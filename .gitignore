@@ -1,0 +1,40 @@
+# Build
+build/
+out/
+cmake-build-*/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+_deps/
+
+# Compiled / archives
+*.o
+*.a
+*.dylib
+*.so
+*.dll
+
+# Executables (when built beside source)
+*.exe
+
+# Xcode (if used)
+*.xcodeproj/
+*.xcworkspace/
+DerivedData/
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*~
+
+# macOS
+.DS_Store
+
+# Debugging / profiling
+*.dSYM/
