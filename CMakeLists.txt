@@ -35,8 +35,8 @@ endif()
 set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "Minimum macOS version")
 
 option(FLUX_ENABLE_DEFAULT_EVENT_LOGGING
-  "Print built-in Application event handlers to stdout (debugging)."
-  OFF)
+  "Print built-in Application event handlers to stdout (disable for quiet or embedded builds)."
+  ON)
 
 add_library(flux STATIC
   src/Core/Application.mm

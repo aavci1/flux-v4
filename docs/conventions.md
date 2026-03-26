@@ -18,7 +18,7 @@ This document describes how the repository is organized and the patterns used co
 - **Sources:** Mix of `.cpp` (portable core) and **Objective-C++** (`.mm`) for Cocoa / AppKit on macOS (`Application.mm`, `Platform/Mac/MacMetalWindow.mm`).
 - **Includes:** Public API under `include/`; private helpers under `src/` (e.g. `src/Core/PlatformWindowCreate.hpp`) with `target_include_directories(… PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)`.
 - **Warnings:** `-Wall -Wextra -Wpedantic` on the `flux` target.
-- **Optional logging:** `FLUX_ENABLE_DEFAULT_EVENT_LOGGING` (CMake `option`, default `OFF`) — when `ON`, the default `Application` event handlers print to stdout (useful for debugging).
+- **Optional logging:** `FLUX_ENABLE_DEFAULT_EVENT_LOGGING` (CMake `option`, default **`ON`**) — the default `Application` event handlers print to stdout (set **`OFF`** for quiet or embedded builds).
 - **Apple frameworks (linked privately on macOS):** Cocoa, QuartzCore, Metal, Foundation.
 
 ## Directory layout
