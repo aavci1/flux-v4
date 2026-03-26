@@ -3,7 +3,8 @@
 #include <memory>
 
 #include <Flux/Core/Window.hpp>
-#include <Flux/Platform/PlatformWindow.hpp>
+
+#include "PlatformWindow.hpp"
 
 namespace flux::detail {
 

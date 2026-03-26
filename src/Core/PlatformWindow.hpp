@@ -8,6 +8,7 @@ namespace flux {
 
 class Window;
 
+/// Internal abstract platform window; implemented in platform translation units. Not part of the public API.
 class PlatformWindow {
 public:
   virtual ~PlatformWindow() = default;

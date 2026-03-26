@@ -6,8 +6,8 @@
 #include <Flux/Core/EventQueue.hpp>
 #include <Flux/Core/Events.hpp>
 #include <Flux/Core/Window.hpp>
-#include <Flux/Platform/PlatformWindow.hpp>
 
+#include "Core/PlatformWindow.hpp"
 #include "Core/PlatformWindowCreate.hpp"
 
 #include <algorithm>

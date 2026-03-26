@@ -27,13 +27,13 @@ This document describes how the repository is organized and the patterns used co
 |------|------|
 | `include/Flux/` | Public headers; stable API surface. |
 | `include/Flux.hpp` | Umbrella include re-exporting core headers. |
-| `src/Core/` | Core implementation (`Application`, `Window`, `EventQueue`, platform factory declaration). |
+| `src/Core/` | Core implementation (`Application`, `Window`, `EventQueue`, `PlatformWindow.hpp`, `PlatformWindowCreate.hpp`, factory). |
 | `src/Platform/Mac/` | macOS-specific windowing (`MacMetalWindow.mm`). |
 | `src/Platform/` | Future: e.g. `Linux/Wayland/`, `Linux/Kms/` mirroring the Mac layout — one implementation of `detail::createPlatformWindow` per supported platform build. |
 | `examples/` | Sample apps (e.g. `hello-world`). |
 | `docs/` | Project documentation (this file). |
 
-Headers are grouped under `Flux/Core/` (types, events, application, window, queue) and `Flux/Platform/` (abstract platform window).
+Public headers live under `Flux/Core/` (types, events, application, window, queue). The abstract `PlatformWindow` interface is **private** — [`src/Core/PlatformWindow.hpp`](src/Core/PlatformWindow.hpp) — used only when building the library.
 
 **Factory rule:** `flux::detail::createPlatformWindow(WindowConfig)` is implemented in exactly one platform translation unit per build — **no** `#ifdef` platform branches inside portable core files such as `Window.cpp`.
 
@@ -45,7 +45,7 @@ Headers are grouped under `Flux/Core/` (types, events, application, window, queu
 ## Public vs private headers
 
 - **Public:** Anything under `include/Flux/…` included by consumers.
-- **Private:** Headers under `src/` (e.g. `PlatformWindowCreate.hpp`) are implementation details; they must not be required by external projects using only `include/`.
+- **Private:** Headers under `src/` (e.g. `PlatformWindow.hpp`, `PlatformWindowCreate.hpp`) are implementation details; they must not be required by external projects using only `include/`.
 
 ## Umbrella include
 
@@ -90,7 +90,7 @@ Shared vocabulary lives in `Types.hpp` (`Size`, `Vec2`, time aliases, `MouseButt
 
 ## Platform abstraction
 
-- **`PlatformWindow`** (`include/Flux/Platform/PlatformWindow.hpp`) is an abstract interface: sizing, title, fullscreen, native presentation surface (`nativeGraphicsSurface()` — see Doxygen), `setFluxWindow(Window*)`, etc.
+- **`PlatformWindow`** ([`src/Core/PlatformWindow.hpp`](src/Core/PlatformWindow.hpp)) is an internal abstract interface: sizing, title, fullscreen, native presentation surface (`nativeGraphicsSurface()`), `setFluxWindow(Window*)`, etc. Not installed as a public header.
 - **Factory:** `flux::detail::createPlatformWindow(WindowConfig)` returns `std::unique_ptr<PlatformWindow>`; implemented in the platform translation unit (e.g. `Platform/Mac/MacMetalWindow.mm` on macOS).
 - Cocoa/AppKit types and Objective-C categories/implementations stay inside **`.mm` files**; public C++ headers stay ObjC-free.
 
@@ -98,12 +98,12 @@ Shared vocabulary lives in `Types.hpp` (`Size`, `Vec2`, time aliases, `MouseButt
 
 - Headers use **`#pragma once`** guard.
 - Project headers use **angle brackets** and paths relative to `include/` — e.g. `#include <Flux/Core/Events.hpp>`.
-- Private includes from `src/` use paths relative to the `src` root — e.g. `#include "Core/PlatformWindowCreate.hpp"` from any `.cpp` / `.mm` under `src/`.
+- Private includes from `src/` use paths relative to the `src` root — e.g. `#include "Core/PlatformWindow.hpp"` / `#include "Core/PlatformWindowCreate.hpp"` from any `.cpp` / `.mm` under `src/`.
 - Order is typically: corresponding public header first (in `.cpp`), then other Flux headers, then standard library, then system/framework (in `.mm`).
 
 ## Documentation comments
 
-- Public APIs use **`///` Doxygen-style** line comments where extra clarity is needed (e.g. `EventQueue`, `PlatformWindow::nativeGraphicsSurface`).
+- Public APIs use **`///` Doxygen-style** line comments where extra clarity is needed (e.g. `EventQueue`, `Window`).
 
 ## Examples
 
