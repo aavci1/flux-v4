@@ -1,7 +1,7 @@
 #pragma once
 
 #include <Flux/Graphics/AttributedString.hpp>
-#include <Flux/Graphics/TextRun.hpp>
+#include <Flux/Graphics/TextLayout.hpp>
 
 #include <cstdint>
 #include <memory>
@@ -14,10 +14,10 @@ class TextSystem {
 public:
   virtual ~TextSystem() = default;
 
-  virtual std::shared_ptr<TextRun> shape(AttributedString const& text, float maxWidth = 0.f) = 0;
+  virtual std::shared_ptr<TextLayout> shape(AttributedString const& text, float maxWidth = 0.f) = 0;
 
-  virtual std::shared_ptr<TextRun> shapePlain(std::string_view utf8, TextAttribute const& attr,
-                                              float maxWidth = 0.f) = 0;
+  virtual std::shared_ptr<TextLayout> shapePlain(std::string_view utf8, TextAttribute const& attr,
+                                                 float maxWidth = 0.f) = 0;
 
   virtual Size measure(AttributedString const& text, float maxWidth = 0.f) = 0;
 

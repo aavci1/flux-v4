@@ -29,16 +29,12 @@ public:
     labelAttr.fontWeight = 500.f;
     labelAttr.color = Colors::darkGray;
 
-    auto textRun = Application::instance().textSystem().shapePlain("Hello, World!", labelAttr, 0.f);
-    Size const m = textRun->measuredSize;
-    float baselineY = h * 0.5f;
-    if (!textRun->glyphIds.empty()) {
-      float const boxTop = (h - m.height) * 0.5f;
-      baselineY = boxTop + textRun->ascent;
-    }
+    auto textLayout = Application::instance().textSystem().shapePlain("Hello, World!", labelAttr, 0.f);
+    Size const m = textLayout->measuredSize;
+    float const y = (h - m.height) * 0.5f;
     float const x = (w - m.width) * 0.5f;
 
-    c.drawText(*textRun, Point{x, baselineY});
+    c.drawTextLayout(*textLayout, Point{x, y});
   }
 };
 

@@ -155,6 +155,85 @@ CTFontRef createCTFont(TextAttribute const& attr) {
   return font;
 }
 
+/// `AttributedString` run ranges are UTF-8 byte offsets; `NSMutableAttributedString` uses UTF-16 indices.
+static size_t utf8Advance(char const* s, std::size_t len, std::size_t i, std::uint32_t* outCp) {
+  if (i >= len) {
+    return 0;
+  }
+  auto const u = static_cast<unsigned char>(s[i]);
+  if (u < 0x80) {
+    *outCp = u;
+    return 1;
+  }
+  if (i + 1 < len && (u & 0xE0) == 0xC0) {
+    auto const u1 = static_cast<unsigned char>(s[i + 1]);
+    if ((u1 & 0xC0) != 0x80) {
+      return 0;
+    }
+    *outCp = (static_cast<std::uint32_t>(u & 0x1F) << 6) | (u1 & 0x3F);
+    return 2;
+  }
+  if (i + 2 < len && (u & 0xF0) == 0xE0) {
+    auto const u1 = static_cast<unsigned char>(s[i + 1]);
+    auto const u2 = static_cast<unsigned char>(s[i + 2]);
+    if ((u1 & 0xC0) != 0x80 || (u2 & 0xC0) != 0x80) {
+      return 0;
+    }
+    *outCp = (static_cast<std::uint32_t>(u & 0x0F) << 12) | (static_cast<std::uint32_t>(u1 & 0x3F) << 6) |
+             (u2 & 0x3F);
+    return 3;
+  }
+  if (i + 3 < len && (u & 0xF8) == 0xF0) {
+    auto const u1 = static_cast<unsigned char>(s[i + 1]);
+    auto const u2 = static_cast<unsigned char>(s[i + 2]);
+    auto const u3 = static_cast<unsigned char>(s[i + 3]);
+    if ((u1 & 0xC0) != 0x80 || (u2 & 0xC0) != 0x80 || (u3 & 0xC0) != 0x80) {
+      return 0;
+    }
+    *outCp = (static_cast<std::uint32_t>(u & 0x07) << 18) | (static_cast<std::uint32_t>(u1 & 0x3F) << 12) |
+             (static_cast<std::uint32_t>(u2 & 0x3F) << 6) | (u3 & 0x3F);
+    return 4;
+  }
+  return 0;
+}
+
+static NSUInteger utf16UnitsForCodepoint(std::uint32_t cp) {
+  return cp > 0xFFFF ? 2u : 1u;
+}
+
+/// Maps half-open UTF-8 byte range `[bStart, bEnd)` to an `NSRange` in UTF-16 (Foundation string units).
+static NSRange utf8ByteRangeToNSRange(char const* utf8, std::size_t utf8Len, std::uint32_t bStart,
+                                      std::uint32_t bEnd) {
+  if (bEnd > utf8Len) {
+    bEnd = static_cast<std::uint32_t>(utf8Len);
+  }
+  if (bStart > bEnd) {
+    bStart = bEnd;
+  }
+  NSUInteger u16Start = 0;
+  std::size_t i = 0;
+  while (i < utf8Len && i < bStart) {
+    std::uint32_t cp = 0;
+    std::size_t const adv = utf8Advance(utf8, utf8Len, i, &cp);
+    if (adv == 0) {
+      break;
+    }
+    u16Start += utf16UnitsForCodepoint(cp);
+    i += adv;
+  }
+  NSUInteger u16End = u16Start;
+  while (i < utf8Len && i < bEnd) {
+    std::uint32_t cp = 0;
+    std::size_t const adv = utf8Advance(utf8, utf8Len, i, &cp);
+    if (adv == 0) {
+      break;
+    }
+    u16End += utf16UnitsForCodepoint(cp);
+    i += adv;
+  }
+  return NSMakeRange(u16Start, u16End - u16Start);
+}
+
 CFAttributedStringRef createCFAttributed(AttributedString const& text,
                                          std::vector<TextAttribute> const& resolved) {
   NSString* ns = [NSString stringWithUTF8String:text.utf8.c_str()];
@@ -164,10 +243,13 @@ CFAttributedStringRef createCFAttributed(AttributedString const& text,
   NSMutableAttributedString* mas =
       [[NSMutableAttributedString alloc] initWithString:ns attributes:@{}];
 
+  char const* const bytes = text.utf8.c_str();
+  std::size_t const byteLen = text.utf8.size();
+
   for (std::size_t ri = 0; ri < text.runs.size(); ++ri) {
     auto const& run = text.runs[ri];
     TextAttribute const& a = resolved[ri];
-    NSRange range = NSMakeRange(run.start, run.end - run.start);
+    NSRange range = utf8ByteRangeToNSRange(bytes, byteLen, run.start, run.end);
     CTFontRef font = createCTFont(a);
     CGFloat rgba[4] = {a.color.r, a.color.g, a.color.b, a.color.a};
     CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
@@ -192,6 +274,93 @@ CFAttributedStringRef createCFAttributedPlain(std::string_view utf8, TextAttribu
   std::vector<TextAttribute> resolved;
   accumulateInheritance(resolved, as);
   return createCFAttributed(as, resolved);
+}
+
+/// Resolves `fontId` / style from a Core Text run’s font (same mapping as the previous single-line shaper).
+static void styleFromCTFont(CTFontRef ctFont, CGColorRef cgColor, CoreTextSystem& sys, std::uint32_t& outFontId,
+                            float& outFontSize, Color& outColor) {
+  outColor = colorFromCGColor(cgColor);
+  outFontSize = static_cast<float>(CTFontGetSize(ctFont));
+  CTFontDescriptorRef fd = CTFontCopyFontDescriptor(ctFont);
+  CFDictionaryRef traitDict =
+      static_cast<CFDictionaryRef>(CTFontDescriptorCopyAttribute(fd, kCTFontTraitsAttribute));
+  CFRelease(fd);
+  bool italic = false;
+  CGFloat weightTrait = 0.0;
+  if (traitDict) {
+    NSDictionary* traits = (__bridge NSDictionary*)traitDict;
+    NSNumber* sym = traits[(id)kCTFontSymbolicTrait];
+    if (sym) {
+      italic = ([sym unsignedIntValue] & kCTFontItalicTrait) != 0;
+    }
+    NSNumber* wt = traits[(id)kCTFontWeightTrait];
+    if (wt) {
+      weightTrait = [wt floatValue];
+    }
+    CFRelease(traitDict);
+  }
+  CFStringRef famRef = CTFontCopyFamilyName(ctFont);
+  NSString* famNs = (__bridge NSString*)famRef;
+  std::string fam = famNs ? [famNs UTF8String] : std::string(kDefaultFontFamily);
+  if (famRef) {
+    CFRelease(famRef);
+  }
+  float cssWeight = 400.f;
+  if (weightTrait >= 0.35) {
+    cssWeight = 700.f;
+  } else if (weightTrait >= 0.15) {
+    cssWeight = 600.f;
+  }
+  outFontId = sys.resolveFontId(fam, cssWeight, italic);
+}
+
+/// One `CTRun` → `PlacedRun`: glyph positions are relative to the run’s baseline-left; `origin` is baseline-left
+/// in layout space (top-left origin, Y down). `frameHeight` is the CT frame path height (Quartz, Y up).
+static void appendPlacedRunFromCTRun(CTRunRef run, CGPoint lineOrigin, CGFloat frameHeight, CoreTextSystem& sys,
+                                     TextLayout& layout) {
+  CFIndex const glyphCount = CTRunGetGlyphCount(run);
+  if (glyphCount <= 0) {
+    return;
+  }
+  NSDictionary* attrs = (__bridge NSDictionary*)CTRunGetAttributes(run);
+  CTFontRef ctFont = (__bridge CTFontRef)attrs[(id)kCTFontAttributeName];
+  CGColorRef cgColor = (__bridge CGColorRef)attrs[(id)kCTForegroundColorAttributeName];
+
+  std::uint32_t fontId = 0;
+  float fontSize = 0.f;
+  Color color = Colors::black;
+  styleFromCTFont(ctFont, cgColor, sys, fontId, fontSize, color);
+
+  std::vector<std::uint16_t> gids(static_cast<std::size_t>(glyphCount));
+  std::vector<CGPoint> cpos(static_cast<std::size_t>(glyphCount));
+  CTRunGetGlyphs(run, CFRangeMake(0, 0), reinterpret_cast<CGGlyph*>(gids.data()));
+  CTRunGetPositions(run, CFRangeMake(0, 0), cpos.data());
+
+  CGFloat ascent = 0, descent = 0, leading = 0;
+  double const runWidth = CTRunGetTypographicBounds(run, CFRangeMake(0, 0), &ascent, &descent, &leading);
+
+  TextLayout::PlacedRun placed{};
+  placed.run.fontId = fontId;
+  placed.run.fontSize = fontSize;
+  placed.run.color = color;
+  placed.run.glyphIds = std::move(gids);
+  placed.run.ascent = static_cast<float>(ascent);
+  placed.run.descent = static_cast<float>(descent);
+  placed.run.width = static_cast<float>(runWidth);
+  placed.run.positions.resize(static_cast<std::size_t>(glyphCount));
+  for (CFIndex gi = 0; gi < glyphCount; ++gi) {
+    float const dx = static_cast<float>(cpos[static_cast<std::size_t>(gi)].x - cpos[0].x);
+    float const dy =
+        -static_cast<float>(cpos[static_cast<std::size_t>(gi)].y - cpos[0].y); // Quartz Y up → canvas Y down
+    placed.run.positions[static_cast<std::size_t>(gi)] = Point{dx, dy};
+  }
+
+  CGFloat const baselineX = lineOrigin.x + cpos[0].x;
+  CGFloat const baselineY = lineOrigin.y + cpos[0].y;
+  placed.origin.x = static_cast<float>(baselineX);
+  placed.origin.y = static_cast<float>(frameHeight - baselineY);
+
+  layout.runs.push_back(std::move(placed));
 }
 
 } // namespace
@@ -368,128 +537,72 @@ Size CoreTextSystem::measurePlain(std::string_view utf8, TextAttribute const& at
   return s;
 }
 
-std::shared_ptr<TextRun> CoreTextSystem::shapePlain(std::string_view utf8, TextAttribute const& attr,
-                                                    float maxWidth) {
+std::shared_ptr<TextLayout> CoreTextSystem::shapePlain(std::string_view utf8, TextAttribute const& attr,
+                                                       float maxWidth) {
   AttributedString as;
   as.utf8 = std::string(utf8);
   as.runs.push_back({0, static_cast<std::uint32_t>(utf8.size()), attr});
   return shape(as, maxWidth);
 }
 
-std::shared_ptr<TextRun> CoreTextSystem::shape(AttributedString const& text, float maxWidth) {
-  (void)maxWidth; // reserved for future line-breaking; single-line layout uses CTLine (no width wrap)
+std::shared_ptr<TextLayout> CoreTextSystem::shape(AttributedString const& text, float maxWidth) {
+  auto out = std::make_shared<TextLayout>();
   if (text.utf8.empty()) {
-    return std::make_shared<TextRun>(TextRun{});
+    return out;
   }
   validateRuns(text);
   std::vector<TextAttribute> resolved;
   accumulateInheritance(resolved, text);
 
   CFAttributedStringRef cfAttr = createCFAttributed(text, resolved);
-  // Single-line TextRun: build a CTLine directly. CTFrame + path uses Quartz Y-up frame coords; using
-  // CTRun positions without CTFrameGetLineOrigins misplaces glyphs (baseline/punctuation vs canvas Y-down).
-  CTLineRef line = CTLineCreateWithAttributedString(cfAttr);
+  CTFramesetterRef fs = CTFramesetterCreateWithAttributedString(cfAttr);
   CFRelease(cfAttr);
-  if (!line) {
-    return std::make_shared<TextRun>(TextRun{});
+  if (!fs) {
+    return out;
   }
-  double lineAscent = 0, lineDescent = 0, lineLeading = 0;
-  double const lineWidth = CTLineGetTypographicBounds(line, &lineAscent, &lineDescent, &lineLeading);
 
-  CFArrayRef glyphRuns = CTLineGetGlyphRuns(line);
-  CFIndex runCount = CFArrayGetCount(glyphRuns);
+  CGSize const constraints =
+      CGSizeMake(maxWidth > 0.f ? static_cast<CGFloat>(maxWidth) : CGFLOAT_MAX, CGFLOAT_MAX);
+  CFRange fitRange{};
+  CGSize sz = CTFramesetterSuggestFrameSizeWithConstraints(fs, CFRangeMake(0, 0), nullptr, constraints,
+                                                             &fitRange);
 
-  std::vector<std::uint16_t> allGids;
-  std::vector<Point> allPos;
-  bool styleFromFirst = false;
-  std::uint32_t fontId = 0;
-  float fontSize = 0.f;
-  Color color = Colors::black;
+  CGFloat const fw = std::max(static_cast<CGFloat>(sz.width), static_cast<CGFloat>(1e-6));
+  CGFloat const fh = std::max(static_cast<CGFloat>(sz.height), static_cast<CGFloat>(1e-6));
+  out->measuredSize = Size{static_cast<float>(fw), static_cast<float>(fh)};
 
-  for (CFIndex ri = 0; ri < runCount; ++ri) {
-    CTRunRef run = (CTRunRef)CFArrayGetValueAtIndex(glyphRuns, ri);
-    CFIndex glyphCount = CTRunGetGlyphCount(run);
-    if (glyphCount <= 0) {
-      continue;
-    }
+  CGPathRef path = CGPathCreateWithRect(CGRectMake(0, 0, fw, fh), nullptr);
+  CTFrameRef frame = CTFramesetterCreateFrame(fs, CFRangeMake(0, 0), path, nullptr);
+  CFRelease(path);
+  CFRelease(fs);
+  if (!frame) {
+    return out;
+  }
 
-    NSDictionary* attrs = (__bridge NSDictionary*)CTRunGetAttributes(run);
-    CTFontRef ctFont = (__bridge CTFontRef)attrs[(id)kCTFontAttributeName];
-    CGColorRef cgColor = (__bridge CGColorRef)attrs[(id)kCTForegroundColorAttributeName];
-    Color runColor = colorFromCGColor(cgColor);
+  CFArrayRef lines = CTFrameGetLines(frame);
+  CFIndex const lineCount = lines ? CFArrayGetCount(lines) : 0;
+  std::vector<CGPoint> origins(static_cast<std::size_t>(std::max(lineCount, CFIndex{0})));
+  if (lineCount > 0) {
+    CTFrameGetLineOrigins(frame, CFRangeMake(0, lineCount), origins.data());
+  }
 
-    CGFloat ctFontSize = CTFontGetSize(ctFont);
-    CTFontDescriptorRef fd = CTFontCopyFontDescriptor(ctFont);
-    CFDictionaryRef traitDict =
-        static_cast<CFDictionaryRef>(CTFontDescriptorCopyAttribute(fd, kCTFontTraitsAttribute));
-    CFRelease(fd);
-    bool italic = false;
-    CGFloat weightTrait = 0.0;
-    if (traitDict) {
-      NSDictionary* traits = (__bridge NSDictionary*)traitDict;
-      NSNumber* sym = traits[(id)kCTFontSymbolicTrait];
-      if (sym) {
-        italic = ([sym unsignedIntValue] & kCTFontItalicTrait) != 0;
-      }
-      NSNumber* wt = traits[(id)kCTFontWeightTrait];
-      if (wt) {
-        weightTrait = [wt floatValue];
-      }
-      CFRelease(traitDict);
-    }
-
-    CFStringRef famRef = CTFontCopyFamilyName(ctFont);
-    NSString* famNs = (__bridge NSString*)famRef;
-    std::string fam = famNs ? [famNs UTF8String] : std::string(kDefaultFontFamily);
-    if (famRef) {
-      CFRelease(famRef);
-    }
-    float cssWeight = 400.f;
-    if (weightTrait >= 0.35) {
-      cssWeight = 700.f;
-    } else if (weightTrait >= 0.15) {
-      cssWeight = 600.f;
-    }
-
-    std::uint32_t const fid = resolveFontId(fam, cssWeight, italic);
-
-    if (!styleFromFirst) {
-      fontId = fid;
-      fontSize = static_cast<float>(ctFontSize);
-      color = runColor;
-      styleFromFirst = true;
-    }
-
-    std::vector<std::uint16_t> gids(static_cast<std::size_t>(glyphCount));
-    std::vector<CGPoint> cpos(static_cast<std::size_t>(glyphCount));
-    CTRunGetGlyphs(run, CFRangeMake(0, 0), reinterpret_cast<CGGlyph*>(gids.data()));
-    CTRunGetPositions(run, CFRangeMake(0, 0), cpos.data());
-
-    std::size_t const base = allGids.size();
-    allGids.resize(base + static_cast<std::size_t>(glyphCount));
-    allPos.resize(base + static_cast<std::size_t>(glyphCount));
-    for (CFIndex gi = 0; gi < glyphCount; ++gi) {
-      allGids[base + static_cast<std::size_t>(gi)] = gids[static_cast<std::size_t>(gi)];
-      // CTRun positions are in Quartz line space (Y up from baseline). Flux / MetalCanvas use Y down.
-      allPos[base + static_cast<std::size_t>(gi)] =
-          Point{static_cast<float>(cpos[static_cast<std::size_t>(gi)].x),
-                -static_cast<float>(cpos[static_cast<std::size_t>(gi)].y)};
+  for (CFIndex li = 0; li < lineCount; ++li) {
+    CTLineRef line = (CTLineRef)CFArrayGetValueAtIndex(lines, li);
+    CGPoint const lineOrigin = origins[static_cast<std::size_t>(li)];
+    CFArrayRef glyphRuns = CTLineGetGlyphRuns(line);
+    CFIndex const runCount = CFArrayGetCount(glyphRuns);
+    for (CFIndex ri = 0; ri < runCount; ++ri) {
+      CTRunRef run = (CTRunRef)CFArrayGetValueAtIndex(glyphRuns, ri);
+      appendPlacedRunFromCTRun(run, lineOrigin, fh, *this, *out);
     }
   }
 
-  CFRelease(line);
+  CFRelease(frame);
 
-  auto out = std::make_shared<TextRun>();
-  out->measuredSize =
-      Size{static_cast<float>(lineWidth),
-           static_cast<float>(lineAscent + lineDescent + lineLeading)};
-  out->fontId = fontId;
-  out->fontSize = fontSize;
-  out->color = color;
-  out->glyphIds = std::move(allGids);
-  out->positions = std::move(allPos);
-  out->ascent = static_cast<float>(lineAscent);
-  out->descent = static_cast<float>(lineDescent);
+  if (!out->runs.empty()) {
+    out->firstBaseline = out->runs.front().origin.y;
+    out->lastBaseline = out->runs.back().origin.y;
+  }
   return out;
 }
 

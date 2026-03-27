@@ -72,14 +72,11 @@ void drawCell(Canvas& c, Rect cell, BlendMode mode, const char* title,
   labelAttr.fontWeight = 500.f;
   labelAttr.color = Color::rgb(38, 38, 45);
 
-  auto labelRun = Application::instance().textSystem().shapePlain(title, labelAttr, 0.f);
-  Size const m = labelRun->measuredSize;
-  float baselineY = cell.y + cell.height - 16.f;
-  if (!labelRun->glyphIds.empty()) {
-    baselineY = cell.y + cell.height - 16.f - labelRun->descent;
-  }
+  auto labelLayout = Application::instance().textSystem().shapePlain(title, labelAttr, 0.f);
+  Size const m = labelLayout->measuredSize;
+  float const y = cell.y + cell.height - 16.f - m.height;
   float const x = cell.x + (cell.width - m.width) * 0.5f;
-  c.drawText(*labelRun, Point{x, baselineY});
+  c.drawTextLayout(*labelLayout, Point{x, y});
 }
 
 class BlendDemoWindow : public Window {

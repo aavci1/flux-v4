@@ -24,7 +24,7 @@ inline void drawHand(Canvas& c, Point center, float length, float width, float a
 }
 
 /// Analog clock face (based on upstream flux `examples/clock`). `hour24` is 0–23; flux-v4 has no
-/// `drawText`, so hour numerals are drawn as small filled circles at the usual positions.
+/// `drawTextLayout`, so hour numerals are drawn as small filled circles at the usual positions.
 inline void drawClock(Canvas& c, Rect const& bounds, int hour24, int minutes, int seconds) {
   const float radius = std::min(bounds.width, bounds.height) * 0.5f - 20.f;
   const Point center = bounds.center();

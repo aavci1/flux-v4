@@ -5,7 +5,7 @@
 
 #include <Flux/Graphics/Canvas.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
-#include <Flux/Graphics/TextRun.hpp>
+#include <Flux/Graphics/TextLayout.hpp>
 
 #include "Graphics/Metal/GlyphAtlas.hpp"
 #include "Graphics/Metal/MetalCanvasTypes.hpp"
@@ -503,11 +503,8 @@ public:
     drawRect(r, CornerRadius::pill(r), fs, ss);
   }
 
-  void drawText(TextRun const& text, Point origin) override {
+  void drawTextLayout(TextLayout const& layout, Point origin) override {
     if (!inFrame_) {
-      return;
-    }
-    if (text.glyphIds.empty()) {
       return;
     }
 
@@ -521,55 +518,59 @@ public:
       return;
     }
 
-    float const baselineY = origin.y;
-    float const x = origin.x;
-    // Premultiplied color: rgb = straight_rgb * alpha * opacity, a = alpha * opacity.
-    float const effectiveAlpha = text.color.a * op;
-    vector_float4 const premul = simd_make_float4(text.color.r * effectiveAlpha,
-                                                  text.color.g * effectiveAlpha,
-                                                  text.color.b * effectiveAlpha,
-                                                  effectiveAlpha);
-
-    // Rasterize at physical size so glyphs are sharp on Retina. sizeQ8 encodes physical pt size.
-    float const physicalFontSize = text.fontSize * dpiScaleX_;
-
-    std::uint32_t const glyphStart = static_cast<std::uint32_t>(frame_.glyphVerts.size());
-    for (std::size_t i = 0; i < text.glyphIds.size(); ++i) {
-      GlyphKey key{};
-      key.fontId = text.fontId;
-      key.glyphId = text.glyphIds[i];
-      unsigned const q = static_cast<unsigned>(physicalFontSize * 4.f);
-      key.sizeQ8 = static_cast<std::uint16_t>(std::min(65535u, q));
-
-      AtlasEntry const& entry = glyphAtlas_->getOrUpload(key);
-      if (entry.width == 0 || entry.height == 0) {
+    for (auto const& placed : layout.runs) {
+      TextRun const& text = placed.run;
+      if (text.glyphIds.empty()) {
         continue;
       }
 
-      float const u0 = static_cast<float>(entry.u) / aw;
-      float const u1 = static_cast<float>(entry.u + entry.width) / aw;
-      float const vLo = static_cast<float>(entry.v) / ah;
-      float const vHi = static_cast<float>(entry.v + entry.height) / ah;
+      float const baselineY = origin.y + placed.origin.y;
+      float const x = origin.x + placed.origin.x;
 
-      // Bearing and bitmap dims are in physical pixels; convert to logical points for the quad.
-      Point const ink = {x + text.positions[i].x, baselineY + text.positions[i].y};
-      Point const tl = {ink.x - entry.bearing.x / dpiScaleX_, ink.y - entry.bearing.y / dpiScaleY_};
-      float const gw = static_cast<float>(entry.width) / dpiScaleX_;
-      float const gh = static_cast<float>(entry.height) / dpiScaleY_;
+      float const effectiveAlpha = text.color.a * op;
+      vector_float4 const premul = simd_make_float4(text.color.r * effectiveAlpha,
+                                                    text.color.g * effectiveAlpha,
+                                                    text.color.b * effectiveAlpha,
+                                                    effectiveAlpha);
 
-      // Atlas row 0 = top of glyph (same row order as CG bitmap → Metal). v increases downward.
-      appendGlyphQuad(frame_.glyphVerts, M, dpiScaleX_, dpiScaleY_, tl, gw, gh, u0, vLo, u1, vHi, premul);
-    }
+      float const physicalFontSize = text.fontSize * dpiScaleX_;
 
-    std::uint32_t const vertCount =
-        static_cast<std::uint32_t>(frame_.glyphVerts.size()) - glyphStart;
-    if (vertCount > 0) {
-      MetalDrawOp op{};
-      op.kind = MetalDrawOp::GlyphMesh;
-      op.glyphStart = glyphStart;
-      op.glyphVertexCount = vertCount;
-      op.blendMode = blend;
-      frame_.ops.push_back(op);
+      std::uint32_t const glyphStart = static_cast<std::uint32_t>(frame_.glyphVerts.size());
+      for (std::size_t i = 0; i < text.glyphIds.size(); ++i) {
+        GlyphKey key{};
+        key.fontId = text.fontId;
+        key.glyphId = text.glyphIds[i];
+        unsigned const q = static_cast<unsigned>(physicalFontSize * 4.f);
+        key.sizeQ8 = static_cast<std::uint16_t>(std::min(65535u, q));
+
+        AtlasEntry const& entry = glyphAtlas_->getOrUpload(key);
+        if (entry.width == 0 || entry.height == 0) {
+          continue;
+        }
+
+        float const u0 = static_cast<float>(entry.u) / aw;
+        float const u1 = static_cast<float>(entry.u + entry.width) / aw;
+        float const vLo = static_cast<float>(entry.v) / ah;
+        float const vHi = static_cast<float>(entry.v + entry.height) / ah;
+
+        Point const ink = {x + text.positions[i].x, baselineY + text.positions[i].y};
+        Point const tl = {ink.x - entry.bearing.x / dpiScaleX_, ink.y - entry.bearing.y / dpiScaleY_};
+        float const gw = static_cast<float>(entry.width) / dpiScaleX_;
+        float const gh = static_cast<float>(entry.height) / dpiScaleY_;
+
+        appendGlyphQuad(frame_.glyphVerts, M, dpiScaleX_, dpiScaleY_, tl, gw, gh, u0, vLo, u1, vHi, premul);
+      }
+
+      std::uint32_t const vertCount =
+          static_cast<std::uint32_t>(frame_.glyphVerts.size()) - glyphStart;
+      if (vertCount > 0) {
+        MetalDrawOp op{};
+        op.kind = MetalDrawOp::GlyphMesh;
+        op.glyphStart = glyphStart;
+        op.glyphVertexCount = vertCount;
+        op.blendMode = blend;
+        frame_.ops.push_back(op);
+      }
     }
   }
 

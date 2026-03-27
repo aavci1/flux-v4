@@ -141,3 +141,6 @@ target_link_libraries(clock_demo PRIVATE flux)
 
 add_executable(blend_demo examples/blend-demo/main.cpp)
 target_link_libraries(blend_demo PRIVATE flux)
+
+add_executable(text_demo examples/text-demo/main.cpp)
+target_link_libraries(text_demo PRIVATE flux)

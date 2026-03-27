@@ -7,11 +7,9 @@
 
 namespace flux {
 
-/// Single-line shaped text with one style (`fontId` / `fontSize` / `color`). Glyph positions are relative to
-/// the left edge of the line baseline; `y` is positive downward (canvas space). The shaper merges Core Text
-/// runs in display order; style is taken from the first non-empty run (uniform styling is assumed).
+/// One Core Text `CTRun`-equivalent: resolved style, shaped glyphs, and metrics. Glyph `positions` are
+/// relative to this run’s baseline-left; `y` is positive downward (canvas space).
 struct TextRun {
-  Size measuredSize{};
   std::uint32_t fontId = 0;
   float fontSize = 0.f;
   Color color = Colors::black;
@@ -19,6 +17,7 @@ struct TextRun {
   std::vector<Point> positions;
   float ascent = 0.f;
   float descent = 0.f;
+  float width = 0.f;
 };
 
 } // namespace flux

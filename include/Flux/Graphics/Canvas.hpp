@@ -3,7 +3,7 @@
 #include <Flux/Core/Types.hpp>
 #include <Flux/Graphics/Path.hpp>
 #include <Flux/Graphics/Styles.hpp>
-#include <Flux/Graphics/TextRun.hpp>
+#include <Flux/Graphics/TextLayout.hpp>
 
 #include <cstdint>
 #include <memory>
@@ -82,8 +82,8 @@ public:
   virtual void drawPath(Path const& path, FillStyle const& fill, StrokeStyle const& stroke) = 0;
   virtual void drawCircle(Point center, float radius, FillStyle const& fill, StrokeStyle const& stroke) = 0;
 
-  /// Draw pre-shaped text. `origin` is the left edge of the line baseline. Each glyph run carries its own color.
-  virtual void drawText(TextRun const& run, Point origin) = 0;
+  /// Draw laid-out text. `origin` is the layout box top-left (`TextLayout::measuredSize`).
+  virtual void drawTextLayout(TextLayout const& layout, Point origin) = 0;
 
   virtual void clear(Color color = Colors::transparent) = 0;
 

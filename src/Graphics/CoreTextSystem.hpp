@@ -12,9 +12,10 @@ public:
   CoreTextSystem(CoreTextSystem const&) = delete;
   CoreTextSystem& operator=(CoreTextSystem const&) = delete;
 
-  std::shared_ptr<TextRun> shape(AttributedString const& text, float maxWidth) override;
+  std::shared_ptr<TextLayout> shape(AttributedString const& text, float maxWidth) override;
 
-  std::shared_ptr<TextRun> shapePlain(std::string_view utf8, TextAttribute const& attr, float maxWidth) override;
+  std::shared_ptr<TextLayout> shapePlain(std::string_view utf8, TextAttribute const& attr,
+                                         float maxWidth) override;
 
   Size measure(AttributedString const& text, float maxWidth) override;
 
