@@ -1,5 +1,7 @@
 #pragma once
 
+#include <chrono>
+#include <cstdint>
 #include <memory>
 #include <type_traits>
 #include <utility>
@@ -35,6 +37,11 @@ public:
 
   /// Marks all windows for a render pass on the next `exec()` iteration and wakes the platform event wait.
   void requestRedraw();
+
+  /// Repeating timer using `std::chrono::steady_clock` in the main `exec()` loop; posts `TimerEvent` each tick.
+  /// Returns an id for `cancelTimer`. `windowHandle` is optional metadata for handlers (e.g. redraw routing).
+  std::uint64_t scheduleRepeatingTimer(std::chrono::nanoseconds interval, unsigned int windowHandle = 0);
+  void cancelTimer(std::uint64_t timerId);
 
   static bool hasInstance();
   static Application& instance();

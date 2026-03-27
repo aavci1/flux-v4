@@ -8,9 +8,11 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #if FLUX_ENABLE_DEFAULT_EVENT_LOGGING
 #include <cstdio>
 #endif
+#include <cmath>
 #include <stdexcept>
 #include <vector>
 
@@ -47,6 +49,12 @@ void logWindowEvent(WindowEvent const& e) {
   std::printf("[flux] WindowEvent %s handle=%u size=%gx%g dpi=%g\n", kind, e.handle,
               static_cast<double>(e.size.width), static_cast<double>(e.size.height),
               static_cast<double>(e.dpi));
+}
+
+void logTimerEvent(TimerEvent const& e) {
+  std::printf("[flux] TimerEvent deadlineNanos=%lld timerId=%llu windowHandle=%u\n",
+              static_cast<long long>(e.deadlineNanos), static_cast<unsigned long long>(e.timerId),
+              static_cast<unsigned>(e.windowHandle));
 }
 
 void logInputEvent(InputEvent const& e) {
@@ -93,12 +101,100 @@ void logInputEvent(InputEvent const& e) {
 } // namespace
 
 struct Application::Impl {
+  struct RepeatingTimerState {
+    std::uint64_t id = 0;
+    std::chrono::steady_clock::time_point nextFire{};
+    std::chrono::nanoseconds interval{};
+    unsigned int windowHandle = 0;
+  };
+
   Application* owner_{nullptr};
   std::unique_ptr<EventQueue> eventQueue_;
   std::vector<std::unique_ptr<Window>> ownedWindows_;
   std::vector<Window*> windows_;
   std::atomic<bool> needsRedraw_{false};
   bool running_{true};
+  std::atomic<std::uint64_t> nextTimerId_{0};
+  std::vector<RepeatingTimerState> repeatingTimers_{};
+
+  void shutdownTimers() { repeatingTimers_.clear(); }
+
+  void wakePlatformWaitIfNeeded() {
+    if (windows_.empty()) {
+      return;
+    }
+    if (PlatformWindow* pw = windows_.front()->platformWindow()) {
+      pw->wakeEventLoop();
+    }
+  }
+
+  /// Next `waitForEvents` timeout, or -1 if there are no timers (infinite wait).
+  int timerWaitTimeoutMs() const {
+    if (repeatingTimers_.empty()) {
+      return -1;
+    }
+    auto const now = std::chrono::steady_clock::now();
+    for (auto const& t : repeatingTimers_) {
+      if (t.nextFire <= now) {
+        return 0;
+      }
+    }
+    std::chrono::nanoseconds minRemain{};
+    bool first = true;
+    for (auto const& t : repeatingTimers_) {
+      auto const remain = std::chrono::duration_cast<std::chrono::nanoseconds>(t.nextFire - now);
+      if (first) {
+        minRemain = remain;
+        first = false;
+      } else {
+        minRemain = std::min(minRemain, remain);
+      }
+    }
+    double const ms = std::chrono::duration<double, std::milli>(minRemain).count();
+    int const msInt = static_cast<int>(std::ceil(ms));
+    return std::max(msInt, 1);
+  }
+
+  void processDueTimers() {
+    if (repeatingTimers_.empty() || !eventQueue_) {
+      return;
+    }
+    auto const now = std::chrono::steady_clock::now();
+    for (auto& t : repeatingTimers_) {
+      if (now >= t.nextFire) {
+        TimerEvent te{};
+        te.deadlineNanos = static_cast<std::int64_t>(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count());
+        te.timerId = t.id;
+        te.windowHandle = t.windowHandle;
+        eventQueue_->post(te);
+        t.nextFire = now + t.interval;
+      }
+    }
+  }
+
+  std::uint64_t addRepeatingTimer(std::chrono::nanoseconds interval, unsigned int windowHandle) {
+    const std::uint64_t id = nextTimerId_.fetch_add(1, std::memory_order_relaxed) + 1;
+    RepeatingTimerState state{};
+    state.id = id;
+    state.interval = interval;
+    state.nextFire = std::chrono::steady_clock::now() + interval;
+    state.windowHandle = windowHandle;
+    repeatingTimers_.push_back(std::move(state));
+    wakePlatformWaitIfNeeded();
+    return id;
+  }
+
+  void cancelRepeatingTimer(std::uint64_t timerId) {
+    if (timerId == 0) {
+      return;
+    }
+    std::size_t const before = repeatingTimers_.size();
+    std::erase_if(repeatingTimers_, [timerId](RepeatingTimerState const& t) { return t.id == timerId; });
+    if (repeatingTimers_.size() != before) {
+      wakePlatformWaitIfNeeded();
+    }
+  }
 
   Window* findWindowByHandle(unsigned int handle) {
     for (Window* cand : windows_) {
@@ -178,6 +274,8 @@ struct Application::Impl {
 #if FLUX_ENABLE_DEFAULT_EVENT_LOGGING
     q.on<InputEvent>([](InputEvent const& e) { logInputEvent(e); });
 
+    q.on<TimerEvent>([](TimerEvent const& e) { logTimerEvent(e); });
+
     q.on<CustomEvent>([](CustomEvent const& e) {
       std::printf("[flux] CustomEvent type=%u\n", static_cast<unsigned>(e.type));
     });
@@ -201,6 +299,9 @@ Application::Application(int /*argc*/, char** /*argv*/) {
 }
 
 Application::~Application() {
+  if (d) {
+    d->shutdownTimers();
+  }
   d->ownedWindows_.clear();
   d.reset();
   if (gCurrentApplication == this) {
@@ -226,6 +327,23 @@ void Application::requestRedraw() {
       pw->wakeEventLoop();
     }
   }
+}
+
+std::uint64_t Application::scheduleRepeatingTimer(std::chrono::nanoseconds interval, unsigned int windowHandle) {
+  if (!d) {
+    return 0;
+  }
+  if (interval.count() <= 0) {
+    throw std::invalid_argument("scheduleRepeatingTimer: interval must be positive");
+  }
+  return d->addRepeatingTimer(interval, windowHandle);
+}
+
+void Application::cancelTimer(std::uint64_t timerId) {
+  if (!d) {
+    return;
+  }
+  d->cancelRepeatingTimer(timerId);
 }
 
 void Application::onWindowRegistered(Window* window) {
@@ -260,7 +378,8 @@ int Application::exec() {
         if (redrawPending) {
           pw->processEvents();
         } else {
-          pw->waitForEvents(-1);
+          const int timeoutMs = d->timerWaitTimeoutMs();
+          pw->waitForEvents(timeoutMs);
         }
       }
     } else {
@@ -269,6 +388,7 @@ int Application::exec() {
       }
     }
 
+    d->processDueTimers();
     d->eventQueue_->dispatch();
 
     if (d->needsRedraw_.exchange(false, std::memory_order_relaxed)) {

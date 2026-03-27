@@ -1,6 +1,6 @@
 # Event Queue
 
-The event queue is the central dispatch path for application-visible work: window lifecycle, window chrome events, input, and user-defined payloads (`CustomEvent`). There is one queue per **`Application`**, owned by it and accessed via **`Application::instance().eventQueue()`**.
+The event queue is the central dispatch path for application-visible work: window lifecycle, window chrome events, input, timer ticks, and user-defined payloads (`CustomEvent`). There is one queue per **`Application`**, owned by it and accessed via **`Application::instance().eventQueue()`**.
 
 ---
 
@@ -22,6 +22,7 @@ using Event = std::variant<
     WindowLifecycleEvent,  // window registered / unregistered with the app
     WindowEvent,             // resize, focus, DPI, close request
     InputEvent,              // pointer, keyboard, touch, scroll
+    TimerEvent,              // repeating timers scheduled via Application
     CustomEvent              // user-defined typed payload
 >;
 ```
@@ -59,6 +60,18 @@ struct InputEvent {
     KeyCode     key;
     Modifiers   modifiers;
     String      text;
+};
+```
+
+### TimerEvent
+
+Delivered when an **`Application::scheduleRepeatingTimer`** interval elapses. The **`Application::exec()`** main loop advances timers with **`std::chrono::steady_clock`**, posts **`TimerEvent`**s, then **`dispatch()`** runs handlers (same thread as `post`). Use **`Application::cancelTimer`** with **`timerId`** to stop.
+
+```cpp
+struct TimerEvent {
+    std::int64_t deadlineNanos;   // steady_clock instant when delivered (ns since steady_clock epoch)
+    std::uint64_t timerId;        // id from scheduleRepeatingTimer / cancelTimer
+    unsigned int windowHandle;    // optional; 0 if not tied to a window
 };
 ```
 
@@ -103,14 +116,15 @@ void dispatch();
 
 ## Dispatch order
 
-Pending events are stored in buckets and drained in order: **lifecycle → window → input → custom**. Within each bucket, order is FIFO.
+Pending events are stored in buckets and drained in order: **lifecycle → window → input → timer → custom**. Within each bucket, order is FIFO.
 
 | Priority | Event type | Role |
 |----------|------------|------|
 | 1 | `WindowLifecycleEvent` | Registration changes before per-window events |
 | 2 | `WindowEvent` | Geometry and window state |
 | 3 | `InputEvent` | User input |
-| 4 | `CustomEvent` | App-defined work |
+| 4 | `TimerEvent` | Periodic work (e.g. animations, clocks) before custom app events |
+| 5 | `CustomEvent` | App-defined work |
 
 ---
 
@@ -124,7 +138,7 @@ Pending events are stored in buckets and drained in order: **lifecycle → windo
 
 How the UI thread drives `dispatch()` depends on the platform:
 
-- **macOS (current):** A `CFRunLoopObserver` on the main run loop calls `EventQueue::dispatch()` before sources each iteration; `Application::exec()` may call `dispatch()` before `[NSApp run]`. Other platforms will attach the same contract to their event loop (e.g. Wayland `wl_display_dispatch`, KMS/DRM page-flip loop).
+- **macOS (current):** `Application::exec()` alternates platform event waits (`PlatformWindow::waitForEvents` / `processEvents`) with **`processDueTimers()`** (standard C++ `steady_clock` deadlines) and **`EventQueue::dispatch()`**. When idle, **`waitForEvents`** uses a timeout derived from the next timer deadline so the loop wakes for timer ticks without busy-waiting. Other platforms will attach the same contract to their event loop (e.g. Wayland `wl_display_dispatch`, KMS/DRM page-flip loop).
 
 ---
 

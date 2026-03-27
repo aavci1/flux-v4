@@ -7,10 +7,6 @@
 #include <cmath>
 #include <memory>
 
-#if defined(__APPLE__)
-#include <dispatch/dispatch.h>
-#endif
-
 using namespace flux;
 
 namespace {
@@ -59,30 +55,13 @@ int main(int argc, char* argv[]) {
   });
   const unsigned int windowHandle = window.handle();
 
-#if defined(__APPLE__)
-  // Drive redraws from the main queue so posts line up with the run loop (vs. a background thread
-  // racing `sleep_until`, which fights coalesced redraws and display pacing).
-  struct DispatchSourceDeleter {
-    void operator()(dispatch_source_t s) const {
-      if (s) {
-        dispatch_source_cancel(s);
-        dispatch_release(s);
-      }
+  app.eventQueue().on<TimerEvent>([windowHandle](TimerEvent const& e) {
+    if (e.windowHandle != 0 && e.windowHandle != windowHandle) {
+      return;
     }
-  };
-  using DispatchSource = std::unique_ptr<std::remove_pointer_t<dispatch_source_t>, DispatchSourceDeleter>;
-  DispatchSource redrawTimer{
-      dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue()),
-      DispatchSourceDeleter{}};
-  if (redrawTimer) {
-    dispatch_source_set_timer(redrawTimer.get(), dispatch_time(DISPATCH_TIME_NOW, 0), NSEC_PER_SEC / 60,
-                              NSEC_PER_SEC / 360);
-    dispatch_source_set_event_handler(redrawTimer.get(), ^{
-      Window::postRedraw(windowHandle);
-    });
-    dispatch_resume(redrawTimer.get());
-  }
-#endif
+    Window::postRedraw(windowHandle);
+  });
+  app.scheduleRepeatingTimer(std::chrono::nanoseconds(1'000'000'000 / 60), windowHandle);
 
   return app.exec();
 }

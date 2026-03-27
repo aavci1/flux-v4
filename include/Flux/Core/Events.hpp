@@ -50,11 +50,21 @@ struct InputEvent {
   std::string text;
 };
 
+/// Posted when an `Application`-scheduled repeating timer fires (main queue / run loop).
+struct TimerEvent {
+  /// Monotonic steady-clock instant when the timer delivered (nanoseconds since `steady_clock` epoch).
+  std::int64_t deadlineNanos = 0;
+  /// Opaque id from `Application::scheduleRepeatingTimer`; pass to `Application::cancelTimer`.
+  std::uint64_t timerId = 0;
+  /// Optional window association; `0` if none. Useful for routing redraws to a specific window.
+  unsigned int windowHandle = 0;
+};
+
 struct CustomEvent {
   std::uint32_t type = 0;
   std::any payload;
 };
 
-using Event = std::variant<WindowLifecycleEvent, WindowEvent, InputEvent, CustomEvent>;
+using Event = std::variant<WindowLifecycleEvent, WindowEvent, InputEvent, TimerEvent, CustomEvent>;
 
 } // namespace flux

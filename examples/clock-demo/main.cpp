@@ -4,10 +4,6 @@
 #include <ctime>
 #include <memory>
 
-#if defined(__APPLE__)
-#include <dispatch/dispatch.h>
-#endif
-
 #include "clock.hpp"
 
 namespace {
@@ -53,27 +49,14 @@ int main(int argc, char* argv[]) {
 
   window.syncTimeFromSystem();
 
-#if defined(__APPLE__)
-  struct DispatchSourceDeleter {
-    void operator()(dispatch_source_t s) const {
-      if (s) {
-        dispatch_source_cancel(s);
-        dispatch_release(s);
-      }
+  app.eventQueue().on<TimerEvent>([&window, windowHandle](TimerEvent const& e) {
+    if (e.windowHandle != 0 && e.windowHandle != windowHandle) {
+      return;
     }
-  };
-  using DispatchSource = std::unique_ptr<std::remove_pointer_t<dispatch_source_t>, DispatchSourceDeleter>;
-  DispatchSource tick{dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue()),
-                      DispatchSourceDeleter{}};
-  if (tick) {
-    dispatch_source_set_timer(tick.get(), dispatch_time(DISPATCH_TIME_NOW, 0), NSEC_PER_SEC, NSEC_PER_SEC / 10);
-    dispatch_source_set_event_handler(tick.get(), ^{
-      window.syncTimeFromSystem();
-      flux::Window::postRedraw(windowHandle);
-    });
-    dispatch_resume(tick.get());
-  }
-#endif
+    window.syncTimeFromSystem();
+    flux::Window::postRedraw(windowHandle);
+  });
+  app.scheduleRepeatingTimer(std::chrono::seconds(1), windowHandle);
 
   return app.exec();
 }

@@ -19,9 +19,10 @@ namespace {
 constexpr std::size_t kLifecycle = 0;
 constexpr std::size_t kWindow = 1;
 constexpr std::size_t kInput = 2;
-constexpr std::size_t kCustom = 3;
+constexpr std::size_t kTimer = 3;
+constexpr std::size_t kCustom = 4;
 constexpr std::size_t kBucketCount = kCustom + 1;
-static_assert(kBucketCount == 4);
+static_assert(kBucketCount == 5);
 
 template<typename T>
 constexpr std::size_t bucketFor() {
@@ -31,6 +32,8 @@ constexpr std::size_t bucketFor() {
     return kWindow;
   } else if constexpr (std::is_same_v<T, InputEvent>) {
     return kInput;
+  } else if constexpr (std::is_same_v<T, TimerEvent>) {
+    return kTimer;
   } else if constexpr (std::is_same_v<T, CustomEvent>) {
     return kCustom;
   } else {
