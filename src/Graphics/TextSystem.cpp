@@ -148,7 +148,9 @@ void applyBoxOptions(std::shared_ptr<TextLayout> const& layout, Rect const& box,
   recomputeTextLayoutMetrics(*layout);
 }
 
-void trimTextLayoutToMaxLinesImpl(TextLayout& layout, int maxLines, bool normalizeAfter) {
+} // namespace
+
+void trimTextLayoutToMaxLines(TextLayout& layout, int maxLines, bool normalizeAfter) {
   if (maxLines <= 0 || layout.runs.empty()) {
     return;
   }
@@ -189,12 +191,6 @@ void trimTextLayoutToMaxLinesImpl(TextLayout& layout, int maxLines, bool normali
   } else {
     recomputeTextLayoutMetrics(layout);
   }
-}
-
-} // namespace
-
-void trimTextLayoutToMaxLines(TextLayout& layout, int maxLines, bool normalizeAfter) {
-  trimTextLayoutToMaxLinesImpl(layout, maxLines, normalizeAfter);
 }
 
 std::shared_ptr<TextLayout> TextSystem::layout(AttributedString const& text, Rect const& box,
