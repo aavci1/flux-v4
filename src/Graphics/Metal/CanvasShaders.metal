@@ -107,8 +107,8 @@ fragment float4 rect_sdf_frag(RectFragmentIn in [[stage_in]], float4 fragCoord [
   float outA = blended.a * in.fragOpacity;
   if (outA < 0.001f)
     discard_fragment();
-  float3 outRgb = blended.rgb / max(blended.a, 1e-6f);
-  return float4(outRgb, outA);
+  // Premultiplied RGBA; blend state uses (One, OneMinusSourceAlpha) like glyph pipeline.
+  return float4(blended.rgb * in.fragOpacity, outA);
 }
 
 // -----------------------------------------------------------------------------
@@ -175,7 +175,7 @@ fragment float4 line_sdf_frag(RectFragmentIn in [[stage_in]], float4 fragCoord [
   float alpha = (1.0f - smoothstep(-0.75f, 0.75f, d)) * in.fragStrokeColor.a * in.fragOpacity;
   if (alpha < 0.001f)
     discard_fragment();
-  return float4(in.fragStrokeColor.rgb, alpha);
+  return float4(in.fragStrokeColor.rgb * alpha, alpha);
 }
 
 // -----------------------------------------------------------------------------
@@ -202,7 +202,10 @@ vertex PathVertexOut path_vert(PathVertexIn in [[stage_in]]) {
   return out;
 }
 
-fragment float4 path_frag(PathVertexOut in [[stage_in]]) { return in.color; }
+fragment float4 path_frag(PathVertexOut in [[stage_in]]) {
+  float4 c = in.color;
+  return float4(c.rgb * c.a, c.a);
+}
 
 // -----------------------------------------------------------------------------
 // Glyph atlas (R8 coverage × premultiplied run color)

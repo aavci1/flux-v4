@@ -22,7 +22,8 @@ void setSrcOverBlend(MTLRenderPipelineColorAttachmentDescriptor* att) {
   att.blendingEnabled = YES;
   att.rgbBlendOperation = MTLBlendOperationAdd;
   att.alphaBlendOperation = MTLBlendOperationAdd;
-  att.sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
+  // Fragment output is premultiplied; matches glyph pipeline and Porter–Duff factors below.
+  att.sourceRGBBlendFactor = MTLBlendFactorOne;
   att.destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
   att.sourceAlphaBlendFactor = MTLBlendFactorOne;
   att.destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
