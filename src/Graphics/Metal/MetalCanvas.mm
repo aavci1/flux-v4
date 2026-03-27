@@ -425,8 +425,9 @@ public:
       Path::CommandView cv = path.command(0);
       if (cv.type == Path::CommandType::Rect && cv.dataCount >= 8) {
         const float* d = cv.data;
-        Rect r{d[0], d[1], d[2], d[3], CornerRadius{d[4], d[5], d[6], d[7]}};
-        drawRect(r, r.corners);
+        Rect r{d[0], d[1], d[2], d[3]};
+        CornerRadius cr{d[4], d[5], d[6], d[7]};
+        drawRect(r, cr);
         return;
       }
       const bool circlePrim = cv.type == Path::CommandType::Circle && cv.dataCount >= 3;
@@ -453,8 +454,8 @@ public:
   }
 
   void drawCircle(Point center, float radius) override {
-    Rect r = Rect::pill(center.x - radius, center.y - radius, radius * 2.f, radius * 2.f);
-    drawRect(r, r.corners);
+    Rect r{center.x - radius, center.y - radius, radius * 2.f, radius * 2.f};
+    drawRect(r, CornerRadius::pill(r));
   }
 
 private:

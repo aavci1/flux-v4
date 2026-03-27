@@ -47,6 +47,8 @@ struct Size {
 // Corner radii (top-left, top-right, bottom-right, bottom-left — matches SDF shader)
 // -----------------------------------------------------------------------------
 
+struct Rect;
+
 struct CornerRadius {
   float topLeft = 0;
   float topRight = 0;
@@ -70,6 +72,9 @@ struct CornerRadius {
     return topLeft == 0 && topRight == 0 && bottomRight == 0 && bottomLeft == 0;
   }
   constexpr bool operator==(const CornerRadius& o) const = default;
+
+  /// Full pill / circle corner radii for an axis-aligned `bounds` (all corners = min(w,h)/2).
+  static constexpr CornerRadius pill(Rect const& bounds);
 };
 
 // -----------------------------------------------------------------------------
@@ -112,7 +117,7 @@ constexpr Color lightGray = Color::hex(0xE0E0E0);
 } // namespace Colors
 
 // -----------------------------------------------------------------------------
-// Rect — axis-aligned bounds + per-corner radii (no separate RRect type)
+// Rect — axis-aligned bounds only (rounded corners use `CornerRadius` separately)
 // -----------------------------------------------------------------------------
 
 struct Rect {
@@ -120,23 +125,12 @@ struct Rect {
   float y = 0;
   float width = 0;
   float height = 0;
-  CornerRadius corners{};
 
   constexpr Rect() = default;
-  constexpr Rect(float x, float y, float width, float height, CornerRadius c = {})
-      : x(x), y(y), width(width), height(height), corners(c) {}
+  constexpr Rect(float x, float y, float width, float height) : x(x), y(y), width(width), height(height) {}
 
-  static Rect rounded(float rx, float ry, float rw, float rh, float radius) {
-    const float r = std::max(0.f, radius);
-    return Rect{rx, ry, rw, rh, CornerRadius(r, r, r, r)};
-  }
-
-  static Rect pill(float rx, float ry, float rw, float rh) {
-    const float r = std::min(rw, rh) * 0.5f;
-    return Rect{rx, ry, rw, rh, CornerRadius(r, r, r, r)};
-  }
-
-  static constexpr Rect sharp(float rx, float ry, float rw, float rh) { return Rect{rx, ry, rw, rh, {}}; }
+  /// Plain axis-aligned rect (same as value constructor; name matches prior `Rect::sharp` usage).
+  static constexpr Rect sharp(float rx, float ry, float rw, float rh) { return Rect{rx, ry, rw, rh}; }
 
   constexpr Point center() const { return {x + width * 0.5f, y + height * 0.5f}; }
 
@@ -146,6 +140,11 @@ struct Rect {
 
   constexpr bool operator==(const Rect& o) const = default;
 };
+
+constexpr CornerRadius CornerRadius::pill(Rect const& bounds) {
+  const float r = std::min(bounds.width, bounds.height) * 0.5f;
+  return CornerRadius(r, r, r, r);
+}
 
 // -----------------------------------------------------------------------------
 // Mat3 — 3×3 affine (column-major; column-vector multiply in `apply`)
