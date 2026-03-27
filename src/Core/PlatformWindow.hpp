@@ -33,6 +33,15 @@ public:
   virtual unsigned int handle() const = 0;
 
   virtual void* nativeGraphicsSurface() const = 0;
+
+  /// Drain queued AppKit/SDL events without blocking (used when a redraw is already pending).
+  virtual void processEvents() {}
+
+  /// Block until the next event or `timeoutMs` elapses; `timeoutMs < 0` waits indefinitely.
+  virtual void waitForEvents(int /*timeoutMs*/) {}
+
+  /// Wake `waitForEvents` (e.g. after `requestRedraw`).
+  virtual void wakeEventLoop() {}
 };
 
 } // namespace flux

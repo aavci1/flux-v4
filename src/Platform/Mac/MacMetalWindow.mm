@@ -163,6 +163,10 @@ public:
 
   std::unique_ptr<Canvas> createCanvas(Window& owner) override;
 
+  void processEvents() override;
+  void waitForEvents(int timeoutMs) override;
+  void wakeEventLoop() override;
+
   Window* fluxWindow() const;
 
 private:
@@ -271,7 +275,6 @@ void postTextInput(FluxMetalView* view, std::string text) {
   void (^block)(void) = ^{
     flux::Application::instance().eventQueue().post(flux::WindowEvent{flux::WindowEvent::Kind::CloseRequest,
                                                                         w->handle(), flux::Size{}, 1.0f});
-    flux::Application::instance().eventQueue().dispatch();
   };
   if ([NSThread isMainThread]) {
     block();
@@ -308,10 +311,7 @@ void postTextInput(FluxMetalView* view, std::string text) {
   }
   flux::Application::instance().eventQueue().post(
       flux::WindowEvent{flux::WindowEvent::Kind::FocusGained, fw->handle(), {}, 1.0f});
-  // Initial `show()` and return from another app: post a paint (resize already does on size change).
-  flux::Application::instance().eventQueue().post(
-      flux::WindowEvent{flux::WindowEvent::Kind::Redraw, fw->handle(), {}, 1.0f});
-  flux::Application::instance().eventQueue().dispatch();
+  flux::Application::instance().requestRedraw();
 }
 
 - (void)windowDidResignKey:(NSNotification*)notification {
@@ -542,6 +542,56 @@ std::unique_ptr<Canvas> MacMetalPlatformWindow::createCanvas(Window& owner) {
     return nullptr;
   }
   return createMetalCanvas(&owner, layerPtr, handle());
+}
+
+void MacMetalPlatformWindow::processEvents() {
+  if (!d->window_) {
+    return;
+  }
+  NSEvent* event = nil;
+  while ((event = [NSApp nextEventMatchingMask:NSEventMaskAny
+                                   untilDate:[NSDate distantPast]
+                                      inMode:NSDefaultRunLoopMode
+                                     dequeue:YES])) {
+    [NSApp sendEvent:event];
+  }
+}
+
+void MacMetalPlatformWindow::waitForEvents(int timeoutMs) {
+  if (!d->window_) {
+    return;
+  }
+  NSDate* until = (timeoutMs < 0) ? [NSDate distantFuture]
+                                : [NSDate dateWithTimeIntervalSinceNow:timeoutMs / 1000.0];
+  NSEvent* event = [NSApp nextEventMatchingMask:NSEventMaskAny
+                                      untilDate:until
+                                         inMode:NSDefaultRunLoopMode
+                                        dequeue:YES];
+  if (event) {
+    [NSApp sendEvent:event];
+  }
+  while ((event = [NSApp nextEventMatchingMask:NSEventMaskAny
+                                     untilDate:[NSDate distantPast]
+                                        inMode:NSDefaultRunLoopMode
+                                       dequeue:YES])) {
+    [NSApp sendEvent:event];
+  }
+}
+
+void MacMetalPlatformWindow::wakeEventLoop() {
+  if (!NSApp) {
+    return;
+  }
+  NSEvent* ev = [NSEvent otherEventWithType:NSEventTypeApplicationDefined
+                                   location:NSZeroPoint
+                              modifierFlags:0
+                                  timestamp:0
+                               windowNumber:0
+                                    context:nil
+                                    subtype:0
+                                      data1:0
+                                      data2:0];
+  [NSApp postEvent:ev atStart:NO];
 }
 
 namespace detail {

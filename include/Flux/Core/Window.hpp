@@ -9,6 +9,7 @@ namespace flux {
 
 class Application;
 class Canvas;
+class PlatformWindow;
 
 struct WindowConfig {
   Size size = {1280, 720};
@@ -34,10 +35,10 @@ public:
   /// Lazily creates the backing canvas on first use.
   Canvas& canvas();
 
-  /// Queue a redraw; the main thread dispatches `WindowEvent::Kind::Redraw`, then runs `beginFrame` → `render` → `present`.
+  /// Request a frame; `Application::exec()` renders all windows when the event pump runs.
   void requestRedraw();
 
-  /// Post a redraw by window handle (safe from any thread after `handle()` is known; no-op if the window is gone).
+  /// Like `requestRedraw()`; `handle` is reserved for future per-window scheduling.
   static void postRedraw(unsigned int handle);
 
   /// Drawing only; `Application` wraps each call with `beginFrame` and `present` when handling redraw.
@@ -49,6 +50,8 @@ protected:
   explicit Window(const WindowConfig& config);
 
 private:
+  PlatformWindow* platformWindow() const;
+
   struct Impl;
   std::unique_ptr<Impl> d;
 };

@@ -23,15 +23,15 @@ Window::Window(const WindowConfig& config) {
       handle(),
       this,
   });
-  Application::instance().eventQueue().dispatch();
-  d->platform_->show();
 }
 
 Window::~Window() {
   const unsigned int id = handle();
-  Application::instance().eventQueue().post(
-      WindowLifecycleEvent{WindowLifecycleEvent::Kind::Unregistered, id, nullptr});
-  Application::instance().eventQueue().dispatch();
+  if (Application::hasInstance()) {
+    Application::instance().unregisterWindowHandle(id);
+    Application::instance().eventQueue().post(
+        WindowLifecycleEvent{WindowLifecycleEvent::Kind::Unregistered, id, nullptr});
+  }
 }
 
 Size Window::getSize() const {
@@ -59,13 +59,16 @@ Canvas& Window::canvas() {
 
 void Window::requestRedraw() { postRedraw(handle()); }
 
+PlatformWindow* Window::platformWindow() const {
+  return d->platform_.get();
+}
+
 void Window::postRedraw(unsigned int handle) {
-  Application::instance().eventQueue().post(WindowEvent{
-      WindowEvent::Kind::Redraw,
-      handle,
-      {},
-      0.f,
-  });
+  (void)handle;
+  if (!Application::hasInstance()) {
+    return;
+  }
+  Application::instance().requestRedraw();
 }
 
 void Window::render(Canvas& /*canvas*/) {}

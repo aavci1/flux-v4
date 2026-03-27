@@ -1,10 +1,13 @@
 #include <Flux/Core/Application.hpp>
 #include <Flux/Core/EventQueue.hpp>
 #include <Flux/Core/Events.hpp>
+#include <Flux/Core/Window.hpp>
 #include <Flux/Graphics/Canvas.hpp>
 
+#include "Core/PlatformWindow.hpp"
+
 #include <algorithm>
-#include <cmath>
+#include <atomic>
 #if FLUX_ENABLE_DEFAULT_EVENT_LOGGING
 #include <cstdio>
 #endif
@@ -23,9 +26,6 @@ Application* gCurrentApplication = nullptr;
 #if FLUX_ENABLE_DEFAULT_EVENT_LOGGING
 
 void logWindowEvent(WindowEvent const& e) {
-  if (e.kind == WindowEvent::Kind::CloseRequest || e.kind == WindowEvent::Kind::Redraw) {
-    return;
-  }
   const char* kind = "?";
   switch (e.kind) {
   case WindowEvent::Kind::Resize:
@@ -42,9 +42,6 @@ void logWindowEvent(WindowEvent const& e) {
     break;
   case WindowEvent::Kind::CloseRequest:
     kind = "CloseRequest";
-    break;
-  case WindowEvent::Kind::Redraw:
-    kind = "Redraw";
     break;
   }
   std::printf("[flux] WindowEvent %s handle=%u size=%gx%g dpi=%g\n", kind, e.handle,
@@ -100,7 +97,8 @@ struct Application::Impl {
   std::unique_ptr<EventQueue> eventQueue_;
   std::vector<std::unique_ptr<Window>> ownedWindows_;
   std::vector<Window*> windows_;
-  CFRunLoopObserverRef runLoopObserver_{nullptr};
+  std::atomic<bool> needsRedraw_{false};
+  bool running_{true};
 
   Window* findWindowByHandle(unsigned int handle) {
     for (Window* cand : windows_) {
@@ -135,8 +133,8 @@ struct Application::Impl {
 
     q.on<WindowLifecycleEvent>([this](WindowLifecycleEvent const& e) {
       if (e.kind == WindowLifecycleEvent::Kind::Registered) {
-        if (e.window) {
-          registerWindow(e.window);
+        if (e.window && owner_) {
+          owner_->onWindowRegistered(e.window);
         }
       } else {
         unregisterWindowByHandle(e.handle);
@@ -148,25 +146,24 @@ struct Application::Impl {
         handleCloseRequest(findWindowByHandle(e.handle));
         return;
       }
-      if (e.kind == WindowEvent::Kind::Redraw) {
-        Window* w = findWindowByHandle(e.handle);
-        if (w) {
-          Canvas& c = w->canvas();
-          c.beginFrame();
-          w->render(c);
-          c.present();
-        }
-        return;
-      }
       if (e.kind == WindowEvent::Kind::Resize) {
         Window* w = findWindowByHandle(e.handle);
         if (w) {
           Canvas& c = w->canvas();
           c.resize(static_cast<int>(std::lround(static_cast<double>(e.size.width))),
                    static_cast<int>(std::lround(static_cast<double>(e.size.height))));
-          c.beginFrame();
-          w->render(c);
-          c.present();
+        }
+        if (owner_) {
+          owner_->requestRedraw();
+        }
+#if FLUX_ENABLE_DEFAULT_EVENT_LOGGING
+        logWindowEvent(e);
+#endif
+        return;
+      }
+      if (e.kind == WindowEvent::Kind::DpiChanged) {
+        if (owner_) {
+          owner_->requestRedraw();
         }
 #if FLUX_ENABLE_DEFAULT_EVENT_LOGGING
         logWindowEvent(e);
@@ -200,14 +197,10 @@ Application::Application(int /*argc*/, char** /*argv*/) {
 
   [NSApplication sharedApplication];
   [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+  [NSApp finishLaunching];
 }
 
 Application::~Application() {
-  if (d && d->runLoopObserver_) {
-    CFRunLoopRemoveObserver(CFRunLoopGetMain(), d->runLoopObserver_, kCFRunLoopCommonModes);
-    CFRelease(d->runLoopObserver_);
-    d->runLoopObserver_ = nullptr;
-  }
   d->ownedWindows_.clear();
   d.reset();
   if (gCurrentApplication == this) {
@@ -221,25 +214,86 @@ void Application::adoptOwnedWindow(std::unique_ptr<Window> window) {
 
 EventQueue& Application::eventQueue() { return *d->eventQueue_; }
 
+bool Application::hasInstance() { return gCurrentApplication != nullptr; }
+
+void Application::requestRedraw() {
+  if (!d) {
+    return;
+  }
+  d->needsRedraw_.store(true, std::memory_order_relaxed);
+  if (!d->windows_.empty()) {
+    if (PlatformWindow* pw = d->windows_.front()->platformWindow()) {
+      pw->wakeEventLoop();
+    }
+  }
+}
+
+void Application::onWindowRegistered(Window* window) {
+  if (!d || !window) {
+    return;
+  }
+  d->registerWindow(window);
+  if (PlatformWindow* pw = window->platformWindow()) {
+    pw->show();
+  }
+  requestRedraw();
+}
+
+void Application::unregisterWindowHandle(unsigned int handle) {
+  if (!d) {
+    return;
+  }
+  d->unregisterWindowByHandle(handle);
+}
+
 int Application::exec() {
   [NSApp activateIgnoringOtherApps:YES];
 
   d->eventQueue_->dispatch();
 
-  d->runLoopObserver_ = CFRunLoopObserverCreateWithHandler(
-      kCFAllocatorDefault, kCFRunLoopBeforeSources, true, 0,
-      ^(CFRunLoopObserverRef /*observer*/, CFRunLoopActivity /*activity*/) {
-        if (gCurrentApplication && gCurrentApplication->d->eventQueue_) {
-          gCurrentApplication->d->eventQueue_->dispatch();
-        }
-      });
-  CFRunLoopAddObserver(CFRunLoopGetMain(), d->runLoopObserver_, kCFRunLoopCommonModes);
+  while (d->running_) {
+    const bool redrawPending = d->needsRedraw_.load(std::memory_order_relaxed);
 
-  [NSApp run];
+    if (!d->windows_.empty()) {
+      Window* w = d->windows_.front();
+      if (PlatformWindow* pw = w->platformWindow()) {
+        if (redrawPending) {
+          pw->processEvents();
+        } else {
+          pw->waitForEvents(-1);
+        }
+      }
+    } else {
+      if (d->running_) {
+        CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.05, true);
+      }
+    }
+
+    d->eventQueue_->dispatch();
+
+    if (d->needsRedraw_.exchange(false, std::memory_order_relaxed)) {
+      for (Window* win : d->windows_) {
+        if (!win) {
+          continue;
+        }
+        Canvas& c = win->canvas();
+        c.beginFrame();
+        win->render(c);
+        c.present();
+      }
+    }
+  }
   return 0;
 }
 
-void Application::quit() { [NSApp stop:nil]; }
+void Application::quit() {
+  d->running_ = false;
+  if (!d->windows_.empty()) {
+    if (PlatformWindow* pw = d->windows_.front()->platformWindow()) {
+      pw->wakeEventLoop();
+    }
+  }
+}
 
 Application& Application::instance() {
   if (!gCurrentApplication) {

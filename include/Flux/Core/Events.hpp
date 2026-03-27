@@ -21,7 +21,7 @@ struct WindowLifecycleEvent {
 };
 
 struct WindowEvent {
-  enum class Kind : std::uint8_t { Resize, FocusGained, FocusLost, DpiChanged, CloseRequest, Redraw };
+  enum class Kind : std::uint8_t { Resize, FocusGained, FocusLost, DpiChanged, CloseRequest };
   Kind kind = Kind::Resize;
   unsigned int handle = 0;
   Size size{};

@@ -33,12 +33,22 @@ public:
   int exec();
   void quit();
 
+  /// Marks all windows for a render pass on the next `exec()` iteration and wakes the platform event wait.
+  void requestRedraw();
+
+  static bool hasInstance();
   static Application& instance();
 
   EventQueue& eventQueue();
 
+  friend class Window;
+
 private:
   void adoptOwnedWindow(std::unique_ptr<Window> window);
+  /// Invoked when `WindowLifecycleEvent::Registered` is dispatched (first `exec()` `dispatch()` drains the ctor post).
+  void onWindowRegistered(Window* window);
+  /// Removes `handle` from the running window list before `Window` is destroyed (synchronous; avoids dangling `Window*`).
+  void unregisterWindowHandle(unsigned int handle);
 
   struct Impl;
   std::unique_ptr<Impl> d;

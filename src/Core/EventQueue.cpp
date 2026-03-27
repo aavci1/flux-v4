@@ -103,17 +103,6 @@ void detail::EventQueueImplAccess::postInner(EventQueue& q, Event&& event) {
         using T = std::decay_t<decltype(ev)>;
         constexpr std::size_t b = bucketFor<T>();
         std::lock_guard lock(q.d->mutex_);
-        if constexpr (std::is_same_v<T, WindowEvent>) {
-          if (ev.kind == WindowEvent::Kind::Redraw) {
-            auto& deq = q.d->buckets_[b];
-            std::erase_if(deq, [&ev](Event const& e) {
-              if (auto const* we = std::get_if<WindowEvent>(&e)) {
-                return we->kind == WindowEvent::Kind::Redraw && we->handle == ev.handle;
-              }
-              return false;
-            });
-          }
-        }
         q.d->buckets_[b].push_back(Event(std::move(ev)));
       },
       std::move(event));
