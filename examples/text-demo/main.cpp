@@ -45,7 +45,7 @@ public:
       t.fontSize = 34.f;
       t.fontWeight = 600.f;
       t.color = Color::rgb(18, 18, 24);
-      auto layout = ts.shapePlain("Text in Flux", t, 0.f);
+      auto layout = ts.layout("Text in Flux", t, 0.f);
       c.drawTextLayout(*layout, Point{margin, y});
       y += layout->measuredSize.height + 8.f;
     }
@@ -56,7 +56,7 @@ public:
       t.fontSize = 14.f;
       t.fontWeight = 400.f;
       t.color = Color::rgb(110, 110, 125);
-      auto layout = ts.shapePlain("shape · measure · wrap · attributed runs", t, 0.f);
+      auto layout = ts.layout("layout · measure · wrap · attributed runs", t, 0.f);
       c.drawTextLayout(*layout, Point{margin, y});
       y += layout->measuredSize.height + 28.f;
     }
@@ -67,7 +67,7 @@ public:
       head.fontSize = 13.f;
       head.fontWeight = 600.f;
       head.color = Color::rgb(75, 75, 88);
-      auto headLayout = ts.shapePlain("Line wrapping", head, 0.f);
+      auto headLayout = ts.layout("Line wrapping", head, 0.f);
       c.drawTextLayout(*headLayout, Point{margin, y});
       y += headLayout->measuredSize.height + 10.f;
 
@@ -78,8 +78,8 @@ public:
       char const* para =
           "TextLayout uses the same Core Text framesetter constraints as measure, so box sizing and "
           "rendered glyphs stay in sync when maxWidth is set. Resize the window to see reflow.";
-      auto bodyLayout = ts.shapePlain(para, body, wrapW - 20.0f);
-      // Outline uses the same measured size as the shaped layout (single source of truth).
+      auto bodyLayout = ts.layout(para, body, wrapW - 20.0f);
+      // Outline uses the same measured size as the laid-out text (single source of truth).
       Size const ms = bodyLayout->measuredSize;
       Rect const box{margin, y, ms.width + 20.0f, ms.height + 20.0f};
       c.drawRect(box, CornerRadius(6.f, 6.f, 6.f, 6.f), FillStyle::none(),
@@ -94,7 +94,7 @@ public:
       head.fontSize = 13.f;
       head.fontWeight = 600.f;
       head.color = Color::rgb(75, 75, 88);
-      auto headLayout = ts.shapePlain("Attributed string", head, 0.f);
+      auto headLayout = ts.layout("Attributed string", head, 0.f);
       c.drawTextLayout(*headLayout, Point{margin, y});
       y += headLayout->measuredSize.height + 10.f;
 
@@ -123,7 +123,7 @@ public:
           {12, 18, a2},
       };
 
-      auto richLayout = ts.shape(rich, 0.f);
+      auto richLayout = ts.layout(rich, 0.f);
       c.drawTextLayout(*richLayout, Point{margin, y});
       y += richLayout->measuredSize.height + 28.f;
     }
@@ -136,7 +136,7 @@ public:
       foot.color = Color::rgb(140, 140, 155);
       std::string const line =
           std::string("firstBaseline → lastBaseline: layout metrics for alignment APIs.");
-      auto footLayout = ts.shapePlain(line, foot, wrapW);
+      auto footLayout = ts.layout(line, foot, wrapW);
       float const fy = std::min(y, h - margin - footLayout->measuredSize.height);
       c.drawTextLayout(*footLayout, Point{margin, fy});
     }

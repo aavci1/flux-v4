@@ -72,7 +72,7 @@ void drawCell(Canvas& c, Rect cell, BlendMode mode, const char* title,
   labelAttr.fontWeight = 500.f;
   labelAttr.color = Color::rgb(38, 38, 45);
 
-  auto labelLayout = Application::instance().textSystem().shapePlain(title, labelAttr, 0.f);
+  auto labelLayout = Application::instance().textSystem().layout(title, labelAttr, 0.f);
   Size const m = labelLayout->measuredSize;
   float const y = cell.y + cell.height - 16.f - m.height;
   float const x = cell.x + (cell.width - m.width) * 0.5f;

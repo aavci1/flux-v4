@@ -15,6 +15,8 @@ public:
   explicit HelloWindow(WindowConfig const& c) : Window(c) {}
 
   void render(Canvas& c) override {
+    TextSystem& ts = Application::instance().textSystem();
+
     c.clear(Color{1.0f, 1.0f, 1.0f, 1.f});
 
     // `clipBounds()` matches the canvas viewport (valid before `NSView` reports a non-zero size).
@@ -29,13 +31,12 @@ public:
     labelAttr.fontWeight = 500.f;
     labelAttr.color = Colors::darkGray;
 
-    auto textLayout = Application::instance().textSystem().shapePlain("Hello, World!", labelAttr, 0.f);
-    Size const m = textLayout->measuredSize;
-    // Center the first baseline in the viewport (avoids the line-box center looking optically low).
-    float const y = h * 0.5f - textLayout->firstBaseline;
-    float const x = (w - m.width) * 0.5f;
-
-    c.drawTextLayout(*textLayout, Point{x, y});
+    auto textLayout = ts.layout("Hello, World!", labelAttr, vb, {
+      .horizontalAlignment = HorizontalAlignment::Center,
+      .verticalAlignment = VerticalAlignment::Center,
+      .wrapping = TextWrapping::WrapAnywhere,
+    });
+    c.drawTextLayout(*textLayout, Point{vb.x, vb.y});
   }
 };
 

@@ -234,8 +234,48 @@ static NSRange utf8ByteRangeToNSRange(char const* utf8, std::size_t utf8Len, std
   return NSMakeRange(u16Start, u16End - u16Start);
 }
 
+static void applyParagraphStyleToMutable(NSMutableAttributedString* mas, TextLayoutOptions const& options) {
+  if (!mas || [mas length] == 0) {
+    return;
+  }
+  CTLineBreakMode lineBreak = kCTLineBreakByWordWrapping;
+  if (options.wrapping == TextWrapping::WrapAnywhere) {
+    lineBreak = kCTLineBreakByCharWrapping;
+  } else {
+    lineBreak = kCTLineBreakByWordWrapping;
+  }
+
+  CTParagraphStyleSetting settings[3];
+  std::size_t n = 0;
+  settings[n].spec = kCTParagraphStyleSpecifierLineBreakMode;
+  settings[n].valueSize = sizeof(lineBreak);
+  settings[n].value = &lineBreak;
+  ++n;
+
+  CGFloat minLh = 0;
+  CGFloat maxLh = 0;
+  if (options.lineHeight > 0.f) {
+    minLh = static_cast<CGFloat>(options.lineHeight);
+    maxLh = static_cast<CGFloat>(options.lineHeight);
+    settings[n].spec = kCTParagraphStyleSpecifierMinimumLineHeight;
+    settings[n].valueSize = sizeof(minLh);
+    settings[n].value = &minLh;
+    ++n;
+    settings[n].spec = kCTParagraphStyleSpecifierMaximumLineHeight;
+    settings[n].valueSize = sizeof(maxLh);
+    settings[n].value = &maxLh;
+    ++n;
+  }
+
+  CTParagraphStyleRef ps = CTParagraphStyleCreate(settings, static_cast<CFIndex>(n));
+  NSDictionary* paraAttrs = @{ (id)kCTParagraphStyleAttributeName : (__bridge id)ps };
+  [mas addAttributes:paraAttrs range:NSMakeRange(0, [mas length])];
+  CFRelease(ps);
+}
+
 CFAttributedStringRef createCFAttributed(AttributedString const& text,
-                                         std::vector<TextAttribute> const& resolved) {
+                                         std::vector<TextAttribute> const& resolved,
+                                         TextLayoutOptions const& options) {
   NSString* ns = [NSString stringWithUTF8String:text.utf8.c_str()];
   if (!ns) {
     ns = @"";
@@ -264,16 +304,18 @@ CFAttributedStringRef createCFAttributed(AttributedString const& text,
     CFRelease(font);
   }
 
+  applyParagraphStyleToMutable(mas, options);
   return (__bridge_retained CFAttributedStringRef)mas;
 }
 
-CFAttributedStringRef createCFAttributedPlain(std::string_view utf8, TextAttribute const& attr) {
+CFAttributedStringRef createCFAttributedPlain(std::string_view utf8, TextAttribute const& attr,
+                                              TextLayoutOptions const& options) {
   AttributedString as;
   as.utf8 = std::string(utf8);
   as.runs.push_back({0, static_cast<std::uint32_t>(utf8.size()), attr});
   std::vector<TextAttribute> resolved;
   accumulateInheritance(resolved, as);
-  return createCFAttributed(as, resolved);
+  return createCFAttributed(as, resolved, options);
 }
 
 /// Resolves `fontId` / style from a Core Text run’s font (same mapping as the previous single-line shaper).
@@ -516,38 +558,40 @@ static Size measureCF(CFAttributedStringRef attrStr, float maxWidth) {
   return Size{static_cast<float>(sz.width), static_cast<float>(sz.height)};
 }
 
-Size CoreTextSystem::measure(AttributedString const& text, float maxWidth) {
+Size CoreTextSystem::measure(AttributedString const& text, float maxWidth, TextLayoutOptions const& options) {
   if (text.utf8.empty()) {
     return {};
   }
   validateRuns(text);
   std::vector<TextAttribute> resolved;
   accumulateInheritance(resolved, text);
-  CFAttributedStringRef cf = createCFAttributed(text, resolved);
+  CFAttributedStringRef cf = createCFAttributed(text, resolved, options);
   Size s = measureCF(cf, maxWidth);
   CFRelease(cf);
   return s;
 }
 
-Size CoreTextSystem::measurePlain(std::string_view utf8, TextAttribute const& attr, float maxWidth) {
+Size CoreTextSystem::measure(std::string_view utf8, TextAttribute const& attr, float maxWidth,
+                             TextLayoutOptions const& options) {
   if (utf8.empty()) {
     return {};
   }
-  CFAttributedStringRef cf = createCFAttributedPlain(utf8, attr);
+  CFAttributedStringRef cf = createCFAttributedPlain(utf8, attr, options);
   Size s = measureCF(cf, maxWidth);
   CFRelease(cf);
   return s;
 }
 
-std::shared_ptr<TextLayout> CoreTextSystem::shapePlain(std::string_view utf8, TextAttribute const& attr,
-                                                       float maxWidth) {
+std::shared_ptr<TextLayout> CoreTextSystem::layout(std::string_view utf8, TextAttribute const& attr,
+                                                   float maxWidth, TextLayoutOptions const& options) {
   AttributedString as;
   as.utf8 = std::string(utf8);
   as.runs.push_back({0, static_cast<std::uint32_t>(utf8.size()), attr});
-  return shape(as, maxWidth);
+  return layout(as, maxWidth, options);
 }
 
-std::shared_ptr<TextLayout> CoreTextSystem::shape(AttributedString const& text, float maxWidth) {
+std::shared_ptr<TextLayout> CoreTextSystem::layout(AttributedString const& text, float maxWidth,
+                                                    TextLayoutOptions const& options) {
   auto out = std::make_shared<TextLayout>();
   if (text.utf8.empty()) {
     return out;
@@ -556,7 +600,7 @@ std::shared_ptr<TextLayout> CoreTextSystem::shape(AttributedString const& text, 
   std::vector<TextAttribute> resolved;
   accumulateInheritance(resolved, text);
 
-  CFAttributedStringRef cfAttr = createCFAttributed(text, resolved);
+  CFAttributedStringRef cfAttr = createCFAttributed(text, resolved, options);
   CTFramesetterRef fs = CTFramesetterCreateWithAttributedString(cfAttr);
   CFRelease(cfAttr);
   if (!fs) {

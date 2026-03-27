@@ -7,7 +7,7 @@
 
 namespace flux {
 
-/// Laid-out text: shaped runs plus placement. `origin` passed to `Canvas::drawTextLayout` is the layout
+/// Laid-out text: runs plus placement in layout space. `origin` passed to `Canvas::drawTextLayout` is the layout
 /// top-left; each `PlacedRun::origin` is the baseline-left of that run relative to that point (`y` down).
 struct TextLayout {
   struct PlacedRun {
