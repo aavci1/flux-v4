@@ -31,6 +31,10 @@ using Event = std::variant<
 
 Posted when a `Window` is constructed (registered) or destroyed (unregistered). Used so `Application` can track open windows.
 
+- **`kind`:** `Registered` when the window is created, `Unregistered` when it is destroyed.
+- **`handle`:** Stable platform window handle; valid for both kinds.
+- **`window`:** Non-null **only** when `kind == Registered` (during construction); use it to associate the `Window*` with the handle before later events reference the handle alone.
+
 ### WindowEvent
 
 Resize, focus gained/lost, backing-scale (DPI) changes, and close requests.
@@ -131,6 +135,13 @@ Pending events are stored in buckets and drained in order: **lifecycle → windo
 ## Thread safety
 
 **Flux v4 today:** The queue does not enforce thread affinity; callers are expected to use **`post` / `dispatch` / `on`** only from the main thread. A future cross-thread `post` plus a platform wake is not implemented in the reference queue yet.
+
+---
+
+## Re-entrancy
+
+- **`dispatch()`** sets a re-entrancy guard: a **nested** `dispatch()` (for example from inside an event handler) **returns immediately** without draining the queue again. Events posted during that handler are still enqueued and are processed when the **outer** `dispatch()` continues its drain loop.
+- **`post`** is safe while a handler runs; new events are appended to the appropriate bucket under an internal mutex.
 
 ---
 
