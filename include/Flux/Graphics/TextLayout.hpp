@@ -21,4 +21,11 @@ struct TextLayout {
   float lastBaseline = 0.f;  ///< Distance from layout top to last line baseline.
 };
 
+/// Recomputes `measuredSize`, `firstBaseline`, and `lastBaseline` from current run geometry.
+void recomputeTextLayoutMetrics(TextLayout& layout);
+
+/// Drops runs on lines after the first `maxLines` distinct baselines, then optionally normalizes origins to the
+/// bounding box top-left (recommended when returning from a shaper).
+void trimTextLayoutToMaxLines(TextLayout& layout, int maxLines, bool normalizeAfter = true);
+
 } // namespace flux

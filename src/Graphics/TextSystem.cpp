@@ -7,11 +7,7 @@
 
 namespace flux {
 
-namespace {
-
-constexpr float kLineEps = 0.5f;
-
-void recomputeMetrics(TextLayout& L) {
+void recomputeTextLayoutMetrics(TextLayout& L) {
   if (L.runs.empty()) {
     L.measuredSize = {};
     L.firstBaseline = 0.f;
@@ -42,6 +38,12 @@ void recomputeMetrics(TextLayout& L) {
   L.lastBaseline = maxBaselineY - minTop;
 }
 
+namespace {
+
+constexpr float kLineEps = 0.5f;
+
+bool nearLine(float a, float b) { return std::abs(a - b) < kLineEps; }
+
 void normalizeOriginsToTopLeft(TextLayout& L) {
   if (L.runs.empty()) {
     return;
@@ -57,19 +59,103 @@ void normalizeOriginsToTopLeft(TextLayout& L) {
     pr.origin.x -= minX;
     pr.origin.y -= minTop;
   }
-  recomputeMetrics(L);
+  recomputeTextLayoutMetrics(L);
 }
 
-bool nearLine(float a, float b) { return std::abs(a - b) < kLineEps; }
-
-void trimToMaxLines(TextLayout& L, int maxLines) {
-  if (maxLines <= 0 || L.runs.empty()) {
+void applyHorizontalPerLine(TextLayout& layout, Rect const& box, HorizontalAlignment horizontalAlignment) {
+  if (layout.runs.empty()) {
+    return;
+  }
+  if (horizontalAlignment == HorizontalAlignment::Leading) {
     return;
   }
 
   std::vector<float> baselines;
-  baselines.reserve(L.runs.size());
-  for (auto const& pr : L.runs) {
+  baselines.reserve(layout.runs.size());
+  for (auto const& pr : layout.runs) {
+    float const y = pr.origin.y;
+    bool found = false;
+    for (float b : baselines) {
+      if (nearLine(b, y)) {
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      baselines.push_back(y);
+    }
+  }
+
+  for (float ly : baselines) {
+    float minL = std::numeric_limits<float>::infinity();
+    float maxR = -std::numeric_limits<float>::infinity();
+    for (auto const& pr : layout.runs) {
+      if (!nearLine(pr.origin.y, ly)) {
+        continue;
+      }
+      minL = std::min(minL, pr.origin.x);
+      maxR = std::max(maxR, pr.origin.x + pr.run.width);
+    }
+    if (!(minL < std::numeric_limits<float>::infinity())) {
+      continue;
+    }
+    float const lineWidth = maxR - minL;
+    float lineDx = 0.f;
+    if (horizontalAlignment == HorizontalAlignment::Center) {
+      lineDx = (box.width - lineWidth) * 0.5f - minL;
+    } else if (horizontalAlignment == HorizontalAlignment::Trailing) {
+      lineDx = box.width - lineWidth - minL;
+    }
+    for (auto& pr : layout.runs) {
+      if (nearLine(pr.origin.y, ly)) {
+        pr.origin.x += lineDx;
+      }
+    }
+  }
+  recomputeTextLayoutMetrics(layout);
+}
+
+void applyBoxOptions(std::shared_ptr<TextLayout> const& layout, Rect const& box,
+                     TextLayoutOptions const& options) {
+  if (!layout) {
+    return;
+  }
+
+  normalizeOriginsToTopLeft(*layout);
+  applyHorizontalPerLine(*layout, box, options.horizontalAlignment);
+
+  float const h = layout->measuredSize.height;
+
+  float dy = 0.f;
+  switch (options.verticalAlignment) {
+  case VerticalAlignment::Top:
+    dy = 0.f;
+    break;
+  case VerticalAlignment::FirstBaseline:
+    dy = options.firstBaselineOffset - layout->firstBaseline;
+    break;
+  case VerticalAlignment::Center:
+    dy = (box.height - h) * 0.5f;
+    break;
+  case VerticalAlignment::Bottom:
+    dy = box.height - h;
+    break;
+  }
+
+  for (auto& pr : layout->runs) {
+    pr.origin.y += dy;
+  }
+  recomputeTextLayoutMetrics(*layout);
+}
+
+void trimTextLayoutToMaxLinesImpl(TextLayout& layout, int maxLines, bool normalizeAfter) {
+  if (maxLines <= 0 || layout.runs.empty()) {
+    return;
+  }
+
+  std::vector<float> baselines;
+  baselines.reserve(layout.runs.size());
+  for (auto const& pr : layout.runs) {
     float const y = pr.origin.y;
     bool found = false;
     for (float b : baselines) {
@@ -88,7 +174,7 @@ void trimToMaxLines(TextLayout& L, int maxLines) {
   }
 
   std::vector<float> const keep(baselines.begin(), baselines.begin() + static_cast<std::ptrdiff_t>(maxLines));
-  auto newEnd = std::remove_if(L.runs.begin(), L.runs.end(), [&](TextLayout::PlacedRun const& pr) {
+  auto newEnd = std::remove_if(layout.runs.begin(), layout.runs.end(), [&](TextLayout::PlacedRun const& pr) {
     for (float k : keep) {
       if (nearLine(k, pr.origin.y)) {
         return false;
@@ -96,62 +182,24 @@ void trimToMaxLines(TextLayout& L, int maxLines) {
     }
     return true;
   });
-  L.runs.erase(newEnd, L.runs.end());
-  normalizeOriginsToTopLeft(L);
-}
+  layout.runs.erase(newEnd, layout.runs.end());
 
-void applyBoxOptions(std::shared_ptr<TextLayout> const& layout, Rect const& box,
-                     TextLayoutOptions const& options) {
-  if (!layout) {
-    return;
-  }
-
-  normalizeOriginsToTopLeft(*layout);
-
-  if (options.maxLines > 0) {
-    trimToMaxLines(*layout, options.maxLines);
-  }
-
-  float const w = layout->measuredSize.width;
-  float const h = layout->measuredSize.height;
-
-  float dx = 0.f;
-  switch (options.horizontalAlignment) {
-  case HorizontalAlignment::Leading:
-    dx = 0.f;
-    break;
-  case HorizontalAlignment::Center:
-    dx = (box.width - w) * 0.5f;
-    break;
-  case HorizontalAlignment::Trailing:
-    dx = box.width - w;
-    break;
-  }
-
-  float dy = 0.f;
-  switch (options.verticalAlignment) {
-  case VerticalAlignment::Top:
-  case VerticalAlignment::FirstBaseline:
-    dy = 0.f;
-    break;
-  case VerticalAlignment::Center:
-    dy = (box.height - h) * 0.5f;
-    break;
-  case VerticalAlignment::Bottom:
-    dy = box.height - h;
-    break;
-  }
-
-  for (auto& pr : layout->runs) {
-    pr.origin.x += dx;
-    pr.origin.y += dy;
+  if (normalizeAfter) {
+    normalizeOriginsToTopLeft(layout);
+  } else {
+    recomputeTextLayoutMetrics(layout);
   }
 }
 
 } // namespace
 
+void trimTextLayoutToMaxLines(TextLayout& layout, int maxLines, bool normalizeAfter) {
+  trimTextLayoutToMaxLinesImpl(layout, maxLines, normalizeAfter);
+}
+
 std::shared_ptr<TextLayout> TextSystem::layout(AttributedString const& text, Rect const& box,
                                                TextLayoutOptions const& options) {
+  // NoWrap uses maxWidth 0; lines are not broken to box.width and may extend past the box horizontally.
   float const maxWidth = options.wrapping == TextWrapping::NoWrap ? 0.f : box.width;
   std::shared_ptr<TextLayout> result = layout(text, maxWidth, options);
   applyBoxOptions(result, box, options);

@@ -71,21 +71,26 @@ public:
       c.drawTextLayout(*headLayout, Point{margin, y});
       y += headLayout->measuredSize.height + 10.f;
 
+
+      char const* para = "TextLayout uses the same Core Text framesetter constraints as measure, so box sizing and rendered glyphs stay in sync when maxWidth is set. Resize the window to see reflow.";
       TextAttribute body = baseUi();
       body.fontSize = 16.f;
       body.fontWeight = 420.f;
       body.color = Color::rgb(38, 38, 48);
-      char const* para =
-          "TextLayout uses the same Core Text framesetter constraints as measure, so box sizing and "
-          "rendered glyphs stay in sync when maxWidth is set. Resize the window to see reflow.";
-      auto bodyLayout = ts.layout(para, body, wrapW - 20.0f);
+
+
+      auto bodyLayout = ts.layout(para, body, Rect{0.0f, 0, contentW - 20.0f, 200.0f}, {
+        .horizontalAlignment = HorizontalAlignment::Center,
+        .verticalAlignment = VerticalAlignment::Top
+      });
+
       // Outline uses the same measured size as the laid-out text (single source of truth).
       Size const ms = bodyLayout->measuredSize;
-      Rect const box{margin, y, ms.width + 20.0f, ms.height + 20.0f};
+      Rect const box{margin, y, contentW, 200.0f};
       c.drawRect(box, CornerRadius(6.f, 6.f, 6.f, 6.f), FillStyle::none(),
                  StrokeStyle::solid(Color::rgb(200, 200, 210), 1.f));
       c.drawTextLayout(*bodyLayout, Point{margin + 10.0f, y + 10.0f});
-      y += bodyLayout->measuredSize.height + 28.f;
+      y += 200.0f + 28.f;
     }
 
     // --- Section: rich text (AttributedString) ---

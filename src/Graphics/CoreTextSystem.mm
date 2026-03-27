@@ -4,6 +4,8 @@
 
 #include "Graphics/CoreTextSystem.hpp"
 
+#include <Flux/Graphics/TextLayout.hpp>
+
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -562,6 +564,10 @@ Size CoreTextSystem::measure(AttributedString const& text, float maxWidth, TextL
   if (text.utf8.empty()) {
     return {};
   }
+  if (options.maxLines > 0) {
+    std::shared_ptr<TextLayout> const L = layout(text, maxWidth, options);
+    return L ? L->measuredSize : Size{};
+  }
   validateRuns(text);
   std::vector<TextAttribute> resolved;
   accumulateInheritance(resolved, text);
@@ -575,6 +581,10 @@ Size CoreTextSystem::measure(std::string_view utf8, TextAttribute const& attr, f
                              TextLayoutOptions const& options) {
   if (utf8.empty()) {
     return {};
+  }
+  if (options.maxLines > 0) {
+    std::shared_ptr<TextLayout> const L = layout(utf8, attr, maxWidth, options);
+    return L ? L->measuredSize : Size{};
   }
   CFAttributedStringRef cf = createCFAttributedPlain(utf8, attr, options);
   Size s = measureCF(cf, maxWidth);
@@ -645,9 +655,9 @@ std::shared_ptr<TextLayout> CoreTextSystem::layout(AttributedString const& text,
 
   CFRelease(frame);
 
-  if (!out->runs.empty()) {
-    out->firstBaseline = out->runs.front().origin.y;
-    out->lastBaseline = out->runs.back().origin.y;
+  recomputeTextLayoutMetrics(*out);
+  if (options.maxLines > 0) {
+    trimTextLayoutToMaxLines(*out, options.maxLines, true);
   }
   return out;
 }

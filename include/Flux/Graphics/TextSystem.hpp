@@ -29,6 +29,8 @@ public:
 
   /// Box-constrained: PlacedRun origins are pre-offset for alignment within the box.
   /// Drawing: `canvas.drawTextLayout(*result, {box.x, box.y})` — no further arithmetic.
+  /// With `TextWrapping::NoWrap`, width is not limited to `box.width`; text may extend past the box unless the
+  /// caller clips (e.g. canvas scissor).
   std::shared_ptr<TextLayout> layout(AttributedString const& text, Rect const& box,
                                      TextLayoutOptions const& options = {});
 
