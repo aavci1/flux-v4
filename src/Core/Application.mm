@@ -227,6 +227,22 @@ struct Application::Impl {
     }
   }
 
+  /// Consumes `needsRedraw_` and runs one render pass for all windows (same as the tail of `exec()`).
+  void presentPendingFrames() {
+    if (!needsRedraw_.exchange(false, std::memory_order_relaxed)) {
+      return;
+    }
+    for (Window* win : windows_) {
+      if (!win) {
+        continue;
+      }
+      Canvas& c = win->canvas();
+      c.beginFrame();
+      win->render(c);
+      c.present();
+    }
+  }
+
   void installEventHandlers() {
     EventQueue& q = *eventQueue_;
 
@@ -255,6 +271,9 @@ struct Application::Impl {
         if (owner_) {
           owner_->requestRedraw();
         }
+        // Live resize runs in AppKit's nested tracking loop. `exec()`'s main loop does not run until the
+        // gesture ends, so deferring present to the end of `exec()` would freeze content until then.
+        presentPendingFrames();
 #if FLUX_ENABLE_DEFAULT_EVENT_LOGGING
         logWindowEvent(e);
 #endif
@@ -264,6 +283,7 @@ struct Application::Impl {
         if (owner_) {
           owner_->requestRedraw();
         }
+        presentPendingFrames();
 #if FLUX_ENABLE_DEFAULT_EVENT_LOGGING
         logWindowEvent(e);
 #endif
@@ -397,17 +417,7 @@ int Application::exec() {
     d->processDueTimers();
     d->eventQueue_->dispatch();
 
-    if (d->needsRedraw_.exchange(false, std::memory_order_relaxed)) {
-      for (Window* win : d->windows_) {
-        if (!win) {
-          continue;
-        }
-        Canvas& c = win->canvas();
-        c.beginFrame();
-        win->render(c);
-        c.present();
-      }
-    }
+    d->presentPendingFrames();
   }
   return 0;
 }

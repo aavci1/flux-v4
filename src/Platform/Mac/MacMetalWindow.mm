@@ -428,6 +428,8 @@ MacMetalPlatformWindow::MacMetalPlatformWindow(const WindowConfig& config) : d(s
                                             backing:NSBackingStoreBuffered
                                               defer:NO];
   [d->window_ setReleasedWhenClosed:NO];
+  // Avoid scaling a stale snapshot during live resize; custom Metal content must update each frame.
+  d->window_.preservesContentDuringLiveResize = NO;
 
   d->metalView_ = [[FluxMetalView alloc] initWithFrame:[[d->window_ contentView] bounds]];
   d->metalView_.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;

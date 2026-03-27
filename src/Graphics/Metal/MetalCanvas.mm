@@ -3,6 +3,7 @@
 #import <QuartzCore/QuartzCore.h>
 #import <simd/simd.h>
 
+#include <Flux/Core/Application.hpp>
 #include <Flux/Graphics/Canvas.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Graphics/TextLayout.hpp>
@@ -162,6 +163,9 @@ public:
     if (!drawable_) {
       dispatch_semaphore_signal(frameSem_);
       cmdBuf_ = nil;
+      if (Application::hasInstance()) {
+        Application::instance().requestRedraw();
+      }
     }
     inFrame_ = (drawable_ != nil && cmdBuf_ != nil);
     const CGSize ds = metal_.layer().drawableSize;
