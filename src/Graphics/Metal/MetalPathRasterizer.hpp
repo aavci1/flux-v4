@@ -17,6 +17,6 @@ namespace flux {
  */
 void metalPathRasterizeToMesh(Path const& path, FillStyle const& fs, StrokeStyle const& ss, Mat3 const& transform,
                               float dpiScaleX, float dpiScaleY, float opacity, float viewportW, float viewportH,
-                              std::vector<PathVertex>& pathVerts, std::vector<MetalDrawOp>& ops);
+                              std::vector<PathVertex>& pathVerts, std::vector<MetalDrawOp>& ops, BlendMode blendMode);
 
 } // namespace flux

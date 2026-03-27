@@ -180,7 +180,7 @@ public:
     for (const MetalDrawOp& op : frame_.ops) {
       switch (op.kind) {
       case MetalDrawOp::Rect: {
-        [enc setRenderPipelineState:metal_.rectPSO()];
+        [enc setRenderPipelineState:metal_.rectPSO(op.blendMode)];
         [enc setVertexBuffer:metal_.quadBuffer() offset:0 atIndex:0];
         const NSUInteger off = instSlot * sizeof(MetalRectInstance);
         ++instSlot;
@@ -190,7 +190,7 @@ public:
         break;
       }
       case MetalDrawOp::Line: {
-        [enc setRenderPipelineState:metal_.linePSO()];
+        [enc setRenderPipelineState:metal_.linePSO(op.blendMode)];
         [enc setVertexBuffer:metal_.quadBuffer() offset:0 atIndex:0];
         const NSUInteger off = instSlot * sizeof(MetalRectInstance);
         ++instSlot;
@@ -203,7 +203,7 @@ public:
         if (op.pathCount == 0) {
           break;
         }
-        [enc setRenderPipelineState:metal_.pathPSO()];
+        [enc setRenderPipelineState:metal_.pathPSO(op.blendMode)];
         const NSUInteger off = static_cast<NSUInteger>(op.pathStart) * sizeof(PathVertex);
         [enc setVertexBuffer:pathBuf offset:off atIndex:0];
         [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:static_cast<NSUInteger>(op.pathCount)];
@@ -409,6 +409,7 @@ public:
         simd_make_float2(ss.width * std::min(dpiScaleX_, dpiScaleY_), paintOpacity);
     op.rectInst.viewport = simd_make_float2(vw, vh);
     op.rectInst.rotationPad = simd_make_float4(0.f, 0.f, 0.f, 0.f);
+    op.blendMode = currentState().blendMode;
     frame_.ops.push_back(op);
   }
 
@@ -448,7 +449,7 @@ public:
     const float vh = static_cast<float>(drawableSize.height);
 
     metalPathRasterizeToMesh(path, fs, ss, currentState().transform, dpiScaleX_, dpiScaleY_, effectiveOpacity(),
-                             vw, vh, frame_.pathVerts, frame_.ops);
+                             vw, vh, frame_.pathVerts, frame_.ops, currentState().blendMode);
   }
 
   void drawCircle(Point center, float radius) override {
@@ -545,6 +546,7 @@ private:
     op.rectInst.strokeWidthOpacity = simd_make_float2(strokeWidth, opacity);
     op.rectInst.viewport = simd_make_float2(vw, vh);
     op.rectInst.rotationPad = simd_make_float4(rotationRad, 0.f, 0.f, 0.f);
+    op.blendMode = currentState().blendMode;
     frame_.ops.push_back(op);
   }
 };

@@ -24,6 +24,7 @@ Window::Window(const WindowConfig& config) {
       this,
   });
   Application::instance().eventQueue().dispatch();
+  d->platform_->show();
 }
 
 Window::~Window() {

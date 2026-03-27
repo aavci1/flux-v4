@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Flux/Graphics/Styles.hpp>
+
 #include <cstdint>
 #include <vector>
 
@@ -23,6 +25,8 @@ struct MetalDrawOp {
   MetalRectInstance rectInst{};
   std::uint32_t pathStart = 0;
   std::uint32_t pathCount = 0;
+  /// Blend state for this draw (fixed-function blend in the PSO).
+  BlendMode blendMode = BlendMode::Normal;
 };
 
 } // namespace flux

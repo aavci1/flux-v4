@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <dispatch/dispatch.h>
 #include <memory>
 #include <string>
 
@@ -151,6 +152,7 @@ public:
   ~MacMetalPlatformWindow() override;
 
   void setFluxWindow(Window* window) override;
+  void show() override;
   void resize(const Size& newSize) override;
   void setFullscreen(bool fullscreen) override;
   void setTitle(const std::string& title) override;
@@ -306,6 +308,10 @@ void postTextInput(FluxMetalView* view, std::string text) {
   }
   flux::Application::instance().eventQueue().post(
       flux::WindowEvent{flux::WindowEvent::Kind::FocusGained, fw->handle(), {}, 1.0f});
+  // Initial `show()` and return from another app: post a paint (resize already does on size change).
+  flux::Application::instance().eventQueue().post(
+      flux::WindowEvent{flux::WindowEvent::Kind::Redraw, fw->handle(), {}, 1.0f});
+  flux::Application::instance().eventQueue().dispatch();
 }
 
 - (void)windowDidResignKey:(NSNotification*)notification {
@@ -443,9 +449,7 @@ MacMetalPlatformWindow::MacMetalPlatformWindow(const WindowConfig& config) : d(s
       [w toggleFullScreen:nil];
     });
   }
-
-  [d->window_ makeKeyAndOrderFront:nil];
-  [d->window_ makeFirstResponder:d->metalView_];
+  // `makeKeyAndOrderFront` is deferred to `show()` so `windowDidBecomeKey` runs after `setFluxWindow`.
 }
 
 MacMetalPlatformWindow::~MacMetalPlatformWindow() {
@@ -465,6 +469,14 @@ MacMetalPlatformWindow::~MacMetalPlatformWindow() {
 
 void MacMetalPlatformWindow::setFluxWindow(Window* window) {
   d->fluxWindow_ = window;
+}
+
+void MacMetalPlatformWindow::show() {
+  if (!d->window_ || !d->metalView_) {
+    return;
+  }
+  [d->window_ makeKeyAndOrderFront:nil];
+  [d->window_ makeFirstResponder:d->metalView_];
 }
 
 void MacMetalPlatformWindow::resize(const Size& newSize) {

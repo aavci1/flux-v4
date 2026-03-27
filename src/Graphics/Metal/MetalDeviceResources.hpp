@@ -1,9 +1,12 @@
 #pragma once
 
+#include <Flux/Graphics/Styles.hpp>
+
 #include "Graphics/Metal/MetalCanvasTypes.hpp"
 #include "Graphics/PathFlattener.hpp"
 
 #include <cstdint>
+#include <unordered_map>
 #include <vector>
 
 #if defined(__APPLE__)
@@ -30,9 +33,9 @@ public:
   CAMetalLayer* layer() const { return layer_; }
   id<MTLDevice> device() const { return device_; }
   id<MTLCommandQueue> queue() const { return queue_; }
-  id<MTLRenderPipelineState> rectPSO() const { return rectPSO_; }
-  id<MTLRenderPipelineState> linePSO() const { return linePSO_; }
-  id<MTLRenderPipelineState> pathPSO() const { return pathPSO_; }
+  id<MTLRenderPipelineState> rectPSO(BlendMode mode);
+  id<MTLRenderPipelineState> linePSO(BlendMode mode);
+  id<MTLRenderPipelineState> pathPSO(BlendMode mode);
   id<MTLBuffer> quadBuffer() const { return quadBuffer_; }
 
   /// Pack rect/line instance data for this frame (submission order preserved).
@@ -48,9 +51,9 @@ private:
   id<MTLDevice> device_{nil};
   id<MTLCommandQueue> queue_{nil};
   id<MTLLibrary> lib_{nil};
-  id<MTLRenderPipelineState> rectPSO_{nil};
-  id<MTLRenderPipelineState> linePSO_{nil};
-  id<MTLRenderPipelineState> pathPSO_{nil};
+  std::unordered_map<std::uint32_t, id<MTLRenderPipelineState>> rectPSOCache_;
+  std::unordered_map<std::uint32_t, id<MTLRenderPipelineState>> linePSOCache_;
+  std::unordered_map<std::uint32_t, id<MTLRenderPipelineState>> pathPSOCache_;
   id<MTLBuffer> quadBuffer_{nil};
 
   id<MTLBuffer> instanceArena_{nil};

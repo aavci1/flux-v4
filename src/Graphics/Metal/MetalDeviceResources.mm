@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <stdexcept>
 
 namespace flux {
 
@@ -15,8 +16,141 @@ namespace {
 
 constexpr NSUInteger kQuadStripCount = 4;
 
+std::uint32_t blendModeKey(BlendMode m) { return static_cast<std::uint32_t>(static_cast<int>(m)); }
+
+void setSrcOverBlend(MTLRenderPipelineColorAttachmentDescriptor* att) {
+  att.blendingEnabled = YES;
+  att.rgbBlendOperation = MTLBlendOperationAdd;
+  att.alphaBlendOperation = MTLBlendOperationAdd;
+  att.sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
+  att.destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+  att.sourceAlphaBlendFactor = MTLBlendFactorOne;
+  att.destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+}
+
+void applyBlendModeToAttachment(MTLRenderPipelineColorAttachmentDescriptor* att, BlendMode mode) {
+  switch (mode) {
+  case BlendMode::Normal:
+  case BlendMode::SrcOver:
+    setSrcOverBlend(att);
+    return;
+  case BlendMode::Multiply:
+    att.blendingEnabled = YES;
+    att.rgbBlendOperation = MTLBlendOperationAdd;
+    att.alphaBlendOperation = MTLBlendOperationAdd;
+    att.sourceRGBBlendFactor = MTLBlendFactorDestinationColor;
+    att.destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+    att.sourceAlphaBlendFactor = MTLBlendFactorDestinationAlpha;
+    att.destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+    return;
+  case BlendMode::Screen:
+    att.blendingEnabled = YES;
+    att.rgbBlendOperation = MTLBlendOperationAdd;
+    att.alphaBlendOperation = MTLBlendOperationAdd;
+    att.sourceRGBBlendFactor = MTLBlendFactorOneMinusDestinationColor;
+    att.destinationRGBBlendFactor = MTLBlendFactorOne;
+    att.sourceAlphaBlendFactor = MTLBlendFactorOne;
+    att.destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+    return;
+  case BlendMode::Darken:
+    att.blendingEnabled = YES;
+    att.rgbBlendOperation = MTLBlendOperationMin;
+    att.alphaBlendOperation = MTLBlendOperationAdd;
+    att.sourceRGBBlendFactor = MTLBlendFactorOne;
+    att.destinationRGBBlendFactor = MTLBlendFactorOne;
+    att.sourceAlphaBlendFactor = MTLBlendFactorOne;
+    att.destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+    return;
+  case BlendMode::Lighten:
+    att.blendingEnabled = YES;
+    att.rgbBlendOperation = MTLBlendOperationMax;
+    att.alphaBlendOperation = MTLBlendOperationAdd;
+    att.sourceRGBBlendFactor = MTLBlendFactorOne;
+    att.destinationRGBBlendFactor = MTLBlendFactorOne;
+    att.sourceAlphaBlendFactor = MTLBlendFactorOne;
+    att.destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+    return;
+  case BlendMode::Clear:
+    att.blendingEnabled = YES;
+    att.rgbBlendOperation = MTLBlendOperationAdd;
+    att.alphaBlendOperation = MTLBlendOperationAdd;
+    att.sourceRGBBlendFactor = MTLBlendFactorZero;
+    att.destinationRGBBlendFactor = MTLBlendFactorZero;
+    att.sourceAlphaBlendFactor = MTLBlendFactorZero;
+    att.destinationAlphaBlendFactor = MTLBlendFactorZero;
+    return;
+  case BlendMode::Src:
+    att.blendingEnabled = YES;
+    att.rgbBlendOperation = MTLBlendOperationAdd;
+    att.alphaBlendOperation = MTLBlendOperationAdd;
+    att.sourceRGBBlendFactor = MTLBlendFactorOne;
+    att.destinationRGBBlendFactor = MTLBlendFactorZero;
+    att.sourceAlphaBlendFactor = MTLBlendFactorOne;
+    att.destinationAlphaBlendFactor = MTLBlendFactorZero;
+    return;
+  case BlendMode::Dst:
+    att.blendingEnabled = YES;
+    att.rgbBlendOperation = MTLBlendOperationAdd;
+    att.alphaBlendOperation = MTLBlendOperationAdd;
+    att.sourceRGBBlendFactor = MTLBlendFactorZero;
+    att.destinationRGBBlendFactor = MTLBlendFactorOne;
+    att.sourceAlphaBlendFactor = MTLBlendFactorZero;
+    att.destinationAlphaBlendFactor = MTLBlendFactorOne;
+    return;
+  case BlendMode::DstOver:
+    att.blendingEnabled = YES;
+    att.rgbBlendOperation = MTLBlendOperationAdd;
+    att.alphaBlendOperation = MTLBlendOperationAdd;
+    att.sourceRGBBlendFactor = MTLBlendFactorOneMinusDestinationAlpha;
+    att.destinationRGBBlendFactor = MTLBlendFactorOne;
+    att.sourceAlphaBlendFactor = MTLBlendFactorOneMinusDestinationAlpha;
+    att.destinationAlphaBlendFactor = MTLBlendFactorOne;
+    return;
+  case BlendMode::SrcIn:
+    att.blendingEnabled = YES;
+    att.rgbBlendOperation = MTLBlendOperationAdd;
+    att.alphaBlendOperation = MTLBlendOperationAdd;
+    att.sourceRGBBlendFactor = MTLBlendFactorDestinationAlpha;
+    att.destinationRGBBlendFactor = MTLBlendFactorZero;
+    att.sourceAlphaBlendFactor = MTLBlendFactorDestinationAlpha;
+    att.destinationAlphaBlendFactor = MTLBlendFactorZero;
+    return;
+  case BlendMode::DstIn:
+    att.blendingEnabled = YES;
+    att.rgbBlendOperation = MTLBlendOperationAdd;
+    att.alphaBlendOperation = MTLBlendOperationAdd;
+    att.sourceRGBBlendFactor = MTLBlendFactorZero;
+    att.destinationRGBBlendFactor = MTLBlendFactorSourceAlpha;
+    att.sourceAlphaBlendFactor = MTLBlendFactorZero;
+    att.destinationAlphaBlendFactor = MTLBlendFactorSourceAlpha;
+    return;
+  case BlendMode::SrcOut:
+    att.blendingEnabled = YES;
+    att.rgbBlendOperation = MTLBlendOperationAdd;
+    att.alphaBlendOperation = MTLBlendOperationAdd;
+    att.sourceRGBBlendFactor = MTLBlendFactorOneMinusDestinationAlpha;
+    att.destinationRGBBlendFactor = MTLBlendFactorZero;
+    att.sourceAlphaBlendFactor = MTLBlendFactorOneMinusDestinationAlpha;
+    att.destinationAlphaBlendFactor = MTLBlendFactorZero;
+    return;
+  case BlendMode::DstOut:
+    att.blendingEnabled = YES;
+    att.rgbBlendOperation = MTLBlendOperationAdd;
+    att.alphaBlendOperation = MTLBlendOperationAdd;
+    att.sourceRGBBlendFactor = MTLBlendFactorZero;
+    att.destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+    att.sourceAlphaBlendFactor = MTLBlendFactorZero;
+    att.destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+    return;
+  default:
+    // Overlay / soft-light / non-separable / Xor / SrcAtop / DstAtop: approximate as Normal until shader blend.
+    setSrcOverBlend(att);
+    return;
+  }
+}
+
 id<MTLRenderPipelineState> makePipeline(id<MTLDevice> device, id<MTLLibrary> lib, NSString* vert, NSString* frag,
-                                        MTLPixelFormat colorFormat, bool blend) {
+                                        MTLPixelFormat colorFormat, BlendMode blendMode) {
   id<MTLFunction> vf = [lib newFunctionWithName:vert];
   id<MTLFunction> ff = [lib newFunctionWithName:frag];
   if (!vf || !ff) {
@@ -26,13 +160,7 @@ id<MTLRenderPipelineState> makePipeline(id<MTLDevice> device, id<MTLLibrary> lib
   d.vertexFunction = vf;
   d.fragmentFunction = ff;
   d.colorAttachments[0].pixelFormat = colorFormat;
-  if (blend) {
-    d.colorAttachments[0].blendingEnabled = YES;
-    d.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
-    d.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
-    d.colorAttachments[0].sourceAlphaBlendFactor = MTLBlendFactorOne;
-    d.colorAttachments[0].destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
-  }
+  applyBlendModeToAttachment(d.colorAttachments[0], blendMode);
   NSError* err = nil;
   id<MTLRenderPipelineState> pso = [device newRenderPipelineStateWithDescriptor:d error:&err];
   if (!pso && err) {
@@ -42,7 +170,7 @@ id<MTLRenderPipelineState> makePipeline(id<MTLDevice> device, id<MTLLibrary> lib
 }
 
 id<MTLRenderPipelineState> makePathPipeline(id<MTLDevice> device, id<MTLLibrary> lib, MTLPixelFormat colorFormat,
-                                              bool blend) {
+                                            BlendMode blendMode) {
   id<MTLFunction> vf = [lib newFunctionWithName:@"path_vert"];
   id<MTLFunction> ff = [lib newFunctionWithName:@"path_frag"];
   if (!vf || !ff) {
@@ -67,13 +195,7 @@ id<MTLRenderPipelineState> makePathPipeline(id<MTLDevice> device, id<MTLLibrary>
   d.fragmentFunction = ff;
   d.vertexDescriptor = vd;
   d.colorAttachments[0].pixelFormat = colorFormat;
-  if (blend) {
-    d.colorAttachments[0].blendingEnabled = YES;
-    d.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
-    d.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
-    d.colorAttachments[0].sourceAlphaBlendFactor = MTLBlendFactorOne;
-    d.colorAttachments[0].destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
-  }
+  applyBlendModeToAttachment(d.colorAttachments[0], blendMode);
   NSError* err = nil;
   id<MTLRenderPipelineState> pso = [device newRenderPipelineStateWithDescriptor:d error:&err];
   if (!pso && err) {
@@ -84,6 +206,47 @@ id<MTLRenderPipelineState> makePathPipeline(id<MTLDevice> device, id<MTLLibrary>
 
 } // namespace
 
+id<MTLRenderPipelineState> MetalDeviceResources::rectPSO(BlendMode mode) {
+  const std::uint32_t k = blendModeKey(mode);
+  if (auto it = rectPSOCache_.find(k); it != rectPSOCache_.end()) {
+    return it->second;
+  }
+  id<MTLRenderPipelineState> pso =
+      makePipeline(device_, lib_, @"rect_sdf_vert", @"rect_sdf_frag", layer_.pixelFormat, mode);
+  if (!pso) {
+    throw std::runtime_error("MetalDeviceResources: rect pipeline creation failed");
+  }
+  rectPSOCache_[k] = pso;
+  return pso;
+}
+
+id<MTLRenderPipelineState> MetalDeviceResources::linePSO(BlendMode mode) {
+  const std::uint32_t k = blendModeKey(mode);
+  if (auto it = linePSOCache_.find(k); it != linePSOCache_.end()) {
+    return it->second;
+  }
+  id<MTLRenderPipelineState> pso =
+      makePipeline(device_, lib_, @"line_sdf_vert", @"line_sdf_frag", layer_.pixelFormat, mode);
+  if (!pso) {
+    throw std::runtime_error("MetalDeviceResources: line pipeline creation failed");
+  }
+  linePSOCache_[k] = pso;
+  return pso;
+}
+
+id<MTLRenderPipelineState> MetalDeviceResources::pathPSO(BlendMode mode) {
+  const std::uint32_t k = blendModeKey(mode);
+  if (auto it = pathPSOCache_.find(k); it != pathPSOCache_.end()) {
+    return it->second;
+  }
+  id<MTLRenderPipelineState> pso = makePathPipeline(device_, lib_, layer_.pixelFormat, mode);
+  if (!pso) {
+    throw std::runtime_error("MetalDeviceResources: path pipeline creation failed");
+  }
+  pathPSOCache_[k] = pso;
+  return pso;
+}
+
 MetalDeviceResources::MetalDeviceResources(CAMetalLayer* layer) : layer_(layer) {
   device_ = layer_.device ? layer_.device : MTLCreateSystemDefaultDevice();
   layer_.device = device_;
@@ -91,14 +254,6 @@ MetalDeviceResources::MetalDeviceResources(CAMetalLayer* layer) : layer_(layer) 
   queue_ = [device_ newCommandQueue];
 
   lib_ = flux::detail::fluxLoadShaderLibrary(device_);
-
-  MTLPixelFormat pf = layer_.pixelFormat;
-  rectPSO_ = makePipeline(device_, lib_, @"rect_sdf_vert", @"rect_sdf_frag", pf, true);
-  linePSO_ = makePipeline(device_, lib_, @"line_sdf_vert", @"line_sdf_frag", pf, true);
-  pathPSO_ = makePathPipeline(device_, lib_, pf, true);
-  if (!rectPSO_ || !linePSO_ || !pathPSO_) {
-    throw std::runtime_error("MetalDeviceResources: pipeline creation failed");
-  }
 
   static const vector_float2 kQuadStrip[kQuadStripCount] = {
       {-1.f, -1.f},

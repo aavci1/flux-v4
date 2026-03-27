@@ -11,6 +11,8 @@ enum class StrokeJoin { Miter, Round, Bevel };
 
 enum class FillRule { NonZero, EvenOdd };
 
+/// Compositing / blend mode for drawing. The Metal backend maps each value to fixed-function
+/// blend state where possible; modes that are not representable use the same factors as `Normal`.
 enum class BlendMode {
   Normal,
   Multiply,

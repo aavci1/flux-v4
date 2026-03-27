@@ -17,6 +17,11 @@ public:
 
   virtual void setFluxWindow(Window* window) = 0;
 
+  /// Present the native window after the Flux `Window` is registered and `setFluxWindow` has run.
+  /// Implementations should not order the window on screen before this (so lifecycle callbacks see a
+  /// valid `Window*`). Default: no-op.
+  virtual void show() {}
+
   virtual std::unique_ptr<Canvas> createCanvas(Window& owner) = 0;
 
   virtual void resize(const Size& newSize) = 0;
