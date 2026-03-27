@@ -86,6 +86,7 @@ add_library(flux STATIC
   src/Core/EventQueue.cpp
   src/Core/Window.cpp
   src/Graphics/Canvas.cpp
+  src/Graphics/Metal/MetalFrameRecorder.mm
   src/Graphics/TextSystem.cpp
   src/Graphics/CoreTextSystem.mm
   src/Graphics/Path.cpp

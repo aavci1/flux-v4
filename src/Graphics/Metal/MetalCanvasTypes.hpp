@@ -3,6 +3,7 @@
 #include <Flux/Graphics/Styles.hpp>
 
 #include <cstdint>
+#include <type_traits>
 #include <vector>
 
 #include <simd/simd.h>
@@ -20,6 +21,8 @@ struct MetalRectInstance {
   vector_float4 rotationPad;
 };
 
+static_assert(std::is_trivially_copyable_v<MetalRectInstance>);
+
 /// Per-vertex glyph payload (two triangles per glyph). Matches `GlyphVertexIn` in `CanvasShaders.metal`.
 struct MetalGlyphVertex {
   vector_float2 pos{};
@@ -35,6 +38,8 @@ struct MetalImageInstance {
   vector_float2 imageModePad; // x: 0 = clamp UV bounds, 1 = tile (repeat sampler)
 };
 
+static_assert(std::is_trivially_copyable_v<MetalImageInstance>);
+
 struct MetalDrawOp {
   enum Kind : std::uint8_t { Rect, Line, PathMesh, GlyphMesh, Image } kind = Rect;
   union {
@@ -47,7 +52,7 @@ struct MetalDrawOp {
   std::uint32_t glyphVertexCount = 0;
   /// Blend state for this draw (fixed-function blend in the PSO).
   BlendMode blendMode = BlendMode::Normal;
-  /// Valid when `kind == Image` — `id<MTLTexture>` (not retained; owned by `Image`).
+  /// Valid when `kind == Image` — `id<MTLTexture>` retained per op (`__bridge_retained`); released in `MetalFrameRecorder::clear`.
   void* texture = nullptr;
   bool repeatSampler = false;
 };

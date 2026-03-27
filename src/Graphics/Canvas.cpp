@@ -2,6 +2,7 @@
 #include <Flux/Graphics/Image.hpp>
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 
 namespace flux {
@@ -14,9 +15,6 @@ Rect imageSourceRect(Size imageSize, Rect const& dst, ImageFillMode mode) {
   }
 
   switch (mode) {
-  case ImageFillMode::Tile:
-    return Rect::sharp(0.f, 0.f, imageSize.width, imageSize.height);
-
   case ImageFillMode::Stretch:
     return Rect::sharp(0.f, 0.f, imageSize.width, imageSize.height);
 
@@ -53,8 +51,11 @@ Rect imageSourceRect(Size imageSize, Rect const& dst, ImageFillMode mode) {
     float const oy = (imageSize.height - sy) * 0.5f;
     return Rect::sharp(ox, oy, sx, sy);
   }
+
+  case ImageFillMode::Tile:
+    assert(false && "Tile must be handled via drawImageTiled before imageSourceRect");
+    return Rect::sharp(0.f, 0.f, 0.f, 0.f);
   }
-  return Rect::sharp(0.f, 0.f, 0.f, 0.f);
 }
 
 } // namespace

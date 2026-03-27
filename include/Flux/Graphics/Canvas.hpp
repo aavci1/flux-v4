@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <memory>
 #include <span>
+#include <string_view>
 
 namespace flux {
 
@@ -97,6 +98,9 @@ public:
 
   void drawImage(Image const& image, Rect const& dst, ImageFillMode fillMode = ImageFillMode::Cover,
                  CornerRadius const& corners = {}, float opacity = 1.f);
+
+  /// Metal: `id<MTLDevice>` as `void*` (use with `loadImageFromFile(path, canvas.gpuDevice())`). Null if unavailable.
+  virtual void* gpuDevice() const = 0;
 
   virtual void clear(Color color = Colors::transparent) = 0;
 

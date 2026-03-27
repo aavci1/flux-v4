@@ -728,6 +728,8 @@ public:
     }
   }
 
+  void* gpuDevice() const override { return (__bridge void*)metal_.device(); }
+
 private:
   struct GpuState {
     Mat3 transform = Mat3::identity();
@@ -840,7 +842,7 @@ private:
     op.imageInst.texSizeInv = texSizeInv;
     op.imageInst.imageModePad = simd_make_float2(imageMode, 0.f);
     op.blendMode = currentState().blendMode;
-    op.texture = (__bridge void*)tex;
+    op.texture = (__bridge_retained void*)tex;
     op.repeatSampler = repeat;
     frame_.ops.push_back(op);
   }

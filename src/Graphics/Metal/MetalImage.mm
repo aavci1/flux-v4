@@ -20,8 +20,9 @@ MetalImage const* tryMetalImage(Image const& image) {
   return dynamic_cast<MetalImage const*>(&image);
 }
 
-std::shared_ptr<Image> loadImageFromFile(std::string_view path) {
-  id<MTLDevice> device = MTLCreateSystemDefaultDevice();
+std::shared_ptr<Image> loadImageFromFile(std::string_view path, void* gpuDevice) {
+  id<MTLDevice> device =
+      gpuDevice ? (__bridge id<MTLDevice>)gpuDevice : MTLCreateSystemDefaultDevice();
   if (!device) {
     return nullptr;
   }

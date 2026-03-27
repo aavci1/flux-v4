@@ -30,8 +30,9 @@ public:
     float const w = std::max({vb.width, sz.width, 1.f});
     float const h = std::max({vb.height, sz.height, 1.f});
 
-    if (!image_) {
-      image_ = loadImageFromFile(imagePath_);
+    if (!image_ && !imageLoadAttempted_) {
+      imageLoadAttempted_ = true;
+      image_ = loadImageFromFile(imagePath_, c.gpuDevice());
     }
 
     if (!image_) {
@@ -68,6 +69,7 @@ public:
 
 private:
   std::string imagePath_;
+  bool imageLoadAttempted_{false};
   std::shared_ptr<Image> image_;
 };
 

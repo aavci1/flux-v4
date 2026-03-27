@@ -13,11 +13,7 @@ struct MetalFrameRecorder {
   std::vector<PathVertex> pathVerts;
   std::vector<MetalGlyphVertex> glyphVerts;
 
-  void clear() {
-    ops.clear();
-    pathVerts.clear();
-    glyphVerts.clear();
-  }
+  void clear();
 };
 
 } // namespace flux
