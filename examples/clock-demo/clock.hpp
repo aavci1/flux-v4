@@ -16,12 +16,10 @@ namespace clock_demo {
 inline void drawHand(Canvas& c, Point center, float length, float width, float angleDeg,
                      Color color) {
   c.save();
-  c.setFillStyle(FillStyle::none());
-  c.setStrokeStyle(StrokeStyle::solid(color, width));
   const float rad = (180.f - angleDeg) * (std::numbers::pi_v<float> / 180.f);
   const float x = center.x + length * std::sin(rad);
   const float y = center.y + length * std::cos(rad);
-  c.drawLine(center, {x, y});
+  c.drawLine(center, {x, y}, StrokeStyle::solid(color, width));
   c.restore();
 }
 
@@ -31,9 +29,7 @@ inline void drawClock(Canvas& c, Rect const& bounds, int hour24, int minutes, in
   const float radius = std::min(bounds.width, bounds.height) * 0.5f - 20.f;
   const Point center = bounds.center();
 
-  c.setFillStyle(FillStyle::solid(Colors::white));
-  c.setStrokeStyle(StrokeStyle::solid(Colors::black, 20.f));
-  c.drawCircle(center, radius);
+  c.drawCircle(center, radius, FillStyle::solid(Colors::white), StrokeStyle::solid(Colors::black, 20.f));
 
   const float hourTickLength = radius / 10.f;
   const float hourTickWidth = 6.f;
@@ -47,9 +43,7 @@ inline void drawClock(Canvas& c, Rect const& bounds, int hour24, int minutes, in
     hourMarks.moveTo({x1, y1});
     hourMarks.lineTo({x2, y2});
   }
-  c.setFillStyle(FillStyle::none());
-  c.setStrokeStyle(StrokeStyle::solid(Colors::black, hourTickWidth));
-  c.drawPath(hourMarks);
+  c.drawPath(hourMarks, FillStyle::none(), StrokeStyle::solid(Colors::black, hourTickWidth));
 
   const float minuteTickLength = radius / 10.f;
   const float minuteTickWidth = 2.f;
@@ -63,9 +57,7 @@ inline void drawClock(Canvas& c, Rect const& bounds, int hour24, int minutes, in
     minuteMarks.moveTo({x1, y1});
     minuteMarks.lineTo({x2, y2});
   }
-  c.setFillStyle(FillStyle::none());
-  c.setStrokeStyle(StrokeStyle::solid(Colors::black, minuteTickWidth));
-  c.drawPath(minuteMarks);
+  c.drawPath(minuteMarks, FillStyle::none(), StrokeStyle::solid(Colors::black, minuteTickWidth));
 
   const int hours12 = hour24 % 12;
   drawHand(c, center, radius * 0.4f, 12.f, static_cast<float>(hours12 * 30) + static_cast<float>(minutes) * 0.5f,
@@ -74,9 +66,7 @@ inline void drawClock(Canvas& c, Rect const& bounds, int hour24, int minutes, in
            Colors::black);
   drawHand(c, center, radius * 0.7f, 4.f, static_cast<float>(seconds * 6), Colors::red);
 
-  c.setFillStyle(FillStyle::solid(Colors::white));
-  c.setStrokeStyle(StrokeStyle::solid(Colors::red, 6.f));
-  c.drawCircle(center, 16.f);
+  c.drawCircle(center, 16.f, FillStyle::solid(Colors::white), StrokeStyle::solid(Colors::red, 6.f));
 }
 
 } // namespace clock_demo

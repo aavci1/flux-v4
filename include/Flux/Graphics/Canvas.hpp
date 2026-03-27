@@ -39,11 +39,6 @@ public:
   virtual void save() = 0;
   virtual void restore() = 0;
 
-  virtual void setFillStyle(FillStyle const& style) = 0;
-  virtual FillStyle fillStyle() const = 0;
-  virtual void setStrokeStyle(StrokeStyle const& style) = 0;
-  virtual StrokeStyle strokeStyle() const = 0;
-
   // -------------------------------------------------------------------------
   // Transform
   // -------------------------------------------------------------------------
@@ -77,13 +72,14 @@ public:
   virtual BlendMode blendMode() const = 0;
 
   // -------------------------------------------------------------------------
-  // Drawing (uses current fill / stroke styles)
+  // Drawing
   // -------------------------------------------------------------------------
 
-  virtual void drawRect(Rect const& rect, CornerRadius const& cornerRadius = {}) = 0;
-  virtual void drawLine(Point from, Point to) = 0;
-  virtual void drawPath(Path const& path) = 0;
-  virtual void drawCircle(Point center, float radius) = 0;
+  virtual void drawRect(Rect const& rect, CornerRadius const& cornerRadius, FillStyle const& fill,
+                        StrokeStyle const& stroke) = 0;
+  virtual void drawLine(Point from, Point to, StrokeStyle const& stroke) = 0;
+  virtual void drawPath(Path const& path, FillStyle const& fill, StrokeStyle const& stroke) = 0;
+  virtual void drawCircle(Point center, float radius, FillStyle const& fill, StrokeStyle const& stroke) = 0;
 
   virtual void clear(Color color = Colors::transparent) = 0;
 

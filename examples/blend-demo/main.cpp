@@ -70,25 +70,20 @@ void drawCell(Canvas& c, Rect cell, BlendMode mode,
   Rect inner = Rect::sharp(innerX, innerY, innerW, innerH);
 
   c.setBlendMode(BlendMode::Normal);
-  c.setStrokeStyle(StrokeStyle::none());
-  c.setFillStyle(FillStyle::solid(Color::rgb(210, 210, 218)));
-  c.drawRect(inner, {});
+  c.drawRect(inner, {}, FillStyle::solid(Color::rgb(210, 210, 218)), StrokeStyle::none());
 
   const float r = std::min(innerW, innerH) * 0.22f * pulse;
   const Point c1{inner.x + innerW * 0.34f, inner.y + innerH * 0.5f};
   const Point c2{inner.x + innerW * 0.66f, inner.y + innerH * 0.5f};
 
-  c.setFillStyle(FillStyle::solid(Color{0.05f, 0.75f, 0.85f, 0.62f}));
-  c.drawCircle(c1, r);
+  c.drawCircle(c1, r, FillStyle::solid(Color{0.05f, 0.75f, 0.85f, 0.62f}), StrokeStyle::none());
 
   c.setBlendMode(mode);
-  c.setFillStyle(FillStyle::solid(Color{0.92f, 0.15f, 0.55f, 0.62f}));
-  c.drawCircle(c2, r);
+  c.drawCircle(c2, r, FillStyle::solid(Color{0.92f, 0.15f, 0.55f, 0.62f}), StrokeStyle::none());
 
   c.setBlendMode(BlendMode::Normal);
-  c.setStrokeStyle(StrokeStyle::solid(Color::rgb(90, 90, 100), 1.2f));
-  c.setFillStyle(FillStyle::none());
-  c.drawRect(cell, CornerRadius(4.f, 4.f, 4.f, 4.f));
+  c.drawRect(cell, CornerRadius(4.f, 4.f, 4.f, 4.f), FillStyle::none(),
+               StrokeStyle::solid(Color::rgb(90, 90, 100), 1.2f));
 }
 
 class BlendDemoWindow : public Window {

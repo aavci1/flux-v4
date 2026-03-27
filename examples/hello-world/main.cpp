@@ -42,9 +42,8 @@ public:
     c.translate(Point{cx, cy});
     c.rotate(t * 0.5f);
     Rect card = Rect::sharp(-r, -r, r * 2.f, r * 2.f);
-    c.setFillStyle(FillStyle::solid(Color::rgb(230, 240, 255)));
-    c.setStrokeStyle(StrokeStyle::solid(Color::rgb(33, 150, 243), 3.f));
-    c.drawRect(card, CornerRadius(16.f));
+    c.drawRect(card, CornerRadius(16.f), FillStyle::solid(Color::rgb(230, 240, 255)),
+               StrokeStyle::solid(Color::rgb(33, 150, 243), 3.f));
     c.restore();
   }
 };

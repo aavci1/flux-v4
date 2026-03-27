@@ -296,20 +296,11 @@ public:
 
   BlendMode blendMode() const override { return currentState().blendMode; }
 
-  void setFillStyle(FillStyle const& style) override { currentState().fillStyle = style; }
-
-  FillStyle fillStyle() const override { return currentState().fillStyle; }
-
-  void setStrokeStyle(StrokeStyle const& style) override { currentState().strokeStyle = style; }
-
-  StrokeStyle strokeStyle() const override { return currentState().strokeStyle; }
-
-  void drawRect(Rect const& rect, CornerRadius const& cornerRadius) override {
+  void drawRect(Rect const& rect, CornerRadius const& cornerRadius, FillStyle const& fs,
+                StrokeStyle const& ss) override {
     if (!inFrame_) {
       return;
     }
-    FillStyle const& fs = currentState().fillStyle;
-    StrokeStyle const& ss = currentState().strokeStyle;
     Color fillC{};
     Color strokeC{};
     bool hasFill = false;
@@ -364,11 +355,10 @@ public:
              hasStroke ? ss.width * s : 0.f, op, rotationRad);
   }
 
-  void drawLine(Point a, Point b) override {
+  void drawLine(Point a, Point b, StrokeStyle const& ss) override {
     if (!inFrame_) {
       return;
     }
-    StrokeStyle const& ss = currentState().strokeStyle;
     Color stroke{};
     if (!ss.solidColor(&stroke)) {
       return;
@@ -413,13 +403,10 @@ public:
     frame_.ops.push_back(op);
   }
 
-  void drawPath(Path const& path) override {
+  void drawPath(Path const& path, FillStyle const& fs, StrokeStyle const& ss) override {
     if (!inFrame_ || path.isEmpty()) {
       return;
     }
-
-    FillStyle const& fs = currentState().fillStyle;
-    StrokeStyle const& ss = currentState().strokeStyle;
 
     if (path.commandCount() == 1) {
       Path::CommandView cv = path.command(0);
@@ -427,7 +414,7 @@ public:
         const float* d = cv.data;
         Rect r{d[0], d[1], d[2], d[3]};
         CornerRadius cr{d[4], d[5], d[6], d[7]};
-        drawRect(r, cr);
+        drawRect(r, cr, fs, ss);
         return;
       }
       const bool circlePrim = cv.type == Path::CommandType::Circle && cv.dataCount >= 3;
@@ -436,9 +423,9 @@ public:
         Color fc{};
         if (!fs.isNone() && fs.solidColor(&fc)) {
           if (circlePrim) {
-            drawCircle({cv.data[0], cv.data[1]}, cv.data[2]);
+            drawCircle({cv.data[0], cv.data[1]}, cv.data[2], fs, ss);
           } else {
-            drawCircle({cv.data[0], cv.data[1]}, std::max(cv.data[2], cv.data[3]));
+            drawCircle({cv.data[0], cv.data[1]}, std::max(cv.data[2], cv.data[3]), fs, ss);
           }
           return;
         }
@@ -449,13 +436,13 @@ public:
     const float vw = static_cast<float>(drawableSize.width);
     const float vh = static_cast<float>(drawableSize.height);
 
-    metalPathRasterizeToMesh(path, fs, ss, currentState().transform, dpiScaleX_, dpiScaleY_, effectiveOpacity(),
-                             vw, vh, frame_.pathVerts, frame_.ops, currentState().blendMode);
+    metalPathRasterizeToMesh(path, fs, ss, currentState().transform, dpiScaleX_, dpiScaleY_, effectiveOpacity(), vw,
+                             vh, frame_.pathVerts, frame_.ops, currentState().blendMode);
   }
 
-  void drawCircle(Point center, float radius) override {
+  void drawCircle(Point center, float radius, FillStyle const& fs, StrokeStyle const& ss) override {
     Rect r{center.x - radius, center.y - radius, radius * 2.f, radius * 2.f};
-    drawRect(r, CornerRadius::pill(r));
+    drawRect(r, CornerRadius::pill(r), fs, ss);
   }
 
 private:
@@ -464,8 +451,6 @@ private:
     float opacity = 1.f;
     BlendMode blendMode = BlendMode::Normal;
     std::optional<Rect> clip;
-    FillStyle fillStyle = FillStyle::solid(Colors::black);
-    StrokeStyle strokeStyle = StrokeStyle::none();
   };
 
   MetalDeviceResources metal_;
