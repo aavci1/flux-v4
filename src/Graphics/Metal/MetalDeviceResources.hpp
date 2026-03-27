@@ -37,17 +37,21 @@ public:
   id<MTLRenderPipelineState> linePSO(BlendMode mode);
   id<MTLRenderPipelineState> pathPSO(BlendMode mode);
   id<MTLRenderPipelineState> glyphPSO(BlendMode mode);
+  id<MTLRenderPipelineState> imagePSO(BlendMode mode);
   id<MTLSamplerState> linearSampler() const { return linearSampler_; }
+  id<MTLSamplerState> repeatSampler() const { return repeatSampler_; }
   id<MTLBuffer> quadBuffer() const { return quadBuffer_; }
 
   /// Pack rect/line instance data for this frame (submission order preserved).
   void uploadInstanceInstances(const std::vector<MetalDrawOp>& ops);
+  void uploadImageInstances(const std::vector<MetalDrawOp>& ops);
   /// Copy path vertices into the path arena (no-op if empty).
   void uploadPathVertices(const std::vector<PathVertex>& pathVerts);
 
   void uploadGlyphVertices(const std::vector<MetalGlyphVertex>& verts);
 
   id<MTLBuffer> instanceArenaBuffer() const { return instanceArena_; }
+  id<MTLBuffer> imageInstanceArenaBuffer() const { return imageInstanceArena_; }
   id<MTLBuffer> pathVertexArenaBuffer() const { return pathVertexArena_; }
   id<MTLBuffer> glyphVertexArenaBuffer() const { return glyphVertexArena_; }
 
@@ -60,17 +64,22 @@ private:
   std::unordered_map<std::uint32_t, id<MTLRenderPipelineState>> linePSOCache_;
   std::unordered_map<std::uint32_t, id<MTLRenderPipelineState>> pathPSOCache_;
   std::unordered_map<std::uint32_t, id<MTLRenderPipelineState>> glyphPSOCache_;
+  std::unordered_map<std::uint32_t, id<MTLRenderPipelineState>> imagePSOCache_;
   id<MTLBuffer> quadBuffer_{nil};
   id<MTLSamplerState> linearSampler_{nil};
+  id<MTLSamplerState> repeatSampler_{nil};
 
   id<MTLBuffer> instanceArena_{nil};
   std::uint32_t instanceArenaCapacityInstanceCount_{0};
+  id<MTLBuffer> imageInstanceArena_{nil};
+  std::uint32_t imageInstanceArenaCapacity_{0};
   id<MTLBuffer> pathVertexArena_{nil};
   std::uint32_t pathVertexArenaCapacityBytes_{0};
   id<MTLBuffer> glyphVertexArena_{nil};
   std::uint32_t glyphVertexArenaCapacityBytes_{0};
 
   void ensureInstanceArenaCapacity(std::uint32_t instanceCount);
+  void ensureImageInstanceArenaCapacity(std::uint32_t instanceCount);
   void ensurePathVertexArenaCapacity(std::uint32_t byteCount);
   void ensureGlyphVertexArenaCapacity(std::uint32_t byteCount);
 };

@@ -5,10 +5,12 @@
 
 #include <Flux/Core/Application.hpp>
 #include <Flux/Graphics/Canvas.hpp>
+#include <Flux/Graphics/Image.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Graphics/TextLayout.hpp>
 
 #include "Graphics/Metal/GlyphAtlas.hpp"
+#include "Graphics/Metal/MetalImage.hpp"
 #include "Graphics/Metal/MetalCanvasTypes.hpp"
 #include "Graphics/Metal/MetalDeviceResources.hpp"
 #include "Graphics/Metal/MetalFrameRecorder.hpp"
@@ -209,6 +211,7 @@ public:
     }
 
     metal_.uploadInstanceInstances(frame_.ops);
+    metal_.uploadImageInstances(frame_.ops);
     metal_.uploadPathVertices(frame_.pathVerts);
     metal_.uploadGlyphVertices(frame_.glyphVerts);
 
@@ -231,6 +234,7 @@ public:
     [enc setScissorRect:sc];
 
     NSUInteger instSlot = 0;
+    NSUInteger imageSlot = 0;
     id<MTLBuffer> pathBuf = metal_.pathVertexArenaBuffer();
     for (const MetalDrawOp& op : frame_.ops) {
       switch (op.kind) {
@@ -250,6 +254,21 @@ public:
         const NSUInteger off = instSlot * sizeof(MetalRectInstance);
         ++instSlot;
         [enc setVertexBuffer:metal_.instanceArenaBuffer() offset:off atIndex:1];
+        [enc drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:kQuadStripCount
+                instanceCount:1];
+        break;
+      }
+      case MetalDrawOp::Image: {
+        if (!op.texture) {
+          break;
+        }
+        [enc setRenderPipelineState:metal_.imagePSO(op.blendMode)];
+        [enc setVertexBuffer:metal_.quadBuffer() offset:0 atIndex:0];
+        const NSUInteger off = imageSlot * sizeof(MetalImageInstance);
+        ++imageSlot;
+        [enc setVertexBuffer:metal_.imageInstanceArenaBuffer() offset:off atIndex:1];
+        [enc setFragmentTexture:(__bridge id<MTLTexture>)op.texture atIndex:0];
+        [enc setFragmentSamplerState:op.repeatSampler ? metal_.repeatSampler() : metal_.linearSampler() atIndex:0];
         [enc drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:kQuadStripCount
                 instanceCount:1];
         break;
@@ -457,7 +476,7 @@ public:
     const float vw = static_cast<float>(drawableSize.width);
     const float vh = static_cast<float>(drawableSize.height);
 
-    MetalDrawOp op;
+    MetalDrawOp op{};
     op.kind = MetalDrawOp::Line;
     op.rectInst.rect = simd_make_float4(lineBounds.x * dpiScaleX_, lineBounds.y * dpiScaleY_,
                                         lineBounds.width * dpiScaleX_, lineBounds.height * dpiScaleY_);
@@ -514,6 +533,128 @@ public:
   void drawCircle(Point center, float radius, FillStyle const& fs, StrokeStyle const& ss) override {
     Rect r{center.x - radius, center.y - radius, radius * 2.f, radius * 2.f};
     drawRect(r, CornerRadius::pill(r), fs, ss);
+  }
+
+  void drawImage(Image const& image, Rect const& src, Rect const& dst, CornerRadius const& corners,
+                 float opacity) override {
+    if (!inFrame_) {
+      return;
+    }
+    MetalImage const* mh = tryMetalImage(image);
+    if (!mh || !mh->texture()) {
+      return;
+    }
+    Size const sz = image.size();
+    if (sz.width <= 0.f || sz.height <= 0.f) {
+      return;
+    }
+    if (src.width <= 0.f || src.height <= 0.f || dst.width <= 0.f || dst.height <= 0.f) {
+      return;
+    }
+    if (quickReject(dst)) {
+      return;
+    }
+    Mat3 const& M = currentState().transform;
+    Rect const mappedClip = boundsOfTransformedRect(dst, M);
+    if (currentState().clip.has_value()) {
+      Rect inter = intersectRects(mappedClip, *currentState().clip);
+      if (inter.width <= 0.f || inter.height <= 0.f) {
+        return;
+      }
+    }
+
+    float rotationRad = 0.f;
+    float tx = 0.f;
+    float ty = 0.f;
+    Rect mapped{};
+    if (tryDecomposeRotationTranslation(M, &rotationRad, &tx, &ty)) {
+      mapped = Rect::sharp(dst.x + tx, dst.y + ty, dst.width, dst.height);
+    } else {
+      mapped = mappedClip;
+      if (currentState().clip.has_value()) {
+        mapped = intersectRects(mapped, *currentState().clip);
+        if (mapped.width <= 0.f || mapped.height <= 0.f) {
+          return;
+        }
+      }
+    }
+
+    const float s = std::min(dpiScaleX_, dpiScaleY_);
+    CornerRadius cr{};
+    cr.topLeft = corners.topLeft * s;
+    cr.topRight = corners.topRight * s;
+    cr.bottomRight = corners.bottomRight * s;
+    cr.bottomLeft = corners.bottomLeft * s;
+    Rect device = Rect::sharp(mapped.x * dpiScaleX_, mapped.y * dpiScaleY_, mapped.width * dpiScaleX_,
+                              mapped.height * dpiScaleY_);
+
+    const float op = effectiveOpacity() * opacity;
+    float const iw = sz.width;
+    float const ih = sz.height;
+    float const u0 = src.x / iw;
+    float const v0 = src.y / ih;
+    float const u1 = (src.x + src.width) / iw;
+    float const v1 = (src.y + src.height) / ih;
+
+    emitImage(mh->texture(), device, cr, simd_make_float4(u0, v0, u1, v1), simd_make_float2(0.f, 0.f), 0.f, op,
+              rotationRad, false);
+  }
+
+  void drawImageTiled(Image const& image, Rect const& dst, CornerRadius const& corners, float opacity) override {
+    if (!inFrame_) {
+      return;
+    }
+    MetalImage const* mh = tryMetalImage(image);
+    if (!mh || !mh->texture()) {
+      return;
+    }
+    Size const sz = image.size();
+    if (sz.width <= 0.f || sz.height <= 0.f) {
+      return;
+    }
+    if (dst.width <= 0.f || dst.height <= 0.f) {
+      return;
+    }
+    if (quickReject(dst)) {
+      return;
+    }
+    Mat3 const& M = currentState().transform;
+    Rect const mappedClip = boundsOfTransformedRect(dst, M);
+    if (currentState().clip.has_value()) {
+      Rect inter = intersectRects(mappedClip, *currentState().clip);
+      if (inter.width <= 0.f || inter.height <= 0.f) {
+        return;
+      }
+    }
+
+    float rotationRad = 0.f;
+    float tx = 0.f;
+    float ty = 0.f;
+    Rect mapped{};
+    if (tryDecomposeRotationTranslation(M, &rotationRad, &tx, &ty)) {
+      mapped = Rect::sharp(dst.x + tx, dst.y + ty, dst.width, dst.height);
+    } else {
+      mapped = mappedClip;
+      if (currentState().clip.has_value()) {
+        mapped = intersectRects(mapped, *currentState().clip);
+        if (mapped.width <= 0.f || mapped.height <= 0.f) {
+          return;
+        }
+      }
+    }
+
+    const float s = std::min(dpiScaleX_, dpiScaleY_);
+    CornerRadius cr{};
+    cr.topLeft = corners.topLeft * s;
+    cr.topRight = corners.topRight * s;
+    cr.bottomRight = corners.bottomRight * s;
+    cr.bottomLeft = corners.bottomLeft * s;
+    Rect device = Rect::sharp(mapped.x * dpiScaleX_, mapped.y * dpiScaleY_, mapped.width * dpiScaleX_,
+                              mapped.height * dpiScaleY_);
+
+    const float op = effectiveOpacity() * opacity;
+    vector_float2 const texInv = simd_make_float2(1.f / sz.width, 1.f / sz.height);
+    emitImage(mh->texture(), device, cr, simd_make_float4(0.f, 0.f, 0.f, 0.f), texInv, 1.f, op, rotationRad, true);
   }
 
   void drawTextLayout(TextLayout const& layout, Point origin) override {
@@ -667,7 +808,7 @@ private:
     const float vw = static_cast<float>(drawableSize.width);
     const float vh = static_cast<float>(drawableSize.height);
 
-    MetalDrawOp op;
+    MetalDrawOp op{};
     op.kind = MetalDrawOp::Rect;
     op.rectInst.rect = simd_make_float4(deviceRect.x, deviceRect.y, deviceRect.width, deviceRect.height);
     op.rectInst.corners = cornersToSimd(corners);
@@ -677,6 +818,30 @@ private:
     op.rectInst.viewport = simd_make_float2(vw, vh);
     op.rectInst.rotationPad = simd_make_float4(rotationRad, 0.f, 0.f, 0.f);
     op.blendMode = currentState().blendMode;
+    frame_.ops.push_back(op);
+  }
+
+  void emitImage(id<MTLTexture> tex, Rect const& deviceRect, CornerRadius const& corners, vector_float4 const& uvBounds,
+                 vector_float2 const& texSizeInv, float imageMode, float opacity, float rotationRad, bool repeat) {
+    CGSize drawableSize = metal_.layer().drawableSize;
+    const float vw = static_cast<float>(drawableSize.width);
+    const float vh = static_cast<float>(drawableSize.height);
+
+    MetalDrawOp op{};
+    op.kind = MetalDrawOp::Image;
+    op.imageInst.sdf.rect = simd_make_float4(deviceRect.x, deviceRect.y, deviceRect.width, deviceRect.height);
+    op.imageInst.sdf.corners = cornersToSimd(corners);
+    op.imageInst.sdf.fillColor = simd_make_float4(1.f, 1.f, 1.f, 1.f);
+    op.imageInst.sdf.strokeColor = simd_make_float4(0.f, 0.f, 0.f, 0.f);
+    op.imageInst.sdf.strokeWidthOpacity = simd_make_float2(0.f, opacity);
+    op.imageInst.sdf.viewport = simd_make_float2(vw, vh);
+    op.imageInst.sdf.rotationPad = simd_make_float4(rotationRad, 0.f, 0.f, 0.f);
+    op.imageInst.uvBounds = uvBounds;
+    op.imageInst.texSizeInv = texSizeInv;
+    op.imageInst.imageModePad = simd_make_float2(imageMode, 0.f);
+    op.blendMode = currentState().blendMode;
+    op.texture = (__bridge void*)tex;
+    op.repeatSampler = repeat;
     frame_.ops.push_back(op);
   }
 };

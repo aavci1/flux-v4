@@ -3,6 +3,7 @@
 #include <Flux/Core/Types.hpp>
 #include <Flux/Graphics/Path.hpp>
 #include <Flux/Graphics/Styles.hpp>
+#include <Flux/Graphics/ImageFillMode.hpp>
 #include <Flux/Graphics/TextLayout.hpp>
 
 #include <cstdint>
@@ -11,6 +12,7 @@
 
 namespace flux {
 
+class Image;
 class Window;
 
 enum class Backend : std::uint8_t { Metal };
@@ -84,6 +86,17 @@ public:
 
   /// Draw laid-out text. `origin` is the layout box top-left (`TextLayout::measuredSize`).
   virtual void drawTextLayout(TextLayout const& layout, Point origin) = 0;
+
+  /// Draw `src` sub-rect of the image (pixel space) into `dst` (logical space). UVs are derived as src/size.
+  virtual void drawImage(Image const& image, Rect const& src, Rect const& dst, CornerRadius const& corners = {},
+                         float opacity = 1.f) = 0;
+
+  /// Repeat the image across `dst` with a repeat sampler (1 logical pixel ≈ 1 texel).
+  virtual void drawImageTiled(Image const& image, Rect const& dst, CornerRadius const& corners = {},
+                               float opacity = 1.f) = 0;
+
+  void drawImage(Image const& image, Rect const& dst, ImageFillMode fillMode = ImageFillMode::Cover,
+                 CornerRadius const& corners = {}, float opacity = 1.f);
 
   virtual void clear(Color color = Colors::transparent) = 0;
 

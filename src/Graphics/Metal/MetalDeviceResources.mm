@@ -307,6 +307,20 @@ id<MTLRenderPipelineState> MetalDeviceResources::glyphPSO(BlendMode mode) {
   return pso;
 }
 
+id<MTLRenderPipelineState> MetalDeviceResources::imagePSO(BlendMode mode) {
+  const std::uint32_t k = blendModeKey(mode) ^ 0x494d4749u; // 'IMGI'
+  if (auto it = imagePSOCache_.find(k); it != imagePSOCache_.end()) {
+    return it->second;
+  }
+  id<MTLRenderPipelineState> pso =
+      makePipeline(device_, lib_, @"image_sdf_vert", @"image_sdf_frag", layer_.pixelFormat, mode);
+  if (!pso) {
+    throw std::runtime_error("MetalDeviceResources: image pipeline creation failed");
+  }
+  imagePSOCache_[k] = pso;
+  return pso;
+}
+
 MetalDeviceResources::MetalDeviceResources(CAMetalLayer* layer) : layer_(layer) {
   device_ = layer_.device ? layer_.device : MTLCreateSystemDefaultDevice();
   layer_.device = device_;
@@ -329,6 +343,13 @@ MetalDeviceResources::MetalDeviceResources(CAMetalLayer* layer) : layer_(layer) 
   sd.sAddressMode = MTLSamplerAddressModeClampToEdge;
   sd.tAddressMode = MTLSamplerAddressModeClampToEdge;
   linearSampler_ = [device_ newSamplerStateWithDescriptor:sd];
+
+  MTLSamplerDescriptor* rd = [MTLSamplerDescriptor new];
+  rd.minFilter = MTLSamplerMinMagFilterLinear;
+  rd.magFilter = MTLSamplerMinMagFilterLinear;
+  rd.sAddressMode = MTLSamplerAddressModeRepeat;
+  rd.tAddressMode = MTLSamplerAddressModeRepeat;
+  repeatSampler_ = [device_ newSamplerStateWithDescriptor:rd];
 }
 
 MetalDeviceResources::~MetalDeviceResources() = default;
@@ -345,6 +366,20 @@ void MetalDeviceResources::ensureInstanceArenaCapacity(std::uint32_t instanceCou
                                    : std::max(instanceCount, instanceArenaCapacityInstanceCount_ * 2);
   instanceArena_ = [device_ newBufferWithLength:newCap * sizeof(MetalRectInstance) options:MTLResourceStorageModeShared];
   instanceArenaCapacityInstanceCount_ = newCap;
+}
+
+void MetalDeviceResources::ensureImageInstanceArenaCapacity(std::uint32_t instanceCount) {
+  if (instanceCount == 0) {
+    return;
+  }
+  if (instanceCount <= imageInstanceArenaCapacity_) {
+    return;
+  }
+  const std::uint32_t newCap =
+      imageInstanceArenaCapacity_ == 0 ? instanceCount : std::max(instanceCount, imageInstanceArenaCapacity_ * 2);
+  imageInstanceArena_ =
+      [device_ newBufferWithLength:newCap * sizeof(MetalImageInstance) options:MTLResourceStorageModeShared];
+  imageInstanceArenaCapacity_ = newCap;
 }
 
 void MetalDeviceResources::ensurePathVertexArenaCapacity(std::uint32_t byteCount) {
@@ -409,6 +444,26 @@ void MetalDeviceResources::uploadGlyphVertices(const std::vector<MetalGlyphVerte
     return;
   }
   std::memcpy([glyphVertexArena_ contents], verts.data(), bytes);
+}
+
+void MetalDeviceResources::uploadImageInstances(const std::vector<MetalDrawOp>& ops) {
+  NSUInteger imageCount = 0;
+  for (const MetalDrawOp& op : ops) {
+    if (op.kind == MetalDrawOp::Image) {
+      ++imageCount;
+    }
+  }
+  ensureImageInstanceArenaCapacity(static_cast<std::uint32_t>(imageCount));
+  if (imageCount == 0) {
+    return;
+  }
+  auto* dst = static_cast<MetalImageInstance*>([imageInstanceArena_ contents]);
+  NSUInteger slot = 0;
+  for (const MetalDrawOp& op : ops) {
+    if (op.kind == MetalDrawOp::Image) {
+      dst[slot++] = op.imageInst;
+    }
+  }
 }
 
 } // namespace flux

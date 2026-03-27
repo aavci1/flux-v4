@@ -112,6 +112,117 @@ fragment float4 rect_sdf_frag(RectFragmentIn in [[stage_in]], float4 fragCoord [
 }
 
 // -----------------------------------------------------------------------------
+// Textured rounded rect (same SDF mask as rect; UV from sub-rect or tile)
+// -----------------------------------------------------------------------------
+
+struct ImageInstance {
+  float4 rect;
+  float4 corners;
+  float4 fillColor;
+  float4 strokeColor;
+  float2 strokeWidthOpacity;
+  float2 viewport;
+  float4 rotationPad;
+  float4 uvBounds;
+  float2 texSizeInv;
+  float2 imageModePad;
+};
+
+struct ImageVertexOut {
+  float4 clip [[position]];
+  float2 fragLocalPos;
+  float2 fragHalfSize;
+  float4 fragCorners;
+  float4 fragFillColor;
+  float4 fragStrokeColor;
+  float fragStrokeWidth;
+  float fragOpacity;
+  float2 fragCenter;
+  float fragAngle;
+  float2 fragViewport;
+  float4 fragUvBounds;
+  float2 fragTexSizeInv;
+  float fragImageMode [[flat]];
+};
+
+struct ImageFragmentIn {
+  float4 clip;
+  float2 fragLocalPos;
+  float2 fragHalfSize;
+  float4 fragCorners;
+  float4 fragFillColor;
+  float4 fragStrokeColor;
+  float fragStrokeWidth;
+  float fragOpacity;
+  float2 fragCenter;
+  float fragAngle;
+  float2 fragViewport;
+  float4 fragUvBounds;
+  float2 fragTexSizeInv;
+  float fragImageMode;
+};
+
+vertex ImageVertexOut image_sdf_vert(uint vid [[vertex_id]], uint iid [[instance_id]], constant float2* quad [[buffer(0)]],
+                                     constant ImageInstance* instances [[buffer(1)]]) {
+  ImageInstance inst = instances[iid];
+  float2 halfSize = inst.rect.zw * 0.5f;
+  float2 center = inst.rect.xy + halfSize;
+  float pad = max(inst.strokeWidthOpacity.x, 1.0f);
+  float2 paddedHalf = halfSize + pad;
+  float2 localOffset = quad[vid] * paddedHalf;
+  float cr = cos(inst.rotationPad.x);
+  float sr = sin(inst.rotationPad.x);
+  float2 worldOffset =
+      float2(localOffset.x * cr - localOffset.y * sr, localOffset.x * sr + localOffset.y * cr);
+  float2 screenPos = center + worldOffset;
+  float2 ndc = (screenPos / inst.viewport) * 2.0f - 1.0f;
+  ndc.y = -ndc.y;
+
+  ImageVertexOut out;
+  out.clip = float4(ndc, 0.0f, 1.0f);
+  out.fragLocalPos = localOffset;
+  out.fragHalfSize = halfSize;
+  out.fragCorners = inst.corners;
+  out.fragFillColor = inst.fillColor;
+  out.fragStrokeColor = inst.strokeColor;
+  out.fragStrokeWidth = inst.strokeWidthOpacity.x;
+  out.fragOpacity = inst.strokeWidthOpacity.y;
+  out.fragCenter = center;
+  out.fragAngle = inst.rotationPad.x;
+  out.fragViewport = inst.viewport;
+  out.fragUvBounds = inst.uvBounds;
+  out.fragTexSizeInv = inst.texSizeInv;
+  out.fragImageMode = inst.imageModePad.x;
+  return out;
+}
+
+fragment float4 image_sdf_frag(ImageFragmentIn in [[stage_in]], float4 fragCoord [[position]], texture2d<float> tex [[texture(0)]],
+                               sampler smpl [[sampler(0)]]) {
+  float2 pixel = fragCoord.xy;
+  float2 delta = pixel - in.fragCenter;
+  float ca = cos(-in.fragAngle);
+  float sa = sin(-in.fragAngle);
+  float2 p = float2(delta.x * ca - delta.y * sa, delta.x * sa + delta.y * ca);
+  float d = roundedRectSDF(p, in.fragHalfSize, in.fragCorners);
+  float coverage = 1.0f - smoothstep(-0.75f, 0.75f, d);
+  float2 local = p + in.fragHalfSize;
+  float2 denom = max(2.0f * in.fragHalfSize, float2(1e-4f));
+  float2 t = float2(local.x / denom.x, local.y / denom.y);
+  float2 uv;
+  if (in.fragImageMode < 0.5f) {
+    uv = float2(mix(in.fragUvBounds.x, in.fragUvBounds.z, t.x), mix(in.fragUvBounds.y, in.fragUvBounds.w, t.y));
+  } else {
+    uv = float2(local.x * in.fragTexSizeInv.x, local.y * in.fragTexSizeInv.y);
+  }
+  float4 c = tex.sample(smpl, uv);
+  float4 premul = float4(c.rgb * c.a, c.a);
+  premul *= coverage * in.fragOpacity;
+  if (premul.a < 0.001f)
+    discard_fragment();
+  return premul;
+}
+
+// -----------------------------------------------------------------------------
 // Line capsule (sdf_line.vert + line.frag)
 // -----------------------------------------------------------------------------
 

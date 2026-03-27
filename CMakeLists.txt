@@ -91,6 +91,7 @@ add_library(flux STATIC
   src/Graphics/Path.cpp
   src/Graphics/PathFlattener.cpp
   src/Graphics/Metal/GlyphAtlas.mm
+  src/Graphics/Metal/MetalImage.mm
   src/Graphics/Metal/MetalPathRasterizer.cpp
   src/Graphics/Metal/MetalShaderLibrary.mm
   src/Graphics/Metal/MetalDeviceResources.mm
@@ -130,6 +131,7 @@ target_link_libraries(flux PRIVATE
   "-framework Cocoa"
   "-framework QuartzCore"
   "-framework Metal"
+  "-framework MetalKit"
   "-framework Foundation"
   "-framework CoreText"
 )
@@ -145,3 +147,6 @@ target_link_libraries(blend_demo PRIVATE flux)
 
 add_executable(text_demo examples/text-demo/main.cpp)
 target_link_libraries(text_demo PRIVATE flux)
+
+add_executable(image_demo examples/image-demo/main.cpp)
+target_link_libraries(image_demo PRIVATE flux)

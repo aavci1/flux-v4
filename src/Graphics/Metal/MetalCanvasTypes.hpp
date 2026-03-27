@@ -27,15 +27,29 @@ struct MetalGlyphVertex {
   vector_float4 color{};
 };
 
+/// GPU instance for `image_sdf_vert` / `image_sdf_frag` (matches `ImageInstance` in `CanvasShaders.metal`).
+struct MetalImageInstance {
+  MetalRectInstance sdf;
+  vector_float4 uvBounds; // u0, v0, u1, v1 in normalized texture coordinates
+  vector_float2 texSizeInv;
+  vector_float2 imageModePad; // x: 0 = clamp UV bounds, 1 = tile (repeat sampler)
+};
+
 struct MetalDrawOp {
-  enum Kind : std::uint8_t { Rect, Line, PathMesh, GlyphMesh } kind = Rect;
-  MetalRectInstance rectInst{};
+  enum Kind : std::uint8_t { Rect, Line, PathMesh, GlyphMesh, Image } kind = Rect;
+  union {
+    MetalRectInstance rectInst;
+    MetalImageInstance imageInst;
+  };
   std::uint32_t pathStart = 0;
   std::uint32_t pathCount = 0;
   std::uint32_t glyphStart = 0;
   std::uint32_t glyphVertexCount = 0;
   /// Blend state for this draw (fixed-function blend in the PSO).
   BlendMode blendMode = BlendMode::Normal;
+  /// Valid when `kind == Image` — `id<MTLTexture>` (not retained; owned by `Image`).
+  void* texture = nullptr;
+  bool repeatSampler = false;
 };
 
 } // namespace flux
