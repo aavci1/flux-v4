@@ -3,8 +3,10 @@
 #include <Flux/Core/Events.hpp>
 #include <Flux/Core/Window.hpp>
 #include <Flux/Graphics/Canvas.hpp>
+#include <Flux/Graphics/TextSystem.hpp>
 
 #include "Core/PlatformWindow.hpp"
+#include "Graphics/CoreTextSystem.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -110,6 +112,7 @@ struct Application::Impl {
 
   Application* owner_{nullptr};
   std::unique_ptr<EventQueue> eventQueue_;
+  std::unique_ptr<TextSystem> textSystem_;
   std::vector<std::unique_ptr<Window>> ownedWindows_;
   std::vector<Window*> windows_;
   std::atomic<bool> needsRedraw_{false};
@@ -291,6 +294,7 @@ Application::Application(int /*argc*/, char** /*argv*/) {
   d = std::make_unique<Impl>();
   d->owner_ = this;
   d->eventQueue_ = std::unique_ptr<EventQueue>(new EventQueue());
+  d->textSystem_ = std::make_unique<CoreTextSystem>();
   d->installEventHandlers();
 
   [NSApplication sharedApplication];
@@ -314,6 +318,8 @@ void Application::adoptOwnedWindow(std::unique_ptr<Window> window) {
 }
 
 EventQueue& Application::eventQueue() { return *d->eventQueue_; }
+
+TextSystem& Application::textSystem() { return *d->textSystem_; }
 
 bool Application::hasInstance() { return gCurrentApplication != nullptr; }
 

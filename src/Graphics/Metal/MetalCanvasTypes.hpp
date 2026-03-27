@@ -20,11 +20,20 @@ struct MetalRectInstance {
   vector_float4 rotationPad;
 };
 
+/// Per-vertex glyph payload (two triangles per glyph). Matches `GlyphVertexIn` in `CanvasShaders.metal`.
+struct MetalGlyphVertex {
+  vector_float2 pos{};
+  vector_float2 uv{};
+  vector_float4 color{};
+};
+
 struct MetalDrawOp {
-  enum Kind : std::uint8_t { Rect, Line, PathMesh } kind = Rect;
+  enum Kind : std::uint8_t { Rect, Line, PathMesh, GlyphMesh } kind = Rect;
   MetalRectInstance rectInst{};
   std::uint32_t pathStart = 0;
   std::uint32_t pathCount = 0;
+  std::uint32_t glyphStart = 0;
+  std::uint32_t glyphVertexCount = 0;
   /// Blend state for this draw (fixed-function blend in the PSO).
   BlendMode blendMode = BlendMode::Normal;
 };

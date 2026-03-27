@@ -4,7 +4,10 @@
 #import <simd/simd.h>
 
 #include <Flux/Graphics/Canvas.hpp>
+#include <Flux/Graphics/TextSystem.hpp>
+#include <Flux/Graphics/TextRun.hpp>
 
+#include "Graphics/Metal/GlyphAtlas.hpp"
 #include "Graphics/Metal/MetalCanvasTypes.hpp"
 #include "Graphics/Metal/MetalDeviceResources.hpp"
 #include "Graphics/Metal/MetalFrameRecorder.hpp"
@@ -21,6 +24,7 @@ class Window;
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <span>
 #include <stdexcept>
 #include <vector>
 
@@ -86,12 +90,50 @@ bool tryDecomposeRotationTranslation(Mat3 const& m, float* outAngle, float* outT
   return true;
 }
 
+void appendGlyphQuad(std::vector<MetalGlyphVertex>& out, Mat3 const& M, float dpiX, float dpiY, Point tlLogical,
+                     float gw, float gh, float u0, float v0, float u1, float v1, vector_float4 premulRgba) {
+  Point const c0 = tlLogical;
+  Point const c1 = {tlLogical.x + gw, tlLogical.y};
+  Point const c2 = {tlLogical.x, tlLogical.y + gh};
+  Point const c3 = {tlLogical.x + gw, tlLogical.y + gh};
+  Point p0 = M.apply(c0);
+  Point p1 = M.apply(c1);
+  Point p2 = M.apply(c2);
+  Point p3 = M.apply(c3);
+  p0.x *= dpiX;
+  p0.y *= dpiY;
+  p1.x *= dpiX;
+  p1.y *= dpiY;
+  p2.x *= dpiX;
+  p2.y *= dpiY;
+  p3.x *= dpiX;
+  p3.y *= dpiY;
+  vector_float2 const uv0 = simd_make_float2(u0, v0);
+  vector_float2 const uv1 = simd_make_float2(u1, v0);
+  vector_float2 const uv2 = simd_make_float2(u0, v1);
+  vector_float2 const uv3 = simd_make_float2(u1, v1);
+  auto push = [&](Point const& p, vector_float2 uv) {
+    MetalGlyphVertex gv{};
+    gv.pos = simd_make_float2(p.x, p.y);
+    gv.uv = uv;
+    gv.color = premulRgba;
+    out.push_back(gv);
+  };
+  push(p0, uv0);
+  push(p1, uv1);
+  push(p2, uv2);
+  push(p1, uv1);
+  push(p3, uv3);
+  push(p2, uv2);
+}
+
 } // namespace
 
 class MetalCanvas final : public Canvas {
 public:
-  MetalCanvas(Window* /*window*/, CAMetalLayer* layer, unsigned int handle)
-      : metal_(layer), windowHandle_(handle) {
+  MetalCanvas(Window* /*window*/, CAMetalLayer* layer, unsigned int handle, TextSystem& textSystem)
+      : textSystem_(textSystem), metal_(layer), windowHandle_(handle) {
+    glyphAtlas_ = std::make_unique<GlyphAtlas>(metal_.device(), textSystem_);
     frameSem_ = dispatch_semaphore_create(static_cast<int>(kFramesInFlight));
     pushState();
   }
@@ -156,6 +198,7 @@ public:
 
     metal_.uploadInstanceInstances(frame_.ops);
     metal_.uploadPathVertices(frame_.pathVerts);
+    metal_.uploadGlyphVertices(frame_.glyphVerts);
 
     MTLRenderPassDescriptor* pass = [MTLRenderPassDescriptor renderPassDescriptor];
     pass.colorAttachments[0].texture = drawable_.texture;
@@ -207,6 +250,21 @@ public:
         const NSUInteger off = static_cast<NSUInteger>(op.pathStart) * sizeof(PathVertex);
         [enc setVertexBuffer:pathBuf offset:off atIndex:0];
         [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:static_cast<NSUInteger>(op.pathCount)];
+        break;
+      }
+      case MetalDrawOp::GlyphMesh: {
+        if (op.glyphVertexCount == 0) {
+          break;
+        }
+        [enc setRenderPipelineState:metal_.glyphPSO(op.blendMode)];
+        id<MTLBuffer> gbuf = metal_.glyphVertexArenaBuffer();
+        const NSUInteger goff = static_cast<NSUInteger>(op.glyphStart) * sizeof(MetalGlyphVertex);
+        [enc setVertexBuffer:gbuf offset:goff atIndex:0];
+        float vp[2] = {vw, vh};
+        [enc setVertexBytes:vp length:sizeof(vp) atIndex:1];
+        [enc setFragmentTexture:glyphAtlas_->texture() atIndex:0];
+        [enc setFragmentSamplerState:metal_.linearSampler() atIndex:0];
+        [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:static_cast<NSUInteger>(op.glyphVertexCount)];
         break;
       }
       }
@@ -445,6 +503,76 @@ public:
     drawRect(r, CornerRadius::pill(r), fs, ss);
   }
 
+  void drawText(TextRun const& text, Point origin) override {
+    if (!inFrame_) {
+      return;
+    }
+    if (text.glyphIds.empty()) {
+      return;
+    }
+
+    Mat3 const& M = currentState().transform;
+    BlendMode const blend = currentState().blendMode;
+    float const op = effectiveOpacity();
+
+    float const aw = static_cast<float>(glyphAtlas_->atlasPixelWidth());
+    float const ah = static_cast<float>(glyphAtlas_->atlasPixelHeight());
+    if (aw < 1.f || ah < 1.f) {
+      return;
+    }
+
+    float const baselineY = origin.y;
+    float const x = origin.x;
+    // Premultiplied color: rgb = straight_rgb * alpha * opacity, a = alpha * opacity.
+    float const effectiveAlpha = text.color.a * op;
+    vector_float4 const premul = simd_make_float4(text.color.r * effectiveAlpha,
+                                                  text.color.g * effectiveAlpha,
+                                                  text.color.b * effectiveAlpha,
+                                                  effectiveAlpha);
+
+    // Rasterize at physical size so glyphs are sharp on Retina. sizeQ8 encodes physical pt size.
+    float const physicalFontSize = text.fontSize * dpiScaleX_;
+
+    std::uint32_t const glyphStart = static_cast<std::uint32_t>(frame_.glyphVerts.size());
+    for (std::size_t i = 0; i < text.glyphIds.size(); ++i) {
+      GlyphKey key{};
+      key.fontId = text.fontId;
+      key.glyphId = text.glyphIds[i];
+      unsigned const q = static_cast<unsigned>(physicalFontSize * 4.f);
+      key.sizeQ8 = static_cast<std::uint16_t>(std::min(65535u, q));
+
+      AtlasEntry const& entry = glyphAtlas_->getOrUpload(key);
+      if (entry.width == 0 || entry.height == 0) {
+        continue;
+      }
+
+      float const u0 = static_cast<float>(entry.u) / aw;
+      float const u1 = static_cast<float>(entry.u + entry.width) / aw;
+      float const vLo = static_cast<float>(entry.v) / ah;
+      float const vHi = static_cast<float>(entry.v + entry.height) / ah;
+
+      // Bearing and bitmap dims are in physical pixels; convert to logical points for the quad.
+      Point const ink = {x + text.positions[i].x, baselineY + text.positions[i].y};
+      Point const tl = {ink.x - entry.bearing.x / dpiScaleX_, ink.y - entry.bearing.y / dpiScaleY_};
+      float const gw = static_cast<float>(entry.width) / dpiScaleX_;
+      float const gh = static_cast<float>(entry.height) / dpiScaleY_;
+
+      // Atlas row 0 = top of glyph (same row order as CG bitmap → Metal). v increases downward.
+      appendGlyphQuad(frame_.glyphVerts, M, dpiScaleX_, dpiScaleY_, tl, gw, gh, u0, vLo, u1, vHi, premul);
+    }
+
+    std::uint32_t const vertCount =
+        static_cast<std::uint32_t>(frame_.glyphVerts.size()) - glyphStart;
+    if (vertCount > 0) {
+      MetalDrawOp op{};
+      op.kind = MetalDrawOp::GlyphMesh;
+      op.glyphStart = glyphStart;
+      op.glyphVertexCount = vertCount;
+      op.blendMode = blend;
+      frame_.ops.push_back(op);
+    }
+  }
+
 private:
   struct GpuState {
     Mat3 transform = Mat3::identity();
@@ -453,6 +581,8 @@ private:
     std::optional<Rect> clip;
   };
 
+  TextSystem& textSystem_;
+  std::unique_ptr<GlyphAtlas> glyphAtlas_;
   MetalDeviceResources metal_;
   unsigned int windowHandle_{0};
 
@@ -537,8 +667,9 @@ private:
   }
 };
 
-std::unique_ptr<Canvas> createMetalCanvas(Window* window, void* caMetalLayer, unsigned int handle) {
-  return std::make_unique<MetalCanvas>(window, (__bridge CAMetalLayer*)caMetalLayer, handle);
+std::unique_ptr<Canvas> createMetalCanvas(Window* window, void* caMetalLayer, unsigned int handle,
+                                          TextSystem& textSystem) {
+  return std::make_unique<MetalCanvas>(window, (__bridge CAMetalLayer*)caMetalLayer, handle, textSystem);
 }
 
 } // namespace flux

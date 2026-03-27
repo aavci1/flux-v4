@@ -11,6 +11,7 @@
 namespace flux {
 
 class EventQueue;
+class TextSystem;
 
 class Application {
 public:
@@ -47,6 +48,8 @@ public:
   static Application& instance();
 
   EventQueue& eventQueue();
+
+  TextSystem& textSystem();
 
   friend class Window;
 

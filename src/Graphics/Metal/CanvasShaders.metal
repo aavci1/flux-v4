@@ -203,3 +203,39 @@ vertex PathVertexOut path_vert(PathVertexIn in [[stage_in]]) {
 }
 
 fragment float4 path_frag(PathVertexOut in [[stage_in]]) { return in.color; }
+
+// -----------------------------------------------------------------------------
+// Glyph atlas (R8 coverage × premultiplied run color)
+// -----------------------------------------------------------------------------
+
+struct GlyphVertexIn {
+  float2 pos [[attribute(0)]];
+  float2 uv [[attribute(1)]];
+  float4 color [[attribute(2)]];
+};
+
+struct GlyphVertexOut {
+  float4 clip [[position]];
+  float2 uv;
+  float4 color;
+};
+
+vertex GlyphVertexOut glyph_vert(GlyphVertexIn in [[stage_in]], constant float2* viewport [[buffer(1)]]) {
+  float2 ndc = (in.pos / viewport[0]) * 2.0f - 1.0f;
+  ndc.y = -ndc.y;
+  GlyphVertexOut out;
+  out.clip = float4(ndc, 0.0f, 1.0f);
+  out.uv = in.uv;
+  out.color = in.color;
+  return out;
+}
+
+fragment float4 glyph_frag(GlyphVertexOut in [[stage_in]], texture2d<float> atlas [[texture(0)]],
+                           sampler atlasSmpl [[sampler(0)]]) {
+  // in.color is premultiplied (rgb already multiplied by alpha * opacity).
+  // Scale by R8 coverage and return; the pipeline uses (One, OneMinusSrcAlpha) premul blending.
+  float cov = atlas.sample(atlasSmpl, in.uv).r;
+  if (cov < 0.001f)
+    discard_fragment();
+  return float4(in.color.rgb * cov, in.color.a * cov);
+}

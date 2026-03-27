@@ -5,6 +5,7 @@
 #include <Flux/Core/Application.hpp>
 #include <Flux/Core/EventQueue.hpp>
 #include <Flux/Core/Events.hpp>
+#include <Flux/Core/Application.hpp>
 #include <Flux/Core/Window.hpp>
 
 #include "Core/PlatformWindow.hpp"
@@ -541,7 +542,7 @@ std::unique_ptr<Canvas> MacMetalPlatformWindow::createCanvas(Window& owner) {
   if (!layerPtr) {
     return nullptr;
   }
-  return createMetalCanvas(&owner, layerPtr, handle());
+  return createMetalCanvas(&owner, layerPtr, handle(), Application::instance().textSystem());
 }
 
 void MacMetalPlatformWindow::processEvents() {

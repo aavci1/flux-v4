@@ -86,8 +86,10 @@ add_library(flux STATIC
   src/Core/EventQueue.cpp
   src/Core/Window.cpp
   src/Graphics/Canvas.cpp
+  src/Graphics/CoreTextSystem.mm
   src/Graphics/Path.cpp
   src/Graphics/PathFlattener.cpp
+  src/Graphics/Metal/GlyphAtlas.mm
   src/Graphics/Metal/MetalPathRasterizer.cpp
   src/Graphics/Metal/MetalShaderLibrary.mm
   src/Graphics/Metal/MetalDeviceResources.mm
@@ -128,6 +130,7 @@ target_link_libraries(flux PRIVATE
   "-framework QuartzCore"
   "-framework Metal"
   "-framework Foundation"
+  "-framework CoreText"
 )
 
 add_executable(hello_world examples/hello-world/main.cpp)

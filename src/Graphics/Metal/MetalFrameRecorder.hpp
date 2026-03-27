@@ -11,10 +11,12 @@ namespace flux {
 struct MetalFrameRecorder {
   std::vector<MetalDrawOp> ops;
   std::vector<PathVertex> pathVerts;
+  std::vector<MetalGlyphVertex> glyphVerts;
 
   void clear() {
     ops.clear();
     pathVerts.clear();
+    glyphVerts.clear();
   }
 };
 

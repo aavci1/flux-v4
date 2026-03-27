@@ -204,6 +204,51 @@ id<MTLRenderPipelineState> makePathPipeline(id<MTLDevice> device, id<MTLLibrary>
   return pso;
 }
 
+id<MTLRenderPipelineState> makeGlyphPipeline(id<MTLDevice> device, id<MTLLibrary> lib, MTLPixelFormat colorFormat,
+                                             BlendMode blendMode) {
+  id<MTLFunction> vf = [lib newFunctionWithName:@"glyph_vert"];
+  id<MTLFunction> ff = [lib newFunctionWithName:@"glyph_frag"];
+  if (!vf || !ff) {
+    return nil;
+  }
+  MTLVertexDescriptor* vd = [[MTLVertexDescriptor alloc] init];
+  vd.attributes[0].format = MTLVertexFormatFloat2;
+  vd.attributes[0].offset = 0;
+  vd.attributes[0].bufferIndex = 0;
+  vd.attributes[1].format = MTLVertexFormatFloat2;
+  vd.attributes[1].offset = 8;
+  vd.attributes[1].bufferIndex = 0;
+  vd.attributes[2].format = MTLVertexFormatFloat4;
+  vd.attributes[2].offset = 16;
+  vd.attributes[2].bufferIndex = 0;
+  // Must match `sizeof(MetalGlyphVertex)` (pos + uv + premul color).
+  vd.layouts[0].stride = sizeof(MetalGlyphVertex);
+  vd.layouts[0].stepRate = 1;
+  vd.layouts[0].stepFunction = MTLVertexStepFunctionPerVertex;
+
+  MTLRenderPipelineDescriptor* d = [[MTLRenderPipelineDescriptor alloc] init];
+  d.vertexFunction = vf;
+  d.fragmentFunction = ff;
+  d.vertexDescriptor = vd;
+  d.colorAttachments[0].pixelFormat = colorFormat;
+  // Glyphs are composited as premultiplied alpha: source rgb is already multiplied by alpha,
+  // so use (One, OneMinusSrcAlpha) rather than the straight-alpha (SourceAlpha, OneMinusSrcAlpha).
+  auto* att = d.colorAttachments[0];
+  att.blendingEnabled = YES;
+  att.rgbBlendOperation = MTLBlendOperationAdd;
+  att.alphaBlendOperation = MTLBlendOperationAdd;
+  att.sourceRGBBlendFactor = MTLBlendFactorOne;
+  att.destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+  att.sourceAlphaBlendFactor = MTLBlendFactorOne;
+  att.destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+  NSError* err = nil;
+  id<MTLRenderPipelineState> pso = [device newRenderPipelineStateWithDescriptor:d error:&err];
+  if (!pso && err) {
+    NSLog(@"Flux MetalDeviceResources: glyph pipeline error: %@", err);
+  }
+  return pso;
+}
+
 } // namespace
 
 id<MTLRenderPipelineState> MetalDeviceResources::rectPSO(BlendMode mode) {
@@ -247,6 +292,20 @@ id<MTLRenderPipelineState> MetalDeviceResources::pathPSO(BlendMode mode) {
   return pso;
 }
 
+id<MTLRenderPipelineState> MetalDeviceResources::glyphPSO(BlendMode mode) {
+  // Bump when glyph vertex layout / stride changes so cached PSOs are not reused incorrectly.
+  const std::uint32_t k = blendModeKey(mode) ^ 0x47595049u; // 'GYPI' — v2: premul blend
+  if (auto it = glyphPSOCache_.find(k); it != glyphPSOCache_.end()) {
+    return it->second;
+  }
+  id<MTLRenderPipelineState> pso = makeGlyphPipeline(device_, lib_, layer_.pixelFormat, mode);
+  if (!pso) {
+    throw std::runtime_error("MetalDeviceResources: glyph pipeline creation failed");
+  }
+  glyphPSOCache_[k] = pso;
+  return pso;
+}
+
 MetalDeviceResources::MetalDeviceResources(CAMetalLayer* layer) : layer_(layer) {
   device_ = layer_.device ? layer_.device : MTLCreateSystemDefaultDevice();
   layer_.device = device_;
@@ -262,6 +321,13 @@ MetalDeviceResources::MetalDeviceResources(CAMetalLayer* layer) : layer_(layer) 
       {1.f, 1.f},
   };
   quadBuffer_ = [device_ newBufferWithBytes:kQuadStrip length:sizeof(kQuadStrip) options:MTLResourceStorageModeShared];
+
+  MTLSamplerDescriptor* sd = [MTLSamplerDescriptor new];
+  sd.minFilter = MTLSamplerMinMagFilterLinear;
+  sd.magFilter = MTLSamplerMinMagFilterLinear;
+  sd.sAddressMode = MTLSamplerAddressModeClampToEdge;
+  sd.tAddressMode = MTLSamplerAddressModeClampToEdge;
+  linearSampler_ = [device_ newSamplerStateWithDescriptor:sd];
 }
 
 MetalDeviceResources::~MetalDeviceResources() = default;
@@ -293,6 +359,19 @@ void MetalDeviceResources::ensurePathVertexArenaCapacity(std::uint32_t byteCount
   pathVertexArenaCapacityBytes_ = newCap;
 }
 
+void MetalDeviceResources::ensureGlyphVertexArenaCapacity(std::uint32_t byteCount) {
+  if (byteCount == 0) {
+    return;
+  }
+  if (byteCount <= glyphVertexArenaCapacityBytes_) {
+    return;
+  }
+  const std::uint32_t newCap =
+      glyphVertexArenaCapacityBytes_ == 0 ? byteCount : std::max(byteCount, glyphVertexArenaCapacityBytes_ * 2);
+  glyphVertexArena_ = [device_ newBufferWithLength:newCap options:MTLResourceStorageModeShared];
+  glyphVertexArenaCapacityBytes_ = newCap;
+}
+
 void MetalDeviceResources::uploadInstanceInstances(const std::vector<MetalDrawOp>& ops) {
   NSUInteger rectLineInstanceCount = 0;
   for (const MetalDrawOp& op : ops) {
@@ -320,6 +399,15 @@ void MetalDeviceResources::uploadPathVertices(const std::vector<PathVertex>& pat
     return;
   }
   std::memcpy([pathVertexArena_ contents], pathVerts.data(), pathVertBytes);
+}
+
+void MetalDeviceResources::uploadGlyphVertices(const std::vector<MetalGlyphVertex>& verts) {
+  const NSUInteger bytes = static_cast<NSUInteger>(verts.size() * sizeof(MetalGlyphVertex));
+  ensureGlyphVertexArenaCapacity(static_cast<std::uint32_t>(bytes));
+  if (bytes == 0) {
+    return;
+  }
+  std::memcpy([glyphVertexArena_ contents], verts.data(), bytes);
 }
 
 } // namespace flux

@@ -2,16 +2,12 @@
 #include <Flux/Core/Application.hpp>
 #include <Flux/Graphics/Canvas.hpp>
 #include <Flux/Graphics/Styles.hpp>
+#include <Flux/Graphics/TextSystem.hpp>
 
 #include <algorithm>
 #include <array>
 #include <chrono>
 #include <cmath>
-#include <cstdio>
-
-#if defined(__APPLE__)
-#include <dispatch/dispatch.h>
-#endif
 
 using namespace flux;
 
@@ -41,22 +37,7 @@ constexpr std::array<DemoCell, 12> kGrid{{
 constexpr int kCols = 4;
 constexpr int kRows = 3;
 
-void printGridLegend() {
-  std::fprintf(stderr, "flux blend_demo — grid (row-major, left-to-right):\n");
-  for (int r = 0; r < kRows; ++r) {
-    std::fprintf(stderr, "  row %d: ", r);
-    for (int c = 0; c < kCols; ++c) {
-      const size_t i = static_cast<size_t>(r * kCols + c);
-      if (i < kGrid.size()) {
-        std::fprintf(stderr, "%s%s", kGrid[i].title, (c < kCols - 1) ? " | " : "");
-      }
-    }
-    std::fprintf(stderr, "\n");
-  }
-  std::fflush(stderr);
-}
-
-void drawCell(Canvas& c, Rect cell, BlendMode mode,
+void drawCell(Canvas& c, Rect cell, BlendMode mode, const char* title,
               std::chrono::steady_clock::time_point start) {
   using clock = std::chrono::steady_clock;
   const float t = std::chrono::duration<float>(clock::now() - start).count();
@@ -84,15 +65,28 @@ void drawCell(Canvas& c, Rect cell, BlendMode mode,
   c.setBlendMode(BlendMode::Normal);
   c.drawRect(cell, CornerRadius(4.f, 4.f, 4.f, 4.f), FillStyle::none(),
                StrokeStyle::solid(Color::rgb(90, 90, 100), 1.2f));
+
+  TextAttribute labelAttr{};
+  labelAttr.fontFamily = ".AppleSystemUIFont";
+  labelAttr.fontSize = 16.f;
+  labelAttr.fontWeight = 500.f;
+  labelAttr.color = Color::rgb(38, 38, 45);
+
+  auto labelRun = Application::instance().textSystem().shapePlain(title, labelAttr, 0.f);
+  Size const m = labelRun->measuredSize;
+  float baselineY = cell.y + cell.height - 16.f;
+  if (!labelRun->glyphIds.empty()) {
+    baselineY = cell.y + cell.height - 16.f - labelRun->descent;
+  }
+  float const x = cell.x + (cell.width - m.width) * 0.5f;
+  c.drawText(*labelRun, Point{x, baselineY});
 }
 
 class BlendDemoWindow : public Window {
   std::chrono::steady_clock::time_point start_{};
 
 public:
-  explicit BlendDemoWindow(WindowConfig const& c) : Window(c), start_(std::chrono::steady_clock::now()) {
-    printGridLegend();
-  }
+  explicit BlendDemoWindow(WindowConfig const& c) : Window(c), start_(std::chrono::steady_clock::now()) {}
 
   void render(Canvas& c) override {
     c.clear(Color{0.96f, 0.96f, 0.98f, 1.f});
@@ -115,7 +109,7 @@ public:
       Rect cell = Rect::sharp(margin + static_cast<float>(col) * cw + gap * 0.5f,
                                           margin + static_cast<float>(row) * ch + gap * 0.5f,
                                           cw - gap, ch - gap);
-      drawCell(c, cell, kGrid[i].mode, start_);
+      drawCell(c, cell, kGrid[i].mode, kGrid[i].title, start_);
     }
   }
 };
@@ -125,9 +119,9 @@ public:
 int main(int argc, char* argv[]) {
   Application app(argc, argv);
 
-  auto& blendWindow = app.createWindow<BlendDemoWindow>({
+  app.createWindow<BlendDemoWindow>({
       .size = {920, 700},
-      .title = "Flux — blend modes (see stderr for grid legend)",
+      .title = "Flux — blend modes",
   });
 
   return app.exec();
