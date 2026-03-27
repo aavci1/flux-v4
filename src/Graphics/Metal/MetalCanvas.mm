@@ -5,7 +5,10 @@
 
 #include <Flux/Graphics/Canvas.hpp>
 
-#include "Graphics/PathFlattener.hpp"
+#include "Graphics/Metal/MetalCanvasTypes.hpp"
+#include "Graphics/Metal/MetalDeviceResources.hpp"
+#include "Graphics/Metal/MetalFrameRecorder.hpp"
+#include "Graphics/Metal/MetalPathRasterizer.hpp"
 
 namespace flux {
 class Window;
@@ -13,15 +16,11 @@ class Window;
 
 #include "Graphics/Metal/MetalCanvas.hpp"
 
-namespace flux::detail {
-extern const char kFluxShaderMSL[];
-}
-
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <limits>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <vector>
 
@@ -32,93 +31,10 @@ namespace {
 constexpr NSUInteger kQuadStripCount = 4;
 constexpr NSUInteger kFramesInFlight = 3;
 
-struct RectInstance {
-  vector_float4 rect;
-  vector_float4 corners;
-  vector_float4 fillColor;
-  vector_float4 strokeColor;
-  vector_float2 strokeWidthOpacity;
-  vector_float2 viewport;
-  vector_float4 rotationPad;
-};
-
-struct DrawOp {
-  enum Kind : std::uint8_t { Rect, Line, PathMesh } kind = Rect;
-  RectInstance rectInst{};
-  std::uint32_t pathStart = 0;
-  std::uint32_t pathCount = 0;
-};
-
 vector_float4 toSimd4(const Color& c) { return simd_make_float4(c.r, c.g, c.b, c.a); }
 
 vector_float4 cornersToSimd(const CornerRadius& cr) {
   return simd_make_float4(cr.topLeft, cr.topRight, cr.bottomRight, cr.bottomLeft);
-}
-
-id<MTLRenderPipelineState> makePipeline(id<MTLDevice> device, id<MTLLibrary> lib, NSString* vert, NSString* frag,
-                                        MTLPixelFormat colorFormat, bool blend) {
-  id<MTLFunction> vf = [lib newFunctionWithName:vert];
-  id<MTLFunction> ff = [lib newFunctionWithName:frag];
-  if (!vf || !ff) {
-    return nil;
-  }
-  MTLRenderPipelineDescriptor* d = [[MTLRenderPipelineDescriptor alloc] init];
-  d.vertexFunction = vf;
-  d.fragmentFunction = ff;
-  d.colorAttachments[0].pixelFormat = colorFormat;
-  if (blend) {
-    d.colorAttachments[0].blendingEnabled = YES;
-    d.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
-    d.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
-    d.colorAttachments[0].sourceAlphaBlendFactor = MTLBlendFactorOne;
-    d.colorAttachments[0].destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
-  }
-  NSError* err = nil;
-  id<MTLRenderPipelineState> pso = [device newRenderPipelineStateWithDescriptor:d error:&err];
-  if (!pso && err) {
-    NSLog(@"Flux MetalCanvas: pipeline error: %@", err);
-  }
-  return pso;
-}
-
-id<MTLRenderPipelineState> makePathPipeline(id<MTLDevice> device, id<MTLLibrary> lib, MTLPixelFormat colorFormat, bool blend) {
-  id<MTLFunction> vf = [lib newFunctionWithName:@"path_vert"];
-  id<MTLFunction> ff = [lib newFunctionWithName:@"path_frag"];
-  if (!vf || !ff) {
-    return nil;
-  }
-  MTLVertexDescriptor* vd = [[MTLVertexDescriptor alloc] init];
-  vd.attributes[0].format = MTLVertexFormatFloat2;
-  vd.attributes[0].offset = 0;
-  vd.attributes[0].bufferIndex = 0;
-  vd.attributes[1].format = MTLVertexFormatFloat4;
-  vd.attributes[1].offset = 8;
-  vd.attributes[1].bufferIndex = 0;
-  vd.attributes[2].format = MTLVertexFormatFloat2;
-  vd.attributes[2].offset = 24;
-  vd.attributes[2].bufferIndex = 0;
-  vd.layouts[0].stride = 32;
-  vd.layouts[0].stepRate = 1;
-  vd.layouts[0].stepFunction = MTLVertexStepFunctionPerVertex;
-
-  MTLRenderPipelineDescriptor* d = [[MTLRenderPipelineDescriptor alloc] init];
-  d.vertexFunction = vf;
-  d.fragmentFunction = ff;
-  d.vertexDescriptor = vd;
-  d.colorAttachments[0].pixelFormat = colorFormat;
-  if (blend) {
-    d.colorAttachments[0].blendingEnabled = YES;
-    d.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
-    d.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
-    d.colorAttachments[0].sourceAlphaBlendFactor = MTLBlendFactorOne;
-    d.colorAttachments[0].destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
-  }
-  NSError* err = nil;
-  id<MTLRenderPipelineState> pso = [device newRenderPipelineStateWithDescriptor:d error:&err];
-  if (!pso && err) {
-    NSLog(@"Flux MetalCanvas: path pipeline error: %@", err);
-  }
-  return pso;
 }
 
 Rect boundsOfTransformedRect(Rect const& r, Mat3 const& m) {
@@ -146,7 +62,6 @@ Rect intersectRects(Rect const& a, Rect const& b) {
   return Rect::sharp(x0, y0, x1 - x0, y1 - y0);
 }
 
-/// If `m` is rotation × translation only (orthogonal det≈1, scale≈1), we can draw the unrotated rect + pass θ to the shader.
 bool tryDecomposeRotationTranslation(Mat3 const& m, float* outAngle, float* outTx, float* outTy) {
   const float a = m.m[0], b = m.m[1], c = m.m[3], d = m.m[4];
   const float det = a * d - b * c;
@@ -176,46 +91,12 @@ bool tryDecomposeRotationTranslation(Mat3 const& m, float* outAngle, float* outT
 class MetalCanvas final : public Canvas {
 public:
   MetalCanvas(Window* /*window*/, CAMetalLayer* layer, unsigned int handle)
-      : layer_(layer), windowHandle_(handle) {
-    device_ = layer_.device ? layer_.device : MTLCreateSystemDefaultDevice();
-    layer_.device = device_;
-    layer_.pixelFormat = MTLPixelFormatBGRA8Unorm;
-    queue_ = [device_ newCommandQueue];
+      : metal_(layer), windowHandle_(handle) {
     frameSem_ = dispatch_semaphore_create(static_cast<int>(kFramesInFlight));
-
-    NSError* err = nil;
-    NSString* src = [NSString stringWithUTF8String:flux::detail::kFluxShaderMSL];
-    MTLCompileOptions* opts = [[MTLCompileOptions alloc] init];
-    opts.languageVersion = MTLLanguageVersion2_4;
-    id<MTLLibrary> lib = [device_ newLibraryWithSource:src options:opts error:&err];
-    if (!lib) {
-      NSLog(@"Flux MetalCanvas: failed to compile embedded Metal library: %@", err);
-      throw std::runtime_error("MetalCanvas: could not compile embedded shaders");
-    }
-    lib_ = lib;
-
-    MTLPixelFormat pf = layer_.pixelFormat;
-    rectPSO_ = makePipeline(device_, lib_, @"rect_sdf_vert", @"rect_sdf_frag", pf, true);
-    linePSO_ = makePipeline(device_, lib_, @"line_sdf_vert", @"line_sdf_frag", pf, true);
-    pathPSO_ = makePathPipeline(device_, lib_, pf, true);
-    if (!rectPSO_ || !linePSO_ || !pathPSO_) {
-      throw std::runtime_error("MetalCanvas: pipeline creation failed");
-    }
-
-    static const vector_float2 kQuadStrip[kQuadStripCount] = {
-        {-1.f, -1.f},
-        {1.f, -1.f},
-        {-1.f, 1.f},
-        {1.f, 1.f},
-    };
-    quadBuffer_ = [device_ newBufferWithBytes:kQuadStrip
-                                       length:sizeof(kQuadStrip)
-                                      options:MTLResourceStorageModeShared];
-
     pushState();
   }
 
-  ~MetalCanvas() override { ops_.clear(); }
+  ~MetalCanvas() override { frame_.clear(); }
 
   Backend backend() const noexcept override { return Backend::Metal; }
 
@@ -232,18 +113,17 @@ public:
   }
 
   void beginFrame() override {
-    ops_.clear();
-    pathVerts_.clear();
+    frame_.clear();
     dispatch_semaphore_wait(frameSem_, DISPATCH_TIME_FOREVER);
-    drawable_ = [layer_ nextDrawable];
-    cmdBuf_ = [queue_ commandBuffer];
+    drawable_ = [metal_.layer() nextDrawable];
+    cmdBuf_ = [metal_.queue() commandBuffer];
     if (!drawable_) {
       dispatch_semaphore_signal(frameSem_);
       cmdBuf_ = nil;
     }
     inFrame_ = (drawable_ != nil && cmdBuf_ != nil);
-    const CGSize ds = layer_.drawableSize;
-    CGFloat cs = layer_.contentsScale;
+    const CGSize ds = metal_.layer().drawableSize;
+    CGFloat cs = metal_.layer().contentsScale;
     if (cs < 0.01) {
       cs = 1.0;
     }
@@ -262,7 +142,7 @@ public:
       return;
     }
 
-    CGSize drawableSize = layer_.drawableSize;
+    CGSize drawableSize = metal_.layer().drawableSize;
     const float vw = static_cast<float>(drawableSize.width);
     const float vh = static_cast<float>(drawableSize.height);
     if (vw < 1.f || vh < 1.f) {
@@ -273,6 +153,9 @@ public:
       inFrame_ = false;
       return;
     }
+
+    metal_.uploadInstanceInstances(frame_.ops);
+    metal_.uploadPathVertices(frame_.pathVerts);
 
     MTLRenderPassDescriptor* pass = [MTLRenderPassDescriptor renderPassDescriptor];
     pass.colorAttachments[0].texture = drawable_.texture;
@@ -292,39 +175,35 @@ public:
     }
     [enc setScissorRect:sc];
 
-    id<MTLBuffer> pathBuf = nil;
-    for (const DrawOp& op : ops_) {
+    NSUInteger instSlot = 0;
+    id<MTLBuffer> pathBuf = metal_.pathVertexArenaBuffer();
+    for (const MetalDrawOp& op : frame_.ops) {
       switch (op.kind) {
-      case DrawOp::Rect: {
-        [enc setRenderPipelineState:rectPSO_];
-        [enc setVertexBuffer:quadBuffer_ offset:0 atIndex:0];
-        id<MTLBuffer> inst = [device_ newBufferWithBytes:&op.rectInst length:sizeof(RectInstance)
-                                                   options:MTLResourceStorageModeShared];
-        [enc setVertexBuffer:inst offset:0 atIndex:1];
+      case MetalDrawOp::Rect: {
+        [enc setRenderPipelineState:metal_.rectPSO()];
+        [enc setVertexBuffer:metal_.quadBuffer() offset:0 atIndex:0];
+        const NSUInteger off = instSlot * sizeof(MetalRectInstance);
+        ++instSlot;
+        [enc setVertexBuffer:metal_.instanceArenaBuffer() offset:off atIndex:1];
         [enc drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:kQuadStripCount
                 instanceCount:1];
         break;
       }
-      case DrawOp::Line: {
-        [enc setRenderPipelineState:linePSO_];
-        [enc setVertexBuffer:quadBuffer_ offset:0 atIndex:0];
-        id<MTLBuffer> inst = [device_ newBufferWithBytes:&op.rectInst length:sizeof(RectInstance)
-                                                   options:MTLResourceStorageModeShared];
-        [enc setVertexBuffer:inst offset:0 atIndex:1];
+      case MetalDrawOp::Line: {
+        [enc setRenderPipelineState:metal_.linePSO()];
+        [enc setVertexBuffer:metal_.quadBuffer() offset:0 atIndex:0];
+        const NSUInteger off = instSlot * sizeof(MetalRectInstance);
+        ++instSlot;
+        [enc setVertexBuffer:metal_.instanceArenaBuffer() offset:off atIndex:1];
         [enc drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:kQuadStripCount
                 instanceCount:1];
         break;
       }
-      case DrawOp::PathMesh: {
+      case MetalDrawOp::PathMesh: {
         if (op.pathCount == 0) {
           break;
         }
-        if (!pathBuf) {
-          pathBuf = [device_ newBufferWithBytes:pathVerts_.data()
-                                           length:pathVerts_.size() * sizeof(PathVertex)
-                                          options:MTLResourceStorageModeShared];
-        }
-        [enc setRenderPipelineState:pathPSO_];
+        [enc setRenderPipelineState:metal_.pathPSO()];
         const NSUInteger off = static_cast<NSUInteger>(op.pathStart) * sizeof(PathVertex);
         [enc setVertexBuffer:pathBuf offset:off atIndex:0];
         [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:static_cast<NSUInteger>(op.pathCount)];
@@ -340,7 +219,7 @@ public:
     [cmdBuf_ presentDrawable:drawable_];
     [cmdBuf_ commit];
 
-    ops_.clear();
+    frame_.clear();
 
     cmdBuf_ = nil;
     drawable_ = nil;
@@ -513,17 +392,16 @@ public:
       return;
     }
 
-    CGSize drawableSize = layer_.drawableSize;
+    CGSize drawableSize = metal_.layer().drawableSize;
     const float vw = static_cast<float>(drawableSize.width);
     const float vh = static_cast<float>(drawableSize.height);
 
-    DrawOp op;
-    op.kind = DrawOp::Line;
+    MetalDrawOp op;
+    op.kind = MetalDrawOp::Line;
     op.rectInst.rect = simd_make_float4(lineBounds.x * dpiScaleX_, lineBounds.y * dpiScaleY_,
                                         lineBounds.width * dpiScaleX_, lineBounds.height * dpiScaleY_);
     const float inv = 1.f / len;
     const float lenDevice = std::hypot(dx * dpiScaleX_, dy * dpiScaleY_);
-    // Segment half-length in device pixels (must not include quad padding; see line_sdf_frag).
     op.rectInst.corners = simd_make_float4(dx * inv, dy * inv, lenDevice * 0.5f, 0.f);
     op.rectInst.fillColor = simd_make_float4(0.f, 0.f, 0.f, 0.f);
     op.rectInst.strokeColor = toSimd4(stroke);
@@ -531,7 +409,7 @@ public:
         simd_make_float2(ss.width * std::min(dpiScaleX_, dpiScaleY_), paintOpacity);
     op.rectInst.viewport = simd_make_float2(vw, vh);
     op.rectInst.rotationPad = simd_make_float4(0.f, 0.f, 0.f, 0.f);
-    ops_.push_back(op);
+    frame_.ops.push_back(op);
   }
 
   void drawPath(Path const& path) override {
@@ -565,80 +443,12 @@ public:
       }
     }
 
-    CGSize drawableSize = layer_.drawableSize;
+    CGSize drawableSize = metal_.layer().drawableSize;
     const float vw = static_cast<float>(drawableSize.width);
     const float vh = static_cast<float>(drawableSize.height);
-    if (vw < 1.f || vh < 1.f) {
-      return;
-    }
 
-    const float s = std::min(dpiScaleX_, dpiScaleY_);
-    Mat3 const& M = currentState().transform;
-    const float op = effectiveOpacity();
-    const size_t pathBegin = pathVerts_.size();
-
-    auto subpaths = PathFlattener::flattenSubpaths(path);
-    for (auto& sp : subpaths) {
-      for (auto& p : sp) {
-        Point q = M.apply(p);
-        p = {q.x * dpiScaleX_, q.y * dpiScaleY_};
-      }
-    }
-
-    auto appendVerts = [this](TessellatedPath&& t) {
-      if (t.vertices.empty()) {
-        return;
-      }
-      pathVerts_.insert(pathVerts_.end(), t.vertices.begin(), t.vertices.end());
-    };
-
-    if (!fs.isNone()) {
-      Color fc{};
-      if (fs.solidColor(&fc)) {
-        fc.a *= op;
-        if (subpaths.size() > 1) {
-          std::vector<std::vector<Point>> nonempty;
-          nonempty.reserve(subpaths.size());
-          for (const auto& s : subpaths) {
-            if (s.size() >= 3) {
-              nonempty.push_back(s);
-            }
-          }
-          if (!nonempty.empty()) {
-            appendVerts(PathFlattener::tessellateFillContours(nonempty, fc, vw, vh,
-                                                              PathFlattener::tessWindingFromFillRule(fs.fillRule)));
-          }
-        } else {
-          for (auto& s : subpaths) {
-            if (s.size() >= 3) {
-              appendVerts(PathFlattener::tessellateFill(s, fc, vw, vh));
-            }
-          }
-        }
-      }
-    }
-
-    if (!ss.isNone()) {
-      Color sc{};
-      if (ss.solidColor(&sc)) {
-        sc.a *= op;
-        const float sw = ss.width * s;
-        for (const auto& sp : subpaths) {
-          if (sp.size() >= 2) {
-            appendVerts(PathFlattener::tessellateStroke(sp, sw, sc, vw, vh));
-          }
-        }
-      }
-    }
-
-    const size_t pathEnd = pathVerts_.size();
-    if (pathEnd > pathBegin) {
-      DrawOp pop{};
-      pop.kind = DrawOp::PathMesh;
-      pop.pathStart = static_cast<std::uint32_t>(pathBegin);
-      pop.pathCount = static_cast<std::uint32_t>(pathEnd - pathBegin);
-      ops_.push_back(pop);
-    }
+    metalPathRasterizeToMesh(path, fs, ss, currentState().transform, dpiScaleX_, dpiScaleY_, effectiveOpacity(),
+                             vw, vh, frame_.pathVerts, frame_.ops);
   }
 
   void drawCircle(Point center, float radius) override {
@@ -656,15 +466,8 @@ private:
     StrokeStyle strokeStyle = StrokeStyle::none();
   };
 
-  CAMetalLayer* layer_{nil};
+  MetalDeviceResources metal_;
   unsigned int windowHandle_{0};
-  id<MTLDevice> device_{nil};
-  id<MTLCommandQueue> queue_{nil};
-  id<MTLLibrary> lib_{nil};
-  id<MTLRenderPipelineState> rectPSO_{nil};
-  id<MTLRenderPipelineState> linePSO_{nil};
-  id<MTLRenderPipelineState> pathPSO_{nil};
-  id<MTLBuffer> quadBuffer_{nil};
 
   dispatch_semaphore_t frameSem_{nullptr};
   id<MTLCommandBuffer> cmdBuf_{nil};
@@ -677,8 +480,7 @@ private:
   float dpiScaleX_{1.f};
   float dpiScaleY_{1.f};
 
-  std::vector<DrawOp> ops_;
-  std::vector<PathVertex> pathVerts_;
+  MetalFrameRecorder frame_;
   std::vector<GpuState> stateStack_;
 
   MTLScissorRect clipScissor_{};
@@ -700,7 +502,7 @@ private:
     if (logicalW_ > 0 && logicalH_ > 0) {
       return Rect::sharp(0, 0, static_cast<float>(logicalW_), static_cast<float>(logicalH_));
     }
-    CGSize ds = layer_.drawableSize;
+    CGSize ds = metal_.layer().drawableSize;
     return Rect::sharp(0, 0, static_cast<float>(ds.width) / dpiScaleX_, static_cast<float>(ds.height) / dpiScaleY_);
   }
 
@@ -718,7 +520,7 @@ private:
     float minY = std::min(y0, y1);
     float maxX = std::max(x0, x1);
     float maxY = std::max(y0, y1);
-    CGSize drawableSize = layer_.drawableSize;
+    CGSize drawableSize = metal_.layer().drawableSize;
     NSUInteger dw = static_cast<NSUInteger>(drawableSize.width);
     NSUInteger dh = static_cast<NSUInteger>(drawableSize.height);
     clipScissor_.x = static_cast<NSUInteger>(std::clamp(minX, 0.f, static_cast<float>(dw - 1)));
@@ -730,12 +532,12 @@ private:
 
   void emitRect(Rect const& deviceRect, CornerRadius const& corners, Color const& fillColor, Color const& strokeColor,
                 float strokeWidth, float opacity, float rotationRad) {
-    CGSize drawableSize = layer_.drawableSize;
+    CGSize drawableSize = metal_.layer().drawableSize;
     const float vw = static_cast<float>(drawableSize.width);
     const float vh = static_cast<float>(drawableSize.height);
 
-    DrawOp op;
-    op.kind = DrawOp::Rect;
+    MetalDrawOp op;
+    op.kind = MetalDrawOp::Rect;
     op.rectInst.rect = simd_make_float4(deviceRect.x, deviceRect.y, deviceRect.width, deviceRect.height);
     op.rectInst.corners = cornersToSimd(corners);
     op.rectInst.fillColor = toSimd4(fillColor);
@@ -743,7 +545,7 @@ private:
     op.rectInst.strokeWidthOpacity = simd_make_float2(strokeWidth, opacity);
     op.rectInst.viewport = simd_make_float2(vw, vh);
     op.rectInst.rotationPad = simd_make_float4(rotationRad, 0.f, 0.f, 0.f);
-    ops_.push_back(op);
+    frame_.ops.push_back(op);
   }
 };
 

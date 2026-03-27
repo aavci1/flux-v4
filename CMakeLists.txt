@@ -63,12 +63,23 @@ option(FLUX_ENABLE_DEFAULT_EVENT_LOGGING
   "Print built-in Application event handlers to stdout (disable for quiet or embedded builds)."
   ON)
 
-file(READ ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Metal/CanvasShaders.metal SHADER_SRC)
-configure_file(
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Metal/ShaderSource.cpp.in
-  ${CMAKE_CURRENT_BINARY_DIR}/MetalShaderSource.cpp
-  @ONLY
+# Offline Metal: compile CanvasShaders.metal → air → metallib → C header (xxd) embedded in MetalShaderLibrary.mm
+set(FLUX_METAL_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Metal/CanvasShaders.metal)
+set(FLUX_METAL_AIR ${CMAKE_CURRENT_BINARY_DIR}/CanvasShaders.air)
+set(FLUX_METALLIB ${CMAKE_CURRENT_BINARY_DIR}/FluxShaders.metallib)
+set(FLUX_METALLIB_EMBED_H ${CMAKE_CURRENT_BINARY_DIR}/FluxShaders.metallib.h)
+# Run xxd in the build dir with basename only so symbols are FluxShaders_metallib (not full path).
+add_custom_command(
+  OUTPUT ${FLUX_METAL_AIR} ${FLUX_METALLIB} ${FLUX_METALLIB_EMBED_H}
+  COMMAND xcrun -sdk macosx metal -mmacosx-version-min=11.0 -std=metal3.0 -c ${FLUX_METAL_SOURCE} -o ${FLUX_METAL_AIR}
+  COMMAND xcrun -sdk macosx metallib ${FLUX_METAL_AIR} -o ${FLUX_METALLIB}
+  COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_CURRENT_BINARY_DIR}
+          xxd -i FluxShaders.metallib FluxShaders.metallib.h
+  DEPENDS ${FLUX_METAL_SOURCE}
+  COMMENT "Compile CanvasShaders.metal to FluxShaders.metallib (embedded)"
+  VERBATIM
 )
+add_custom_target(flux_shaders DEPENDS ${FLUX_METALLIB_EMBED_H})
 
 add_library(flux STATIC
   src/Core/Application.mm
@@ -77,16 +88,20 @@ add_library(flux STATIC
   src/Graphics/Canvas.cpp
   src/Graphics/Path.cpp
   src/Graphics/PathFlattener.cpp
-  ${CMAKE_CURRENT_BINARY_DIR}/MetalShaderSource.cpp
+  src/Graphics/Metal/MetalPathRasterizer.cpp
+  src/Graphics/Metal/MetalShaderLibrary.mm
+  src/Graphics/Metal/MetalDeviceResources.mm
   src/Graphics/Metal/MetalCanvas.mm
   src/Platform/Mac/MacMetalWindow.mm
 )
+add_dependencies(flux flux_shaders)
 
 target_include_directories(flux PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 target_include_directories(flux PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${CMAKE_CURRENT_BINARY_DIR}
 )
 
 target_compile_options(flux PRIVATE
