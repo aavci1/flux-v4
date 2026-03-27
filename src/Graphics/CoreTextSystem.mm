@@ -348,6 +348,8 @@ static void appendPlacedRunFromCTRun(CTRunRef run, CGPoint lineOrigin, CGFloat f
   placed.run.descent = static_cast<float>(descent);
   placed.run.width = static_cast<float>(runWidth);
   placed.run.positions.resize(static_cast<std::size_t>(glyphCount));
+  // LTR: positions are anchored to glyph index 0. For RTL (`kCTRunStatusRightToLeft`), index 0 is not
+  // necessarily the visual left edge; relative dx/dy would need a different anchor when RTL is supported.
   for (CFIndex gi = 0; gi < glyphCount; ++gi) {
     float const dx = static_cast<float>(cpos[static_cast<std::size_t>(gi)].x - cpos[0].x);
     float const dy =

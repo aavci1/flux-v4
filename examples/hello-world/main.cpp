@@ -31,7 +31,8 @@ public:
 
     auto textLayout = Application::instance().textSystem().shapePlain("Hello, World!", labelAttr, 0.f);
     Size const m = textLayout->measuredSize;
-    float const y = (h - m.height) * 0.5f;
+    // Center the first baseline in the viewport (avoids the line-box center looking optically low).
+    float const y = h * 0.5f - textLayout->firstBaseline;
     float const x = (w - m.width) * 0.5f;
 
     c.drawTextLayout(*textLayout, Point{x, y});

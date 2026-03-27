@@ -45,7 +45,32 @@ GlyphAtlas::GlyphAtlas(id<MTLDevice> device, TextSystem& textSystem)
   }
 }
 
+bool GlyphAtlas::pressureHighForHeadroom() const {
+  if (atlasWidth_ >= kMaxAtlasDim || atlasHeight_ >= kMaxAtlasDim) {
+    return false;
+  }
+  std::uint64_t const usedBottom = static_cast<std::uint64_t>(shelfY_) + static_cast<std::uint64_t>(shelfH_);
+  return usedBottom * 100u > static_cast<std::uint64_t>(atlasHeight_) * 75u;
+}
+
+void GlyphAtlas::prepareForFrameBegin() {
+  if (pressureHighForHeadroom()) {
+    grow();
+  }
+}
+
+void GlyphAtlas::afterPresent() {
+  if (pressureHighForHeadroom()) {
+    grow();
+  }
+}
+
 void GlyphAtlas::grow() {
+#ifndef NDEBUG
+  if (beforeGrow_) {
+    beforeGrow_();
+  }
+#endif
   if (atlasWidth_ >= kMaxAtlasDim || atlasHeight_ >= kMaxAtlasDim) {
     throw std::runtime_error("GlyphAtlas: atlas exceeds maximum size");
   }

@@ -4,6 +4,7 @@
 #include <Flux/Graphics/TextSystem.hpp>
 
 #include <cstdint>
+#include <functional>
 #include <unordered_map>
 #include <vector>
 
@@ -45,11 +46,24 @@ public:
 
   void grow();
 
+  /// Tier A: grow before drawing when shelf usage is high so `grow()` rarely runs mid-frame (which would
+  /// invalidate UVs already written to the frame). Call from `Canvas::beginFrame` after clearing frame data.
+  /// For a hard guarantee under unbounded unique glyphs per frame, a copy-preserving grow (tier C) is needed.
+  void prepareForFrameBegin();
+
+  /// Tier B: grow after a presented frame when utilization is still high, giving headroom for the next frame.
+  void afterPresent();
+
+  /// Debug: assert if `grow()` runs while the Metal canvas still holds glyph verts for the current frame.
+  void setBeforeGrowCallback(std::function<void()> cb) { beforeGrow_ = std::move(cb); }
+
   std::uint32_t atlasPixelWidth() const { return atlasWidth_; }
   std::uint32_t atlasPixelHeight() const { return atlasHeight_; }
 
 private:
   AtlasEntry allocateAndUpload(GlyphKey const& key);
+
+  bool pressureHighForHeadroom() const;
 
   id<MTLDevice> device_{nil};
   id<MTLTexture> texture_{nil};
@@ -63,6 +77,8 @@ private:
   std::uint32_t shelfH_ = 0;
 
   std::unordered_map<GlyphKey, AtlasEntry, GlyphKeyHash> entries_;
+
+  std::function<void()> beforeGrow_{};
 };
 
 } // namespace flux

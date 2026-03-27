@@ -79,8 +79,8 @@ public:
           "TextLayout uses the same Core Text framesetter constraints as measure, so box sizing and "
           "rendered glyphs stay in sync when maxWidth is set. Resize the window to see reflow.";
       auto bodyLayout = ts.shapePlain(para, body, wrapW - 20.0f);
-      // Optional: outline matches measured bounds (same width as wrap).
-      Size const ms = ts.measurePlain(para, body, wrapW - 20.0f);
+      // Outline uses the same measured size as the shaped layout (single source of truth).
+      Size const ms = bodyLayout->measuredSize;
       Rect const box{margin, y, ms.width + 20.0f, ms.height + 20.0f};
       c.drawRect(box, CornerRadius(6.f, 6.f, 6.f, 6.f), FillStyle::none(),
                  StrokeStyle::solid(Color::rgb(200, 200, 210), 1.f));

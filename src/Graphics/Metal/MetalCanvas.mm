@@ -21,6 +21,7 @@ class Window;
 #include "Graphics/Metal/MetalCanvas.hpp"
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <cstdint>
 #include <memory>
@@ -135,6 +136,10 @@ public:
   MetalCanvas(Window* /*window*/, CAMetalLayer* layer, unsigned int handle, TextSystem& textSystem)
       : textSystem_(textSystem), metal_(layer), windowHandle_(handle) {
     glyphAtlas_ = std::make_unique<GlyphAtlas>(metal_.device(), textSystem_);
+    glyphAtlas_->setBeforeGrowCallback([this]() {
+      assert(frame_.glyphVerts.empty() &&
+             "GlyphAtlas::grow() repacks UVs; cannot run while the frame still holds glyph vertices");
+    });
     frameSem_ = dispatch_semaphore_create(static_cast<int>(kFramesInFlight));
     pushState();
   }
@@ -178,6 +183,9 @@ public:
     if (logicalW_ <= 0 || logicalH_ <= 0) {
       logicalW_ = static_cast<int>(std::lround(static_cast<double>(ds.width) / static_cast<double>(cs)));
       logicalH_ = static_cast<int>(std::lround(static_cast<double>(ds.height) / static_cast<double>(cs)));
+    }
+    if (inFrame_) {
+      glyphAtlas_->prepareForFrameBegin();
     }
   }
 
@@ -282,6 +290,7 @@ public:
     [cmdBuf_ commit];
 
     frame_.clear();
+    glyphAtlas_->afterPresent();
 
     cmdBuf_ = nil;
     drawable_ = nil;
@@ -522,6 +531,7 @@ public:
       return;
     }
 
+    std::uint32_t const glyphStart = static_cast<std::uint32_t>(frame_.glyphVerts.size());
     for (auto const& placed : layout.runs) {
       TextRun const& text = placed.run;
       if (text.glyphIds.empty()) {
@@ -539,7 +549,6 @@ public:
 
       float const physicalFontSize = text.fontSize * dpiScaleX_;
 
-      std::uint32_t const glyphStart = static_cast<std::uint32_t>(frame_.glyphVerts.size());
       for (std::size_t i = 0; i < text.glyphIds.size(); ++i) {
         GlyphKey key{};
         key.fontId = text.fontId;
@@ -564,17 +573,17 @@ public:
 
         appendGlyphQuad(frame_.glyphVerts, M, dpiScaleX_, dpiScaleY_, tl, gw, gh, u0, vLo, u1, vHi, premul);
       }
+    }
 
-      std::uint32_t const vertCount =
-          static_cast<std::uint32_t>(frame_.glyphVerts.size()) - glyphStart;
-      if (vertCount > 0) {
-        MetalDrawOp op{};
-        op.kind = MetalDrawOp::GlyphMesh;
-        op.glyphStart = glyphStart;
-        op.glyphVertexCount = vertCount;
-        op.blendMode = blend;
-        frame_.ops.push_back(op);
-      }
+    std::uint32_t const vertCount =
+        static_cast<std::uint32_t>(frame_.glyphVerts.size()) - glyphStart;
+    if (vertCount > 0) {
+      MetalDrawOp op{};
+      op.kind = MetalDrawOp::GlyphMesh;
+      op.glyphStart = glyphStart;
+      op.glyphVertexCount = vertCount;
+      op.blendMode = blend;
+      frame_.ops.push_back(op);
     }
   }
 
