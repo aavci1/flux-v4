@@ -1,8 +1,10 @@
 #include <Flux/Core/Application.hpp>
 #include <Flux/Core/EventQueue.hpp>
 #include <Flux/Core/Events.hpp>
+#include <Flux/Graphics/Canvas.hpp>
 
 #include <algorithm>
+#include <cmath>
 #if FLUX_ENABLE_DEFAULT_EVENT_LOGGING
 #include <cstdio>
 #endif
@@ -21,7 +23,7 @@ Application* gCurrentApplication = nullptr;
 #if FLUX_ENABLE_DEFAULT_EVENT_LOGGING
 
 void logWindowEvent(WindowEvent const& e) {
-  if (e.kind == WindowEvent::Kind::CloseRequest) {
+  if (e.kind == WindowEvent::Kind::CloseRequest || e.kind == WindowEvent::Kind::Redraw) {
     return;
   }
   const char* kind = "?";
@@ -40,6 +42,9 @@ void logWindowEvent(WindowEvent const& e) {
     break;
   case WindowEvent::Kind::CloseRequest:
     kind = "CloseRequest";
+    break;
+  case WindowEvent::Kind::Redraw:
+    kind = "Redraw";
     break;
   }
   std::printf("[flux] WindowEvent %s handle=%u size=%gx%g dpi=%g\n", kind, e.handle,
@@ -143,6 +148,31 @@ struct Application::Impl {
         handleCloseRequest(findWindowByHandle(e.handle));
         return;
       }
+      if (e.kind == WindowEvent::Kind::Redraw) {
+        Window* w = findWindowByHandle(e.handle);
+        if (w) {
+          Canvas& c = w->canvas();
+          c.beginFrame();
+          w->render(c);
+          c.present();
+        }
+        return;
+      }
+      if (e.kind == WindowEvent::Kind::Resize) {
+        Window* w = findWindowByHandle(e.handle);
+        if (w) {
+          Canvas& c = w->canvas();
+          c.resize(static_cast<int>(std::lround(static_cast<double>(e.size.width))),
+                   static_cast<int>(std::lround(static_cast<double>(e.size.height))));
+          c.beginFrame();
+          w->render(c);
+          c.present();
+        }
+#if FLUX_ENABLE_DEFAULT_EVENT_LOGGING
+        logWindowEvent(e);
+#endif
+        return;
+      }
 #if FLUX_ENABLE_DEFAULT_EVENT_LOGGING
       logWindowEvent(e);
 #endif
@@ -185,11 +215,8 @@ Application::~Application() {
   }
 }
 
-Window& Application::createWindow(const WindowConfig& config) {
-  auto window = std::make_unique<Window>(config);
-  Window* raw = window.get();
+void Application::adoptOwnedWindow(std::unique_ptr<Window> window) {
   d->ownedWindows_.push_back(std::move(window));
-  return *raw;
 }
 
 EventQueue& Application::eventQueue() { return *d->eventQueue_; }

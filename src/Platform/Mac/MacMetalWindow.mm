@@ -9,6 +9,7 @@
 
 #include "Core/PlatformWindow.hpp"
 #include "Core/PlatformWindowCreate.hpp"
+#include "Graphics/Metal/MetalCanvas.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -37,6 +38,9 @@ class MacMetalPlatformWindow;
   }
   metalLayer.pixelFormat = MTLPixelFormatBGRA8Unorm;
   metalLayer.contentsScale = [NSScreen mainScreen].backingScaleFactor;
+  // Match MetalCanvas in-flight limit; helps avoid main-thread stalls on nextDrawable during live resize.
+  metalLayer.maximumDrawableCount = 3;
+  metalLayer.allowsNextDrawableTimeout = YES;
   return metalLayer;
 }
 
@@ -155,6 +159,8 @@ public:
   unsigned int handle() const override;
   void* nativeGraphicsSurface() const override;
 
+  std::unique_ptr<Canvas> createCanvas(Window& owner) override;
+
   Window* fluxWindow() const;
 
 private:
@@ -204,7 +210,7 @@ MouseButton buttonFromNSEvent(NSEvent* e) {
   }
 }
 
-void postInputFromView(FluxMetalView* view, InputEvent::Kind kind, NSEvent* e, String text = {}) {
+void postInputFromView(FluxMetalView* view, InputEvent::Kind kind, NSEvent* e, std::string text = {}) {
   MacMetalPlatformWindow* p = view.fluxPlatform;
   if (!p || !p->fluxWindow()) {
     return;
@@ -231,7 +237,7 @@ void postInputFromView(FluxMetalView* view, InputEvent::Kind kind, NSEvent* e, S
   Application::instance().eventQueue().post(ie);
 }
 
-void postTextInput(FluxMetalView* view, String text) {
+void postTextInput(FluxMetalView* view, std::string text) {
   MacMetalPlatformWindow* p = view.fluxPlatform;
   if (!p || !p->fluxWindow()) {
     return;
@@ -283,6 +289,9 @@ void postTextInput(FluxMetalView* view, String text) {
   }
   flux::Application::instance().eventQueue().post(flux::WindowEvent{flux::WindowEvent::Kind::Resize, fw->handle(),
                                                        platform->currentSize(), 1.0f});
+  // Live resize runs in a tracking run loop mode where GCD timers / run-loop observers may not fire
+  // until the drag ends; flush immediately so Resize → paint runs during the drag.
+  flux::Application::instance().eventQueue().dispatch();
 }
 
 - (void)windowDidBecomeKey:(NSNotification*)notification {
@@ -511,7 +520,16 @@ void* MacMetalPlatformWindow::nativeGraphicsSurface() const {
   if (!d->metalView_) {
     return nullptr;
   }
-  return static_cast<void*>(d->metalView_.layer);
+  return (__bridge void*)d->metalView_.layer;
+}
+
+std::unique_ptr<Canvas> MacMetalPlatformWindow::createCanvas(Window& owner) {
+  (void)owner;
+  void* layerPtr = nativeGraphicsSurface();
+  if (!layerPtr) {
+    return nullptr;
+  }
+  return createMetalCanvas(&owner, layerPtr, handle());
 }
 
 namespace detail {

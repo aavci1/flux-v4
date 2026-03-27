@@ -4,6 +4,7 @@
 
 #include <any>
 #include <cstdint>
+#include <string>
 #include <variant>
 
 namespace flux {
@@ -20,7 +21,7 @@ struct WindowLifecycleEvent {
 };
 
 struct WindowEvent {
-  enum class Kind : std::uint8_t { Resize, FocusGained, FocusLost, DpiChanged, CloseRequest };
+  enum class Kind : std::uint8_t { Resize, FocusGained, FocusLost, DpiChanged, CloseRequest, Redraw };
   Kind kind = Kind::Resize;
   unsigned int handle = 0;
   Size size{};
@@ -46,7 +47,7 @@ struct InputEvent {
   MouseButton button = MouseButton::None;
   KeyCode key = 0;
   Modifiers modifiers = Modifiers::None;
-  String text;
+  std::string text;
 };
 
 struct CustomEvent {

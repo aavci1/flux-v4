@@ -1,6 +1,8 @@
 #pragma once
 
 #include <memory>
+#include <type_traits>
+#include <utility>
 
 #include <Flux/Core/Window.hpp>
 
@@ -18,7 +20,15 @@ public:
   Application(Application&&) = delete;
   Application& operator=(Application&&) = delete;
 
-  Window& createWindow(const WindowConfig& config);
+  template<typename T = Window, typename... Args>
+  T& createWindow(WindowConfig const& config, Args&&... args) {
+    static_assert(std::is_base_of_v<Window, T>);
+    // `new T` must run in a member of `Application` so `friend Application` can call `Window`'s protected ctor.
+    auto window = std::unique_ptr<T>(new T(config, std::forward<Args>(args)...));
+    T* raw = window.get();
+    adoptOwnedWindow(std::move(window));
+    return *raw;
+  }
 
   int exec();
   void quit();
@@ -28,6 +38,8 @@ public:
   EventQueue& eventQueue();
 
 private:
+  void adoptOwnedWindow(std::unique_ptr<Window> window);
+
   struct Impl;
   std::unique_ptr<Impl> d;
 };

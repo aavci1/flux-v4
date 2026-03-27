@@ -5,3 +5,5 @@
 #include <Flux/Core/Events.hpp>
 #include <Flux/Core/Types.hpp>
 #include <Flux/Core/Window.hpp>
+#include <Flux/Graphics/Canvas.hpp>
+#include <Flux/Graphics/Styles.hpp>

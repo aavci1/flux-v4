@@ -1,9 +1,11 @@
 #include <Flux/Core/EventQueue.hpp>
 
+#include <algorithm>
 #include <any>
 #include <array>
 #include <deque>
 #include <functional>
+#include <mutex>
 #include <typeindex>
 #include <unordered_map>
 #include <utility>
@@ -42,6 +44,7 @@ constexpr std::size_t bucketFor() {
 struct EventQueue::Impl {
   using AnyHandler = std::function<void(std::any const&)>;
 
+  std::mutex mutex_{};
   std::array<std::deque<Event>, kBucketCount> buckets_{};
   std::unordered_map<std::type_index, std::vector<AnyHandler>> frameworkHandlers_;
   std::unordered_map<std::uint32_t, std::vector<std::function<void(std::any const&)>>> customPayloadHandlers_;
@@ -62,9 +65,16 @@ void EventQueue::dispatch() {
   while (progress) {
     progress = false;
     for (auto& bucket : d->buckets_) {
-      while (!bucket.empty()) {
-        Event e = std::move(bucket.front());
-        bucket.pop_front();
+      while (true) {
+        Event e;
+        {
+          std::lock_guard lock(d->mutex_);
+          if (bucket.empty()) {
+            break;
+          }
+          e = std::move(bucket.front());
+          bucket.pop_front();
+        }
         detail::EventQueueImplAccess::dispatchOne(*this, e);
         progress = true;
       }
@@ -92,6 +102,18 @@ void detail::EventQueueImplAccess::postInner(EventQueue& q, Event&& event) {
       [&q](auto&& ev) {
         using T = std::decay_t<decltype(ev)>;
         constexpr std::size_t b = bucketFor<T>();
+        std::lock_guard lock(q.d->mutex_);
+        if constexpr (std::is_same_v<T, WindowEvent>) {
+          if (ev.kind == WindowEvent::Kind::Redraw) {
+            auto& deq = q.d->buckets_[b];
+            std::erase_if(deq, [&ev](Event const& e) {
+              if (auto const* we = std::get_if<WindowEvent>(&e)) {
+                return we->kind == WindowEvent::Kind::Redraw && we->handle == ev.handle;
+              }
+              return false;
+            });
+          }
+        }
         q.d->buckets_[b].push_back(Event(std::move(ev)));
       },
       std::move(event));

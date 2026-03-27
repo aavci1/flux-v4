@@ -2,6 +2,7 @@
 #include <Flux/Core/EventQueue.hpp>
 #include <Flux/Core/Events.hpp>
 #include <Flux/Core/Window.hpp>
+#include <Flux/Graphics/Canvas.hpp>
 
 #include "Core/PlatformWindow.hpp"
 #include "Core/PlatformWindowCreate.hpp"
@@ -10,6 +11,7 @@ namespace flux {
 
 struct Window::Impl {
   std::unique_ptr<PlatformWindow> platform_;
+  std::unique_ptr<Canvas> canvas_;
 };
 
 Window::Window(const WindowConfig& config) {
@@ -46,5 +48,25 @@ void Window::setFullscreen(bool fullscreen) {
 unsigned int Window::handle() const {
   return d->platform_->handle();
 }
+
+Canvas& Window::canvas() {
+  if (!d->canvas_) {
+    d->canvas_ = d->platform_->createCanvas(*this);
+  }
+  return *d->canvas_;
+}
+
+void Window::requestRedraw() { postRedraw(handle()); }
+
+void Window::postRedraw(unsigned int handle) {
+  Application::instance().eventQueue().post(WindowEvent{
+      WindowEvent::Kind::Redraw,
+      handle,
+      {},
+      0.f,
+  });
+}
+
+void Window::render(Canvas& /*canvas*/) {}
 
 } // namespace flux
