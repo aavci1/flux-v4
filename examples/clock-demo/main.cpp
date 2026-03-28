@@ -71,7 +71,7 @@ public:
     }
 
     {
-      WithTransition wt{Transition::spring(220.f, 22.f, 0.65f)};
+      WithTransition wt{Transition::spring(500.f, 25.f, 0.65f)};
       hourAngle_.set(unwrapForward(hourAngle_.get(), h));
       minuteAngle_.set(unwrapForward(minuteAngle_.get(), m));
       secondAngle_.set(unwrapForward(secondAngle_.get(), s));

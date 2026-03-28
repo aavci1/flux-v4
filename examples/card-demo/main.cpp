@@ -72,7 +72,7 @@ struct Card {
                 .onTap = [expanded, bodyOpacity] {
                   bool const next = !expanded;
                   expanded = next;
-                  WithTransition t{Transition::spring(280.f, 22.f, 0.5f)};
+                  WithTransition t{Transition::spring(500.f, 25.f, 0.5f)};
                   bodyOpacity = next ? 1.f : 0.f;
                 },
             },
