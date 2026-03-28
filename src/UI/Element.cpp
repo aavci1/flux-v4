@@ -143,12 +143,35 @@ void Element::Model<Text>::build(BuildContext& ctx) const {
 }
 
 Size Element::Model<Text>::measure(LayoutConstraints const& c, TextSystem& ts) const {
-  if (value.frame.width > 0.f || value.frame.height > 0.f) {
+  float const pad = value.padding * 2.f;
+  TextLayoutOptions const opts = textViewLayoutOptions(value);
+
+  // Explicit box: both dimensions fixed.
+  if (value.frame.width > 0.f && value.frame.height > 0.f) {
     return {value.frame.width, value.frame.height};
   }
-  float const pad = value.padding * 2.f;
+  // Fixed height, width from constraints / text (e.g. animated row height with width TBD).
+  if (value.frame.width <= 0.f && value.frame.height > 0.f) {
+    float const mw = std::isfinite(c.maxWidth) && c.maxWidth > pad ? c.maxWidth - pad : 0.f;
+    Size const s = ts.measure(value.text, value.font, value.color, mw, opts);
+    float w = s.width + pad;
+    if (std::isfinite(c.maxWidth) && c.maxWidth > 0.f) {
+      w = std::min(w, c.maxWidth);
+    }
+    return {w, value.frame.height};
+  }
+  // Fixed width, height from text measurement.
+  if (value.frame.width > 0.f && value.frame.height <= 0.f) {
+    float const mw = std::max(0.f, value.frame.width - pad);
+    Size const s = ts.measure(value.text, value.font, value.color, mw, opts);
+    float h = s.height + pad;
+    if (std::isfinite(c.maxHeight) && c.maxHeight > 0.f) {
+      h = std::min(h, c.maxHeight);
+    }
+    return {value.frame.width, h};
+  }
+
   float const mw = std::isfinite(c.maxWidth) && c.maxWidth > pad ? c.maxWidth - pad : 0.f;
-  TextLayoutOptions const opts = textViewLayoutOptions(value);
   Size s = ts.measure(value.text, value.font, value.color, mw, opts);
   float w = s.width + pad;
   float h = s.height + pad;
