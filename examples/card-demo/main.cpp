@@ -25,12 +25,8 @@ struct Card {
   std::string detail;
 
   auto body() const {
-    auto& expanded = useState<bool>(false);
-    auto& bodyOpacity = useAnimated<float>(0.f);
-
-    bool const open = expanded.get();
-    float const op = bodyOpacity.get();
-    float const bodyH = op * 56.f;
+    auto expanded = useState<bool>(false);
+    auto bodyOpacity = useAnimated<float>(0.f);
 
     std::vector<Element> rows;
     rows.emplace_back(HStack{
@@ -45,7 +41,7 @@ struct Card {
             Text{.text = title, .font = {.size = 17.f, .weight = 600.f}, .color = pal::label},
             Spacer{},
             Text{
-                .text = open ? "⌄" : "›",
+                .text = expanded ? "⌄" : "›",
                 .font = {.size = 24.f, .weight = 600.f},
                 .color = pal::sublabel,
                 .horizontalAlignment = HorizontalAlignment::Center,
@@ -55,18 +51,15 @@ struct Card {
         },
     });
 
-    if (bodyH > 0.5f) {
+    if (bodyOpacity > 0.5f) {
       rows.emplace_back(Text{
           .text = detail,
           .font = {.size = 15.f, .weight = 400.f},
           .color = pal::sublabel,
           .wrapping = TextWrapping::Wrap,
-          .frame = {0, 0, 0, bodyH},
+          .frame = {0, 0, 0, bodyOpacity * 56.f},
       });
     }
-
-    Signal<bool>* pExpanded = &expanded;
-    Animated<float>* pBodyOpacity = &bodyOpacity;
 
     return ZStack{
         .hAlign = HorizontalAlignment::Leading,
@@ -76,11 +69,11 @@ struct Card {
                 .cornerRadius = CornerRadius(14.f),
                 .fill = FillStyle::solid(pal::surface),
                 .stroke = StrokeStyle::solid(pal::border, 1.f),
-                .onTap = [pExpanded, pBodyOpacity] {
-                  bool const next = !pExpanded->get();
-                  pExpanded->set(next);
+                .onTap = [expanded, bodyOpacity] {
+                  bool const next = !expanded;
+                  expanded = next;
                   WithTransition t{Transition::spring(280.f, 22.f, 0.5f)};
-                  pBodyOpacity->set(next ? 1.f : 0.f);
+                  bodyOpacity = next ? 1.f : 0.f;
                 },
             },
             VStack{.spacing = 10.f, .padding = 18.f, .children = std::move(rows)},
