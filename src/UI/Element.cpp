@@ -7,6 +7,7 @@
 #include <Flux/Scene/SceneGraph.hpp>
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 
 namespace flux {
@@ -75,8 +76,7 @@ Size Element::Model<Rectangle>::measure(LayoutConstraints const& c, TextSystem&)
     return {value.frame.width, value.frame.height};
   }
   float const w = std::isfinite(c.maxWidth) ? c.maxWidth : 0.f;
-  float const h = std::isfinite(c.maxHeight) ? c.maxHeight : 0.f;
-  return {w, h};
+  return {w, 0.f};
 }
 
 void Element::Model<LaidOutText>::build(BuildContext& ctx) const {
@@ -104,6 +104,7 @@ Size Element::Model<LaidOutText>::measure(LayoutConstraints const&, TextSystem&)
 void Element::Model<Text>::build(BuildContext& ctx) const {
   Rect const bounds =
       resolveLeafBounds(value.frame, ctx.layoutEngine().childFrame(), ctx.constraints());
+  assert(value.text.empty() || (bounds.width > 0.f && bounds.height > 0.f));
 
   float const pad = std::max(0.f, value.padding);
   Rect inner{bounds.x + pad, bounds.y + pad, std::max(0.f, bounds.width - 2.f * pad),

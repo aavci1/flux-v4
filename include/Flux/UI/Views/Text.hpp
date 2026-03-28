@@ -11,7 +11,7 @@
 namespace flux {
 
 /// UTF-8 text in a view box with optional background, border, and rounded corners.
-/// Size comes from `frame` when set, or from layout constraints (e.g. full window when `frame` is empty).
+/// Size comes from `frame` when set, or from layout constraints (e.g. full window width when `frame` is empty).
 struct Text {
   std::string text;
   Font font{ .family = "", .size = 16.f, .weight = 400.f, .italic = false };
@@ -20,8 +20,8 @@ struct Text {
   StrokeStyle border = StrokeStyle::none();
   Color color = Colors::black;
 
-  HorizontalAlignment horizontalAlignment = HorizontalAlignment::Center;
-  VerticalAlignment verticalAlignment = VerticalAlignment::Center;
+  HorizontalAlignment horizontalAlignment = HorizontalAlignment::Leading;
+  VerticalAlignment verticalAlignment = VerticalAlignment::Top;
   TextWrapping wrapping = TextWrapping::Wrap;
 
   float padding = 0.f;

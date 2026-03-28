@@ -137,8 +137,8 @@ void Element::Model<VStack>::build(BuildContext& ctx) const {
 
 Size Element::Model<VStack>::measure(LayoutConstraints const& constraints, TextSystem& ts) const {
   LayoutEngine tmp{};
-  float const assignedW = assignedSpan(
-      0.f, std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f);
+  float const assignedW =
+      std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;
   float innerW = std::max(0.f, assignedW - 2.f * value.padding);
 
   LayoutConstraints childCs = constraints;
@@ -177,7 +177,7 @@ void Element::Model<HStack>::build(BuildContext& ctx) const {
 
   LayoutConstraints childCs = outer;
   childCs.maxWidth = std::numeric_limits<float>::infinity();
-  childCs.maxHeight = innerH > 0.f ? innerH : std::numeric_limits<float>::infinity();
+  childCs.maxHeight = std::numeric_limits<float>::infinity();
 
   std::vector<Size> sizes;
   sizes.reserve(value.children.size());
@@ -239,13 +239,10 @@ void Element::Model<HStack>::build(BuildContext& ctx) const {
 
 Size Element::Model<HStack>::measure(LayoutConstraints const& constraints, TextSystem& ts) const {
   LayoutEngine tmp{};
-  float const assignedH = assignedSpan(
-      0.f, std::isfinite(constraints.maxHeight) ? constraints.maxHeight : 0.f);
-  float innerH = std::max(0.f, assignedH - 2.f * value.padding);
 
   LayoutConstraints childCs = constraints;
   childCs.maxWidth = std::numeric_limits<float>::infinity();
-  childCs.maxHeight = innerH > 0.f ? innerH : std::numeric_limits<float>::infinity();
+  childCs.maxHeight = std::numeric_limits<float>::infinity();
 
   float sumW = 2.f * value.padding;
   float maxH = 0.f;
@@ -319,10 +316,10 @@ void Element::Model<ZStack>::build(BuildContext& ctx) const {
 
 Size Element::Model<ZStack>::measure(LayoutConstraints const& constraints, TextSystem& ts) const {
   LayoutEngine tmp{};
-  float const assignedW = assignedSpan(
-      0.f, std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f);
-  float const assignedH = assignedSpan(
-      0.f, std::isfinite(constraints.maxHeight) ? constraints.maxHeight : 0.f);
+  float const assignedW =
+      std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;
+  float const assignedH =
+      std::isfinite(constraints.maxHeight) ? constraints.maxHeight : 0.f;
   float innerW = std::max(0.f, assignedW);
   float innerH = std::max(0.f, assignedH);
 

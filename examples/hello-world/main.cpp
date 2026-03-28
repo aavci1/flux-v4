@@ -16,6 +16,8 @@ int main(int argc, char* argv[]) {
       .text = "Hello, World!",
       .font = {.size = 32.f, .weight = 500.f},
       .color = Colors::darkGray,
+      .horizontalAlignment = HorizontalAlignment::Center,
+      .verticalAlignment = VerticalAlignment::Center,
     }
   );
 

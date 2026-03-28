@@ -27,11 +27,13 @@ int main(int argc, char* argv[]) {
           .text = "Text in Flux",
           .font = {.size = 34.f, .weight = 600.f},
           .color = Color::rgb(18, 18, 24),
+          .horizontalAlignment = HorizontalAlignment::Center,
         },
         Text {
           .text = "layout · measure · wrap · attributed runs",
           .font = {.size = 14.f, .weight = 400.f},
           .color = Color::rgb(110, 110, 125),
+          .horizontalAlignment = HorizontalAlignment::Center,
         },
         Text {
           .text = "Line wrapping",
