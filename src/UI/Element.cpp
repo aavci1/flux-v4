@@ -157,15 +157,20 @@ Size Element::Model<Text>::measure(LayoutConstraints const& c, TextSystem& ts) c
   if (value.frame.width > 0.f || value.frame.height > 0.f) {
     return {value.frame.width, value.frame.height};
   }
-  if (std::isfinite(c.maxWidth) && std::isfinite(c.maxHeight)) {
-    return {c.maxWidth, c.maxHeight};
-  }
   float const mw = std::isfinite(c.maxWidth) ? c.maxWidth : 0.f;
   TextAttribute const attr = textViewAttribute(value);
   TextLayoutOptions const opts = textViewLayoutOptions(value);
   Size s = ts.measure(value.text, attr, mw, opts);
   float const p = value.padding * 2.f;
-  return {s.width + p, s.height + p};
+  float w = s.width + p;
+  float h = s.height + p;
+  if (std::isfinite(c.maxWidth) && c.maxWidth > 0.f) {
+    w = std::min(w, c.maxWidth);
+  }
+  if (std::isfinite(c.maxHeight) && c.maxHeight > 0.f) {
+    h = std::min(h, c.maxHeight);
+  }
+  return {w, h};
 }
 
 void Element::Model<views::Image>::build(BuildContext& ctx) const {

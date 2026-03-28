@@ -3,6 +3,8 @@
 #include <Flux/Core/Events.hpp>
 #include <Flux/Core/Types.hpp>
 #include <Flux/Core/Window.hpp>
+#include <Flux/Detail/Runtime.hpp>
+#include <Flux/UI/Element.hpp>
 #include <Flux/Graphics/Canvas.hpp>
 #include <Flux/Scene/SceneGraph.hpp>
 #include <Flux/Scene/SceneRenderer.hpp>
@@ -19,7 +21,17 @@ struct Window::Impl {
   std::optional<SceneGraph> sceneGraph_;
   Color clearColor_{Colors::lightGray};
   std::unique_ptr<Runtime> runtime_;
+
+  PlatformWindow* platformWindow() const { return platform_.get(); }
+  void setViewRoot(Window& window, Element&& root);
 };
+
+void Window::Impl::setViewRoot(Window& window, Element&& root) {
+  if (!runtime_) {
+    runtime_ = std::make_unique<Runtime>(window);
+  }
+  runtime_->setView(std::move(root));
+}
 
 Window::Window(const WindowConfig& config) {
   d = std::make_unique<Impl>();
@@ -78,7 +90,7 @@ SceneGraph const& Window::sceneGraph() const { return const_cast<Window*>(this)-
 void Window::requestRedraw() { postRedraw(handle()); }
 
 PlatformWindow* Window::platformWindow() const {
-  return d->platform_.get();
+  return d->platformWindow();
 }
 
 void Window::postRedraw(unsigned int handle) {
@@ -93,11 +105,8 @@ void Window::setClearColor(Color color) { d->clearColor_ = color; }
 
 Color Window::clearColor() const { return d->clearColor_; }
 
-void Window::setViewRoot(Element root) {
-  if (!d->runtime_) {
-    d->runtime_ = std::make_unique<Runtime>(*this);
-  }
-  d->runtime_->setView(std::move(root));
+void Window::setViewRoot(Element&& root) {
+  d->setViewRoot(*this, std::move(root));
 }
 
 void Window::render(Canvas& canvas) {

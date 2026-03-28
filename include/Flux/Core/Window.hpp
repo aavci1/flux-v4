@@ -4,12 +4,12 @@
 #include <string>
 
 #include <Flux/Core/Types.hpp>
-#include <Flux/UI/Element.hpp>
 
 namespace flux {
 
 class Application;
 class Canvas;
+class Element;
 class PlatformWindow;
 class SceneGraph;
 
@@ -60,6 +60,7 @@ public:
   Color clearColor() const;
 
   /// Sets the root view component (declarative UI). Creates internal state on first call.
+  /// Definition in `<Flux/Core/WindowUI.hpp>` (include that header in TUs that call `setView`).
   template<typename C>
   void setView(C component);
 
@@ -69,23 +70,13 @@ protected:
   explicit Window(const WindowConfig& config);
 
 private:
+  /// Used by `Application` (friend); implementation on `Impl`.
   PlatformWindow* platformWindow() const;
-
-  void setViewRoot(Element root);
+  /// Used by `Window::setView` in `<Flux/Core/WindowUI.hpp>`; implementation on `Impl`.
+  void setViewRoot(Element&& root);
 
   struct Impl;
   std::unique_ptr<Impl> d;
 };
-
-} // namespace flux
-
-#include <Flux/Detail/Runtime.hpp>
-
-namespace flux {
-
-template<typename C>
-void Window::setView(C component) {
-  setViewRoot(Element(std::move(component)));
-}
 
 } // namespace flux
