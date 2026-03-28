@@ -7,9 +7,10 @@
 
 namespace flux {
 
+struct RootHolder;
+
 class Application;
 class Canvas;
-class Element;
 class PlatformWindow;
 class SceneGraph;
 
@@ -61,8 +62,15 @@ public:
 
   /// Sets the root view component (declarative UI). Creates internal state on first call.
   /// Definition in `<Flux/Core/WindowUI.hpp>` (include that header in TUs that call `setView`).
+  ///
+  /// Pass a component with `setView(std::move(c))` when `C` is movable/copyable.
+  /// For a default-constructible root whose subcomponents own non-movable state (e.g. `Signal`),
+  /// use `setView<C>()` so the root is built in place on the heap (no move of inner state).
   template<typename C>
-  void setView(C component);
+  void setView(C&& component);
+
+  template<typename C>
+  void setView();
 
 protected:
   friend class Application;
@@ -73,7 +81,7 @@ private:
   /// Used by `Application` (friend); implementation on `Impl`.
   PlatformWindow* platformWindow() const;
   /// Used by `Window::setView` in `<Flux/Core/WindowUI.hpp>`; implementation on `Impl`.
-  void setViewRoot(Element&& root);
+  void setViewRoot(std::unique_ptr<RootHolder> holder);
 
   struct Impl;
   std::unique_ptr<Impl> d;

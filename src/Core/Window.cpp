@@ -3,8 +3,8 @@
 #include <Flux/Core/Events.hpp>
 #include <Flux/Core/Types.hpp>
 #include <Flux/Core/Window.hpp>
+#include <Flux/Detail/RootHolder.hpp>
 #include <Flux/Detail/Runtime.hpp>
-#include <Flux/UI/Element.hpp>
 #include <Flux/Graphics/Canvas.hpp>
 #include <Flux/Scene/SceneGraph.hpp>
 #include <Flux/Scene/SceneRenderer.hpp>
@@ -23,14 +23,14 @@ struct Window::Impl {
   std::unique_ptr<Runtime> runtime_;
 
   PlatformWindow* platformWindow() const { return platform_.get(); }
-  void setViewRoot(Window& window, Element&& root);
+  void setViewRoot(Window& window, std::unique_ptr<RootHolder> holder);
 };
 
-void Window::Impl::setViewRoot(Window& window, Element&& root) {
+void Window::Impl::setViewRoot(Window& window, std::unique_ptr<RootHolder> holder) {
   if (!runtime_) {
     runtime_ = std::make_unique<Runtime>(window);
   }
-  runtime_->setView(std::move(root));
+  runtime_->setRoot(std::move(holder));
 }
 
 Window::Window(const WindowConfig& config) {
@@ -105,8 +105,8 @@ void Window::setClearColor(Color color) { d->clearColor_ = color; }
 
 Color Window::clearColor() const { return d->clearColor_; }
 
-void Window::setViewRoot(Element&& root) {
-  d->setViewRoot(*this, std::move(root));
+void Window::setViewRoot(std::unique_ptr<RootHolder> holder) {
+  d->setViewRoot(*this, std::move(holder));
 }
 
 void Window::render(Canvas& canvas) {

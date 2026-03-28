@@ -1,10 +1,12 @@
 #pragma once
 
 #include <Flux/Core/Events.hpp>
+#include <Flux/Detail/RootHolder.hpp>
 #include <Flux/Reactive/Observer.hpp>
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/EventMap.hpp>
 
+#include <memory>
 #include <optional>
 
 namespace flux {
@@ -18,11 +20,7 @@ public:
   explicit Runtime(Window& window);
   ~Runtime();
 
-  template<typename C>
-  void setView(C component) {
-    root_.emplace(std::move(component));
-    rebuild();
-  }
+  void setRoot(std::unique_ptr<RootHolder> holder);
 
   void handleInput(InputEvent const& e);
 
@@ -35,7 +33,7 @@ private:
   void subscribeResize();
 
   Window& window_;
-  std::optional<Element> root_;
+  std::unique_ptr<RootHolder> rootHolder_;
   EventMap eventMap_;
   LayoutEngine layoutEngine_;
   ObserverHandle rebuildHandle_{};

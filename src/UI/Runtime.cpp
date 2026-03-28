@@ -17,6 +17,11 @@
 
 namespace flux {
 
+void Runtime::setRoot(std::unique_ptr<RootHolder> holder) {
+  rootHolder_ = std::move(holder);
+  rebuild();
+}
+
 namespace {
 
 /// Whole-point layout size avoids subpixel oscillation in `NSView.bounds` during live resize.
@@ -52,8 +57,8 @@ void Runtime::rebuild(std::optional<Size> sizeOverride) {
   rootCs.maxWidth = sz.width;
   rootCs.maxHeight = sz.height;
   ctx.pushConstraints(rootCs);
-  if (root_) {
-    root_->build(ctx);
+  if (rootHolder_) {
+    rootHolder_->buildInto(ctx);
   }
   ctx.popConstraints();
   eventMap_ = std::move(newMap);

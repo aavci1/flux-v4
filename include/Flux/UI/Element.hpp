@@ -4,6 +4,8 @@
 #include <Flux/UI/Leaves.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 
+#include <cassert>
+#include <cstdlib>
 #include <memory>
 #include <type_traits>
 #include <utility>
@@ -57,7 +59,12 @@ struct Element::Model : Concept {
   C value;
   explicit Model(C c) : value(std::move(c)) {}
   std::unique_ptr<Concept> clone() const override {
-    return std::make_unique<Model<C>>(value);
+    if constexpr (std::is_copy_constructible_v<C>) {
+      return std::make_unique<Model<C>>(value);
+    } else {
+      assert(false && "Non-copyable component cannot be placed in a children list");
+      std::abort();
+    }
   }
   void build(BuildContext& ctx) const override;
   Size measure(LayoutConstraints const& constraints, TextSystem& textSystem) const override;
