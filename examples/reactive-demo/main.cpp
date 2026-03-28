@@ -65,7 +65,7 @@ public:
       s_.clicks.set(s_.clicks.get() + 1);
 
       {
-        WithTransition spring{Transition::spring(300.f, 20.f, 0.55f)};
+        WithTransition spring{Transition::spring(500.f, 25.f, 0.55f)};
         Color const target = (s_.clicks.get() % 2 == 0) ? kColdFill : kWarmFill;
         s_.fillColor.set(target);
       }

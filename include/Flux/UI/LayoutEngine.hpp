@@ -6,6 +6,7 @@
 
 namespace flux {
 
+class BuildContext;
 class Element;
 class TextSystem;
 
@@ -20,7 +21,8 @@ public:
   /// does not read a stale `childFrame` left from the previous pass (e.g. after resize).
   void resetForBuild();
 
-  Size measure(Element const& element, LayoutConstraints const& constraints, TextSystem& textSystem) const;
+  Size measure(BuildContext& ctx, Element const& element, LayoutConstraints const& constraints,
+               TextSystem& textSystem) const;
 
   void setChildFrame(Rect frame);
   Rect childFrame() const;
