@@ -23,9 +23,10 @@ inline void drawHand(Canvas& c, Point center, float length, float width, float a
   c.restore();
 }
 
-/// Analog clock face (based on upstream flux `examples/clock`). `hour24` is 0–23; flux-v4 has no
-/// `drawTextLayout`, so hour numerals are drawn as small filled circles at the usual positions.
-inline void drawClock(Canvas& c, Rect const& bounds, int hour24, int minutes, int seconds) {
+/// Hand angles in degrees (same convention as the original `hour24`/`minutes`/`seconds` mapping:
+/// hour `hours12 * 30 + minutes * 0.5`, minute `minutes * 6 + seconds * 0.1`, second `seconds * 6`).
+inline void drawClock(Canvas& c, Rect const& bounds, float hourAngleDeg, float minuteAngleDeg,
+                      float secondAngleDeg) {
   const float radius = std::min(bounds.width, bounds.height) * 0.5f - 20.f;
   const Point center = bounds.center();
 
@@ -59,12 +60,9 @@ inline void drawClock(Canvas& c, Rect const& bounds, int hour24, int minutes, in
   }
   c.drawPath(minuteMarks, FillStyle::none(), StrokeStyle::solid(Colors::black, minuteTickWidth));
 
-  const int hours12 = hour24 % 12;
-  drawHand(c, center, radius * 0.4f, 12.f, static_cast<float>(hours12 * 30) + static_cast<float>(minutes) * 0.5f,
-           Colors::black);
-  drawHand(c, center, radius * 0.55f, 8.f, static_cast<float>(minutes * 6) + static_cast<float>(seconds) * 0.1f,
-           Colors::black);
-  drawHand(c, center, radius * 0.7f, 4.f, static_cast<float>(seconds * 6), Colors::red);
+  drawHand(c, center, radius * 0.4f, 12.f, hourAngleDeg, Colors::black);
+  drawHand(c, center, radius * 0.55f, 8.f, minuteAngleDeg, Colors::black);
+  drawHand(c, center, radius * 0.7f, 4.f, secondAngleDeg, Colors::red);
 
   c.drawCircle(center, 16.f, FillStyle::solid(Colors::white), StrokeStyle::solid(Colors::red, 6.f));
 }

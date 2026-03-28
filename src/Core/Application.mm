@@ -2,6 +2,7 @@
 #include <Flux/Core/EventQueue.hpp>
 #include <Flux/Core/Events.hpp>
 #include <Flux/Core/Window.hpp>
+#include <Flux/Reactive/AnimationClock.hpp>
 #include <Flux/Graphics/Canvas.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 
@@ -314,6 +315,7 @@ Application::Application(int /*argc*/, char** /*argv*/) {
   d = std::make_unique<Impl>();
   d->owner_ = this;
   d->eventQueue_ = std::unique_ptr<EventQueue>(new EventQueue());
+  AnimationClock::instance().install(*d->eventQueue_);
   d->textSystem_ = std::make_unique<CoreTextSystem>();
   d->installEventHandlers();
 
@@ -324,6 +326,7 @@ Application::Application(int /*argc*/, char** /*argv*/) {
 
 Application::~Application() {
   if (d) {
+    AnimationClock::instance().shutdown();
     d->shutdownTimers();
   }
   d->ownedWindows_.clear();
