@@ -35,6 +35,7 @@ std::function<float(float)> spring(float stiffness, float damping) {
     const int n = 96;
     float x = 0.f;
     float v = 0.f;
+    // Fixed step count with `dt = t/n` — step size scales with `t`; visually fine for UI, not a fixed-timestep physics solve.
     const float dt = t / static_cast<float>(n);
     for (int i = 0; i < n; ++i) {
       const float a = stiffness * (1.f - x) - damping * v;

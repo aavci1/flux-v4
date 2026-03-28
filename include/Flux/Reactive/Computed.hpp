@@ -16,6 +16,7 @@ template<typename T>
 class Computed : public Observable {
 public:
   explicit Computed(std::function<T()> f);
+  ~Computed();
 
   T const& get() const;
 
@@ -43,6 +44,15 @@ namespace flux {
 template<typename T>
 Computed<T>::Computed(std::function<T()> f) : fn_(std::move(f)) {
   recompute();
+}
+
+template<typename T>
+Computed<T>::~Computed() {
+  for (auto& dh : depHandles_) {
+    if (dh.first) {
+      dh.first->unobserve(dh.second);
+    }
+  }
 }
 
 template<typename T>

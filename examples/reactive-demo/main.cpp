@@ -1,5 +1,6 @@
 #include <Flux.hpp>
 #include <Flux/Core/Events.hpp>
+#include <Flux/Reactive/Observer.hpp>
 #include <Flux/Graphics/Canvas.hpp>
 #include <Flux/Graphics/Styles.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
@@ -33,15 +34,20 @@ struct DemoState {
 
 class ReactiveDemoWindow : public Window {
   DemoState s_;
+  ObserverHandle hClicks_{};
+  ObserverHandle hFill_{};
+  ObserverHandle hCircle_{};
+  ObserverHandle hPointer_{};
+  ObserverHandle hDistance_{};
 
 public:
   explicit ReactiveDemoWindow(WindowConfig const& c) : Window(c) {
     auto redraw = [this]() { Window::requestRedraw(); };
-    s_.clicks.observe(redraw);
-    s_.fillColor.observe(redraw);
-    s_.circleCenter.observe(redraw);
-    s_.pointerPos.observe(redraw);
-    s_.distanceToPointer.observe(redraw);
+    hClicks_ = s_.clicks.observe(redraw);
+    hFill_ = s_.fillColor.observe(redraw);
+    hCircle_ = s_.circleCenter.observe(redraw);
+    hPointer_ = s_.pointerPos.observe(redraw);
+    hDistance_ = s_.distanceToPointer.observe(redraw);
 
     Application::instance().eventQueue().on<InputEvent>([this](InputEvent const& e) {
       if (e.handle != Window::handle()) {
@@ -69,6 +75,14 @@ public:
         s_.circleCenter.set(p);
       }
     });
+  }
+
+  ~ReactiveDemoWindow() {
+    s_.clicks.unobserve(hClicks_);
+    s_.fillColor.unobserve(hFill_);
+    s_.circleCenter.unobserve(hCircle_);
+    s_.pointerPos.unobserve(hPointer_);
+    s_.distanceToPointer.unobserve(hDistance_);
   }
 
   void render(Canvas& c) override {

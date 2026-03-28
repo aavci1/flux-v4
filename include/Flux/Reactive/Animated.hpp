@@ -169,6 +169,21 @@ bool Animated<T>::tick(double nowSeconds) {
     }
   }
 
+  // When t >= 1, only snap to target and notify once (avoid double notify with spring/ease at t=1).
+  if (t >= 1.f) {
+    if constexpr (detail::equalityComparableV<T>) {
+      if (current_ != target_) {
+        current_ = target_;
+        notifyObservers();
+      }
+    } else {
+      current_ = target_;
+      notifyObservers();
+    }
+    animating_ = false;
+    return false;
+  }
+
   float progress = 0.f;
   if (transition_.springFn) {
     progress = (*transition_.springFn)(t);
@@ -186,13 +201,6 @@ bool Animated<T>::tick(double nowSeconds) {
   } else {
     current_ = newValue;
     notifyObservers();
-  }
-
-  if (t >= 1.f) {
-    current_ = target_;
-    animating_ = false;
-    notifyObservers();
-    return false;
   }
 
   return true;
