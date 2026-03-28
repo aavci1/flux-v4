@@ -9,7 +9,6 @@
 
 #include "Core/PlatformWindow.hpp"
 #include "Core/PlatformWindowCreate.hpp"
-
 #include <optional>
 
 namespace flux {
@@ -18,7 +17,8 @@ struct Window::Impl {
   std::unique_ptr<PlatformWindow> platform_;
   std::unique_ptr<Canvas> canvas_;
   std::optional<SceneGraph> sceneGraph_;
-  Color clearColor_{Colors::transparent};
+  Color clearColor_{Colors::lightGray};
+  std::unique_ptr<Runtime> runtime_;
 };
 
 Window::Window(const WindowConfig& config) {
@@ -92,6 +92,13 @@ void Window::postRedraw(unsigned int handle) {
 void Window::setClearColor(Color color) { d->clearColor_ = color; }
 
 Color Window::clearColor() const { return d->clearColor_; }
+
+void Window::setViewRoot(Element root) {
+  if (!d->runtime_) {
+    d->runtime_ = std::make_unique<Runtime>(*this);
+  }
+  d->runtime_->setView(std::move(root));
+}
 
 void Window::render(Canvas& canvas) {
   if (d->sceneGraph_) {

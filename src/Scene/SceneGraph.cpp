@@ -181,6 +181,17 @@ void SceneGraph::remove(NodeId id) {
   removeRecursive(id);
 }
 
+void SceneGraph::clear() {
+  auto* rootLayer = node<LayerNode>(root_);
+  if (!rootLayer) {
+    return;
+  }
+  std::vector<NodeId> const children = rootLayer->children;
+  for (NodeId c : children) {
+    remove(c);
+  }
+}
+
 void SceneGraph::reparent(NodeId id, NodeId newParent, std::size_t index) {
   if (id == root_) {
     return;

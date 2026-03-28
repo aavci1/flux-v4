@@ -90,6 +90,12 @@ add_library(flux STATIC
   src/Reactive/Transition.cpp
   src/Reactive/AnimationClock.cpp
   src/Core/Window.cpp
+  src/UI/BuildContext.cpp
+  src/UI/Element.cpp
+  src/UI/EventMap.cpp
+  src/UI/LayoutEngine.cpp
+  src/UI/Layout.cpp
+  src/UI/Runtime.cpp
   src/Scene/NodeStore.cpp
   src/Scene/SceneGraph.cpp
   src/Scene/SceneRenderer.cpp

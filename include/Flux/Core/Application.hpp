@@ -2,11 +2,13 @@
 
 #include <chrono>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <type_traits>
 #include <utility>
 
 #include <Flux/Core/Window.hpp>
+#include <Flux/Reactive/Observer.hpp>
 
 namespace flux {
 
@@ -50,6 +52,13 @@ public:
   EventQueue& eventQueue();
 
   TextSystem& textSystem();
+
+  /// Batched callback: runs at most once per `exec()` iteration after any reactive update.
+  ObserverHandle onNextFrameNeeded(std::function<void()> callback);
+  void unobserveNextFrame(ObserverHandle handle);
+
+  /// Marks that reactive state changed; wakes the event loop. Used internally by the reactive layer.
+  void markReactiveDirty();
 
   friend class Window;
 

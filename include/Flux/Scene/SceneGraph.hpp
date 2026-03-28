@@ -28,6 +28,9 @@ public:
   NodeId addLine(NodeId parent, LineNode node);
 
   void remove(NodeId id);
+  /// Removes every node under the root except the root itself (invalidates all other `NodeId`s).
+  void clear();
+
   void reparent(NodeId id, NodeId newParent, std::size_t index = npos);
   /// No-op unless `orderedChildren` is a permutation of the parent's current children (same set of
   /// child ids; well-formed trees have no duplicates).

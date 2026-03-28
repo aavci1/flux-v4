@@ -1,3 +1,4 @@
+#include <Flux/Core/Application.hpp>
 #include <Flux/Reactive/Detail/Notify.hpp>
 
 #include <cstdint>
@@ -15,6 +16,9 @@ thread_local std::vector<std::function<void()>> gDeferred;
 } // namespace
 
 void notifyObserverList(std::vector<std::pair<std::uint64_t, std::function<void()>>>& observers) {
+  if (Application::hasInstance()) {
+    Application::instance().markReactiveDirty();
+  }
   auto snapshot = observers;
   if (gNotifyDepth > 0) {
     gDeferred.push_back([snap = std::move(snapshot)]() mutable {
