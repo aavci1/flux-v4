@@ -2,6 +2,7 @@
 #include <Flux/UI/BuildContext.hpp>
 #include <Flux/UI/Layout.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
+#include <Flux/UI/StateStore.hpp>
 
 #include <Flux/Scene/Nodes.hpp>
 #include <Flux/Scene/SceneGraph.hpp>
@@ -55,6 +56,9 @@ float vAlignOffset(float childH, float innerH, VerticalAlignment a) {
 } // namespace
 
 void Element::Model<VStack>::build(BuildContext& ctx) const {
+  if (!ctx.consumeCompositeBodySubtreeRootSkip()) {
+    ctx.advanceChildSlot();
+  }
   LayoutEngine& le = ctx.layoutEngine();
   Rect const parentFrame = le.childFrame();
   LayoutConstraints const outer = ctx.constraints();
@@ -76,9 +80,14 @@ void Element::Model<VStack>::build(BuildContext& ctx) const {
 
   std::vector<Size> sizes;
   sizes.reserve(value.children.size());
+  ctx.pushChildIndex();
   for (Element const& ch : value.children) {
-    sizes.push_back(le.measure(ch, childCs, ctx.textSystem()));
+    sizes.push_back(le.measure(ctx, ch, childCs, ctx.textSystem()));
   }
+  if (StateStore* store = StateStore::current()) {
+    store->resetSlotCursors();
+  }
+  ctx.rewindChildKeyIndex();
 
   std::size_t const n = value.children.size();
   std::vector<bool> spacer(n, false);
@@ -136,10 +145,15 @@ void Element::Model<VStack>::build(BuildContext& ctx) const {
     y += sz.height + value.spacing;
   }
 
+  ctx.popChildIndex();
   ctx.popLayer();
 }
 
-Size Element::Model<VStack>::measure(LayoutConstraints const& constraints, TextSystem& ts) const {
+Size Element::Model<VStack>::measure(BuildContext& ctx, LayoutConstraints const& constraints,
+                                     TextSystem& ts) const {
+  if (!ctx.consumeCompositeBodySubtreeRootSkip()) {
+    ctx.advanceChildSlot();
+  }
   LayoutEngine tmp{};
   float const assignedW =
       std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;
@@ -155,11 +169,13 @@ Size Element::Model<VStack>::measure(LayoutConstraints const& constraints, TextS
   if (n > 1) {
     sumH += static_cast<float>(n - 1) * value.spacing;
   }
+  ctx.pushChildIndex();
   for (Element const& ch : value.children) {
-    Size const s = tmp.measure(ch, childCs, ts);
+    Size const s = tmp.measure(ctx, ch, childCs, ts);
     maxW = std::max(maxW, s.width);
     sumH += s.height;
   }
+  ctx.popChildIndex();
   float w = maxW + 2.f * value.padding;
   if (std::isfinite(assignedW) && assignedW > 0.f) {
     w = std::max(w, assignedW);
@@ -168,6 +184,9 @@ Size Element::Model<VStack>::measure(LayoutConstraints const& constraints, TextS
 }
 
 void Element::Model<HStack>::build(BuildContext& ctx) const {
+  if (!ctx.consumeCompositeBodySubtreeRootSkip()) {
+    ctx.advanceChildSlot();
+  }
   LayoutEngine& le = ctx.layoutEngine();
   Rect const parentFrame = le.childFrame();
   LayoutConstraints const outer = ctx.constraints();
@@ -187,9 +206,14 @@ void Element::Model<HStack>::build(BuildContext& ctx) const {
 
   std::vector<Size> sizes;
   sizes.reserve(value.children.size());
+  ctx.pushChildIndex();
   for (Element const& ch : value.children) {
-    sizes.push_back(le.measure(ch, childCs, ctx.textSystem()));
+    sizes.push_back(le.measure(ctx, ch, childCs, ctx.textSystem()));
   }
+  if (StateStore* store = StateStore::current()) {
+    store->resetSlotCursors();
+  }
+  ctx.rewindChildKeyIndex();
 
   std::size_t const n = value.children.size();
   std::vector<bool> spacer(n, false);
@@ -238,10 +262,15 @@ void Element::Model<HStack>::build(BuildContext& ctx) const {
     x += sz.width + value.spacing;
   }
 
+  ctx.popChildIndex();
   ctx.popLayer();
 }
 
-Size Element::Model<HStack>::measure(LayoutConstraints const& constraints, TextSystem& ts) const {
+Size Element::Model<HStack>::measure(BuildContext& ctx, LayoutConstraints const& constraints,
+                                     TextSystem& ts) const {
+  if (!ctx.consumeCompositeBodySubtreeRootSkip()) {
+    ctx.advanceChildSlot();
+  }
   LayoutEngine tmp{};
 
   LayoutConstraints childCs = constraints;
@@ -254,15 +283,20 @@ Size Element::Model<HStack>::measure(LayoutConstraints const& constraints, TextS
   if (n > 1) {
     sumW += static_cast<float>(n - 1) * value.spacing;
   }
+  ctx.pushChildIndex();
   for (Element const& ch : value.children) {
-    Size const s = tmp.measure(ch, childCs, ts);
+    Size const s = tmp.measure(ctx, ch, childCs, ts);
     sumW += s.width;
     maxH = std::max(maxH, s.height);
   }
+  ctx.popChildIndex();
   return {sumW, maxH + 2.f * value.padding};
 }
 
 void Element::Model<ZStack>::build(BuildContext& ctx) const {
+  if (!ctx.consumeCompositeBodySubtreeRootSkip()) {
+    ctx.advanceChildSlot();
+  }
   LayoutEngine& le = ctx.layoutEngine();
   Rect const parentFrame = le.childFrame();
   LayoutConstraints const outer = ctx.constraints();
@@ -287,12 +321,17 @@ void Element::Model<ZStack>::build(BuildContext& ctx) const {
   float maxH = 0.f;
   std::vector<Size> sizes;
   sizes.reserve(value.children.size());
+  ctx.pushChildIndex();
   for (Element const& ch : value.children) {
-    Size const s = le.measure(ch, childCs, ctx.textSystem());
+    Size const s = le.measure(ctx, ch, childCs, ctx.textSystem());
     sizes.push_back(s);
     maxW = std::max(maxW, s.width);
     maxH = std::max(maxH, s.height);
   }
+  if (StateStore* store = StateStore::current()) {
+    store->resetSlotCursors();
+  }
+  ctx.rewindChildKeyIndex();
 
   if (innerW <= 0.f) {
     innerW = maxW;
@@ -320,10 +359,15 @@ void Element::Model<ZStack>::build(BuildContext& ctx) const {
     ctx.popConstraints();
   }
 
+  ctx.popChildIndex();
   ctx.popLayer();
 }
 
-Size Element::Model<ZStack>::measure(LayoutConstraints const& constraints, TextSystem& ts) const {
+Size Element::Model<ZStack>::measure(BuildContext& ctx, LayoutConstraints const& constraints,
+                                       TextSystem& ts) const {
+  if (!ctx.consumeCompositeBodySubtreeRootSkip()) {
+    ctx.advanceChildSlot();
+  }
   LayoutEngine tmp{};
   float const assignedW =
       std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;
@@ -338,19 +382,22 @@ Size Element::Model<ZStack>::measure(LayoutConstraints const& constraints, TextS
 
   float maxW = 0.f;
   float maxH = 0.f;
+  ctx.pushChildIndex();
   for (Element const& ch : value.children) {
-    Size const s = tmp.measure(ch, childCs, ts);
+    Size const s = tmp.measure(ctx, ch, childCs, ts);
     maxW = std::max(maxW, s.width);
     maxH = std::max(maxH, s.height);
   }
+  ctx.popChildIndex();
   return {maxW, maxH};
 }
 
 void Element::Model<Spacer>::build(BuildContext& ctx) const {
-  (void)ctx;
+  ctx.advanceChildSlot();
 }
 
-Size Element::Model<Spacer>::measure(LayoutConstraints const&, TextSystem&) const {
+Size Element::Model<Spacer>::measure(BuildContext& ctx, LayoutConstraints const&, TextSystem&) const {
+  ctx.advanceChildSlot();
   float const m = std::max(0.f, value.minLength);
   return {m, m};
 }

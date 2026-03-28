@@ -11,6 +11,7 @@
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/EventMap.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
+#include <Flux/UI/StateStore.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -49,6 +50,9 @@ void Runtime::rebuild(std::optional<Size> sizeOverride) {
 
   layoutEngine_.resetForBuild();
 
+  stateStore_.beginRebuild();
+  StateStore::setCurrent(&stateStore_);
+
   EventMap newMap;
   BuildContext ctx{graph, newMap, Application::instance().textSystem(), layoutEngine_};
   Size const raw = sizeOverride.value_or(window_.getSize());
@@ -61,6 +65,10 @@ void Runtime::rebuild(std::optional<Size> sizeOverride) {
     rootHolder_->buildInto(ctx);
   }
   ctx.popConstraints();
+
+  StateStore::setCurrent(nullptr);
+  stateStore_.endRebuild();
+
   eventMap_ = std::move(newMap);
   window_.requestRedraw();
 }

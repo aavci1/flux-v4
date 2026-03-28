@@ -5,6 +5,7 @@
 #include <Flux/Reactive/Observer.hpp>
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/EventMap.hpp>
+#include <Flux/UI/StateStore.hpp>
 
 #include <memory>
 #include <optional>
@@ -36,6 +37,7 @@ private:
   std::unique_ptr<RootHolder> rootHolder_;
   EventMap eventMap_;
   LayoutEngine layoutEngine_;
+  StateStore stateStore_;
   ObserverHandle rebuildHandle_{};
   bool inputRegistered_ = false;
 };

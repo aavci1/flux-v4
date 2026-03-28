@@ -44,4 +44,37 @@ void BuildContext::popConstraints() {
   }
 }
 
+void BuildContext::pushChildIndex() {
+  keyStack_.push_back(nextChildIndex_);
+  savedChildIndices_.push_back(nextChildIndex_);
+  nextChildIndex_ = 0;
+}
+
+void BuildContext::popChildIndex() {
+  keyStack_.pop_back();
+  nextChildIndex_ = savedChildIndices_.back();
+  savedChildIndices_.pop_back();
+  ++nextChildIndex_;
+}
+
+ComponentKey BuildContext::nextCompositeKey() {
+  ComponentKey key = keyStack_;
+  key.push_back(nextChildIndex_++);
+  return key;
+}
+
+void BuildContext::advanceChildSlot() { ++nextChildIndex_; }
+
+void BuildContext::rewindChildKeyIndex() { nextChildIndex_ = 0; }
+
+void BuildContext::beginCompositeBodySubtree() { skipNextLayoutChildAdvance_ = true; }
+
+bool BuildContext::consumeCompositeBodySubtreeRootSkip() {
+  if (skipNextLayoutChildAdvance_) {
+    skipNextLayoutChildAdvance_ = false;
+    return true;
+  }
+  return false;
+}
+
 } // namespace flux

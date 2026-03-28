@@ -11,7 +11,7 @@
 namespace flux {
 
 /// Heap-allocated owner for the root component. Keeps the component at a stable address
-/// so Signal/Animated members remain valid across rebuilds.
+/// for the lifetime of the window.
 struct RootHolder {
   virtual ~RootHolder() = default;
   virtual void buildInto(BuildContext& ctx) const = 0;
@@ -27,8 +27,11 @@ struct TypedRootHolder final : RootHolder {
 
   void buildInto(BuildContext& ctx) const override {
     if constexpr (CompositeComponent<C>) {
+      ctx.pushChildIndex();
       Element child{value.body()};
+      ctx.beginCompositeBodySubtree();
       child.build(ctx);
+      ctx.popChildIndex();
     } else {
       static_assert(std::is_copy_constructible_v<C>,
           "Leaf root component must be copy-constructible. "

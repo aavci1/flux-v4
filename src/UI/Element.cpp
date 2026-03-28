@@ -46,13 +46,15 @@ TextLayoutOptions textViewLayoutOptions(Text const& v) {
 
 void Element::build(BuildContext& ctx) const { impl_->build(ctx); }
 
-Size Element::measure(LayoutConstraints const& constraints, TextSystem& textSystem) const {
-  return impl_->measure(constraints, textSystem);
+Size Element::measure(BuildContext& ctx, LayoutConstraints const& constraints,
+                      TextSystem& textSystem) const {
+  return impl_->measure(ctx, constraints, textSystem);
 }
 
 bool Element::isSpacer() const { return impl_->isSpacer(); }
 
 void Element::Model<Rectangle>::build(BuildContext& ctx) const {
+  ctx.advanceChildSlot();
   Rect const bounds =
       resolveLeafBounds(value.frame, ctx.layoutEngine().childFrame(), ctx.constraints());
   NodeId const id = ctx.graph().addRect(ctx.parentLayer(), RectNode{
@@ -71,7 +73,8 @@ void Element::Model<Rectangle>::build(BuildContext& ctx) const {
   }
 }
 
-Size Element::Model<Rectangle>::measure(LayoutConstraints const& c, TextSystem&) const {
+Size Element::Model<Rectangle>::measure(BuildContext& ctx, LayoutConstraints const& c, TextSystem&) const {
+  ctx.advanceChildSlot();
   if (value.frame.width > 0.f || value.frame.height > 0.f) {
     return {value.frame.width, value.frame.height};
   }
@@ -80,6 +83,7 @@ Size Element::Model<Rectangle>::measure(LayoutConstraints const& c, TextSystem&)
 }
 
 void Element::Model<LaidOutText>::build(BuildContext& ctx) const {
+  ctx.advanceChildSlot();
   if (!value.layout) {
     return;
   }
@@ -94,7 +98,8 @@ void Element::Model<LaidOutText>::build(BuildContext& ctx) const {
   });
 }
 
-Size Element::Model<LaidOutText>::measure(LayoutConstraints const&, TextSystem&) const {
+Size Element::Model<LaidOutText>::measure(BuildContext& ctx, LayoutConstraints const&, TextSystem&) const {
+  ctx.advanceChildSlot();
   if (!value.layout) {
     return {};
   }
@@ -102,6 +107,7 @@ Size Element::Model<LaidOutText>::measure(LayoutConstraints const&, TextSystem&)
 }
 
 void Element::Model<Text>::build(BuildContext& ctx) const {
+  ctx.advanceChildSlot();
   Rect const bounds =
       resolveLeafBounds(value.frame, ctx.layoutEngine().childFrame(), ctx.constraints());
   assert(value.text.empty() || (bounds.width > 0.f && bounds.height > 0.f));
@@ -142,7 +148,8 @@ void Element::Model<Text>::build(BuildContext& ctx) const {
   }
 }
 
-Size Element::Model<Text>::measure(LayoutConstraints const& c, TextSystem& ts) const {
+Size Element::Model<Text>::measure(BuildContext& ctx, LayoutConstraints const& c, TextSystem& ts) const {
+  ctx.advanceChildSlot();
   float const pad = value.padding * 2.f;
   TextLayoutOptions const opts = textViewLayoutOptions(value);
 
@@ -185,6 +192,7 @@ Size Element::Model<Text>::measure(LayoutConstraints const& c, TextSystem& ts) c
 }
 
 void Element::Model<views::Image>::build(BuildContext& ctx) const {
+  ctx.advanceChildSlot();
   if (!value.source) {
     return;
   }
@@ -202,7 +210,8 @@ void Element::Model<views::Image>::build(BuildContext& ctx) const {
   }
 }
 
-Size Element::Model<views::Image>::measure(LayoutConstraints const& c, TextSystem&) const {
+Size Element::Model<views::Image>::measure(BuildContext& ctx, LayoutConstraints const& c, TextSystem&) const {
+  ctx.advanceChildSlot();
   if (value.frame.width > 0.f || value.frame.height > 0.f) {
     return {value.frame.width, value.frame.height};
   }
@@ -212,6 +221,7 @@ Size Element::Model<views::Image>::measure(LayoutConstraints const& c, TextSyste
 }
 
 void Element::Model<PathShape>::build(BuildContext& ctx) const {
+  ctx.advanceChildSlot();
   ctx.graph().addPath(ctx.parentLayer(), PathNode{
       .path = value.path,
       .fill = value.fill,
@@ -219,12 +229,14 @@ void Element::Model<PathShape>::build(BuildContext& ctx) const {
   });
 }
 
-Size Element::Model<PathShape>::measure(LayoutConstraints const&, TextSystem&) const {
+Size Element::Model<PathShape>::measure(BuildContext& ctx, LayoutConstraints const&, TextSystem&) const {
+  ctx.advanceChildSlot();
   Rect const b = value.path.getBounds();
   return {b.width, b.height};
 }
 
 void Element::Model<Line>::build(BuildContext& ctx) const {
+  ctx.advanceChildSlot();
   ctx.graph().addLine(ctx.parentLayer(), LineNode{
       .from = value.from,
       .to = value.to,
@@ -232,7 +244,8 @@ void Element::Model<Line>::build(BuildContext& ctx) const {
   });
 }
 
-Size Element::Model<Line>::measure(LayoutConstraints const&, TextSystem&) const {
+Size Element::Model<Line>::measure(BuildContext& ctx, LayoutConstraints const&, TextSystem&) const {
+  ctx.advanceChildSlot();
   float const minX = std::min(value.from.x, value.to.x);
   float const maxX = std::max(value.from.x, value.to.x);
   float const minY = std::min(value.from.y, value.to.y);
