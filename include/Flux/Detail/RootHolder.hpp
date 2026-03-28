@@ -27,8 +27,10 @@ struct TypedRootHolder final : RootHolder {
 
   void buildInto(BuildContext& ctx) const override {
     if constexpr (CompositeComponent<C>) {
+      ctx.pushChildIndex();
       Element child{value.body()};
       child.build(ctx);
+      ctx.popChildIndex();
     } else {
       static_assert(std::is_copy_constructible_v<C>,
           "Leaf root component must be copy-constructible. "

@@ -2,12 +2,14 @@
 
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Scene/SceneGraph.hpp>
+#include <Flux/UI/ComponentRegistry.hpp>
 #include <Flux/UI/EventMap.hpp>
 
 namespace flux {
 
-BuildContext::BuildContext(SceneGraph& g, EventMap& em, TextSystem& ts, LayoutEngine& layout)
-    : graph_(g), eventMap_(em), textSystem_(ts), layoutEngine_(layout) {
+BuildContext::BuildContext(SceneGraph& g, EventMap& em, TextSystem& ts, LayoutEngine& layout,
+                             ComponentRegistry& registry)
+    : graph_(g), eventMap_(em), textSystem_(ts), layoutEngine_(layout), registry_(registry) {
   constraintStack_.push_back(LayoutConstraints{});
 }
 
@@ -26,6 +28,8 @@ TextSystem& BuildContext::textSystem() { return textSystem_; }
 
 LayoutEngine& BuildContext::layoutEngine() { return layoutEngine_; }
 
+ComponentRegistry& BuildContext::registry() { return registry_; }
+
 void BuildContext::pushLayer(NodeId layerId) { layerStack_.push_back(layerId); }
 
 void BuildContext::popLayer() {
@@ -43,5 +47,28 @@ void BuildContext::popConstraints() {
     constraintStack_.pop_back();
   }
 }
+
+ComponentKey const& BuildContext::currentKey() const { return keyStack_; }
+
+void BuildContext::pushChildIndex() {
+  keyStack_.push_back(nextChildIndex_);
+  savedChildIndices_.push_back(nextChildIndex_);
+  nextChildIndex_ = 0;
+}
+
+void BuildContext::popChildIndex() {
+  keyStack_.pop_back();
+  nextChildIndex_ = savedChildIndices_.back();
+  savedChildIndices_.pop_back();
+  ++nextChildIndex_;
+}
+
+ComponentKey BuildContext::nextCompositeKey() {
+  ComponentKey key = keyStack_;
+  key.push_back(nextChildIndex_++);
+  return key;
+}
+
+void BuildContext::advanceChildSlot() { ++nextChildIndex_; }
 
 } // namespace flux

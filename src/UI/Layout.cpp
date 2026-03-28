@@ -66,6 +66,8 @@ void Element::Model<VStack>::build(BuildContext& ctx) const {
   NodeId const layerId = ctx.graph().addLayer(ctx.parentLayer(), std::move(layer));
   ctx.pushLayer(layerId);
 
+  ctx.pushChildIndex();
+
   float const assignedW = assignedSpan(parentFrame.width, outer.maxWidth);
   float const assignedH = assignedSpan(parentFrame.height, outer.maxHeight);
   float innerW = std::max(0.f, assignedW - 2.f * value.padding);
@@ -136,6 +138,7 @@ void Element::Model<VStack>::build(BuildContext& ctx) const {
     y += sz.height + value.spacing;
   }
 
+  ctx.popChildIndex();
   ctx.popLayer();
 }
 
@@ -178,6 +181,8 @@ void Element::Model<HStack>::build(BuildContext& ctx) const {
   }
   NodeId const layerId = ctx.graph().addLayer(ctx.parentLayer(), std::move(layer));
   ctx.pushLayer(layerId);
+
+  ctx.pushChildIndex();
 
   float const assignedW = assignedSpan(parentFrame.width, outer.maxWidth);
 
@@ -238,6 +243,7 @@ void Element::Model<HStack>::build(BuildContext& ctx) const {
     x += sz.width + value.spacing;
   }
 
+  ctx.popChildIndex();
   ctx.popLayer();
 }
 
@@ -273,6 +279,8 @@ void Element::Model<ZStack>::build(BuildContext& ctx) const {
   }
   NodeId const layerId = ctx.graph().addLayer(ctx.parentLayer(), std::move(layer));
   ctx.pushLayer(layerId);
+
+  ctx.pushChildIndex();
 
   float const assignedW = assignedSpan(parentFrame.width, outer.maxWidth);
   float const assignedH = assignedSpan(parentFrame.height, outer.maxHeight);
@@ -320,6 +328,7 @@ void Element::Model<ZStack>::build(BuildContext& ctx) const {
     ctx.popConstraints();
   }
 
+  ctx.popChildIndex();
   ctx.popLayer();
 }
 
@@ -347,7 +356,7 @@ Size Element::Model<ZStack>::measure(LayoutConstraints const& constraints, TextS
 }
 
 void Element::Model<Spacer>::build(BuildContext& ctx) const {
-  (void)ctx;
+  ctx.advanceChildSlot();
 }
 
 Size Element::Model<Spacer>::measure(LayoutConstraints const&, TextSystem&) const {

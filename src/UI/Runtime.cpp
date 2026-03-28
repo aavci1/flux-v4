@@ -49,8 +49,10 @@ void Runtime::rebuild(std::optional<Size> sizeOverride) {
 
   layoutEngine_.resetForBuild();
 
+  registry_.beginRebuild();
+
   EventMap newMap;
-  BuildContext ctx{graph, newMap, Application::instance().textSystem(), layoutEngine_};
+  BuildContext ctx{graph, newMap, Application::instance().textSystem(), layoutEngine_, registry_};
   Size const raw = sizeOverride.value_or(window_.getSize());
   Size const sz = snapRootLayoutSize(raw);
   LayoutConstraints rootCs{};
@@ -61,6 +63,9 @@ void Runtime::rebuild(std::optional<Size> sizeOverride) {
     rootHolder_->buildInto(ctx);
   }
   ctx.popConstraints();
+
+  registry_.endRebuild();
+
   eventMap_ = std::move(newMap);
   window_.requestRedraw();
 }

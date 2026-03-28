@@ -1,6 +1,10 @@
 #pragma once
 
+#include <Flux/UI/BuildContext.hpp>
 #include <Flux/UI/Component.hpp>
+#include <Flux/UI/ComponentKey.hpp>
+#include <Flux/UI/ComponentRegistry.hpp>
+#include <Flux/UI/DescribedComposite.hpp>
 #include <Flux/UI/Leaves.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 
@@ -16,7 +20,6 @@ template<typename>
 inline constexpr bool alwaysFalse = false;
 
 
-class BuildContext;
 class TextSystem;
 
 class Element {
@@ -56,7 +59,7 @@ private:
 
 template<typename C>
 struct Element::Model : Concept {
-  C value;
+  mutable C value;
   explicit Model(C c) : value(std::move(c)) {}
   std::unique_ptr<Concept> clone() const override {
     if constexpr (std::is_copy_constructible_v<C>) {
@@ -73,7 +76,12 @@ struct Element::Model : Concept {
 template<typename C>
 void Element::Model<C>::build(BuildContext& ctx) const {
   if constexpr (CompositeComponent<C>) {
-    Element child{value.body()};
+    static_assert(std::is_move_constructible_v<C>,
+                  "Composite C must be move-constructible, or use DescribedComposite<C, Desc> "
+                  "with updateProps(Desc const&) on C.");
+    ComponentKey key = ctx.nextCompositeKey();
+    C* instance = ctx.registry().getOrCreate(key, std::move(value));
+    Element child{instance->body()};
     child.build(ctx);
   } else {
     static_assert(alwaysFalse<C>, "Missing Element::Model specialization for this component type");
@@ -83,6 +91,8 @@ void Element::Model<C>::build(BuildContext& ctx) const {
 template<typename C>
 Size Element::Model<C>::measure(LayoutConstraints const& constraints, TextSystem& textSystem) const {
   if constexpr (CompositeComponent<C>) {
+    static_assert(std::is_move_constructible_v<C>,
+                  "Composite C must be move-constructible, or use DescribedComposite<C, Desc>.");
     Element child{value.body()};
     return child.measure(constraints, textSystem);
   } else {
@@ -90,6 +100,26 @@ Size Element::Model<C>::measure(LayoutConstraints const& constraints, TextSystem
     return {};
   }
 }
+
+template<typename C, typename Desc>
+struct Element::Model<DescribedComposite<C, Desc>> : Concept {
+  mutable DescribedComposite<C, Desc> value;
+  explicit Model(DescribedComposite<C, Desc> c) : value(std::move(c)) {}
+  std::unique_ptr<Concept> clone() const override {
+    return std::make_unique<Model<DescribedComposite<C, Desc>>>(value);
+  }
+  void build(BuildContext& ctx) const override {
+    ComponentKey key = ctx.nextCompositeKey();
+    C* instance = ctx.registry().getOrCreate<C>(key, value.desc);
+    Element child{instance->body()};
+    child.build(ctx);
+  }
+  Size measure(LayoutConstraints const& constraints, TextSystem& textSystem) const override {
+    C tmp{};
+    tmp.updateProps(value.desc);
+    return Element{tmp.body()}.measure(constraints, textSystem);
+  }
+};
 
 } // namespace flux
 

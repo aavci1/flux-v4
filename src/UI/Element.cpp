@@ -53,6 +53,7 @@ Size Element::measure(LayoutConstraints const& constraints, TextSystem& textSyst
 bool Element::isSpacer() const { return impl_->isSpacer(); }
 
 void Element::Model<Rectangle>::build(BuildContext& ctx) const {
+  ctx.advanceChildSlot();
   Rect const bounds =
       resolveLeafBounds(value.frame, ctx.layoutEngine().childFrame(), ctx.constraints());
   NodeId const id = ctx.graph().addRect(ctx.parentLayer(), RectNode{
@@ -80,6 +81,7 @@ Size Element::Model<Rectangle>::measure(LayoutConstraints const& c, TextSystem&)
 }
 
 void Element::Model<LaidOutText>::build(BuildContext& ctx) const {
+  ctx.advanceChildSlot();
   if (!value.layout) {
     return;
   }
@@ -102,6 +104,7 @@ Size Element::Model<LaidOutText>::measure(LayoutConstraints const&, TextSystem&)
 }
 
 void Element::Model<Text>::build(BuildContext& ctx) const {
+  ctx.advanceChildSlot();
   Rect const bounds =
       resolveLeafBounds(value.frame, ctx.layoutEngine().childFrame(), ctx.constraints());
   assert(value.text.empty() || (bounds.width > 0.f && bounds.height > 0.f));
@@ -185,6 +188,7 @@ Size Element::Model<Text>::measure(LayoutConstraints const& c, TextSystem& ts) c
 }
 
 void Element::Model<views::Image>::build(BuildContext& ctx) const {
+  ctx.advanceChildSlot();
   if (!value.source) {
     return;
   }
@@ -212,6 +216,7 @@ Size Element::Model<views::Image>::measure(LayoutConstraints const& c, TextSyste
 }
 
 void Element::Model<PathShape>::build(BuildContext& ctx) const {
+  ctx.advanceChildSlot();
   ctx.graph().addPath(ctx.parentLayer(), PathNode{
       .path = value.path,
       .fill = value.fill,
@@ -225,6 +230,7 @@ Size Element::Model<PathShape>::measure(LayoutConstraints const&, TextSystem&) c
 }
 
 void Element::Model<Line>::build(BuildContext& ctx) const {
+  ctx.advanceChildSlot();
   ctx.graph().addLine(ctx.parentLayer(), LineNode{
       .from = value.from,
       .to = value.to,

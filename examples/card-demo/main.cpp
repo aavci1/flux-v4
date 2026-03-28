@@ -24,18 +24,31 @@ constexpr Color accent2   = Color::hex(0xD05A2B); // Scene Graph     — orange
 } // namespace pal
 
 // ---------------------------------------------------------------------------
-// Card — composite; signals live on this object (stable address via root holder).
-// `mutable` so `body() const` can drive `set` from tap handlers.
+// Card — composite; heap instance lives in ComponentRegistry. The tree carries
+// DescribedComposite<Card, CardProps> because Signal/Animated are non-movable.
 // ---------------------------------------------------------------------------
 
-struct Card {
-  mutable Signal<bool>    expanded{false};
-  mutable Animated<float> bodyOpacity{0.f};
-  Color                   accent = pal::accent0;
-  std::string             title;
-  std::string             detail;
+struct CardProps {
+  Color       accent = pal::accent0;
+  std::string title;
+  std::string detail;
+};
 
-  auto body() const {
+struct Card {
+  Signal<bool>    expanded{false};
+  Animated<float> bodyOpacity{0.f};
+  Color           accent = pal::accent0;
+  std::string     title;
+  std::string     detail;
+
+  void updateProps(CardProps const& p) {
+    accent = p.accent;
+    title  = p.title;
+    detail = p.detail;
+  }
+
+  auto body() {
+    Card* self = this;
     float const op = bodyOpacity.get();
 
     auto dot = Rectangle{
@@ -96,11 +109,11 @@ struct Card {
                 .cornerRadius = CornerRadius(14.f),
                 .fill   = FillStyle::solid(pal::surface),
                 .stroke = StrokeStyle::solid(pal::border, 1.f),
-                .onTap  = [this] {
-                  bool const next = !expanded.get();
-                  expanded.set(next);
+                .onTap  = [self] {
+                  bool const next = !self->expanded.get();
+                  self->expanded.set(next);
                   WithTransition t{Transition::spring(280.f, 22.f, 0.5f)};
-                  bodyOpacity.set(next ? 1.f : 0.f);
+                  self->bodyOpacity.set(next ? 1.f : 0.f);
                 },
             },
             VStack{
@@ -113,22 +126,11 @@ struct Card {
   }
 };
 
-// ---------------------------------------------------------------------------
-// Root — default member initializers + setView<CardListView>() avoid moving Cards
-// (Signal / Animated are non-movable).
+using CardElement = DescribedComposite<Card, CardProps>;
+
 // ---------------------------------------------------------------------------
 
 struct CardListView {
-  Card card0{.accent = pal::accent0,
-             .title  = "Metal Renderer",
-             .detail = "SDF rounded-rect shaders, glyph atlas, path tessellation via libtess2."};
-  Card card1{.accent = pal::accent1,
-             .title  = "Reactive State",
-             .detail = "Signal<T>, Computed<T>, Animated<T>. One timer drives all animations."};
-  Card card2{.accent = pal::accent2,
-             .title  = "Scene Graph",
-             .detail = "Slot-map NodeStore, LayerNode compositing, HitTester for input routing."};
-
   auto body() const {
     return ZStack{
         .hAlign = HorizontalAlignment::Leading,
@@ -152,9 +154,18 @@ struct CardListView {
                         .font  = {.size = 14.f, .weight = 400.f},
                         .color = pal::sublabel,
                     },
-                    card0.body(),
-                    card1.body(),
-                    card2.body(),
+                    CardElement{
+                        .desc = {.accent = pal::accent0,
+                                 .title  = "Metal Renderer",
+                                 .detail = "SDF rounded-rect shaders, glyph atlas, path tessellation via libtess2."}},
+                    CardElement{
+                        .desc = {.accent = pal::accent1,
+                                 .title  = "Reactive State",
+                                 .detail = "Signal<T>, Computed<T>, Animated<T>. One timer drives all animations."}},
+                    CardElement{
+                        .desc = {.accent = pal::accent2,
+                                 .title  = "Scene Graph",
+                                 .detail = "Slot-map NodeStore, LayerNode compositing, HitTester for input routing."}},
                 },
             },
         },

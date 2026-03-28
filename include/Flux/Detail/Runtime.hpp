@@ -3,6 +3,7 @@
 #include <Flux/Core/Events.hpp>
 #include <Flux/Detail/RootHolder.hpp>
 #include <Flux/Reactive/Observer.hpp>
+#include <Flux/UI/ComponentRegistry.hpp>
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/EventMap.hpp>
 
@@ -36,6 +37,7 @@ private:
   std::unique_ptr<RootHolder> rootHolder_;
   EventMap eventMap_;
   LayoutEngine layoutEngine_;
+  ComponentRegistry registry_;
   ObserverHandle rebuildHandle_{};
   bool inputRegistered_ = false;
 };
