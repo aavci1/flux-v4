@@ -2,6 +2,7 @@
 #include <Flux/Core/Events.hpp>
 #include <Flux/Reactive/Observer.hpp>
 #include <Flux/Graphics/Canvas.hpp>
+#include <Flux/Graphics/Font.hpp>
 #include <Flux/Graphics/Styles.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 
@@ -108,24 +109,19 @@ public:
     const float r = 36.f;
     c.drawCircle(center, r, FillStyle::solid(Color::rgb(255, 255, 255)), StrokeStyle::solid(Color::rgb(40, 44, 55), 2.f));
 
-    TextAttribute bodyAttr{};
-    bodyAttr.fontFamily = ".AppleSystemUIFont";
-    bodyAttr.fontSize = 15.f;
-    bodyAttr.fontWeight = 450.f;
-    bodyAttr.color = Color::rgb(32, 34, 42);
+    Font bodyFont{.family = ".AppleSystemUIFont", .size = 15.f, .weight = 450.f};
 
     std::string const line = std::string("Signal<int> clicks: ") + std::to_string(s_.clicks.get()) +
                              "  |  Computed<float> dist: " +
                              std::to_string(static_cast<int>(s_.distanceToPointer.get())) +
                              " px  |  Animated<Color> (spring) + Animated<Point> (ease)";
-    auto bodyLayout = ts.layout(line, bodyAttr, panel.width - 32.f);
+    auto bodyLayout = ts.layout(line, bodyFont, Color::rgb(32, 34, 42), panel.width - 32.f);
     c.drawTextLayout(*bodyLayout, Point{panel.x + 16.f, panel.y + 16.f});
 
-    TextAttribute hintAttr = bodyAttr;
-    hintAttr.fontSize = 13.f;
-    hintAttr.color = Color::rgb(90, 94, 108);
+    Font hintFont = bodyFont;
+    hintFont.size = 13.f;
     auto hintLayout = ts.layout("Click: spring palette + ease circle to click. Move pointer: Computed distance updates.",
-                                hintAttr, panel.width - 32.f);
+                                hintFont, Color::rgb(90, 94, 108), panel.width - 32.f);
     c.drawTextLayout(*hintLayout, Point{panel.x + 16.f, panel.y + panel.height - 52.f});
   }
 };

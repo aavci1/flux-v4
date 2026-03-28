@@ -1,6 +1,7 @@
 #include <Flux.hpp>
 #include <Flux/Core/Events.hpp>
 #include <Flux/Graphics/Canvas.hpp>
+#include <Flux/Graphics/Font.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Scene/HitTester.hpp>
 #include <Flux/Scene/Nodes.hpp>
@@ -94,12 +95,8 @@ public:
 
     float const margin = 28.f;
     TextSystem& ts = Application::instance().textSystem();
-    TextAttribute titleAttr0{};
-    titleAttr0.fontFamily = ".AppleSystemUIFont";
-    titleAttr0.fontSize = 26.f;
-    titleAttr0.fontWeight = 600.f;
-    titleAttr0.color = Color::rgb(235, 238, 245);
-    auto titleLayout = ts.layout("Scene graph", titleAttr0, s.width - margin * 2.f);
+    Font titleFont{.family = ".AppleSystemUIFont", .size = 26.f, .weight = 600.f};
+    auto titleLayout = ts.layout("Scene graph", titleFont, Color::rgb(235, 238, 245), s.width - margin * 2.f);
     float const titleBand = titleLayout->measuredSize.height;
     float const rowTop = margin + titleBand + 18.f;
     float const rowH = 160.f;
@@ -149,14 +146,11 @@ public:
     float const titleX = margin + (s.width - margin * 2.f - titleW) * 0.5f;
     titleId_ = g.addText(root, TextNode{.layout = std::move(titleLayout), .origin = Point{titleX, margin}});
 
-    TextAttribute hintAttr{};
-    hintAttr.fontFamily = ".AppleSystemUIFont";
-    hintAttr.fontSize = 14.f;
-    hintAttr.fontWeight = 400.f;
-    hintAttr.color = Color::rgb(140, 150, 170);
+    Font hintFont{.family = ".AppleSystemUIFont", .size = 14.f, .weight = 400.f};
 
     auto hintLayout =
-        ts.layout("Layer, clip, transform, rects, line, text, hit-test", hintAttr, s.width - margin * 2.f);
+        ts.layout("Layer, clip, transform, rects, line, text, hit-test", hintFont, Color::rgb(140, 150, 170),
+                  s.width - margin * 2.f);
     float const hintW = hintLayout->measuredSize.width;
     float const hintX = margin + (s.width - margin * 2.f - hintW) * 0.5f;
     hintId_ = g.addText(root,
@@ -171,12 +165,9 @@ public:
 
     float const margin = 28.f;
     TextSystem& ts = Application::instance().textSystem();
-    TextAttribute titleAttr0{};
-    titleAttr0.fontFamily = ".AppleSystemUIFont";
-    titleAttr0.fontSize = 26.f;
-    titleAttr0.fontWeight = 600.f;
-    titleAttr0.color = Color::rgb(235, 238, 245);
-    float const titleBand = ts.layout("Scene graph", titleAttr0, s.width - margin * 2.f)->measuredSize.height;
+    Font titleFont{.family = ".AppleSystemUIFont", .size = 26.f, .weight = 600.f};
+    float const titleBand =
+        ts.layout("Scene graph", titleFont, Color::rgb(235, 238, 245), s.width - margin * 2.f)->measuredSize.height;
     float const rowTop = margin + titleBand + 18.f;
     float const rowH = 160.f;
     float const gap = 18.f;
@@ -212,27 +203,17 @@ public:
       ln->to = Point{rowOrigin.x + cardW + gap + cardW * 0.15f, rowOrigin.y + rowH * 0.72f};
     }
 
-    TextAttribute titleAttr{};
-    titleAttr.fontFamily = ".AppleSystemUIFont";
-    titleAttr.fontSize = 26.f;
-    titleAttr.fontWeight = 600.f;
-    titleAttr.color = Color::rgb(235, 238, 245);
-
     if (TextNode* t = g.node<TextNode>(titleId_)) {
-      t->layout = ts.layout("Scene graph", titleAttr, s.width - margin * 2.f);
+      t->layout = ts.layout("Scene graph", titleFont, Color::rgb(235, 238, 245), s.width - margin * 2.f);
       float const titleW = t->layout->measuredSize.width;
       t->origin = Point{margin + (s.width - margin * 2.f - titleW) * 0.5f, margin};
     }
 
-    TextAttribute hintAttr{};
-    hintAttr.fontFamily = ".AppleSystemUIFont";
-    hintAttr.fontSize = 14.f;
-    hintAttr.fontWeight = 400.f;
-    hintAttr.color = Color::rgb(140, 150, 170);
+    Font hintFont{.family = ".AppleSystemUIFont", .size = 14.f, .weight = 400.f};
 
     if (TextNode* t = g.node<TextNode>(hintId_)) {
-      t->layout =
-          ts.layout("Layer, clip, transform, rects, line, text, hit-test", hintAttr, s.width - margin * 2.f);
+      t->layout = ts.layout("Layer, clip, transform, rects, line, text, hit-test", hintFont,
+                            Color::rgb(140, 150, 170), s.width - margin * 2.f);
       float const hintW = t->layout->measuredSize.width;
       t->origin = Point{margin + (s.width - margin * 2.f - hintW) * 0.5f, margin + titleBand + 6.f};
     }

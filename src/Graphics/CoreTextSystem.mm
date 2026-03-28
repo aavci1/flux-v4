@@ -92,57 +92,62 @@ void validateRuns(AttributedString const& text) {
   }
 }
 
-TextAttribute resolveAttribute(TextAttribute const& base, TextAttribute const& run) {
-  TextAttribute a = run;
-  if (a.fontFamily.empty()) {
-    a.fontFamily = base.fontFamily;
+struct ResolvedStyle {
+  Font font;
+  Color color;
+};
+
+Font resolveFont(Font const& base, Font const& run) {
+  Font a = run;
+  if (a.family.empty()) {
+    a.family = base.family;
   }
-  if (a.fontSize <= 0.f) {
-    a.fontSize = base.fontSize;
+  if (a.size <= 0.f) {
+    a.size = base.size;
   }
-  if (a.fontWeight <= 0.f) {
-    a.fontWeight = base.fontWeight;
+  if (a.weight <= 0.f) {
+    a.weight = base.weight;
   }
   return a;
 }
 
-TextAttribute baseDefaults() {
-  TextAttribute b;
-  b.fontFamily = kDefaultFontFamily;
-  b.fontSize = kDefaultFontSize;
-  b.fontWeight = kDefaultFontWeight;
+Font baseDefaultsFont() {
+  Font b;
+  b.family = kDefaultFontFamily;
+  b.size = kDefaultFontSize;
+  b.weight = kDefaultFontWeight;
   b.italic = false;
-  b.color = Colors::black;
   return b;
 }
 
-void accumulateInheritance(std::vector<TextAttribute>& out, AttributedString const& text) {
+void accumulateInheritance(std::vector<ResolvedStyle>& out, AttributedString const& text) {
   out.clear();
   out.resize(text.runs.size());
-  TextAttribute inherited = baseDefaults();
+  Font inherited = baseDefaultsFont();
   for (std::size_t i = 0; i < text.runs.size(); ++i) {
-    TextAttribute const& r = text.runs[i].attr;
-    out[i] = resolveAttribute(inherited, r);
-    if (!r.fontFamily.empty()) {
-      inherited.fontFamily = r.fontFamily;
+    AttributedRun const& run = text.runs[i];
+    Font const& rf = run.font;
+    out[i].font = resolveFont(inherited, rf);
+    out[i].color = run.color;
+    if (!rf.family.empty()) {
+      inherited.family = rf.family;
     }
-    if (r.fontSize > 0.f) {
-      inherited.fontSize = r.fontSize;
+    if (rf.size > 0.f) {
+      inherited.size = rf.size;
     }
-    if (r.fontWeight > 0.f) {
-      inherited.fontWeight = r.fontWeight;
+    if (rf.weight > 0.f) {
+      inherited.weight = rf.weight;
     }
-    inherited.italic = r.italic;
-    inherited.color = r.color;
+    inherited.italic = rf.italic;
   }
 }
 
-CTFontRef createCTFont(TextAttribute const& attr) {
-  NSString* fam = [NSString stringWithUTF8String:attr.fontFamily.c_str()];
+CTFontRef createCTFont(Font const& attr) {
+  NSString* fam = [NSString stringWithUTF8String:attr.family.c_str()];
   if (!fam) {
     fam = @".AppleSystemUIFont";
   }
-  CGFloat const wTrait = ctWeightTraitFromCss(attr.fontWeight);
+  CGFloat const wTrait = ctWeightTraitFromCss(attr.weight);
   NSDictionary* traits = @{
     (id)kCTFontSymbolicTrait : @(attr.italic ? kCTFontItalicTrait : 0),
     (id)kCTFontWeightTrait : @(wTrait),
@@ -152,7 +157,7 @@ CTFontRef createCTFont(TextAttribute const& attr) {
     (id)kCTFontTraitsAttribute : traits,
   };
   CTFontDescriptorRef fd = CTFontDescriptorCreateWithAttributes((__bridge CFDictionaryRef)descDict);
-  CTFontRef font = CTFontCreateWithFontDescriptor(fd, static_cast<CGFloat>(attr.fontSize), nullptr);
+  CTFontRef font = CTFontCreateWithFontDescriptor(fd, static_cast<CGFloat>(attr.size), nullptr);
   CFRelease(fd);
   return font;
 }
@@ -276,7 +281,7 @@ static void applyParagraphStyleToMutable(NSMutableAttributedString* mas, TextLay
 }
 
 CFAttributedStringRef createCFAttributed(AttributedString const& text,
-                                         std::vector<TextAttribute> const& resolved,
+                                         std::vector<ResolvedStyle> const& resolved,
                                          TextLayoutOptions const& options) {
   NSString* ns = [NSString stringWithUTF8String:text.utf8.c_str()];
   if (!ns) {
@@ -290,9 +295,9 @@ CFAttributedStringRef createCFAttributed(AttributedString const& text,
 
   for (std::size_t ri = 0; ri < text.runs.size(); ++ri) {
     auto const& run = text.runs[ri];
-    TextAttribute const& a = resolved[ri];
+    ResolvedStyle const& a = resolved[ri];
     NSRange range = utf8ByteRangeToNSRange(bytes, byteLen, run.start, run.end);
-    CTFontRef font = createCTFont(a);
+    CTFontRef font = createCTFont(a.font);
     CGFloat rgba[4] = {a.color.r, a.color.g, a.color.b, a.color.a};
     CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
     CGColorRef cg = CGColorCreate(cs, rgba);
@@ -310,12 +315,12 @@ CFAttributedStringRef createCFAttributed(AttributedString const& text,
   return (__bridge_retained CFAttributedStringRef)mas;
 }
 
-CFAttributedStringRef createCFAttributedPlain(std::string_view utf8, TextAttribute const& attr,
+CFAttributedStringRef createCFAttributedPlain(std::string_view utf8, Font const& font, Color const& color,
                                               TextLayoutOptions const& options) {
   AttributedString as;
   as.utf8 = std::string(utf8);
-  as.runs.push_back({0, static_cast<std::uint32_t>(utf8.size()), attr});
-  std::vector<TextAttribute> resolved;
+  as.runs.push_back({0, static_cast<std::uint32_t>(utf8.size()), font, color});
+  std::vector<ResolvedStyle> resolved;
   accumulateInheritance(resolved, as);
   return createCFAttributed(as, resolved, options);
 }
@@ -453,10 +458,10 @@ std::uint32_t CoreTextSystem::resolveFontId(std::string_view fontFamily, float w
   key.family = std::string(fontFamily.empty() ? kDefaultFontFamily : fontFamily);
   key.weight = weight > 0.f ? weight : kDefaultFontWeight;
   key.italic = italic;
-  TextAttribute a;
-  a.fontFamily = key.family;
-  a.fontSize = 12.f;
-  a.fontWeight = key.weight;
+  Font a;
+  a.family = key.family;
+  a.size = 12.f;
+  a.weight = key.weight;
   a.italic = key.italic;
   CTFontRef font = createCTFont(a);
   return d->fontIdForKey(key, font);
@@ -569,7 +574,7 @@ Size CoreTextSystem::measure(AttributedString const& text, float maxWidth, TextL
     return L ? L->measuredSize : Size{};
   }
   validateRuns(text);
-  std::vector<TextAttribute> resolved;
+  std::vector<ResolvedStyle> resolved;
   accumulateInheritance(resolved, text);
   CFAttributedStringRef cf = createCFAttributed(text, resolved, options);
   Size s = measureCF(cf, maxWidth);
@@ -577,26 +582,26 @@ Size CoreTextSystem::measure(AttributedString const& text, float maxWidth, TextL
   return s;
 }
 
-Size CoreTextSystem::measure(std::string_view utf8, TextAttribute const& attr, float maxWidth,
+Size CoreTextSystem::measure(std::string_view utf8, Font const& font, Color const& color, float maxWidth,
                              TextLayoutOptions const& options) {
   if (utf8.empty()) {
     return {};
   }
   if (options.maxLines > 0) {
-    std::shared_ptr<TextLayout> const L = layout(utf8, attr, maxWidth, options);
+    std::shared_ptr<TextLayout> const L = layout(utf8, font, color, maxWidth, options);
     return L ? L->measuredSize : Size{};
   }
-  CFAttributedStringRef cf = createCFAttributedPlain(utf8, attr, options);
+  CFAttributedStringRef cf = createCFAttributedPlain(utf8, font, color, options);
   Size s = measureCF(cf, maxWidth);
   CFRelease(cf);
   return s;
 }
 
-std::shared_ptr<TextLayout> CoreTextSystem::layout(std::string_view utf8, TextAttribute const& attr,
+std::shared_ptr<TextLayout> CoreTextSystem::layout(std::string_view utf8, Font const& font, Color const& color,
                                                    float maxWidth, TextLayoutOptions const& options) {
   AttributedString as;
   as.utf8 = std::string(utf8);
-  as.runs.push_back({0, static_cast<std::uint32_t>(utf8.size()), attr});
+  as.runs.push_back({0, static_cast<std::uint32_t>(utf8.size()), font, color});
   return layout(as, maxWidth, options);
 }
 
@@ -607,7 +612,7 @@ std::shared_ptr<TextLayout> CoreTextSystem::layout(AttributedString const& text,
     return out;
   }
   validateRuns(text);
-  std::vector<TextAttribute> resolved;
+  std::vector<ResolvedStyle> resolved;
   accumulateInheritance(resolved, text);
 
   CFAttributedStringRef cfAttr = createCFAttributed(text, resolved, options);

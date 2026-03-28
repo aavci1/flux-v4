@@ -15,12 +15,12 @@ public:
   std::shared_ptr<TextLayout> layout(AttributedString const& text, float maxWidth,
                                      TextLayoutOptions const& options) override;
 
-  std::shared_ptr<TextLayout> layout(std::string_view utf8, TextAttribute const& attr, float maxWidth,
+  std::shared_ptr<TextLayout> layout(std::string_view utf8, Font const& font, Color const& color, float maxWidth,
                                      TextLayoutOptions const& options) override;
 
   Size measure(AttributedString const& text, float maxWidth, TextLayoutOptions const& options) override;
 
-  Size measure(std::string_view utf8, TextAttribute const& attr, float maxWidth,
+  Size measure(std::string_view utf8, Font const& font, Color const& color, float maxWidth,
                TextLayoutOptions const& options) override;
 
   std::uint32_t resolveFontId(std::string_view fontFamily, float weight, bool italic) override;

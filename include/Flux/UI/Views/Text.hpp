@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Flux/Core/Types.hpp>
+#include <Flux/Graphics/Font.hpp>
 #include <Flux/Graphics/Styles.hpp>
 #include <Flux/Graphics/TextLayoutOptions.hpp>
 
@@ -13,9 +14,7 @@ namespace flux {
 /// Size comes from `frame` when set, or from layout constraints (e.g. full window when `frame` is empty).
 struct Text {
   std::string text;
-  std::string fontFamily;
-  float fontSize = 16.f;
-  float fontWeight = 400.f;
+  Font font{ .family = "", .size = 16.f, .weight = 400.f, .italic = false };
 
   FillStyle background = FillStyle::none();
   StrokeStyle border = StrokeStyle::none();
@@ -31,7 +30,6 @@ struct Text {
   float lineHeight = 0.f;
   int maxLines = 0;
   float firstBaselineOffset = 0.f;
-  bool italic = false;
 
   Rect frame{};
 

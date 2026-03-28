@@ -14,8 +14,7 @@ int main(int argc, char* argv[]) {
   w.setView(
     Text {
       .text = "Hello, World!",
-      .fontSize = 32.f,
-      .fontWeight = 500.f,
+      .font = {.size = 32.f, .weight = 500.f},
       .color = Colors::darkGray,
     }
   );

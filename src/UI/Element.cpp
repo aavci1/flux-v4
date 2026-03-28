@@ -2,7 +2,6 @@
 
 #include <Flux/UI/BuildContext.hpp>
 #include <Flux/UI/EventMap.hpp>
-#include <Flux/Graphics/AttributedString.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Scene/Nodes.hpp>
 #include <Flux/Scene/SceneGraph.hpp>
@@ -29,16 +28,6 @@ Rect resolveLeafBounds(Rect const& frame, Rect const& childFrame, LayoutConstrai
     }
   }
   return bounds;
-}
-
-TextAttribute textViewAttribute(Text const& v) {
-  TextAttribute a{};
-  a.fontFamily = v.fontFamily;
-  a.fontSize = v.fontSize;
-  a.fontWeight = v.fontWeight;
-  a.italic = v.italic;
-  a.color = v.color;
-  return a;
 }
 
 TextLayoutOptions textViewLayoutOptions(Text const& v) {
@@ -122,9 +111,8 @@ void Element::Model<Text>::build(BuildContext& ctx) const {
 
   std::shared_ptr<TextLayout> layout;
   if (!value.text.empty()) {
-    TextAttribute const attr = textViewAttribute(value);
     TextLayoutOptions const opts = textViewLayoutOptions(value);
-    layout = ctx.textSystem().layout(value.text, attr, inner, opts);
+    layout = ctx.textSystem().layout(value.text, value.font, value.color, inner, opts);
   }
 
   bool const drawBackground = !value.background.isNone() || !value.border.isNone();
@@ -158,9 +146,8 @@ Size Element::Model<Text>::measure(LayoutConstraints const& c, TextSystem& ts) c
     return {value.frame.width, value.frame.height};
   }
   float const mw = std::isfinite(c.maxWidth) ? c.maxWidth : 0.f;
-  TextAttribute const attr = textViewAttribute(value);
   TextLayoutOptions const opts = textViewLayoutOptions(value);
-  Size s = ts.measure(value.text, attr, mw, opts);
+  Size s = ts.measure(value.text, value.font, value.color, mw, opts);
   float const p = value.padding * 2.f;
   float w = s.width + p;
   float h = s.height + p;
