@@ -169,7 +169,7 @@ bool Animated<T>::tick(double nowSeconds) {
     }
   }
 
-  // When t >= 1, only snap to target and notify once (avoid double notify with spring/ease at t=1).
+  // Animation complete — snap and exit before interpolation (progress/lerp below are for t < 1 only).
   if (t >= 1.f) {
     if constexpr (detail::equalityComparableV<T>) {
       if (current_ != target_) {
