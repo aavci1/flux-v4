@@ -202,10 +202,10 @@ std::shared_ptr<TextLayout> TextSystem::layout(AttributedString const& text, Rec
   return result;
 }
 
-std::shared_ptr<TextLayout> TextSystem::layout(std::string_view utf8, TextAttribute const& attr, Rect const& box,
-                                               TextLayoutOptions const& options) {
+std::shared_ptr<TextLayout> TextSystem::layout(std::string_view utf8, Font const& font, Color const& color,
+                                               Rect const& box, TextLayoutOptions const& options) {
   float const maxWidth = options.wrapping == TextWrapping::NoWrap ? 0.f : box.width;
-  std::shared_ptr<TextLayout> result = layout(utf8, attr, maxWidth, options);
+  std::shared_ptr<TextLayout> result = layout(utf8, font, color, maxWidth, options);
   applyBoxOptions(result, box, options);
   return result;
 }

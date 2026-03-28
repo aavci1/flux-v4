@@ -164,6 +164,16 @@ public:
 
   void beginFrame() override {
     frame_.clear();
+    // Each frame must start from a clean stack and identity transform. If a prior `render`
+    // left extra states (e.g. unbalanced save/restore), transforms would accumulate and later
+    // nodes (cards, subtitle) would draw off-screen or with wrong opacity.
+    while (stateStack_.size() > 1) {
+      stateStack_.pop_back();
+    }
+    if (!stateStack_.empty()) {
+      stateStack_.back() = GpuState{};
+      updateClipScissor();
+    }
     dispatch_semaphore_wait(frameSem_, DISPATCH_TIME_FOREVER);
     drawable_ = [metal_.layer() nextDrawable];
     cmdBuf_ = [metal_.queue() commandBuffer];
@@ -374,8 +384,9 @@ public:
     if (!currentState().clip.has_value()) {
       return false;
     }
-    Rect mapped = boundsOfTransformedRect(rect, currentState().transform);
-    return !intersects(mapped, *currentState().clip);
+    // `rect` and `st.clip` are both in the current local coordinate system (same as drawRect).
+    // Do not compare transformed bounds to an axis-aligned clip in local space.
+    return !intersects(rect, *currentState().clip);
   }
 
   void setOpacity(float o) override { currentState().opacity = std::clamp(o, 0.f, 1.f); }
@@ -409,28 +420,22 @@ public:
     }
     const float op = effectiveOpacity();
     Mat3 const& M = currentState().transform;
-    Rect const mappedClip = boundsOfTransformedRect(rect, M);
+    Rect drawR = rect;
     if (currentState().clip.has_value()) {
-      Rect inter = intersectRects(mappedClip, *currentState().clip);
+      Rect const inter = intersectRects(rect, *currentState().clip);
       if (inter.width <= 0.f || inter.height <= 0.f) {
         return;
       }
+      drawR = inter;
     }
 
     float rotationRad = 0.f;
     float tx = 0.f;
     float ty = 0.f;
-    Rect mapped{};
-    if (tryDecomposeRotationTranslation(M, &rotationRad, &tx, &ty)) {
-      mapped = Rect::sharp(rect.x + tx, rect.y + ty, rect.width, rect.height);
-    } else {
-      mapped = mappedClip;
-      if (currentState().clip.has_value()) {
-        mapped = intersectRects(mapped, *currentState().clip);
-        if (mapped.width <= 0.f || mapped.height <= 0.f) {
-          return;
-        }
-      }
+    bool const decomposed = tryDecomposeRotationTranslation(M, &rotationRad, &tx, &ty);
+    Rect const mapped = boundsOfTransformedRect(drawR, M);
+    if (decomposed) {
+      rotationRad = 0.f;
     }
 
     const float s = std::min(dpiScaleX_, dpiScaleY_);
@@ -453,6 +458,18 @@ public:
     if (!ss.solidColor(&stroke)) {
       return;
     }
+    const float paintOpacity = effectiveOpacity();
+    const float pad = std::max(ss.width * 2.f, 4.f);
+    if (currentState().clip.has_value()) {
+      const float minX = std::min(a.x, b.x) - pad;
+      const float maxX = std::max(a.x, b.x) + pad;
+      const float minY = std::min(a.y, b.y) - pad;
+      const float maxY = std::max(a.y, b.y) + pad;
+      Rect const lineBoundsLocal = Rect::sharp(minX, minY, maxX - minX, maxY - minY);
+      if (!intersects(lineBoundsLocal, *currentState().clip)) {
+        return;
+      }
+    }
     Point ta = currentState().transform.apply(a);
     Point tb = currentState().transform.apply(b);
     const float dx = tb.x - ta.x;
@@ -461,16 +478,11 @@ public:
     if (len < 1e-4f) {
       return;
     }
-    const float paintOpacity = effectiveOpacity();
-    const float pad = std::max(ss.width * 2.f, 4.f);
     const float w = len + pad * 2.f;
     const float h = ss.width + pad * 2.f;
     const float cx = (ta.x + tb.x) * 0.5f;
     const float cy = (ta.y + tb.y) * 0.5f;
-    Rect lineBounds = Rect::sharp(cx - w * 0.5f, cy - h * 0.5f, w, h);
-    if (currentState().clip.has_value() && !intersects(lineBounds, *currentState().clip)) {
-      return;
-    }
+    Rect const lineBounds = Rect::sharp(cx - w * 0.5f, cy - h * 0.5f, w, h);
 
     CGSize drawableSize = metal_.layer().drawableSize;
     const float vw = static_cast<float>(drawableSize.width);
@@ -557,7 +569,7 @@ public:
     Mat3 const& M = currentState().transform;
     Rect const mappedClip = boundsOfTransformedRect(dst, M);
     if (currentState().clip.has_value()) {
-      Rect inter = intersectRects(mappedClip, *currentState().clip);
+      Rect const inter = intersectRects(dst, *currentState().clip);
       if (inter.width <= 0.f || inter.height <= 0.f) {
         return;
       }
@@ -570,12 +582,14 @@ public:
     if (tryDecomposeRotationTranslation(M, &rotationRad, &tx, &ty)) {
       mapped = Rect::sharp(dst.x + tx, dst.y + ty, dst.width, dst.height);
     } else {
-      mapped = mappedClip;
       if (currentState().clip.has_value()) {
-        mapped = intersectRects(mapped, *currentState().clip);
-        if (mapped.width <= 0.f || mapped.height <= 0.f) {
+        Rect const clipped = intersectRects(dst, *currentState().clip);
+        if (clipped.width <= 0.f || clipped.height <= 0.f) {
           return;
         }
+        mapped = boundsOfTransformedRect(clipped, M);
+      } else {
+        mapped = mappedClip;
       }
     }
 
@@ -621,7 +635,7 @@ public:
     Mat3 const& M = currentState().transform;
     Rect const mappedClip = boundsOfTransformedRect(dst, M);
     if (currentState().clip.has_value()) {
-      Rect inter = intersectRects(mappedClip, *currentState().clip);
+      Rect const inter = intersectRects(dst, *currentState().clip);
       if (inter.width <= 0.f || inter.height <= 0.f) {
         return;
       }
@@ -634,12 +648,14 @@ public:
     if (tryDecomposeRotationTranslation(M, &rotationRad, &tx, &ty)) {
       mapped = Rect::sharp(dst.x + tx, dst.y + ty, dst.width, dst.height);
     } else {
-      mapped = mappedClip;
       if (currentState().clip.has_value()) {
-        mapped = intersectRects(mapped, *currentState().clip);
-        if (mapped.width <= 0.f || mapped.height <= 0.f) {
+        Rect const clipped = intersectRects(dst, *currentState().clip);
+        if (clipped.width <= 0.f || clipped.height <= 0.f) {
           return;
         }
+        mapped = boundsOfTransformedRect(clipped, M);
+      } else {
+        mapped = mappedClip;
       }
     }
 

@@ -2,11 +2,13 @@
 
 #include <chrono>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <type_traits>
 #include <utility>
 
 #include <Flux/Core/Window.hpp>
+#include <Flux/Reactive/Observer.hpp>
 
 namespace flux {
 
@@ -39,6 +41,10 @@ public:
   /// Marks all windows for a render pass on the next `exec()` iteration and wakes the platform event wait.
   void requestRedraw();
 
+  /// Presents pending frames immediately. Use when the main loop may not iterate (e.g. live window resize runs
+  /// the run loop in `NSEventTrackingRunLoopMode`, so `waitForEvents` in `NSDefaultRunLoopMode` does not return).
+  void flushRedraw();
+
   /// Repeating timer using `std::chrono::steady_clock` in the main `exec()` loop; posts `TimerEvent` each tick.
   /// Returns an id for `cancelTimer`. `windowHandle` is optional metadata for handlers (e.g. redraw routing).
   std::uint64_t scheduleRepeatingTimer(std::chrono::nanoseconds interval, unsigned int windowHandle = 0);
@@ -51,6 +57,13 @@ public:
 
   TextSystem& textSystem();
 
+  /// Batched callback: runs at most once per `exec()` iteration after any reactive update.
+  ObserverHandle onNextFrameNeeded(std::function<void()> callback);
+  void unobserveNextFrame(ObserverHandle handle);
+
+  /// Marks that reactive state changed; wakes the event loop. Used internally by the reactive layer.
+  void markReactiveDirty();
+
   friend class Window;
 
 private:
@@ -59,6 +72,8 @@ private:
   void onWindowRegistered(Window* window);
   /// Removes `handle` from the running window list before `Window` is destroyed (synchronous; avoids dangling `Window*`).
   void unregisterWindowHandle(unsigned int handle);
+
+  void presentAllWindows();
 
   struct Impl;
   std::unique_ptr<Impl> d;

@@ -1,0 +1,141 @@
+#include <Flux.hpp>
+#include <Flux/Core/Events.hpp>
+#include <Flux/Reactive/Observer.hpp>
+#include <Flux/Graphics/Canvas.hpp>
+#include <Flux/Graphics/Font.hpp>
+#include <Flux/Graphics/Styles.hpp>
+#include <Flux/Graphics/TextSystem.hpp>
+
+#include <algorithm>
+#include <cmath>
+#include <string>
+
+using namespace flux;
+
+namespace {
+
+Color const kColdFill = Color::rgb(64, 110, 200);
+Color const kWarmFill = Color::rgb(220, 96, 140);
+
+/// Holds reactive fields (stable addresses; non-movable Signal / Computed / Animated).
+struct DemoState {
+  Signal<int> clicks{0};
+  Animated<Color> fillColor{kColdFill};
+  Animated<Point> circleCenter{Point{360.f, 260.f}};
+  Signal<Point> pointerPos{Point{0.f, 0.f}};
+
+  Computed<float> distanceToPointer{[&]() {
+    Point const c = circleCenter.get();
+    Point const p = pointerPos.get();
+    float const dx = c.x - p.x;
+    float const dy = c.y - p.y;
+    return std::sqrt(dx * dx + dy * dy);
+  }};
+};
+
+class ReactiveDemoWindow : public Window {
+  DemoState s_;
+  ObserverHandle hClicks_{};
+  ObserverHandle hFill_{};
+  ObserverHandle hCircle_{};
+  ObserverHandle hPointer_{};
+  ObserverHandle hDistance_{};
+
+public:
+  explicit ReactiveDemoWindow(WindowConfig const& c) : Window(c) {
+    auto redraw = [this]() { Window::requestRedraw(); };
+    hClicks_ = s_.clicks.observe(redraw);
+    hFill_ = s_.fillColor.observe(redraw);
+    hCircle_ = s_.circleCenter.observe(redraw);
+    hPointer_ = s_.pointerPos.observe(redraw);
+    hDistance_ = s_.distanceToPointer.observe(redraw);
+
+    Application::instance().eventQueue().on<InputEvent>([this](InputEvent const& e) {
+      if (e.handle != Window::handle()) {
+        return;
+      }
+      if (e.kind == InputEvent::Kind::PointerMove) {
+        s_.pointerPos.set(Point{e.position.x, e.position.y});
+        return;
+      }
+      if (e.kind != InputEvent::Kind::PointerDown) {
+        return;
+      }
+
+      s_.clicks.set(s_.clicks.get() + 1);
+
+      {
+        WithTransition spring{Transition::spring(300.f, 20.f, 0.55f)};
+        Color const target = (s_.clicks.get() % 2 == 0) ? kColdFill : kWarmFill;
+        s_.fillColor.set(target);
+      }
+
+      {
+        WithTransition ease{Transition::ease(0.4f)};
+        Point const p{e.position.x, e.position.y};
+        s_.circleCenter.set(p);
+      }
+    });
+  }
+
+  ~ReactiveDemoWindow() {
+    s_.clicks.unobserve(hClicks_);
+    s_.fillColor.unobserve(hFill_);
+    s_.circleCenter.unobserve(hCircle_);
+    s_.pointerPos.unobserve(hPointer_);
+    s_.distanceToPointer.unobserve(hDistance_);
+  }
+
+  void render(Canvas& c) override {
+    TextSystem& ts = Application::instance().textSystem();
+
+    Rect const vb = c.clipBounds();
+    Size const sz = Window::getSize();
+    float const w = std::max({vb.width, sz.width, 1.f});
+    float const h = std::max({vb.height, sz.height, 1.f});
+
+    Color const bg = Color::rgb(245, 246, 250);
+    c.clear(bg);
+
+    const float margin = 24.f;
+    Rect const panel =
+        Rect::sharp(margin, margin, std::max(w - margin * 2.f, 40.f), std::max(h - margin * 2.f, 40.f));
+
+    Color const cardColor = s_.fillColor.get();
+    c.drawRect(panel, CornerRadius(18.f, 18.f, 18.f, 18.f), FillStyle::solid(cardColor),
+               StrokeStyle::solid(Color::rgb(255, 255, 255), 1.5f));
+
+    Point const center = s_.circleCenter.get();
+    const float r = 36.f;
+    c.drawCircle(center, r, FillStyle::solid(Color::rgb(255, 255, 255)), StrokeStyle::solid(Color::rgb(40, 44, 55), 2.f));
+
+    Font bodyFont{.family = ".AppleSystemUIFont", .size = 15.f, .weight = 450.f};
+
+    std::string const line = std::string("Signal<int> clicks: ") + std::to_string(s_.clicks.get()) +
+                             "  |  Computed<float> dist: " +
+                             std::to_string(static_cast<int>(s_.distanceToPointer.get())) +
+                             " px  |  Animated<Color> (spring) + Animated<Point> (ease)";
+    auto bodyLayout = ts.layout(line, bodyFont, Color::rgb(32, 34, 42), panel.width - 32.f);
+    c.drawTextLayout(*bodyLayout, Point{panel.x + 16.f, panel.y + 16.f});
+
+    Font hintFont = bodyFont;
+    hintFont.size = 13.f;
+    auto hintLayout = ts.layout("Click: spring palette + ease circle to click. Move pointer: Computed distance updates.",
+                                hintFont, Color::rgb(90, 94, 108), panel.width - 32.f);
+    c.drawTextLayout(*hintLayout, Point{panel.x + 16.f, panel.y + panel.height - 52.f});
+  }
+};
+
+} // namespace
+
+int main(int argc, char* argv[]) {
+  Application app(argc, argv);
+
+  app.createWindow<ReactiveDemoWindow>({
+      .size = {720, 520},
+      .title = "Flux — Reactive & animation demo",
+      .resizable = true,
+  });
+
+  return app.exec();
+}

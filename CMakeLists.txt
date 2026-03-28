@@ -84,7 +84,23 @@ add_custom_target(flux_shaders DEPENDS ${FLUX_METALLIB_EMBED_H})
 add_library(flux STATIC
   src/Core/Application.mm
   src/Core/EventQueue.cpp
+  src/Reactive/Signal.cpp
+  src/Reactive/Computed.cpp
+  src/Reactive/Easing.cpp
+  src/Reactive/Transition.cpp
+  src/Reactive/AnimationClock.cpp
   src/Core/Window.cpp
+  src/UI/BuildContext.cpp
+  src/UI/Element.cpp
+  src/UI/EventMap.cpp
+  src/UI/LayoutEngine.cpp
+  src/UI/Layout.cpp
+  src/UI/Runtime.cpp
+  src/Scene/NodeStore.cpp
+  src/Scene/SceneGraph.cpp
+  src/Scene/SceneRenderer.cpp
+  src/Scene/HitTester.cpp
+  src/Scene/SceneGraphDump.cpp
   src/Graphics/Canvas.cpp
   src/Graphics/Metal/MetalFrameRecorder.mm
   src/Graphics/TextSystem.cpp
@@ -151,3 +167,9 @@ target_link_libraries(text_demo PRIVATE flux)
 
 add_executable(image_demo examples/image-demo/main.cpp)
 target_link_libraries(image_demo PRIVATE flux)
+
+add_executable(scene_demo examples/scene-demo/main.cpp)
+target_link_libraries(scene_demo PRIVATE flux)
+
+add_executable(reactive_demo examples/reactive-demo/main.cpp)
+target_link_libraries(reactive_demo PRIVATE flux)

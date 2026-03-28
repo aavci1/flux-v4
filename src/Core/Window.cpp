@@ -1,18 +1,37 @@
 #include <Flux/Core/Application.hpp>
 #include <Flux/Core/EventQueue.hpp>
 #include <Flux/Core/Events.hpp>
+#include <Flux/Core/Types.hpp>
 #include <Flux/Core/Window.hpp>
+#include <Flux/Detail/Runtime.hpp>
+#include <Flux/UI/Element.hpp>
 #include <Flux/Graphics/Canvas.hpp>
+#include <Flux/Scene/SceneGraph.hpp>
+#include <Flux/Scene/SceneRenderer.hpp>
 
 #include "Core/PlatformWindow.hpp"
 #include "Core/PlatformWindowCreate.hpp"
+#include <optional>
 
 namespace flux {
 
 struct Window::Impl {
   std::unique_ptr<PlatformWindow> platform_;
   std::unique_ptr<Canvas> canvas_;
+  std::optional<SceneGraph> sceneGraph_;
+  Color clearColor_{Colors::lightGray};
+  std::unique_ptr<Runtime> runtime_;
+
+  PlatformWindow* platformWindow() const { return platform_.get(); }
+  void setViewRoot(Window& window, Element&& root);
 };
+
+void Window::Impl::setViewRoot(Window& window, Element&& root) {
+  if (!runtime_) {
+    runtime_ = std::make_unique<Runtime>(window);
+  }
+  runtime_->setView(std::move(root));
+}
 
 Window::Window(const WindowConfig& config) {
   d = std::make_unique<Impl>();
@@ -57,10 +76,21 @@ Canvas& Window::canvas() {
   return *d->canvas_;
 }
 
+bool Window::hasSceneGraph() const { return d->sceneGraph_.has_value(); }
+
+SceneGraph& Window::sceneGraph() {
+  if (!d->sceneGraph_) {
+    d->sceneGraph_.emplace();
+  }
+  return *d->sceneGraph_;
+}
+
+SceneGraph const& Window::sceneGraph() const { return const_cast<Window*>(this)->sceneGraph(); }
+
 void Window::requestRedraw() { postRedraw(handle()); }
 
 PlatformWindow* Window::platformWindow() const {
-  return d->platform_.get();
+  return d->platformWindow();
 }
 
 void Window::postRedraw(unsigned int handle) {
@@ -71,6 +101,18 @@ void Window::postRedraw(unsigned int handle) {
   Application::instance().requestRedraw();
 }
 
-void Window::render(Canvas& /*canvas*/) {}
+void Window::setClearColor(Color color) { d->clearColor_ = color; }
+
+Color Window::clearColor() const { return d->clearColor_; }
+
+void Window::setViewRoot(Element&& root) {
+  d->setViewRoot(*this, std::move(root));
+}
+
+void Window::render(Canvas& canvas) {
+  if (d->sceneGraph_) {
+    SceneRenderer{}.render(*d->sceneGraph_, canvas, d->clearColor_);
+  }
+}
 
 } // namespace flux

@@ -138,6 +138,14 @@ struct Rect {
     return x < o.x + o.width && x + width > o.x && y < o.y + o.height && y + height > o.y;
   }
 
+  constexpr bool contains(Point p) const {
+    const float x0 = std::min(x, x + width);
+    const float x1 = std::max(x, x + width);
+    const float y0 = std::min(y, y + height);
+    const float y1 = std::max(y, y + height);
+    return p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1;
+  }
+
   constexpr bool operator==(const Rect& o) const = default;
 };
 
@@ -216,6 +224,40 @@ struct Mat3 {
     const float y = m[1] * p.x + m[4] * p.y + m[7];
     return {x, y};
   }
+
+  /// Full 3×3 inverse. Returns `identity()` if the matrix is singular (|det| below epsilon).
+  Mat3 inverse() const {
+    constexpr float kEps = 1e-12f;
+    const float a = m[0];
+    const float b = m[1];
+    const float c = m[2];
+    const float d = m[3];
+    const float e = m[4];
+    const float f = m[5];
+    const float g = m[6];
+    const float h = m[7];
+    const float i = m[8];
+    const float det =
+        a * (e * i - f * h) - d * (b * i - c * h) + g * (b * f - c * e);
+    if (std::abs(det) < kEps) {
+      return identity();
+    }
+    const float invDet = 1.f / det;
+    Mat3 r{};
+    r.m[0] = (e * i - f * h) * invDet;
+    r.m[1] = (c * h - b * i) * invDet;
+    r.m[2] = (b * f - c * e) * invDet;
+    r.m[3] = (f * g - d * i) * invDet;
+    r.m[4] = (a * i - c * g) * invDet;
+    r.m[5] = (c * d - a * f) * invDet;
+    r.m[6] = (d * h - e * g) * invDet;
+    r.m[7] = (b * g - a * h) * invDet;
+    r.m[8] = (a * e - b * d) * invDet;
+    return r;
+  }
+
+  /// Determinant of the upper-left 2×2 (scale/rotation/shear); zero when the affine map collapses 2D area.
+  float affineDeterminant() const { return m[0] * m[4] - m[1] * m[3]; }
 };
 
 enum class MouseButton : std::uint8_t { None, Left, Right, Middle, Other };

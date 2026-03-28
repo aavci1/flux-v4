@@ -2,6 +2,7 @@
 
 #include <Flux/Core/Types.hpp>
 #include <Flux/Graphics/AttributedString.hpp>
+#include <Flux/Graphics/Font.hpp>
 #include <Flux/Graphics/TextLayout.hpp>
 #include <Flux/Graphics/TextLayoutOptions.hpp>
 
@@ -24,8 +25,8 @@ public:
   virtual std::shared_ptr<TextLayout> layout(AttributedString const& text, float maxWidth = 0.f,
                                              TextLayoutOptions const& options = {}) = 0;
 
-  virtual std::shared_ptr<TextLayout> layout(std::string_view utf8, TextAttribute const& attr, float maxWidth = 0.f,
-                                             TextLayoutOptions const& options = {}) = 0;
+  virtual std::shared_ptr<TextLayout> layout(std::string_view utf8, Font const& font, Color const& color,
+                                             float maxWidth = 0.f, TextLayoutOptions const& options = {}) = 0;
 
   /// Box-constrained: PlacedRun origins are pre-offset for alignment within the box.
   /// Drawing: `canvas.drawTextLayout(*result, {box.x, box.y})` — no further arithmetic.
@@ -34,7 +35,7 @@ public:
   std::shared_ptr<TextLayout> layout(AttributedString const& text, Rect const& box,
                                      TextLayoutOptions const& options = {});
 
-  std::shared_ptr<TextLayout> layout(std::string_view utf8, TextAttribute const& attr, Rect const& box,
+  std::shared_ptr<TextLayout> layout(std::string_view utf8, Font const& font, Color const& color, Rect const& box,
                                      TextLayoutOptions const& options = {});
 
   // -----------------------------------------------------------------
@@ -44,7 +45,7 @@ public:
   virtual Size measure(AttributedString const& text, float maxWidth = 0.f,
                        TextLayoutOptions const& options = {}) = 0;
 
-  virtual Size measure(std::string_view utf8, TextAttribute const& attr, float maxWidth = 0.f,
+  virtual Size measure(std::string_view utf8, Font const& font, Color const& color, float maxWidth = 0.f,
                        TextLayoutOptions const& options = {}) = 0;
 
   // -----------------------------------------------------------------

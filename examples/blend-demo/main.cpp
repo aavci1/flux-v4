@@ -1,6 +1,7 @@
 #include <Flux.hpp>
 #include <Flux/Core/Application.hpp>
 #include <Flux/Graphics/Canvas.hpp>
+#include <Flux/Graphics/Font.hpp>
 #include <Flux/Graphics/Styles.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 
@@ -66,13 +67,9 @@ void drawCell(Canvas& c, Rect cell, BlendMode mode, const char* title,
   c.drawRect(cell, CornerRadius(4.f, 4.f, 4.f, 4.f), FillStyle::none(),
                StrokeStyle::solid(Color::rgb(90, 90, 100), 1.2f));
 
-  TextAttribute labelAttr{};
-  labelAttr.fontFamily = ".AppleSystemUIFont";
-  labelAttr.fontSize = 16.f;
-  labelAttr.fontWeight = 500.f;
-  labelAttr.color = Color::rgb(38, 38, 45);
+  Font labelFont{.family = ".AppleSystemUIFont", .size = 16.f, .weight = 500.f};
 
-  auto labelLayout = Application::instance().textSystem().layout(title, labelAttr, 0.f);
+  auto labelLayout = Application::instance().textSystem().layout(title, labelFont, Color::rgb(38, 38, 45), 0.f);
   Size const m = labelLayout->measuredSize;
   float const y = cell.y + cell.height - 16.f - m.height;
   float const x = cell.x + (cell.width - m.width) * 0.5f;

@@ -11,13 +11,12 @@ using namespace flux;
 
 namespace {
 
-TextAttribute baseUi() {
-  TextAttribute a{};
-  a.fontFamily = ".AppleSystemUIFont";
-  a.fontSize = 16.f;
-  a.fontWeight = 450.f;
-  a.color = Color::rgb(28, 28, 34);
-  return a;
+Font baseFont() {
+  Font f{};
+  f.family = ".AppleSystemUIFont";
+  f.size = 16.f;
+  f.weight = 450.f;
+  return f;
 }
 
 class TextDemoWindow : public Window {
@@ -41,45 +40,39 @@ public:
 
     // --- Title ---
     {
-      TextAttribute t = baseUi();
-      t.fontSize = 34.f;
-      t.fontWeight = 600.f;
-      t.color = Color::rgb(18, 18, 24);
-      auto layout = ts.layout("Text in Flux", t, 0.f);
+      Font t = baseFont();
+      t.size = 34.f;
+      t.weight = 600.f;
+      auto layout = ts.layout("Text in Flux", t, Color::rgb(18, 18, 24), 0.f);
       c.drawTextLayout(*layout, Point{margin, y});
       y += layout->measuredSize.height + 8.f;
     }
 
     // --- Subtitle ---
     {
-      TextAttribute t = baseUi();
-      t.fontSize = 14.f;
-      t.fontWeight = 400.f;
-      t.color = Color::rgb(110, 110, 125);
-      auto layout = ts.layout("layout · measure · wrap · attributed runs", t, 0.f);
+      Font t = baseFont();
+      t.size = 14.f;
+      t.weight = 400.f;
+      auto layout = ts.layout("layout · measure · wrap · attributed runs", t, Color::rgb(110, 110, 125), 0.f);
       c.drawTextLayout(*layout, Point{margin, y});
       y += layout->measuredSize.height + 28.f;
     }
 
     // --- Section: wrapped paragraph ---
     {
-      TextAttribute head = baseUi();
-      head.fontSize = 13.f;
-      head.fontWeight = 600.f;
-      head.color = Color::rgb(75, 75, 88);
-      auto headLayout = ts.layout("Line wrapping", head, 0.f);
+      Font head = baseFont();
+      head.size = 13.f;
+      head.weight = 600.f;
+      auto headLayout = ts.layout("Line wrapping", head, Color::rgb(75, 75, 88), 0.f);
       c.drawTextLayout(*headLayout, Point{margin, y});
       y += headLayout->measuredSize.height + 10.f;
 
-
       char const* para = "TextLayout uses the same Core Text framesetter constraints as measure, so box sizing and rendered glyphs stay in sync when maxWidth is set. Resize the window to see reflow.";
-      TextAttribute body = baseUi();
-      body.fontSize = 16.f;
-      body.fontWeight = 420.f;
-      body.color = Color::rgb(38, 38, 48);
+      Font body = baseFont();
+      body.size = 16.f;
+      body.weight = 420.f;
 
-
-      auto bodyLayout = ts.layout(para, body, Rect{0.0f, 0, contentW - 20.0f, 200.0f}, {
+      auto bodyLayout = ts.layout(para, body, Color::rgb(38, 38, 48), Rect{0.0f, 0, contentW - 20.0f, 200.0f}, {
         .horizontalAlignment = HorizontalAlignment::Center,
         .verticalAlignment = VerticalAlignment::Top
       });
@@ -95,37 +88,33 @@ public:
 
     // --- Section: rich text (AttributedString) ---
     {
-      TextAttribute head = baseUi();
-      head.fontSize = 13.f;
-      head.fontWeight = 600.f;
-      head.color = Color::rgb(75, 75, 88);
-      auto headLayout = ts.layout("Attributed string", head, 0.f);
+      Font head = baseFont();
+      head.size = 13.f;
+      head.weight = 600.f;
+      auto headLayout = ts.layout("Attributed string", head, Color::rgb(75, 75, 88), 0.f);
       c.drawTextLayout(*headLayout, Point{margin, y});
       y += headLayout->measuredSize.height + 10.f;
 
       // "Swift UIKit AppKit" — three runs, contiguous UTF-8 ranges.
       AttributedString rich{};
       rich.utf8 = "Swift UIKit AppKit";
-      TextAttribute a0 = baseUi();
-      a0.fontSize = 22.f;
-      a0.fontWeight = 520.f;
-      a0.color = Colors::blue;
+      Font a0 = baseFont();
+      a0.size = 22.f;
+      a0.weight = 520.f;
 
-      TextAttribute a1 = baseUi();
-      a1.fontSize = 22.f;
-      a1.fontWeight = 700.f;
-      a1.color = Color::rgb(180, 60, 50);
+      Font a1 = baseFont();
+      a1.size = 22.f;
+      a1.weight = 700.f;
 
-      TextAttribute a2 = baseUi();
-      a2.fontSize = 22.f;
-      a2.fontWeight = 520.f;
-      a2.color = Color::rgb(40, 140, 75);
+      Font a2 = baseFont();
+      a2.size = 22.f;
+      a2.weight = 520.f;
 
       // UTF-8 byte ranges: "Swift "(6) + "UIKit "(6) + "AppKit"(6) = 18 bytes.
       rich.runs = {
-          {0, 6, a0},
-          {6, 12, a1},
-          {12, 18, a2},
+          {0, 6, a0, Colors::blue},
+          {6, 12, a1, Color::rgb(180, 60, 50)},
+          {12, 18, a2, Color::rgb(40, 140, 75)},
       };
 
       auto richLayout = ts.layout(rich, 0.f);
@@ -135,13 +124,12 @@ public:
 
     // --- Footer: sizes & baselines (informational) ---
     if (y < h - margin) {
-      TextAttribute foot = baseUi();
-      foot.fontSize = 12.f;
-      foot.fontWeight = 400.f;
-      foot.color = Color::rgb(140, 140, 155);
+      Font foot = baseFont();
+      foot.size = 12.f;
+      foot.weight = 400.f;
       std::string const line =
           std::string("firstBaseline → lastBaseline: layout metrics for alignment APIs.");
-      auto footLayout = ts.layout(line, foot, wrapW);
+      auto footLayout = ts.layout(line, foot, Color::rgb(140, 140, 155), wrapW);
       float const fy = std::min(y, h - margin - footLayout->measuredSize.height);
       c.drawTextLayout(*footLayout, Point{margin, fy});
     }
