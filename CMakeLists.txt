@@ -85,6 +85,11 @@ add_library(flux STATIC
   src/Core/Application.mm
   src/Core/EventQueue.cpp
   src/Core/Window.cpp
+  src/Scene/NodeStore.cpp
+  src/Scene/SceneGraph.cpp
+  src/Scene/SceneRenderer.cpp
+  src/Scene/HitTester.cpp
+  src/Scene/SceneGraphDump.cpp
   src/Graphics/Canvas.cpp
   src/Graphics/Metal/MetalFrameRecorder.mm
   src/Graphics/TextSystem.cpp
@@ -151,3 +156,6 @@ target_link_libraries(text_demo PRIVATE flux)
 
 add_executable(image_demo examples/image-demo/main.cpp)
 target_link_libraries(image_demo PRIVATE flux)
+
+add_executable(scene_demo examples/scene-demo/main.cpp)
+target_link_libraries(scene_demo PRIVATE flux)

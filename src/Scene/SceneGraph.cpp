@@ -1,0 +1,209 @@
+#include <Flux/Scene/SceneGraph.hpp>
+
+#include <algorithm>
+#include <cstddef>
+#include <optional>
+#include <utility>
+#include <variant>
+
+namespace flux {
+
+namespace {
+
+/// `NodeStore::insert` may reallocate `slots_`, invalidating any raw `SceneNode*` from `get(parent)`
+/// taken before the insert. Always append children after insert, re-resolving `parent`.
+bool appendChild(NodeStore& store, NodeId parent, NodeId child) {
+  SceneNode* p = store.get(parent);
+  if (!p) {
+    return false;
+  }
+  auto* layer = std::get_if<LayerNode>(p);
+  if (!layer) {
+    return false;
+  }
+  layer->children.push_back(child);
+  return true;
+}
+
+} // namespace
+
+SceneGraph::SceneGraph() {
+  LayerNode root{};
+  root_ = store_.insert(SceneNode{std::move(root)});
+}
+
+NodeId SceneGraph::addLayer(LayerNode node) {
+  NodeId const id = store_.insert(SceneNode{std::move(node)});
+  if (!appendChild(store_, root_, id)) {
+    return kInvalidNodeId;
+  }
+  return id;
+}
+
+NodeId SceneGraph::addRect(NodeId parent, RectNode node) {
+  SceneNode* p = store_.get(parent);
+  if (!p || !std::get_if<LayerNode>(p)) {
+    return kInvalidNodeId;
+  }
+  NodeId const id = store_.insert(SceneNode{std::move(node)});
+  if (!appendChild(store_, parent, id)) {
+    return kInvalidNodeId;
+  }
+  return id;
+}
+
+NodeId SceneGraph::addText(NodeId parent, TextNode node) {
+  SceneNode* p = store_.get(parent);
+  if (!p || !std::get_if<LayerNode>(p)) {
+    return kInvalidNodeId;
+  }
+  NodeId const id = store_.insert(SceneNode{std::move(node)});
+  if (!appendChild(store_, parent, id)) {
+    return kInvalidNodeId;
+  }
+  return id;
+}
+
+NodeId SceneGraph::addImage(NodeId parent, ImageNode node) {
+  SceneNode* p = store_.get(parent);
+  if (!p || !std::get_if<LayerNode>(p)) {
+    return kInvalidNodeId;
+  }
+  NodeId const id = store_.insert(SceneNode{std::move(node)});
+  if (!appendChild(store_, parent, id)) {
+    return kInvalidNodeId;
+  }
+  return id;
+}
+
+NodeId SceneGraph::addPath(NodeId parent, PathNode node) {
+  SceneNode* p = store_.get(parent);
+  if (!p || !std::get_if<LayerNode>(p)) {
+    return kInvalidNodeId;
+  }
+  NodeId const id = store_.insert(SceneNode{std::move(node)});
+  if (!appendChild(store_, parent, id)) {
+    return kInvalidNodeId;
+  }
+  return id;
+}
+
+NodeId SceneGraph::addLine(NodeId parent, LineNode node) {
+  SceneNode* p = store_.get(parent);
+  if (!p || !std::get_if<LayerNode>(p)) {
+    return kInvalidNodeId;
+  }
+  NodeId const id = store_.insert(SceneNode{std::move(node)});
+  if (!appendChild(store_, parent, id)) {
+    return kInvalidNodeId;
+  }
+  return id;
+}
+
+std::optional<NodeId> SceneGraph::findParent(NodeId subtree, NodeId target) const {
+  SceneNode const* sn = get(subtree);
+  auto const* layer = std::get_if<LayerNode>(sn);
+  if (!layer) {
+    return std::nullopt;
+  }
+  for (NodeId c : layer->children) {
+    if (c == target) {
+      return subtree;
+    }
+  }
+  for (NodeId c : layer->children) {
+    if (std::optional<NodeId> p = findParent(c, target)) {
+      return p;
+    }
+  }
+  return std::nullopt;
+}
+
+void SceneGraph::eraseFromParentChildren(NodeId parent, NodeId child) {
+  auto* layer = node<LayerNode>(parent);
+  if (!layer) {
+    return;
+  }
+  std::erase(layer->children, child);
+}
+
+bool SceneGraph::isDescendant(NodeId ancestor, NodeId possibleDescendant) const {
+  if (possibleDescendant == ancestor) {
+    return true;
+  }
+  SceneNode const* sn = get(ancestor);
+  auto const* layer = std::get_if<LayerNode>(sn);
+  if (!layer) {
+    return false;
+  }
+  for (NodeId c : layer->children) {
+    if (isDescendant(c, possibleDescendant)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void SceneGraph::removeRecursive(NodeId id) {
+  SceneNode* sn = store_.get(id);
+  if (!sn) {
+    return;
+  }
+  if (auto* layer = std::get_if<LayerNode>(sn)) {
+    std::vector<NodeId> const ch = layer->children;
+    for (NodeId c : ch) {
+      removeRecursive(c);
+    }
+    layer->children.clear();
+  }
+  if (id != root_) {
+    if (std::optional<NodeId> p = findParent(root_, id)) {
+      eraseFromParentChildren(*p, id);
+    }
+  }
+  store_.remove(id);
+}
+
+void SceneGraph::remove(NodeId id) {
+  if (id == root_) {
+    return;
+  }
+  removeRecursive(id);
+}
+
+void SceneGraph::reparent(NodeId id, NodeId newParent, std::size_t index) {
+  if (id == root_) {
+    return;
+  }
+  SceneNode* np = store_.get(newParent);
+  if (!np) {
+    return;
+  }
+  auto* newLayer = std::get_if<LayerNode>(np);
+  if (!newLayer) {
+    return;
+  }
+  if (newParent == id || isDescendant(id, newParent)) {
+    return;
+  }
+  std::optional<NodeId> oldParent = findParent(root_, id);
+  if (!oldParent) {
+    return;
+  }
+  eraseFromParentChildren(*oldParent, id);
+  if (index == npos || index > newLayer->children.size()) {
+    newLayer->children.push_back(id);
+  } else {
+    newLayer->children.insert(newLayer->children.begin() + static_cast<std::ptrdiff_t>(index), id);
+  }
+}
+
+void SceneGraph::reorder(NodeId parent, std::vector<NodeId> const& orderedChildren) {
+  auto* layer = node<LayerNode>(parent);
+  if (!layer) {
+    return;
+  }
+  layer->children = orderedChildren;
+}
+
+} // namespace flux

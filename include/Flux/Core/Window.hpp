@@ -10,6 +10,7 @@ namespace flux {
 class Application;
 class Canvas;
 class PlatformWindow;
+class SceneGraph;
 
 struct WindowConfig {
   Size size = {1280, 720};
@@ -34,6 +35,13 @@ public:
 
   /// Lazily creates the backing canvas on first use.
   Canvas& canvas();
+
+  /// True after the scene graph has been created (first `sceneGraph()` call).
+  bool hasSceneGraph() const;
+
+  /// Lazily creates the scene graph on first access. Does not create the canvas.
+  SceneGraph& sceneGraph();
+  SceneGraph const& sceneGraph() const;
 
   /// Request a frame; `Application::exec()` renders all windows when the event pump runs.
   void requestRedraw();

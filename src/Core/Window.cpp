@@ -3,15 +3,20 @@
 #include <Flux/Core/Events.hpp>
 #include <Flux/Core/Window.hpp>
 #include <Flux/Graphics/Canvas.hpp>
+#include <Flux/Scene/SceneGraph.hpp>
+#include <Flux/Scene/SceneRenderer.hpp>
 
 #include "Core/PlatformWindow.hpp"
 #include "Core/PlatformWindowCreate.hpp"
+
+#include <optional>
 
 namespace flux {
 
 struct Window::Impl {
   std::unique_ptr<PlatformWindow> platform_;
   std::unique_ptr<Canvas> canvas_;
+  std::optional<SceneGraph> sceneGraph_;
 };
 
 Window::Window(const WindowConfig& config) {
@@ -57,6 +62,17 @@ Canvas& Window::canvas() {
   return *d->canvas_;
 }
 
+bool Window::hasSceneGraph() const { return d->sceneGraph_.has_value(); }
+
+SceneGraph& Window::sceneGraph() {
+  if (!d->sceneGraph_) {
+    d->sceneGraph_.emplace();
+  }
+  return *d->sceneGraph_;
+}
+
+SceneGraph const& Window::sceneGraph() const { return const_cast<Window*>(this)->sceneGraph(); }
+
 void Window::requestRedraw() { postRedraw(handle()); }
 
 PlatformWindow* Window::platformWindow() const {
@@ -71,6 +87,10 @@ void Window::postRedraw(unsigned int handle) {
   Application::instance().requestRedraw();
 }
 
-void Window::render(Canvas& /*canvas*/) {}
+void Window::render(Canvas& canvas) {
+  if (d->sceneGraph_) {
+    SceneRenderer{}.render(*d->sceneGraph_, canvas);
+  }
+}
 
 } // namespace flux
