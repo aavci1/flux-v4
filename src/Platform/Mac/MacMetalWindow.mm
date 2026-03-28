@@ -295,9 +295,10 @@ void postTextInput(FluxMetalView* view, std::string text) {
   }
   flux::Application::instance().eventQueue().post(flux::WindowEvent{flux::WindowEvent::Kind::Resize, fw->handle(),
                                                        platform->currentSize(), 1.0f});
-  // Live resize runs in a tracking run loop mode where GCD timers / run-loop observers may not fire
-  // until the drag ends; flush immediately so Resize → paint runs during the drag.
+  // Live resize runs in NSEventTrackingRunLoopMode; our main loop waits in NSDefaultRunLoopMode, so it does not
+  // run the redraw pass until tracking ends. Dispatch + flush presents immediately during the drag.
   flux::Application::instance().eventQueue().dispatch();
+  flux::Application::instance().flushRedraw();
 }
 
 - (void)windowDidBecomeKey:(NSNotification*)notification {

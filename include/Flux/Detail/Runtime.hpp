@@ -30,6 +30,7 @@ private:
   void rebuild();
   void subscribeToRebuild();
   void subscribeInput();
+  void subscribeResize();
 
   Window& window_;
   std::optional<Element> root_;

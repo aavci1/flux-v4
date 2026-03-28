@@ -101,6 +101,9 @@ Application::Application(int /*argc*/, char** /*argv*/) {
     if (it != d->windows_.end()) {
       d->byHandle_.erase(ev.handle);
       d->windows_.erase(it);
+      if (d->windows_.empty()) {
+        quit();
+      }
     }
   });
 
@@ -168,6 +171,26 @@ void Application::requestRedraw() {
   }
 }
 
+void Application::presentAllWindows() {
+  for (auto& w : d->windows_) {
+    if (!w) {
+      continue;
+    }
+    Canvas& canvas = w->canvas();
+    canvas.beginFrame();
+    w->render(canvas);
+    canvas.present();
+  }
+}
+
+void Application::flushRedraw() {
+  if (!d->redraw_) {
+    return;
+  }
+  d->redraw_ = false;
+  presentAllWindows();
+}
+
 std::uint64_t Application::scheduleRepeatingTimer(std::chrono::nanoseconds interval, unsigned int windowHandle) {
   std::uint64_t const id = d->nextTimerId_++;
   Impl::TimerEntry t;
@@ -220,15 +243,7 @@ int Application::exec() {
 
     if (d->redraw_) {
       d->redraw_ = false;
-      for (auto& w : d->windows_) {
-        if (!w) {
-          continue;
-        }
-        Canvas& canvas = w->canvas();
-        canvas.beginFrame();
-        w->render(canvas);
-        canvas.present();
-      }
+      presentAllWindows();
     }
 
     int timeoutMs = d->nextTimerTimeoutMs();

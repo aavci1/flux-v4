@@ -19,6 +19,7 @@ namespace flux {
 Runtime::Runtime(Window& window) : window_(window) {
   subscribeToRebuild();
   subscribeInput();
+  subscribeResize();
 }
 
 Runtime::~Runtime() {
@@ -61,6 +62,16 @@ void Runtime::subscribeInput() {
       return;
     }
     handleInput(e);
+  });
+}
+
+void Runtime::subscribeResize() {
+  unsigned int const hid = window_.handle();
+  Application::instance().eventQueue().on<WindowEvent>([this, hid](WindowEvent const& ev) {
+    if (ev.handle != hid || ev.kind != WindowEvent::Kind::Resize) {
+      return;
+    }
+    rebuild();
   });
 }
 
