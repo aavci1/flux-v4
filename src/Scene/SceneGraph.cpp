@@ -32,9 +32,15 @@ SceneGraph::SceneGraph() {
   root_ = store_.insert(SceneNode{std::move(root)});
 }
 
-NodeId SceneGraph::addLayer(LayerNode node) {
+NodeId SceneGraph::addLayer(LayerNode node) { return addLayer(root_, std::move(node)); }
+
+NodeId SceneGraph::addLayer(NodeId parent, LayerNode node) {
+  SceneNode* p = store_.get(parent);
+  if (!p || !std::get_if<LayerNode>(p)) {
+    return kInvalidNodeId;
+  }
   NodeId const id = store_.insert(SceneNode{std::move(node)});
-  if (!appendChild(store_, root_, id)) {
+  if (!appendChild(store_, parent, id)) {
     return kInvalidNodeId;
   }
   return id;
@@ -100,6 +106,8 @@ NodeId SceneGraph::addLine(NodeId parent, LineNode node) {
   return id;
 }
 
+// DFS over the tree; O(subtree size). Mutations call this often — if rebuilds become hot, cache a
+// parent pointer per slot (or reverse map) so remove/reparent stay O(1) for parent lookup.
 std::optional<NodeId> SceneGraph::findParent(NodeId subtree, NodeId target) const {
   SceneNode const* sn = get(subtree);
   auto const* layer = std::get_if<LayerNode>(sn);
@@ -150,6 +158,8 @@ void SceneGraph::removeRecursive(NodeId id) {
     return;
   }
   if (auto* layer = std::get_if<LayerNode>(sn)) {
+    // Copy: each recursive step mutates this layer's `children` via eraseFromParentChildren, so we
+    // must not iterate the live vector.
     std::vector<NodeId> const ch = layer->children;
     for (NodeId c : ch) {
       removeRecursive(c);
@@ -190,6 +200,9 @@ void SceneGraph::reparent(NodeId id, NodeId newParent, std::size_t index) {
   if (!oldParent) {
     return;
   }
+  // `newLayer` points at `slots_[newParent.index]`; `eraseFromParentChildren` only mutates a
+  // *different* layer's `children` vector (or the same layer's list when oldParent == newParent).
+  // It does not reallocate `slots_`, so this pointer stays valid — no need to re-resolve after erase.
   eraseFromParentChildren(*oldParent, id);
   if (index == npos || index > newLayer->children.size()) {
     newLayer->children.push_back(id);
@@ -201,6 +214,13 @@ void SceneGraph::reparent(NodeId id, NodeId newParent, std::size_t index) {
 void SceneGraph::reorder(NodeId parent, std::vector<NodeId> const& orderedChildren) {
   auto* layer = node<LayerNode>(parent);
   if (!layer) {
+    return;
+  }
+  auto const& cur = layer->children;
+  if (orderedChildren.size() != cur.size()) {
+    return;
+  }
+  if (!std::is_permutation(orderedChildren.begin(), orderedChildren.end(), cur.begin())) {
     return;
   }
   layer->children = orderedChildren;

@@ -18,7 +18,9 @@ public:
 
   explicit SceneGraph();
 
+  /// Adds a layer under the scene root (same as `addLayer(root(), node)`).
   NodeId addLayer(LayerNode node);
+  NodeId addLayer(NodeId parent, LayerNode node);
   NodeId addRect(NodeId parent, RectNode node);
   NodeId addText(NodeId parent, TextNode node);
   NodeId addImage(NodeId parent, ImageNode node);
@@ -27,6 +29,7 @@ public:
 
   void remove(NodeId id);
   void reparent(NodeId id, NodeId newParent, std::size_t index = npos);
+  /// No-op unless `orderedChildren` is the same multiset (same size, same members) as the current list.
   void reorder(NodeId parent, std::vector<NodeId> const& orderedChildren);
 
   template <typename T>

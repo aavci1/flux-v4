@@ -50,7 +50,13 @@ public:
   static void postRedraw(unsigned int handle);
 
   /// Drawing only; `Application` wraps each call with `beginFrame` and `present` when handling redraw.
+  /// Default implementation clears with `clearColor()` then draws the scene graph (if any).
   virtual void render(Canvas& canvas);
+
+  /// Color passed to `SceneRenderer::render` for the initial canvas clear. Default is transparent;
+  /// use an opaque color if the scene has no full-window background rect.
+  void setClearColor(Color color);
+  Color clearColor() const;
 
 protected:
   friend class Application;

@@ -1,6 +1,7 @@
 #include <Flux/Core/Application.hpp>
 #include <Flux/Core/EventQueue.hpp>
 #include <Flux/Core/Events.hpp>
+#include <Flux/Core/Types.hpp>
 #include <Flux/Core/Window.hpp>
 #include <Flux/Graphics/Canvas.hpp>
 #include <Flux/Scene/SceneGraph.hpp>
@@ -17,6 +18,7 @@ struct Window::Impl {
   std::unique_ptr<PlatformWindow> platform_;
   std::unique_ptr<Canvas> canvas_;
   std::optional<SceneGraph> sceneGraph_;
+  Color clearColor_{Colors::transparent};
 };
 
 Window::Window(const WindowConfig& config) {
@@ -87,9 +89,13 @@ void Window::postRedraw(unsigned int handle) {
   Application::instance().requestRedraw();
 }
 
+void Window::setClearColor(Color color) { d->clearColor_ = color; }
+
+Color Window::clearColor() const { return d->clearColor_; }
+
 void Window::render(Canvas& canvas) {
   if (d->sceneGraph_) {
-    SceneRenderer{}.render(*d->sceneGraph_, canvas);
+    SceneRenderer{}.render(*d->sceneGraph_, canvas, d->clearColor_);
   }
 }
 
