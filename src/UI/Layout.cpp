@@ -124,8 +124,12 @@ void Element::Model<VStack>::build(BuildContext& ctx) const {
     if (spacer[i]) {
       sz.height = sz.height + perSpacer;
     }
-    float const x = hAlignOffset(sz.width, innerW, value.hAlign) + value.padding;
-    le.setChildFrame(Rect{x, y, sz.width, sz.height});
+    // Stretch each row to the column width so children (e.g. HStack + Spacer) receive the full proposed width.
+    // Using only sz.width leaves rows at intrinsic width; a narrow header under a wide wrapped body row would
+    // not give flex children (spacers) any extra space.
+    float const rowW = std::max(sz.width, innerW);
+    float const x = hAlignOffset(rowW, innerW, value.hAlign) + value.padding;
+    le.setChildFrame(Rect{x, y, rowW, sz.height});
     ctx.pushConstraints(innerForBuild);
     child.build(ctx);
     ctx.popConstraints();
@@ -156,7 +160,11 @@ Size Element::Model<VStack>::measure(LayoutConstraints const& constraints, TextS
     maxW = std::max(maxW, s.width);
     sumH += s.height;
   }
-  return {maxW + 2.f * value.padding, sumH};
+  float w = maxW + 2.f * value.padding;
+  if (std::isfinite(assignedW) && assignedW > 0.f) {
+    w = std::max(w, assignedW);
+  }
+  return {w, sumH};
 }
 
 void Element::Model<HStack>::build(BuildContext& ctx) const {
@@ -299,9 +307,14 @@ void Element::Model<ZStack>::build(BuildContext& ctx) const {
 
   for (std::size_t i = 0; i < value.children.size(); ++i) {
     Size const sz = sizes[i];
-    float const x = hAlignOffset(sz.width, innerW, value.hAlign);
-    float const y = vAlignOffset(sz.height, innerH, value.vAlign);
-    le.setChildFrame(Rect{x, y, sz.width, sz.height});
+    // All stack children share the same layout box (max of measured sizes). Using each child's
+    // intrinsic size alone leaves a small VStack behind a full-window Rect with a narrow frame,
+    // so flex layouts (HStack + Spacer) never receive the full proposed width.
+    float const childW = std::max(sz.width, innerW);
+    float const childH = std::max(sz.height, innerH);
+    float const x = hAlignOffset(childW, innerW, value.hAlign);
+    float const y = vAlignOffset(childH, innerH, value.vAlign);
+    le.setChildFrame(Rect{x, y, childW, childH});
     ctx.pushConstraints(innerForBuild);
     value.children[i].build(ctx);
     ctx.popConstraints();

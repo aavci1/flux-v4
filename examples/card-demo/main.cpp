@@ -62,11 +62,11 @@ struct Card {
         bool const open = state->expanded.get();
         auto chevron = Text{
             .text  = open ? "⌄" : "›",
-            .font  = {.size = 18.f, .weight = 600.f},
+            .font  = {.size = 24.f, .weight = 600.f},
             .color = pal::sublabel,
             .horizontalAlignment = HorizontalAlignment::Center,
             .verticalAlignment   = VerticalAlignment::Center,
-            .frame = {0, 0, 20.f, 24.f},
+            .frame = {0, 0, 24.f, 24.f},
         };
 
         // Header row: dot + title + spacer + chevron
