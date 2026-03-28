@@ -89,7 +89,9 @@ struct Card {
         // Expanded body text — only contributes height when opacity > 0
         // We use a frame with height proportional to opacity so the card
         // animates open. At opacity=0 height=0, at opacity=1 height=natural.
-        float const expandedH = 56.f; // approximate body text height
+        // Fixed row height for the expand animation — not measured layout height; long wrapped
+        // lines may clip on narrow windows unless this is revisited.
+        float const expandedH = 56.f;
         float const bodyH     = op * expandedH;
 
         std::vector<Element> rows;
@@ -119,6 +121,7 @@ struct Card {
                     .stroke = StrokeStyle::solid(pal::border, 1.f),
                     .onTap  = [st] {
                         bool const next = !st->expanded.get();
+                        // Signal::set ignores transitions; schedule rebuild before animating opacity.
                         st->expanded.set(next);
                         WithTransition t{Transition::spring(280.f, 22.f, 0.5f)};
                         st->bodyOpacity.set(next ? 1.f : 0.f);

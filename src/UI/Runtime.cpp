@@ -96,7 +96,9 @@ void Runtime::handleInput(InputEvent const& e) {
     return;
   }
   Point const p{e.position.x, e.position.y};
-  auto hit = HitTester{}.hitTest(window_.sceneGraph(), p);
+  auto hit = HitTester{}.hitTest(window_.sceneGraph(), p, [this](NodeId id) {
+    return eventMap_.find(id) != nullptr;
+  });
   if (!hit) {
     return;
   }

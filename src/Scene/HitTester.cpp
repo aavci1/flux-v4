@@ -4,6 +4,7 @@
 #include <Flux/Scene/SceneGraph.hpp>
 
 #include <cmath>
+#include <functional>
 #include <variant>
 
 namespace flux {
@@ -12,14 +13,27 @@ namespace {
 
 constexpr float kDetEps = 1e-12f;
 
+bool acceptNodeOrAll(std::function<bool(NodeId)> const* acceptTarget, NodeId id) {
+  if (!acceptTarget) {
+    return true;
+  }
+  return (*acceptTarget)(id);
+}
+
 } // namespace
 
 std::optional<HitResult> HitTester::hitTest(SceneGraph const& graph, Point windowPoint) const {
-  return hitTestNode(graph.root(), graph, windowPoint, Mat3::identity());
+  return hitTestNode(graph.root(), graph, windowPoint, Mat3::identity(), nullptr);
+}
+
+std::optional<HitResult> HitTester::hitTest(SceneGraph const& graph, Point windowPoint,
+                                         std::function<bool(NodeId)> const& acceptTarget) const {
+  return hitTestNode(graph.root(), graph, windowPoint, Mat3::identity(), &acceptTarget);
 }
 
 std::optional<HitResult> HitTester::hitTestNode(NodeId id, SceneGraph const& graph, Point point,
-                                               Mat3 const& parentTransform) const {
+                                               Mat3 const& parentTransform,
+                                               std::function<bool(NodeId)> const* acceptTarget) const {
   SceneNode const* sn = graph.get(id);
   if (!sn) {
     return std::nullopt;
@@ -36,7 +50,7 @@ std::optional<HitResult> HitTester::hitTestNode(NodeId id, SceneGraph const& gra
       }
     }
     for (auto it = layer->children.rbegin(); it != layer->children.rend(); ++it) {
-      if (auto r = hitTestNode(*it, graph, point, localTransform)) {
+      if (auto r = hitTestNode(*it, graph, point, localTransform, acceptTarget)) {
         return r;
       }
     }
@@ -48,6 +62,9 @@ std::optional<HitResult> HitTester::hitTestNode(NodeId id, SceneGraph const& gra
   Point const localPoint = parentTransform.inverse().apply(point);
   if (auto const* rect = std::get_if<RectNode>(sn)) {
     if (rect->bounds.contains(localPoint)) {
+      if (!acceptNodeOrAll(acceptTarget, rect->id)) {
+        return std::nullopt;
+      }
       return HitResult{rect->id, localPoint};
     }
     return std::nullopt;
@@ -60,12 +77,18 @@ std::optional<HitResult> HitTester::hitTestNode(NodeId id, SceneGraph const& gra
     Rect const textBounds =
         Rect::sharp(text->origin.x, text->origin.y, ms.width, ms.height);
     if (textBounds.contains(localPoint)) {
+      if (!acceptNodeOrAll(acceptTarget, text->id)) {
+        return std::nullopt;
+      }
       return HitResult{text->id, localPoint};
     }
     return std::nullopt;
   }
   if (auto const* img = std::get_if<ImageNode>(sn)) {
     if (img->bounds.contains(localPoint)) {
+      if (!acceptNodeOrAll(acceptTarget, img->id)) {
+        return std::nullopt;
+      }
       return HitResult{img->id, localPoint};
     }
     return std::nullopt;
