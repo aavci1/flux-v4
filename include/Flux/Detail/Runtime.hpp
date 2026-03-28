@@ -27,7 +27,9 @@ public:
   void handleInput(InputEvent const& e);
 
 private:
-  void rebuild();
+  /// `sizeOverride` — size from `WindowEvent::size` on resize (preferred over re-querying the view).
+  void rebuild(std::optional<Size> sizeOverride = std::nullopt);
+  void rebuild(Size const& sizeFromResizeEvent) { rebuild(std::optional<Size>(sizeFromResizeEvent)); }
   void subscribeToRebuild();
   void subscribeInput();
   void subscribeResize();

@@ -145,12 +145,12 @@ Size Element::Model<Text>::measure(LayoutConstraints const& c, TextSystem& ts) c
   if (value.frame.width > 0.f || value.frame.height > 0.f) {
     return {value.frame.width, value.frame.height};
   }
-  float const mw = std::isfinite(c.maxWidth) ? c.maxWidth : 0.f;
+  float const pad = value.padding * 2.f;
+  float const mw = std::isfinite(c.maxWidth) && c.maxWidth > pad ? c.maxWidth - pad : 0.f;
   TextLayoutOptions const opts = textViewLayoutOptions(value);
   Size s = ts.measure(value.text, value.font, value.color, mw, opts);
-  float const p = value.padding * 2.f;
-  float w = s.width + p;
-  float h = s.height + p;
+  float w = s.width + pad;
+  float h = s.height + pad;
   if (std::isfinite(c.maxWidth) && c.maxWidth > 0.f) {
     w = std::min(w, c.maxWidth);
   }

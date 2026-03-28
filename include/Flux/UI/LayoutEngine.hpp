@@ -16,6 +16,10 @@ struct LayoutConstraints {
 
 class LayoutEngine {
 public:
+  /// Clears the current child frame. Call at the start of each full `build` pass so the root
+  /// does not read a stale `childFrame` left from the previous pass (e.g. after resize).
+  void resetForBuild();
+
   Size measure(Element const& element, LayoutConstraints const& constraints, TextSystem& textSystem) const;
 
   void setChildFrame(Rect frame);

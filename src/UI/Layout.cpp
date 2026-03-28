@@ -9,11 +9,23 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <limits>
 #include <vector>
 
 namespace flux {
 
 namespace {
+
+/// When the parent assigned a frame (width/height > 0), use it; otherwise use the finite constraint span.
+float assignedSpan(float parentSpan, float outerSpan) {
+  if (parentSpan > 0.f) {
+    return parentSpan;
+  }
+  if (std::isfinite(outerSpan) && outerSpan > 0.f) {
+    return outerSpan;
+  }
+  return 0.f;
+}
 
 float hAlignOffset(float childW, float innerW, HorizontalAlignment a) {
   switch (a) {
@@ -44,14 +56,28 @@ float vAlignOffset(float childH, float innerH, VerticalAlignment a) {
 
 void Element::Model<VStack>::build(BuildContext& ctx) const {
   LayoutEngine& le = ctx.layoutEngine();
-  NodeId const layerId = ctx.graph().addLayer(ctx.parentLayer(), LayerNode{});
+  Rect const parentFrame = le.childFrame();
+  LayoutConstraints const outer = ctx.constraints();
+
+  LayerNode layer{};
+  if (parentFrame.width > 0.f || parentFrame.height > 0.f) {
+    layer.transform = Mat3::translate(parentFrame.x, parentFrame.y);
+  }
+  NodeId const layerId = ctx.graph().addLayer(ctx.parentLayer(), std::move(layer));
   ctx.pushLayer(layerId);
 
-  LayoutConstraints const outer = ctx.constraints();
+  float const assignedW = assignedSpan(parentFrame.width, outer.maxWidth);
+  float const assignedH = assignedSpan(parentFrame.height, outer.maxHeight);
+  float innerW = std::max(0.f, assignedW - 2.f * value.padding);
+
+  LayoutConstraints childCs = outer;
+  childCs.maxHeight = std::numeric_limits<float>::infinity();
+  childCs.maxWidth = innerW > 0.f ? innerW : std::numeric_limits<float>::infinity();
+
   std::vector<Size> sizes;
   sizes.reserve(value.children.size());
   for (Element const& ch : value.children) {
-    sizes.push_back(le.measure(ch, outer, ctx.textSystem()));
+    sizes.push_back(le.measure(ch, childCs, ctx.textSystem()));
   }
 
   std::size_t const n = value.children.size();
@@ -64,8 +90,6 @@ void Element::Model<VStack>::build(BuildContext& ctx) const {
     }
   }
 
-  float innerW =
-      std::isfinite(outer.maxWidth) ? std::max(0.f, outer.maxWidth - 2.f * value.padding) : 0.f;
   float maxChildW = 0.f;
   for (Size s : sizes) {
     maxChildW = std::max(maxChildW, s.width);
@@ -73,6 +97,10 @@ void Element::Model<VStack>::build(BuildContext& ctx) const {
   if (innerW <= 0.f) {
     innerW = maxChildW;
   }
+
+  LayoutConstraints innerForBuild = outer;
+  innerForBuild.maxWidth = innerW;
+  innerForBuild.maxHeight = std::numeric_limits<float>::infinity();
 
   float contentH = 0.f;
   for (std::size_t i = 0; i < n; ++i) {
@@ -83,8 +111,8 @@ void Element::Model<VStack>::build(BuildContext& ctx) const {
   }
 
   float extra = 0.f;
-  if (std::isfinite(outer.maxHeight) && spacerCount > 0) {
-    float const avail = std::max(0.f, outer.maxHeight - 2.f * value.padding);
+  if (std::isfinite(assignedH) && assignedH > 0.f && spacerCount > 0) {
+    float const avail = std::max(0.f, assignedH - 2.f * value.padding);
     extra = std::max(0.f, avail - contentH);
   }
   float const perSpacer = (spacerCount > 0) ? extra / static_cast<float>(spacerCount) : 0.f;
@@ -96,9 +124,11 @@ void Element::Model<VStack>::build(BuildContext& ctx) const {
     if (spacer[i]) {
       sz.height = sz.height + perSpacer;
     }
-    float const x = value.padding + hAlignOffset(sz.width, innerW, value.hAlign);
+    float const x = hAlignOffset(sz.width, innerW, value.hAlign) + value.padding;
     le.setChildFrame(Rect{x, y, sz.width, sz.height});
+    ctx.pushConstraints(innerForBuild);
     child.build(ctx);
+    ctx.popConstraints();
     y += sz.height + value.spacing;
   }
 
@@ -107,6 +137,14 @@ void Element::Model<VStack>::build(BuildContext& ctx) const {
 
 Size Element::Model<VStack>::measure(LayoutConstraints const& constraints, TextSystem& ts) const {
   LayoutEngine tmp{};
+  float const assignedW = assignedSpan(
+      0.f, std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f);
+  float innerW = std::max(0.f, assignedW - 2.f * value.padding);
+
+  LayoutConstraints childCs = constraints;
+  childCs.maxHeight = std::numeric_limits<float>::infinity();
+  childCs.maxWidth = innerW > 0.f ? innerW : std::numeric_limits<float>::infinity();
+
   float maxW = 0.f;
   float sumH = 2.f * value.padding;
   std::size_t n = value.children.size();
@@ -114,7 +152,7 @@ Size Element::Model<VStack>::measure(LayoutConstraints const& constraints, TextS
     sumH += static_cast<float>(n - 1) * value.spacing;
   }
   for (Element const& ch : value.children) {
-    Size const s = tmp.measure(ch, constraints, ts);
+    Size const s = tmp.measure(ch, childCs, ts);
     maxW = std::max(maxW, s.width);
     sumH += s.height;
   }
@@ -123,14 +161,28 @@ Size Element::Model<VStack>::measure(LayoutConstraints const& constraints, TextS
 
 void Element::Model<HStack>::build(BuildContext& ctx) const {
   LayoutEngine& le = ctx.layoutEngine();
-  NodeId const layerId = ctx.graph().addLayer(ctx.parentLayer(), LayerNode{});
+  Rect const parentFrame = le.childFrame();
+  LayoutConstraints const outer = ctx.constraints();
+
+  LayerNode layer{};
+  if (parentFrame.width > 0.f || parentFrame.height > 0.f) {
+    layer.transform = Mat3::translate(parentFrame.x, parentFrame.y);
+  }
+  NodeId const layerId = ctx.graph().addLayer(ctx.parentLayer(), std::move(layer));
   ctx.pushLayer(layerId);
 
-  LayoutConstraints const outer = ctx.constraints();
+  float const assignedW = assignedSpan(parentFrame.width, outer.maxWidth);
+  float const assignedH = assignedSpan(parentFrame.height, outer.maxHeight);
+  float innerH = std::max(0.f, assignedH - 2.f * value.padding);
+
+  LayoutConstraints childCs = outer;
+  childCs.maxWidth = std::numeric_limits<float>::infinity();
+  childCs.maxHeight = innerH > 0.f ? innerH : std::numeric_limits<float>::infinity();
+
   std::vector<Size> sizes;
   sizes.reserve(value.children.size());
   for (Element const& ch : value.children) {
-    sizes.push_back(le.measure(ch, outer, ctx.textSystem()));
+    sizes.push_back(le.measure(ch, childCs, ctx.textSystem()));
   }
 
   std::size_t const n = value.children.size();
@@ -154,14 +206,19 @@ void Element::Model<HStack>::build(BuildContext& ctx) const {
   }
 
   float extra = 0.f;
-  if (std::isfinite(outer.maxWidth) && spacerCount > 0) {
-    float const avail = std::max(0.f, outer.maxWidth - 2.f * value.padding);
+  if (std::isfinite(assignedW) && assignedW > 0.f && spacerCount > 0) {
+    float const avail = std::max(0.f, assignedW - 2.f * value.padding);
     extra = std::max(0.f, avail - contentW);
   }
   float const perSpacer = (spacerCount > 0) ? extra / static_cast<float>(spacerCount) : 0.f;
 
-  float innerH =
-      std::isfinite(outer.maxHeight) ? std::max(0.f, outer.maxHeight - 2.f * value.padding) : maxH;
+  if (innerH <= 0.f) {
+    innerH = maxH;
+  }
+
+  LayoutConstraints innerForBuild = outer;
+  innerForBuild.maxWidth = std::numeric_limits<float>::infinity();
+  innerForBuild.maxHeight = innerH;
 
   float x = value.padding;
   for (std::size_t i = 0; i < n; ++i) {
@@ -171,7 +228,9 @@ void Element::Model<HStack>::build(BuildContext& ctx) const {
     }
     float const y = value.padding + vAlignOffset(sz.height, innerH, value.vAlign);
     le.setChildFrame(Rect{x, y, sz.width, sz.height});
+    ctx.pushConstraints(innerForBuild);
     value.children[i].build(ctx);
+    ctx.popConstraints();
     x += sz.width + value.spacing;
   }
 
@@ -180,6 +239,14 @@ void Element::Model<HStack>::build(BuildContext& ctx) const {
 
 Size Element::Model<HStack>::measure(LayoutConstraints const& constraints, TextSystem& ts) const {
   LayoutEngine tmp{};
+  float const assignedH = assignedSpan(
+      0.f, std::isfinite(constraints.maxHeight) ? constraints.maxHeight : 0.f);
+  float innerH = std::max(0.f, assignedH - 2.f * value.padding);
+
+  LayoutConstraints childCs = constraints;
+  childCs.maxWidth = std::numeric_limits<float>::infinity();
+  childCs.maxHeight = innerH > 0.f ? innerH : std::numeric_limits<float>::infinity();
+
   float sumW = 2.f * value.padding;
   float maxH = 0.f;
   std::size_t n = value.children.size();
@@ -187,7 +254,7 @@ Size Element::Model<HStack>::measure(LayoutConstraints const& constraints, TextS
     sumW += static_cast<float>(n - 1) * value.spacing;
   }
   for (Element const& ch : value.children) {
-    Size const s = tmp.measure(ch, constraints, ts);
+    Size const s = tmp.measure(ch, childCs, ts);
     sumW += s.width;
     maxH = std::max(maxH, s.height);
   }
@@ -196,29 +263,55 @@ Size Element::Model<HStack>::measure(LayoutConstraints const& constraints, TextS
 
 void Element::Model<ZStack>::build(BuildContext& ctx) const {
   LayoutEngine& le = ctx.layoutEngine();
-  NodeId const layerId = ctx.graph().addLayer(ctx.parentLayer(), LayerNode{});
+  Rect const parentFrame = le.childFrame();
+  LayoutConstraints const outer = ctx.constraints();
+
+  LayerNode layer{};
+  if (parentFrame.width > 0.f || parentFrame.height > 0.f) {
+    layer.transform = Mat3::translate(parentFrame.x, parentFrame.y);
+  }
+  NodeId const layerId = ctx.graph().addLayer(ctx.parentLayer(), std::move(layer));
   ctx.pushLayer(layerId);
 
-  LayoutConstraints const outer = ctx.constraints();
+  float const assignedW = assignedSpan(parentFrame.width, outer.maxWidth);
+  float const assignedH = assignedSpan(parentFrame.height, outer.maxHeight);
+  float innerW = std::max(0.f, assignedW);
+  float innerH = std::max(0.f, assignedH);
+
+  LayoutConstraints childCs = outer;
+  childCs.maxWidth = innerW > 0.f ? innerW : std::numeric_limits<float>::infinity();
+  childCs.maxHeight = innerH > 0.f ? innerH : std::numeric_limits<float>::infinity();
+
   float maxW = 0.f;
   float maxH = 0.f;
   std::vector<Size> sizes;
+  sizes.reserve(value.children.size());
   for (Element const& ch : value.children) {
-    Size const s = le.measure(ch, outer, ctx.textSystem());
+    Size const s = le.measure(ch, childCs, ctx.textSystem());
     sizes.push_back(s);
     maxW = std::max(maxW, s.width);
     maxH = std::max(maxH, s.height);
   }
 
-  float innerW = std::isfinite(outer.maxWidth) ? std::max(0.f, outer.maxWidth) : maxW;
-  float innerH = std::isfinite(outer.maxHeight) ? std::max(0.f, outer.maxHeight) : maxH;
+  if (innerW <= 0.f) {
+    innerW = maxW;
+  }
+  if (innerH <= 0.f) {
+    innerH = maxH;
+  }
+
+  LayoutConstraints innerForBuild{};
+  innerForBuild.maxWidth = innerW;
+  innerForBuild.maxHeight = innerH;
 
   for (std::size_t i = 0; i < value.children.size(); ++i) {
     Size const sz = sizes[i];
     float const x = hAlignOffset(sz.width, innerW, value.hAlign);
     float const y = vAlignOffset(sz.height, innerH, value.vAlign);
     le.setChildFrame(Rect{x, y, sz.width, sz.height});
+    ctx.pushConstraints(innerForBuild);
     value.children[i].build(ctx);
+    ctx.popConstraints();
   }
 
   ctx.popLayer();
@@ -226,10 +319,21 @@ void Element::Model<ZStack>::build(BuildContext& ctx) const {
 
 Size Element::Model<ZStack>::measure(LayoutConstraints const& constraints, TextSystem& ts) const {
   LayoutEngine tmp{};
+  float const assignedW = assignedSpan(
+      0.f, std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f);
+  float const assignedH = assignedSpan(
+      0.f, std::isfinite(constraints.maxHeight) ? constraints.maxHeight : 0.f);
+  float innerW = std::max(0.f, assignedW);
+  float innerH = std::max(0.f, assignedH);
+
+  LayoutConstraints childCs = constraints;
+  childCs.maxWidth = innerW > 0.f ? innerW : std::numeric_limits<float>::infinity();
+  childCs.maxHeight = innerH > 0.f ? innerH : std::numeric_limits<float>::infinity();
+
   float maxW = 0.f;
   float maxH = 0.f;
   for (Element const& ch : value.children) {
-    Size const s = tmp.measure(ch, constraints, ts);
+    Size const s = tmp.measure(ch, childCs, ts);
     maxW = std::max(maxW, s.width);
     maxH = std::max(maxH, s.height);
   }

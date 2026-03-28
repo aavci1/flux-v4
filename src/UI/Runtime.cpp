@@ -13,8 +13,18 @@
 #include <Flux/UI/LayoutEngine.hpp>
 
 #include <algorithm>
+#include <cmath>
 
 namespace flux {
+
+namespace {
+
+/// Whole-point layout size avoids subpixel oscillation in `NSView.bounds` during live resize.
+Size snapRootLayoutSize(Size s) {
+  return {std::max(1.f, std::round(s.width)), std::max(1.f, std::round(s.height))};
+}
+
+} // namespace
 
 Runtime::Runtime(Window& window) : window_(window) {
   subscribeToRebuild();
@@ -28,16 +38,19 @@ Runtime::~Runtime() {
   }
 }
 
-void Runtime::rebuild() {
+void Runtime::rebuild(std::optional<Size> sizeOverride) {
   SceneGraph& graph = window_.sceneGraph();
   graph.clear();
 
+  layoutEngine_.resetForBuild();
+
   EventMap newMap;
   BuildContext ctx{graph, newMap, Application::instance().textSystem(), layoutEngine_};
-  Size const sz = window_.getSize();
+  Size const raw = sizeOverride.value_or(window_.getSize());
+  Size const sz = snapRootLayoutSize(raw);
   LayoutConstraints rootCs{};
-  rootCs.maxWidth = std::max(1.f, sz.width);
-  rootCs.maxHeight = std::max(1.f, sz.height);
+  rootCs.maxWidth = sz.width;
+  rootCs.maxHeight = sz.height;
   ctx.pushConstraints(rootCs);
   if (root_) {
     root_->build(ctx);
@@ -71,7 +84,9 @@ void Runtime::subscribeResize() {
     if (ev.handle != hid || ev.kind != WindowEvent::Kind::Resize) {
       return;
     }
-    rebuild();
+    // Use the size captured when the event was posted; re-querying the view during dispatch can
+    // differ slightly from bounds updates and cause visible jitter during live resize.
+    rebuild(ev.size);
   });
 }
 
