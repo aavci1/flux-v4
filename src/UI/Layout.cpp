@@ -172,8 +172,6 @@ void Element::Model<HStack>::build(BuildContext& ctx) const {
   ctx.pushLayer(layerId);
 
   float const assignedW = assignedSpan(parentFrame.width, outer.maxWidth);
-  float const assignedH = assignedSpan(parentFrame.height, outer.maxHeight);
-  float innerH = std::max(0.f, assignedH - 2.f * value.padding);
 
   LayoutConstraints childCs = outer;
   childCs.maxWidth = std::numeric_limits<float>::infinity();
@@ -212,13 +210,11 @@ void Element::Model<HStack>::build(BuildContext& ctx) const {
   }
   float const perSpacer = (spacerCount > 0) ? extra / static_cast<float>(spacerCount) : 0.f;
 
-  if (innerH <= 0.f) {
-    innerH = maxH;
-  }
+  float const rowInnerH = maxH;
 
   LayoutConstraints innerForBuild = outer;
   innerForBuild.maxWidth = std::numeric_limits<float>::infinity();
-  innerForBuild.maxHeight = innerH;
+  innerForBuild.maxHeight = rowInnerH;
 
   float x = value.padding;
   for (std::size_t i = 0; i < n; ++i) {
@@ -226,7 +222,7 @@ void Element::Model<HStack>::build(BuildContext& ctx) const {
     if (spacer[i]) {
       sz.width = sz.width + perSpacer;
     }
-    float const y = value.padding + vAlignOffset(sz.height, innerH, value.vAlign);
+    float const y = value.padding + vAlignOffset(sz.height, rowInnerH, value.vAlign);
     le.setChildFrame(Rect{x, y, sz.width, sz.height});
     ctx.pushConstraints(innerForBuild);
     value.children[i].build(ctx);
