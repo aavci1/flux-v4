@@ -246,6 +246,7 @@ void postInputFromView(FluxMetalView* view, InputEvent::Kind kind, NSEvent* e, s
     ie.position = Vec2{static_cast<float>(pt.x), static_cast<float>(pt.y)};
     ie.scrollDelta =
         Vec2{static_cast<float>(e.scrollingDeltaX), static_cast<float>(e.scrollingDeltaY)};
+    ie.preciseScrollDelta = static_cast<bool>(e.hasPreciseScrollingDeltas);
   } else {
     NSPoint pt = [view convertPoint:[e locationInWindow] fromView:nil];
     ie.position = Vec2{static_cast<float>(pt.x), static_cast<float>(pt.y)};

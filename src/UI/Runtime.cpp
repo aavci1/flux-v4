@@ -213,6 +213,12 @@ void Runtime::handleInput(InputEvent const& e) {
 
   if (e.kind == InputEvent::Kind::Scroll) {
     Point const p{e.position.x, e.position.y};
+    Vec2 delta = e.scrollDelta;
+    if (!e.preciseScrollDelta) {
+      constexpr float kLineHeight = 40.f;
+      delta.x *= kLineHeight;
+      delta.y *= kLineHeight;
+    }
     auto const acceptScroll = [this](NodeId id) {
       EventHandlers const* h = eventMap_.find(id);
       return h && h->onScroll;
@@ -223,14 +229,14 @@ void Runtime::handleInput(InputEvent const& e) {
         std::fprintf(stderr,
                      "[flux:input] Scroll pos=(%.1f,%.1f) delta=(%.2f,%.2f) frontmost geom: local=(%.1f,%.1f) ",
                      static_cast<double>(p.x), static_cast<double>(p.y),
-                     static_cast<double>(e.scrollDelta.x), static_cast<double>(e.scrollDelta.y),
+                     static_cast<double>(delta.x), static_cast<double>(delta.y),
                      static_cast<double>(front->localPoint.x), static_cast<double>(front->localPoint.y));
         logNodeId("frontmost (any)", front->nodeId);
       } else {
         std::fprintf(stderr,
                      "[flux:input] Scroll pos=(%.1f,%.1f) delta=(%.2f,%.2f) frontmost geom: (no hit)\n",
                      static_cast<double>(p.x), static_cast<double>(p.y),
-                     static_cast<double>(e.scrollDelta.x), static_cast<double>(e.scrollDelta.y));
+                     static_cast<double>(delta.x), static_cast<double>(delta.y));
       }
     }
     if (auto hit = tester.hitTest(graph, p, acceptScroll)) {
@@ -241,7 +247,7 @@ void Runtime::handleInput(InputEvent const& e) {
         logNodeId("scroll target", hit->nodeId);
       }
       if (EventHandlers const* h = eventMap_.find(hit->nodeId); h && h->onScroll) {
-        h->onScroll(e.scrollDelta);
+        h->onScroll(delta);
         if (dbg) {
           std::fprintf(stderr, "[flux:input] onScroll invoked\n");
         }
@@ -282,9 +288,6 @@ void Runtime::handleInput(InputEvent const& e) {
         ps.downPoint = p;
         ps.cancelled = false;
         ps.hadOnTapOnDown = static_cast<bool>(h->onTap);
-        if (ps.hadOnTapOnDown) {
-          ps.downTapTargetKey = h->stableTargetKey;
-        }
         activePress_ = std::move(ps);
         if (h->onPointerDown) {
           h->onPointerDown(hit->localPoint);

@@ -46,6 +46,9 @@ struct InputEvent {
   Vec2 position{};
   /// Wheel / trackpad deltas when `kind == Scroll`; unused otherwise.
   Vec2 scrollDelta{};
+  /// When `kind == Scroll`: true if deltas are in logical pixels (trackpad); false if line units
+  /// (mouse wheel) and should be scaled before use (see Runtime scroll handling).
+  bool preciseScrollDelta = true;
   MouseButton button = MouseButton::None;
   KeyCode key = 0;
   Modifiers modifiers = Modifiers::None;
