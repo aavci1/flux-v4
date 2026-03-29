@@ -95,7 +95,13 @@ add_library(flux STATIC
   src/UI/Element.cpp
   src/UI/EventMap.cpp
   src/UI/LayoutEngine.cpp
-  src/UI/Layout.cpp
+  src/UI/Layout/LayoutVStack.cpp
+  src/UI/Layout/LayoutHStack.cpp
+  src/UI/Layout/LayoutZStack.cpp
+  src/UI/Layout/LayoutGrid.cpp
+  src/UI/Layout/LayoutSpacer.cpp
+  src/UI/Layout/LayoutOffsetView.cpp
+  src/UI/Layout/LayoutScrollView.cpp
   src/UI/Runtime.cpp
   src/Scene/NodeStore.cpp
   src/Scene/SceneGraph.cpp
