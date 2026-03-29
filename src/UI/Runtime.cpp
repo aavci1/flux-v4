@@ -318,6 +318,7 @@ void Runtime::cancelActivePress(Point windowPoint) {
     h->onPointerUp(local.value_or(Point{0.f, 0.f}));
   }
   activePress_ = std::nullopt;
+  Application::instance().markReactiveDirty();
 }
 
 void Runtime::applyCursor(Cursor kind) {
@@ -519,6 +520,7 @@ void Runtime::handleInput(InputEvent const& e) {
         ps.cancelled = false;
         ps.hadOnTapOnDown = static_cast<bool>(h->onTap);
         activePress_ = std::move(ps);
+        Application::instance().markReactiveDirty();
         if (h->onPointerDown) {
           h->onPointerDown(hit->localPoint);
         }
@@ -603,6 +605,9 @@ void Runtime::handleInput(InputEvent const& e) {
   HitTester tester{};
   std::optional<PressState> const released = activePress_;
   activePress_ = std::nullopt;
+  if (released) {
+    Application::instance().markReactiveDirty();
+  }
 
   auto hit = tester.hitTest(graph, p, acceptFn);
   if (hit) {
