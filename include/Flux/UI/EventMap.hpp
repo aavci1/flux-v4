@@ -13,6 +13,9 @@ struct EventHandlers {
   std::function<void()> onTap;
   std::function<void(Point)> onPointerDown;
   std::function<void(Point)> onPointerUp;
+  /// Called when the pointer moves over this node. Note: not locked to the
+  /// initially-pressed node during a drag — use `onPointerDown` + `onPointerMove`
+  /// on the same node only if the drag stays within the node's bounds.
   std::function<void(Point)> onPointerMove;
 };
 
