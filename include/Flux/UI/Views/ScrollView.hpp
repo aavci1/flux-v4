@@ -89,13 +89,14 @@ struct ScrollView {
                     .onScroll =
                         [offset, ax, viewport, content](Vec2 d) {
                           Point next = *offset;
-                          // Match platform scroll deltas: macOS `scrollingDeltaY` is positive when the
-                          // document scrolls upward; subtracting here clamped negative values back to 0.
+                          // scrollingDelta* is expressed for non-flipped NSView coords (y up). Flux uses
+                          // a flipped space (y down), so negate to align. Natural Scrolling is already in
+                          // the delta sign from AppKit; this is only the coordinate-system fix.
                           if (ax == ScrollAxis::Vertical || ax == ScrollAxis::Both) {
-                            next.y += d.y;
+                            next.y -= d.y;
                           }
                           if (ax == ScrollAxis::Horizontal || ax == ScrollAxis::Both) {
-                            next.x += d.x;
+                            next.x -= d.x;
                           }
                           offset = clampScrollOffset(ax, next, *viewport, *content);
                         },
