@@ -39,16 +39,19 @@ struct BlendCell {
   static constexpr int kRows = 3;
   static constexpr float kMargin = 24.f;
   static constexpr float kGap = 10.f;
-  /// Fallback when constraints are unbounded (e.g. HStack passes infinite width to children).
+  /// Default `layoutHint` when parent does not set one (matches demo window defaults).
   static constexpr float kDefaultWinW = 920.f;
   static constexpr float kDefaultWinH = 700.f;
 
   BlendMode mode = BlendMode::Normal;
   const char* title = "";
+  /// Used when `measure` sees unbounded constraints (HStack does not propagate width to children).
+  /// Parent should set this to the current window / content size so the grid fills the layout.
+  Size layoutHint{kDefaultWinW, kDefaultWinH};
 
   Size measure(LayoutConstraints const& c) const {
-    float const winW = std::isfinite(c.maxWidth) && c.maxWidth > 0.f ? c.maxWidth : kDefaultWinW;
-    float const winH = std::isfinite(c.maxHeight) && c.maxHeight > 0.f ? c.maxHeight : kDefaultWinH;
+    float const winW = std::isfinite(c.maxWidth) && c.maxWidth > 0.f ? c.maxWidth : layoutHint.width;
+    float const winH = std::isfinite(c.maxHeight) && c.maxHeight > 0.f ? c.maxHeight : layoutHint.height;
     float const innerW = std::max(0.f, winW - 2.f * kMargin);
     float const innerH = std::max(0.f, winH - 2.f * kMargin);
     float const cellW =
@@ -93,13 +96,16 @@ struct BlendCell {
 };
 
 struct BlendDemoView {
+  /// Passed into each `BlendCell` so `measure` can infer cell size when the row has infinite width.
+  Size layoutSize{BlendCell::kDefaultWinW, BlendCell::kDefaultWinH};
+
   auto body() const {
-    auto row = [](int r) {
+    auto row = [this](int r) {
       std::vector<Element> cells;
       cells.reserve(static_cast<std::size_t>(BlendCell::kCols));
       for (int col = 0; col < BlendCell::kCols; ++col) {
         DemoCell const& d = kGrid[static_cast<std::size_t>(r * BlendCell::kCols + col)];
-        cells.push_back(BlendCell{.mode = d.mode, .title = d.title});
+        cells.push_back(BlendCell{.mode = d.mode, .title = d.title, .layoutHint = layoutSize});
       }
       return HStack{
           .spacing = BlendCell::kGap,
@@ -127,11 +133,11 @@ struct BlendDemoView {
 int main(int argc, char* argv[]) {
   Application app(argc, argv);
 
+  Size const layoutSize{BlendCell::kDefaultWinW, BlendCell::kDefaultWinH};
   app.createWindow<Window>({
-      .size = {static_cast<unsigned int>(BlendCell::kDefaultWinW),
-               static_cast<unsigned int>(BlendCell::kDefaultWinH)},
+      .size = layoutSize,
       .title = "Flux — blend modes",
-  }).setView<BlendDemoView>();
+  }).setView(BlendDemoView{.layoutSize = layoutSize});
 
   return app.exec();
 }

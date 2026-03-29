@@ -104,20 +104,21 @@ void Element::Model<C>::build(BuildContext& ctx) const {
             .draw = [copy, frame](Canvas& canvas) { copy.render(canvas, frame); },
         });
 
-    if constexpr (requires {
-          value.onTap;
-          value.onPointerDown;
-          value.onPointerUp;
-          value.onPointerMove;
-        }) {
-      if (value.onTap || value.onPointerDown || value.onPointerUp || value.onPointerMove) {
-        ctx.eventMap().insert(id, EventHandlers{
-            .onTap = value.onTap,
-            .onPointerDown = value.onPointerDown,
-            .onPointerUp = value.onPointerUp,
-            .onPointerMove = value.onPointerMove,
-        });
-      }
+    EventHandlers handlers{};
+    if constexpr (requires { value.onTap; }) {
+      handlers.onTap = value.onTap;
+    }
+    if constexpr (requires { value.onPointerDown; }) {
+      handlers.onPointerDown = value.onPointerDown;
+    }
+    if constexpr (requires { value.onPointerUp; }) {
+      handlers.onPointerUp = value.onPointerUp;
+    }
+    if constexpr (requires { value.onPointerMove; }) {
+      handlers.onPointerMove = value.onPointerMove;
+    }
+    if (handlers.onTap || handlers.onPointerDown || handlers.onPointerUp || handlers.onPointerMove) {
+      ctx.eventMap().insert(id, std::move(handlers));
     }
   } else {
     static_assert(alwaysFalse<C>,

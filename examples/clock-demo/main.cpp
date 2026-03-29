@@ -69,7 +69,6 @@ int main(int argc, char* argv[]) {
     }
     w.requestRedraw();
   });
-  // w.requestRedraw();
 
   return app.exec();
 }
