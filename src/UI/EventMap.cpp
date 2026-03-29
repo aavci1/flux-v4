@@ -16,6 +16,18 @@ EventHandlers const* EventMap::find(NodeId id) const {
   return &it->second;
 }
 
+std::pair<NodeId, EventHandlers const*> EventMap::findWithIdByKey(ComponentKey const& key) const {
+  if (key.empty()) {
+    return {kInvalidNodeId, nullptr};
+  }
+  for (auto const& [id, h] : map_) {
+    if (h.stableTargetKey == key) {
+      return {id, &h};
+    }
+  }
+  return {kInvalidNodeId, nullptr};
+}
+
 void EventMap::clear() { map_.clear(); }
 
 } // namespace flux

@@ -179,25 +179,29 @@ void Runtime::subscribeResize() {
   });
 }
 
+std::pair<NodeId, EventHandlers const*> Runtime::findPressHandlersWithNode(PressState const& ps) const {
+  if (EventHandlers const* h = eventMap_.find(ps.nodeId)) {
+    return {ps.nodeId, h};
+  }
+  if (!ps.stableTargetKey.empty()) {
+    return eventMap_.findWithIdByKey(ps.stableTargetKey);
+  }
+  return {kInvalidNodeId, nullptr};
+}
+
 void Runtime::cancelActivePress(Point windowPoint) {
   if (!activePress_) {
     return;
   }
   SceneGraph const& graph = window_.sceneGraph();
-  if (EventHandlers const* h = eventMap_.find(activePress_->nodeId)) {
-    if (h->onPointerUp) {
-      HitTester tester{};
-      std::optional<Point> local =
-          tester.localPointForNode(graph, activePress_->downPoint, activePress_->nodeId);
-      if (!local) {
-        local = tester.localPointForNode(graph, windowPoint, activePress_->nodeId);
-      }
-      if (local) {
-        h->onPointerUp(*local);
-      } else {
-        h->onPointerUp(Point{0.f, 0.f});
-      }
+  auto const [currentId, h] = findPressHandlersWithNode(*activePress_);
+  if (h && h->onPointerUp && currentId.isValid()) {
+    HitTester tester{};
+    std::optional<Point> local = tester.localPointForNode(graph, activePress_->downPoint, currentId);
+    if (!local) {
+      local = tester.localPointForNode(graph, windowPoint, currentId);
     }
+    h->onPointerUp(local.value_or(Point{0.f, 0.f}));
   }
   activePress_ = std::nullopt;
 }
@@ -274,6 +278,7 @@ void Runtime::handleInput(InputEvent const& e) {
       if (EventHandlers const* h = eventMap_.find(hit->nodeId)) {
         PressState ps{};
         ps.nodeId = hit->nodeId;
+        ps.stableTargetKey = h->stableTargetKey;
         ps.downPoint = p;
         ps.cancelled = false;
         ps.hadOnTapOnDown = static_cast<bool>(h->onTap);
@@ -313,9 +318,9 @@ void Runtime::handleInput(InputEvent const& e) {
     }
     HitTester tester{};
     if (activePress_) {
-      if (EventHandlers const* pressed = eventMap_.find(activePress_->nodeId);
-          pressed && pressed->onPointerMove) {
-        if (auto local = tester.localPointForNode(graph, p, activePress_->nodeId)) {
+      auto const [pressId, pressed] = findPressHandlersWithNode(*activePress_);
+      if (pressed && pressed->onPointerMove && pressId.isValid()) {
+        if (auto local = tester.localPointForNode(graph, p, pressId)) {
           if (logThisMove) {
             std::fprintf(stderr,
                          "[flux:input] PointerMove routed to press target local=(%.1f,%.1f)\n",
@@ -371,29 +376,32 @@ void Runtime::handleInput(InputEvent const& e) {
         bool const sameNode = released->nodeId == hit->nodeId;
         bool const retargetAfterRebuild =
             released->hadOnTapOnDown && eventMap_.find(released->nodeId) == nullptr &&
-            !released->downTapTargetKey.empty() && h->stableTargetKey == released->downTapTargetKey;
+            !released->stableTargetKey.empty() && h->stableTargetKey == released->stableTargetKey;
         if (sameNode || retargetAfterRebuild) {
           h->onTap();
         }
       }
     }
-  } else if (released && released->nodeId.isValid()) {
+  } else if (released) {
     if (dbg) {
       std::fprintf(stderr, "[flux:input] PointerUp: no interactive hit; trying press-target up\n");
       logNodeId("  released press", released->nodeId);
     }
     // Release outside any interactive node: still notify the press target (e.g. end drag).
-    if (EventHandlers const* pressed = eventMap_.find(released->nodeId)) {
-      if (pressed->onPointerUp) {
-        if (auto local = tester.localPointForNode(graph, p, released->nodeId)) {
-          if (dbg) {
-            std::fprintf(stderr,
-                         "[flux:input] PointerUp fallback local=(%.1f,%.1f)\n",
-                         static_cast<double>(local->x), static_cast<double>(local->y));
-          }
-          pressed->onPointerUp(*local);
-        } else if (dbg) {
-          std::fprintf(stderr, "[flux:input] PointerUp fallback: localPointForNode FAILED\n");
+    auto const [currentId, pressed] = findPressHandlersWithNode(*released);
+    if (pressed && pressed->onPointerUp && currentId.isValid()) {
+      std::optional<Point> local = tester.localPointForNode(graph, p, currentId);
+      if (local) {
+        if (dbg) {
+          std::fprintf(stderr,
+                       "[flux:input] PointerUp fallback local=(%.1f,%.1f)\n",
+                       static_cast<double>(local->x), static_cast<double>(local->y));
+        }
+        pressed->onPointerUp(*local);
+      } else {
+        pressed->onPointerUp(Point{0.f, 0.f});
+        if (dbg) {
+          std::fprintf(stderr, "[flux:input] PointerUp fallback: localPointForNode FAILED; used (0,0)\n");
         }
       }
     }

@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <functional>
 #include <unordered_map>
+#include <utility>
 
 namespace flux {
 
@@ -33,6 +34,8 @@ class EventMap {
 public:
   void insert(NodeId id, EventHandlers handlers);
   EventHandlers const* find(NodeId id) const;
+  /// First entry whose `stableTargetKey` matches \p key (O(n)); used when `NodeId` is stale after rebuild.
+  std::pair<NodeId, EventHandlers const*> findWithIdByKey(ComponentKey const& key) const;
   void clear();
 
 private:

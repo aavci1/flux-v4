@@ -10,6 +10,7 @@
 
 #include <memory>
 #include <optional>
+#include <utility>
 
 namespace flux {
 
@@ -37,6 +38,8 @@ private:
 
   struct PressState {
     NodeId nodeId{};
+    /// Same logical target as `EventHandlers::stableTargetKey`; used when `nodeId` is stale after rebuild.
+    ComponentKey stableTargetKey{};
     Point downPoint{};
     bool cancelled = false;
     /// True if the press target had `onTap` at PointerDown (used when the scene rebuilds before PointerUp).
@@ -44,6 +47,7 @@ private:
     /// Matches `EventHandlers::stableTargetKey` for tap retargeting after rebuild.
     ComponentKey downTapTargetKey{};
   };
+  std::pair<NodeId, EventHandlers const*> findPressHandlersWithNode(PressState const& ps) const;
   std::optional<PressState> activePress_{};
 
   Window& window_;
