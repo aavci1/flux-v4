@@ -296,6 +296,15 @@ void Runtime::onOverlayPushed(OverlayEntry& entry) {
 }
 
 void Runtime::onOverlayRemoved(OverlayEntry const& entry) {
+  if (imploding_) {
+    if (focusInOverlay_ == entry.id) {
+      focusInOverlay_.reset();
+    }
+    if (hoverInOverlay_ == entry.id) {
+      hoverInOverlay_.reset();
+    }
+    return;
+  }
   if (entry.config.modal) {
     if (focusInOverlay_ == entry.id) {
       focusInOverlay_.reset();
@@ -354,6 +363,7 @@ Runtime::~Runtime() {
   if (rebuildHandle_.isValid()) {
     Application::instance().unobserveNextFrame(rebuildHandle_);
   }
+  imploding_ = true;
 }
 
 void Runtime::rebuild(std::optional<Size> sizeOverride) {

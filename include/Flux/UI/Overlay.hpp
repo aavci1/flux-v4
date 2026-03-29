@@ -72,7 +72,9 @@ public:
 
   OverlayId push(Element content, OverlayConfig config, Runtime* runtime);
   void remove(OverlayId id, Runtime* runtime);
-  void clear(Runtime* runtime);
+  /// If \p invokeDismissCallbacks is false, `config.onDismiss` is not called (used when tearing down
+  /// the window so hooks must not re-enter `removeOverlay`).
+  void clear(Runtime* runtime, bool invokeDismissCallbacks = true);
 
   bool hasOverlays() const noexcept { return !overlays_.empty(); }
 

@@ -185,16 +185,18 @@ void OverlayManager::remove(OverlayId id, Runtime* runtime) {
       if (runtime) {
         runtime->onOverlayRemoved(*removed);
       }
-      Application::instance().markReactiveDirty();
+      if (!runtime || !runtime->imploding()) {
+        Application::instance().markReactiveDirty();
+      }
       return;
     }
   }
 }
 
-void OverlayManager::clear(Runtime* runtime) {
+void OverlayManager::clear(Runtime* runtime, bool invokeDismissCallbacks) {
   while (!overlays_.empty()) {
     OverlayEntry& top = *overlays_.back();
-    if (top.config.onDismiss) {
+    if (invokeDismissCallbacks && top.config.onDismiss) {
       top.config.onDismiss();
     }
     std::unique_ptr<OverlayEntry> removed = std::move(overlays_.back());
@@ -203,7 +205,9 @@ void OverlayManager::clear(Runtime* runtime) {
       runtime->onOverlayRemoved(*removed);
     }
   }
-  Application::instance().markReactiveDirty();
+  if (!runtime || !runtime->imploding()) {
+    Application::instance().markReactiveDirty();
+  }
 }
 
 } // namespace flux

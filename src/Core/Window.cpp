@@ -24,10 +24,14 @@ struct Window::Impl {
   std::unique_ptr<Canvas> canvas_;
   std::optional<SceneGraph> sceneGraph_;
   Color clearColor_{Colors::lightGray};
-  std::unique_ptr<Runtime> runtime_;
+  /// Declared before `runtime_` so `~Runtime` (and `OverlayHookSlot` teardown calling `removeOverlay`)
+  /// runs while `OverlayManager` is still alive. Reverse member destruction order would destroy
+  /// `overlayMgr_` first and use-after-free on window close with an open overlay.
   OverlayManager overlayMgr_;
+  std::unique_ptr<Runtime> runtime_;
 
   explicit Impl(Window&) {}
+  ~Impl();
 
   PlatformWindow* platformWindow() const { return platform_.get(); }
   void setViewRoot(Window& window, std::unique_ptr<RootHolder> holder);
@@ -38,6 +42,12 @@ void Window::Impl::setViewRoot(Window& window, std::unique_ptr<RootHolder> holde
     runtime_ = std::make_unique<Runtime>(window);
   }
   runtime_->setRoot(std::move(holder));
+}
+
+Window::Impl::~Impl() {
+  if (runtime_) {
+    overlayMgr_.clear(runtime_.get(), false);
+  }
 }
 
 Window::Window(const WindowConfig& config) {
@@ -117,16 +127,25 @@ void Window::setClearColor(Color color) { d->clearColor_ = color; }
 Color Window::clearColor() const { return d->clearColor_; }
 
 OverlayId Window::pushOverlay(Element content, OverlayConfig config) {
+  if (!d) {
+    return kInvalidOverlayId;
+  }
   Runtime* rt = d->runtime_.get();
   return d->overlayMgr_.push(std::move(content), std::move(config), rt);
 }
 
 void Window::removeOverlay(OverlayId id) {
+  if (!d) {
+    return;
+  }
   Runtime* rt = d->runtime_.get();
   d->overlayMgr_.remove(id, rt);
 }
 
 void Window::clearOverlays() {
+  if (!d) {
+    return;
+  }
   Runtime* rt = d->runtime_.get();
   d->overlayMgr_.clear(rt);
 }

@@ -69,6 +69,10 @@ public:
   /// For `usePress`: true when `activePress_` overlay scope matches `store.overlayScope()`.
   bool pressKeyMatchesStoreContext(StateStore const& store) const;
 
+  /// True after `~Runtime`'s destructor body finishes; member subobjects are being destroyed.
+  /// `onOverlayRemoved` uses this to skip focus/eventMap work during `~StateStore` teardown.
+  bool imploding() const noexcept { return imploding_; }
+
 private:
   /// `sizeOverride` — size from `WindowEvent::size` on resize (preferred over re-querying the view).
   void rebuild(std::optional<Size> sizeOverride = std::nullopt);
@@ -110,7 +114,6 @@ private:
   std::unique_ptr<RootHolder> rootHolder_;
   EventMap eventMap_;
   LayoutEngine layoutEngine_;
-  StateStore stateStore_;
   ObserverHandle rebuildHandle_{};
   bool inputRegistered_ = false;
 
@@ -122,6 +125,12 @@ private:
   std::optional<OverlayId> focusInOverlay_{};
   /// When set, `hoveredKey_` is for that overlay's scene graph.
   std::optional<OverlayId> hoverInOverlay_{};
+  /// Set true at end of `~Runtime()` body (before members are destroyed). Outlives `stateStore_`
+  /// so `OverlayHookSlot::~` → `onOverlayRemoved` can see teardown and avoid invalid `eventMap_` use.
+  bool imploding_{false};
+  /// Declared after overlay/focus fields so `~StateStore` (e.g. `OverlayHookSlot` calling
+  /// `removeOverlay` → `onOverlayRemoved`) runs while `focusInOverlay_` / `eventMap_` / etc. are still alive.
+  StateStore stateStore_;
   /// When false, keyboard events are not dispatched (window in background).
   bool windowHasFocus_ = true;
 
