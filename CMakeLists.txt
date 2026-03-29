@@ -61,7 +61,11 @@ target_include_directories(libtess2 PUBLIC
 
 option(FLUX_ENABLE_DEFAULT_EVENT_LOGGING
   "Print built-in Application event handlers to stdout (disable for quiet or embedded builds)."
-  ON)
+  OFF)
+
+option(FLUX_BUILD_EXAMPLES
+  "Build example executables under examples/ (hello_world, *_demo, …)."
+  OFF)
 
 # Offline Metal: compile CanvasShaders.metal → air → metallib → C header (xxd) embedded in MetalShaderLibrary.mm
 set(FLUX_METAL_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Metal/CanvasShaders.metal)
@@ -160,47 +164,6 @@ target_link_libraries(flux PRIVATE
   "-framework CoreText"
 )
 
-add_executable(hello_world examples/hello-world/main.cpp)
-target_link_libraries(hello_world PRIVATE flux)
-
-add_executable(clock_demo examples/clock-demo/main.cpp)
-target_link_libraries(clock_demo PRIVATE flux)
-
-add_executable(blend_demo examples/blend-demo/main.cpp)
-target_link_libraries(blend_demo PRIVATE flux)
-
-add_executable(text_demo examples/text-demo/main.cpp)
-target_link_libraries(text_demo PRIVATE flux)
-
-add_executable(image_demo examples/image-demo/main.cpp)
-target_link_libraries(image_demo PRIVATE flux)
-
-add_executable(scene_demo examples/scene-demo/main.cpp)
-target_link_libraries(scene_demo PRIVATE flux)
-
-add_executable(reactive_demo examples/reactive-demo/main.cpp)
-target_link_libraries(reactive_demo PRIVATE flux)
-
-add_executable(card_demo examples/card-demo/main.cpp)
-target_link_libraries(card_demo PRIVATE flux)
-
-add_executable(scroll_demo examples/scroll-demo/main.cpp)
-target_link_libraries(scroll_demo PRIVATE flux)
-
-add_executable(focus_demo examples/focus-demo/main.cpp)
-target_link_libraries(focus_demo PRIVATE flux)
-
-add_executable(request_focus_demo examples/request-focus-demo/main.cpp)
-target_link_libraries(request_focus_demo PRIVATE flux)
-
-add_executable(memo_demo examples/memo-demo/main.cpp)
-target_link_libraries(memo_demo PRIVATE flux)
-
-add_executable(cursor_demo examples/cursor-demo/main.cpp)
-target_link_libraries(cursor_demo PRIVATE flux)
-
-add_executable(foreach_demo examples/foreach-demo/main.cpp)
-target_link_libraries(foreach_demo PRIVATE flux)
-
-add_executable(hover_demo examples/hover-demo/main.cpp)
-target_link_libraries(hover_demo PRIVATE flux)
+if(FLUX_BUILD_EXAMPLES)
+  add_subdirectory(examples)
+endif()

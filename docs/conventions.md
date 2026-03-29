@@ -6,7 +6,7 @@ This document describes how the repository is organized and the patterns used co
 
 - **Name / version:** Flux v4 (`CMakeLists.txt`: `project(flux VERSION 4.0.0 …)`).
 - **Platforms (roadmap):** **macOS** is implemented today. **Linux desktop** (Wayland + Vulkan) and **embedded Linux** (KMS/DRM) are planned; CMake reserves `FLUX_PLATFORM` values for those backends. Non-macOS builds fail at configure time until a backend is added.
-- **Library:** Static library `flux`, plus example executables: `hello_world`, `clock_demo`, `blend_demo`, `text_demo`, `image_demo`, `scene_demo`, `reactive_demo`, `card_demo`, and `scroll_demo`.
+- **Library:** Static library `flux`, plus optional example executables (default **OFF**) listed in [`examples/CMakeLists.txt`](../examples/CMakeLists.txt); enable with **`FLUX_BUILD_EXAMPLES=ON`**.
 - **Language:** **C++23** (`CMAKE_CXX_STANDARD 23`), extensions off (`CMAKE_CXX_EXTENSIONS OFF`).
 - **Minimum macOS:** 11.0 (`CMAKE_OSX_DEPLOYMENT_TARGET`) when targeting macOS.
 
@@ -18,7 +18,8 @@ This document describes how the repository is organized and the patterns used co
 - **Sources:** Mix of `.cpp` (portable core) and **Objective-C++** (`.mm`) for Cocoa / AppKit on macOS (`Application.mm`, `Platform/Mac/MacMetalWindow.mm`).
 - **Includes:** Public API under `include/`; private helpers under `src/` (e.g. `src/Core/PlatformWindowCreate.hpp`) with `target_include_directories(… PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)`.
 - **Warnings:** `-Wall -Wextra -Wpedantic` on the `flux` target.
-- **Optional logging:** `FLUX_ENABLE_DEFAULT_EVENT_LOGGING` (CMake `option`, default **`ON`**) — the default `Application` event handlers print to stdout (set **`OFF`** for quiet or embedded builds).
+- **Optional logging:** `FLUX_ENABLE_DEFAULT_EVENT_LOGGING` (CMake `option`, default **`OFF`**) — set **`ON`** to print default `Application` event handlers to stdout (handy for debugging).
+- **Examples:** `FLUX_BUILD_EXAMPLES` (default **`OFF`**) — when **`ON`**, the root project `add_subdirectory(examples)`; example targets are defined in [`examples/CMakeLists.txt`](../examples/CMakeLists.txt).
 - **Apple frameworks (linked privately on macOS):** Cocoa, QuartzCore, Metal, MetalKit, Foundation, CoreText.
 - **Third-party (FetchContent):** **libtess2** — path fill/stroke tessellation; pulled at configure time from GitHub.
 - **Metal shaders:** `src/Graphics/Metal/CanvasShaders.metal` is compiled to a **metallib** and embedded into `MetalShaderLibrary.mm` via a CMake custom command (`xcrun metal` / `metallib` / `xxd`).
@@ -40,7 +41,7 @@ This document describes how the repository is organized and the patterns used co
 | `src/Graphics/` | Portable graphics (`Canvas.cpp`, `Path.cpp`, `PathFlattener`, `TextSystem.cpp`) and Metal/Core Text implementations (`Metal/`, `CoreTextSystem.mm`). |
 | `src/Platform/Mac/` | macOS-specific windowing (`MacMetalWindow.mm`). |
 | `src/Platform/` | Future: e.g. `Linux/Wayland/`, `Linux/Kms/` mirroring the Mac layout — one implementation of `detail::createPlatformWindow` per supported platform build. |
-| `examples/` | Sample apps (see [Examples](#examples)). |
+| `examples/` | Sample apps; CMake lists targets in [`examples/CMakeLists.txt`](../examples/CMakeLists.txt) (see [Examples](#examples)). |
 | `docs/` | Project documentation (this file and companions). |
 
 Public headers live under `Flux/Core/`, **`Flux/Graphics/`**, **`Flux/UI/`**, **`Flux/Scene/`**, and **`Flux/Reactive/`**. The abstract `PlatformWindow` interface is **private** — [`src/Core/PlatformWindow.hpp`](src/Core/PlatformWindow.hpp) — used only when building the library. Headers under **`Flux/Detail/`** are implementation-facing; prefer **`Window::setView`** and **`#include <Flux/UI/UI.hpp>`** rather than including detail headers directly.
@@ -132,7 +133,7 @@ Shared vocabulary lives in `Types.hpp` (`Size`, `Vec2`, time aliases, `MouseButt
 | `examples/card-demo` | `setView`, `VStack` / `HStack`, hooks, `useAnimated`, interactions |
 | `examples/scroll-demo` | `ScrollView` with many `Text` rows |
 
-Each target links the `flux` static library; see root `CMakeLists.txt` for CMake target names (`hello_world`, `clock_demo`, …).
+Each target links the `flux` static library; see [`examples/CMakeLists.txt`](../examples/CMakeLists.txt) for CMake target names (`hello_world`, `clock_demo`, …).
 
 ## Git
 

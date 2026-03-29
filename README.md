@@ -9,11 +9,11 @@ Linux desktop (Wayland/Vulkan) and embedded Linux (KMS/DRM) are reserved in CMak
 Requirements: **CMake 3.25+**, **Xcode command-line tools** (Metal compiler `xcrun metal`, `xxd` for embedded shader bytecode).
 
 ```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DFLUX_BUILD_EXAMPLES=ON
 cmake --build build
 ```
 
-Executables (all link the static `flux` library):
+By default only the static `flux` library is built. Pass **`-DFLUX_BUILD_EXAMPLES=ON`** (as above) to build the sample executables below (each links `flux`):
 
 | Target | Description |
 |--------|-------------|
@@ -30,7 +30,8 @@ Executables (all link the static `flux` library):
 Configure-time options:
 
 - `FLUX_PLATFORM` — `AUTO` (default), `MACOS`, or reserved future values (`LINUX_WAYLAND`, `LINUX_KMS`).
-- `FLUX_ENABLE_DEFAULT_EVENT_LOGGING` — default **ON**; set **OFF** to silence stdout logging from built-in `Application` handlers.
+- `FLUX_ENABLE_DEFAULT_EVENT_LOGGING` — default **OFF**; set **ON** to print built-in `Application` event handlers to stdout (useful while debugging).
+- `FLUX_BUILD_EXAMPLES` — default **OFF**; set **ON** to build example executables under [`examples/CMakeLists.txt`](examples/CMakeLists.txt).
 
 ## Documentation
 
