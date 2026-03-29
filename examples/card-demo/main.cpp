@@ -38,8 +38,12 @@ struct Card {
                 .cornerRadius = CornerRadius(7.f),
                 .fill = FillStyle::solid(accent),
             },
-            Text{.text = title, .font = {.size = 17.f, .weight = 600.f}, .color = pal::label},
-            Spacer{},
+            Element{Text{
+                .text = title,
+                .font = {.size = 17.f, .weight = 600.f},
+                .color = pal::label,
+                .frame = {0, 0, 0, 24.f},
+            }}.withFlex(1.f),
             Text{
                 .text = expanded ? "⌄" : "›",
                 .font = {.size = 24.f, .weight = 600.f},
