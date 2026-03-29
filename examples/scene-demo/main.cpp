@@ -62,6 +62,14 @@ class SceneDemoWindow : public Window {
 public:
   explicit SceneDemoWindow(WindowConfig const& c) : Window(c) {
     sceneGraph();
+    Application::instance().eventQueue().on<WindowEvent>([this](WindowEvent const& ev) {
+      if (ev.handle != handle() || ev.kind != WindowEvent::Kind::Resize) {
+        return;
+      }
+      // Geometry will be rebuilt in `render`; clear hover label so we do not show hits against stale bounds.
+      lastHover_ = std::nullopt;
+      setTitle("Flux — Scene graph — hover: —");
+    });
     Application::instance().eventQueue().on<InputEvent>([this](InputEvent const& e) {
       if (e.handle != handle()) {
         return;

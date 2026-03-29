@@ -1,6 +1,7 @@
 #include <Flux.hpp>
 #include <Flux/Core/Events.hpp>
 #include <Flux/Reactive/Observer.hpp>
+#include <Flux/Reactive/Transition.hpp>
 #include <Flux/Graphics/Canvas.hpp>
 #include <Flux/Graphics/Font.hpp>
 #include <Flux/Graphics/Styles.hpp>
@@ -40,15 +41,36 @@ class ReactiveDemoWindow : public Window {
   ObserverHandle hCircle_{};
   ObserverHandle hPointer_{};
   ObserverHandle hDistance_{};
+  /// Previous window content size; used to scale pointer/circle when the window is resized.
+  Size lastLayout_{};
 
 public:
-  explicit ReactiveDemoWindow(WindowConfig const& c) : Window(c) {
+  explicit ReactiveDemoWindow(WindowConfig const& c) : Window(c), lastLayout_{c.size} {
     auto redraw = [this]() { Window::requestRedraw(); };
     hClicks_ = s_.clicks.observe(redraw);
     hFill_ = s_.fillColor.observe(redraw);
     hCircle_ = s_.circleCenter.observe(redraw);
     hPointer_ = s_.pointerPos.observe(redraw);
     hDistance_ = s_.distanceToPointer.observe(redraw);
+
+    Application::instance().eventQueue().on<WindowEvent>([this](WindowEvent const& ev) {
+      if (ev.handle != handle() || ev.kind != WindowEvent::Kind::Resize) {
+        return;
+      }
+      Size const newS = ev.size;
+      if (newS.width < 1.f || newS.height < 1.f) {
+        return;
+      }
+      if (lastLayout_.width >= 1.f && lastLayout_.height >= 1.f) {
+        float const sx = newS.width / lastLayout_.width;
+        float const sy = newS.height / lastLayout_.height;
+        Point const p = s_.pointerPos.get();
+        s_.pointerPos.set(Point{p.x * sx, p.y * sy});
+        Point const c = s_.circleCenter.get();
+        s_.circleCenter.set(Point{c.x * sx, c.y * sy}, Transition::instant());
+      }
+      lastLayout_ = newS;
+    });
 
     Application::instance().eventQueue().on<InputEvent>([this](InputEvent const& e) {
       if (e.handle != Window::handle()) {
