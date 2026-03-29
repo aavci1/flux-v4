@@ -73,14 +73,17 @@ struct FocusField {
   }
 };
 
-/// Panel wrapping a FocusField; writes the subtree request-focus callable into \p focusBind each build.
+/// Panel wrapping a FocusField; writes the subtree request-focus callable into \p focusFnOut each build.
+/// Callers pass a pointer to storage that lives as long as the window (e.g. root \c mutable members).
 struct EditorPanel {
   std::string title;
-  State<std::function<void()>> focusBind;
+  std::function<void()>* focusFnOut = nullptr;
 
   auto body() const {
     auto requestFocus = useRequestFocus();
-    focusBind = requestFocus;
+    if (focusFnOut) {
+      *focusFnOut = requestFocus;
+    }
 
     return ZStack{
         .hAlign = HorizontalAlignment::Leading,
@@ -106,10 +109,11 @@ struct EditorPanel {
 };
 
 struct RequestFocusDemo {
-  auto body() const {
-    auto focusA = useState<std::function<void()>>({});
-    auto focusB = useState<std::function<void()>>({});
+  /// Stable storage for the latest \c useRequestFocus callables (written each build; not reactive).
+  mutable std::function<void()> focusPanelA;
+  mutable std::function<void()> focusPanelB;
 
+  auto body() const {
     auto btn = [](std::string label, std::function<void()> action) -> Element {
       return ZStack{
           .children =
@@ -155,22 +159,24 @@ struct RequestFocusDemo {
                                 .vAlign = VerticalAlignment::Top,
                                 .children =
                                     {
-                                        Element{EditorPanel{.title = "Panel A", .focusBind = focusA}}.withFlex(1.f),
-                                        Element{EditorPanel{.title = "Panel B", .focusBind = focusB}}.withFlex(1.f),
+                                        Element{EditorPanel{.title = "Panel A", .focusFnOut = &focusPanelA}}
+                                            .withFlex(1.f),
+                                        Element{EditorPanel{.title = "Panel B", .focusFnOut = &focusPanelB}}
+                                            .withFlex(1.f),
                                     },
                             },
                             HStack{
                                 .spacing = 10.f,
                                 .children =
                                     {
-                                        btn("Focus A", [focusA] {
-                                          if (*focusA) {
-                                            (*focusA)();
+                                        btn("Focus A", [this] {
+                                          if (focusPanelA) {
+                                            focusPanelA();
                                           }
                                         }),
-                                        btn("Focus B", [focusB] {
-                                          if (*focusB) {
-                                            (*focusB)();
+                                        btn("Focus B", [this] {
+                                          if (focusPanelB) {
+                                            focusPanelB();
                                           }
                                         }),
                                     },
