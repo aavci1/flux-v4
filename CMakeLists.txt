@@ -127,6 +127,7 @@ add_library(flux STATIC
   src/Graphics/Metal/MetalDeviceResources.mm
   src/Graphics/Metal/MetalCanvas.mm
   src/Platform/Mac/MacMetalWindow.mm
+  src/Platform/Mac/MacClipboard.mm
 )
 add_dependencies(flux flux_shaders)
 

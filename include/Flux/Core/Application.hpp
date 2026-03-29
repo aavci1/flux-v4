@@ -7,6 +7,7 @@
 #include <type_traits>
 #include <utility>
 
+#include <Flux/Core/Clipboard.hpp>
 #include <Flux/Core/Window.hpp>
 #include <Flux/Reactive/Observer.hpp>
 
@@ -56,6 +57,10 @@ public:
   EventQueue& eventQueue();
 
   TextSystem& textSystem();
+
+  /// Returns the process-wide system clipboard.
+  /// The returned reference is valid for the lifetime of the Application.
+  Clipboard& clipboard();
 
   /// Batched callback: runs at most once per `exec()` iteration after any reactive update.
   ObserverHandle onNextFrameNeeded(std::function<void()> callback);

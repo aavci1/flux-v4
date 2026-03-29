@@ -8,6 +8,7 @@
 
 #include "Core/PlatformWindow.hpp"
 #include "Graphics/CoreTextSystem.hpp"
+#include "Platform/Mac/MacClipboard.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -49,6 +50,7 @@ struct Application::Impl {
   std::unordered_map<unsigned int, Window*> byHandle_;
 
   std::unique_ptr<CoreTextSystem> textSystem_;
+  std::unique_ptr<Clipboard> clipboard_;
 
   bool quit_ = false;
   bool redraw_ = false;
@@ -97,6 +99,7 @@ Application::Application(int /*argc*/, char** /*argv*/) {
   gCurrent = this;
   d = std::make_unique<Impl>();
   d->textSystem_ = std::make_unique<CoreTextSystem>();
+  d->clipboard_ = std::make_unique<MacClipboard>();
 
   d->eventQueue_.on<WindowLifecycleEvent>([this](WindowLifecycleEvent const& e) {
     if (e.kind == WindowLifecycleEvent::Kind::Registered && e.window != nullptr) {
@@ -160,6 +163,8 @@ void Application::unregisterWindowHandle(unsigned int handle) { d->byHandle_.era
 EventQueue& Application::eventQueue() { return d->eventQueue_; }
 
 TextSystem& Application::textSystem() { return *d->textSystem_; }
+
+Clipboard& Application::clipboard() { return *d->clipboard_; }
 
 ObserverHandle Application::onNextFrameNeeded(std::function<void()> callback) {
   std::uint64_t const id = d->nextFrameId_++;
