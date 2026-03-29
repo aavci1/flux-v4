@@ -11,6 +11,8 @@ namespace flux {
 enum class ScrollAxis { Vertical, Horizontal, Both };
 
 /// Internal: applies a translation to scroll content. Used by `ScrollView`.
+/// Children are stacked along the scroll axis with no extra gap between siblings; use a single
+/// `VStack`/`HStack` (or similar) as the child when you need spacing.
 struct OffsetView {
   Point offset{};
   ScrollAxis axis = ScrollAxis::Vertical;

@@ -46,6 +46,7 @@ struct ScrollView {
   auto body() const {
     auto offset = useState<Point>({0.f, 0.f});
     auto downPoint = useState<Point>({0.f, 0.f});
+    auto dragging = useState(false);
     auto viewport = useState<Size>({0.f, 0.f});
     auto content = useState<Size>({0.f, 0.f});
     ScrollAxis const ax = axis;
@@ -69,11 +70,19 @@ struct ScrollView {
                     .stroke = StrokeStyle::none(),
                     .flexGrow = 1.f,
                     .onPointerDown =
-                        [offset, downPoint](Point p) {
+                        [dragging, offset, downPoint](Point p) {
+                          dragging = true;
                           downPoint = Point{p.x + (*offset).x, p.y + (*offset).y};
                         },
+                    .onPointerUp =
+                        [dragging](Point) {
+                          dragging = false;
+                        },
                     .onPointerMove =
-                        [offset, downPoint, ax, viewport, content](Point p) {
+                        [offset, downPoint, ax, viewport, content, dragging](Point p) {
+                          if (!*dragging) {
+                            return;
+                          }
                           Point const next{(*downPoint).x - p.x, (*downPoint).y - p.y};
                           offset = clampScrollOffset(ax, next, *viewport, *content);
                         },

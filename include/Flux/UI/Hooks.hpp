@@ -15,6 +15,8 @@ template<typename T>
 struct State {
   Signal<T>* signal = nullptr;
 
+  /// Default-constructed `State` is invalid (`signal == nullptr`). Only use default
+  /// construction when the handle will be assigned before `operator*` or conversion.
   State() = default;
   explicit State(Signal<T>* s) : signal(s) {}
 

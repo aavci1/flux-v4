@@ -791,15 +791,26 @@ Size Element::Model<OffsetView>::measure(BuildContext& ctx, LayoutConstraints co
   float innerW = std::max(0.f, assignedW);
   float innerH = std::max(0.f, assignedH);
 
+  // Match `OffsetView::build`: scrollport size comes from the parent's proposed constraints, not
+  // from an expanded child frame (see build pass comment).
+  float viewportW = innerW;
+  float viewportH = innerH;
+  if (std::isfinite(constraints.maxWidth) && constraints.maxWidth > 0.f) {
+    viewportW = constraints.maxWidth;
+  }
+  if (std::isfinite(constraints.maxHeight) && constraints.maxHeight > 0.f) {
+    viewportH = constraints.maxHeight;
+  }
+
   LayoutConstraints childCs = constraints;
   switch (value.axis) {
   case ScrollAxis::Vertical:
-    childCs.maxWidth = innerW > 0.f ? innerW : std::numeric_limits<float>::infinity();
+    childCs.maxWidth = viewportW > 0.f ? viewportW : std::numeric_limits<float>::infinity();
     childCs.maxHeight = std::numeric_limits<float>::infinity();
     break;
   case ScrollAxis::Horizontal:
     childCs.maxWidth = std::numeric_limits<float>::infinity();
-    childCs.maxHeight = innerH > 0.f ? innerH : std::numeric_limits<float>::infinity();
+    childCs.maxHeight = viewportH > 0.f ? viewportH : std::numeric_limits<float>::infinity();
     break;
   case ScrollAxis::Both:
     childCs.maxWidth = std::numeric_limits<float>::infinity();
@@ -824,6 +835,14 @@ Size Element::Model<OffsetView>::measure(BuildContext& ctx, LayoutConstraints co
     }
   }
   ctx.popChildIndex();
+
+  if (value.viewportSize.signal) {
+    value.viewportSize = Size{viewportW, viewportH};
+  }
+  if (value.contentSize.signal) {
+    value.contentSize = Size{totalW, totalH};
+  }
+
   return {totalW, totalH};
 }
 
