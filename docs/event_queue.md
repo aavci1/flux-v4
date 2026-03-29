@@ -149,7 +149,11 @@ Pending events are stored in buckets and drained in order: **lifecycle → windo
 
 How the UI thread drives `dispatch()` depends on the platform:
 
-- **macOS (current):** `Application::exec()` alternates platform event waits (`PlatformWindow::waitForEvents` / `processEvents`) with **`processDueTimers()`** (standard C++ `steady_clock` deadlines) and **`EventQueue::dispatch()`**. When idle, **`waitForEvents`** uses a timeout derived from the next timer deadline so the loop wakes for timer ticks without busy-waiting. Other platforms will attach the same contract to their event loop (e.g. Wayland `wl_display_dispatch`, KMS/DRM page-flip loop).
+- **macOS (current):** `Application::exec()` alternates platform event waits (`PlatformWindow::waitForEvents` / `processEvents`) with **`processDueTimers()`** (standard C++ `steady_clock` deadlines), **reactive / next-frame** bookkeeping (see below), and **`EventQueue::dispatch()`**. When idle, **`waitForEvents`** uses a timeout derived from the next timer deadline so the loop wakes for timer ticks without busy-waiting. Other platforms will attach the same contract to their event loop (e.g. Wayland `wl_display_dispatch`, KMS/DRM page-flip loop).
+
+### Reactive updates and redraw
+
+The **reactive** layer can mark work pending; **`Application::markReactiveDirty()`** (used internally when signals change) participates in the same main loop. After queued events are handled, the app may run **next-frame** callbacks registered with **`Application::onNextFrameNeeded()`** and coalesce redraws. This is separate from **`EventQueue`** buckets but still **main-thread**; custom UI events posted from those callbacks follow the usual **`post` → `dispatch`** path.
 
 ---
 

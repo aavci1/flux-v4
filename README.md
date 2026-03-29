@@ -1,6 +1,6 @@
 # Flux v4
 
-A small **C++23** application framework for **macOS** with a **Metal** 2D canvas, vector paths (tessellated via [libtess2](https://github.com/memononen/libtess2)), and **CoreText**-backed text layout and glyph rasterization.
+A small **C++23** application framework for **macOS** with a **Metal** 2D canvas, vector paths (tessellated via [libtess2](https://github.com/memononen/libtess2)), and **CoreText**-backed text layout and glyph rasterization. It also provides an optional **declarative UI** layer (layout, views, input routing into a **scene graph**), plus **reactive** primitives (`Signal`, `Computed`, `Animated`, transitions) coordinated with the main loop.
 
 Linux desktop (Wayland/Vulkan) and embedded Linux (KMS/DRM) are reserved in CMake but not implemented yet.
 
@@ -18,9 +18,14 @@ Executables (all link the static `flux` library):
 | Target | Description |
 |--------|-------------|
 | `hello_world` | Minimal window and `Application::exec()` |
-| `clock_demo` | Timers and drawing |
+| `clock_demo` | Timers and canvas drawing |
 | `blend_demo` | Opacity and blend modes |
 | `text_demo` | `TextSystem`, `AttributedString`, `Canvas::drawTextLayout` |
+| `image_demo` | Loading and drawing `Image` from a file |
+| `scene_demo` | Imperative `SceneGraph`, `SceneRenderer`, `HitTester` |
+| `reactive_demo` | `Signal` / `Computed` / `Animated` and observers |
+| `card_demo` | Declarative UI (`setView`), stacks, state hooks, animation |
+| `scroll_demo` | `ScrollView` with a scrollable list |
 
 Configure-time options:
 
@@ -34,4 +39,4 @@ Configure-time options:
 - [Conventions](docs/conventions.md) — layout, naming, pimpl, platform boundaries.
 - [Event queue](docs/event_queue.md) — `EventQueue`, dispatch order, timers, custom events.
 
-Public API headers live under `include/Flux/`. The umbrella header is [`include/Flux.hpp`](include/Flux.hpp).
+Public API headers live under `include/Flux/`. The umbrella header is [`include/Flux.hpp`](include/Flux.hpp) (core, graphics, and [`Reactive.hpp`](include/Flux/Reactive/Reactive.hpp)). Declarative UI pulls in [`UI/UI.hpp`](include/Flux/UI/UI.hpp) (also includes `WindowUI.hpp` for `Window::setView`).

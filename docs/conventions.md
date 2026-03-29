@@ -6,7 +6,7 @@ This document describes how the repository is organized and the patterns used co
 
 - **Name / version:** Flux v4 (`CMakeLists.txt`: `project(flux VERSION 4.0.0 …)`).
 - **Platforms (roadmap):** **macOS** is implemented today. **Linux desktop** (Wayland + Vulkan) and **embedded Linux** (KMS/DRM) are planned; CMake reserves `FLUX_PLATFORM` values for those backends. Non-macOS builds fail at configure time until a backend is added.
-- **Library:** Static library `flux`, plus example executables `hello_world`, `clock_demo`, `blend_demo`, and `text_demo`.
+- **Library:** Static library `flux`, plus example executables: `hello_world`, `clock_demo`, `blend_demo`, `text_demo`, `image_demo`, `scene_demo`, `reactive_demo`, `card_demo`, and `scroll_demo`.
 - **Language:** **C++23** (`CMAKE_CXX_STANDARD 23`), extensions off (`CMAKE_CXX_EXTENSIONS OFF`).
 - **Minimum macOS:** 11.0 (`CMAKE_OSX_DEPLOYMENT_TARGET`) when targeting macOS.
 
@@ -19,7 +19,7 @@ This document describes how the repository is organized and the patterns used co
 - **Includes:** Public API under `include/`; private helpers under `src/` (e.g. `src/Core/PlatformWindowCreate.hpp`) with `target_include_directories(… PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)`.
 - **Warnings:** `-Wall -Wextra -Wpedantic` on the `flux` target.
 - **Optional logging:** `FLUX_ENABLE_DEFAULT_EVENT_LOGGING` (CMake `option`, default **`ON`**) — the default `Application` event handlers print to stdout (set **`OFF`** for quiet or embedded builds).
-- **Apple frameworks (linked privately on macOS):** Cocoa, QuartzCore, Metal, Foundation, CoreText.
+- **Apple frameworks (linked privately on macOS):** Cocoa, QuartzCore, Metal, MetalKit, Foundation, CoreText.
 - **Third-party (FetchContent):** **libtess2** — path fill/stroke tessellation; pulled at configure time from GitHub.
 - **Metal shaders:** `src/Graphics/Metal/CanvasShaders.metal` is compiled to a **metallib** and embedded into `MetalShaderLibrary.mm` via a CMake custom command (`xcrun metal` / `metallib` / `xxd`).
 
@@ -28,15 +28,22 @@ This document describes how the repository is organized and the patterns used co
 | Path | Role |
 |------|------|
 | `include/Flux/` | Public headers; stable API surface. |
-| `include/Flux.hpp` | Umbrella include re-exporting core and selected graphics headers (see below). |
+| `include/Flux.hpp` | Umbrella include: core, graphics, and [`Reactive.hpp`](../include/Flux/Reactive/Reactive.hpp). |
+| `include/Flux/UI/` | Declarative UI (`Element`, layout, views, hooks, `LayoutEngine`). Entry point: [`UI.hpp`](../include/Flux/UI/UI.hpp). |
+| `include/Flux/Scene/` | Scene graph, renderer, hit testing, node store. |
+| `include/Flux/Reactive/` | Signals, computed values, animation, observers. |
+| `include/Flux/Detail/` | Internal helpers (`Runtime.hpp`, `RootHolder.hpp`) — not stable public API. |
 | `src/Core/` | Core implementation (`Application`, `Window`, `EventQueue`, `PlatformWindow.hpp`, `PlatformWindowCreate.hpp`, factory). |
+| `src/UI/` | UI runtime, layout, element build, state store, event map. |
+| `src/Scene/` | Scene graph storage, renderer, hit tester, optional dump. |
+| `src/Reactive/` | Reactive primitives implementation. |
 | `src/Graphics/` | Portable graphics (`Canvas.cpp`, `Path.cpp`, `PathFlattener`, `TextSystem.cpp`) and Metal/Core Text implementations (`Metal/`, `CoreTextSystem.mm`). |
 | `src/Platform/Mac/` | macOS-specific windowing (`MacMetalWindow.mm`). |
 | `src/Platform/` | Future: e.g. `Linux/Wayland/`, `Linux/Kms/` mirroring the Mac layout — one implementation of `detail::createPlatformWindow` per supported platform build. |
-| `examples/` | Sample apps: `hello-world`, `clock-demo`, `blend-demo`, `text-demo`. |
+| `examples/` | Sample apps (see [Examples](#examples)). |
 | `docs/` | Project documentation (this file and companions). |
 
-Public headers live under `Flux/Core/` (types, events, application, window, queue) and **`Flux/Graphics/`** (canvas, path, styles, text layout, attributed strings). The abstract `PlatformWindow` interface is **private** — [`src/Core/PlatformWindow.hpp`](src/Core/PlatformWindow.hpp) — used only when building the library.
+Public headers live under `Flux/Core/`, **`Flux/Graphics/`**, **`Flux/UI/`**, **`Flux/Scene/`**, and **`Flux/Reactive/`**. The abstract `PlatformWindow` interface is **private** — [`src/Core/PlatformWindow.hpp`](src/Core/PlatformWindow.hpp) — used only when building the library. Headers under **`Flux/Detail/`** are implementation-facing; prefer **`Window::setView`** and **`#include <Flux/UI/UI.hpp>`** rather than including detail headers directly.
 
 **Factory rule:** `flux::detail::createPlatformWindow(WindowConfig)` is implemented in exactly one platform translation unit per build — **no** `#ifdef` platform branches inside portable core files such as `Window.cpp`.
 
@@ -52,7 +59,8 @@ Public headers live under `Flux/Core/` (types, events, application, window, queu
 
 ## Umbrella include
 
-- Prefer **`#include <Flux.hpp>`** for apps that want the main surface area; it pulls `Application`, `EventQueue`, `Events`, `Types`, `Window`, **`Canvas`**, and **`Styles`** (see `include/Flux.hpp`). Graphics-only consumers can include **`TextSystem.hpp`**, **`Path.hpp`**, etc., directly under `Flux/Graphics/`.
+- Prefer **`#include <Flux.hpp>`** for apps that want the main surface area; it pulls `Application`, `EventQueue`, `Events`, `Types`, `Window`, the **`Reactive`** umbrella, **`Canvas`**, and **`Styles`** (see `include/Flux.hpp`). Graphics-only consumers can include **`TextSystem.hpp`**, **`Path.hpp`**, etc., directly under `Flux/Graphics/`.
+- Declarative UI: **`#include <Flux/UI/UI.hpp>`** (and `WindowUI.hpp` is included there for **`Window::setView`**). Scene-only or imperative demos can include **`Flux/Scene/SceneGraph.hpp`** and related headers without the UI layer.
 - Finer-grained includes (`<Flux/Core/…>`) are fine when dependencies should stay minimal.
 
 ## Private implementation (pimpl)
@@ -91,6 +99,7 @@ Shared vocabulary lives in `Types.hpp` (`Size`, `Vec2`, time aliases, `MouseButt
 - **`CustomEvent`** carries a `std::uint32_t type` and `std::any payload` for arbitrary user payloads; `EventQueue` maps non-framework types to `CustomEvent` via `typeid`-derived IDs.
 - **`EventQueue`:** `post` / `dispatch` / `on` are **main-thread-only by convention**. Obtain the queue with **`Application::instance().eventQueue()`** (or **`app.eventQueue()`**).
 - **`TextSystem`:** obtain with **`Application::instance().textSystem()`** for layout, measurement, and font/glyph resolution used by **`Canvas::drawTextLayout`** and the Metal glyph atlas.
+- **`Application`:** reactive integration includes **`markReactiveDirty()`** (internal / reactive layer) and **`onNextFrameNeeded()`** for batched work once per main-loop iteration after reactive updates.
 
 ## Platform abstraction
 
@@ -117,8 +126,13 @@ Shared vocabulary lives in `Types.hpp` (`Size`, `Vec2`, time aliases, `MouseButt
 | `examples/clock-demo` | Timers, redraw requests, `Window::render` / canvas drawing |
 | `examples/blend-demo` | Opacity and blend modes on the canvas |
 | `examples/text-demo` | `TextSystem`, `AttributedString`, `TextLayout`, `Canvas::drawTextLayout` |
+| `examples/image-demo` | `loadImageFromFile`, `Image`, `Canvas::drawImage` |
+| `examples/scene-demo` | Imperative `SceneGraph`, `SceneRenderer`, `HitTester`, hit labels |
+| `examples/reactive-demo` | `Signal`, `Computed`, `Animated`, `Observer` with canvas |
+| `examples/card-demo` | `setView`, `VStack` / `HStack`, hooks, `useAnimated`, interactions |
+| `examples/scroll-demo` | `ScrollView` with many `Text` rows |
 
-Each target links the `flux` static library; see root `CMakeLists.txt` for target names.
+Each target links the `flux` static library; see root `CMakeLists.txt` for CMake target names (`hello_world`, `clock_demo`, …).
 
 ## Git
 
@@ -126,4 +140,4 @@ Each target links the `flux` static library; see root `CMakeLists.txt` for targe
 
 ---
 
-When adding new features, prefer extending these patterns (pimpl with `Impl` + `d`, `flux::detail` for non-public helpers, main-thread discipline for `EventQueue`, platform code behind `PlatformWindow` + factory, graphics behind `Canvas` + `TextSystem`) so the codebase stays uniform and the public headers stay stable.
+When adding new features, prefer extending these patterns (pimpl with `Impl` + `d`, `flux::detail` for non-public helpers, main-thread discipline for `EventQueue`, platform code behind `PlatformWindow` + factory, graphics behind `Canvas` + `TextSystem`, UI rebuilds and layout behind **`Runtime`** + **`LayoutEngine`**) so the codebase stays uniform and the public headers stay stable.
