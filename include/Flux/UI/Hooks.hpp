@@ -5,9 +5,37 @@
 #include <Flux/Reactive/Signal.hpp>
 #include <Flux/UI/StateStore.hpp>
 
+#include <cassert>
+#include <cstddef>
+#include <functional>
+#include <type_traits>
 #include <utility>
 
 namespace flux {
+
+namespace detail {
+
+inline std::size_t combineHash(std::size_t seed, std::size_t h) {
+  return seed ^ (h + 0x9e3779b9u + (seed << 6) + (seed >> 2));
+}
+
+inline std::size_t hashDeps() { return 0; }
+
+template<typename First, typename... Rest>
+inline std::size_t hashDeps(First const& first, Rest const&... rest) {
+  std::size_t const h = std::hash<std::decay_t<First>>{}(first);
+  return combineHash(h, hashDeps(rest...));
+}
+
+} // namespace detail
+
+/// Cached memo slot for `useMemo` — holds the last value and dependency hash.
+template<typename T>
+struct MemoSlot {
+  T value{};
+  std::size_t depsHash = 0;
+  bool initialised = false;
+};
 
 /// Copyable handle to the persistent `Signal<T>` for this hook slot. Capturing a
 /// `State<T>` in a lambda copies the pointer — safe for the window lifetime.
@@ -60,5 +88,43 @@ Anim<T> useAnimated(T initial = T{}) {
 /// Returns true if the calling component's subtree contains the window's focused node.
 /// Must be called inside body() like other hooks.
 bool useFocus();
+
+/// Returns a cached value of `fn()`, recomputing only when the combined hash of `deps...`
+/// changes from the previous call.
+///
+/// This is **not** reactive: it does not subscribe to signals. It only avoids redundant work
+/// within and across rebuilds when dependencies are unchanged.
+///
+/// Must be called in the same order every `body()` invocation (same rules as `useState`).
+/// Each `deps` value is hashed with `std::hash` and mixed into a single fingerprint; types
+/// without `std::hash` fail to compile at the call site.
+///
+/// The returned reference is valid for the duration of the current `body()` call only. Copy
+/// values into lambdas that may outlive `body()`.
+///
+/// If `T` holds pointers or `std::string_view` into storage not owned by the memo slot, you
+/// must ensure that storage outlives the slot (typically the window lifetime). Prefer returning
+/// owning values from `fn()`.
+///
+/// With **zero dependencies**, the hash is always `0` and `fn` runs once (first initialisation)
+/// then never again — useful for one-time setup, easy to misuse if you omit a dependency.
+///
+/// `fn` should return a value type; the implementation stores `std::decay_t` of the result.
+template<typename Fn, typename... Deps>
+std::decay_t<std::invoke_result_t<Fn&&>> const& useMemo(Fn&& fn, Deps const&... deps) {
+  using T = std::decay_t<std::invoke_result_t<Fn&&>>;
+  StateStore* store = StateStore::current();
+  assert(store && "useMemo called outside of a build pass");
+
+  MemoSlot<T>& slot = store->claimSlot<MemoSlot<T>>();
+
+  std::size_t const currentHash = detail::hashDeps(deps...);
+  if (!slot.initialised || slot.depsHash != currentHash) {
+    slot.value = std::invoke(std::forward<Fn>(fn));
+    slot.depsHash = currentHash;
+    slot.initialised = true;
+  }
+  return slot.value;
+}
 
 } // namespace flux

@@ -1,5 +1,7 @@
 #include <Flux.hpp>
 #include <Flux/Core/WindowUI.hpp>
+#include <Flux/Graphics/TextLayoutOptions.hpp>
+#include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Reactive/Reactive.hpp>
 #include <Flux/UI/UI.hpp>
 
@@ -19,6 +21,9 @@ constexpr Color accent1 = Color::hex(0x2E9E5B);
 constexpr Color accent2 = Color::hex(0xD05A2B);
 } // namespace pal
 
+/// Inner width for wrapped body text: default window (480) minus list padding (24×2) minus card padding (18×2).
+constexpr float kCardBodyInnerWidth = 480.f - 48.f - 36.f;
+
 struct Card {
   Color accent = pal::accent0;
   std::string title;
@@ -27,6 +32,13 @@ struct Card {
   auto body() const {
     auto expanded = useState<bool>(false);
     auto bodyOpacity = useAnimated<float>(0.f);
+
+    float const bodyTextHeight = useMemo([&] {
+      TextSystem& ts = Application::instance().textSystem();
+      Font const bodyFont{.size = 15.f, .weight = 400.f};
+      TextLayoutOptions opts{.wrapping = TextWrapping::Wrap};
+      return ts.measure(detail, bodyFont, pal::sublabel, kCardBodyInnerWidth, opts).height;
+    }, detail, kCardBodyInnerWidth);
 
     std::vector<Element> rows;
     rows.emplace_back(HStack{
@@ -62,7 +74,7 @@ struct Card {
           .font = {.size = 15.f, .weight = 400.f},
           .color = pal::sublabel,
           .wrapping = TextWrapping::Wrap,
-          .frame = {0, 0, 0, bodyOpacity * 56.f},
+          .frame = {0, 0, 0, bodyOpacity * bodyTextHeight},
       });
     }
 
