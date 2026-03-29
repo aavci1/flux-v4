@@ -6,6 +6,7 @@
 #include <Flux/Reactive/Observer.hpp>
 #include <Flux/Core/Types.hpp>
 #include <Flux/Scene/SceneGraph.hpp>
+#include <Flux/UI/ActionRegistry.hpp>
 #include <Flux/UI/BuildContext.hpp>
 #include <Flux/UI/ComponentKey.hpp>
 #include <Flux/UI/Element.hpp>
@@ -73,6 +74,12 @@ public:
   /// `onOverlayRemoved` uses this to skip focus/eventMap work during `~StateStore` teardown.
   bool imploding() const noexcept { return imploding_; }
 
+  /// Descriptor + committed registry: whether the handler for \p name is enabled (for `Window::isActionEnabled`).
+  bool isActionCurrentlyEnabled(std::string const& name) const;
+
+  /// Registry filled during the current rebuild; swap to committed at end of rebuild.
+  ActionRegistry& actionRegistryForBuild() noexcept { return actionRegistryBuild_; }
+
 private:
   /// `sizeOverride` — size from `WindowEvent::size` on resize (preferred over re-querying the view).
   void rebuild(std::optional<Size> sizeOverride = std::nullopt);
@@ -137,6 +144,9 @@ private:
 
   std::unordered_map<ComponentKey, Rect, ComponentKeyHash> layoutRectPrev_{};
   std::unordered_map<ComponentKey, Rect, ComponentKeyHash> layoutRectCurrent_{};
+
+  ActionRegistry actionRegistryBuild_{};
+  ActionRegistry actionRegistryCommitted_{};
 };
 
 } // namespace flux

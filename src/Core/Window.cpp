@@ -6,12 +6,14 @@
 #include <Flux/Core/Window.hpp>
 #include <Flux/Detail/RootHolder.hpp>
 #include <Flux/Detail/Runtime.hpp>
+#include <Flux/Detail/Runtime.hpp>
 #include <Flux/Graphics/Canvas.hpp>
 #include <Flux/Scene/SceneGraph.hpp>
 #include <Flux/Scene/SceneRenderer.hpp>
 #include <Flux/UI/Overlay.hpp>
 
 #include <memory>
+#include <utility>
 
 #include "Core/PlatformWindow.hpp"
 #include "Core/PlatformWindowCreate.hpp"
@@ -29,6 +31,7 @@ struct Window::Impl {
   /// `overlayMgr_` first and use-after-free on window close with an open overlay.
   OverlayManager overlayMgr_;
   std::unique_ptr<Runtime> runtime_;
+  std::unordered_map<std::string, ActionDescriptor> actions_;
 
   explicit Impl(Window&) {}
   ~Impl();
@@ -153,6 +156,28 @@ void Window::clearOverlays() {
 OverlayManager& Window::overlayManager() { return d->overlayMgr_; }
 
 OverlayManager const& Window::overlayManager() const { return d->overlayMgr_; }
+
+void Window::registerAction(std::string name, ActionDescriptor descriptor) {
+  d->actions_[std::move(name)] = std::move(descriptor);
+}
+
+bool Window::isActionEnabled(std::string const& name) const {
+  auto it = d->actions_.find(name);
+  if (it == d->actions_.end()) {
+    return false;
+  }
+  if (it->second.isEnabled && !it->second.isEnabled()) {
+    return false;
+  }
+  if (!d->runtime_) {
+    return true;
+  }
+  return d->runtime_->isActionCurrentlyEnabled(name);
+}
+
+std::unordered_map<std::string, ActionDescriptor> const& Window::actionDescriptors() const {
+  return d->actions_;
+}
 
 void Window::setViewRoot(std::unique_ptr<RootHolder> holder) {
   d->setViewRoot(*this, std::move(holder));

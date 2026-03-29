@@ -1,7 +1,10 @@
 #pragma once
 
+#include <Flux/Core/Action.hpp>
+
 #include <memory>
 #include <string>
+#include <unordered_map>
 
 #include <Flux/Core/Cursor.hpp>
 #include <Flux/Core/Types.hpp>
@@ -82,6 +85,13 @@ public:
   OverlayManager& overlayManager();
   OverlayManager const& overlayManager() const;
 
+  /// Registers an action descriptor. Must be called before the first build or during window setup —
+  /// descriptors are static for the window lifetime. Calling again for the same name replaces it.
+  void registerAction(std::string name, ActionDescriptor descriptor);
+
+  /// True if \p name is registered and descriptor + handler enabled checks pass (for menus/toolbars).
+  bool isActionEnabled(std::string const& name) const;
+
   /// Sets the root view component (declarative UI). Creates internal state on first call.
   /// Definition in `<Flux/Core/WindowUI.hpp>` (include that header in TUs that call `setView`).
   ///
@@ -101,6 +111,8 @@ protected:
 
 private:
   friend class Runtime;
+
+  std::unordered_map<std::string, ActionDescriptor> const& actionDescriptors() const;
 
   /// Used by `Application` (friend); implementation on `Impl`.
   PlatformWindow* platformWindow() const;

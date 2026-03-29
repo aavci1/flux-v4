@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <functional>
 #include <optional>
+#include <string>
 #include <type_traits>
 #include <utility>
 
@@ -154,5 +155,13 @@ std::decay_t<std::invoke_result_t<Fn&&>> const& useMemo(Fn&& fn, Deps const&... 
 
 /// Window-space rect for the calling composite from the previous layout pass (see `Runtime`).
 std::optional<Rect> useLayoutRect();
+
+/// Registers a handler for the named action that fires only when the calling component subtree has focus.
+void useViewAction(std::string const& name, std::function<void()> handler,
+                   std::function<bool()> isEnabled = {});
+
+/// Registers a window-level action handler (last registration in build order wins for a given name).
+void useWindowAction(std::string const& name, std::function<void()> handler,
+                     std::function<bool()> isEnabled = {});
 
 } // namespace flux

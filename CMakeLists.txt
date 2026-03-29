@@ -97,6 +97,7 @@ add_library(flux STATIC
   src/UI/BuildContext.cpp
   src/UI/StateStore.cpp
   src/UI/Element.cpp
+  src/UI/ActionRegistry.cpp
   src/UI/EventMap.cpp
   src/UI/LayoutEngine.cpp
   src/UI/Layout/LayoutVStack.cpp

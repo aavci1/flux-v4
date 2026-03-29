@@ -23,9 +23,14 @@
 #include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <utility>
 #include <vector>
 
 namespace flux {
+
+bool Runtime::isActionCurrentlyEnabled(std::string const& name) const {
+  return actionRegistryCommitted_.isHandlerEnabled(focusedKey_, name, window_.actionDescriptors());
+}
 
 void Runtime::setRoot(std::unique_ptr<RootHolder> holder) {
   rootHolder_ = std::move(holder);
@@ -374,6 +379,8 @@ void Runtime::rebuild(std::optional<Size> sizeOverride) {
 
   layoutEngine_.resetForBuild();
 
+  actionRegistryBuild_.beginRebuild();
+
   stateStore_.beginRebuild();
   StateStore::setCurrent(&stateStore_);
 
@@ -407,6 +414,8 @@ void Runtime::rebuild(std::optional<Size> sizeOverride) {
   }
 
   window_.overlayManager().rebuild(sz, *this);
+
+  std::swap(actionRegistryBuild_, actionRegistryCommitted_);
 
   if (inputDebugEnabled()) {
     std::fprintf(stderr,
@@ -673,6 +682,11 @@ void Runtime::handleInput(InputEvent const& e) {
       bool const reverse = any(e.modifiers & Modifiers::Shift);
       cycleTabFocusInMap(eventMap_, reverse, std::nullopt);
       return;
+    }
+    if (windowHasFocus_) {
+      if (actionRegistryCommitted_.dispatchShortcut(focusedKey_, e.key, e.modifiers, window_.actionDescriptors())) {
+        return;
+      }
     }
     if (!focusedKey_.empty() && windowHasFocus_) {
       auto const [id, h] = eventMap_.findWithIdByKey(focusedKey_);
@@ -1118,6 +1132,21 @@ std::function<void()> useRequestFocus() {
   return [rt, key] {
     rt->requestFocusInSubtree(key);
   };
+}
+
+void useViewAction(std::string const& name, std::function<void()> handler, std::function<bool()> isEnabled) {
+  Runtime* rt = Runtime::current();
+  StateStore* store = StateStore::current();
+  assert(rt && "useViewAction called outside of a build pass");
+  assert(store && "useViewAction called outside of a build pass");
+  rt->actionRegistryForBuild().registerViewClaim(store->currentComponentKey(), name, std::move(handler),
+                                                 std::move(isEnabled));
+}
+
+void useWindowAction(std::string const& name, std::function<void()> handler, std::function<bool()> isEnabled) {
+  Runtime* rt = Runtime::current();
+  assert(rt && "useWindowAction called outside of a build pass");
+  rt->actionRegistryForBuild().registerWindowAction(name, std::move(handler), std::move(isEnabled));
 }
 
 namespace {
