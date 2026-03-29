@@ -31,7 +31,7 @@ void MacClipboard::writeText(std::string text) {
 
 bool MacClipboard::hasText() const {
   NSPasteboard* pb = [NSPasteboard generalPasteboard];
-  return [[pb types] containsObject:NSPasteboardTypeString];
+  return [pb availableTypeFromArray:@[NSPasteboardTypeString]] != nil;
 }
 
 } // namespace flux
