@@ -9,6 +9,7 @@
 #include <string>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 namespace flux {
 
@@ -44,8 +45,12 @@ public:
   std::pair<NodeId, EventHandlers const*> findWithIdByKey(ComponentKey const& key) const;
   void clear();
 
+  /// Stable keys of all focusable nodes, in build order.
+  std::vector<ComponentKey> const& focusOrder() const { return focusOrder_; }
+
 private:
   std::unordered_map<NodeId, EventHandlers, NodeIdHash> map_;
+  std::vector<ComponentKey> focusOrder_{};
 };
 
 } // namespace flux

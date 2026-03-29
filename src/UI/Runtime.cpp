@@ -4,6 +4,7 @@
 #include <Flux/Core/EventQueue.hpp>
 #include <Flux/Core/Window.hpp>
 #include <Flux/Core/Events.hpp>
+#include <Flux/Core/KeyCodes.hpp>
 #include <Flux/Scene/SceneGraph.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Scene/HitTester.hpp>
@@ -123,6 +124,31 @@ void Runtime::clearFocus() {
   }
   focusedKey_.clear();
   Application::instance().markReactiveDirty();
+}
+
+void Runtime::cycleTabFocus(bool reverse) {
+  auto const& order = eventMap_.focusOrder();
+  if (order.empty()) {
+    return;
+  }
+
+  if (focusedKey_.empty()) {
+    setFocus(reverse ? order.back() : order.front());
+    return;
+  }
+
+  auto it = std::find(order.begin(), order.end(), focusedKey_);
+  if (it == order.end()) {
+    setFocus(reverse ? order.back() : order.front());
+    return;
+  }
+
+  if (!reverse) {
+    ++it;
+    setFocus(it == order.end() ? order.front() : *it);
+  } else {
+    setFocus(it == order.begin() ? order.back() : *std::prev(it));
+  }
 }
 
 Runtime::Runtime(Window& window) : window_(window) {
@@ -262,6 +288,11 @@ void Runtime::handleInput(InputEvent const& e) {
     if (dbg) {
       std::fprintf(stderr, "[flux:input] KeyDown key=%u modifiers=%u\n", static_cast<unsigned>(e.key),
                    static_cast<unsigned>(e.modifiers));
+    }
+    if (e.key == keys::Tab && windowHasFocus_) {
+      bool const reverse = any(e.modifiers & Modifiers::Shift);
+      cycleTabFocus(reverse);
+      return;
     }
     if (!focusedKey_.empty() && windowHasFocus_) {
       auto const [id, h] = eventMap_.findWithIdByKey(focusedKey_);

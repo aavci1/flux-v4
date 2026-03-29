@@ -43,6 +43,7 @@ private:
   void cancelActivePress(Point windowPoint);
   void setFocus(ComponentKey const& key);
   void clearFocus();
+  void cycleTabFocus(bool reverse);
 
   static thread_local Runtime* sCurrent;
 

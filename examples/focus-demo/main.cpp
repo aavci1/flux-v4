@@ -98,8 +98,8 @@ struct FocusDemoRoot {
                                  .color = pal::label},
                             Text{
                                 .text = "Click a field to focus. Type text; Delete removes a character; Esc "
-                                        "clears. Cmd+S appends a demo tag. Switch fields by clicking the other "
-                                        "panel. Focus ring uses useFocus().",
+                                        "clears. Cmd+S appends a demo tag. Tab / Shift+Tab cycle fields "
+                                        "(A→B→C). Focus ring uses useFocus().",
                                 .font = {.size = 14.f, .weight = 400.f},
                                 .color = pal::sublabel,
                                 .wrapping = TextWrapping::Wrap,
@@ -111,6 +111,7 @@ struct FocusDemoRoot {
                                     {
                                         Element{FocusField{.title = "Field A — notes"}}.withFlex(1.f),
                                         Element{FocusField{.title = "Field B — scratch"}}.withFlex(1.f),
+                                        Element{FocusField{.title = "Field C — extra"}}.withFlex(1.f),
                                     },
                             },
                         },

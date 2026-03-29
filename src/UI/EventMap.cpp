@@ -6,7 +6,12 @@ std::size_t NodeIdHash::operator()(NodeId id) const noexcept {
   return static_cast<std::size_t>(id.index) ^ (static_cast<std::size_t>(id.generation) << 16u);
 }
 
-void EventMap::insert(NodeId id, EventHandlers handlers) { map_[id] = std::move(handlers); }
+void EventMap::insert(NodeId id, EventHandlers handlers) {
+  if (handlers.focusable && !handlers.stableTargetKey.empty()) {
+    focusOrder_.push_back(handlers.stableTargetKey);
+  }
+  map_.insert_or_assign(id, std::move(handlers));
+}
 
 EventHandlers const* EventMap::find(NodeId id) const {
   auto it = map_.find(id);
@@ -28,6 +33,9 @@ std::pair<NodeId, EventHandlers const*> EventMap::findWithIdByKey(ComponentKey c
   return {kInvalidNodeId, nullptr};
 }
 
-void EventMap::clear() { map_.clear(); }
+void EventMap::clear() {
+  map_.clear();
+  focusOrder_.clear();
+}
 
 } // namespace flux
