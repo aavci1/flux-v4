@@ -1139,6 +1139,10 @@ void useViewAction(std::string const& name, std::function<void()> handler, std::
   StateStore* store = StateStore::current();
   assert(rt && "useViewAction called outside of a build pass");
   assert(store && "useViewAction called outside of a build pass");
+  if (store->overlayScope().has_value()) {
+    assert(false && "useViewAction is not supported in overlay subtrees (ComponentKey collision risk)");
+    return;
+  }
   rt->actionRegistryForBuild().registerViewClaim(store->currentComponentKey(), name, std::move(handler),
                                                  std::move(isEnabled));
 }

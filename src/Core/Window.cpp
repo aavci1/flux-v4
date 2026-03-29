@@ -6,7 +6,6 @@
 #include <Flux/Core/Window.hpp>
 #include <Flux/Detail/RootHolder.hpp>
 #include <Flux/Detail/Runtime.hpp>
-#include <Flux/Detail/Runtime.hpp>
 #include <Flux/Graphics/Canvas.hpp>
 #include <Flux/Scene/SceneGraph.hpp>
 #include <Flux/Scene/SceneRenderer.hpp>

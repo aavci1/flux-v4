@@ -90,6 +90,10 @@ public:
   void registerAction(std::string name, ActionDescriptor descriptor);
 
   /// True if \p name is registered and descriptor + handler enabled checks pass (for menus/toolbars).
+  ///
+  /// During an active `body()` pass, handler state is read from the **committed** action registry (the
+  /// previous rebuild). The in-flight build buffer is not swapped until rebuild completes, so enabled
+  /// UI can lag by one frame (e.g. clipboard or selection); the next reactive pass corrects it.
   bool isActionEnabled(std::string const& name) const;
 
   /// Sets the root view component (declarative UI). Creates internal state on first call.

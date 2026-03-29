@@ -157,6 +157,9 @@ std::decay_t<std::invoke_result_t<Fn&&>> const& useMemo(Fn&& fn, Deps const&... 
 std::optional<Rect> useLayoutRect();
 
 /// Registers a handler for the named action that fires only when the calling component subtree has focus.
+///
+/// Must not be called from overlay subtrees: overlay `ComponentKey` paths can collide with the main tree,
+/// which would make dispatch match the wrong claim. Use raw keyboard handlers in overlays instead.
 void useViewAction(std::string const& name, std::function<void()> handler,
                    std::function<bool()> isEnabled = {});
 

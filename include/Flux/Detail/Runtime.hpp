@@ -74,7 +74,8 @@ public:
   /// `onOverlayRemoved` uses this to skip focus/eventMap work during `~StateStore` teardown.
   bool imploding() const noexcept { return imploding_; }
 
-  /// Descriptor + committed registry: whether the handler for \p name is enabled (for `Window::isActionEnabled`).
+  /// Whether the committed registry's handler for \p name passes enabled checks (for `Window::isActionEnabled`).
+  /// Committed data is from the last finished rebuild — not the build currently in progress.
   bool isActionCurrentlyEnabled(std::string const& name) const;
 
   /// Registry filled during the current rebuild; swap to committed at end of rebuild.
