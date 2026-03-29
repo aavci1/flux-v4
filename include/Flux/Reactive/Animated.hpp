@@ -105,6 +105,11 @@ void Animated<T>::set(T target) {
 
 template<Interpolatable T>
 void Animated<T>::set(T target, Transition transition) {
+  if constexpr (detail::equalityComparableV<T>) {
+    if (target_ == target) {
+      return;
+    }
+  }
   transition_ = std::move(transition);
   target_ = std::move(target);
 

@@ -106,6 +106,18 @@ NodeId SceneGraph::addLine(NodeId parent, LineNode node) {
   return id;
 }
 
+NodeId SceneGraph::addCustomRender(NodeId parent, CustomRenderNode node) {
+  SceneNode* p = store_.get(parent);
+  if (!p || !std::get_if<LayerNode>(p)) {
+    return kInvalidNodeId;
+  }
+  NodeId const id = store_.insert(SceneNode{std::move(node)});
+  if (!appendChild(store_, parent, id)) {
+    return kInvalidNodeId;
+  }
+  return id;
+}
+
 // DFS over the tree; O(subtree size). Mutations call this often — if rebuilds become hot, cache a
 // parent pointer per slot (or reverse map) so remove/reparent stay O(1) for parent lookup.
 std::optional<NodeId> SceneGraph::findParent(NodeId subtree, NodeId target) const {

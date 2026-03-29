@@ -1,4 +1,7 @@
 #include <Flux.hpp>
+#include <Flux/Core/Events.hpp>
+#include <Flux/Core/WindowUI.hpp>
+#include <Flux/UI/UI.hpp>
 
 #include <chrono>
 #include <cmath>
@@ -8,104 +11,63 @@
 
 using namespace flux;
 
-namespace {
-
-/// Choose the next target >= `current` that matches `targetDeg` modulo 360° so hands always move
-/// forward (handles 59 → 0 second, etc.).
-inline float unwrapForward(float current, float targetDeg) {
-  float t = std::fmod(targetDeg, 360.f);
-  if (t < 0.f) {
-    t += 360.f;
-  }
-  float T = t;
-  while (T < current) {
-    T += 360.f;
-  }
-  return T;
-}
-
-class ClockWindow : public Window {
-  Animated<float> hourAngle_{0.f};
-  Animated<float> minuteAngle_{0.f};
-  Animated<float> secondAngle_{0.f};
-  bool firstSync_{true};
-
-public:
-  explicit ClockWindow(WindowConfig const& c) : Window(c) {
-    auto redraw = [this]() { Window::requestRedraw(); };
-    hourAngle_.observe(redraw);
-    minuteAngle_.observe(redraw);
-    secondAngle_.observe(redraw);
+struct ClockFace {
+  Size measure(LayoutConstraints const& c) const {
+    float const s = std::min(
+        std::isfinite(c.maxWidth) ? c.maxWidth : 360.f,
+        std::isfinite(c.maxHeight) ? c.maxHeight : 360.f);
+    return {s, s};
   }
 
-  void render(Canvas& c) override {
-    const auto sz = getSize();
-    Rect bounds =
-        Rect::sharp(0.f, 0.f, static_cast<float>(sz.width), static_cast<float>(sz.height));
-    c.clear(Color::rgb(245, 245, 248));
-    clock_demo::drawClock(c, bounds, hourAngle_.get(), minuteAngle_.get(), secondAngle_.get());
-  }
-
-  void syncTimeFromSystem() {
-    const auto now = std::chrono::system_clock::now();
-    const std::time_t t = std::chrono::system_clock::to_time_t(now);
-    std::tm* local = std::localtime(&t);
+  /// Angles come from wall-clock time at draw time — independent of layout/rebuild cadence.
+  void render(Canvas& canvas, Rect frame) const {
+    using namespace std::chrono;
+    auto const now = system_clock::now();
+    std::time_t const tt = system_clock::to_time_t(now);
+    double const fracSec = duration<double>(now - system_clock::from_time_t(tt)).count();
+    std::tm* local = std::localtime(&tt);
     if (!local) {
       return;
     }
-    const int hour24 = local->tm_hour;
-    const int minutes = local->tm_min;
-    const int seconds = local->tm_sec;
-
-    const int hours12 = hour24 % 12;
-    const float h = static_cast<float>(hours12) * 30.f + static_cast<float>(minutes) * 0.5f;
-    const float m = static_cast<float>(minutes) * 6.f + static_cast<float>(seconds) * 0.1f;
-    const float s = static_cast<float>(seconds) * 6.f;
-
-    if (firstSync_) {
-      hourAngle_.set(h, Transition::instant());
-      minuteAngle_.set(m, Transition::instant());
-      secondAngle_.set(s, Transition::instant());
-      firstSync_ = false;
-      return;
-    }
-
-    {
-      WithTransition wt{Transition::spring(500.f, 25.f, 0.65f)};
-      hourAngle_.set(unwrapForward(hourAngle_.get(), h));
-      minuteAngle_.set(unwrapForward(minuteAngle_.get(), m));
-      secondAngle_.set(unwrapForward(secondAngle_.get(), s));
-    }
+    int const h12 = local->tm_hour % 12;
+    float const s = static_cast<float>(local->tm_sec) + static_cast<float>(fracSec);
+    float const hDeg = static_cast<float>(h12) * 30.f + static_cast<float>(local->tm_min) * 0.5f + s / 120.f;
+    float const mDeg = static_cast<float>(local->tm_min) * 6.f + s * 0.1f;
+    float const sDeg = s * 6.f;
+    clock_demo::drawClock(canvas, frame, hDeg, mDeg, sDeg);
   }
 };
 
-} // namespace
+struct ClockView {
+  auto body() const {
+    return ZStack{.children = {
+                      Rectangle{.fill = FillStyle::solid(Color::rgb(245, 245, 248))},
+                      ClockFace{},
+                  }};
+  }
+};
 
 int main(int argc, char* argv[]) {
   Application app(argc, argv);
-
-  auto& window = app.createWindow<ClockWindow>({
-      .size = {800, 800},
-      .title = "Clock",
+  auto& w = app.createWindow<Window>({
+      .size = {400, 400},
+      .title = "Flux — Clock",
+      .resizable = true,
   });
-  const unsigned int windowHandle = window.handle();
+  w.setView<ClockView>();
 
-  window.syncTimeFromSystem();
-  window.requestRedraw();
-
-  // Must filter by timer id: `AnimationClock` also uses `scheduleRepeatingTimer` (~60Hz, windowHandle 0).
-  // Without this, every animation tick would call `syncTimeFromSystem()` and restart the hand animation.
-  std::uint64_t const clockTimerId = app.scheduleRepeatingTimer(std::chrono::seconds(1), windowHandle);
-
-  app.eventQueue().on<TimerEvent>([&window, windowHandle, clockTimerId](TimerEvent const& e) {
-    if (e.timerId != clockTimerId) {
+  // Redraw ~60 Hz so the hands track real time (scene rebuild is not required; `render()` reads `now()`).
+  unsigned int const windowHandle = w.handle();
+  std::uint64_t const redrawTimerId =
+      app.scheduleRepeatingTimer(std::chrono::nanoseconds(1'000'000'000 / 60), windowHandle);
+  app.eventQueue().on<TimerEvent>([&w, windowHandle, redrawTimerId](TimerEvent const& e) {
+    if (e.timerId != redrawTimerId) {
       return;
     }
     if (e.windowHandle != 0 && e.windowHandle != windowHandle) {
       return;
     }
-    window.syncTimeFromSystem();
-    Window::postRedraw(windowHandle);
+    w.requestRedraw();
   });
 
   return app.exec();

@@ -2,9 +2,15 @@
 
 #include <Flux/UI/BuildContext.hpp>
 #include <Flux/UI/Component.hpp>
+#include <Flux/UI/Detail/LeafBounds.hpp>
+#include <Flux/UI/EventMap.hpp>
 #include <Flux/UI/Leaves.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 #include <Flux/UI/StateStore.hpp>
+
+#include <Flux/Graphics/Canvas.hpp>
+#include <Flux/Scene/Nodes.hpp>
+#include <Flux/Scene/SceneGraph.hpp>
 
 #include <cassert>
 #include <cstdlib>
@@ -86,8 +92,39 @@ void Element::Model<C>::build(BuildContext& ctx) const {
     }
     ctx.beginCompositeBodySubtree();
     child.build(ctx);
+  } else if constexpr (RenderComponent<C>) {
+    ctx.advanceChildSlot();
+    Rect const frame = flux::detail::resolveLeafBounds(
+        {}, ctx.layoutEngine().childFrame(), ctx.constraints());
+
+    C const copy = value;
+    NodeId const id = ctx.graph().addCustomRender(ctx.parentLayer(),
+        CustomRenderNode{
+            .frame = frame,
+            .draw = [copy, frame](Canvas& canvas) { copy.render(canvas, frame); },
+        });
+
+    EventHandlers handlers{};
+    if constexpr (requires { value.onTap; }) {
+      handlers.onTap = value.onTap;
+    }
+    if constexpr (requires { value.onPointerDown; }) {
+      handlers.onPointerDown = value.onPointerDown;
+    }
+    if constexpr (requires { value.onPointerUp; }) {
+      handlers.onPointerUp = value.onPointerUp;
+    }
+    if constexpr (requires { value.onPointerMove; }) {
+      handlers.onPointerMove = value.onPointerMove;
+    }
+    if (handlers.onTap || handlers.onPointerDown || handlers.onPointerUp || handlers.onPointerMove) {
+      ctx.eventMap().insert(id, std::move(handlers));
+    }
   } else {
-    static_assert(alwaysFalse<C>, "Missing Element::Model specialization for this component type");
+    static_assert(alwaysFalse<C>,
+        "Missing Element::Model specialization for this component type. "
+        "Add body() for a composite, or render(Canvas&, Rect) + "
+        "measure(LayoutConstraints const&) for a render component.");
   }
 }
 
@@ -106,8 +143,15 @@ Size Element::Model<C>::measure(BuildContext& ctx, LayoutConstraints const& cons
     }
     ctx.beginCompositeBodySubtree();
     return child.measure(ctx, constraints, textSystem);
+  } else if constexpr (RenderComponent<C>) {
+    ctx.advanceChildSlot();
+    (void)textSystem;
+    return value.measure(constraints);
   } else {
-    static_assert(alwaysFalse<C>, "Missing Element::Model specialization for this component type");
+    static_assert(alwaysFalse<C>,
+        "Missing Element::Model specialization for this component type. "
+        "Add body() for a composite, or render(Canvas&, Rect) + "
+        "measure(LayoutConstraints const&) for a render component.");
     return {};
   }
 }
