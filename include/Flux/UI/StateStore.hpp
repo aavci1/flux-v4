@@ -3,7 +3,9 @@
 #include <Flux/UI/ComponentKey.hpp>
 
 #include <cassert>
+#include <cstdint>
 #include <memory>
+#include <optional>
 #include <utility>
 #include <typeindex>
 #include <unordered_map>
@@ -66,6 +68,10 @@ public:
     return activeStack_.back();
   }
 
+  /// When building an overlay subtree, set to that overlay's id value (for `useFocus` / `useHover`).
+  void setOverlayScope(std::optional<std::uint64_t> overlayIdValue) { overlayScope_ = overlayIdValue; }
+  std::optional<std::uint64_t> overlayScope() const { return overlayScope_; }
+
   /// Thread-local pointer to the active StateStore during a build pass.
   /// Set by Runtime::rebuild; accessed by useState/useAnimated free functions.
   static StateStore* current() noexcept;
@@ -78,6 +84,8 @@ private:
   // Stack of active component keys (depth > 1 when body() calls a helper
   // that returns an Element containing further composites — rare but valid).
   std::vector<ComponentKey> activeStack_;
+
+  std::optional<std::uint64_t> overlayScope_{};
 
   static thread_local StateStore* sCurrent;
 };

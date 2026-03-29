@@ -25,6 +25,18 @@
 
 namespace flux {
 
+namespace detail {
+
+bool signalBridgeApplicationHasInstance() {
+  return Application::hasInstance();
+}
+
+void signalBridgeMarkReactiveDirty() {
+  Application::instance().markReactiveDirty();
+}
+
+} // namespace detail
+
 namespace {
 
 Application* gCurrent = nullptr;

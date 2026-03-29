@@ -7,6 +7,7 @@
 #include <Flux/Core/Events.hpp>
 #include <Flux/Core/KeyCodes.hpp>
 #include <Flux/Scene/SceneGraph.hpp>
+#include <Flux/Scene/SceneGraphBounds.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Scene/HitTester.hpp>
 #include <Flux/UI/BuildContext.hpp>
@@ -21,6 +22,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <memory>
+#include <vector>
 
 namespace flux {
 
@@ -109,14 +112,36 @@ bool Runtime::isFocusInSubtree(ComponentKey const& key) const noexcept {
   if (focusedKey_.empty() || key.size() > focusedKey_.size()) {
     return false;
   }
-  return std::equal(key.begin(), key.end(), focusedKey_.begin());
+  if (!std::equal(key.begin(), key.end(), focusedKey_.begin())) {
+    return false;
+  }
+  StateStore* store = StateStore::current();
+  if (!store) {
+    return false;
+  }
+  std::optional<std::uint64_t> const os = store->overlayScope();
+  if (os.has_value()) {
+    return focusInOverlay_.has_value() && focusInOverlay_->value == *os;
+  }
+  return !focusInOverlay_.has_value();
 }
 
 bool Runtime::isHoverInSubtree(ComponentKey const& key) const noexcept {
   if (hoveredKey_.empty() || key.size() > hoveredKey_.size()) {
     return false;
   }
-  return std::equal(key.begin(), key.end(), hoveredKey_.begin());
+  if (!std::equal(key.begin(), key.end(), hoveredKey_.begin())) {
+    return false;
+  }
+  StateStore* store = StateStore::current();
+  if (!store) {
+    return false;
+  }
+  std::optional<std::uint64_t> const os = store->overlayScope();
+  if (os.has_value()) {
+    return hoverInOverlay_.has_value() && hoverInOverlay_->value == *os;
+  }
+  return !hoverInOverlay_.has_value();
 }
 
 void Runtime::requestFocusInSubtree(ComponentKey const& subtreeKey) {
@@ -127,67 +152,196 @@ void Runtime::requestFocusInSubtree(ComponentKey const& subtreeKey) {
   for (ComponentKey const& leafKey : order) {
     if (leafKey.size() >= subtreeKey.size() &&
         std::equal(subtreeKey.begin(), subtreeKey.end(), leafKey.begin())) {
-      setFocus(leafKey);
+      setFocus(leafKey, std::nullopt);
       return;
     }
   }
 }
 
-void Runtime::setFocus(ComponentKey const& key) {
-  if (focusedKey_ == key) {
+void Runtime::setFocus(ComponentKey const& key, std::optional<OverlayId> overlayScope) {
+  if (focusedKey_ == key && focusInOverlay_ == overlayScope) {
     return;
   }
   focusedKey_ = key;
+  focusInOverlay_ = overlayScope;
   Application::instance().markReactiveDirty();
 }
 
 void Runtime::clearFocus() {
-  if (focusedKey_.empty()) {
+  if (focusedKey_.empty() && !focusInOverlay_.has_value()) {
     return;
   }
   focusedKey_.clear();
+  focusInOverlay_.reset();
   Application::instance().markReactiveDirty();
 }
 
-void Runtime::setHovered(ComponentKey const& key) {
-  if (hoveredKey_ == key) {
+void Runtime::setHovered(ComponentKey const& key, std::optional<OverlayId> overlayScope) {
+  if (hoveredKey_ == key && hoverInOverlay_ == overlayScope) {
     return;
   }
   hoveredKey_ = key;
+  hoverInOverlay_ = overlayScope;
   Application::instance().markReactiveDirty();
 }
 
 void Runtime::clearHovered() {
-  if (hoveredKey_.empty()) {
+  if (hoveredKey_.empty() && !hoverInOverlay_.has_value()) {
     return;
   }
   hoveredKey_.clear();
+  hoverInOverlay_.reset();
   Application::instance().markReactiveDirty();
 }
 
-void Runtime::cycleTabFocus(bool reverse) {
-  auto const& order = eventMap_.focusOrder();
+void Runtime::cycleTabFocusInMap(EventMap const& em, bool reverse, std::optional<OverlayId> overlayId) {
+  auto const& order = em.focusOrder();
   if (order.empty()) {
     return;
   }
 
   if (focusedKey_.empty()) {
-    setFocus(reverse ? order.back() : order.front());
+    setFocus(reverse ? order.back() : order.front(), overlayId);
     return;
   }
 
   auto it = std::find(order.begin(), order.end(), focusedKey_);
   if (it == order.end()) {
-    setFocus(reverse ? order.back() : order.front());
+    setFocus(reverse ? order.back() : order.front(), overlayId);
     return;
   }
 
   if (!reverse) {
     ++it;
-    setFocus(it == order.end() ? order.front() : *it);
+    setFocus(it == order.end() ? order.front() : *it, overlayId);
   } else {
-    setFocus(it == order.begin() ? order.back() : *std::prev(it));
+    setFocus(it == order.begin() ? order.back() : *std::prev(it), overlayId);
   }
+}
+
+void Runtime::cycleTabFocusNonModal(bool reverse) {
+  std::vector<std::pair<ComponentKey, std::optional<OverlayId>>> merged;
+  for (std::unique_ptr<OverlayEntry> const& up : window_.overlayManager().entries()) {
+    OverlayEntry const& e = *up;
+    for (ComponentKey const& k : e.eventMap.focusOrder()) {
+      merged.push_back({k, e.id});
+    }
+  }
+  for (ComponentKey const& k : eventMap_.focusOrder()) {
+    merged.push_back({k, std::nullopt});
+  }
+  if (merged.empty()) {
+    return;
+  }
+
+  std::size_t idx = 0;
+  bool found = false;
+  for (std::size_t i = 0; i < merged.size(); ++i) {
+    if (merged[i].first == focusedKey_ && focusInOverlay_ == merged[i].second) {
+      idx = i;
+      found = true;
+      break;
+    }
+  }
+
+  if (!found || focusedKey_.empty()) {
+    if (reverse) {
+      setFocus(merged.back().first, merged.back().second);
+    } else {
+      setFocus(merged.front().first, merged.front().second);
+    }
+    return;
+  }
+
+  if (!reverse) {
+    std::size_t const next = (idx + 1) % merged.size();
+    setFocus(merged[next].first, merged[next].second);
+  } else {
+    std::size_t const prev = idx == 0 ? merged.size() - 1 : idx - 1;
+    setFocus(merged[prev].first, merged[prev].second);
+  }
+}
+
+void Runtime::cycleTabFocus(bool reverse) {
+  cycleTabFocusInMap(eventMap_, reverse, std::nullopt);
+}
+
+void Runtime::fillLayoutRectCache(SceneGraph const& graph, BuildContext const& ctx) {
+  layoutRectPrev_.swap(layoutRectCurrent_);
+  layoutRectCurrent_.clear();
+  for (auto const& [key, nodeId] : ctx.subtreeRootLayers()) {
+    layoutRectCurrent_[key] = unionSubtreeBounds(graph, nodeId, Mat3::identity());
+  }
+}
+
+std::optional<Rect> Runtime::layoutRectForCurrentComponent() const {
+  StateStore* store = StateStore::current();
+  if (!store) {
+    return std::nullopt;
+  }
+  auto it = layoutRectPrev_.find(store->currentComponentKey());
+  if (it == layoutRectPrev_.end()) {
+    return std::nullopt;
+  }
+  return it->second;
+}
+
+void Runtime::onOverlayPushed(OverlayEntry& entry) {
+  if (!entry.config.modal) {
+    return;
+  }
+  entry.preFocusKey = focusedKey_;
+  focusInOverlay_ = entry.id;
+  focusedKey_.clear();
+}
+
+void Runtime::onOverlayRemoved(OverlayEntry const& entry) {
+  if (entry.config.modal) {
+    if (focusInOverlay_ == entry.id) {
+      focusInOverlay_.reset();
+      focusedKey_ = entry.preFocusKey;
+      if (!focusedKey_.empty()) {
+        auto const [id, h] = eventMap_.findWithIdByKey(focusedKey_);
+        (void)id;
+        if (!h) {
+          focusedKey_.clear();
+        }
+      }
+    }
+  }
+  if (hoverInOverlay_ == entry.id) {
+    hoverInOverlay_.reset();
+    hoveredKey_.clear();
+  }
+}
+
+void Runtime::syncModalOverlayFocusAfterRebuild(OverlayEntry& entry) {
+  if (!entry.config.modal) {
+    return;
+  }
+  if (focusInOverlay_ != entry.id) {
+    return;
+  }
+  auto const& order = entry.eventMap.focusOrder();
+  if (order.empty()) {
+    return;
+  }
+  auto const [id, h] = entry.eventMap.findWithIdByKey(focusedKey_);
+  (void)id;
+  if (!h) {
+    focusedKey_ = order.front();
+  }
+}
+
+bool Runtime::pressKeyMatchesStoreContext(StateStore const& store) const {
+  if (!activePress_) {
+    return false;
+  }
+  std::optional<std::uint64_t> const oscope = store.overlayScope();
+  if (activePress_->overlayScope.has_value()) {
+    return oscope.has_value() && *oscope == activePress_->overlayScope->value;
+  }
+  return !oscope.has_value();
 }
 
 Runtime::Runtime(Window& window) : window_(window) {
@@ -230,17 +384,24 @@ void Runtime::rebuild(std::optional<Size> sizeOverride) {
   }
   ctx.popConstraints();
 
+  fillLayoutRectCache(graph, ctx);
+
   StateStore::setCurrent(nullptr);
   stateStore_.endRebuild();
 
   eventMap_ = std::move(newMap);
-  if (!focusedKey_.empty()) {
-    auto const [id, h] = eventMap_.findWithIdByKey(focusedKey_);
-    (void)id;
-    if (!h) {
-      focusedKey_.clear();
+  if (!focusInOverlay_) {
+    if (!focusedKey_.empty()) {
+      auto const [id, h] = eventMap_.findWithIdByKey(focusedKey_);
+      (void)id;
+      if (!h) {
+        focusedKey_.clear();
+      }
     }
   }
+
+  window_.overlayManager().rebuild(sz, *this);
+
   if (inputDebugEnabled()) {
     std::fprintf(stderr,
                  "[flux:input] rebuild layout=%.1fx%.1f scene root children (if any) updated\n",
@@ -294,6 +455,22 @@ void Runtime::subscribeWindowEvents() {
 }
 
 std::pair<NodeId, EventHandlers const*> Runtime::findPressHandlersWithNode(PressState const& ps) const {
+  if (ps.overlayScope.has_value()) {
+    for (std::unique_ptr<OverlayEntry> const& up : window_.overlayManager().entries()) {
+      OverlayEntry const& e = *up;
+      if (e.id.value != ps.overlayScope->value) {
+        continue;
+      }
+      if (EventHandlers const* h = e.eventMap.find(ps.nodeId)) {
+        return {ps.nodeId, h};
+      }
+      if (!ps.stableTargetKey.empty()) {
+        return e.eventMap.findWithIdByKey(ps.stableTargetKey);
+      }
+      return {kInvalidNodeId, nullptr};
+    }
+    return {kInvalidNodeId, nullptr};
+  }
   if (EventHandlers const* h = eventMap_.find(ps.nodeId)) {
     return {ps.nodeId, h};
   }
@@ -303,11 +480,23 @@ std::pair<NodeId, EventHandlers const*> Runtime::findPressHandlersWithNode(Press
   return {kInvalidNodeId, nullptr};
 }
 
+SceneGraph const& Runtime::sceneGraphForPress(PressState const& ps) const {
+  if (ps.overlayScope.has_value()) {
+    for (std::unique_ptr<OverlayEntry> const& up : window_.overlayManager().entries()) {
+      OverlayEntry const& e = *up;
+      if (e.id.value == ps.overlayScope->value) {
+        return e.graph;
+      }
+    }
+  }
+  return window_.sceneGraph();
+}
+
 void Runtime::cancelActivePress(Point windowPoint) {
   if (!activePress_) {
     return;
   }
-  SceneGraph const& graph = window_.sceneGraph();
+  SceneGraph const& graph = sceneGraphForPress(*activePress_);
   auto const [currentId, h] = findPressHandlersWithNode(*activePress_);
   if (h && h->onPointerUp && currentId.isValid()) {
     HitTester tester{};
@@ -339,6 +528,32 @@ void Runtime::updateCursorForPoint(Point windowPoint) {
     }
   }
 
+  std::vector<std::unique_ptr<OverlayEntry>> const& oentries = window_.overlayManager().entries();
+  for (auto it = oentries.rbegin(); it != oentries.rend(); ++it) {
+    OverlayEntry const& oe = **it;
+    Point const local{windowPoint.x - oe.resolvedFrame.x, windowPoint.y - oe.resolvedFrame.y};
+    auto const acceptFn = [&oe](NodeId id) {
+      EventHandlers const* h = oe.eventMap.find(id);
+      if (!h) {
+        return false;
+      }
+      if (h->cursorPassthrough) {
+        return false;
+      }
+      if (h->cursor == Cursor::Inherit) {
+        return false;
+      }
+      return true;
+    };
+    HitTester tester{};
+    if (auto hit = tester.hitTest(oe.graph, local, acceptFn)) {
+      if (EventHandlers const* h = oe.eventMap.find(hit->nodeId)) {
+        applyCursor(h->cursor);
+        return;
+      }
+    }
+  }
+
   SceneGraph const& graph = window_.sceneGraph();
   auto const acceptFn = [this](NodeId id) {
     EventHandlers const* h = eventMap_.find(id);
@@ -366,6 +581,23 @@ void Runtime::updateCursorForPoint(Point windowPoint) {
 }
 
 void Runtime::updateHoveredForPoint(Point windowPoint) {
+  std::vector<std::unique_ptr<OverlayEntry>> const& oentries = window_.overlayManager().entries();
+  for (auto it = oentries.rbegin(); it != oentries.rend(); ++it) {
+    OverlayEntry const& oe = **it;
+    Point const local{windowPoint.x - oe.resolvedFrame.x, windowPoint.y - oe.resolvedFrame.y};
+    auto const acceptFn = [&oe](NodeId id) -> bool {
+      EventHandlers const* h = oe.eventMap.find(id);
+      return h && !h->cursorPassthrough;
+    };
+    HitTester tester{};
+    if (auto hit = tester.hitTest(oe.graph, local, acceptFn)) {
+      if (EventHandlers const* h = oe.eventMap.find(hit->nodeId)) {
+        setHovered(h->stableTargetKey, oe.id);
+        return;
+      }
+    }
+  }
+
   SceneGraph const& graph = window_.sceneGraph();
   auto const acceptFn = [this](NodeId id) -> bool {
     EventHandlers const* h = eventMap_.find(id);
@@ -381,7 +613,7 @@ void Runtime::updateHoveredForPoint(Point windowPoint) {
   auto hit = HitTester{}.hitTest(graph, windowPoint, acceptFn);
   if (hit) {
     if (EventHandlers const* h = eventMap_.find(hit->nodeId)) {
-      setHovered(h->stableTargetKey);
+      setHovered(h->stableTargetKey, std::nullopt);
     } else {
       clearHovered();
     }
@@ -400,9 +632,40 @@ void Runtime::handleInput(InputEvent const& e) {
       std::fprintf(stderr, "[flux:input] KeyDown key=%u modifiers=%u\n", static_cast<unsigned>(e.key),
                    static_cast<unsigned>(e.modifiers));
     }
+    if (window_.overlayManager().hasOverlays()) {
+      OverlayEntry const* top = window_.overlayManager().top();
+      if (top->config.modal) {
+        if (e.key == keys::Escape && top->config.dismissOnEscape) {
+          window_.removeOverlay(top->id);
+          return;
+        }
+        if (e.key == keys::Tab && windowHasFocus_) {
+          bool const reverse = any(e.modifiers & Modifiers::Shift);
+          cycleTabFocusInMap(top->eventMap, reverse, top->id);
+          return;
+        }
+        if (!focusedKey_.empty() && windowHasFocus_) {
+          auto const [id, h] = top->eventMap.findWithIdByKey(focusedKey_);
+          (void)id;
+          if (h && h->onKeyDown) {
+            h->onKeyDown(e.key, e.modifiers);
+          }
+        }
+        return;
+      }
+      if (e.key == keys::Escape && top->config.dismissOnEscape) {
+        window_.removeOverlay(top->id);
+        return;
+      }
+      if (e.key == keys::Tab && windowHasFocus_) {
+        bool const reverse = any(e.modifiers & Modifiers::Shift);
+        cycleTabFocusNonModal(reverse);
+        return;
+      }
+    }
     if (e.key == keys::Tab && windowHasFocus_) {
       bool const reverse = any(e.modifiers & Modifiers::Shift);
-      cycleTabFocus(reverse);
+      cycleTabFocusInMap(eventMap_, reverse, std::nullopt);
       return;
     }
     if (!focusedKey_.empty() && windowHasFocus_) {
@@ -419,6 +682,19 @@ void Runtime::handleInput(InputEvent const& e) {
       std::fprintf(stderr, "[flux:input] KeyUp key=%u modifiers=%u\n", static_cast<unsigned>(e.key),
                    static_cast<unsigned>(e.modifiers));
     }
+    if (window_.overlayManager().hasOverlays()) {
+      OverlayEntry const* top = window_.overlayManager().top();
+      if (top->config.modal) {
+        if (!focusedKey_.empty() && windowHasFocus_) {
+          auto const [id, h] = top->eventMap.findWithIdByKey(focusedKey_);
+          (void)id;
+          if (h && h->onKeyUp) {
+            h->onKeyUp(e.key, e.modifiers);
+          }
+        }
+        return;
+      }
+    }
     if (!focusedKey_.empty() && windowHasFocus_) {
       auto const [id, h] = eventMap_.findWithIdByKey(focusedKey_);
       (void)id;
@@ -431,6 +707,19 @@ void Runtime::handleInput(InputEvent const& e) {
   if (e.kind == InputEvent::Kind::TextInput) {
     if (dbg) {
       std::fprintf(stderr, "[flux:input] TextInput len=%zu\n", e.text.size());
+    }
+    if (window_.overlayManager().hasOverlays()) {
+      OverlayEntry const* top = window_.overlayManager().top();
+      if (top->config.modal) {
+        if (!focusedKey_.empty() && windowHasFocus_) {
+          auto const [id, h] = top->eventMap.findWithIdByKey(focusedKey_);
+          (void)id;
+          if (h && h->onTextInput) {
+            h->onTextInput(e.text);
+          }
+        }
+        return;
+      }
     }
     if (!focusedKey_.empty() && windowHasFocus_) {
       auto const [id, h] = eventMap_.findWithIdByKey(focusedKey_);
@@ -450,11 +739,26 @@ void Runtime::handleInput(InputEvent const& e) {
       delta.x *= kLineHeight;
       delta.y *= kLineHeight;
     }
+    HitTester tester{};
+    std::vector<std::unique_ptr<OverlayEntry>> const& oentries = window_.overlayManager().entries();
+    for (auto it = oentries.rbegin(); it != oentries.rend(); ++it) {
+      OverlayEntry const& oe = **it;
+      Point const pl{p.x - oe.resolvedFrame.x, p.y - oe.resolvedFrame.y};
+      auto const acceptScroll = [&oe](NodeId id) {
+        EventHandlers const* h = oe.eventMap.find(id);
+        return h && h->onScroll;
+      };
+      if (auto hit = tester.hitTest(oe.graph, pl, acceptScroll)) {
+        if (EventHandlers const* h = oe.eventMap.find(hit->nodeId); h && h->onScroll) {
+          h->onScroll(delta);
+        }
+        return;
+      }
+    }
     auto const acceptScroll = [this](NodeId id) {
       EventHandlers const* h = eventMap_.find(id);
       return h && h->onScroll;
     };
-    HitTester tester{};
     if (dbg) {
       if (auto front = tester.hitTest(graph, p)) {
         std::fprintf(stderr,
@@ -494,7 +798,7 @@ void Runtime::handleInput(InputEvent const& e) {
     return;
   }
   Point const p{e.position.x, e.position.y};
-  auto const acceptFn = [this](NodeId id) { return eventMap_.find(id) != nullptr; };
+  auto const acceptFnMain = [this](NodeId id) { return eventMap_.find(id) != nullptr; };
 
   static int moveLogCounter = 0;
 
@@ -503,8 +807,50 @@ void Runtime::handleInput(InputEvent const& e) {
       std::fprintf(stderr, "[flux:input] PointerDown pos=(%.1f,%.1f)\n", static_cast<double>(p.x),
                    static_cast<double>(p.y));
     }
-    auto hit = HitTester{}.hitTest(graph, p, acceptFn);
     activePress_ = std::nullopt;
+    std::vector<std::unique_ptr<OverlayEntry>> const& oentries = window_.overlayManager().entries();
+    for (auto it = oentries.rbegin(); it != oentries.rend(); ++it) {
+      OverlayEntry const& oe = **it;
+      Point const pl{p.x - oe.resolvedFrame.x, p.y - oe.resolvedFrame.y};
+      auto const acceptFn = [&oe](NodeId id) { return oe.eventMap.find(id) != nullptr; };
+      if (auto hit = HitTester{}.hitTest(oe.graph, pl, acceptFn)) {
+        if (dbg) {
+          std::fprintf(stderr,
+                       "[flux:input] PointerDown hit local=(%.1f,%.1f) ",
+                       static_cast<double>(hit->localPoint.x), static_cast<double>(hit->localPoint.y));
+          logNodeId("press target", hit->nodeId);
+        }
+        if (EventHandlers const* h = oe.eventMap.find(hit->nodeId)) {
+          PressState ps{};
+          ps.nodeId = hit->nodeId;
+          ps.stableTargetKey = h->stableTargetKey;
+          ps.downPoint = p;
+          ps.cancelled = false;
+          ps.hadOnTapOnDown = static_cast<bool>(h->onTap);
+          ps.overlayScope = oe.id;
+          activePress_ = std::move(ps);
+          Application::instance().markReactiveDirty();
+          if (h->onPointerDown) {
+            h->onPointerDown(hit->localPoint);
+          }
+          if (oe.config.modal && shouldClaimFocus(*h)) {
+            setFocus(h->stableTargetKey, oe.id);
+          }
+        }
+        updateCursorForPoint(p);
+        updateHoveredForPoint(p);
+        return;
+      }
+      if (oe.config.modal) {
+        if (oe.config.dismissOnOutsideTap) {
+          window_.removeOverlay(oe.id);
+        }
+        updateCursorForPoint(p);
+        updateHoveredForPoint(p);
+        return;
+      }
+    }
+    auto hit = HitTester{}.hitTest(graph, p, acceptFnMain);
     if (hit) {
       if (dbg) {
         std::fprintf(stderr,
@@ -525,7 +871,7 @@ void Runtime::handleInput(InputEvent const& e) {
           h->onPointerDown(hit->localPoint);
         }
         if (shouldClaimFocus(*h)) {
-          setFocus(h->stableTargetKey);
+          setFocus(h->stableTargetKey, std::nullopt);
         }
       }
     } else if (dbg) {
@@ -560,14 +906,14 @@ void Runtime::handleInput(InputEvent const& e) {
     if (activePress_) {
       auto const [pressId, pressed] = findPressHandlersWithNode(*activePress_);
       if (pressed && pressed->onPointerMove && pressId.isValid()) {
-        if (auto local = tester.localPointForNode(graph, p, pressId)) {
+        SceneGraph const& gPress = sceneGraphForPress(*activePress_);
+        if (auto local = tester.localPointForNode(gPress, p, pressId)) {
           if (logThisMove) {
             std::fprintf(stderr,
                          "[flux:input] PointerMove routed to press target local=(%.1f,%.1f)\n",
                          static_cast<double>(local->x), static_cast<double>(local->y));
           }
           pressed->onPointerMove(*local);
-          // Cursor update for active drag; early return — the tail `updateCursorForPoint` below is not run.
           updateCursorForPoint(p);
           updateHoveredForPoint(p);
           return;
@@ -578,7 +924,27 @@ void Runtime::handleInput(InputEvent const& e) {
         }
       }
     }
-    if (auto hit = tester.hitTest(graph, p, acceptFn)) {
+    std::vector<std::unique_ptr<OverlayEntry>> const& oentries = window_.overlayManager().entries();
+    for (auto oit = oentries.rbegin(); oit != oentries.rend(); ++oit) {
+      OverlayEntry const& oe = **oit;
+      Point const pl{p.x - oe.resolvedFrame.x, p.y - oe.resolvedFrame.y};
+      auto const acceptFn = [&oe](NodeId id) { return oe.eventMap.find(id) != nullptr; };
+      if (auto hit = tester.hitTest(oe.graph, pl, acceptFn)) {
+        if (logThisMove) {
+          std::fprintf(stderr,
+                       "[flux:input] PointerMove hit-test path local=(%.1f,%.1f) ",
+                       static_cast<double>(hit->localPoint.x), static_cast<double>(hit->localPoint.y));
+          logNodeId("under cursor", hit->nodeId);
+        }
+        if (EventHandlers const* h = oe.eventMap.find(hit->nodeId); h && h->onPointerMove) {
+          h->onPointerMove(hit->localPoint);
+        }
+        updateCursorForPoint(p);
+        updateHoveredForPoint(p);
+        return;
+      }
+    }
+    if (auto hit = tester.hitTest(graph, p, acceptFnMain)) {
       if (logThisMove) {
         std::fprintf(stderr,
                      "[flux:input] PointerMove hit-test path local=(%.1f,%.1f) ",
@@ -591,13 +957,11 @@ void Runtime::handleInput(InputEvent const& e) {
     } else if (logThisMove) {
       std::fprintf(stderr, "[flux:input] PointerMove: no interactive node under cursor\n");
     }
-    // Hover path (or active press without drag delivery above); mutually exclusive with the early return.
     updateCursorForPoint(p);
     updateHoveredForPoint(p);
     return;
   }
 
-  // PointerUp
   if (dbg) {
     std::fprintf(stderr, "[flux:input] PointerUp pos=(%.1f,%.1f)\n", static_cast<double>(p.x),
                  static_cast<double>(p.y));
@@ -609,7 +973,39 @@ void Runtime::handleInput(InputEvent const& e) {
     Application::instance().markReactiveDirty();
   }
 
-  auto hit = tester.hitTest(graph, p, acceptFn);
+  std::vector<std::unique_ptr<OverlayEntry>> const& entriesUp = window_.overlayManager().entries();
+  for (auto it = entriesUp.rbegin(); it != entriesUp.rend(); ++it) {
+    OverlayEntry const& oe = **it;
+    Point const pl{p.x - oe.resolvedFrame.x, p.y - oe.resolvedFrame.y};
+    auto const acceptFn = [&oe](NodeId id) { return oe.eventMap.find(id) != nullptr; };
+    if (auto hit = tester.hitTest(oe.graph, pl, acceptFn)) {
+      if (dbg) {
+        std::fprintf(stderr,
+                     "[flux:input] PointerUp release on interactive node local=(%.1f,%.1f) ",
+                     static_cast<double>(hit->localPoint.x), static_cast<double>(hit->localPoint.y));
+        logNodeId("release hit", hit->nodeId);
+      }
+      if (EventHandlers const* h = oe.eventMap.find(hit->nodeId)) {
+        if (h->onPointerUp) {
+          h->onPointerUp(hit->localPoint);
+        }
+        if (h->onTap && released && !released->cancelled) {
+          bool const sameNode = released->nodeId == hit->nodeId;
+          bool const retargetAfterRebuild =
+              released->hadOnTapOnDown && oe.eventMap.find(released->nodeId) == nullptr &&
+              !released->stableTargetKey.empty() && h->stableTargetKey == released->stableTargetKey;
+          if (sameNode || retargetAfterRebuild) {
+            h->onTap();
+          }
+        }
+      }
+      updateCursorForPoint(p);
+      updateHoveredForPoint(p);
+      return;
+    }
+  }
+
+  auto hit = tester.hitTest(graph, p, acceptFnMain);
   if (hit) {
     if (dbg) {
       std::fprintf(stderr,
@@ -636,10 +1032,10 @@ void Runtime::handleInput(InputEvent const& e) {
       std::fprintf(stderr, "[flux:input] PointerUp: no interactive hit; trying press-target up\n");
       logNodeId("  released press", released->nodeId);
     }
-    // Release outside any interactive node: still notify the press target (e.g. end drag).
+    SceneGraph const& gRel = sceneGraphForPress(*released);
     auto const [currentId, pressed] = findPressHandlersWithNode(*released);
     if (pressed && pressed->onPointerUp && currentId.isValid()) {
-      std::optional<Point> local = tester.localPointForNode(graph, p, currentId);
+      std::optional<Point> local = tester.localPointForNode(gRel, p, currentId);
       if (local) {
         if (dbg) {
           std::fprintf(stderr,
@@ -699,7 +1095,10 @@ bool usePress() {
   if (pressKey.empty() || key.size() > pressKey.size()) {
     return false;
   }
-  return std::equal(key.begin(), key.end(), pressKey.begin());
+  if (!std::equal(key.begin(), key.end(), pressKey.begin())) {
+    return false;
+  }
+  return rt->pressKeyMatchesStoreContext(*store);
 }
 
 std::function<void()> useRequestFocus() {
@@ -713,6 +1112,62 @@ std::function<void()> useRequestFocus() {
   return [rt, key] {
     rt->requestFocusInSubtree(key);
   };
+}
+
+namespace {
+
+struct OverlayHookSlot {
+  OverlayId id{};
+  Window* window = nullptr;
+
+  ~OverlayHookSlot() {
+    if (id.isValid() && window) {
+      OverlayId const rid = id;
+      id = kInvalidOverlayId;
+      window->removeOverlay(rid);
+    }
+  }
+};
+
+} // namespace
+
+std::tuple<std::function<void(Element, OverlayConfig)>, std::function<void()>, bool> useOverlay() {
+  StateStore* store = StateStore::current();
+  Runtime* rt = Runtime::current();
+  assert(store && "useOverlay called outside of a build pass");
+  assert(rt && "useOverlay called outside of a build pass");
+
+  OverlayHookSlot& slot = store->claimSlot<OverlayHookSlot>();
+  Window& w = rt->window();
+  slot.window = &w;
+
+  auto show = [&slot, &w](Element el, OverlayConfig cfg) {
+    if (slot.id.isValid()) {
+      OverlayId const rid = slot.id;
+      slot.id = kInvalidOverlayId;
+      w.removeOverlay(rid);
+    }
+    slot.id = w.pushOverlay(std::move(el), std::move(cfg));
+  };
+
+  auto hide = [&slot, &w]() {
+    if (slot.id.isValid()) {
+      OverlayId const rid = slot.id;
+      slot.id = kInvalidOverlayId;
+      w.removeOverlay(rid);
+    }
+  };
+
+  bool const presented = slot.id.isValid();
+  return {std::move(show), std::move(hide), presented};
+}
+
+std::optional<Rect> useLayoutRect() {
+  Runtime* rt = Runtime::current();
+  if (!rt) {
+    return std::nullopt;
+  }
+  return rt->layoutRectForCurrentComponent();
 }
 
 } // namespace flux

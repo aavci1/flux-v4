@@ -102,6 +102,7 @@ void Element::Model<OffsetView>::build(BuildContext& ctx) const {
     layer.transform = Mat3::translate(ox, oy);
   }
   NodeId const layerId = ctx.graph().addLayer(ctx.parentLayer(), std::move(layer));
+  ctx.registerCompositeSubtreeRootIfPending(layerId);
   ctx.pushLayer(layerId);
 
   if (value.axis == ScrollAxis::Horizontal) {

@@ -37,6 +37,7 @@ void Element::Model<ZStack>::build(BuildContext& ctx) const {
     layer.clip = Rect{0.f, 0.f, assignedW, assignedH};
   }
   NodeId const layerId = ctx.graph().addLayer(ctx.parentLayer(), std::move(layer));
+  ctx.registerCompositeSubtreeRootIfPending(layerId);
   ctx.pushLayer(layerId);
 
   float innerW = std::max(0.f, assignedW);

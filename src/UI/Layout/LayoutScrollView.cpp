@@ -20,7 +20,7 @@ void Element::Model<ScrollView>::build(BuildContext& ctx) const {
   if (store) {
     store->popComponent();
   }
-  ctx.beginCompositeBodySubtree();
+  ctx.beginCompositeBodySubtree(key);
   ctx.pushCompositeKeyTail(key);
   child.build(ctx);
   ctx.popCompositeKeyTail();
@@ -40,7 +40,7 @@ Size Element::Model<ScrollView>::measure(BuildContext& ctx, LayoutConstraints co
   if (store) {
     store->popComponent();
   }
-  ctx.beginCompositeBodySubtree();
+  ctx.beginCompositeBodySubtree(key);
   ctx.pushCompositeKeyTail(key);
   (void)child.measure(ctx, constraints, ts);
   ctx.popCompositeKeyTail();

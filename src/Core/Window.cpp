@@ -9,6 +9,9 @@
 #include <Flux/Graphics/Canvas.hpp>
 #include <Flux/Scene/SceneGraph.hpp>
 #include <Flux/Scene/SceneRenderer.hpp>
+#include <Flux/UI/Overlay.hpp>
+
+#include <memory>
 
 #include "Core/PlatformWindow.hpp"
 #include "Core/PlatformWindowCreate.hpp"
@@ -22,6 +25,9 @@ struct Window::Impl {
   std::optional<SceneGraph> sceneGraph_;
   Color clearColor_{Colors::lightGray};
   std::unique_ptr<Runtime> runtime_;
+  OverlayManager overlayMgr_;
+
+  explicit Impl(Window&) {}
 
   PlatformWindow* platformWindow() const { return platform_.get(); }
   void setViewRoot(Window& window, std::unique_ptr<RootHolder> holder);
@@ -35,7 +41,7 @@ void Window::Impl::setViewRoot(Window& window, std::unique_ptr<RootHolder> holde
 }
 
 Window::Window(const WindowConfig& config) {
-  d = std::make_unique<Impl>();
+  d = std::make_unique<Impl>(*this);
   d->platform_ = detail::createPlatformWindow(config);
   d->platform_->setFluxWindow(this);
   Application::instance().eventQueue().post(WindowLifecycleEvent{
@@ -110,6 +116,25 @@ void Window::setClearColor(Color color) { d->clearColor_ = color; }
 
 Color Window::clearColor() const { return d->clearColor_; }
 
+OverlayId Window::pushOverlay(Element content, OverlayConfig config) {
+  Runtime* rt = d->runtime_.get();
+  return d->overlayMgr_.push(std::move(content), std::move(config), rt);
+}
+
+void Window::removeOverlay(OverlayId id) {
+  Runtime* rt = d->runtime_.get();
+  d->overlayMgr_.remove(id, rt);
+}
+
+void Window::clearOverlays() {
+  Runtime* rt = d->runtime_.get();
+  d->overlayMgr_.clear(rt);
+}
+
+OverlayManager& Window::overlayManager() { return d->overlayMgr_; }
+
+OverlayManager const& Window::overlayManager() const { return d->overlayMgr_; }
+
 void Window::setViewRoot(std::unique_ptr<RootHolder> holder) {
   d->setViewRoot(*this, std::move(holder));
 }
@@ -117,6 +142,13 @@ void Window::setViewRoot(std::unique_ptr<RootHolder> holder) {
 void Window::render(Canvas& canvas) {
   if (d->sceneGraph_) {
     SceneRenderer{}.render(*d->sceneGraph_, canvas, d->clearColor_);
+  }
+  for (std::unique_ptr<OverlayEntry> const& up : d->overlayMgr_.entries()) {
+    OverlayEntry const& entry = *up;
+    canvas.save();
+    canvas.transform(Mat3::translate(Point{entry.resolvedFrame.x, entry.resolvedFrame.y}));
+    SceneRenderer{}.render(entry.graph, canvas, Colors::transparent);
+    canvas.restore();
   }
 }
 

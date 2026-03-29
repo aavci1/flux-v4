@@ -79,7 +79,11 @@ ComponentKey BuildContext::leafComponentKey() const {
 
 void BuildContext::rewindChildKeyIndex() { nextChildIndex_ = 0; }
 
-void BuildContext::beginCompositeBodySubtree() { skipNextLayoutChildAdvance_ = true; }
+void BuildContext::beginCompositeBodySubtree(ComponentKey compositeKey) {
+  skipNextLayoutChildAdvance_ = true;
+  pendingCompositeSubtreeRoot_ = true;
+  pendingCompositeSubtreeKey_ = std::move(compositeKey);
+}
 
 bool BuildContext::consumeCompositeBodySubtreeRootSkip() {
   if (skipNextLayoutChildAdvance_) {
@@ -102,6 +106,14 @@ void BuildContext::popCompositeKeyTail() {
   assert(!savedChildIndices_.empty());
   nextChildIndex_ = savedChildIndices_.back();
   savedChildIndices_.pop_back();
+}
+
+void BuildContext::registerCompositeSubtreeRootIfPending(NodeId layerId) {
+  if (!pendingCompositeSubtreeRoot_) {
+    return;
+  }
+  pendingCompositeSubtreeRoot_ = false;
+  subtreeRootLayers_[pendingCompositeSubtreeKey_] = layerId;
 }
 
 } // namespace flux

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Flux/Core/Application.hpp>
+#include <Flux/Reactive/Detail/ApplicationSignalBridge.hpp>
 #include <Flux/Reactive/Detail/DependencyTracker.hpp>
 #include <Flux/Reactive/Detail/Notify.hpp>
 #include <Flux/Reactive/Detail/TypeTraits.hpp>
@@ -88,8 +88,8 @@ void Signal<T>::notifyObservers() {
   // `useState` / internal `Signal`s often have no `observe()` callbacks; `notifyObserverList` would
   // otherwise skip `markReactiveDirty`, so `Runtime`'s next-frame rebuild never runs (resize still
   // rebuilt via `WindowEvent::Resize`).
-  if (observers_.empty() && Application::hasInstance()) {
-    Application::instance().markReactiveDirty();
+  if (observers_.empty() && detail::signalBridgeApplicationHasInstance()) {
+    detail::signalBridgeMarkReactiveDirty();
   }
   detail::notifyObserverList(observers_);
 }

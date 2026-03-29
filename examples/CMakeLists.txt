@@ -44,3 +44,6 @@ target_link_libraries(foreach_demo PRIVATE flux)
 
 add_executable(hover_demo hover-demo/main.cpp)
 target_link_libraries(hover_demo PRIVATE flux)
+
+add_executable(overlay_confirm_demo overlay-confirm-demo/main.cpp)
+target_link_libraries(overlay_confirm_demo PRIVATE flux)

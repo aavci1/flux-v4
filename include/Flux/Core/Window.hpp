@@ -5,6 +5,8 @@
 
 #include <Flux/Core/Cursor.hpp>
 #include <Flux/Core/Types.hpp>
+#include <Flux/UI/Element.hpp>
+#include <Flux/UI/Overlay.hpp>
 
 namespace flux {
 
@@ -14,6 +16,8 @@ class Application;
 class Canvas;
 class PlatformWindow;
 class SceneGraph;
+
+class OverlayManager;
 
 struct WindowConfig {
   Size size = {1280, 720};
@@ -65,6 +69,19 @@ public:
   void setClearColor(Color color);
   Color clearColor() const;
 
+  /// Pushes content onto the overlay stack. Safe from event handlers and outside build passes.
+  /// Returns a handle for `removeOverlay`.
+  OverlayId pushOverlay(Element content, OverlayConfig config = {});
+
+  /// Removes the overlay with the given id; no-op if invalid or already removed. Calls `onDismiss`.
+  void removeOverlay(OverlayId id);
+
+  /// Removes all overlays; calls `onDismiss` for each.
+  void clearOverlays();
+
+  OverlayManager& overlayManager();
+  OverlayManager const& overlayManager() const;
+
   /// Sets the root view component (declarative UI). Creates internal state on first call.
   /// Definition in `<Flux/Core/WindowUI.hpp>` (include that header in TUs that call `setView`).
   ///
@@ -83,6 +100,8 @@ protected:
   explicit Window(const WindowConfig& config);
 
 private:
+  friend class Runtime;
+
   /// Used by `Application` (friend); implementation on `Impl`.
   PlatformWindow* platformWindow() const;
   /// Used by `Window::setView` in `<Flux/Core/WindowUI.hpp>`; implementation on `Impl`.

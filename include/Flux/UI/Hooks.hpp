@@ -8,8 +8,11 @@
 #include <cassert>
 #include <cstddef>
 #include <functional>
+#include <optional>
 #include <type_traits>
 #include <utility>
+
+#include <Flux/Core/Types.hpp>
 
 namespace flux {
 
@@ -148,5 +151,8 @@ std::decay_t<std::invoke_result_t<Fn&&>> const& useMemo(Fn&& fn, Deps const&... 
   }
   return slot.value;
 }
+
+/// Window-space rect for the calling composite from the previous layout pass (see `Runtime`).
+std::optional<Rect> useLayoutRect();
 
 } // namespace flux

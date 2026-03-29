@@ -5,6 +5,7 @@
 #include <Flux/UI/LayoutEngine.hpp>
 
 #include <cstddef>
+#include <unordered_map>
 #include <vector>
 
 namespace flux {
@@ -52,8 +53,9 @@ public:
   void rewindChildKeyIndex();
 
   /// Model<C>::build calls this before child.build — the subtree root must not consume a
-  /// second sibling index after nextCompositeKey.
-  void beginCompositeBodySubtree();
+  /// second sibling index after nextCompositeKey. \p compositeKey is the composite whose `body()`
+  /// subtree is being built (for `useLayoutRect`).
+  void beginCompositeBodySubtree(ComponentKey compositeKey);
   /// Returns true if this build should skip advanceChildSlot (composite body subtree root).
   bool consumeCompositeBodySubtreeRootSkip();
 
@@ -63,8 +65,16 @@ public:
   void pushCompositeKeyTail(ComponentKey const& compositeKey);
   void popCompositeKeyTail();
 
+  /// First `addLayer` after `beginCompositeBodySubtree` records the subtree root for `useLayoutRect`.
+  void registerCompositeSubtreeRootIfPending(NodeId layerId);
+
+  std::unordered_map<ComponentKey, NodeId, ComponentKeyHash> const& subtreeRootLayers() const {
+    return subtreeRootLayers_;
+  }
+
 private:
   friend class Runtime;
+  friend class OverlayManager;
 
   BuildContext(SceneGraph& g, EventMap& em, TextSystem& ts, LayoutEngine& layout);
 
@@ -79,6 +89,9 @@ private:
   std::vector<std::size_t> savedChildIndices_;
   std::size_t nextChildIndex_{0};
   bool skipNextLayoutChildAdvance_{false};
+  bool pendingCompositeSubtreeRoot_{false};
+  ComponentKey pendingCompositeSubtreeKey_{};
+  std::unordered_map<ComponentKey, NodeId, ComponentKeyHash> subtreeRootLayers_{};
 };
 
 } // namespace flux

@@ -133,7 +133,7 @@ void Element::Model<C>::build(BuildContext& ctx) const {
     if (store) {
       store->popComponent();
     }
-    ctx.beginCompositeBodySubtree();
+    ctx.beginCompositeBodySubtree(key);
     ctx.pushCompositeKeyTail(key);
     child.build(ctx);
     ctx.popCompositeKeyTail();
@@ -217,7 +217,7 @@ Size Element::Model<C>::measure(BuildContext& ctx, LayoutConstraints const& cons
     if (store) {
       store->popComponent();
     }
-    ctx.beginCompositeBodySubtree();
+    ctx.beginCompositeBodySubtree(key);
     ctx.pushCompositeKeyTail(key);
     Size const sz = child.measure(ctx, constraints, textSystem);
     ctx.popCompositeKeyTail();

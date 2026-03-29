@@ -37,7 +37,7 @@ struct TypedRootHolder final : RootHolder {
       if (store) {
         store->popComponent();
       }
-      ctx.beginCompositeBodySubtree();
+      ctx.beginCompositeBodySubtree(key);
       ctx.pushCompositeKeyTail(key);
       child.build(ctx);
       ctx.popCompositeKeyTail();

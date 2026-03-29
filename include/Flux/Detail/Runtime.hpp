@@ -4,13 +4,19 @@
 #include <Flux/Core/Events.hpp>
 #include <Flux/Detail/RootHolder.hpp>
 #include <Flux/Reactive/Observer.hpp>
+#include <Flux/Core/Types.hpp>
+#include <Flux/Scene/SceneGraph.hpp>
+#include <Flux/UI/BuildContext.hpp>
 #include <Flux/UI/ComponentKey.hpp>
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/EventMap.hpp>
+#include <Flux/UI/Overlay.hpp>
 #include <Flux/UI/StateStore.hpp>
 
+#include <cstdint>
 #include <memory>
 #include <optional>
+#include <unordered_map>
 #include <utility>
 
 namespace flux {
@@ -27,6 +33,8 @@ public:
   void setRoot(std::unique_ptr<RootHolder> holder);
 
   void handleInput(InputEvent const& e);
+
+  Window& window() noexcept { return window_; }
 
   /// Valid only during a build pass (`rebuild`); otherwise `nullptr`.
   static Runtime* current() noexcept { return sCurrent; }
@@ -52,6 +60,15 @@ public:
   /// calls during \c body() may not see leaves registered later in the same build.
   void requestFocusInSubtree(ComponentKey const& subtreeKey);
 
+  void onOverlayPushed(OverlayEntry& entry);
+  void onOverlayRemoved(OverlayEntry const& entry);
+  void syncModalOverlayFocusAfterRebuild(OverlayEntry& entry);
+
+  std::optional<Rect> layoutRectForCurrentComponent() const;
+
+  /// For `usePress`: true when `activePress_` overlay scope matches `store.overlayScope()`.
+  bool pressKeyMatchesStoreContext(StateStore const& store) const;
+
 private:
   /// `sizeOverride` — size from `WindowEvent::size` on resize (preferred over re-querying the view).
   void rebuild(std::optional<Size> sizeOverride = std::nullopt);
@@ -63,11 +80,14 @@ private:
   void updateCursorForPoint(Point windowPoint);
   void updateHoveredForPoint(Point windowPoint);
   void applyCursor(Cursor kind);
-  void setHovered(ComponentKey const& key);
+  void setHovered(ComponentKey const& key, std::optional<OverlayId> overlayScope);
   void clearHovered();
-  void setFocus(ComponentKey const& key);
+  void setFocus(ComponentKey const& key, std::optional<OverlayId> overlayScope);
   void clearFocus();
   void cycleTabFocus(bool reverse);
+  void cycleTabFocusNonModal(bool reverse);
+  void cycleTabFocusInMap(EventMap const& em, bool reverse, std::optional<OverlayId> overlayId);
+  void fillLayoutRectCache(SceneGraph const& graph, BuildContext const& ctx);
 
   static thread_local Runtime* sCurrent;
 
@@ -79,8 +99,11 @@ private:
     bool cancelled = false;
     /// True if the press target had `onTap` at PointerDown (used when the scene rebuilds before PointerUp).
     bool hadOnTapOnDown = false;
+    /// When the press started on an overlay; `findPressHandlersWithNode` resolves against that overlay's `EventMap`.
+    std::optional<OverlayId> overlayScope{};
   };
   std::pair<NodeId, EventHandlers const*> findPressHandlersWithNode(PressState const& ps) const;
+  SceneGraph const& sceneGraphForPress(PressState const& ps) const;
   std::optional<PressState> activePress_{};
 
   Window& window_;
@@ -95,10 +118,17 @@ private:
   ComponentKey focusedKey_{};
   /// Stable key of the node under the pointer (geometric hover). Empty when nothing is hovered.
   ComponentKey hoveredKey_{};
+  /// When set, `focusedKey_` is resolved against that overlay's `EventMap`.
+  std::optional<OverlayId> focusInOverlay_{};
+  /// When set, `hoveredKey_` is for that overlay's scene graph.
+  std::optional<OverlayId> hoverInOverlay_{};
   /// When false, keyboard events are not dispatched (window in background).
   bool windowHasFocus_ = true;
 
   Cursor currentCursor_ = Cursor::Arrow;
+
+  std::unordered_map<ComponentKey, Rect, ComponentKeyHash> layoutRectPrev_{};
+  std::unordered_map<ComponentKey, Rect, ComponentKeyHash> layoutRectCurrent_{};
 };
 
 } // namespace flux
