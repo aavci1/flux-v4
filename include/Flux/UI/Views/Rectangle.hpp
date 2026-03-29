@@ -30,7 +30,8 @@ struct Rectangle {
   std::function<void(std::string const&)> onTextInput;
 
   Cursor cursor = Cursor::Default;
-  /// If true, this node is ignored for cursor resolution; the view behind is used (see ScrollView overlay).
+  /// If true, this node is ignored for cursor resolution; the view behind is used (e.g. ScrollView overlay).
+  /// Not on `Text` — text is always real content, not a full-bleed invisible capture layer.
   bool cursorPassthrough = false;
 };
 

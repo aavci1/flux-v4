@@ -494,6 +494,7 @@ void Runtime::handleInput(InputEvent const& e) {
                          static_cast<double>(local->x), static_cast<double>(local->y));
           }
           pressed->onPointerMove(*local);
+          // Cursor update for active drag; early return — the tail `updateCursorForPoint` below is not run.
           updateCursorForPoint(p);
           return;
         }
@@ -516,6 +517,7 @@ void Runtime::handleInput(InputEvent const& e) {
     } else if (logThisMove) {
       std::fprintf(stderr, "[flux:input] PointerMove: no interactive node under cursor\n");
     }
+    // Hover path (or active press without drag delivery above); mutually exclusive with the early return.
     updateCursorForPoint(p);
     return;
   }

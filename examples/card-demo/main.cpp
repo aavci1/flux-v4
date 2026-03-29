@@ -14,7 +14,8 @@ using namespace flux;
 
 namespace {
 
-/// Demo-only: `CardListView` needs live window width for `TextSystem::measure`; the declarative root has no `Window&` yet.
+/// Demo-only: `CardListView` needs live window width for `TextSystem::measure`. A proper fix is framework
+/// support for passing context (e.g. `Window` or size) through the component tree (environment / context).
 Window* gCardDemoWindow = nullptr;
 
 } // namespace
