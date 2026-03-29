@@ -3,6 +3,7 @@
 #include <Flux/Core/Events.hpp>
 #include <Flux/Detail/RootHolder.hpp>
 #include <Flux/Reactive/Observer.hpp>
+#include <Flux/UI/ComponentKey.hpp>
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/EventMap.hpp>
 #include <Flux/UI/StateStore.hpp>
@@ -37,6 +38,10 @@ private:
     NodeId nodeId{};
     Point downPoint{};
     bool cancelled = false;
+    /// True if the press target had `onTap` at PointerDown (used when the scene rebuilds before PointerUp).
+    bool hadOnTapOnDown = false;
+    /// Matches `EventHandlers::stableTargetKey` for tap retargeting after rebuild.
+    ComponentKey downTapTargetKey{};
   };
   std::optional<PressState> activePress_{};
 

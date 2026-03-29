@@ -41,6 +41,9 @@ public:
   /// Called by leaf build specialisations and Spacer.
   void advanceChildSlot();
 
+  /// Structural path for the next leaf slot (call before `advanceChildSlot` for that leaf).
+  ComponentKey leafComponentKey() const;
+
   /// After the measure pass over children, reset the per-container child index so the
   /// build pass assigns the same composite keys (pairs with resetSlotCursors).
   void rewindChildKeyIndex();

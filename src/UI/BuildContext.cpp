@@ -65,6 +65,12 @@ ComponentKey BuildContext::nextCompositeKey() {
 
 void BuildContext::advanceChildSlot() { ++nextChildIndex_; }
 
+ComponentKey BuildContext::leafComponentKey() const {
+  ComponentKey key = keyStack_;
+  key.push_back(nextChildIndex_);
+  return key;
+}
+
 void BuildContext::rewindChildKeyIndex() { nextChildIndex_ = 0; }
 
 void BuildContext::beginCompositeBodySubtree() { skipNextLayoutChildAdvance_ = true; }

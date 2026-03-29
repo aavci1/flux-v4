@@ -36,6 +36,7 @@ Size Element::measure(BuildContext& ctx, LayoutConstraints const& constraints,
 }
 
 void Element::Model<Rectangle>::build(BuildContext& ctx) const {
+  ComponentKey const stableKey = ctx.leafComponentKey();
   ctx.advanceChildSlot();
   Rect const bounds = flux::detail::resolveLeafBounds(
       value.frame, ctx.layoutEngine().childFrame(), ctx.constraints());
@@ -47,6 +48,7 @@ void Element::Model<Rectangle>::build(BuildContext& ctx) const {
   });
   if (value.onTap || value.onPointerDown || value.onPointerUp || value.onPointerMove || value.onScroll) {
     ctx.eventMap().insert(id, EventHandlers{
+        .stableTargetKey = stableKey,
         .onTap = value.onTap,
         .onPointerDown = value.onPointerDown,
         .onPointerUp = value.onPointerUp,
@@ -90,6 +92,7 @@ Size Element::Model<LaidOutText>::measure(BuildContext& ctx, LayoutConstraints c
 }
 
 void Element::Model<Text>::build(BuildContext& ctx) const {
+  ComponentKey const stableKey = ctx.leafComponentKey();
   ctx.advanceChildSlot();
   Rect const bounds = flux::detail::resolveLeafBounds(
       value.frame, ctx.layoutEngine().childFrame(), ctx.constraints());
@@ -115,6 +118,7 @@ void Element::Model<Text>::build(BuildContext& ctx) const {
     });
     if (value.onTap || value.onPointerDown || value.onPointerUp || value.onPointerMove) {
       ctx.eventMap().insert(id, EventHandlers{
+          .stableTargetKey = stableKey,
           .onTap = value.onTap,
           .onPointerDown = value.onPointerDown,
           .onPointerUp = value.onPointerUp,
@@ -175,6 +179,7 @@ Size Element::Model<Text>::measure(BuildContext& ctx, LayoutConstraints const& c
 }
 
 void Element::Model<views::Image>::build(BuildContext& ctx) const {
+  ComponentKey const stableKey = ctx.leafComponentKey();
   ctx.advanceChildSlot();
   if (!value.source) {
     return;
@@ -189,7 +194,7 @@ void Element::Model<views::Image>::build(BuildContext& ctx) const {
       .opacity = value.opacity,
   });
   if (value.onTap) {
-    ctx.eventMap().insert(id, EventHandlers{.onTap = value.onTap});
+    ctx.eventMap().insert(id, EventHandlers{.stableTargetKey = stableKey, .onTap = value.onTap});
   }
 }
 

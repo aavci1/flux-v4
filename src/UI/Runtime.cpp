@@ -107,7 +107,11 @@ Runtime::~Runtime() {
 }
 
 void Runtime::rebuild(std::optional<Size> sizeOverride) {
-  activePress_ = std::nullopt;
+  // Only drop an active gesture when the window size changes; rebuilds from reactive/layout
+  // animation reuse new NodeIds and would otherwise break PointerUp matching for taps.
+  if (sizeOverride.has_value()) {
+    activePress_ = std::nullopt;
+  }
   SceneGraph& graph = window_.sceneGraph();
   graph.clear();
 
@@ -245,7 +249,15 @@ void Runtime::handleInput(InputEvent const& e) {
         logNodeId("press target", hit->nodeId);
       }
       if (EventHandlers const* h = eventMap_.find(hit->nodeId)) {
-        activePress_ = PressState{hit->nodeId, p};
+        PressState ps{};
+        ps.nodeId = hit->nodeId;
+        ps.downPoint = p;
+        ps.cancelled = false;
+        ps.hadOnTapOnDown = static_cast<bool>(h->onTap);
+        if (ps.hadOnTapOnDown) {
+          ps.downTapTargetKey = h->stableTargetKey;
+        }
+        activePress_ = std::move(ps);
         if (h->onPointerDown) {
           h->onPointerDown(hit->localPoint);
         }
@@ -329,8 +341,14 @@ void Runtime::handleInput(InputEvent const& e) {
       if (h->onPointerUp) {
         h->onPointerUp(hit->localPoint);
       }
-      if (h->onTap && released && released->nodeId == hit->nodeId && !released->cancelled) {
-        h->onTap();
+      if (h->onTap && released && !released->cancelled) {
+        bool const sameNode = released->nodeId == hit->nodeId;
+        bool const retargetAfterRebuild =
+            released->hadOnTapOnDown && eventMap_.find(released->nodeId) == nullptr &&
+            !released->downTapTargetKey.empty() && h->stableTargetKey == released->downTapTargetKey;
+        if (sameNode || retargetAfterRebuild) {
+          h->onTap();
+        }
       }
     }
   } else if (released && released->nodeId.isValid()) {

@@ -136,6 +136,7 @@ void Element::Model<C>::build(BuildContext& ctx) const {
     ctx.beginCompositeBodySubtree();
     child.build(ctx);
   } else if constexpr (RenderComponent<C>) {
+    ComponentKey const stableKey = ctx.leafComponentKey();
     ctx.advanceChildSlot();
     Rect const frame = flux::detail::resolveLeafBounds(
         {}, ctx.layoutEngine().childFrame(), ctx.constraints());
@@ -148,6 +149,7 @@ void Element::Model<C>::build(BuildContext& ctx) const {
         });
 
     EventHandlers handlers{};
+    handlers.stableTargetKey = stableKey;
     if constexpr (requires { value.onTap; }) {
       handlers.onTap = value.onTap;
     }

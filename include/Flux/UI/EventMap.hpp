@@ -2,6 +2,7 @@
 
 #include <Flux/Core/Types.hpp>
 #include <Flux/Scene/NodeId.hpp>
+#include <Flux/UI/ComponentKey.hpp>
 
 #include <cstddef>
 #include <functional>
@@ -10,6 +11,9 @@
 namespace flux {
 
 struct EventHandlers {
+  /// When non-empty, identifies this logical target across scene rebuilds (same subtree path).
+  ComponentKey stableTargetKey;
+
   std::function<void()> onTap;
   std::function<void(Point)> onPointerDown;
   std::function<void(Point)> onPointerUp;
