@@ -36,17 +36,39 @@ ParseResult expensiveParse(std::string const& text) {
   return r;
 }
 
+/// `useHover()` compares the runtime hover leaf key to the *calling* component's key. Calling it
+/// in `MemoDemo::body()` would use the root key, which prefixes every hover target — the whole
+/// window would read as hovered. This wrapper scopes hover to the button only. For full
+/// `useHover` / `usePress` patterns, see `examples/hover-demo/main.cpp`.
+struct MemoHoverButton {
+  auto body() const {
+    bool const hovered = useHover();
+    Color const btnFill = hovered ? pal::accent : pal::surface;
+    Color const btnText = hovered ? Color::hex(0xFFFFFF) : pal::label;
+    return ZStack{.children = {
+                      Rectangle{
+                          .frame = {0, 0, 0, 36.f},
+                          .cornerRadius = CornerRadius(8.f),
+                          .fill = FillStyle::solid(btnFill),
+                          .stroke = StrokeStyle::solid(pal::border, 1.f),
+                          .flexGrow = 0.f,
+                          .cursor = Cursor::Hand,
+                      },
+                      Text{.text = "Hover me (rebuild, no text change)",
+                           .font = {.size = 13.f},
+                           .color = btnText,
+                           .padding = 10.f},
+                  }};
+  }
+};
+
 struct MemoDemo {
   auto body() const {
     ++gRebuildCount;
 
     auto text = useState<std::string>("Hello, world");
-    bool const hovered = useHover();
 
     ParseResult const& result = useMemo([&] { return expensiveParse(*text); }, *text);
-
-    Color const btnFill = hovered ? pal::accent : pal::surface;
-    Color const btnText = hovered ? Color::hex(0xFFFFFF) : pal::label;
 
     int const cacheHits = gRebuildCount - gParseCalls;
 
@@ -83,20 +105,7 @@ struct MemoDemo {
                              .color = Color::hex(0xFFFFFF),
                              .padding = 10.f},
                     }},
-                    ZStack{.children = {
-                        Rectangle{
-                            .frame = {0, 0, 0, 36.f},
-                            .cornerRadius = CornerRadius(8.f),
-                            .fill = FillStyle::solid(btnFill),
-                            .stroke = StrokeStyle::solid(pal::border, 1.f),
-                            .flexGrow = 0.f,
-                            .cursor = Cursor::Hand,
-                        },
-                        Text{.text = "Hover me (rebuild, no text change)",
-                             .font = {.size = 13.f},
-                             .color = btnText,
-                             .padding = 10.f},
-                    }},
+                    MemoHoverButton{},
                     ZStack{.children = {
                         Rectangle{
                             .frame = {0, 0, 0, 36.f},
