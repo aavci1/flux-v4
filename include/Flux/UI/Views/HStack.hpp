@@ -11,6 +11,7 @@ struct HStack {
   float spacing = 8.f;
   float padding = 0.f;
   VerticalAlignment vAlign = VerticalAlignment::Center;
+  bool clip = false;
   std::vector<Element> children;
 };
 

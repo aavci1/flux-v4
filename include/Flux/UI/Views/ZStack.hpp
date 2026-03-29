@@ -10,6 +10,7 @@ namespace flux {
 struct ZStack {
   HorizontalAlignment hAlign = HorizontalAlignment::Center;
   VerticalAlignment vAlign = VerticalAlignment::Center;
+  bool clip = false;
   std::vector<Element> children;
 };
 

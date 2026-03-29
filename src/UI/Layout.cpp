@@ -142,15 +142,19 @@ void Element::Model<VStack>::build(BuildContext& ctx) const {
   Rect const parentFrame = le.childFrame();
   LayoutConstraints const outer = ctx.constraints();
 
+  float const assignedW = assignedSpan(parentFrame.width, outer.maxWidth);
+  float const assignedH = assignedSpan(parentFrame.height, outer.maxHeight);
+
   LayerNode layer{};
   if (parentFrame.width > 0.f || parentFrame.height > 0.f) {
     layer.transform = Mat3::translate(parentFrame.x, parentFrame.y);
   }
+  if (value.clip && assignedW > 0.f && assignedH > 0.f) {
+    layer.clip = Rect{0.f, 0.f, assignedW, assignedH};
+  }
   NodeId const layerId = ctx.graph().addLayer(ctx.parentLayer(), std::move(layer));
   ctx.pushLayer(layerId);
 
-  float const assignedW = assignedSpan(parentFrame.width, outer.maxWidth);
-  float const assignedH = assignedSpan(parentFrame.height, outer.maxHeight);
   float innerW = std::max(0.f, assignedW - 2.f * value.padding);
 
   LayoutConstraints childCs = outer;
@@ -273,14 +277,18 @@ void Element::Model<HStack>::build(BuildContext& ctx) const {
   Rect const parentFrame = le.childFrame();
   LayoutConstraints const outer = ctx.constraints();
 
+  float const assignedW = assignedSpan(parentFrame.width, outer.maxWidth);
+  float const assignedH = assignedSpan(parentFrame.height, outer.maxHeight);
+
   LayerNode layer{};
   if (parentFrame.width > 0.f || parentFrame.height > 0.f) {
     layer.transform = Mat3::translate(parentFrame.x, parentFrame.y);
   }
+  if (value.clip && assignedW > 0.f && assignedH > 0.f) {
+    layer.clip = Rect{0.f, 0.f, assignedW, assignedH};
+  }
   NodeId const layerId = ctx.graph().addLayer(ctx.parentLayer(), std::move(layer));
   ctx.pushLayer(layerId);
-
-  float const assignedW = assignedSpan(parentFrame.width, outer.maxWidth);
 
   LayoutConstraints childCs = outer;
   childCs.maxWidth = std::numeric_limits<float>::infinity();
@@ -386,15 +394,19 @@ void Element::Model<ZStack>::build(BuildContext& ctx) const {
   Rect const parentFrame = le.childFrame();
   LayoutConstraints const outer = ctx.constraints();
 
+  float const assignedW = assignedSpan(parentFrame.width, outer.maxWidth);
+  float const assignedH = assignedSpan(parentFrame.height, outer.maxHeight);
+
   LayerNode layer{};
   if (parentFrame.width > 0.f || parentFrame.height > 0.f) {
     layer.transform = Mat3::translate(parentFrame.x, parentFrame.y);
   }
+  if (value.clip && assignedW > 0.f && assignedH > 0.f) {
+    layer.clip = Rect{0.f, 0.f, assignedW, assignedH};
+  }
   NodeId const layerId = ctx.graph().addLayer(ctx.parentLayer(), std::move(layer));
   ctx.pushLayer(layerId);
 
-  float const assignedW = assignedSpan(parentFrame.width, outer.maxWidth);
-  float const assignedH = assignedSpan(parentFrame.height, outer.maxHeight);
   float innerW = std::max(0.f, assignedW);
   float innerH = std::max(0.f, assignedH);
 
@@ -485,15 +497,19 @@ void Element::Model<Grid>::build(BuildContext& ctx) const {
   Rect const parentFrame = le.childFrame();
   LayoutConstraints const outer = ctx.constraints();
 
+  float const assignedW = assignedSpan(parentFrame.width, outer.maxWidth);
+  float const assignedH = assignedSpan(parentFrame.height, outer.maxHeight);
+
   LayerNode layer{};
   if (parentFrame.width > 0.f || parentFrame.height > 0.f) {
     layer.transform = Mat3::translate(parentFrame.x, parentFrame.y);
   }
+  if (value.clip && assignedW > 0.f && assignedH > 0.f) {
+    layer.clip = Rect{0.f, 0.f, assignedW, assignedH};
+  }
   NodeId const layerId = ctx.graph().addLayer(ctx.parentLayer(), std::move(layer));
   ctx.pushLayer(layerId);
 
-  float const assignedW = assignedSpan(parentFrame.width, outer.maxWidth);
-  float const assignedH = assignedSpan(parentFrame.height, outer.maxHeight);
   float const innerW = std::max(0.f, assignedW - 2.f * value.padding);
   float const innerH = std::max(0.f, assignedH - 2.f * value.padding);
   std::size_t const cols = std::max<std::size_t>(1, value.columns);
