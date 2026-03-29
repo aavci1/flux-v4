@@ -21,6 +21,7 @@
 #include <vector>
 
 #import <Cocoa/Cocoa.h>
+#import <dispatch/dispatch.h>
 
 namespace flux {
 
@@ -95,16 +96,24 @@ Application::Application(int /*argc*/, char** /*argv*/) {
     if (ev.kind != WindowEvent::Kind::CloseRequest) {
       return;
     }
-    auto it = std::find_if(d->windows_.begin(), d->windows_.end(), [&](std::unique_ptr<Window> const& w) {
-      return w && w->handle() == ev.handle;
-    });
-    if (it != d->windows_.end()) {
-      d->byHandle_.erase(ev.handle);
-      d->windows_.erase(it);
-      if (d->windows_.empty()) {
-        quit();
+    // Defer destruction until after all WindowEvent handlers for this event return. Otherwise handlers
+    // registered after Application (e.g. per-window subscriptions) may run with a dangling `this`.
+    unsigned int const closeHandle = ev.handle;
+    Application* app = this;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      auto it = std::find_if(app->d->windows_.begin(), app->d->windows_.end(),
+                             [&](std::unique_ptr<Window> const& w) {
+                               return w && w->handle() == closeHandle;
+                             });
+      if (it == app->d->windows_.end()) {
+        return;
       }
-    }
+      app->d->byHandle_.erase(closeHandle);
+      app->d->windows_.erase(it);
+      if (app->d->windows_.empty()) {
+        app->quit();
+      }
+    });
   });
 
   [NSApplication sharedApplication];
