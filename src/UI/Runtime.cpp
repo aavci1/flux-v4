@@ -112,6 +112,13 @@ bool Runtime::isFocusInSubtree(ComponentKey const& key) const noexcept {
   return std::equal(key.begin(), key.end(), focusedKey_.begin());
 }
 
+bool Runtime::isHoverInSubtree(ComponentKey const& key) const noexcept {
+  if (hoveredKey_.empty() || key.size() > hoveredKey_.size()) {
+    return false;
+  }
+  return std::equal(key.begin(), key.end(), hoveredKey_.begin());
+}
+
 void Runtime::requestFocusInSubtree(ComponentKey const& subtreeKey) {
   if (subtreeKey.empty()) {
     return;
@@ -139,6 +146,22 @@ void Runtime::clearFocus() {
     return;
   }
   focusedKey_.clear();
+  Application::instance().markReactiveDirty();
+}
+
+void Runtime::setHovered(ComponentKey const& key) {
+  if (hoveredKey_ == key) {
+    return;
+  }
+  hoveredKey_ = key;
+  Application::instance().markReactiveDirty();
+}
+
+void Runtime::clearHovered() {
+  if (hoveredKey_.empty()) {
+    return;
+  }
+  hoveredKey_.clear();
   Application::instance().markReactiveDirty();
 }
 
@@ -263,6 +286,7 @@ void Runtime::subscribeWindowEvents() {
       windowHasFocus_ = false;
       cancelActivePress(Point{});
       currentCursor_ = Cursor::Arrow;
+      clearHovered();
     } else if (ev.kind == WindowEvent::Kind::FocusGained) {
       windowHasFocus_ = true;
     }
@@ -337,6 +361,31 @@ void Runtime::updateCursorForPoint(Point windowPoint) {
     }
   } else {
     applyCursor(Cursor::Arrow);
+  }
+}
+
+void Runtime::updateHoveredForPoint(Point windowPoint) {
+  SceneGraph const& graph = window_.sceneGraph();
+  auto const acceptFn = [this](NodeId id) -> bool {
+    EventHandlers const* h = eventMap_.find(id);
+    if (!h) {
+      return false;
+    }
+    if (h->cursorPassthrough) {
+      return false;
+    }
+    return true;
+  };
+
+  auto hit = HitTester{}.hitTest(graph, windowPoint, acceptFn);
+  if (hit) {
+    if (EventHandlers const* h = eventMap_.find(hit->nodeId)) {
+      setHovered(h->stableTargetKey);
+    } else {
+      clearHovered();
+    }
+  } else {
+    clearHovered();
   }
 }
 
@@ -481,6 +530,7 @@ void Runtime::handleInput(InputEvent const& e) {
       std::fprintf(stderr, "[flux:input] PointerDown: no interactive node under cursor\n");
     }
     updateCursorForPoint(p);
+    updateHoveredForPoint(p);
     return;
   }
 
@@ -517,6 +567,7 @@ void Runtime::handleInput(InputEvent const& e) {
           pressed->onPointerMove(*local);
           // Cursor update for active drag; early return — the tail `updateCursorForPoint` below is not run.
           updateCursorForPoint(p);
+          updateHoveredForPoint(p);
           return;
         }
         if (dbg) {
@@ -540,6 +591,7 @@ void Runtime::handleInput(InputEvent const& e) {
     }
     // Hover path (or active press without drag delivery above); mutually exclusive with the early return.
     updateCursorForPoint(p);
+    updateHoveredForPoint(p);
     return;
   }
 
@@ -601,6 +653,7 @@ void Runtime::handleInput(InputEvent const& e) {
     std::fprintf(stderr, "[flux:input] PointerUp: no hit and no active press to notify\n");
   }
   updateCursorForPoint(p);
+  updateHoveredForPoint(p);
 }
 
 bool useFocus() {
@@ -613,6 +666,35 @@ bool useFocus() {
     return false;
   }
   return rt->isFocusInSubtree(store->currentComponentKey());
+}
+
+bool useHover() {
+  Runtime* rt = Runtime::current();
+  if (!rt) {
+    return false;
+  }
+  StateStore* store = StateStore::current();
+  if (!store) {
+    return false;
+  }
+  return rt->isHoverInSubtree(store->currentComponentKey());
+}
+
+bool usePress() {
+  Runtime* rt = Runtime::current();
+  if (!rt) {
+    return false;
+  }
+  StateStore* store = StateStore::current();
+  if (!store) {
+    return false;
+  }
+  ComponentKey const& key = store->currentComponentKey();
+  ComponentKey const& pressKey = rt->activePressKey();
+  if (pressKey.empty() || key.size() > pressKey.size()) {
+    return false;
+  }
+  return std::equal(key.begin(), key.end(), pressKey.begin());
 }
 
 std::function<void()> useRequestFocus() {

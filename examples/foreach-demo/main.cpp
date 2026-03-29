@@ -24,8 +24,8 @@ struct HoverRow {
   int index = 0;
 
   auto body() const {
-    auto hovered = useState(false);
-    Color const bgColor = *hovered ? Color::hex(0xDFDFE6) : Color::hex(0xFFFFFF);
+    bool const hovered = useHover();
+    Color const bgColor = hovered ? Color::hex(0xDFDFE6) : Color::hex(0xFFFFFF);
 
     return ZStack{.children = {
                       Rectangle{
@@ -33,11 +33,9 @@ struct HoverRow {
                           .cornerRadius = CornerRadius(8.f),
                           .fill = FillStyle::solid(bgColor),
                           .stroke = StrokeStyle::solid(Color::hex(0xE0E0E6), 1.f),
-                          .onPointerDown = [hovered](Point) { hovered = true; },
-                          .onPointerUp = [hovered](Point) { hovered = false; },
                           .cursor = Cursor::Hand,
                       },
-                      Text{.text = "Row " + std::to_string(index) + (*hovered ? "  ← hovered" : ""),
+                      Text{.text = "Row " + std::to_string(index) + (hovered ? "  ← hovered" : ""),
                            .font = {.size = 14.f, .weight = 400.f},
                            .color = pal::label,
                            .padding = 14.f},

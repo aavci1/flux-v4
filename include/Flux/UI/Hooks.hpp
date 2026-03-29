@@ -89,6 +89,16 @@ Anim<T> useAnimated(T initial = T{}) {
 /// Must be called inside body() like other hooks.
 bool useFocus();
 
+/// Returns true when the pointer is geometrically over the calling component's subtree and the hit
+/// is not a cursor-passthrough overlay. Updates reactively on pointer moves.
+/// Must be called inside body() like other hooks.
+bool useHover();
+
+/// Returns true when the primary mouse button is held and the calling component's subtree was the
+/// original press target (true even if the pointer moves outside during a drag).
+/// Must be called inside body() like other hooks.
+bool usePress();
+
 /// Returns a callable that, when invoked, focuses the first focusable leaf node in the calling
 /// component's subtree. Does not consume a StateStore slot; it captures the current component
 /// key and Runtime pointer at call time.

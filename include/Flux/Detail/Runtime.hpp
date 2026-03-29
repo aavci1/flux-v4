@@ -34,6 +34,18 @@ public:
   /// True when the focused leaf lies under \p key in the component tree (`focusedKey_` has \p key as prefix).
   bool isFocusInSubtree(ComponentKey const& key) const noexcept;
 
+  /// True when the hovered leaf lies under \p key in the component tree (`hoveredKey_` has \p key as prefix).
+  bool isHoverInSubtree(ComponentKey const& key) const noexcept;
+
+  /// Stable key of the node under the active primary-button press, or empty when none.
+  ComponentKey const& activePressKey() const noexcept {
+    static ComponentKey const kEmpty{};
+    if (activePress_) {
+      return activePress_->stableTargetKey;
+    }
+    return kEmpty;
+  }
+
   /// Programmatically focuses the first focusable leaf in the subtree rooted at \p subtreeKey.
   /// Safe to call from event handlers (outside the build pass). No-op if no focusable node with
   /// \p subtreeKey as a key prefix exists. \c focusOrder() is from the last committed rebuild;
@@ -49,7 +61,10 @@ private:
   void subscribeWindowEvents();
   void cancelActivePress(Point windowPoint);
   void updateCursorForPoint(Point windowPoint);
+  void updateHoveredForPoint(Point windowPoint);
   void applyCursor(Cursor kind);
+  void setHovered(ComponentKey const& key);
+  void clearHovered();
   void setFocus(ComponentKey const& key);
   void clearFocus();
   void cycleTabFocus(bool reverse);
@@ -78,6 +93,8 @@ private:
 
   /// Stable key of the focused node (leaf `stableTargetKey`). Empty when nothing is focused.
   ComponentKey focusedKey_{};
+  /// Stable key of the node under the pointer (geometric hover). Empty when nothing is hovered.
+  ComponentKey hoveredKey_{};
   /// When false, keyboard events are not dispatched (window in background).
   bool windowHasFocus_ = true;
 

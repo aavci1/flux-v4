@@ -41,12 +41,12 @@ struct MemoDemo {
     ++gRebuildCount;
 
     auto text = useState<std::string>("Hello, world");
-    auto hovered = useState<bool>(false);
+    bool const hovered = useHover();
 
     ParseResult const& result = useMemo([&] { return expensiveParse(*text); }, *text);
 
-    Color const btnFill = *hovered ? pal::accent : pal::surface;
-    Color const btnText = *hovered ? Color::hex(0xFFFFFF) : pal::label;
+    Color const btnFill = hovered ? pal::accent : pal::surface;
+    Color const btnText = hovered ? Color::hex(0xFFFFFF) : pal::label;
 
     int const cacheHits = gRebuildCount - gParseCalls;
 
@@ -90,8 +90,7 @@ struct MemoDemo {
                             .fill = FillStyle::solid(btnFill),
                             .stroke = StrokeStyle::solid(pal::border, 1.f),
                             .flexGrow = 0.f,
-                            .onPointerDown = [hovered](Point) { hovered = true; },
-                            .onPointerUp = [hovered](Point) { hovered = false; },
+                            .cursor = Cursor::Hand,
                         },
                         Text{.text = "Hover me (rebuild, no text change)",
                              .font = {.size = 13.f},

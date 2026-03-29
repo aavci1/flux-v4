@@ -201,3 +201,6 @@ target_link_libraries(cursor_demo PRIVATE flux)
 
 add_executable(foreach_demo examples/foreach-demo/main.cpp)
 target_link_libraries(foreach_demo PRIVATE flux)
+
+add_executable(hover_demo examples/hover-demo/main.cpp)
+target_link_libraries(hover_demo PRIVATE flux)
