@@ -1,14 +1,23 @@
 #include <Flux.hpp>
+#include <Flux/Core/Window.hpp>
 #include <Flux/Core/WindowUI.hpp>
 #include <Flux/Graphics/TextLayoutOptions.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Reactive/Reactive.hpp>
 #include <Flux/UI/UI.hpp>
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
 using namespace flux;
+
+namespace {
+
+/// Demo-only: `CardListView` needs live window width for `TextSystem::measure`; the declarative root has no `Window&` yet.
+Window* gCardDemoWindow = nullptr;
+
+} // namespace
 
 namespace pal {
 constexpr Color bg = Color::hex(0xF2F2F7);
@@ -21,24 +30,25 @@ constexpr Color accent1 = Color::hex(0x2E9E5B);
 constexpr Color accent2 = Color::hex(0xD05A2B);
 } // namespace pal
 
-/// Inner width for wrapped body text: default window (480) minus list padding (24×2) minus card padding (18×2).
-constexpr float kCardBodyInnerWidth = 480.f - 48.f - 36.f;
-
 struct Card {
   Color accent = pal::accent0;
   std::string title;
   std::string detail;
+  /// Width available to the card row (matches parent content width). Used for wrapped body measurement.
+  float availableWidth = 400.f;
 
   auto body() const {
     auto expanded = useState<bool>(false);
     auto bodyOpacity = useAnimated<float>(0.f);
 
+    float const innerTextWidth = std::max(1.f, availableWidth - 36.f);
+
     float const bodyTextHeight = useMemo([&] {
       TextSystem& ts = Application::instance().textSystem();
       Font const bodyFont{.size = 15.f, .weight = 400.f};
       TextLayoutOptions opts{.wrapping = TextWrapping::Wrap};
-      return ts.measure(detail, bodyFont, pal::sublabel, kCardBodyInnerWidth, opts).height;
-    }, detail, kCardBodyInnerWidth);
+      return ts.measure(detail, bodyFont, pal::sublabel, innerTextWidth, opts).height;
+    }, detail, availableWidth);
 
     std::vector<Element> rows;
     rows.emplace_back(HStack{
@@ -101,6 +111,9 @@ struct Card {
 
 struct CardListView {
   auto body() const {
+    float const listContentWidth =
+        gCardDemoWindow ? std::max(1.f, gCardDemoWindow->getSize().width - 48.f) : 432.f;
+
     return ZStack{
         .hAlign = HorizontalAlignment::Leading,
         .vAlign = VerticalAlignment::Top,
@@ -119,13 +132,16 @@ struct CardListView {
                          .color = pal::sublabel},
                     Card{.accent = pal::accent0,
                          .title = "Metal Renderer",
-                         .detail = "SDF rounded-rect shaders, glyph atlas, libtess2."},
+                         .detail = "SDF rounded-rect shaders, glyph atlas, libtess2.",
+                         .availableWidth = listContentWidth},
                     Card{.accent = pal::accent1,
                          .title = "Reactive State",
-                         .detail = "Signal<T>, Computed<T>, Animated<T>."},
+                         .detail = "Signal<T>, Computed<T>, Animated<T>.",
+                         .availableWidth = listContentWidth},
                     Card{.accent = pal::accent2,
                          .title = "Scene Graph",
-                         .detail = "Slot-map NodeStore, LayerNode, HitTester."},
+                         .detail = "Slot-map NodeStore, LayerNode, HitTester.",
+                         .availableWidth = listContentWidth},
                 },
             },
         },
@@ -140,6 +156,7 @@ int main(int argc, char* argv[]) {
       .title = "Flux — Card demo",
       .resizable = true,
   });
+  gCardDemoWindow = &w;
   w.setView<CardListView>();
   return app.exec();
 }

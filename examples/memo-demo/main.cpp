@@ -90,13 +90,13 @@ struct MemoDemo {
                             .fill = FillStyle::solid(btnFill),
                             .stroke = StrokeStyle::solid(pal::border, 1.f),
                             .flexGrow = 0.f,
+                            .onPointerDown = [hovered](Point) { hovered = true; },
+                            .onPointerUp = [hovered](Point) { hovered = false; },
                         },
                         Text{.text = "Hover me (rebuild, no text change)",
                              .font = {.size = 13.f},
                              .color = btnText,
-                             .padding = 10.f,
-                             .onPointerDown = [hovered](Point) { hovered = true; },
-                             .onPointerUp = [hovered](Point) { hovered = false; }},
+                             .padding = 10.f},
                     }},
                     ZStack{.children = {
                         Rectangle{
@@ -127,7 +127,8 @@ struct MemoDemo {
                         Text{.text = "Parse calls (expensive fn): " + std::to_string(gParseCalls),
                              .font = {.size = 15.f, .weight = 600.f},
                              .color = pal::accent},
-                        Text{.text = "Total rebuilds: " + std::to_string(gRebuildCount),
+                        Text{.text = "Total rebuilds: " + std::to_string(gRebuildCount) +
+                                         " (×2 per event: measure + build pass)",
                              .font = {.size = 15.f},
                              .color = pal::sub},
                         Text{.text = "Cache hit ratio: " + std::to_string(cacheHits) + "/" +
