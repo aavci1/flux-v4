@@ -5,7 +5,6 @@
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/UI/UI.hpp>
 
-#include <algorithm>
 #include <array>
 #include <vector>
 
@@ -35,30 +34,23 @@ constexpr std::array<DemoCell, 12> kGrid{{
 }};
 
 struct BlendCell {
-  static constexpr int kCols = 4;
-  static constexpr int kRows = 3;
   static constexpr float kMargin = 24.f;
   static constexpr float kGap = 10.f;
-  /// Default `layoutHint` when parent does not set one (matches demo window defaults).
-  static constexpr float kDefaultWinW = 920.f;
-  static constexpr float kDefaultWinH = 700.f;
 
   BlendMode mode = BlendMode::Normal;
   const char* title = "";
-  /// Used when `measure` sees unbounded constraints (HStack does not propagate width to children).
-  /// Parent should set this to the current window / content size so the grid fills the layout.
-  Size layoutHint{kDefaultWinW, kDefaultWinH};
 
+  /// `Grid` passes a finite `maxWidth` per cell; height is unbounded, so we use a square cell.
   Size measure(LayoutConstraints const& c) const {
-    float const winW = std::isfinite(c.maxWidth) && c.maxWidth > 0.f ? c.maxWidth : layoutHint.width;
-    float const winH = std::isfinite(c.maxHeight) && c.maxHeight > 0.f ? c.maxHeight : layoutHint.height;
-    float const innerW = std::max(0.f, winW - 2.f * kMargin);
-    float const innerH = std::max(0.f, winH - 2.f * kMargin);
-    float const cellW =
-        std::max(0.f, (innerW - kGap * (static_cast<float>(kCols) - 1.f)) / static_cast<float>(kCols));
-    float const cellH =
-        std::max(0.f, (innerH - kGap * (static_cast<float>(kRows) - 1.f)) / static_cast<float>(kRows));
-    return {cellW, cellH};
+    float const w = std::isfinite(c.maxWidth) && c.maxWidth > 0.f ? c.maxWidth : 0.f;
+    if (w <= 0.f) {
+      return {0.f, 0.f};
+    }
+    float h = std::isfinite(c.maxHeight) && c.maxHeight > 0.f ? c.maxHeight : w;
+    if (h > w) {
+      h = w;
+    }
+    return {w, h};
   }
 
   void render(Canvas& canvas, Rect cell) const {
@@ -96,34 +88,18 @@ struct BlendCell {
 };
 
 struct BlendDemoView {
-  /// Passed into each `BlendCell` so `measure` can infer cell size when the row has infinite width.
-  Size layoutSize{BlendCell::kDefaultWinW, BlendCell::kDefaultWinH};
-
   auto body() const {
-    auto row = [this](int r) {
-      std::vector<Element> cells;
-      cells.reserve(static_cast<std::size_t>(BlendCell::kCols));
-      for (int col = 0; col < BlendCell::kCols; ++col) {
-        DemoCell const& d = kGrid[static_cast<std::size_t>(r * BlendCell::kCols + col)];
-        cells.push_back(BlendCell{.mode = d.mode, .title = d.title, .layoutHint = layoutSize});
-      }
-      return HStack{
-          .spacing = BlendCell::kGap,
-          .vAlign = VerticalAlignment::Center,
-          .children = std::move(cells),
-      };
-    };
-
-    return VStack {
-      .spacing = BlendCell::kGap,
-      .padding = BlendCell::kMargin,
-      .hAlign = HorizontalAlignment::Center,
-      .children =
-          {
-              row(0),
-              row(1),
-              row(2),
-          },
+    std::vector<Element> cells;
+    cells.reserve(kGrid.size());
+    for (DemoCell const& d : kGrid) {
+      cells.push_back(BlendCell{.mode = d.mode, .title = d.title});
+    }
+    return Grid{
+                    .columns = 4,
+                    .hSpacing = BlendCell::kGap,
+                    .vSpacing = BlendCell::kGap,
+                    .padding = BlendCell::kMargin,
+                    .children = std::move(cells),
     };
   }
 };
@@ -133,11 +109,9 @@ struct BlendDemoView {
 int main(int argc, char* argv[]) {
   Application app(argc, argv);
 
-  Size const layoutSize{BlendCell::kDefaultWinW, BlendCell::kDefaultWinH};
   app.createWindow<Window>({
-      .size = layoutSize,
       .title = "Flux — blend modes",
-  }).setView(BlendDemoView{.layoutSize = layoutSize});
+  }).setView(BlendDemoView{});
 
   return app.exec();
 }

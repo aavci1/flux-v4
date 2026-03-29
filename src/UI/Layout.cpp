@@ -392,6 +392,136 @@ Size Element::Model<ZStack>::measure(BuildContext& ctx, LayoutConstraints const&
   return {maxW, maxH};
 }
 
+void Element::Model<Grid>::build(BuildContext& ctx) const {
+  if (!ctx.consumeCompositeBodySubtreeRootSkip()) {
+    ctx.advanceChildSlot();
+  }
+  LayoutEngine& le = ctx.layoutEngine();
+  Rect const parentFrame = le.childFrame();
+  LayoutConstraints const outer = ctx.constraints();
+
+  LayerNode layer{};
+  if (parentFrame.width > 0.f || parentFrame.height > 0.f) {
+    layer.transform = Mat3::translate(parentFrame.x, parentFrame.y);
+  }
+  NodeId const layerId = ctx.graph().addLayer(ctx.parentLayer(), std::move(layer));
+  ctx.pushLayer(layerId);
+
+  float const assignedW = assignedSpan(parentFrame.width, outer.maxWidth);
+  float const innerW = std::max(0.f, assignedW - 2.f * value.padding);
+  std::size_t const cols = std::max<std::size_t>(1, value.columns);
+  float const cellW =
+      innerW > 0.f
+          ? std::max(0.f, (innerW - static_cast<float>(cols - 1) * value.hSpacing) / static_cast<float>(cols))
+          : 0.f;
+
+  LayoutConstraints childCs = outer;
+  childCs.maxHeight = std::numeric_limits<float>::infinity();
+  childCs.maxWidth =
+      cellW > 0.f ? cellW : std::numeric_limits<float>::infinity();
+
+  std::vector<Size> sizes;
+  sizes.reserve(value.children.size());
+  ctx.pushChildIndex();
+  for (Element const& ch : value.children) {
+    sizes.push_back(le.measure(ctx, ch, childCs, ctx.textSystem()));
+  }
+  if (StateStore* store = StateStore::current()) {
+    store->resetSlotCursors();
+  }
+  ctx.rewindChildKeyIndex();
+
+  std::size_t const n = value.children.size();
+  std::size_t const rowCount = n == 0 ? 0 : (n + cols - 1) / cols;
+  std::vector<float> rowH(rowCount, 0.f);
+  for (std::size_t i = 0; i < n; ++i) {
+    std::size_t const row = i / cols;
+    rowH[row] = std::max(rowH[row], sizes[i].height);
+  }
+
+  LayoutConstraints innerForBuild = outer;
+  innerForBuild.maxHeight = std::numeric_limits<float>::infinity();
+  innerForBuild.maxWidth =
+      cellW > 0.f ? cellW : std::numeric_limits<float>::infinity();
+
+  float y = value.padding;
+  for (std::size_t r = 0; r < rowCount; ++r) {
+    float x = value.padding;
+    for (std::size_t c = 0; c < cols; ++c) {
+      std::size_t const i = r * cols + c;
+      if (i >= n) {
+        break;
+      }
+      Element const& child = value.children[i];
+      Size const sz = sizes[i];
+      if (child.isSpacer()) {
+        ctx.advanceChildSlot();
+        x += cellW + value.hSpacing;
+        continue;
+      }
+      float const cx = x + hAlignOffset(sz.width, cellW, value.hAlign);
+      float const cy = y + vAlignOffset(sz.height, rowH[r], value.vAlign);
+      le.setChildFrame(Rect{cx, cy, sz.width, sz.height});
+      ctx.pushConstraints(innerForBuild);
+      child.build(ctx);
+      ctx.popConstraints();
+      x += cellW + value.hSpacing;
+    }
+    y += rowH[r] + value.vSpacing;
+  }
+
+  ctx.popChildIndex();
+  ctx.popLayer();
+}
+
+Size Element::Model<Grid>::measure(BuildContext& ctx, LayoutConstraints const& constraints,
+                                   TextSystem& ts) const {
+  if (!ctx.consumeCompositeBodySubtreeRootSkip()) {
+    ctx.advanceChildSlot();
+  }
+  LayoutEngine tmp{};
+  float const assignedW =
+      std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;
+  float const innerW = std::max(0.f, assignedW - 2.f * value.padding);
+  std::size_t const cols = std::max<std::size_t>(1, value.columns);
+  float const cellW =
+      innerW > 0.f
+          ? std::max(0.f, (innerW - static_cast<float>(cols - 1) * value.hSpacing) / static_cast<float>(cols))
+          : 0.f;
+
+  LayoutConstraints childCs = constraints;
+  childCs.maxHeight = std::numeric_limits<float>::infinity();
+  childCs.maxWidth =
+      cellW > 0.f ? cellW : std::numeric_limits<float>::infinity();
+
+  std::vector<Size> sizes;
+  sizes.reserve(value.children.size());
+  ctx.pushChildIndex();
+  for (Element const& ch : value.children) {
+    sizes.push_back(tmp.measure(ctx, ch, childCs, ts));
+  }
+  ctx.popChildIndex();
+
+  std::size_t const n = value.children.size();
+  std::size_t const rowCount = n == 0 ? 0 : (n + cols - 1) / cols;
+  std::vector<float> rowH(rowCount, 0.f);
+  for (std::size_t i = 0; i < n; ++i) {
+    std::size_t const row = i / cols;
+    rowH[row] = std::max(rowH[row], sizes[i].height);
+  }
+
+  float totalH = 2.f * value.padding;
+  if (rowCount > 1) {
+    totalH += static_cast<float>(rowCount - 1) * value.vSpacing;
+  }
+  for (float h : rowH) {
+    totalH += h;
+  }
+
+  float const totalW = innerW > 0.f ? assignedW : 0.f;
+  return {totalW, totalH};
+}
+
 void Element::Model<Spacer>::build(BuildContext& ctx) const {
   ctx.advanceChildSlot();
 }

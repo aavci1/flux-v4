@@ -262,6 +262,17 @@ struct Element::Model<ZStack> final : Concept {
 };
 
 template<>
+struct Element::Model<Grid> final : Concept {
+  Grid value;
+  explicit Model(Grid c) : value(std::move(c)) {}
+  std::unique_ptr<Concept> clone() const override {
+    return std::make_unique<Model<Grid>>(value);
+  }
+  void build(BuildContext& ctx) const override;
+  Size measure(BuildContext& ctx, LayoutConstraints const& constraints, TextSystem& textSystem) const override;
+};
+
+template<>
 struct Element::Model<Spacer> final : Concept {
   Spacer value;
   explicit Model(Spacer c) : value(std::move(c)) {}
