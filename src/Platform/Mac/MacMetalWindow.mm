@@ -1,4 +1,5 @@
 #import <Cocoa/Cocoa.h>
+#import <CoreGraphics/CoreGraphics.h>
 #import <Metal/Metal.h>
 #import <QuartzCore/QuartzCore.h>
 
@@ -257,6 +258,15 @@ void postInputFromView(FluxMetalView* view, InputEvent::Kind kind, NSEvent* e, s
     ie.key = static_cast<KeyCode>(e.keyCode);
   }
   ie.modifiers = modifiersFromNSEvent(e);
+  {
+    std::uint8_t pb = static_cast<std::uint8_t>([NSEvent pressedMouseButtons] & 0xFF);
+    // Session-state can reflect a physical release before AppKit's bitmask updates when mouseUp
+    // was not delivered to this window (e.g. release outside the window during a drag).
+    if (!CGEventSourceButtonState(kCGEventSourceStateCombinedSessionState, kCGMouseButtonLeft)) {
+      pb &= static_cast<std::uint8_t>(~1u);
+    }
+    ie.pressedButtons = pb;
+  }
   ie.text = std::move(text);
   if (fluxDebugInputMacPost()) {
     if (kind == InputEvent::Kind::Scroll) {

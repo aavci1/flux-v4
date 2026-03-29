@@ -49,6 +49,10 @@ struct InputEvent {
   MouseButton button = MouseButton::None;
   KeyCode key = 0;
   Modifiers modifiers = Modifiers::None;
+  /// Bitmask of mouse buttons currently held at the time of this event.
+  /// Bit 0 = primary (left), bit 1 = secondary (right), bit 2 = middle.
+  /// Populated on pointer and scroll events from platforms that support it; 0 otherwise.
+  std::uint8_t pressedButtons = 0;
   std::string text;
 };
 

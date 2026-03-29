@@ -179,6 +179,29 @@ void Runtime::subscribeResize() {
   });
 }
 
+void Runtime::cancelActivePress(Point windowPoint) {
+  if (!activePress_) {
+    return;
+  }
+  SceneGraph const& graph = window_.sceneGraph();
+  if (EventHandlers const* h = eventMap_.find(activePress_->nodeId)) {
+    if (h->onPointerUp) {
+      HitTester tester{};
+      std::optional<Point> local =
+          tester.localPointForNode(graph, activePress_->downPoint, activePress_->nodeId);
+      if (!local) {
+        local = tester.localPointForNode(graph, windowPoint, activePress_->nodeId);
+      }
+      if (local) {
+        h->onPointerUp(*local);
+      } else {
+        h->onPointerUp(Point{0.f, 0.f});
+      }
+    }
+  }
+  activePress_ = std::nullopt;
+}
+
 void Runtime::handleInput(InputEvent const& e) {
   SceneGraph const& graph = window_.sceneGraph();
   bool const dbg = inputDebugEnabled();
@@ -269,6 +292,9 @@ void Runtime::handleInput(InputEvent const& e) {
   }
 
   if (e.kind == InputEvent::Kind::PointerMove) {
+    if (activePress_ && !(e.pressedButtons & 1)) {
+      cancelActivePress(p);
+    }
     bool const logThisMove = dbgMove || (dbg && (++moveLogCounter % 15 == 0));
     if (logThisMove) {
       std::fprintf(stderr, "[flux:input] PointerMove pos=(%.1f,%.1f) activePress=%s\n",

@@ -51,15 +51,8 @@ std::optional<Point> HitTester::localPointForNodeImpl(NodeId id, SceneGraph cons
       }
       return localTransform.inverse().apply(windowPoint);
     }
-    if (layer->clip.has_value()) {
-      if (std::abs(localTransform.affineDeterminant()) < kDetEps) {
-        return std::nullopt;
-      }
-      Point const localPoint = localTransform.inverse().apply(windowPoint);
-      if (!layer->clip->contains(localPoint)) {
-        return std::nullopt;
-      }
-    }
+    // Unlike hitTest, do not cull by clip: we map window points to a node's local space for drag /
+    // release delivery even when the pointer is outside the clipped region (e.g. scroll viewport).
     for (NodeId child : layer->children) {
       if (auto p = localPointForNodeImpl(child, graph, windowPoint, localTransform, targetId)) {
         return p;

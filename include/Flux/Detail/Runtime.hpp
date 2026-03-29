@@ -33,6 +33,7 @@ private:
   void subscribeToRebuild();
   void subscribeInput();
   void subscribeResize();
+  void cancelActivePress(Point windowPoint);
 
   struct PressState {
     NodeId nodeId{};
