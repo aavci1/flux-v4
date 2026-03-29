@@ -29,6 +29,7 @@ struct Grid {
   /// Alignment of each child within its cell when the child is narrower or shorter than the cell.
   HorizontalAlignment hAlign = HorizontalAlignment::Leading;
   VerticalAlignment vAlign = VerticalAlignment::Top;
+  bool clip = false;
   /// Children in row-major order (left-to-right, top-to-bottom).
   std::vector<Element> children;
 };

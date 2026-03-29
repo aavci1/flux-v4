@@ -30,6 +30,9 @@ Size snapRootLayoutSize(Size s) {
   return {std::max(1.f, std::round(s.width)), std::max(1.f, std::round(s.height))};
 }
 
+/// Logical points; matches UIKit default touch slop (roadmap §2).
+constexpr float kTapSlop = 8.f;
+
 } // namespace
 
 Runtime::Runtime(Window& window) : window_(window) {
@@ -45,6 +48,7 @@ Runtime::~Runtime() {
 }
 
 void Runtime::rebuild(std::optional<Size> sizeOverride) {
+  activePress_ = std::nullopt;
   SceneGraph& graph = window_.sceneGraph();
   graph.clear();
 
@@ -109,38 +113,53 @@ void Runtime::handleInput(InputEvent const& e) {
     return;
   }
   Point const p{e.position.x, e.position.y};
-  auto hit = HitTester{}.hitTest(window_.sceneGraph(), p, [this](NodeId id) {
-    return eventMap_.find(id) != nullptr;
-  });
-  if (!hit) {
+  auto const acceptFn = [this](NodeId id) { return eventMap_.find(id) != nullptr; };
+  SceneGraph const& graph = window_.sceneGraph();
+
+  if (e.kind == InputEvent::Kind::PointerDown) {
+    auto hit = HitTester{}.hitTest(graph, p, acceptFn);
+    activePress_ = std::nullopt;
+    if (hit) {
+      if (EventHandlers const* h = eventMap_.find(hit->nodeId)) {
+        activePress_ = PressState{hit->nodeId, p};
+        if (h->onPointerDown) {
+          h->onPointerDown(hit->localPoint);
+        }
+      }
+    }
     return;
   }
-  EventHandlers const* handlers = eventMap_.find(hit->nodeId);
-  if (!handlers) {
+
+  if (e.kind == InputEvent::Kind::PointerMove) {
+    if (activePress_) {
+      float const dx = p.x - activePress_->downPoint.x;
+      float const dy = p.y - activePress_->downPoint.y;
+      if (dx * dx + dy * dy > kTapSlop * kTapSlop) {
+        activePress_->cancelled = true;
+      }
+    }
+    auto hit = HitTester{}.hitTest(graph, p, acceptFn);
+    if (hit) {
+      if (EventHandlers const* h = eventMap_.find(hit->nodeId); h && h->onPointerMove) {
+        h->onPointerMove(hit->localPoint);
+      }
+    }
     return;
   }
-  switch (e.kind) {
-  case InputEvent::Kind::PointerDown:
-    if (handlers->onPointerDown) {
-      handlers->onPointerDown(hit->localPoint);
+
+  // PointerUp
+  auto hit = HitTester{}.hitTest(graph, p, acceptFn);
+  if (hit) {
+    if (EventHandlers const* h = eventMap_.find(hit->nodeId)) {
+      if (h->onPointerUp) {
+        h->onPointerUp(hit->localPoint);
+      }
+      if (h->onTap && activePress_ && activePress_->nodeId == hit->nodeId && !activePress_->cancelled) {
+        h->onTap();
+      }
     }
-    break;
-  case InputEvent::Kind::PointerUp:
-    if (handlers->onPointerUp) {
-      handlers->onPointerUp(hit->localPoint);
-    }
-    if (handlers->onTap) {
-      handlers->onTap();
-    }
-    break;
-  case InputEvent::Kind::PointerMove:
-    if (handlers->onPointerMove) {
-      handlers->onPointerMove(hit->localPoint);
-    }
-    break;
-  default:
-    break;
   }
+  activePress_ = std::nullopt;
 }
 
 } // namespace flux

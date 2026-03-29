@@ -33,6 +33,13 @@ private:
   void subscribeInput();
   void subscribeResize();
 
+  struct PressState {
+    NodeId nodeId{};
+    Point downPoint{};
+    bool cancelled = false;
+  };
+  std::optional<PressState> activePress_{};
+
   Window& window_;
   std::unique_ptr<RootHolder> rootHolder_;
   EventMap eventMap_;
