@@ -59,6 +59,10 @@ void BuildContext::popChildIndex() {
   ++nextChildIndex_;
 }
 
+void BuildContext::setChildIndex(std::size_t index) {
+  nextChildIndex_ = index;
+}
+
 ComponentKey BuildContext::nextCompositeKey() {
   ComponentKey key = keyStack_;
   key.push_back(nextChildIndex_++);

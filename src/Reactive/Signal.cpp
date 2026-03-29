@@ -16,7 +16,8 @@ thread_local std::vector<std::function<void()>> gDeferred;
 } // namespace
 
 void notifyObserverList(std::vector<std::pair<std::uint64_t, std::function<void()>>>& observers) {
-  // No observers => nothing to invalidate; skip markReactiveDirty (see Signal::set with non-comparable T).
+  // Empty list: `Signal::notifyObservers` still schedules reactive work when `Signal` has no
+  // `observe()` callbacks (see `Signal.hpp`).
   if (observers.empty()) {
     return;
   }

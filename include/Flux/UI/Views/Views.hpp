@@ -13,5 +13,6 @@
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/ZStack.hpp>
 #include <Flux/UI/Views/Grid.hpp>
+#include <Flux/UI/Views/ForEach.hpp>
 #include <Flux/UI/Views/Spacer.hpp>
 #include <Flux/UI/Views/ScrollView.hpp>

@@ -34,6 +34,9 @@ public:
   void pushChildIndex();
   void popChildIndex();
 
+  /// Override the next leaf/composite index within the current key segment (used by `ForEach`).
+  void setChildIndex(std::size_t index);
+
   /// Called by Element::Model<C>::build for composite components.
   /// Returns the key for this component and advances the cursor.
   ComponentKey nextCompositeKey();
