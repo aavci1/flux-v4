@@ -49,7 +49,7 @@ struct Text {
   std::function<void(KeyCode, Modifiers)> onKeyUp;
   std::function<void(std::string const&)> onTextInput;
 
-  Cursor cursor = Cursor::Default;
+  Cursor cursor = Cursor::Inherit;
 };
 
 } // namespace flux

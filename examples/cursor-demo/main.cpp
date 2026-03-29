@@ -89,7 +89,7 @@ struct CursorDemo {
                                             .padding = 20.f,
                                             .children =
                                                 {
-                                                    cursorSwatchRow("Default", Cursor::Default,
+                                                    cursorSwatchRow("Default", Cursor::Arrow,
                                                                     pal::chipDefault),
                                                     cursorSwatchRow("Hand", Cursor::Hand, pal::chipHand),
                                                     cursorSwatchRow("ResizeEW", Cursor::ResizeEW,

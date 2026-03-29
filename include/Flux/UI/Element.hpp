@@ -193,7 +193,7 @@ void Element::Model<C>::build(BuildContext& ctx) const {
     }
     if (handlers.onTap || handlers.onPointerDown || handlers.onPointerUp || handlers.onPointerMove ||
         handlers.onScroll || handlers.onKeyDown || handlers.onKeyUp || handlers.onTextInput || handlers.focusable ||
-        handlers.cursor != Cursor::Default || handlers.cursorPassthrough) {
+        handlers.cursor != Cursor::Inherit || handlers.cursorPassthrough) {
       ctx.eventMap().insert(id, std::move(handlers));
     }
   } else {

@@ -51,7 +51,7 @@ void Element::Model<Rectangle>::build(BuildContext& ctx) const {
                          static_cast<bool>(value.onKeyUp) || static_cast<bool>(value.onTextInput);
   if (value.onTap || value.onPointerDown || value.onPointerUp || value.onPointerMove || value.onScroll ||
       value.onKeyDown || value.onKeyUp || value.onTextInput || value.focusable ||
-      value.cursor != Cursor::Default || value.cursorPassthrough) {
+      value.cursor != Cursor::Inherit || value.cursorPassthrough) {
     ctx.eventMap().insert(id, EventHandlers{
         .stableTargetKey = stableKey,
         .onTap = value.onTap,
@@ -130,7 +130,7 @@ void Element::Model<Text>::build(BuildContext& ctx) const {
     bool const focusable = value.focusable || static_cast<bool>(value.onKeyDown) ||
                            static_cast<bool>(value.onKeyUp) || static_cast<bool>(value.onTextInput);
     if (value.onTap || value.onPointerDown || value.onPointerUp || value.onPointerMove || value.onKeyDown ||
-        value.onKeyUp || value.onTextInput || value.focusable || value.cursor != Cursor::Default) {
+        value.onKeyUp || value.onTextInput || value.focusable || value.cursor != Cursor::Inherit) {
       ctx.eventMap().insert(id, EventHandlers{
           .stableTargetKey = stableKey,
           .onTap = value.onTap,
@@ -151,7 +151,7 @@ void Element::Model<Text>::build(BuildContext& ctx) const {
         .layout = layout,
         .origin = {inner.x, inner.y},
     });
-    if (value.cursor != Cursor::Default) {
+    if (value.cursor != Cursor::Inherit) {
       ctx.eventMap().insert(textId, EventHandlers{
           .stableTargetKey = stableKey,
           .cursor = value.cursor,

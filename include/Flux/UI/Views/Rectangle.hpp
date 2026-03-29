@@ -29,7 +29,7 @@ struct Rectangle {
   std::function<void(KeyCode, Modifiers)> onKeyUp;
   std::function<void(std::string const&)> onTextInput;
 
-  Cursor cursor = Cursor::Default;
+  Cursor cursor = Cursor::Inherit;
   /// If true, this node is ignored for cursor resolution; the view behind is used (e.g. ScrollView overlay).
   /// Not on `Text` — text is always real content, not a full-bleed invisible capture layer.
   bool cursorPassthrough = false;

@@ -262,7 +262,7 @@ void Runtime::subscribeWindowEvents() {
     } else if (ev.kind == WindowEvent::Kind::FocusLost) {
       windowHasFocus_ = false;
       cancelActivePress(Point{});
-      currentCursor_ = Cursor::Default;
+      currentCursor_ = Cursor::Arrow;
     } else if (ev.kind == WindowEvent::Kind::FocusGained) {
       windowHasFocus_ = true;
     }
@@ -308,7 +308,7 @@ void Runtime::updateCursorForPoint(Point windowPoint) {
   if (activePress_) {
     auto const [pressId, pressed] = findPressHandlersWithNode(*activePress_);
     (void)pressId;
-    if (pressed) {
+    if (pressed && pressed->cursor != Cursor::Inherit) {
       applyCursor(pressed->cursor);
       return;
     }
@@ -318,19 +318,25 @@ void Runtime::updateCursorForPoint(Point windowPoint) {
   auto const acceptFn = [this](NodeId id) {
     EventHandlers const* h = eventMap_.find(id);
     if (!h) {
-      return true;
+      return false;
     }
-    return !h->cursorPassthrough;
+    if (h->cursorPassthrough) {
+      return false;
+    }
+    if (h->cursor == Cursor::Inherit) {
+      return false;
+    }
+    return true;
   };
   auto hit = HitTester{}.hitTest(graph, windowPoint, acceptFn);
   if (hit) {
-    Cursor kind = Cursor::Default;
     if (EventHandlers const* h = eventMap_.find(hit->nodeId)) {
-      kind = h->cursor;
+      applyCursor(h->cursor);
+    } else {
+      applyCursor(Cursor::Arrow);
     }
-    applyCursor(kind);
   } else {
-    applyCursor(Cursor::Default);
+    applyCursor(Cursor::Arrow);
   }
 }
 

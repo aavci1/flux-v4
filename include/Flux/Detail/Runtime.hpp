@@ -81,7 +81,7 @@ private:
   /// When false, keyboard events are not dispatched (window in background).
   bool windowHasFocus_ = true;
 
-  Cursor currentCursor_ = Cursor::Default;
+  Cursor currentCursor_ = Cursor::Arrow;
 };
 
 } // namespace flux

@@ -6,7 +6,8 @@ namespace flux {
 
 /// Mouse pointer shape. Values map to standard platform cursors.
 enum class Cursor : std::uint8_t {
-    Default,       ///< Platform arrow (the implicit default everywhere)
+    Inherit,       ///< Unset — does not constrain the cursor; the hit behind wins (see Runtime cursor hit-test).
+    Arrow,         ///< Platform arrow pointer
     IBeam,         ///< Text insertion cursor (I-beam)
     Hand,          ///< Pointing hand — clickable items, links
     ResizeEW,      ///< Horizontal resize (↔) — vertical dividers

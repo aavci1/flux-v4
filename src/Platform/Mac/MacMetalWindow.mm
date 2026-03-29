@@ -741,7 +741,10 @@ void MacMetalPlatformWindow::wakeEventLoop() {
 void MacMetalPlatformWindow::setCursor(Cursor kind) {
   NSCursor* c = nil;
   switch (kind) {
-  case Cursor::Default:
+  case Cursor::Inherit:
+    c = [NSCursor arrowCursor];
+    break;
+  case Cursor::Arrow:
     c = [NSCursor arrowCursor];
     break;
   case Cursor::IBeam:

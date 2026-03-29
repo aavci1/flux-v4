@@ -21,7 +21,8 @@ public:
   std::optional<HitResult> hitTest(SceneGraph const& graph, Point windowPoint) const;
 
   /// If \p acceptTarget is set, only nodes for which it returns true may be hit. Other nodes are
-  /// transparent so input reaches geometry behind them (e.g. text without handlers over a button).
+  /// transparent so input reaches geometry behind them (e.g. overlay text with \ref Cursor::Inherit
+  /// over a control that sets \ref Cursor::Hand).
   std::optional<HitResult> hitTest(SceneGraph const& graph, Point windowPoint,
                                    std::function<bool(NodeId)> const& acceptTarget) const;
 

@@ -33,7 +33,7 @@ struct EventHandlers {
   /// True when the view sets `focusable` or registers any keyboard handler (used for focus claim).
   bool focusable = false;
 
-  Cursor cursor = Cursor::Default;
+  Cursor cursor = Cursor::Inherit;
   /// When true, cursor hit-testing skips this node so the shape under it (e.g. scroll content) wins.
   bool cursorPassthrough = false;
 };
