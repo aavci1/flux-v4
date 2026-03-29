@@ -36,6 +36,9 @@ constexpr std::array<DemoCell, 12> kGrid{{
 struct BlendCell {
   static constexpr float kMargin = 24.f;
   static constexpr float kGap = 10.f;
+  /// Default window size in `main` (explicit baseline; avoids relying on `WindowConfig` defaults).
+  static constexpr float kDefaultWinW = 920.f;
+  static constexpr float kDefaultWinH = 700.f;
 
   BlendMode mode = BlendMode::Normal;
   const char* title = "";
@@ -110,6 +113,7 @@ int main(int argc, char* argv[]) {
   Application app(argc, argv);
 
   app.createWindow<Window>({
+      .size = {BlendCell::kDefaultWinW, BlendCell::kDefaultWinH},
       .title = "Flux — blend modes",
   }).setView(BlendDemoView{});
 

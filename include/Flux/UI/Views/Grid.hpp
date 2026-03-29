@@ -14,6 +14,10 @@ namespace flux {
 /// measured with unbounded width. Views that expand to fill width (e.g. `Rectangle` with no
 /// frame) may measure at zero width — the grid reports `{0, totalHeight}` until a parent assigns a
 /// finite width, same idea as `VStack`.
+///
+/// `Spacer` has no flex axis here (unlike `VStack` / `HStack`), but it remains a valid child: it is
+/// measured like other cells, occupies a full column in row-major order, and produces no output.
+/// Slot / key indices stay aligned by advancing the child cursor without calling `Spacer::build`.
 struct Grid {
   /// Number of columns. Values below 1 are clamped to 1 during layout.
   std::size_t columns = 2;

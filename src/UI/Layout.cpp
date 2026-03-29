@@ -455,6 +455,7 @@ void Element::Model<Grid>::build(BuildContext& ctx) const {
       Element const& child = value.children[i];
       Size const sz = sizes[i];
       if (child.isSpacer()) {
+        // Same effect as Spacer::build (slot only); no flex distribution in a grid.
         ctx.advanceChildSlot();
         x += cellW + value.hSpacing;
         continue;
@@ -467,7 +468,10 @@ void Element::Model<Grid>::build(BuildContext& ctx) const {
       ctx.popConstraints();
       x += cellW + value.hSpacing;
     }
-    y += rowH[r] + value.vSpacing;
+    y += rowH[r];
+    if (r + 1 < rowCount) {
+      y += value.vSpacing;
+    }
   }
 
   ctx.popChildIndex();
