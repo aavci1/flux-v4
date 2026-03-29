@@ -84,8 +84,11 @@ void flexGrowAlongMainAxis(std::vector<float>& alloc, std::vector<Element> const
 }
 
 /// Reduces main-axis allocations until `sum(alloc) <= targetSum` (or no shrinkable space left).
+/// Shrink weights follow CSS flexbox: proportional to `flexShrink * naturalSize`, using a snapshot
+/// of each child's natural main size at shrink start (not the current allocation after min clamps).
 void flexShrinkAlongMainAxis(std::vector<float>& alloc, std::vector<Element> const& children,
                              float targetSum) {
+  std::vector<float> const natural = alloc;
   for (;;) {
     float sumA = 0.f;
     for (float a : alloc) {
@@ -100,7 +103,7 @@ void flexShrinkAlongMainAxis(std::vector<float>& alloc, std::vector<Element> con
       float const fs = children[i].flexShrink();
       float const mn = children[i].minMainSize();
       if (fs > 0.f && alloc[i] > mn + kFlexEpsilon) {
-        sumBasis += fs * alloc[i];
+        sumBasis += fs * natural[i];
       }
     }
     if (sumBasis <= 1e-6f) {
@@ -113,7 +116,7 @@ void flexShrinkAlongMainAxis(std::vector<float>& alloc, std::vector<Element> con
       if (fs <= 0.f || alloc[i] <= mn + kFlexEpsilon) {
         continue;
       }
-      float const r = need * (fs * alloc[i] / sumBasis);
+      float const r = need * (fs * natural[i] / sumBasis);
       float const na = alloc[i] - r;
       if (na < mn) {
         removedPass += alloc[i] - mn;
@@ -184,6 +187,9 @@ void Element::Model<VStack>::build(BuildContext& ctx) const {
     allocH[i] = sizes[i].height;
   }
 
+  // Grow and shrink need a finite assigned main-axis size from the parent. If `assignedH` is not
+  // set (e.g. nested in an unconstrained-height VStack), we keep natural sizes — same trade-off as
+  // measuring with unbounded maxHeight.
   bool const heightConstrained = std::isfinite(assignedH) && assignedH > 0.f;
   if (heightConstrained && n > 0) {
     float const innerH = std::max(0.f, assignedH - 2.f * value.padding);
@@ -308,6 +314,7 @@ void Element::Model<HStack>::build(BuildContext& ctx) const {
     allocW[i] = sizes[i].width;
   }
 
+  // Grow/shrink along the row only when the stack has a finite assigned width from its parent.
   bool const widthConstrained = std::isfinite(assignedW) && assignedW > 0.f;
   if (widthConstrained && n > 0) {
     float const innerW = std::max(0.f, assignedW - 2.f * value.padding);

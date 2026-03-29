@@ -13,6 +13,7 @@ struct Rectangle {
   FillStyle fill = FillStyle::none();
   StrokeStyle stroke = StrokeStyle::none();
   float flexGrow = 0.f;
+  /// Defaults to 0 (unlike CSS `flex-shrink: 1`) so layout does not shrink views unless opted in.
   float flexShrink = 0.f;
   float minSize = 0.f;
   std::function<void()> onTap;

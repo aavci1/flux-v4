@@ -34,6 +34,7 @@ struct Text {
   Rect frame{};
 
   float flexGrow = 0.f;
+  /// Defaults to 0 (unlike CSS `flex-shrink: 1`) so text layout is stable unless opted in.
   float flexShrink = 0.f;
   float minSize = 0.f;
 
