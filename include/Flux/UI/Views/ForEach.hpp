@@ -1,6 +1,8 @@
 #pragma once
 
 #include <Flux/Graphics/TextLayoutOptions.hpp>
+#include <Flux/Scene/Nodes.hpp>
+#include <Flux/Scene/SceneGraph.hpp>
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 
@@ -34,9 +36,10 @@ inline float forEachHAlignOffset(float rowW, float innerW, HorizontalAlignment a
 /// Each index `i` is built under a stable key path while it stays at that index; prepends and
 /// deletes shift indices and will move state accordingly.
 ///
-/// `ForEach` does not add a layout layer: it lays out items in a **vertical** column and sizes
-/// itself as the max child width by sum of child heights (plus `spacing`). Use inside `VStack` /
-/// `ScrollView` layouts; other parents may get incorrect intrinsic size.
+/// `ForEach` adds a layer translated by its assigned frame origin so children are positioned in
+/// local coordinates; it lays out items in a **vertical** column and sizes itself as the max child
+/// width by sum of child heights (plus `spacing`). Use inside `VStack` / `ScrollView` layouts; other
+/// parents may get incorrect intrinsic size.
 ///
 /// The `factory` runs during measure **and** build each frame — keep it free of one-off side
 /// effects. For large `T`, prefer storing ids or `shared_ptr` and capturing those in lambdas.
@@ -106,6 +109,13 @@ void Element::Model<ForEach<T>>::build(BuildContext& ctx) const {
     innerW = maxChildW;
   }
 
+  LayerNode fxLayer{};
+  if (box.width > 0.f || box.height > 0.f) {
+    fxLayer.transform = Mat3::translate(box.x, box.y);
+  }
+  NodeId const forEachLayerId = ctx.graph().addLayer(ctx.parentLayer(), std::move(fxLayer));
+  ctx.pushLayer(forEachLayerId);
+
   float y = 0.f;
   for (std::size_t i = 0; i < n; ++i) {
     if (i > 0) {
@@ -130,6 +140,8 @@ void Element::Model<ForEach<T>>::build(BuildContext& ctx) const {
     ctx.popConstraints();
     y += sz.height;
   }
+
+  ctx.popLayer();
 }
 
 template<typename T>
