@@ -131,6 +131,34 @@ void appendGlyphQuad(std::vector<MetalGlyphVertex>& out, Mat3 const& M, float dp
   push(p2, uv2);
 }
 
+void tagOpWithClip(MetalDrawOp& op, bool clipValid, MTLScissorRect const& clip) {
+  if (clipValid) {
+    op.scissorValid = true;
+    op.scissorX = static_cast<std::uint32_t>(clip.x);
+    op.scissorY = static_cast<std::uint32_t>(clip.y);
+    op.scissorW = static_cast<std::uint32_t>(clip.width);
+    op.scissorH = static_cast<std::uint32_t>(clip.height);
+  } else {
+    op.scissorValid = false;
+  }
+}
+
+void setEncoderScissorForOp(id<MTLRenderCommandEncoder> enc, MetalDrawOp const& op, MTLScissorRect fullScissor,
+                            MTLScissorRect* last, bool* haveLast) {
+  MTLScissorRect sc = fullScissor;
+  if (op.scissorValid) {
+    sc.x = op.scissorX;
+    sc.y = op.scissorY;
+    sc.width = op.scissorW;
+    sc.height = op.scissorH;
+  }
+  if (!*haveLast || sc.x != last->x || sc.y != last->y || sc.width != last->width || sc.height != last->height) {
+    [enc setScissorRect:sc];
+    *last = sc;
+    *haveLast = true;
+  }
+}
+
 } // namespace
 
 class MetalCanvas final : public Canvas {
@@ -236,17 +264,17 @@ public:
     MTLViewport vp = {0, 0, drawableSize.width, drawableSize.height, 0.0, 1.0};
     [enc setViewport:vp];
 
-    MTLScissorRect sc = {0, 0, static_cast<NSUInteger>(drawableSize.width),
-                         static_cast<NSUInteger>(drawableSize.height)};
-    if (clipScissorValid_) {
-      sc = clipScissor_;
-    }
-    [enc setScissorRect:sc];
+    MTLScissorRect const fullScissor = {0, 0, static_cast<NSUInteger>(drawableSize.width),
+                                        static_cast<NSUInteger>(drawableSize.height)};
+    MTLScissorRect lastScissor = {0, 0, 0, 0};
+    bool haveScissor = false;
 
     NSUInteger instSlot = 0;
     NSUInteger imageSlot = 0;
     id<MTLBuffer> pathBuf = metal_.pathVertexArenaBuffer();
     for (const MetalDrawOp& op : frame_.ops) {
+      setEncoderScissorForOp(enc, op, fullScissor, &lastScissor, &haveScissor);
+
       switch (op.kind) {
       case MetalDrawOp::Rect: {
         [enc setRenderPipelineState:metal_.rectPSO(op.blendMode)];
@@ -341,7 +369,11 @@ public:
   }
 
   void transform(Mat3 const& m) override {
-    currentState().transform = currentState().transform * m;
+    auto& st = currentState();
+    if (st.clip.has_value()) {
+      st.clip = boundsOfTransformedRect(*st.clip, m.inverse());
+    }
+    st.transform = st.transform * m;
     updateClipScissor();
   }
 
@@ -502,7 +534,7 @@ public:
     op.rectInst.viewport = simd_make_float2(vw, vh);
     op.rectInst.rotationPad = simd_make_float4(0.f, 0.f, 0.f, 0.f);
     op.blendMode = currentState().blendMode;
-    frame_.ops.push_back(op);
+    pushOp(std::move(op));
   }
 
   void drawPath(Path const& path, FillStyle const& fs, StrokeStyle const& ss) override {
@@ -538,8 +570,12 @@ public:
     const float vw = static_cast<float>(drawableSize.width);
     const float vh = static_cast<float>(drawableSize.height);
 
+    std::size_t const nOpsBefore = frame_.ops.size();
     metalPathRasterizeToMesh(path, fs, ss, currentState().transform, dpiScaleX_, dpiScaleY_, effectiveOpacity(), vw,
                              vh, frame_.pathVerts, frame_.ops, currentState().blendMode);
+    if (frame_.ops.size() > nOpsBefore) {
+      tagOpWithClip(frame_.ops.back(), clipScissorValid_, clipScissor_);
+    }
   }
 
   void drawCircle(Point center, float radius, FillStyle const& fs, StrokeStyle const& ss) override {
@@ -740,7 +776,7 @@ public:
       op.glyphStart = glyphStart;
       op.glyphVertexCount = vertCount;
       op.blendMode = blend;
-      frame_.ops.push_back(op);
+      pushOp(std::move(op));
     }
   }
 
@@ -801,23 +837,25 @@ private:
       clipScissorValid_ = false;
       return;
     }
-    Rect c = *currentState().clip;
-    float x0 = c.x * dpiScaleX_;
-    float y0 = c.y * dpiScaleY_;
-    float x1 = (c.x + c.width) * dpiScaleX_;
-    float y1 = (c.y + c.height) * dpiScaleY_;
-    float minX = std::min(x0, x1);
-    float minY = std::min(y0, y1);
-    float maxX = std::max(x0, x1);
-    float maxY = std::max(y0, y1);
-    CGSize drawableSize = metal_.layer().drawableSize;
-    NSUInteger dw = static_cast<NSUInteger>(drawableSize.width);
-    NSUInteger dh = static_cast<NSUInteger>(drawableSize.height);
+    Mat3 const& M = currentState().transform;
+    Rect const world = boundsOfTransformedRect(*currentState().clip, M);
+    float const minX = world.x * dpiScaleX_;
+    float const minY = world.y * dpiScaleY_;
+    float const maxX = (world.x + world.width) * dpiScaleX_;
+    float const maxY = (world.y + world.height) * dpiScaleY_;
+    CGSize const drawableSize = metal_.layer().drawableSize;
+    NSUInteger const dw = static_cast<NSUInteger>(drawableSize.width);
+    NSUInteger const dh = static_cast<NSUInteger>(drawableSize.height);
     clipScissor_.x = static_cast<NSUInteger>(std::clamp(minX, 0.f, static_cast<float>(dw - 1)));
     clipScissor_.y = static_cast<NSUInteger>(std::clamp(minY, 0.f, static_cast<float>(dh - 1)));
     clipScissor_.width = static_cast<NSUInteger>(std::clamp(maxX - minX, 0.f, static_cast<float>(dw)));
     clipScissor_.height = static_cast<NSUInteger>(std::clamp(maxY - minY, 0.f, static_cast<float>(dh)));
     clipScissorValid_ = clipScissor_.width > 0 && clipScissor_.height > 0;
+  }
+
+  void pushOp(MetalDrawOp op) {
+    tagOpWithClip(op, clipScissorValid_, clipScissor_);
+    frame_.ops.push_back(std::move(op));
   }
 
   void emitRect(Rect const& deviceRect, CornerRadius const& corners, Color const& fillColor, Color const& strokeColor,
@@ -836,7 +874,7 @@ private:
     op.rectInst.viewport = simd_make_float2(vw, vh);
     op.rectInst.rotationPad = simd_make_float4(rotationRad, 0.f, 0.f, 0.f);
     op.blendMode = currentState().blendMode;
-    frame_.ops.push_back(op);
+    pushOp(std::move(op));
   }
 
   void emitImage(id<MTLTexture> tex, Rect const& deviceRect, CornerRadius const& corners, vector_float4 const& uvBounds,
@@ -860,7 +898,7 @@ private:
     op.blendMode = currentState().blendMode;
     op.texture = (__bridge_retained void*)tex;
     op.repeatSampler = repeat;
-    frame_.ops.push_back(op);
+    pushOp(std::move(op));
   }
 };
 
