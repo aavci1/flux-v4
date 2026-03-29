@@ -34,6 +34,12 @@ public:
   /// True when the focused leaf lies under \p key in the component tree (`focusedKey_` has \p key as prefix).
   bool isFocusInSubtree(ComponentKey const& key) const noexcept;
 
+  /// Programmatically focuses the first focusable leaf in the subtree rooted at \p subtreeKey.
+  /// Safe to call from event handlers (outside the build pass). No-op if no focusable node with
+  /// \p subtreeKey as a key prefix exists. \c focusOrder() is from the last committed rebuild;
+  /// calls during \c body() may not see leaves registered later in the same build.
+  void requestFocusInSubtree(ComponentKey const& subtreeKey);
+
 private:
   /// `sizeOverride` — size from `WindowEvent::size` on resize (preferred over re-querying the view).
   void rebuild(std::optional<Size> sizeOverride = std::nullopt);

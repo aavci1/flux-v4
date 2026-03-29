@@ -89,6 +89,18 @@ Anim<T> useAnimated(T initial = T{}) {
 /// Must be called inside body() like other hooks.
 bool useFocus();
 
+/// Returns a callable that, when invoked, focuses the first focusable leaf node in the calling
+/// component's subtree. Does not consume a StateStore slot; it captures the current component
+/// key and Runtime pointer at call time.
+///
+/// The returned `std::function<void()>` is safe to capture in lambdas and call from event
+/// handlers — it does not require an active build pass.
+///
+/// If the component has no focusable descendants when the callable is invoked, the call is a no-op.
+///
+/// Must be called inside body() like other hooks.
+std::function<void()> useRequestFocus();
+
 /// Returns a cached value of `fn()`, recomputing only when the combined hash of `deps...`
 /// changes from the previous call.
 ///

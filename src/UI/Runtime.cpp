@@ -13,6 +13,7 @@
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/EventMap.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
+#include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/StateStore.hpp>
 
 #include <algorithm>
@@ -109,6 +110,20 @@ bool Runtime::isFocusInSubtree(ComponentKey const& key) const noexcept {
     return false;
   }
   return std::equal(key.begin(), key.end(), focusedKey_.begin());
+}
+
+void Runtime::requestFocusInSubtree(ComponentKey const& subtreeKey) {
+  if (subtreeKey.empty()) {
+    return;
+  }
+  auto const& order = eventMap_.focusOrder();
+  for (ComponentKey const& leafKey : order) {
+    if (leafKey.size() >= subtreeKey.size() &&
+        std::equal(subtreeKey.begin(), subtreeKey.end(), leafKey.begin())) {
+      setFocus(leafKey);
+      return;
+    }
+  }
 }
 
 void Runtime::setFocus(ComponentKey const& key) {
@@ -592,6 +607,19 @@ bool useFocus() {
     return false;
   }
   return rt->isFocusInSubtree(store->currentComponentKey());
+}
+
+std::function<void()> useRequestFocus() {
+  Runtime* rt = Runtime::current();
+  StateStore* store = StateStore::current();
+  assert(rt && "useRequestFocus called outside of a build pass");
+  assert(store && "useRequestFocus called outside of a build pass");
+
+  ComponentKey const key = store->currentComponentKey();
+
+  return [rt, key] {
+    rt->requestFocusInSubtree(key);
+  };
 }
 
 } // namespace flux
