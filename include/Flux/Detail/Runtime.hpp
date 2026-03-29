@@ -88,7 +88,6 @@ private:
   void clearHovered();
   void setFocus(ComponentKey const& key, std::optional<OverlayId> overlayScope);
   void clearFocus();
-  void cycleTabFocus(bool reverse);
   void cycleTabFocusNonModal(bool reverse);
   void cycleTabFocusInMap(EventMap const& em, bool reverse, std::optional<OverlayId> overlayId);
   void fillLayoutRectCache(SceneGraph const& graph, BuildContext const& ctx);

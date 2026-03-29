@@ -177,9 +177,6 @@ void OverlayManager::remove(OverlayId id, Runtime* runtime) {
   }
   for (auto it = overlays_.begin(); it != overlays_.end(); ++it) {
     if ((*it)->id.value == id.value) {
-      if ((*it)->config.onDismiss) {
-        (*it)->config.onDismiss();
-      }
       std::unique_ptr<OverlayEntry> removed = std::move(*it);
       overlays_.erase(it);
       if (runtime) {
@@ -187,6 +184,9 @@ void OverlayManager::remove(OverlayId id, Runtime* runtime) {
       }
       if (!runtime || !runtime->imploding()) {
         Application::instance().markReactiveDirty();
+      }
+      if (removed->config.onDismiss) {
+        removed->config.onDismiss();
       }
       return;
     }

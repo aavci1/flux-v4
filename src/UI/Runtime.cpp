@@ -262,10 +262,6 @@ void Runtime::cycleTabFocusNonModal(bool reverse) {
   }
 }
 
-void Runtime::cycleTabFocus(bool reverse) {
-  cycleTabFocusInMap(eventMap_, reverse, std::nullopt);
-}
-
 void Runtime::fillLayoutRectCache(SceneGraph const& graph, BuildContext const& ctx) {
   layoutRectPrev_.swap(layoutRectCurrent_);
   layoutRectCurrent_.clear();
@@ -1151,20 +1147,23 @@ std::tuple<std::function<void(Element, OverlayConfig)>, std::function<void()>, b
   Window& w = rt->window();
   slot.window = &w;
 
-  auto show = [&slot, &w](Element el, OverlayConfig cfg) {
-    if (slot.id.isValid()) {
-      OverlayId const rid = slot.id;
-      slot.id = kInvalidOverlayId;
-      w.removeOverlay(rid);
+  OverlayHookSlot* slotPtr = &slot;
+  Window* wPtr = &w;
+
+  auto show = [slotPtr, wPtr](Element el, OverlayConfig cfg) {
+    if (slotPtr->id.isValid()) {
+      OverlayId const rid = slotPtr->id;
+      slotPtr->id = kInvalidOverlayId;
+      wPtr->removeOverlay(rid);
     }
-    slot.id = w.pushOverlay(std::move(el), std::move(cfg));
+    slotPtr->id = wPtr->pushOverlay(std::move(el), std::move(cfg));
   };
 
-  auto hide = [&slot, &w]() {
-    if (slot.id.isValid()) {
-      OverlayId const rid = slot.id;
-      slot.id = kInvalidOverlayId;
-      w.removeOverlay(rid);
+  auto hide = [slotPtr, wPtr]() {
+    if (slotPtr->id.isValid()) {
+      OverlayId const rid = slotPtr->id;
+      slotPtr->id = kInvalidOverlayId;
+      wPtr->removeOverlay(rid);
     }
   };
 
