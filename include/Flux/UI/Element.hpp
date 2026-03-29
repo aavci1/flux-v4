@@ -12,9 +12,11 @@
 #include <Flux/Scene/Nodes.hpp>
 #include <Flux/Scene/SceneGraph.hpp>
 
+#include <algorithm>
 #include <cassert>
 #include <cstdlib>
 #include <memory>
+#include <optional>
 #include <type_traits>
 #include <utility>
 
@@ -23,6 +25,33 @@ namespace flux {
 template<typename>
 inline constexpr bool alwaysFalse = false;
 
+namespace detail {
+
+template<typename C>
+float flexGrowOf(C const& v) {
+  if constexpr (requires { v.flexGrow; }) {
+    return v.flexGrow;
+  }
+  return 0.f;
+}
+
+template<typename C>
+float flexShrinkOf(C const& v) {
+  if constexpr (requires { v.flexShrink; }) {
+    return v.flexShrink;
+  }
+  return 0.f;
+}
+
+template<typename C>
+float minMainSizeOf(C const& v) {
+  if constexpr (requires { v.minSize; }) {
+    return v.minSize;
+  }
+  return 0.f;
+}
+
+} // namespace detail
 
 class TextSystem;
 
@@ -44,6 +73,15 @@ public:
   /// Used by layout containers to distribute flexible space among `Spacer` children.
   bool isSpacer() const;
 
+  /// Optional flex overrides on the wrapper (from `withFlex`). When set, they replace the
+  /// underlying component's flex hints for layout.
+  float flexGrow() const;
+  float flexShrink() const;
+  float minMainSize() const;
+
+  /// Sets flex metadata for this child in its parent stack. Overrides struct-level flex fields.
+  Element withFlex(float grow, float shrink = 1.f, float minMain = 0.f) &&;
+
 private:
   friend class LayoutEngine;
 
@@ -54,12 +92,18 @@ private:
     virtual Size measure(BuildContext& ctx, LayoutConstraints const& constraints,
                          TextSystem& textSystem) const = 0;
     virtual bool isSpacer() const { return false; }
+    virtual float flexGrow() const { return 0.f; }
+    virtual float flexShrink() const { return 0.f; }
+    virtual float minMainSize() const { return 0.f; }
   };
 
   template<typename C>
   struct Model;
 
   std::unique_ptr<Concept> impl_;
+  std::optional<float> flexGrowOverride_;
+  std::optional<float> flexShrinkOverride_;
+  std::optional<float> minMainSizeOverride_;
 };
 
 template<typename C>
@@ -76,6 +120,9 @@ struct Element::Model : Concept {
   }
   void build(BuildContext& ctx) const override;
   Size measure(BuildContext& ctx, LayoutConstraints const& constraints, TextSystem& textSystem) const override;
+  float flexGrow() const override { return detail::flexGrowOf(value); }
+  float flexShrink() const override { return detail::flexShrinkOf(value); }
+  float minMainSize() const override { return detail::minMainSizeOf(value); }
 };
 
 template<typename C>
@@ -171,6 +218,9 @@ struct Element::Model<Rectangle> final : Concept {
   }
   void build(BuildContext& ctx) const override;
   Size measure(BuildContext& ctx, LayoutConstraints const& constraints, TextSystem& textSystem) const override;
+  float flexGrow() const override { return detail::flexGrowOf(value); }
+  float flexShrink() const override { return detail::flexShrinkOf(value); }
+  float minMainSize() const override { return detail::minMainSizeOf(value); }
 };
 
 template<>
@@ -182,6 +232,9 @@ struct Element::Model<LaidOutText> final : Concept {
   }
   void build(BuildContext& ctx) const override;
   Size measure(BuildContext& ctx, LayoutConstraints const& constraints, TextSystem& textSystem) const override;
+  float flexGrow() const override { return detail::flexGrowOf(value); }
+  float flexShrink() const override { return detail::flexShrinkOf(value); }
+  float minMainSize() const override { return detail::minMainSizeOf(value); }
 };
 
 template<>
@@ -193,6 +246,9 @@ struct Element::Model<Text> final : Concept {
   }
   void build(BuildContext& ctx) const override;
   Size measure(BuildContext& ctx, LayoutConstraints const& constraints, TextSystem& textSystem) const override;
+  float flexGrow() const override { return detail::flexGrowOf(value); }
+  float flexShrink() const override { return detail::flexShrinkOf(value); }
+  float minMainSize() const override { return detail::minMainSizeOf(value); }
 };
 
 template<>
@@ -204,6 +260,9 @@ struct Element::Model<views::Image> final : Concept {
   }
   void build(BuildContext& ctx) const override;
   Size measure(BuildContext& ctx, LayoutConstraints const& constraints, TextSystem& textSystem) const override;
+  float flexGrow() const override { return detail::flexGrowOf(value); }
+  float flexShrink() const override { return detail::flexShrinkOf(value); }
+  float minMainSize() const override { return detail::minMainSizeOf(value); }
 };
 
 template<>
@@ -215,6 +274,9 @@ struct Element::Model<PathShape> final : Concept {
   }
   void build(BuildContext& ctx) const override;
   Size measure(BuildContext& ctx, LayoutConstraints const& constraints, TextSystem& textSystem) const override;
+  float flexGrow() const override { return detail::flexGrowOf(value); }
+  float flexShrink() const override { return detail::flexShrinkOf(value); }
+  float minMainSize() const override { return detail::minMainSizeOf(value); }
 };
 
 template<>
@@ -226,6 +288,9 @@ struct Element::Model<Line> final : Concept {
   }
   void build(BuildContext& ctx) const override;
   Size measure(BuildContext& ctx, LayoutConstraints const& constraints, TextSystem& textSystem) const override;
+  float flexGrow() const override { return detail::flexGrowOf(value); }
+  float flexShrink() const override { return detail::flexShrinkOf(value); }
+  float minMainSize() const override { return detail::minMainSizeOf(value); }
 };
 
 template<>
@@ -237,6 +302,9 @@ struct Element::Model<VStack> final : Concept {
   }
   void build(BuildContext& ctx) const override;
   Size measure(BuildContext& ctx, LayoutConstraints const& constraints, TextSystem& textSystem) const override;
+  float flexGrow() const override { return detail::flexGrowOf(value); }
+  float flexShrink() const override { return detail::flexShrinkOf(value); }
+  float minMainSize() const override { return detail::minMainSizeOf(value); }
 };
 
 template<>
@@ -248,6 +316,9 @@ struct Element::Model<HStack> final : Concept {
   }
   void build(BuildContext& ctx) const override;
   Size measure(BuildContext& ctx, LayoutConstraints const& constraints, TextSystem& textSystem) const override;
+  float flexGrow() const override { return detail::flexGrowOf(value); }
+  float flexShrink() const override { return detail::flexShrinkOf(value); }
+  float minMainSize() const override { return detail::minMainSizeOf(value); }
 };
 
 template<>
@@ -259,6 +330,9 @@ struct Element::Model<ZStack> final : Concept {
   }
   void build(BuildContext& ctx) const override;
   Size measure(BuildContext& ctx, LayoutConstraints const& constraints, TextSystem& textSystem) const override;
+  float flexGrow() const override { return detail::flexGrowOf(value); }
+  float flexShrink() const override { return detail::flexShrinkOf(value); }
+  float minMainSize() const override { return detail::minMainSizeOf(value); }
 };
 
 template<>
@@ -270,6 +344,9 @@ struct Element::Model<Grid> final : Concept {
   }
   void build(BuildContext& ctx) const override;
   Size measure(BuildContext& ctx, LayoutConstraints const& constraints, TextSystem& textSystem) const override;
+  float flexGrow() const override { return detail::flexGrowOf(value); }
+  float flexShrink() const override { return detail::flexShrinkOf(value); }
+  float minMainSize() const override { return detail::minMainSizeOf(value); }
 };
 
 template<>
@@ -282,19 +359,47 @@ struct Element::Model<Spacer> final : Concept {
   void build(BuildContext& ctx) const override;
   Size measure(BuildContext& ctx, LayoutConstraints const& constraints, TextSystem& textSystem) const override;
   bool isSpacer() const override { return true; }
+  float flexGrow() const override { return 1.f; }
+  float flexShrink() const override { return 0.f; }
+  float minMainSize() const override { return std::max(0.f, value.minLength); }
 };
 
 template<typename C>
 Element::Element(C component) : impl_(std::make_unique<Model<C>>(std::move(component))) {}
 
 inline Element::Element(Element const& other)
-    : impl_(other.impl_ ? other.impl_->clone() : nullptr) {}
+    : impl_(other.impl_ ? other.impl_->clone() : nullptr)
+    , flexGrowOverride_(other.flexGrowOverride_)
+    , flexShrinkOverride_(other.flexShrinkOverride_)
+    , minMainSizeOverride_(other.minMainSizeOverride_) {}
 
 inline Element& Element::operator=(Element const& other) {
   if (this != &other) {
     impl_ = other.impl_ ? other.impl_->clone() : nullptr;
+    flexGrowOverride_ = other.flexGrowOverride_;
+    flexShrinkOverride_ = other.flexShrinkOverride_;
+    minMainSizeOverride_ = other.minMainSizeOverride_;
   }
   return *this;
+}
+
+inline float Element::flexGrow() const {
+  return flexGrowOverride_.value_or(impl_->flexGrow());
+}
+
+inline float Element::flexShrink() const {
+  return flexShrinkOverride_.value_or(impl_->flexShrink());
+}
+
+inline float Element::minMainSize() const {
+  return minMainSizeOverride_.value_or(impl_->minMainSize());
+}
+
+inline Element Element::withFlex(float grow, float shrink, float minMain) && {
+  flexGrowOverride_ = grow;
+  flexShrinkOverride_ = shrink;
+  minMainSizeOverride_ = minMain;
+  return std::move(*this);
 }
 
 } // namespace flux

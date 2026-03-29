@@ -53,6 +53,82 @@ float vAlignOffset(float childH, float innerH, VerticalAlignment a) {
   return 0.f;
 }
 
+/// Per-row height when the grid has a finite inner height (`innerH > 0`); otherwise 0 (unconstrained).
+float gridCellHeight(float innerH, std::size_t rowCount, float vSpacing) {
+  if (innerH <= 0.f || rowCount == 0) {
+    return 0.f;
+  }
+  float const gaps = rowCount > 1 ? static_cast<float>(rowCount - 1) * vSpacing : 0.f;
+  return std::max(0.f, (innerH - gaps) / static_cast<float>(rowCount));
+}
+
+constexpr float kFlexEpsilon = 1e-4f;
+
+void flexGrowAlongMainAxis(std::vector<float>& alloc, std::vector<Element> const& children, float extra) {
+  if (extra <= kFlexEpsilon) {
+    return;
+  }
+  float totalGrow = 0.f;
+  for (Element const& ch : children) {
+    totalGrow += ch.flexGrow();
+  }
+  if (totalGrow <= kFlexEpsilon) {
+    return;
+  }
+  for (std::size_t i = 0; i < children.size(); ++i) {
+    float const g = children[i].flexGrow();
+    if (g > 0.f) {
+      alloc[i] += extra * (g / totalGrow);
+    }
+  }
+}
+
+/// Reduces main-axis allocations until `sum(alloc) <= targetSum` (or no shrinkable space left).
+void flexShrinkAlongMainAxis(std::vector<float>& alloc, std::vector<Element> const& children,
+                             float targetSum) {
+  for (;;) {
+    float sumA = 0.f;
+    for (float a : alloc) {
+      sumA += a;
+    }
+    float const need = sumA - targetSum;
+    if (need <= kFlexEpsilon) {
+      break;
+    }
+    float sumBasis = 0.f;
+    for (std::size_t i = 0; i < children.size(); ++i) {
+      float const fs = children[i].flexShrink();
+      float const mn = children[i].minMainSize();
+      if (fs > 0.f && alloc[i] > mn + kFlexEpsilon) {
+        sumBasis += fs * alloc[i];
+      }
+    }
+    if (sumBasis <= 1e-6f) {
+      break;
+    }
+    float removedPass = 0.f;
+    for (std::size_t i = 0; i < children.size(); ++i) {
+      float const fs = children[i].flexShrink();
+      float const mn = children[i].minMainSize();
+      if (fs <= 0.f || alloc[i] <= mn + kFlexEpsilon) {
+        continue;
+      }
+      float const r = need * (fs * alloc[i] / sumBasis);
+      float const na = alloc[i] - r;
+      if (na < mn) {
+        removedPass += alloc[i] - mn;
+        alloc[i] = mn;
+      } else {
+        removedPass += r;
+        alloc[i] = na;
+      }
+    }
+    if (removedPass < kFlexEpsilon) {
+      break;
+    }
+  }
+}
+
 } // namespace
 
 void Element::Model<VStack>::build(BuildContext& ctx) const {
@@ -90,14 +166,6 @@ void Element::Model<VStack>::build(BuildContext& ctx) const {
   ctx.rewindChildKeyIndex();
 
   std::size_t const n = value.children.size();
-  std::vector<bool> spacer(n, false);
-  std::size_t spacerCount = 0;
-  for (std::size_t i = 0; i < n; ++i) {
-    if (value.children[i].isSpacer()) {
-      spacer[i] = true;
-      spacerCount++;
-    }
-  }
 
   float maxChildW = 0.f;
   for (Size s : sizes) {
@@ -111,35 +179,43 @@ void Element::Model<VStack>::build(BuildContext& ctx) const {
   innerForBuild.maxWidth = innerW;
   innerForBuild.maxHeight = std::numeric_limits<float>::infinity();
 
-  float contentH = 0.f;
+  std::vector<float> allocH(n);
   for (std::size_t i = 0; i < n; ++i) {
-    contentH += sizes[i].height;
-  }
-  if (n > 1) {
-    contentH += static_cast<float>(n - 1) * value.spacing;
+    allocH[i] = sizes[i].height;
   }
 
-  float extra = 0.f;
-  if (std::isfinite(assignedH) && assignedH > 0.f && spacerCount > 0) {
-    float const avail = std::max(0.f, assignedH - 2.f * value.padding);
-    extra = std::max(0.f, avail - contentH);
+  bool const heightConstrained = std::isfinite(assignedH) && assignedH > 0.f;
+  if (heightConstrained && n > 0) {
+    float const innerH = std::max(0.f, assignedH - 2.f * value.padding);
+    float const gaps = n > 1 ? static_cast<float>(n - 1) * value.spacing : 0.f;
+    float const targetSum = std::max(0.f, innerH - gaps);
+    float sumNat = 0.f;
+    for (float h : allocH) {
+      sumNat += h;
+    }
+    float const extra = targetSum - sumNat;
+    if (extra > kFlexEpsilon) {
+      flexGrowAlongMainAxis(allocH, value.children, extra);
+    } else if (extra < -kFlexEpsilon) {
+      flexShrinkAlongMainAxis(allocH, value.children, targetSum);
+    }
   }
-  float const perSpacer = (spacerCount > 0) ? extra / static_cast<float>(spacerCount) : 0.f;
 
   float y = value.padding;
   for (std::size_t i = 0; i < n; ++i) {
     Element const& child = value.children[i];
     Size sz = sizes[i];
-    if (spacer[i]) {
-      sz.height = sz.height + perSpacer;
-    }
+    sz.height = allocH[i];
     // Stretch each row to the column width so children (e.g. HStack + Spacer) receive the full proposed width.
     // Using only sz.width leaves rows at intrinsic width; a narrow header under a wide wrapped body row would
     // not give flex children (spacers) any extra space.
     float const rowW = std::max(sz.width, innerW);
     float const x = hAlignOffset(rowW, innerW, value.hAlign) + value.padding;
     le.setChildFrame(Rect{x, y, rowW, sz.height});
-    ctx.pushConstraints(innerForBuild);
+    LayoutConstraints childBuild = innerForBuild;
+    childBuild.maxHeight = allocH[i];
+    childBuild.minHeight = child.minMainSize();
+    ctx.pushConstraints(childBuild);
     child.build(ctx);
     ctx.popConstraints();
     y += sz.height + value.spacing;
@@ -216,47 +292,49 @@ void Element::Model<HStack>::build(BuildContext& ctx) const {
   ctx.rewindChildKeyIndex();
 
   std::size_t const n = value.children.size();
-  std::vector<bool> spacer(n, false);
-  std::size_t spacerCount = 0;
-  for (std::size_t i = 0; i < n; ++i) {
-    if (value.children[i].isSpacer()) {
-      spacer[i] = true;
-      spacerCount++;
-    }
-  }
 
-  float contentW = 0.f;
   float maxH = 0.f;
   for (std::size_t i = 0; i < n; ++i) {
-    contentW += sizes[i].width;
     maxH = std::max(maxH, sizes[i].height);
   }
-  if (n > 1) {
-    contentW += static_cast<float>(n - 1) * value.spacing;
-  }
-
-  float extra = 0.f;
-  if (std::isfinite(assignedW) && assignedW > 0.f && spacerCount > 0) {
-    float const avail = std::max(0.f, assignedW - 2.f * value.padding);
-    extra = std::max(0.f, avail - contentW);
-  }
-  float const perSpacer = (spacerCount > 0) ? extra / static_cast<float>(spacerCount) : 0.f;
-
   float const rowInnerH = maxH;
 
   LayoutConstraints innerForBuild = outer;
   innerForBuild.maxWidth = std::numeric_limits<float>::infinity();
   innerForBuild.maxHeight = rowInnerH;
 
+  std::vector<float> allocW(n);
+  for (std::size_t i = 0; i < n; ++i) {
+    allocW[i] = sizes[i].width;
+  }
+
+  bool const widthConstrained = std::isfinite(assignedW) && assignedW > 0.f;
+  if (widthConstrained && n > 0) {
+    float const innerW = std::max(0.f, assignedW - 2.f * value.padding);
+    float const gaps = n > 1 ? static_cast<float>(n - 1) * value.spacing : 0.f;
+    float const targetSum = std::max(0.f, innerW - gaps);
+    float sumNat = 0.f;
+    for (float w : allocW) {
+      sumNat += w;
+    }
+    float const extra = targetSum - sumNat;
+    if (extra > kFlexEpsilon) {
+      flexGrowAlongMainAxis(allocW, value.children, extra);
+    } else if (extra < -kFlexEpsilon) {
+      flexShrinkAlongMainAxis(allocW, value.children, targetSum);
+    }
+  }
+
   float x = value.padding;
   for (std::size_t i = 0; i < n; ++i) {
     Size sz = sizes[i];
-    if (spacer[i]) {
-      sz.width = sz.width + perSpacer;
-    }
+    sz.width = allocW[i];
     float const y = value.padding + vAlignOffset(sz.height, rowInnerH, value.vAlign);
     le.setChildFrame(Rect{x, y, sz.width, sz.height});
-    ctx.pushConstraints(innerForBuild);
+    LayoutConstraints childBuild = innerForBuild;
+    childBuild.maxWidth = allocW[i];
+    childBuild.minWidth = value.children[i].minMainSize();
+    ctx.pushConstraints(childBuild);
     value.children[i].build(ctx);
     ctx.popConstraints();
     x += sz.width + value.spacing;
@@ -408,17 +486,23 @@ void Element::Model<Grid>::build(BuildContext& ctx) const {
   ctx.pushLayer(layerId);
 
   float const assignedW = assignedSpan(parentFrame.width, outer.maxWidth);
+  float const assignedH = assignedSpan(parentFrame.height, outer.maxHeight);
   float const innerW = std::max(0.f, assignedW - 2.f * value.padding);
+  float const innerH = std::max(0.f, assignedH - 2.f * value.padding);
   std::size_t const cols = std::max<std::size_t>(1, value.columns);
+  std::size_t const n = value.children.size();
+  std::size_t const rowCount = n == 0 ? 0 : (n + cols - 1) / cols;
   float const cellW =
       innerW > 0.f
           ? std::max(0.f, (innerW - static_cast<float>(cols - 1) * value.hSpacing) / static_cast<float>(cols))
           : 0.f;
+  float const cellH = gridCellHeight(innerH, rowCount, value.vSpacing);
 
   LayoutConstraints childCs = outer;
-  childCs.maxHeight = std::numeric_limits<float>::infinity();
   childCs.maxWidth =
       cellW > 0.f ? cellW : std::numeric_limits<float>::infinity();
+  childCs.maxHeight =
+      cellH > 0.f ? cellH : std::numeric_limits<float>::infinity();
 
   std::vector<Size> sizes;
   sizes.reserve(value.children.size());
@@ -431,18 +515,23 @@ void Element::Model<Grid>::build(BuildContext& ctx) const {
   }
   ctx.rewindChildKeyIndex();
 
-  std::size_t const n = value.children.size();
-  std::size_t const rowCount = n == 0 ? 0 : (n + cols - 1) / cols;
   std::vector<float> rowH(rowCount, 0.f);
-  for (std::size_t i = 0; i < n; ++i) {
-    std::size_t const row = i / cols;
-    rowH[row] = std::max(rowH[row], sizes[i].height);
+  if (cellH > 0.f && rowCount > 0) {
+    for (std::size_t r = 0; r < rowCount; ++r) {
+      rowH[r] = cellH;
+    }
+  } else {
+    for (std::size_t i = 0; i < n; ++i) {
+      std::size_t const row = i / cols;
+      rowH[row] = std::max(rowH[row], sizes[i].height);
+    }
   }
 
   LayoutConstraints innerForBuild = outer;
-  innerForBuild.maxHeight = std::numeric_limits<float>::infinity();
   innerForBuild.maxWidth =
       cellW > 0.f ? cellW : std::numeric_limits<float>::infinity();
+  innerForBuild.maxHeight =
+      cellH > 0.f ? cellH : std::numeric_limits<float>::infinity();
 
   float y = value.padding;
   for (std::size_t r = 0; r < rowCount; ++r) {
@@ -460,9 +549,11 @@ void Element::Model<Grid>::build(BuildContext& ctx) const {
         x += cellW + value.hSpacing;
         continue;
       }
-      float const cx = x + hAlignOffset(sz.width, cellW, value.hAlign);
-      float const cy = y + vAlignOffset(sz.height, rowH[r], value.vAlign);
-      le.setChildFrame(Rect{cx, cy, sz.width, sz.height});
+      float const frameW = cellW > 0.f ? cellW : sz.width;
+      float const frameH = rowH[r] > 0.f ? rowH[r] : sz.height;
+      float const cx = x + hAlignOffset(sz.width, frameW, value.hAlign);
+      float const cy = y + vAlignOffset(sz.height, frameH, value.vAlign);
+      le.setChildFrame(Rect{cx, cy, frameW, frameH});
       ctx.pushConstraints(innerForBuild);
       child.build(ctx);
       ctx.popConstraints();
@@ -486,17 +577,24 @@ Size Element::Model<Grid>::measure(BuildContext& ctx, LayoutConstraints const& c
   LayoutEngine tmp{};
   float const assignedW =
       std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;
+  float const assignedH =
+      std::isfinite(constraints.maxHeight) ? constraints.maxHeight : 0.f;
   float const innerW = std::max(0.f, assignedW - 2.f * value.padding);
+  float const innerH = std::max(0.f, assignedH - 2.f * value.padding);
   std::size_t const cols = std::max<std::size_t>(1, value.columns);
+  std::size_t const n = value.children.size();
+  std::size_t const rowCount = n == 0 ? 0 : (n + cols - 1) / cols;
   float const cellW =
       innerW > 0.f
           ? std::max(0.f, (innerW - static_cast<float>(cols - 1) * value.hSpacing) / static_cast<float>(cols))
           : 0.f;
+  float const cellH = gridCellHeight(innerH, rowCount, value.vSpacing);
 
   LayoutConstraints childCs = constraints;
-  childCs.maxHeight = std::numeric_limits<float>::infinity();
   childCs.maxWidth =
       cellW > 0.f ? cellW : std::numeric_limits<float>::infinity();
+  childCs.maxHeight =
+      cellH > 0.f ? cellH : std::numeric_limits<float>::infinity();
 
   std::vector<Size> sizes;
   sizes.reserve(value.children.size());
@@ -506,20 +604,29 @@ Size Element::Model<Grid>::measure(BuildContext& ctx, LayoutConstraints const& c
   }
   ctx.popChildIndex();
 
-  std::size_t const n = value.children.size();
-  std::size_t const rowCount = n == 0 ? 0 : (n + cols - 1) / cols;
   std::vector<float> rowH(rowCount, 0.f);
-  for (std::size_t i = 0; i < n; ++i) {
-    std::size_t const row = i / cols;
-    rowH[row] = std::max(rowH[row], sizes[i].height);
+  if (cellH > 0.f && rowCount > 0) {
+    for (std::size_t r = 0; r < rowCount; ++r) {
+      rowH[r] = cellH;
+    }
+  } else {
+    for (std::size_t i = 0; i < n; ++i) {
+      std::size_t const row = i / cols;
+      rowH[row] = std::max(rowH[row], sizes[i].height);
+    }
   }
 
-  float totalH = 2.f * value.padding;
-  if (rowCount > 1) {
-    totalH += static_cast<float>(rowCount - 1) * value.vSpacing;
-  }
-  for (float h : rowH) {
-    totalH += h;
+  float totalH;
+  if (cellH > 0.f && rowCount > 0) {
+    totalH = assignedH;
+  } else {
+    totalH = 2.f * value.padding;
+    if (rowCount > 1) {
+      totalH += static_cast<float>(rowCount - 1) * value.vSpacing;
+    }
+    for (float h : rowH) {
+      totalH += h;
+    }
   }
 
   float const totalW = innerW > 0.f ? assignedW : 0.f;

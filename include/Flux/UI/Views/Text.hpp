@@ -33,6 +33,10 @@ struct Text {
 
   Rect frame{};
 
+  float flexGrow = 0.f;
+  float flexShrink = 0.f;
+  float minSize = 0.f;
+
   std::function<void()> onTap;
   std::function<void(Point)> onPointerDown;
   std::function<void(Point)> onPointerUp;

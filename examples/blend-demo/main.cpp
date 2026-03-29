@@ -43,16 +43,10 @@ struct BlendCell {
   BlendMode mode = BlendMode::Normal;
   const char* title = "";
 
-  /// `Grid` passes a finite `maxWidth` per cell; height is unbounded, so we use a square cell.
+  /// Fills the cell size the `Grid` passes via `maxWidth` / `maxHeight`.
   Size measure(LayoutConstraints const& c) const {
     float const w = std::isfinite(c.maxWidth) && c.maxWidth > 0.f ? c.maxWidth : 0.f;
-    if (w <= 0.f) {
-      return {0.f, 0.f};
-    }
-    float h = std::isfinite(c.maxHeight) && c.maxHeight > 0.f ? c.maxHeight : w;
-    if (h > w) {
-      h = w;
-    }
+    float const h = std::isfinite(c.maxHeight) && c.maxHeight > 0.f ? c.maxHeight : w;
     return {w, h};
   }
 
