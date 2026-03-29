@@ -192,3 +192,6 @@ target_link_libraries(focus_demo PRIVATE flux)
 
 add_executable(memo_demo examples/memo-demo/main.cpp)
 target_link_libraries(memo_demo PRIVATE flux)
+
+add_executable(cursor_demo examples/cursor-demo/main.cpp)
+target_link_libraries(cursor_demo PRIVATE flux)

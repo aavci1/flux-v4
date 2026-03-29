@@ -176,6 +176,12 @@ void Element::Model<C>::build(BuildContext& ctx) const {
     if constexpr (requires { value.onTextInput; }) {
       handlers.onTextInput = value.onTextInput;
     }
+    if constexpr (requires { value.cursor; }) {
+      handlers.cursor = value.cursor;
+    }
+    if constexpr (requires { value.cursorPassthrough; }) {
+      handlers.cursorPassthrough = value.cursorPassthrough;
+    }
     if constexpr (requires { value.focusable; }) {
       handlers.focusable =
           value.focusable || static_cast<bool>(handlers.onKeyDown) || static_cast<bool>(handlers.onKeyUp) ||
@@ -186,7 +192,8 @@ void Element::Model<C>::build(BuildContext& ctx) const {
           static_cast<bool>(handlers.onTextInput);
     }
     if (handlers.onTap || handlers.onPointerDown || handlers.onPointerUp || handlers.onPointerMove ||
-        handlers.onScroll || handlers.onKeyDown || handlers.onKeyUp || handlers.onTextInput || handlers.focusable) {
+        handlers.onScroll || handlers.onKeyDown || handlers.onKeyUp || handlers.onTextInput || handlers.focusable ||
+        handlers.cursor != Cursor::Default || handlers.cursorPassthrough) {
       ctx.eventMap().insert(id, std::move(handlers));
     }
   } else {

@@ -1,6 +1,7 @@
 #include <Flux/Detail/Runtime.hpp>
 
 #include <Flux/Core/Application.hpp>
+#include <Flux/Core/Cursor.hpp>
 #include <Flux/Core/EventQueue.hpp>
 #include <Flux/Core/Window.hpp>
 #include <Flux/Core/Events.hpp>
@@ -246,6 +247,7 @@ void Runtime::subscribeWindowEvents() {
     } else if (ev.kind == WindowEvent::Kind::FocusLost) {
       windowHasFocus_ = false;
       cancelActivePress(Point{});
+      currentCursor_ = Cursor::Default;
     } else if (ev.kind == WindowEvent::Kind::FocusGained) {
       windowHasFocus_ = true;
     }
@@ -277,6 +279,44 @@ void Runtime::cancelActivePress(Point windowPoint) {
     h->onPointerUp(local.value_or(Point{0.f, 0.f}));
   }
   activePress_ = std::nullopt;
+}
+
+void Runtime::applyCursor(Cursor kind) {
+  if (kind == currentCursor_) {
+    return;
+  }
+  currentCursor_ = kind;
+  window_.setCursor(kind);
+}
+
+void Runtime::updateCursorForPoint(Point windowPoint) {
+  if (activePress_) {
+    auto const [pressId, pressed] = findPressHandlersWithNode(*activePress_);
+    (void)pressId;
+    if (pressed) {
+      applyCursor(pressed->cursor);
+      return;
+    }
+  }
+
+  SceneGraph const& graph = window_.sceneGraph();
+  auto const acceptFn = [this](NodeId id) {
+    EventHandlers const* h = eventMap_.find(id);
+    if (!h) {
+      return true;
+    }
+    return !h->cursorPassthrough;
+  };
+  auto hit = HitTester{}.hitTest(graph, windowPoint, acceptFn);
+  if (hit) {
+    Cursor kind = Cursor::Default;
+    if (EventHandlers const* h = eventMap_.find(hit->nodeId)) {
+      kind = h->cursor;
+    }
+    applyCursor(kind);
+  } else {
+    applyCursor(Cursor::Default);
+  }
 }
 
 void Runtime::handleInput(InputEvent const& e) {
@@ -419,6 +459,7 @@ void Runtime::handleInput(InputEvent const& e) {
     } else if (dbg) {
       std::fprintf(stderr, "[flux:input] PointerDown: no interactive node under cursor\n");
     }
+    updateCursorForPoint(p);
     return;
   }
 
@@ -453,6 +494,7 @@ void Runtime::handleInput(InputEvent const& e) {
                          static_cast<double>(local->x), static_cast<double>(local->y));
           }
           pressed->onPointerMove(*local);
+          updateCursorForPoint(p);
           return;
         }
         if (dbg) {
@@ -474,6 +516,7 @@ void Runtime::handleInput(InputEvent const& e) {
     } else if (logThisMove) {
       std::fprintf(stderr, "[flux:input] PointerMove: no interactive node under cursor\n");
     }
+    updateCursorForPoint(p);
     return;
   }
 
@@ -534,6 +577,7 @@ void Runtime::handleInput(InputEvent const& e) {
   } else if (dbg) {
     std::fprintf(stderr, "[flux:input] PointerUp: no hit and no active press to notify\n");
   }
+  updateCursorForPoint(p);
 }
 
 bool useFocus() {

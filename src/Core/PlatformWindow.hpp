@@ -3,6 +3,7 @@
 #include <memory>
 #include <string>
 
+#include <Flux/Core/Cursor.hpp>
 #include <Flux/Core/Types.hpp>
 
 namespace flux {
@@ -42,6 +43,8 @@ public:
 
   /// Wake `waitForEvents` (e.g. after `requestRedraw`).
   virtual void wakeEventLoop() {}
+
+  virtual void setCursor(Cursor /*kind*/) {}
 };
 
 } // namespace flux

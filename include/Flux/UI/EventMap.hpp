@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Flux/Core/Cursor.hpp>
 #include <Flux/Core/Types.hpp>
 #include <Flux/Scene/NodeId.hpp>
 #include <Flux/UI/ComponentKey.hpp>
@@ -31,6 +32,10 @@ struct EventHandlers {
   std::function<void(std::string const&)> onTextInput;
   /// True when the view sets `focusable` or registers any keyboard handler (used for focus claim).
   bool focusable = false;
+
+  Cursor cursor = Cursor::Default;
+  /// When true, cursor hit-testing skips this node so the shape under it (e.g. scroll content) wins.
+  bool cursorPassthrough = false;
 };
 
 struct NodeIdHash {

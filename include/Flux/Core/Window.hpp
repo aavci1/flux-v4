@@ -3,6 +3,7 @@
 #include <memory>
 #include <string>
 
+#include <Flux/Core/Cursor.hpp>
 #include <Flux/Core/Types.hpp>
 
 namespace flux {
@@ -47,6 +48,10 @@ public:
 
   /// Request a frame; `Application::exec()` renders all windows when the event pump runs.
   void requestRedraw();
+
+  /// Sets the platform mouse cursor shape. Called by Runtime; safe to call
+  /// from any code that has a Window reference.
+  void setCursor(Cursor kind);
 
   /// Like `requestRedraw()`; `handle` is reserved for future per-window scheduling.
   static void postRedraw(unsigned int handle);

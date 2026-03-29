@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Flux/Core/Cursor.hpp>
 #include <Flux/Core/Events.hpp>
 #include <Flux/Detail/RootHolder.hpp>
 #include <Flux/Reactive/Observer.hpp>
@@ -41,6 +42,8 @@ private:
   void subscribeInput();
   void subscribeWindowEvents();
   void cancelActivePress(Point windowPoint);
+  void updateCursorForPoint(Point windowPoint);
+  void applyCursor(Cursor kind);
   void setFocus(ComponentKey const& key);
   void clearFocus();
   void cycleTabFocus(bool reverse);
@@ -71,6 +74,8 @@ private:
   ComponentKey focusedKey_{};
   /// When false, keyboard events are not dispatched (window in background).
   bool windowHasFocus_ = true;
+
+  Cursor currentCursor_ = Cursor::Default;
 };
 
 } // namespace flux

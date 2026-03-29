@@ -100,6 +100,7 @@ struct ScrollView {
                           }
                           offset = clampScrollOffset(ax, next, *viewport, *content);
                         },
+                    .cursorPassthrough = true,
                 },
             },
     };

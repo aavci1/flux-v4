@@ -2,6 +2,7 @@
 #include <Flux/Core/EventQueue.hpp>
 #include <Flux/Core/Events.hpp>
 #include <Flux/Core/Types.hpp>
+#include <Flux/Core/Cursor.hpp>
 #include <Flux/Core/Window.hpp>
 #include <Flux/Detail/RootHolder.hpp>
 #include <Flux/Detail/Runtime.hpp>
@@ -88,6 +89,10 @@ SceneGraph& Window::sceneGraph() {
 SceneGraph const& Window::sceneGraph() const { return const_cast<Window*>(this)->sceneGraph(); }
 
 void Window::requestRedraw() { postRedraw(handle()); }
+
+void Window::setCursor(Cursor kind) {
+  d->platform_->setCursor(kind);
+}
 
 PlatformWindow* Window::platformWindow() const {
   return d->platformWindow();

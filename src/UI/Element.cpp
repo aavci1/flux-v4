@@ -1,5 +1,6 @@
 #include <Flux/UI/Element.hpp>
 
+#include <Flux/Core/Cursor.hpp>
 #include <Flux/UI/BuildContext.hpp>
 #include <Flux/UI/Detail/LeafBounds.hpp>
 #include <Flux/UI/EventMap.hpp>
@@ -49,7 +50,8 @@ void Element::Model<Rectangle>::build(BuildContext& ctx) const {
   bool const focusable = value.focusable || static_cast<bool>(value.onKeyDown) ||
                          static_cast<bool>(value.onKeyUp) || static_cast<bool>(value.onTextInput);
   if (value.onTap || value.onPointerDown || value.onPointerUp || value.onPointerMove || value.onScroll ||
-      value.onKeyDown || value.onKeyUp || value.onTextInput || value.focusable) {
+      value.onKeyDown || value.onKeyUp || value.onTextInput || value.focusable ||
+      value.cursor != Cursor::Default || value.cursorPassthrough) {
     ctx.eventMap().insert(id, EventHandlers{
         .stableTargetKey = stableKey,
         .onTap = value.onTap,
@@ -61,6 +63,8 @@ void Element::Model<Rectangle>::build(BuildContext& ctx) const {
         .onKeyUp = value.onKeyUp,
         .onTextInput = value.onTextInput,
         .focusable = focusable,
+        .cursor = value.cursor,
+        .cursorPassthrough = value.cursorPassthrough,
     });
   }
 }
@@ -126,7 +130,7 @@ void Element::Model<Text>::build(BuildContext& ctx) const {
     bool const focusable = value.focusable || static_cast<bool>(value.onKeyDown) ||
                            static_cast<bool>(value.onKeyUp) || static_cast<bool>(value.onTextInput);
     if (value.onTap || value.onPointerDown || value.onPointerUp || value.onPointerMove || value.onKeyDown ||
-        value.onKeyUp || value.onTextInput || value.focusable) {
+        value.onKeyUp || value.onTextInput || value.focusable || value.cursor != Cursor::Default) {
       ctx.eventMap().insert(id, EventHandlers{
           .stableTargetKey = stableKey,
           .onTap = value.onTap,
@@ -137,15 +141,22 @@ void Element::Model<Text>::build(BuildContext& ctx) const {
           .onKeyUp = value.onKeyUp,
           .onTextInput = value.onTextInput,
           .focusable = focusable,
+          .cursor = value.cursor,
       });
     }
   }
 
   if (layout && !layout->runs.empty()) {
-    ctx.graph().addText(ctx.parentLayer(), TextNode{
+    NodeId const textId = ctx.graph().addText(ctx.parentLayer(), TextNode{
         .layout = layout,
         .origin = {inner.x, inner.y},
     });
+    if (value.cursor != Cursor::Default) {
+      ctx.eventMap().insert(textId, EventHandlers{
+          .stableTargetKey = stableKey,
+          .cursor = value.cursor,
+      });
+    }
   }
 }
 

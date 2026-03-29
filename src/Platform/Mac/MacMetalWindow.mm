@@ -4,6 +4,7 @@
 #import <QuartzCore/QuartzCore.h>
 
 #include <Flux/Core/Application.hpp>
+#include <Flux/Core/Cursor.hpp>
 #include <Flux/Core/EventQueue.hpp>
 #include <Flux/Core/Events.hpp>
 #include <Flux/Core/Application.hpp>
@@ -25,6 +26,12 @@
 namespace flux {
 class MacMetalPlatformWindow;
 } // namespace flux
+
+/// Private AppKit class methods; stable in practice for diagonal window-resize cursors.
+@interface NSCursor (FluxPrivateResizeCursors)
++ (NSCursor*)_windowResizeNorthEastSouthWestCursor;
++ (NSCursor*)_windowResizeNorthWestSouthEastCursor;
+@end
 
 @interface FluxMetalView : NSView <NSTextInputClient>
 @property(nonatomic, assign) flux::MacMetalPlatformWindow* fluxPlatform;
@@ -124,6 +131,12 @@ void postTextInput(FluxMetalView* view, std::string text);
 
 - (BOOL)isFlipped {
   return YES;
+}
+
+- (void)cursorUpdate:(NSEvent*)event {
+  // Suppress AppKit's automatic reset to the arrow cursor.
+  // Runtime::updateCursorForPoint handles cursor selection after every move.
+  (void)event;
 }
 
 - (void)updateTrackingAreas {
@@ -249,6 +262,8 @@ public:
   void processEvents() override;
   void waitForEvents(int timeoutMs) override;
   void wakeEventLoop() override;
+
+  void setCursor(Cursor kind) override;
 
   Window* fluxWindow() const;
 
@@ -721,6 +736,46 @@ void MacMetalPlatformWindow::wakeEventLoop() {
                                       data1:0
                                       data2:0];
   [NSApp postEvent:ev atStart:NO];
+}
+
+void MacMetalPlatformWindow::setCursor(Cursor kind) {
+  NSCursor* c = nil;
+  switch (kind) {
+  case Cursor::Default:
+    c = [NSCursor arrowCursor];
+    break;
+  case Cursor::IBeam:
+    c = [NSCursor IBeamCursor];
+    break;
+  case Cursor::Hand:
+    c = [NSCursor pointingHandCursor];
+    break;
+  case Cursor::ResizeEW:
+    c = [NSCursor resizeLeftRightCursor];
+    break;
+  case Cursor::ResizeNS:
+    c = [NSCursor resizeUpDownCursor];
+    break;
+  case Cursor::ResizeNESW:
+    // Private API; public alternatives are resizeLeftRight/resizeUpDown only.
+    c = [NSCursor _windowResizeNorthEastSouthWestCursor];
+    break;
+  case Cursor::ResizeNWSE:
+    c = [NSCursor _windowResizeNorthWestSouthEastCursor];
+    break;
+  case Cursor::ResizeAll:
+    c = [NSCursor openHandCursor];
+    break;
+  case Cursor::Crosshair:
+    c = [NSCursor crosshairCursor];
+    break;
+  case Cursor::NotAllowed:
+    c = [NSCursor operationNotAllowedCursor];
+    break;
+  }
+  if (c) {
+    [c set];
+  }
 }
 
 namespace detail {

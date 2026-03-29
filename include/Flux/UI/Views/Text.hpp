@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Flux/Core/Cursor.hpp>
 #include <Flux/Core/Types.hpp>
 #include <Flux/Graphics/Font.hpp>
 #include <Flux/Graphics/Styles.hpp>
@@ -47,6 +48,8 @@ struct Text {
   std::function<void(KeyCode, Modifiers)> onKeyDown;
   std::function<void(KeyCode, Modifiers)> onKeyUp;
   std::function<void(std::string const&)> onTextInput;
+
+  Cursor cursor = Cursor::Default;
 };
 
 } // namespace flux
