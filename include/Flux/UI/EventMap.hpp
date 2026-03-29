@@ -6,6 +6,7 @@
 
 #include <cstddef>
 #include <functional>
+#include <string>
 #include <unordered_map>
 #include <utility>
 
@@ -24,6 +25,11 @@ struct EventHandlers {
   /// node under the pointer.
   std::function<void(Point)> onPointerMove;
   std::function<void(Vec2)> onScroll;
+  std::function<void(KeyCode, Modifiers)> onKeyDown;
+  std::function<void(KeyCode, Modifiers)> onKeyUp;
+  std::function<void(std::string const&)> onTextInput;
+  /// True when the view sets `focusable` or registers any keyboard handler (used for focus claim).
+  bool focusable = false;
 };
 
 struct NodeIdHash {

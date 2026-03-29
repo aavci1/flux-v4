@@ -21,7 +21,9 @@ void Element::Model<ScrollView>::build(BuildContext& ctx) const {
     store->popComponent();
   }
   ctx.beginCompositeBodySubtree();
+  ctx.pushCompositeKeyTail(key);
   child.build(ctx);
+  ctx.popCompositeKeyTail();
 }
 
 Size Element::Model<ScrollView>::measure(BuildContext& ctx, LayoutConstraints const& constraints,
@@ -39,7 +41,9 @@ Size Element::Model<ScrollView>::measure(BuildContext& ctx, LayoutConstraints co
     store->popComponent();
   }
   ctx.beginCompositeBodySubtree();
+  ctx.pushCompositeKeyTail(key);
   (void)child.measure(ctx, constraints, ts);
+  ctx.popCompositeKeyTail();
   float const w = std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;
   float const h = std::isfinite(constraints.maxHeight) ? constraints.maxHeight : 0.f;
   return {w, h};

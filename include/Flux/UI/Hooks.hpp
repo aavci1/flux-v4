@@ -57,4 +57,8 @@ Anim<T> useAnimated(T initial = T{}) {
   return Anim<T>{&store->claimSlot<Animated<T>>(std::move(initial))};
 }
 
+/// Returns true if the calling component's subtree contains the window's focused node.
+/// Must be called inside body() like other hooks.
+bool useFocus();
+
 } // namespace flux

@@ -42,6 +42,11 @@ struct Text {
   std::function<void(Point)> onPointerDown;
   std::function<void(Point)> onPointerUp;
   std::function<void(Point)> onPointerMove;
+  /// When true, a PointerDown on this node claims focus for the window until another focusable node is tapped.
+  bool focusable = false;
+  std::function<void(KeyCode, Modifiers)> onKeyDown;
+  std::function<void(KeyCode, Modifiers)> onKeyUp;
+  std::function<void(std::string const&)> onTextInput;
 };
 
 } // namespace flux

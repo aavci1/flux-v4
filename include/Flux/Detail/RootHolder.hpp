@@ -38,7 +38,9 @@ struct TypedRootHolder final : RootHolder {
         store->popComponent();
       }
       ctx.beginCompositeBodySubtree();
+      ctx.pushCompositeKeyTail(key);
       child.build(ctx);
+      ctx.popCompositeKeyTail();
       ctx.popChildIndex();
     } else {
       static_assert(std::is_copy_constructible_v<C>,

@@ -27,14 +27,24 @@ public:
 
   void handleInput(InputEvent const& e);
 
+  /// Valid only during a build pass (`rebuild`); otherwise `nullptr`.
+  static Runtime* current() noexcept { return sCurrent; }
+
+  /// True when the focused leaf lies under \p key in the component tree (`focusedKey_` has \p key as prefix).
+  bool isFocusInSubtree(ComponentKey const& key) const noexcept;
+
 private:
   /// `sizeOverride` — size from `WindowEvent::size` on resize (preferred over re-querying the view).
   void rebuild(std::optional<Size> sizeOverride = std::nullopt);
   void rebuild(Size const& sizeFromResizeEvent) { rebuild(std::optional<Size>(sizeFromResizeEvent)); }
   void subscribeToRebuild();
   void subscribeInput();
-  void subscribeResize();
+  void subscribeWindowEvents();
   void cancelActivePress(Point windowPoint);
+  void setFocus(ComponentKey const& key);
+  void clearFocus();
+
+  static thread_local Runtime* sCurrent;
 
   struct PressState {
     NodeId nodeId{};
@@ -55,6 +65,11 @@ private:
   StateStore stateStore_;
   ObserverHandle rebuildHandle_{};
   bool inputRegistered_ = false;
+
+  /// Stable key of the focused node (leaf `stableTargetKey`). Empty when nothing is focused.
+  ComponentKey focusedKey_{};
+  /// When false, keyboard events are not dispatched (window in background).
+  bool windowHasFocus_ = true;
 };
 
 } // namespace flux

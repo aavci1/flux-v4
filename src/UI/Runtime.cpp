@@ -94,10 +94,41 @@ char const* inputKindName(InputEvent::Kind k) {
 
 } // namespace
 
+thread_local Runtime* Runtime::sCurrent = nullptr;
+
+namespace {
+
+bool shouldClaimFocus(EventHandlers const& h) { return h.focusable; }
+
+} // namespace
+
+bool Runtime::isFocusInSubtree(ComponentKey const& key) const noexcept {
+  if (focusedKey_.empty() || key.size() > focusedKey_.size()) {
+    return false;
+  }
+  return std::equal(key.begin(), key.end(), focusedKey_.begin());
+}
+
+void Runtime::setFocus(ComponentKey const& key) {
+  if (focusedKey_ == key) {
+    return;
+  }
+  focusedKey_ = key;
+  Application::instance().markReactiveDirty();
+}
+
+void Runtime::clearFocus() {
+  if (focusedKey_.empty()) {
+    return;
+  }
+  focusedKey_.clear();
+  Application::instance().markReactiveDirty();
+}
+
 Runtime::Runtime(Window& window) : window_(window) {
   subscribeToRebuild();
   subscribeInput();
-  subscribeResize();
+  subscribeWindowEvents();
 }
 
 Runtime::~Runtime() {
@@ -112,6 +143,7 @@ void Runtime::rebuild(std::optional<Size> sizeOverride) {
   if (sizeOverride.has_value()) {
     activePress_ = std::nullopt;
   }
+  sCurrent = this;
   SceneGraph& graph = window_.sceneGraph();
   graph.clear();
 
@@ -137,12 +169,20 @@ void Runtime::rebuild(std::optional<Size> sizeOverride) {
   stateStore_.endRebuild();
 
   eventMap_ = std::move(newMap);
+  if (!focusedKey_.empty()) {
+    auto const [id, h] = eventMap_.findWithIdByKey(focusedKey_);
+    (void)id;
+    if (!h) {
+      focusedKey_.clear();
+    }
+  }
   if (inputDebugEnabled()) {
     std::fprintf(stderr,
                  "[flux:input] rebuild layout=%.1fx%.1f scene root children (if any) updated\n",
                  static_cast<double>(sz.width), static_cast<double>(sz.height));
   }
   window_.requestRedraw();
+  sCurrent = nullptr;
 }
 
 void Runtime::subscribeToRebuild() {
@@ -167,15 +207,22 @@ void Runtime::subscribeInput() {
   });
 }
 
-void Runtime::subscribeResize() {
+void Runtime::subscribeWindowEvents() {
   unsigned int const hid = window_.handle();
   Application::instance().eventQueue().on<WindowEvent>([this, hid](WindowEvent const& ev) {
-    if (ev.handle != hid || ev.kind != WindowEvent::Kind::Resize) {
+    if (ev.handle != hid) {
       return;
     }
-    // Use the size captured when the event was posted; re-querying the view during dispatch can
-    // differ slightly from bounds updates and cause visible jitter during live resize.
-    rebuild(ev.size);
+    if (ev.kind == WindowEvent::Kind::Resize) {
+      // Use the size captured when the event was posted; re-querying the view during dispatch can
+      // differ slightly from bounds updates and cause visible jitter during live resize.
+      rebuild(ev.size);
+    } else if (ev.kind == WindowEvent::Kind::FocusLost) {
+      windowHasFocus_ = false;
+      cancelActivePress(Point{});
+    } else if (ev.kind == WindowEvent::Kind::FocusGained) {
+      windowHasFocus_ = true;
+    }
   });
 }
 
@@ -210,6 +257,48 @@ void Runtime::handleInput(InputEvent const& e) {
   SceneGraph const& graph = window_.sceneGraph();
   bool const dbg = inputDebugEnabled();
   bool const dbgMove = dbg && inputDebugVerbose();
+
+  if (e.kind == InputEvent::Kind::KeyDown) {
+    if (dbg) {
+      std::fprintf(stderr, "[flux:input] KeyDown key=%u modifiers=%u\n", static_cast<unsigned>(e.key),
+                   static_cast<unsigned>(e.modifiers));
+    }
+    if (!focusedKey_.empty() && windowHasFocus_) {
+      auto const [id, h] = eventMap_.findWithIdByKey(focusedKey_);
+      (void)id;
+      if (h && h->onKeyDown) {
+        h->onKeyDown(e.key, e.modifiers);
+      }
+    }
+    return;
+  }
+  if (e.kind == InputEvent::Kind::KeyUp) {
+    if (dbg) {
+      std::fprintf(stderr, "[flux:input] KeyUp key=%u modifiers=%u\n", static_cast<unsigned>(e.key),
+                   static_cast<unsigned>(e.modifiers));
+    }
+    if (!focusedKey_.empty() && windowHasFocus_) {
+      auto const [id, h] = eventMap_.findWithIdByKey(focusedKey_);
+      (void)id;
+      if (h && h->onKeyUp) {
+        h->onKeyUp(e.key, e.modifiers);
+      }
+    }
+    return;
+  }
+  if (e.kind == InputEvent::Kind::TextInput) {
+    if (dbg) {
+      std::fprintf(stderr, "[flux:input] TextInput len=%zu\n", e.text.size());
+    }
+    if (!focusedKey_.empty() && windowHasFocus_) {
+      auto const [id, h] = eventMap_.findWithIdByKey(focusedKey_);
+      (void)id;
+      if (h && h->onTextInput) {
+        h->onTextInput(e.text);
+      }
+    }
+    return;
+  }
 
   if (e.kind == InputEvent::Kind::Scroll) {
     Point const p{e.position.x, e.position.y};
@@ -291,6 +380,9 @@ void Runtime::handleInput(InputEvent const& e) {
         activePress_ = std::move(ps);
         if (h->onPointerDown) {
           h->onPointerDown(hit->localPoint);
+        }
+        if (shouldClaimFocus(*h)) {
+          setFocus(h->stableTargetKey);
         }
       }
     } else if (dbg) {
@@ -411,6 +503,18 @@ void Runtime::handleInput(InputEvent const& e) {
   } else if (dbg) {
     std::fprintf(stderr, "[flux:input] PointerUp: no hit and no active press to notify\n");
   }
+}
+
+bool useFocus() {
+  Runtime* rt = Runtime::current();
+  if (!rt) {
+    return false;
+  }
+  StateStore* store = StateStore::current();
+  if (!store) {
+    return false;
+  }
+  return rt->isFocusInSubtree(store->currentComponentKey());
 }
 
 } // namespace flux

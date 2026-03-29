@@ -60,6 +60,12 @@ public:
   template<typename S, typename... Args>
   S& claimSlot(Args&&... args);
 
+  /// Key of the composite component whose `body()` is executing (top of the active stack).
+  ComponentKey const& currentComponentKey() const {
+    assert(!activeStack_.empty());
+    return activeStack_.back();
+  }
+
   /// Thread-local pointer to the active StateStore during a build pass.
   /// Set by Runtime::rebuild; accessed by useState/useAnimated free functions.
   static StateStore* current() noexcept;

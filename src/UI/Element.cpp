@@ -46,7 +46,10 @@ void Element::Model<Rectangle>::build(BuildContext& ctx) const {
       .fill = value.fill,
       .stroke = value.stroke,
   });
-  if (value.onTap || value.onPointerDown || value.onPointerUp || value.onPointerMove || value.onScroll) {
+  bool const focusable = value.focusable || static_cast<bool>(value.onKeyDown) ||
+                         static_cast<bool>(value.onKeyUp) || static_cast<bool>(value.onTextInput);
+  if (value.onTap || value.onPointerDown || value.onPointerUp || value.onPointerMove || value.onScroll ||
+      value.onKeyDown || value.onKeyUp || value.onTextInput || value.focusable) {
     ctx.eventMap().insert(id, EventHandlers{
         .stableTargetKey = stableKey,
         .onTap = value.onTap,
@@ -54,6 +57,10 @@ void Element::Model<Rectangle>::build(BuildContext& ctx) const {
         .onPointerUp = value.onPointerUp,
         .onPointerMove = value.onPointerMove,
         .onScroll = value.onScroll,
+        .onKeyDown = value.onKeyDown,
+        .onKeyUp = value.onKeyUp,
+        .onTextInput = value.onTextInput,
+        .focusable = focusable,
     });
   }
 }
@@ -116,13 +123,20 @@ void Element::Model<Text>::build(BuildContext& ctx) const {
         .fill = value.background,
         .stroke = value.border,
     });
-    if (value.onTap || value.onPointerDown || value.onPointerUp || value.onPointerMove) {
+    bool const focusable = value.focusable || static_cast<bool>(value.onKeyDown) ||
+                           static_cast<bool>(value.onKeyUp) || static_cast<bool>(value.onTextInput);
+    if (value.onTap || value.onPointerDown || value.onPointerUp || value.onPointerMove || value.onKeyDown ||
+        value.onKeyUp || value.onTextInput || value.focusable) {
       ctx.eventMap().insert(id, EventHandlers{
           .stableTargetKey = stableKey,
           .onTap = value.onTap,
           .onPointerDown = value.onPointerDown,
           .onPointerUp = value.onPointerUp,
           .onPointerMove = value.onPointerMove,
+          .onKeyDown = value.onKeyDown,
+          .onKeyUp = value.onKeyUp,
+          .onTextInput = value.onTextInput,
+          .focusable = focusable,
       });
     }
   }

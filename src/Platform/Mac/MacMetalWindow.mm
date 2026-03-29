@@ -26,11 +26,18 @@ namespace flux {
 class MacMetalPlatformWindow;
 } // namespace flux
 
-@interface FluxMetalView : NSView
+@interface FluxMetalView : NSView <NSTextInputClient>
 @property(nonatomic, assign) flux::MacMetalPlatformWindow* fluxPlatform;
 - (CAMetalLayer*)fluxMetalLayer;
 - (void)updateDrawableSize;
 @end
+
+namespace flux {
+namespace detail {
+void postInputFromView(FluxMetalView* view, InputEvent::Kind kind, NSEvent* e, std::string text = {});
+void postTextInput(FluxMetalView* view, std::string text);
+} // namespace detail
+} // namespace flux
 
 @implementation FluxMetalView
 
@@ -137,6 +144,77 @@ class MacMetalPlatformWindow;
   [self updateTrackingAreas];
 }
 
+- (void)keyDown:(NSEvent*)event {
+  flux::detail::postInputFromView(self, flux::InputEvent::Kind::KeyDown, event);
+  [self interpretKeyEvents:@[event]];
+}
+
+- (void)keyUp:(NSEvent*)event {
+  flux::detail::postInputFromView(self, flux::InputEvent::Kind::KeyUp, event);
+}
+
+- (void)doCommandBySelector:(SEL)selector {
+  (void)selector;
+}
+
+- (BOOL)hasMarkedText {
+  return NO;
+}
+
+- (NSRange)markedRange {
+  return NSMakeRange(NSNotFound, 0);
+}
+
+- (NSRange)selectedRange {
+  return NSMakeRange(NSNotFound, 0);
+}
+
+- (void)setMarkedText:(id)string
+        selectedRange:(NSRange)selectedRange
+     replacementRange:(NSRange)replacementRange {
+  (void)string;
+  (void)selectedRange;
+  (void)replacementRange;
+}
+
+- (void)unmarkText {
+}
+
+- (NSArray<NSAttributedStringKey>*)validAttributesForMarkedText {
+  return @[];
+}
+
+- (NSAttributedString*)attributedSubstringForProposedRange:(NSRange)range
+                                                actualRange:(NSRangePointer)actualRange {
+  (void)range;
+  (void)actualRange;
+  return nil;
+}
+
+- (void)insertText:(id)string replacementRange:(NSRange)replacementRange {
+  (void)replacementRange;
+  NSString* s = nil;
+  if ([string isKindOfClass:[NSAttributedString class]]) {
+    s = [(NSAttributedString*)string string];
+  } else if ([string isKindOfClass:[NSString class]]) {
+    s = (NSString*)string;
+  }
+  std::string utf8 = s ? [s UTF8String] : "";
+  flux::detail::postTextInput(self, std::move(utf8));
+}
+
+- (NSUInteger)characterIndexForPoint:(NSPoint)point {
+  (void)point;
+  return NSNotFound;
+}
+
+- (NSRect)firstRectForCharacterRange:(NSRange)range actualRange:(NSRangePointer)actualRange {
+  (void)range;
+  (void)actualRange;
+  NSWindow* w = self.window;
+  return w ? [w convertRectToScreen:w.frame] : NSZeroRect;
+}
+
 @end
 
 @interface FluxWindowDelegate : NSObject <NSWindowDelegate>
@@ -230,7 +308,7 @@ bool fluxDebugInputMacPost() {
   return cached != 0;
 }
 
-void postInputFromView(FluxMetalView* view, InputEvent::Kind kind, NSEvent* e, std::string text = {}) {
+void postInputFromView(FluxMetalView* view, InputEvent::Kind kind, NSEvent* e, std::string text) {
   MacMetalPlatformWindow* p = view.fluxPlatform;
   if (!p || !p->fluxWindow()) {
     if (fluxDebugInputMacPost()) {
@@ -442,21 +520,6 @@ void postTextInput(FluxMetalView* view, std::string text) {
 
 - (void)scrollWheel:(NSEvent*)event {
   flux::detail::postInputFromView(self, flux::InputEvent::Kind::Scroll, event);
-}
-
-- (void)keyDown:(NSEvent*)event {
-  flux::detail::postInputFromView(self, flux::InputEvent::Kind::KeyDown, event);
-}
-
-- (void)keyUp:(NSEvent*)event {
-  flux::detail::postInputFromView(self, flux::InputEvent::Kind::KeyUp, event);
-}
-
-- (void)insertText:(id)string replacementRange:(NSRange)replacementRange {
-  (void)replacementRange;
-  NSString* s = (NSString*)string;
-  std::string utf8 = s ? [s UTF8String] : "";
-  flux::detail::postTextInput(self, std::move(utf8));
 }
 
 @end

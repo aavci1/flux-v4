@@ -54,6 +54,12 @@ public:
   /// Returns true if this build should skip advanceChildSlot (composite body subtree root).
   bool consumeCompositeBodySubtreeRootSkip();
 
+  /// After `nextCompositeKey()`, push the composite segment onto `keyStack_` and reset
+  /// `nextChildIndex_` so inner layouts (VStack, etc.) use correct leaf keys extending this
+  /// composite path. Paired with `popCompositeKeyTail()` after `child.build` / `child.measure`.
+  void pushCompositeKeyTail(ComponentKey const& compositeKey);
+  void popCompositeKeyTail();
+
 private:
   friend class Runtime;
 

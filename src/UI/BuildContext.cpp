@@ -1,5 +1,7 @@
 #include <Flux/UI/BuildContext.hpp>
 
+#include <cassert>
+
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Scene/SceneGraph.hpp>
 #include <Flux/UI/EventMap.hpp>
@@ -81,6 +83,21 @@ bool BuildContext::consumeCompositeBodySubtreeRootSkip() {
     return true;
   }
   return false;
+}
+
+void BuildContext::pushCompositeKeyTail(ComponentKey const& compositeKey) {
+  assert(!compositeKey.empty());
+  keyStack_.push_back(compositeKey.back());
+  savedChildIndices_.push_back(nextChildIndex_);
+  nextChildIndex_ = 0;
+}
+
+void BuildContext::popCompositeKeyTail() {
+  assert(!keyStack_.empty());
+  keyStack_.pop_back();
+  assert(!savedChildIndices_.empty());
+  nextChildIndex_ = savedChildIndices_.back();
+  savedChildIndices_.pop_back();
 }
 
 } // namespace flux

@@ -134,7 +134,9 @@ void Element::Model<C>::build(BuildContext& ctx) const {
       store->popComponent();
     }
     ctx.beginCompositeBodySubtree();
+    ctx.pushCompositeKeyTail(key);
     child.build(ctx);
+    ctx.popCompositeKeyTail();
   } else if constexpr (RenderComponent<C>) {
     ComponentKey const stableKey = ctx.leafComponentKey();
     ctx.advanceChildSlot();
@@ -165,8 +167,26 @@ void Element::Model<C>::build(BuildContext& ctx) const {
     if constexpr (requires { value.onScroll; }) {
       handlers.onScroll = value.onScroll;
     }
+    if constexpr (requires { value.onKeyDown; }) {
+      handlers.onKeyDown = value.onKeyDown;
+    }
+    if constexpr (requires { value.onKeyUp; }) {
+      handlers.onKeyUp = value.onKeyUp;
+    }
+    if constexpr (requires { value.onTextInput; }) {
+      handlers.onTextInput = value.onTextInput;
+    }
+    if constexpr (requires { value.focusable; }) {
+      handlers.focusable =
+          value.focusable || static_cast<bool>(handlers.onKeyDown) || static_cast<bool>(handlers.onKeyUp) ||
+          static_cast<bool>(handlers.onTextInput);
+    } else {
+      handlers.focusable =
+          static_cast<bool>(handlers.onKeyDown) || static_cast<bool>(handlers.onKeyUp) ||
+          static_cast<bool>(handlers.onTextInput);
+    }
     if (handlers.onTap || handlers.onPointerDown || handlers.onPointerUp || handlers.onPointerMove ||
-        handlers.onScroll) {
+        handlers.onScroll || handlers.onKeyDown || handlers.onKeyUp || handlers.onTextInput || handlers.focusable) {
       ctx.eventMap().insert(id, std::move(handlers));
     }
   } else {
@@ -191,7 +211,10 @@ Size Element::Model<C>::measure(BuildContext& ctx, LayoutConstraints const& cons
       store->popComponent();
     }
     ctx.beginCompositeBodySubtree();
-    return child.measure(ctx, constraints, textSystem);
+    ctx.pushCompositeKeyTail(key);
+    Size const sz = child.measure(ctx, constraints, textSystem);
+    ctx.popCompositeKeyTail();
+    return sz;
   } else if constexpr (RenderComponent<C>) {
     ctx.advanceChildSlot();
     (void)textSystem;

@@ -186,3 +186,6 @@ target_link_libraries(card_demo PRIVATE flux)
 
 add_executable(scroll_demo examples/scroll-demo/main.cpp)
 target_link_libraries(scroll_demo PRIVATE flux)
+
+add_executable(focus_demo examples/focus-demo/main.cpp)
+target_link_libraries(focus_demo PRIVATE flux)
