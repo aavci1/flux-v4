@@ -17,6 +17,7 @@ struct EventHandlers {
   /// initially-pressed node during a drag — use `onPointerDown` + `onPointerMove`
   /// on the same node only if the drag stays within the node's bounds.
   std::function<void(Point)> onPointerMove;
+  std::function<void(Vec2)> onScroll;
 };
 
 struct NodeIdHash {

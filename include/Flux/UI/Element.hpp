@@ -160,7 +160,11 @@ void Element::Model<C>::build(BuildContext& ctx) const {
     if constexpr (requires { value.onPointerMove; }) {
       handlers.onPointerMove = value.onPointerMove;
     }
-    if (handlers.onTap || handlers.onPointerDown || handlers.onPointerUp || handlers.onPointerMove) {
+    if constexpr (requires { value.onScroll; }) {
+      handlers.onScroll = value.onScroll;
+    }
+    if (handlers.onTap || handlers.onPointerDown || handlers.onPointerUp || handlers.onPointerMove ||
+        handlers.onScroll) {
       ctx.eventMap().insert(id, std::move(handlers));
     }
   } else {
@@ -357,6 +361,34 @@ struct Element::Model<Spacer> final : Concept {
   float flexGrow() const override { return 1.f; }
   float flexShrink() const override { return 0.f; }
   float minMainSize() const override { return std::max(0.f, value.minLength); }
+};
+
+template<>
+struct Element::Model<OffsetView> final : Concept {
+  OffsetView value;
+  explicit Model(OffsetView c) : value(std::move(c)) {}
+  std::unique_ptr<Concept> clone() const override {
+    return std::make_unique<Model<OffsetView>>(value);
+  }
+  void build(BuildContext& ctx) const override;
+  Size measure(BuildContext& ctx, LayoutConstraints const& constraints, TextSystem& textSystem) const override;
+  float flexGrow() const override { return detail::flexGrowOf(value); }
+  float flexShrink() const override { return detail::flexShrinkOf(value); }
+  float minMainSize() const override { return detail::minMainSizeOf(value); }
+};
+
+template<>
+struct Element::Model<ScrollView> final : Concept {
+  ScrollView value;
+  explicit Model(ScrollView c) : value(std::move(c)) {}
+  std::unique_ptr<Concept> clone() const override {
+    return std::make_unique<Model<ScrollView>>(value);
+  }
+  void build(BuildContext& ctx) const override;
+  Size measure(BuildContext& ctx, LayoutConstraints const& constraints, TextSystem& textSystem) const override;
+  float flexGrow() const override { return detail::flexGrowOf(value); }
+  float flexShrink() const override { return detail::flexShrinkOf(value); }
+  float minMainSize() const override { return detail::minMainSizeOf(value); }
 };
 
 template<typename C>

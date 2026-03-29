@@ -15,6 +15,7 @@ template<typename T>
 struct State {
   Signal<T>* signal = nullptr;
 
+  State() = default;
   explicit State(Signal<T>* s) : signal(s) {}
 
   T const& operator*() const { return signal->get(); }

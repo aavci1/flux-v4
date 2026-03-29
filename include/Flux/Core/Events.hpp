@@ -44,6 +44,8 @@ struct InputEvent {
   Kind kind = Kind::PointerMove;
   unsigned int handle = 0;
   Vec2 position{};
+  /// Wheel / trackpad deltas when `kind == Scroll`; unused otherwise.
+  Vec2 scrollDelta{};
   MouseButton button = MouseButton::None;
   KeyCode key = 0;
   Modifiers modifiers = Modifiers::None;

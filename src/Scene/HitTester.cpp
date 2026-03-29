@@ -31,6 +31,51 @@ std::optional<HitResult> HitTester::hitTest(SceneGraph const& graph, Point windo
   return hitTestNode(graph.root(), graph, windowPoint, Mat3::identity(), &acceptTarget);
 }
 
+std::optional<Point> HitTester::localPointForNode(SceneGraph const& graph, Point windowPoint,
+                                                  NodeId targetId) const {
+  return localPointForNodeImpl(graph.root(), graph, windowPoint, Mat3::identity(), targetId);
+}
+
+std::optional<Point> HitTester::localPointForNodeImpl(NodeId id, SceneGraph const& graph,
+                                                      Point windowPoint, Mat3 const& parentTransform,
+                                                      NodeId targetId) const {
+  SceneNode const* sn = graph.get(id);
+  if (!sn) {
+    return std::nullopt;
+  }
+  if (auto const* layer = std::get_if<LayerNode>(sn)) {
+    Mat3 const localTransform = parentTransform * layer->transform;
+    if (layer->id == targetId) {
+      if (std::abs(localTransform.affineDeterminant()) < kDetEps) {
+        return std::nullopt;
+      }
+      return localTransform.inverse().apply(windowPoint);
+    }
+    if (layer->clip.has_value()) {
+      if (std::abs(localTransform.affineDeterminant()) < kDetEps) {
+        return std::nullopt;
+      }
+      Point const localPoint = localTransform.inverse().apply(windowPoint);
+      if (!layer->clip->contains(localPoint)) {
+        return std::nullopt;
+      }
+    }
+    for (NodeId child : layer->children) {
+      if (auto p = localPointForNodeImpl(child, graph, windowPoint, localTransform, targetId)) {
+        return p;
+      }
+    }
+    return std::nullopt;
+  }
+  if (id == targetId) {
+    if (std::abs(parentTransform.affineDeterminant()) < kDetEps) {
+      return std::nullopt;
+    }
+    return parentTransform.inverse().apply(windowPoint);
+  }
+  return std::nullopt;
+}
+
 std::optional<HitResult> HitTester::hitTestNode(NodeId id, SceneGraph const& graph, Point point,
                                                Mat3 const& parentTransform,
                                                std::function<bool(NodeId)> const* acceptTarget) const {
@@ -62,10 +107,10 @@ std::optional<HitResult> HitTester::hitTestNode(NodeId id, SceneGraph const& gra
   Point const localPoint = parentTransform.inverse().apply(point);
   if (auto const* rect = std::get_if<RectNode>(sn)) {
     if (rect->bounds.contains(localPoint)) {
-      if (!acceptNodeOrAll(acceptTarget, rect->id)) {
-        return std::nullopt;
+      if (acceptNodeOrAll(acceptTarget, rect->id)) {
+        return HitResult{rect->id, localPoint};
       }
-      return HitResult{rect->id, localPoint};
+      // Geometry hit but filtered out: treat as pass-through so targets behind still receive input.
     }
     return std::nullopt;
   }
@@ -77,28 +122,25 @@ std::optional<HitResult> HitTester::hitTestNode(NodeId id, SceneGraph const& gra
     Rect const textBounds =
         Rect::sharp(text->origin.x, text->origin.y, ms.width, ms.height);
     if (textBounds.contains(localPoint)) {
-      if (!acceptNodeOrAll(acceptTarget, text->id)) {
-        return std::nullopt;
+      if (acceptNodeOrAll(acceptTarget, text->id)) {
+        return HitResult{text->id, localPoint};
       }
-      return HitResult{text->id, localPoint};
     }
     return std::nullopt;
   }
   if (auto const* img = std::get_if<ImageNode>(sn)) {
     if (img->bounds.contains(localPoint)) {
-      if (!acceptNodeOrAll(acceptTarget, img->id)) {
-        return std::nullopt;
+      if (acceptNodeOrAll(acceptTarget, img->id)) {
+        return HitResult{img->id, localPoint};
       }
-      return HitResult{img->id, localPoint};
     }
     return std::nullopt;
   }
   if (auto const* custom = std::get_if<CustomRenderNode>(sn)) {
     if (custom->frame.contains(localPoint)) {
-      if (!acceptNodeOrAll(acceptTarget, custom->id)) {
-        return std::nullopt;
+      if (acceptNodeOrAll(acceptTarget, custom->id)) {
+        return HitResult{custom->id, localPoint};
       }
-      return HitResult{custom->id, localPoint};
     }
     return std::nullopt;
   }
