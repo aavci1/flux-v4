@@ -25,10 +25,18 @@ public:
   std::optional<HitResult> hitTest(SceneGraph const& graph, Point windowPoint,
                                    std::function<bool(NodeId)> const& acceptTarget) const;
 
+  /// Pointer in the same local space as \ref HitResult::localPoint for \p targetId, if that node
+  /// exists in the scene graph (used to deliver drags to the press target regardless of frontmost hit).
+  std::optional<Point> localPointForNode(SceneGraph const& graph, Point windowPoint,
+                                         NodeId targetId) const;
+
 private:
   std::optional<HitResult> hitTestNode(NodeId id, SceneGraph const& graph, Point point,
                                        Mat3 const& parentTransform,
                                        std::function<bool(NodeId)> const* acceptTarget) const;
+
+  std::optional<Point> localPointForNodeImpl(NodeId id, SceneGraph const& graph, Point windowPoint,
+                                             Mat3 const& parentTransform, NodeId targetId) const;
 };
 
 } // namespace flux

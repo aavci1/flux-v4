@@ -177,3 +177,6 @@ target_link_libraries(reactive_demo PRIVATE flux)
 
 add_executable(card_demo examples/card-demo/main.cpp)
 target_link_libraries(card_demo PRIVATE flux)
+
+add_executable(scroll_demo examples/scroll-demo/main.cpp)
+target_link_libraries(scroll_demo PRIVATE flux)

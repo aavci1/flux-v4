@@ -55,6 +55,12 @@ struct MetalDrawOp {
   /// Valid when `kind == Image` — `id<MTLTexture>` retained per op (`__bridge_retained`); released in `MetalFrameRecorder::clear`.
   void* texture = nullptr;
   bool repeatSampler = false;
+  /// GPU scissor for this draw (physical pixels). If `false`, use full drawable in `present()`.
+  bool scissorValid = false;
+  std::uint32_t scissorX = 0;
+  std::uint32_t scissorY = 0;
+  std::uint32_t scissorW = 0;
+  std::uint32_t scissorH = 0;
 };
 
 } // namespace flux

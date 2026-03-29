@@ -13,7 +13,12 @@ struct EventHandlers {
   std::function<void()> onTap;
   std::function<void(Point)> onPointerDown;
   std::function<void(Point)> onPointerUp;
+  /// During an active drag (after `onPointerDown`), move events are routed to the
+  /// pressed node when it has `onPointerMove`, using coordinates in that node's space
+  /// even if the pointer leaves the node's bounds. Outside a drag, events go to the
+  /// node under the pointer.
   std::function<void(Point)> onPointerMove;
+  std::function<void(Vec2)> onScroll;
 };
 
 struct NodeIdHash {

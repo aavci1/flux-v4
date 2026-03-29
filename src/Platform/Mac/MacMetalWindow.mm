@@ -14,6 +14,9 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <dispatch/dispatch.h>
 #include <memory>
 #include <string>
@@ -217,16 +220,30 @@ MouseButton buttonFromNSEvent(NSEvent* e) {
   }
 }
 
+bool fluxDebugInputMacPost() {
+  static int cached = -1;
+  if (cached < 0) {
+    char const* v = std::getenv("FLUX_DEBUG_INPUT");
+    cached = (v && v[0] != '\0' && std::strcmp(v, "0") != 0 && std::strcmp(v, "false") != 0) ? 1 : 0;
+  }
+  return cached != 0;
+}
+
 void postInputFromView(FluxMetalView* view, InputEvent::Kind kind, NSEvent* e, std::string text = {}) {
   MacMetalPlatformWindow* p = view.fluxPlatform;
   if (!p || !p->fluxWindow()) {
+    if (fluxDebugInputMacPost()) {
+      std::fprintf(stderr, "[flux:input:mac] postInputFromView: no platform/window (dropped)\n");
+    }
     return;
   }
   InputEvent ie;
   ie.kind = kind;
   ie.handle = p->fluxWindow()->handle();
   if (kind == InputEvent::Kind::Scroll) {
-    ie.position =
+    NSPoint pt = [view convertPoint:[e locationInWindow] fromView:nil];
+    ie.position = Vec2{static_cast<float>(pt.x), static_cast<float>(pt.y)};
+    ie.scrollDelta =
         Vec2{static_cast<float>(e.scrollingDeltaX), static_cast<float>(e.scrollingDeltaY)};
   } else {
     NSPoint pt = [view convertPoint:[e locationInWindow] fromView:nil];
@@ -241,6 +258,37 @@ void postInputFromView(FluxMetalView* view, InputEvent::Kind kind, NSEvent* e, s
   }
   ie.modifiers = modifiersFromNSEvent(e);
   ie.text = std::move(text);
+  if (fluxDebugInputMacPost()) {
+    if (kind == InputEvent::Kind::Scroll) {
+      std::fprintf(stderr,
+                   "[flux:input:mac] post Scroll handle=%u pos=(%.1f,%.1f) delta=(%.2f,%.2f)\n",
+                   static_cast<unsigned>(ie.handle), static_cast<double>(ie.position.x),
+                   static_cast<double>(ie.position.y), static_cast<double>(ie.scrollDelta.x),
+                   static_cast<double>(ie.scrollDelta.y));
+    } else if (kind == InputEvent::Kind::PointerMove) {
+      static int moveN;
+      if (++moveN % 20 == 1) {
+        std::fprintf(stderr, "[flux:input:mac] post PointerMove handle=%u pos=(%.1f,%.1f) (sampled)\n",
+                     static_cast<unsigned>(ie.handle), static_cast<double>(ie.position.x),
+                     static_cast<double>(ie.position.y));
+      }
+    } else {
+      char const* kn = "?";
+      switch (kind) {
+      case InputEvent::Kind::PointerDown:
+        kn = "PointerDown";
+        break;
+      case InputEvent::Kind::PointerUp:
+        kn = "PointerUp";
+        break;
+      default:
+        break;
+      }
+      std::fprintf(stderr, "[flux:input:mac] post %s handle=%u pos=(%.1f,%.1f)\n", kn,
+                   static_cast<unsigned>(ie.handle), static_cast<double>(ie.position.x),
+                   static_cast<double>(ie.position.y));
+    }
+  }
   Application::instance().eventQueue().post(ie);
 }
 

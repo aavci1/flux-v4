@@ -20,6 +20,7 @@ struct Rectangle {
   std::function<void(Point)> onPointerDown;
   std::function<void(Point)> onPointerUp;
   std::function<void(Point)> onPointerMove;
+  std::function<void(Vec2)> onScroll;
 };
 
 } // namespace flux

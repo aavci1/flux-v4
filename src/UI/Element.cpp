@@ -45,12 +45,13 @@ void Element::Model<Rectangle>::build(BuildContext& ctx) const {
       .fill = value.fill,
       .stroke = value.stroke,
   });
-  if (value.onTap || value.onPointerDown || value.onPointerUp || value.onPointerMove) {
+  if (value.onTap || value.onPointerDown || value.onPointerUp || value.onPointerMove || value.onScroll) {
     ctx.eventMap().insert(id, EventHandlers{
         .onTap = value.onTap,
         .onPointerDown = value.onPointerDown,
         .onPointerUp = value.onPointerUp,
         .onPointerMove = value.onPointerMove,
+        .onScroll = value.onScroll,
     });
   }
 }
