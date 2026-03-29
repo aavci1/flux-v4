@@ -35,8 +35,6 @@ Size Element::measure(BuildContext& ctx, LayoutConstraints const& constraints,
   return impl_->measure(ctx, constraints, textSystem);
 }
 
-bool Element::isSpacer() const { return impl_->isSpacer(); }
-
 void Element::Model<Rectangle>::build(BuildContext& ctx) const {
   ctx.advanceChildSlot();
   Rect const bounds = flux::detail::resolveLeafBounds(

@@ -550,12 +550,6 @@ void Element::Model<Grid>::build(BuildContext& ctx) const {
       }
       Element const& child = value.children[i];
       Size const sz = sizes[i];
-      if (child.isSpacer()) {
-        // Same effect as Spacer::build (slot only); no flex distribution in a grid.
-        ctx.advanceChildSlot();
-        x += cellW + value.hSpacing;
-        continue;
-      }
       float const frameW = cellW > 0.f ? cellW : sz.width;
       float const frameH = rowH[r] > 0.f ? rowH[r] : sz.height;
       float const cx = x + hAlignOffset(sz.width, frameW, value.hAlign);

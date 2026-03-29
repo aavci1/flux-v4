@@ -70,9 +70,6 @@ public:
   void build(BuildContext& ctx) const;
   Size measure(BuildContext& ctx, LayoutConstraints const& constraints, TextSystem& textSystem) const;
 
-  /// Used by layout containers to distribute flexible space among `Spacer` children.
-  bool isSpacer() const;
-
   /// Optional flex overrides on the wrapper (from `withFlex`). When set, they replace the
   /// underlying component's flex hints for layout.
   float flexGrow() const;
@@ -91,7 +88,6 @@ private:
     virtual void build(BuildContext& ctx) const = 0;
     virtual Size measure(BuildContext& ctx, LayoutConstraints const& constraints,
                          TextSystem& textSystem) const = 0;
-    virtual bool isSpacer() const { return false; }
     virtual float flexGrow() const { return 0.f; }
     virtual float flexShrink() const { return 0.f; }
     virtual float minMainSize() const { return 0.f; }
@@ -358,7 +354,6 @@ struct Element::Model<Spacer> final : Concept {
   }
   void build(BuildContext& ctx) const override;
   Size measure(BuildContext& ctx, LayoutConstraints const& constraints, TextSystem& textSystem) const override;
-  bool isSpacer() const override { return true; }
   float flexGrow() const override { return 1.f; }
   float flexShrink() const override { return 0.f; }
   float minMainSize() const override { return std::max(0.f, value.minLength); }
