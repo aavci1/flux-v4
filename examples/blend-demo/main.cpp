@@ -1,14 +1,13 @@
 #include <Flux.hpp>
 #include <Flux/Core/Application.hpp>
-#include <Flux/Graphics/Canvas.hpp>
+#include <Flux/Core/WindowUI.hpp>
 #include <Flux/Graphics/Font.hpp>
-#include <Flux/Graphics/Styles.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
+#include <Flux/UI/UI.hpp>
 
 #include <algorithm>
 #include <array>
-#include <chrono>
-#include <cmath>
+#include <vector>
 
 using namespace flux;
 
@@ -35,76 +34,91 @@ constexpr std::array<DemoCell, 12> kGrid{{
     {BlendMode::Dst, "Dst"},
 }};
 
-constexpr int kCols = 4;
-constexpr int kRows = 3;
+struct BlendCell {
+  static constexpr int kCols = 4;
+  static constexpr int kRows = 3;
+  static constexpr float kMargin = 24.f;
+  static constexpr float kGap = 10.f;
+  /// Fallback when constraints are unbounded (e.g. HStack passes infinite width to children).
+  static constexpr float kDefaultWinW = 920.f;
+  static constexpr float kDefaultWinH = 700.f;
 
-void drawCell(Canvas& c, Rect cell, BlendMode mode, const char* title,
-              std::chrono::steady_clock::time_point start) {
-  using clock = std::chrono::steady_clock;
-  const float t = std::chrono::duration<float>(clock::now() - start).count();
-  const float pulse = 0.92f + 0.08f * std::sin(t * 2.5f);
+  BlendMode mode = BlendMode::Normal;
+  const char* title = "";
 
-  const float pad = 8.f;
-  const float innerX = cell.x + pad;
-  const float innerY = cell.y + pad;
-  const float innerW = std::max(cell.width - pad * 2.f, 4.f);
-  const float innerH = std::max(cell.height - pad * 2.f, 4.f);
-  Rect inner = Rect::sharp(innerX, innerY, innerW, innerH);
+  Size measure(LayoutConstraints const& c) const {
+    float const winW = std::isfinite(c.maxWidth) && c.maxWidth > 0.f ? c.maxWidth : kDefaultWinW;
+    float const winH = std::isfinite(c.maxHeight) && c.maxHeight > 0.f ? c.maxHeight : kDefaultWinH;
+    float const innerW = std::max(0.f, winW - 2.f * kMargin);
+    float const innerH = std::max(0.f, winH - 2.f * kMargin);
+    float const cellW =
+        std::max(0.f, (innerW - kGap * (static_cast<float>(kCols) - 1.f)) / static_cast<float>(kCols));
+    float const cellH =
+        std::max(0.f, (innerH - kGap * (static_cast<float>(kRows) - 1.f)) / static_cast<float>(kRows));
+    return {cellW, cellH};
+  }
 
-  c.setBlendMode(BlendMode::Normal);
-  c.drawRect(inner, {}, FillStyle::solid(Color::rgb(210, 210, 218)), StrokeStyle::none());
+  void render(Canvas& canvas, Rect cell) const {
+    float const pad = 8.f;
+    float const innerX = cell.x + pad;
+    float const innerY = cell.y + pad;
+    float const innerW = std::max(cell.width - pad * 2.f, 4.f);
+    float const innerH = std::max(cell.height - pad * 2.f, 4.f);
+    Rect const inner = Rect::sharp(innerX, innerY, innerW, innerH);
 
-  const float r = std::min(innerW, innerH) * 0.22f * pulse;
-  const Point c1{inner.x + innerW * 0.34f, inner.y + innerH * 0.5f};
-  const Point c2{inner.x + innerW * 0.66f, inner.y + innerH * 0.5f};
+    canvas.setBlendMode(BlendMode::Normal);
+    canvas.drawRect(inner, {}, FillStyle::solid(Color::rgb(210, 210, 218)), StrokeStyle::none());
 
-  c.drawCircle(c1, r, FillStyle::solid(Color{0.05f, 0.75f, 0.85f, 0.62f}), StrokeStyle::none());
+    float const r = std::min(innerW, innerH) * 0.22f;
+    Point const c1{inner.x + innerW * 0.34f, inner.y + innerH * 0.5f};
+    Point const c2{inner.x + innerW * 0.66f, inner.y + innerH * 0.5f};
 
-  c.setBlendMode(mode);
-  c.drawCircle(c2, r, FillStyle::solid(Color{0.92f, 0.15f, 0.55f, 0.62f}), StrokeStyle::none());
+    canvas.drawCircle(c1, r, FillStyle::solid(Color{0.05f, 0.75f, 0.85f, 0.62f}), StrokeStyle::none());
 
-  c.setBlendMode(BlendMode::Normal);
-  c.drawRect(cell, CornerRadius(4.f, 4.f, 4.f, 4.f), FillStyle::none(),
-               StrokeStyle::solid(Color::rgb(90, 90, 100), 1.2f));
+    canvas.setBlendMode(mode);
+    canvas.drawCircle(c2, r, FillStyle::solid(Color{0.92f, 0.15f, 0.55f, 0.62f}), StrokeStyle::none());
 
-  Font labelFont{.family = ".AppleSystemUIFont", .size = 16.f, .weight = 500.f};
+    canvas.setBlendMode(BlendMode::Normal);
+    canvas.drawRect(cell, CornerRadius(4.f, 4.f, 4.f, 4.f), FillStyle::none(),
+                    StrokeStyle::solid(Color::rgb(90, 90, 100), 1.2f));
 
-  auto labelLayout = Application::instance().textSystem().layout(title, labelFont, Color::rgb(38, 38, 45), 0.f);
-  Size const m = labelLayout->measuredSize;
-  float const y = cell.y + cell.height - 16.f - m.height;
-  float const x = cell.x + (cell.width - m.width) * 0.5f;
-  c.drawTextLayout(*labelLayout, Point{x, y});
-}
+    Font const labelFont{.family = ".AppleSystemUIFont", .size = 16.f, .weight = 500.f};
+    auto labelLayout =
+        Application::instance().textSystem().layout(title, labelFont, Color::rgb(38, 38, 45), 0.f);
+    Size const m = labelLayout->measuredSize;
+    float const y = cell.y + cell.height - 16.f - m.height;
+    float const x = cell.x + (cell.width - m.width) * 0.5f;
+    canvas.drawTextLayout(*labelLayout, Point{x, y});
+  }
+};
 
-class BlendDemoWindow : public Window {
-  std::chrono::steady_clock::time_point start_{};
+struct BlendDemoView {
+  auto body() const {
+    auto row = [](int r) {
+      std::vector<Element> cells;
+      cells.reserve(static_cast<std::size_t>(BlendCell::kCols));
+      for (int col = 0; col < BlendCell::kCols; ++col) {
+        DemoCell const& d = kGrid[static_cast<std::size_t>(r * BlendCell::kCols + col)];
+        cells.push_back(BlendCell{.mode = d.mode, .title = d.title});
+      }
+      return HStack{
+          .spacing = BlendCell::kGap,
+          .vAlign = VerticalAlignment::Center,
+          .children = std::move(cells),
+      };
+    };
 
-public:
-  explicit BlendDemoWindow(WindowConfig const& c) : Window(c), start_(std::chrono::steady_clock::now()) {}
-
-  void render(Canvas& c) override {
-    c.clear(Color{0.96f, 0.96f, 0.98f, 1.f});
-
-    const Rect vb = c.clipBounds();
-    const Size sz = getSize();
-    const float w = std::max({vb.width, sz.width, 1.f});
-    const float h = std::max({vb.height, sz.height, 1.f});
-
-    const float margin = 24.f;
-    const float gw = w - margin * 2.f;
-    const float gh = h - margin * 2.f;
-    const float cw = gw / static_cast<float>(kCols);
-    const float ch = gh / static_cast<float>(kRows);
-    const float gap = 10.f;
-
-    for (size_t i = 0; i < kGrid.size(); ++i) {
-      const int col = static_cast<int>(i % static_cast<size_t>(kCols));
-      const int row = static_cast<int>(i / static_cast<size_t>(kCols));
-      Rect cell = Rect::sharp(margin + static_cast<float>(col) * cw + gap * 0.5f,
-                                          margin + static_cast<float>(row) * ch + gap * 0.5f,
-                                          cw - gap, ch - gap);
-      drawCell(c, cell, kGrid[i].mode, kGrid[i].title, start_);
-    }
+    return VStack {
+      .spacing = BlendCell::kGap,
+      .padding = BlendCell::kMargin,
+      .hAlign = HorizontalAlignment::Center,
+      .children =
+          {
+              row(0),
+              row(1),
+              row(2),
+          },
+    };
   }
 };
 
@@ -113,10 +127,11 @@ public:
 int main(int argc, char* argv[]) {
   Application app(argc, argv);
 
-  app.createWindow<BlendDemoWindow>({
-      .size = {920, 700},
+  app.createWindow<Window>({
+      .size = {static_cast<unsigned int>(BlendCell::kDefaultWinW),
+               static_cast<unsigned int>(BlendCell::kDefaultWinH)},
       .title = "Flux — blend modes",
-  });
+  }).setView<BlendDemoView>();
 
   return app.exec();
 }

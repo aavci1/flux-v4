@@ -1,6 +1,7 @@
 #include <Flux/UI/Element.hpp>
 
 #include <Flux/UI/BuildContext.hpp>
+#include <Flux/UI/Detail/LeafBounds.hpp>
 #include <Flux/UI/EventMap.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Scene/Nodes.hpp>
@@ -13,23 +14,6 @@
 namespace flux {
 
 namespace {
-
-/// Resolves axis-aligned bounds for leaves that use an optional `frame`, then `childFrame` from layout,
-/// then the current `LayoutConstraints` (e.g. root view under `body()` has no `childFrame` until this).
-Rect resolveLeafBounds(Rect const& frame, Rect const& childFrame, LayoutConstraints const& constraints) {
-  Rect bounds = frame;
-  if (childFrame.width > 0.f || childFrame.height > 0.f) {
-    bounds = childFrame;
-  }
-  if (bounds.width <= 0.f || bounds.height <= 0.f) {
-    float const w = std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;
-    float const h = std::isfinite(constraints.maxHeight) ? constraints.maxHeight : 0.f;
-    if (w > 0.f && h > 0.f) {
-      bounds = Rect{0, 0, w, h};
-    }
-  }
-  return bounds;
-}
 
 TextLayoutOptions textViewLayoutOptions(Text const& v) {
   TextLayoutOptions o{};
@@ -55,8 +39,8 @@ bool Element::isSpacer() const { return impl_->isSpacer(); }
 
 void Element::Model<Rectangle>::build(BuildContext& ctx) const {
   ctx.advanceChildSlot();
-  Rect const bounds =
-      resolveLeafBounds(value.frame, ctx.layoutEngine().childFrame(), ctx.constraints());
+  Rect const bounds = flux::detail::resolveLeafBounds(
+      value.frame, ctx.layoutEngine().childFrame(), ctx.constraints());
   NodeId const id = ctx.graph().addRect(ctx.parentLayer(), RectNode{
       .bounds = bounds,
       .cornerRadius = value.cornerRadius,
@@ -108,8 +92,8 @@ Size Element::Model<LaidOutText>::measure(BuildContext& ctx, LayoutConstraints c
 
 void Element::Model<Text>::build(BuildContext& ctx) const {
   ctx.advanceChildSlot();
-  Rect const bounds =
-      resolveLeafBounds(value.frame, ctx.layoutEngine().childFrame(), ctx.constraints());
+  Rect const bounds = flux::detail::resolveLeafBounds(
+      value.frame, ctx.layoutEngine().childFrame(), ctx.constraints());
   assert(value.text.empty() || (bounds.width > 0.f && bounds.height > 0.f));
 
   float const pad = std::max(0.f, value.padding);
@@ -196,8 +180,8 @@ void Element::Model<views::Image>::build(BuildContext& ctx) const {
   if (!value.source) {
     return;
   }
-  Rect const bounds =
-      resolveLeafBounds(value.frame, ctx.layoutEngine().childFrame(), ctx.constraints());
+  Rect const bounds = flux::detail::resolveLeafBounds(
+      value.frame, ctx.layoutEngine().childFrame(), ctx.constraints());
   NodeId const id = ctx.graph().addImage(ctx.parentLayer(), ImageNode{
       .image = value.source,
       .bounds = bounds,

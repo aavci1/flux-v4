@@ -93,6 +93,15 @@ std::optional<HitResult> HitTester::hitTestNode(NodeId id, SceneGraph const& gra
     }
     return std::nullopt;
   }
+  if (auto const* custom = std::get_if<CustomRenderNode>(sn)) {
+    if (custom->frame.contains(localPoint)) {
+      if (!acceptNodeOrAll(acceptTarget, custom->id)) {
+        return std::nullopt;
+      }
+      return HitResult{custom->id, localPoint};
+    }
+    return std::nullopt;
+  }
   if (std::holds_alternative<PathNode>(*sn) || std::holds_alternative<LineNode>(*sn)) {
     return std::nullopt;
   }

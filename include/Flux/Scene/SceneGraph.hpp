@@ -26,6 +26,7 @@ public:
   NodeId addImage(NodeId parent, ImageNode node);
   NodeId addPath(NodeId parent, PathNode node);
   NodeId addLine(NodeId parent, LineNode node);
+  NodeId addCustomRender(NodeId parent, CustomRenderNode node);
 
   void remove(NodeId id);
   /// Removes every node under the root except the root itself (invalidates all other `NodeId`s).

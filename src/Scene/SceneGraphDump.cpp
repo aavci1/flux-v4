@@ -132,6 +132,12 @@ void dumpNode(SceneGraph const& graph, NodeId id, int depth, std::ostream& os) {
             os << " w=" << node.stroke.width;
           }
           os << '\n';
+        } else if constexpr (std::is_same_v<T, CustomRenderNode>) {
+          os << p << "CustomRender ";
+          fmtNodeId(os, id);
+          os << "  frame=";
+          fmtRect(os, node.frame);
+          os << '\n';
         }
       },
       *sn);

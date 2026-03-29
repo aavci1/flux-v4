@@ -9,12 +9,15 @@
 
 #include <Flux/Scene/NodeId.hpp>
 
+#include <functional>
 #include <memory>
 #include <optional>
 #include <variant>
 #include <vector>
 
 namespace flux {
+
+class Canvas;
 
 struct LayerNode {
   NodeId id{};
@@ -62,6 +65,13 @@ struct LineNode {
   StrokeStyle stroke = StrokeStyle::none();
 };
 
-using SceneNode = std::variant<LayerNode, RectNode, TextNode, ImageNode, PathNode, LineNode>;
+struct CustomRenderNode {
+  NodeId id{};
+  Rect frame{};
+  std::function<void(Canvas&)> draw;
+};
+
+using SceneNode =
+    std::variant<LayerNode, RectNode, TextNode, ImageNode, PathNode, LineNode, CustomRenderNode>;
 
 } // namespace flux

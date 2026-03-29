@@ -28,7 +28,15 @@ struct TypedRootHolder final : RootHolder {
   void buildInto(BuildContext& ctx) const override {
     if constexpr (CompositeComponent<C>) {
       ctx.pushChildIndex();
+      ComponentKey const key = ctx.nextCompositeKey();
+      StateStore* store = StateStore::current();
+      if (store) {
+        store->pushComponent(key);
+      }
       Element child{value.body()};
+      if (store) {
+        store->popComponent();
+      }
       ctx.beginCompositeBodySubtree();
       child.build(ctx);
       ctx.popChildIndex();
