@@ -46,14 +46,36 @@ inline Path chevronPath(bool open, float w, float h) {
   return p;
 }
 
-inline Path checkmarkPath() {
+/// Scale factor vs 16pt reference (body text). Used for checkmark path and column width.
+inline float checkmarkScale(Font const& font) {
+  constexpr float kRefFontSize = 16.f;
+  float const fs = font.size > 0.f ? font.size : kRefFontSize;
+  return fs / kRefFontSize;
+}
+
+/// Open polyline for a ✓ (stroke only — filling a 3-point path fills a triangle).
+/// Geometry is authored at 16pt text size; \p scale is `font.size / 16` (or 1 when size unset).
+inline Path checkmarkPath(float scale) {
   Path p;
-  constexpr float w = 10.f;
-  constexpr float h = 8.f;
-  p.moveTo({0.8f, h * 0.52f});
-  p.lineTo({w * 0.38f, h * 0.95f});
-  p.lineTo({w - 0.5f, 0.6f});
+  constexpr float baseW = 20.f;
+  const float s = scale;
+  const float w = baseW * s;
+  p.moveTo({2.4f * s, 8.1f * s});
+  p.lineTo({8.5f * s, 14.2f * s});
+  p.lineTo({(baseW - 0.8f) * s, 1.8f * s});
   return p;
+}
+
+inline PathShape checkmarkPathShape(Color c, Font const& font) {
+  float const scale = checkmarkScale(font);
+  StrokeStyle ss = StrokeStyle::solid(c, std::max(1.5f, 4.0f * scale));
+  ss.join = StrokeJoin::Round;
+  ss.cap = StrokeCap::Round;
+  return PathShape{
+      .path = checkmarkPath(scale),
+      .fill = FillStyle::none(),
+      .stroke = std::move(ss),
+  };
 }
 
 } // namespace detail
@@ -143,12 +165,8 @@ struct PickerRow {
                                         ZStack{
                                             .children =
                                                 {
-                                                    Rectangle{.frame = {0.f, 0.f, 20.f, 36.f}},
-                                                    selected ? Element{PathShape{
-                                                                   .path = detail::checkmarkPath(),
-                                                                   .fill = FillStyle::solid(checkmarkColor),
-                                                                   .stroke = StrokeStyle::none(),
-                                                               }}
+                                                    Rectangle{.frame = {0.f, 0.f, std::max(12.f, 20.f * detail::checkmarkScale(font)), 36.f}},
+                                                    selected ? Element{detail::checkmarkPathShape(checkmarkColor, font)}
                                                              : Element{Rectangle{}},
                                                 },
                                         },

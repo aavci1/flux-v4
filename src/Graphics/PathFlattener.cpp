@@ -8,6 +8,7 @@ namespace flux {
 namespace {
 
 constexpr float kTwoPi = 6.283185307179586476925286766559f;
+constexpr float kPi = 3.14159265358979323846f;
 constexpr int kMinArcSegments = 8;
 constexpr float kDegenerateEdge = 1e-6f;
 constexpr float kDegenerateEdgeStroke = 0.001f;
@@ -242,6 +243,137 @@ TessellatedPath tessellateStrokeClosedRing(const std::vector<Point>& pts, float 
     expanded.push_back(expanded.front());
 
     return PathFlattener::tessellateFill(expanded, color, vpW, vpH);
+}
+
+void perpLUnit(float dx, float dy, float& nx, float& ny) {
+    float len = std::sqrt(dx * dx + dy * dy);
+    if (len < kDegenerateEdgeStroke) {
+        nx = 0.f;
+        ny = 1.f;
+        return;
+    }
+    nx = -dy / len;
+    ny = dx / len;
+}
+
+/** Pick circular arc sweep (±2π) so the arc midpoint is closest to hint angle `am`. */
+float pickRoundJoinSweep(float a0, float a1, float am) {
+    auto shortestDelta = [](float d) {
+        while (d <= -kPi)
+            d += kTwoPi;
+        while (d > kPi)
+            d -= kTwoPi;
+        return d;
+    };
+    float sweep1 = shortestDelta(a1 - a0);
+    float mid1 = a0 + sweep1 * 0.5f;
+    float err1 = std::abs(shortestDelta(mid1 - am));
+    float sweep2 = sweep1 > 0 ? sweep1 - kTwoPi : sweep1 + kTwoPi;
+    float mid2 = a0 + sweep2 * 0.5f;
+    float err2 = std::abs(shortestDelta(mid2 - am));
+    return err2 < err1 ? sweep2 : sweep1;
+}
+
+/** Direction toward the outer round-join arc midpoint (robust when miter is clamped). */
+float outerRoundJoinHint(float nInx, float nIny, float nOutx, float nOuty, float vx, float vy, float miterOx,
+                         float miterOy) {
+    float bx = nInx + nOutx, by = nIny + nOuty;
+    float blen = std::sqrt(bx * bx + by * by);
+    if (blen > 1e-4f)
+        return std::atan2(by / blen, bx / blen);
+    return std::atan2(miterOy - vy, miterOx - vx);
+}
+
+/** Direction toward the inner round-join arc midpoint. */
+float innerRoundJoinHint(float nInx, float nIny, float nOutx, float nOuty, float vx, float vy, float miterIx,
+                         float miterIy) {
+    float bx = -nInx - nOutx, by = -nIny - nOuty;
+    float blen = std::sqrt(bx * bx + by * by);
+    if (blen > 1e-4f)
+        return std::atan2(by / blen, bx / blen);
+    return std::atan2(miterIy - vy, miterIx - vx);
+}
+
+TessellatedPath tessellateStrokeRoundJoinRoundCap(const std::vector<Point>& pl, float hw,
+                                                  const Color& color, float vpW, float vpH) {
+    TessellatedPath result;
+    const size_t n = pl.size();
+    if (n < 2) return result;
+
+    std::vector<Point> ring;
+    ring.reserve(n * 24);
+
+    if (n == 2) {
+        float dx = pl[1].x - pl[0].x, dy = pl[1].y - pl[0].y;
+        float nlx, nly;
+        perpLUnit(dx, dy, nlx, nly);
+        float a0 = std::atan2(nly, nlx);
+        ring.push_back({pl[0].x + nlx * hw, pl[0].y + nly * hw});
+        ring.push_back({pl[1].x + nlx * hw, pl[1].y + nly * hw});
+        appendArcSamples(ring, pl[1].x, pl[1].y, hw, a0, kPi);
+        ring.push_back({pl[0].x - nlx * hw, pl[0].y - nly * hw});
+        appendArcSamples(ring, pl[0].x, pl[0].y, hw, a0 + kPi, kPi);
+        ring.push_back(ring.front());
+        return PathFlattener::tessellateFill(ring, color, vpW, vpH);
+    }
+
+    float e0x = pl[1].x - pl[0].x, e0y = pl[1].y - pl[0].y;
+    float nl0x, nl0y;
+    perpLUnit(e0x, e0y, nl0x, nl0y);
+    ring.push_back({pl[0].x + nl0x * hw, pl[0].y + nl0y * hw});
+    ring.push_back({pl[1].x + nl0x * hw, pl[1].y + nl0y * hw});
+
+    for (size_t j = 1; j + 1 < n; ++j) {
+        float eInx = pl[j].x - pl[j - 1].x, eIny = pl[j].y - pl[j - 1].y;
+        float eOutx = pl[j + 1].x - pl[j].x, eOuty = pl[j + 1].y - pl[j].y;
+        float nInx, nIny, nOutx, nOuty;
+        perpLUnit(eInx, eIny, nInx, nIny);
+        perpLUnit(eOutx, eOuty, nOutx, nOuty);
+        float a0 = std::atan2(nIny, nInx);
+        float a1 = std::atan2(nOuty, nOutx);
+        float ox, oy, ix, iy;
+        miterOffset(pl[j - 1], pl[j], pl[j + 1], hw, ox, oy, ix, iy);
+        float am = outerRoundJoinHint(nInx, nIny, nOutx, nOuty, pl[j].x, pl[j].y, ox, oy);
+        float sweep = pickRoundJoinSweep(a0, a1, am);
+        appendArcSamples(ring, pl[j].x, pl[j].y, hw, a0, sweep);
+        ring.push_back({pl[j + 1].x + nOutx * hw, pl[j + 1].y + nOuty * hw});
+    }
+
+    float eEx = pl[n - 1].x - pl[n - 2].x, eEy = pl[n - 1].y - pl[n - 2].y;
+    float nlEx, nlEy;
+    perpLUnit(eEx, eEy, nlEx, nlEy);
+    float aE = std::atan2(nlEy, nlEx);
+    appendArcSamples(ring, pl[n - 1].x, pl[n - 1].y, hw, aE, kPi);
+
+    std::vector<Point> innerFwd;
+    innerFwd.reserve(n * 16);
+    innerFwd.push_back({pl[0].x - nl0x * hw, pl[0].y - nl0y * hw});
+    innerFwd.push_back({pl[1].x - nl0x * hw, pl[1].y - nl0y * hw});
+    for (size_t j = 1; j + 1 < n; ++j) {
+        float eInx = pl[j].x - pl[j - 1].x, eIny = pl[j].y - pl[j - 1].y;
+        float eOutx = pl[j + 1].x - pl[j].x, eOuty = pl[j + 1].y - pl[j].y;
+        float nInx, nIny, nOutx, nOuty;
+        perpLUnit(eInx, eIny, nInx, nIny);
+        perpLUnit(eOutx, eOuty, nOutx, nOuty);
+        float a0 = std::atan2(-nIny, -nInx);
+        float a1 = std::atan2(-nOuty, -nOutx);
+        float ox, oy, ix, iy;
+        miterOffset(pl[j - 1], pl[j], pl[j + 1], hw, ox, oy, ix, iy);
+        float am = innerRoundJoinHint(nInx, nIny, nOutx, nOuty, pl[j].x, pl[j].y, ix, iy);
+        float sweep = pickRoundJoinSweep(a0, a1, am);
+        appendArcSamples(innerFwd, pl[j].x, pl[j].y, hw, a0, sweep);
+        innerFwd.push_back({pl[j + 1].x - nOutx * hw, pl[j + 1].y - nOuty * hw});
+    }
+
+    if (innerFwd.size() >= 2) {
+        for (int i = static_cast<int>(innerFwd.size()) - 2; i >= 0; --i)
+            ring.push_back(innerFwd[static_cast<size_t>(i)]);
+    }
+
+    appendArcSamples(ring, pl[0].x, pl[0].y, hw, std::atan2(-nl0y, -nl0x), kPi);
+    ring.push_back(ring.front());
+
+    return PathFlattener::tessellateFill(ring, color, vpW, vpH);
 }
 
 } // namespace
@@ -543,7 +675,8 @@ TessellatedPath PathFlattener::tessellateFillContours(const std::vector<std::vec
 }
 
 TessellatedPath PathFlattener::tessellateStroke(const std::vector<Point>& polyline, float strokeWidth,
-                                                const Color& color, float vpW, float vpH) {
+                                                const Color& color, float vpW, float vpH,
+                                                StrokeJoin join, StrokeCap cap) {
     TessellatedPath result;
     if (polyline.size() < 2) return result;
 
@@ -558,19 +691,49 @@ TessellatedPath PathFlattener::tessellateStroke(const std::vector<Point>& polyli
     if (closed && pts.size() >= 3)
         return tessellateStrokeClosedRing(pts, hw, color, vpW, vpH);
 
-    std::vector<Point> expanded;
-    expanded.reserve(polyline.size() * 2 + 2);
+    if (join == StrokeJoin::Round && cap == StrokeCap::Round)
+        return tessellateStrokeRoundJoinRoundCap(pts, hw, color, vpW, vpH);
 
-    for (size_t i = 0; i < polyline.size(); i++) {
-        float nx, ny;
-        edgeNormalOpenPoly(polyline, i, nx, ny);
-        expanded.push_back({polyline[i].x + nx * hw, polyline[i].y + ny * hw});
+    std::vector<Point> const& pl = pts;
+    size_t const n = pl.size();
+
+    // Expand an open polyline to a closed polygon: outer strip, then inner strip (reversed).
+    // Interior joints must use a miter between incoming and outgoing edges; using only the
+    // outgoing normal at each vertex (previous implementation) made stroke width collapse on the
+    // short leg of bends (e.g. a ✓ drawn as one 3-point chain).
+    std::vector<Point> expanded;
+    expanded.reserve(n * 2 + 2);
+
+    for (size_t i = 0; i < n; ++i) {
+        if (i == 0) {
+            float nx, ny;
+            edgeNormalOpenPoly(pl, 0, nx, ny);
+            expanded.push_back({pl[0].x + nx * hw, pl[0].y + ny * hw});
+        } else if (i + 1 < n) {
+            float ox, oy, ix, iy;
+            miterOffset(pl[i - 1], pl[i], pl[i + 1], hw, ox, oy, ix, iy);
+            expanded.push_back({ox, oy});
+        } else {
+            float nx, ny;
+            edgeNormalOpenPoly(pl, i, nx, ny);
+            expanded.push_back({pl[i].x + nx * hw, pl[i].y + ny * hw});
+        }
     }
-    for (int i = static_cast<int>(polyline.size()) - 1; i >= 0; i--) {
-        float nx, ny;
-        edgeNormalOpenPoly(polyline, static_cast<size_t>(i), nx, ny);
-        expanded.push_back({polyline[static_cast<size_t>(i)].x - nx * hw,
-                            polyline[static_cast<size_t>(i)].y - ny * hw});
+    for (int i = static_cast<int>(n) - 1; i >= 0; --i) {
+        size_t const si = static_cast<size_t>(i);
+        if (i == static_cast<int>(n) - 1) {
+            float nx, ny;
+            edgeNormalOpenPoly(pl, si, nx, ny);
+            expanded.push_back({pl[si].x - nx * hw, pl[si].y - ny * hw});
+        } else if (i > 0) {
+            float ox, oy, ix, iy;
+            miterOffset(pl[si - 1], pl[si], pl[si + 1], hw, ox, oy, ix, iy);
+            expanded.push_back({ix, iy});
+        } else {
+            float nx, ny;
+            edgeNormalOpenPoly(pl, 0, nx, ny);
+            expanded.push_back({pl[0].x - nx * hw, pl[0].y - ny * hw});
+        }
     }
     expanded.push_back(expanded.front());
 

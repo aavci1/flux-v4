@@ -63,7 +63,7 @@ void metalPathRasterizeToMesh(Path const& path, FillStyle const& fs, StrokeStyle
       const float sw = ss.width * s;
       for (const auto& sp : subpaths) {
         if (sp.size() >= 2) {
-          appendVerts(PathFlattener::tessellateStroke(sp, sw, sc, viewportW, viewportH));
+          appendVerts(PathFlattener::tessellateStroke(sp, sw, sc, viewportW, viewportH, ss.join, ss.cap));
         }
       }
     }

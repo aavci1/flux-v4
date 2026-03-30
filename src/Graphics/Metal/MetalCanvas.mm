@@ -94,6 +94,25 @@ bool tryDecomposeRotationTranslation(Mat3 const& m, float* outAngle, float* outT
   return true;
 }
 
+/** Stroke-only paths that flatten to polylines (Move/Line only). */
+bool pathIsMoveLineOnlyStroke(Path const& path) {
+  if (path.commandCount() < 2) {
+    return false;
+  }
+  for (size_t i = 0; i < path.commandCount(); ++i) {
+    Path::CommandView cv = path.command(i);
+    switch (cv.type) {
+      case Path::CommandType::MoveTo:
+      case Path::CommandType::LineTo:
+      case Path::CommandType::SetWinding:
+        break;
+      default:
+        return false;
+    }
+  }
+  return true;
+}
+
 void appendGlyphQuad(std::vector<MetalGlyphVertex>& out, Mat3 const& M, float dpiX, float dpiY, Point tlLogical,
                      float gw, float gh, float u0, float v0, float u1, float v1, vector_float4 premulRgba) {
   Point const c0 = tlLogical;
@@ -561,6 +580,27 @@ public:
           } else {
             drawCircle({cv.data[0], cv.data[1]}, std::max(cv.data[2], cv.data[3]), fs, ss);
           }
+          return;
+        }
+      }
+    }
+
+    // Round stroke on open polylines: `drawLine` uses the capsule SDF (same rounded look as clock
+    // hands). CPU path-mesh stroke expansion is a separate pipeline and does not match that shader.
+    if (fs.isNone() && ss.cap == StrokeCap::Round && ss.join == StrokeJoin::Round && pathIsMoveLineOnlyStroke(path)) {
+      Color sc{};
+      if (ss.solidColor(&sc)) {
+        auto subpaths = PathFlattener::flattenSubpaths(path);
+        std::size_t const nOpsBefore = frame_.ops.size();
+        for (auto const& sp : subpaths) {
+          if (sp.size() < 2) {
+            continue;
+          }
+          for (size_t i = 0; i + 1 < sp.size(); ++i) {
+            drawLine(sp[i], sp[i + 1], ss);
+          }
+        }
+        if (frame_.ops.size() > nOpsBefore) {
           return;
         }
       }

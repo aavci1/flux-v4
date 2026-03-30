@@ -43,7 +43,9 @@ public:
                                                 const Color& color, float vpW, float vpH, int tessWindingRule);
 
   static TessellatedPath tessellateStroke(const std::vector<Point>& polyline, float strokeWidth,
-                                          const Color& color, float vpW, float vpH);
+                                          const Color& color, float vpW, float vpH,
+                                          StrokeJoin join = StrokeJoin::Miter,
+                                          StrokeCap cap = StrokeCap::Butt);
 
   /** Maps `FillRule` to libtess2 `TESS_WINDING_*` values. */
   static int tessWindingFromFillRule(FillRule rule);
