@@ -177,6 +177,8 @@ Element Button::body() const {
                              (isLink ? keyboardFocused : true);
   CornerRadius const cr = isLink ? CornerRadius{ 2.f } : cornerRadius;
 
+  // Focus is drawn as this rectangle's stroke (inset along the edge), not a separate outset ring: true
+  // outside gap would need layout/`resolveLeafBounds` support or a dedicated FocusRing primitive.
   StrokeStyle stroke{};
   if (showFocusRing) {
     stroke = StrokeStyle::solid(colors.focusRing, 2.f);

@@ -5,6 +5,7 @@
 #include <Flux/Core/KeyCodes.hpp>
 #include <Flux/Graphics/TextLayoutOptions.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
+#include <Flux/UI/StateStore.hpp>
 #include <Flux/UI/Views/TextInput.hpp>
 
 #include <algorithm>
@@ -282,6 +283,39 @@ using namespace std::chrono;
 std::unordered_set<std::uint64_t> gCaretBlinkTimerIds;
 std::once_flag gCaretBlinkTimerBridgeOnce;
 
+/// Owns the repeating caret-blink timer id for one `TextInput` instance. Destructor cancels the timer and
+/// removes the id from `gCaretBlinkTimerIds` so orphaned ids are not left when the field is torn down
+/// (e.g. window close while focused).
+struct CaretBlinkTimerSlot {
+  std::uint64_t timerId = 0;
+
+  ~CaretBlinkTimerSlot() { cancel(); }
+
+  void cancel() {
+    if (timerId == 0) {
+      return;
+    }
+    gCaretBlinkTimerIds.erase(timerId);
+    if (Application::hasInstance()) {
+      Application::instance().cancelTimer(timerId);
+    }
+    timerId = 0;
+  }
+
+  void set(std::uint64_t id) {
+    if (id == timerId) {
+      return;
+    }
+    cancel();
+    timerId = id;
+    if (id != 0) {
+      gCaretBlinkTimerIds.insert(id);
+    }
+  }
+
+  std::uint64_t get() const { return timerId; }
+};
+
 /// Half-period of the 1.06 s blink in render() — redraw twice per full cycle, no per-frame requestRedraw.
 void ensureCaretBlinkTimerBridge() {
   std::call_once(gCaretBlinkTimerBridgeOnce, [] {
@@ -548,7 +582,7 @@ Element TextInput::body() const {
   auto lastBlink = useState(duration_cast<nanoseconds>(steady_clock::now().time_since_epoch()));
   auto mouseDragSelecting = useState(false);
   auto mouseDragAnchorByte = useState(0);
-  auto blinkCaretTimerId = useState(std::uint64_t{0});
+  CaretBlinkTimerSlot& blinkCaretTimer = StateStore::current()->claimSlot<CaretBlinkTimerSlot>();
 
   std::string const& bufRef = *val;
   int cb = detail::utf8Clamp(bufRef, *caretByte);
@@ -585,18 +619,12 @@ Element TextInput::body() const {
 
   if (focused && !isDisabled) {
     ensureCaretBlinkTimerBridge();
-    if (*blinkCaretTimerId == 0) {
+    if (blinkCaretTimer.get() == 0) {
       std::uint64_t const id = Application::instance().scheduleRepeatingTimer(std::chrono::nanoseconds(530'000'000), 0);
-      blinkCaretTimerId = id;
-      gCaretBlinkTimerIds.insert(id);
+      blinkCaretTimer.set(id);
     }
   } else {
-    if (*blinkCaretTimerId != 0) {
-      std::uint64_t const id = *blinkCaretTimerId;
-      gCaretBlinkTimerIds.erase(id);
-      Application::instance().cancelTimer(id);
-      blinkCaretTimerId = std::uint64_t{0};
-    }
+    blinkCaretTimer.cancel();
   }
 
   std::function<void(std::string const&)> const onCh = onChange;
