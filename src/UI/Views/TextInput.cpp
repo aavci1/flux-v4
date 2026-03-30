@@ -563,7 +563,7 @@ void TextInputView::render(Canvas& canvas, Rect frame) const {
     bool const caretVisible = std::fmod(elapsed, 1.06) < 0.53;
     if (caretVisible) {
       float const cx = content.x + cachedCaretX - scroll;
-      canvas.drawLine({cx, lineTop}, {cx, lineTop + lineH}, StrokeStyle::solid(caretColor, 1.5f));
+      canvas.drawLine({cx, lineTop}, {cx, lineTop + lineH}, StrokeStyle::solid(caretColor, 2.0f));
     }
   }
 
