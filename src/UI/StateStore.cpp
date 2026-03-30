@@ -27,10 +27,6 @@ void StateStore::endRebuild() {
 }
 
 void StateStore::shutdown() {
-  for (auto& [key, cs] : states_) {
-    (void)cs;
-    visited_.insert(key);
-  }
   states_.clear();
   visited_.clear();
   activeStack_.clear();

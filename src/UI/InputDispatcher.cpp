@@ -339,8 +339,11 @@ void InputDispatcher::onPointerDown(InputEvent const& e) {
     OverlayEntry const* top = window_.overlayManager().top();
     if (top && !top->config.modal && top->config.dismissOnOutsideTap) {
       window_.removeOverlay(top->id);
-      cursor_.updateForPoint(p, gesture_, overlays, graph, em);
-      hover_.updateForPoint(p, overlays, graph, em);
+      // `overlays` was built before removal; the dismissed entry is freed — no overlays left for
+      // hit-testing in this path (same as resolving only the main tree).
+      std::vector<OverlayEntry const*> const noOverlays{};
+      cursor_.updateForPoint(p, gesture_, noOverlays, graph, em);
+      hover_.updateForPoint(p, noOverlays, graph, em);
       return;
     }
   }

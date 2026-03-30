@@ -39,12 +39,11 @@ bool inputDebugEnabled() {
 } // namespace
 
 BuildOrchestrator::BuildOrchestrator(Window& window, FocusController& focus, HoverController& hover,
-                                   GestureTracker& gesture, Runtime* runtime)
+                                   GestureTracker& gesture)
     : window_(window)
     , focus_(focus)
     , hover_(hover)
-    , gesture_(gesture)
-    , runtime_(runtime) {
+    , gesture_(gesture) {
   (void)hover_;
 }
 
@@ -65,7 +64,7 @@ void BuildOrchestrator::subscribeToRebuild(std::function<void()> onFrameNeeded) 
   rebuildHandle_ = Application::instance().onNextFrameNeeded(std::move(onFrameNeeded));
 }
 
-void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride) {
+void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runtime) {
   if (sizeOverride.has_value()) {
     gesture_.clearPress();
   }
@@ -104,7 +103,7 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride) {
   eventMap_ = std::move(newMap);
   focus_.validateAfterRebuild(eventMap_);
 
-  window_.overlayManager().rebuild(sz, *runtime_);
+  window_.overlayManager().rebuild(sz, runtime);
 
   std::swap(actionRegistryBuild_, actionRegistryCommitted_);
 

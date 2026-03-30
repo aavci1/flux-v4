@@ -61,7 +61,7 @@ thread_local Runtime* Runtime::sCurrent = nullptr;
 Runtime::Runtime(Window& window)
     : window_(window)
     , cursor_(window)
-    , buildOrchestrator_(window, focus_, hover_, gesture_, this)
+    , buildOrchestrator_(window, focus_, hover_, gesture_)
     , dispatcher_(window, focus_, hover_, gesture_, cursor_, buildOrchestrator_, windowHasFocus_) {
   buildOrchestrator_.subscribeToRebuild([this]() { rebuild(std::nullopt); });
   subscribeInput();
@@ -115,7 +115,7 @@ std::optional<ComponentKey> Runtime::tapAnchorLeafKeySnapshot() const {
 
 void Runtime::rebuild(std::optional<Size> sizeOverride) {
   sCurrent = this;
-  buildOrchestrator_.rebuild(sizeOverride);
+  buildOrchestrator_.rebuild(sizeOverride, *this);
   sCurrent = nullptr;
 }
 

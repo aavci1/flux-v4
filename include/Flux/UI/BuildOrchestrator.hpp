@@ -24,8 +24,7 @@ class Window;
 /// Owns `StateStore`, `LayoutEngine`, `RootHolder`, and `LayoutRectCache`.
 class BuildOrchestrator {
 public:
-  BuildOrchestrator(Window& window, FocusController& focus, HoverController& hover, GestureTracker& gesture,
-                    Runtime* runtime);
+  BuildOrchestrator(Window& window, FocusController& focus, HoverController& hover, GestureTracker& gesture);
 
   ~BuildOrchestrator();
 
@@ -33,7 +32,8 @@ public:
   /// Registers the reactive frame callback; typically `[&] { runtime.rebuild(...); }` so `sCurrent` is set.
   void subscribeToRebuild(std::function<void()> onFrameNeeded);
 
-  void rebuild(std::optional<Size> sizeOverride = std::nullopt);
+  /// `runtime` is passed in for `OverlayManager::rebuild` only (not stored — avoids a header cycle).
+  void rebuild(std::optional<Size> sizeOverride, Runtime& runtime);
 
   StateStore& stateStore() noexcept { return stateStore_; }
   LayoutEngine& layoutEngine() noexcept { return layoutEngine_; }
@@ -50,7 +50,6 @@ private:
   FocusController& focus_;
   HoverController& hover_;
   GestureTracker& gesture_;
-  Runtime* runtime_{};
 
   std::unique_ptr<RootHolder> rootHolder_;
   LayoutEngine layoutEngine_;
