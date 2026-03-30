@@ -12,28 +12,41 @@
 namespace flux {
 
 Element Alert::body() const {
-  return ZStack{
+  // A lone ZStack under the full-window overlay expands every child to the window size
+  // (see LayoutZStack — children share the stack's max proposed size). Spacers + flex center
+  // the card so the inner ZStack only receives the card's intrinsic width/height.
+  return VStack{
+      .spacing = 0.f,
       .hAlign = HorizontalAlignment::Center,
-      .vAlign = VerticalAlignment::Center,
       .children =
           {
-              ZStack{
+              Element{Spacer{}}.withFlex(1.f),
+              HStack{
+                  .spacing = 0.f,
                   .children =
                       {
-                          Rectangle{
-                              .frame = {0.f, 0.f, cardWidth, 0.f},
-                              .cornerRadius = cornerRadius,
-                              .fill = FillStyle::solid(cardColor),
-                              .stroke = StrokeStyle::solid(cardStrokeColor, 1.f),
+                          Element{Spacer{}}.withFlex(1.f),
+                          ZStack{
+                              .children =
+                                  {
+                                      Rectangle{
+                                          .frame = {0.f, 0.f, cardWidth, 0.f},
+                                          .cornerRadius = cornerRadius,
+                                          .fill = FillStyle::solid(cardColor),
+                                          .stroke = StrokeStyle::solid(cardStrokeColor, 1.f),
+                                      },
+                                      VStack{
+                                          .spacing = 12.f,
+                                          .padding = 24.f,
+                                          .hAlign = HorizontalAlignment::Leading,
+                                          .children = buildContent(),
+                                      },
+                                  },
                           },
-                          VStack{
-                              .spacing = 12.f,
-                              .padding = 24.f,
-                              .hAlign = HorizontalAlignment::Leading,
-                              .children = buildContent(),
-                          },
+                          Element{Spacer{}}.withFlex(1.f),
                       },
               },
+              Element{Spacer{}}.withFlex(1.f),
           },
   };
 }
