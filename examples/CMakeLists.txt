@@ -68,3 +68,6 @@ target_link_libraries(picker_demo PRIVATE flux)
 
 add_executable(theme_demo theme-demo/main.cpp)
 target_link_libraries(theme_demo PRIVATE flux)
+
+add_executable(stack_demo stack-demo/main.cpp)
+target_link_libraries(stack_demo PRIVATE flux)
