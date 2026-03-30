@@ -1301,4 +1301,16 @@ std::optional<Rect> useLayoutRect() {
   return rt->layoutRectForCurrentComponent();
 }
 
+namespace detail {
+
+EnvironmentLayer const* windowEnvironmentLayerForCurrentRuntime() {
+  Runtime* const rt = Runtime::current();
+  if (!rt) {
+    return nullptr;
+  }
+  return &rt->window().environmentLayer();
+}
+
+} // namespace detail
+
 } // namespace flux

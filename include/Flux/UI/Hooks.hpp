@@ -172,8 +172,9 @@ void useViewAction(std::string const& name, std::function<void()> handler,
 void useWindowAction(std::string const& name, std::function<void()> handler,
                      std::function<bool()> isEnabled = {});
 
-/// Nearest environment value of type \p T (subtree overrides, then window baseline pushed during rebuild),
-/// or a static default when called outside a build pass.
+/// Nearest environment value of type \p T: (1) thread-local stack (subtree \c .environment() and the
+/// window baseline pushed during rebuild), (2) else the active \c Runtime's window \c EnvironmentLayer,
+/// (3) else a static default-constructed \p T (only when no window is current).
 template<typename T>
 T const& useEnvironment();
 
@@ -183,10 +184,20 @@ T const& useEnvironment();
 
 namespace flux {
 
+namespace detail {
+/// Used by \c useEnvironment when the stack has no value (e.g. outside \c rebuild). Not for app code.
+EnvironmentLayer const* windowEnvironmentLayerForCurrentRuntime();
+}
+
 template<typename T>
 T const& useEnvironment() {
   if (T const* v = EnvironmentStack::current().find<T>()) {
     return *v;
+  }
+  if (EnvironmentLayer const* layer = detail::windowEnvironmentLayerForCurrentRuntime()) {
+    if (T const* v = layer->get<T>()) {
+      return *v;
+    }
   }
   static T const sDefault{};
   return sDefault;

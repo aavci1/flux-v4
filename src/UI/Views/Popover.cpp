@@ -159,6 +159,7 @@ std::tuple<std::function<void(Popover)>, std::function<void()>, bool> usePopover
 
     Vec2 const offset = popoverOverlayGapOffset(resolved, gap);
 
+    // show() runs outside a build pass — read window storage, not useEnvironment (backdrop is show-time).
     FluxTheme const* tp = wPtr->environmentValue<FluxTheme>();
     FluxTheme const theme = tp ? *tp : FluxTheme::light();
     Color const backdropResolved = resolveColor(popover.backdropColor, theme.overlayPopoverBackdrop);

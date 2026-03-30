@@ -151,6 +151,7 @@ std::tuple<std::function<void(Alert)>, std::function<void()>, bool> useAlert() {
       };
     }
 
+    // show() runs outside a build pass — read window storage, not useEnvironment (backdrop is show-time).
     FluxTheme const* tp = wPtr->environmentValue<FluxTheme>();
     FluxTheme const theme = tp ? *tp : FluxTheme::light();
     Color const backdrop = resolveColor(alert.backdropColor, theme.overlayBackdropScrim);
