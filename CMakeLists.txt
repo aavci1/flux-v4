@@ -114,6 +114,9 @@ add_library(flux STATIC
   src/UI/Views/TextInput.cpp
   src/UI/Views/Button.cpp
   src/UI/Views/Alert.cpp
+  src/UI/Views/Popover.cpp
+  src/UI/Views/PopoverCalloutPath.cpp
+  src/UI/PopoverCalloutShapeElement.cpp
   src/Scene/SceneGraphBounds.cpp
   src/Scene/NodeStore.cpp
   src/Scene/SceneGraph.cpp

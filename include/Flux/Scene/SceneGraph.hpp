@@ -60,6 +60,9 @@ public:
 
   NodeId root() const { return root_; }
 
+  /// Parent of \p child in the tree (`nullopt` if \p child is the root or unknown).
+  std::optional<NodeId> parentOf(NodeId child) const;
+
 private:
   std::optional<NodeId> findParent(NodeId subtree, NodeId target) const;
   bool isDescendant(NodeId ancestor, NodeId possibleDescendant) const;

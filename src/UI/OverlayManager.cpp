@@ -40,36 +40,46 @@ LayoutConstraints OverlayManager::resolveConstraints(Size windowSize, OverlayCon
   return cs;
 }
 
-Rect OverlayManager::resolveFrame(Size win, OverlayConfig const& cfg, Size content) const {
+Rect OverlayManager::resolveFrame(Size win, OverlayConfig const& cfg, Rect contentBounds) const {
   if (!cfg.anchor.has_value()) {
     return {0.f, 0.f, win.width, win.height};
   }
   Rect const& a = *cfg.anchor;
+  float const cx = a.x + a.width * 0.5f;
+  float const cy = a.y + a.height * 0.5f;
+  // Geometric center of drawn content in root-local coords (may be != (W/2, H/2) if min x/y != 0).
+  float const centerLocalX = contentBounds.x + contentBounds.width * 0.5f;
+  float const centerLocalY = contentBounds.y + contentBounds.height * 0.5f;
+  // Tip Y for Below: top of drawable union (arrow tip points up at anchor bottom).
+  float const tipTopLocalY = contentBounds.y;
+  // Tip Y for Above: bottom of drawable union (arrow tip points down at anchor top).
+  float const tipBottomLocalY = contentBounds.y + contentBounds.height;
   float x = 0.f;
   float y = 0.f;
+  // Center the arrow horizontally on the anchor; vertically align the tip to the anchor edge.
   switch (cfg.placement) {
   case OverlayConfig::Placement::Below:
-    x = a.x;
-    y = a.y + a.height;
+    x = cx - centerLocalX;
+    y = a.y + a.height - tipTopLocalY;
     break;
   case OverlayConfig::Placement::Above:
-    x = a.x;
-    y = a.y - content.height;
+    x = cx - centerLocalX;
+    y = a.y - tipBottomLocalY;
     break;
   case OverlayConfig::Placement::End:
     x = a.x + a.width;
-    y = a.y;
+    y = cy - centerLocalY;
     break;
   case OverlayConfig::Placement::Start:
-    x = a.x - content.width;
-    y = a.y;
+    x = a.x - contentBounds.width;
+    y = cy - centerLocalY;
     break;
   }
   x += cfg.offset.x;
   y += cfg.offset.y;
-  x = std::clamp(x, 0.f, std::max(0.f, win.width - content.width));
-  y = std::clamp(y, 0.f, std::max(0.f, win.height - content.height));
-  return {x, y, content.width, content.height};
+  x = std::clamp(x, 0.f, std::max(0.f, win.width - contentBounds.width));
+  y = std::clamp(y, 0.f, std::max(0.f, win.height - contentBounds.height));
+  return {x, y, contentBounds.width, contentBounds.height};
 }
 
 void OverlayManager::insertModalChrome(OverlayEntry& entry, Size windowSize) {
@@ -119,6 +129,11 @@ void OverlayManager::insertModalChrome(OverlayEntry& entry, Size windowSize) {
 void OverlayManager::rebuild(Size windowSize, Runtime& runtime) {
   for (std::unique_ptr<OverlayEntry>& up : overlays_) {
     OverlayEntry& entry = *up;
+    if (entry.config.anchorTrackLeafKey.has_value() && !entry.config.anchorTrackLeafKey->empty()) {
+      if (auto r = runtime.layoutRectForLeafKeyPrefix(*entry.config.anchorTrackLeafKey)) {
+        entry.config.anchor = *r;
+      }
+    }
     entry.graph.clear();
     entry.eventMap.clear();
 
@@ -139,15 +154,15 @@ void OverlayManager::rebuild(Size windowSize, Runtime& runtime) {
     entry.stateStore->setOverlayScope(std::nullopt);
     entry.stateStore->endRebuild();
 
-    Size contentSize = measureRootContentSize(entry.graph);
-    if (contentSize.width <= 0.f || !std::isfinite(contentSize.width)) {
-      contentSize.width = 1.f;
+    Rect contentBounds = measureRootContentBounds(entry.graph);
+    if (contentBounds.width <= 0.f || !std::isfinite(contentBounds.width)) {
+      contentBounds.width = 1.f;
     }
-    if (contentSize.height <= 0.f || !std::isfinite(contentSize.height)) {
-      contentSize.height = 1.f;
+    if (contentBounds.height <= 0.f || !std::isfinite(contentBounds.height)) {
+      contentBounds.height = 1.f;
     }
 
-    entry.resolvedFrame = resolveFrame(windowSize, entry.config, contentSize);
+    entry.resolvedFrame = resolveFrame(windowSize, entry.config, contentBounds);
 
     if (entry.config.modal) {
       insertModalChrome(entry, windowSize);
@@ -166,6 +181,9 @@ OverlayId OverlayManager::push(Element content, OverlayConfig config, Runtime* r
 
   if (runtime) {
     runtime->onOverlayPushed(*overlays_.back());
+    Size const sz = runtime->window().getSize();
+    rebuild(sz, *runtime);
+    runtime->window().requestRedraw();
   }
   Application::instance().markReactiveDirty();
   return overlays_.back()->id;

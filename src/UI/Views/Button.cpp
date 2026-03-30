@@ -213,6 +213,8 @@ Element Button::body() const {
                 .horizontalAlignment = isLink ? HorizontalAlignment::Leading : HorizontalAlignment::Center,
                 .verticalAlignment = VerticalAlignment::Center,
                 .padding = effPaddingH,
+                .onTap = effectivelyDisabled ? nullptr : std::function<void()>{ handleTap },
+                .cursor = effectivelyDisabled ? Cursor::Inherit : Cursor::Hand,
             },
         },
   };

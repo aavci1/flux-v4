@@ -31,6 +31,10 @@ struct OverlayConfig {
 
   std::optional<Rect> anchor;
 
+  /// When set, each overlay rebuild refreshes `anchor` from `Runtime::layoutRectForLeafKeyPrefix`
+  /// so the popover follows the control (e.g. scroll) instead of staying at the initial tap rect.
+  std::optional<ComponentKey> anchorTrackLeafKey;
+
   enum class Placement { Below, Above, End, Start };
   Placement placement = Placement::Below;
 
@@ -83,7 +87,7 @@ public:
   std::vector<std::unique_ptr<OverlayEntry>> const& entries() const { return overlays_; }
 
 private:
-  Rect resolveFrame(Size windowSize, OverlayConfig const& config, Size contentSize) const;
+  Rect resolveFrame(Size windowSize, OverlayConfig const& config, Rect contentBounds) const;
   LayoutConstraints resolveConstraints(Size windowSize, OverlayConfig const& config) const;
 
   void insertModalChrome(OverlayEntry& entry, Size windowSize);

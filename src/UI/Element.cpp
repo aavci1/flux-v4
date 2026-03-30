@@ -151,9 +151,20 @@ void Element::Model<Text>::build(BuildContext& ctx) const {
         .layout = layout,
         .origin = {inner.x, inner.y},
     });
-    if (value.cursor != Cursor::Inherit) {
+    bool const textFocusable = value.focusable || static_cast<bool>(value.onKeyDown) ||
+                               static_cast<bool>(value.onKeyUp) || static_cast<bool>(value.onTextInput);
+    if (value.onTap || value.onPointerDown || value.onPointerUp || value.onPointerMove || value.onKeyDown ||
+        value.onKeyUp || value.onTextInput || value.focusable || value.cursor != Cursor::Inherit) {
       ctx.eventMap().insert(textId, EventHandlers{
           .stableTargetKey = stableKey,
+          .onTap = value.onTap,
+          .onPointerDown = value.onPointerDown,
+          .onPointerUp = value.onPointerUp,
+          .onPointerMove = value.onPointerMove,
+          .onKeyDown = value.onKeyDown,
+          .onKeyUp = value.onKeyUp,
+          .onTextInput = value.onTextInput,
+          .focusable = textFocusable,
           .cursor = value.cursor,
       });
     }
@@ -235,11 +246,16 @@ Size Element::Model<views::Image>::measure(BuildContext& ctx, LayoutConstraints 
 
 void Element::Model<PathShape>::build(BuildContext& ctx) const {
   ctx.advanceChildSlot();
-  ctx.graph().addPath(ctx.parentLayer(), PathNode{
-      .path = value.path,
-      .fill = value.fill,
-      .stroke = value.stroke,
-  });
+  PathNode node{.path = value.path, .fill = value.fill, .stroke = value.stroke};
+  Rect const cf = ctx.layoutEngine().childFrame();
+  if (cf.x != 0.f || cf.y != 0.f) {
+    LayerNode layer{};
+    layer.transform = Mat3::translate(cf.x, cf.y);
+    NodeId const lid = ctx.graph().addLayer(ctx.parentLayer(), std::move(layer));
+    ctx.graph().addPath(lid, std::move(node));
+  } else {
+    ctx.graph().addPath(ctx.parentLayer(), std::move(node));
+  }
 }
 
 Size Element::Model<PathShape>::measure(BuildContext& ctx, LayoutConstraints const&, TextSystem&) const {

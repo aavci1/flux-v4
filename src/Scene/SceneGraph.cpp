@@ -120,6 +120,13 @@ NodeId SceneGraph::addCustomRender(NodeId parent, CustomRenderNode node) {
 
 // DFS over the tree; O(subtree size). Mutations call this often — if rebuilds become hot, cache a
 // parent pointer per slot (or reverse map) so remove/reparent stay O(1) for parent lookup.
+std::optional<NodeId> SceneGraph::parentOf(NodeId child) const {
+  if (child == root_) {
+    return std::nullopt;
+  }
+  return findParent(root_, child);
+}
+
 std::optional<NodeId> SceneGraph::findParent(NodeId subtree, NodeId target) const {
   SceneNode const* sn = get(subtree);
   auto const* layer = std::get_if<LayerNode>(sn);

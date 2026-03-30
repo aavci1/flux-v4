@@ -477,3 +477,23 @@ inline Element Element::withFlex(float grow, float shrink, float minMain) && {
 }
 
 } // namespace flux
+
+#include <Flux/UI/Views/PopoverCalloutShape.hpp>
+
+namespace flux {
+
+template<>
+struct Element::Model<PopoverCalloutShape> final : Concept {
+  PopoverCalloutShape value;
+  explicit Model(PopoverCalloutShape c) : value(std::move(c)) {}
+  std::unique_ptr<Concept> clone() const override {
+    return std::make_unique<Model<PopoverCalloutShape>>(value);
+  }
+  void build(BuildContext& ctx) const override;
+  Size measure(BuildContext& ctx, LayoutConstraints const& constraints, TextSystem& textSystem) const override;
+  float flexGrow() const override { return detail::flexGrowOf(value); }
+  float flexShrink() const override { return detail::flexShrinkOf(value); }
+  float minMainSize() const override { return detail::minMainSizeOf(value); }
+};
+
+} // namespace flux

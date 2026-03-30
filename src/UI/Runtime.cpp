@@ -103,6 +103,27 @@ char const* inputKindName(InputEvent::Kind k) {
   }
 }
 
+/// Prefer targets that are not `cursorPassthrough` (e.g. ScrollView's full-viewport drag layer) so
+/// hits reach stacked content (buttons); fall back to include passthrough so empty viewport drags work.
+std::optional<HitResult> hitTestPointerTarget(EventMap const& em, SceneGraph const& graph, Point windowPoint) {
+  auto const acceptAll = [&em](NodeId id) { return em.find(id) != nullptr; };
+  auto const acceptPrimary = [&em](NodeId id) {
+    EventHandlers const* h = em.find(id);
+    if (!h) {
+      return false;
+    }
+    if (h->cursorPassthrough) {
+      return false;
+    }
+    return true;
+  };
+  HitTester tester{};
+  if (auto r = tester.hitTest(graph, windowPoint, acceptPrimary)) {
+    return r;
+  }
+  return tester.hitTest(graph, windowPoint, acceptAll);
+}
+
 } // namespace
 
 thread_local Runtime* Runtime::sCurrent = nullptr;
@@ -272,7 +293,8 @@ void Runtime::fillLayoutRectCache(SceneGraph const& graph, BuildContext const& c
   layoutRectPrev_.swap(layoutRectCurrent_);
   layoutRectCurrent_.clear();
   for (auto const& [key, nodeId] : ctx.subtreeRootLayers()) {
-    layoutRectCurrent_[key] = unionSubtreeBounds(graph, nodeId, Mat3::identity());
+    Mat3 const pw = subtreeAncestorWorldTransform(graph, nodeId);
+    layoutRectCurrent_[key] = unionSubtreeBounds(graph, nodeId, pw);
   }
 }
 
@@ -289,6 +311,43 @@ std::optional<Rect> Runtime::layoutRectForCurrentComponent() const {
     return std::nullopt;
   }
   return it->second;
+}
+
+std::optional<Rect> Runtime::layoutRectForKey(ComponentKey const& key) const {
+  auto it = layoutRectCurrent_.find(key);
+  if (it == layoutRectCurrent_.end()) {
+    return std::nullopt;
+  }
+  return it->second;
+}
+
+std::optional<Rect> Runtime::layoutRectForTapLeafKey(ComponentKey const& stableTargetKey) const {
+  for (std::size_t len = stableTargetKey.size(); len > 0; --len) {
+    ComponentKey prefix(stableTargetKey.begin(),
+                        stableTargetKey.begin() + static_cast<std::ptrdiff_t>(len));
+    if (auto it = layoutRectCurrent_.find(prefix); it != layoutRectCurrent_.end()) {
+      return it->second;
+    }
+  }
+  return std::nullopt;
+}
+
+std::optional<Rect> Runtime::layoutRectForTapAnchor() const {
+  if (pendingTapTargetKey_.empty()) {
+    return std::nullopt;
+  }
+  return layoutRectForTapLeafKey(pendingTapTargetKey_);
+}
+
+std::optional<Rect> Runtime::layoutRectForLeafKeyPrefix(ComponentKey const& stableTargetKey) const {
+  return layoutRectForTapLeafKey(stableTargetKey);
+}
+
+std::optional<ComponentKey> Runtime::tapAnchorLeafKeySnapshot() const {
+  if (pendingTapTargetKey_.empty()) {
+    return std::nullopt;
+  }
+  return pendingTapTargetKey_;
 }
 
 void Runtime::onOverlayPushed(OverlayEntry& entry) {
@@ -824,7 +883,6 @@ void Runtime::handleInput(InputEvent const& e) {
     return;
   }
   Point const p{e.position.x, e.position.y};
-  auto const acceptFnMain = [this](NodeId id) { return eventMap_.find(id) != nullptr; };
 
   static int moveLogCounter = 0;
 
@@ -838,8 +896,7 @@ void Runtime::handleInput(InputEvent const& e) {
     for (auto it = oentries.rbegin(); it != oentries.rend(); ++it) {
       OverlayEntry const& oe = **it;
       Point const pl{p.x - oe.resolvedFrame.x, p.y - oe.resolvedFrame.y};
-      auto const acceptFn = [&oe](NodeId id) { return oe.eventMap.find(id) != nullptr; };
-      if (auto hit = HitTester{}.hitTest(oe.graph, pl, acceptFn)) {
+      if (auto hit = hitTestPointerTarget(oe.eventMap, oe.graph, pl)) {
         if (dbg) {
           std::fprintf(stderr,
                        "[flux:input] PointerDown hit local=(%.1f,%.1f) ",
@@ -867,16 +924,19 @@ void Runtime::handleInput(InputEvent const& e) {
         updateHoveredForPoint(p);
         return;
       }
+      if (oe.config.dismissOnOutsideTap) {
+        window_.removeOverlay(oe.id);
+        updateCursorForPoint(p);
+        updateHoveredForPoint(p);
+        return;
+      }
       if (oe.config.modal) {
-        if (oe.config.dismissOnOutsideTap) {
-          window_.removeOverlay(oe.id);
-        }
         updateCursorForPoint(p);
         updateHoveredForPoint(p);
         return;
       }
     }
-    auto hit = HitTester{}.hitTest(graph, p, acceptFnMain);
+    auto hit = hitTestPointerTarget(eventMap_, graph, p);
     if (hit) {
       if (dbg) {
         std::fprintf(stderr,
@@ -954,8 +1014,7 @@ void Runtime::handleInput(InputEvent const& e) {
     for (auto oit = oentries.rbegin(); oit != oentries.rend(); ++oit) {
       OverlayEntry const& oe = **oit;
       Point const pl{p.x - oe.resolvedFrame.x, p.y - oe.resolvedFrame.y};
-      auto const acceptFn = [&oe](NodeId id) { return oe.eventMap.find(id) != nullptr; };
-      if (auto hit = tester.hitTest(oe.graph, pl, acceptFn)) {
+      if (auto hit = hitTestPointerTarget(oe.eventMap, oe.graph, pl)) {
         if (logThisMove) {
           std::fprintf(stderr,
                        "[flux:input] PointerMove hit-test path local=(%.1f,%.1f) ",
@@ -970,7 +1029,7 @@ void Runtime::handleInput(InputEvent const& e) {
         return;
       }
     }
-    if (auto hit = tester.hitTest(graph, p, acceptFnMain)) {
+    if (auto hit = hitTestPointerTarget(eventMap_, graph, p)) {
       if (logThisMove) {
         std::fprintf(stderr,
                      "[flux:input] PointerMove hit-test path local=(%.1f,%.1f) ",
@@ -1003,8 +1062,7 @@ void Runtime::handleInput(InputEvent const& e) {
   for (auto it = entriesUp.rbegin(); it != entriesUp.rend(); ++it) {
     OverlayEntry const& oe = **it;
     Point const pl{p.x - oe.resolvedFrame.x, p.y - oe.resolvedFrame.y};
-    auto const acceptFn = [&oe](NodeId id) { return oe.eventMap.find(id) != nullptr; };
-    if (auto hit = tester.hitTest(oe.graph, pl, acceptFn)) {
+    if (auto hit = hitTestPointerTarget(oe.eventMap, oe.graph, pl)) {
       if (dbg) {
         std::fprintf(stderr,
                      "[flux:input] PointerUp release on interactive node local=(%.1f,%.1f) ",
@@ -1021,7 +1079,9 @@ void Runtime::handleInput(InputEvent const& e) {
               released->hadOnTapOnDown && oe.eventMap.find(released->nodeId) == nullptr &&
               !released->stableTargetKey.empty() && h->stableTargetKey == released->stableTargetKey;
           if (sameNode || retargetAfterRebuild) {
+            pendingTapTargetKey_ = released->stableTargetKey;
             h->onTap();
+            pendingTapTargetKey_.clear();
           }
         }
       }
@@ -1031,7 +1091,7 @@ void Runtime::handleInput(InputEvent const& e) {
     }
   }
 
-  auto hit = tester.hitTest(graph, p, acceptFnMain);
+  auto hit = hitTestPointerTarget(eventMap_, graph, p);
   if (hit) {
     if (dbg) {
       std::fprintf(stderr,
@@ -1049,7 +1109,9 @@ void Runtime::handleInput(InputEvent const& e) {
             released->hadOnTapOnDown && eventMap_.find(released->nodeId) == nullptr &&
             !released->stableTargetKey.empty() && h->stableTargetKey == released->stableTargetKey;
         if (sameNode || retargetAfterRebuild) {
+          pendingTapTargetKey_ = released->stableTargetKey;
           h->onTap();
+          pendingTapTargetKey_.clear();
         }
       }
     }

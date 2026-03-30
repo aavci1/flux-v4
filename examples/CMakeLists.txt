@@ -59,3 +59,6 @@ target_link_libraries(textinput_demo PRIVATE flux)
 
 add_executable(button_demo button-demo/main.cpp)
 target_link_libraries(button_demo PRIVATE flux)
+
+add_executable(popover_demo popover-demo/main.cpp)
+target_link_libraries(popover_demo PRIVATE flux)

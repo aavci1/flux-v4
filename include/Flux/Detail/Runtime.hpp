@@ -67,6 +67,23 @@ public:
 
   std::optional<Rect> layoutRectForCurrentComponent() const;
 
+  /// Last completed layout union for the composite subtree registered at \p key (same map as
+  /// `useLayoutRect`). Safe from event handlers when given a key captured during `body()`.
+  std::optional<Rect> layoutRectForKey(ComponentKey const& key) const;
+
+  /// During a pointer-originated `onTap`, the layout union for the innermost composite ancestor of
+  /// the tapped node (longest prefix of the leaf `stableTargetKey` present in the layout cache).
+  /// Empty when the tap did not come from a primary press (e.g. keyboard) or outside `onTap`.
+  std::optional<Rect> layoutRectForTapAnchor() const;
+
+  /// Longest-prefix layout rect for a leaf stable key (same lookup as `layoutRectForTapAnchor`).
+  /// Used by overlay anchor tracking when the popover should follow a scrolled control.
+  std::optional<Rect> layoutRectForLeafKeyPrefix(ComponentKey const& stableTargetKey) const;
+
+  /// While inside `onTap` from a primary pointer release, the leaf `stableTargetKey` used for tap
+  /// anchor layout. Empty after `onTap` returns.
+  std::optional<ComponentKey> tapAnchorLeafKeySnapshot() const;
+
   /// Layer-local rect for the layout slot of the component currently being built. Valid only during
   /// `rebuild` (e.g. inside `body()`). Matches `ctx.layoutEngine().childFrame()` when wiring leaves.
   Rect buildSlotRect() const { return layoutEngine_.childFrame(); }
@@ -106,6 +123,7 @@ private:
   void cycleTabFocusNonModal(bool reverse);
   void cycleTabFocusInMap(EventMap const& em, bool reverse, std::optional<OverlayId> overlayId);
   void fillLayoutRectCache(SceneGraph const& graph, BuildContext const& ctx);
+  std::optional<Rect> layoutRectForTapLeafKey(ComponentKey const& stableTargetKey) const;
 
   static thread_local Runtime* sCurrent;
 
@@ -154,6 +172,9 @@ private:
 
   std::unordered_map<ComponentKey, Rect, ComponentKeyHash> layoutRectPrev_{};
   std::unordered_map<ComponentKey, Rect, ComponentKeyHash> layoutRectCurrent_{};
+
+  /// Set immediately before `EventHandlers::onTap` for a pointer release; cleared after `onTap` returns.
+  ComponentKey pendingTapTargetKey_{};
 
   ActionRegistry actionRegistryBuild_{};
   ActionRegistry actionRegistryCommitted_{};

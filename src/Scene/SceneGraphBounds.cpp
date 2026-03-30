@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <vector>
 #include <variant>
 
 namespace flux {
@@ -93,6 +94,30 @@ void accumulate(NodeId id, SceneGraph const& graph, Mat3 const& parentWorld, Rec
 
 } // namespace
 
+Mat3 subtreeAncestorWorldTransform(SceneGraph const& graph, NodeId subtreeRoot) {
+  std::vector<NodeId> path;
+  NodeId cur = subtreeRoot;
+  while (true) {
+    path.push_back(cur);
+    if (cur == graph.root()) {
+      break;
+    }
+    auto p = graph.parentOf(cur);
+    if (!p) {
+      break;
+    }
+    cur = *p;
+  }
+  std::reverse(path.begin(), path.end());
+  Mat3 w = Mat3::identity();
+  for (std::size_t i = 1; i + 1 < path.size(); ++i) {
+    if (auto const* layer = graph.node<LayerNode>(path[i])) {
+      w = w * layer->transform;
+    }
+  }
+  return w;
+}
+
 Rect unionSubtreeBounds(SceneGraph const& graph, NodeId subtreeRoot, Mat3 parentWorld) {
   Rect acc{};
   bool has = false;
@@ -103,7 +128,7 @@ Rect unionSubtreeBounds(SceneGraph const& graph, NodeId subtreeRoot, Mat3 parent
   return acc;
 }
 
-Size measureRootContentSize(SceneGraph const& graph) {
+Rect measureRootContentBounds(SceneGraph const& graph) {
   Rect acc{};
   bool has = false;
   auto const* root = graph.node<LayerNode>(graph.root());
@@ -117,7 +142,15 @@ Size measureRootContentSize(SceneGraph const& graph) {
   if (!has) {
     return {};
   }
-  return {acc.width, acc.height};
+  return acc;
+}
+
+Size measureRootContentSize(SceneGraph const& graph) {
+  Rect const b = measureRootContentBounds(graph);
+  if (b.width <= 0.f && b.height <= 0.f) {
+    return {};
+  }
+  return {b.width, b.height};
 }
 
 } // namespace flux
