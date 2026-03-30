@@ -321,8 +321,12 @@ void InputDispatcher::onPointerDown(InputEvent const& e) {
         if (h->onPointerDown) {
           h->onPointerDown(hit->localPoint);
         }
-        if (oe.config.modal && shouldClaimFocus(*h)) {
-          focus_.set(h->stableTargetKey, oe.id, FocusInputKind::Pointer);
+        if (oe.config.modal) {
+          if (shouldClaimFocus(*h)) {
+            focus_.set(h->stableTargetKey, oe.id, FocusInputKind::Pointer);
+          } else if (!h->stableTargetKey.empty()) {
+            focus_.claimFocusForSubtree(h->stableTargetKey, oe.eventMap, oe.id);
+          }
         }
       }
       cursor_.updateForPoint(p, gesture_, overlays, graph, em);
@@ -361,6 +365,8 @@ void InputDispatcher::onPointerDown(InputEvent const& e) {
       }
       if (shouldClaimFocus(*h)) {
         focus_.set(h->stableTargetKey, std::nullopt, FocusInputKind::Pointer);
+      } else if (!h->stableTargetKey.empty()) {
+        focus_.claimFocusForSubtree(h->stableTargetKey, em, std::nullopt);
       }
     }
   } else if (dbg) {
@@ -537,8 +543,8 @@ void InputDispatcher::onPointerUp(InputEvent const& e) {
     }
   }
 
-  if (released && released->nodeId.isValid()) {
-    gesture_.dispatchTap(*released, p, overlays, graph, em);
+  if (released) {
+    gesture_.dispatchTap(*released, overlays, em);
   }
   cursor_.updateForPoint(p, gesture_, overlays, graph, em);
   hover_.updateForPoint(p, overlays, graph, em);

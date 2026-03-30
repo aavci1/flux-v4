@@ -4,7 +4,6 @@
 #include <Flux/UI/EventMap.hpp>
 #include <Flux/UI/Overlay.hpp>
 #include <Flux/Scene/SceneGraph.hpp>
-#include <Flux/Scene/HitTester.hpp>
 #include <Flux/Core/Types.hpp>
 
 #include <functional>
@@ -52,8 +51,7 @@ public:
 
   bool pressMatchesStoreContext(StateStore const& store) const noexcept;
 
-  bool dispatchTap(PressState const& released, Point upPoint,
-                   std::vector<OverlayEntry const*> const& overlayEntries, SceneGraph const& mainGraph,
+  bool dispatchTap(PressState const& released, std::vector<OverlayEntry const*> const& overlayEntries,
                    EventMap const& mainEventMap);
 
   ComponentKey const& pendingTapLeafKey() const noexcept { return pendingTapLeafKey_; }
@@ -67,8 +65,6 @@ public:
                                        SceneGraph const& mainGraph) const;
 
 private:
-  static bool keySharesPrefix(ComponentKey const& a, ComponentKey const& b) noexcept;
-
   std::optional<PressState> activePress_{};
   ComponentKey pendingTapLeafKey_{};
 };

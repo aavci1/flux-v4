@@ -42,6 +42,11 @@ public:
   void requestInSubtree(ComponentKey const& subtreeKey, EventMap const& eventMap,
                         std::optional<OverlayId> overlayId = std::nullopt);
 
+  /// When the hit target is not focusable (e.g. Text inside Button), focus the first focusable
+  /// leaf in \p em whose key shares a prefix with \p pressedKey (same composite subtree).
+  void claimFocusForSubtree(ComponentKey const& pressedKey, EventMap const& em,
+                            std::optional<OverlayId> overlayScope);
+
   /// Called by `BuildOrchestrator` when a modal overlay is pushed.
   void onOverlayPushed(OverlayEntry& entry);
 

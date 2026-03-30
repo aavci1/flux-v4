@@ -1,6 +1,7 @@
 #include <Flux/UI/FocusController.hpp>
 
 #include <Flux/Core/Application.hpp>
+#include <Flux/UI/ComponentKeyUtil.hpp>
 #include <Flux/UI/StateStore.hpp>
 
 #include <algorithm>
@@ -119,6 +120,19 @@ void FocusController::requestInSubtree(ComponentKey const& subtreeKey, EventMap 
     if (leafKey.size() >= subtreeKey.size() &&
         std::equal(subtreeKey.begin(), subtreeKey.end(), leafKey.begin())) {
       set(leafKey, overlayId, FocusInputKind::Keyboard);
+      return;
+    }
+  }
+}
+
+void FocusController::claimFocusForSubtree(ComponentKey const& pressedKey, EventMap const& em,
+                                           std::optional<OverlayId> overlayScope) {
+  if (pressedKey.empty()) {
+    return;
+  }
+  for (ComponentKey const& leafKey : em.focusOrder()) {
+    if (keySharesPrefix(leafKey, pressedKey)) {
+      set(leafKey, overlayScope, FocusInputKind::Pointer);
       return;
     }
   }

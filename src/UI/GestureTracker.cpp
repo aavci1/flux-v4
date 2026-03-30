@@ -5,17 +5,7 @@
 #include <Flux/UI/HitTestUtil.hpp>
 #include <Flux/UI/StateStore.hpp>
 
-#include <algorithm>
-
 namespace flux {
-
-bool GestureTracker::keySharesPrefix(ComponentKey const& a, ComponentKey const& b) noexcept {
-  if (a.empty() || b.empty()) {
-    return false;
-  }
-  std::size_t const len = std::min(a.size(), b.size());
-  return std::equal(a.begin(), a.begin() + static_cast<std::ptrdiff_t>(len), b.begin());
-}
 
 void GestureTracker::recordPress(NodeId nodeId, ComponentKey stableTargetKey, Point downPoint, bool hadOnTap,
                                  std::optional<OverlayId> overlayScope) {
@@ -101,9 +91,9 @@ void GestureTracker::cancelPress(Point windowPoint, std::vector<OverlayEntry con
   Application::instance().markReactiveDirty();
 }
 
-bool GestureTracker::dispatchTap(PressState const& released, Point upPoint,
+bool GestureTracker::dispatchTap(PressState const& released,
                                  std::vector<OverlayEntry const*> const& overlayEntries,
-                                 SceneGraph const& mainGraph, EventMap const& mainEventMap) {
+                                 EventMap const& mainEventMap) {
   if (released.cancelled || !released.hadOnTapOnDown) {
     return false;
   }
@@ -111,31 +101,31 @@ bool GestureTracker::dispatchTap(PressState const& released, Point upPoint,
     return false;
   }
 
-  for (OverlayEntry const* p : overlayEntries) {
-    OverlayEntry const& oe = *p;
-    Point const pl{ upPoint.x - oe.resolvedFrame.x, upPoint.y - oe.resolvedFrame.y };
-    if (auto hit = hitTestPointerTarget(oe.eventMap, oe.graph, pl)) {
-      if (EventHandlers const* h = oe.eventMap.find(hit->nodeId)) {
-        if (h->onTap && keySharesPrefix(h->stableTargetKey, released.stableTargetKey)) {
-          pendingTapLeafKey_ = released.stableTargetKey;
-          h->onTap();
-          pendingTapLeafKey_.clear();
-          return true;
-        }
+  if (released.overlayScope.has_value()) {
+    for (OverlayEntry const* p : overlayEntries) {
+      if (p->id != *released.overlayScope) {
+        continue;
       }
-      return false;
-    }
-  }
-
-  if (auto hit = hitTestPointerTarget(mainEventMap, mainGraph, upPoint)) {
-    if (EventHandlers const* h = mainEventMap.find(hit->nodeId)) {
-      if (h->onTap && keySharesPrefix(h->stableTargetKey, released.stableTargetKey)) {
+      auto const [id, h] = p->eventMap.findWithIdByKey(released.stableTargetKey);
+      (void)id;
+      if (h && h->onTap) {
         pendingTapLeafKey_ = released.stableTargetKey;
         h->onTap();
         pendingTapLeafKey_.clear();
         return true;
       }
+      return false;
     }
+    return false;
+  }
+
+  auto const [id, h] = mainEventMap.findWithIdByKey(released.stableTargetKey);
+  (void)id;
+  if (h && h->onTap) {
+    pendingTapLeafKey_ = released.stableTargetKey;
+    h->onTap();
+    pendingTapLeafKey_.clear();
+    return true;
   }
   return false;
 }
