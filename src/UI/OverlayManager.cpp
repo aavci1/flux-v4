@@ -7,6 +7,7 @@
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Scene/SceneGraphBounds.hpp>
 #include <Flux/UI/BuildContext.hpp>
+#include <Flux/UI/Environment.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -175,9 +176,12 @@ void OverlayManager::rebuild(Size windowSize, Runtime& runtime) {
     LayoutConstraints const cs = resolveConstraints(windowSize, entry.config);
     BuildContext ctx{entry.graph, entry.eventMap, Application::instance().textSystem(), layoutEngine_};
     ctx.pushConstraints(cs);
+    EnvironmentLayer windowEnvBaseline = runtime.window().environmentLayer();
+    EnvironmentStack::current().push(std::move(windowEnvBaseline));
     if (entry.content.has_value()) {
       entry.content->build(ctx);
     }
+    EnvironmentStack::current().pop();
     ctx.popConstraints();
 
     StateStore::setCurrent(nullptr);

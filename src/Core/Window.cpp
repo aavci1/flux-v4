@@ -10,6 +10,7 @@
 #include <Flux/Scene/SceneGraph.hpp>
 #include <Flux/Scene/SceneRenderer.hpp>
 #include <Flux/UI/Overlay.hpp>
+#include <Flux/UI/Theme.hpp>
 
 #include <memory>
 #include <utility>
@@ -31,8 +32,11 @@ struct Window::Impl {
   OverlayManager overlayMgr_;
   std::unique_ptr<Runtime> runtime_;
   std::unordered_map<std::string, ActionDescriptor> actions_;
+  EnvironmentLayer windowEnvironment_{};
 
-  explicit Impl(Window&) {}
+  explicit Impl(Window&) {
+    windowEnvironment_.set(FluxTheme::light());
+  }
   ~Impl();
 
   PlatformWindow* platformWindow() const { return platform_.get(); }
@@ -180,6 +184,14 @@ std::unordered_map<std::string, ActionDescriptor> const& Window::actionDescripto
 
 void Window::setViewRoot(std::unique_ptr<RootHolder> holder) {
   d->setViewRoot(*this, std::move(holder));
+}
+
+EnvironmentLayer& Window::environmentLayerMut() {
+  return d->windowEnvironment_;
+}
+
+EnvironmentLayer const& Window::environmentLayer() const {
+  return d->windowEnvironment_;
 }
 
 void Window::render(Canvas& canvas) {

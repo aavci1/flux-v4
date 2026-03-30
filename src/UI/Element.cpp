@@ -1,5 +1,6 @@
 #include <Flux/UI/Element.hpp>
 
+#include <Flux/UI/Environment.hpp>
 #include <Flux/UI/Views/Popover.hpp>
 
 #include <Flux/Core/Cursor.hpp>
@@ -31,11 +32,26 @@ TextLayoutOptions textViewLayoutOptions(Text const& v) {
 
 } // namespace
 
-void Element::build(BuildContext& ctx) const { impl_->build(ctx); }
+void Element::build(BuildContext& ctx) const {
+  if (envLayer_) {
+    EnvironmentStack::current().push(*envLayer_);
+  }
+  impl_->build(ctx);
+  if (envLayer_) {
+    EnvironmentStack::current().pop();
+  }
+}
 
 Size Element::measure(BuildContext& ctx, LayoutConstraints const& constraints,
                       TextSystem& textSystem) const {
-  return impl_->measure(ctx, constraints, textSystem);
+  if (envLayer_) {
+    EnvironmentStack::current().push(*envLayer_);
+  }
+  Size const sz = impl_->measure(ctx, constraints, textSystem);
+  if (envLayer_) {
+    EnvironmentStack::current().pop();
+  }
+  return sz;
 }
 
 namespace detail {

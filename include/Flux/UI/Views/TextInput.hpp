@@ -6,6 +6,7 @@
 #include <Flux/Graphics/Styles.hpp>
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/Hooks.hpp>
+#include <Flux/UI/Theme.hpp>
 
 #include <functional>
 #include <string>
@@ -24,16 +25,16 @@ struct TextInput {
 
   // ── Appearance ───────────────────────────────────────────────────────────
 
-  Font font{ .size = 15.f, .weight = 400.f };
+  Font font = kFontFromTheme;
 
-  Color textColor = Color::hex(0x111118);
-  Color placeholderColor = Color::hex(0xAAAAAA);
-  Color backgroundColor = Color::hex(0xFFFFFF);
-  Color borderColor = Color::hex(0xC8C8D0);
-  Color borderFocusColor = Color::hex(0x3A7BD5);
-  Color caretColor = Color::hex(0x3A7BD5);
-  Color selectionColor = Color{0.23f, 0.48f, 0.84f, 0.25f};
-  Color disabledColor = Color::hex(0xDDDDDD);
+  Color textColor = kFromTheme;
+  Color placeholderColor = kFromTheme;
+  Color backgroundColor = kFromTheme;
+  Color borderColor = kFromTheme;
+  Color borderFocusColor = kFromTheme;
+  Color caretColor = kFromTheme;
+  Color selectionColor = kFromTheme;
+  Color disabledColor = kFromTheme;
 
   float borderWidth = 1.f;
   float borderFocusWidth = 2.f;

@@ -103,6 +103,13 @@ struct Color {
   constexpr bool operator==(const Color& o) const = default;
 };
 
+/// Sentinel: inherit from `FluxTheme` (see `resolveColor`).
+inline constexpr Color kFromTheme{0.f, 0.f, 0.f, -1.f};
+
+constexpr inline Color resolveColor(Color override, Color themeValue) {
+  return (override.a < 0.f) ? themeValue : override;
+}
+
 namespace Colors {
 constexpr Color white{1, 1, 1, 1};
 constexpr Color black{0, 0, 0, 1};

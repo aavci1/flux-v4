@@ -11,6 +11,7 @@
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Scene/HitTester.hpp>
 #include <Flux/UI/BuildContext.hpp>
+#include <Flux/UI/Environment.hpp>
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/EventMap.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
@@ -457,9 +458,12 @@ void Runtime::rebuild(std::optional<Size> sizeOverride) {
   rootCs.maxWidth = sz.width;
   rootCs.maxHeight = sz.height;
   ctx.pushConstraints(rootCs);
+  EnvironmentLayer windowEnvBaseline = window_.environmentLayer();
+  EnvironmentStack::current().push(std::move(windowEnvBaseline));
   if (rootHolder_) {
     rootHolder_->buildInto(ctx);
   }
+  EnvironmentStack::current().pop();
   ctx.popConstraints();
 
   fillLayoutRectCache(graph, ctx);

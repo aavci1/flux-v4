@@ -2,6 +2,7 @@
 
 #include <Flux/Core/Types.hpp>
 #include <Flux/Graphics/Font.hpp>
+#include <Flux/UI/Theme.hpp>
 #include <Flux/Graphics/Styles.hpp>
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/Hooks.hpp>
@@ -33,7 +34,7 @@ struct Button {
   /// which always sizes to its text height). Ignored for Link.
   float height = 0.f;
 
-  Font font{ .size = 14.f, .weight = 500.f };
+  Font font = kFontFromTheme;
 
   /// Horizontal padding between label and button edge.
   /// Ignored for Link (always 0).
@@ -42,9 +43,9 @@ struct Button {
   CornerRadius cornerRadius{ 8.f };
 
   /// Accent colour: Primary/Ghost/Secondary/Link label and focus ring.
-  Color accentColor = Color::hex(0x3A7BD5);
+  Color accentColor = kFromTheme;
   /// Danger colour: Destructive fill and focus ring.
-  Color destructiveColor = Color::hex(0xD94040);
+  Color destructiveColor = kFromTheme;
 
   // ── Layout ───────────────────────────────────────────────────────────────
 

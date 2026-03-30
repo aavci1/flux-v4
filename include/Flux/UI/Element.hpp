@@ -7,6 +7,7 @@
 #include <Flux/UI/Leaves.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 #include <Flux/UI/StateStore.hpp>
+#include <Flux/UI/Environment.hpp>
 
 #include <Flux/Graphics/Canvas.hpp>
 #include <Flux/Scene/Nodes.hpp>
@@ -84,6 +85,16 @@ public:
   /// Sets flex metadata for this child in its parent stack. Overrides struct-level flex fields.
   Element withFlex(float grow, float shrink = 1.f, float minMain = 0.f) &&;
 
+  /// Pushes environment values for this subtree's build and measure passes.
+  template<typename T>
+  Element environment(T value) && {
+    if (!envLayer_) {
+      envLayer_.emplace();
+    }
+    envLayer_->set(std::move(value));
+    return std::move(*this);
+  }
+
 private:
   friend class LayoutEngine;
   friend Popover* detail::popoverOverlayStateIf(Element& el);
@@ -106,6 +117,7 @@ private:
   std::optional<float> flexGrowOverride_;
   std::optional<float> flexShrinkOverride_;
   std::optional<float> minMainSizeOverride_;
+  std::optional<EnvironmentLayer> envLayer_;
 };
 
 template<typename C>
@@ -451,7 +463,8 @@ inline Element::Element(Element const& other)
     : impl_(other.impl_ ? other.impl_->clone() : nullptr)
     , flexGrowOverride_(other.flexGrowOverride_)
     , flexShrinkOverride_(other.flexShrinkOverride_)
-    , minMainSizeOverride_(other.minMainSizeOverride_) {}
+    , minMainSizeOverride_(other.minMainSizeOverride_)
+    , envLayer_(other.envLayer_) {}
 
 inline Element& Element::operator=(Element const& other) {
   if (this != &other) {
@@ -459,6 +472,7 @@ inline Element& Element::operator=(Element const& other) {
     flexGrowOverride_ = other.flexGrowOverride_;
     flexShrinkOverride_ = other.flexShrinkOverride_;
     minMainSizeOverride_ = other.minMainSizeOverride_;
+    envLayer_ = other.envLayer_;
   }
   return *this;
 }

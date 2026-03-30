@@ -4,6 +4,7 @@
 #include <Flux/UI/Hooks.hpp>
 
 #include <Flux/Core/Types.hpp>
+#include <Flux/UI/Theme.hpp>
 
 #include <functional>
 #include <string>
@@ -38,11 +39,11 @@ struct Alert {
   /// Width of the card. 360 pt matches macOS alert width convention.
   float cardWidth = 360.f;
 
-  Color cardColor = Color::hex(0xFFFFFF);
-  Color cardStrokeColor = Color::hex(0xE0E0E6);
-  Color titleColor = Color::hex(0x111118);
-  Color messageColor = Color::hex(0x6E6E80);
-  Color backdropColor = Color{0.f, 0.f, 0.f, 0.45f};
+  Color cardColor = kFromTheme;
+  Color cardStrokeColor = kFromTheme;
+  Color titleColor = kFromTheme;
+  Color messageColor = kFromTheme;
+  Color backdropColor = kFromTheme;
   CornerRadius cornerRadius{14.f};
 
   // ── Behaviour ────────────────────────────────────────────────────────────
@@ -56,7 +57,7 @@ struct Alert {
   Element body() const;
 
 private:
-  std::vector<Element> buildContent() const;
+  std::vector<Element> buildContent(Color titleC, Color msgC, FluxTheme const& theme) const;
 };
 
 /// Hook: returns (show, hide, isPresented) for presenting an Alert.

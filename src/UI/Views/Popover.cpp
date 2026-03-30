@@ -1,6 +1,8 @@
 #include <Flux/UI/Views/Popover.hpp>
 
+#include <Flux/Core/Types.hpp>
 #include <Flux/Core/Window.hpp>
+#include <Flux/UI/Theme.hpp>
 #include <Flux/Detail/Runtime.hpp>
 #include <Flux/UI/Overlay.hpp>
 #include <Flux/UI/StateStore.hpp>
@@ -105,13 +107,16 @@ OverlayConfig::Placement overlayPlacementFromPopover(PopoverPlacement p) {
 }
 
 Element Popover::body() const {
+  FluxTheme const& theme = useEnvironment<FluxTheme>();
+  Color const bg = resolveColor(backgroundColor, theme.surfaceOverlay);
+  Color const bd = resolveColor(borderColor, theme.borderSubtle);
   return Element{PopoverCalloutShape{
       .placement = resolvedPlacement,
       .arrow = arrow,
       .padding = contentPadding,
       .cornerRadius = cornerRadius,
-      .backgroundColor = backgroundColor,
-      .borderColor = borderColor,
+      .backgroundColor = bg,
+      .borderColor = bd,
       .borderWidth = borderWidth,
       .maxSize = maxSize,
       .content = content,
@@ -154,6 +159,10 @@ std::tuple<std::function<void(Popover)>, std::function<void()>, bool> usePopover
 
     Vec2 const offset = popoverOverlayGapOffset(resolved, gap);
 
+    FluxTheme const* tp = wPtr->environmentValue<FluxTheme>();
+    FluxTheme const theme = tp ? *tp : FluxTheme::light();
+    Color const backdropResolved = resolveColor(popover.backdropColor, theme.overlayPopoverBackdrop);
+
     showOverlay(
         Element{std::move(popover)},
         OverlayConfig{
@@ -164,7 +173,7 @@ std::tuple<std::function<void(Popover)>, std::function<void()>, bool> usePopover
             .offset = offset,
             .maxSize = maxSz,
             .modal = false,
-            .backdropColor = popover.backdropColor,
+            .backdropColor = backdropResolved,
             .popoverPreferredPlacement = preferred,
             .popoverGapTotal = gapTotal,
             .popoverGap = gap,

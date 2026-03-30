@@ -172,4 +172,24 @@ void useViewAction(std::string const& name, std::function<void()> handler,
 void useWindowAction(std::string const& name, std::function<void()> handler,
                      std::function<bool()> isEnabled = {});
 
+/// Nearest environment value of type \p T (subtree overrides, then window baseline pushed during rebuild),
+/// or a static default when called outside a build pass.
+template<typename T>
+T const& useEnvironment();
+
+} // namespace flux
+
+#include <Flux/UI/Environment.hpp>
+
+namespace flux {
+
+template<typename T>
+T const& useEnvironment() {
+  if (T const* v = EnvironmentStack::current().find<T>()) {
+    return *v;
+  }
+  static T const sDefault{};
+  return sDefault;
+}
+
 } // namespace flux

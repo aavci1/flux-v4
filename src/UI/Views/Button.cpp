@@ -2,6 +2,7 @@
 #include <Flux/Detail/Runtime.hpp>
 #include <Flux/Reactive/Interpolatable.hpp>
 #include <Flux/Reactive/Transition.hpp>
+#include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Views/Button.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/ScaleAroundCenter.hpp>
@@ -102,6 +103,11 @@ ButtonColors deriveColors(ButtonVariant variant, Color accent, Color destructive
 } // namespace
 
 Element Button::body() const {
+  FluxTheme const& theme = useEnvironment<FluxTheme>();
+  Color const accent = resolveColor(accentColor, theme.accent);
+  Color const destructive = resolveColor(destructiveColor, theme.danger);
+  Font const fontResolved = resolveFont(font, theme.fontLabel);
+
   bool const hovered = useHover();
   bool const pressed = usePress();
   bool const focused = useFocus();
@@ -115,14 +121,15 @@ Element Button::body() const {
     }
   }
 
-  ButtonColors const colors = deriveColors(variant, accentColor, destructiveColor);
+  ButtonColors const colors = deriveColors(variant, accent, destructive);
 
   auto fillAnim = useAnimated<Color>(colors.fill);
   if (!isLink) {
-    Color const fillTarget = effectivelyDisabled ? Color::hex(0xE0E0E4)
-                                                 : pressed ? colors.fillPress
-                                                 : hovered ? colors.fillHover
-                                                           : colors.fill;
+    Color const fillTarget =
+        effectivelyDisabled ? theme.surfaceDisabled
+                            : pressed ? colors.fillPress
+                            : hovered ? colors.fillHover
+                                      : colors.fill;
     if (*fillAnim != fillTarget) {
       fillAnim.set(fillTarget, Transition::ease(0.12f));
     }
@@ -132,7 +139,7 @@ Element Button::body() const {
   {
     Color const labelTarget =
         effectivelyDisabled
-            ? Color::hex(0xAAAAAA)
+            ? theme.textDisabled
             : (isLink ? (pressed ? colors.labelPress : hovered ? colors.labelHover : colors.label) : colors.label);
     if (*labelAnim != labelTarget) {
       labelAnim.set(labelTarget, Transition::ease(0.12f));
@@ -208,7 +215,7 @@ Element Button::body() const {
             },
             Text{
                 .text = label,
-                .font = font,
+                .font = fontResolved,
                 .color = *labelAnim,
                 .horizontalAlignment = isLink ? HorizontalAlignment::Leading : HorizontalAlignment::Center,
                 .verticalAlignment = VerticalAlignment::Center,

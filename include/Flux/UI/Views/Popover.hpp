@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Flux/Core/Types.hpp>
+#include <Flux/UI/Theme.hpp>
 #include <Flux/Graphics/Styles.hpp>
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/Hooks.hpp>
@@ -32,8 +33,8 @@ struct Popover {
 
   // ── Appearance ───────────────────────────────────────────────────────────
 
-  Color backgroundColor = Color::hex(0xFFFFFF);
-  Color borderColor = Color::hex(0xE0E0E6);
+  Color backgroundColor = kFromTheme;
+  Color borderColor = kFromTheme;
   float borderWidth = 1.f;
   CornerRadius cornerRadius{10.f};
 
@@ -44,8 +45,8 @@ struct Popover {
   /// nullopt = size to content, clamped to window bounds.
   std::optional<Size> maxSize;
 
-  /// Full-window dim behind the popover. Default is transparent (no dim).
-  Color backdropColor = Color{0.f, 0.f, 0.f, 0.f};
+  /// Full-window dim behind the popover. Default `kFromTheme` uses `FluxTheme::overlayPopoverBackdrop`.
+  Color backdropColor = kFromTheme;
 
   /// When set, the overlay anchor height is clamped to this value (use the trigger row height).
   std::optional<float> anchorMaxHeight;

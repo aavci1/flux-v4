@@ -70,6 +70,7 @@ struct PopoverDemoRoot {
                 .placement = placement,
                 .arrow = *showArrow,
                 .maxSize = Size{260.f, 200.f},
+                .backdropColor = Colors::transparent,
                 .dismissOnEscape = true,
                 .dismissOnOutsideTap = *dismissOutside,
             });
@@ -146,6 +147,7 @@ struct PopoverDemoRoot {
               .placement = PopoverPlacement::Below,
               .arrow = *showArrow,
               .maxSize = Size{280.f, 220.f},
+              .backdropColor = Colors::transparent,
               .dismissOnEscape = true,
               .dismissOnOutsideTap = *dismissOutside,
           });
@@ -182,6 +184,7 @@ struct PopoverDemoRoot {
               .placement = PopoverPlacement::Below,
               .arrow = *showArrow,
               .maxSize = Size{280.f, 220.f},
+              .backdropColor = Colors::transparent,
               .dismissOnEscape = true,
               .dismissOnOutsideTap = *dismissOutside,
           });

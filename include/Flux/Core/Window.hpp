@@ -9,6 +9,7 @@
 #include <Flux/Core/Cursor.hpp>
 #include <Flux/Core/Types.hpp>
 #include <Flux/UI/Element.hpp>
+#include <Flux/UI/Environment.hpp>
 #include <Flux/UI/Overlay.hpp>
 
 namespace flux {
@@ -108,6 +109,18 @@ public:
   template<typename C>
   void setView();
 
+  EnvironmentLayer const& environmentLayer() const;
+
+  template<typename T>
+  void setEnvironmentValue(T value) {
+    environmentLayerMut().set(std::move(value));
+  }
+
+  template<typename T>
+  T const* environmentValue() const {
+    return environmentLayer().get<T>();
+  }
+
 protected:
   friend class Application;
 
@@ -115,6 +128,8 @@ protected:
 
 private:
   friend class Runtime;
+
+  EnvironmentLayer& environmentLayerMut();
 
   std::unordered_map<std::string, ActionDescriptor> const& actionDescriptors() const;
 

@@ -10,6 +10,7 @@
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/InputFieldLayout.hpp>
 #include <Flux/UI/Hooks.hpp>
+#include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Views/ForEach.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/PathShape.hpp>
@@ -257,6 +258,7 @@ Popover makePickerDropdownPopover(std::vector<PickerOption<T>> opts, std::functi
       .cornerRadius = menuCornerRadius,
       .contentPadding = 0.f,
       .maxSize = std::make_optional(dropdownMax),
+      .backdropColor = Colors::transparent,
       .anchorMaxHeight = triggerRowHeight,
       .dismissOnEscape = true,
       .dismissOnOutsideTap = true,
@@ -276,18 +278,18 @@ struct Picker {
 
   // ── Appearance ───────────────────────────────────────────────────────────
 
-  Font font{ .size = 15.f, .weight = 400.f };
+  Font font = kFontFromTheme;
 
-  Color textColor = Color::hex(0x111118);
-  Color placeholderColor = Color::hex(0xAAAAAA);
-  Color backgroundColor = Color::hex(0xFFFFFF);
-  Color borderColor = Color::hex(0xC8C8D0);
-  Color borderFocusColor = Color::hex(0x3A7BD5);
-  Color chevronColor = Color::hex(0x8E8E9A);
-  Color disabledColor = Color::hex(0xDDDDDD);
+  Color textColor = kFromTheme;
+  Color placeholderColor = kFromTheme;
+  Color backgroundColor = kFromTheme;
+  Color borderColor = kFromTheme;
+  Color borderFocusColor = kFromTheme;
+  Color chevronColor = kFromTheme;
+  Color disabledColor = kFromTheme;
 
-  Color rowHoverColor = Color::hex(0xF0F0F5);
-  Color rowSelectedColor = Color{0.23f, 0.48f, 0.84f, 0.12f};
+  Color rowHoverColor = kFromTheme;
+  Color rowSelectedColor = kFromTheme;
 
   float borderWidth = 1.f;
   float borderFocusWidth = 2.f;
@@ -310,17 +312,31 @@ struct Picker {
   bool disabled = false;
   std::function<void(T const&)> onChange;
 
-  Element buildChevron(bool isOpen) const {
+  Element buildChevron(bool isOpen, Color chevron) const {
     float const w = 10.f;
     float const h = 5.f;
     return Element{PathShape{
         .path = detail::chevronPath(isOpen, w, h),
-        .fill = FillStyle::solid(chevronColor),
+        .fill = FillStyle::solid(chevron),
         .stroke = StrokeStyle::none(),
     }};
   }
 
   Element body() const {
+    FluxTheme const& theme = useEnvironment<FluxTheme>();
+    Font const fontR = resolveFont(font, theme.fontBody);
+    Color const textR = resolveColor(textColor, theme.textPrimary);
+    Color const plcR = resolveColor(placeholderColor, theme.textPlaceholder);
+    Color const bgR = resolveColor(backgroundColor, theme.surfaceField);
+    Color const brdR = resolveColor(borderColor, theme.border);
+    Color const brdFocusR = resolveColor(borderFocusColor, theme.accent);
+    Color const chvR = resolveColor(chevronColor, theme.textMuted);
+    Color const disR = resolveColor(disabledColor, theme.surfaceDisabled);
+    Color const rowHoverR = resolveColor(rowHoverColor, theme.surfaceRowHover);
+    Color const rowSelR =
+        resolveColor(rowSelectedColor, Color{theme.accent.r, theme.accent.g, theme.accent.b, 0.12f});
+    Color const triggerHoverR = theme.surfaceHover;
+
     auto [showPopover, hidePopover, isOpen] = usePopover();
     auto requestFocus = useRequestFocus();
     auto keyboardCursor = useState(-1);
@@ -357,31 +373,29 @@ struct Picker {
     float const maxDdH = maxDropdownHeight > 0.f ? maxDropdownHeight : 240.f;
     float const rowPadH = paddingH;
     CornerRadius const menuCorners = cornerRadius;
-    Color const rowHover = rowHoverColor;
-    Color const rowSelected = rowSelectedColor;
-    Font const rowFont = font;
-    Color const rowText = textColor;
-    Color const checkCol = borderFocusColor;
+    Color const rowHover = rowHoverR;
+    Color const rowSelected = rowSelR;
+    Font const rowFont = fontR;
+    Color const rowText = textR;
+    Color const checkCol = brdFocusR;
 
     std::optional<Rect> const layoutRect = useLayoutRect();
     float const triggerWidth = layoutRect ? layoutRect->width : 200.f;
 
-    auto fillAnim = useAnimated<Color>(backgroundColor);
+    auto fillAnim = useAnimated<Color>(bgR);
     {
-      Color const target = isDisabled ? disabledColor
-                         : isOpen    ? backgroundColor
-                         : hovered   ? Color::hex(0xF8F8FA)
-                                     : backgroundColor;
+      Color const target =
+          isDisabled ? disR : isOpen ? bgR : hovered ? triggerHoverR : bgR;
       if (*fillAnim != target) {
         fillAnim.set(target, Transition::ease(0.12f));
       }
     }
 
     bool const showFocusBorder = (isOpen || (focused && kbFocus)) && !isDisabled;
-    Color const borderCol = showFocusBorder ? borderFocusColor : borderColor;
+    Color const borderCol = showFocusBorder ? brdFocusR : brdR;
     float const borderW = showFocusBorder ? borderFocusWidth : borderWidth;
 
-    float const h = resolvedInputFieldHeight(font, textColor, paddingV, height);
+    float const h = resolvedInputFieldHeight(fontR, textR, paddingV, height);
 
     std::size_t const optionCount = menuOptions.size();
 
@@ -480,8 +494,8 @@ struct Picker {
                             },
                             Text{
                                 .text = hasMatch ? selectedLabel : placeholder,
-                                .font = font,
-                                .color = hasMatch ? textColor : placeholderColor,
+                                .font = fontR,
+                                .color = hasMatch ? textR : plcR,
                                 .horizontalAlignment = HorizontalAlignment::Leading,
                                 .verticalAlignment = VerticalAlignment::Center,
                                 .wrapping = TextWrapping::NoWrap,
@@ -514,7 +528,7 @@ struct Picker {
                                             .onTap = isDisabled ? nullptr : std::function<void()>{onTriggerTap},
                                             .cursor = isDisabled ? Cursor::Inherit : Cursor::Hand,
                                         },
-                                        buildChevron(isOpen),
+                                        buildChevron(isOpen, chvR),
                                     },
                             }},
                             Rectangle{

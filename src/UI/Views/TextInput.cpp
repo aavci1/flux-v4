@@ -7,6 +7,7 @@
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/UI/StateStore.hpp>
 #include <Flux/UI/InputFieldLayout.hpp>
+#include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Views/TextInput.hpp>
 
 #include <algorithm>
@@ -569,6 +570,18 @@ void TextInputView::render(Canvas& canvas, Rect frame) const {
 Element TextInput::body() const {
   using namespace std::chrono;
 
+  FluxTheme const& theme = useEnvironment<FluxTheme>();
+  Font const fnt = resolveFont(font, theme.fontBody);
+  Color const tc = resolveColor(textColor, theme.textPrimary);
+  Color const plc = resolveColor(placeholderColor, theme.textPlaceholder);
+  Color const bg = resolveColor(backgroundColor, theme.surfaceField);
+  Color const bc = resolveColor(borderColor, theme.border);
+  Color const bfc = resolveColor(borderFocusColor, theme.accent);
+  Color const cc = resolveColor(caretColor, theme.accent);
+  Color const sc =
+      resolveColor(selectionColor, Color{theme.accent.r, theme.accent.g, theme.accent.b, 0.25f});
+  Color const dc = resolveColor(disabledColor, theme.surfaceDisabled);
+
   State<std::string> val = value;
   auto caretByte = useState(0);
   auto selAnchor = useState(0);
@@ -593,14 +606,16 @@ Element TextInput::body() const {
 
   int const cbKey = *caretByte;
   int const saKey = *selAnchor;
+  // Use resolved `fnt` / `tc` — raw `font` / `textColor` may be kFromTheme / kFontFromTheme sentinels.
   float const cachedCaretX = useMemo(
-      [&]() { return detail::caretXPosition(ts, bufCopy, cbKey, font, textColor); }, bufCopy, cbKey);
+      [&]() { return detail::caretXPosition(ts, bufCopy, cbKey, fnt, tc); }, bufCopy, cbKey, fnt.size, fnt.weight,
+      fnt.family, fnt.italic, tc.r, tc.g, tc.b, tc.a);
   float const cachedSelX0 = useMemo(
-      [&]() { return detail::caretXPosition(ts, bufCopy, std::min(cbKey, saKey), font, textColor); }, bufCopy, cbKey,
-      saKey);
+      [&]() { return detail::caretXPosition(ts, bufCopy, std::min(cbKey, saKey), fnt, tc); }, bufCopy, cbKey, saKey,
+      fnt.size, fnt.weight, fnt.family, fnt.italic, tc.r, tc.g, tc.b, tc.a);
   float const cachedSelX1 = useMemo(
-      [&]() { return detail::caretXPosition(ts, bufCopy, std::max(cbKey, saKey), font, textColor); }, bufCopy, cbKey,
-      saKey);
+      [&]() { return detail::caretXPosition(ts, bufCopy, std::max(cbKey, saKey), fnt, tc); }, bufCopy, cbKey, saKey,
+      fnt.size, fnt.weight, fnt.family, fnt.italic, tc.r, tc.g, tc.b, tc.a);
 
   bool const isDisabled = disabled;
   bool const focused = useFocus();
@@ -630,8 +645,6 @@ Element TextInput::body() const {
     Runtime* const rt = Runtime::current();
     return rt ? rt->buildSlotRect().x : 0.f;
   }();
-  Font const fnt = font;
-  Color const tc = textColor;
 
   useViewAction(
       "edit.copy",
@@ -969,15 +982,15 @@ Element TextInput::body() const {
       .focused = focused,
       .disabled = isDisabled,
       .placeholder = placeholder,
-      .font = font,
-      .textColor = textColor,
-      .placeholderColor = placeholderColor,
-      .backgroundColor = backgroundColor,
-      .borderColor = borderColor,
-      .borderFocusColor = borderFocusColor,
-      .caretColor = caretColor,
-      .selectionColor = selectionColor,
-      .disabledColor = disabledColor,
+      .font = fnt,
+      .textColor = tc,
+      .placeholderColor = plc,
+      .backgroundColor = bg,
+      .borderColor = bc,
+      .borderFocusColor = bfc,
+      .caretColor = cc,
+      .selectionColor = sc,
+      .disabledColor = dc,
       .borderWidth = borderWidth,
       .borderFocusWidth = borderFocusWidth,
       .cornerRadius = cornerRadius,

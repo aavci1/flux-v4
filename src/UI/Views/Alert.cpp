@@ -1,3 +1,7 @@
+#include <Flux/Core/Window.hpp>
+#include <Flux/Detail/Runtime.hpp>
+#include <Flux/UI/StateStore.hpp>
+#include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Views/Alert.hpp>
 #include <Flux/UI/Overlay.hpp>
 #include <Flux/UI/Views/HStack.hpp>
@@ -12,6 +16,11 @@
 namespace flux {
 
 Element Alert::body() const {
+  FluxTheme const& theme = useEnvironment<FluxTheme>();
+  Color const card = resolveColor(cardColor, theme.surfaceOverlay);
+  Color const stroke = resolveColor(cardStrokeColor, theme.borderSubtle);
+  Color const titleC = resolveColor(titleColor, theme.textPrimary);
+  Color const msgC = resolveColor(messageColor, theme.textSecondary);
   // A lone ZStack under the full-window overlay expands every child to the window size
   // (see LayoutZStack — children share the stack's max proposed size). Spacers + flex center
   // the card so the inner ZStack only receives the card's intrinsic width/height.
@@ -32,14 +41,14 @@ Element Alert::body() const {
                                       Rectangle{
                                           .frame = {0.f, 0.f, cardWidth, 0.f},
                                           .cornerRadius = cornerRadius,
-                                          .fill = FillStyle::solid(cardColor),
-                                          .stroke = StrokeStyle::solid(cardStrokeColor, 1.f),
+                                          .fill = FillStyle::solid(card),
+                                          .stroke = StrokeStyle::solid(stroke, 1.f),
                                       },
                                       VStack{
                                           .spacing = 12.f,
                                           .padding = 24.f,
                                           .hAlign = HorizontalAlignment::Leading,
-                                          .children = buildContent(),
+                                          .children = buildContent(titleC, msgC, theme),
                                       },
                                   },
                           },
@@ -51,20 +60,20 @@ Element Alert::body() const {
   };
 }
 
-std::vector<Element> Alert::buildContent() const {
+std::vector<Element> Alert::buildContent(Color titleC, Color msgC, FluxTheme const& theme) const {
   std::vector<Element> rows;
 
   rows.push_back(Text{
       .text = title,
-      .font = {.size = 17.f, .weight = 600.f},
-      .color = titleColor,
+      .font = theme.fontTitle,
+      .color = titleC,
   });
 
   if (!message.empty()) {
     rows.push_back(Text{
         .text = message,
-        .font = {.size = 14.f, .weight = 400.f},
-        .color = messageColor,
+        .font = theme.fontLabel,
+        .color = msgC,
         .wrapping = TextWrapping::Wrap,
         .frame = {0.f, 0.f, cardWidth - 48.f, 0.f},
     });
@@ -109,8 +118,12 @@ std::vector<Element> Alert::buildContent() const {
 
 std::tuple<std::function<void(Alert)>, std::function<void()>, bool> useAlert() {
   auto [showOverlay, hideOverlay, isPresented] = useOverlay();
+  StateStore* store = StateStore::current();
+  Runtime* rt = Runtime::current();
+  assert(store && rt && "useAlert must be called inside body()");
+  Window* wPtr = &rt->window();
 
-  auto show = [showOverlay, hideOverlay](Alert alert) {
+  auto show = [showOverlay, hideOverlay, wPtr](Alert alert) {
     if (alert.buttons.empty()) {
       // Empty action (not hideOverlay): the loop below wraps every button with
       // hideOverlay() then originalAction. OK only needs dismiss — same result as
@@ -138,7 +151,9 @@ std::tuple<std::function<void(Alert)>, std::function<void()>, bool> useAlert() {
       };
     }
 
-    Color const backdrop = alert.backdropColor;
+    FluxTheme const* tp = wPtr->environmentValue<FluxTheme>();
+    FluxTheme const theme = tp ? *tp : FluxTheme::light();
+    Color const backdrop = resolveColor(alert.backdropColor, theme.overlayBackdropScrim);
     bool const dismissEsc = alert.dismissOnEscape;
 
     showOverlay(
