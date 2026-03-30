@@ -153,7 +153,9 @@ void OverlayManager::rebuild(Size windowSize, Runtime& runtime) {
           entry.config.popoverGapTotal, windowSize);
       entry.config.placement = overlayPlacementFromPopover(resolved);
       entry.config.offset = popoverOverlayGapOffset(resolved, entry.config.popoverGap);
-      entry.content->setPopoverResolvedPlacementIf(resolved);
+      if (entry.onPlacementResolved) {
+        entry.onPlacementResolved(resolved);
+      }
     }
     entry.graph.clear();
     entry.eventMap.clear();
@@ -200,6 +202,11 @@ OverlayId OverlayManager::push(Element content, OverlayConfig config, Runtime* r
   entry->id = OverlayId{nextId_++};
   entry->content.emplace(std::move(content));
   entry->config = std::move(config);
+  if (entry->content.has_value()) {
+    if (Popover* pop = detail::popoverOverlayStateIf(*entry->content)) {
+      entry->onPlacementResolved = [pop](PopoverPlacement p) { pop->resolvedPlacement = p; };
+    }
+  }
   overlays_.push_back(std::move(entry));
 
   if (runtime) {
@@ -207,8 +214,9 @@ OverlayId OverlayManager::push(Element content, OverlayConfig config, Runtime* r
     Size const sz = runtime->window().getSize();
     rebuild(sz, *runtime);
     runtime->window().requestRedraw();
+  } else {
+    Application::instance().markReactiveDirty();
   }
-  Application::instance().markReactiveDirty();
   return overlays_.back()->id;
 }
 

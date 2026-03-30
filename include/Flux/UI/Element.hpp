@@ -2,7 +2,6 @@
 
 #include <Flux/UI/BuildContext.hpp>
 #include <Flux/UI/Component.hpp>
-#include <Flux/UI/Views/PopoverPlacement.hpp>
 #include <Flux/UI/Detail/LeafBounds.hpp>
 #include <Flux/UI/EventMap.hpp>
 #include <Flux/UI/Leaves.hpp>
@@ -23,12 +22,15 @@
 
 namespace flux {
 
+class Element;
 struct Popover;
 
 template<typename>
 inline constexpr bool alwaysFalse = false;
 
 namespace detail {
+
+Popover* popoverOverlayStateIf(Element& el);
 
 template<typename C>
 float flexGrowOf(C const& v) {
@@ -82,11 +84,9 @@ public:
   /// Sets flex metadata for this child in its parent stack. Overrides struct-level flex fields.
   Element withFlex(float grow, float shrink = 1.f, float minMain = 0.f) &&;
 
-  /// When this element wraps a \ref Popover, updates \ref Popover::resolvedPlacement for layout/arrow.
-  void setPopoverResolvedPlacementIf(PopoverPlacement p);
-
 private:
   friend class LayoutEngine;
+  friend Popover* detail::popoverOverlayStateIf(Element& el);
 
   struct Concept {
     virtual ~Concept() = default;
@@ -97,7 +97,6 @@ private:
     virtual float flexGrow() const { return 0.f; }
     virtual float flexShrink() const { return 0.f; }
     virtual float minMainSize() const { return 0.f; }
-    virtual void setPopoverResolvedPlacementIf(PopoverPlacement) {}
   };
 
   template<typename C>
@@ -126,11 +125,6 @@ struct Element::Model : Concept {
   float flexGrow() const override { return detail::flexGrowOf(value); }
   float flexShrink() const override { return detail::flexShrinkOf(value); }
   float minMainSize() const override { return detail::minMainSizeOf(value); }
-  void setPopoverResolvedPlacementIf(PopoverPlacement p) override {
-    if constexpr (std::is_same_v<C, Popover>) {
-      value.resolvedPlacement = p;
-    }
-  }
 };
 
 template<typename C>

@@ -72,6 +72,10 @@ struct OverlayEntry {
   std::unique_ptr<StateStore> stateStore = std::make_unique<StateStore>();
   Rect resolvedFrame{};
 
+  /// When overlay content is a \ref Popover, set in \ref OverlayManager::push to update
+  /// \ref Popover::resolvedPlacement each rebuild (no \ref Element API hook).
+  std::function<void(PopoverPlacement)> onPlacementResolved;
+
   ComponentKey preFocusKey{};
 };
 

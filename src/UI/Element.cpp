@@ -1,5 +1,7 @@
 #include <Flux/UI/Element.hpp>
 
+#include <Flux/UI/Views/Popover.hpp>
+
 #include <Flux/Core/Cursor.hpp>
 #include <Flux/UI/BuildContext.hpp>
 #include <Flux/UI/Detail/LeafBounds.hpp>
@@ -36,9 +38,14 @@ Size Element::measure(BuildContext& ctx, LayoutConstraints const& constraints,
   return impl_->measure(ctx, constraints, textSystem);
 }
 
-void Element::setPopoverResolvedPlacementIf(PopoverPlacement p) {
-  impl_->setPopoverResolvedPlacementIf(p);
+namespace detail {
+
+Popover* popoverOverlayStateIf(Element& el) {
+  auto* m = dynamic_cast<Element::Model<Popover>*>(el.impl_.get());
+  return m ? &m->value : nullptr;
 }
+
+} // namespace detail
 
 void Element::Model<Rectangle>::build(BuildContext& ctx) const {
   ComponentKey const stableKey = ctx.leafComponentKey();

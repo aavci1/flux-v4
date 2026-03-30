@@ -49,7 +49,8 @@ struct Popover {
   bool dismissOnEscape = true;
   bool dismissOnOutsideTap = true;
 
-  /// Filled by `usePopover()` before the overlay is shown; leave unset for manual overlay use.
+  /// Set when presenting via \ref usePopover (initial resolve) and on each overlay rebuild when
+  /// \ref OverlayConfig::popoverPreferredPlacement is set.
   PopoverPlacement resolvedPlacement = placement;
 
   // ── Component protocol ─────────────────────────────────────────────────────
