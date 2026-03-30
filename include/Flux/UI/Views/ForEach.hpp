@@ -80,6 +80,8 @@ void Element::Model<ForEach<T>>::build(BuildContext& ctx) const {
 
   ComponentKey const forEachKey = ctx.nextCompositeKey();
 
+  std::size_t const n = value.items.size();
+
   LayoutEngine tmp{};
   LayoutConstraints childCsMeasure = outer;
   childCsMeasure.maxHeight = std::numeric_limits<float>::infinity();
@@ -88,7 +90,6 @@ void Element::Model<ForEach<T>>::build(BuildContext& ctx) const {
       assignedW > 0.f ? assignedW : std::numeric_limits<float>::infinity();
 
   std::vector<Size> sizes;
-  std::size_t const n = value.items.size();
   sizes.reserve(n);
 
   for (std::size_t i = 0; i < n; ++i) {

@@ -44,6 +44,9 @@ struct Popover {
   /// Full-window dim behind the popover. Default is transparent (no dim).
   Color backdropColor = Color{0.f, 0.f, 0.f, 0.f};
 
+  /// When set, the overlay anchor height is clamped to this value (use the trigger row height).
+  std::optional<float> anchorMaxHeight;
+
   // ── Behaviour ────────────────────────────────────────────────────────────
 
   bool dismissOnEscape = true;

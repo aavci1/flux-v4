@@ -924,16 +924,18 @@ void Runtime::handleInput(InputEvent const& e) {
         updateHoveredForPoint(p);
         return;
       }
-      if (oe.config.dismissOnOutsideTap) {
-        window_.removeOverlay(oe.id);
-        updateCursorForPoint(p);
-        updateHoveredForPoint(p);
-        return;
-      }
       if (oe.config.modal) {
         updateCursorForPoint(p);
         updateHoveredForPoint(p);
         return;
+      }
+    }
+    // Pointer missed every overlay graph (non-modal overlays fell through). Dismiss top overlay when
+    // configured — same as tapping outside the card (transparent backdrop has no capture layer).
+    if (window_.overlayManager().hasOverlays()) {
+      OverlayEntry const* top = window_.overlayManager().top();
+      if (top && !top->config.modal && top->config.dismissOnOutsideTap) {
+        window_.removeOverlay(top->id);
       }
     }
     auto hit = hitTestPointerTarget(eventMap_, graph, p);

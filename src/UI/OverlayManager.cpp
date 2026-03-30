@@ -29,12 +29,15 @@ LayoutConstraints OverlayManager::resolveConstraints(Size windowSize, OverlayCon
   float maxW = windowSize.width;
   float maxH = windowSize.height;
   if (config.maxSize.has_value()) {
-    if (std::isfinite(config.maxSize->width)) {
-      maxW = std::min(maxW, config.maxSize->width);
+    Size const& ms = *config.maxSize;
+    // Width 0: treat as unset (measured width not ready); do not clamp to 0 or the card disappears.
+    if (std::isfinite(ms.width) && ms.width > 0.f) {
+      maxW = std::min(maxW, ms.width);
     }
-    if (std::isfinite(config.maxSize->height)) {
-      maxH = std::min(maxH, config.maxSize->height);
+    if (std::isfinite(ms.height) && ms.height > 0.f) {
+      maxH = std::min(maxH, ms.height);
     }
+    // height <= 0: leave maxH as window height; PopoverCalloutShape also clamps using Popover::maxSize in build.
   }
   cs.maxWidth = std::max(0.f, maxW);
   cs.maxHeight = std::max(0.f, maxH);
@@ -145,6 +148,10 @@ void OverlayManager::rebuild(Size windowSize, Runtime& runtime) {
       if (auto r = runtime.layoutRectForLeafKeyPrefix(*entry.config.anchorTrackLeafKey)) {
         entry.config.anchor = *r;
       }
+    }
+    if (entry.config.anchor.has_value() && entry.config.anchorMaxHeight.has_value()) {
+      entry.config.anchor->height =
+          std::min(entry.config.anchor->height, *entry.config.anchorMaxHeight);
     }
     if (entry.config.popoverPreferredPlacement.has_value() && entry.content.has_value() &&
         entry.config.anchor.has_value()) {

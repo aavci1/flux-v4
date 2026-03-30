@@ -62,3 +62,6 @@ target_link_libraries(button_demo PRIVATE flux)
 
 add_executable(popover_demo popover-demo/main.cpp)
 target_link_libraries(popover_demo PRIVATE flux)
+
+add_executable(picker_demo picker-demo/main.cpp)
+target_link_libraries(picker_demo PRIVATE flux)

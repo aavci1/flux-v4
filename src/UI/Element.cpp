@@ -161,6 +161,7 @@ void Element::Model<Text>::build(BuildContext& ctx) const {
     NodeId const textId = ctx.graph().addText(ctx.parentLayer(), TextNode{
         .layout = layout,
         .origin = {inner.x, inner.y},
+        .allocation = inner,
     });
     bool const textFocusable = value.focusable || static_cast<bool>(value.onKeyDown) ||
                                static_cast<bool>(value.onKeyUp) || static_cast<bool>(value.onTextInput);
@@ -259,9 +260,20 @@ void Element::Model<PathShape>::build(BuildContext& ctx) const {
   ctx.advanceChildSlot();
   PathNode node{.path = value.path, .fill = value.fill, .stroke = value.stroke};
   Rect const cf = ctx.layoutEngine().childFrame();
-  if (cf.x != 0.f || cf.y != 0.f) {
+  Rect const pb = value.path.getBounds();
+  float dx = 0.f;
+  float dy = 0.f;
+  if (cf.width > pb.width + 1e-6f) {
+    dx = (cf.width - pb.width) * 0.5f - pb.x;
+  }
+  if (cf.height > pb.height + 1e-6f) {
+    dy = (cf.height - pb.height) * 0.5f - pb.y;
+  }
+  float const tx = cf.x + dx;
+  float const ty = cf.y + dy;
+  if (tx != 0.f || ty != 0.f) {
     LayerNode layer{};
-    layer.transform = Mat3::translate(cf.x, cf.y);
+    layer.transform = Mat3::translate(tx, ty);
     NodeId const lid = ctx.graph().addLayer(ctx.parentLayer(), std::move(layer));
     ctx.graph().addPath(lid, std::move(node));
   } else {

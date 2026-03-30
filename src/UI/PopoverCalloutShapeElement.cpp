@@ -22,13 +22,10 @@ namespace flux {
 
 using namespace flux::layout;
 
-Size Element::Model<PopoverCalloutShape>::measure(BuildContext& ctx, LayoutConstraints const& constraints,
-                                                    TextSystem& ts) const {
-  if (!ctx.consumeCompositeBodySubtreeRootSkip()) {
-    ctx.advanceChildSlot();
-  }
-  LayoutEngine tmp{};
-  LayoutConstraints cc = constraints;
+namespace {
+
+LayoutConstraints innerConstraintsForPopoverContent(PopoverCalloutShape const& value,
+                                                    LayoutConstraints cc) {
   if (value.maxSize) {
     if (std::isfinite(value.maxSize->width) && value.maxSize->width > 0.f) {
       cc.maxWidth = std::min(cc.maxWidth, value.maxSize->width);
@@ -40,7 +37,6 @@ Size Element::Model<PopoverCalloutShape>::measure(BuildContext& ctx, LayoutConst
 
   float const pad = value.padding;
   float const ah = PopoverCalloutShape::kArrowH;
-  float const awTri = PopoverCalloutShape::kArrowW;
 
   float availW = cc.maxWidth;
   float availH = cc.maxHeight;
@@ -70,10 +66,26 @@ Size Element::Model<PopoverCalloutShape>::measure(BuildContext& ctx, LayoutConst
 
   cc.maxWidth = std::max(0.f, availW);
   cc.maxHeight = std::max(0.f, availH);
+  return cc;
+}
+
+} // namespace
+
+Size Element::Model<PopoverCalloutShape>::measure(BuildContext& ctx, LayoutConstraints const& constraints,
+                                                    TextSystem& ts) const {
+  if (!ctx.consumeCompositeBodySubtreeRootSkip()) {
+    ctx.advanceChildSlot();
+  }
+  LayoutEngine tmp{};
+  LayoutConstraints cc = innerConstraintsForPopoverContent(value, constraints);
 
   ctx.pushChildIndex();
   Size const inner = tmp.measure(ctx, value.content, cc, ts);
   ctx.popChildIndex();
+
+  float const pad = value.padding;
+  float const ah = PopoverCalloutShape::kArrowH;
+  float const awTri = PopoverCalloutShape::kArrowW;
 
   float const cardW = inner.width + 2.f * pad;
   float const cardH = inner.height + 2.f * pad;
@@ -98,10 +110,58 @@ void Element::Model<PopoverCalloutShape>::build(BuildContext& ctx) const {
   }
   LayoutEngine& le = ctx.layoutEngine();
   Rect const parentFrame = le.childFrame();
-  LayoutConstraints const outer = ctx.constraints();
+  LayoutConstraints outer = ctx.constraints();
+  // Match measure(): intersect overlay constraints with the popover's intrinsic maxSize. Build used
+  // to read only ctx.constraints(); if overlay maxSize was wrong, the card collapsed to one row.
+  if (value.maxSize) {
+    if (std::isfinite(value.maxSize->width) && value.maxSize->width > 0.f) {
+      outer.maxWidth = std::min(outer.maxWidth, value.maxSize->width);
+    }
+    if (std::isfinite(value.maxSize->height) && value.maxSize->height > 0.f) {
+      outer.maxHeight = std::min(outer.maxHeight, value.maxSize->height);
+    }
+  }
+
+  LayoutConstraints const ccInner = innerConstraintsForPopoverContent(value, outer);
+  LayoutEngine tmpMeasure{};
+  ctx.pushChildIndex();
+  Size const innerMeasured = tmpMeasure.measure(ctx, value.content, ccInner, ctx.textSystem());
+  ctx.popChildIndex();
 
   float const assignedW = assignedSpan(parentFrame.width, outer.maxWidth);
   float const assignedH = assignedSpan(parentFrame.height, outer.maxHeight);
+
+  float const pad = value.padding;
+  float const ah = PopoverCalloutShape::kArrowH;
+
+  float tw = std::max(0.f, assignedW);
+  float th = std::max(0.f, assignedH);
+
+  // Shrink-wrap height: overlay max height is often the full cap (e.g. 240px) while list content is
+  // shorter. Do not clamp width — Popover max width matches the trigger; narrowing would clip it.
+  float const cardHFromContent = innerMeasured.height + 2.f * pad;
+  if (!value.arrow) {
+    if (cardHFromContent > 1e-3f && cardHFromContent < th) {
+      th = cardHFromContent;
+    }
+  } else {
+    switch (value.placement) {
+    case PopoverPlacement::Below:
+    case PopoverPlacement::Above: {
+      float const layerH = cardHFromContent + ah;
+      if (layerH > 1e-3f && layerH < th) {
+        th = layerH;
+      }
+      break;
+    }
+    case PopoverPlacement::End:
+    case PopoverPlacement::Start:
+      if (cardHFromContent > 1e-3f && cardHFromContent < th) {
+        th = cardHFromContent;
+      }
+      break;
+    }
+  }
 
   LayerNode layer{};
   if (parentFrame.width > 0.f || parentFrame.height > 0.f) {
@@ -111,15 +171,7 @@ void Element::Model<PopoverCalloutShape>::build(BuildContext& ctx) const {
   ctx.registerCompositeSubtreeRootIfPending(layerId);
   ctx.pushLayer(layerId);
 
-  float const tw = std::max(0.f, assignedW);
-  float const th = std::max(0.f, assignedH);
-
-  float const pad = value.padding;
-  float const ah = PopoverCalloutShape::kArrowH;
-
-  // Card size must come from the assigned frame (tw, th), not from measure alone. The overlay can
-  // assign a different size than the intrinsic measure; using measured dims here desyncs the path
-  // from the layer and produces collapsed / skewed outlines.
+  // Card size follows clamped tw/th so path + fill match content; still respects overlay max via outer.
   float cardW = tw;
   float cardH = th;
   Rect cardRect{};

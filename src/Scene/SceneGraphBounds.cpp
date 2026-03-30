@@ -62,8 +62,13 @@ void accumulate(NodeId id, SceneGraph const& graph, Mat3 const& parentWorld, Rec
     if (!text->layout) {
       return;
     }
-    Size const ms = text->layout->measuredSize;
-    Rect const tb = Rect::sharp(text->origin.x, text->origin.y, ms.width, ms.height);
+    Rect tb{};
+    if (text->allocation.width > 0.f && text->allocation.height > 0.f) {
+      tb = text->allocation;
+    } else {
+      Size const ms = text->layout->measuredSize;
+      tb = Rect::sharp(text->origin.x, text->origin.y, ms.width, ms.height);
+    }
     quadToWorldAabb(tb, parentWorld, acc, has);
     return;
   }

@@ -36,6 +36,9 @@ struct OverlayConfig {
   /// so the popover follows the control (e.g. scroll) instead of staying at the initial tap rect.
   std::optional<ComponentKey> anchorTrackLeafKey;
 
+  /// When set, clamps `anchor.height` after layout union (e.g. row height vs inflated text bounds).
+  std::optional<float> anchorMaxHeight;
+
   enum class Placement { Below, Above, End, Start };
   Placement placement = Placement::Below;
 

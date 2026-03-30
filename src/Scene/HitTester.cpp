@@ -111,9 +111,13 @@ std::optional<HitResult> HitTester::hitTestNode(NodeId id, SceneGraph const& gra
     if (!text->layout) {
       return std::nullopt;
     }
-    Size const ms = text->layout->measuredSize;
-    Rect const textBounds =
-        Rect::sharp(text->origin.x, text->origin.y, ms.width, ms.height);
+    Rect textBounds{};
+    if (text->allocation.width > 0.f && text->allocation.height > 0.f) {
+      textBounds = text->allocation;
+    } else {
+      Size const ms = text->layout->measuredSize;
+      textBounds = Rect::sharp(text->origin.x, text->origin.y, ms.width, ms.height);
+    }
     if (textBounds.contains(localPoint)) {
       if (acceptNodeOrAll(acceptTarget, text->id)) {
         return HitResult{text->id, localPoint};

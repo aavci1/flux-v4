@@ -6,6 +6,7 @@
 #include <Flux/UI/StateStore.hpp>
 #include <Flux/UI/Views/PopoverCalloutShape.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <utility>
 
@@ -137,6 +138,9 @@ std::tuple<std::function<void(Popover)>, std::function<void()>, bool> usePopover
       anchorRect = rt->layoutRectForKey(anchorKey);
       anchorTrackLeafKey = std::nullopt;
     }
+    if (anchorRect.has_value() && popover.anchorMaxHeight.has_value()) {
+      anchorRect->height = std::min(anchorRect->height, *popover.anchorMaxHeight);
+    }
     Size const win = wPtr->getSize();
     // Space needed for flip heuristic: gap + arrow height (arrow is inside overlay bounds, not in offset).
     float const gapTotal = popover.gap + (popover.arrow ? Popover::kArrowH : 0.f);
@@ -157,6 +161,7 @@ std::tuple<std::function<void(Popover)>, std::function<void()>, bool> usePopover
         OverlayConfig{
             .anchor = anchorRect,
             .anchorTrackLeafKey = std::move(anchorTrackLeafKey),
+            .anchorMaxHeight = popover.anchorMaxHeight,
             .placement = overlayPlacementFromPopover(resolved),
             .offset = offset,
             .maxSize = maxSz,
