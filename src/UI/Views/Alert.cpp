@@ -7,7 +7,6 @@
 #include <Flux/UI/Views/VStack.hpp>
 #include <Flux/UI/Views/ZStack.hpp>
 
-#include <cassert>
 #include <utility>
 
 namespace flux {
@@ -100,6 +99,10 @@ std::tuple<std::function<void(Alert)>, std::function<void()>, bool> useAlert() {
 
   auto show = [showOverlay, hideOverlay](Alert alert) {
     if (alert.buttons.empty()) {
+      // Empty action (not hideOverlay): the loop below wraps every button with
+      // hideOverlay() then originalAction. OK only needs dismiss — same result as
+      // spec's hideOverlay on the slot, without stuffing hideOverlay into original
+      // and running it twice through the wrapper.
       alert.buttons.push_back({
           .label = "OK",
           .variant = ButtonVariant::Secondary,
@@ -107,7 +110,10 @@ std::tuple<std::function<void(Alert)>, std::function<void()>, bool> useAlert() {
       });
     }
 
-    assert(alert.buttons.size() <= 3 && "Alert supports at most three buttons");
+    // Cap at three buttons in all builds (assert would vanish in release).
+    if (alert.buttons.size() > 3) {
+      alert.buttons.resize(3);
+    }
 
     for (auto& btn : alert.buttons) {
       auto originalAction = std::move(btn.action);

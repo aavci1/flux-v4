@@ -30,6 +30,7 @@ struct Alert {
 
   /// Up to three buttons, rendered left-to-right (last = rightmost = primary).
   /// When empty, a single "OK" Secondary button is added automatically.
+  /// `useAlert` keeps only the first three if more are supplied.
   std::vector<AlertButton> buttons;
 
   // ── Appearance ───────────────────────────────────────────────────────────
