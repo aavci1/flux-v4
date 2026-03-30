@@ -39,16 +39,17 @@ struct ButtonColors {
   Color focusRing{};
 };
 
-ButtonColors deriveColors(ButtonVariant variant, Color accent, Color destructive) {
+ButtonColors deriveColors(ButtonVariant variant, Color accent, Color destructive, Color onAccent,
+                          Color onDanger) {
   switch (variant) {
   case ButtonVariant::Primary:
     return {
         .fill = accent,
         .fillHover = lighten(accent, 0.08f),
         .fillPress = darken(accent, 0.08f),
-        .label = Colors::white,
-        .labelHover = Colors::white,
-        .labelPress = Colors::white,
+        .label = onAccent,
+        .labelHover = onAccent,
+        .labelPress = onAccent,
         .border = Colors::transparent,
         .focusRing = accent,
     };
@@ -68,9 +69,9 @@ ButtonColors deriveColors(ButtonVariant variant, Color accent, Color destructive
         .fill = destructive,
         .fillHover = lighten(destructive, 0.08f),
         .fillPress = darken(destructive, 0.08f),
-        .label = Colors::white,
-        .labelHover = Colors::white,
-        .labelPress = Colors::white,
+        .label = onDanger,
+        .labelHover = onDanger,
+        .labelPress = onDanger,
         .border = Colors::transparent,
         .focusRing = destructive,
     };
@@ -104,9 +105,14 @@ ButtonColors deriveColors(ButtonVariant variant, Color accent, Color destructive
 
 Element Button::body() const {
   FluxTheme const& theme = useEnvironment<FluxTheme>();
-  Color const accent = resolveColor(accentColor, theme.accent);
-  Color const destructive = resolveColor(destructiveColor, theme.danger);
-  Font const fontResolved = resolveFont(font, theme.fontLabel);
+  Color const accent = resolveColor(accentColor, theme.colorAccent);
+  Color const destructive = resolveColor(destructiveColor, theme.colorDanger);
+  Font const fontResolved = resolveFont(font, theme.typeLabel.toFont());
+
+  Transition const trFast =
+      theme.reducedMotion ? Transition::instant() : Transition::ease(theme.durationFast);
+  Transition const trMed =
+      theme.reducedMotion ? Transition::instant() : Transition::ease(theme.durationMedium);
 
   bool const hovered = useHover();
   bool const pressed = usePress();
@@ -121,17 +127,18 @@ Element Button::body() const {
     }
   }
 
-  ButtonColors const colors = deriveColors(variant, accent, destructive);
+  ButtonColors const colors =
+      deriveColors(variant, accent, destructive, theme.colorOnAccent, theme.colorOnDanger);
 
   auto fillAnim = useAnimated<Color>(colors.fill);
   if (!isLink) {
     Color const fillTarget =
-        effectivelyDisabled ? theme.surfaceDisabled
+        effectivelyDisabled ? theme.colorSurfaceDisabled
                             : pressed ? colors.fillPress
                             : hovered ? colors.fillHover
                                       : colors.fill;
     if (*fillAnim != fillTarget) {
-      fillAnim.set(fillTarget, Transition::ease(0.12f));
+      fillAnim.set(fillTarget, trMed);
     }
   }
 
@@ -139,10 +146,10 @@ Element Button::body() const {
   {
     Color const labelTarget =
         effectivelyDisabled
-            ? theme.textDisabled
+            ? theme.colorTextDisabled
             : (isLink ? (pressed ? colors.labelPress : hovered ? colors.labelHover : colors.label) : colors.label);
     if (*labelAnim != labelTarget) {
-      labelAnim.set(labelTarget, Transition::ease(0.12f));
+      labelAnim.set(labelTarget, trMed);
     }
   }
 
@@ -150,7 +157,7 @@ Element Button::body() const {
   if (!isLink) {
     float const scaleTarget = (pressed && !effectivelyDisabled) ? 0.97f : 1.f;
     if (std::abs(*scaleAnim - scaleTarget) > 0.001f) {
-      scaleAnim.set(scaleTarget, Transition::ease(0.10f));
+      scaleAnim.set(scaleTarget, trFast);
     }
   }
 
@@ -162,8 +169,9 @@ Element Button::body() const {
     }, [effectivelyDisabled] { return !effectivelyDisabled; });
   }
 
-  float const h = isLink ? 0.f : (height > 0.f ? height : 36.f);
-  float const effPaddingH = isLink ? 0.f : paddingH;
+  float const h =
+      isLink ? 0.f : (height > 0.f ? height : theme.controlHeightMedium);
+  float const effPaddingH = isLink ? 0.f : resolveFloat(paddingH, theme.space4);
   float const effFlexGrow = isLink ? 0.f : flexGrow;
 
   auto handleTap = [onTap = onTap, effectivelyDisabled]() {
@@ -182,7 +190,9 @@ Element Button::body() const {
 
   bool const showFocusRing = !effectivelyDisabled && focused &&
                              (isLink ? keyboardFocused : true);
-  CornerRadius const cr = isLink ? CornerRadius{ 2.f } : cornerRadius;
+  float const radiusResolved =
+      isLink ? theme.radiusXSmall : resolveFloat(cornerRadius, theme.radiusMedium);
+  CornerRadius const cr{radiusResolved};
 
   // Focus is drawn as this rectangle's stroke (inset along the edge), not a separate outset ring: true
   // outside gap would need layout/`resolveLeafBounds` support or a dedicated FocusRing primitive.

@@ -25,8 +25,8 @@ struct Popover {
 
   PopoverPlacement placement = PopoverPlacement::Below;
 
-  /// Gap between the anchor edge and the popover card (before the arrow).
-  float gap = 6.f;
+  /// Gap between the anchor edge and the popover card (`kFloatFromTheme` = `FluxTheme::space2`).
+  float gap = kFloatFromTheme;
 
   /// When true, a callout triangle is drawn pointing at the anchor.
   bool arrow = true;
@@ -36,16 +36,16 @@ struct Popover {
   Color backgroundColor = kFromTheme;
   Color borderColor = kFromTheme;
   float borderWidth = 1.f;
-  CornerRadius cornerRadius{10.f};
+  float cornerRadius = kFloatFromTheme;
 
-  /// Inset between the card outline and the popover content (default matches system padding).
-  float contentPadding = 12.f;
+  /// Inset between the card outline and the popover content (`kFloatFromTheme` = `FluxTheme::space3`).
+  float contentPadding = kFloatFromTheme;
 
   /// Maximum size of the popover content area (excluding arrow).
   /// nullopt = size to content, clamped to window bounds.
   std::optional<Size> maxSize;
 
-  /// Full-window dim behind the popover. Default `kFromTheme` uses `FluxTheme::overlayPopoverBackdrop`.
+  /// Full-window dim behind the popover. Default `kFromTheme` uses `FluxTheme::colorScrimPopover`.
   Color backdropColor = kFromTheme;
 
   /// When set, the overlay anchor height is clamped to this value (use the trigger row height).

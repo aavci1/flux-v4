@@ -30,17 +30,17 @@ struct Button {
 
   ButtonVariant variant = ButtonVariant::Primary;
 
-  /// Override the default height (0 = 36 pt for all variants except Link,
-  /// which always sizes to its text height). Ignored for Link.
-  float height = 0.f;
+  /// Override fixed height (`<= 0` or `kHeightFromTheme` = `FluxTheme::controlHeightMedium`). Ignored for Link.
+  float height = kHeightFromTheme;
 
   Font font = kFontFromTheme;
 
-  /// Horizontal padding between label and button edge.
+  /// Horizontal padding between label and button edge (`kFloatFromTheme` = `FluxTheme::space4`).
   /// Ignored for Link (always 0).
-  float paddingH = 16.f;
+  float paddingH = kFloatFromTheme;
 
-  CornerRadius cornerRadius{ 8.f };
+  /// Uniform corner radius (`kFloatFromTheme` = `FluxTheme::radiusMedium`).
+  float cornerRadius = kFloatFromTheme;
 
   /// Accent colour: Primary/Ghost/Secondary/Link label and focus ring.
   Color accentColor = kFromTheme;

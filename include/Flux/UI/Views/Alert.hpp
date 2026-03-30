@@ -44,7 +44,8 @@ struct Alert {
   Color titleColor = kFromTheme;
   Color messageColor = kFromTheme;
   Color backdropColor = kFromTheme;
-  CornerRadius cornerRadius{14.f};
+  /// Uniform card radius (`kFloatFromTheme` = `FluxTheme::radiusXLarge`).
+  float cornerRadius = kFloatFromTheme;
 
   // ── Behaviour ────────────────────────────────────────────────────────────
 

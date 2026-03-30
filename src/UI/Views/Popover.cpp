@@ -108,13 +108,15 @@ OverlayConfig::Placement overlayPlacementFromPopover(PopoverPlacement p) {
 
 Element Popover::body() const {
   FluxTheme const& theme = useEnvironment<FluxTheme>();
-  Color const bg = resolveColor(backgroundColor, theme.surfaceOverlay);
-  Color const bd = resolveColor(borderColor, theme.borderSubtle);
+  Color const bg = resolveColor(backgroundColor, theme.colorSurfaceOverlay);
+  Color const bd = resolveColor(borderColor, theme.colorBorderSubtle);
+  float const padR = resolveFloat(contentPadding, theme.space3);
+  CornerRadius const crR{resolveFloat(cornerRadius, theme.radiusLarge)};
   return Element{PopoverCalloutShape{
       .placement = resolvedPlacement,
       .arrow = arrow,
-      .padding = contentPadding,
-      .cornerRadius = cornerRadius,
+      .padding = padR,
+      .cornerRadius = crR,
       .backgroundColor = bg,
       .borderColor = bd,
       .borderWidth = borderWidth,
@@ -145,9 +147,11 @@ std::tuple<std::function<void(Popover)>, std::function<void()>, bool> usePopover
       anchorRect->height = std::min(anchorRect->height, *popover.anchorMaxHeight);
     }
     Size const win = wPtr->getSize();
+    FluxTheme const* tp = wPtr->environmentValue<FluxTheme>();
+    FluxTheme const theme = tp ? *tp : FluxTheme::light();
+    float const gap = resolveFloat(popover.gap, theme.space2);
     // Space needed for flip heuristic: gap + arrow height (arrow is inside overlay bounds, not in offset).
-    float const gapTotal = popover.gap + (popover.arrow ? Popover::kArrowH : 0.f);
-    float const gap = popover.gap;
+    float const gapTotal = gap + (popover.arrow ? Popover::kArrowH : 0.f);
     std::optional<Size> const maxSz = popover.maxSize;
     bool const dismissOutside = popover.dismissOnOutsideTap;
     bool const dismissEsc = popover.dismissOnEscape;
@@ -159,10 +163,7 @@ std::tuple<std::function<void(Popover)>, std::function<void()>, bool> usePopover
 
     Vec2 const offset = popoverOverlayGapOffset(resolved, gap);
 
-    // show() runs outside a build pass — read window storage, not useEnvironment (backdrop is show-time).
-    FluxTheme const* tp = wPtr->environmentValue<FluxTheme>();
-    FluxTheme const theme = tp ? *tp : FluxTheme::light();
-    Color const backdropResolved = resolveColor(popover.backdropColor, theme.overlayPopoverBackdrop);
+    Color const backdropResolved = resolveColor(popover.backdropColor, theme.colorScrimPopover);
 
     showOverlay(
         Element{std::move(popover)},

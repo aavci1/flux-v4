@@ -14,4 +14,28 @@ struct Font {
   bool italic = false;
 };
 
+/// Typographic style: font metrics plus line height for vertical rhythm.
+/// `lineHeight` is a multiplier (e.g. 1.4 = 140% of font size). Use 0 for the font's natural line height.
+struct TextStyle {
+  std::string family{};
+  float size = 16.f;
+  float weight = 400.f;
+  bool italic = false;
+  float lineHeight = 0.f;
+
+  TextStyle() = default;
+  constexpr TextStyle(float sz, float wt, float lh = 0.f) : size(sz), weight(wt), lineHeight(lh) {}
+
+  Font toFont() const { return Font{family, size, weight, italic}; }
+};
+
+/// Sentinel: inherit `TextStyle` from `FluxTheme`.
+inline constexpr TextStyle kStyleFromTheme{-1.f, 0.f};
+
+inline bool isFromTheme(TextStyle const& s) { return s.size < 0.f; }
+
+inline TextStyle resolveStyle(TextStyle const& override, TextStyle const& themeValue) {
+  return isFromTheme(override) ? themeValue : override;
+}
+
 } // namespace flux

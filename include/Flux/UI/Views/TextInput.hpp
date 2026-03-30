@@ -38,13 +38,14 @@ struct TextInput {
 
   float borderWidth = 1.f;
   float borderFocusWidth = 2.f;
-  CornerRadius cornerRadius{8.f};
+  /// Uniform corner radius (`kFloatFromTheme` = `FluxTheme::radiusMedium`).
+  float cornerRadius = kFloatFromTheme;
 
   /// Total vertical height of the field. 0 = \ref resolvedInputFieldHeight (same default as \ref Picker).
   float height = 0.f;
 
-  float paddingH = 12.f;
-  float paddingV = 8.f;
+  float paddingH = kFloatFromTheme;
+  float paddingV = kFloatFromTheme;
 
   // ── Layout ───────────────────────────────────────────────────────────────
 

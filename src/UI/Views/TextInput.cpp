@@ -571,16 +571,18 @@ Element TextInput::body() const {
   using namespace std::chrono;
 
   FluxTheme const& theme = useEnvironment<FluxTheme>();
-  Font const fnt = resolveFont(font, theme.fontBody);
-  Color const tc = resolveColor(textColor, theme.textPrimary);
-  Color const plc = resolveColor(placeholderColor, theme.textPlaceholder);
-  Color const bg = resolveColor(backgroundColor, theme.surfaceField);
-  Color const bc = resolveColor(borderColor, theme.border);
-  Color const bfc = resolveColor(borderFocusColor, theme.accent);
-  Color const cc = resolveColor(caretColor, theme.accent);
-  Color const sc =
-      resolveColor(selectionColor, Color{theme.accent.r, theme.accent.g, theme.accent.b, 0.25f});
-  Color const dc = resolveColor(disabledColor, theme.surfaceDisabled);
+  Font const fnt = resolveFont(font, theme.typeBody.toFont());
+  float const padHResolved = resolveFloat(paddingH, theme.paddingFieldH);
+  float const padVResolved = resolveFloat(paddingV, theme.paddingFieldV);
+  CornerRadius const crResolved{resolveFloat(cornerRadius, theme.radiusMedium)};
+  Color const tc = resolveColor(textColor, theme.colorTextPrimary);
+  Color const plc = resolveColor(placeholderColor, theme.colorTextPlaceholder);
+  Color const bg = resolveColor(backgroundColor, theme.colorSurfaceField);
+  Color const bc = resolveColor(borderColor, theme.colorBorder);
+  Color const bfc = resolveColor(borderFocusColor, theme.colorBorderFocus);
+  Color const cc = resolveColor(caretColor, theme.colorAccent);
+  Color const sc = resolveColor(selectionColor, theme.colorAccentSubtle);
+  Color const dc = resolveColor(disabledColor, theme.colorSurfaceDisabled);
 
   State<std::string> val = value;
   auto caretByte = useState(0);
@@ -639,7 +641,7 @@ Element TextInput::body() const {
   std::function<void(std::string const&)> const onCh = onChange;
   std::function<void(std::string const&)> const onSub = onSubmit;
   int const maxLen = maxLength;
-  float const padH = paddingH;
+  float const padH = padHResolved;
   // buildSlotRect() matches layout after the previous pass; first build can yield 0 — click-to-caret fixes next frame.
   float const frameX = [] {
     Runtime* const rt = Runtime::current();
@@ -993,10 +995,10 @@ Element TextInput::body() const {
       .disabledColor = dc,
       .borderWidth = borderWidth,
       .borderFocusWidth = borderFocusWidth,
-      .cornerRadius = cornerRadius,
+      .cornerRadius = crResolved,
       .height = height,
-      .paddingH = paddingH,
-      .paddingV = paddingV,
+      .paddingH = padHResolved,
+      .paddingV = padVResolved,
       .minSize = minSize,
       .cachedCaretX = cachedCaretX,
       .cachedSelX0 = cachedSelX0,

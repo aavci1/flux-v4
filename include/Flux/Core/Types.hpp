@@ -110,6 +110,17 @@ constexpr inline Color resolveColor(Color override, Color themeValue) {
   return (override.a < 0.f) ? themeValue : override;
 }
 
+/// Sentinel float: inherit spacing, radius, or non-layout float from `FluxTheme`.
+inline constexpr float kFloatFromTheme = -1.f;
+
+/// Sentinel for Button fixed height when it should use `FluxTheme::controlHeightMedium` (same value as
+/// `kFloatFromTheme`; separate name documents intent).
+inline constexpr float kHeightFromTheme = -1.f;
+
+constexpr inline float resolveFloat(float override, float themeValue) {
+  return (override < 0.f) ? themeValue : override;
+}
+
 namespace Colors {
 constexpr Color white{1, 1, 1, 1};
 constexpr Color black{0, 0, 0, 1};

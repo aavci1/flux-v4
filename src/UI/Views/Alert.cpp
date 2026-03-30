@@ -17,10 +17,11 @@ namespace flux {
 
 Element Alert::body() const {
   FluxTheme const& theme = useEnvironment<FluxTheme>();
-  Color const card = resolveColor(cardColor, theme.surfaceOverlay);
-  Color const stroke = resolveColor(cardStrokeColor, theme.borderSubtle);
-  Color const titleC = resolveColor(titleColor, theme.textPrimary);
-  Color const msgC = resolveColor(messageColor, theme.textSecondary);
+  Color const card = resolveColor(cardColor, theme.colorSurface);
+  Color const stroke = resolveColor(cardStrokeColor, theme.colorBorderSubtle);
+  Color const titleC = resolveColor(titleColor, theme.colorTextPrimary);
+  Color const msgC = resolveColor(messageColor, theme.colorTextSecondary);
+  CornerRadius const cardCorner{resolveFloat(cornerRadius, theme.radiusXLarge)};
   // A lone ZStack under the full-window overlay expands every child to the window size
   // (see LayoutZStack — children share the stack's max proposed size). Spacers + flex center
   // the card so the inner ZStack only receives the card's intrinsic width/height.
@@ -40,13 +41,13 @@ Element Alert::body() const {
                                   {
                                       Rectangle{
                                           .frame = {0.f, 0.f, cardWidth, 0.f},
-                                          .cornerRadius = cornerRadius,
+                                          .cornerRadius = cardCorner,
                                           .fill = FillStyle::solid(card),
                                           .stroke = StrokeStyle::solid(stroke, 1.f),
                                       },
                                       VStack{
-                                          .spacing = 12.f,
-                                          .padding = 24.f,
+                                          .spacing = theme.space3,
+                                          .padding = theme.space6,
                                           .hAlign = HorizontalAlignment::Leading,
                                           .children = buildContent(titleC, msgC, theme),
                                       },
@@ -65,24 +66,26 @@ std::vector<Element> Alert::buildContent(Color titleC, Color msgC, FluxTheme con
 
   rows.push_back(Text{
       .text = title,
-      .font = theme.fontTitle,
+      .font = theme.typeTitle.toFont(),
       .color = titleC,
+      .lineHeight = theme.typeTitle.lineHeight,
   });
 
   if (!message.empty()) {
     rows.push_back(Text{
         .text = message,
-        .font = theme.fontLabel,
+        .font = theme.typeBody.toFont(),
         .color = msgC,
         .wrapping = TextWrapping::Wrap,
-        .frame = {0.f, 0.f, cardWidth - 48.f, 0.f},
+        .lineHeight = theme.typeBody.lineHeight,
+        .frame = {0.f, 0.f, cardWidth - 2.f * theme.space6, 0.f},
     });
   }
 
   if (buttons.size() == 1) {
     auto const& btn = buttons[0];
     rows.push_back(HStack{
-        .spacing = 8.f,
+        .spacing = theme.space2,
         .children =
             {
                 Spacer{},
@@ -108,7 +111,7 @@ std::vector<Element> Alert::buildContent(Color titleC, Color msgC, FluxTheme con
               .withFlex(1.f));
     }
     rows.push_back(HStack{
-        .spacing = 8.f,
+        .spacing = theme.space2,
         .children = std::move(buttonElems),
     });
   }
@@ -154,7 +157,7 @@ std::tuple<std::function<void(Alert)>, std::function<void()>, bool> useAlert() {
     // show() runs outside a build pass — read window storage, not useEnvironment (backdrop is show-time).
     FluxTheme const* tp = wPtr->environmentValue<FluxTheme>();
     FluxTheme const theme = tp ? *tp : FluxTheme::light();
-    Color const backdrop = resolveColor(alert.backdropColor, theme.overlayBackdropScrim);
+    Color const backdrop = resolveColor(alert.backdropColor, theme.colorScrimModal);
     bool const dismissEsc = alert.dismissOnEscape;
 
     showOverlay(

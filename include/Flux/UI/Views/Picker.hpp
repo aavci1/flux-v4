@@ -10,6 +10,7 @@
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/InputFieldLayout.hpp>
 #include <Flux/UI/Hooks.hpp>
+#include <Flux/Reactive/Transition.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Views/ForEach.hpp>
 #include <Flux/UI/Views/HStack.hpp>
@@ -199,15 +200,13 @@ template<typename T>
 Popover makePickerDropdownPopover(std::vector<PickerOption<T>> opts, std::function<void()> hide,
                                   State<T> val, State<int> keyboardCursor, float triggerWidth,
                                   float triggerRowHeight, float maxDropdownHeight, float rowPaddingH,
-                                  CornerRadius menuCornerRadius,
+                                  float menuCornerRadius,
                                   std::function<void(T const&)> onCh, Color rowHoverColor,
                                   Color rowSelectedColor, Font font, Color textColor, Color checkColor) {
   std::vector<int> indices(opts.size());
   std::iota(indices.begin(), indices.end(), 0);
   std::size_t const rowCount = opts.size();
-  float const menuR =
-      std::min({menuCornerRadius.topLeft, menuCornerRadius.topRight, menuCornerRadius.bottomRight,
-                menuCornerRadius.bottomLeft});
+  float const menuR = menuCornerRadius;
 
   Element rowList = VStack{
       .spacing = 0.f,
@@ -293,11 +292,11 @@ struct Picker {
 
   float borderWidth = 1.f;
   float borderFocusWidth = 2.f;
-  CornerRadius cornerRadius{8.f};
+  float cornerRadius = kFloatFromTheme;
   /// Total trigger height; 0 = same rule as \ref TextInput (\ref resolvedInputFieldHeight).
   float height = 0.f;
-  float paddingH = 12.f;
-  float paddingV = 8.f;
+  float paddingH = kFloatFromTheme;
+  float paddingV = kFloatFromTheme;
 
   float maxDropdownHeight = 240.f;
 
@@ -324,18 +323,24 @@ struct Picker {
 
   Element body() const {
     FluxTheme const& theme = useEnvironment<FluxTheme>();
-    Font const fontR = resolveFont(font, theme.fontBody);
-    Color const textR = resolveColor(textColor, theme.textPrimary);
-    Color const plcR = resolveColor(placeholderColor, theme.textPlaceholder);
-    Color const bgR = resolveColor(backgroundColor, theme.surfaceField);
-    Color const brdR = resolveColor(borderColor, theme.border);
-    Color const brdFocusR = resolveColor(borderFocusColor, theme.accent);
-    Color const chvR = resolveColor(chevronColor, theme.textMuted);
-    Color const disR = resolveColor(disabledColor, theme.surfaceDisabled);
-    Color const rowHoverR = resolveColor(rowHoverColor, theme.surfaceRowHover);
-    Color const rowSelR =
-        resolveColor(rowSelectedColor, Color{theme.accent.r, theme.accent.g, theme.accent.b, 0.12f});
-    Color const triggerHoverR = theme.surfaceHover;
+    float const padHResolved = resolveFloat(paddingH, theme.paddingFieldH);
+    float const padVResolved = resolveFloat(paddingV, theme.paddingFieldV);
+    CornerRadius const triggerCr{resolveFloat(cornerRadius, theme.radiusMedium)};
+    float const menuRadius = theme.radiusLarge;
+    Transition const trMed =
+        theme.reducedMotion ? Transition::instant() : Transition::ease(theme.durationMedium);
+
+    Font const fontR = resolveFont(font, theme.typeBody.toFont());
+    Color const textR = resolveColor(textColor, theme.colorTextPrimary);
+    Color const plcR = resolveColor(placeholderColor, theme.colorTextPlaceholder);
+    Color const bgR = resolveColor(backgroundColor, theme.colorSurfaceField);
+    Color const brdR = resolveColor(borderColor, theme.colorBorder);
+    Color const brdFocusR = resolveColor(borderFocusColor, theme.colorBorderFocus);
+    Color const chvR = resolveColor(chevronColor, theme.colorTextMuted);
+    Color const disR = resolveColor(disabledColor, theme.colorSurfaceDisabled);
+    Color const rowHoverR = resolveColor(rowHoverColor, theme.colorSurfaceRowHover);
+    Color const rowSelR = resolveColor(rowSelectedColor, theme.colorAccentSubtle);
+    Color const triggerHoverR = theme.colorSurfaceHover;
 
     auto [showPopover, hidePopover, isOpen] = usePopover();
     auto requestFocus = useRequestFocus();
@@ -371,8 +376,7 @@ struct Picker {
     State<T> valHandle = value;
     std::function<void(T const&)> const onChangeFn = onChange;
     float const maxDdH = maxDropdownHeight > 0.f ? maxDropdownHeight : 240.f;
-    float const rowPadH = paddingH;
-    CornerRadius const menuCorners = cornerRadius;
+    float const rowPadH = padHResolved;
     Color const rowHover = rowHoverR;
     Color const rowSelected = rowSelR;
     Font const rowFont = fontR;
@@ -387,7 +391,7 @@ struct Picker {
       Color const target =
           isDisabled ? disR : isOpen ? bgR : hovered ? triggerHoverR : bgR;
       if (*fillAnim != target) {
-        fillAnim.set(target, Transition::ease(0.12f));
+        fillAnim.set(target, trMed);
       }
     }
 
@@ -395,7 +399,7 @@ struct Picker {
     Color const borderCol = showFocusBorder ? brdFocusR : brdR;
     float const borderW = showFocusBorder ? borderFocusWidth : borderWidth;
 
-    float const h = resolvedInputFieldHeight(fontR, textR, paddingV, height);
+    float const h = resolvedInputFieldHeight(fontR, textR, padVResolved, height);
 
     std::size_t const optionCount = menuOptions.size();
 
@@ -412,7 +416,7 @@ struct Picker {
         keyboardCursor = -1;
       } else {
         showPopover(detail::makePickerDropdownPopover(menuOptions, hidePopover, valHandle, keyboardCursor,
-                                                      triggerWidth, h, maxDdH, rowPadH, menuCorners, onChangeFn,
+                                                      triggerWidth, h, maxDdH, rowPadH, menuRadius, onChangeFn,
                                                       rowHover, rowSelected, rowFont, rowText, checkCol));
       }
     };
@@ -431,7 +435,7 @@ struct Picker {
           requestFocus();
           keyboardCursor = 0;
           showPopover(detail::makePickerDropdownPopover(menuOptions, hidePopover, valHandle, keyboardCursor,
-                                                        triggerWidth, h, maxDdH, rowPadH, menuCorners,
+                                                        triggerWidth, h, maxDdH, rowPadH, menuRadius,
                                                         onChangeFn, rowHover, rowSelected, rowFont, rowText,
                                                         checkCol));
         }
@@ -471,7 +475,7 @@ struct Picker {
             {
                 Rectangle{
                     .frame = {0.f, 0.f, 0.f, h},
-                    .cornerRadius = cornerRadius,
+                    .cornerRadius = triggerCr,
                     .fill = FillStyle::solid(*fillAnim),
                     .stroke = StrokeStyle::solid(borderCol, borderW),
                     .flexGrow = flexGrow,
@@ -488,7 +492,7 @@ struct Picker {
                     .children =
                         {
                             Rectangle{
-                                .frame = {0.f, 0.f, paddingH, h},
+                                .frame = {0.f, 0.f, padHResolved, h},
                                 .fill = FillStyle::none(),
                                 .stroke = StrokeStyle::none(),
                             },
@@ -510,7 +514,7 @@ struct Picker {
                                 .cursor = isDisabled ? Cursor::Inherit : Cursor::Hand,
                             },
                             Rectangle{
-                                .frame = {0.f, 0.f, paddingH, h},
+                                .frame = {0.f, 0.f, padHResolved, h},
                                 .fill = FillStyle::none(),
                                 .stroke = StrokeStyle::none(),
                                 .onTap = isDisabled ? nullptr : std::function<void()>{onTriggerTap},
@@ -532,7 +536,7 @@ struct Picker {
                                     },
                             }},
                             Rectangle{
-                                .frame = {0.f, 0.f, paddingH, h},
+                                .frame = {0.f, 0.f, padHResolved, h},
                                 .fill = FillStyle::none(),
                                 .stroke = StrokeStyle::none(),
                                 .onTap = isDisabled ? nullptr : std::function<void()>{onTriggerTap},

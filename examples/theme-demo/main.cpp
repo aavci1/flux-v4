@@ -1,5 +1,7 @@
 // Demonstrates FluxTheme, useEnvironment, Element::environment(), and window-level theme switching.
 #include <Flux.hpp>
+
+#include <string>
 #include <Flux/Core/Application.hpp>
 #include <Flux/Core/Window.hpp>
 #include <Flux/Core/WindowUI.hpp>
@@ -14,26 +16,62 @@ using namespace flux;
 
 Window* gThemeDemoWindow = nullptr;
 
+namespace {
+
+FluxTheme themeForPreset(int preset) {
+  switch (preset) {
+  case 0:
+    return FluxTheme::light();
+  case 1:
+    return FluxTheme::dark();
+  case 2:
+    return FluxTheme::compact();
+  case 3:
+    return FluxTheme::comfortable();
+  default:
+    return FluxTheme::light();
+  }
+}
+
+char const* presetLabel(int preset) {
+  switch (preset) {
+  case 0:
+    return "Light";
+  case 1:
+    return "Dark";
+  case 2:
+    return "Compact";
+  case 3:
+    return "Comfortable";
+  default:
+    return "Light";
+  }
+}
+
+} // namespace
+
 struct ThemeDemoRoot {
   auto body() const {
-    auto windowDark = useState(false);
+    auto windowPreset = useState(0);
 
     FluxTheme const& windowTheme = useEnvironment<FluxTheme>();
 
-    auto pane = [](char const* title, char const* subtitle, FluxTheme const& t) {
+    auto pane = [&](char const* title, char const* subtitle, FluxTheme const& t) {
       return VStack{
-          .spacing = 8.f,
-          .padding = 16.f,
+          .spacing = windowTheme.space2,
+          .padding = windowTheme.space4,
           .hAlign = HorizontalAlignment::Leading,
           .children =
               {
                   Text{ .text = title,
-                        .font = t.fontHeading,
-                        .color = t.textPrimary },
+                        .font = t.typeHeading.toFont(),
+                        .color = t.colorTextPrimary,
+                        .lineHeight = t.typeHeading.lineHeight },
                   Text{ .text = subtitle,
-                        .font = t.fontBody,
-                        .color = t.textSecondary,
+                        .font = t.typeBody.toFont(),
+                        .color = t.colorTextSecondary,
                         .wrapping = TextWrapping::Wrap,
+                        .lineHeight = t.typeBody.lineHeight,
                         .frame = { 0.f, 0.f, 200.f, 0.f } },
                   Button{ .label = "Accent",
                           .variant = ButtonVariant::Primary,
@@ -45,40 +83,98 @@ struct ThemeDemoRoot {
     return ZStack{
         .children =
             {
-                Rectangle{ .fill = FillStyle::solid(windowTheme.surfaceBackground) },
+                Rectangle{ .fill = FillStyle::solid(windowTheme.colorBackground) },
                 VStack{
-                    .spacing = 16.f,
-                    .padding = 20.f,
+                    .spacing = windowTheme.space4,
+                    .padding = windowTheme.space5,
                     .hAlign = HorizontalAlignment::Leading,
                     .children =
                         {
                             Text{ .text = "Theme & environment",
-                                  .font = windowTheme.fontHeading,
-                                  .color = windowTheme.textPrimary },
+                                  .font = windowTheme.typeHeading.toFont(),
+                                  .color = windowTheme.colorTextPrimary,
+                                  .lineHeight = windowTheme.typeHeading.lineHeight },
                             Text{
                                 .text = "Window theme drives defaults. The right column uses "
                                         "Element::environment(FluxTheme::dark()) for a subtree override.",
-                                .font = windowTheme.fontBody,
-                                .color = windowTheme.textSecondary,
+                                .font = windowTheme.typeBody.toFont(),
+                                .color = windowTheme.colorTextSecondary,
                                 .wrapping = TextWrapping::Wrap,
+                                .lineHeight = windowTheme.typeBody.lineHeight,
                                 .frame = { 0.f, 0.f, 520.f, 0.f },
                             },
-                            Button{
-                                .label = *windowDark ? "Switch window to light" : "Switch window to dark",
-                                .variant = ButtonVariant::Secondary,
-                                .onTap = [windowDark] {
-                                  if (!gThemeDemoWindow) {
-                                    return;
-                                  }
-                                  bool const next = !*windowDark;
-                                  gThemeDemoWindow->setEnvironmentValue(next ? FluxTheme::dark()
-                                                                           : FluxTheme::light());
-                                  windowDark = next;
-                                  Application::instance().markReactiveDirty();
-                                },
+                            Text{
+                                .text = std::string("Window preset: ") + presetLabel(*windowPreset) +
+                                        "  (density " + std::to_string(windowTheme.density) +
+                                        ", horizontal spacing token space4=" + std::to_string(windowTheme.space4) +
+                                        "pt)",
+                                .font = windowTheme.typeBodySmall.toFont(),
+                                .color = windowTheme.colorTextMuted,
+                                .wrapping = TextWrapping::Wrap,
+                                .lineHeight = windowTheme.typeBodySmall.lineHeight,
+                                .frame = { 0.f, 0.f, 520.f, 0.f },
                             },
                             HStack{
-                                .spacing = 12.f,
+                                .spacing = windowTheme.space2,
+                                .vAlign = VerticalAlignment::Center,
+                                .children =
+                                    {
+                                        Button{
+                                            .label = "Light",
+                                            .variant = *windowPreset == 0 ? ButtonVariant::Primary
+                                                                          : ButtonVariant::Secondary,
+                                            .onTap = [windowPreset] {
+                                              if (!gThemeDemoWindow) {
+                                                return;
+                                              }
+                                              gThemeDemoWindow->setEnvironmentValue(themeForPreset(0));
+                                              windowPreset = 0;
+                                              Application::instance().markReactiveDirty();
+                                            },
+                                        },
+                                        Button{
+                                            .label = "Dark",
+                                            .variant = *windowPreset == 1 ? ButtonVariant::Primary
+                                                                          : ButtonVariant::Secondary,
+                                            .onTap = [windowPreset] {
+                                              if (!gThemeDemoWindow) {
+                                                return;
+                                              }
+                                              gThemeDemoWindow->setEnvironmentValue(themeForPreset(1));
+                                              windowPreset = 1;
+                                              Application::instance().markReactiveDirty();
+                                            },
+                                        },
+                                        Button{
+                                            .label = "Compact",
+                                            .variant = *windowPreset == 2 ? ButtonVariant::Primary
+                                                                          : ButtonVariant::Secondary,
+                                            .onTap = [windowPreset] {
+                                              if (!gThemeDemoWindow) {
+                                                return;
+                                              }
+                                              gThemeDemoWindow->setEnvironmentValue(themeForPreset(2));
+                                              windowPreset = 2;
+                                              Application::instance().markReactiveDirty();
+                                            },
+                                        },
+                                        Button{
+                                            .label = "Comfortable",
+                                            .variant = *windowPreset == 3 ? ButtonVariant::Primary
+                                                                          : ButtonVariant::Secondary,
+                                            .onTap = [windowPreset] {
+                                              if (!gThemeDemoWindow) {
+                                                return;
+                                              }
+                                              gThemeDemoWindow->setEnvironmentValue(themeForPreset(3));
+                                              windowPreset = 3;
+                                              Application::instance().markReactiveDirty();
+                                            },
+                                        },
+                                    },
+                            },
+                            HStack{
+                                .spacing = windowTheme.space3,
                                 .vAlign = VerticalAlignment::Top,
                                 .children =
                                     {
