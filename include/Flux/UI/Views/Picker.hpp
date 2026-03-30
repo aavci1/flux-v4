@@ -58,6 +58,23 @@ inline Path checkmarkPath() {
 
 } // namespace detail
 
+/// Background corners for a menu row so fills stay inside the popover’s rounded outline.
+inline CornerRadius pickerMenuRowCorners(std::size_t rowIndex, std::size_t rowCount, float r) {
+  if (rowCount == 0 || r <= 0.f) {
+    return CornerRadius{};
+  }
+  if (rowCount == 1) {
+    return CornerRadius{r};
+  }
+  if (rowIndex == 0) {
+    return CornerRadius{r, r, 0.f, 0.f};
+  }
+  if (rowIndex == rowCount - 1) {
+    return CornerRadius{0.f, 0.f, r, r};
+  }
+  return CornerRadius{};
+}
+
 template<typename T>
 struct PickerOption {
   T value{};
@@ -71,6 +88,8 @@ struct PickerRow {
   bool keyboardActive = false;
   /// Matches \ref Picker::paddingH so menu labels align with the trigger text.
   float rowPaddingH = 12.f;
+  /// Corners rounded where the row meets the popover card (see \ref pickerMenuRowCorners).
+  CornerRadius rowBgCorners{};
   Font font{};
   Color textColor{};
   Color hoverColor{};
@@ -91,6 +110,7 @@ struct PickerRow {
             {
                 Rectangle{
                     .frame = {0.f, 0.f, 0.f, 36.f},
+                    .cornerRadius = rowBgCorners,
                     .fill = FillStyle::solid(bg),
                     .stroke = StrokeStyle::none(),
                     .flexGrow = 1.f,
@@ -156,26 +176,33 @@ template<typename T>
 Popover makePickerDropdownPopover(std::vector<PickerOption<T>> opts, std::function<void()> hide,
                                   State<T> val, State<int> keyboardCursor, float triggerWidth,
                                   float triggerRowHeight, float maxDropdownHeight, float rowPaddingH,
+                                  CornerRadius menuCornerRadius,
                                   std::function<void(T const&)> onCh, Color rowHoverColor,
                                   Color rowSelectedColor, Font font, Color textColor, Color checkColor) {
   std::vector<int> indices(opts.size());
   std::iota(indices.begin(), indices.end(), 0);
+  std::size_t const rowCount = opts.size();
+  float const menuR =
+      std::min({menuCornerRadius.topLeft, menuCornerRadius.topRight, menuCornerRadius.bottomRight,
+                menuCornerRadius.bottomLeft});
 
   Element rowList = VStack{
       .spacing = 0.f,
+      .clip = true,
       .children =
           {
               Element{ForEach<int>{
                   std::move(indices),
-                  [opts, val, hide, onCh, keyboardCursor, rowPaddingH, rowHoverColor = rowHoverColor,
-                   rowSelectedColor = rowSelectedColor, font = font, textColor = textColor,
-                   checkColor = checkColor](int i) -> Element {
+                  [opts, val, hide, onCh, keyboardCursor, rowPaddingH, rowCount, menuR,
+                   rowHoverColor = rowHoverColor, rowSelectedColor = rowSelectedColor, font = font,
+                   textColor = textColor, checkColor = checkColor](int i) -> Element {
                     auto const idx = static_cast<std::size_t>(i);
                     return Element{PickerRow<T>{
                         .option = opts[idx],
                         .selected = (opts[idx].value == *val),
                         .keyboardActive = (*keyboardCursor == i),
                         .rowPaddingH = rowPaddingH,
+                        .rowBgCorners = pickerMenuRowCorners(idx, rowCount, menuR),
                         .font = font,
                         .textColor = textColor,
                         .hoverColor = rowHoverColor,
@@ -204,7 +231,7 @@ Popover makePickerDropdownPopover(std::vector<PickerOption<T>> opts, std::functi
       .placement = PopoverPlacement::Below,
       .gap = 4.f,
       .arrow = false,
-      .cornerRadius = CornerRadius{8.f},
+      .cornerRadius = menuCornerRadius,
       .contentPadding = 0.f,
       .maxSize = std::make_optional(dropdownMax),
       .anchorMaxHeight = triggerRowHeight,
@@ -271,6 +298,7 @@ struct Picker {
 
   Element body() const {
     auto [showPopover, hidePopover, isOpen] = usePopover();
+    auto requestFocus = useRequestFocus();
     auto keyboardCursor = useState(-1);
     auto prevPopoverOpen = useState(false);
     bool const focused = useFocus();
@@ -282,6 +310,11 @@ struct Picker {
       keyboardCursor = -1;
     }
     prevPopoverOpen = isOpen;
+
+    if (isOpen && !isDisabled && !focused) {
+      hidePopover();
+      keyboardCursor = -1;
+    }
 
     std::string selectedLabel;
     bool hasMatch = false;
@@ -299,6 +332,7 @@ struct Picker {
     std::function<void(T const&)> const onChangeFn = onChange;
     float const maxDdH = maxDropdownHeight > 0.f ? maxDropdownHeight : 240.f;
     float const rowPadH = paddingH;
+    CornerRadius const menuCorners = cornerRadius;
     Color const rowHover = rowHoverColor;
     Color const rowSelected = rowSelectedColor;
     Font const rowFont = font;
@@ -334,13 +368,14 @@ struct Picker {
       if (optionCount == 0) {
         return;
       }
+      requestFocus();
       if (isOpen) {
         hidePopover();
         keyboardCursor = -1;
       } else {
         showPopover(detail::makePickerDropdownPopover(menuOptions, hidePopover, valHandle, keyboardCursor,
-                                                      triggerWidth, h, maxDdH, rowPadH, onChangeFn, rowHover,
-                                                      rowSelected, rowFont, rowText, checkCol));
+                                                      triggerWidth, h, maxDdH, rowPadH, menuCorners, onChangeFn,
+                                                      rowHover, rowSelected, rowFont, rowText, checkCol));
       }
     };
 
@@ -355,10 +390,12 @@ struct Picker {
           onTriggerTap();
         }
         if (k == keys::DownArrow && nOpts > 0) {
+          requestFocus();
           keyboardCursor = 0;
           showPopover(detail::makePickerDropdownPopover(menuOptions, hidePopover, valHandle, keyboardCursor,
-                                                        triggerWidth, h, maxDdH, rowPadH, onChangeFn, rowHover,
-                                                        rowSelected, rowFont, rowText, checkCol));
+                                                        triggerWidth, h, maxDdH, rowPadH, menuCorners,
+                                                        onChangeFn, rowHover, rowSelected, rowFont, rowText,
+                                                        checkCol));
         }
         return;
       }
