@@ -103,6 +103,7 @@ add_library(flux STATIC
   src/UI/Layout/LayoutVStack.cpp
   src/UI/Layout/LayoutHStack.cpp
   src/UI/Layout/LayoutZStack.cpp
+  src/UI/Layout/LayoutScaleAroundCenter.cpp
   src/UI/Layout/LayoutGrid.cpp
   src/UI/Layout/LayoutSpacer.cpp
   src/UI/Layout/LayoutOffsetView.cpp
@@ -110,6 +111,7 @@ add_library(flux STATIC
   src/UI/Runtime.cpp
   src/UI/OverlayManager.cpp
   src/UI/Views/TextInput.cpp
+  src/UI/Views/Button.cpp
   src/Scene/SceneGraphBounds.cpp
   src/Scene/NodeStore.cpp
   src/Scene/SceneGraph.cpp

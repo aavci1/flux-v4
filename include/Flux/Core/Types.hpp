@@ -116,6 +116,9 @@ constexpr Color darkGray = Color::hex(0x424242);
 constexpr Color lightGray = Color::hex(0xE0E0E0);
 } // namespace Colors
 
+/// How the current keyboard focus was last moved (pointer click vs Tab / programmatic).
+enum class FocusInputKind : std::uint8_t { Pointer, Keyboard };
+
 // -----------------------------------------------------------------------------
 // Rect — axis-aligned bounds only (rounded corners use `CornerRadius` separately)
 // -----------------------------------------------------------------------------

@@ -53,3 +53,6 @@ target_link_libraries(actions_editor_demo PRIVATE flux)
 
 add_executable(textinput_demo textinput-demo/main.cpp)
 target_link_libraries(textinput_demo PRIVATE flux)
+
+add_executable(button_demo button-demo/main.cpp)
+target_link_libraries(button_demo PRIVATE flux)

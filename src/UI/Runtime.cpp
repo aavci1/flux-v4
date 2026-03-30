@@ -157,18 +157,19 @@ void Runtime::requestFocusInSubtree(ComponentKey const& subtreeKey) {
   for (ComponentKey const& leafKey : order) {
     if (leafKey.size() >= subtreeKey.size() &&
         std::equal(subtreeKey.begin(), subtreeKey.end(), leafKey.begin())) {
-      setFocus(leafKey, std::nullopt);
+      setFocus(leafKey, std::nullopt, FocusInputKind::Keyboard);
       return;
     }
   }
 }
 
-void Runtime::setFocus(ComponentKey const& key, std::optional<OverlayId> overlayScope) {
+void Runtime::setFocus(ComponentKey const& key, std::optional<OverlayId> overlayScope, FocusInputKind kind) {
   if (focusedKey_ == key && focusInOverlay_ == overlayScope) {
     return;
   }
   focusedKey_ = key;
   focusInOverlay_ = overlayScope;
+  lastFocusInputKind_ = kind;
   Application::instance().markReactiveDirty();
 }
 
@@ -206,21 +207,21 @@ void Runtime::cycleTabFocusInMap(EventMap const& em, bool reverse, std::optional
   }
 
   if (focusedKey_.empty()) {
-    setFocus(reverse ? order.back() : order.front(), overlayId);
+    setFocus(reverse ? order.back() : order.front(), overlayId, FocusInputKind::Keyboard);
     return;
   }
 
   auto it = std::find(order.begin(), order.end(), focusedKey_);
   if (it == order.end()) {
-    setFocus(reverse ? order.back() : order.front(), overlayId);
+    setFocus(reverse ? order.back() : order.front(), overlayId, FocusInputKind::Keyboard);
     return;
   }
 
   if (!reverse) {
     ++it;
-    setFocus(it == order.end() ? order.front() : *it, overlayId);
+    setFocus(it == order.end() ? order.front() : *it, overlayId, FocusInputKind::Keyboard);
   } else {
-    setFocus(it == order.begin() ? order.back() : *std::prev(it), overlayId);
+    setFocus(it == order.begin() ? order.back() : *std::prev(it), overlayId, FocusInputKind::Keyboard);
   }
 }
 
@@ -251,19 +252,19 @@ void Runtime::cycleTabFocusNonModal(bool reverse) {
 
   if (!found || focusedKey_.empty()) {
     if (reverse) {
-      setFocus(merged.back().first, merged.back().second);
+      setFocus(merged.back().first, merged.back().second, FocusInputKind::Keyboard);
     } else {
-      setFocus(merged.front().first, merged.front().second);
+      setFocus(merged.front().first, merged.front().second, FocusInputKind::Keyboard);
     }
     return;
   }
 
   if (!reverse) {
     std::size_t const next = (idx + 1) % merged.size();
-    setFocus(merged[next].first, merged[next].second);
+    setFocus(merged[next].first, merged[next].second, FocusInputKind::Keyboard);
   } else {
     std::size_t const prev = idx == 0 ? merged.size() - 1 : idx - 1;
-    setFocus(merged[prev].first, merged[prev].second);
+    setFocus(merged[prev].first, merged[prev].second, FocusInputKind::Keyboard);
   }
 }
 
@@ -313,6 +314,7 @@ void Runtime::onOverlayRemoved(OverlayEntry const& entry) {
     if (focusInOverlay_ == entry.id) {
       focusInOverlay_.reset();
       focusedKey_ = entry.preFocusKey;
+      lastFocusInputKind_ = FocusInputKind::Keyboard;
       if (!focusedKey_.empty()) {
         auto const [id, h] = eventMap_.findWithIdByKey(focusedKey_);
         (void)id;
@@ -343,6 +345,7 @@ void Runtime::syncModalOverlayFocusAfterRebuild(OverlayEntry& entry) {
   (void)id;
   if (!h) {
     focusedKey_ = order.front();
+    lastFocusInputKind_ = FocusInputKind::Keyboard;
   }
 }
 
@@ -857,7 +860,7 @@ void Runtime::handleInput(InputEvent const& e) {
             h->onPointerDown(hit->localPoint);
           }
           if (oe.config.modal && shouldClaimFocus(*h)) {
-            setFocus(h->stableTargetKey, oe.id);
+            setFocus(h->stableTargetKey, oe.id, FocusInputKind::Pointer);
           }
         }
         updateCursorForPoint(p);
@@ -894,7 +897,7 @@ void Runtime::handleInput(InputEvent const& e) {
           h->onPointerDown(hit->localPoint);
         }
         if (shouldClaimFocus(*h)) {
-          setFocus(h->stableTargetKey, std::nullopt);
+          setFocus(h->stableTargetKey, std::nullopt, FocusInputKind::Pointer);
         }
       }
     } else if (dbg) {
@@ -1090,6 +1093,18 @@ bool useFocus() {
     return false;
   }
   return rt->isFocusInSubtree(store->currentComponentKey());
+}
+
+bool useKeyboardFocus() {
+  Runtime* rt = Runtime::current();
+  if (!rt) {
+    return false;
+  }
+  StateStore* store = StateStore::current();
+  if (!store) {
+    return false;
+  }
+  return rt->isFocusInSubtree(store->currentComponentKey()) && rt->isLastFocusFromKeyboard();
 }
 
 bool useHover() {

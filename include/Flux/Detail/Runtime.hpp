@@ -82,6 +82,9 @@ public:
   /// Committed data is from the last finished rebuild — not the build currently in progress.
   bool isActionCurrentlyEnabled(std::string const& name) const;
 
+  /// True when focus last moved via Tab / cycle focus / `requestFocusInSubtree` (not pointer down).
+  bool isLastFocusFromKeyboard() const noexcept { return lastFocusInputKind_ == FocusInputKind::Keyboard; }
+
   /// Registry filled during the current rebuild; swap to committed at end of rebuild.
   ActionRegistry& actionRegistryForBuild() noexcept { return actionRegistryBuild_; }
 
@@ -98,7 +101,7 @@ private:
   void applyCursor(Cursor kind);
   void setHovered(ComponentKey const& key, std::optional<OverlayId> overlayScope);
   void clearHovered();
-  void setFocus(ComponentKey const& key, std::optional<OverlayId> overlayScope);
+  void setFocus(ComponentKey const& key, std::optional<OverlayId> overlayScope, FocusInputKind kind);
   void clearFocus();
   void cycleTabFocusNonModal(bool reverse);
   void cycleTabFocusInMap(EventMap const& em, bool reverse, std::optional<OverlayId> overlayId);
@@ -130,6 +133,8 @@ private:
 
   /// Stable key of the focused node (leaf `stableTargetKey`). Empty when nothing is focused.
   ComponentKey focusedKey_{};
+  /// Updated whenever `setFocus` runs (not when focus is assigned by direct `focusedKey_ =` in overlay restore).
+  FocusInputKind lastFocusInputKind_{FocusInputKind::Keyboard};
   /// Stable key of the node under the pointer (geometric hover). Empty when nothing is hovered.
   ComponentKey hoveredKey_{};
   /// When set, `focusedKey_` is resolved against that overlay's `EventMap`.

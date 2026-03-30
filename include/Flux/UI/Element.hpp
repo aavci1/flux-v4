@@ -238,6 +238,7 @@ Size Element::Model<C>::measure(BuildContext& ctx, LayoutConstraints const& cons
 } // namespace flux
 
 #include <Flux/UI/Layout.hpp>
+#include <Flux/UI/Views/ScaleAroundCenter.hpp>
 
 namespace flux {
 
@@ -359,6 +360,20 @@ struct Element::Model<ZStack> final : Concept {
   explicit Model(ZStack c) : value(std::move(c)) {}
   std::unique_ptr<Concept> clone() const override {
     return std::make_unique<Model<ZStack>>(value);
+  }
+  void build(BuildContext& ctx) const override;
+  Size measure(BuildContext& ctx, LayoutConstraints const& constraints, TextSystem& textSystem) const override;
+  float flexGrow() const override { return detail::flexGrowOf(value); }
+  float flexShrink() const override { return detail::flexShrinkOf(value); }
+  float minMainSize() const override { return detail::minMainSizeOf(value); }
+};
+
+template<>
+struct Element::Model<ScaleAroundCenter> final : Concept {
+  ScaleAroundCenter value;
+  explicit Model(ScaleAroundCenter c) : value(std::move(c)) {}
+  std::unique_ptr<Concept> clone() const override {
+    return std::make_unique<Model<ScaleAroundCenter>>(value);
   }
   void build(BuildContext& ctx) const override;
   Size measure(BuildContext& ctx, LayoutConstraints const& constraints, TextSystem& textSystem) const override;

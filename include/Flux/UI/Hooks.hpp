@@ -69,6 +69,7 @@ struct Anim {
   operator T const&() const { return animated->get(); }
   /// Uses `WithTransition::current()` when set inside a `WithTransition` scope.
   void operator=(T value) const { animated->set(std::move(value)); }
+  void set(T value, Transition transition) const { animated->set(std::move(value), std::move(transition)); }
 };
 
 /// Returns a persistent `Signal<T>` for the current component instance.
@@ -92,6 +93,10 @@ Anim<T> useAnimated(T initial = T{}) {
 /// Returns true if the calling component's subtree contains the window's focused node.
 /// Must be called inside body() like other hooks.
 bool useFocus();
+
+/// True when the subtree has focus and focus last moved via keyboard (Tab / cycle / programmatic),
+/// not via pointer down. Used for link-style focus rings that should not show after mouse focus.
+bool useKeyboardFocus();
 
 /// Returns true when the pointer is geometrically over the calling component's subtree and the hit
 /// is not a cursor-passthrough overlay. Updates reactively on pointer moves.
