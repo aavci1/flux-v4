@@ -1,4 +1,6 @@
 #include <Flux/Core/Application.hpp>
+#include <Flux/Core/EventQueue.hpp>
+#include <Flux/Core/Events.hpp>
 #include <Flux/Detail/Runtime.hpp>
 #include <Flux/Core/KeyCodes.hpp>
 #include <Flux/Graphics/TextLayoutOptions.hpp>
@@ -13,9 +15,11 @@
 #include <functional>
 #include <limits>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <vector>
 
 #include <Flux/Graphics/TextLayout.hpp>
@@ -275,6 +279,20 @@ namespace {
 
 using namespace std::chrono;
 
+std::unordered_set<std::uint64_t> gCaretBlinkTimerIds;
+std::once_flag gCaretBlinkTimerBridgeOnce;
+
+/// Half-period of the 1.06 s blink in render() — redraw twice per full cycle, no per-frame requestRedraw.
+void ensureCaretBlinkTimerBridge() {
+  std::call_once(gCaretBlinkTimerBridgeOnce, [] {
+    Application::instance().eventQueue().on<TimerEvent>([](TimerEvent const& e) {
+      if (gCaretBlinkTimerIds.count(e.timerId)) {
+        Application::instance().requestRedraw();
+      }
+    });
+  });
+}
+
 int utf8CountChars(std::string const& s) {
   int n = 0;
   int i = 0;
@@ -516,10 +534,6 @@ void TextInputView::render(Canvas& canvas, Rect frame) const {
   }
 
   canvas.restore();
-
-  if (focused && !disabled) {
-    Application::instance().requestRedraw();
-  }
 }
 
 } // namespace
@@ -534,6 +548,7 @@ Element TextInput::body() const {
   auto lastBlink = useState(duration_cast<nanoseconds>(steady_clock::now().time_since_epoch()));
   auto mouseDragSelecting = useState(false);
   auto mouseDragAnchorByte = useState(0);
+  auto blinkCaretTimerId = useState(std::uint64_t{0});
 
   std::string const& bufRef = *val;
   int cb = detail::utf8Clamp(bufRef, *caretByte);
@@ -562,14 +577,33 @@ Element TextInput::body() const {
   bool const isDisabled = disabled;
   bool const focused = useFocus();
   bool const pressInSubtree = usePress();
+  // Hover routing delivers onPointerMove without PointerDown; mouseDragSelecting gates drag extension.
+  // usePress() clears the flag when the primary button releases outside the press target (no PointerUp).
   if (!pressInSubtree && *mouseDragSelecting) {
     mouseDragSelecting = false;
+  }
+
+  if (focused && !isDisabled) {
+    ensureCaretBlinkTimerBridge();
+    if (*blinkCaretTimerId == 0) {
+      std::uint64_t const id = Application::instance().scheduleRepeatingTimer(std::chrono::nanoseconds(530'000'000), 0);
+      blinkCaretTimerId = id;
+      gCaretBlinkTimerIds.insert(id);
+    }
+  } else {
+    if (*blinkCaretTimerId != 0) {
+      std::uint64_t const id = *blinkCaretTimerId;
+      gCaretBlinkTimerIds.erase(id);
+      Application::instance().cancelTimer(id);
+      blinkCaretTimerId = std::uint64_t{0};
+    }
   }
 
   std::function<void(std::string const&)> const onCh = onChange;
   std::function<void(std::string const&)> const onSub = onSubmit;
   int const maxLen = maxLength;
   float const padH = paddingH;
+  // buildSlotRect() matches layout after the previous pass; first build can yield 0 — click-to-caret fixes next frame.
   float const frameX = [] {
     Runtime* const rt = Runtime::current();
     return rt ? rt->buildSlotRect().x : 0.f;
