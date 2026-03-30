@@ -190,7 +190,7 @@ void Window::render(Canvas& canvas) {
     OverlayEntry const& entry = *up;
     canvas.save();
     canvas.transform(Mat3::translate(Point{entry.resolvedFrame.x, entry.resolvedFrame.y}));
-    SceneRenderer{}.render(entry.graph, canvas, Colors::transparent);
+    SceneRenderer{}.render(entry.graph, canvas);
     canvas.restore();
   }
 }

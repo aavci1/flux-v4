@@ -8,6 +8,10 @@
 
 namespace flux {
 
+void SceneRenderer::render(SceneGraph const& graph, Canvas& canvas) const {
+  renderNode(graph.root(), graph, canvas);
+}
+
 void SceneRenderer::render(SceneGraph const& graph, Canvas& canvas, Color clearColor) const {
   canvas.clear(clearColor);
   renderNode(graph.root(), graph, canvas);

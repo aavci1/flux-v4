@@ -6,25 +6,12 @@
 #include <Flux/UI/StateStore.hpp>
 #include <Flux/UI/Views/PopoverCalloutShape.hpp>
 
+#include <cmath>
 #include <utility>
 
 namespace flux {
 
 namespace {
-
-OverlayConfig::Placement toOverlayPlacement(PopoverPlacement p) {
-  switch (p) {
-  case PopoverPlacement::Below:
-    return OverlayConfig::Placement::Below;
-  case PopoverPlacement::Above:
-    return OverlayConfig::Placement::Above;
-  case PopoverPlacement::End:
-    return OverlayConfig::Placement::End;
-  case PopoverPlacement::Start:
-    return OverlayConfig::Placement::Start;
-  }
-  return OverlayConfig::Placement::Below;
-}
 
 Size estimateContentSize(std::optional<Size> const& maxSize) {
   float w = 200.f;
@@ -40,8 +27,12 @@ Size estimateContentSize(std::optional<Size> const& maxSize) {
   return {w, h};
 }
 
-PopoverPlacement resolvePlacement(PopoverPlacement preferred, std::optional<Rect> const& anchor,
-                                  std::optional<Size> const& maxSize, float gapTotal, Size win) {
+constexpr float kContentPad = 12.f;
+
+} // namespace
+
+PopoverPlacement resolvePopoverPlacement(PopoverPlacement preferred, std::optional<Rect> const& anchor,
+                                         std::optional<Size> const& maxSize, float gapTotal, Size win) {
   if (!anchor.has_value()) {
     return preferred;
   }
@@ -81,9 +72,38 @@ PopoverPlacement resolvePlacement(PopoverPlacement preferred, std::optional<Rect
   return preferred;
 }
 
-constexpr float kContentPad = 12.f;
+Vec2 popoverOverlayGapOffset(PopoverPlacement resolved, float gap) {
+  Vec2 offset{};
+  switch (resolved) {
+  case PopoverPlacement::Below:
+    offset.y = gap;
+    break;
+  case PopoverPlacement::Above:
+    offset.y = -gap;
+    break;
+  case PopoverPlacement::End:
+    offset.x = gap;
+    break;
+  case PopoverPlacement::Start:
+    offset.x = -gap;
+    break;
+  }
+  return offset;
+}
 
-} // namespace
+OverlayConfig::Placement overlayPlacementFromPopover(PopoverPlacement p) {
+  switch (p) {
+  case PopoverPlacement::Below:
+    return OverlayConfig::Placement::Below;
+  case PopoverPlacement::Above:
+    return OverlayConfig::Placement::Above;
+  case PopoverPlacement::End:
+    return OverlayConfig::Placement::End;
+  case PopoverPlacement::Start:
+    return OverlayConfig::Placement::Start;
+  }
+  return OverlayConfig::Placement::Below;
+}
 
 Element Popover::body() const {
   return Element{PopoverCalloutShape{
@@ -125,36 +145,26 @@ std::tuple<std::function<void(Popover)>, std::function<void()>, bool> usePopover
     bool const dismissOutside = popover.dismissOnOutsideTap;
     bool const dismissEsc = popover.dismissOnEscape;
 
+    PopoverPlacement const preferred = popover.placement;
     PopoverPlacement const resolved =
-        resolvePlacement(popover.placement, anchorRect, maxSz, gapTotal, win);
+        resolvePopoverPlacement(preferred, anchorRect, maxSz, gapTotal, win);
     popover.resolvedPlacement = resolved;
 
-    // Offset is only the visual gap; arrow + card height are in measured content (see body()).
-    Vec2 offset{};
-    switch (resolved) {
-    case PopoverPlacement::Below:
-      offset.y = gap;
-      break;
-    case PopoverPlacement::Above:
-      offset.y = -gap;
-      break;
-    case PopoverPlacement::End:
-      offset.x = gap;
-      break;
-    case PopoverPlacement::Start:
-      offset.x = -gap;
-      break;
-    }
+    Vec2 const offset = popoverOverlayGapOffset(resolved, gap);
 
     showOverlay(
         Element{std::move(popover)},
         OverlayConfig{
             .anchor = anchorRect,
             .anchorTrackLeafKey = std::move(anchorTrackLeafKey),
-            .placement = toOverlayPlacement(resolved),
+            .placement = overlayPlacementFromPopover(resolved),
             .offset = offset,
             .maxSize = maxSz,
             .modal = false,
+            .backdropColor = popover.backdropColor,
+            .popoverPreferredPlacement = preferred,
+            .popoverGapTotal = gapTotal,
+            .popoverGap = gap,
             .dismissOnOutsideTap = dismissOutside,
             .dismissOnEscape = dismissEsc,
             .onDismiss = hideOverlay,

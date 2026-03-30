@@ -7,6 +7,7 @@
 #include <Flux/UI/EventMap.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 #include <Flux/UI/StateStore.hpp>
+#include <Flux/UI/Views/PopoverPlacement.hpp>
 
 #include <cstdint>
 #include <functional>
@@ -44,7 +45,13 @@ struct OverlayConfig {
 
   bool modal = false;
 
-  Color backdropColor = Color{0.f, 0.f, 0.f, 0.4f};
+  /// Modal dialogs and non-modal overlays with non-zero alpha (e.g. dimmed popovers).
+  Color backdropColor = Color{0.f, 0.f, 0.f, 0.f};
+
+  /// When set, each rebuild re-resolves placement from \ref anchor (popover flip when scrolling).
+  std::optional<PopoverPlacement> popoverPreferredPlacement;
+  float popoverGapTotal = 0.f;
+  float popoverGap = 0.f;
 
   bool dismissOnOutsideTap = true;
 
@@ -90,7 +97,8 @@ private:
   Rect resolveFrame(Size windowSize, OverlayConfig const& config, Rect contentBounds) const;
   LayoutConstraints resolveConstraints(Size windowSize, OverlayConfig const& config) const;
 
-  void insertModalChrome(OverlayEntry& entry, Size windowSize);
+  void insertOverlayBackdropChrome(OverlayEntry& entry, Size windowSize, Runtime& runtime,
+                                   bool dismissOnBackdropTap);
 
   std::vector<std::unique_ptr<OverlayEntry>> overlays_;
   std::uint64_t nextId_ = 1;

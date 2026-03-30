@@ -1,8 +1,9 @@
 #include <Flux/UI/Overlay.hpp>
 
 #include <Flux/Core/Application.hpp>
-#include <Flux/Detail/Runtime.hpp>
 #include <Flux/Core/Window.hpp>
+#include <Flux/Detail/Runtime.hpp>
+#include <Flux/UI/Views/Popover.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Scene/SceneGraphBounds.hpp>
 #include <Flux/UI/BuildContext.hpp>
@@ -82,7 +83,8 @@ Rect OverlayManager::resolveFrame(Size win, OverlayConfig const& cfg, Rect conte
   return {x, y, contentBounds.width, contentBounds.height};
 }
 
-void OverlayManager::insertModalChrome(OverlayEntry& entry, Size windowSize) {
+void OverlayManager::insertOverlayBackdropChrome(OverlayEntry& entry, Size windowSize, Runtime& runtime,
+                                                   bool dismissOnBackdropTap) {
   SceneGraph& g = entry.graph;
   if (!g.node<LayerNode>(g.root())) {
     return;
@@ -90,22 +92,32 @@ void OverlayManager::insertModalChrome(OverlayEntry& entry, Size windowSize) {
 
   float const w = windowSize.width;
   float const h = windowSize.height;
+  // Window::render translates the overlay graph by resolvedFrame (popover position). Offset the
+  // full-window backdrop/capture so they still cover (0,0)—(W,H) in screen space after that transform.
+  float const ox = -entry.resolvedFrame.x;
+  float const oy = -entry.resolvedFrame.y;
 
   RectNode backdrop{};
-  backdrop.bounds = Rect{0.f, 0.f, w, h};
+  backdrop.bounds = Rect{ox, oy, w, h};
   backdrop.fill = FillStyle::solid(entry.config.backdropColor);
   backdrop.stroke = StrokeStyle::none();
   NodeId const backdropId = g.addRect(g.root(), std::move(backdrop));
 
   RectNode capture{};
-  capture.bounds = Rect{0.f, 0.f, w, h};
+  capture.bounds = Rect{ox, oy, w, h};
   capture.fill = FillStyle::none();
   capture.stroke = StrokeStyle::none();
   NodeId const captureId = g.addRect(g.root(), std::move(capture));
 
   EventHandlers captureHandlers{};
   captureHandlers.stableTargetKey = ComponentKey{};
-  captureHandlers.onPointerDown = [](Point) {};
+  if (dismissOnBackdropTap) {
+    OverlayId const oid = entry.id;
+    Window& wnd = runtime.window();
+    captureHandlers.onPointerDown = [oid, &wnd](Point) { wnd.removeOverlay(oid); };
+  } else {
+    captureHandlers.onPointerDown = [](Point) {};
+  }
   entry.eventMap.insert(captureId, std::move(captureHandlers));
 
   // Re-fetch root after addRect: NodeStore::insert may reallocate slots_, invalidating
@@ -133,6 +145,15 @@ void OverlayManager::rebuild(Size windowSize, Runtime& runtime) {
       if (auto r = runtime.layoutRectForLeafKeyPrefix(*entry.config.anchorTrackLeafKey)) {
         entry.config.anchor = *r;
       }
+    }
+    if (entry.config.popoverPreferredPlacement.has_value() && entry.content.has_value() &&
+        entry.config.anchor.has_value()) {
+      PopoverPlacement const resolved = resolvePopoverPlacement(
+          *entry.config.popoverPreferredPlacement, entry.config.anchor, entry.config.maxSize,
+          entry.config.popoverGapTotal, windowSize);
+      entry.config.placement = overlayPlacementFromPopover(resolved);
+      entry.config.offset = popoverOverlayGapOffset(resolved, entry.config.popoverGap);
+      entry.content->setPopoverResolvedPlacementIf(resolved);
     }
     entry.graph.clear();
     entry.eventMap.clear();
@@ -165,7 +186,9 @@ void OverlayManager::rebuild(Size windowSize, Runtime& runtime) {
     entry.resolvedFrame = resolveFrame(windowSize, entry.config, contentBounds);
 
     if (entry.config.modal) {
-      insertModalChrome(entry, windowSize);
+      insertOverlayBackdropChrome(entry, windowSize, runtime, false);
+    } else if (entry.config.backdropColor.a > 0.001f) {
+      insertOverlayBackdropChrome(entry, windowSize, runtime, entry.config.dismissOnOutsideTap);
     }
 
     runtime.syncModalOverlayFocusAfterRebuild(entry);

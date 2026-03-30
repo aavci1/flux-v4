@@ -36,6 +36,10 @@ Size Element::measure(BuildContext& ctx, LayoutConstraints const& constraints,
   return impl_->measure(ctx, constraints, textSystem);
 }
 
+void Element::setPopoverResolvedPlacementIf(PopoverPlacement p) {
+  impl_->setPopoverResolvedPlacementIf(p);
+}
+
 void Element::Model<Rectangle>::build(BuildContext& ctx) const {
   ComponentKey const stableKey = ctx.leafComponentKey();
   ctx.advanceChildSlot();

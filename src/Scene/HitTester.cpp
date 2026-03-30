@@ -137,6 +137,8 @@ std::optional<HitResult> HitTester::hitTestNode(NodeId id, SceneGraph const& gra
     }
     return std::nullopt;
   }
+  // PathNode / LineNode: geometry hit-testing not implemented; views that need hits should add a
+  // Rect (e.g. PopoverCalloutShape uses a full-bounds transparent rect under the path).
   if (std::holds_alternative<PathNode>(*sn) || std::holds_alternative<LineNode>(*sn)) {
     return std::nullopt;
   }

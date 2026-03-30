@@ -6,9 +6,11 @@
 #include <Flux/UI/Views/PathShape.hpp>
 #include <Flux/UI/Views/PopoverCalloutPath.hpp>
 
+#include <Flux/Core/Cursor.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Scene/Nodes.hpp>
 #include <Flux/Scene/SceneGraph.hpp>
+#include <Flux/UI/EventMap.hpp>
 
 #include "UI/Layout/LayoutHelpers.hpp"
 
@@ -168,6 +170,19 @@ void Element::Model<PopoverCalloutShape>::build(BuildContext& ctx) const {
     store->resetSlotCursors();
   }
   ctx.rewindChildKeyIndex();
+
+  // PathNode is not hit-tested (see HitTester); a full-bounds rect absorbs pointer/hover/scroll so
+  // content below the overlay does not receive input in padding and non-rect areas.
+  NodeId const blockId = ctx.graph().addRect(ctx.parentLayer(), RectNode{
+      .bounds = {0.f, 0.f, tw, th},
+      .fill = FillStyle::none(),
+      .stroke = StrokeStyle::none(),
+  });
+  ctx.eventMap().insert(blockId, EventHandlers{
+      .stableTargetKey = {},
+      .onScroll = [](Vec2) {},
+      .cursor = Cursor::Arrow,
+  });
 
   LayoutConstraints innerForBuild{};
   innerForBuild.maxWidth = tw;

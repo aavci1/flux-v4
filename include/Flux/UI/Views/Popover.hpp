@@ -41,6 +41,9 @@ struct Popover {
   /// nullopt = size to content, clamped to window bounds.
   std::optional<Size> maxSize;
 
+  /// Full-window dim behind the popover. Default is transparent (no dim).
+  Color backdropColor = Color{0.f, 0.f, 0.f, 0.f};
+
   // ── Behaviour ────────────────────────────────────────────────────────────
 
   bool dismissOnEscape = true;
@@ -68,5 +71,13 @@ struct Popover {
 ///
 /// Must be called inside body() like other hooks.
 std::tuple<std::function<void(Popover)>, std::function<void()>, bool> usePopover();
+
+/// Resolves preferred placement (flip above/below or start/end) from anchor and window size.
+PopoverPlacement resolvePopoverPlacement(PopoverPlacement preferred, std::optional<Rect> const& anchor,
+                                         std::optional<Size> const& maxSize, float gapTotal, Size win);
+
+Vec2 popoverOverlayGapOffset(PopoverPlacement resolved, float gap);
+
+OverlayConfig::Placement overlayPlacementFromPopover(PopoverPlacement p);
 
 } // namespace flux
