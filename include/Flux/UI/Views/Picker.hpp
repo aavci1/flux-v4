@@ -69,6 +69,8 @@ struct PickerRow {
   PickerOption<T> option{};
   bool selected = false;
   bool keyboardActive = false;
+  /// Matches \ref Picker::paddingH so menu labels align with the trigger text.
+  float rowPaddingH = 12.f;
   Font font{};
   Color textColor{};
   Color hoverColor{};
@@ -96,29 +98,47 @@ struct PickerRow {
                     .cursor = Cursor::Hand,
                 },
                 HStack{
-                    .spacing = 8.f,
+                    .spacing = 0.f,
                     .vAlign = VerticalAlignment::Center,
                     .children =
                         {
-                            ZStack{
+                            Rectangle{
+                                .frame = {0.f, 0.f, rowPaddingH, 36.f},
+                                .fill = FillStyle::none(),
+                                .stroke = StrokeStyle::none(),
+                            },
+                            Element{HStack{
+                                .spacing = 8.f,
+                                .vAlign = VerticalAlignment::Center,
                                 .children =
                                     {
-                                        Rectangle{.frame = {0.f, 0.f, 20.f, 36.f}},
-                                        selected ? Element{PathShape{
-                                                       .path = detail::checkmarkPath(),
-                                                       .fill = FillStyle::solid(checkmarkColor),
-                                                       .stroke = StrokeStyle::none(),
-                                                   }}
-                                                 : Element{Rectangle{}},
+                                        Text{
+                                            .text = option.label,
+                                            .font = font,
+                                            .color = textColor,
+                                            .flexGrow = 1.f,
+                                            .onTap = onSelect,
+                                            .cursor = Cursor::Hand,
+                                        },
+                                        ZStack{
+                                            .children =
+                                                {
+                                                    Rectangle{.frame = {0.f, 0.f, 20.f, 36.f}},
+                                                    selected ? Element{PathShape{
+                                                                   .path = detail::checkmarkPath(),
+                                                                   .fill = FillStyle::solid(checkmarkColor),
+                                                                   .stroke = StrokeStyle::none(),
+                                                               }}
+                                                             : Element{Rectangle{}},
+                                                },
+                                        },
                                     },
-                            },
-                            Text{
-                                .text = option.label,
-                                .font = font,
-                                .color = textColor,
-                                .flexGrow = 1.f,
-                                .onTap = onSelect,
-                                .cursor = Cursor::Hand,
+                            }}
+                                .withFlex(1.f),
+                            Rectangle{
+                                .frame = {0.f, 0.f, rowPaddingH, 36.f},
+                                .fill = FillStyle::none(),
+                                .stroke = StrokeStyle::none(),
                             },
                         },
                 },
@@ -135,7 +155,7 @@ template<typename T>
   requires std::equality_comparable<T>
 Popover makePickerDropdownPopover(std::vector<PickerOption<T>> opts, std::function<void()> hide,
                                   State<T> val, State<int> keyboardCursor, float triggerWidth,
-                                  float triggerRowHeight, float maxDropdownHeight,
+                                  float triggerRowHeight, float maxDropdownHeight, float rowPaddingH,
                                   std::function<void(T const&)> onCh, Color rowHoverColor,
                                   Color rowSelectedColor, Font font, Color textColor, Color checkColor) {
   std::vector<int> indices(opts.size());
@@ -147,7 +167,7 @@ Popover makePickerDropdownPopover(std::vector<PickerOption<T>> opts, std::functi
           {
               Element{ForEach<int>{
                   std::move(indices),
-                  [opts, val, hide, onCh, keyboardCursor, rowHoverColor = rowHoverColor,
+                  [opts, val, hide, onCh, keyboardCursor, rowPaddingH, rowHoverColor = rowHoverColor,
                    rowSelectedColor = rowSelectedColor, font = font, textColor = textColor,
                    checkColor = checkColor](int i) -> Element {
                     auto const idx = static_cast<std::size_t>(i);
@@ -155,6 +175,7 @@ Popover makePickerDropdownPopover(std::vector<PickerOption<T>> opts, std::functi
                         .option = opts[idx],
                         .selected = (opts[idx].value == *val),
                         .keyboardActive = (*keyboardCursor == i),
+                        .rowPaddingH = rowPaddingH,
                         .font = font,
                         .textColor = textColor,
                         .hoverColor = rowHoverColor,
@@ -184,6 +205,7 @@ Popover makePickerDropdownPopover(std::vector<PickerOption<T>> opts, std::functi
       .gap = 4.f,
       .arrow = false,
       .cornerRadius = CornerRadius{8.f},
+      .contentPadding = 0.f,
       .maxSize = std::make_optional(dropdownMax),
       .anchorMaxHeight = triggerRowHeight,
       .dismissOnEscape = true,
@@ -276,6 +298,7 @@ struct Picker {
     State<T> valHandle = value;
     std::function<void(T const&)> const onChangeFn = onChange;
     float const maxDdH = maxDropdownHeight > 0.f ? maxDropdownHeight : 240.f;
+    float const rowPadH = paddingH;
     Color const rowHover = rowHoverColor;
     Color const rowSelected = rowSelectedColor;
     Font const rowFont = font;
@@ -316,7 +339,7 @@ struct Picker {
         keyboardCursor = -1;
       } else {
         showPopover(detail::makePickerDropdownPopover(menuOptions, hidePopover, valHandle, keyboardCursor,
-                                                      triggerWidth, h, maxDdH, onChangeFn, rowHover,
+                                                      triggerWidth, h, maxDdH, rowPadH, onChangeFn, rowHover,
                                                       rowSelected, rowFont, rowText, checkCol));
       }
     };
@@ -334,7 +357,7 @@ struct Picker {
         if (k == keys::DownArrow && nOpts > 0) {
           keyboardCursor = 0;
           showPopover(detail::makePickerDropdownPopover(menuOptions, hidePopover, valHandle, keyboardCursor,
-                                                        triggerWidth, h, maxDdH, onChangeFn, rowHover,
+                                                        triggerWidth, h, maxDdH, rowPadH, onChangeFn, rowHover,
                                                         rowSelected, rowFont, rowText, checkCol));
         }
         return;

@@ -28,8 +28,6 @@ Size estimateContentSize(std::optional<Size> const& maxSize) {
   return {w, h};
 }
 
-constexpr float kContentPad = 12.f;
-
 } // namespace
 
 PopoverPlacement resolvePopoverPlacement(PopoverPlacement preferred, std::optional<Rect> const& anchor,
@@ -110,7 +108,7 @@ Element Popover::body() const {
   return Element{PopoverCalloutShape{
       .placement = resolvedPlacement,
       .arrow = arrow,
-      .padding = kContentPad,
+      .padding = contentPadding,
       .cornerRadius = cornerRadius,
       .backgroundColor = backgroundColor,
       .borderColor = borderColor,

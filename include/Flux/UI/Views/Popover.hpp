@@ -37,6 +37,9 @@ struct Popover {
   float borderWidth = 1.f;
   CornerRadius cornerRadius{10.f};
 
+  /// Inset between the card outline and the popover content (default matches system padding).
+  float contentPadding = 12.f;
+
   /// Maximum size of the popover content area (excluding arrow).
   /// nullopt = size to content, clamped to window bounds.
   std::optional<Size> maxSize;
