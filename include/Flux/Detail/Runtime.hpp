@@ -67,6 +67,10 @@ public:
 
   std::optional<Rect> layoutRectForCurrentComponent() const;
 
+  /// Layer-local rect for the layout slot of the component currently being built. Valid only during
+  /// `rebuild` (e.g. inside `body()`). Matches `ctx.layoutEngine().childFrame()` when wiring leaves.
+  Rect buildSlotRect() const { return layoutEngine_.childFrame(); }
+
   /// For `usePress`: true when `activePress_` overlay scope matches `store.overlayScope()`.
   bool pressKeyMatchesStoreContext(StateStore const& store) const;
 

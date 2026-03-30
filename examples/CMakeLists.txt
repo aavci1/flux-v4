@@ -50,3 +50,6 @@ target_link_libraries(overlay_confirm_demo PRIVATE flux)
 
 add_executable(actions_editor_demo actions-editor-demo/main.cpp)
 target_link_libraries(actions_editor_demo PRIVATE flux)
+
+add_executable(textinput_demo textinput-demo/main.cpp)
+target_link_libraries(textinput_demo PRIVATE flux)

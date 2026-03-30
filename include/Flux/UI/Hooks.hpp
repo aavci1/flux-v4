@@ -153,7 +153,7 @@ std::decay_t<std::invoke_result_t<Fn&&>> const& useMemo(Fn&& fn, Deps const&... 
   return slot.value;
 }
 
-/// Window-space rect for the calling composite from the previous layout pass (see `Runtime`).
+/// Window-space rect for the calling composite from the last completed layout pass (see `Runtime`).
 std::optional<Rect> useLayoutRect();
 
 /// Registers a handler for the named action that fires only when the calling component subtree has focus.

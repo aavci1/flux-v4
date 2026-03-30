@@ -280,8 +280,11 @@ std::optional<Rect> Runtime::layoutRectForCurrentComponent() const {
   if (!store) {
     return std::nullopt;
   }
-  auto it = layoutRectPrev_.find(store->currentComponentKey());
-  if (it == layoutRectPrev_.end()) {
+  // Read layoutRectCurrent_, not layoutRectPrev_. After fillLayoutRectCache swaps maps, `prev` holds
+  // the map that was current before the swap — one frame older than `current` at build time. During
+  // body() we need the last completed layout (what `current` still holds until this rebuild's fill runs).
+  auto it = layoutRectCurrent_.find(store->currentComponentKey());
+  if (it == layoutRectCurrent_.end()) {
     return std::nullopt;
   }
   return it->second;

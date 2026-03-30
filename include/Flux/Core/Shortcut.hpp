@@ -14,7 +14,12 @@ struct Shortcut {
 
   /// True when this shortcut matches a KeyDown event.
   constexpr bool matches(KeyCode k, Modifiers m) const {
-    return key != 0 && k == key && m == modifiers;
+    // Default `Shortcut{}` means "no shortcut" (optional in ActionDescriptor). `keys::A` is 0x00 on
+    // macOS, so we must not treat key==0 alone as invalid — only the full default pair is "unset".
+    if (key == 0 && modifiers == Modifiers::None) {
+      return false;
+    }
+    return k == key && m == modifiers;
   }
 };
 

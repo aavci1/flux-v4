@@ -109,6 +109,7 @@ add_library(flux STATIC
   src/UI/Layout/LayoutScrollView.cpp
   src/UI/Runtime.cpp
   src/UI/OverlayManager.cpp
+  src/UI/Views/TextInput.cpp
   src/Scene/SceneGraphBounds.cpp
   src/Scene/NodeStore.cpp
   src/Scene/SceneGraph.cpp

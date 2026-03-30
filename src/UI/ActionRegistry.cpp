@@ -27,14 +27,20 @@ void ActionRegistry::registerWindowAction(std::string const& actionName, std::fu
 
 ActionHandler const* ActionRegistry::findViewClaim(ComponentKey const& focusedKey,
                                                    std::string const& actionName) const {
-  auto cit = viewClaims_.find(focusedKey);
-  if (cit == viewClaims_.end()) {
-    return nullptr;
-  }
-  for (ActionHandler const& h : cit->second) {
-    if (h.name == actionName) {
-      return &h;
+  ComponentKey probe = focusedKey;
+  for (;;) {
+    auto cit = viewClaims_.find(probe);
+    if (cit != viewClaims_.end()) {
+      for (ActionHandler const& h : cit->second) {
+        if (h.name == actionName) {
+          return &h;
+        }
+      }
     }
+    if (probe.empty()) {
+      break;
+    }
+    probe.pop_back();
   }
   return nullptr;
 }
@@ -50,27 +56,35 @@ ActionHandler const* ActionRegistry::findWindowAction(std::string const& actionN
 
 bool ActionRegistry::dispatchShortcut(ComponentKey const& focusedKey, KeyCode key, Modifiers modifiers,
                                     std::unordered_map<std::string, ActionDescriptor> const& descriptors) const {
-  // Step 1: view-claims from focused component (first matching shortcut in list order).
+  // Step 1: view-claims on the focused leaf or an ancestor composite. `useViewAction` registers on the
+  // composite key while `focusedKey_` is the leaf `stableTargetKey`, so we walk key prefixes.
   if (!focusedKey.empty()) {
-    auto cit = viewClaims_.find(focusedKey);
-    if (cit != viewClaims_.end()) {
-      for (ActionHandler const& claim : cit->second) {
-        auto dit = descriptors.find(claim.name);
-        if (dit == descriptors.end()) {
-          continue;
+    ComponentKey probe = focusedKey;
+    for (;;) {
+      auto cit = viewClaims_.find(probe);
+      if (cit != viewClaims_.end()) {
+        for (ActionHandler const& claim : cit->second) {
+          auto dit = descriptors.find(claim.name);
+          if (dit == descriptors.end()) {
+            continue;
+          }
+          if (!dit->second.shortcut.matches(key, modifiers)) {
+            continue;
+          }
+          if (dit->second.isEnabled && !dit->second.isEnabled()) {
+            continue;
+          }
+          if (claim.isEnabled && !claim.isEnabled()) {
+            continue;
+          }
+          claim.trigger();
+          return true;
         }
-        if (!dit->second.shortcut.matches(key, modifiers)) {
-          continue;
-        }
-        if (dit->second.isEnabled && !dit->second.isEnabled()) {
-          continue;
-        }
-        if (claim.isEnabled && !claim.isEnabled()) {
-          continue;
-        }
-        claim.trigger();
-        return true;
       }
+      if (probe.empty()) {
+        break;
+      }
+      probe.pop_back();
     }
   }
 

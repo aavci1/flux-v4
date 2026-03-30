@@ -553,6 +553,35 @@ std::vector<std::uint8_t> CoreTextSystem::rasterizeGlyph(std::uint32_t fontId, s
   return r8;
 }
 
+/// CTFramesetterSuggestFrameSizeWithConstraints omits trailing whitespace from the suggested width.
+/// For a single-line frame, CTLineGetTypographicBounds includes it. Widen `sz` when appropriate.
+static void adjustSuggestSizeForSingleLineTrailingWhitespace(CTFramesetterRef fs, CGSize* sz) {
+  if (!fs || !sz) {
+    return;
+  }
+  CGFloat const fw = std::max(sz->width, static_cast<CGFloat>(1e-6));
+  CGFloat const fh = std::max(sz->height, static_cast<CGFloat>(1e-6));
+  CGPathRef path = CGPathCreateWithRect(CGRectMake(0, 0, fw, fh), nullptr);
+  CTFrameRef frame = CTFramesetterCreateFrame(fs, CFRangeMake(0, 0), path, nullptr);
+  CFRelease(path);
+  if (!frame) {
+    return;
+  }
+  CFArrayRef lines = CTFrameGetLines(frame);
+  CFIndex const lineCount = lines ? CFArrayGetCount(lines) : 0;
+  if (lineCount == 1) {
+    CTLineRef const line = (CTLineRef)CFArrayGetValueAtIndex(lines, 0);
+    CGFloat ascent = 0;
+    CGFloat descent = 0;
+    CGFloat leading = 0;
+    double const tw = CTLineGetTypographicBounds(line, &ascent, &descent, &leading);
+    if (tw > sz->width) {
+      sz->width = static_cast<CGFloat>(tw);
+    }
+  }
+  CFRelease(frame);
+}
+
 static Size measureCF(CFAttributedStringRef attrStr, float maxWidth) {
   CTFramesetterRef fs = CTFramesetterCreateWithAttributedString(attrStr);
   if (!fs) {
@@ -561,6 +590,7 @@ static Size measureCF(CFAttributedStringRef attrStr, float maxWidth) {
   CGSize constraints = CGSizeMake(maxWidth > 0.f ? static_cast<CGFloat>(maxWidth) : CGFLOAT_MAX, CGFLOAT_MAX);
   CFRange fitRange;
   CGSize sz = CTFramesetterSuggestFrameSizeWithConstraints(fs, CFRangeMake(0, 0), nullptr, constraints, &fitRange);
+  adjustSuggestSizeForSingleLineTrailingWhitespace(fs, &sz);
   CFRelease(fs);
   return Size{static_cast<float>(sz.width), static_cast<float>(sz.height)};
 }
@@ -627,6 +657,7 @@ std::shared_ptr<TextLayout> CoreTextSystem::layout(AttributedString const& text,
   CFRange fitRange{};
   CGSize sz = CTFramesetterSuggestFrameSizeWithConstraints(fs, CFRangeMake(0, 0), nullptr, constraints,
                                                              &fitRange);
+  adjustSuggestSizeForSingleLineTrailingWhitespace(fs, &sz);
 
   CGFloat const fw = std::max(static_cast<CGFloat>(sz.width), static_cast<CGFloat>(1e-6));
   CGFloat const fh = std::max(static_cast<CGFloat>(sz.height), static_cast<CGFloat>(1e-6));

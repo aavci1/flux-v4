@@ -16,3 +16,4 @@
 #include <Flux/UI/Views/ForEach.hpp>
 #include <Flux/UI/Views/Spacer.hpp>
 #include <Flux/UI/Views/ScrollView.hpp>
+#include <Flux/UI/Views/TextInput.hpp>
