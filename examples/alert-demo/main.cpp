@@ -1,0 +1,160 @@
+// Demonstrates Alert + useAlert: informational, confirmation, three-button, Escape, disabled.
+#include <Flux.hpp>
+#include <Flux/Core/WindowUI.hpp>
+#include <Flux/Reactive/Reactive.hpp>
+#include <Flux/UI/UI.hpp>
+#include <Flux/UI/Views/Alert.hpp>
+#include <Flux/UI/Views/Button.hpp>
+#include <Flux/UI/Views/Text.hpp>
+#include <Flux/UI/Views/VStack.hpp>
+#include <Flux/UI/Views/ZStack.hpp>
+#include <Flux/UI/Views/Rectangle.hpp>
+
+#include <string>
+
+using namespace flux;
+
+namespace pal {
+constexpr Color bg = Color::hex(0xF2F2F7);
+constexpr Color titleC = Color::hex(0x111118);
+constexpr Color bodyC = Color::hex(0x6E6E80);
+} // namespace pal
+
+struct AlertDemoRoot {
+  auto body() const {
+    auto [showAlert, hideAlert, alertOpen] = useAlert();
+    (void)alertOpen;
+
+    auto filename = useState(std::string{"report.pdf"});
+    auto status = useState(std::string{"Tap a button to open an alert."});
+
+    return ZStack{
+        .children =
+            {
+                Rectangle{.fill = FillStyle::solid(pal::bg)},
+                VStack{
+                    .spacing = 16.f,
+                    .padding = 24.f,
+                    .hAlign = HorizontalAlignment::Leading,
+                    .children =
+                        {
+                            Text{.text = "Alert demo",
+                                 .font = {.size = 22.f, .weight = 700.f},
+                                 .color = pal::titleC},
+                            Text{.text = "Modal alerts via useAlert(). Escape dismisses when enabled. "
+                                          "Outside tap does not dismiss.",
+                                 .font = {.size = 14.f, .weight = 400.f},
+                                 .color = pal::bodyC,
+                                 .wrapping = TextWrapping::Wrap,
+                                 .frame = {0.f, 0.f, 480.f, 0.f}},
+                            Text{.text = *status,
+                                 .font = {.size = 13.f, .weight = 500.f},
+                                 .color = Color::hex(0x3A7BD5),
+                                 .wrapping = TextWrapping::Wrap,
+                                 .frame = {0.f, 0.f, 480.f, 0.f}},
+
+                            Button{
+                                .label = "Delete file (confirmation)",
+                                .variant = ButtonVariant::Destructive,
+                                .onTap =
+                                    [=] {
+                                      showAlert(Alert{
+                                          .title = "Delete \"" + *filename + "\"?",
+                                          .message = "This file will be permanently removed and cannot be recovered.",
+                                          .buttons =
+                                              {
+                                                  {.label = "Cancel",
+                                                   .variant = ButtonVariant::Secondary,
+                                                   .action = hideAlert},
+                                                  {.label = "Delete",
+                                                   .variant = ButtonVariant::Destructive,
+                                                   .action =
+                                                       [=] {
+                                                         status = std::string{"Deleted (simulated)."};
+                                                       }},
+                                              },
+                                      });
+                                    },
+                            },
+
+                            Button{
+                                .label = "Show info (single OK)",
+                                .variant = ButtonVariant::Secondary,
+                                .onTap =
+                                    [=] {
+                                      showAlert(Alert{
+                                          .title = "Upload complete",
+                                          .message = "\"" + *filename + "\" was uploaded successfully.",
+                                      });
+                                    },
+                            },
+
+                            Button{
+                                .label = "Close document (three buttons)",
+                                .variant = ButtonVariant::Ghost,
+                                .onTap =
+                                    [=] {
+                                      showAlert(Alert{
+                                          .title = "Save changes?",
+                                          .message = "Your changes will be lost if you don't save.",
+                                          .buttons =
+                                              {
+                                                  {.label = "Cancel",
+                                                   .variant = ButtonVariant::Secondary,
+                                                   .action = hideAlert},
+                                                  {.label = "Don't Save",
+                                                   .variant = ButtonVariant::Ghost,
+                                                   .action =
+                                                       [=] {
+                                                         status = std::string{"Closed without saving."};
+                                                       }},
+                                                  {.label = "Save",
+                                                   .variant = ButtonVariant::Primary,
+                                                   .action =
+                                                       [=] {
+                                                         status = std::string{"Saved and closed."};
+                                                       }},
+                                              },
+                                      });
+                                    },
+                            },
+
+                            Button{
+                                .label = "Alert with disabled action",
+                                .variant = ButtonVariant::Secondary,
+                                .onTap =
+                                    [=] {
+                                      showAlert(Alert{
+                                          .title = "Requires upgrade",
+                                          .message = "This action is not available on your plan.",
+                                          .buttons =
+                                              {
+                                                  {.label = "Cancel", .variant = ButtonVariant::Secondary, .action = hideAlert},
+                                                  {.label = "Upgrade",
+                                                   .variant = ButtonVariant::Primary,
+                                                   .disabled = true,
+                                                   .action =
+                                                       [=] {
+                                                         status = std::string{"Should not run while disabled."};
+                                                       }},
+                                              },
+                                      });
+                                    },
+                            },
+                        },
+                },
+            },
+    };
+  }
+};
+
+int main(int argc, char* argv[]) {
+  Application app(argc, argv);
+  auto& w = app.createWindow<Window>({
+      .size = {520, 520},
+      .title = "Flux — Alert demo",
+      .resizable = true,
+  });
+  w.setView<AlertDemoRoot>();
+  return app.exec();
+}

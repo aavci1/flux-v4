@@ -18,3 +18,4 @@
 #include <Flux/UI/Views/ScrollView.hpp>
 #include <Flux/UI/Views/TextInput.hpp>
 #include <Flux/UI/Views/Button.hpp>
+#include <Flux/UI/Views/Alert.hpp>
