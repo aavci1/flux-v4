@@ -75,6 +75,7 @@ FluxTheme FluxTheme::withDensity(float d) const {
   t.density = d;
   // Scale the full space scale so components using `theme.spaceN` (Button, layouts, etc.)
   // participate in compact/comfortable, not only paddingFieldH/V.
+  // radius* and typography tokens are left unchanged; motion/icon tokens unchanged.
   t.space1 = kSpace1 * d;
   t.space2 = kSpace2 * d;
   t.space3 = kSpace3 * d;

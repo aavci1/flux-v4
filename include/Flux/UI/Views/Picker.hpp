@@ -292,6 +292,8 @@ struct Picker {
 
   float borderWidth = 1.f;
   float borderFocusWidth = 2.f;
+  /// Uniform trigger corner radius (`kFloatFromTheme` = `FluxTheme::radiusMedium`); dropdown menu uses
+  /// `radiusLarge` separately. Scalar only — no per-corner radii on the trigger via this field.
   float cornerRadius = kFloatFromTheme;
   /// Total trigger height; 0 = same rule as \ref TextInput (\ref resolvedInputFieldHeight).
   float height = 0.f;
@@ -327,6 +329,7 @@ struct Picker {
     float const padVResolved = resolveFloat(paddingV, theme.paddingFieldV);
     CornerRadius const triggerCr{resolveFloat(cornerRadius, theme.radiusMedium)};
     float const menuRadius = theme.radiusLarge;
+    // Trigger background/hover cross-fade: `FluxTheme` motion tokens (cf. Button).
     Transition const trMed =
         theme.reducedMotion ? Transition::instant() : Transition::ease(theme.durationMedium);
 

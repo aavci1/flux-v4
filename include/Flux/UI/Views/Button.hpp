@@ -39,7 +39,9 @@ struct Button {
   /// Ignored for Link (always 0).
   float paddingH = kFloatFromTheme;
 
-  /// Uniform corner radius (`kFloatFromTheme` = `FluxTheme::radiusMedium`).
+  /// Uniform corner radius in points (`kFloatFromTheme` = `FluxTheme::radiusMedium`). `body()` builds
+  /// `CornerRadius` from this value — all four corners match. Per-corner radii (e.g. top-only sheet
+  /// rounding) are not expressible on this field; use a lower-level primitive with explicit `CornerRadius`.
   float cornerRadius = kFloatFromTheme;
 
   /// Accent colour: Primary/Ghost/Secondary/Link label and focus ring.

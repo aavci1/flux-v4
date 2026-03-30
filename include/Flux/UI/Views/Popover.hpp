@@ -15,6 +15,8 @@
 
 namespace flux {
 
+/// Floating card + optional arrow. Present/dismiss timing is owned by the overlay stack, not
+/// `FluxTheme::duration*` (those apply to in-body transitions such as `useAnimated` on controls).
 struct Popover {
   // ── Content ──────────────────────────────────────────────────────────────
 
@@ -36,6 +38,8 @@ struct Popover {
   Color backgroundColor = kFromTheme;
   Color borderColor = kFromTheme;
   float borderWidth = 1.f;
+  /// Uniform card radius (`kFloatFromTheme` = `FluxTheme::radiusLarge`). Per-corner control lives in
+  /// `PopoverCalloutShape` / path geometry, not this scalar.
   float cornerRadius = kFloatFromTheme;
 
   /// Inset between the card outline and the popover content (`kFloatFromTheme` = `FluxTheme::space3`).

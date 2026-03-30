@@ -124,6 +124,10 @@ struct FluxTheme {
   TextStyle typeLabelSmall{12.f, 500.f, 1.20f};
   TextStyle typeCode{13.f, 400.f, 1.50f};
 
+  // Spacing scale (8 pt grid). At density 1.0, space3 is 12 pt, space4 is 16 pt, etc.
+  // `withDensity(d)` scales space1–space8 by d (and updates paddingFieldH/V to match space3/space2).
+  // After compact/comfortable, spaceN are no longer fixed “name = 12 pt” constants — always read from
+  // `FluxTheme` so layout participates in density; hardcoded literals (e.g. 24.f) do not.
   float space1 = 4.f;
   float space2 = 8.f;
   float space3 = 12.f;
@@ -133,11 +137,14 @@ struct FluxTheme {
   float space7 = 32.f;
   float space8 = 48.f;
 
+  /// Multiplier recorded when using `withDensity`; spacing fields above include its effect after `withDensity`.
   float density = 1.0f;
 
+  /// Horizontal / vertical padding for single-line fields; kept in sync with space3 / space2 by `withDensity`.
   float paddingFieldH = 12.f;
   float paddingFieldV = 8.f;
 
+  // Corner radii (points). Not scaled by `withDensity` — shape stays stable across density presets.
   float radiusNone = 0.f;
   float radiusXSmall = 4.f;
   float radiusSmall = 6.f;
