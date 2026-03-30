@@ -1,10 +1,10 @@
 #include <Flux/UI/FocusController.hpp>
 
 #include <Flux/Core/Application.hpp>
-#include <Flux/UI/ComponentKeyUtil.hpp>
 #include <Flux/UI/StateStore.hpp>
 
 #include <algorithm>
+#include <cstddef>
 
 namespace flux {
 
@@ -130,8 +130,21 @@ void FocusController::claimFocusForSubtree(ComponentKey const& pressedKey, Event
   if (pressedKey.empty()) {
     return;
   }
+  std::size_t const parentLen = pressedKey.size() - 1;
   for (ComponentKey const& leafKey : em.focusOrder()) {
-    if (keySharesPrefix(leafKey, pressedKey)) {
+    if (leafKey.size() <= parentLen) {
+      continue;
+    }
+    bool sameParent = false;
+    if (parentLen == 0) {
+      std::size_t const len = std::min(leafKey.size(), pressedKey.size());
+      sameParent = len > 0 && std::equal(pressedKey.begin(), pressedKey.begin() + static_cast<std::ptrdiff_t>(len),
+                                         leafKey.begin());
+    } else {
+      sameParent = std::equal(pressedKey.begin(),
+                              pressedKey.begin() + static_cast<std::ptrdiff_t>(parentLen), leafKey.begin());
+    }
+    if (sameParent) {
       set(leafKey, overlayScope, FocusInputKind::Pointer);
       return;
     }
