@@ -61,6 +61,12 @@ void postTextInput(FluxMetalView* view, std::string text);
   // Match MetalCanvas in-flight limit; helps avoid main-thread stalls on nextDrawable during live resize.
   metalLayer.maximumDrawableCount = 3;
   metalLayer.allowsNextDrawableTimeout = YES;
+
+  // `presentsWithTransaction` is toggled only around resize-driven flush (see windowDidResize). Leaving it
+  // always YES can defer the first composite until a later CA transaction and cause an intermittent blank window.
+  metalLayer.autoresizingMask = kCALayerWidthSizable | kCALayerHeightSizable;
+  metalLayer.needsDisplayOnBoundsChange = YES;
+
   return metalLayer;
 }
 
@@ -68,6 +74,7 @@ void postTextInput(FluxMetalView* view, std::string text);
   self = [super initWithFrame:frameRect];
   if (self) {
     self.wantsLayer = YES;
+    self.layerContentsRedrawPolicy = NSViewLayerContentsRedrawDuringViewResize;
     [self updateDrawableSize];
   }
   return self;
@@ -267,6 +274,9 @@ public:
 
   Window* fluxWindow() const;
 
+  /// Enables CAMetalLayer transaction presentation only for resize flushes (paired with MetalCanvas sync present).
+  void setMetalLayerPresentsWithTransaction(bool enable);
+
 private:
   struct Impl;
   std::unique_ptr<Impl> d;
@@ -453,7 +463,10 @@ void postTextInput(FluxMetalView* view, std::string text) {
   // `flushRedraw` only presents when `requestRedraw` has been set. Declarative windows get this from
   // `Runtime`'s resize subscription; imperative apps must not rely on that — always request here.
   flux::Application::instance().requestRedraw();
+  platform->setMetalLayerPresentsWithTransaction(true);
+  flux::setSyncPresentForCanvas(&fw->canvas(), true);
   flux::Application::instance().flushRedraw();
+  platform->setMetalLayerPresentsWithTransaction(false);
 }
 
 - (void)windowDidBecomeKey:(NSNotification*)notification {
@@ -677,6 +690,16 @@ void* MacMetalPlatformWindow::nativeGraphicsSurface() const {
     return nullptr;
   }
   return (__bridge void*)d->metalView_.layer;
+}
+
+void MacMetalPlatformWindow::setMetalLayerPresentsWithTransaction(bool enable) {
+  if (!d->metalView_) {
+    return;
+  }
+  CAMetalLayer* ml = [d->metalView_ fluxMetalLayer];
+  if (ml) {
+    ml.presentsWithTransaction = enable ? YES : NO;
+  }
 }
 
 std::unique_ptr<Canvas> MacMetalPlatformWindow::createCanvas(Window& owner) {

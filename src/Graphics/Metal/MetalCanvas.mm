@@ -250,8 +250,11 @@ public:
 
   void clear(Color color) override { clearColor_ = color; }
 
+  void setSyncPresent(bool sync) noexcept { syncPresent_ = sync; }
+
   void present() override {
     if (!inFrame_ || !cmdBuf_ || !drawable_) {
+      syncPresent_ = false;
       return;
     }
 
@@ -259,6 +262,7 @@ public:
     const float vw = static_cast<float>(drawableSize.width);
     const float vh = static_cast<float>(drawableSize.height);
     if (vw < 1.f || vh < 1.f) {
+      syncPresent_ = false;
       [cmdBuf_ commit];
       cmdBuf_ = nil;
       drawable_ = nil;
@@ -360,10 +364,18 @@ public:
 
     [enc endEncoding];
 
-    __block dispatch_semaphore_t sem = frameSem_;
-    [cmdBuf_ addCompletedHandler:^(id<MTLCommandBuffer> /*cb*/) { dispatch_semaphore_signal(sem); }];
-    [cmdBuf_ presentDrawable:drawable_];
-    [cmdBuf_ commit];
+    if (syncPresent_) {
+      [cmdBuf_ commit];
+      [cmdBuf_ waitUntilScheduled];
+      [drawable_ present];
+      dispatch_semaphore_signal(frameSem_);
+      syncPresent_ = false;
+    } else {
+      __block dispatch_semaphore_t sem = frameSem_;
+      [cmdBuf_ addCompletedHandler:^(id<MTLCommandBuffer> /*cb*/) { dispatch_semaphore_signal(sem); }];
+      [cmdBuf_ presentDrawable:drawable_];
+      [cmdBuf_ commit];
+    }
 
     frame_.clear();
     glyphAtlas_->afterPresent();
@@ -839,6 +851,7 @@ private:
   id<MTLCommandBuffer> cmdBuf_{nil};
   id<CAMetalDrawable> drawable_{nil};
   bool inFrame_{false};
+  bool syncPresent_{false};
 
   Color clearColor_{0.f, 0.f, 0.f, 1.f};
   int logicalW_{0};
@@ -945,6 +958,15 @@ private:
 std::unique_ptr<Canvas> createMetalCanvas(Window* window, void* caMetalLayer, unsigned int handle,
                                           TextSystem& textSystem) {
   return std::make_unique<MetalCanvas>(window, (__bridge CAMetalLayer*)caMetalLayer, handle, textSystem);
+}
+
+void setSyncPresentForCanvas(Canvas* canvas, bool sync) {
+  if (!canvas) {
+    return;
+  }
+  if (auto* mc = dynamic_cast<MetalCanvas*>(canvas)) {
+    mc->setSyncPresent(sync);
+  }
 }
 
 } // namespace flux
