@@ -6,6 +6,7 @@
 #include <Flux/Graphics/TextLayoutOptions.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/UI/StateStore.hpp>
+#include <Flux/UI/InputFieldLayout.hpp>
 #include <Flux/UI/Views/TextInput.hpp>
 
 #include <algorithm>
@@ -371,8 +372,6 @@ std::pair<int, int> orderedSelection(int caret, int anchor) {
 }
 
 constexpr float kSelectionExtraBottomPx = 2.f;
-/// Inner height slack so centered text leaves room under the line for `kSelectionExtraBottomPx` inside `clipRect`.
-constexpr float kSelectionVerticalSlackPx = 2.f * kSelectionExtraBottomPx;
 
 /// Canvas-space top and height of the laid-out ink (ascent + descent), matching `drawTextLayout(..., textOrigin)`.
 void lineInkTopAndHeight(TextLayout const& layout, Point textOrigin, float& outTop, float& outHeight) {
@@ -446,12 +445,7 @@ void replaceSelection(State<std::string> val, State<int> caretByte, State<int> s
 struct TextInputView {
   Size measure(LayoutConstraints const& cs) const {
     float const w = std::isfinite(cs.maxWidth) ? cs.maxWidth : 200.f;
-    TextSystem& ts = Application::instance().textSystem();
-    TextLayoutOptions mopts{};
-    mopts.wrapping = TextWrapping::NoWrap;
-    Size const line = ts.measure("Agy", font, textColor, 0.f, mopts);
-    float const minBodyH = line.height + 2.f * paddingV + kSelectionVerticalSlackPx;
-    float h = (height > 0.f) ? std::max(height, minBodyH) : minBodyH;
+    float const h = resolvedInputFieldHeight(font, textColor, paddingV, height);
     return {std::max(minSize, w), h};
   }
 

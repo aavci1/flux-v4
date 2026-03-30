@@ -936,6 +936,9 @@ void Runtime::handleInput(InputEvent const& e) {
       OverlayEntry const* top = window_.overlayManager().top();
       if (top && !top->config.modal && top->config.dismissOnOutsideTap) {
         window_.removeOverlay(top->id);
+        updateCursorForPoint(p);
+        updateHoveredForPoint(p);
+        return;
       }
     }
     auto hit = hitTestPointerTarget(eventMap_, graph, p);

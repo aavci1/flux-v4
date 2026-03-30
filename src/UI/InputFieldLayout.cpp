@@ -1,0 +1,30 @@
+#include <Flux/UI/InputFieldLayout.hpp>
+
+#include <Flux/Core/Application.hpp>
+#include <Flux/Graphics/TextLayoutOptions.hpp>
+#include <Flux/Graphics/TextSystem.hpp>
+
+#include <algorithm>
+
+namespace flux {
+
+namespace {
+
+// Keep in sync with TextInput.cpp (selection clip slack below the line).
+constexpr float kSelectionVerticalSlackPx = 4.f;
+
+} // namespace
+
+float resolvedInputFieldHeight(Font const& font, Color textInkColor, float paddingV, float explicitHeight) {
+  TextSystem& ts = Application::instance().textSystem();
+  TextLayoutOptions mopts{};
+  mopts.wrapping = TextWrapping::NoWrap;
+  Size const line = ts.measure("Agy", font, textInkColor, 0.f, mopts);
+  float const minBodyH = line.height + 2.f * paddingV + kSelectionVerticalSlackPx;
+  if (explicitHeight > 0.f) {
+    return std::max(explicitHeight, minBodyH);
+  }
+  return minBodyH;
+}
+
+} // namespace flux

@@ -8,6 +8,7 @@
 #include <Flux/Graphics/Styles.hpp>
 #include <Flux/Graphics/TextLayoutOptions.hpp>
 #include <Flux/UI/Element.hpp>
+#include <Flux/UI/InputFieldLayout.hpp>
 #include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/Views/ForEach.hpp>
 #include <Flux/UI/Views/HStack.hpp>
@@ -110,6 +111,8 @@ struct PickerRow {
   bool keyboardActive = false;
   /// Matches \ref Picker::paddingH so menu labels align with the trigger text.
   float rowPaddingH = 12.f;
+  /// Matches the picker trigger row height (\ref Picker resolved height).
+  float rowHeight = 36.f;
   /// Corners rounded where the row meets the popover card (see \ref pickerMenuRowCorners).
   CornerRadius rowBgCorners{};
   Font font{};
@@ -131,7 +134,7 @@ struct PickerRow {
         .children =
             {
                 Rectangle{
-                    .frame = {0.f, 0.f, 0.f, 36.f},
+                    .frame = {0.f, 0.f, 0.f, rowHeight},
                     .cornerRadius = rowBgCorners,
                     .fill = FillStyle::solid(bg),
                     .stroke = StrokeStyle::none(),
@@ -145,7 +148,7 @@ struct PickerRow {
                     .children =
                         {
                             Rectangle{
-                                .frame = {0.f, 0.f, rowPaddingH, 36.f},
+                                .frame = {0.f, 0.f, rowPaddingH, rowHeight},
                                 .fill = FillStyle::none(),
                                 .stroke = StrokeStyle::none(),
                             },
@@ -165,7 +168,7 @@ struct PickerRow {
                                         ZStack{
                                             .children =
                                                 {
-                                                    Rectangle{.frame = {0.f, 0.f, std::max(12.f, 20.f * detail::checkmarkScale(font)), 36.f}},
+                                                    Rectangle{.frame = {0.f, 0.f, std::max(12.f, 20.f * detail::checkmarkScale(font)), rowHeight}},
                                                     selected ? Element{detail::checkmarkPathShape(checkmarkColor, font)}
                                                              : Element{Rectangle{}},
                                                 },
@@ -174,7 +177,7 @@ struct PickerRow {
                             }}
                                 .withFlex(1.f),
                             Rectangle{
-                                .frame = {0.f, 0.f, rowPaddingH, 36.f},
+                                .frame = {0.f, 0.f, rowPaddingH, rowHeight},
                                 .fill = FillStyle::none(),
                                 .stroke = StrokeStyle::none(),
                             },
@@ -187,8 +190,9 @@ struct PickerRow {
 
 namespace detail {
 
-/// Builds dropdown content without a `Picker*` — tap/key handlers must not call member functions on a
-/// potentially stale `this` (segfault); all menu/state/styling is passed by value.
+/// Builds dropdown content without a `Picker*` — the `Picker` value is only live for the duration of
+/// `body()`; capturing `this` in lambdas would dangle. Handlers close over values captured by copy
+/// (State handles, options, colors, etc.).
 template<typename T>
   requires std::equality_comparable<T>
 Popover makePickerDropdownPopover(std::vector<PickerOption<T>> opts, std::function<void()> hide,
@@ -211,7 +215,7 @@ Popover makePickerDropdownPopover(std::vector<PickerOption<T>> opts, std::functi
           {
               Element{ForEach<int>{
                   std::move(indices),
-                  [opts, val, hide, onCh, keyboardCursor, rowPaddingH, rowCount, menuR,
+                  [opts, val, hide, onCh, keyboardCursor, rowPaddingH, rowCount, menuR, triggerRowHeight,
                    rowHoverColor = rowHoverColor, rowSelectedColor = rowSelectedColor, font = font,
                    textColor = textColor, checkColor = checkColor](int i) -> Element {
                     auto const idx = static_cast<std::size_t>(i);
@@ -220,6 +224,7 @@ Popover makePickerDropdownPopover(std::vector<PickerOption<T>> opts, std::functi
                         .selected = (opts[idx].value == *val),
                         .keyboardActive = (*keyboardCursor == i),
                         .rowPaddingH = rowPaddingH,
+                        .rowHeight = triggerRowHeight,
                         .rowBgCorners = pickerMenuRowCorners(idx, rowCount, menuR),
                         .font = font,
                         .textColor = textColor,
@@ -287,6 +292,7 @@ struct Picker {
   float borderWidth = 1.f;
   float borderFocusWidth = 2.f;
   CornerRadius cornerRadius{8.f};
+  /// Total trigger height; 0 = same rule as \ref TextInput (\ref resolvedInputFieldHeight).
   float height = 0.f;
   float paddingH = 12.f;
   float paddingV = 8.f;
@@ -375,7 +381,7 @@ struct Picker {
     Color const borderCol = showFocusBorder ? borderFocusColor : borderColor;
     float const borderW = showFocusBorder ? borderFocusWidth : borderWidth;
 
-    float const h = height > 0.f ? height : font.size + 2.f * paddingV;
+    float const h = resolvedInputFieldHeight(font, textColor, paddingV, height);
 
     std::size_t const optionCount = menuOptions.size();
 

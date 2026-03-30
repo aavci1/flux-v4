@@ -39,8 +39,7 @@ struct TextInput {
   float borderFocusWidth = 2.f;
   CornerRadius cornerRadius{8.f};
 
-  /// Total vertical height of the field. Defaults to font.size + 2×padding.
-  /// Set explicitly to enforce a fixed height across all inputs in a form.
+  /// Total vertical height of the field. 0 = \ref resolvedInputFieldHeight (same default as \ref Picker).
   float height = 0.f;
 
   float paddingH = 12.f;

@@ -111,6 +111,7 @@ add_library(flux STATIC
   src/UI/Layout/LayoutScrollView.cpp
   src/UI/Runtime.cpp
   src/UI/OverlayManager.cpp
+  src/UI/InputFieldLayout.cpp
   src/UI/Views/TextInput.cpp
   src/UI/Views/Button.cpp
   src/UI/Views/Alert.cpp
