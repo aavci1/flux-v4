@@ -42,6 +42,10 @@ public:
   /// whose keys were not visited in this pass (they were removed from the tree).
   void endRebuild();
 
+  /// Explicitly destroy all state slots (triggers OverlayHookSlot destructors).
+  /// Called by `BuildOrchestrator` destructor before other members are destroyed.
+  void shutdown();
+
   /// Sets every component's slot cursor to 0 so a second pass over the tree
   /// (e.g. measure then build) can claim the same slots in the same order.
   void resetSlotCursors();

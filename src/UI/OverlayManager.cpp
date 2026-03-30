@@ -242,7 +242,7 @@ void OverlayManager::remove(OverlayId id, Runtime* runtime) {
       if (runtime) {
         runtime->onOverlayRemoved(*removed);
       }
-      if (!runtime || !runtime->imploding()) {
+      if (!runtime || !runtime->shuttingDown()) {
         Application::instance().markReactiveDirty();
       }
       if (removed->config.onDismiss) {
@@ -265,7 +265,7 @@ void OverlayManager::clear(Runtime* runtime, bool invokeDismissCallbacks) {
       runtime->onOverlayRemoved(*removed);
     }
   }
-  if (!runtime || !runtime->imploding()) {
+  if (!runtime || !runtime->shuttingDown()) {
     Application::instance().markReactiveDirty();
   }
 }

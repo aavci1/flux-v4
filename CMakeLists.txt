@@ -111,6 +111,17 @@ add_library(flux STATIC
   src/UI/Layout/LayoutSpacer.cpp
   src/UI/Layout/LayoutOffsetView.cpp
   src/UI/Layout/LayoutScrollView.cpp
+  src/UI/LayoutRectCache.cpp
+  src/UI/HitTestUtil.cpp
+  src/UI/FocusController.cpp
+  src/UI/HoverController.cpp
+  src/UI/GestureTracker.cpp
+  src/UI/CursorController.cpp
+  src/UI/BuildOrchestrator.cpp
+  src/UI/InputDispatcher.cpp
+  src/UI/Hooks.cpp
+  src/UI/ActionHooks.cpp
+  src/UI/OverlayHooks.cpp
   src/UI/Runtime.cpp
   src/UI/OverlayManager.cpp
   src/UI/InputFieldLayout.cpp

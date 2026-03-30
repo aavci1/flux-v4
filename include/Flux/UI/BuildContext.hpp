@@ -14,6 +14,7 @@ class SceneGraph;
 class TextSystem;
 class EventMap;
 class Runtime;
+class BuildOrchestrator;
 
 class BuildContext {
 public:
@@ -74,6 +75,7 @@ public:
 
 private:
   friend class Runtime;
+  friend class BuildOrchestrator;
   friend class OverlayManager;
 
   BuildContext(SceneGraph& g, EventMap& em, TextSystem& ts, LayoutEngine& layout);

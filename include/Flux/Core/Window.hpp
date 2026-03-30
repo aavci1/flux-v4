@@ -128,6 +128,7 @@ protected:
 
 private:
   friend class Runtime;
+  friend class InputDispatcher;
 
   EnvironmentLayer& environmentLayerMut();
 
