@@ -18,6 +18,7 @@
 #include <Flux/UI/Views/ScrollView.hpp>
 #include <Flux/UI/Views/TextInput.hpp>
 #include <Flux/UI/Views/TextArea.hpp>
+#include <Flux/UI/Views/Toggle.hpp>
 #include <Flux/UI/Views/Icon.hpp>
 #include <Flux/UI/Views/Picker.hpp>
 #include <Flux/UI/Views/Button.hpp>

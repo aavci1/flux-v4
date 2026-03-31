@@ -71,7 +71,8 @@ inline Rect resolveRectangleBounds(Rect const& frame, Rect const& childFrame,
     float const dx = vStackSlotOffsetX(frame.width, childFrame.width, *constraints.vStackCrossAlign);
     return Rect{childFrame.x + dx, childFrame.y, frame.width, frame.height};
   }
-  return resolveLeafBounds(frame, childFrame, constraints);
+  // Explicit `frame` size: position within the parent's laid-out cell (e.g. ZStack overlay thumb).
+  return Rect{childFrame.x + frame.x, childFrame.y + frame.y, frame.width, frame.height};
 }
 
 } // namespace flux::detail
