@@ -13,6 +13,7 @@
 #include <cmath>
 #include <cstddef>
 #include <limits>
+#include <optional>
 #include <vector>
 
 namespace flux {
@@ -73,7 +74,7 @@ void Element::Model<VStack>::build(BuildContext& ctx) const {
 
   std::vector<float> allocH(n);
   for (std::size_t i = 0; i < n; ++i) {
-    allocH[i] = sizes[i].height;
+    allocH[i] = std::max(sizes[i].height, value.children[i].minMainSize());
   }
 
   // Grow and shrink need a finite assigned main-axis size from the parent. If `assignedH` is not
@@ -110,6 +111,7 @@ void Element::Model<VStack>::build(BuildContext& ctx) const {
     LayoutConstraints childBuild = innerForBuild;
     childBuild.maxHeight = allocH[i];
     childBuild.minHeight = child.minMainSize();
+    childBuild.hStackCrossAlign = std::nullopt;
     ctx.pushConstraints(childBuild);
     child.build(ctx);
     ctx.popConstraints();

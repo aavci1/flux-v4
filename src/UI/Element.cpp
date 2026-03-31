@@ -66,7 +66,7 @@ Popover* popoverOverlayStateIf(Element& el) {
 void Element::Model<Rectangle>::build(BuildContext& ctx) const {
   ComponentKey const stableKey = ctx.leafComponentKey();
   ctx.advanceChildSlot();
-  Rect const bounds = flux::detail::resolveLeafBounds(
+  Rect const bounds = flux::detail::resolveRectangleBounds(
       value.frame, ctx.layoutEngine().childFrame(), ctx.constraints());
   NodeId const id = ctx.graph().addRect(ctx.parentLayer(), RectNode{
       .bounds = bounds,

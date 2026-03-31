@@ -69,7 +69,9 @@ void Element::Model<HStack>::build(BuildContext& ctx) const {
 
   std::vector<float> allocW(n);
   for (std::size_t i = 0; i < n; ++i) {
-    allocW[i] = sizes[i].width;
+    // Flex basis must respect min main size; otherwise flex-grow only touches fg>0 children and
+    // minMain (e.g. withFlex third arg) is ignored when intrinsic measure is smaller.
+    allocW[i] = std::max(sizes[i].width, value.children[i].minMainSize());
   }
 
   // Grow/shrink along the row only when the stack has a finite assigned width from its parent.
@@ -94,11 +96,14 @@ void Element::Model<HStack>::build(BuildContext& ctx) const {
   for (std::size_t i = 0; i < n; ++i) {
     Size sz = sizes[i];
     sz.width = allocW[i];
-    float const y = value.padding + vAlignOffset(sz.height, rowInnerH, value.vAlign);
-    le.setChildFrame(Rect{x, y, sz.width, sz.height});
+    // Each column gets the full row height so nested VStacks (e.g. Text + Spacer) receive a
+    // definite main-axis size; vertical alignment of shorter intrinsic children is handled
+    // inside leaves (e.g. Rectangle with explicit frame + hStackCrossAlign).
+    le.setChildFrame(Rect{x, value.padding, allocW[i], rowInnerH});
     LayoutConstraints childBuild = innerForBuild;
     childBuild.maxWidth = allocW[i];
     childBuild.minWidth = value.children[i].minMainSize();
+    childBuild.hStackCrossAlign = value.vAlign;
     ctx.pushConstraints(childBuild);
     value.children[i].build(ctx);
     ctx.popConstraints();
