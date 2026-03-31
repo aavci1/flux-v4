@@ -103,6 +103,7 @@ void Element::Model<HStack>::build(BuildContext& ctx) const {
     LayoutConstraints childBuild = innerForBuild;
     childBuild.maxWidth = allocW[i];
     childBuild.minWidth = value.children[i].minMainSize();
+    // See `LayoutConstraints::hStackCrossAlign` — only Rectangle consumes this today.
     childBuild.hStackCrossAlign = value.vAlign;
     ctx.pushConstraints(childBuild);
     value.children[i].build(ctx);
