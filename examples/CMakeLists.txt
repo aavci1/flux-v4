@@ -1,5 +1,18 @@
 # Sample apps (link the static `flux` library). Included when FLUX_BUILD_EXAMPLES=ON at the project root (default OFF).
 
+# Bundled fonts (Material Symbols, etc.) live next to each example binary so Application can register them at runtime.
+function(flux_copy_example_resources target_name)
+  add_custom_command(
+    TARGET ${target_name}
+    POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${target_name}>/fonts"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/../resources/fonts/MaterialSymbolsRounded.ttf"
+            "$<TARGET_FILE_DIR:${target_name}>/fonts/MaterialSymbolsRounded.ttf"
+    VERBATIM
+    COMMENT "Copy bundled fonts for ${target_name}")
+endfunction()
+
 add_executable(hello_world hello-world/main.cpp)
 target_link_libraries(hello_world PRIVATE flux)
 
@@ -69,6 +82,9 @@ target_link_libraries(popover_demo PRIVATE flux)
 add_executable(picker_demo picker-demo/main.cpp)
 target_link_libraries(picker_demo PRIVATE flux)
 
+add_executable(icon_demo icon-demo/main.cpp)
+target_link_libraries(icon_demo PRIVATE flux)
+
 add_executable(theme_demo theme-demo/main.cpp)
 target_link_libraries(theme_demo PRIVATE flux)
 
@@ -77,3 +93,36 @@ target_link_libraries(stack_demo PRIVATE flux)
 
 add_executable(notes_demo notes/main.cpp)
 target_link_libraries(notes_demo PRIVATE flux)
+
+set(FLUX_EXAMPLE_TARGETS
+    hello_world
+    clock_demo
+    blend_demo
+    text_demo
+    image_demo
+    scene_demo
+    reactive_demo
+    card_demo
+    scroll_demo
+    focus_demo
+    request_focus_demo
+    memo_demo
+    cursor_demo
+    foreach_demo
+    hover_demo
+    overlay_confirm_demo
+    alert_demo
+    actions_editor_demo
+    textinput_demo
+    textarea_demo
+    button_demo
+    popover_demo
+    picker_demo
+    icon_demo
+    theme_demo
+    stack_demo
+    notes_demo
+)
+foreach(t ${FLUX_EXAMPLE_TARGETS})
+  flux_copy_example_resources(${t})
+endforeach()

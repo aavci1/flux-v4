@@ -145,7 +145,8 @@ void accumulateInheritance(std::vector<ResolvedStyle>& out, AttributedString con
 
 CTFontRef createCTFont(Font const& attr) {
   NSString* fam = [NSString stringWithUTF8String:attr.family.c_str()];
-  if (!fam) {
+  // Empty string is a valid NSString (not nil) but must not be passed as kCTFontFamilyNameAttribute.
+  if (!fam || fam.length == 0) {
     fam = @".AppleSystemUIFont";
   }
   CGFloat const wTrait = ctWeightTraitFromCss(attr.weight);
@@ -760,6 +761,11 @@ std::shared_ptr<TextLayout> CoreTextSystem::layout(AttributedString const& text,
   CFRelease(frame);
 
   recomputeTextLayoutMetrics(*out);
+  // If no placed runs (e.g. zero-glyph CTRuns) `recomputeTextLayoutMetrics` clears `measuredSize` even
+  // though `CTFramesetterSuggestFrameSizeWithConstraints` already produced a valid intrinsic size.
+  if (out->measuredSize.width <= 0.f && out->measuredSize.height <= 0.f && !text.utf8.empty()) {
+    out->measuredSize = Size{static_cast<float>(fw), static_cast<float>(fh)};
+  }
   if (options.maxLines > 0) {
     trimTextLayoutToMaxLines(*out, options.maxLines, true);
   }

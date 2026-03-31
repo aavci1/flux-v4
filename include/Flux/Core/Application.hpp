@@ -62,6 +62,9 @@ public:
   /// The returned reference is valid for the lifetime of the Application.
   Clipboard& clipboard();
 
+  /// Opaque platform font handle for the bundled icon font (on macOS: `CTFontRef`), or null if load failed.
+  void* iconFontHandle() const;
+
   /// Batched callback: runs at most once per `exec()` iteration after any reactive update.
   ObserverHandle onNextFrameNeeded(std::function<void()> callback);
   void unobserveNextFrame(ObserverHandle handle);

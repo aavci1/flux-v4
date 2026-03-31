@@ -3,6 +3,8 @@
 #include <Flux/Core/Types.hpp>
 #include <Flux/Graphics/Font.hpp>
 
+#include <string>
+
 namespace flux {
 
 inline constexpr Font kFontFromTheme{.size = -1.f};
@@ -164,9 +166,8 @@ struct FluxTheme {
 
   bool reducedMotion = false;
 
-  float iconSizeSmall = 12.f;
-  float iconSizeMedium = 16.f;
-  float iconSizeLarge = 20.f;
+  /// Bundled Material Symbols Rounded (override to swap icon sets globally).
+  std::string iconFontFamily = "Material Symbols Rounded";
 
   Color shadowColor = Color{0.f, 0.f, 0.f, 0.15f};
 

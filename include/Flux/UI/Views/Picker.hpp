@@ -4,7 +4,6 @@
 #include <Flux/Core/KeyCodes.hpp>
 #include <Flux/Core/Types.hpp>
 #include <Flux/Graphics/Font.hpp>
-#include <Flux/Graphics/Path.hpp>
 #include <Flux/Graphics/Styles.hpp>
 #include <Flux/Graphics/TextLayoutOptions.hpp>
 #include <Flux/UI/Element.hpp>
@@ -14,7 +13,7 @@
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Views/ForEach.hpp>
 #include <Flux/UI/Views/HStack.hpp>
-#include <Flux/UI/Views/PathShape.hpp>
+#include <Flux/UI/Views/Icon.hpp>
 #include <Flux/UI/Views/Popover.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/Text.hpp>
@@ -30,58 +29,6 @@
 #include <vector>
 
 namespace flux {
-
-namespace detail {
-
-inline Path chevronPath(bool open, float w, float h) {
-  Path p;
-  if (!open) {
-    p.moveTo({0.f, 0.f});
-    p.lineTo({w, 0.f});
-    p.lineTo({w * 0.5f, h});
-    p.close();
-  } else {
-    p.moveTo({0.f, h});
-    p.lineTo({w, h});
-    p.lineTo({w * 0.5f, 0.f});
-    p.close();
-  }
-  return p;
-}
-
-/// Scale factor vs 16pt reference (body text). Used for checkmark path and column width.
-inline float checkmarkScale(Font const& font) {
-  constexpr float kRefFontSize = 16.f;
-  float const fs = font.size > 0.f ? font.size : kRefFontSize;
-  return fs / kRefFontSize;
-}
-
-/// Open polyline for a ✓ (stroke only — filling a 3-point path fills a triangle).
-/// Geometry is authored at 16pt text size; \p scale is `font.size / 16` (or 1 when size unset).
-inline Path checkmarkPath(float scale) {
-  Path p;
-  constexpr float baseW = 20.f;
-  const float s = scale;
-  const float w = baseW * s;
-  p.moveTo({2.4f * s, 8.1f * s});
-  p.lineTo({8.5f * s, 14.2f * s});
-  p.lineTo({(baseW - 0.8f) * s, 1.8f * s});
-  return p;
-}
-
-inline PathShape checkmarkPathShape(Color c, Font const& font) {
-  float const scale = checkmarkScale(font);
-  StrokeStyle ss = StrokeStyle::solid(c, std::max(1.5f, 4.0f * scale));
-  ss.join = StrokeJoin::Round;
-  ss.cap = StrokeCap::Round;
-  return PathShape{
-      .path = checkmarkPath(scale),
-      .fill = FillStyle::none(),
-      .stroke = std::move(ss),
-  };
-}
-
-} // namespace detail
 
 /// Background corners for a menu row so fills stay inside the popover’s rounded outline.
 inline CornerRadius pickerMenuRowCorners(std::size_t rowIndex, std::size_t rowCount, float r) {
@@ -126,6 +73,9 @@ struct PickerRow {
 
   auto body() const {
     bool const hovered = useHover();
+    FluxTheme const& theme = useEnvironment<FluxTheme>();
+    float const iconSz = resolveFloat(kFloatFromTheme, theme.typeBody.size);
+    float const checkColW = std::max(12.f, iconSz);
 
     Color const bg = keyboardActive ? hoverColor
                    : hovered        ? hoverColor
@@ -177,8 +127,12 @@ struct PickerRow {
                                         ZStack{
                                             .children =
                                                 {
-                                                    Rectangle{.frame = {0.f, 0.f, std::max(12.f, 20.f * detail::checkmarkScale(font)), rowHeight}},
-                                                    selected ? Element{detail::checkmarkPathShape(checkmarkColor, font)}
+                                                    Rectangle{.frame = {0.f, 0.f, checkColW, rowHeight}},
+                                                    selected ? Element{Icon{
+                                                                   .name = IconName::Check,
+                                                                   .size = iconSz,
+                                                                   .color = checkmarkColor,
+                                                               }}
                                                              : Element{Rectangle{}},
                                                 },
                                         },
@@ -320,16 +274,6 @@ struct Picker {
   bool disabled = false;
   std::function<void(T const&)> onChange;
 
-  Element buildChevron(bool isOpen, Color chevron) const {
-    float const w = 10.f;
-    float const h = 5.f;
-    return Element{PathShape{
-        .path = detail::chevronPath(isOpen, w, h),
-        .fill = FillStyle::solid(chevron),
-        .stroke = StrokeStyle::none(),
-    }};
-  }
-
   Element body() const {
     FluxTheme const& theme = useEnvironment<FluxTheme>();
     float const padHResolved = resolveFloat(paddingH, theme.paddingFieldH);
@@ -395,6 +339,7 @@ struct Picker {
 
     std::optional<Rect> const layoutRect = useLayoutRect();
     float const triggerWidth = layoutRect ? layoutRect->width : 200.f;
+    float const chevronIconSz = resolveFloat(kFloatFromTheme, theme.typeBody.size);
 
     auto fillAnim = useAnimated<Color>(bgR);
     {
@@ -536,13 +481,17 @@ struct Picker {
                                 .children =
                                     {
                                         Rectangle{
-                                            .frame = {0.f, 0.f, 14.f, h},
+                                            .frame = {0.f, 0.f, std::max(14.f, chevronIconSz), h},
                                             .fill = FillStyle::none(),
                                             .stroke = StrokeStyle::none(),
                                             .onTap = isDisabled ? nullptr : std::function<void()>{onTriggerTap},
                                             .cursor = isDisabled ? Cursor::Inherit : Cursor::Hand,
                                         },
-                                        buildChevron(isOpen, chvR),
+                                        Icon{
+                                          .name = isOpen ? IconName::ExpandLess : IconName::ExpandMore,
+                                          .size = chevronIconSz,
+                                          .color = chvR,
+                                      }
                                     },
                             }},
                             Rectangle{

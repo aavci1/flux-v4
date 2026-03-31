@@ -22,6 +22,7 @@
 #include <vector>
 
 #import <Cocoa/Cocoa.h>
+#import <CoreText/CoreText.h>
 #import <dispatch/dispatch.h>
 
 namespace flux {
@@ -51,6 +52,9 @@ struct Application::Impl {
 
   std::unique_ptr<CoreTextSystem> textSystem_;
   std::unique_ptr<Clipboard> clipboard_;
+
+  /// `CTFontRef` retained; released in `Application` destructor.
+  void* iconFont_ = nullptr;
 
   bool quit_ = false;
   bool redraw_ = false;
@@ -101,6 +105,21 @@ Application::Application(int /*argc*/, char** /*argv*/) {
   d->textSystem_ = std::make_unique<CoreTextSystem>();
   d->clipboard_ = std::make_unique<MacClipboard>();
 
+  {
+    NSBundle* const bundle = [NSBundle mainBundle];
+    NSString* fontPath = [bundle pathForResource:@"MaterialSymbolsRounded" ofType:@"ttf" inDirectory:@"fonts"];
+    if (!fontPath) {
+      NSString* const bp = [bundle bundlePath];
+      fontPath = [bp stringByAppendingPathComponent:@"fonts/MaterialSymbolsRounded.ttf"];
+    }
+    if (fontPath && [[NSFileManager defaultManager] fileExistsAtPath:fontPath]) {
+      NSURL* const url = [NSURL fileURLWithPath:fontPath];
+      CTFontManagerRegisterFontsForURL((__bridge CFURLRef)url, kCTFontManagerScopeProcess, nullptr);
+      CTFontRef const ct = CTFontCreateWithName(CFSTR("Material Symbols Rounded"), 24., nullptr);
+      d->iconFont_ = reinterpret_cast<void*>(reinterpret_cast<std::uintptr_t>(ct));
+    }
+  }
+
   d->eventQueue_.on<WindowLifecycleEvent>([this](WindowLifecycleEvent const& e) {
     if (e.kind == WindowLifecycleEvent::Kind::Registered && e.window != nullptr) {
       onWindowRegistered(e.window);
@@ -138,6 +157,10 @@ Application::Application(int /*argc*/, char** /*argv*/) {
 }
 
 Application::~Application() {
+  if (d->iconFont_) {
+    CFRelease(reinterpret_cast<CTFontRef>(reinterpret_cast<std::uintptr_t>(d->iconFont_)));
+    d->iconFont_ = nullptr;
+  }
   d->windows_.clear();
   if (gCurrent == this) {
     gCurrent = nullptr;
@@ -165,6 +188,8 @@ EventQueue& Application::eventQueue() { return d->eventQueue_; }
 TextSystem& Application::textSystem() { return *d->textSystem_; }
 
 Clipboard& Application::clipboard() { return *d->clipboard_; }
+
+void* Application::iconFontHandle() const { return d->iconFont_; }
 
 ObserverHandle Application::onNextFrameNeeded(std::function<void()> callback) {
   std::uint64_t const id = d->nextFrameId_++;

@@ -129,6 +129,7 @@ add_library(flux STATIC
   src/UI/Views/TextInput.cpp
   src/UI/Views/TextArea.cpp
   src/UI/Views/Button.cpp
+  src/UI/Views/Icon.cpp
   src/UI/Views/Alert.cpp
   src/UI/Views/Popover.cpp
   src/UI/Views/PopoverCalloutPath.cpp
