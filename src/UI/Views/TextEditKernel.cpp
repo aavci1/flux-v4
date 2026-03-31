@@ -308,6 +308,41 @@ std::vector<LineMetrics> buildLineMetrics(std::string const& buf, TextLayout con
     return out;
   }
 
+  if (!layout.lines.empty()) {
+    out.reserve(layout.lines.size() + 2);
+    for (auto const& lr : layout.lines) {
+      LineMetrics lm{};
+      lm.byteStart = lr.byteStart;
+      lm.byteEnd = lr.byteEnd;
+      lm.lineMinX = lr.lineMinX;
+      lm.top = lr.top;
+      lm.bottom = lr.bottom;
+      lm.baseline = lr.baseline;
+      out.push_back(lm);
+    }
+    if (!buf.empty() && buf.back() == '\n') {
+      int const n = static_cast<int>(buf.size());
+      bool const haveTrailingCaretLine =
+          !out.empty() && out.back().byteStart == n && out.back().byteEnd == n;
+      if (!haveTrailingCaretLine) {
+        float const lh =
+            out.size() >= 2 ? (out.back().baseline - out[out.size() - 2].baseline) : fallbackLineH;
+        LineMetrics const& last = out.back();
+        LineMetrics trail{};
+        trail.byteStart = n;
+        trail.byteEnd = n;
+        trail.lineMinX = 0.f;
+        float const ascent = last.baseline - last.top;
+        float const descent = last.bottom - last.baseline;
+        trail.baseline = last.baseline + lh;
+        trail.top = trail.baseline - ascent;
+        trail.bottom = trail.baseline + descent;
+        out.push_back(trail);
+      }
+    }
+    return out;
+  }
+
   auto grouped = groupRunsIntoVisualLines(layout);
   out.reserve(grouped.size() + 2);
 

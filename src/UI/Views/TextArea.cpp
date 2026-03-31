@@ -23,6 +23,11 @@
 
 namespace flux {
 
+namespace detail {
+// Implemented in TextEditKernel.cpp (not in kernel header — TextArea-only consumer).
+int caretByteAtPoint(TextSystem&, std::string const&, Font const&, Color const&, TextLayout const&, Point);
+}
+
 namespace {
 
 using namespace std::chrono;

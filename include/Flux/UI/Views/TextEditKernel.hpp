@@ -33,9 +33,6 @@ std::string utf8TruncateToChars(std::string const& s, int maxChars);
 float caretXPosition(TextSystem&, std::string const&, int byteEnd, Font const&, Color const&);
 int caretByteAtTextX(TextSystem&, std::string const&, Font const&, Color const&, float textX);
 
-// Caret geometry — multi-line (used by TextArea)
-int caretByteAtPoint(TextSystem&, std::string const&, Font const&, Color const&, TextLayout const&, Point localPoint);
-
 struct LineMetrics {
   float top{};
   float bottom{};

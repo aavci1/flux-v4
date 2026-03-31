@@ -11,6 +11,18 @@ namespace flux {
 /// Laid-out text: runs plus placement in layout space. `origin` passed to `Canvas::drawTextLayout` is the layout
 /// top-left; each `PlacedRun::origin` is the baseline-left of that run relative to that point (`y` down).
 struct TextLayout {
+  /// One visual line from Core Text (`CTLine`): UTF-8 byte span and geometry in layout space (after the same
+  /// transforms as `runs`: normalize, horizontal alignment, vertical box offset). Populated by CoreTextSystem.
+  struct LineRange {
+    std::uint32_t ctLineIndex = 0;
+    int byteStart = 0;
+    int byteEnd = 0; ///< Half-open [byteStart, byteEnd) in UTF-8 source bytes.
+    float lineMinX = 0.f;
+    float top = 0.f;
+    float bottom = 0.f;
+    float baseline = 0.f;
+  };
+
   struct PlacedRun {
     TextRun run{};
     Point origin{}; ///< Baseline-left relative to layout origin (top-left).
@@ -22,6 +34,8 @@ struct TextLayout {
   };
 
   std::vector<PlacedRun> runs;
+  /// Empty for legacy layouts; when non-empty, byte ranges match `CTLineGetStringRange` (UTF-8 mapped).
+  std::vector<LineRange> lines;
   Size measuredSize{};
   float firstBaseline = 0.f; ///< Distance from layout top to first line baseline.
   float lastBaseline = 0.f;  ///< Distance from layout top to last line baseline.

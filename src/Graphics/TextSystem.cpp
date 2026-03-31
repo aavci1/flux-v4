@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <unordered_set>
 #include <vector>
 
 namespace flux {
@@ -12,6 +13,7 @@ void recomputeTextLayoutMetrics(TextLayout& L) {
     L.measuredSize = {};
     L.firstBaseline = 0.f;
     L.lastBaseline = 0.f;
+    L.lines.clear();
     return;
   }
 
@@ -58,6 +60,12 @@ void normalizeOriginsToTopLeft(TextLayout& L) {
   for (auto& pr : L.runs) {
     pr.origin.x -= minX;
     pr.origin.y -= minTop;
+  }
+  for (auto& lr : L.lines) {
+    lr.lineMinX -= minX;
+    lr.top -= minTop;
+    lr.bottom -= minTop;
+    lr.baseline -= minTop;
   }
   recomputeTextLayoutMetrics(L);
 }
@@ -111,6 +119,11 @@ void applyHorizontalPerLine(TextLayout& layout, Rect const& box, HorizontalAlign
         pr.origin.x += lineDx;
       }
     }
+    for (auto& lr : layout.lines) {
+      if (nearLine(lr.baseline, ly)) {
+        lr.lineMinX += lineDx;
+      }
+    }
   }
   recomputeTextLayoutMetrics(layout);
 }
@@ -144,6 +157,11 @@ void applyBoxOptions(std::shared_ptr<TextLayout> const& layout, Rect const& box,
 
   for (auto& pr : layout->runs) {
     pr.origin.y += dy;
+  }
+  for (auto& lr : layout->lines) {
+    lr.top += dy;
+    lr.bottom += dy;
+    lr.baseline += dy;
   }
   recomputeTextLayoutMetrics(*layout);
 }
@@ -185,6 +203,17 @@ void trimTextLayoutToMaxLines(TextLayout& layout, int maxLines, bool normalizeAf
     return true;
   });
   layout.runs.erase(newEnd, layout.runs.end());
+
+  std::unordered_set<std::uint32_t> keptLineIndices;
+  keptLineIndices.reserve(layout.runs.size());
+  for (auto const& pr : layout.runs) {
+    keptLineIndices.insert(pr.ctLineIndex);
+  }
+  layout.lines.erase(std::remove_if(layout.lines.begin(), layout.lines.end(),
+                                    [&](TextLayout::LineRange const& lr) {
+                                      return keptLineIndices.count(lr.ctLineIndex) == 0;
+                                    }),
+                     layout.lines.end());
 
   if (normalizeAfter) {
     normalizeOriginsToTopLeft(layout);

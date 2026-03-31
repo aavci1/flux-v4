@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <limits>
 #include <stdexcept>
 #include <unordered_map>
 
@@ -720,6 +721,40 @@ std::shared_ptr<TextLayout> CoreTextSystem::layout(AttributedString const& text,
       CTRunRef run = (CTRunRef)CFArrayGetValueAtIndex(glyphRuns, ri);
       appendPlacedRunFromCTRun(run, lineOrigin, fh, *this, *out, nsFull, li);
     }
+  }
+
+  out->lines.clear();
+  out->lines.reserve(static_cast<std::size_t>(std::max(lineCount, CFIndex{0})));
+  for (CFIndex li = 0; li < lineCount; ++li) {
+    CTLineRef line = (CTLineRef)CFArrayGetValueAtIndex(lines, li);
+    CFRange const rng = CTLineGetStringRange(line);
+    NSRange const nsr = NSMakeRange(static_cast<NSUInteger>(rng.location), static_cast<NSUInteger>(rng.length));
+    TextLayout::LineRange lr{};
+    lr.ctLineIndex = static_cast<std::uint32_t>(li);
+    std::uint32_t b0 = 0;
+    std::uint32_t b1 = 0;
+    utf16RangeToUtf8ByteRange(nsFull, nsr, b0, b1);
+    lr.byteStart = static_cast<int>(b0);
+    lr.byteEnd = static_cast<int>(b1);
+
+    float baselineY = -std::numeric_limits<float>::infinity();
+    float minTop = std::numeric_limits<float>::infinity();
+    float maxBot = -std::numeric_limits<float>::infinity();
+    float minOx = std::numeric_limits<float>::infinity();
+    for (auto const& pr : out->runs) {
+      if (pr.ctLineIndex != lr.ctLineIndex) {
+        continue;
+      }
+      baselineY = std::max(baselineY, pr.origin.y);
+      minTop = std::min(minTop, pr.origin.y - pr.run.ascent);
+      maxBot = std::max(maxBot, pr.origin.y + pr.run.descent);
+      minOx = std::min(minOx, pr.origin.x);
+    }
+    lr.baseline = baselineY;
+    lr.top = minTop;
+    lr.bottom = maxBot;
+    lr.lineMinX = std::isfinite(minOx) ? minOx : 0.f;
+    out->lines.push_back(lr);
   }
 
   CFRelease(frame);
