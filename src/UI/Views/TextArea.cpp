@@ -50,6 +50,36 @@ int lineEndBeforeTrailingNewlines(std::string const& buf, detail::LineMetrics co
   return std::max(lm.byteStart, e);
 }
 
+/// Layout-space X of the caret ink at `byte` (same box as key handling / render).
+float caretLayoutXForByte(std::string const& cur, int byte, float fieldW, float fieldH, float padH, float padV,
+                          float lineHeightOpt, Font const& fnt, Color const& tc, Color const& plc,
+                          std::string const& placeholderText) {
+  TextSystem& ts = Application::instance().textSystem();
+  TextLayoutOptions opts{};
+  opts.wrapping = TextWrapping::Wrap;
+  opts.verticalAlignment = VerticalAlignment::Top;
+  opts.lineHeight = lineHeightOpt;
+  float const cw = std::max(0.f, fieldW - 2.f * padH);
+  float const ch = std::max(0.f, fieldH - 2.f * padV);
+  Rect const box{0.f, 0.f, cw, ch};
+  bool const empty = cur.empty();
+  std::shared_ptr<TextLayout> const layout =
+      empty ? ts.layout(placeholderText, fnt, plc, box, opts) : ts.layout(cur, fnt, tc, box, opts);
+  std::string const& text = empty ? placeholderText : cur;
+  Color const col = empty ? plc : tc;
+  auto lines = detail::buildLineMetrics(text, *layout, ts, fnt, col);
+  int const b = detail::utf8Clamp(text, byte);
+  int const li = detail::lineIndexForByte(lines, b, text);
+  if (li < 0 || li >= static_cast<int>(lines.size())) {
+    return 0.f;
+  }
+  detail::LineMetrics const& le = lines[static_cast<std::size_t>(li)];
+  std::string const slice = text.substr(static_cast<std::size_t>(le.byteStart),
+                                        static_cast<std::size_t>(std::max(0, le.byteEnd - le.byteStart)));
+  int const rel = b - le.byteStart;
+  return detail::caretXPosition(ts, slice, std::max(0, rel), fnt, col) + le.lineMinX;
+}
+
 struct TextAreaView {
   Size measure(LayoutConstraints const& cs) const {
     float const contentW = std::isfinite(cs.maxWidth) ? cs.maxWidth : 200.f;
@@ -256,6 +286,9 @@ Element TextArea::body() const {
   auto lastBlink = useState(duration_cast<nanoseconds>(steady_clock::now().time_since_epoch()));
   auto mouseDragSelecting = useState(false);
   auto mouseDragAnchorByte = useState(0);
+  /// Preferred layout-space X for ↑/↓ (macOS-style column); `active` false until first vertical step uses line X.
+  auto stickyCaretLayoutX = useState(0.f);
+  auto stickyCaretActive = useState(false);
   detail::CaretBlinkTimerSlot& blinkCaretTimer = StateStore::current()->claimSlot<detail::CaretBlinkTimerSlot>();
 
   std::string const& bufRef = *val;
@@ -339,6 +372,17 @@ Element TextArea::body() const {
   int const maxLen = maxLength;
   float const padH = padHResolved;
   float const padV = padVResolved;
+
+  // Value-capture dimensions and theme copies — pointer/keyboard handlers run after `body()` returns; `[&]` would
+  // leave dangling refs to `fieldW`, `fnt`, `placeholderText`, etc.
+  auto updateStickyColumnFromCaret = [fieldW, fieldH, padH, padV, lineHeightOpt, fnt, tc, plc, placeholderText,
+                                      stickyCaretLayoutX, stickyCaretActive](std::string const& text, int byte) {
+    float const x = caretLayoutXForByte(text, byte, fieldW, fieldH, padH, padV, lineHeightOpt, fnt, tc, plc,
+                                        placeholderText);
+    stickyCaretLayoutX = x;
+    stickyCaretActive = true;
+  };
+
   useViewAction(
       "edit.copy",
       [val, caretByte, selAnchor]() {
@@ -354,7 +398,7 @@ Element TextArea::body() const {
 
   useViewAction(
       "edit.cut",
-      [val, caretByte, selAnchor, onCh, lastBlink, isDisabled]() {
+      [val, caretByte, selAnchor, onCh, lastBlink, isDisabled, updateStickyColumnFromCaret]() {
         if (isDisabled) {
           return;
         }
@@ -373,6 +417,7 @@ Element TextArea::body() const {
           onCh(*val);
         }
         detail::resetBlink(lastBlink);
+        updateStickyColumnFromCaret(*val, *caretByte);
       },
       [caretByte, selAnchor, isDisabled]() {
         return !isDisabled && *caretByte != *selAnchor;
@@ -380,36 +425,41 @@ Element TextArea::body() const {
 
   useViewAction(
       "edit.paste",
-      [val, caretByte, selAnchor, onCh, maxLen, lastBlink, isDisabled]() {
+      [val, caretByte, selAnchor, onCh, maxLen, lastBlink, isDisabled, updateStickyColumnFromCaret]() {
         if (isDisabled) {
           return;
         }
         if (auto s = Application::instance().clipboard().readText()) {
           detail::replaceSelection(val, caretByte, selAnchor, std::move(*s), maxLen, onCh, lastBlink);
+          updateStickyColumnFromCaret(*val, *caretByte);
         }
       },
       [isDisabled]() { return !isDisabled && Application::instance().clipboard().hasText(); });
 
   useViewAction(
       "edit.selectAll",
-      [val, caretByte, selAnchor, isDisabled]() {
+      [val, caretByte, selAnchor, isDisabled, updateStickyColumnFromCaret]() {
         if (isDisabled) {
           return;
         }
         selAnchor = 0;
         caretByte = static_cast<int>((*val).size());
+        updateStickyColumnFromCaret(*val, *caretByte);
       },
       [isDisabled]() { return !isDisabled; });
 
-  auto onText = [val, caretByte, selAnchor, onCh, maxLen, lastBlink, isDisabled](std::string const& chunk) {
+  auto onText = [val, caretByte, selAnchor, onCh, maxLen, lastBlink, isDisabled, updateStickyColumnFromCaret](
+                    std::string const& chunk) {
     if (isDisabled || chunk.empty()) {
       return;
     }
     detail::replaceSelection(val, caretByte, selAnchor, chunk, maxLen, onCh, lastBlink);
+    updateStickyColumnFromCaret(*val, *caretByte);
   };
 
-  auto onKey = [val, caretByte, selAnchor, scrollOffsetY, onCh, onEsc, lastBlink, isDisabled, fnt, tc, plc, padH,
-                  padV, fieldW, fieldH, lineHeightOpt, placeholderText, maxLen](KeyCode k, Modifiers m) {
+  auto onKey = [val, caretByte, selAnchor, scrollOffsetY, stickyCaretLayoutX, stickyCaretActive, onCh, onEsc, lastBlink,
+                  isDisabled, fnt, tc, plc, padH, padV, fieldW, fieldH, lineHeightOpt, placeholderText, maxLen,
+                  updateStickyColumnFromCaret](KeyCode k, Modifiers m) {
     if (isDisabled) {
       return;
     }
@@ -450,6 +500,7 @@ Element TextArea::body() const {
 
     if (k == keys::Return) {
       detail::replaceSelection(val, caretByte, selAnchor, std::string("\n"), maxLen, onCh, lastBlink);
+      updateStickyColumnFromCaret(*val, *caretByte);
       return;
     }
 
@@ -475,6 +526,7 @@ Element TextArea::body() const {
         caretByte = k == keys::UpArrow ? 0 : n;
       }
       touchCaret();
+      updateStickyColumnFromCaret(*val, *caretByte);
       return;
     }
 
@@ -492,7 +544,8 @@ Element TextArea::body() const {
                                                                   lines[static_cast<std::size_t>(li)].byteStart)));
       int const rel = *caretByte - lines[static_cast<std::size_t>(li)].byteStart;
       float const caretRelX = detail::caretXPosition(ts, slice, std::max(0, rel), fnt, tc);
-      float const caretLayoutX = caretRelX + lines[static_cast<std::size_t>(li)].lineMinX;
+      float const lineCaretX = caretRelX + lines[static_cast<std::size_t>(li)].lineMinX;
+      float const targetX = *stickyCaretActive ? *stickyCaretLayoutX : lineCaretX;
 
       if (k == keys::UpArrow) {
         if (li <= 0) {
@@ -508,7 +561,7 @@ Element TextArea::body() const {
         } else {
           detail::LineMetrics const& tl = lines[static_cast<std::size_t>(li - 1)];
           float const my = (tl.top + tl.bottom) * 0.5f;
-          Point const pt{caretLayoutX, my};
+          Point const pt{targetX, my};
           int const nb = detail::caretByteAtPoint(ts, cur, fnt, tc, *layout, pt);
           if (!shift) {
             caretByte = nb;
@@ -520,6 +573,8 @@ Element TextArea::body() const {
             caretByte = nb;
           }
         }
+        stickyCaretLayoutX = targetX;
+        stickyCaretActive = true;
         touchCaret();
         return;
       }
@@ -538,7 +593,7 @@ Element TextArea::body() const {
         } else {
           detail::LineMetrics const& tl = lines[static_cast<std::size_t>(li + 1)];
           float const my = (tl.top + tl.bottom) * 0.5f;
-          Point const pt{caretLayoutX, my};
+          Point const pt{targetX, my};
           int const nb = detail::caretByteAtPoint(ts, cur, fnt, tc, *layout, pt);
           if (!shift) {
             caretByte = nb;
@@ -550,6 +605,8 @@ Element TextArea::body() const {
             caretByte = nb;
           }
         }
+        stickyCaretLayoutX = targetX;
+        stickyCaretActive = true;
         touchCaret();
         return;
       }
@@ -568,6 +625,7 @@ Element TextArea::body() const {
           caretByte = target;
         }
         touchCaret();
+        updateStickyColumnFromCaret(*val, *caretByte);
         return;
       }
       if (meta) {
@@ -584,6 +642,7 @@ Element TextArea::body() const {
           caretByte = ls;
         }
         touchCaret();
+        updateStickyColumnFromCaret(*val, *caretByte);
         return;
       }
       if (!shift) {
@@ -602,6 +661,7 @@ Element TextArea::body() const {
         caretByte = detail::utf8PrevChar(cur, *caretByte);
       }
       touchCaret();
+      updateStickyColumnFromCaret(*val, *caretByte);
       return;
     }
 
@@ -618,6 +678,7 @@ Element TextArea::body() const {
           caretByte = target;
         }
         touchCaret();
+        updateStickyColumnFromCaret(*val, *caretByte);
         return;
       }
       if (meta) {
@@ -634,6 +695,7 @@ Element TextArea::body() const {
           caretByte = le;
         }
         touchCaret();
+        updateStickyColumnFromCaret(*val, *caretByte);
         return;
       }
       if (!shift) {
@@ -652,6 +714,7 @@ Element TextArea::body() const {
         caretByte = detail::utf8NextChar(cur, *caretByte);
       }
       touchCaret();
+      updateStickyColumnFromCaret(*val, *caretByte);
       return;
     }
 
@@ -669,6 +732,7 @@ Element TextArea::body() const {
         caretByte = ls;
       }
       touchCaret();
+      updateStickyColumnFromCaret(*val, *caretByte);
       return;
     }
 
@@ -686,6 +750,7 @@ Element TextArea::body() const {
         caretByte = le;
       }
       touchCaret();
+      updateStickyColumnFromCaret(*val, *caretByte);
       return;
     }
 
@@ -701,6 +766,7 @@ Element TextArea::body() const {
             onCh(*val);
           }
           touchCaret();
+          updateStickyColumnFromCaret(*val, *caretByte);
         }
         return;
       }
@@ -713,6 +779,7 @@ Element TextArea::body() const {
           onCh(*val);
         }
         touchCaret();
+        updateStickyColumnFromCaret(*val, *caretByte);
         return;
       }
       if (i0 > 0) {
@@ -725,6 +792,7 @@ Element TextArea::body() const {
           onCh(*val);
         }
         touchCaret();
+        updateStickyColumnFromCaret(*val, *caretByte);
       }
       return;
     }
@@ -739,6 +807,7 @@ Element TextArea::body() const {
           onCh(*val);
         }
         touchCaret();
+        updateStickyColumnFromCaret(*val, *caretByte);
         return;
       }
       if (i0 < n) {
@@ -751,13 +820,15 @@ Element TextArea::body() const {
           onCh(*val);
         }
         touchCaret();
+        updateStickyColumnFromCaret(*val, *caretByte);
       }
       return;
     }
   };
 
   auto onPointerDown = [val, caretByte, selAnchor, scrollOffsetY, lastBlink, mouseDragSelecting, mouseDragAnchorByte,
-                          padH, padV, fieldW, fieldH, fnt, tc, plc, isDisabled, lineHeightOpt, placeholderText](
+                          padH, padV, fieldW, fieldH, fnt, tc, plc, isDisabled, lineHeightOpt, placeholderText,
+                          updateStickyColumnFromCaret](
                            Point local) {
     if (isDisabled) {
       return;
@@ -781,6 +852,7 @@ Element TextArea::body() const {
       caretByte = pos;
       selAnchor = pos;
       detail::resetBlink(lastBlink);
+      updateStickyColumnFromCaret(*val, *caretByte);
       return;
     }
     std::shared_ptr<TextLayout> const layout = ts.layout(buf, fnt, tc, content, opts);
@@ -789,10 +861,12 @@ Element TextArea::body() const {
     caretByte = pos;
     selAnchor = pos;
     detail::resetBlink(lastBlink);
+    updateStickyColumnFromCaret(*val, *caretByte);
   };
 
   auto onPointerMove = [val, caretByte, selAnchor, scrollOffsetY, lastBlink, mouseDragSelecting, mouseDragAnchorByte,
-                          padH, padV, fieldW, fieldH, fnt, tc, plc, isDisabled, lineHeightOpt, placeholderText](
+                          padH, padV, fieldW, fieldH, fnt, tc, plc, isDisabled, lineHeightOpt, placeholderText,
+                          updateStickyColumnFromCaret](
                            Point local) {
     if (isDisabled || !*mouseDragSelecting) {
       return;
@@ -815,6 +889,7 @@ Element TextArea::body() const {
       caretByte = pos;
       selAnchor = anchor;
       detail::resetBlink(lastBlink);
+      updateStickyColumnFromCaret(*val, *caretByte);
       return;
     }
     std::shared_ptr<TextLayout> const layout = ts.layout(buf, fnt, tc, content, opts);
@@ -822,6 +897,7 @@ Element TextArea::body() const {
     caretByte = pos;
     selAnchor = anchor;
     detail::resetBlink(lastBlink);
+    updateStickyColumnFromCaret(*val, *caretByte);
   };
 
   auto onPointerUp = [mouseDragSelecting](Point) { mouseDragSelecting = false; };

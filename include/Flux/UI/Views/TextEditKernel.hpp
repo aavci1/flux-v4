@@ -34,7 +34,9 @@ float caretXPosition(TextSystem&, std::string const&, int byteEnd, Font const&, 
 int caretByteAtTextX(TextSystem&, std::string const&, Font const&, Color const&, float textX);
 
 struct LineMetrics {
+  /// Layout-space Y of the line band top (add canvas `textOrigin.y` for drawing).
   float top{};
+  /// Layout-space Y of the line band bottom (add canvas `textOrigin.y` for drawing).
   float bottom{};
   float baseline{};
   /// Minimum `PlacedRun::origin.x` among runs on this visual line (layout space). Used to map pointer /

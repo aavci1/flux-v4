@@ -23,6 +23,9 @@ struct TextLayout {
     float baseline = 0.f;
   };
 
+  /// Alternate name for `LineRange` (per-line UTF-8 span from Core Text); useful in documentation.
+  using VisualLine = LineRange;
+
   struct PlacedRun {
     TextRun run{};
     Point origin{}; ///< Baseline-left relative to layout origin (top-left).
