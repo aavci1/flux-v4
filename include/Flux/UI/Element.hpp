@@ -119,7 +119,9 @@ private:
     /// `(measureId, constraints)` within a single rebuild after replaying \ref BuildContext::advanceChildSlot.
     /// Composites and layouts must return false. Memoization is safe because each `Element` has a stable
     /// \ref measureId_ and \ref MeasureCache is cleared every rebuild — the cache does not key on mutable
-    /// content (e.g. string value); different instances get different ids.
+    /// content (e.g. string value); different instances get different ids. Leaves whose \ref measure
+    /// depends on reactive state that is not part of the key should return false if that state can change
+    /// between the first measure and a later replay in the same pass (see \ref MeasureCache).
     virtual bool canMemoizeMeasure() const { return false; }
   };
 

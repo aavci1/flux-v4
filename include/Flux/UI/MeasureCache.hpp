@@ -72,6 +72,13 @@ inline MeasureCacheKey makeMeasureCacheKey(std::uint64_t elementMeasureId, Layou
 /// Per-pass cache. Cleared when a new rebuild starts so content changes always get fresh measures;
 /// within one pass, distinct elements have distinct `measureId`s so there is no stale hit from
 /// differing state alone.
+///
+/// The key does not include mutable leaf content (e.g. `State<std::string>`). Memoization is
+/// correct while no `State` writes occur during the measure pass and nothing replays `measure`
+/// after `build()` mutates state in the same pass — an implicit invariant today. A leaf whose
+/// `measure` reads reactive state and could become incorrect if that invariant breaks should
+/// return `canMemoizeMeasure() == false`, or the engine would need a cache flush between measure
+/// and build.
 class MeasureCache {
 public:
   void clear() { map_.clear(); }

@@ -134,6 +134,9 @@ Size Element::Model<VStack>::measure(BuildContext& ctx, LayoutConstraints const&
   LayoutConstraints childCs = constraints;
   childCs.maxHeight = std::numeric_limits<float>::infinity();
   childCs.maxWidth = innerW > 0.f ? innerW : std::numeric_limits<float>::infinity();
+  // Match `build`: cross-axis alignment for leaves (e.g. `Text` via `textViewLayoutOptions`).
+  childCs.hStackCrossAlign = std::nullopt;
+  childCs.vStackCrossAlign = value.hAlign;
 
   float maxW = 0.f;
   float sumH = 2.f * value.padding;
