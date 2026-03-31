@@ -18,6 +18,7 @@
 #include <limits>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include <Flux/Graphics/TextLayout.hpp>
 
@@ -33,6 +34,13 @@ namespace {
 using namespace std::chrono;
 
 constexpr float kSelectionExtraBottomPx = 2.f;
+
+/// Cached caret position in layout space (same coordinates as `LineMetrics` / `TextLayout::lines`).
+struct CaretGeom {
+  float x = 0.f;
+  float y = 0.f;
+  float h = 0.f;
+};
 
 int lineEndBeforeTrailingNewlines(std::string const& buf, detail::LineMetrics const& lm) {
   int e = lm.byteEnd;
@@ -138,12 +146,13 @@ void TextAreaView::render(Canvas& canvas, Rect frame) const {
   std::shared_ptr<TextLayout> const layout =
       empty ? ts.layout(placeholder, font, phc, content, opts) : ts.layout(buf, font, tc, content, opts);
 
-  float const scroll = *scrollOffsetY;
-  Point const textOrigin{content.x, content.y - scroll};
-
   std::string const& textForMetrics = empty ? placeholder : buf;
   Color const colForMetrics = empty ? phc : tc;
-  auto lines = detail::buildLineMetrics(textForMetrics, *layout, ts, font, colForMetrics);
+  // Line metrics are layout-space (`LineMetrics` matches `TextLayout::lines`); scroll only shifts the draw origin.
+  std::vector<detail::LineMetrics> const lines =
+      detail::buildLineMetrics(textForMetrics, *layout, ts, font, colForMetrics);
+
+  float const scroll = *scrollOffsetY;
   int const cb = detail::utf8Clamp(textForMetrics, *caretByte);
   int const li = detail::lineIndexForByte(lines, cb, textForMetrics);
   if (li >= 0 && li < static_cast<int>(lines.size())) {
@@ -168,7 +177,6 @@ void TextAreaView::render(Canvas& canvas, Rect frame) const {
 
   float const scroll2 = *scrollOffsetY;
   Point const textOrigin2{content.x, content.y - scroll2};
-  lines = detail::buildLineMetrics(textForMetrics, *layout, ts, font, colForMetrics);
 
   std::string const& textForSel = empty ? placeholder : buf;
   auto [i0, i1] = detail::orderedSelection(*caretByte, *selAnchor);
@@ -265,8 +273,8 @@ Element TextArea::body() const {
 
   int const cbKey = *caretByte;
 
-  // Same outer size as `TextAreaView::render` uses (`frame` from layout). `buildSlotRect()` is not
-  // reliable here (last slot in the engine, not necessarily this field).
+  // Width for layout + caret memo must match render: prefer `useLayoutRect()` (this element's frame),
+  // else `Runtime::buildSlotRect()` like TextInput's `frameX` fallback (stale by one frame on first build).
   std::optional<Rect> const layoutRect = useLayoutRect();
   float const fieldW = layoutRect ? layoutRect->width
                                   : ([]() -> float {
@@ -280,8 +288,8 @@ Element TextArea::body() const {
                                      })();
   float const contentW = std::max(0.f, fieldW - 2.f * padHResolved);
 
-  float const cachedCaretX = useMemo(
-      [&]() {
+  CaretGeom const cachedCaret = useMemo(
+      [&]() -> CaretGeom {
         std::string const& text = bufCopy.empty() ? placeholderText : bufCopy;
         Color const col = bufCopy.empty() ? plc : tc;
         TextLayoutOptions opts{};
@@ -294,57 +302,17 @@ Element TextArea::body() const {
         auto lines = detail::buildLineMetrics(text, *layout, ts, fnt, col);
         int const li = detail::lineIndexForByte(lines, cbKey, text);
         if (li < 0 || li >= static_cast<int>(lines.size())) {
-          return 0.f;
+          return {};
         }
         detail::LineMetrics const& le = lines[static_cast<std::size_t>(li)];
         int const rel = cbKey - le.byteStart;
         std::string const slice =
             text.substr(static_cast<std::size_t>(le.byteStart),
                         static_cast<std::size_t>(std::max(0, le.byteEnd - le.byteStart)));
-        return detail::caretXPosition(ts, slice, std::max(0, rel), fnt, col) + le.lineMinX;
-      },
-      bufCopy, cbKey, placeholderText, contentW, lineHeightOpt, fnt.size, fnt.weight, fnt.family, fnt.italic, tc.r, tc.g,
-      tc.b, tc.a, plc.r, plc.g, plc.b, plc.a);
-
-  float const cachedCaretY = useMemo(
-      [&]() {
-        std::string const& text = bufCopy.empty() ? placeholderText : bufCopy;
-        Color const col = bufCopy.empty() ? plc : tc;
-        TextLayoutOptions opts{};
-        opts.wrapping = TextWrapping::Wrap;
-        opts.verticalAlignment = VerticalAlignment::Top;
-        opts.lineHeight = lineHeightOpt;
-        Rect const box{0.f, 0.f, contentW, 10000.f};
-        std::shared_ptr<TextLayout> const layout =
-            bufCopy.empty() ? ts.layout(placeholderText, fnt, plc, box, opts) : ts.layout(bufCopy, fnt, tc, box, opts);
-        auto lines = detail::buildLineMetrics(text, *layout, ts, fnt, col);
-        int const li = detail::lineIndexForByte(lines, cbKey, text);
-        if (li < 0 || li >= static_cast<int>(lines.size())) {
-          return 0.f;
-        }
-        return lines[static_cast<std::size_t>(li)].top;
-      },
-      bufCopy, cbKey, placeholderText, contentW, lineHeightOpt, fnt.size, fnt.weight, fnt.family, fnt.italic, tc.r, tc.g,
-      tc.b, tc.a, plc.r, plc.g, plc.b, plc.a);
-
-  float const cachedCaretH = useMemo(
-      [&]() {
-        std::string const& text = bufCopy.empty() ? placeholderText : bufCopy;
-        Color const col = bufCopy.empty() ? plc : tc;
-        TextLayoutOptions opts{};
-        opts.wrapping = TextWrapping::Wrap;
-        opts.verticalAlignment = VerticalAlignment::Top;
-        opts.lineHeight = lineHeightOpt;
-        Rect const box{0.f, 0.f, contentW, 10000.f};
-        std::shared_ptr<TextLayout> const layout =
-            bufCopy.empty() ? ts.layout(placeholderText, fnt, plc, box, opts) : ts.layout(bufCopy, fnt, tc, box, opts);
-        auto lines = detail::buildLineMetrics(text, *layout, ts, fnt, col);
-        int const li = detail::lineIndexForByte(lines, cbKey, text);
-        if (li < 0 || li >= static_cast<int>(lines.size())) {
-          return 0.f;
-        }
-        detail::LineMetrics const& le = lines[static_cast<std::size_t>(li)];
-        return std::max(0.f, le.bottom - le.top);
+        float const x = detail::caretXPosition(ts, slice, std::max(0, rel), fnt, col) + le.lineMinX;
+        float const y = le.top;
+        float const h = std::max(0.f, le.bottom - le.top);
+        return {x, y, h};
       },
       bufCopy, cbKey, placeholderText, contentW, lineHeightOpt, fnt.size, fnt.weight, fnt.family, fnt.italic, tc.r, tc.g,
       tc.b, tc.a, plc.r, plc.g, plc.b, plc.a);
@@ -906,9 +874,9 @@ Element TextArea::body() const {
       .paddingV = padVResolved,
       .lineHeight = lineHeightOpt,
       .minSize = minSize,
-      .cachedCaretX = cachedCaretX,
-      .cachedCaretY = cachedCaretY,
-      .cachedCaretH = cachedCaretH,
+      .cachedCaretX = cachedCaret.x,
+      .cachedCaretY = cachedCaret.y,
+      .cachedCaretH = cachedCaret.h,
       .maxLength = maxLength,
       .onChange = onChange,
       .onEscape = onEscape,

@@ -465,14 +465,10 @@ int caretByteAtPoint(TextSystem& ts, std::string const& buf, Font const& font, C
   return utf8Clamp(buf, a + rel);
 }
 
-namespace {
-
-using namespace std::chrono;
-
+// Caret blink timer registry: single definition in this TU (TextInput / TextArea link here only).
+// Named `flux::detail` scope — not a nested anonymous namespace — so there is exactly one bridge.
 std::unordered_set<std::uint64_t> gCaretBlinkTimerIds;
 std::once_flag gCaretBlinkTimerBridgeOnce;
-
-} // namespace
 
 CaretBlinkTimerSlot::~CaretBlinkTimerSlot() {
   cancel();
@@ -558,7 +554,8 @@ std::pair<int, int> orderedSelection(int caret, int anchor) {
 }
 
 void resetBlink(State<std::chrono::nanoseconds> lastBlink) {
-  lastBlink = duration_cast<nanoseconds>(steady_clock::now().time_since_epoch());
+  lastBlink = std::chrono::duration_cast<std::chrono::nanoseconds>(
+      std::chrono::steady_clock::now().time_since_epoch());
 }
 
 void replaceSelection(State<std::string> val, State<int> caretByte, State<int> selAnchor, std::string insert,
