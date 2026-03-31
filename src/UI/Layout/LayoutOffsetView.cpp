@@ -109,7 +109,8 @@ void Element::Model<OffsetView>::build(BuildContext& ctx) const {
     float x = 0.f;
     for (std::size_t i = 0; i < n; ++i) {
       Size const sz = sizes[i];
-      float const rowH = std::max(sz.height, innerH);
+      float const rowH = (viewportH > 0.f && std::isfinite(viewportH)) ? viewportH
+                                                                       : std::max(sz.height, innerH);
       le.setChildFrame(Rect{x, 0.f, sz.width, rowH});
       LayoutConstraints childBuild = outer;
       childBuild.maxWidth = sz.width;
@@ -124,7 +125,11 @@ void Element::Model<OffsetView>::build(BuildContext& ctx) const {
     float y = 0.f;
     for (std::size_t i = 0; i < n; ++i) {
       Size const sz = sizes[i];
-      float const rowW = std::max(sz.width, innerW);
+      // Scrollport width comes from `outer` (viewport). `parentFrame` may be expanded by ZStack to
+      // max(intrinsic, viewport); using that for rowW would lay out wider than the clip — padding
+      // disappears at the right edge when narrow.
+      float const rowW = (viewportW > 0.f && std::isfinite(viewportW)) ? viewportW
+                                                                       : std::max(sz.width, innerW);
       le.setChildFrame(Rect{0.f, y, rowW, sz.height});
       LayoutConstraints childBuild = outer;
       childBuild.maxWidth = rowW;
@@ -196,13 +201,9 @@ Size Element::Model<OffsetView>::measure(BuildContext& ctx, LayoutConstraints co
   }
   ctx.popChildIndex();
 
-  if (value.viewportSize.signal) {
-    value.viewportSize = Size{viewportW, viewportH};
-  }
-  if (value.contentSize.signal) {
-    value.contentSize = Size{totalW, totalH};
-  }
-
+  // Do not assign viewportSize / contentSize here. `State` writes go through `Signal::set`, which can
+  // mark the reactive graph dirty during measure (before `build` lays out children). `build` applies
+  // the same sizes — same pattern as TextInputView::measure (pure size; no hook/state mutation).
   return {totalW, totalH};
 }
 
