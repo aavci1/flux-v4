@@ -98,7 +98,6 @@ Size Element::Model<ZStack>::measure(BuildContext& ctx, LayoutConstraints const&
   if (!ctx.consumeCompositeBodySubtreeRootSkip()) {
     ctx.advanceChildSlot();
   }
-  LayoutEngine tmp{};
   float const assignedW =
       std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;
   float const assignedH =
@@ -114,7 +113,7 @@ Size Element::Model<ZStack>::measure(BuildContext& ctx, LayoutConstraints const&
   float maxH = 0.f;
   ctx.pushChildIndex();
   for (Element const& ch : value.children) {
-    Size const s = tmp.measure(ctx, ch, childCs, ts);
+    Size const s = ch.measure(ctx, childCs, ts);
     maxW = std::max(maxW, s.width);
     maxH = std::max(maxH, s.height);
   }

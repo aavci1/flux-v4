@@ -126,7 +126,6 @@ Size Element::Model<VStack>::measure(BuildContext& ctx, LayoutConstraints const&
   if (!ctx.consumeCompositeBodySubtreeRootSkip()) {
     ctx.advanceChildSlot();
   }
-  LayoutEngine tmp{};
   float const assignedW =
       std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;
   float innerW = std::max(0.f, assignedW - 2.f * value.padding);
@@ -143,7 +142,7 @@ Size Element::Model<VStack>::measure(BuildContext& ctx, LayoutConstraints const&
   }
   ctx.pushChildIndex();
   for (Element const& ch : value.children) {
-    Size const s = tmp.measure(ctx, ch, childCs, ts);
+    Size const s = ch.measure(ctx, childCs, ts);
     maxW = std::max(maxW, s.width);
     sumH += s.height;
   }

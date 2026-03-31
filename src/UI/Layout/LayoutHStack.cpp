@@ -120,8 +120,6 @@ Size Element::Model<HStack>::measure(BuildContext& ctx, LayoutConstraints const&
   if (!ctx.consumeCompositeBodySubtreeRootSkip()) {
     ctx.advanceChildSlot();
   }
-  LayoutEngine tmp{};
-
   LayoutConstraints childCs = constraints;
   childCs.maxWidth = std::numeric_limits<float>::infinity();
   childCs.maxHeight = std::numeric_limits<float>::infinity();
@@ -134,7 +132,7 @@ Size Element::Model<HStack>::measure(BuildContext& ctx, LayoutConstraints const&
   }
   ctx.pushChildIndex();
   for (Element const& ch : value.children) {
-    Size const s = tmp.measure(ctx, ch, childCs, ts);
+    Size const s = ch.measure(ctx, childCs, ts);
     sumW += s.width;
     maxH = std::max(maxH, s.height);
   }

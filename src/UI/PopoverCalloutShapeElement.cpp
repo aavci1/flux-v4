@@ -76,11 +76,10 @@ Size Element::Model<PopoverCalloutShape>::measure(BuildContext& ctx, LayoutConst
   if (!ctx.consumeCompositeBodySubtreeRootSkip()) {
     ctx.advanceChildSlot();
   }
-  LayoutEngine tmp{};
   LayoutConstraints cc = innerConstraintsForPopoverContent(value, constraints);
 
   ctx.pushChildIndex();
-  Size const inner = tmp.measure(ctx, value.content, cc, ts);
+  Size const inner = value.content.measure(ctx, cc, ts);
   ctx.popChildIndex();
 
   float const pad = value.padding;
@@ -123,9 +122,8 @@ void Element::Model<PopoverCalloutShape>::build(BuildContext& ctx) const {
   }
 
   LayoutConstraints const ccInner = innerConstraintsForPopoverContent(value, outer);
-  LayoutEngine tmpMeasure{};
   ctx.pushChildIndex();
-  Size const innerMeasured = tmpMeasure.measure(ctx, value.content, ccInner, ctx.textSystem());
+  Size const innerMeasured = value.content.measure(ctx, ccInner, ctx.textSystem());
   ctx.popChildIndex();
 
   float const assignedW = assignedSpan(parentFrame.width, outer.maxWidth);

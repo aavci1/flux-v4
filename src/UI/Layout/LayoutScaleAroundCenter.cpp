@@ -81,7 +81,6 @@ Size Element::Model<ScaleAroundCenter>::measure(BuildContext& ctx, LayoutConstra
   if (!ctx.consumeCompositeBodySubtreeRootSkip()) {
     ctx.advanceChildSlot();
   }
-  LayoutEngine tmp{};
   float const assignedW = std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;
   float const assignedH = std::isfinite(constraints.maxHeight) ? constraints.maxHeight : 0.f;
   float innerW = std::max(0.f, assignedW);
@@ -92,7 +91,7 @@ Size Element::Model<ScaleAroundCenter>::measure(BuildContext& ctx, LayoutConstra
   childCs.maxHeight = innerH > 0.f ? innerH : std::numeric_limits<float>::infinity();
 
   ctx.pushChildIndex();
-  Size const s = tmp.measure(ctx, value.child, childCs, ts);
+  Size const s = value.child.measure(ctx, childCs, ts);
   ctx.popChildIndex();
   return s;
 }

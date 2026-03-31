@@ -82,7 +82,6 @@ void Element::Model<ForEach<T>>::build(BuildContext& ctx) const {
 
   std::size_t const n = value.items.size();
 
-  LayoutEngine tmp{};
   LayoutConstraints childCsMeasure = outer;
   childCsMeasure.maxHeight = std::numeric_limits<float>::infinity();
   float const assignedW = std::isfinite(outer.maxWidth) ? outer.maxWidth : 0.f;
@@ -96,7 +95,7 @@ void Element::Model<ForEach<T>>::build(BuildContext& ctx) const {
     Element item{value.factory(value.items[i])};
     ctx.pushCompositeKeyTail(forEachKey);
     ctx.setChildIndex(i);
-    sizes.push_back(tmp.measure(ctx, item, childCsMeasure, ctx.textSystem()));
+    sizes.push_back(item.measure(ctx, childCsMeasure, ctx.textSystem()));
     ctx.popCompositeKeyTail();
   }
 
@@ -152,7 +151,6 @@ template<typename T>
 Size Element::Model<ForEach<T>>::measure(BuildContext& ctx, LayoutConstraints const& constraints,
                                          TextSystem& ts) const {
   ComponentKey const forEachKey = ctx.nextCompositeKey();
-  LayoutEngine tmp{};
   LayoutConstraints childCs = constraints;
   childCs.maxHeight = std::numeric_limits<float>::infinity();
   float const assignedW = std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;
@@ -167,7 +165,7 @@ Size Element::Model<ForEach<T>>::measure(BuildContext& ctx, LayoutConstraints co
     Element item{value.factory(value.items[i])};
     ctx.pushCompositeKeyTail(forEachKey);
     ctx.setChildIndex(i);
-    Size const s = tmp.measure(ctx, item, childCs, ts);
+    Size const s = item.measure(ctx, childCs, ts);
     ctx.popCompositeKeyTail();
     totalW = std::max(totalW, s.width);
     totalH += s.height;

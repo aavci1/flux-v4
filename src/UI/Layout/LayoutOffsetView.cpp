@@ -144,7 +144,6 @@ Size Element::Model<OffsetView>::measure(BuildContext& ctx, LayoutConstraints co
   if (!ctx.consumeCompositeBodySubtreeRootSkip()) {
     ctx.advanceChildSlot();
   }
-  LayoutEngine tmp{};
   float const assignedW = std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;
   float const assignedH = std::isfinite(constraints.maxHeight) ? constraints.maxHeight : 0.f;
   float innerW = std::max(0.f, assignedW);
@@ -182,13 +181,13 @@ Size Element::Model<OffsetView>::measure(BuildContext& ctx, LayoutConstraints co
   ctx.pushChildIndex();
   if (value.axis == ScrollAxis::Horizontal) {
     for (Element const& ch : value.children) {
-      Size const s = tmp.measure(ctx, ch, childCs, ts);
+      Size const s = ch.measure(ctx, childCs, ts);
       totalW += s.width;
       totalH = std::max(totalH, s.height);
     }
   } else {
     for (Element const& ch : value.children) {
-      Size const s = tmp.measure(ctx, ch, childCs, ts);
+      Size const s = ch.measure(ctx, childCs, ts);
       totalW = std::max(totalW, s.width);
       totalH += s.height;
     }

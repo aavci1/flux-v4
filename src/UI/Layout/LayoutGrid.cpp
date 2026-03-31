@@ -121,7 +121,6 @@ Size Element::Model<Grid>::measure(BuildContext& ctx, LayoutConstraints const& c
   if (!ctx.consumeCompositeBodySubtreeRootSkip()) {
     ctx.advanceChildSlot();
   }
-  LayoutEngine tmp{};
   float const assignedW =
       std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;
   float const assignedH =
@@ -147,7 +146,7 @@ Size Element::Model<Grid>::measure(BuildContext& ctx, LayoutConstraints const& c
   sizes.reserve(value.children.size());
   ctx.pushChildIndex();
   for (Element const& ch : value.children) {
-    sizes.push_back(tmp.measure(ctx, ch, childCs, ts));
+    sizes.push_back(ch.measure(ctx, childCs, ts));
   }
   ctx.popChildIndex();
 
