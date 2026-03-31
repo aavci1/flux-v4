@@ -20,9 +20,8 @@ Element Icon::body() const {
         .text = std::move(utf8),
         .font = Font {
             .family = theme.iconFontFamily,
-            .size = sz,
-            .weight = wght,
-            .italic = false,
+            .size = sz * 1.25f,
+            .weight = wght * 1.25f,
         },
         .color = col,
         .horizontalAlignment = HorizontalAlignment::Center,
