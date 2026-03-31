@@ -173,14 +173,28 @@ void Element::Model<C>::build(BuildContext& ctx) const {
     if constexpr (requires { value.onTap; }) {
       handlers.onTap = value.onTap;
     }
+    // Pointer hits use the same coordinate space as `frame`. Convert to widget-local (0..size) so handlers
+    // do not depend on `Runtime::buildSlotRect()`, which may not match this node after nested layout.
     if constexpr (requires { value.onPointerDown; }) {
-      handlers.onPointerDown = value.onPointerDown;
+      if (value.onPointerDown) {
+        handlers.onPointerDown = [pd = value.onPointerDown, frame](Point local) {
+          pd(Point{local.x - frame.x, local.y - frame.y});
+        };
+      }
     }
     if constexpr (requires { value.onPointerUp; }) {
-      handlers.onPointerUp = value.onPointerUp;
+      if (value.onPointerUp) {
+        handlers.onPointerUp = [pu = value.onPointerUp, frame](Point local) {
+          pu(Point{local.x - frame.x, local.y - frame.y});
+        };
+      }
     }
     if constexpr (requires { value.onPointerMove; }) {
-      handlers.onPointerMove = value.onPointerMove;
+      if (value.onPointerMove) {
+        handlers.onPointerMove = [pm = value.onPointerMove, frame](Point local) {
+          pm(Point{local.x - frame.x, local.y - frame.y});
+        };
+      }
     }
     if constexpr (requires { value.onScroll; }) {
       handlers.onScroll = value.onScroll;

@@ -3,6 +3,7 @@
 #include <Flux/Core/Types.hpp>
 #include <Flux/Graphics/TextRun.hpp>
 
+#include <cstdint>
 #include <vector>
 
 namespace flux {
@@ -13,6 +14,11 @@ struct TextLayout {
   struct PlacedRun {
     TextRun run{};
     Point origin{}; ///< Baseline-left relative to layout origin (top-left).
+    /// Half-open UTF-8 byte range in the source string this run maps to (from Core Text).
+    std::uint32_t utf8Begin = 0;
+    std::uint32_t utf8End = 0;
+    /// Index of the `CTLine` this run came from (stable grouping for hit-testing vs. baseline epsilon).
+    std::uint32_t ctLineIndex = 0;
   };
 
   std::vector<PlacedRun> runs;

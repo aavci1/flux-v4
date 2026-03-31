@@ -241,6 +241,32 @@ static NSRange utf8ByteRangeToNSRange(char const* utf8, std::size_t utf8Len, std
   return NSMakeRange(u16Start, u16End - u16Start);
 }
 
+/// Maps a UTF-16 `NSRange` in `ns` to half-open UTF-8 byte offsets `[outBegin, outEnd)` in the UTF-8 encoding of `ns`.
+static void utf16RangeToUtf8ByteRange(NSString* ns, NSRange r16, std::uint32_t& outBegin, std::uint32_t& outEnd) {
+  if (!ns || [ns length] == 0) {
+    outBegin = 0;
+    outEnd = 0;
+    return;
+  }
+  NSUInteger const len = [ns length];
+  NSUInteger u16Start = r16.location;
+  NSUInteger u16End = NSMaxRange(r16);
+  if (u16Start > len) {
+    u16Start = len;
+  }
+  if (u16End > len) {
+    u16End = len;
+  }
+  NSString* const prefixStart = u16Start > 0 ? [ns substringToIndex:u16Start] : @"";
+  NSString* const prefixEnd = u16End > 0 ? [ns substringToIndex:u16End] : @"";
+  NSData* const d0 = [prefixStart dataUsingEncoding:NSUTF8StringEncoding];
+  NSData* const d1 = [prefixEnd dataUsingEncoding:NSUTF8StringEncoding];
+  NSUInteger const b0 = d0 ? [d0 length] : 0u;
+  NSUInteger const b1 = d1 ? [d1 length] : 0u;
+  outBegin = static_cast<std::uint32_t>(b0);
+  outEnd = static_cast<std::uint32_t>(b1);
+}
+
 static void applyParagraphStyleToMutable(NSMutableAttributedString* mas, TextLayoutOptions const& options) {
   if (!mas || [mas length] == 0) {
     return;
@@ -366,7 +392,7 @@ static void styleFromCTFont(CTFontRef ctFont, CGColorRef cgColor, CoreTextSystem
 /// One `CTRun` → `PlacedRun`: glyph positions are relative to the run’s baseline-left; `origin` is baseline-left
 /// in layout space (top-left origin, Y down). `frameHeight` is the CT frame path height (Quartz, Y up).
 static void appendPlacedRunFromCTRun(CTRunRef run, CGPoint lineOrigin, CGFloat frameHeight, CoreTextSystem& sys,
-                                     TextLayout& layout) {
+                                     TextLayout& layout, NSString* fullString, CFIndex ctLineIndex) {
   CFIndex const glyphCount = CTRunGetGlyphCount(run);
   if (glyphCount <= 0) {
     return;
@@ -410,6 +436,11 @@ static void appendPlacedRunFromCTRun(CTRunRef run, CGPoint lineOrigin, CGFloat f
   CGFloat const baselineY = lineOrigin.y + cpos[0].y;
   placed.origin.x = static_cast<float>(baselineX);
   placed.origin.y = static_cast<float>(frameHeight - baselineY);
+
+  CFRange const strRange = CTRunGetStringRange(run);
+  NSRange const nsr = NSMakeRange(static_cast<NSUInteger>(strRange.location), static_cast<NSUInteger>(strRange.length));
+  utf16RangeToUtf8ByteRange(fullString, nsr, placed.utf8Begin, placed.utf8End);
+  placed.ctLineIndex = static_cast<std::uint32_t>(ctLineIndex);
 
   layout.runs.push_back(std::move(placed));
 }
@@ -678,6 +709,8 @@ std::shared_ptr<TextLayout> CoreTextSystem::layout(AttributedString const& text,
     CTFrameGetLineOrigins(frame, CFRangeMake(0, lineCount), origins.data());
   }
 
+  NSString* const nsFull = [NSString stringWithUTF8String:text.utf8.c_str()];
+
   for (CFIndex li = 0; li < lineCount; ++li) {
     CTLineRef line = (CTLineRef)CFArrayGetValueAtIndex(lines, li);
     CGPoint const lineOrigin = origins[static_cast<std::size_t>(li)];
@@ -685,7 +718,7 @@ std::shared_ptr<TextLayout> CoreTextSystem::layout(AttributedString const& text,
     CFIndex const runCount = CFArrayGetCount(glyphRuns);
     for (CFIndex ri = 0; ri < runCount; ++ri) {
       CTRunRef run = (CTRunRef)CFArrayGetValueAtIndex(glyphRuns, ri);
-      appendPlacedRunFromCTRun(run, lineOrigin, fh, *this, *out);
+      appendPlacedRunFromCTRun(run, lineOrigin, fh, *this, *out, nsFull, li);
     }
   }
 

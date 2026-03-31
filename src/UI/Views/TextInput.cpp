@@ -9,6 +9,7 @@
 #include <Flux/UI/InputFieldLayout.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Views/TextInput.hpp>
+#include <Flux/UI/Views/TextEditKernel.hpp>
 
 #include <algorithm>
 #include <chrono>
@@ -22,355 +23,15 @@
 #include <optional>
 #include <string>
 #include <string_view>
-#include <unordered_set>
 #include <vector>
 
 #include <Flux/Graphics/TextLayout.hpp>
-
-namespace {
-
-bool utf8DecodeAt(std::string const& s, int i, char32_t& outCp, int& outLen) {
-  int const n = static_cast<int>(s.size());
-  if (i < 0 || i >= n) {
-    return false;
-  }
-  auto const u = static_cast<unsigned char>(s[static_cast<std::size_t>(i)]);
-  if ((u & 0x80) == 0) {
-    outCp = u;
-    outLen = 1;
-    return true;
-  }
-  if ((u & 0xE0) == 0xC0 && i + 1 < n) {
-    auto const u1 = static_cast<unsigned char>(s[static_cast<std::size_t>(i + 1)]);
-    if ((u1 & 0xC0) != 0x80) {
-      return false;
-    }
-    outCp = (u & 0x1F) << 6 | (u1 & 0x3F);
-    outLen = 2;
-    return true;
-  }
-  if ((u & 0xF0) == 0xE0 && i + 2 < n) {
-    auto const u1 = static_cast<unsigned char>(s[static_cast<std::size_t>(i + 1)]);
-    auto const u2 = static_cast<unsigned char>(s[static_cast<std::size_t>(i + 2)]);
-    if ((u1 & 0xC0) != 0x80 || (u2 & 0xC0) != 0x80) {
-      return false;
-    }
-    outCp = (u & 0x0F) << 12 | (u1 & 0x3F) << 6 | (u2 & 0x3F);
-    outLen = 3;
-    return true;
-  }
-  if ((u & 0xF8) == 0xF0 && i + 3 < n) {
-    auto const u1 = static_cast<unsigned char>(s[static_cast<std::size_t>(i + 1)]);
-    auto const u2 = static_cast<unsigned char>(s[static_cast<std::size_t>(i + 2)]);
-    auto const u3 = static_cast<unsigned char>(s[static_cast<std::size_t>(i + 3)]);
-    if ((u1 & 0xC0) != 0x80 || (u2 & 0xC0) != 0x80 || (u3 & 0xC0) != 0x80) {
-      return false;
-    }
-    outCp = (u & 0x07) << 18 | (u1 & 0x3F) << 12 | (u2 & 0x3F) << 6 | (u3 & 0x3F);
-    outLen = 4;
-    return true;
-  }
-  return false;
-}
-
-bool isSpaceChar(char32_t cp) {
-  return cp == ' ' || cp == '\t' || cp == '\n' || cp == '\r' || cp == 0x3000;
-}
-
-bool isWordChar(char32_t cp) {
-  if (cp <= 0x7F) {
-    return (cp >= '0' && cp <= '9') || (cp >= 'A' && cp <= 'Z') || (cp >= 'a' && cp <= 'z') || cp == '_';
-  }
-  if (isSpaceChar(cp)) {
-    return false;
-  }
-  return true;
-}
-
-int utf8NextCharImpl(std::string const& s, int pos) {
-  int const n = static_cast<int>(s.size());
-  if (pos >= n) {
-    return pos;
-  }
-  int len = 1;
-  char32_t cp{};
-  if (utf8DecodeAt(s, pos, cp, len)) {
-    return pos + len;
-  }
-  return pos + 1;
-}
-
-int utf8PrevCharImpl(std::string const& s, int pos) {
-  if (pos <= 0) {
-    return 0;
-  }
-  int p = pos - 1;
-  while (p > 0 && (static_cast<unsigned char>(s[static_cast<std::size_t>(p)]) & 0xC0) == 0x80) {
-    --p;
-  }
-  return p;
-}
-
-int utf8ClampImpl(std::string const& s, int pos) {
-  int const n = static_cast<int>(s.size());
-  if (pos <= 0) {
-    return 0;
-  }
-  if (pos >= n) {
-    return n;
-  }
-  int p = pos;
-  while (p > 0 && (static_cast<unsigned char>(s[static_cast<std::size_t>(p)]) & 0xC0) == 0x80) {
-    --p;
-  }
-  char32_t cp{};
-  int len = 1;
-  if (!utf8DecodeAt(s, p, cp, len)) {
-    return pos;
-  }
-  if (p + len < pos) {
-    return p + len;
-  }
-  return p;
-}
-
-int utf8PrevWordImpl(std::string const& s, int pos) {
-  pos = utf8ClampImpl(s, pos);
-  if (pos <= 0) {
-    return 0;
-  }
-  int p = pos;
-  while (p > 0) {
-    int const prevStart = utf8PrevCharImpl(s, p);
-    char32_t cp = 0;
-    int len = 1;
-    if (!utf8DecodeAt(s, prevStart, cp, len)) {
-      p = prevStart;
-      continue;
-    }
-    if (!isSpaceChar(cp)) {
-      break;
-    }
-    p = prevStart;
-  }
-  while (p > 0) {
-    int const prevStart = utf8PrevCharImpl(s, p);
-    char32_t cp = 0;
-    int len = 1;
-    if (!utf8DecodeAt(s, prevStart, cp, len)) {
-      p = prevStart;
-      continue;
-    }
-    if (!isWordChar(cp)) {
-      break;
-    }
-    p = prevStart;
-  }
-  return p;
-}
-
-int utf8NextWordImpl(std::string const& s, int pos) {
-  int p = utf8ClampImpl(s, pos);
-  int const n = static_cast<int>(s.size());
-  while (p < n) {
-    char32_t cp = 0;
-    int len = 1;
-    if (!utf8DecodeAt(s, p, cp, len)) {
-      p = utf8NextCharImpl(s, p);
-      continue;
-    }
-    if (!isSpaceChar(cp)) {
-      break;
-    }
-    p += len;
-  }
-  while (p < n) {
-    char32_t cp = 0;
-    int len = 1;
-    if (!utf8DecodeAt(s, p, cp, len)) {
-      p = utf8NextCharImpl(s, p);
-      continue;
-    }
-    if (!isWordChar(cp)) {
-      break;
-    }
-    p += len;
-  }
-  return p;
-}
-
-float caretXPositionImpl(flux::TextSystem& ts, std::string const& s, int byteEnd, flux::Font const& font,
-                         flux::Color const& color) {
-  byteEnd = utf8ClampImpl(s, byteEnd);
-  if (byteEnd <= 0) {
-    return 0.f;
-  }
-  std::string_view const prefix(s.data(), static_cast<std::size_t>(byteEnd));
-  flux::TextLayoutOptions opts{};
-  opts.wrapping = flux::TextWrapping::NoWrap;
-  return ts.measure(prefix, font, color, 0.f, opts).width;
-}
-
-} // namespace
-
-namespace flux::detail {
-
-int utf8NextChar(std::string const& s, int pos) {
-  return utf8NextCharImpl(s, pos);
-}
-
-int utf8PrevChar(std::string const& s, int pos) {
-  return utf8PrevCharImpl(s, pos);
-}
-
-int utf8Clamp(std::string const& s, int pos) {
-  return utf8ClampImpl(s, pos);
-}
-
-int utf8PrevWord(std::string const& s, int pos) {
-  return utf8PrevWordImpl(s, pos);
-}
-
-int utf8NextWord(std::string const& s, int pos) {
-  return utf8NextWordImpl(s, pos);
-}
-
-float caretXPosition(TextSystem& ts, std::string const& s, int byteEnd, Font const& font, Color const& color) {
-  return caretXPositionImpl(ts, s, byteEnd, font, color);
-}
-
-int caretByteAtTextX(TextSystem& ts, std::string const& s, Font const& font, Color const& color, float textX) {
-  int const n = static_cast<int>(s.size());
-  if (n == 0) {
-    return 0;
-  }
-  std::vector<int> offs;
-  offs.reserve(static_cast<std::size_t>(n) + 2);
-  for (int i = 0; i < n;) {
-    offs.push_back(i);
-    i = utf8NextChar(s, i);
-  }
-  offs.push_back(n);
-  int lo = 0;
-  int hi = static_cast<int>(offs.size()) - 1;
-  int j = 0;
-  while (lo <= hi) {
-    int const mid = (lo + hi) / 2;
-    float const x = caretXPosition(ts, s, offs[static_cast<std::size_t>(mid)], font, color);
-    if (x <= textX) {
-      j = mid;
-      lo = mid + 1;
-    } else {
-      hi = mid - 1;
-    }
-  }
-  if (j + 1 < static_cast<int>(offs.size())) {
-    float const x0 = caretXPosition(ts, s, offs[static_cast<std::size_t>(j)], font, color);
-    float const x1 = caretXPosition(ts, s, offs[static_cast<std::size_t>(j + 1)], font, color);
-    if (textX - x0 > x1 - textX) {
-      return offs[static_cast<std::size_t>(j) + 1];
-    }
-  }
-  return offs[static_cast<std::size_t>(j)];
-}
-
-} // namespace flux::detail
 
 namespace flux {
 
 namespace {
 
 using namespace std::chrono;
-
-std::unordered_set<std::uint64_t> gCaretBlinkTimerIds;
-std::once_flag gCaretBlinkTimerBridgeOnce;
-
-/// Owns the repeating caret-blink timer id for one `TextInput` instance. Destructor cancels the timer and
-/// removes the id from `gCaretBlinkTimerIds` so orphaned ids are not left when the field is torn down
-/// (e.g. window close while focused).
-struct CaretBlinkTimerSlot {
-  std::uint64_t timerId = 0;
-
-  ~CaretBlinkTimerSlot() { cancel(); }
-
-  void cancel() {
-    if (timerId == 0) {
-      return;
-    }
-    gCaretBlinkTimerIds.erase(timerId);
-    if (Application::hasInstance()) {
-      Application::instance().cancelTimer(timerId);
-    }
-    timerId = 0;
-  }
-
-  void set(std::uint64_t id) {
-    if (id == timerId) {
-      return;
-    }
-    cancel();
-    timerId = id;
-    if (id != 0) {
-      gCaretBlinkTimerIds.insert(id);
-    }
-  }
-
-  std::uint64_t get() const { return timerId; }
-};
-
-/// Half-period of the 1.06 s blink in render() — redraw twice per full cycle, no per-frame requestRedraw.
-void ensureCaretBlinkTimerBridge() {
-  std::call_once(gCaretBlinkTimerBridgeOnce, [] {
-    Application::instance().eventQueue().on<TimerEvent>([](TimerEvent const& e) {
-      if (gCaretBlinkTimerIds.count(e.timerId)) {
-        Application::instance().requestRedraw();
-      }
-    });
-  });
-}
-
-int utf8CountChars(std::string const& s) {
-  int n = 0;
-  int i = 0;
-  int const len = static_cast<int>(s.size());
-  while (i < len) {
-    char32_t cp{};
-    int L = 1;
-    if (!utf8DecodeAt(s, i, cp, L)) {
-      ++i;
-      ++n;
-      continue;
-    }
-    i += L;
-    ++n;
-  }
-  return n;
-}
-
-std::string utf8TruncateToChars(std::string const& s, int maxChars) {
-  if (maxChars <= 0) {
-    return {};
-  }
-  int n = 0;
-  int i = 0;
-  int const len = static_cast<int>(s.size());
-  while (i < len && n < maxChars) {
-    char32_t cp{};
-    int L = 1;
-    if (!utf8DecodeAt(s, i, cp, L)) {
-      ++i;
-      ++n;
-      continue;
-    }
-    i += L;
-    ++n;
-  }
-  return s.substr(0, static_cast<std::size_t>(i));
-}
-
-std::pair<int, int> orderedSelection(int caret, int anchor) {
-  return {std::min(caret, anchor), std::max(caret, anchor)};
-}
 
 constexpr float kSelectionExtraBottomPx = 2.f;
 
@@ -409,38 +70,6 @@ void reconcileHorizontalScroll(TextSystem& ts, std::string const& buf, Font cons
   if (std::abs(s - *scrollOffset) > 1e-3f) {
     scrollOffset = s;
   }
-}
-
-void resetBlink(State<std::chrono::nanoseconds> lastBlink) {
-  lastBlink = duration_cast<nanoseconds>(steady_clock::now().time_since_epoch());
-}
-
-void replaceSelection(State<std::string> val, State<int> caretByte, State<int> selAnchor, std::string insert,
-                      int maxLength, std::function<void(std::string const&)> const& onChange,
-                      State<std::chrono::nanoseconds> lastBlink) {
-  std::string buf = *val;
-  auto [i0, i1] = orderedSelection(*caretByte, *selAnchor);
-  i0 = detail::utf8Clamp(buf, i0);
-  i1 = detail::utf8Clamp(buf, i1);
-  if (maxLength > 0) {
-    int const before = utf8CountChars(buf.substr(0, static_cast<std::size_t>(i0)));
-    int const after = utf8CountChars(buf.substr(static_cast<std::size_t>(i1)));
-    int remaining = maxLength - (before + after);
-    if (remaining < 0) {
-      remaining = 0;
-    }
-    insert = utf8TruncateToChars(insert, remaining);
-  }
-  buf.erase(static_cast<std::size_t>(i0), static_cast<std::size_t>(i1 - i0));
-  buf.insert(static_cast<std::size_t>(i0), insert);
-  int const newPos = i0 + static_cast<int>(insert.size());
-  val = std::move(buf);
-  caretByte = newPos;
-  selAnchor = newPos;
-  if (onChange) {
-    onChange(*val);
-  }
-  resetBlink(lastBlink);
 }
 
 struct TextInputView {
@@ -538,7 +167,7 @@ void TextInputView::render(Canvas& canvas, Rect frame) const {
     lineTop = content.y + (content.height - lineH) * 0.5f;
   }
 
-  auto [i0, i1] = orderedSelection(*caretByte, *selAnchor);
+  auto [i0, i1] = detail::orderedSelection(*caretByte, *selAnchor);
   i0 = detail::utf8Clamp(buf, i0);
   i1 = detail::utf8Clamp(buf, i1);
 
@@ -591,7 +220,7 @@ Element TextInput::body() const {
   auto lastBlink = useState(duration_cast<nanoseconds>(steady_clock::now().time_since_epoch()));
   auto mouseDragSelecting = useState(false);
   auto mouseDragAnchorByte = useState(0);
-  CaretBlinkTimerSlot& blinkCaretTimer = StateStore::current()->claimSlot<CaretBlinkTimerSlot>();
+  detail::CaretBlinkTimerSlot& blinkCaretTimer = StateStore::current()->claimSlot<detail::CaretBlinkTimerSlot>();
 
   std::string const& bufRef = *val;
   int cb = detail::utf8Clamp(bufRef, *caretByte);
@@ -629,7 +258,7 @@ Element TextInput::body() const {
   }
 
   if (focused && !isDisabled) {
-    ensureCaretBlinkTimerBridge();
+    detail::ensureCaretBlinkTimerBridge();
     if (blinkCaretTimer.get() == 0) {
       std::uint64_t const id = Application::instance().scheduleRepeatingTimer(std::chrono::nanoseconds(530'000'000), 0);
       blinkCaretTimer.set(id);
@@ -642,16 +271,11 @@ Element TextInput::body() const {
   std::function<void(std::string const&)> const onSub = onSubmit;
   int const maxLen = maxLength;
   float const padH = padHResolved;
-  // buildSlotRect() matches layout after the previous pass; first build can yield 0 — click-to-caret fixes next frame.
-  float const frameX = [] {
-    Runtime* const rt = Runtime::current();
-    return rt ? rt->buildSlotRect().x : 0.f;
-  }();
 
   useViewAction(
       "edit.copy",
       [val, caretByte, selAnchor]() {
-        auto [a, b] = orderedSelection(*caretByte, *selAnchor);
+        auto [a, b] = detail::orderedSelection(*caretByte, *selAnchor);
         if (a < b) {
           Application::instance().clipboard().writeText(
               (*val).substr(static_cast<std::size_t>(a), static_cast<std::size_t>(b - a)));
@@ -667,7 +291,7 @@ Element TextInput::body() const {
         if (isDisabled) {
           return;
         }
-        auto [a, b] = orderedSelection(*caretByte, *selAnchor);
+        auto [a, b] = detail::orderedSelection(*caretByte, *selAnchor);
         if (a >= b) {
           return;
         }
@@ -681,7 +305,7 @@ Element TextInput::body() const {
         if (onCh) {
           onCh(*val);
         }
-        resetBlink(lastBlink);
+        detail::resetBlink(lastBlink);
       },
       [caretByte, selAnchor, isDisabled]() {
         return !isDisabled && *caretByte != *selAnchor;
@@ -694,7 +318,7 @@ Element TextInput::body() const {
           return;
         }
         if (auto s = Application::instance().clipboard().readText()) {
-          replaceSelection(val, caretByte, selAnchor, std::move(*s), maxLen, onCh, lastBlink);
+          detail::replaceSelection(val, caretByte, selAnchor, std::move(*s), maxLen, onCh, lastBlink);
         }
       },
       [isDisabled]() { return !isDisabled && Application::instance().clipboard().hasText(); });
@@ -714,7 +338,7 @@ Element TextInput::body() const {
     if (isDisabled || chunk.empty()) {
       return;
     }
-    replaceSelection(val, caretByte, selAnchor, chunk, maxLen, onCh, lastBlink);
+    detail::replaceSelection(val, caretByte, selAnchor, chunk, maxLen, onCh, lastBlink);
   };
 
   auto onKey = [val, caretByte, selAnchor, onCh, onSub, lastBlink, isDisabled](KeyCode k, Modifiers m) {
@@ -727,9 +351,9 @@ Element TextInput::body() const {
 
     std::string cur = *val;
     int const n = static_cast<int>(cur.size());
-    auto [i0, i1] = orderedSelection(*caretByte, *selAnchor);
+    auto [i0, i1] = detail::orderedSelection(*caretByte, *selAnchor);
 
-    auto touchCaret = [&]() { resetBlink(lastBlink); };
+    auto touchCaret = [&]() { detail::resetBlink(lastBlink); };
 
     if (k == keys::Return) {
       if (onSub) {
@@ -928,7 +552,7 @@ Element TextInput::body() const {
   };
 
   auto onPointerDown = [val, caretByte, selAnchor, scrollOffset, lastBlink, mouseDragSelecting, mouseDragAnchorByte,
-                          frameX, padH, fnt, tc, isDisabled](Point local) {
+                          padH, fnt, tc, isDisabled](Point local) {
     if (isDisabled) {
       return;
     }
@@ -936,41 +560,41 @@ Element TextInput::body() const {
     std::string const& buf = *val;
     TextSystem& ts = Application::instance().textSystem();
     float const scroll = *scrollOffset;
-    float const textX = local.x - frameX - padH + scroll;
+    float const textX = local.x - padH + scroll;
     if (buf.empty()) {
       mouseDragAnchorByte = 0;
       caretByte = 0;
       selAnchor = 0;
-      resetBlink(lastBlink);
+      detail::resetBlink(lastBlink);
       return;
     }
     int const pos = detail::caretByteAtTextX(ts, buf, fnt, tc, textX);
     mouseDragAnchorByte = pos;
     caretByte = pos;
     selAnchor = pos;
-    resetBlink(lastBlink);
+    detail::resetBlink(lastBlink);
   };
 
   auto onPointerMove = [val, caretByte, selAnchor, scrollOffset, lastBlink, mouseDragSelecting, mouseDragAnchorByte,
-                          frameX, padH, fnt, tc, isDisabled](Point local) {
+                          padH, fnt, tc, isDisabled](Point local) {
     if (isDisabled || !*mouseDragSelecting) {
       return;
     }
     std::string const& buf = *val;
     TextSystem& ts = Application::instance().textSystem();
     float const scroll = *scrollOffset;
-    float const textX = local.x - frameX - padH + scroll;
+    float const textX = local.x - padH + scroll;
     int const anchor = *mouseDragAnchorByte;
     if (buf.empty()) {
       caretByte = 0;
       selAnchor = anchor;
-      resetBlink(lastBlink);
+      detail::resetBlink(lastBlink);
       return;
     }
     int const pos = detail::caretByteAtTextX(ts, buf, fnt, tc, textX);
     caretByte = pos;
     selAnchor = anchor;
-    resetBlink(lastBlink);
+    detail::resetBlink(lastBlink);
   };
 
   auto onPointerUp = [mouseDragSelecting](Point) { mouseDragSelecting = false; };

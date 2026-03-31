@@ -17,6 +17,7 @@
 #include <Flux/UI/Views/Spacer.hpp>
 #include <Flux/UI/Views/ScrollView.hpp>
 #include <Flux/UI/Views/TextInput.hpp>
+#include <Flux/UI/Views/TextArea.hpp>
 #include <Flux/UI/Views/Picker.hpp>
 #include <Flux/UI/Views/Button.hpp>
 #include <Flux/UI/Views/Alert.hpp>
