@@ -130,6 +130,7 @@ add_library(flux STATIC
   src/UI/Views/TextArea.cpp
   src/UI/Views/Button.cpp
   src/UI/Views/Toggle.cpp
+  src/UI/Views/Checkbox.cpp
   src/UI/Views/Icon.cpp
   src/UI/Views/Alert.cpp
   src/UI/Views/Popover.cpp

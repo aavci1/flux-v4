@@ -79,6 +79,9 @@ target_link_libraries(button_demo PRIVATE flux)
 add_executable(toggle_demo toggle-demo/main.cpp)
 target_link_libraries(toggle_demo PRIVATE flux)
 
+add_executable(checkbox_demo checkbox-demo/main.cpp)
+target_link_libraries(checkbox_demo PRIVATE flux)
+
 add_executable(popover_demo popover-demo/main.cpp)
 target_link_libraries(popover_demo PRIVATE flux)
 
@@ -120,6 +123,7 @@ set(FLUX_EXAMPLE_TARGETS
     textarea_demo
     button_demo
     toggle_demo
+    checkbox_demo
     popover_demo
     picker_demo
     icon_demo
