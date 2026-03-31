@@ -61,7 +61,7 @@ void Element::Model<Grid>::build(BuildContext& ctx) const {
   sizes.reserve(value.children.size());
   ctx.pushChildIndex();
   for (Element const& ch : value.children) {
-    sizes.push_back(le.measure(ctx, ch, childCs, ctx.textSystem()));
+    sizes.push_back(ch.measure(ctx, childCs, ctx.textSystem()));
   }
   if (StateStore* store = StateStore::current()) {
     store->resetSlotCursors();

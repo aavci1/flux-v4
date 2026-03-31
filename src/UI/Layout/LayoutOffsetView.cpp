@@ -44,6 +44,8 @@ void Element::Model<OffsetView>::build(BuildContext& ctx) const {
     viewportH = outer.maxHeight;
   }
 
+  // `viewportSize` / `contentSize` are assigned here only — `OffsetView::measure` returns sizes
+  // without writing `State` so measure stays free of reactive side effects.
   if (value.viewportSize.signal) {
     value.viewportSize = Size{viewportW, viewportH};
   }
@@ -68,7 +70,7 @@ void Element::Model<OffsetView>::build(BuildContext& ctx) const {
   sizes.reserve(value.children.size());
   ctx.pushChildIndex();
   for (Element const& ch : value.children) {
-    sizes.push_back(le.measure(ctx, ch, childCs, ctx.textSystem()));
+    sizes.push_back(ch.measure(ctx, childCs, ctx.textSystem()));
   }
   if (StateStore* store = StateStore::current()) {
     store->resetSlotCursors();

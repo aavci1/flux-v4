@@ -117,7 +117,9 @@ private:
     virtual float minMainSize() const { return 0.f; }
     /// When true, \ref Element::measure may return a cached \ref Size for the same
     /// `(measureId, constraints)` within a single rebuild after replaying \ref BuildContext::advanceChildSlot.
-    /// Composites and layouts must return false.
+    /// Composites and layouts must return false. Memoization is safe because each `Element` has a stable
+    /// \ref measureId_ and \ref MeasureCache is cleared every rebuild — the cache does not key on mutable
+    /// content (e.g. string value); different instances get different ids.
     virtual bool canMemoizeMeasure() const { return false; }
   };
 

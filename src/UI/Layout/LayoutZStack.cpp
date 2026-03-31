@@ -53,7 +53,7 @@ void Element::Model<ZStack>::build(BuildContext& ctx) const {
   sizes.reserve(value.children.size());
   ctx.pushChildIndex();
   for (Element const& ch : value.children) {
-    Size const s = le.measure(ctx, ch, childCs, ctx.textSystem());
+    Size const s = ch.measure(ctx, childCs, ctx.textSystem());
     sizes.push_back(s);
     maxW = std::max(maxW, s.width);
     maxH = std::max(maxH, s.height);

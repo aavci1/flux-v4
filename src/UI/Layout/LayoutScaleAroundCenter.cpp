@@ -35,7 +35,7 @@ void Element::Model<ScaleAroundCenter>::build(BuildContext& ctx) const {
   childCs.maxHeight = innerH > 0.f ? innerH : std::numeric_limits<float>::infinity();
 
   ctx.pushChildIndex();
-  Size const sz = le.measure(ctx, value.child, childCs, ctx.textSystem());
+  Size const sz = value.child.measure(ctx, childCs, ctx.textSystem());
   if (StateStore* store = StateStore::current()) {
     store->resetSlotCursors();
   }

@@ -15,7 +15,9 @@ namespace flux {
 /// Key for memoizing leaf \ref Element::measure results within a single layout pass.
 /// Uses \ref Element's unique `measureId` (not `impl` pointer): allocators can reuse the same
 /// heap address after a temporary \ref Element is destroyed (e.g. \ref ForEach measure loop),
-/// which would otherwise collide in the cache. Cleared at each rebuild start.
+/// which would otherwise collide in the cache. The key does not hash text or other mutable
+/// content — correctness relies on one `measureId` per distinct element instance and on
+/// \ref MeasureCache being cleared at each rebuild start.
 struct MeasureCacheKey {
   std::uint64_t elementMeasureId{};
   float maxWidth{};
@@ -67,7 +69,9 @@ inline MeasureCacheKey makeMeasureCacheKey(std::uint64_t elementMeasureId, Layou
   return k;
 }
 
-/// Per-pass cache; cleared when a new rebuild starts so content changes always get fresh measures.
+/// Per-pass cache. Cleared when a new rebuild starts so content changes always get fresh measures;
+/// within one pass, distinct elements have distinct `measureId`s so there is no stale hit from
+/// differing state alone.
 class MeasureCache {
 public:
   void clear() { map_.clear(); }

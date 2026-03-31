@@ -22,11 +22,12 @@ inline float assignedSpan(float parentSpan, float outerSpan) {
   return 0.f;
 }
 
-/// Main-axis span for stack children when the parent frame may be narrower than `outer` (cross-axis
-/// alignment) but flex and nested stacks must still use the constraint cap (e.g. column width).
+/// Main-axis span for stacks. Unlike \ref assignedSpan (which prefers the laid-out parent frame when
+/// it is positive), when both a positive parent span and a positive finite constraint exist we use the
+/// **constraint cap** (`outerSpan`) so nested flex and stacks respect the viewport max width/height.
 inline float stackMainAxisSpan(float parentSpan, float outerSpan) {
   if (parentSpan > 0.f && std::isfinite(outerSpan) && outerSpan > 0.f) {
-    return std::min(outerSpan, std::max(parentSpan, outerSpan));
+    return outerSpan;
   }
   return assignedSpan(parentSpan, outerSpan);
 }

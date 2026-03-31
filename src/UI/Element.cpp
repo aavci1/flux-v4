@@ -52,6 +52,7 @@ Size Element::measure(BuildContext& ctx, LayoutConstraints const& constraints,
     EnvironmentStack::current().push(*envLayer_);
   }
   Size sz{};
+  // `measureCache` is keyed by measureId + constraints (see MeasureCache.hpp), not by leaf content.
   MeasureCache* const mc = envLayer_ ? nullptr : ctx.measureCache();
   if (mc && impl_->canMemoizeMeasure()) {
     MeasureCacheKey const key = makeMeasureCacheKey(measureId_, constraints);

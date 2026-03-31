@@ -35,8 +35,9 @@ inline float vStackSlotOffsetX(float itemW, float slotW, HorizontalAlignment a) 
   return 0.f;
 }
 
-/// `Rectangle` with explicit `frame` size: stretch to cell width, align vertically when the cell is
-/// taller than the intrinsic height and `constraints.hStackCrossAlign` is set (HStack row cells).
+/// `Rectangle` with explicit `frame` size: stretch to cell width; apply `hStackCrossAlign` /
+/// `vStackCrossAlign` when the laid-out child frame is larger than the explicit box (HStack / VStack
+/// cells). `Text` does not use this helper — it aligns runs via constraints in `Element::Model<Text>`.
 inline Rect resolveRectangleBounds(Rect const& frame, Rect const& childFrame,
                                    LayoutConstraints const& constraints) {
   if (frame.width <= 0.f || frame.height <= 0.f) {

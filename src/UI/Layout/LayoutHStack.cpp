@@ -44,18 +44,23 @@ void Element::Model<HStack>::build(BuildContext& ctx) const {
   childCs.maxWidth = std::numeric_limits<float>::infinity();
   childCs.maxHeight = std::numeric_limits<float>::infinity();
 
+  std::size_t const n = value.children.size();
+  // Match `HStack::measure`: single-child rows must use the parent's finite width so wrapping
+  // Text measures multi-line height (`sizes` drives `rowInnerH` and flex basis).
+  if (n == 1 && std::isfinite(outer.maxWidth) && outer.maxWidth > 0.f) {
+    childCs.maxWidth = std::max(0.f, outer.maxWidth - 2.f * value.padding);
+  }
+
   std::vector<Size> sizes;
   sizes.reserve(value.children.size());
   ctx.pushChildIndex();
   for (Element const& ch : value.children) {
-    sizes.push_back(le.measure(ctx, ch, childCs, ctx.textSystem()));
+    sizes.push_back(ch.measure(ctx, childCs, ctx.textSystem()));
   }
   if (StateStore* store = StateStore::current()) {
     store->resetSlotCursors();
   }
   ctx.rewindChildKeyIndex();
-
-  std::size_t const n = value.children.size();
 
   float maxH = 0.f;
   for (std::size_t i = 0; i < n; ++i) {
@@ -103,7 +108,8 @@ void Element::Model<HStack>::build(BuildContext& ctx) const {
     LayoutConstraints childBuild = innerForBuild;
     childBuild.maxWidth = allocW[i];
     childBuild.minWidth = value.children[i].minMainSize();
-    // See `LayoutConstraints::hStackCrossAlign` — only Rectangle consumes this today.
+    // See `LayoutConstraints::hStackCrossAlign` — `Rectangle` uses `resolveRectangleBounds`; other
+    // leaves typically fill row height.
     childBuild.hStackCrossAlign = value.vAlign;
     childBuild.vStackCrossAlign = std::nullopt;
     ctx.pushConstraints(childBuild);
@@ -128,6 +134,7 @@ Size Element::Model<HStack>::measure(BuildContext& ctx, LayoutConstraints const&
   std::size_t n = value.children.size();
   // Single-child rows often wrap Text with flexGrow; measuring with infinite width yields one
   // long line and inflates intrinsic width (VStack/ScrollView content wider than the viewport).
+  // When maxWidth is infinite (unconstrained parent), we leave maxWidth infinite — same as multi-child.
   if (n == 1 && std::isfinite(constraints.maxWidth) && constraints.maxWidth > 0.f) {
     childCs.maxWidth = std::max(0.f, constraints.maxWidth - 2.f * value.padding);
   }
