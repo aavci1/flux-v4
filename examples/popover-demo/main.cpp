@@ -36,11 +36,18 @@ struct PopoverDemoRoot {
 
     addSection("Placement");
     scrollChildren.push_back(
-        Text{.text = "Scroll so triggers sit near window edges to see flip.",
-             .font = {.size = 12.f, .weight = 400.f},
-             .color = pal::bodyC,
-             .wrapping = TextWrapping::Wrap,
-             .padding = 8.f});
+        HStack{
+            .spacing = 0.f,
+            .children =
+                {
+                    Element{Text{.text = "Scroll so triggers sit near window edges to see flip.",
+                                 .font = {.size = 12.f, .weight = 400.f},
+                                 .color = pal::bodyC,
+                                 .wrapping = TextWrapping::Wrap,
+                                 .padding = 8.f}}
+                        .withFlex(1.f),
+                },
+        });
 
     auto addPlacementButton = [&](char const* label, PopoverPlacement placement) {
       scrollChildren.push_back(Button{
@@ -56,10 +63,17 @@ struct PopoverDemoRoot {
                             Text{.text = std::string(label),
                                  .font = {.size = 15.f, .weight = 600.f},
                                  .color = pal::titleC},
-                            Text{.text = "Placement follows preference when space allows.",
-                                 .font = {.size = 13.f, .weight = 400.f},
-                                 .color = pal::bodyC,
-                                 .wrapping = TextWrapping::Wrap},
+                            HStack{
+                                .spacing = 0.f,
+                                .children =
+                                    {
+                                        Element{Text{.text = "Placement follows preference when space allows.",
+                                                     .font = {.size = 13.f, .weight = 400.f},
+                                                     .color = pal::bodyC,
+                                                     .wrapping = TextWrapping::Wrap}}
+                                            .withFlex(1.f),
+                                    },
+                            },
                             Button{
                                 .label = "Close",
                                 .variant = ButtonVariant::Secondary,
@@ -137,10 +151,19 @@ struct PopoverDemoRoot {
                           Text{.text = "Popover anchored to this button.",
                                .font = {.size = 17.f, .weight = 600.f},
                                .color = pal::titleC},
-                          Text{.text = "ScrollView keeps layout rects updated; anchor follows the trigger.",
-                               .font = {.size = 13.f, .weight = 400.f},
-                               .color = pal::bodyC,
-                               .wrapping = TextWrapping::Wrap},
+                          HStack{
+                              .spacing = 0.f,
+                              .children =
+                                  {
+                                      Element{Text{
+                                              .text = "ScrollView keeps layout rects updated; anchor follows the trigger.",
+                                              .font = {.size = 13.f, .weight = 400.f},
+                                              .color = pal::bodyC,
+                                              .wrapping = TextWrapping::Wrap,
+                                          }}
+                                          .withFlex(1.f),
+                                  },
+                          },
                           Button{.label = "OK", .onTap = hidePopover},
                       },
               }},
@@ -174,10 +197,19 @@ struct PopoverDemoRoot {
                           Text{.text = "Flip test",
                                .font = {.size = 17.f, .weight = 600.f},
                                .color = pal::titleC},
-                          Text{.text = "If there is not enough room below the anchor, placement flips to Above.",
-                               .font = {.size = 13.f, .weight = 400.f},
-                               .color = pal::bodyC,
-                               .wrapping = TextWrapping::Wrap},
+                          HStack{
+                              .spacing = 0.f,
+                              .children =
+                                  {
+                                      Element{Text{
+                                              .text = "If there is not enough room below the anchor, placement flips to Above.",
+                                              .font = {.size = 13.f, .weight = 400.f},
+                                              .color = pal::bodyC,
+                                              .wrapping = TextWrapping::Wrap,
+                                          }}
+                                          .withFlex(1.f),
+                                  },
+                          },
                           Button{.label = "OK", .onTap = hidePopover},
                       },
               }},

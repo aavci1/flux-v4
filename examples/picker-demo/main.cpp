@@ -2,6 +2,7 @@
 #include <Flux.hpp>
 #include <Flux/Core/WindowUI.hpp>
 #include <Flux/UI/UI.hpp>
+#include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Picker.hpp>
 #include <Flux/UI/Views/Text.hpp>
 #include <Flux/UI/Views/VStack.hpp>
@@ -28,65 +29,103 @@ struct TaskForm {
                 Text{.text = "Picker demo",
                      .font = {.size = 22.f, .weight = 700.f},
                      .color = Color::hex(0x111118)},
-                Text{.text = "Tab to the pickers. Return / Space opens; arrows move; Escape dismisses.",
-                     .font = {.size = 13.f, .weight = 400.f},
-                     .color = Color::hex(0x6E6E80),
-                     .wrapping = TextWrapping::Wrap,
-                     .frame = {0.f, 0.f, 0.f, 0.f}},
+                HStack{
+                    .spacing = 0.f,
+                    .children =
+                        {
+                            Element{Text{
+                                    .text = "Tab to the pickers. Return / Space opens; arrows move; Escape dismisses.",
+                                    .font = {.size = 13.f, .weight = 400.f},
+                                    .color = Color::hex(0x6E6E80),
+                                    .wrapping = TextWrapping::Wrap,
+                                }}
+                                .withFlex(1.f),
+                        },
+                },
 
                 Text{.text = "Language",
                      .font = {.size = 13.f, .weight = 600.f},
                      .color = Color::hex(0x3A3A44)},
-                Picker<std::string>{
-                    .value = language,
-                    .options =
+                HStack{
+                    .spacing = 0.f,
+                    .children =
                         {
-                            {"en", "English"},
-                            {"tr", "Turkish"},
-                            {"de", "German"},
-                            {"fr", "French"},
-                            {"ja", "Japanese"},
+                            Element{Picker<std::string>{
+                                        .value = language,
+                                        .options =
+                                            {
+                                                {"en", "English"},
+                                                {"tr", "Turkish"},
+                                                {"de", "German"},
+                                                {"fr", "French"},
+                                                {"ja", "Japanese"},
+                                            },
+                                        .placeholder = "Select language…",
+                                        .onChange = [](std::string const& v) {
+                                          std::fprintf(stderr, "[picker-demo] language: %s\n", v.c_str());
+                                        },
+                                    }}
+                                .withFlex(1.f),
                         },
-                    .placeholder = "Select language…",
-                    .onChange = [](std::string const& v) {
-                      std::fprintf(stderr, "[picker-demo] language: %s\n", v.c_str());
-                    },
                 },
 
                 Text{.text = "Count",
                      .font = {.size = 13.f, .weight = 600.f},
                      .color = Color::hex(0x3A3A44)},
-                Picker<int>{
-                    .value = count,
-                    .options = {{1, "1"}, {2, "2"}, {3, "3"}, {5, "5"}, {10, "10"}},
-                    .onChange = [](int v) { std::fprintf(stderr, "[picker-demo] count: %d\n", v); },
+                HStack{
+                    .spacing = 0.f,
+                    .children =
+                        {
+                            Element{Picker<int>{
+                                        .value = count,
+                                        .options = {{1, "1"}, {2, "2"}, {3, "3"}, {5, "5"}, {10, "10"}},
+                                        .onChange = [](int v) {
+                                          std::fprintf(stderr, "[picker-demo] count: %d\n", v);
+                                        },
+                                    }}
+                                .withFlex(1.f),
+                        },
                 },
 
                 Text{.text = "Priority",
                      .font = {.size = 13.f, .weight = 600.f},
                      .color = Color::hex(0x3A3A44)},
-                Picker<Priority>{
-                    .value = priority,
-                    .options =
+                HStack{
+                    .spacing = 0.f,
+                    .children =
                         {
-                            {Priority::Low, "Low"},
-                            {Priority::Medium, "Medium"},
-                            {Priority::High, "High"},
+                            Element{Picker<Priority>{
+                                        .value = priority,
+                                        .options =
+                                            {
+                                                {Priority::Low, "Low"},
+                                                {Priority::Medium, "Medium"},
+                                                {Priority::High, "High"},
+                                            },
+                                    }}
+                                .withFlex(1.f),
                         },
                 },
 
                 Text{.text = "Disabled sample",
                      .font = {.size = 13.f, .weight = 600.f},
                      .color = Color::hex(0x3A3A44)},
-                Picker<std::string>{
-                    .value = language,
-                    .options =
+                HStack{
+                    .spacing = 0.f,
+                    .children =
                         {
-                            {"en", "English"},
-                            {"tr", "Turkish"},
+                            Element{Picker<std::string>{
+                                        .value = language,
+                                        .options =
+                                            {
+                                                {"en", "English"},
+                                                {"tr", "Turkish"},
+                                            },
+                                        .placeholder = "Unavailable",
+                                        .disabled = true,
+                                    }}
+                                .withFlex(1.f),
                         },
-                    .placeholder = "Unavailable",
-                    .disabled = true,
                 },
             },
     };

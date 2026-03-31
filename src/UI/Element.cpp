@@ -19,7 +19,7 @@ namespace flux {
 
 namespace {
 
-TextLayoutOptions textViewLayoutOptions(Text const& v) {
+TextLayoutOptions textViewLayoutOptions(Text const& v, LayoutConstraints const& c) {
   TextLayoutOptions o{};
   o.horizontalAlignment = v.horizontalAlignment;
   o.verticalAlignment = v.verticalAlignment;
@@ -27,6 +27,9 @@ TextLayoutOptions textViewLayoutOptions(Text const& v) {
   o.lineHeight = v.lineHeight;
   o.maxLines = v.maxLines;
   o.firstBaselineOffset = v.firstBaselineOffset;
+  if (c.vStackCrossAlign) {
+    o.horizontalAlignment = *c.vStackCrossAlign;
+  }
   return o;
 }
 
@@ -142,7 +145,7 @@ void Element::Model<Text>::build(BuildContext& ctx) const {
 
   std::shared_ptr<TextLayout> layout;
   if (!value.text.empty()) {
-    TextLayoutOptions const opts = textViewLayoutOptions(value);
+    TextLayoutOptions const opts = textViewLayoutOptions(value, ctx.constraints());
     layout = ctx.textSystem().layout(value.text, value.font, value.color, inner, opts);
   }
 
@@ -202,7 +205,7 @@ void Element::Model<Text>::build(BuildContext& ctx) const {
 Size Element::Model<Text>::measure(BuildContext& ctx, LayoutConstraints const& c, TextSystem& ts) const {
   ctx.advanceChildSlot();
   float const pad = value.padding * 2.f;
-  TextLayoutOptions const opts = textViewLayoutOptions(value);
+  TextLayoutOptions const opts = textViewLayoutOptions(value, c);
 
   // Explicit box: both dimensions fixed.
   if (value.frame.width > 0.f && value.frame.height > 0.f) {

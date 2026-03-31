@@ -100,100 +100,113 @@ struct TextEditor {
         .hAlign = HorizontalAlignment::Leading,
         .children =
             {
-                Rectangle{
-                    .frame = {0.f, 0.f, 0.f, 200.f},
-                    .cornerRadius = CornerRadius(10.f),
-                    .fill = FillStyle::solid(focused ? Color::hex(0xE8F0FC) : Color::hex(0xFAFAFC)),
-                    .stroke = StrokeStyle::solid(focused ? Color::hex(0x3A7BD5) : Color::hex(0xC8C8D0),
-                                           focused ? 2.f : 1.f),
-                    .flexGrow = 1.f,
-                    .minSize = 120.f,
-                    .focusable = true,
-                    .onKeyDown =
-                        [text, selStart, selEnd](KeyCode k, Modifiers m) {
-                          (void)m;
-                          int a = *selStart;
-                          int b = *selEnd;
-                          int i0 = std::min(a, b);
-                          int i1 = std::max(a, b);
-                          std::string cur = *text;
-                          int const len = static_cast<int>(cur.size());
+                HStack{
+                    .spacing = 0.f,
+                    .children =
+                        {
+                            Element{Rectangle{
+                                .frame = {0.f, 0.f, 0.f, 200.f},
+                                .cornerRadius = CornerRadius(10.f),
+                                .fill = FillStyle::solid(focused ? Color::hex(0xE8F0FC) : Color::hex(0xFAFAFC)),
+                                .stroke = StrokeStyle::solid(focused ? Color::hex(0x3A7BD5) : Color::hex(0xC8C8D0),
+                                                               focused ? 2.f : 1.f),
+                                .flexGrow = 1.f,
+                                .minSize = 120.f,
+                                .focusable = true,
+                                .onKeyDown =
+                                    [text, selStart, selEnd](KeyCode k, Modifiers m) {
+                                      (void)m;
+                                      int a = *selStart;
+                                      int b = *selEnd;
+                                      int i0 = std::min(a, b);
+                                      int i1 = std::max(a, b);
+                                      std::string cur = *text;
+                                      int const len = static_cast<int>(cur.size());
 
-                          auto collapse = [&](int pos) {
-                            pos = std::clamp(pos, 0, len);
-                            selStart = pos;
-                            selEnd = pos;
-                          };
+                                      auto collapse = [&](int pos) {
+                                        pos = std::clamp(pos, 0, len);
+                                        selStart = pos;
+                                        selEnd = pos;
+                                      };
 
-                          if (k == keys::LeftArrow) {
-                            if (i0 < i1) {
-                              collapse(i0);
-                            } else {
-                              collapse(i0 - 1);
-                            }
-                            return;
-                          }
-                          if (k == keys::RightArrow) {
-                            if (i0 < i1) {
-                              collapse(i1);
-                            } else {
-                              collapse(i0 + 1);
-                            }
-                            return;
-                          }
-                          if (k == keys::Delete) {
-                            if (i0 < i1) {
-                              cur.erase(static_cast<std::size_t>(i0), static_cast<std::size_t>(i1 - i0));
-                              text = std::move(cur);
-                              collapse(i0);
-                            } else if (i0 > 0) {
-                              cur.erase(static_cast<std::size_t>(i0 - 1), 1);
-                              text = std::move(cur);
-                              collapse(i0 - 1);
-                            }
-                            return;
-                          }
-                          if (k == keys::ForwardDelete) {
-                            if (i0 < i1) {
-                              cur.erase(static_cast<std::size_t>(i0), static_cast<std::size_t>(i1 - i0));
-                              text = std::move(cur);
-                              collapse(i0);
-                            } else if (i0 < len) {
-                              cur.erase(static_cast<std::size_t>(i0), 1);
-                              text = std::move(cur);
-                              collapse(i0);
-                            }
-                            return;
-                          }
-                          if (k == keys::Return) {
-                            cur.insert(static_cast<std::size_t>(i0), "\n");
-                            text = std::move(cur);
-                            collapse(i0 + 1);
-                          }
-                        },
-                    .onTextInput =
-                        [text, selStart, selEnd](std::string const& chunk) {
-                          if (chunk.empty()) {
-                            return;
-                          }
-                          int a = *selStart;
-                          int b = *selEnd;
-                          int i0 = std::min(a, b);
-                          int i1 = std::max(a, b);
-                          std::string cur = *text;
-                          cur.erase(static_cast<std::size_t>(i0), static_cast<std::size_t>(i1 - i0));
-                          cur.insert(static_cast<std::size_t>(i0), chunk);
-                          text = std::move(cur);
-                          int const p = i0 + static_cast<int>(chunk.size());
-                          selStart = p;
-                          selEnd = p;
+                                      if (k == keys::LeftArrow) {
+                                        if (i0 < i1) {
+                                          collapse(i0);
+                                        } else {
+                                          collapse(i0 - 1);
+                                        }
+                                        return;
+                                      }
+                                      if (k == keys::RightArrow) {
+                                        if (i0 < i1) {
+                                          collapse(i1);
+                                        } else {
+                                          collapse(i0 + 1);
+                                        }
+                                        return;
+                                      }
+                                      if (k == keys::Delete) {
+                                        if (i0 < i1) {
+                                          cur.erase(static_cast<std::size_t>(i0), static_cast<std::size_t>(i1 - i0));
+                                          text = std::move(cur);
+                                          collapse(i0);
+                                        } else if (i0 > 0) {
+                                          cur.erase(static_cast<std::size_t>(i0 - 1), 1);
+                                          text = std::move(cur);
+                                          collapse(i0 - 1);
+                                        }
+                                        return;
+                                      }
+                                      if (k == keys::ForwardDelete) {
+                                        if (i0 < i1) {
+                                          cur.erase(static_cast<std::size_t>(i0), static_cast<std::size_t>(i1 - i0));
+                                          text = std::move(cur);
+                                          collapse(i0);
+                                        } else if (i0 < len) {
+                                          cur.erase(static_cast<std::size_t>(i0), 1);
+                                          text = std::move(cur);
+                                          collapse(i0);
+                                        }
+                                        return;
+                                      }
+                                      if (k == keys::Return) {
+                                        cur.insert(static_cast<std::size_t>(i0), "\n");
+                                        text = std::move(cur);
+                                        collapse(i0 + 1);
+                                      }
+                                    },
+                                .onTextInput =
+                                    [text, selStart, selEnd](std::string const& chunk) {
+                                      if (chunk.empty()) {
+                                        return;
+                                      }
+                                      int a = *selStart;
+                                      int b = *selEnd;
+                                      int i0 = std::min(a, b);
+                                      int i1 = std::max(a, b);
+                                      std::string cur = *text;
+                                      cur.erase(static_cast<std::size_t>(i0), static_cast<std::size_t>(i1 - i0));
+                                      cur.insert(static_cast<std::size_t>(i0), chunk);
+                                      text = std::move(cur);
+                                      int const p = i0 + static_cast<int>(chunk.size());
+                                      selStart = p;
+                                      selEnd = p;
+                                    },
+                            }}
+                                .withFlex(1.f),
                         },
                 },
-                Text{.text = (*text).empty() ? std::string("(empty)") : std::string(*text),
-                     .font = {.size = 14.f, .weight = 400.f},
-                     .color = Color::hex(0x3A3A44),
-                     .wrapping = TextWrapping::Wrap,
-                     .frame = {0.f, 0.f, 0.f, 0.f}},
+                HStack{
+                    .spacing = 0.f,
+                    .children =
+                        {
+                            Element{Text{.text = (*text).empty() ? std::string("(empty)") : std::string(*text),
+                                        .font = {.size = 14.f, .weight = 400.f},
+                                        .color = Color::hex(0x3A3A44),
+                                        .wrapping = TextWrapping::Wrap}}
+                                .withFlex(1.f),
+                        },
+                },
             },
     };
   }
@@ -303,14 +316,30 @@ struct EditorRoot {
                                         Text{.text = "Actions editor demo",
                                              .font = {.size = 22.f, .weight = 700.f},
                                              .color = Color::hex(0x111118)},
-                                        Text{
-                                            .text = "Focus the editor. Toolbar buttons use the same shared "
-                                                    "state; enabled flags follow isActionEnabled.",
-                                            .font = {.size = 13.f, .weight = 400.f},
-                                            .color = Color::hex(0x6E6E80),
-                                            .wrapping = TextWrapping::Wrap,
-                                            .frame = {0.f, 0.f, 0.f, 0.f}},
-                                        Element{TextEditor{.text = text, .selStart = selStart, .selEnd = selEnd}}
+                                        HStack{
+                                            .spacing = 0.f,
+                                            .children =
+                                                {
+                                                    Element{Text{
+                                                            .text = "Focus the editor. Toolbar buttons use the same shared "
+                                                                    "state; enabled flags follow isActionEnabled.",
+                                                            .font = {.size = 13.f, .weight = 400.f},
+                                                            .color = Color::hex(0x6E6E80),
+                                                            .wrapping = TextWrapping::Wrap,
+                                                        }}
+                                                        .withFlex(1.f),
+                                                },
+                                        },
+                                        Element{HStack{
+                                                    .spacing = 0.f,
+                                                    .children =
+                                                        {
+                                                            Element{TextEditor{.text = text,
+                                                                              .selStart = selStart,
+                                                                              .selEnd = selEnd}}
+                                                                .withFlex(1.f),
+                                                        },
+                                                }}
                                             .withFlex(1.f),
                                     },
                             },

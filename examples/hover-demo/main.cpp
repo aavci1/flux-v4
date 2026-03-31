@@ -2,6 +2,7 @@
 #include <Flux/Core/WindowUI.hpp>
 #include <Flux/UI/UI.hpp>
 #include <Flux/UI/Views/ForEach.hpp>
+#include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/Text.hpp>
 #include <Flux/UI/Views/VStack.hpp>
@@ -75,12 +76,19 @@ struct HoverDemo {
                                   Text{.text = "useHover / usePress demo",
                                        .font = {.size = 22.f, .weight = 700.f},
                                        .color = Color::hex(0x111118)},
-                                  Text{.text = "Move over the button to see hover. "
-                                                "Click and hold to see press. "
-                                                "Drag outside while holding to confirm press stays active.",
-                                       .font = {.size = 14.f},
-                                       .color = Color::hex(0x6E6E80),
-                                       .wrapping = TextWrapping::Wrap},
+                                  HStack{
+                                      .spacing = 0.f,
+                                      .children =
+                                          {
+                                              Element{Text{.text = "Move over the button to see hover. "
+                                                                   "Click and hold to see press. "
+                                                                   "Drag outside while holding to confirm press stays active.",
+                                                           .font = {.size = 14.f},
+                                                           .color = Color::hex(0x6E6E80),
+                                                           .wrapping = TextWrapping::Wrap}}
+                                                  .withFlex(1.f),
+                                          },
+                                  },
                                   ThreeStateButton{
                                       .label = "Hover / Click me",
                                       .onTap = [] {},

@@ -5,6 +5,7 @@
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Reactive/Reactive.hpp>
 #include <Flux/UI/UI.hpp>
+#include <Flux/UI/Views/HStack.hpp>
 
 #include <algorithm>
 #include <string>
@@ -80,12 +81,19 @@ struct Card {
     });
 
     if (bodyOpacity > 0.5f) {
-      rows.emplace_back(Text{
-          .text = detail,
-          .font = {.size = 15.f, .weight = 400.f},
-          .color = pal::sublabel,
-          .wrapping = TextWrapping::Wrap,
-          .frame = {0, 0, 0, bodyOpacity * bodyTextHeight},
+      rows.emplace_back(HStack{
+          .spacing = 0.f,
+          .children =
+              {
+                  Element{Text{
+                              .text = detail,
+                              .font = {.size = 15.f, .weight = 400.f},
+                              .color = pal::sublabel,
+                              .wrapping = TextWrapping::Wrap,
+                              .frame = {0, 0, 0, bodyOpacity * bodyTextHeight},
+                          }}
+                      .withFlex(1.f),
+              },
       });
     }
 

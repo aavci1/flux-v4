@@ -23,6 +23,18 @@ inline Rect resolveLeafBounds(Rect const& frame, Rect const& childFrame,
   return bounds;
 }
 
+inline float vStackSlotOffsetX(float itemW, float slotW, HorizontalAlignment a) {
+  switch (a) {
+  case HorizontalAlignment::Leading:
+    return 0.f;
+  case HorizontalAlignment::Center:
+    return (slotW - itemW) * 0.5f;
+  case HorizontalAlignment::Trailing:
+    return slotW - itemW;
+  }
+  return 0.f;
+}
+
 /// `Rectangle` with explicit `frame` size: stretch to cell width, align vertically when the cell is
 /// taller than the intrinsic height and `constraints.hStackCrossAlign` is set (HStack row cells).
 inline Rect resolveRectangleBounds(Rect const& frame, Rect const& childFrame,
@@ -51,6 +63,10 @@ inline Rect resolveRectangleBounds(Rect const& frame, Rect const& childFrame,
       break;
     }
     return Rect{x, y, w, h};
+  }
+  if (constraints.vStackCrossAlign && childFrame.width > frame.width + 1e-4f) {
+    float const dx = vStackSlotOffsetX(frame.width, childFrame.width, *constraints.vStackCrossAlign);
+    return Rect{childFrame.x + dx, childFrame.y, frame.width, frame.height};
   }
   return resolveLeafBounds(frame, childFrame, constraints);
 }

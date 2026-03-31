@@ -62,11 +62,17 @@ struct ConfirmDialog {
                                                     Text{.text = title,
                                                          .font = {.size = 17.f, .weight = 600.f},
                                                          .color = pal::titleC},
-                                                    Text{.text = message,
-                                                         .font = {.size = 14.f, .weight = 400.f},
-                                                         .color = pal::bodyC,
-                                                         .wrapping = TextWrapping::Wrap,
-                                                         .frame = {0.f, 0.f, 312.f, 0.f}},
+                                                    HStack{
+                                                        .spacing = 0.f,
+                                                        .children =
+                                                            {
+                                                                Element{Text{.text = message,
+                                                                             .font = {.size = 14.f, .weight = 400.f},
+                                                                             .color = pal::bodyC,
+                                                                             .wrapping = TextWrapping::Wrap}}
+                                                                    .withFlex(1.f),
+                                                            },
+                                                    },
                                                     HStack{
                                                         .spacing = 10.f,
                                                         .children =
@@ -210,12 +216,20 @@ struct OverlayConfirmRoot {
                             Text{.text = "Overlay — confirm dialog",
                                  .font = {.size = 22.f, .weight = 700.f},
                                  .color = pal::titleC},
-                            Text{.text = "Tap Delete on a row. Modal overlay traps Tab between Cancel and Delete; "
-                                          "Escape or the buttons dismiss.",
-                                 .font = {.size = 14.f, .weight = 400.f},
-                                 .color = pal::bodyC,
-                                 .wrapping = TextWrapping::Wrap,
-                                 .frame = {0.f, 0.f, 480.f, 0.f}},
+                            HStack{
+                                .spacing = 0.f,
+                                .children =
+                                    {
+                                        Element{Text{
+                                                .text = "Tap Delete on a row. Modal overlay traps Tab between Cancel and Delete; "
+                                                        "Escape or the buttons dismiss.",
+                                                .font = {.size = 14.f, .weight = 400.f},
+                                                .color = pal::bodyC,
+                                                .wrapping = TextWrapping::Wrap,
+                                            }}
+                                            .withFlex(1.f),
+                                    },
+                            },
                             Element{FileManagerRow{.filename = "notes.txt", .onDelete = [] {}}}.withFlex(1.f),
                             Element{FileManagerRow{.filename = "draft.md", .onDelete = [] {}}}.withFlex(1.f),
                         },

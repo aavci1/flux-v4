@@ -4,6 +4,7 @@
 #include <Flux/Graphics/Styles.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/UI/UI.hpp>
+#include <Flux/UI/Views/HStack.hpp>
 
 #include <algorithm>
 #include <string>
@@ -40,17 +41,24 @@ int main(int argc, char* argv[]) {
           .font = {.size = 13.f, .weight = 600.f},
           .color = Color::rgb(75, 75, 88),
         },
-        Text {
-          .text = "TextLayout uses the same Core Text framesetter constraints as measure, so box sizing and rendered glyphs stay in sync when maxWidth is set. Resize the window to see reflow.",
-          .font = {.size = 16.f, .weight = 420.f},
-          .background = FillStyle::solid(Color::rgb(250, 250, 252)),
-          .border = StrokeStyle::solid(Color::rgb(200, 200, 210), 1.f),
-          .color = Colors::darkGray,
-          .horizontalAlignment = HorizontalAlignment::Center,
-          .verticalAlignment = VerticalAlignment::Top,
-          .wrapping = TextWrapping::Wrap,
-          .padding = 24.f,
-          .cornerRadius = CornerRadius(6.f, 6.f, 6.f, 6.f),
+        HStack{
+            .spacing = 0.f,
+            .children =
+                {
+                    Element{Text{
+                            .text = "TextLayout uses the same Core Text framesetter constraints as measure, so box sizing and rendered glyphs stay in sync when maxWidth is set. Resize the window to see reflow.",
+                            .font = {.size = 16.f, .weight = 420.f},
+                            .background = FillStyle::solid(Color::rgb(250, 250, 252)),
+                            .border = StrokeStyle::solid(Color::rgb(200, 200, 210), 1.f),
+                            .color = Colors::darkGray,
+                            .horizontalAlignment = HorizontalAlignment::Center,
+                            .verticalAlignment = VerticalAlignment::Top,
+                            .wrapping = TextWrapping::Wrap,
+                            .padding = 24.f,
+                            .cornerRadius = CornerRadius(6.f, 6.f, 6.f, 6.f),
+                        }}
+                        .withFlex(1.f),
+                },
         },
         Text {
           .text = "Attributed string",

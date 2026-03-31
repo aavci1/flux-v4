@@ -45,11 +45,10 @@ struct StackDemoRoot {
                                  .font = {.size = 26.f, .weight = 700.f},
                                  .color = pal::ink},
                             Text{.text = "VStack arranges children top-to-bottom; HStack left-to-right. "
-                                          "Use spacing, padding, and alignment to tune layout.",
+                                         "Use spacing, padding, and alignment to tune layout.",
                                  .font = {.size = 14.f, .weight = 400.f},
                                  .color = pal::muted,
-                                 .wrapping = TextWrapping::Wrap,
-                                 .frame = {0.f, 0.f, 0.f, 0.f}},
+                                 .wrapping = TextWrapping::Wrap},
 
                             Text{.text = "VStack",
                                  .font = {.size = 15.f, .weight = 600.f},

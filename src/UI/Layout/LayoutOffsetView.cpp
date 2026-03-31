@@ -114,6 +114,7 @@ void Element::Model<OffsetView>::build(BuildContext& ctx) const {
       LayoutConstraints childBuild = outer;
       childBuild.maxWidth = sz.width;
       childBuild.maxHeight = rowH;
+      childBuild.vStackCrossAlign = std::nullopt;
       ctx.pushConstraints(childBuild);
       value.children[i].build(ctx);
       ctx.popConstraints();
@@ -128,6 +129,7 @@ void Element::Model<OffsetView>::build(BuildContext& ctx) const {
       LayoutConstraints childBuild = outer;
       childBuild.maxWidth = rowW;
       childBuild.maxHeight = sz.height;
+      childBuild.vStackCrossAlign = std::nullopt;
       ctx.pushConstraints(childBuild);
       value.children[i].build(ctx);
       ctx.popConstraints();

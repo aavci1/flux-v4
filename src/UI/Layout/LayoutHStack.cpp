@@ -105,6 +105,7 @@ void Element::Model<HStack>::build(BuildContext& ctx) const {
     childBuild.minWidth = value.children[i].minMainSize();
     // See `LayoutConstraints::hStackCrossAlign` — only Rectangle consumes this today.
     childBuild.hStackCrossAlign = value.vAlign;
+    childBuild.vStackCrossAlign = std::nullopt;
     ctx.pushConstraints(childBuild);
     value.children[i].build(ctx);
     ctx.popConstraints();
@@ -124,9 +125,15 @@ Size Element::Model<HStack>::measure(BuildContext& ctx, LayoutConstraints const&
   childCs.maxWidth = std::numeric_limits<float>::infinity();
   childCs.maxHeight = std::numeric_limits<float>::infinity();
 
+  std::size_t n = value.children.size();
+  // Single-child rows often wrap Text with flexGrow; measuring with infinite width yields one
+  // long line and inflates intrinsic width (VStack/ScrollView content wider than the viewport).
+  if (n == 1 && std::isfinite(constraints.maxWidth) && constraints.maxWidth > 0.f) {
+    childCs.maxWidth = std::max(0.f, constraints.maxWidth - 2.f * value.padding);
+  }
+
   float sumW = 2.f * value.padding;
   float maxH = 0.f;
-  std::size_t n = value.children.size();
   if (n > 1) {
     sumW += static_cast<float>(n - 1) * value.spacing;
   }

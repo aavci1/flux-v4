@@ -27,22 +27,29 @@ namespace {
 
 Element cursorSwatchRow(std::string name, Cursor cursor, Color chip) {
   return HStack{
-      .spacing = 12.f,
-      .vAlign = VerticalAlignment::Center,
+      .spacing = 0.f,
       .children =
           {
-              Text{.text = std::move(name),
-                   .font = {.size = 14.f, .weight = 600.f},
-                   .color = pal::label,
-                   .frame = {152.f, 0.f, 0.f, 0.f}},
-              Rectangle{
-                  .frame = {0.f, 0.f, 0.f, 44.f},
-                  .cornerRadius = CornerRadius(8.f),
-                  .fill = FillStyle::solid(chip),
-                  .stroke = StrokeStyle::solid(Color::hex(0xC8C8D0), 1.f),
-                  .flexGrow = 1.f,
-                  .cursor = cursor,
-              },
+              Element{HStack{
+                    .spacing = 12.f,
+                    .vAlign = VerticalAlignment::Center,
+                    .children =
+                        {
+                            Text{.text = std::move(name),
+                                 .font = {.size = 14.f, .weight = 600.f},
+                                 .color = pal::label,
+                                 .frame = {152.f, 0.f, 0.f, 0.f}},
+                            Rectangle{
+                                .frame = {0.f, 0.f, 0.f, 44.f},
+                                .cornerRadius = CornerRadius(8.f),
+                                .fill = FillStyle::solid(chip),
+                                .stroke = StrokeStyle::solid(Color::hex(0xC8C8D0), 1.f),
+                                .flexGrow = 1.f,
+                                .cursor = cursor,
+                            },
+                        },
+                }}
+                  .withFlex(1.f),
           },
   };
 }
@@ -70,12 +77,19 @@ struct CursorDemo {
                                         Text{.text = "Cursor shapes",
                                              .font = {.size = 26.f, .weight = 700.f},
                                              .color = pal::label},
-                                        Text{
-                                            .text = "Move the pointer over each swatch. Drag the resize strip — the "
-                                                    "cursor stays locked to that node during the drag.",
-                                            .font = {.size = 14.f, .weight = 400.f},
-                                            .color = pal::sub,
-                                            .wrapping = TextWrapping::Wrap,
+                                        HStack{
+                                            .spacing = 0.f,
+                                            .children =
+                                                {
+                                                    Element{Text{
+                                                            .text = "Move the pointer over each swatch. Drag the resize strip — the "
+                                                                    "cursor stays locked to that node during the drag.",
+                                                            .font = {.size = 14.f, .weight = 400.f},
+                                                            .color = pal::sub,
+                                                            .wrapping = TextWrapping::Wrap,
+                                                        }}
+                                                        .withFlex(1.f),
+                                                },
                                         },
                                     },
                             },
@@ -117,7 +131,7 @@ struct CursorDemo {
                                                                     .font = {.size = 14.f, .weight = 600.f},
                                                                     .color = pal::label,
                                                                     .frame = {152.f, 0.f, 0.f, 0.f}},
-                                                                Text{
+                                                                Element{Text{
                                                                     .text = "Read-only label — cursor is I-beam over "
                                                                             "glyphs (no pointer handlers).",
                                                                     .font = {.size = 14.f, .weight = 400.f},
@@ -132,29 +146,37 @@ struct CursorDemo {
                                                                     .frame = {0.f, 0.f, 0.f, 0.f},
                                                                     .flexGrow = 1.f,
                                                                     .cursor = Cursor::IBeam,
-                                                                },
+                                                                }}
+                                                                    .withFlex(1.f),
                                                             },
                                                     },
 
-                                                    VStack{
-                                                        .spacing = 8.f,
-                                                        .hAlign = HorizontalAlignment::Leading,
+                                                    HStack{
+                                                        .spacing = 0.f,
                                                         .children =
                                                             {
-                                                                Text{
-                                                                    .text = "Drag lock (ResizeAll)",
-                                                                    .font = {.size = 14.f, .weight = 600.f},
-                                                                    .color = pal::label,
-                                                                },
-                                                                Rectangle{
-                                                                    .frame = {0.f, 0.f, 0.f, 52.f},
-                                                                    .cornerRadius = CornerRadius(10.f),
-                                                                    .fill = FillStyle::solid(pal::chipAccent),
-                                                                    .onPointerDown = [](Point) {},
-                                                                    .onPointerUp = [](Point) {},
-                                                                    .onPointerMove = [](Point) {},
-                                                                    .cursor = Cursor::ResizeAll,
-                                                                },
+                                                                Element{VStack{
+                                                                            .spacing = 8.f,
+                                                                            .hAlign = HorizontalAlignment::Leading,
+                                                                            .children =
+                                                                                {
+                                                                                    Text{
+                                                                                        .text = "Drag lock (ResizeAll)",
+                                                                                        .font = {.size = 14.f, .weight = 600.f},
+                                                                                        .color = pal::label,
+                                                                                    },
+                                                                                    Rectangle{
+                                                                                        .frame = {0.f, 0.f, 0.f, 52.f},
+                                                                                        .cornerRadius = CornerRadius(10.f),
+                                                                                        .fill = FillStyle::solid(pal::chipAccent),
+                                                                                        .onPointerDown = [](Point) {},
+                                                                                        .onPointerUp = [](Point) {},
+                                                                                        .onPointerMove = [](Point) {},
+                                                                                        .cursor = Cursor::ResizeAll,
+                                                                                    },
+                                                                                },
+                                                                        }}
+                                                                    .withFlex(1.f),
                                                             },
                                                     },
                                                 },

@@ -1,6 +1,7 @@
 #include <Flux.hpp>
 #include <Flux/Core/WindowUI.hpp>
 #include <Flux/UI/UI.hpp>
+#include <Flux/UI/Views/HStack.hpp>
 
 #include <sstream>
 #include <string>
@@ -83,13 +84,20 @@ struct MemoDemo {
                      .font = {.size = 22.f, .weight = 700.f},
                      .color = pal::label},
 
-                Text{.text = "Content: " + *text,
-                     .font = {.size = 15.f, .weight = 400.f},
-                     .background = FillStyle::solid(pal::surface),
-                     .border = StrokeStyle::solid(pal::border, 1.f),
-                     .color = pal::label,
-                     .wrapping = TextWrapping::Wrap,
-                     .padding = 12.f},
+                HStack{
+                    .spacing = 0.f,
+                    .children =
+                        {
+                            Element{Text{.text = "Content: " + *text,
+                                         .font = {.size = 15.f, .weight = 400.f},
+                                         .background = FillStyle::solid(pal::surface),
+                                         .border = StrokeStyle::solid(pal::border, 1.f),
+                                         .color = pal::label,
+                                         .wrapping = TextWrapping::Wrap,
+                                         .padding = 12.f}}
+                                .withFlex(1.f),
+                        },
+                },
 
                 HStack{.spacing = 12.f, .children = {
                     ZStack{.children = {

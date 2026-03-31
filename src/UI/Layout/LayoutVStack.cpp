@@ -102,15 +102,16 @@ void Element::Model<VStack>::build(BuildContext& ctx) const {
     Element const& child = value.children[i];
     Size sz = sizes[i];
     sz.height = allocH[i];
-    // Row frame uses natural width so hAlign can offset narrow children; childBuild.maxWidth stays innerW
-    // so flex (Spacer, nested HStack) still sees the full column via stackMainAxisSpan.
-    float const rowW = innerW > 0.f ? std::min(sz.width, innerW) : sz.width;
-    float const x = hAlignOffset(rowW, innerW, value.hAlign) + value.padding;
+    // Full column width for the row slot so nested HStacks flex to innerW without drawing past the
+    // slot (narrow frame + stackMainAxisSpan overflow). Cross-axis alignment uses vStackCrossAlign.
+    float const rowW = innerW > 0.f ? innerW : sz.width;
+    float const x = value.padding;
     le.setChildFrame(Rect{x, y, rowW, sz.height});
     LayoutConstraints childBuild = innerForBuild;
     childBuild.maxHeight = allocH[i];
     childBuild.minHeight = child.minMainSize();
     childBuild.hStackCrossAlign = std::nullopt;
+    childBuild.vStackCrossAlign = value.hAlign;
     ctx.pushConstraints(childBuild);
     child.build(ctx);
     ctx.popConstraints();

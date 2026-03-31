@@ -64,11 +64,13 @@ Element Alert::body() const {
 std::vector<Element> Alert::buildContent(Color titleC, Color msgC, FluxTheme const& theme) const {
   std::vector<Element> rows;
 
+  float const contentW = std::max(0.f, cardWidth - 2.f * theme.space6);
   rows.push_back(Text{
       .text = title,
       .font = theme.typeTitle.toFont(),
       .color = titleC,
       .lineHeight = theme.typeTitle.lineHeight,
+      .frame = {0.f, 0.f, contentW, 0.f},
   });
 
   if (!message.empty()) {
@@ -78,7 +80,7 @@ std::vector<Element> Alert::buildContent(Color titleC, Color msgC, FluxTheme con
         .color = msgC,
         .wrapping = TextWrapping::Wrap,
         .lineHeight = theme.typeBody.lineHeight,
-        .frame = {0.f, 0.f, cardWidth - 2.f * theme.space6, 0.f},
+        .frame = {0.f, 0.f, contentW, 0.f},
     });
   }
 
@@ -124,6 +126,7 @@ std::tuple<std::function<void(Alert)>, std::function<void()>, bool> useAlert() {
   StateStore* store = StateStore::current();
   Runtime* rt = Runtime::current();
   assert(store && rt && "useAlert must be called inside body()");
+  (void)store;
   Window* wPtr = &rt->window();
 
   auto show = [showOverlay, hideOverlay, wPtr](Alert alert) {

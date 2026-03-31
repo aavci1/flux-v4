@@ -67,12 +67,20 @@ struct ThemeDemoRoot {
                         .font = t.typeHeading.toFont(),
                         .color = t.colorTextPrimary,
                         .lineHeight = t.typeHeading.lineHeight },
-                  Text{ .text = subtitle,
-                        .font = t.typeBody.toFont(),
-                        .color = t.colorTextSecondary,
-                        .wrapping = TextWrapping::Wrap,
-                        .lineHeight = t.typeBody.lineHeight,
-                        .frame = { 0.f, 0.f, 200.f, 0.f } },
+                  HStack{
+                      .spacing = 0.f,
+                      .children =
+                          {
+                              Element{Text{
+                                      .text = subtitle,
+                                      .font = t.typeBody.toFont(),
+                                      .color = t.colorTextSecondary,
+                                      .wrapping = TextWrapping::Wrap,
+                                      .lineHeight = t.typeBody.lineHeight,
+                                  }}
+                                  .withFlex(1.f),
+                          },
+                  },
                   Button{ .label = "Accent",
                           .variant = ButtonVariant::Primary,
                           .onTap = [] {} },
@@ -94,25 +102,37 @@ struct ThemeDemoRoot {
                                   .font = windowTheme.typeHeading.toFont(),
                                   .color = windowTheme.colorTextPrimary,
                                   .lineHeight = windowTheme.typeHeading.lineHeight },
-                            Text{
-                                .text = "Window theme drives defaults. The right column uses "
-                                        "Element::environment(FluxTheme::dark()) for a subtree override.",
-                                .font = windowTheme.typeBody.toFont(),
-                                .color = windowTheme.colorTextSecondary,
-                                .wrapping = TextWrapping::Wrap,
-                                .lineHeight = windowTheme.typeBody.lineHeight,
-                                .frame = { 0.f, 0.f, 520.f, 0.f },
+                            HStack{
+                                .spacing = 0.f,
+                                .children =
+                                    {
+                                        Element{Text{
+                                                .text = "Window theme drives defaults. The right column uses "
+                                                        "Element::environment(FluxTheme::dark()) for a subtree override.",
+                                                .font = windowTheme.typeBody.toFont(),
+                                                .color = windowTheme.colorTextSecondary,
+                                                .wrapping = TextWrapping::Wrap,
+                                                .lineHeight = windowTheme.typeBody.lineHeight,
+                                            }}
+                                            .withFlex(1.f),
+                                    },
                             },
-                            Text{
-                                .text = std::string("Window preset: ") + presetLabel(*windowPreset) +
-                                        "  (density " + std::to_string(windowTheme.density) +
-                                        ", horizontal spacing token space4=" + std::to_string(windowTheme.space4) +
-                                        "pt)",
-                                .font = windowTheme.typeBodySmall.toFont(),
-                                .color = windowTheme.colorTextMuted,
-                                .wrapping = TextWrapping::Wrap,
-                                .lineHeight = windowTheme.typeBodySmall.lineHeight,
-                                .frame = { 0.f, 0.f, 520.f, 0.f },
+                            HStack{
+                                .spacing = 0.f,
+                                .children =
+                                    {
+                                        Element{Text{
+                                                .text = std::string("Window preset: ") + presetLabel(*windowPreset) +
+                                                        "  (density " + std::to_string(windowTheme.density) +
+                                                        ", horizontal spacing token space4=" +
+                                                        std::to_string(windowTheme.space4) + "pt)",
+                                                .font = windowTheme.typeBodySmall.toFont(),
+                                                .color = windowTheme.colorTextMuted,
+                                                .wrapping = TextWrapping::Wrap,
+                                                .lineHeight = windowTheme.typeBodySmall.lineHeight,
+                                            }}
+                                            .withFlex(1.f),
+                                    },
                             },
                             HStack{
                                 .spacing = windowTheme.space2,

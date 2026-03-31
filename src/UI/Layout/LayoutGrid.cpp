@@ -85,6 +85,7 @@ void Element::Model<Grid>::build(BuildContext& ctx) const {
       cellW > 0.f ? cellW : std::numeric_limits<float>::infinity();
   innerForBuild.maxHeight =
       cellH > 0.f ? cellH : std::numeric_limits<float>::infinity();
+  innerForBuild.vStackCrossAlign = std::nullopt;
 
   float y = value.padding;
   for (std::size_t r = 0; r < rowCount; ++r) {

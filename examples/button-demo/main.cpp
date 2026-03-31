@@ -39,12 +39,20 @@ struct ButtonDemoRoot {
                             Text{ .text = "Button",
                                   .font = { .size = 26.f, .weight = 700.f },
                                   .color = Color::hex(0x111118) },
-                            Text{ .text = "Five variants, hover/press/focus, disabled state, and Tab navigation. "
-                                           "Link focus rings appear only after keyboard focus.",
-                                  .font = { .size = 14.f, .weight = 400.f },
-                                  .color = Color::hex(0x6E6E80),
-                                  .wrapping = TextWrapping::Wrap,
-                                  .frame = { 0.f, 0.f, 0.f, 0.f } },
+                            HStack{
+                                .spacing = 0.f,
+                                .children =
+                                    {
+                                        Element{Text{
+                                                .text = "Five variants, hover/press/focus, disabled state, and Tab navigation. "
+                                                        "Link focus rings appear only after keyboard focus.",
+                                                .font = {.size = 14.f, .weight = 400.f},
+                                                .color = Color::hex(0x6E6E80),
+                                                .wrapping = TextWrapping::Wrap,
+                                            }}
+                                            .withFlex(1.f),
+                                    },
+                            },
                             Text{ .text = "Variants",
                                   .font = { .size = 15.f, .weight = 600.f },
                                   .color = Color::hex(0x111118) },

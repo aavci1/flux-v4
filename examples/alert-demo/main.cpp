@@ -42,16 +42,14 @@ struct AlertDemoRoot {
                                  .font = {.size = 22.f, .weight = 700.f},
                                  .color = pal::titleC},
                             Text{.text = "Modal alerts via useAlert(). Escape dismisses when enabled. "
-                                          "Outside tap does not dismiss.",
+                                         "Outside tap does not dismiss.",
                                  .font = {.size = 14.f, .weight = 400.f},
                                  .color = pal::bodyC,
-                                 .wrapping = TextWrapping::Wrap,
-                                 .frame = {0.f, 0.f, 480.f, 0.f}},
+                                 .wrapping = TextWrapping::Wrap},
                             Text{.text = *status,
                                  .font = {.size = 13.f, .weight = 500.f},
                                  .color = Color::hex(0x3A7BD5),
-                                 .wrapping = TextWrapping::Wrap,
-                                 .frame = {0.f, 0.f, 480.f, 0.f}},
+                                 .wrapping = TextWrapping::Wrap},
 
                             Button{
                                 .label = "Delete file (confirmation)",

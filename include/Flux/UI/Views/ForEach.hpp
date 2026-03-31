@@ -15,22 +15,6 @@
 
 namespace flux {
 
-namespace detail {
-
-inline float forEachHAlignOffset(float rowW, float innerW, HorizontalAlignment a) {
-  switch (a) {
-  case HorizontalAlignment::Leading:
-    return 0.f;
-  case HorizontalAlignment::Center:
-    return (innerW - rowW) * 0.5f;
-  case HorizontalAlignment::Trailing:
-    return innerW - rowW;
-  }
-  return 0.f;
-}
-
-} // namespace detail
-
 /// Transparent element expander for dynamic lists (v1: **positional** keys only).
 ///
 /// Each index `i` is built under a stable key path while it stays at that index; prepends and
@@ -123,8 +107,8 @@ void Element::Model<ForEach<T>>::build(BuildContext& ctx) const {
     }
     Element item{value.factory(value.items[i])};
     Size sz = sizes[i];
-    float const rowW = innerW > 0.f ? std::min(sz.width, innerW) : sz.width;
-    float const x = detail::forEachHAlignOffset(rowW, innerW, value.hAlign);
+    float const rowW = innerW > 0.f ? innerW : sz.width;
+    float const x = 0.f;
     le.setChildFrame(Rect{x, y, rowW, sz.height});
 
     LayoutConstraints childBuild = outer;
@@ -133,6 +117,7 @@ void Element::Model<ForEach<T>>::build(BuildContext& ctx) const {
     }
     childBuild.maxHeight = sz.height;
     childBuild.minHeight = item.minMainSize();
+    childBuild.vStackCrossAlign = value.hAlign;
     ctx.pushConstraints(childBuild);
 
     ctx.pushCompositeKeyTail(forEachKey);

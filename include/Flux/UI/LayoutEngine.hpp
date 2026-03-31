@@ -24,6 +24,11 @@ struct LayoutConstraints {
   /// does not leak into nested rows. A cross-stack layout pass could eventually replace this
   /// channel with explicit per-child frames, similar to `VStack` horizontal alignment.
   std::optional<VerticalAlignment> hStackCrossAlign;
+  /// Set by `VStack` / `ForEach` for each row: how to align intrinsic-width content in the column
+  /// slot. The row frame is always full `innerW` so nested flex (e.g. `HStack` + `Spacer`) does not
+  /// overflow; leaves (`Text`, fixed-size `Rectangle`) read this for layout. Cleared by `HStack`,
+  /// `Grid`, `OffsetView`, and `ZStack` (fresh constraints) so it does not leak.
+  std::optional<HorizontalAlignment> vStackCrossAlign;
 };
 
 class LayoutEngine {

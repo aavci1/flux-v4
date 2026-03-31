@@ -37,43 +37,57 @@ struct FocusField {
                 Text{.text = title,
                      .font = {.size = 14.f, .weight = 600.f},
                      .color = pal::label},
-                Rectangle{
-                    .frame = {0.f, 0.f, 0.f, 120.f},
-                    .cornerRadius = CornerRadius(10.f),
-                    .fill = FillStyle::solid(focused ? pal::editorBgFocus : pal::editorBg),
-                    .stroke = StrokeStyle::solid(focused ? pal::borderFocus : pal::border, focused ? 2.f : 1.f),
-                    .flexGrow = 1.f,
-                    .minSize = 80.f,
-                    .focusable = true,
-                    .onKeyDown =
-                        [text](KeyCode k, Modifiers m) {
-                          std::string const& cur = *text;
-                          if (k == keys::Delete && !cur.empty()) {
-                            std::string s = cur;
-                            s.pop_back();
-                            text = std::move(s);
-                            return;
-                          }
-                          if (k == keys::Escape) {
-                            text = std::string{};
-                            return;
-                          }
-                          if (k == keys::S && any(m & Modifiers::Meta)) {
-                            text = cur + " [saved]";
-                          }
-                        },
-                    .onTextInput =
-                        [text](std::string const& chunk) {
-                          if (!chunk.empty()) {
-                            text = *text + chunk;
-                          }
+                HStack{
+                    .spacing = 0.f,
+                    .children =
+                        {
+                            Element{Rectangle{
+                                        .frame = {0.f, 0.f, 0.f, 120.f},
+                                        .cornerRadius = CornerRadius(10.f),
+                                        .fill = FillStyle::solid(focused ? pal::editorBgFocus : pal::editorBg),
+                                        .stroke = StrokeStyle::solid(focused ? pal::borderFocus : pal::border,
+                                                                     focused ? 2.f : 1.f),
+                                        .flexGrow = 1.f,
+                                        .minSize = 80.f,
+                                        .focusable = true,
+                                        .onKeyDown =
+                                            [text](KeyCode k, Modifiers m) {
+                                              std::string const& cur = *text;
+                                              if (k == keys::Delete && !cur.empty()) {
+                                                std::string s = cur;
+                                                s.pop_back();
+                                                text = std::move(s);
+                                                return;
+                                              }
+                                              if (k == keys::Escape) {
+                                                text = std::string{};
+                                                return;
+                                              }
+                                              if (k == keys::S && any(m & Modifiers::Meta)) {
+                                                text = cur + " [saved]";
+                                              }
+                                            },
+                                        .onTextInput =
+                                            [text](std::string const& chunk) {
+                                              if (!chunk.empty()) {
+                                                text = *text + chunk;
+                                              }
+                                            },
+                                    }}
+                                .withFlex(1.f),
                         },
                 },
-                Text{.text = (*text).empty() ? std::string("(empty)") : std::string(*text),
-                     .font = {.size = 13.f, .weight = 400.f},
-                     .color = pal::sublabel,
-                     .wrapping = TextWrapping::Wrap,
-                     .frame = {0.f, 0.f, 0.f, 0.f}},
+                HStack{
+                    .spacing = 0.f,
+                    .children =
+                        {
+                            Element{Text{.text = (*text).empty() ? std::string("(empty)") : std::string(*text),
+                                        .font = {.size = 13.f, .weight = 400.f},
+                                        .color = pal::sublabel,
+                                        .wrapping = TextWrapping::Wrap}}
+                                .withFlex(1.f),
+                        },
+                },
             },
     };
   }
@@ -96,14 +110,21 @@ struct FocusDemoRoot {
                             Text{.text = "Focus & keyboard",
                                  .font = {.size = 26.f, .weight = 700.f},
                                  .color = pal::label},
-                            Text{
-                                .text = "Click a field to focus. Type text; Delete removes a character; Esc "
-                                        "clears. Cmd+S appends a demo tag. Tab / Shift+Tab cycle fields "
-                                        "(A→B→C). Focus ring uses useFocus().",
-                                .font = {.size = 14.f, .weight = 400.f},
-                                .color = pal::sublabel,
-                                .wrapping = TextWrapping::Wrap,
-                                .frame = {0.f, 0.f, 0.f, 0.f}},
+                            HStack{
+                                .spacing = 0.f,
+                                .children =
+                                    {
+                                        Element{Text{
+                                                .text = "Click a field to focus. Type text; Delete removes a character; Esc "
+                                                        "clears. Cmd+S appends a demo tag. Tab / Shift+Tab cycle fields "
+                                                        "(A→B→C). Focus ring uses useFocus().",
+                                                .font = {.size = 14.f, .weight = 400.f},
+                                                .color = pal::sublabel,
+                                                .wrapping = TextWrapping::Wrap,
+                                            }}
+                                            .withFlex(1.f),
+                                    },
+                            },
                             HStack{
                                 .spacing = 16.f,
                                 .vAlign = VerticalAlignment::Top,
