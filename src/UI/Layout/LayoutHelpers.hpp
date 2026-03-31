@@ -22,6 +22,15 @@ inline float assignedSpan(float parentSpan, float outerSpan) {
   return 0.f;
 }
 
+/// Main-axis span for stack children when the parent frame may be narrower than `outer` (cross-axis
+/// alignment) but flex and nested stacks must still use the constraint cap (e.g. column width).
+inline float stackMainAxisSpan(float parentSpan, float outerSpan) {
+  if (parentSpan > 0.f && std::isfinite(outerSpan) && outerSpan > 0.f) {
+    return std::min(outerSpan, std::max(parentSpan, outerSpan));
+  }
+  return assignedSpan(parentSpan, outerSpan);
+}
+
 inline float hAlignOffset(float childW, float innerW, HorizontalAlignment a) {
   switch (a) {
   case HorizontalAlignment::Leading:

@@ -27,8 +27,8 @@ void Element::Model<VStack>::build(BuildContext& ctx) const {
   Rect const parentFrame = le.childFrame();
   LayoutConstraints const outer = ctx.constraints();
 
-  float const assignedW = assignedSpan(parentFrame.width, outer.maxWidth);
-  float const assignedH = assignedSpan(parentFrame.height, outer.maxHeight);
+  float const assignedW = stackMainAxisSpan(parentFrame.width, outer.maxWidth);
+  float const assignedH = stackMainAxisSpan(parentFrame.height, outer.maxHeight);
 
   LayerNode layer{};
   if (parentFrame.width > 0.f || parentFrame.height > 0.f) {
@@ -102,10 +102,9 @@ void Element::Model<VStack>::build(BuildContext& ctx) const {
     Element const& child = value.children[i];
     Size sz = sizes[i];
     sz.height = allocH[i];
-    // Stretch each row to the column width so children (e.g. HStack + Spacer) receive the full proposed width.
-    // Using only sz.width leaves rows at intrinsic width; a narrow header under a wide wrapped body row would
-    // not give flex children (spacers) any extra space.
-    float const rowW = std::max(sz.width, innerW);
+    // Row frame uses natural width so hAlign can offset narrow children; childBuild.maxWidth stays innerW
+    // so flex (Spacer, nested HStack) still sees the full column via stackMainAxisSpan.
+    float const rowW = innerW > 0.f ? std::min(sz.width, innerW) : sz.width;
     float const x = hAlignOffset(rowW, innerW, value.hAlign) + value.padding;
     le.setChildFrame(Rect{x, y, rowW, sz.height});
     LayoutConstraints childBuild = innerForBuild;

@@ -124,11 +124,14 @@ void Element::Model<ForEach<T>>::build(BuildContext& ctx) const {
     }
     Element item{value.factory(value.items[i])};
     Size sz = sizes[i];
-    float const rowW = std::max(sz.width, innerW);
+    float const rowW = innerW > 0.f ? std::min(sz.width, innerW) : sz.width;
     float const x = detail::forEachHAlignOffset(rowW, innerW, value.hAlign);
     le.setChildFrame(Rect{x, y, rowW, sz.height});
 
     LayoutConstraints childBuild = outer;
+    if (innerW > 0.f) {
+      childBuild.maxWidth = innerW;
+    }
     childBuild.maxHeight = sz.height;
     childBuild.minHeight = item.minMainSize();
     ctx.pushConstraints(childBuild);

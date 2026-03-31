@@ -26,8 +26,8 @@ void Element::Model<HStack>::build(BuildContext& ctx) const {
   Rect const parentFrame = le.childFrame();
   LayoutConstraints const outer = ctx.constraints();
 
-  float const assignedW = assignedSpan(parentFrame.width, outer.maxWidth);
-  float const assignedH = assignedSpan(parentFrame.height, outer.maxHeight);
+  float const assignedW = stackMainAxisSpan(parentFrame.width, outer.maxWidth);
+  float const assignedH = stackMainAxisSpan(parentFrame.height, outer.maxHeight);
 
   LayerNode layer{};
   if (parentFrame.width > 0.f || parentFrame.height > 0.f) {
