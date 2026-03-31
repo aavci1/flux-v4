@@ -5,6 +5,7 @@
 
 #include <Flux/Core/Cursor.hpp>
 #include <Flux/UI/BuildContext.hpp>
+#include <Flux/UI/MeasureCache.hpp>
 #include <Flux/UI/Detail/LeafBounds.hpp>
 #include <Flux/UI/EventMap.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
@@ -50,7 +51,20 @@ Size Element::measure(BuildContext& ctx, LayoutConstraints const& constraints,
   if (envLayer_) {
     EnvironmentStack::current().push(*envLayer_);
   }
-  Size const sz = impl_->measure(ctx, constraints, textSystem);
+  Size sz{};
+  MeasureCache* const mc = envLayer_ ? nullptr : ctx.measureCache();
+  if (mc && impl_->canMemoizeMeasure()) {
+    MeasureCacheKey const key = makeMeasureCacheKey(measureId_, constraints);
+    if (std::optional<Size> const cached = mc->tryGet(key)) {
+      ctx.advanceChildSlot();
+      sz = *cached;
+    } else {
+      sz = impl_->measure(ctx, constraints, textSystem);
+      mc->put(key, sz);
+    }
+  } else {
+    sz = impl_->measure(ctx, constraints, textSystem);
+  }
   if (envLayer_) {
     EnvironmentStack::current().pop();
   }

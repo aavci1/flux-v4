@@ -173,8 +173,10 @@ void OverlayManager::rebuild(Size windowSize, Runtime& runtime) {
     StateStore::setCurrent(entry.stateStore.get());
 
     layoutEngine_.resetForBuild();
+    overlayMeasureCache_.clear();
     LayoutConstraints const cs = resolveConstraints(windowSize, entry.config);
-    BuildContext ctx{entry.graph, entry.eventMap, Application::instance().textSystem(), layoutEngine_};
+    BuildContext ctx{entry.graph, entry.eventMap, Application::instance().textSystem(), layoutEngine_,
+                     &overlayMeasureCache_};
     ctx.pushConstraints(cs);
     EnvironmentLayer windowEnvBaseline = runtime.window().environmentLayer();
     EnvironmentStack::current().push(std::move(windowEnvBaseline));

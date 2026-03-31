@@ -8,8 +8,13 @@
 
 namespace flux {
 
-BuildContext::BuildContext(SceneGraph& g, EventMap& em, TextSystem& ts, LayoutEngine& layout)
-    : graph_(g), eventMap_(em), textSystem_(ts), layoutEngine_(layout) {
+BuildContext::BuildContext(SceneGraph& g, EventMap& em, TextSystem& ts, LayoutEngine& layout,
+                           MeasureCache* measureCache)
+    : graph_(g)
+    , eventMap_(em)
+    , textSystem_(ts)
+    , layoutEngine_(layout)
+    , measureCache_(measureCache) {
   constraintStack_.push_back(LayoutConstraints{});
 }
 

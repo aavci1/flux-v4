@@ -6,6 +6,7 @@
 #include <Flux/UI/EventMap.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 #include <Flux/UI/LayoutRectCache.hpp>
+#include <Flux/UI/MeasureCache.hpp>
 #include <Flux/UI/StateStore.hpp>
 
 #include <functional>
@@ -59,6 +60,7 @@ private:
   ObserverHandle rebuildHandle_{};
   ActionRegistry actionRegistryBuild_{};
   ActionRegistry actionRegistryCommitted_{};
+  MeasureCache measureCache_{};
 };
 
 } // namespace flux

@@ -6,6 +6,7 @@
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/EventMap.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
+#include <Flux/UI/MeasureCache.hpp>
 #include <Flux/UI/StateStore.hpp>
 #include <Flux/UI/Views/PopoverPlacement.hpp>
 
@@ -110,6 +111,7 @@ private:
   std::vector<std::unique_ptr<OverlayEntry>> overlays_;
   std::uint64_t nextId_ = 1;
   LayoutEngine layoutEngine_{};
+  MeasureCache overlayMeasureCache_{};
 };
 
 } // namespace flux

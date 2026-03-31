@@ -31,6 +31,13 @@ inline constexpr bool alwaysFalse = false;
 
 namespace detail {
 
+/// Monotonic id for \ref Element::measureId_; never reused (unlike heap addresses after temp
+/// \ref Element destruction — see measure memoization key).
+inline std::uint64_t nextElementMeasureId() {
+  static std::uint64_t n = 1;
+  return n++;
+}
+
 Popover* popoverOverlayStateIf(Element& el);
 
 template<typename C>
@@ -108,6 +115,10 @@ private:
     virtual float flexGrow() const { return 0.f; }
     virtual float flexShrink() const { return 0.f; }
     virtual float minMainSize() const { return 0.f; }
+    /// When true, \ref Element::measure may return a cached \ref Size for the same
+    /// `(measureId, constraints)` within a single rebuild after replaying \ref BuildContext::advanceChildSlot.
+    /// Composites and layouts must return false.
+    virtual bool canMemoizeMeasure() const { return false; }
   };
 
   template<typename C>
@@ -118,6 +129,9 @@ private:
   std::optional<float> flexShrinkOverride_;
   std::optional<float> minMainSizeOverride_;
   std::optional<EnvironmentLayer> envLayer_;
+  /// Stable for this \ref Element instance; used by \ref MeasureCache (not `impl*` — addresses can
+  /// be recycled by the allocator across short-lived temporaries).
+  std::uint64_t measureId_{};
 };
 
 template<typename C>
@@ -137,6 +151,14 @@ struct Element::Model : Concept {
   float flexGrow() const override { return detail::flexGrowOf(value); }
   float flexShrink() const override { return detail::flexShrinkOf(value); }
   float minMainSize() const override { return detail::minMainSizeOf(value); }
+  bool canMemoizeMeasure() const override {
+    if constexpr (CompositeComponent<C>) {
+      return false;
+    } else if constexpr (RenderComponent<C>) {
+      return true;
+    }
+    return false;
+  }
 };
 
 template<typename C>
@@ -286,6 +308,7 @@ struct Element::Model<Rectangle> final : Concept {
   float flexGrow() const override { return detail::flexGrowOf(value); }
   float flexShrink() const override { return detail::flexShrinkOf(value); }
   float minMainSize() const override { return detail::minMainSizeOf(value); }
+  bool canMemoizeMeasure() const override { return true; }
 };
 
 template<>
@@ -300,6 +323,7 @@ struct Element::Model<LaidOutText> final : Concept {
   float flexGrow() const override { return detail::flexGrowOf(value); }
   float flexShrink() const override { return detail::flexShrinkOf(value); }
   float minMainSize() const override { return detail::minMainSizeOf(value); }
+  bool canMemoizeMeasure() const override { return true; }
 };
 
 template<>
@@ -314,6 +338,7 @@ struct Element::Model<Text> final : Concept {
   float flexGrow() const override { return detail::flexGrowOf(value); }
   float flexShrink() const override { return detail::flexShrinkOf(value); }
   float minMainSize() const override { return detail::minMainSizeOf(value); }
+  bool canMemoizeMeasure() const override { return true; }
 };
 
 template<>
@@ -328,6 +353,7 @@ struct Element::Model<views::Image> final : Concept {
   float flexGrow() const override { return detail::flexGrowOf(value); }
   float flexShrink() const override { return detail::flexShrinkOf(value); }
   float minMainSize() const override { return detail::minMainSizeOf(value); }
+  bool canMemoizeMeasure() const override { return true; }
 };
 
 template<>
@@ -342,6 +368,7 @@ struct Element::Model<PathShape> final : Concept {
   float flexGrow() const override { return detail::flexGrowOf(value); }
   float flexShrink() const override { return detail::flexShrinkOf(value); }
   float minMainSize() const override { return detail::minMainSizeOf(value); }
+  bool canMemoizeMeasure() const override { return true; }
 };
 
 template<>
@@ -356,6 +383,7 @@ struct Element::Model<Line> final : Concept {
   float flexGrow() const override { return detail::flexGrowOf(value); }
   float flexShrink() const override { return detail::flexShrinkOf(value); }
   float minMainSize() const override { return detail::minMainSizeOf(value); }
+  bool canMemoizeMeasure() const override { return true; }
 };
 
 template<>
@@ -440,6 +468,7 @@ struct Element::Model<Spacer> final : Concept {
   float flexGrow() const override { return 1.f; }
   float flexShrink() const override { return 0.f; }
   float minMainSize() const override { return std::max(0.f, value.minLength); }
+  bool canMemoizeMeasure() const override { return true; }
 };
 
 template<>
@@ -471,14 +500,17 @@ struct Element::Model<ScrollView> final : Concept {
 };
 
 template<typename C>
-Element::Element(C component) : impl_(std::make_unique<Model<C>>(std::move(component))) {}
+Element::Element(C component)
+    : impl_(std::make_unique<Model<C>>(std::move(component)))
+    , measureId_(detail::nextElementMeasureId()) {}
 
 inline Element::Element(Element const& other)
     : impl_(other.impl_ ? other.impl_->clone() : nullptr)
     , flexGrowOverride_(other.flexGrowOverride_)
     , flexShrinkOverride_(other.flexShrinkOverride_)
     , minMainSizeOverride_(other.minMainSizeOverride_)
-    , envLayer_(other.envLayer_) {}
+    , envLayer_(other.envLayer_)
+    , measureId_(detail::nextElementMeasureId()) {}
 
 inline Element& Element::operator=(Element const& other) {
   if (this != &other) {
@@ -487,6 +519,7 @@ inline Element& Element::operator=(Element const& other) {
     flexShrinkOverride_ = other.flexShrinkOverride_;
     minMainSizeOverride_ = other.minMainSizeOverride_;
     envLayer_ = other.envLayer_;
+    measureId_ = detail::nextElementMeasureId();
   }
   return *this;
 }

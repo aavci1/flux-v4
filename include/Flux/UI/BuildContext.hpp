@@ -15,6 +15,7 @@ class TextSystem;
 class EventMap;
 class Runtime;
 class BuildOrchestrator;
+class MeasureCache;
 
 class BuildContext {
 public:
@@ -24,6 +25,8 @@ public:
   EventMap& eventMap();
   TextSystem& textSystem();
   LayoutEngine& layoutEngine();
+  /// Non-null during main and overlay rebuilds; holds leaf measure memoization for the current pass.
+  MeasureCache* measureCache() const { return measureCache_; }
 
   void pushLayer(NodeId layerId);
   void popLayer();
@@ -78,7 +81,8 @@ private:
   friend class BuildOrchestrator;
   friend class OverlayManager;
 
-  BuildContext(SceneGraph& g, EventMap& em, TextSystem& ts, LayoutEngine& layout);
+  BuildContext(SceneGraph& g, EventMap& em, TextSystem& ts, LayoutEngine& layout,
+               MeasureCache* measureCache = nullptr);
 
   SceneGraph& graph_;
   EventMap& eventMap_;
@@ -94,6 +98,7 @@ private:
   bool pendingCompositeSubtreeRoot_{false};
   ComponentKey pendingCompositeSubtreeKey_{};
   std::unordered_map<ComponentKey, NodeId, ComponentKeyHash> subtreeRootLayers_{};
+  MeasureCache* measureCache_{nullptr};
 };
 
 } // namespace flux

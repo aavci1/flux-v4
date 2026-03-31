@@ -73,6 +73,7 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
   graph.clear();
 
   layoutEngine_.resetForBuild();
+  measureCache_.clear();
 
   actionRegistryBuild_.beginRebuild();
 
@@ -80,7 +81,7 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
   StateStore::setCurrent(&stateStore_);
 
   EventMap newMap;
-  BuildContext ctx{ graph, newMap, Application::instance().textSystem(), layoutEngine_ };
+  BuildContext ctx{ graph, newMap, Application::instance().textSystem(), layoutEngine_, &measureCache_ };
   Size const raw = sizeOverride.value_or(window_.getSize());
   Size const sz = snapRootLayoutSize(raw);
   LayoutConstraints rootCs{};
