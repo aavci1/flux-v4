@@ -19,6 +19,7 @@
 #include <Flux/UI/Views/TextInput.hpp>
 #include <Flux/UI/Views/TextArea.hpp>
 #include <Flux/UI/Views/Toggle.hpp>
+#include <Flux/UI/Views/Slider.hpp>
 #include <Flux/UI/Views/Checkbox.hpp>
 #include <Flux/UI/Views/Icon.hpp>
 #include <Flux/UI/Views/Picker.hpp>
