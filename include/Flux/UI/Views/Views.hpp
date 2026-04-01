@@ -26,3 +26,4 @@
 #include <Flux/UI/Views/Button.hpp>
 #include <Flux/UI/Views/Alert.hpp>
 #include <Flux/UI/Views/Popover.hpp>
+#include <Flux/UI/Views/Tooltip.hpp>

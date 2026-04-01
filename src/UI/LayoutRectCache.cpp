@@ -15,25 +15,34 @@ void LayoutRectCache::fill(SceneGraph const& graph, BuildContext const& ctx) {
 }
 
 std::optional<Rect> LayoutRectCache::forCurrentComponent(StateStore const& store) const {
-  auto it = current_.find(store.currentComponentKey());
-  if (it == current_.end()) {
-    return std::nullopt;
+  ComponentKey const& key = store.currentComponentKey();
+  if (auto it = current_.find(key); it != current_.end()) {
+    return it->second;
   }
-  return it->second;
+  if (auto it = prev_.find(key); it != prev_.end()) {
+    return it->second;
+  }
+  return std::nullopt;
 }
 
 std::optional<Rect> LayoutRectCache::forKey(ComponentKey const& key) const {
-  auto it = current_.find(key);
-  if (it == current_.end()) {
-    return std::nullopt;
+  if (auto it = current_.find(key); it != current_.end()) {
+    return it->second;
   }
-  return it->second;
+  // During a rebuild, `fill` swaps generations; exact key may live in `prev_` until this pass ends.
+  if (auto it = prev_.find(key); it != prev_.end()) {
+    return it->second;
+  }
+  return std::nullopt;
 }
 
 std::optional<Rect> LayoutRectCache::forLeafKeyPrefix(ComponentKey const& key) const {
   for (std::size_t len = key.size(); len > 0; --len) {
     ComponentKey prefix(key.begin(), key.begin() + static_cast<std::ptrdiff_t>(len));
     if (auto it = current_.find(prefix); it != current_.end()) {
+      return it->second;
+    }
+    if (auto it = prev_.find(prefix); it != prev_.end()) {
       return it->second;
     }
   }

@@ -60,6 +60,19 @@ struct Popover {
   bool dismissOnEscape = true;
   bool dismissOnOutsideTap = true;
 
+  /// When true (default), \ref usePopover prefers the last pointer-down tap anchor (same resolution
+  /// as popover-demo: \c forLeafKeyPrefix on the tap leaf). Set false when using \ref useHoverLeafAnchor
+  /// or an explicit \ref anchorRectOverride.
+  bool useTapAnchor = true;
+
+  /// When true (e.g. tooltips), resolve the anchor like tap-driven popovers but using the current
+  /// hover leaf key: \c layoutRects().forLeafKeyPrefix(hoveredKey) and track that leaf for scroll.
+  /// Matches popover-demo placement without requiring a pointer-down.
+  bool useHoverLeafAnchor = false;
+
+  /// When set, \ref usePopover uses this window-space rect as the anchor (skips tap, hover, and key lookup).
+  std::optional<Rect> anchorRectOverride;
+
   /// Set when presenting via \ref usePopover (initial resolve) and on each overlay rebuild when
   /// \ref OverlayConfig::popoverPreferredPlacement is set.
   PopoverPlacement resolvedPlacement = placement;
@@ -76,8 +89,9 @@ struct Popover {
 
 /// Hook: returns (show, hide, isPresented) for presenting a Popover.
 ///
-/// show(popover) — anchors to the tapped control's layout rect when opened from a pointer tap, otherwise
-/// to the hook caller's composite layout rect (same component as `usePopover()`).
+/// show(popover) — by default anchors to the last tap leaf (\c forLeafKeyPrefix, like popover-demo).
+/// With \c Popover::useHoverLeafAnchor, anchors to the current hover leaf the same way (for tooltips).
+/// Otherwise falls back to the hook caller's composite layout rect.
 /// hide()        — dismisses the popover.
 /// isPresented   — true while the popover is on screen.
 ///

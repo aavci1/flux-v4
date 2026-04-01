@@ -135,12 +135,32 @@ std::tuple<std::function<void(Popover)>, std::function<void()>, bool> usePopover
   ComponentKey const anchorKey = store->currentComponentKey();
   Window* wPtr = &rt->window();
 
-  auto show = [showOverlay, hideOverlay, anchorKey, rt, wPtr](Popover popover) {
-    std::optional<Rect> const tapAnchor = rt->layoutRectForTapAnchor();
-    std::optional<Rect> anchorRect = tapAnchor;
-    std::optional<ComponentKey> anchorTrackLeafKey = rt->tapAnchorLeafKeySnapshot();
+  auto show = [showOverlay, hideOverlay, anchorKey, rt, wPtr, store](Popover popover) {
+    std::optional<Rect> anchorRect;
+    std::optional<ComponentKey> anchorTrackLeafKey;
+    if (popover.anchorRectOverride.has_value()) {
+      anchorRect = popover.anchorRectOverride;
+      anchorTrackLeafKey = std::nullopt;
+    } else if (popover.useHoverLeafAnchor) {
+      // Same anchor resolution as tap-driven popovers (see popover-demo onTap): forLeafKeyPrefix on a
+      // leaf key, plus tracking key for scroll. Uses hover leaf while the tooltip trigger is hovered.
+      ComponentKey const hk = rt->hover().hoveredKey();
+      if (!hk.empty() && rt->hover().isInSubtree(anchorKey, *store)) {
+        anchorRect = rt->layoutRectForLeafKeyPrefix(hk);
+        anchorTrackLeafKey = hk;
+      }
+    } else if (popover.useTapAnchor) {
+      anchorRect = rt->layoutRectForTapAnchor();
+      anchorTrackLeafKey = rt->tapAnchorLeafKeySnapshot();
+    }
     if (!anchorRect.has_value()) {
       anchorRect = rt->layoutRectForKey(anchorKey);
+      anchorTrackLeafKey = std::nullopt;
+    }
+    // Exact composite key is sometimes absent from the cache during the same pass; walk prefixes so we
+    // still anchor to an ancestor composite rect (same idea as tap tracking).
+    if (!anchorRect.has_value()) {
+      anchorRect = rt->layoutRectForLeafKeyPrefix(anchorKey);
       anchorTrackLeafKey = std::nullopt;
     }
     if (anchorRect.has_value() && popover.anchorMaxHeight.has_value()) {

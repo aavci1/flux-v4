@@ -144,6 +144,7 @@ void OverlayManager::insertOverlayBackdropChrome(OverlayEntry& entry, Size windo
 
 void OverlayManager::rebuild(Size windowSize, Runtime& runtime) {
   for (std::unique_ptr<OverlayEntry>& up : overlays_) {
+    StateStore* const prevCurrent = StateStore::current();
     OverlayEntry& entry = *up;
     if (entry.config.anchorTrackLeafKey.has_value() && !entry.config.anchorTrackLeafKey->empty()) {
       if (auto r = runtime.layoutRectForLeafKeyPrefix(*entry.config.anchorTrackLeafKey)) {
@@ -186,7 +187,7 @@ void OverlayManager::rebuild(Size windowSize, Runtime& runtime) {
     EnvironmentStack::current().pop();
     ctx.popConstraints();
 
-    StateStore::setCurrent(nullptr);
+    StateStore::setCurrent(prevCurrent);
     entry.stateStore->setOverlayScope(std::nullopt);
     entry.stateStore->endRebuild();
 
