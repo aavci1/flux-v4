@@ -193,6 +193,7 @@ void OverlayManager::rebuild(Size windowSize, Runtime& runtime) {
     ctx.pushConstraints(cs);
     EnvironmentLayer windowEnvBaseline = runtime.window().environmentLayer();
     EnvironmentStack::current().push(std::move(windowEnvBaseline));
+    layoutEngine_.setChildFrame(Rect{0.f, 0.f, cs.maxWidth, cs.maxHeight});
     if (entry.content.has_value()) {
       entry.content->build(ctx);
     }

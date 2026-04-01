@@ -69,11 +69,12 @@ class LayoutEngine {
 public:
   void resetForBuild();
   void setChildFrame(Rect frame);
-  Rect childFrame() const;
+  Rect consumeAssignedFrame();   // debug: asserts parent set frame for this child
+  Rect lastAssignedFrame() const; // e.g. BuildOrchestrator::buildSlotRect after rebuild
 };
 ```
 
-Parent containers call `setChildFrame(...)` before building each child. The child reads `childFrame()` to know where it has been placed.
+Parent containers call `setChildFrame(...)` before building each child. Layout containers and leaves call `consumeAssignedFrame()` to read that assignment (debug builds assert the contract). `lastAssignedFrame()` returns the last stored rect without consuming the debug flag (used after a full pass for APIs like `buildSlotRect`).
 
 ### Alignment (`include/Flux/Graphics/TextLayoutOptions.hpp`)
 
@@ -143,7 +144,7 @@ The build pass is a single depth-first traversal. For each node:
 
 **Layout container** (VStack, HStack, ZStack, etc.):
 1. `advanceChildSlot()` (unless composite body root)
-2. Read `parentFrame` from `layoutEngine().childFrame()`
+2. Read `parentFrame` from `layoutEngine().consumeAssignedFrame()`
 3. Read constraints from `ctx.constraints()`
 4. Add a `LayerNode` (transform + optional clip) to the scene graph
 5. **Measure pass**: iterate children, call `child.measure(ctx, childCs, textSystem)` collecting sizes

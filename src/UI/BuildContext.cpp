@@ -1,6 +1,7 @@
 #include <Flux/UI/BuildContext.hpp>
 
 #include <cassert>
+#include <cmath>
 #include <unordered_map>
 
 #include <Flux/Graphics/TextSystem.hpp>
@@ -44,7 +45,14 @@ void BuildContext::popLayer() {
 
 LayoutConstraints const& BuildContext::constraints() const { return constraintStack_.back(); }
 
-void BuildContext::pushConstraints(LayoutConstraints const& c) { constraintStack_.push_back(c); }
+void BuildContext::pushConstraints(LayoutConstraints const& c) {
+#ifndef NDEBUG
+  assert(std::isfinite(c.minWidth) && std::isfinite(c.minHeight));
+  assert(c.minWidth <= c.maxWidth);
+  assert(c.minHeight <= c.maxHeight);
+#endif
+  constraintStack_.push_back(c);
+}
 
 void BuildContext::popConstraints() {
   if (constraintStack_.size() > 1) {

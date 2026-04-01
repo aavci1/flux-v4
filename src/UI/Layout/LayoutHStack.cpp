@@ -61,6 +61,8 @@ void Element::Model<HStack>::build(BuildContext& ctx) const {
     } else if (extra < -kFlexEpsilon) {
       flexShrinkAlongMainAxis(allocW, value.children, targetSum);
     }
+  } else if (n > 0) {
+    warnFlexGrowIfParentMainAxisUnconstrained(value.children, widthConstrained);
   }
 
   float x = value.padding;

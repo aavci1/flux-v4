@@ -192,7 +192,7 @@ void Element::Model<C>::build(BuildContext& ctx) const {
     ComponentKey const stableKey = ctx.leafComponentKey();
     ctx.advanceChildSlot();
     Rect const frame = flux::detail::resolveLeafBounds(
-        {}, ctx.layoutEngine().childFrame(), ctx.constraints());
+        {}, ctx.layoutEngine().consumeAssignedFrame(), ctx.constraints());
 
     C const copy = value;
     NodeId const id = ctx.graph().addCustomRender(ctx.parentLayer(),

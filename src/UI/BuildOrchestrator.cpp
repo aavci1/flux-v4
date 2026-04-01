@@ -90,6 +90,7 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
   ctx.pushConstraints(rootCs);
   EnvironmentLayer windowEnvBaseline = window_.environmentLayer();
   EnvironmentStack::current().push(std::move(windowEnvBaseline));
+  layoutEngine_.setChildFrame(Rect{0.f, 0.f, sz.width, sz.height});
   if (rootHolder_) {
     rootHolder_->buildInto(ctx);
   }
@@ -145,7 +146,7 @@ ActionRegistry const& BuildOrchestrator::actionRegistryCommitted() const noexcep
 }
 
 Rect BuildOrchestrator::buildSlotRect() const {
-  return layoutEngine_.childFrame();
+  return layoutEngine_.lastAssignedFrame();
 }
 
 } // namespace flux

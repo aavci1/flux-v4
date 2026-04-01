@@ -6,6 +6,9 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <limits>
 #include <vector>
 
@@ -67,6 +70,33 @@ inline float gridCellHeight(float innerH, std::size_t rowCount, float vSpacing) 
 }
 
 constexpr float kFlexEpsilon = 1e-4f;
+
+/// Opt-in layout diagnostics (same env as the layout tree dump). When set, stderr may include
+/// flex-ineffectiveness hints.
+inline bool layoutDebugLayoutEnabled() {
+  static int cached = -1;
+  if (cached < 0) {
+    char const* v = std::getenv("FLUX_DEBUG_LAYOUT");
+    cached = (v && v[0] != '\0' && std::strcmp(v, "0") != 0) ? 1 : 0;
+  }
+  return cached != 0;
+}
+
+/// Warn when `flexGrow > 0` on a child cannot apply because the stack has no finite main-axis size.
+inline void warnFlexGrowIfParentMainAxisUnconstrained(std::vector<Element> const& children,
+                                                    bool parentMainAxisFinite) {
+  if (parentMainAxisFinite || !layoutDebugLayoutEnabled()) {
+    return;
+  }
+  for (Element const& ch : children) {
+    if (ch.flexGrow() > kFlexEpsilon) {
+      std::fprintf(stderr,
+                   "[flux:layout] flexGrow>0 has no effect: parent stack has no finite main-axis size "
+                   "(FLUX_DEBUG_LAYOUT)\n");
+      break;
+    }
+  }
+}
 
 inline void flexGrowAlongMainAxis(std::vector<float>& alloc, std::vector<Element> const& children,
                                   float extra) {

@@ -14,6 +14,8 @@
 #include <Flux/Scene/Nodes.hpp>
 #include <Flux/Scene/SceneGraph.hpp>
 
+#include <cassert>
+#include <cstddef>
 #include <vector>
 
 namespace flux {
@@ -38,10 +40,16 @@ class ContainerBuildScope {
 public:
   explicit ContainerBuildScope(BuildContext& ctx)
       : ctx(ctx), le(ctx.layoutEngine()) {
+#ifndef NDEBUG
+    layerDepth0_ = ctx.debugLayerStackDepth();
+    constraintDepth0_ = ctx.debugConstraintStackDepth();
+    keyPathDepth0_ = ctx.debugKeyPathDepth();
+    savedDepth0_ = ctx.debugSavedChildDepth();
+#endif
     if (!ctx.consumeCompositeBodySubtreeRootSkip()) {
       ctx.advanceChildSlot();
     }
-    parentFrame = le.childFrame();
+    parentFrame = le.consumeAssignedFrame();
     outer = ctx.constraints();
     ctx.pushChildIndex();
   }
@@ -103,6 +111,12 @@ public:
     if (layerPushed_) {
       ctx.popLayer();
     }
+#ifndef NDEBUG
+    assert(ctx.debugLayerStackDepth() == layerDepth0_);
+    assert(ctx.debugConstraintStackDepth() == constraintDepth0_);
+    assert(ctx.debugKeyPathDepth() == keyPathDepth0_);
+    assert(ctx.debugSavedChildDepth() == savedDepth0_);
+#endif
   }
 
   ContainerBuildScope(ContainerBuildScope const&) = delete;
@@ -115,6 +129,12 @@ public:
 
 private:
   bool layerPushed_{false};
+#ifndef NDEBUG
+  std::size_t layerDepth0_{};
+  std::size_t constraintDepth0_{};
+  std::size_t keyPathDepth0_{};
+  std::size_t savedDepth0_{};
+#endif
 };
 
 /// Manages the measure-side container preamble: slot consumption and balanced
@@ -122,19 +142,33 @@ private:
 class ContainerMeasureScope {
 public:
   explicit ContainerMeasureScope(BuildContext& ctx) : ctx_(ctx) {
+#ifndef NDEBUG
+    keyPathDepth0_ = ctx_.debugKeyPathDepth();
+    savedDepth0_ = ctx_.debugSavedChildDepth();
+#endif
     if (!ctx_.consumeCompositeBodySubtreeRootSkip()) {
       ctx_.advanceChildSlot();
     }
     ctx_.pushChildIndex();
   }
 
-  ~ContainerMeasureScope() { ctx_.popChildIndex(); }
+  ~ContainerMeasureScope() {
+    ctx_.popChildIndex();
+#ifndef NDEBUG
+    assert(ctx_.debugKeyPathDepth() == keyPathDepth0_);
+    assert(ctx_.debugSavedChildDepth() == savedDepth0_);
+#endif
+  }
 
   ContainerMeasureScope(ContainerMeasureScope const&) = delete;
   ContainerMeasureScope& operator=(ContainerMeasureScope const&) = delete;
 
 private:
   BuildContext& ctx_;
+#ifndef NDEBUG
+  std::size_t keyPathDepth0_{};
+  std::size_t savedDepth0_{};
+#endif
 };
 
 } // namespace flux

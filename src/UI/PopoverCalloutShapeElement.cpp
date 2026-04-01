@@ -108,7 +108,7 @@ void Element::Model<PopoverCalloutShape>::build(BuildContext& ctx) const {
     ctx.advanceChildSlot();
   }
   LayoutEngine& le = ctx.layoutEngine();
-  Rect const parentFrame = le.childFrame();
+  Rect const parentFrame = le.consumeAssignedFrame();
   LayoutConstraints outer = ctx.constraints();
   // Match measure(): intersect overlay constraints with the popover's intrinsic maxSize. Build used
   // to read only ctx.constraints(); if overlay maxSize was wrong, the card collapsed to one row.

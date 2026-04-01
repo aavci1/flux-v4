@@ -64,7 +64,7 @@ struct Element::Model<ForEach<T>> final : Element::Concept {
 template<typename T>
 void Element::Model<ForEach<T>>::build(BuildContext& ctx) const {
   LayoutEngine& le = ctx.layoutEngine();
-  Rect const box = le.childFrame();
+  Rect const box = le.consumeAssignedFrame();
   LayoutConstraints const outer = ctx.constraints();
 
   ComponentKey const forEachKey = ctx.nextCompositeKey();

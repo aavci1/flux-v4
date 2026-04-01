@@ -69,6 +69,10 @@ Size Element::measure(BuildContext& ctx, LayoutConstraints const& constraints,
   if (envLayer_) {
     EnvironmentStack::current().pop();
   }
+#ifndef NDEBUG
+  assert(std::isfinite(sz.width) && std::isfinite(sz.height));
+  assert(sz.width >= 0.f && sz.height >= 0.f);
+#endif
   return sz;
 }
 
@@ -129,7 +133,7 @@ void Element::Model<Rectangle>::build(BuildContext& ctx) const {
   ComponentKey const stableKey = ctx.leafComponentKey();
   ctx.advanceChildSlot();
   Rect const bounds = flux::detail::resolveRectangleBounds(
-      value.frame, ctx.layoutEngine().childFrame(), ctx.constraints());
+      value.frame, ctx.layoutEngine().consumeAssignedFrame(), ctx.constraints());
   NodeId const id = ctx.graph().addRect(ctx.parentLayer(), RectNode{
       .bounds = bounds,
       .cornerRadius = value.cornerRadius,
@@ -173,7 +177,7 @@ void Element::Model<LaidOutText>::build(BuildContext& ctx) const {
     return;
   }
   Point origin = value.origin;
-  Rect const cf = ctx.layoutEngine().childFrame();
+  Rect const cf = ctx.layoutEngine().consumeAssignedFrame();
   if (cf.width > 0.f || cf.height > 0.f) {
     origin = {cf.x, cf.y};
   }
@@ -195,7 +199,7 @@ void Element::Model<Text>::build(BuildContext& ctx) const {
   ComponentKey const stableKey = ctx.leafComponentKey();
   ctx.advanceChildSlot();
   Rect const bounds = flux::detail::resolveLeafBounds(
-      value.frame, ctx.layoutEngine().childFrame(), ctx.constraints());
+      value.frame, ctx.layoutEngine().consumeAssignedFrame(), ctx.constraints());
   assert(value.text.empty() || (bounds.width > 0.f && bounds.height > 0.f));
 
   float const pad = std::max(0.f, value.padding);
@@ -311,7 +315,7 @@ void Element::Model<views::Image>::build(BuildContext& ctx) const {
     return;
   }
   Rect const bounds = flux::detail::resolveLeafBounds(
-      value.frame, ctx.layoutEngine().childFrame(), ctx.constraints());
+      value.frame, ctx.layoutEngine().consumeAssignedFrame(), ctx.constraints());
   NodeId const id = ctx.graph().addImage(ctx.parentLayer(), ImageNode{
       .image = value.source,
       .bounds = bounds,
@@ -337,7 +341,7 @@ Size Element::Model<views::Image>::measure(BuildContext& ctx, LayoutConstraints 
 void Element::Model<PathShape>::build(BuildContext& ctx) const {
   ctx.advanceChildSlot();
   PathNode node{.path = value.path, .fill = value.fill, .stroke = value.stroke};
-  Rect const cf = ctx.layoutEngine().childFrame();
+  Rect const cf = ctx.layoutEngine().consumeAssignedFrame();
   Rect const pb = value.path.getBounds();
   float dx = 0.f;
   float dy = 0.f;

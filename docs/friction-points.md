@@ -88,17 +88,13 @@ Implemented as `FLUX_ELEMENT_MODEL(Type, ...)` in `Element.hpp`. All 14 standard
 
 Implemented as `ContainerBuildScope` + `ContainerMeasureScope` in `src/UI/Layout/ContainerScope.hpp`. Refactored 6 layout files (VStack, HStack, ZStack, Grid, OffsetView, ScaleAroundCenter). ~260 lines of duplicated protocol code removed. Protocol violations (forgotten `popLayer`, `rewindChildKeyIndex`, `setChildFrame`) are now structurally impossible.
 
-### C. Debug assertions in debug builds
+### C. Debug assertions in debug builds — ✅ DONE
 
-Add `assert` checks (compiled out in release) for common bugs:
-
-- **Balanced push/pop**: track stack depths for layers, constraints, child indices; assert they match at scope exit
-- **Frame was set**: add a `bool childFrameDirty_` flag to `LayoutEngine`; `setChildFrame` sets it, `childFrame()` clears it; assert it was set before read
-- **No NaN/negative**: assert `Size` returned from `measure` has non-negative, non-NaN components
-- **Key order consistency**: record the child index sequence during measure; during build, assert the same sequence is replayed
-- **Constraint sanity**: assert `minWidth <= maxWidth`, `minHeight <= maxHeight`
-
-These would catch most layout bugs at the point of introduction rather than manifesting as visual artifacts.
+- **Balanced push/pop**: `ContainerBuildScope` / `ContainerMeasureScope` snapshot stack depths and assert on exit (debug builds).
+- **Frame was set**: `LayoutEngine::consumeAssignedFrame()` asserts `setChildFrame` ran for this child; `lastAssignedFrame()` for post-pass queries. Root and overlay rebuilds call `setChildFrame` before the root/overlay content build.
+- **Non-NaN/non-negative sizes**: `Element::measure` asserts after every measured `Size`.
+- **Constraint sanity**: `BuildContext::pushConstraints` asserts finite mins and `min ≤ max` on each axis.
+- **Flex ineffectiveness**: when `FLUX_DEBUG_LAYOUT` is set, stderr warning if a child has `flexGrow > 0` but the stack has no finite main-axis size.
 
 ### D. Decouple alignment hints from `LayoutConstraints`
 

@@ -79,6 +79,14 @@ public:
 
   std::unordered_map<ComponentKey, NodeId, ComponentKeyHash> const& subtreeRootLayers() const;
 
+#ifndef NDEBUG
+  /// Stack depth probes for \ref ContainerBuildScope / \ref ContainerMeasureScope balance checks.
+  std::size_t debugLayerStackDepth() const noexcept { return layerStack_.size(); }
+  std::size_t debugConstraintStackDepth() const noexcept { return constraintStack_.size(); }
+  std::size_t debugKeyPathDepth() const noexcept { return keyStack_.size(); }
+  std::size_t debugSavedChildDepth() const noexcept { return savedChildIndices_.size(); }
+#endif
+
 private:
   friend class Runtime;
   friend class BuildOrchestrator;
