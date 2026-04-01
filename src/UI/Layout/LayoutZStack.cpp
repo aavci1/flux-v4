@@ -85,7 +85,7 @@ void Element::Model<ZStack>::build(BuildContext& ctx) const {
 }
 
 Size Element::Model<ZStack>::measure(BuildContext& ctx, LayoutConstraints const& constraints,
-                                     TextSystem& ts) const {
+                                     LayoutHints const&, TextSystem& ts) const {
   ContainerMeasureScope scope(ctx);
   float const assignedW = std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;
   float const assignedH = std::isfinite(constraints.maxHeight) ? constraints.maxHeight : 0.f;
@@ -99,7 +99,7 @@ Size Element::Model<ZStack>::measure(BuildContext& ctx, LayoutConstraints const&
   float maxW = 0.f;
   float maxH = 0.f;
   for (Element const& ch : value.children) {
-    Size const s = ch.measure(ctx, childCs, ts);
+    Size const s = ch.measure(ctx, childCs, LayoutHints{}, ts);
     maxW = std::max(maxW, s.width);
     maxH = std::max(maxH, s.height);
   }

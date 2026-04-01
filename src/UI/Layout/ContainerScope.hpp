@@ -78,11 +78,12 @@ public:
   }
 
   std::vector<Size> measureChildren(std::vector<Element> const& children,
-                                    LayoutConstraints const& childCs) {
+                                    LayoutConstraints const& childCs,
+                                    LayoutHints childHints = {}) {
     std::vector<Size> sizes;
     sizes.reserve(children.size());
     for (Element const& ch : children) {
-      sizes.push_back(ch.measure(ctx, childCs, ctx.textSystem()));
+      sizes.push_back(ch.measure(ctx, childCs, childHints, ctx.textSystem()));
     }
     if (StateStore* store = StateStore::current()) {
       store->resetSlotCursors();
@@ -91,8 +92,9 @@ public:
     return sizes;
   }
 
-  Size measureChild(Element const& child, LayoutConstraints const& childCs) {
-    Size const sz = child.measure(ctx, childCs, ctx.textSystem());
+  Size measureChild(Element const& child, LayoutConstraints const& childCs,
+                    LayoutHints childHints = {}) {
+    Size const sz = child.measure(ctx, childCs, childHints, ctx.textSystem());
     if (StateStore* store = StateStore::current()) {
       store->resetSlotCursors();
     }
@@ -100,10 +102,10 @@ public:
     return sz;
   }
 
-  void buildChild(Element const& child, Rect frame,
-                   LayoutConstraints const& cs) {
+  void buildChild(Element const& child, Rect frame, LayoutConstraints const& cs,
+                  LayoutHints hints = {}) {
     le.setChildFrame(frame);
-    ctx.pushConstraints(cs);
+    ctx.pushConstraints(cs, std::move(hints));
     child.build(ctx);
     ctx.popConstraints();
   }

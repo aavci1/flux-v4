@@ -14,7 +14,8 @@ void Element::Model<Spacer>::build(BuildContext& ctx) const {
   layoutDebugLogLeaf("Spacer", ctx.constraints(), r, 1.f, 0.f, std::max(0.f, value.minLength));
 }
 
-Size Element::Model<Spacer>::measure(BuildContext& ctx, LayoutConstraints const&, TextSystem&) const {
+Size Element::Model<Spacer>::measure(BuildContext& ctx, LayoutConstraints const&, LayoutHints const&,
+                                       TextSystem&) const {
   ctx.advanceChildSlot();
   float const m = std::max(0.f, value.minLength);
   return {m, m};

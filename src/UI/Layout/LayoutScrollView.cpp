@@ -27,7 +27,7 @@ void Element::Model<ScrollView>::build(BuildContext& ctx) const {
 }
 
 Size Element::Model<ScrollView>::measure(BuildContext& ctx, LayoutConstraints const& constraints,
-                                         TextSystem& ts) const {
+                                         LayoutHints const& hints, TextSystem& ts) const {
   if (!ctx.consumeCompositeBodySubtreeRootSkip()) {
     ctx.advanceChildSlot();
   }
@@ -42,7 +42,7 @@ Size Element::Model<ScrollView>::measure(BuildContext& ctx, LayoutConstraints co
   }
   ctx.beginCompositeBodySubtree(key);
   ctx.pushCompositeKeyTail(key);
-  (void)child.measure(ctx, constraints, ts);
+  (void)child.measure(ctx, constraints, hints, ts);
   ctx.popCompositeKeyTail();
   float const w = std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;
   float const h = std::isfinite(constraints.maxHeight) ? constraints.maxHeight : 0.f;

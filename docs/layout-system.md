@@ -51,14 +51,15 @@ struct LayoutConstraints {
   float maxHeight = infinity;
   float minWidth  = 0.f;
   float minHeight = 0.f;
+};
 
-  // Cross-axis alignment hints propagated by parent stacks:
-  std::optional<VerticalAlignment>   hStackCrossAlign;  // set by HStack
-  std::optional<HorizontalAlignment> vStackCrossAlign;  // set by VStack
+struct LayoutHints {
+  std::optional<VerticalAlignment>   hStackCrossAlign;   // set by HStack per child
+  std::optional<HorizontalAlignment> vStackCrossAlign;  // set by VStack / ForEach per child
 };
 ```
 
-Constraints flow top-down. The root constraints are the window size. Each container narrows constraints for its children (e.g. VStack sets `maxHeight = infinity` for children, HStack sets `maxWidth = infinity`).
+Numeric **constraints** flow top-down (`BuildContext::constraints()`). **Hints** are a parallel stack (`BuildContext::hints()`) for cross-axis alignment — not size bounds. Parents pass both when calling `child.measure(ctx, childCs, childHints, textSystem)` and `pushConstraints(childCs, childHints)` before `child.build`.
 
 ### LayoutEngine (`include/Flux/UI/LayoutEngine.hpp`)
 
@@ -151,7 +152,7 @@ The build pass is a single depth-first traversal. For each node:
 2. Read `parentFrame` from `layoutEngine().consumeAssignedFrame()`
 3. Read constraints from `ctx.constraints()`
 4. Add a `LayerNode` (transform + optional clip) to the scene graph
-5. **Measure pass**: iterate children, call `child.measure(ctx, childCs, textSystem)` collecting sizes
+5. **Measure pass**: iterate children, call `child.measure(ctx, childCs, childHints, textSystem)` collecting sizes
 6. Rewind child key index (`ctx.rewindChildKeyIndex()`)
 7. Compute flex distribution (grow/shrink) if the main axis is constrained
 8. **Build pass**: for each child, `setChildFrame(...)`, push constraints, `child.build(ctx)`, pop constraints
@@ -161,9 +162,9 @@ The measure-then-build pattern within each container is critical: it allows the 
 
 ### 4. Measure
 
-`Element::measure` returns a `Size` without side effects (no scene graph writes). It uses `MeasureCache` for leaf memoization — keyed by `(elementMeasureId, constraints)`, cleared every rebuild.
+`Element::measure` returns a `Size` without side effects (no scene graph writes). It uses `MeasureCache` for leaf memoization — keyed by `(elementMeasureId, constraints, hints)`, cleared every rebuild.
 
-For composites, measure recursively measures `body()`. For render leaves, it calls `value.measure(constraints)`. For layout containers, it measures all children and aggregates (sum along main axis for stacks, max for ZStack).
+For composites, measure recursively measures `body()`. For render leaves, it calls `value.measure(constraints, hints)`. For layout containers, it measures all children and aggregates (sum along main axis for stacks, max for ZStack).
 
 ### 5. Render
 
@@ -222,7 +223,7 @@ All three follow the same pattern with axis-specific differences:
 4. If height-constrained: flex grow/shrink on the Y axis
 5. Place each child: `setChildFrame({padding, y, innerW, allocH[i]})`, advance `y`
 
-Children get the **full column width** so nested HStacks can flex horizontally. Cross-axis alignment is communicated via `vStackCrossAlign` on the constraints (used by `Text` for glyph alignment).
+Children get the **full column width** so nested HStacks can flex horizontally. Cross-axis alignment is communicated via `LayoutHints::vStackCrossAlign` (used by `Text` for glyph alignment).
 
 ### HStack (horizontal stack)
 
@@ -235,7 +236,7 @@ The horizontal dual of VStack:
 2. If width-constrained: flex grow/shrink on the X axis
 3. Place each child: `setChildFrame({x, padding, allocW[i], rowInnerH})`, advance `x`
 
-Children get the **full row height**. Cross-axis alignment uses `hStackCrossAlign`.
+Children get the **full row height**. Cross-axis alignment uses `LayoutHints::hStackCrossAlign`.
 
 ### ZStack (overlay stack)
 
@@ -456,7 +457,7 @@ Size Element::Model<WrapStack>::measure(BuildContext& ctx,
   bool firstOnLine = true;
 
   for (Element const& ch : value.children) {
-    Size const s = ch.measure(ctx, childCs, ts);
+    Size const s = ch.measure(ctx, childCs, LayoutHints{}, ts);
     if (!firstOnLine && lineW + value.spacing + s.width > innerW && innerW > 0.f) {
       totalH += lineH + value.lineSpacing;
       lineW = 0.f;

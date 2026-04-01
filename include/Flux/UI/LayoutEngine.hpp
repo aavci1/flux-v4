@@ -13,23 +13,22 @@
 
 namespace flux {
 
+/// Cross-axis alignment propagated by stacks — not size constraints; carried beside
+/// \ref LayoutConstraints via \ref BuildContext::hints().
+struct LayoutHints {
+  /// Set by `HStack` for each row child (`HStack::vAlign`). Used by `resolveRectangleBounds` and
+  /// similar. Cleared by `VStack` when building children so it does not leak into nested rows.
+  std::optional<VerticalAlignment> hStackCrossAlign;
+  /// Set by `VStack` / `ForEach` for each row (`VStack::hAlign`). `Text` applies via
+  /// `TextLayoutOptions` in `Element.cpp`. Cleared by `HStack`, `Grid`, `OffsetView`, `ZStack`.
+  std::optional<HorizontalAlignment> vStackCrossAlign;
+};
+
 struct LayoutConstraints {
   float maxWidth = std::numeric_limits<float>::infinity();
   float maxHeight = std::numeric_limits<float>::infinity();
   float minWidth = 0.f;
   float minHeight = 0.f;
-  /// Set by `HStack` for each row child: vertical alignment of the row (`HStack::vAlign`).
-  /// `Rectangle` with an explicit frame uses `resolveRectangleBounds` (`LeafBounds.hpp`) to
-  /// vertically center (etc.) in the row cell. Other leaves typically fill row height; this flag
-  /// does not apply to them. Parent stacks (e.g. `VStack`) clear it when building children so it
-  /// does not leak into nested rows.
-  std::optional<VerticalAlignment> hStackCrossAlign;
-  /// Set by `VStack` / `ForEach` for each row: horizontal alignment of content in the column slot.
-  /// The row frame is always full `innerW` so nested flex (e.g. `HStack` + `Spacer`) does not
-  /// overflow. `Text` applies this via `TextLayoutOptions` in `Element.cpp` (glyph alignment);
-  /// fixed-size `Rectangle` uses `resolveRectangleBounds` when the laid-out child is wider than the
-  /// slot. Cleared by `HStack`, `Grid`, `OffsetView`, and `ZStack` (fresh constraints) so it does not leak.
-  std::optional<HorizontalAlignment> vStackCrossAlign;
 };
 
 class LayoutEngine {

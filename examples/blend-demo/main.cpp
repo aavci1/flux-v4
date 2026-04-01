@@ -44,7 +44,7 @@ struct BlendCell {
   const char* title = "";
 
   /// Fills the cell size the `Grid` passes via `maxWidth` / `maxHeight`.
-  Size measure(LayoutConstraints const& c) const {
+  Size measure(LayoutConstraints const& c, LayoutHints const&) const {
     float const w = std::isfinite(c.maxWidth) && c.maxWidth > 0.f ? c.maxWidth : 0.f;
     float const h = std::isfinite(c.maxHeight) && c.maxHeight > 0.f ? c.maxHeight : w;
     return {w, h};

@@ -55,7 +55,8 @@ struct Element::Model<ForEach<T>> final : Element::Concept {
   }
 
   void build(BuildContext& ctx) const override;
-  Size measure(BuildContext& ctx, LayoutConstraints const& constraints, TextSystem& ts) const override;
+  Size measure(BuildContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
+               TextSystem& ts) const override;
 
   float flexGrow() const override { return 0.f; }
   float flexShrink() const override { return 0.f; }
@@ -85,7 +86,9 @@ void Element::Model<ForEach<T>>::build(BuildContext& ctx) const {
     Element item{value.factory(value.items[i])};
     ctx.pushCompositeKeyTail(forEachKey);
     ctx.setChildIndex(i);
-    sizes.push_back(item.measure(ctx, childCsMeasure, ctx.textSystem()));
+    LayoutHints childHints{};
+    childHints.vStackCrossAlign = value.hAlign;
+    sizes.push_back(item.measure(ctx, childCsMeasure, childHints, ctx.textSystem()));
     ctx.popCompositeKeyTail();
   }
 
@@ -125,8 +128,9 @@ void Element::Model<ForEach<T>>::build(BuildContext& ctx) const {
     }
     childBuild.maxHeight = sz.height;
     childBuild.minHeight = item.minMainSize();
-    childBuild.vStackCrossAlign = value.hAlign;
-    ctx.pushConstraints(childBuild);
+    LayoutHints rowHints{};
+    rowHints.vStackCrossAlign = value.hAlign;
+    ctx.pushConstraints(childBuild, rowHints);
 
     ctx.pushCompositeKeyTail(forEachKey);
     ctx.setChildIndex(i);
@@ -142,13 +146,16 @@ void Element::Model<ForEach<T>>::build(BuildContext& ctx) const {
 
 template<typename T>
 Size Element::Model<ForEach<T>>::measure(BuildContext& ctx, LayoutConstraints const& constraints,
-                                         TextSystem& ts) const {
+                                            LayoutHints const&, TextSystem& ts) const {
   ComponentKey const forEachKey = ctx.nextCompositeKey();
   LayoutConstraints childCs = constraints;
   childCs.maxHeight = std::numeric_limits<float>::infinity();
   float const assignedW = std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;
   childCs.maxWidth =
       assignedW > 0.f ? assignedW : std::numeric_limits<float>::infinity();
+
+  LayoutHints childHints{};
+  childHints.vStackCrossAlign = value.hAlign;
 
   float totalW = 0.f;
   float totalH = 0.f;
@@ -158,7 +165,7 @@ Size Element::Model<ForEach<T>>::measure(BuildContext& ctx, LayoutConstraints co
     Element item{value.factory(value.items[i])};
     ctx.pushCompositeKeyTail(forEachKey);
     ctx.setChildIndex(i);
-    Size const s = item.measure(ctx, childCs, ts);
+    Size const s = item.measure(ctx, childCs, childHints, ts);
     ctx.popCompositeKeyTail();
     totalW = std::max(totalW, s.width);
     totalH += s.height;

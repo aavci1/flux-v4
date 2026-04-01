@@ -73,7 +73,7 @@ void reconcileHorizontalScroll(TextSystem& ts, std::string const& buf, Font cons
 }
 
 struct TextInputView {
-  Size measure(LayoutConstraints const& cs) const {
+  Size measure(LayoutConstraints const& cs, LayoutHints const&) const {
     float const w = std::isfinite(cs.maxWidth) ? cs.maxWidth : 200.f;
     float const h = resolvedInputFieldHeight(font, textColor, paddingV, height);
     return {std::max(minSize, w), h};

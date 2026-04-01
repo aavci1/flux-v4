@@ -12,7 +12,7 @@
 using namespace flux;
 
 struct ClockFace {
-  Size measure(LayoutConstraints const& c) const {
+  Size measure(LayoutConstraints const& c, LayoutHints const&) const {
     float const s = std::min(
         std::isfinite(c.maxWidth) ? c.maxWidth : 360.f,
         std::isfinite(c.maxHeight) ? c.maxHeight : 360.f);

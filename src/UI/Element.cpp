@@ -21,7 +21,8 @@ namespace flux {
 
 namespace {
 
-TextLayoutOptions textViewLayoutOptions(Text const& v, LayoutConstraints const& c) {
+TextLayoutOptions textViewLayoutOptions(Text const& v, LayoutConstraints const&,
+                                        LayoutHints const& h) {
   TextLayoutOptions o{};
   o.horizontalAlignment = v.horizontalAlignment;
   o.verticalAlignment = v.verticalAlignment;
@@ -29,8 +30,8 @@ TextLayoutOptions textViewLayoutOptions(Text const& v, LayoutConstraints const& 
   o.lineHeight = v.lineHeight;
   o.maxLines = v.maxLines;
   o.firstBaselineOffset = v.firstBaselineOffset;
-  if (c.vStackCrossAlign) {
-    o.horizontalAlignment = *c.vStackCrossAlign;
+  if (h.vStackCrossAlign) {
+    o.horizontalAlignment = *h.vStackCrossAlign;
   }
   return o;
 }
@@ -50,7 +51,7 @@ void Element::build(BuildContext& ctx) const {
 }
 
 Size Element::measure(BuildContext& ctx, LayoutConstraints const& constraints,
-                      TextSystem& textSystem) const {
+                      LayoutHints const& hints, TextSystem& textSystem) const {
   if (envLayer_) {
     EnvironmentStack::current().push(*envLayer_);
   }
@@ -58,16 +59,16 @@ Size Element::measure(BuildContext& ctx, LayoutConstraints const& constraints,
   // `measureCache` is keyed by measureId + constraints (see MeasureCache.hpp), not by leaf content.
   MeasureCache* const mc = envLayer_ ? nullptr : ctx.measureCache();
   if (mc && impl_->canMemoizeMeasure()) {
-    MeasureCacheKey const key = makeMeasureCacheKey(measureId_, constraints);
+    MeasureCacheKey const key = makeMeasureCacheKey(measureId_, constraints, hints);
     if (std::optional<Size> const cached = mc->tryGet(key)) {
       ctx.advanceChildSlot();
       sz = *cached;
     } else {
-      sz = impl_->measure(ctx, constraints, textSystem);
+      sz = impl_->measure(ctx, constraints, hints, textSystem);
       mc->put(key, sz);
     }
   } else {
-    sz = impl_->measure(ctx, constraints, textSystem);
+    sz = impl_->measure(ctx, constraints, hints, textSystem);
   }
   if (envLayer_) {
     EnvironmentStack::current().pop();
@@ -137,7 +138,7 @@ void Element::Model<Rectangle>::build(BuildContext& ctx) const {
   ComponentKey const stableKey = ctx.leafComponentKey();
   ctx.advanceChildSlot();
   Rect const bounds = flux::detail::resolveRectangleBounds(
-      value.frame, ctx.layoutEngine().consumeAssignedFrame(), ctx.constraints());
+      value.frame, ctx.layoutEngine().consumeAssignedFrame(), ctx.constraints(), ctx.hints());
   NodeId const id = ctx.graph().addRect(ctx.parentLayer(), RectNode{
       .bounds = bounds,
       .cornerRadius = value.cornerRadius,
@@ -168,7 +169,8 @@ void Element::Model<Rectangle>::build(BuildContext& ctx) const {
                      detail::flexShrinkOf(value), detail::minMainSizeOf(value));
 }
 
-Size Element::Model<Rectangle>::measure(BuildContext& ctx, LayoutConstraints const& c, TextSystem&) const {
+Size Element::Model<Rectangle>::measure(BuildContext& ctx, LayoutConstraints const& c, LayoutHints const&,
+                                          TextSystem&) const {
   ctx.advanceChildSlot();
   if (value.frame.width > 0.f || value.frame.height > 0.f) {
     return {value.frame.width, value.frame.height};
@@ -195,7 +197,8 @@ void Element::Model<LaidOutText>::build(BuildContext& ctx) const {
                      detail::flexShrinkOf(value), detail::minMainSizeOf(value));
 }
 
-Size Element::Model<LaidOutText>::measure(BuildContext& ctx, LayoutConstraints const&, TextSystem&) const {
+Size Element::Model<LaidOutText>::measure(BuildContext& ctx, LayoutConstraints const&, LayoutHints const&,
+                                          TextSystem&) const {
   ctx.advanceChildSlot();
   if (!value.layout) {
     return {};
@@ -216,7 +219,7 @@ void Element::Model<Text>::build(BuildContext& ctx) const {
 
   std::shared_ptr<TextLayout> layout;
   if (!value.text.empty()) {
-    TextLayoutOptions const opts = textViewLayoutOptions(value, ctx.constraints());
+    TextLayoutOptions const opts = textViewLayoutOptions(value, ctx.constraints(), ctx.hints());
     layout = ctx.textSystem().layout(value.text, value.font, value.color, inner, opts);
   }
 
@@ -275,10 +278,11 @@ void Element::Model<Text>::build(BuildContext& ctx) const {
                      detail::flexShrinkOf(value), detail::minMainSizeOf(value));
 }
 
-Size Element::Model<Text>::measure(BuildContext& ctx, LayoutConstraints const& c, TextSystem& ts) const {
+Size Element::Model<Text>::measure(BuildContext& ctx, LayoutConstraints const& c, LayoutHints const& hints,
+                                     TextSystem& ts) const {
   ctx.advanceChildSlot();
   float const pad = value.padding * 2.f;
-  TextLayoutOptions const opts = textViewLayoutOptions(value, c);
+  TextLayoutOptions const opts = textViewLayoutOptions(value, c, hints);
 
   // Explicit box: both dimensions fixed.
   if (value.frame.width > 0.f && value.frame.height > 0.f) {
@@ -340,7 +344,8 @@ void Element::Model<views::Image>::build(BuildContext& ctx) const {
                      detail::flexShrinkOf(value), detail::minMainSizeOf(value));
 }
 
-Size Element::Model<views::Image>::measure(BuildContext& ctx, LayoutConstraints const& c, TextSystem&) const {
+Size Element::Model<views::Image>::measure(BuildContext& ctx, LayoutConstraints const& c, LayoutHints const&,
+                                             TextSystem&) const {
   ctx.advanceChildSlot();
   if (value.frame.width > 0.f || value.frame.height > 0.f) {
     return {value.frame.width, value.frame.height};
@@ -377,7 +382,8 @@ void Element::Model<PathShape>::build(BuildContext& ctx) const {
                      detail::flexShrinkOf(value), detail::minMainSizeOf(value));
 }
 
-Size Element::Model<PathShape>::measure(BuildContext& ctx, LayoutConstraints const&, TextSystem&) const {
+Size Element::Model<PathShape>::measure(BuildContext& ctx, LayoutConstraints const&, LayoutHints const&,
+                                        TextSystem&) const {
   ctx.advanceChildSlot();
   Rect const b = value.path.getBounds();
   return {b.width, b.height};
@@ -399,7 +405,8 @@ void Element::Model<Line>::build(BuildContext& ctx) const {
                      detail::flexShrinkOf(value), detail::minMainSizeOf(value));
 }
 
-Size Element::Model<Line>::measure(BuildContext& ctx, LayoutConstraints const&, TextSystem&) const {
+Size Element::Model<Line>::measure(BuildContext& ctx, LayoutConstraints const&, LayoutHints const&,
+                                   TextSystem&) const {
   ctx.advanceChildSlot();
   float const minX = std::min(value.from.x, value.to.x);
   float const maxX = std::max(value.from.x, value.to.x);

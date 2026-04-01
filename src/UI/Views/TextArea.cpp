@@ -81,7 +81,7 @@ float caretLayoutXForByte(std::string const& cur, int byte, float fieldW, float 
 }
 
 struct TextAreaView {
-  Size measure(LayoutConstraints const& cs) const {
+  Size measure(LayoutConstraints const& cs, LayoutHints const&) const {
     float const contentW = std::isfinite(cs.maxWidth) ? cs.maxWidth : 200.f;
     TextSystem& ts = Application::instance().textSystem();
     TextLayoutOptions opts{};

@@ -60,7 +60,7 @@ void Element::Model<ScaleAroundCenter>::build(BuildContext& ctx) const {
 }
 
 Size Element::Model<ScaleAroundCenter>::measure(BuildContext& ctx, LayoutConstraints const& constraints,
-                                                TextSystem& ts) const {
+                                                LayoutHints const&, TextSystem& ts) const {
   ContainerMeasureScope scope(ctx);
   float const assignedW = std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;
   float const assignedH = std::isfinite(constraints.maxHeight) ? constraints.maxHeight : 0.f;
@@ -71,7 +71,7 @@ Size Element::Model<ScaleAroundCenter>::measure(BuildContext& ctx, LayoutConstra
   childCs.maxWidth = innerW > 0.f ? innerW : std::numeric_limits<float>::infinity();
   childCs.maxHeight = innerH > 0.f ? innerH : std::numeric_limits<float>::infinity();
 
-  return value.child.measure(ctx, childCs, ts);
+  return value.child.measure(ctx, childCs, LayoutHints{}, ts);
 }
 
 } // namespace flux

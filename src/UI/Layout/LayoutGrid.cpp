@@ -57,7 +57,6 @@ void Element::Model<Grid>::build(BuildContext& ctx) const {
       cellW > 0.f ? cellW : std::numeric_limits<float>::infinity();
   innerForBuild.maxHeight =
       cellH > 0.f ? cellH : std::numeric_limits<float>::infinity();
-  innerForBuild.vStackCrossAlign = std::nullopt;
 
   float y = value.padding;
   for (std::size_t r = 0; r < rowCount; ++r) {
@@ -83,7 +82,7 @@ void Element::Model<Grid>::build(BuildContext& ctx) const {
 }
 
 Size Element::Model<Grid>::measure(BuildContext& ctx, LayoutConstraints const& constraints,
-                                   TextSystem& ts) const {
+                                   LayoutHints const&, TextSystem& ts) const {
   ContainerMeasureScope scope(ctx);
   float const assignedW =
       std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;
@@ -109,7 +108,7 @@ Size Element::Model<Grid>::measure(BuildContext& ctx, LayoutConstraints const& c
   std::vector<Size> sizes;
   sizes.reserve(value.children.size());
   for (Element const& ch : value.children) {
-    sizes.push_back(ch.measure(ctx, childCs, ts));
+    sizes.push_back(ch.measure(ctx, childCs, LayoutHints{}, ts));
   }
 
   std::vector<float> rowH(rowCount, 0.f);

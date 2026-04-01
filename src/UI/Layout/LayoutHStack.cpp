@@ -71,15 +71,15 @@ void Element::Model<HStack>::build(BuildContext& ctx) const {
     LayoutConstraints childBuild = innerForBuild;
     childBuild.maxWidth = allocW[i];
     childBuild.minWidth = value.children[i].minMainSize();
-    childBuild.hStackCrossAlign = value.vAlign;
-    childBuild.vStackCrossAlign = std::nullopt;
-    scope.buildChild(value.children[i], Rect{x, value.padding, allocW[i], rowInnerH}, childBuild);
+    LayoutHints rowHints{};
+    rowHints.hStackCrossAlign = value.vAlign;
+    scope.buildChild(value.children[i], Rect{x, value.padding, allocW[i], rowInnerH}, childBuild, rowHints);
     x += allocW[i] + value.spacing;
   }
 }
 
 Size Element::Model<HStack>::measure(BuildContext& ctx, LayoutConstraints const& constraints,
-                                     TextSystem& ts) const {
+                                     LayoutHints const&, TextSystem& ts) const {
   ContainerMeasureScope scope(ctx);
   LayoutConstraints childCs = constraints;
   childCs.maxWidth = std::numeric_limits<float>::infinity();
@@ -96,7 +96,7 @@ Size Element::Model<HStack>::measure(BuildContext& ctx, LayoutConstraints const&
     sumW += static_cast<float>(n - 1) * value.spacing;
   }
   for (Element const& ch : value.children) {
-    Size const s = ch.measure(ctx, childCs, ts);
+    Size const s = ch.measure(ctx, childCs, LayoutHints{}, ts);
     sumW += s.width;
     maxH = std::max(maxH, s.height);
   }

@@ -95,7 +95,6 @@ void Element::Model<OffsetView>::build(BuildContext& ctx) const {
       LayoutConstraints childBuild = scope.outer;
       childBuild.maxWidth = sz.width;
       childBuild.maxHeight = rowH;
-      childBuild.vStackCrossAlign = std::nullopt;
       scope.buildChild(value.children[i], Rect{x, 0.f, sz.width, rowH}, childBuild);
       x += sz.width;
     }
@@ -108,7 +107,6 @@ void Element::Model<OffsetView>::build(BuildContext& ctx) const {
       LayoutConstraints childBuild = scope.outer;
       childBuild.maxWidth = rowW;
       childBuild.maxHeight = sz.height;
-      childBuild.vStackCrossAlign = std::nullopt;
       scope.buildChild(value.children[i], Rect{0.f, y, rowW, sz.height}, childBuild);
       y += sz.height;
     }
@@ -116,7 +114,7 @@ void Element::Model<OffsetView>::build(BuildContext& ctx) const {
 }
 
 Size Element::Model<OffsetView>::measure(BuildContext& ctx, LayoutConstraints const& constraints,
-                                         TextSystem& ts) const {
+                                         LayoutHints const&, TextSystem& ts) const {
   ContainerMeasureScope scope(ctx);
   float const assignedW = std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;
   float const assignedH = std::isfinite(constraints.maxHeight) ? constraints.maxHeight : 0.f;
@@ -152,13 +150,13 @@ Size Element::Model<OffsetView>::measure(BuildContext& ctx, LayoutConstraints co
   float totalH = 0.f;
   if (value.axis == ScrollAxis::Horizontal) {
     for (Element const& ch : value.children) {
-      Size const s = ch.measure(ctx, childCs, ts);
+      Size const s = ch.measure(ctx, childCs, LayoutHints{}, ts);
       totalW += s.width;
       totalH = std::max(totalH, s.height);
     }
   } else {
     for (Element const& ch : value.children) {
-      Size const s = ch.measure(ctx, childCs, ts);
+      Size const s = ch.measure(ctx, childCs, LayoutHints{}, ts);
       totalW = std::max(totalW, s.width);
       totalH += s.height;
     }

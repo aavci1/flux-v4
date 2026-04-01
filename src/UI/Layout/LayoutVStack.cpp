@@ -26,7 +26,9 @@ void Element::Model<VStack>::build(BuildContext& ctx) const {
   childCs.maxHeight = std::numeric_limits<float>::infinity();
   childCs.maxWidth = innerW > 0.f ? innerW : std::numeric_limits<float>::infinity();
 
-  auto sizes = scope.measureChildren(value.children, childCs);
+  LayoutHints measureHints{};
+  measureHints.vStackCrossAlign = value.hAlign;
+  auto sizes = scope.measureChildren(value.children, childCs, measureHints);
   scope.logContainer("VStack");
   std::size_t const n = value.children.size();
 
@@ -74,15 +76,15 @@ void Element::Model<VStack>::build(BuildContext& ctx) const {
     LayoutConstraints childBuild = innerForBuild;
     childBuild.maxHeight = allocH[i];
     childBuild.minHeight = value.children[i].minMainSize();
-    childBuild.hStackCrossAlign = std::nullopt;
-    childBuild.vStackCrossAlign = value.hAlign;
-    scope.buildChild(value.children[i], Rect{value.padding, y, rowW, sz.height}, childBuild);
+    LayoutHints rowHints{};
+    rowHints.vStackCrossAlign = value.hAlign;
+    scope.buildChild(value.children[i], Rect{value.padding, y, rowW, sz.height}, childBuild, rowHints);
     y += sz.height + value.spacing;
   }
 }
 
 Size Element::Model<VStack>::measure(BuildContext& ctx, LayoutConstraints const& constraints,
-                                     TextSystem& ts) const {
+                                     LayoutHints const&, TextSystem& ts) const {
   ContainerMeasureScope scope(ctx);
   float const assignedW =
       std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;
@@ -91,8 +93,8 @@ Size Element::Model<VStack>::measure(BuildContext& ctx, LayoutConstraints const&
   LayoutConstraints childCs = constraints;
   childCs.maxHeight = std::numeric_limits<float>::infinity();
   childCs.maxWidth = innerW > 0.f ? innerW : std::numeric_limits<float>::infinity();
-  childCs.hStackCrossAlign = std::nullopt;
-  childCs.vStackCrossAlign = value.hAlign;
+  LayoutHints childHints{};
+  childHints.vStackCrossAlign = value.hAlign;
 
   float maxW = 0.f;
   float sumH = 2.f * value.padding;
@@ -101,7 +103,7 @@ Size Element::Model<VStack>::measure(BuildContext& ctx, LayoutConstraints const&
     sumH += static_cast<float>(n - 1) * value.spacing;
   }
   for (Element const& ch : value.children) {
-    Size const s = ch.measure(ctx, childCs, ts);
+    Size const s = ch.measure(ctx, childCs, childHints, ts);
     maxW = std::max(maxW, s.width);
     sumH += s.height;
   }

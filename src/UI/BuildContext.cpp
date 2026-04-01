@@ -17,7 +17,7 @@ BuildContext::BuildContext(SceneGraph& g, EventMap& em, TextSystem& ts, LayoutEn
     , textSystem_(ts)
     , layoutEngine_(layout)
     , measureCache_(measureCache) {
-  constraintStack_.push_back(LayoutConstraints{});
+  layoutStack_.push_back(LayoutFrame{});
 }
 
 NodeId BuildContext::parentLayer() const {
@@ -43,20 +43,22 @@ void BuildContext::popLayer() {
   }
 }
 
-LayoutConstraints const& BuildContext::constraints() const { return constraintStack_.back(); }
+LayoutConstraints const& BuildContext::constraints() const { return layoutStack_.back().constraints; }
 
-void BuildContext::pushConstraints(LayoutConstraints const& c) {
+LayoutHints const& BuildContext::hints() const { return layoutStack_.back().hints; }
+
+void BuildContext::pushConstraints(LayoutConstraints const& c, LayoutHints hints) {
 #ifndef NDEBUG
   assert(std::isfinite(c.minWidth) && std::isfinite(c.minHeight));
   assert(c.minWidth <= c.maxWidth);
   assert(c.minHeight <= c.maxHeight);
 #endif
-  constraintStack_.push_back(c);
+  layoutStack_.push_back(LayoutFrame{.constraints = c, .hints = std::move(hints)});
 }
 
 void BuildContext::popConstraints() {
-  if (constraintStack_.size() > 1) {
-    constraintStack_.pop_back();
+  if (layoutStack_.size() > 1) {
+    layoutStack_.pop_back();
   }
 }
 

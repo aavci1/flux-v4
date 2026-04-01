@@ -37,7 +37,8 @@ public:
   void popLayer();
 
   LayoutConstraints const& constraints() const;
-  void pushConstraints(LayoutConstraints const& c);
+  LayoutHints const& hints() const;
+  void pushConstraints(LayoutConstraints const& c, LayoutHints hints = {});
   void popConstraints();
 
   /// Called by layout containers around their child build loops.
@@ -82,7 +83,7 @@ public:
 #ifndef NDEBUG
   /// Stack depth probes for \ref ContainerBuildScope / \ref ContainerMeasureScope balance checks.
   std::size_t debugLayerStackDepth() const noexcept { return layerStack_.size(); }
-  std::size_t debugConstraintStackDepth() const noexcept { return constraintStack_.size(); }
+  std::size_t debugConstraintStackDepth() const noexcept { return layoutStack_.size(); }
   std::size_t debugKeyPathDepth() const noexcept { return keyStack_.size(); }
   std::size_t debugSavedChildDepth() const noexcept { return savedChildIndices_.size(); }
 #endif
@@ -100,7 +101,11 @@ private:
   TextSystem& textSystem_;
   LayoutEngine& layoutEngine_;
   std::vector<NodeId> layerStack_;
-  std::vector<LayoutConstraints> constraintStack_;
+  struct LayoutFrame {
+    LayoutConstraints constraints{};
+    LayoutHints hints{};
+  };
+  std::vector<LayoutFrame> layoutStack_;
 
   std::vector<std::size_t> keyStack_;
   std::vector<std::size_t> savedChildIndices_;

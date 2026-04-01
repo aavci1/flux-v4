@@ -12,7 +12,7 @@ Here's my analysis, grounded in the concrete code I've read across the system.
 
 **4. Flex silently does nothing in unconstrained parents.** Setting `flexGrow = 1.f` on a child has zero effect if the parent VStack/HStack itself has an unconstrained main axis. There's no warning — the child just gets its natural size. This is a common source of "why isn't this stretching?" confusion.
 
-**5. Cross-axis alignment leaks through constraints.** `vStackCrossAlign` set by an outer VStack can affect a deeply nested `Text` unless an intermediate container clears it. Each container must manually clear the "other" stack's alignment (`HStack` clears `vStackCrossAlign`, `VStack` clears `hStackCrossAlign`). If a new container forgets to clear, alignment leaks produce subtle misplacement bugs that are hard to trace.
+**5. Cross-axis alignment propagation.** Alignment is now **`LayoutHints`** (not on `LayoutConstraints`). Parents still must pass the correct hint per child and avoid leaking the wrong axis into nested stacks — but hints are set per `pushConstraints` / `measure` call rather than inheriting ambiguous constraint fields.
 
 ---
 
@@ -66,13 +66,7 @@ Missing `rewindChildKeyIndex` → keys diverge between measure and build, state 
 
 **5. `Element.hpp` is a compilation bottleneck.** It includes headers for every view type (via the Model specializations), plus `Layout.hpp`, `ScaleAroundCenter.hpp`, `PopoverCalloutShape.hpp`. Changing any view struct (even just adding a field to `Rectangle`) triggers recompilation of everything that transitively includes `Element.hpp` — which is essentially the entire UI layer.
 
-**6. No layout debugging infrastructure.** There is no way to:
-- Dump the constraint/size tree to see what constraints each node received and what size it returned
-- Visually highlight layout boundaries (debug overlay)
-- Detect NaN/negative sizes, unclosed push/pop pairs, or child-outside-parent placement
-- Trace why a specific element ended up at a specific size/position
-
-The only debugging aid is `FLUX_DEBUG_INPUT` for input events. Layout bugs require mental simulation of the entire recursive build.
+**6. Layout debugging (partially addressed).** With `FLUX_DEBUG_LAYOUT`, stderr prints a per-rebuild tree (constraints, measured size, frame, flex). Still missing: a visual overlay for layout bounds, and automated checks for child-outside-parent placement beyond existing asserts.
 
 **7. Bounds resolution is split into two ad-hoc paths.** `resolveLeafBounds` and `resolveRectangleBounds` handle the `frame` → `childFrame` → `constraints` fallback chain differently. `Rectangle` with an explicit `frame` uses `resolveRectangleBounds` which applies cross-axis alignment offsets. `Text` and custom `RenderComponent` leaves use `resolveLeafBounds` which just picks whichever rect is non-zero. The distinction is non-obvious and the naming doesn't explain when to use which.
 
@@ -96,15 +90,11 @@ Implemented as `ContainerBuildScope` + `ContainerMeasureScope` in `src/UI/Layout
 - **Constraint sanity**: `BuildContext::pushConstraints` asserts finite mins and `min ≤ max` on each axis.
 - **Flex ineffectiveness**: when `FLUX_DEBUG_LAYOUT` is set, stderr warning if a child has `flexGrow > 0` but the stack has no finite main-axis size.
 
-### D. Decouple alignment hints from `LayoutConstraints`
+### D. Decouple alignment hints from `LayoutConstraints` — ✅ DONE
 
-`hStackCrossAlign` and `vStackCrossAlign` don't belong on `LayoutConstraints` — they're container-specific layout hints, not size constraints. Every new container that needs a custom alignment hint would have to grow the struct. Options:
+Implemented as **`LayoutHints`** (`include/Flux/UI/LayoutEngine.hpp`) beside **`LayoutConstraints`**: `BuildContext::pushConstraints(cs, hints)`, `hints()`, `Element::measure(..., LayoutHints const&, ...)`, and `RenderComponent::measure(cs, hints)`. Stack alignment no longer lives on the constraint struct.
 
-- Move them to a separate `LayoutHints` struct carried alongside constraints
-- Let containers set them as environment values (already have `EnvironmentLayer` for this)
-- Pass them to `resolveLeafBounds`/`resolveRectangleBounds` explicitly rather than reading them from the constraint stack
-
-This also eliminates the bug class where containers forget to clear the other stack's alignment field.
+This removes the design smell where every container grew `LayoutConstraints`, and clears are now explicit per-child hints rather than mutating shared constraint fields.
 
 ### E. Layout tree dump for debugging
 
@@ -138,10 +128,10 @@ Currently, layout containers interleave "compute where children go" and "emit sc
 
 If I had to pick the highest-impact items to tackle first:
 
-1. **ContainerBuildScope** (B) — eliminates the largest class of implementor bugs and reduces code by ~40% per layout file
-2. **Debug assertions** (C) — catches bugs at introduction time, cheap to add
-3. **Model boilerplate macro** (A) — low risk, immediate quality-of-life improvement
+1. **ContainerBuildScope** (B) — done
+2. **Debug assertions** (C) — done
+3. **Model boilerplate macro** (A) — done
 4. **Layout tree dump** (E) — stderr dump done; overlay still future
-5. **Decouple alignment from constraints** (D) — removes a design smell that will get worse as more containers are added
+5. **Decouple alignment from constraints** (D) — done (`LayoutHints`)
 
 Items F, G, and H are larger refactors that trade off more disruption for more structural improvement — good candidates for the "rewrite/clean up" TODO item you already have.

@@ -29,18 +29,19 @@ std::size_t MeasureCacheKeyHash::operator()(MeasureCacheKey const& k) const noex
   return h;
 }
 
-MeasureCacheKey makeMeasureCacheKey(std::uint64_t elementMeasureId, LayoutConstraints const& c) {
+MeasureCacheKey makeMeasureCacheKey(std::uint64_t elementMeasureId, LayoutConstraints const& c,
+                                    LayoutHints const& h) {
   MeasureCacheKey k{};
   k.elementMeasureId = elementMeasureId;
   k.maxWidth = c.maxWidth;
   k.maxHeight = c.maxHeight;
   k.minWidth = c.minWidth;
   k.minHeight = c.minHeight;
-  k.hStackCross = c.hStackCrossAlign
-      ? static_cast<std::uint8_t>(*c.hStackCrossAlign) + std::uint8_t{1}
+  k.hStackCross = h.hStackCrossAlign
+      ? static_cast<std::uint8_t>(*h.hStackCrossAlign) + std::uint8_t{1}
       : std::uint8_t{0};
-  k.vStackCross = c.vStackCrossAlign
-      ? static_cast<std::uint8_t>(*c.vStackCrossAlign) + std::uint8_t{1}
+  k.vStackCross = h.vStackCrossAlign
+      ? static_cast<std::uint8_t>(*h.vStackCrossAlign) + std::uint8_t{1}
       : std::uint8_t{0};
   return k;
 }

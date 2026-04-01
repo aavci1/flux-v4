@@ -26,9 +26,10 @@ template<typename T>
 concept Component = true;
 
 template<typename T>
-concept RenderComponent = requires(T const& t, Canvas& c, Rect r, LayoutConstraints const& cs) {
+concept RenderComponent = requires(T const& t, Canvas& c, Rect r, LayoutConstraints const& cs,
+                                 LayoutHints const& h) {
   { t.render(c, r) };
-  { t.measure(cs) } -> std::convertible_to<Size>;
+  { t.measure(cs, h) } -> std::convertible_to<Size>;
 } && !CompositeComponent<T>;
 
 } // namespace flux

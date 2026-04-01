@@ -22,7 +22,8 @@ namespace flux {
 /// heap address after a temporary \ref Element is destroyed (e.g. \ref ForEach measure loop),
 /// which would otherwise collide in the cache. The key does not hash text or other mutable
 /// content — correctness relies on one `measureId` per distinct element instance and on
-/// \ref MeasureCache being cleared at each rebuild start.
+/// \ref MeasureCache being cleared at each rebuild start. Cross-axis alignment from \ref LayoutHints
+/// is folded into `hStackCross` / `vStackCross` bytes.
 struct MeasureCacheKey {
   std::uint64_t elementMeasureId{};
   float maxWidth{};
@@ -39,7 +40,8 @@ struct MeasureCacheKeyHash {
   std::size_t operator()(MeasureCacheKey const& k) const noexcept;
 };
 
-MeasureCacheKey makeMeasureCacheKey(std::uint64_t elementMeasureId, LayoutConstraints const& c);
+MeasureCacheKey makeMeasureCacheKey(std::uint64_t elementMeasureId, LayoutConstraints const& c,
+                                    LayoutHints const& h);
 
 /// Per-pass cache. Cleared when a new rebuild starts so content changes always get fresh measures;
 /// within one pass, distinct elements have distinct `measureId`s so there is no stale hit from

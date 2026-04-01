@@ -86,7 +86,8 @@ public:
   Element& operator=(Element&&) noexcept = default;
 
   void build(BuildContext& ctx) const;
-  Size measure(BuildContext& ctx, LayoutConstraints const& constraints, TextSystem& textSystem) const;
+  Size measure(BuildContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
+               TextSystem& textSystem) const;
 
   /// Optional flex overrides on the wrapper (from `withFlex`). When set, they replace the
   /// underlying component's flex hints for layout.
@@ -116,7 +117,7 @@ private:
     virtual std::unique_ptr<Concept> clone() const = 0;
     virtual void build(BuildContext& ctx) const = 0;
     virtual Size measure(BuildContext& ctx, LayoutConstraints const& constraints,
-                         TextSystem& textSystem) const = 0;
+                         LayoutHints const& hints, TextSystem& textSystem) const = 0;
     virtual float flexGrow() const { return 0.f; }
     virtual float flexShrink() const { return 0.f; }
     virtual float minMainSize() const { return 0.f; }
@@ -156,7 +157,8 @@ struct Element::Model : Concept {
     }
   }
   void build(BuildContext& ctx) const override;
-  Size measure(BuildContext& ctx, LayoutConstraints const& constraints, TextSystem& textSystem) const override;
+  Size measure(BuildContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
+               TextSystem& textSystem) const override;
   float flexGrow() const override { return detail::flexGrowOf(value); }
   float flexShrink() const override { return detail::flexShrinkOf(value); }
   float minMainSize() const override { return detail::minMainSizeOf(value); }
@@ -265,13 +267,13 @@ void Element::Model<C>::build(BuildContext& ctx) const {
     static_assert(alwaysFalse<C>,
         "Missing Element::Model specialization for this component type. "
         "Add body() for a composite, or render(Canvas&, Rect) + "
-        "measure(LayoutConstraints const&) for a render component.");
+        "measure(LayoutConstraints const&, LayoutHints const&) for a render component.");
   }
 }
 
 template<typename C>
 Size Element::Model<C>::measure(BuildContext& ctx, LayoutConstraints const& constraints,
-                                TextSystem& textSystem) const {
+                                LayoutHints const& hints, TextSystem& textSystem) const {
   if constexpr (CompositeComponent<C>) {
     ComponentKey const key = ctx.nextCompositeKey();
     StateStore* store = StateStore::current();
@@ -286,18 +288,18 @@ Size Element::Model<C>::measure(BuildContext& ctx, LayoutConstraints const& cons
     }
     ctx.beginCompositeBodySubtree(key);
     ctx.pushCompositeKeyTail(key);
-    Size const sz = child.measure(ctx, constraints, textSystem);
+    Size const sz = child.measure(ctx, constraints, hints, textSystem);
     ctx.popCompositeKeyTail();
     return sz;
   } else if constexpr (RenderComponent<C>) {
     ctx.advanceChildSlot();
     (void)textSystem;
-    return value.measure(constraints);
+    return value.measure(constraints, hints);
   } else {
     static_assert(alwaysFalse<C>,
         "Missing Element::Model specialization for this component type. "
         "Add body() for a composite, or render(Canvas&, Rect) + "
-        "measure(LayoutConstraints const&) for a render component.");
+        "measure(LayoutConstraints const&, LayoutHints const&) for a render component.");
     return {};
   }
 }
@@ -320,7 +322,7 @@ namespace flux {
       return std::make_unique<Model<Type>>(value);                                       \
     }                                                                                     \
     void build(BuildContext& ctx) const override;                                         \
-    Size measure(BuildContext& ctx, LayoutConstraints const&, TextSystem&) const override; \
+    Size measure(BuildContext& ctx, LayoutConstraints const&, LayoutHints const&, TextSystem&) const override; \
     float flexGrow() const override { return detail::flexGrowOf(value); }                \
     float flexShrink() const override { return detail::flexShrinkOf(value); }            \
     float minMainSize() const override { return detail::minMainSizeOf(value); }          \
@@ -355,7 +357,7 @@ struct Element::Model<Spacer> final : Concept {
     return std::make_unique<Model<Spacer>>(value);
   }
   void build(BuildContext& ctx) const override;
-  Size measure(BuildContext& ctx, LayoutConstraints const&, TextSystem&) const override;
+  Size measure(BuildContext& ctx, LayoutConstraints const&, LayoutHints const&, TextSystem&) const override;
   float flexGrow() const override { return 1.f; }
   float flexShrink() const override { return 0.f; }
   float minMainSize() const override { return std::max(0.f, value.minLength); }
