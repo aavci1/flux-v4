@@ -1,6 +1,7 @@
 #include <Flux/UI/Element.hpp>
 
 #include <Flux/UI/BuildContext.hpp>
+#include <Flux/UI/Detail/LayoutDebugDump.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 #include <Flux/UI/StateStore.hpp>
 #include <Flux/UI/Views/PathShape.hpp>
@@ -120,6 +121,7 @@ void Element::Model<PopoverCalloutShape>::build(BuildContext& ctx) const {
       outer.maxHeight = std::min(outer.maxHeight, value.maxSize->height);
     }
   }
+  layoutDebugLogContainer("PopoverCalloutShape", outer, parentFrame);
 
   LayoutConstraints const ccInner = innerConstraintsForPopoverContent(value, outer);
   ctx.pushChildIndex();

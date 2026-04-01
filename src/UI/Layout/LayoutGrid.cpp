@@ -38,6 +38,7 @@ void Element::Model<Grid>::build(BuildContext& ctx) const {
       cellH > 0.f ? cellH : std::numeric_limits<float>::infinity();
 
   auto sizes = scope.measureChildren(value.children, childCs);
+  scope.logContainer("Grid");
 
   std::vector<float> rowH(rowCount, 0.f);
   if (cellH > 0.f && rowCount > 0) {

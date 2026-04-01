@@ -14,6 +14,8 @@
 #include <Flux/Scene/Nodes.hpp>
 #include <Flux/Scene/SceneGraph.hpp>
 
+#include <Flux/UI/Detail/LayoutDebugDump.hpp>
+
 #include <cassert>
 #include <cstddef>
 #include <vector>
@@ -104,6 +106,11 @@ public:
     ctx.pushConstraints(cs);
     child.build(ctx);
     ctx.popConstraints();
+  }
+
+  /// Log this container after \ref measureChildren / \ref measureChild so measured sizes are in the map.
+  void logContainer(char const* tag) const {
+    layoutDebugLogContainer(tag, outer, parentFrame);
   }
 
   ~ContainerBuildScope() {

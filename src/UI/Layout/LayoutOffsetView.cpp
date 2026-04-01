@@ -54,6 +54,7 @@ void Element::Model<OffsetView>::build(BuildContext& ctx) const {
   }
 
   auto sizes = scope.measureChildren(value.children, childCs);
+  scope.logContainer("OffsetView");
 
   std::size_t const n = value.children.size();
   float totalW = 0.f;

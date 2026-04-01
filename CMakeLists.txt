@@ -124,6 +124,7 @@ add_library(flux STATIC
   src/UI/GestureTracker.cpp
   src/UI/CursorController.cpp
   src/UI/BuildOrchestrator.cpp
+  src/UI/LayoutDebugDump.cpp
   src/UI/InputDispatcher.cpp
   src/UI/Hooks.cpp
   src/UI/ActionHooks.cpp

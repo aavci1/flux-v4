@@ -8,6 +8,7 @@
 #include <Flux/Graphics/TextLayoutOptions.hpp>
 #include <Flux/Scene/Nodes.hpp>
 #include <Flux/Scene/SceneGraph.hpp>
+#include <Flux/UI/Detail/LayoutDebugDump.hpp>
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 
@@ -87,6 +88,8 @@ void Element::Model<ForEach<T>>::build(BuildContext& ctx) const {
     sizes.push_back(item.measure(ctx, childCsMeasure, ctx.textSystem()));
     ctx.popCompositeKeyTail();
   }
+
+  layoutDebugLogContainer("ForEach", outer, box);
 
   float maxChildW = 0.f;
   for (Size s : sizes) {

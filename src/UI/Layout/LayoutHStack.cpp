@@ -30,6 +30,7 @@ void Element::Model<HStack>::build(BuildContext& ctx) const {
   }
 
   auto sizes = scope.measureChildren(value.children, childCs);
+  scope.logContainer("HStack");
 
   float maxH = 0.f;
   for (std::size_t i = 0; i < n; ++i) {

@@ -76,6 +76,10 @@ public:
 
 Parent containers call `setChildFrame(...)` before building each child. Layout containers and leaves call `consumeAssignedFrame()` to read that assignment (debug builds assert the contract). `lastAssignedFrame()` returns the last stored rect without consuming the debug flag (used after a full pass for APIs like `buildSlotRect`).
 
+### Layout stderr tree (`FLUX_DEBUG_LAYOUT`)
+
+When the environment variable `FLUX_DEBUG_LAYOUT` is set to a non-empty value other than `0`/`false` (same truthiness as other layout diagnostics), each rebuild prints a text tree to **stderr**: opening/closing markers, then one line per container and leaf as the build walk visits nodes. Lines include **constraints** (`maxWidth`×`maxHeight`), **measured** size from the last `Element::measure` for that element, **frame** (`Rect`), and optional **flex** on leaves. Root containers may show `measured: 0×0` if no measure ran for that node before `build` (the root often goes straight to `buildInto`). Implementation: `include/Flux/UI/Detail/LayoutDebugDump.hpp`, `src/UI/LayoutDebugDump.cpp`, hooks in `Element::build`/`measure`, `BuildOrchestrator::rebuild`, and container `logContainer` calls after child measurement.
+
 ### Alignment (`include/Flux/Graphics/TextLayoutOptions.hpp`)
 
 ```cpp

@@ -28,6 +28,7 @@ void Element::Model<ScaleAroundCenter>::build(BuildContext& ctx) const {
   childCs.maxHeight = innerH > 0.f ? innerH : std::numeric_limits<float>::infinity();
 
   Size const sz = scope.measureChild(value.child, childCs);
+  scope.logContainer("ScaleAroundCenter");
 
   if (innerW <= 0.f) {
     innerW = sz.width;

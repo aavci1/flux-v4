@@ -108,18 +108,9 @@ This also eliminates the bug class where containers forget to clear the other st
 
 ### E. Layout tree dump for debugging
 
-Add an opt-in debug mode (e.g. `FLUX_DEBUG_LAYOUT=1`) that captures a parallel tree during rebuild:
+**Stderr tree:** Implemented — set `FLUX_DEBUG_LAYOUT=1` to print constraints, measured size, frame, and flex (where relevant) per node during rebuild. See **Layout stderr tree** in `docs/layout-system.md`.
 
-```
-[VStack] assigned: 800×600, measured: 800×400
-  [HStack] frame: {0, 0, 800, 40}, measured: 350×40
-    [Text "Hello"] frame: {0, 0, 80, 40}, measured: 80×20
-    [Spacer] frame: {88, 0, 632, 40}, flex: grow=1
-    [Button] frame: {728, 0, 72, 40}
-  [Rectangle] frame: {0, 48, 800, 352}, flex: grow=1
-```
-
-This could also be an overlay that draws layout boundaries on screen, toggled at runtime.
+**Still open:** a visual overlay that draws layout boundaries on screen, toggled at runtime.
 
 ### F. Unify the sizing model
 
@@ -150,7 +141,7 @@ If I had to pick the highest-impact items to tackle first:
 1. **ContainerBuildScope** (B) — eliminates the largest class of implementor bugs and reduces code by ~40% per layout file
 2. **Debug assertions** (C) — catches bugs at introduction time, cheap to add
 3. **Model boilerplate macro** (A) — low risk, immediate quality-of-life improvement
-4. **Layout tree dump** (E) — transforms layout debugging from "mental simulation" to "read the log"
+4. **Layout tree dump** (E) — stderr dump done; overlay still future
 5. **Decouple alignment from constraints** (D) — removes a design smell that will get worse as more containers are added
 
 Items F, G, and H are larger refactors that trade off more disruption for more structural improvement — good candidates for the "rewrite/clean up" TODO item you already have.

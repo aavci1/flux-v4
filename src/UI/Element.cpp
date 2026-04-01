@@ -1,5 +1,6 @@
 #include <Flux/UI/Element.hpp>
 
+#include <Flux/UI/Detail/LayoutDebugDump.hpp>
 #include <Flux/UI/Environment.hpp>
 #include <Flux/UI/Views/Popover.hpp>
 
@@ -37,6 +38,7 @@ TextLayoutOptions textViewLayoutOptions(Text const& v, LayoutConstraints const& 
 } // namespace
 
 void Element::build(BuildContext& ctx) const {
+  layoutDebugPushElementBuild(measureId_);
   if (envLayer_) {
     EnvironmentStack::current().push(*envLayer_);
   }
@@ -44,6 +46,7 @@ void Element::build(BuildContext& ctx) const {
   if (envLayer_) {
     EnvironmentStack::current().pop();
   }
+  layoutDebugPopElementBuild();
 }
 
 Size Element::measure(BuildContext& ctx, LayoutConstraints const& constraints,
@@ -69,6 +72,7 @@ Size Element::measure(BuildContext& ctx, LayoutConstraints const& constraints,
   if (envLayer_) {
     EnvironmentStack::current().pop();
   }
+  layoutDebugRecordMeasure(measureId_, constraints, sz);
 #ifndef NDEBUG
   assert(std::isfinite(sz.width) && std::isfinite(sz.height));
   assert(sz.width >= 0.f && sz.height >= 0.f);
@@ -160,6 +164,8 @@ void Element::Model<Rectangle>::build(BuildContext& ctx) const {
         .cursorPassthrough = value.cursorPassthrough,
     });
   }
+  layoutDebugLogLeaf("Rectangle", ctx.constraints(), bounds, detail::flexGrowOf(value),
+                     detail::flexShrinkOf(value), detail::minMainSizeOf(value));
 }
 
 Size Element::Model<Rectangle>::measure(BuildContext& ctx, LayoutConstraints const& c, TextSystem&) const {
@@ -185,6 +191,8 @@ void Element::Model<LaidOutText>::build(BuildContext& ctx) const {
       .layout = value.layout,
       .origin = origin,
   });
+  layoutDebugLogLeaf("LaidOutText", ctx.constraints(), cf, detail::flexGrowOf(value),
+                     detail::flexShrinkOf(value), detail::minMainSizeOf(value));
 }
 
 Size Element::Model<LaidOutText>::measure(BuildContext& ctx, LayoutConstraints const&, TextSystem&) const {
@@ -263,6 +271,8 @@ void Element::Model<Text>::build(BuildContext& ctx) const {
       });
     }
   }
+  layoutDebugLogLeaf("Text", ctx.constraints(), bounds, detail::flexGrowOf(value),
+                     detail::flexShrinkOf(value), detail::minMainSizeOf(value));
 }
 
 Size Element::Model<Text>::measure(BuildContext& ctx, LayoutConstraints const& c, TextSystem& ts) const {
@@ -326,6 +336,8 @@ void Element::Model<views::Image>::build(BuildContext& ctx) const {
   if (value.onTap) {
     ctx.eventMap().insert(id, EventHandlers{.stableTargetKey = stableKey, .onTap = value.onTap});
   }
+  layoutDebugLogLeaf("Image", ctx.constraints(), bounds, detail::flexGrowOf(value),
+                     detail::flexShrinkOf(value), detail::minMainSizeOf(value));
 }
 
 Size Element::Model<views::Image>::measure(BuildContext& ctx, LayoutConstraints const& c, TextSystem&) const {
@@ -361,6 +373,8 @@ void Element::Model<PathShape>::build(BuildContext& ctx) const {
   } else {
     ctx.graph().addPath(ctx.parentLayer(), std::move(node));
   }
+  layoutDebugLogLeaf("PathShape", ctx.constraints(), cf, detail::flexGrowOf(value),
+                     detail::flexShrinkOf(value), detail::minMainSizeOf(value));
 }
 
 Size Element::Model<PathShape>::measure(BuildContext& ctx, LayoutConstraints const&, TextSystem&) const {
@@ -376,6 +390,13 @@ void Element::Model<Line>::build(BuildContext& ctx) const {
       .to = value.to,
       .stroke = value.stroke,
   });
+  float const minX = std::min(value.from.x, value.to.x);
+  float const maxX = std::max(value.from.x, value.to.x);
+  float const minY = std::min(value.from.y, value.to.y);
+  float const maxY = std::max(value.from.y, value.to.y);
+  Rect const lineBounds{minX, minY, maxX - minX, maxY - minY};
+  layoutDebugLogLeaf("Line", ctx.constraints(), lineBounds, detail::flexGrowOf(value),
+                     detail::flexShrinkOf(value), detail::minMainSizeOf(value));
 }
 
 Size Element::Model<Line>::measure(BuildContext& ctx, LayoutConstraints const&, TextSystem&) const {

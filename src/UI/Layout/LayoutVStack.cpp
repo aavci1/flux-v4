@@ -27,6 +27,7 @@ void Element::Model<VStack>::build(BuildContext& ctx) const {
   childCs.maxWidth = innerW > 0.f ? innerW : std::numeric_limits<float>::infinity();
 
   auto sizes = scope.measureChildren(value.children, childCs);
+  scope.logContainer("VStack");
   std::size_t const n = value.children.size();
 
   float maxChildW = 0.f;

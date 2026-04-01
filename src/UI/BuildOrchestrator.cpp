@@ -10,6 +10,8 @@
 #include <Flux/UI/Environment.hpp>
 #include <Flux/UI/Overlay.hpp>
 
+#include <Flux/UI/Detail/LayoutDebugDump.hpp>
+
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -74,6 +76,7 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
 
   layoutEngine_.resetForBuild();
   measureCache_.clear();
+  layoutDebugBeginPass();
 
   actionRegistryBuild_.beginRebuild();
 
@@ -98,6 +101,7 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
   ctx.popConstraints();
 
   layoutRects_.fill(graph, ctx);
+  layoutDebugEndPass();
 
   StateStore::setCurrent(nullptr);
   stateStore_.endRebuild();

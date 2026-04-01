@@ -30,6 +30,7 @@ void Element::Model<ZStack>::build(BuildContext& ctx) const {
   float maxW = 0.f;
   float maxH = 0.f;
   auto sizes = scope.measureChildren(value.children, childCs);
+  scope.logContainer("ZStack");
   for (Size const& s : sizes) {
     maxW = std::max(maxW, s.width);
     maxH = std::max(maxH, s.height);
