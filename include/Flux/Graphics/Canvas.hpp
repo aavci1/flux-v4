@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/Graphics/Canvas.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <Flux/Core/Types.hpp>
 #include <Flux/Graphics/Path.hpp>
 #include <Flux/Graphics/Styles.hpp>

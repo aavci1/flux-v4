@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/Detail/Runtime.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <Flux/UI/BuildOrchestrator.hpp>
 #include <Flux/UI/CursorController.hpp>
 #include <Flux/UI/FocusController.hpp>
@@ -27,24 +32,22 @@ public:
 
   void setRoot(std::unique_ptr<RootHolder> holder);
   void handleInput(InputEvent const& e);
-  Window& window() noexcept { return window_; }
+  Window& window() noexcept;
 
-  static Runtime* current() noexcept { return sCurrent; }
+  static Runtime* current() noexcept;
 
-  FocusController& focus() noexcept { return focus_; }
-  HoverController& hover() noexcept { return hover_; }
-  GestureTracker& gesture() noexcept { return gesture_; }
-  LayoutRectCache& layoutRects() noexcept { return buildOrchestrator_.layoutRects(); }
+  FocusController& focus() noexcept;
+  HoverController& hover() noexcept;
+  GestureTracker& gesture() noexcept;
+  LayoutRectCache& layoutRects() noexcept;
 
-  ActionRegistry& actionRegistryForBuild() noexcept { return buildOrchestrator_.actionRegistryForBuild(); }
+  ActionRegistry& actionRegistryForBuild() noexcept;
 
-  EventMap const& mainEventMap() const noexcept { return buildOrchestrator_.mainEventMap(); }
+  EventMap const& mainEventMap() const noexcept;
 
   bool isActionCurrentlyEnabled(std::string const& name) const;
 
-  void requestFocusInSubtree(ComponentKey const& subtreeKey) {
-    focus_.requestInSubtree(subtreeKey, mainEventMap());
-  }
+  void requestFocusInSubtree(ComponentKey const& subtreeKey);
 
   std::optional<Rect> layoutRectForCurrentComponent() const;
   std::optional<Rect> layoutRectForKey(ComponentKey const& key) const;
@@ -52,12 +55,12 @@ public:
   std::optional<Rect> layoutRectForLeafKeyPrefix(ComponentKey const& stableTargetKey) const;
   std::optional<ComponentKey> tapAnchorLeafKeySnapshot() const;
 
-  Rect buildSlotRect() const { return buildOrchestrator_.buildSlotRect(); }
+  Rect buildSlotRect() const;
 
-  bool shuttingDown() const noexcept { return shuttingDown_; }
+  bool shuttingDown() const noexcept;
 
   /// Alias for overlay teardown checks (same as `shuttingDown()`).
-  bool imploding() const noexcept { return shuttingDown_; }
+  bool imploding() const noexcept;
 
   void onOverlayPushed(OverlayEntry& entry);
   void onOverlayRemoved(OverlayEntry const& entry);

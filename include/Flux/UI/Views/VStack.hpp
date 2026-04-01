@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/UI/Views/VStack.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <Flux/Graphics/TextLayoutOptions.hpp>
 #include <Flux/UI/Element.hpp>
 

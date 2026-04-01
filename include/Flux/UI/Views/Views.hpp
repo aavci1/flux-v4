@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/UI/Views/Views.hpp
+///
+/// Part of the Flux public API.
+
+
 /// Built-in leaf views (no `Element` dependency).
 #include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/LaidOutText.hpp>

@@ -130,4 +130,31 @@ bool GestureTracker::dispatchTap(PressState const& released,
   return false;
 }
 
+void GestureTracker::clearPress() {
+  activePress_ = std::nullopt;
+}
+
+void GestureTracker::markCancelled() {
+  if (activePress_) {
+    activePress_->cancelled = true;
+  }
+}
+
+bool GestureTracker::hasActivePress() const noexcept {
+  return activePress_.has_value();
+}
+
+GestureTracker::PressState const* GestureTracker::press() const noexcept {
+  return activePress_ ? &*activePress_ : nullptr;
+}
+
+ComponentKey const& GestureTracker::activePressKey() const noexcept {
+  static ComponentKey const kEmpty{};
+  return activePress_ ? activePress_->stableTargetKey : kEmpty;
+}
+
+ComponentKey const& GestureTracker::pendingTapLeafKey() const noexcept {
+  return pendingTapLeafKey_;
+}
+
 } // namespace flux

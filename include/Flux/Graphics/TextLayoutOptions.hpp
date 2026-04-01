@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/Graphics/TextLayoutOptions.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <cstdint>
 
 namespace flux {

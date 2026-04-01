@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/Core/Cursor.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <cstdint>
 
 namespace flux {

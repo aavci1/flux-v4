@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/Graphics/AttributedString.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <Flux/Core/Types.hpp>
 #include <Flux/Graphics/Font.hpp>
 
@@ -21,10 +26,7 @@ struct AttributedString {
   std::string utf8;
   std::vector<AttributedRun> runs; // sorted by start, non-overlapping
 
-  static AttributedString plain(std::string_view text, Font const& font, Color const& color) {
-    return {std::string(text),
-            {{0, static_cast<std::uint32_t>(text.size()), font, color}}};
-  }
+  static AttributedString plain(std::string_view text, Font const& font, Color const& color);
 };
 
 } // namespace flux

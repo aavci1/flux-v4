@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/UI/GestureTracker.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <Flux/UI/ComponentKey.hpp>
 #include <Flux/UI/EventMap.hpp>
 #include <Flux/UI/Overlay.hpp>
@@ -33,28 +38,21 @@ public:
   void cancelPress(Point cancelPoint, std::vector<OverlayEntry const*> const& overlayEntries,
                    SceneGraph const& mainGraph, EventMap const& mainEventMap);
 
-  void clearPress() { activePress_ = std::nullopt; }
+  void clearPress();
 
-  void markCancelled() {
-    if (activePress_) {
-      activePress_->cancelled = true;
-    }
-  }
+  void markCancelled();
 
-  bool hasActivePress() const noexcept { return activePress_.has_value(); }
-  PressState const* press() const noexcept { return activePress_ ? &*activePress_ : nullptr; }
+  bool hasActivePress() const noexcept;
+  PressState const* press() const noexcept;
 
-  ComponentKey const& activePressKey() const noexcept {
-    static ComponentKey const kEmpty{};
-    return activePress_ ? activePress_->stableTargetKey : kEmpty;
-  }
+  ComponentKey const& activePressKey() const noexcept;
 
   bool pressMatchesStoreContext(StateStore const& store) const noexcept;
 
   bool dispatchTap(PressState const& released, std::vector<OverlayEntry const*> const& overlayEntries,
                    EventMap const& mainEventMap);
 
-  ComponentKey const& pendingTapLeafKey() const noexcept { return pendingTapLeafKey_; }
+  ComponentKey const& pendingTapLeafKey() const noexcept;
 
   std::pair<NodeId, EventHandlers const*> findPressHandlers(PressState const& ps,
                                                             std::vector<OverlayEntry const*> const& overlayEntries,

@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/UI/Views/Checkbox.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <Flux/Core/Types.hpp>
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/Hooks.hpp>
@@ -9,9 +14,12 @@
 
 namespace flux {
 
+/// Boolean box with optional indeterminate state and checkmark. Uses \ref FluxTheme checkbox tokens
+/// when style fields use sentinels.
 struct Checkbox {
   // ── Binding ──────────────────────────────────────────────────────────────
 
+  /// Checked state; bind with \c useState<bool>() or equivalent.
   State<bool> value { };
 
   // ── Indeterminate ────────────────────────────────────────────────────────
@@ -46,6 +54,7 @@ struct Checkbox {
 
   // ── Events ───────────────────────────────────────────────────────────────
 
+  /// Fires when the user toggles or activates via keyboard; update \c value and clear indeterminate as needed.
   std::function<void(bool)> onChange;
 
 

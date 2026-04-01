@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/Reactive/Detail/DependencyTracker.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <Flux/Reactive/Observer.hpp>
 
 #include <vector>

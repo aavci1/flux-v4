@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/Core/EventQueue.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <Flux/Core/Events.hpp>
 
 #include <any>

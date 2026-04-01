@@ -1,5 +1,9 @@
 #pragma once
 
+/// \file Flux/UI/Views/Rectangle.hpp
+///
+/// Filled and/or stroked rectangle primitive with optional interaction handlers.
+
 #include <Flux/Core/Cursor.hpp>
 #include <Flux/Core/Types.hpp>
 #include <Flux/Graphics/Styles.hpp>
@@ -9,10 +13,13 @@
 
 namespace flux {
 
+/// Axis-aligned rounded rect leaf. Local \c frame is relative to the layout cell; zero width/height
+/// expands to the proposed constraint box (see layout code).
 struct Rectangle {
 
   // ── Appearance ─────────────────────────────────────────────────────────────
 
+  /// Local geometry; use \c {0,0,0,0} to fill the assigned layout rect.
   Rect frame{};
   CornerRadius cornerRadius{};
   FillStyle fill = FillStyle::none();
@@ -35,6 +42,7 @@ struct Rectangle {
 
   // ── Events ─────────────────────────────────────────────────────────────────
 
+  /// Coordinates are in the rectangle’s local space (origin top-left of the laid-out bounds).
   std::function<void(KeyCode, Modifiers)> onKeyDown;
   std::function<void(KeyCode, Modifiers)> onKeyUp;
   std::function<void(std::string const&)> onTextInput;

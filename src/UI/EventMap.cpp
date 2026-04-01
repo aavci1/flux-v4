@@ -38,4 +38,8 @@ void EventMap::clear() {
   focusOrder_.clear();
 }
 
+std::vector<ComponentKey> const& EventMap::focusOrder() const {
+  return focusOrder_;
+}
+
 } // namespace flux

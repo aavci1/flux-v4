@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/UI/Views/Tooltip.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <Flux/UI/Views/PopoverPlacement.hpp>
 
 #include <string>

@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/Graphics/Styles.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <Flux/Core/Types.hpp>
 
 #include <variant>
@@ -49,27 +54,12 @@ struct FillStyle {
   std::variant<std::monostate, Color> data = std::monostate{};
   FillRule fillRule = FillRule::NonZero;
 
-  static FillStyle none() {
-    FillStyle s;
-    s.data = std::monostate{};
-    return s;
-  }
+  static FillStyle none();
+  static FillStyle solid(Color c);
 
-  static FillStyle solid(Color c) {
-    FillStyle s;
-    s.data = c;
-    return s;
-  }
+  bool isNone() const;
 
-  bool isNone() const { return std::holds_alternative<std::monostate>(data); }
-
-  bool solidColor(Color* out) const {
-    if (auto* c = std::get_if<Color>(&data)) {
-      *out = *c;
-      return true;
-    }
-    return false;
-  }
+  bool solidColor(Color* out) const;
 };
 
 /// Stroke for paths, lines, and stroked rects. Matches upstream `StrokeStyle` factory pattern.
@@ -82,29 +72,12 @@ struct StrokeStyle {
   StrokeJoin join = StrokeJoin::Miter;
   float miterLimit = 4.f;
 
-  static StrokeStyle none() {
-    StrokeStyle s;
-    s.type = Type::None;
-    return s;
-  }
+  static StrokeStyle none();
+  static StrokeStyle solid(Color c, float w = 1.f);
 
-  static StrokeStyle solid(Color c, float w = 1.f) {
-    StrokeStyle s;
-    s.type = Type::Solid;
-    s.color = c;
-    s.width = w;
-    return s;
-  }
+  bool isNone() const;
 
-  bool isNone() const { return type == Type::None || width <= 0.f; }
-
-  bool solidColor(Color* out) const {
-    if (type != Type::Solid) {
-      return false;
-    }
-    *out = color;
-    return true;
-  }
+  bool solidColor(Color* out) const;
 };
 
 } // namespace flux

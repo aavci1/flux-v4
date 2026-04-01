@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/UI/Views/PathShape.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <Flux/Graphics/Path.hpp>
 #include <Flux/Graphics/Styles.hpp>
 

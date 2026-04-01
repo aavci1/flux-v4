@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/UI/Views/ScaleAroundCenter.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <Flux/UI/Element.hpp>
 
 namespace flux {

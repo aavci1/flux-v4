@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/UI/Views/Button.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <Flux/Core/Types.hpp>
 #include <Flux/Graphics/Font.hpp>
 #include <Flux/UI/Theme.hpp>

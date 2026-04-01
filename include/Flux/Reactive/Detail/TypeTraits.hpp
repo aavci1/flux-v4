@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/Reactive/Detail/TypeTraits.hpp
+///
+/// Part of the Flux public API.
+
+
 namespace flux::detail {
 
 template<typename T>

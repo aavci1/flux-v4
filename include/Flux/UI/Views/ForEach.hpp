@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/UI/Views/ForEach.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <Flux/Graphics/TextLayoutOptions.hpp>
 #include <Flux/Scene/Nodes.hpp>
 #include <Flux/Scene/SceneGraph.hpp>

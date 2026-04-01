@@ -2,6 +2,35 @@
 
 namespace flux {
 
+Transition Transition::instant() {
+  Transition t{};
+  t.duration = 0.f;
+  return t;
+}
+
+Transition Transition::linear(float dur) {
+  Transition t{};
+  t.duration = dur;
+  t.easing = Easing::linear;
+  return t;
+}
+
+Transition Transition::ease(float dur) {
+  Transition t{};
+  t.duration = dur;
+  t.easing = Easing::easeInOut;
+  return t;
+}
+
+Transition Transition::spring(float k, float d, float dur) {
+  Transition t{};
+  t.duration = dur;
+  t.delay = 0.f;
+  t.easing = Easing::linear;
+  t.springFn = Easing::spring(k, d);
+  return t;
+}
+
 namespace {
 
 thread_local std::vector<Transition> gTransitionStack;

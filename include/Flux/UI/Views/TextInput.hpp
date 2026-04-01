@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/UI/Views/TextInput.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <Flux/Core/Cursor.hpp>
 #include <Flux/Core/Types.hpp>
 #include <Flux/Graphics/Font.hpp>

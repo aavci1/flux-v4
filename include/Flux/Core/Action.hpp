@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/Core/Action.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <Flux/Core/Shortcut.hpp>
 
 #include <functional>

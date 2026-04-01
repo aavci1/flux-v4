@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/UI/ActionRegistry.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <Flux/Core/Action.hpp>
 #include <Flux/Core/Types.hpp>
 #include <Flux/UI/ComponentKey.hpp>

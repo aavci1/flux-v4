@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/Reactive/AnimationClock.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <cstdint>
 #include <vector>
 

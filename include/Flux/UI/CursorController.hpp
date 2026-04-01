@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/UI/CursorController.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <Flux/Core/Cursor.hpp>
 #include <Flux/Core/Types.hpp>
 #include <Flux/UI/ComponentKey.hpp>
@@ -17,13 +22,13 @@ class GestureTracker;
 /// Owns cursor resolution for one window.
 class CursorController {
 public:
-  explicit CursorController(Window& window) : window_(window) {}
+  explicit CursorController(Window& window);
 
   void updateForPoint(Point windowPoint, GestureTracker const& gesture,
                       std::vector<OverlayEntry const*> const& overlayEntries, SceneGraph const& mainGraph,
                       EventMap const& mainEventMap);
 
-  void reset() { apply(Cursor::Arrow); }
+  void reset();
 
 private:
   void apply(Cursor kind);

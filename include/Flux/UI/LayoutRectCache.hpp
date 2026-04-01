@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/UI/LayoutRectCache.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <Flux/UI/BuildContext.hpp>
 #include <Flux/UI/ComponentKey.hpp>
 #include <Flux/Scene/SceneGraph.hpp>

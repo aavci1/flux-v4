@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/UI/Hooks.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <Flux/Reactive/Animated.hpp>
 #include <Flux/Reactive/Interpolatable.hpp>
 #include <Flux/Reactive/Signal.hpp>

@@ -116,4 +116,36 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
   window_.requestRedraw();
 }
 
+StateStore& BuildOrchestrator::stateStore() noexcept {
+  return stateStore_;
+}
+
+LayoutEngine& BuildOrchestrator::layoutEngine() noexcept {
+  return layoutEngine_;
+}
+
+LayoutRectCache& BuildOrchestrator::layoutRects() noexcept {
+  return layoutRects_;
+}
+
+LayoutRectCache const& BuildOrchestrator::layoutRects() const noexcept {
+  return layoutRects_;
+}
+
+EventMap const& BuildOrchestrator::mainEventMap() const noexcept {
+  return eventMap_;
+}
+
+ActionRegistry& BuildOrchestrator::actionRegistryForBuild() noexcept {
+  return actionRegistryBuild_;
+}
+
+ActionRegistry const& BuildOrchestrator::actionRegistryCommitted() const noexcept {
+  return actionRegistryCommitted_;
+}
+
+Rect BuildOrchestrator::buildSlotRect() const {
+  return layoutEngine_.childFrame();
+}
+
 } // namespace flux

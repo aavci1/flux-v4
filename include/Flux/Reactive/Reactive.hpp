@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/Reactive/Reactive.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <Flux/Reactive/Observer.hpp>
 #include <Flux/Reactive/Signal.hpp>
 #include <Flux/Reactive/Computed.hpp>

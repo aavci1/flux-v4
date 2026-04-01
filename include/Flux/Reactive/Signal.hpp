@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/Reactive/Signal.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <Flux/Reactive/Detail/ApplicationSignalBridge.hpp>
 #include <Flux/Reactive/Detail/DependencyTracker.hpp>
 #include <Flux/Reactive/Detail/Notify.hpp>

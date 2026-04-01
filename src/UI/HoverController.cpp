@@ -6,6 +6,14 @@
 
 namespace flux {
 
+ComponentKey const& HoverController::hoveredKey() const noexcept {
+  return hoveredKey_;
+}
+
+std::optional<OverlayId> HoverController::hoverInOverlay() const noexcept {
+  return hoverInOverlay_;
+}
+
 bool HoverController::isInSubtree(ComponentKey const& key, StateStore const& store) const noexcept {
   if (hoveredKey_.empty() || key.size() > hoveredKey_.size()) {
     return false;

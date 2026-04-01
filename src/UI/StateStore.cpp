@@ -68,4 +68,17 @@ LayoutConstraints const* StateStore::currentCompositeConstraints() const {
   return &compositeConstraintStack_.back();
 }
 
+ComponentKey const& StateStore::currentComponentKey() const {
+  assert(!activeStack_.empty());
+  return activeStack_.back();
+}
+
+void StateStore::setOverlayScope(std::optional<std::uint64_t> overlayIdValue) {
+  overlayScope_ = overlayIdValue;
+}
+
+std::optional<std::uint64_t> StateStore::overlayScope() const {
+  return overlayScope_;
+}
+
 } // namespace flux

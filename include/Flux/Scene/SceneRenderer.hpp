@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/Scene/SceneRenderer.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <Flux/Core/Types.hpp>
 #include <Flux/Scene/NodeId.hpp>
 

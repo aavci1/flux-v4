@@ -58,6 +58,54 @@ char const* inputKindName(InputEvent::Kind k) {
 
 thread_local Runtime* Runtime::sCurrent = nullptr;
 
+Window& Runtime::window() noexcept {
+  return window_;
+}
+
+Runtime* Runtime::current() noexcept {
+  return sCurrent;
+}
+
+FocusController& Runtime::focus() noexcept {
+  return focus_;
+}
+
+HoverController& Runtime::hover() noexcept {
+  return hover_;
+}
+
+GestureTracker& Runtime::gesture() noexcept {
+  return gesture_;
+}
+
+LayoutRectCache& Runtime::layoutRects() noexcept {
+  return buildOrchestrator_.layoutRects();
+}
+
+ActionRegistry& Runtime::actionRegistryForBuild() noexcept {
+  return buildOrchestrator_.actionRegistryForBuild();
+}
+
+EventMap const& Runtime::mainEventMap() const noexcept {
+  return buildOrchestrator_.mainEventMap();
+}
+
+void Runtime::requestFocusInSubtree(ComponentKey const& subtreeKey) {
+  focus_.requestInSubtree(subtreeKey, mainEventMap());
+}
+
+Rect Runtime::buildSlotRect() const {
+  return buildOrchestrator_.buildSlotRect();
+}
+
+bool Runtime::shuttingDown() const noexcept {
+  return shuttingDown_;
+}
+
+bool Runtime::imploding() const noexcept {
+  return shuttingDown_;
+}
+
 Runtime::Runtime(Window& window)
     : window_(window)
     , cursor_(window)

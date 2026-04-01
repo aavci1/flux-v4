@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/Core/Shortcut.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <Flux/Core/KeyCodes.hpp>
 #include <Flux/Core/Types.hpp>
 

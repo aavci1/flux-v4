@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/UI/Leaves.hpp
+///
+/// Part of the Flux public API.
+
+
 /// Barrel for leaf view types. Prefer including `<Flux/UI/Views/...>` directly.
 #include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/LaidOutText.hpp>

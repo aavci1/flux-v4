@@ -6,6 +6,12 @@
 
 namespace flux {
 
+CursorController::CursorController(Window& window) : window_(window) {}
+
+void CursorController::reset() {
+  apply(Cursor::Arrow);
+}
+
 void CursorController::apply(Cursor kind) {
   if (kind == current_) {
     return;

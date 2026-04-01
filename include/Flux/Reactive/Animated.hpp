@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/Reactive/Animated.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <Flux/Reactive/Detail/DependencyTracker.hpp>
 #include <Flux/Reactive/Detail/AnimatedRebuild.hpp>
 #include <Flux/Reactive/Detail/Notify.hpp>

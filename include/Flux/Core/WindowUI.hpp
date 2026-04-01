@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/Core/WindowUI.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <Flux/Core/Window.hpp>
 #include <Flux/Detail/RootHolder.hpp>
 

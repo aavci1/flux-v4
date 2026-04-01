@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/UI/Overlay.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <Flux/Core/Types.hpp>
 #include <Flux/Scene/SceneGraph.hpp>
 #include <Flux/UI/ComponentKey.hpp>
@@ -23,7 +28,7 @@ class Runtime;
 
 struct OverlayId {
   std::uint64_t value = 0;
-  bool isValid() const noexcept { return value != 0; }
+  bool isValid() const noexcept;
   bool operator==(OverlayId const&) const = default;
 };
 
@@ -95,11 +100,11 @@ public:
   /// the window so hooks must not re-enter `removeOverlay`).
   void clear(Runtime* runtime, bool invokeDismissCallbacks = true);
 
-  bool hasOverlays() const noexcept { return !overlays_.empty(); }
+  bool hasOverlays() const noexcept;
 
   OverlayEntry const* top() const;
 
-  std::vector<std::unique_ptr<OverlayEntry>> const& entries() const { return overlays_; }
+  std::vector<std::unique_ptr<OverlayEntry>> const& entries() const;
 
 private:
   Rect resolveFrame(Size windowSize, OverlayConfig const& config, Rect contentBounds) const;

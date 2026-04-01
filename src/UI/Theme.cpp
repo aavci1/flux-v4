@@ -4,6 +4,13 @@
 
 namespace flux {
 
+Font resolveFont(Font const& override, Font const& themeValue) {
+  if (override.size < 0.f) {
+    return themeValue;
+  }
+  return override;
+}
+
 FluxTheme FluxTheme::light() { return FluxTheme{}; }
 
 FluxTheme FluxTheme::dark() {

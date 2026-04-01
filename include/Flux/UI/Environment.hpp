@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/UI/Environment.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <any>
 #include <typeinfo>
 #include <typeindex>

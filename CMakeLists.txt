@@ -88,7 +88,9 @@ add_custom_target(flux_shaders DEPENDS ${FLUX_METALLIB_EMBED_H})
 add_library(flux STATIC
   src/Core/Application.mm
   src/Core/EventQueue.cpp
+  src/Core/Utf8.cpp
   src/Reactive/Signal.cpp
+  src/Reactive/Observer.cpp
   src/Reactive/Computed.cpp
   src/Reactive/Easing.cpp
   src/Reactive/Transition.cpp
@@ -112,6 +114,10 @@ add_library(flux STATIC
   src/UI/Layout/LayoutOffsetView.cpp
   src/UI/Layout/LayoutScrollView.cpp
   src/UI/LayoutRectCache.cpp
+  src/UI/MeasureCache.cpp
+  src/UI/ComponentKey.cpp
+  src/UI/ComponentKeyUtil.cpp
+  src/UI/Detail/LeafBounds.cpp
   src/UI/HitTestUtil.cpp
   src/UI/FocusController.cpp
   src/UI/HoverController.cpp
@@ -132,6 +138,8 @@ add_library(flux STATIC
   src/UI/Views/Toggle.cpp
   src/UI/Views/Slider.cpp
   src/UI/Views/Checkbox.cpp
+  src/UI/Views/ScrollView.cpp
+  src/UI/Views/Picker.cpp
   src/UI/Views/Icon.cpp
   src/UI/Views/Alert.cpp
   src/UI/Views/Popover.cpp
@@ -144,6 +152,9 @@ add_library(flux STATIC
   src/Scene/SceneRenderer.cpp
   src/Scene/HitTester.cpp
   src/Scene/SceneGraphDump.cpp
+  src/Graphics/Styles.cpp
+  src/Graphics/Font.cpp
+  src/Graphics/AttributedString.cpp
   src/Graphics/Canvas.cpp
   src/Graphics/Metal/MetalFrameRecorder.mm
   src/Graphics/TextSystem.cpp

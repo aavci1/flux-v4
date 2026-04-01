@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/UI/BuildContext.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <Flux/Scene/NodeId.hpp>
 #include <Flux/UI/ComponentKey.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
@@ -26,7 +31,7 @@ public:
   TextSystem& textSystem();
   LayoutEngine& layoutEngine();
   /// Non-null during main and overlay rebuilds; holds leaf measure memoization for the current pass.
-  MeasureCache* measureCache() const { return measureCache_; }
+  MeasureCache* measureCache() const;
 
   void pushLayer(NodeId layerId);
   void popLayer();
@@ -72,9 +77,7 @@ public:
   /// First `addLayer` after `beginCompositeBodySubtree` records the subtree root for `useLayoutRect`.
   void registerCompositeSubtreeRootIfPending(NodeId layerId);
 
-  std::unordered_map<ComponentKey, NodeId, ComponentKeyHash> const& subtreeRootLayers() const {
-    return subtreeRootLayers_;
-  }
+  std::unordered_map<ComponentKey, NodeId, ComponentKeyHash> const& subtreeRootLayers() const;
 
 private:
   friend class Runtime;

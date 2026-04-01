@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/Scene/SceneGraph.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <Flux/Scene/NodeId.hpp>
 #include <Flux/Scene/NodeStore.hpp>
 #include <Flux/Scene/Nodes.hpp>

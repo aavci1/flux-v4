@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/UI/Layout.hpp
+///
+/// Part of the Flux public API.
+
+
 /// Barrel for stack layout views. Prefer including `<Flux/UI/Views/...>` directly.
 #include <Flux/UI/Views/VStack.hpp>
 #include <Flux/UI/Views/HStack.hpp>

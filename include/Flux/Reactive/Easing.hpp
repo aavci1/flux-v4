@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/Reactive/Easing.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <functional>
 
 namespace flux {

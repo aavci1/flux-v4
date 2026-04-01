@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/Graphics/Image.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <Flux/Core/Types.hpp>
 
 #include <memory>

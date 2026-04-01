@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/UI/Views/Alert.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <Flux/UI/Views/Button.hpp>
 #include <Flux/UI/Hooks.hpp>
 

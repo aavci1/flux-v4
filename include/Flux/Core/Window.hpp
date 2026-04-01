@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/Core/Window.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <Flux/Core/Action.hpp>
 
 #include <memory>

@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/UI/StateStore.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <Flux/UI/ComponentKey.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 
@@ -73,14 +78,11 @@ public:
   S& claimSlot(Args&&... args);
 
   /// Key of the composite component whose `body()` is executing (top of the active stack).
-  ComponentKey const& currentComponentKey() const {
-    assert(!activeStack_.empty());
-    return activeStack_.back();
-  }
+  ComponentKey const& currentComponentKey() const;
 
   /// When building an overlay subtree, set to that overlay's id value (for `useFocus` / `useHover`).
-  void setOverlayScope(std::optional<std::uint64_t> overlayIdValue) { overlayScope_ = overlayIdValue; }
-  std::optional<std::uint64_t> overlayScope() const { return overlayScope_; }
+  void setOverlayScope(std::optional<std::uint64_t> overlayIdValue);
+  std::optional<std::uint64_t> overlayScope() const;
 
   /// Thread-local pointer to the active StateStore during a build pass.
   /// Set by Runtime::rebuild; accessed by useState/useAnimated free functions.

@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/UI/BuildOrchestrator.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <Flux/Detail/RootHolder.hpp>
 #include <Flux/Reactive/Observer.hpp>
 #include <Flux/UI/ActionRegistry.hpp>
@@ -36,15 +41,15 @@ public:
   /// `runtime` is passed in for `OverlayManager::rebuild` only (not stored — avoids a header cycle).
   void rebuild(std::optional<Size> sizeOverride, Runtime& runtime);
 
-  StateStore& stateStore() noexcept { return stateStore_; }
-  LayoutEngine& layoutEngine() noexcept { return layoutEngine_; }
-  LayoutRectCache& layoutRects() noexcept { return layoutRects_; }
-  LayoutRectCache const& layoutRects() const noexcept { return layoutRects_; }
-  EventMap const& mainEventMap() const noexcept { return eventMap_; }
-  ActionRegistry& actionRegistryForBuild() noexcept { return actionRegistryBuild_; }
-  ActionRegistry const& actionRegistryCommitted() const noexcept { return actionRegistryCommitted_; }
+  StateStore& stateStore() noexcept;
+  LayoutEngine& layoutEngine() noexcept;
+  LayoutRectCache& layoutRects() noexcept;
+  LayoutRectCache const& layoutRects() const noexcept;
+  EventMap const& mainEventMap() const noexcept;
+  ActionRegistry& actionRegistryForBuild() noexcept;
+  ActionRegistry const& actionRegistryCommitted() const noexcept;
 
-  Rect buildSlotRect() const { return layoutEngine_.childFrame(); }
+  Rect buildSlotRect() const;
 
 private:
   Window& window_;

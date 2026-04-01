@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/UI/HoverController.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <Flux/UI/ComponentKey.hpp>
 #include <Flux/UI/EventMap.hpp>
 #include <Flux/UI/Overlay.hpp>
@@ -18,8 +23,8 @@ class HoverController {
 public:
   bool isInSubtree(ComponentKey const& key, StateStore const& store) const noexcept;
 
-  ComponentKey const& hoveredKey() const noexcept { return hoveredKey_; }
-  std::optional<OverlayId> hoverInOverlay() const noexcept { return hoverInOverlay_; }
+  ComponentKey const& hoveredKey() const noexcept;
+  std::optional<OverlayId> hoverInOverlay() const noexcept;
 
   void set(ComponentKey const& key, std::optional<OverlayId> overlayScope);
   void clear();

@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/Core/Application.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <chrono>
 #include <cstdint>
 #include <functional>

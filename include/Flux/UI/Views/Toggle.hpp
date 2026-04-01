@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/UI/Views/Toggle.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <Flux/Core/Types.hpp>
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/Hooks.hpp>
@@ -9,7 +14,10 @@
 
 namespace flux {
 
+/// On/off switch control (track + thumb). Binds to \ref value, supports keyboard (Space/Return),
+/// pointer, focus ring, and theme-driven motion when \ref FluxTheme::reducedMotion is false.
 struct Toggle {
+  /// Visual tokens; any field may use \c kFromTheme / \c kFloatFromTheme to inherit from \ref FluxTheme.
   struct Style {
     float trackWidth = kFloatFromTheme;
     float trackHeight = kFloatFromTheme;
@@ -25,20 +33,24 @@ struct Toggle {
 
   // ── State ──────────────────────────────────────────────────────────────────
 
+  /// Current on/off state; typically from \c useState<bool>() in a parent or owned by this subtree.
   State<bool> value { };
 
   // ── Properties ─────────────────────────────────────────────────────────────
 
+  /// When true, ignores input and uses disabled styling.
   bool disabled { false };
   Style style { };
 
   // ── Events ─────────────────────────────────────────────────────────────────
 
+  /// Invoked after the toggle changes \c value (same as mutating \c value from handlers).
   std::function<void(bool)> onChange;
 
 
   // ── Component protocol ─────────────────────────────────────────────────────
 
+  /// Builds the animated track/thumb tree. Call only from a composite \c body().
   Element body() const;
 };
 

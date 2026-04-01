@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/Reactive/Detail/Notify.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <cstdint>
 #include <functional>
 #include <utility>

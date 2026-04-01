@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/UI/FocusController.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <Flux/Core/Types.hpp>
 #include <Flux/UI/ComponentKey.hpp>
 #include <Flux/UI/EventMap.hpp>
@@ -22,10 +27,10 @@ public:
   /// Called by `useFocus()` / `useKeyboardFocus()` during `body()`.
   bool isInSubtree(ComponentKey const& key, StateStore const& store) const noexcept;
 
-  bool hasKeyboardOrigin() const noexcept { return lastInputKind_ == FocusInputKind::Keyboard; }
+  bool hasKeyboardOrigin() const noexcept;
 
-  ComponentKey const& focusedKey() const noexcept { return focusedKey_; }
-  std::optional<OverlayId> focusInOverlay() const noexcept { return focusInOverlay_; }
+  ComponentKey const& focusedKey() const noexcept;
+  std::optional<OverlayId> focusInOverlay() const noexcept;
 
   void set(ComponentKey const& key, std::optional<OverlayId> overlayScope, FocusInputKind kind);
   void clear();

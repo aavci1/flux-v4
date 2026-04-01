@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/Scene/SceneGraphDump.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <Flux/Scene/SceneGraph.hpp>
 
 #include <iosfwd>

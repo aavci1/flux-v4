@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/Core/Types.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <algorithm>
 #include <cmath>
 #include <cstdint>

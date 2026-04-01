@@ -16,6 +16,18 @@
 
 namespace flux {
 
+bool OverlayId::isValid() const noexcept {
+  return value != 0;
+}
+
+bool OverlayManager::hasOverlays() const noexcept {
+  return !overlays_.empty();
+}
+
+std::vector<std::unique_ptr<OverlayEntry>> const& OverlayManager::entries() const {
+  return overlays_;
+}
+
 OverlayEntry const* OverlayManager::top() const {
   if (overlays_.empty()) {
     return nullptr;

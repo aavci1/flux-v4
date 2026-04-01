@@ -1,5 +1,16 @@
 #pragma once
 
+/// \file Flux/UI/Views/Picker.hpp
+///
+/// Part of the Flux public API.
+
+
+/// Dropdown / combo-box style picker. \c Picker<T> is a template (options carry values of type \c T);
+/// its \c body() and menu row UI are implemented in this header so instantiations see the full
+/// definition. Only \ref pickerMenuRowCorners is compiled in \c Picker.cpp.
+///
+/// \c T must be equality-comparable (\c ==) so the control can match the current \ref value to labels.
+
 #include <Flux/Core/Cursor.hpp>
 #include <Flux/Core/KeyCodes.hpp>
 #include <Flux/Core/Types.hpp>
@@ -31,33 +42,26 @@
 namespace flux {
 
 /// Background corners for a menu row so fills stay inside the popover’s rounded outline.
-inline CornerRadius pickerMenuRowCorners(std::size_t rowIndex, std::size_t rowCount, float r) {
-  if (rowCount == 0 || r <= 0.f) {
-    return CornerRadius{};
-  }
-  if (rowCount == 1) {
-    return CornerRadius{r};
-  }
-  if (rowIndex == 0) {
-    return CornerRadius{r, r, 0.f, 0.f};
-  }
-  if (rowIndex == rowCount - 1) {
-    return CornerRadius{0.f, 0.f, r, r};
-  }
-  return CornerRadius{};
-}
+CornerRadius pickerMenuRowCorners(std::size_t rowIndex, std::size_t rowCount, float r);
 
+/// One selectable entry in a \ref Picker list.
 template<typename T>
 struct PickerOption {
   T value{};
   std::string label;
 };
 
+/// One row in the dropdown menu (built by \ref detail::makePickerDropdownPopover).
 template<typename T>
 struct PickerRow {
+  // ── Row data ─────────────────────────────────────────────────────────────
+
   PickerOption<T> option{};
   bool selected = false;
   bool keyboardActive = false;
+
+  // ── Layout (aligned with trigger) ───────────────────────────────────────
+
   /// Matches \ref Picker::paddingH so menu labels align with the trigger text.
   float rowPaddingH = 12.f;
   /// Matches the picker trigger row height (\ref Picker resolved height).
@@ -71,7 +75,9 @@ struct PickerRow {
   Color checkmarkColor{};
   std::function<void()> onSelect;
 
-  auto body() const {
+  // ── Component protocol ───────────────────────────────────────────────────
+
+  Element body() const {
     bool const hovered = useHover();
     FluxTheme const& theme = useEnvironment<FluxTheme>();
     float const iconSz = resolveFloat(kFloatFromTheme, theme.typeBody.size);
@@ -232,13 +238,16 @@ Popover makePickerDropdownPopover(std::vector<PickerOption<T>> opts, std::functi
 
 } // namespace detail
 
+/// Field-style dropdown: tap opens a \ref Popover menu; keyboard navigates rows when open.
 template<typename T>
   requires std::equality_comparable<T>
 struct Picker {
   // ── Content ──────────────────────────────────────────────────────────────
 
+  /// Bound selection; must stay in sync with \ref options entries.
   State<T> value{};
   std::vector<PickerOption<T>> options;
+  /// Shown when no option matches \c *value or the field is empty.
   std::string placeholder = "Select…";
 
   // ── Appearance ───────────────────────────────────────────────────────────
@@ -277,8 +286,10 @@ struct Picker {
   // ── Behaviour ────────────────────────────────────────────────────────────
 
   bool disabled = false;
+  /// Fired after the user picks a value (and after \c value is updated).
   std::function<void(T const&)> onChange;
 
+  /// Builds the trigger row, popover presentation, and input routing. Call only from a composite \c body().
   Element body() const {
     FluxTheme const& theme = useEnvironment<FluxTheme>();
     float const padHResolved = resolveFloat(paddingH, theme.paddingFieldH);

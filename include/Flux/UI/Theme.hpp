@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/UI/Theme.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <Flux/Core/Types.hpp>
 #include <Flux/Graphics/Font.hpp>
 
@@ -9,12 +14,7 @@ namespace flux {
 
 inline constexpr Font kFontFromTheme{.size = -1.f};
 
-inline Font resolveFont(Font const& override, Font const& themeValue) {
-  if (override.size < 0.f) {
-    return themeValue;
-  }
-  return override;
-}
+Font resolveFont(Font const& override, Font const& themeValue);
 
 /// Raw colour palette — 50 named swatches across 5 hues × 10 steps.
 /// Used to build FluxTheme presets; not consumed by components directly.

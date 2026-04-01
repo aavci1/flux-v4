@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/Graphics/Font.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <string>
 
 namespace flux {
@@ -26,16 +31,14 @@ struct TextStyle {
   TextStyle() = default;
   constexpr TextStyle(float sz, float wt, float lh = 0.f) : size(sz), weight(wt), lineHeight(lh) {}
 
-  Font toFont() const { return Font{family, size, weight, italic}; }
+  Font toFont() const;
 };
 
 /// Sentinel: inherit `TextStyle` from `FluxTheme`.
 inline constexpr TextStyle kStyleFromTheme{-1.f, 0.f};
 
-inline bool isFromTheme(TextStyle const& s) { return s.size < 0.f; }
+bool isFromTheme(TextStyle const& s);
 
-inline TextStyle resolveStyle(TextStyle const& override, TextStyle const& themeValue) {
-  return isFromTheme(override) ? themeValue : override;
-}
+TextStyle resolveStyle(TextStyle const& override, TextStyle const& themeValue);
 
 } // namespace flux

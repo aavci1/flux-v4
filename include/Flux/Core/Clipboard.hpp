@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/Core/Clipboard.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <optional>
 #include <string>
 

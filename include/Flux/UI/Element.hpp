@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/UI/Element.hpp
+///
+/// Type-erased UI component wrapper: holds any view or composite, dispatches \c build / \c measure,
+/// optional flex overrides, and per-subtree environment values.
+
 #include <Flux/UI/BuildContext.hpp>
 #include <Flux/UI/Component.hpp>
 #include <Flux/UI/Detail/LeafBounds.hpp>
@@ -33,10 +38,7 @@ namespace detail {
 
 /// Monotonic id for \ref Element::measureId_; never reused (unlike heap addresses after temp
 /// \ref Element destruction — see measure memoization key).
-inline std::uint64_t nextElementMeasureId() {
-  static std::uint64_t n = 1;
-  return n++;
-}
+std::uint64_t nextElementMeasureId();
 
 Popover* popoverOverlayStateIf(Element& el);
 
@@ -68,8 +70,11 @@ float minMainSizeOf(C const& v) {
 
 class TextSystem;
 
+/// Erased handle to a component model (\ref CompositeComponent with \c body(), or a render leaf).
+/// Copying allocates a new \c measureId_ for memoization correctness.
 class Element {
 public:
+  /// Wraps a concrete component type; \c C must satisfy \ref CompositeComponent or \ref RenderComponent.
   template<typename C>
   Element(C component);
 
@@ -511,45 +516,6 @@ template<typename C>
 Element::Element(C component)
     : impl_(std::make_unique<Model<C>>(std::move(component)))
     , measureId_(detail::nextElementMeasureId()) {}
-
-inline Element::Element(Element const& other)
-    : impl_(other.impl_ ? other.impl_->clone() : nullptr)
-    , flexGrowOverride_(other.flexGrowOverride_)
-    , flexShrinkOverride_(other.flexShrinkOverride_)
-    , minMainSizeOverride_(other.minMainSizeOverride_)
-    , envLayer_(other.envLayer_)
-    , measureId_(detail::nextElementMeasureId()) {}
-
-inline Element& Element::operator=(Element const& other) {
-  if (this != &other) {
-    impl_ = other.impl_ ? other.impl_->clone() : nullptr;
-    flexGrowOverride_ = other.flexGrowOverride_;
-    flexShrinkOverride_ = other.flexShrinkOverride_;
-    minMainSizeOverride_ = other.minMainSizeOverride_;
-    envLayer_ = other.envLayer_;
-    measureId_ = detail::nextElementMeasureId();
-  }
-  return *this;
-}
-
-inline float Element::flexGrow() const {
-  return flexGrowOverride_.value_or(impl_->flexGrow());
-}
-
-inline float Element::flexShrink() const {
-  return flexShrinkOverride_.value_or(impl_->flexShrink());
-}
-
-inline float Element::minMainSize() const {
-  return minMainSizeOverride_.value_or(impl_->minMainSize());
-}
-
-inline Element Element::withFlex(float grow, float shrink, float minMain) && {
-  flexGrowOverride_ = grow;
-  flexShrinkOverride_ = shrink;
-  minMainSizeOverride_ = minMain;
-  return std::move(*this);
-}
 
 } // namespace flux
 

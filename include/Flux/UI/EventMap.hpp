@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/UI/EventMap.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <Flux/Core/Cursor.hpp>
 #include <Flux/Core/Types.hpp>
 #include <Flux/Scene/NodeId.hpp>
@@ -51,7 +56,7 @@ public:
   void clear();
 
   /// Stable keys of all focusable nodes, in build order.
-  std::vector<ComponentKey> const& focusOrder() const { return focusOrder_; }
+  std::vector<ComponentKey> const& focusOrder() const;
 
 private:
   std::unordered_map<NodeId, EventHandlers, NodeIdHash> map_;

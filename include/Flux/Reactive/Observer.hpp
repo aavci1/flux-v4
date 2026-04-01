@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/Reactive/Observer.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <cstdint>
 #include <functional>
 
@@ -8,7 +13,7 @@ namespace flux {
 /// Opaque handle returned by `Observable::observe`. Pass to `Observable::unobserve`.
 struct ObserverHandle {
   std::uint64_t id = 0;
-  bool isValid() const { return id != 0; }
+  bool isValid() const;
 };
 
 /// Interface implemented by Signal<T>, Computed<T>, and Animated<T>.

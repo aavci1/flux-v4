@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/Scene/NodeId.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <cstdint>
 
 namespace flux {

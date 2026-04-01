@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/UI/Views/Icon.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <Flux/Core/Types.hpp>
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/IconName.hpp>

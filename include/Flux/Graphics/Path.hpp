@@ -1,5 +1,10 @@
 #pragma once
 
+/// \file Flux/Graphics/Path.hpp
+///
+/// Part of the Flux public API.
+
+
 #include <Flux/Core/Types.hpp>
 #include <cstdint>
 #include <vector>
@@ -73,12 +78,9 @@ public:
     uint8_t dataCount;
   };
 
-  size_t commandCount() const { return commands_.size(); }
+  size_t commandCount() const;
 
-  CommandView command(size_t idx) const {
-    const auto& c = commands_[idx];
-    return {c.type, c.winding, data_.data() + c.dataOffset, c.dataCount};
-  }
+  CommandView command(size_t idx) const;
 
 private:
   std::vector<Command> commands_;

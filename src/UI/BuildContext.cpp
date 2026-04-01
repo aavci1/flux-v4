@@ -1,6 +1,7 @@
 #include <Flux/UI/BuildContext.hpp>
 
 #include <cassert>
+#include <unordered_map>
 
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Scene/SceneGraph.hpp>
@@ -119,6 +120,14 @@ void BuildContext::registerCompositeSubtreeRootIfPending(NodeId layerId) {
   }
   pendingCompositeSubtreeRoot_ = false;
   subtreeRootLayers_[pendingCompositeSubtreeKey_] = layerId;
+}
+
+MeasureCache* BuildContext::measureCache() const {
+  return measureCache_;
+}
+
+std::unordered_map<ComponentKey, NodeId, ComponentKeyHash> const& BuildContext::subtreeRootLayers() const {
+  return subtreeRootLayers_;
 }
 
 } // namespace flux

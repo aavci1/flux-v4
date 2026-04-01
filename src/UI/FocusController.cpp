@@ -8,6 +8,18 @@
 
 namespace flux {
 
+bool FocusController::hasKeyboardOrigin() const noexcept {
+  return lastInputKind_ == FocusInputKind::Keyboard;
+}
+
+ComponentKey const& FocusController::focusedKey() const noexcept {
+  return focusedKey_;
+}
+
+std::optional<OverlayId> FocusController::focusInOverlay() const noexcept {
+  return focusInOverlay_;
+}
+
 bool FocusController::isInSubtree(ComponentKey const& key, StateStore const& store) const noexcept {
   if (focusedKey_.empty() || key.size() > focusedKey_.size()) {
     return false;

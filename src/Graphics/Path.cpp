@@ -275,4 +275,13 @@ uint64_t Path::contentHash() const {
   return h;
 }
 
+size_t Path::commandCount() const {
+  return commands_.size();
+}
+
+Path::CommandView Path::command(size_t idx) const {
+  const auto& c = commands_[idx];
+  return {c.type, c.winding, data_.data() + c.dataOffset, c.dataCount};
+}
+
 } // namespace flux
