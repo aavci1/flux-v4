@@ -61,7 +61,7 @@ Element Slider::body() const {
 
   std::optional<Rect> const layoutRect = useLayoutRect();
   float const componentWidth = layoutRect ? layoutRect->width : 200.f;
-  float const usableWidth = std::max(componentWidth - thSz, 1.f);
+  float const usableWidth = std::max(componentWidth - thSz * 1.15f, 1.f);
 
   float const fraction = fractionForValue(*value, min, max);
   float const thumbX = fraction * usableWidth;
@@ -143,12 +143,12 @@ Element Slider::body() const {
   float const trackY = (compH - trkH) * 0.5f;
   float const thumbY = (compH - thumbDia) * 0.5f;
 
-  return Element{ZStack{
+  return ZStack {
       .hAlign = HorizontalAlignment::Leading,
       .vAlign = VerticalAlignment::Top,
       .children = {
           // Full-height invisible hit target + intrinsic height (pointer + keyboard).
-          Rectangle{
+          Rectangle {
               .frame = {0.f, 0.f, componentWidth, compH},
               .cornerRadius = {},
               .fill = FillStyle::none(),
@@ -156,31 +156,29 @@ Element Slider::body() const {
               .flexGrow = flexGrow,
               .flexShrink = flexShrink,
               .minSize = minSize,
-              .onPointerDown =
-                  isDisabled ? nullptr : std::function<void(Point)>{handleDown},
+              .onPointerDown = isDisabled ? nullptr : std::function<void(Point)>{handleDown},
               .onPointerUp = isDisabled ? nullptr : std::function<void(Point)>{handleUp},
-              .onPointerMove =
-                  isDisabled ? nullptr : std::function<void(Point)>{handleMove},
+              .onPointerMove = isDisabled ? nullptr : std::function<void(Point)>{handleMove},
               .focusable = !isDisabled,
-              .onKeyDown    = isDisabled ? nullptr : std::function<void(KeyCode, Modifiers)>{handleKey},
-              .cursor       = isDisabled ? Cursor::Inherit : Cursor::Hand,
+              .onKeyDown = isDisabled ? nullptr : std::function<void(KeyCode, Modifiers)>{handleKey},
+              .cursor = isDisabled ? Cursor::Inherit : Cursor::Hand,
           },
           // Inactive track (visual only; events hit the layer below).
-          Rectangle{
+          Rectangle {
               .frame = {0.f, trackY, componentWidth, trkH},
               .cornerRadius = trackCr,
               .fill = FillStyle::solid(isDisabled ? theme.colorSurfaceDisabled : inactiveC),
               .stroke = StrokeStyle::none(),
           },
           // Active track (filled portion).
-          Rectangle{
+          Rectangle {
               .frame = {0.f, trackY, std::max(filledWidth, trkH), trkH},
               .cornerRadius = trackCr,
               .fill = FillStyle::solid(isDisabled ? theme.colorTextDisabled : activeC),
               .stroke = StrokeStyle::none(),
           },
           // Thumb.
-          Rectangle{
+          Rectangle {
               .frame = {thumbX + thumbOffset, thumbY, thumbDia, thumbDia},
               .cornerRadius = thumbCr,
               .fill = FillStyle::solid(isDisabled ? theme.colorSurfaceDisabled : thumbC),
@@ -189,7 +187,7 @@ Element Slider::body() const {
               .cursorPassthrough = !isDisabled,
           },
       },
-  }};
+  };
 }
 
 } // namespace flux
