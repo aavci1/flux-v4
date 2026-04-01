@@ -77,6 +77,7 @@ struct ScrollView {
                     .fill = FillStyle::none(),
                     .stroke = StrokeStyle::none(),
                     .flexGrow = 1.f,
+                    .cursorPassthrough = true,
                     .onPointerDown =
                         [dragging, offset, downPoint](Point p) {
                           dragging = true;
@@ -110,7 +111,6 @@ struct ScrollView {
                               clampScrollOffset(ax, next, effectiveViewport, *content);
                           offset = clamped;
                         },
-                    .cursorPassthrough = true,
                 },
             },
     };

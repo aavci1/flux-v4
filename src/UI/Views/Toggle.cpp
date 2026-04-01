@@ -120,10 +120,10 @@ Element Toggle::body() const {
           .cornerRadius = CornerRadius {trackHeight * 0.5f},
           .fill = FillStyle::solid(*trackFillAnim),
           .stroke = StrokeStyle::solid(focused ? focusColor : borderColor, borderWidth),
-          .onTap = isDisabled ? nullptr : std::function<void()>{handleToggle},
+          .cursor = isDisabled ? Cursor::Inherit : Cursor::Hand,
           .focusable = !isDisabled,
           .onKeyDown = isDisabled ? nullptr : std::function<void(KeyCode, Modifiers)>{handleKey},
-          .cursor = isDisabled ? Cursor::Inherit : Cursor::Hand,
+          .onTap = isDisabled ? nullptr : std::function<void()>{handleToggle},
         },
         Rectangle {
           .frame = {*thumbXAnim, thumbInset, thumbSize, thumbSize},

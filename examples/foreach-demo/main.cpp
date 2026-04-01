@@ -68,8 +68,8 @@ struct ForEachDemo {
                                                                   .frame = {0.f, 0.f, 120.f, 36.f},
                                                                   .cornerRadius = CornerRadius(8.f),
                                                                   .fill = FillStyle::solid(Color::hex(0x3A7BD5)),
-                                                                  .onTap = [count] { count = *count + 1; },
                                                                   .cursor = Cursor::Hand,
+                                                                  .onTap = [count] { count = *count + 1; },
                                                               },
                                                               Text{.text = "+ Row",
                                                                    .font = {.size = 14.f, .weight = 600.f},
@@ -80,12 +80,12 @@ struct ForEachDemo {
                                                                   .frame = {0.f, 0.f, 120.f, 36.f},
                                                                   .cornerRadius = CornerRadius(8.f),
                                                                   .fill = FillStyle::solid(Color::hex(0xD05A2B)),
+                                                                  .cursor = Cursor::Hand,
                                                                   .onTap = [count] {
                                                                     if (*count > 0) {
                                                                       count = *count - 1;
                                                                     }
                                                                   },
-                                                                  .cursor = Cursor::Hand,
                                                               },
                                                               Text{.text = "- Row",
                                                                    .font = {.size = 14.f, .weight = 600.f},

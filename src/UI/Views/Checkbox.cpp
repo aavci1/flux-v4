@@ -120,10 +120,10 @@ Element Checkbox::body() const {
               .flexGrow = flexGrow,
               .flexShrink = flexShrink,
               .minSize = minSize,
-              .onTap = isDisabled ? nullptr : std::function<void()> {handleToggle},
+              .cursor = isDisabled ? Cursor::Inherit : Cursor::Hand,
               .focusable = !isDisabled,
               .onKeyDown = isDisabled ? nullptr : std::function<void(KeyCode, Modifiers)> {handleKey},
-              .cursor = isDisabled ? Cursor::Inherit : Cursor::Hand,
+              .onTap = isDisabled ? nullptr : std::function<void()> {handleToggle},
           },
           Icon {
               .name = iconName,

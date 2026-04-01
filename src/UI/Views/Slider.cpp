@@ -180,12 +180,12 @@ Element Slider::body() const {
         .children = {
             Rectangle {
                 .frame = {0.f, 0.f, componentWidth, componentHeight},
+                .cursor = isDisabled ? Cursor::Inherit : Cursor::Hand,
+                .focusable = !isDisabled,
+                .onKeyDown = isDisabled ? nullptr : std::function<void(KeyCode, Modifiers)> {handleKey},
                 .onPointerDown = isDisabled ? nullptr : std::function<void(Point)> {handleDown},
                 .onPointerUp = isDisabled ? nullptr : std::function<void(Point)> {handleUp},
                 .onPointerMove = isDisabled ? nullptr : std::function<void(Point)> {handleMove},
-                .focusable = !isDisabled,
-                .onKeyDown = isDisabled ? nullptr : std::function<void(KeyCode, Modifiers)> {handleKey},
-                .cursor = isDisabled ? Cursor::Inherit : Cursor::Hand,
             },
             Rectangle {
                 .frame = {thumbSize * 0.5f, trackY, trackWidth, trackHeight},

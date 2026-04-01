@@ -85,7 +85,7 @@ struct ConfirmDialog {
                                                                                 .cornerRadius = CornerRadius(8.f),
                                                                                 .fill = FillStyle::solid(Color::hex(0xF0F0F5)),
                                                                                 .stroke = StrokeStyle::solid(pal::cardStroke, 1.f),
-                                                                                .onTap = onCancel,
+                                                                                .cursor = Cursor::Hand,
                                                                                 .focusable = true,
                                                                                 .onKeyDown =
                                                                                     [cb = onCancel](KeyCode k, Modifiers) {
@@ -93,7 +93,7 @@ struct ConfirmDialog {
                                                                                         cb();
                                                                                       }
                                                                                     },
-                                                                                .cursor = Cursor::Hand,
+                                                                                .onTap = onCancel,
                                                                             },
                                                                             Text{.text = "Cancel",
                                                                                  .font = {.size = 14.f, .weight = 500.f},
@@ -110,7 +110,7 @@ struct ConfirmDialog {
                                                                                 .cornerRadius = CornerRadius(8.f),
                                                                                 .fill = FillStyle::solid(confirmColor),
                                                                                 .stroke = StrokeStyle::none(),
-                                                                                .onTap = onConfirm,
+                                                                                .cursor = Cursor::Hand,
                                                                                 .focusable = true,
                                                                                 .onKeyDown =
                                                                                     [cb = onConfirm](KeyCode k, Modifiers) {
@@ -118,7 +118,7 @@ struct ConfirmDialog {
                                                                                         cb();
                                                                                       }
                                                                                     },
-                                                                                .cursor = Cursor::Hand,
+                                                                                .onTap = onConfirm,
                                                                             },
                                                                             Text{.text = confirmLabel,
                                                                                  .font = {.size = 14.f, .weight = 600.f},
@@ -164,6 +164,7 @@ struct FileManagerRow {
                                 .cornerRadius = CornerRadius(6.f),
                                 .fill = FillStyle::solid(pal::dangerBg),
                                 .stroke = StrokeStyle::solid(pal::dangerStroke, 1.f),
+                                .cursor = Cursor::Hand,
                                 .onTap =
                                     [fn, del, showDialog, hideDialog] {
                                       showDialog(
@@ -187,7 +188,6 @@ struct FileManagerRow {
                                               .onDismiss = hideDialog,
                                           });
                                     },
-                                .cursor = Cursor::Hand,
                             },
                             Text{.text = "Delete",
                                  .font = {.size = 13.f, .weight = 500.f},

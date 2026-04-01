@@ -94,8 +94,8 @@ struct PickerRow {
                     .fill = FillStyle::solid(bg),
                     .stroke = StrokeStyle::none(),
                     .flexGrow = 1.f,
-                    .onTap = onSelect,
                     .cursor = Cursor::Hand,
+                    .onTap = onSelect,
                 },
                 HStack{
                     .spacing = 0.f,
@@ -441,10 +441,10 @@ struct Picker {
                     .flexGrow = flexGrow,
                     .flexShrink = flexShrink,
                     .minSize = minSize,
-                    .onTap = isDisabled ? nullptr : std::function<void()>{onTriggerTap},
+                    .cursor = isDisabled ? Cursor::Inherit : Cursor::Hand,
                     .focusable = !isDisabled,
                     .onKeyDown = isDisabled ? nullptr : std::function<void(KeyCode, Modifiers)>{onTriggerKey},
-                    .cursor = isDisabled ? Cursor::Inherit : Cursor::Hand,
+                    .onTap = isDisabled ? nullptr : std::function<void()>{onTriggerTap},
                 },
                 HStack{
                     .spacing = 0.f,
@@ -477,8 +477,8 @@ struct Picker {
                                 .frame = {0.f, 0.f, padHResolved, h},
                                 .fill = FillStyle::none(),
                                 .stroke = StrokeStyle::none(),
-                                .onTap = isDisabled ? nullptr : std::function<void()>{onTriggerTap},
                                 .cursor = isDisabled ? Cursor::Inherit : Cursor::Hand,
+                                .onTap = isDisabled ? nullptr : std::function<void()>{onTriggerTap},
                             },
                             Element{ZStack{
                                 // Hit rect + chevron share left edge; vertical center in the row.
@@ -490,8 +490,8 @@ struct Picker {
                                             .frame = {0.f, 0.f, std::max(14.f, chevronIconSz), h},
                                             .fill = FillStyle::none(),
                                             .stroke = StrokeStyle::none(),
-                                            .onTap = isDisabled ? nullptr : std::function<void()>{onTriggerTap},
                                             .cursor = isDisabled ? Cursor::Inherit : Cursor::Hand,
+                                            .onTap = isDisabled ? nullptr : std::function<void()>{onTriggerTap},
                                         },
                                         Icon{
                                           .name = isOpen ? IconName::ExpandLess : IconName::ExpandMore,
@@ -504,8 +504,8 @@ struct Picker {
                                 .frame = {0.f, 0.f, padHResolved, h},
                                 .fill = FillStyle::none(),
                                 .stroke = StrokeStyle::none(),
-                                .onTap = isDisabled ? nullptr : std::function<void()>{onTriggerTap},
                                 .cursor = isDisabled ? Cursor::Inherit : Cursor::Hand,
+                                .onTap = isDisabled ? nullptr : std::function<void()>{onTriggerTap},
                             },
                         },
                 },

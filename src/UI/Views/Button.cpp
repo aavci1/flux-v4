@@ -218,10 +218,10 @@ Element Button::body() const {
                 .flexGrow = effFlexGrow,
                 .flexShrink = flexShrink,
                 .minSize = minSize,
-                .onTap = effectivelyDisabled ? nullptr : std::function<void()>{ handleTap },
+                .cursor = effectivelyDisabled ? Cursor::Inherit : Cursor::Hand,
                 .focusable = !effectivelyDisabled,
                 .onKeyDown = effectivelyDisabled ? nullptr : std::function<void(KeyCode, Modifiers)>{ handleKey },
-                .cursor = effectivelyDisabled ? Cursor::Inherit : Cursor::Hand,
+                .onTap = effectivelyDisabled ? nullptr : std::function<void()>{ handleTap },
             },
             Text{
                 .text = label,

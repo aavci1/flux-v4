@@ -169,10 +169,10 @@ struct CursorDemo {
                                                                                         .frame = {0.f, 0.f, 0.f, 52.f},
                                                                                         .cornerRadius = CornerRadius(10.f),
                                                                                         .fill = FillStyle::solid(pal::chipAccent),
+                                                                                        .cursor = Cursor::ResizeAll,
                                                                                         .onPointerDown = [](Point) {},
                                                                                         .onPointerUp = [](Point) {},
                                                                                         .onPointerMove = [](Point) {},
-                                                                                        .cursor = Cursor::ResizeAll,
                                                                                     },
                                                                                 },
                                                                         }}
