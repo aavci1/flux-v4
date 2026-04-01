@@ -42,6 +42,9 @@ struct Slider {
   bool disabled { false };
   Style style { };
 
+  /// Optional stable id for `--test-mode` UI tree JSON (`focusKey` field).
+  std::string testFocusKey;
+
   // ── Events ───────────────────────────────────────────────────────────────
 
   /// Called whenever \c value changes from user interaction.

@@ -73,6 +73,9 @@ struct Button {
   /// and registers `useWindowAction` so the shortcut fires the same handler.
   std::string actionName;
 
+  /// Optional: stable id for UI tests (`GetUi` snapshot `focusKey` field).
+  std::string testFocusKey;
+
   // ── Component protocol ───────────────────────────────────────────────────
 
   Element body() const;

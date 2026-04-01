@@ -67,6 +67,10 @@ option(FLUX_BUILD_EXAMPLES
   "Build example executables under examples/ (hello_world, *_demo, …)."
   OFF)
 
+option(FLUX_BUILD_UI_TESTS
+  "Build UI test harness executables under tests/ui/apps/ (requires FLUX_BUILD_EXAMPLES for shared patterns)."
+  OFF)
+
 # Offline Metal: compile CanvasShaders.metal → air → metallib → C header (xxd) embedded in MetalShaderLibrary.mm
 set(FLUX_METAL_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Metal/CanvasShaders.metal)
 set(FLUX_METAL_AIR ${CMAKE_CURRENT_BINARY_DIR}/CanvasShaders.air)
@@ -124,6 +128,9 @@ add_library(flux STATIC
   src/UI/GestureTracker.cpp
   src/UI/CursorController.cpp
   src/UI/BuildOrchestrator.cpp
+  src/UI/TestTreeAnnotator.cpp
+  src/Testing/TestServer.cpp
+  src/Testing/PngEncode.cpp
   src/UI/InputDispatcher.cpp
   src/UI/Hooks.cpp
   src/UI/ActionHooks.cpp
@@ -210,4 +217,8 @@ target_link_libraries(flux PRIVATE
 
 if(FLUX_BUILD_EXAMPLES)
   add_subdirectory(examples)
+endif()
+
+if(FLUX_BUILD_UI_TESTS)
+  add_subdirectory(tests/ui)
 endif()

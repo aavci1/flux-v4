@@ -37,6 +37,9 @@ struct Checkbox {
 
   bool disabled = false;
 
+  /// Optional stable id for `--test-mode` UI tree JSON (`focusKey` field).
+  std::string testFocusKey;
+
   // ── Style ────────────────────────────────────────────────────────────────
 
   struct Style {

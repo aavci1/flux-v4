@@ -15,6 +15,7 @@
 #include <memory>
 #include <span>
 #include <string_view>
+#include <vector>
 
 namespace flux {
 
@@ -108,6 +109,17 @@ public:
   virtual void* gpuDevice() const = 0;
 
   virtual void clear(Color color = Colors::transparent) = 0;
+
+  /// When true, the next `present()` copies the drawable to CPU memory (test-mode screenshots).
+  virtual void setTestFramebufferReadbackRequested(bool) {}
+
+  /// Returns RGBA8 pixels from the last `present()` that had readback enabled (test mode).
+  virtual bool readLastPresentRgba(std::vector<std::uint8_t>& out, int& w, int& h) {
+    (void)out;
+    (void)w;
+    (void)h;
+    return false;
+  }
 
 protected:
   Canvas() = default;

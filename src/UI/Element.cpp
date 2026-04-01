@@ -11,6 +11,7 @@
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Scene/Nodes.hpp>
 #include <Flux/Scene/SceneGraph.hpp>
+#include <Flux/UI/TestAnnotate.hpp>
 
 #include <algorithm>
 #include <cassert>
@@ -156,6 +157,7 @@ void Element::Model<Rectangle>::build(BuildContext& ctx) const {
         .cursorPassthrough = value.cursorPassthrough,
     });
   }
+  detail::annotateLeaf(ctx, value, stableKey, bounds);
 }
 
 Size Element::Model<Rectangle>::measure(BuildContext& ctx, LayoutConstraints const& c, TextSystem&) const {
@@ -168,6 +170,7 @@ Size Element::Model<Rectangle>::measure(BuildContext& ctx, LayoutConstraints con
 }
 
 void Element::Model<LaidOutText>::build(BuildContext& ctx) const {
+  ComponentKey const stableKey = ctx.leafComponentKey();
   ctx.advanceChildSlot();
   if (!value.layout) {
     return;
@@ -181,6 +184,8 @@ void Element::Model<LaidOutText>::build(BuildContext& ctx) const {
       .layout = value.layout,
       .origin = origin,
   });
+  Rect const textBounds = Rect::sharp(origin.x, origin.y, value.layout->measuredSize.width, value.layout->measuredSize.height);
+  detail::annotateLeaf(ctx, value, stableKey, textBounds);
 }
 
 Size Element::Model<LaidOutText>::measure(BuildContext& ctx, LayoutConstraints const&, TextSystem&) const {
@@ -259,6 +264,7 @@ void Element::Model<Text>::build(BuildContext& ctx) const {
       });
     }
   }
+  detail::annotateLeaf(ctx, value, stableKey, bounds);
 }
 
 Size Element::Model<Text>::measure(BuildContext& ctx, LayoutConstraints const& c, TextSystem& ts) const {
@@ -322,6 +328,7 @@ void Element::Model<views::Image>::build(BuildContext& ctx) const {
   if (value.onTap) {
     ctx.eventMap().insert(id, EventHandlers{.stableTargetKey = stableKey, .onTap = value.onTap});
   }
+  detail::annotateLeaf(ctx, value, stableKey, bounds);
 }
 
 Size Element::Model<views::Image>::measure(BuildContext& ctx, LayoutConstraints const& c, TextSystem&) const {
@@ -335,6 +342,7 @@ Size Element::Model<views::Image>::measure(BuildContext& ctx, LayoutConstraints 
 }
 
 void Element::Model<PathShape>::build(BuildContext& ctx) const {
+  ComponentKey const stableKey = ctx.leafComponentKey();
   ctx.advanceChildSlot();
   PathNode node{.path = value.path, .fill = value.fill, .stroke = value.stroke};
   Rect const cf = ctx.layoutEngine().childFrame();
@@ -357,6 +365,7 @@ void Element::Model<PathShape>::build(BuildContext& ctx) const {
   } else {
     ctx.graph().addPath(ctx.parentLayer(), std::move(node));
   }
+  detail::annotateLeaf(ctx, value, stableKey, cf);
 }
 
 Size Element::Model<PathShape>::measure(BuildContext& ctx, LayoutConstraints const&, TextSystem&) const {
@@ -366,12 +375,19 @@ Size Element::Model<PathShape>::measure(BuildContext& ctx, LayoutConstraints con
 }
 
 void Element::Model<Line>::build(BuildContext& ctx) const {
+  ComponentKey const stableKey = ctx.leafComponentKey();
   ctx.advanceChildSlot();
   ctx.graph().addLine(ctx.parentLayer(), LineNode{
       .from = value.from,
       .to = value.to,
       .stroke = value.stroke,
   });
+  float const minX = std::min(value.from.x, value.to.x);
+  float const maxX = std::max(value.from.x, value.to.x);
+  float const minY = std::min(value.from.y, value.to.y);
+  float const maxY = std::max(value.from.y, value.to.y);
+  Rect const lb = Rect::sharp(minX, minY, maxX - minX, maxY - minY);
+  detail::annotateLeaf(ctx, value, stableKey, lb);
 }
 
 Size Element::Model<Line>::measure(BuildContext& ctx, LayoutConstraints const&, TextSystem&) const {

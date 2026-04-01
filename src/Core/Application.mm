@@ -14,9 +14,12 @@
 #include <chrono>
 #include <climits>
 #include <cstdint>
+#include <cstring>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <stdexcept>
+#include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -76,6 +79,14 @@ struct Application::Impl {
   std::vector<TimerEntry> timers_;
   std::uint64_t nextTimerId_ = 1;
 
+  bool testMode_ = false;
+  int testPort_ = 8435;
+  std::string testSocketPath_{};
+
+  std::atomic<std::uint64_t> testPresentGen_{0};
+  std::mutex testFrameMutex_;
+  std::condition_variable testFrameCv_;
+
   int nextTimerTimeoutMs() const {
     using namespace std::chrono;
     if (timers_.empty()) {
@@ -96,12 +107,26 @@ struct Application::Impl {
   }
 };
 
-Application::Application(int /*argc*/, char** /*argv*/) {
+Application::Application(int argc, char** argv) {
   if (gCurrent) {
     throw std::runtime_error("Application already exists");
   }
   gCurrent = this;
   d = std::make_unique<Impl>();
+  if (argv) {
+    for (int i = 1; i < argc; ++i) {
+      if (std::strcmp(argv[i], "--test-mode") == 0) {
+        d->testMode_ = true;
+      } else if (std::strcmp(argv[i], "--test-port") == 0 && i + 1 < argc) {
+        d->testPort_ = std::atoi(argv[++i]);
+        if (d->testPort_ <= 0) {
+          d->testPort_ = 8435;
+        }
+      } else if (std::strcmp(argv[i], "--test-socket") == 0 && i + 1 < argc) {
+        d->testSocketPath_ = argv[++i];
+      }
+    }
+  }
   d->textSystem_ = std::make_unique<CoreTextSystem>();
   d->clipboard_ = std::make_unique<MacClipboard>();
 
@@ -178,6 +203,9 @@ void Application::onWindowRegistered(Window* window) {
   if (!window) {
     return;
   }
+  if (d->testMode_) {
+    window->enableTestMode(d->testPort_, d->testSocketPath_);
+  }
   window->platformWindow()->show();
 }
 
@@ -228,9 +256,19 @@ void Application::presentAllWindows() {
       continue;
     }
     Canvas& canvas = w->canvas();
+    if (d->testMode_) {
+      w->prepareTestFrame(canvas);
+    }
     canvas.beginFrame();
     w->render(canvas);
     canvas.present();
+    if (d->testMode_) {
+      w->onTestFramePresented(canvas);
+    }
+  }
+  if (d->testMode_) {
+    d->testPresentGen_.fetch_add(1, std::memory_order_acq_rel);
+    d->testFrameCv_.notify_all();
   }
 }
 
@@ -331,5 +369,22 @@ Application& Application::instance() {
 }
 
 bool Application::hasInstance() { return gCurrent != nullptr; }
+
+bool Application::isTestMode() const noexcept { return d->testMode_; }
+
+int Application::testPort() const noexcept { return d->testPort_; }
+
+std::string const& Application::testSocketPath() const { return d->testSocketPath_; }
+
+std::uint64_t Application::testPresentGeneration() const noexcept {
+  return d->testPresentGen_.load(std::memory_order_acquire);
+}
+
+void Application::waitForTestPresentAfter(std::uint64_t generationBefore, int timeoutMs) {
+  std::unique_lock<std::mutex> lock(d->testFrameMutex_);
+  d->testFrameCv_.wait_for(lock, std::chrono::milliseconds(timeoutMs), [&] {
+    return d->testPresentGen_.load(std::memory_order_acquire) > generationBefore;
+  });
+}
 
 } // namespace flux

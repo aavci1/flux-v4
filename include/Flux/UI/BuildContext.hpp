@@ -21,6 +21,7 @@ class EventMap;
 class Runtime;
 class BuildOrchestrator;
 class MeasureCache;
+class TestTreeAnnotator;
 
 class BuildContext {
 public:
@@ -32,6 +33,9 @@ public:
   LayoutEngine& layoutEngine();
   /// Non-null during main and overlay rebuilds; holds leaf measure memoization for the current pass.
   MeasureCache* measureCache() const;
+
+  /// Non-null when `Application::isTestMode()` and the window is building the UI tree for test snapshots.
+  TestTreeAnnotator* testAnnotator() const noexcept;
 
   void pushLayer(NodeId layerId);
   void popLayer();
@@ -85,7 +89,7 @@ private:
   friend class OverlayManager;
 
   BuildContext(SceneGraph& g, EventMap& em, TextSystem& ts, LayoutEngine& layout,
-               MeasureCache* measureCache = nullptr);
+               MeasureCache* measureCache = nullptr, TestTreeAnnotator* testAnnotator = nullptr);
 
   SceneGraph& graph_;
   EventMap& eventMap_;
@@ -102,6 +106,7 @@ private:
   ComponentKey pendingCompositeSubtreeKey_{};
   std::unordered_map<ComponentKey, NodeId, ComponentKeyHash> subtreeRootLayers_{};
   MeasureCache* measureCache_{nullptr};
+  TestTreeAnnotator* testAnnotator_{nullptr};
 };
 
 } // namespace flux

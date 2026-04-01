@@ -9,6 +9,7 @@
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/Environment.hpp>
 #include <Flux/UI/Overlay.hpp>
+#include <Flux/UI/TestTreeAnnotator.hpp>
 
 #include <cmath>
 #include <cstdio>
@@ -81,7 +82,13 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
   StateStore::setCurrent(&stateStore_);
 
   EventMap newMap;
-  BuildContext ctx{ graph, newMap, Application::instance().textSystem(), layoutEngine_, &measureCache_ };
+  std::unique_ptr<TestTreeAnnotator> testTree;
+  TestTreeAnnotator* testAnnot = nullptr;
+  if (Application::hasInstance() && Application::instance().isTestMode()) {
+    testTree = std::make_unique<TestTreeAnnotator>();
+    testAnnot = testTree.get();
+  }
+  BuildContext ctx{ graph, newMap, Application::instance().textSystem(), layoutEngine_, &measureCache_, testAnnot };
   Size const raw = sizeOverride.value_or(window_.getSize());
   Size const sz = snapRootLayoutSize(raw);
   LayoutConstraints rootCs{};
@@ -97,6 +104,11 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
   ctx.popConstraints();
 
   layoutRects_.fill(graph, ctx);
+
+  if (testAnnot) {
+    testAnnot->applyBounds(layoutRects_);
+    window_.testUpdateUiTreeJson(testAnnot->toJson());
+  }
 
   StateStore::setCurrent(nullptr);
   stateStore_.endRebuild();

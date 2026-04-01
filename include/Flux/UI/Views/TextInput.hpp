@@ -72,6 +72,9 @@ struct TextInput {
   /// Called when Return is pressed.
   std::function<void(std::string const&)> onSubmit;
 
+  /// Optional stable id for `--test-mode` UI tree JSON (`focusKey` field).
+  std::string testFocusKey;
+
   // ── Component protocol ─────────────────────────────────────────────────────
 
   Element body() const;

@@ -24,9 +24,11 @@ struct RootHolder;
 class Application;
 class Canvas;
 class PlatformWindow;
+class TestServer;
 class SceneGraph;
 
 class OverlayManager;
+class BuildOrchestrator;
 
 struct WindowConfig {
   Size size = {1280, 720};
@@ -68,6 +70,10 @@ public:
 
   /// Like `requestRedraw()`; `handle` is reserved for future per-window scheduling.
   static void postRedraw(unsigned int handle);
+
+  /// Starts the binary test IPC server (TCP or Unix socket). Call once after construction when
+  /// `Application::isTestMode()` is true. Idempotent.
+  void enableTestMode(int tcpPort = 8435, std::string unixSocketPath = {});
 
   /// Drawing only; `Application` wraps each call with `beginFrame` and `present` when handling redraw.
   /// Default implementation clears with `clearColor()` then draws the scene graph (if any).
@@ -134,6 +140,10 @@ protected:
 private:
   friend class Runtime;
   friend class InputDispatcher;
+  friend class BuildOrchestrator;
+  friend class TestServer;
+
+  void testUpdateUiTreeJson(std::string json);
 
   EnvironmentLayer& environmentLayerMut();
 
@@ -143,6 +153,11 @@ private:
   PlatformWindow* platformWindow() const;
   /// Used by `Window::setView` in `<Flux/Core/WindowUI.hpp>`; implementation on `Impl`.
   void setViewRoot(std::unique_ptr<RootHolder> holder);
+
+  /// Called from `Application::presentAllWindows` after `canvas.present()` when `--test-mode` is active.
+  void onTestFramePresented(Canvas& canvas);
+
+  void prepareTestFrame(Canvas& canvas);
 
   struct Impl;
   std::unique_ptr<Impl> d;

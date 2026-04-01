@@ -13,6 +13,7 @@
 #include <Flux/UI/LayoutEngine.hpp>
 #include <Flux/UI/StateStore.hpp>
 #include <Flux/UI/Environment.hpp>
+#include <Flux/UI/TestAnnotate.hpp>
 
 #include <Flux/Graphics/Canvas.hpp>
 #include <Flux/Scene/Nodes.hpp>
@@ -186,8 +187,10 @@ void Element::Model<C>::build(BuildContext& ctx) const {
     }
     ctx.beginCompositeBodySubtree(key);
     ctx.pushCompositeKeyTail(key);
+    detail::annotateCompositeEnter(ctx, value, key);
     child.build(ctx);
     ctx.popCompositeKeyTail();
+    detail::annotateCompositeExit(ctx);
   } else if constexpr (RenderComponent<C>) {
     ComponentKey const stableKey = ctx.leafComponentKey();
     ctx.advanceChildSlot();
@@ -261,6 +264,7 @@ void Element::Model<C>::build(BuildContext& ctx) const {
         handlers.cursor != Cursor::Inherit || handlers.cursorPassthrough) {
       ctx.eventMap().insert(id, std::move(handlers));
     }
+    detail::annotateLeaf(ctx, value, stableKey, frame);
   } else {
     static_assert(alwaysFalse<C>,
         "Missing Element::Model specialization for this component type. "

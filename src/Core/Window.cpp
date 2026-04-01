@@ -17,14 +17,20 @@
 
 #include "Core/PlatformWindow.hpp"
 #include "Core/PlatformWindowCreate.hpp"
+#include "Testing/TestServer.hpp"
 #include <optional>
 
 namespace flux {
+
+namespace detail {
+std::vector<std::uint8_t> encodePngFromRgba(std::vector<std::uint8_t> const& rgba, int w, int h);
+}
 
 struct Window::Impl {
   std::unique_ptr<PlatformWindow> platform_;
   std::unique_ptr<Canvas> canvas_;
   std::optional<SceneGraph> sceneGraph_;
+  std::unique_ptr<TestServer> testServer_;
   Color clearColor_{Color::hex(0xF2F2F7)};
   /// Declared before `runtime_` so `~Runtime` (and `OverlayHookSlot` teardown calling `removeOverlay`)
   /// runs while `OverlayManager` is still alive. Reverse member destruction order would destroy
@@ -184,6 +190,43 @@ std::unordered_map<std::string, ActionDescriptor> const& Window::actionDescripto
 
 void Window::setViewRoot(std::unique_ptr<RootHolder> holder) {
   d->setViewRoot(*this, std::move(holder));
+}
+
+void Window::enableTestMode(int tcpPort, std::string unixSocketPath) {
+  if (d->testServer_) {
+    return;
+  }
+  d->testServer_ = std::make_unique<TestServer>(*this, tcpPort, std::move(unixSocketPath));
+  d->testServer_->start();
+}
+
+void Window::testUpdateUiTreeJson(std::string json) {
+  if (d->testServer_) {
+    d->testServer_->setUiTreeJson(std::move(json));
+  }
+}
+
+void Window::prepareTestFrame(Canvas& canvas) {
+  if (!d->testServer_) {
+    return;
+  }
+  if (d->testServer_->takeCaptureNextFrame()) {
+    canvas.setTestFramebufferReadbackRequested(true);
+  }
+}
+
+void Window::onTestFramePresented(Canvas& canvas) {
+  if (!d->testServer_ || !d->testServer_->needsScreenshotCapture()) {
+    return;
+  }
+  std::vector<std::uint8_t> rgba;
+  int w = 0;
+  int h = 0;
+  std::vector<std::uint8_t> png;
+  if (canvas.readLastPresentRgba(rgba, w, h) && w > 0 && h > 0) {
+    png = detail::encodePngFromRgba(rgba, w, h);
+  }
+  d->testServer_->setLastScreenshotPng(std::move(png));
 }
 
 EnvironmentLayer& Window::environmentLayerMut() {

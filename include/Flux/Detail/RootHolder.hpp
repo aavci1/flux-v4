@@ -8,6 +8,7 @@
 #include <Flux/UI/BuildContext.hpp>
 #include <Flux/UI/Component.hpp>
 #include <Flux/UI/Element.hpp>
+#include <Flux/UI/TestAnnotate.hpp>
 
 #include <memory>
 #include <type_traits>
@@ -44,8 +45,10 @@ struct TypedRootHolder final : RootHolder {
       }
       ctx.beginCompositeBodySubtree(key);
       ctx.pushCompositeKeyTail(key);
+      detail::annotateCompositeEnter(ctx, value, key);
       child.build(ctx);
       ctx.popCompositeKeyTail();
+      detail::annotateCompositeExit(ctx);
       ctx.popChildIndex();
     } else {
       static_assert(std::is_copy_constructible_v<C>,

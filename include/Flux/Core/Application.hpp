@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <string>
 #include <type_traits>
 #include <utility>
 
@@ -76,6 +77,21 @@ public:
 
   /// Marks that reactive state changed; wakes the event loop. Used internally by the reactive layer.
   void markReactiveDirty();
+
+  /// True when the process was started with `--test-mode` (binary IPC + UI snapshots).
+  bool isTestMode() const noexcept;
+
+  /// TCP port for the test server when using TCP (default 8435). Ignored when `testSocketPath()` is non-empty.
+  int testPort() const noexcept;
+
+  /// Unix domain socket path for the test server; empty means use TCP on `testPort()`.
+  std::string const& testSocketPath() const;
+
+  /// Monotonic counter incremented after each `presentAllWindows()` (for test RPC synchronization).
+  std::uint64_t testPresentGeneration() const noexcept;
+
+  /// Called by the test server after posting synthetic input; waits until the next present completes.
+  void waitForTestPresentAfter(std::uint64_t generationBefore, int timeoutMs = 3000);
 
   friend class Window;
 

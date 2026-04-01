@@ -6,6 +6,7 @@
 
 #include <Flux/Scene/Nodes.hpp>
 #include <Flux/Scene/SceneGraph.hpp>
+#include <Flux/UI/TestAnnotate.hpp>
 
 #include "UI/Layout/LayoutHelpers.hpp"
 
@@ -20,9 +21,11 @@ namespace flux {
 using namespace flux::layout;
 
 void Element::Model<VStack>::build(BuildContext& ctx) const {
+  ComponentKey const __testKey = ctx.leafComponentKey();
   if (!ctx.consumeCompositeBodySubtreeRootSkip()) {
     ctx.advanceChildSlot();
   }
+  detail::annotateCompositeEnter(ctx, value, __testKey);
   LayoutEngine& le = ctx.layoutEngine();
   Rect const parentFrame = le.childFrame();
   LayoutConstraints const outer = ctx.constraints();
@@ -118,6 +121,7 @@ void Element::Model<VStack>::build(BuildContext& ctx) const {
     y += sz.height + value.spacing;
   }
 
+  detail::annotateCompositeExit(ctx);
   ctx.popChildIndex();
   ctx.popLayer();
 }

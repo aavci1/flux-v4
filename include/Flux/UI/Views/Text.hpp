@@ -55,6 +55,9 @@ struct Text {
   std::function<void(std::string const&)> onTextInput;
 
   Cursor cursor = Cursor::Inherit;
+
+  /// Optional stable id for `--test-mode` UI tree JSON (`focusKey` field).
+  std::string testFocusKey;
 };
 
 } // namespace flux

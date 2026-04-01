@@ -2,6 +2,7 @@
 #include <Flux/UI/BuildContext.hpp>
 #include <Flux/UI/Layout.hpp>
 #include <Flux/UI/StateStore.hpp>
+#include <Flux/UI/TestAnnotate.hpp>
 
 #include <cmath>
 
@@ -22,8 +23,10 @@ void Element::Model<ScrollView>::build(BuildContext& ctx) const {
   }
   ctx.beginCompositeBodySubtree(key);
   ctx.pushCompositeKeyTail(key);
+  detail::annotateCompositeEnter(ctx, value, key);
   child.build(ctx);
   ctx.popCompositeKeyTail();
+  detail::annotateCompositeExit(ctx);
 }
 
 Size Element::Model<ScrollView>::measure(BuildContext& ctx, LayoutConstraints const& constraints,

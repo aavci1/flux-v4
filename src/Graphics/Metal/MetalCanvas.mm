@@ -27,6 +27,7 @@ class Window;
 #include <cmath>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -252,6 +253,19 @@ public:
 
   void setSyncPresent(bool sync) noexcept { syncPresent_ = sync; }
 
+  void setTestFramebufferReadbackRequested(bool v) override { testReadback_ = v; }
+
+  bool readLastPresentRgba(std::vector<std::uint8_t>& out, int& w, int& h) override {
+    std::lock_guard<std::mutex> lock(readbackMutex_);
+    if (lastReadbackRgba_.empty()) {
+      return false;
+    }
+    out = lastReadbackRgba_;
+    w = lastReadbackW_;
+    h = lastReadbackH_;
+    return true;
+  }
+
   void present() override {
     if (!inFrame_ || !cmdBuf_ || !drawable_) {
       syncPresent_ = false;
@@ -364,10 +378,62 @@ public:
 
     [enc endEncoding];
 
-    if (syncPresent_) {
+    const bool doReadback = testReadback_;
+    if (doReadback) {
+      id<MTLTexture> srcTex = drawable_.texture;
+      NSUInteger const dw = srcTex.width;
+      NSUInteger const dh = srcTex.height;
+      if (dw > 0 && dh > 0) {
+        if (!readbackStaging_ || readbackStaging_.width != dw || readbackStaging_.height != dh) {
+          MTLTextureDescriptor* td =
+              [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm
+                                                                  width:dw
+                                                                 height:dh
+                                                              mipmapped:NO];
+          td.storageMode = MTLStorageModeShared;
+          td.usage = MTLTextureUsageShaderRead;
+          readbackStaging_ = [metal_.device() newTextureWithDescriptor:td];
+        }
+        if (readbackStaging_) {
+          id<MTLBlitCommandEncoder> blit = [cmdBuf_ blitCommandEncoder];
+          [blit copyFromTexture:srcTex
+                    sourceSlice:0
+                    sourceLevel:0
+                   sourceOrigin:MTLOriginMake(0, 0, 0)
+                     sourceSize:MTLSizeMake(dw, dh, 1)
+                      toTexture:readbackStaging_
+               destinationSlice:0
+               destinationLevel:0
+              destinationOrigin:MTLOriginMake(0, 0, 0)];
+          [blit endEncoding];
+        }
+      }
+    }
+
+    if (syncPresent_ || doReadback) {
+      [cmdBuf_ presentDrawable:drawable_];
       [cmdBuf_ commit];
-      [cmdBuf_ waitUntilScheduled];
-      [drawable_ present];
+      [cmdBuf_ waitUntilCompleted];
+      if (doReadback && readbackStaging_) {
+        NSUInteger const dw = readbackStaging_.width;
+        NSUInteger const dh = readbackStaging_.height;
+        std::vector<std::uint8_t> buf(static_cast<std::size_t>(dw * dh * 4));
+        MTLRegion region = MTLRegionMake2D(0, 0, dw, dh);
+        [readbackStaging_ getBytes:buf.data()
+                       bytesPerRow:static_cast<NSUInteger>(dw * 4)
+                        fromRegion:region
+                       mipmapLevel:0];
+        for (std::size_t i = 0; i + 3 < buf.size(); i += 4) {
+          std::swap(buf[i], buf[i + 2]);
+        }
+        {
+          std::lock_guard<std::mutex> lock(readbackMutex_);
+          lastReadbackRgba_ = std::move(buf);
+          lastReadbackW_ = static_cast<int>(dw);
+          lastReadbackH_ = static_cast<int>(dh);
+        }
+        testReadback_ = false;
+      }
       dispatch_semaphore_signal(frameSem_);
       syncPresent_ = false;
     } else {
@@ -864,6 +930,13 @@ private:
 
   MTLScissorRect clipScissor_{};
   bool clipScissorValid_{false};
+
+  bool testReadback_{false};
+  id<MTLTexture> readbackStaging_{nil};
+  std::mutex readbackMutex_;
+  std::vector<std::uint8_t> lastReadbackRgba_{};
+  int lastReadbackW_{0};
+  int lastReadbackH_{0};
 
   GpuState& currentState() { return stateStack_.back(); }
   GpuState const& currentState() const { return stateStack_.back(); }

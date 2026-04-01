@@ -1,5 +1,7 @@
 #include <Flux/UI/BuildContext.hpp>
 
+#include <Flux/UI/TestTreeAnnotator.hpp>
+
 #include <cassert>
 #include <unordered_map>
 
@@ -10,12 +12,13 @@
 namespace flux {
 
 BuildContext::BuildContext(SceneGraph& g, EventMap& em, TextSystem& ts, LayoutEngine& layout,
-                           MeasureCache* measureCache)
+                           MeasureCache* measureCache, TestTreeAnnotator* testAnnotator)
     : graph_(g)
     , eventMap_(em)
     , textSystem_(ts)
     , layoutEngine_(layout)
-    , measureCache_(measureCache) {
+    , measureCache_(measureCache)
+    , testAnnotator_(testAnnotator) {
   constraintStack_.push_back(LayoutConstraints{});
 }
 
@@ -33,6 +36,8 @@ EventMap& BuildContext::eventMap() { return eventMap_; }
 TextSystem& BuildContext::textSystem() { return textSystem_; }
 
 LayoutEngine& BuildContext::layoutEngine() { return layoutEngine_; }
+
+TestTreeAnnotator* BuildContext::testAnnotator() const noexcept { return testAnnotator_; }
 
 void BuildContext::pushLayer(NodeId layerId) { layerStack_.push_back(layerId); }
 
