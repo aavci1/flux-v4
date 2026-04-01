@@ -1,5 +1,6 @@
 #include <Flux/Detail/Runtime.hpp>
 #include <Flux/UI/Hooks.hpp>
+#include <Flux/UI/LayoutEngine.hpp>
 #include <Flux/UI/StateStore.hpp>
 
 #include <algorithm>
@@ -70,6 +71,14 @@ std::optional<Rect> useLayoutRect() {
     return std::nullopt;
   }
   return rt->layoutRectForCurrentComponent();
+}
+
+LayoutConstraints const* useLayoutConstraints() {
+  StateStore* store = StateStore::current();
+  if (!store) {
+    return nullptr;
+  }
+  return store->currentCompositeConstraints();
 }
 
 } // namespace flux

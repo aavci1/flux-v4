@@ -235,7 +235,9 @@ struct CheckboxDemoRoot {
                                             {
                                                 Checkbox{
                                                     .value = greenCheck,
-                                                    .checkedColor = theme.colorSuccess,
+                                                    .style = Checkbox::Style {
+                                                        .checkedColor = theme.colorSuccess,
+                                                    },
                                                 },
                                                 Text{
                                                     .text = "Green accent",

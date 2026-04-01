@@ -169,12 +169,31 @@ struct FluxTheme {
   // Toggle
   float toggleTrackWidth = 44.f;
   float toggleTrackHeight = 26.f;
-  float toggleThumbInset = 3.f;
-  float toggleBorderWidth = 2.f;
+  float toggleThumbInset = 4.f;
+  float toggleBorderWidth = 1.f;
+  float toggleThumbBorderWidth = 2.f;
   Color toggleOnColor = Color::hex(0x3A7BD5);
-  Color toggleOffColor = Color::hex(0xE5E5EA);
+  Color toggleOffColor = Color::hex(0xE5E5E5);
   Color toggleThumbColor = Color::hex(0xFFFFFF);
-  Color toggleBorderColor = Color::hex(0xE5E5EA);
+  Color toggleThumbBorderColor = Color::hex(0xFFFFFF);
+  Color toggleBorderColor = Color::hex(0xEEEEEE);
+
+  // Checkbox
+  float checkboxBoxSize = 20.f;
+  float checkboxCornerRadius = 4.f;
+  float checkboxBorderWidth = 2.0f;
+  Color checkboxCheckedColor = Color::hex(0x3A7BD5);
+  Color checkboxUncheckedColor = Color::hex(0xE5E5E5);
+  Color checkboxCheckColor = Color::hex(0xFFFFFF);
+  Color checkboxBorderColor = Color::hex(0xEEEEEE);
+
+  // Slider
+  float sliderTrackHeight = 4.f;
+  float sliderThumbSize = 20.f;
+  float sliderThumbBorderWidth = 2.f;
+  Color sliderTrackColor = Color::hex(0xE5E5E5);
+  Color sliderThumbColor = Color::hex(0xFFFFFF);
+  Color sliderThumbBorderColor = Color::hex(0xEEEEEE);
 
   /// Bundled Material Symbols Rounded (override to swap icon sets globally).
   std::string iconFontFamily = "Material Symbols Rounded";

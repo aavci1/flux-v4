@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Flux/UI/ComponentKey.hpp>
+#include <Flux/UI/LayoutEngine.hpp>
 
 #include <cassert>
 #include <cstdint>
@@ -57,6 +58,11 @@ public:
   /// Called by Element::Model<C>::build just after body() returns.
   void popComponent();
 
+  /// Constraints for the composite whose `body()` is executing (`Element::Model<C>` build/measure).
+  void pushCompositeConstraints(LayoutConstraints const& c);
+  void popCompositeConstraints();
+  LayoutConstraints const* currentCompositeConstraints() const;
+
   /// Called by useState<T> / useAnimated<T> inside body().
   /// Returns a reference to the next slot for the active component, creating
   /// it with `initial` if this is the first call.
@@ -90,6 +96,8 @@ private:
   std::vector<ComponentKey> activeStack_;
 
   std::optional<std::uint64_t> overlayScope_{};
+
+  std::vector<LayoutConstraints> compositeConstraintStack_{};
 
   static thread_local StateStore* sCurrent;
 };

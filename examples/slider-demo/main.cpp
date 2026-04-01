@@ -1,15 +1,14 @@
-// Demonstrates Slider: continuous, stepped, disabled, custom colors,
-// custom sizing, keyboard arrows, and live value display.
+// RGB color picker: three sliders (0–255) with live swatch, hex, and rgb() text.
 #include <Flux.hpp>
 #include <Flux/Core/WindowUI.hpp>
 #include <Flux/Reactive/Reactive.hpp>
 #include <Flux/UI/UI.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
+#include <Flux/UI/Views/ScrollView.hpp>
 #include <Flux/UI/Views/Slider.hpp>
-#include <Flux/UI/Views/Spacer.hpp>
-#include <Flux/UI/Views/ZStack.hpp>
 #include <Flux/UI/Views/Text.hpp>
+#include <Flux/UI/Views/ZStack.hpp>
 #include <Flux/UI/Views/VStack.hpp>
 
 #include <cstdio>
@@ -25,11 +24,21 @@ std::string fmtInt(float v) {
   return buf;
 }
 
-std::string fmtPct(float v) {
-  char buf[32];
-  std::snprintf(buf, sizeof(buf), "%d%%", static_cast<int>(v * 100.f));
+std::string fmtHex(float r, float g, float b) {
+  char buf[16];
+  std::snprintf(buf, sizeof(buf), "#%02X%02X%02X", static_cast<int>(r), static_cast<int>(g),
+                static_cast<int>(b));
   return buf;
 }
+
+std::string fmtRgbLine(float r, float g, float b) {
+  char buf[48];
+  std::snprintf(buf, sizeof(buf), "rgb(%d, %d, %d)", static_cast<int>(r), static_cast<int>(g),
+                static_cast<int>(b));
+  return buf;
+}
+
+constexpr float kChannelScale = 1.f / 255.f;
 
 } // namespace
 
@@ -38,9 +47,8 @@ struct LabeledSlider {
   std::string valueText;
   State<float> value{};
   float min = 0.f;
-  float max = 1.f;
-  float step = 0.f;
-  bool disabled = false;
+  float max = 255.f;
+  float step = 1.f;
   Color activeColor = kFromTheme;
 
   auto body() const {
@@ -56,13 +64,13 @@ struct LabeledSlider {
                     Text{
                         .text = label,
                         .font = theme.typeBody.toFont(),
-                        .color = disabled ? theme.colorTextDisabled : theme.colorTextPrimary,
+                        .color = theme.colorTextPrimary,
                     },
                     Spacer{},
                     Text{
                         .text = valueText,
                         .font = theme.typeLabel.toFont(),
-                        .color = disabled ? theme.colorTextDisabled : theme.colorTextSecondary,
+                        .color = theme.colorTextSecondary,
                     },
                 },
             }}.withFlex(1.f),
@@ -71,11 +79,8 @@ struct LabeledSlider {
                 .min = min,
                 .max = max,
                 .step = step,
-                .activeColor = activeColor,
-                .disabled = disabled,
-                .onChange = [label = label](float v) {
-                  std::fprintf(stderr, "[slider-demo] %s → %.3f\n", label.c_str(),
-                               static_cast<double>(v));
+                .style = Slider::Style {
+                    .activeColor = activeColor,
                 },
             }}.withFlex(1.f),
         },
@@ -83,158 +88,104 @@ struct LabeledSlider {
   }
 };
 
-struct SliderDemoRoot {
+struct RgbColorSelectorRoot {
   auto body() const {
     FluxTheme const& theme = useEnvironment<FluxTheme>();
 
-    auto opacity = useState(0.75f);
-    auto volume = useState(50.f);
-    auto rating = useState(3.f);
-    auto disabled = useState(0.5f);
-    auto green = useState(0.6f);
-    auto compact = useState(0.5f);
+    auto red = useState(90.f);
+    auto green = useState(120.f);
+    auto blue = useState(200.f);
 
-    return ZStack{
-        .hAlign = HorizontalAlignment::Leading,
-        .vAlign = VerticalAlignment::Top,
+    Color const preview = Color{*red * kChannelScale, *green * kChannelScale, *blue * kChannelScale,
+                                1.f};
+
+    return ScrollView {
         .children = {
-            Rectangle{.fill = FillStyle::solid(theme.colorBackground)},
-            VStack{
+            VStack {
                 .spacing = 20.f,
                 .padding = 24.f,
                 .hAlign = HorizontalAlignment::Leading,
                 .children = {
                     Text{
-                        .text = "Slider",
+                        .text = "RGB color",
                         .font = theme.typeHeading.toFont(),
                         .color = theme.colorTextPrimary,
                     },
                     Element{Text{
-                        .text = "Continuous and stepped range input "
-                                "with drag, keyboard arrows, focus "
-                                "ring, and thumb scale feedback.",
+                        .text = "Adjust red, green, and blue channels (0–255). The preview updates "
+                                "as you drag or use the keyboard.",
                         .font = theme.typeBody.toFont(),
                         .color = theme.colorTextSecondary,
                         .wrapping = TextWrapping::Wrap,
                     }}.withFlex(1.f),
 
+                    ZStack{
+                        .hAlign = HorizontalAlignment::Center,
+                        .vAlign = VerticalAlignment::Center,
+                        .children = {
+                            Rectangle{
+                                .frame = {0.f, 0.f, 0.f, 160.f},
+                                .cornerRadius = CornerRadius{theme.radiusLarge},
+                                .fill = FillStyle::solid(preview),
+                                .stroke = StrokeStyle::solid(theme.colorBorder, 1.f),
+                                .flexGrow = 1.f,
+                            },
+                            Text{
+                                .text = fmtHex(*red, *green, *blue),
+                                .font = theme.typeTitle.toFont(),
+                                .color = luminance(preview) > 0.55f ? theme.colorTextPrimary : theme.colorOnAccent,
+                            },
+                        },
+                    },
+
                     Text{
-                        .text = "Continuous",
+                        .text = fmtRgbLine(*red, *green, *blue),
+                        .font = theme.typeBodySmall.toFont(),
+                        .color = theme.colorTextSecondary,
+                    },
+
+                    Text{
+                        .text = "Channels",
                         .font = theme.typeSubtitle.toFont(),
                         .color = theme.colorTextPrimary,
                     },
                     Element{LabeledSlider{
-                        .label = "Opacity",
-                        .valueText = fmtPct(*opacity),
-                        .value = opacity,
+                        .label = "Red",
+                        .valueText = fmtInt(*red),
+                        .value = red,
+                        .activeColor = theme.colorDanger,
                     }}.withFlex(1.f),
-
-                    Text{
-                        .text = "Stepped",
-                        .font = theme.typeSubtitle.toFont(),
-                        .color = theme.colorTextPrimary,
-                    },
                     Element{LabeledSlider{
-                        .label = "Volume",
-                        .valueText = fmtInt(*volume),
-                        .value = volume,
-                        .min = 0.f,
-                        .max = 100.f,
-                        .step = 1.f,
-                    }}.withFlex(1.f),
-
-                    Element{LabeledSlider{
-                        .label = "Rating",
-                        .valueText = fmtInt(*rating) + " / 5",
-                        .value = rating,
-                        .min = 1.f,
-                        .max = 5.f,
-                        .step = 1.f,
-                    }}.withFlex(1.f),
-
-                    Text{
-                        .text = "Disabled",
-                        .font = theme.typeSubtitle.toFont(),
-                        .color = theme.colorTextPrimary,
-                    },
-                    Element{LabeledSlider{
-                        .label = "Locked",
-                        .valueText = fmtPct(*disabled),
-                        .value = disabled,
-                        .disabled = true,
-                    }}.withFlex(1.f),
-
-                    Text{
-                        .text = "Custom color",
-                        .font = theme.typeSubtitle.toFont(),
-                        .color = theme.colorTextPrimary,
-                    },
-                    Element{LabeledSlider{
-                        .label = "Green accent",
-                        .valueText = fmtPct(*green),
+                        .label = "Green",
+                        .valueText = fmtInt(*green),
                         .value = green,
                         .activeColor = theme.colorSuccess,
                     }}.withFlex(1.f),
-
-                    Text{
-                        .text = "Custom sizing",
-                        .font = theme.typeSubtitle.toFont(),
-                        .color = theme.colorTextPrimary,
-                    },
-                    Element{HStack{
-                        .spacing = 8.f,
-                        .vAlign = VerticalAlignment::Center,
-                        .children = {
-                            Text{
-                                .text = "Compact",
-                                .font = theme.typeBody.toFont(),
-                                .color = theme.colorTextPrimary,
-                            },
-                            Spacer{},
-                            Text{
-                                .text = fmtPct(*compact),
-                                .font = theme.typeLabel.toFont(),
-                                .color = theme.colorTextSecondary,
-                            },
-                        },
+                    Element{LabeledSlider{
+                        .label = "Blue",
+                        .valueText = fmtInt(*blue),
+                        .value = blue,
+                        .activeColor = theme.colorAccent,
                     }}.withFlex(1.f),
-                    Element{Slider{
-                        .value = compact,
-                        .trackHeight = 3.f,
-                        .thumbSize = 14.f,
-                    }}.withFlex(1.f),
-
-                    Text{
-                        .text = "Live preview",
-                        .font = theme.typeSubtitle.toFont(),
-                        .color = theme.colorTextPrimary,
-                    },
-                    Rectangle{
-                        .frame = {0.f, 0.f, 0.f, 48.f},
-                        .cornerRadius = CornerRadius{theme.radiusMedium},
-                        .fill = FillStyle::solid(Color{
-                            theme.colorAccent.r,
-                            theme.colorAccent.g,
-                            theme.colorAccent.b,
-                            *opacity,
-                        }),
-                        .stroke = StrokeStyle::solid(theme.colorBorder, 1.f),
-                        .flexGrow = 1.f,
-                    },
                 },
             },
         },
     };
+  }
+
+  /// Relative luminance (sRGB), for readable overlay text on the swatch.
+  static float luminance(Color const& c) {
+    return 0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b;
   }
 };
 
 int main(int argc, char* argv[]) {
   Application app(argc, argv);
   auto& w = app.createWindow<Window>({
-      .size = {480, 780},
-      .title = "Flux — Slider demo",
+      .size = {480, 640},
+      .title = "Flux — RGB color",
       .resizable = true,
   });
-  w.setView<SliderDemoRoot>();
+  w.setView<RgbColorSelectorRoot>();
   return app.exec();
 }

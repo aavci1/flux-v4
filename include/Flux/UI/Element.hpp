@@ -172,9 +172,11 @@ void Element::Model<C>::build(BuildContext& ctx) const {
     StateStore* store = StateStore::current();
     if (store) {
       store->pushComponent(key);
+      store->pushCompositeConstraints(ctx.constraints());
     }
     Element child{value.body()};
     if (store) {
+      store->popCompositeConstraints();
       store->popComponent();
     }
     ctx.beginCompositeBodySubtree(key);
@@ -270,9 +272,11 @@ Size Element::Model<C>::measure(BuildContext& ctx, LayoutConstraints const& cons
     StateStore* store = StateStore::current();
     if (store) {
       store->pushComponent(key);
+      store->pushCompositeConstraints(constraints);
     }
     Element child{value.body()};
     if (store) {
+      store->popCompositeConstraints();
       store->popComponent();
     }
     ctx.beginCompositeBodySubtree(key);

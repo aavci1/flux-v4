@@ -19,9 +19,11 @@ Toggle::Style resolveStyle(Toggle::Style const& style, FluxTheme const& theme) {
     .trackHeight = resolveFloat(style.trackHeight, theme.toggleTrackHeight),
     .thumbInset = resolveFloat(style.thumbInset, theme.toggleThumbInset),
     .borderWidth = resolveFloat(style.borderWidth, theme.toggleBorderWidth),
+    .thumbBorderWidth = resolveFloat(style.thumbBorderWidth, theme.toggleThumbBorderWidth),
     .onColor = resolveColor(style.onColor, theme.toggleOnColor),
     .offColor = resolveColor(style.offColor, theme.toggleOffColor),
     .thumbColor = resolveColor(style.thumbColor, theme.toggleThumbColor),
+    .thumbBorderColor = resolveColor(style.thumbBorderColor, theme.toggleThumbBorderColor),
     .borderColor = resolveColor(style.borderColor, theme.toggleBorderColor),
   };
 }
@@ -34,9 +36,11 @@ Element Toggle::body() const {
     trackHeight,
     thumbInset,
     borderWidth,
+    thumbBorderWidth,
     onColor,
     offColor,
     thumbColor,
+    thumbBorderColor,
     borderColor
   ] = resolveStyle(style, theme);
   auto disabledColor = theme.colorTextDisabled;
@@ -83,17 +87,17 @@ Element Toggle::body() const {
     }
   }
 
-  State<bool> val = value;
-  std::function<void(bool)> onCh = onChange;
+  auto v = value;
+  auto oc = onChange;
 
-  auto handleToggle = [val, onCh, isDisabled]() {
+  auto handleToggle = [v, oc, isDisabled]() {
     if (isDisabled) {
       return;
     }
-    bool const next = !*val;
-    val = next;
-    if (onCh) {
-      onCh(next);
+    bool const next = !*v;
+    v = next;
+    if (oc) {
+      oc(next);
     }
   };
 
@@ -106,15 +110,16 @@ Element Toggle::body() const {
   return ScaleAroundCenter {
     .scale = *scaleAnim,
     .child = ZStack {
+      // Leading/Top: track + thumb use local `frame` coords relative to the same origin; center
+      // alignment would offset each child by its own intrinsic size and separate the layers.
+      .hAlign = HorizontalAlignment::Leading,
+      .vAlign = VerticalAlignment::Top,
       .children = {
         Rectangle {
           .frame = {0.f, 0.f, trackWidth, trackHeight},
           .cornerRadius = CornerRadius {trackHeight * 0.5f},
           .fill = FillStyle::solid(*trackFillAnim),
           .stroke = StrokeStyle::solid(focused ? focusColor : borderColor, borderWidth),
-          .flexGrow = flexGrow,
-          .flexShrink = flexShrink,
-          .minSize = minSize,
           .onTap = isDisabled ? nullptr : std::function<void()>{handleToggle},
           .focusable = !isDisabled,
           .onKeyDown = isDisabled ? nullptr : std::function<void(KeyCode, Modifiers)>{handleKey},
@@ -124,7 +129,7 @@ Element Toggle::body() const {
           .frame = {*thumbXAnim, thumbInset, thumbSize, thumbSize},
           .cornerRadius = CornerRadius {thumbSize * 0.5f},
           .fill = FillStyle::solid(isDisabled ? disabledColor : thumbColor),
-          .stroke = StrokeStyle::none(),
+          .stroke = isDisabled ? StrokeStyle::solid(disabledColor, thumbBorderWidth) : StrokeStyle::solid(thumbBorderColor, thumbBorderWidth),
           .cursor = isDisabled ? Cursor::Inherit : Cursor::Hand,
           .cursorPassthrough = true,
         },

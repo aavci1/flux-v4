@@ -9,6 +9,7 @@ StateStore* StateStore::current() noexcept { return sCurrent; }
 void StateStore::setCurrent(StateStore* s) noexcept { sCurrent = s; }
 
 void StateStore::beginRebuild() {
+  compositeConstraintStack_.clear();
   visited_.clear();
   for (auto& [key, cs] : states_) {
     (void)key;
@@ -48,6 +49,23 @@ void StateStore::pushComponent(ComponentKey const& key) {
 void StateStore::popComponent() {
   assert(!activeStack_.empty());
   activeStack_.pop_back();
+}
+
+void StateStore::pushCompositeConstraints(LayoutConstraints const& c) {
+  compositeConstraintStack_.push_back(c);
+}
+
+void StateStore::popCompositeConstraints() {
+  if (!compositeConstraintStack_.empty()) {
+    compositeConstraintStack_.pop_back();
+  }
+}
+
+LayoutConstraints const* StateStore::currentCompositeConstraints() const {
+  if (compositeConstraintStack_.empty()) {
+    return nullptr;
+  }
+  return &compositeConstraintStack_.back();
 }
 
 } // namespace flux

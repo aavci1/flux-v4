@@ -49,6 +49,14 @@ struct ScrollView {
     auto dragging = useState(false);
     auto viewport = useState<Size>({0.f, 0.f});
     auto content = useState<Size>({0.f, 0.f});
+    std::optional<Rect> const layoutRect = useLayoutRect();
+    Size effectiveViewport = *viewport;
+    if (effectiveViewport.width <= 0.f && layoutRect && layoutRect->width > 0.f) {
+      effectiveViewport.width = layoutRect->width;
+    }
+    if (effectiveViewport.height <= 0.f && layoutRect && layoutRect->height > 0.f) {
+      effectiveViewport.height = layoutRect->height;
+    }
     ScrollAxis const ax = axis;
     std::vector<Element> contentChildren = children;
 
@@ -79,15 +87,15 @@ struct ScrollView {
                           dragging = false;
                         },
                     .onPointerMove =
-                        [offset, downPoint, ax, viewport, content, dragging](Point p) {
+                        [offset, downPoint, ax, content, dragging, effectiveViewport](Point p) {
                           if (!*dragging) {
                             return;
                           }
                           Point const next{(*downPoint).x - p.x, (*downPoint).y - p.y};
-                          offset = clampScrollOffset(ax, next, *viewport, *content);
+                          offset = clampScrollOffset(ax, next, effectiveViewport, *content);
                         },
                     .onScroll =
-                        [offset, ax, viewport, content](Vec2 d) {
+                        [offset, ax, content, effectiveViewport](Vec2 d) {
                           Point next = *offset;
                           // scrollingDelta* is expressed for non-flipped NSView coords (y up). Flux uses
                           // a flipped space (y down), so negate to align. Natural Scrolling is already in
@@ -98,7 +106,9 @@ struct ScrollView {
                           if (ax == ScrollAxis::Horizontal || ax == ScrollAxis::Both) {
                             next.x -= d.x;
                           }
-                          offset = clampScrollOffset(ax, next, *viewport, *content);
+                          Point const clamped =
+                              clampScrollOffset(ax, next, effectiveViewport, *content);
+                          offset = clamped;
                         },
                     .cursorPassthrough = true,
                 },

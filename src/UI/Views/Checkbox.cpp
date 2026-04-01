@@ -1,6 +1,5 @@
 #include <Flux/UI/Views/Checkbox.hpp>
 
-#include <Flux/Core/Cursor.hpp>
 #include <Flux/Core/KeyCodes.hpp>
 #include <Flux/Reactive/Interpolatable.hpp>
 #include <Flux/Reactive/Transition.hpp>
@@ -15,18 +14,34 @@
 
 namespace flux {
 
+Checkbox::Style resolveStyle(Checkbox::Style const& style, FluxTheme const& theme) {
+  return Checkbox::Style {
+    .boxSize = resolveFloat(style.boxSize, theme.checkboxBoxSize),
+    .cornerRadius = resolveFloat(style.cornerRadius, theme.checkboxCornerRadius),
+    .borderWidth = resolveFloat(style.borderWidth, theme.checkboxBorderWidth),
+    .checkedColor = resolveColor(style.checkedColor, theme.checkboxCheckedColor),
+    .uncheckedColor = resolveColor(style.uncheckedColor, theme.checkboxUncheckedColor),
+    .checkColor = resolveColor(style.checkColor, theme.checkboxCheckColor),
+    .borderColor = resolveColor(style.borderColor, theme.checkboxBorderColor),
+  };
+}
+
 Element Checkbox::body() const {
   FluxTheme const& theme = useEnvironment<FluxTheme>();
 
-  float const sz = boxSize > 0.f ? boxSize : 20.f;
-  float const cr = resolveFloat(cornerRadius, theme.radiusXSmall);
-  float const iconSz = sz * 0.6f;
+  auto [
+    boxSize,
+    cornerRadius,
+    borderWidth,
+    checkedColor,
+    uncheckedColor,
+    checkColor,
+    borderColor
+  ] = resolveStyle(style, theme);
+  auto disabledColor = theme.colorTextDisabled;
+  auto focusColor = theme.colorBorderFocus;
 
-  Color const checkedC = resolveColor(checkedColor, theme.colorAccent);
-  Color const uncheckedC = resolveColor(uncheckedColor, Colors::transparent);
-  Color const borderC = resolveColor(borderColor, theme.colorBorder);
-  Color const iconC = resolveColor(iconColor, theme.colorOnAccent);
-  Color const focusC = resolveColor(focusColor, theme.colorBorderFocus);
+  float const iconSz = boxSize * 0.6f;
 
   bool const isOn = *value;
   bool const showFilled = isOn || indeterminate;
@@ -34,32 +49,23 @@ Element Checkbox::body() const {
   bool const pressed = usePress();
   bool const isDisabled = disabled;
 
-  Transition const tr =
-      theme.reducedMotion ? Transition::instant() : Transition::ease(theme.durationFast);
+  Transition const trInstant = Transition::instant();
+  Transition const trMotion = theme.reducedMotion ? trInstant : Transition::ease(theme.durationMedium);
+  Transition const tr = isDisabled ? trInstant : trMotion;
+  Transition const trPress = theme.reducedMotion ? trInstant : Transition::ease(theme.durationFast);
 
-  auto boxFillAnim = useAnimated<Color>(showFilled ? checkedC : uncheckedC);
+  auto boxFillAnim = useAnimated<Color>(showFilled ? checkedColor : uncheckedColor);
   {
-    Color const target = isDisabled ? theme.colorSurfaceDisabled
-                     : showFilled ? checkedC
-                                  : uncheckedC;
+    Color const target = isDisabled ? theme.colorSurfaceDisabled : showFilled ? checkedColor : uncheckedColor;
     if (*boxFillAnim != target) {
       boxFillAnim.set(target, tr);
     }
   }
 
-  auto boxBorderAnim = useAnimated<Color>(showFilled ? Colors::transparent : borderC);
+  Color const iconTransparent = Color {checkColor.r, checkColor.g, checkColor.b, 0.f};
+  auto iconColorAnim = useAnimated<Color>(showFilled ? checkColor : iconTransparent);
   {
-    Color const target = showFilled ? Colors::transparent : borderC;
-    if (*boxBorderAnim != target) {
-      boxBorderAnim.set(target, tr);
-    }
-  }
-
-  Color const iconTransparent = Color{iconC.r, iconC.g, iconC.b, 0.f};
-  auto iconColorAnim = useAnimated<Color>(showFilled ? iconC : iconTransparent);
-  {
-    Color const target =
-        !showFilled ? iconTransparent : isDisabled ? theme.colorTextDisabled : iconC;
+    Color const target = !showFilled ? iconTransparent : isDisabled ? disabledColor : checkColor;
     if (*iconColorAnim != target) {
       iconColorAnim.set(target, tr);
     }
@@ -69,22 +75,21 @@ Element Checkbox::body() const {
   {
     float const target = (pressed && !isDisabled) ? 0.90f : 1.f;
     if (std::abs(*scaleAnim - target) > 0.001f) {
-      scaleAnim.set(target, tr);
+      scaleAnim.set(target, trPress);
     }
   }
 
-  State<bool> val = value;
-  bool const indet = indeterminate;
-  std::function<void(bool)> onCh = onChange;
-
-  auto handleToggle = [val, indet, onCh, isDisabled]() {
+  auto v = value;
+  auto i = indeterminate;
+  auto oc = onChange;
+  auto handleToggle = [v, i, oc, isDisabled]() {
     if (isDisabled) {
       return;
     }
-    bool const next = indet ? true : !*val;
-    val = next;
-    if (onCh) {
-      onCh(next);
+    bool const next = i ? true : !*v;
+    v = next;
+    if (oc) {
+      oc(next);
     }
   };
 
@@ -94,47 +99,40 @@ Element Checkbox::body() const {
     }
   };
 
-  StrokeStyle boxStroke = StrokeStyle::solid(*boxBorderAnim, 1.5f);
+  StrokeStyle boxStroke = StrokeStyle::solid(borderColor, borderWidth);
   if (focused && !isDisabled) {
-    boxStroke = StrokeStyle::solid(focusC, 2.f);
+    boxStroke = StrokeStyle::solid(focusColor, borderWidth);
   }
 
-  IconName const iconName =
-      indeterminate ? IconName::HorizontalRule : IconName::Check;
+  IconName const iconName = indeterminate ? IconName::HorizontalRule : IconName::Check;
 
-  CornerRadius const boxCr{cr};
-
-  auto content = ZStack{
+  return ScaleAroundCenter {
+    .scale = *scaleAnim,
+    .child = ZStack {
       .hAlign = HorizontalAlignment::Center,
       .vAlign = VerticalAlignment::Center,
-      .children =
-          {
-              Rectangle{
-                  .frame = {0.f, 0.f, sz, sz},
-                  .cornerRadius = boxCr,
-                  .fill = FillStyle::solid(*boxFillAnim),
-                  .stroke = boxStroke,
-                  .flexGrow = flexGrow,
-                  .flexShrink = flexShrink,
-                  .minSize = minSize,
-                  .onTap = isDisabled ? nullptr : std::function<void()>{handleToggle},
-                  .focusable = !isDisabled,
-                  .onKeyDown =
-                      isDisabled ? nullptr : std::function<void(KeyCode, Modifiers)>{handleKey},
-                  .cursor = isDisabled ? Cursor::Inherit : Cursor::Hand,
-              },
-              Icon{
-                  .name = iconName,
-                  .size = iconSz,
-                  .color = *iconColorAnim,
-              },
+      .children = {
+          Rectangle {
+              .frame = {0.f, 0.f, boxSize, boxSize},
+              .cornerRadius = CornerRadius {cornerRadius},
+              .fill = FillStyle::solid(*boxFillAnim),
+              .stroke = boxStroke,
+              .flexGrow = flexGrow,
+              .flexShrink = flexShrink,
+              .minSize = minSize,
+              .onTap = isDisabled ? nullptr : std::function<void()> {handleToggle},
+              .focusable = !isDisabled,
+              .onKeyDown = isDisabled ? nullptr : std::function<void(KeyCode, Modifiers)> {handleKey},
+              .cursor = isDisabled ? Cursor::Inherit : Cursor::Hand,
           },
+          Icon {
+              .name = iconName,
+              .size = iconSz,
+              .color = *iconColorAnim,
+          },
+      },
+    },
   };
-
-  return Element{ScaleAroundCenter{
-      .scale = *scaleAnim,
-      .child = Element{std::move(content)},
-  }};
 }
 
 } // namespace flux

@@ -15,6 +15,8 @@
 
 #include <Flux/Core/Types.hpp>
 
+#include <Flux/UI/LayoutEngine.hpp>
+
 namespace flux {
 
 namespace detail {
@@ -160,6 +162,9 @@ std::decay_t<std::invoke_result_t<Fn&&>> const& useMemo(Fn&& fn, Deps const&... 
 
 /// Window-space rect for the calling composite from the last completed layout pass (see `Runtime`).
 std::optional<Rect> useLayoutRect();
+
+/// Layout constraints for the current composite `body()` call (see `Runtime::pushCompositeConstraints`).
+LayoutConstraints const* useLayoutConstraints();
 
 /// Registers a handler for the named action that fires only when the calling component subtree has focus.
 ///

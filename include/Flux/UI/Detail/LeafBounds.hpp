@@ -67,7 +67,7 @@ inline Rect resolveRectangleBounds(Rect const& frame, Rect const& childFrame,
     }
     return Rect{x, y, w, h};
   }
-  if (constraints.vStackCrossAlign && childFrame.width > frame.width + 1e-4f) {
+  if (constraints.vStackCrossAlign) {
     float const dx = vStackSlotOffsetX(frame.width, childFrame.width, *constraints.vStackCrossAlign);
     return Rect{childFrame.x + dx, childFrame.y, frame.width, frame.height};
   }

@@ -37,6 +37,10 @@ Element Alert::body() const {
                       {
                           Element{Spacer{}}.withFlex(1.f),
                           ZStack{
+                              // Card + content share top-left; center alignment would offset each
+                              // child by its own measured size and misalign the background.
+                              .hAlign = HorizontalAlignment::Leading,
+                              .vAlign = VerticalAlignment::Top,
                               .children =
                                   {
                                       Rectangle{

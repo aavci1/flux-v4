@@ -12,13 +12,21 @@ namespace flux {
 /// outer frame in the tree) if you need margins inside the window.
 ///
 /// Layout uses the parent’s proposed size when finite; each child is measured against that box, then
-/// the stack’s own size is the max of children’s widths and heights. If the proposed width or height
-/// is unknown (`<= 0` after constraints), that axis falls back to the largest measured child so the
-/// stack still gets a non-zero footprint.
+/// the stack’s reported size is `max` of that inner box and the largest child on each axis (after the
+/// same fallback when an axis is unknown). That matches `build`, where each child frame uses
+/// `max(intrinsic, inner)` so ancestors see the true footprint (e.g. scrollable content taller than
+/// the viewport proposal).
 ///
-/// During `build`, every child receives the same inner width/height (that shared box). Child frames
-/// are expanded with `max(intrinsic, inner)` on each axis so nested flex (e.g. `HStack` + `Spacer`)
-/// still sees the full proposed size, then `hAlign` / `vAlign` offset the frame within that box.
+/// During `build`, the shared inner width/height uses the same `max(proposed, largest child)` rule
+/// as `measure` before laying out children. Each child receives that box; child frames are expanded
+/// with `max(intrinsic, inner)` on each axis so nested flex (e.g. `HStack` + `Spacer`) still sees the
+/// full proposed size, then `hAlign` / `vAlign` offset each child's frame using its intrinsic size
+/// (or the expanded frame when `flexGrow > 0`) within that box.
+///
+/// **Overlay composition:** siblings that share one coordinate system (e.g. a track `Rectangle` and a
+/// thumb `Rectangle` with `frame` positions relative to each other) should use `Leading` and `Top`
+/// so every layer keeps the same origin. Default `Center` is for centering independent children
+/// (e.g. label over a full-bleed background).
 struct ZStack {
   HorizontalAlignment hAlign = HorizontalAlignment::Center;
   VerticalAlignment vAlign = VerticalAlignment::Center;

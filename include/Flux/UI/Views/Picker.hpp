@@ -83,6 +83,9 @@ struct PickerRow {
                                     : Colors::transparent;
 
     return ZStack{
+        // Row background + row content overlay: same origin (Leading/Top).
+        .hAlign = HorizontalAlignment::Leading,
+        .vAlign = VerticalAlignment::Top,
         .children =
             {
                 Rectangle{
@@ -125,6 +128,8 @@ struct PickerRow {
                                             .cursor = Cursor::Hand,
                                         },
                                         ZStack{
+                                            .hAlign = HorizontalAlignment::Leading,
+                                            .vAlign = VerticalAlignment::Top,
                                             .children =
                                                 {
                                                     Rectangle{.frame = {0.f, 0.f, checkColW, rowHeight}},
@@ -476,7 +481,8 @@ struct Picker {
                                 .cursor = isDisabled ? Cursor::Inherit : Cursor::Hand,
                             },
                             Element{ZStack{
-                                .hAlign = HorizontalAlignment::Center,
+                                // Hit rect + chevron share left edge; vertical center in the row.
+                                .hAlign = HorizontalAlignment::Leading,
                                 .vAlign = VerticalAlignment::Center,
                                 .children =
                                     {
