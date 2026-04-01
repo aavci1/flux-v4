@@ -1,12 +1,8 @@
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/BuildContext.hpp>
-#include <Flux/UI/Layout.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
-#include <Flux/UI/StateStore.hpp>
 
-#include <Flux/Scene/Nodes.hpp>
-#include <Flux/Scene/SceneGraph.hpp>
-
+#include "UI/Layout/ContainerScope.hpp"
 #include "UI/Layout/LayoutHelpers.hpp"
 
 #include <algorithm>
@@ -19,26 +15,10 @@ namespace flux {
 using namespace flux::layout;
 
 void Element::Model<Grid>::build(BuildContext& ctx) const {
-  if (!ctx.consumeCompositeBodySubtreeRootSkip()) {
-    ctx.advanceChildSlot();
-  }
-  LayoutEngine& le = ctx.layoutEngine();
-  Rect const parentFrame = le.childFrame();
-  LayoutConstraints const outer = ctx.constraints();
-
-  float const assignedW = assignedSpan(parentFrame.width, outer.maxWidth);
-  float const assignedH = assignedSpan(parentFrame.height, outer.maxHeight);
-
-  LayerNode layer{};
-  if (parentFrame.width > 0.f || parentFrame.height > 0.f) {
-    layer.transform = Mat3::translate(parentFrame.x, parentFrame.y);
-  }
-  if (value.clip && assignedW > 0.f && assignedH > 0.f) {
-    layer.clip = Rect{0.f, 0.f, assignedW, assignedH};
-  }
-  NodeId const layerId = ctx.graph().addLayer(ctx.parentLayer(), std::move(layer));
-  ctx.registerCompositeSubtreeRootIfPending(layerId);
-  ctx.pushLayer(layerId);
+  ContainerBuildScope scope(ctx);
+  float const assignedW = assignedSpan(scope.parentFrame.width, scope.outer.maxWidth);
+  float const assignedH = assignedSpan(scope.parentFrame.height, scope.outer.maxHeight);
+  scope.pushStandardLayer(value.clip, assignedW, assignedH);
 
   float const innerW = std::max(0.f, assignedW - 2.f * value.padding);
   float const innerH = std::max(0.f, assignedH - 2.f * value.padding);
@@ -51,22 +31,13 @@ void Element::Model<Grid>::build(BuildContext& ctx) const {
           : 0.f;
   float const cellH = gridCellHeight(innerH, rowCount, value.vSpacing);
 
-  LayoutConstraints childCs = outer;
+  LayoutConstraints childCs = scope.outer;
   childCs.maxWidth =
       cellW > 0.f ? cellW : std::numeric_limits<float>::infinity();
   childCs.maxHeight =
       cellH > 0.f ? cellH : std::numeric_limits<float>::infinity();
 
-  std::vector<Size> sizes;
-  sizes.reserve(value.children.size());
-  ctx.pushChildIndex();
-  for (Element const& ch : value.children) {
-    sizes.push_back(ch.measure(ctx, childCs, ctx.textSystem()));
-  }
-  if (StateStore* store = StateStore::current()) {
-    store->resetSlotCursors();
-  }
-  ctx.rewindChildKeyIndex();
+  auto sizes = scope.measureChildren(value.children, childCs);
 
   std::vector<float> rowH(rowCount, 0.f);
   if (cellH > 0.f && rowCount > 0) {
@@ -80,7 +51,7 @@ void Element::Model<Grid>::build(BuildContext& ctx) const {
     }
   }
 
-  LayoutConstraints innerForBuild = outer;
+  LayoutConstraints innerForBuild = scope.outer;
   innerForBuild.maxWidth =
       cellW > 0.f ? cellW : std::numeric_limits<float>::infinity();
   innerForBuild.maxHeight =
@@ -95,16 +66,12 @@ void Element::Model<Grid>::build(BuildContext& ctx) const {
       if (i >= n) {
         break;
       }
-      Element const& child = value.children[i];
       Size const sz = sizes[i];
       float const frameW = cellW > 0.f ? cellW : sz.width;
       float const frameH = rowH[r] > 0.f ? rowH[r] : sz.height;
       float const cx = x + hAlignOffset(sz.width, frameW, value.hAlign);
       float const cy = y + vAlignOffset(sz.height, frameH, value.vAlign);
-      le.setChildFrame(Rect{cx, cy, frameW, frameH});
-      ctx.pushConstraints(innerForBuild);
-      child.build(ctx);
-      ctx.popConstraints();
+      scope.buildChild(value.children[i], Rect{cx, cy, frameW, frameH}, innerForBuild);
       x += cellW + value.hSpacing;
     }
     y += rowH[r];
@@ -112,16 +79,11 @@ void Element::Model<Grid>::build(BuildContext& ctx) const {
       y += value.vSpacing;
     }
   }
-
-  ctx.popChildIndex();
-  ctx.popLayer();
 }
 
 Size Element::Model<Grid>::measure(BuildContext& ctx, LayoutConstraints const& constraints,
                                    TextSystem& ts) const {
-  if (!ctx.consumeCompositeBodySubtreeRootSkip()) {
-    ctx.advanceChildSlot();
-  }
+  ContainerMeasureScope scope(ctx);
   float const assignedW =
       std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;
   float const assignedH =
@@ -145,11 +107,9 @@ Size Element::Model<Grid>::measure(BuildContext& ctx, LayoutConstraints const& c
 
   std::vector<Size> sizes;
   sizes.reserve(value.children.size());
-  ctx.pushChildIndex();
   for (Element const& ch : value.children) {
     sizes.push_back(ch.measure(ctx, childCs, ts));
   }
-  ctx.popChildIndex();
 
   std::vector<float> rowH(rowCount, 0.f);
   if (cellH > 0.f && rowCount > 0) {

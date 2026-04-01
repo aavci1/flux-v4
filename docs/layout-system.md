@@ -421,14 +421,14 @@ FLUX_ELEMENT_MODEL(MyLeaf, bool canMemoizeMeasure() const override { return true
 
 **Implementation** (`src/UI/Layout/LayoutWrapStack.cpp`):
 
+Use the `ContainerBuildScope` and `ContainerMeasureScope` RAII helpers (defined in `src/UI/Layout/ContainerScope.hpp`) to handle the container protocol automatically — slot consumption, layer management, child index push/pop, measure-rewind, and per-child frame+constraints wrapping.
+
 ```cpp
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/BuildContext.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
-#include <Flux/UI/StateStore.hpp>
-#include <Flux/Scene/Nodes.hpp>
-#include <Flux/Scene/SceneGraph.hpp>
 
+#include "UI/Layout/ContainerScope.hpp"
 #include "UI/Layout/LayoutHelpers.hpp"
 
 namespace flux {
@@ -437,24 +437,19 @@ using namespace flux::layout;
 Size Element::Model<WrapStack>::measure(BuildContext& ctx,
                                         LayoutConstraints const& constraints,
                                         TextSystem& ts) const {
-  // 1. Consume a slot (required for key stability)
-  if (!ctx.consumeCompositeBodySubtreeRootSkip()) {
-    ctx.advanceChildSlot();
-  }
+  ContainerMeasureScope scope(ctx);
 
   float const maxW = std::isfinite(constraints.maxWidth)
                          ? constraints.maxWidth
                          : 0.f;
   float const innerW = std::max(0.f, maxW - 2.f * value.padding);
 
-  // 2. Measure each child with unconstrained height
   LayoutConstraints childCs = constraints;
   childCs.maxHeight = std::numeric_limits<float>::infinity();
 
   float lineW = 0.f, totalH = 0.f, lineH = 0.f;
   bool firstOnLine = true;
 
-  ctx.pushChildIndex();
   for (Element const& ch : value.children) {
     Size const s = ch.measure(ctx, childCs, ts);
     if (!firstOnLine && lineW + value.spacing + s.width > innerW && innerW > 0.f) {
@@ -469,57 +464,24 @@ Size Element::Model<WrapStack>::measure(BuildContext& ctx,
     firstOnLine = false;
   }
   totalH += lineH;
-  ctx.popChildIndex();
 
   float const w = (innerW > 0.f ? maxW : lineW + 2.f * value.padding);
   return {w, totalH + 2.f * value.padding};
 }
 
 void Element::Model<WrapStack>::build(BuildContext& ctx) const {
-  // 1. Consume a slot
-  if (!ctx.consumeCompositeBodySubtreeRootSkip()) {
-    ctx.advanceChildSlot();
-  }
-
-  LayoutEngine& le = ctx.layoutEngine();
-  Rect const parentFrame = le.childFrame();
-  LayoutConstraints const outer = ctx.constraints();
-
-  float const assignedW = stackMainAxisSpan(parentFrame.width, outer.maxWidth);
-  float const assignedH = stackMainAxisSpan(parentFrame.height, outer.maxHeight);
-
-  // 2. Add a LayerNode for this container's coordinate space
-  LayerNode layer{};
-  if (parentFrame.width > 0.f || parentFrame.height > 0.f) {
-    layer.transform = Mat3::translate(parentFrame.x, parentFrame.y);
-  }
-  if (value.clip && assignedW > 0.f && assignedH > 0.f) {
-    layer.clip = Rect{0.f, 0.f, assignedW, assignedH};
-  }
-  NodeId const layerId = ctx.graph().addLayer(ctx.parentLayer(), std::move(layer));
-  ctx.registerCompositeSubtreeRootIfPending(layerId);
-  ctx.pushLayer(layerId);
+  ContainerBuildScope scope(ctx);
+  float const assignedW = stackMainAxisSpan(scope.parentFrame.width, scope.outer.maxWidth);
+  float const assignedH = stackMainAxisSpan(scope.parentFrame.height, scope.outer.maxHeight);
+  scope.pushStandardLayer(value.clip, assignedW, assignedH);
 
   float const innerW = std::max(0.f, assignedW - 2.f * value.padding);
 
-  // 3. Measure all children
-  LayoutConstraints childCs = outer;
+  LayoutConstraints childCs = scope.outer;
   childCs.maxHeight = std::numeric_limits<float>::infinity();
 
-  std::vector<Size> sizes;
-  sizes.reserve(value.children.size());
-  ctx.pushChildIndex();
-  for (Element const& ch : value.children) {
-    sizes.push_back(ch.measure(ctx, childCs, ctx.textSystem()));
-  }
+  auto sizes = scope.measureChildren(value.children, childCs);
 
-  // 4. Rewind so build uses the same keys as measure
-  if (StateStore* store = StateStore::current()) {
-    store->resetSlotCursors();
-  }
-  ctx.rewindChildKeyIndex();
-
-  // 5. Place and build each child
   float x = value.padding, y = value.padding, lineH = 0.f;
   bool firstOnLine = true;
 
@@ -534,18 +496,12 @@ void Element::Model<WrapStack>::build(BuildContext& ctx) const {
     }
     if (!firstOnLine) x += value.spacing;
 
-    le.setChildFrame(Rect{x, y, sz.width, sz.height});
-    ctx.pushConstraints(childCs);
-    value.children[i].build(ctx);
-    ctx.popConstraints();
+    scope.buildChild(value.children[i], Rect{x, y, sz.width, sz.height}, childCs);
 
     x += sz.width;
     lineH = std::max(lineH, sz.height);
     firstOnLine = false;
   }
-
-  ctx.popChildIndex();
-  ctx.popLayer();
 }
 
 } // namespace flux
@@ -553,21 +509,19 @@ void Element::Model<WrapStack>::build(BuildContext& ctx) const {
 
 ### The Layout Container Contract
 
-Every layout container must follow this protocol:
+The `ContainerBuildScope` and `ContainerMeasureScope` RAII helpers (in `src/UI/Layout/ContainerScope.hpp`) handle the protocol automatically. The underlying steps they encapsulate are:
 
-1. **Slot consumption**: Call `ctx.consumeCompositeBodySubtreeRootSkip()` or `ctx.advanceChildSlot()` at the top of both `build` and `measure`.
+1. **Slot consumption**: `consumeCompositeBodySubtreeRootSkip()` or `advanceChildSlot()` at the top of both `build` and `measure`. *(Handled by both scope constructors.)*
 
-2. **Layer management**: In `build`, add a `LayerNode` to the scene graph, `pushLayer`, and `popLayer` when done. This establishes the container's coordinate space.
+2. **Layer management**: In `build`, add a `LayerNode` to the scene graph, `pushLayer`, and `popLayer` when done. *(Use `scope.pushStandardLayer(clip, w, h)` for a translated+clipped layer, or `scope.pushCustomLayer(layerId)` for custom transforms. Destructor calls `popLayer`.)*
 
-3. **Child index management**: Call `ctx.pushChildIndex()` before iterating children, `ctx.popChildIndex()` after. This is required for stable component key generation.
+3. **Child index management**: `pushChildIndex()` before iterating children, `popChildIndex()` after. *(Handled by scope constructor/destructor.)*
 
-4. **Measure-then-build**: In `build`, first measure all children to collect sizes. Then call `ctx.rewindChildKeyIndex()` and `StateStore::resetSlotCursors()` to rewind, then iterate again to build.
+4. **Measure-then-build**: In `build`, first measure all children, then rewind keys + state cursors, then build. *(Use `scope.measureChildren(children, cs)` which measures and rewinds automatically.)*
 
-5. **Child frame**: Before building each child, call `le.setChildFrame(rect)` with the position and size you've computed for that child.
+5. **Child frame + constraints**: Before building each child, `setChildFrame` + `pushConstraints` / `popConstraints`. *(Use `scope.buildChild(child, frame, cs)`.)*
 
-6. **Constraints**: `pushConstraints` before each child's build, `popConstraints` after. Narrow the constraints appropriately for your layout logic.
-
-7. **Composite subtree root**: Call `ctx.registerCompositeSubtreeRootIfPending(layerId)` right after adding your layer node. This supports `useLayoutRect()`.
+6. **Composite subtree root**: `registerCompositeSubtreeRootIfPending(layerId)` right after adding the layer node. *(Handled by `pushStandardLayer` / `pushCustomLayer`.)*
 
 ---
 

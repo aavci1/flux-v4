@@ -84,35 +84,9 @@ The only debugging aid is `FLUX_DEBUG_INPUT` for input events. Layout bugs requi
 
 Implemented as `FLUX_ELEMENT_MODEL(Type, ...)` in `Element.hpp`. All 14 standard specializations replaced with one-line macro invocations (Spacer kept manual due to custom flex). ~170 lines of repetition removed.
 
-### B. Extract the container protocol into a `ContainerBuildScope` RAII helper
+### B. Extract the container protocol into a `ContainerBuildScope` RAII helper — ✅ DONE
 
-The duplicated ceremony in every layout container should be a single helper that handles the preamble and postamble, making protocol violations structurally impossible:
-
-```cpp
-struct ContainerBuildScope {
-  BuildContext& ctx;
-  LayoutEngine& le;
-  Rect parentFrame;
-  LayoutConstraints outer;
-  NodeId layerId;
-
-  // Constructor handles: slot consumption, read parent frame/constraints,
-  // add layer, register composite subtree root, push layer, push child index
-  ContainerBuildScope(BuildContext& ctx, bool clip, float assignedW, float assignedH);
-
-  // Measure all children, rewind state + key index
-  std::vector<Size> measureChildren(std::vector<Element> const& children,
-                                     LayoutConstraints const& childCs);
-
-  // Set frame and constraints for one child, build it
-  void buildChild(Element const& child, Rect frame, LayoutConstraints const& cs);
-
-  // Destructor handles: popChildIndex, popLayer
-  ~ContainerBuildScope();
-};
-```
-
-VStack's build would shrink from 100 lines to ~40 lines of actual layout logic. More importantly, you can't forget `popLayer` or `rewindChildKeyIndex` — they happen automatically.
+Implemented as `ContainerBuildScope` + `ContainerMeasureScope` in `src/UI/Layout/ContainerScope.hpp`. Refactored 6 layout files (VStack, HStack, ZStack, Grid, OffsetView, ScaleAroundCenter). ~260 lines of duplicated protocol code removed. Protocol violations (forgotten `popLayer`, `rewindChildKeyIndex`, `setChildFrame`) are now structurally impossible.
 
 ### C. Debug assertions in debug builds
 
