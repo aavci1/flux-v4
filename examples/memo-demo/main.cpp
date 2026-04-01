@@ -48,7 +48,7 @@ struct MemoHoverButton {
     Color const btnText = hovered ? Color::hex(0xFFFFFF) : pal::label;
     return ZStack{.children = {
                       Rectangle{
-                          .frame = {0, 0, 0, 36.f},
+                          .offsetX = 0, .offsetY = 0, .width = 0, .height = 36.f,
                           .cornerRadius = CornerRadius(8.f),
                           .fill = FillStyle::solid(btnFill),
                           .stroke = StrokeStyle::solid(pal::border, 1.f),
@@ -102,7 +102,7 @@ struct MemoDemo {
                 HStack{.spacing = 12.f, .children = {
                     ZStack{.children = {
                         Rectangle{
-                            .frame = {0, 0, 0, 36.f},
+                            .offsetX = 0, .offsetY = 0, .width = 0, .height = 36.f,
                             .cornerRadius = CornerRadius(8.f),
                             .fill = FillStyle::solid(pal::accent),
                             .flexGrow = 0.f,
@@ -117,7 +117,7 @@ struct MemoDemo {
                     MemoHoverButton{},
                     ZStack{.children = {
                         Rectangle{
-                            .frame = {0, 0, 0, 36.f},
+                            .offsetX = 0, .offsetY = 0, .width = 0, .height = 36.f,
                             .cornerRadius = CornerRadius(8.f),
                             .fill = FillStyle::solid(pal::surface),
                             .stroke = StrokeStyle::solid(pal::border, 1.f),

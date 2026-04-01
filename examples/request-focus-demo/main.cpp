@@ -44,7 +44,7 @@ struct FocusField {
                     .children =
                         {
                             Element{Rectangle{
-                                        .frame = {0.f, 0.f, 0.f, 80.f},
+                                        .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 80.f,
                                         .cornerRadius = CornerRadius(10.f),
                                         .fill = FillStyle::solid(focused ? pal::editorFocus : pal::editorBg),
                                         .stroke =
@@ -135,7 +135,7 @@ struct RequestFocusDemo {
           .children =
               {
                   Rectangle{
-                      .frame = {0.f, 0.f, 0.f, 36.f},
+                      .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 36.f,
                       .cornerRadius = CornerRadius(8.f),
                       .fill = FillStyle::solid(pal::accent),
                       .cursor = Cursor::Hand,

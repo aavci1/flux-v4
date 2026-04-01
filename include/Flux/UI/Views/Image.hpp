@@ -18,7 +18,10 @@ namespace flux::views {
 /// Image view component. `source` references `flux::Image` (bitmap); distinct from this `Image` view type.
 struct Image {
   std::shared_ptr<flux::Image> source;
-  Rect frame{};
+  float offsetX = 0.f;
+  float offsetY = 0.f;
+  float width = 0.f;
+  float height = 0.f;
   ImageFillMode fillMode = ImageFillMode::Cover;
   CornerRadius cornerRadius{};
   float opacity = 1.f;

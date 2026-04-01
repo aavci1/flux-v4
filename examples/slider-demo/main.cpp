@@ -124,7 +124,7 @@ struct RgbColorSelectorRoot {
                         .vAlign = VerticalAlignment::Center,
                         .children = {
                             Rectangle{
-                                .frame = {0.f, 0.f, 0.f, 160.f},
+                                .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 160.f,
                                 .cornerRadius = CornerRadius{theme.radiusLarge},
                                 .fill = FillStyle::solid(preview),
                                 .stroke = StrokeStyle::solid(theme.colorBorder, 1.f),

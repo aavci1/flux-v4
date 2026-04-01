@@ -109,6 +109,7 @@ add_library(flux STATIC
   src/UI/Layout/LayoutHStack.cpp
   src/UI/Layout/LayoutZStack.cpp
   src/UI/Layout/LayoutScaleAroundCenter.cpp
+  src/UI/Layout/LayoutLayerEffect.cpp
   src/UI/Layout/LayoutGrid.cpp
   src/UI/Layout/LayoutSpacer.cpp
   src/UI/Layout/LayoutOffsetView.cpp

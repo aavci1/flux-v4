@@ -26,7 +26,7 @@ struct ThreeStateButton {
 
     return ZStack{.children = {
                       Rectangle{
-                          .frame = {0.f, 0.f, 0.f, 44.f},
+                          .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 44.f,
                           .cornerRadius = CornerRadius(10.f),
                           .fill = FillStyle::solid(bg),
                           .cursor = Cursor::Hand,
@@ -50,7 +50,7 @@ struct HoverListRow {
 
     return ZStack{.children = {
                       Rectangle{
-                          .frame = {0.f, 0.f, 0.f, 48.f},
+                          .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 48.f,
                           .cornerRadius = CornerRadius(8.f),
                           .fill = FillStyle::solid(hovered ? Color::hex(0xDFDFE8) : Color::hex(0xFFFFFF)),
                           .cursor = Cursor::Hand,

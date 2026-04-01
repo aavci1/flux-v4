@@ -44,7 +44,8 @@ Element Alert::body() const {
                               .children =
                                   {
                                       Rectangle{
-                                          .frame = {0.f, 0.f, cardWidth, 0.f},
+                                          .width = cardWidth,
+                                          .height = 0.f,
                                           .cornerRadius = cardCorner,
                                           .fill = FillStyle::solid(card),
                                           .stroke = StrokeStyle::solid(stroke, 1.f),
@@ -74,7 +75,8 @@ std::vector<Element> Alert::buildContent(Color titleC, Color msgC, FluxTheme con
       .font = theme.typeTitle.toFont(),
       .color = titleC,
       .lineHeight = theme.typeTitle.lineHeight,
-      .frame = {0.f, 0.f, contentW, 0.f},
+      .width = contentW,
+      .height = 0.f,
   });
 
   if (!message.empty()) {
@@ -84,7 +86,8 @@ std::vector<Element> Alert::buildContent(Color titleC, Color msgC, FluxTheme con
         .color = msgC,
         .wrapping = TextWrapping::Wrap,
         .lineHeight = theme.typeBody.lineHeight,
-        .frame = {0.f, 0.f, contentW, 0.f},
+        .width = contentW,
+        .height = 0.f,
     });
   }
 

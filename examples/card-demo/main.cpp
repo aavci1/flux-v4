@@ -58,7 +58,7 @@ struct Card {
         .vAlign = VerticalAlignment::Center,
         .children = {
             Rectangle{
-                .frame = {0, 0, 14.f, 14.f},
+                .offsetX = 0, .offsetY = 0, .width = 14.f, .height = 14.f,
                 .cornerRadius = CornerRadius(7.f),
                 .fill = FillStyle::solid(accent),
             },
@@ -66,7 +66,8 @@ struct Card {
                 .text = title,
                 .font = {.size = 17.f, .weight = 600.f},
                 .color = pal::label,
-                .frame = {0, 0, 0, 24.f},
+                .width = 0.f,
+                .height = 24.f,
                 .flexGrow = 1.f,
             },
             Text{
@@ -75,7 +76,8 @@ struct Card {
                 .color = pal::sublabel,
                 .horizontalAlignment = HorizontalAlignment::Center,
                 .verticalAlignment = VerticalAlignment::Center,
-                .frame = {0, 0, 24.f, 24.f},
+                .width = 24.f,
+                .height = 24.f,
             },
         },
     });
@@ -90,7 +92,8 @@ struct Card {
                               .font = {.size = 15.f, .weight = 400.f},
                               .color = pal::sublabel,
                               .wrapping = TextWrapping::Wrap,
-                              .frame = {0, 0, 0, bodyOpacity * bodyTextHeight},
+                              .width = 0.f,
+                              .height = bodyOpacity * bodyTextHeight,
                           }}
                       .withFlex(1.f),
               },

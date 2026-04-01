@@ -26,7 +26,8 @@ Element Icon::body() const {
         .color = col,
         .horizontalAlignment = HorizontalAlignment::Center,
         .verticalAlignment = VerticalAlignment::Center,
-        .frame = {0.f, 0.f, sz, sz},
+        .width = sz,
+        .height = sz,
     };
 }
 

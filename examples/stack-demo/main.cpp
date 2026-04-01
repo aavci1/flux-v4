@@ -1,5 +1,7 @@
 // Showcases VStack (vertical) and HStack (horizontal) layout: spacing,
 // alignment, nesting, and Spacer.
+#include <cstdio>
+
 #include <Flux.hpp>
 #include <Flux/Core/WindowUI.hpp>
 #include <Flux/UI/UI.hpp>
@@ -46,6 +48,31 @@ struct StackDemoRoot {
                             .wrapping = TextWrapping::Wrap
                         },
                         Text {
+                            .text = "Element modifier chain",
+                            .font = {.size = 15.f, .weight = 600.f},
+                            .color = pal::ink
+                        },
+                        Text {
+                            .text = "Wrap a view in Element { … } and chain .padding(), .background(), .cornerRadius(), .onTapGesture(), etc. "
+                                    "Each call wraps the previous subtree (first modifier sits closest to the content).",
+                            .font = {.size = 14.f, .weight = 400.f},
+                            .color = pal::muted,
+                            .wrapping = TextWrapping::Wrap
+                        },
+                        Element{
+                            Text {
+                                .text = "  Tap: stderr  ",
+                                .font = {.size = 14.f, .weight = 600.f},
+                                .color = pal::ink,
+                            }
+                        }
+                            .padding(14.f)
+                            .background(FillStyle::solid(Color::hex(0xE8E8EF)))
+                            .cornerRadius(CornerRadius{10.f})
+                            .onTapGesture([] {
+                              std::fprintf(stderr, "stack-demo: modifier chain tap\n");
+                            }),
+                        Text {
                             .text = "VStack",
                             .font = {.size = 15.f, .weight = 600.f},
                             .color = pal::ink
@@ -56,17 +83,17 @@ struct StackDemoRoot {
                             .children =
                                 children(
                                     Rectangle {
-                                        .frame = {0.f, 0.f, 160.f, 36.f},
+                                        .offsetX = 0.f, .offsetY = 0.f, .width = 160.f, .height = 36.f,
                                         .cornerRadius = CornerRadius{8.f},
                                         .fill = FillStyle::solid(pal::coral),
                                     },
                                     Rectangle {
-                                        .frame = {0.f, 0.f, 200.f, 36.f},
+                                        .offsetX = 0.f, .offsetY = 0.f, .width = 200.f, .height = 36.f,
                                         .cornerRadius = CornerRadius{8.f},
                                         .fill = FillStyle::solid(pal::teal),
                                     },
                                     Rectangle {
-                                        .frame = {0.f, 0.f, 120.f, 36.f},
+                                        .offsetX = 0.f, .offsetY = 0.f, .width = 120.f, .height = 36.f,
                                         .cornerRadius = CornerRadius{8.f},
                                         .fill = FillStyle::solid(pal::indigo),
                                     }),
@@ -82,25 +109,25 @@ struct StackDemoRoot {
                             .children = {
                                 Element {
                                     Rectangle {
-                                        .frame = {0.f, 0.f, 56.f, 56.f},
+                                        .offsetX = 0.f, .offsetY = 0.f, .width = 56.f, .height = 56.f,
                                         .cornerRadius = CornerRadius{10.f},
                                         .fill = FillStyle::solid(pal::coral),
                                     }
                                 }.withFlex(2.f),
                                 Rectangle {
-                                    .frame = {0.f, 0.f, 56.f, 72.f},
+                                    .offsetX = 0.f, .offsetY = 0.f, .width = 56.f, .height = 72.f,
                                     .cornerRadius = CornerRadius{10.f},
                                     .fill = FillStyle::solid(pal::teal),
                                 },
                                 Element {
                                     Rectangle {
-                                        .frame = {0.f, 0.f, 56.f, 40.f},
+                                        .offsetX = 0.f, .offsetY = 0.f, .width = 56.f, .height = 40.f,
                                         .cornerRadius = CornerRadius{10.f},
                                         .fill = FillStyle::solid(pal::indigo),
                                     }
                                 }.withFlex(1.f),
                                 Rectangle {
-                                    .frame = {0.f, 0.f, 56.f, 56.f},
+                                    .offsetX = 0.f, .offsetY = 0.f, .width = 56.f, .height = 56.f,
                                     .cornerRadius = CornerRadius{10.f},
                                     .fill = FillStyle::solid(pal::amber),
                                 },
@@ -120,7 +147,7 @@ struct StackDemoRoot {
                                     .vAlign = VerticalAlignment::Center,
                                     .children = {
                                         Rectangle {
-                                            .frame = {0.f, 0.f, 0.f, 28.f},
+                                            .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 28.f,
                                             .cornerRadius = CornerRadius{6.f},
                                             .fill = FillStyle::solid(Color::hex(0xE8E8EF)),
                                             .flexGrow = 1.f,
@@ -138,7 +165,7 @@ struct StackDemoRoot {
                                     .vAlign = VerticalAlignment::Center,
                                     .children = {
                                         Rectangle {
-                                            .frame = {0.f, 0.f, 0.f, 28.f},
+                                            .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 28.f,
                                             .cornerRadius = CornerRadius{6.f},
                                             .fill = FillStyle::solid(Color::hex(0xE8E8EF)),
                                             .flexGrow = 1.f,
@@ -156,7 +183,7 @@ struct StackDemoRoot {
                                     .vAlign = VerticalAlignment::Center,
                                     .children = {
                                         Rectangle {
-                                            .frame = {0.f, 0.f, 0.f, 28.f},
+                                            .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 28.f,
                                             .cornerRadius = CornerRadius{6.f},
                                             .fill = FillStyle::solid(Color::hex(0xE8E8EF)),
                                             .flexGrow = 1.f,

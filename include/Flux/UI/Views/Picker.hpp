@@ -95,7 +95,7 @@ struct PickerRow {
         .children =
             {
                 Rectangle{
-                    .frame = {0.f, 0.f, 0.f, rowHeight},
+                    .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = rowHeight,
                     .cornerRadius = rowBgCorners,
                     .fill = FillStyle::solid(bg),
                     .stroke = StrokeStyle::none(),
@@ -109,7 +109,7 @@ struct PickerRow {
                     .children =
                         {
                             Rectangle{
-                                .frame = {0.f, 0.f, rowPaddingH, rowHeight},
+                                .offsetX = 0.f, .offsetY = 0.f, .width = rowPaddingH, .height = rowHeight,
                                 .fill = FillStyle::none(),
                                 .stroke = StrokeStyle::none(),
                             },
@@ -128,7 +128,8 @@ struct PickerRow {
                                             .lineHeight = 0.f,
                                             .maxLines = 1,
                                             .firstBaselineOffset = 0.f,
-                                            .frame = {0.f, 0.f, 0.f, rowHeight},
+                                            .width = 0.f,
+                                            .height = rowHeight,
                                             .flexGrow = 1.f,
                                             .onTap = onSelect,
                                             .cursor = Cursor::Hand,
@@ -138,7 +139,7 @@ struct PickerRow {
                                             .vAlign = VerticalAlignment::Top,
                                             .children =
                                                 {
-                                                    Rectangle{.frame = {0.f, 0.f, checkColW, rowHeight}},
+                                                    Rectangle{.offsetX = 0.f, .offsetY = 0.f, .width = checkColW, .height = rowHeight},
                                                     selected ? Element{Icon{
                                                                    .name = IconName::Check,
                                                                    .size = iconSz,
@@ -151,7 +152,7 @@ struct PickerRow {
                             }}
                                 .withFlex(1.f),
                             Rectangle{
-                                .frame = {0.f, 0.f, rowPaddingH, rowHeight},
+                                .offsetX = 0.f, .offsetY = 0.f, .width = rowPaddingH, .height = rowHeight,
                                 .fill = FillStyle::none(),
                                 .stroke = StrokeStyle::none(),
                             },
@@ -445,13 +446,13 @@ struct Picker {
         .children =
             {
                 Rectangle{
-                    .frame = {0.f, 0.f, 0.f, h},
+                    .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = h,
                     .cornerRadius = triggerCr,
                     .fill = FillStyle::solid(*fillAnim),
                     .stroke = StrokeStyle::solid(borderCol, borderW),
                     .flexGrow = flexGrow,
                     .flexShrink = flexShrink,
-                    .minSize = minSize,
+                    .minMainSize = minSize,
                     .cursor = isDisabled ? Cursor::Inherit : Cursor::Hand,
                     .focusable = !isDisabled,
                     .onKeyDown = isDisabled ? nullptr : std::function<void(KeyCode, Modifiers)>{onTriggerKey},
@@ -463,7 +464,7 @@ struct Picker {
                     .children =
                         {
                             Rectangle{
-                                .frame = {0.f, 0.f, padHResolved, h},
+                                .offsetX = 0.f, .offsetY = 0.f, .width = padHResolved, .height = h,
                                 .fill = FillStyle::none(),
                                 .stroke = StrokeStyle::none(),
                             },
@@ -479,13 +480,14 @@ struct Picker {
                                 .lineHeight = 0.f,
                                 .maxLines = 1,
                                 .firstBaselineOffset = 0.f,
-                                .frame = {0.f, 0.f, 0.f, h},
+                                .width = 0.f,
+                                .height = h,
                                 .flexGrow = 1.f,
                                 .onTap = isDisabled ? nullptr : std::function<void()>{onTriggerTap},
                                 .cursor = isDisabled ? Cursor::Inherit : Cursor::Hand,
                             },
                             Rectangle{
-                                .frame = {0.f, 0.f, padHResolved, h},
+                                .offsetX = 0.f, .offsetY = 0.f, .width = padHResolved, .height = h,
                                 .fill = FillStyle::none(),
                                 .stroke = StrokeStyle::none(),
                                 .cursor = isDisabled ? Cursor::Inherit : Cursor::Hand,
@@ -498,7 +500,10 @@ struct Picker {
                                 .children =
                                     {
                                         Rectangle{
-                                            .frame = {0.f, 0.f, std::max(14.f, chevronIconSz), h},
+                                            .offsetX = 0.f,
+                                            .offsetY = 0.f,
+                                            .width = std::max(14.f, chevronIconSz),
+                                            .height = h,
                                             .fill = FillStyle::none(),
                                             .stroke = StrokeStyle::none(),
                                             .cursor = isDisabled ? Cursor::Inherit : Cursor::Hand,
@@ -512,7 +517,7 @@ struct Picker {
                                     },
                             }},
                             Rectangle{
-                                .frame = {0.f, 0.f, padHResolved, h},
+                                .offsetX = 0.f, .offsetY = 0.f, .width = padHResolved, .height = h,
                                 .fill = FillStyle::none(),
                                 .stroke = StrokeStyle::none(),
                                 .cursor = isDisabled ? Cursor::Inherit : Cursor::Hand,

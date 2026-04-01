@@ -179,7 +179,7 @@ struct CheckboxDemoRoot {
                                                             .children =
                                                                 {
                                                                     Rectangle{
-                                                                        .frame = {0.f, 0.f, 20.f, 0.f},
+                                                                        .offsetX = 0.f, .offsetY = 0.f, .width = 20.f, .height = 0.f,
                                                                     },
                                                                     Element{LabeledCheckbox{
                                                                                 .label = "Item A",
@@ -194,7 +194,7 @@ struct CheckboxDemoRoot {
                                                             .children =
                                                                 {
                                                                     Rectangle{
-                                                                        .frame = {0.f, 0.f, 20.f, 0.f},
+                                                                        .offsetX = 0.f, .offsetY = 0.f, .width = 20.f, .height = 0.f,
                                                                     },
                                                                     Element{LabeledCheckbox{
                                                                                 .label = "Item B",
@@ -209,7 +209,7 @@ struct CheckboxDemoRoot {
                                                             .children =
                                                                 {
                                                                     Rectangle{
-                                                                        .frame = {0.f, 0.f, 20.f, 0.f},
+                                                                        .offsetX = 0.f, .offsetY = 0.f, .width = 20.f, .height = 0.f,
                                                                     },
                                                                     Element{LabeledCheckbox{
                                                                                 .label = "Item C",

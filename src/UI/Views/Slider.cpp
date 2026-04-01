@@ -179,7 +179,7 @@ Element Slider::body() const {
         .vAlign = VerticalAlignment::Top,
         .children = {
             Rectangle {
-                .frame = {0.f, 0.f, componentWidth, componentHeight},
+                .offsetX = 0.f, .offsetY = 0.f, .width = componentWidth, .height = componentHeight,
                 .cursor = isDisabled ? Cursor::Inherit : Cursor::Hand,
                 .focusable = !isDisabled,
                 .onKeyDown = isDisabled ? nullptr : std::function<void(KeyCode, Modifiers)> {handleKey},
@@ -188,19 +188,19 @@ Element Slider::body() const {
                 .onPointerMove = isDisabled ? nullptr : std::function<void(Point)> {handleMove},
             },
             Rectangle {
-                .frame = {thumbSize * 0.5f, trackY, trackWidth, trackHeight},
+                .offsetX = thumbSize * 0.5f, .offsetY = trackY, .width = trackWidth, .height = trackHeight,
                 .cornerRadius = CornerRadius {trackHeight * 0.5f},
                 .fill = FillStyle::solid(isDisabled ? theme.colorSurfaceDisabled : inactiveColor),
                 .stroke = StrokeStyle::none(),
             },
             Rectangle {
-                .frame = {thumbSize * 0.5f, trackY, filledWidth, trackHeight},
+                .offsetX = thumbSize * 0.5f, .offsetY = trackY, .width = filledWidth, .height = trackHeight,
                 .cornerRadius = CornerRadius {trackHeight * 0.5f},
                 .fill = FillStyle::solid(isDisabled ? theme.colorSurfaceDisabled : activeColor),
                 .stroke = StrokeStyle::none(),
             },
             Rectangle {
-                .frame = {thumbX + thumbOffset, thumbY, thumbDiameter, thumbDiameter},
+                .offsetX = thumbX + thumbOffset, .offsetY = thumbY, .width = thumbDiameter, .height = thumbDiameter,
                 .cornerRadius = CornerRadius {thumbDiameter * 0.5f},
                 .fill = FillStyle::solid(isDisabled ? theme.colorTextDisabled : thumbColor),
                 .stroke = isDisabled ? StrokeStyle::solid(theme.colorTextDisabled, 1.f) : thumbStroke,

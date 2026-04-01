@@ -48,7 +48,7 @@ struct ConfirmDialog {
                                 .children =
                                     {
                                         Rectangle{
-                                            .frame = {0.f, 0.f, 360.f, 0.f},
+                                            .offsetX = 0.f, .offsetY = 0.f, .width = 360.f, .height = 0.f,
                                             .cornerRadius = CornerRadius(14.f),
                                             .fill = FillStyle::solid(Color::hex(0xFFFFFF)),
                                             .stroke = StrokeStyle::solid(pal::cardStroke, 1.f),
@@ -81,7 +81,7 @@ struct ConfirmDialog {
                                                                     .children =
                                                                         {
                                                                             Rectangle{
-                                                                                .frame = {0.f, 0.f, 0.f, 44.f},
+                                                                                .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 44.f,
                                                                                 .cornerRadius = CornerRadius(8.f),
                                                                                 .fill = FillStyle::solid(Color::hex(0xF0F0F5)),
                                                                                 .stroke = StrokeStyle::solid(pal::cardStroke, 1.f),
@@ -106,7 +106,7 @@ struct ConfirmDialog {
                                                                     .children =
                                                                         {
                                                                             Rectangle{
-                                                                                .frame = {0.f, 0.f, 0.f, 44.f},
+                                                                                .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 44.f,
                                                                                 .cornerRadius = CornerRadius(8.f),
                                                                                 .fill = FillStyle::solid(confirmColor),
                                                                                 .stroke = StrokeStyle::none(),
@@ -160,7 +160,7 @@ struct FileManagerRow {
                     .children =
                         {
                             Rectangle{
-                                .frame = {0.f, 0.f, 88.f, 32.f},
+                                .offsetX = 0.f, .offsetY = 0.f, .width = 88.f, .height = 32.f,
                                 .cornerRadius = CornerRadius(6.f),
                                 .fill = FillStyle::solid(pal::dangerBg),
                                 .stroke = StrokeStyle::solid(pal::dangerStroke, 1.f),

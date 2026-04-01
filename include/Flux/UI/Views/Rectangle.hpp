@@ -13,14 +13,17 @@
 
 namespace flux {
 
-/// Axis-aligned rounded rect leaf. Local \c frame is relative to the layout cell; zero width/height
-/// expands to the proposed constraint box (see layout code).
+/// Axis-aligned rounded rect leaf. \c width / \c height are explicit sizes; \c 0 means expand along
+/// that axis from the proposed constraint box (see layout code). \c offsetX / \c offsetY shift the
+/// rect within the parent cell (e.g. ZStack overlays).
 struct Rectangle {
 
   // ── Appearance ─────────────────────────────────────────────────────────────
 
-  /// Local geometry; use \c {0,0,0,0} to fill the assigned layout rect.
-  Rect frame{};
+  float offsetX = 0.f;
+  float offsetY = 0.f;
+  float width = 0.f;
+  float height = 0.f;
   CornerRadius cornerRadius{};
   FillStyle fill = FillStyle::none();
   StrokeStyle stroke = StrokeStyle::none();
@@ -29,7 +32,7 @@ struct Rectangle {
 
   float flexGrow = 0.f;
   float flexShrink = 0.f;
-  float minSize = 0.f;
+  float minMainSize = 0.f;
 
   // ── Interaction ────────────────────────────────────────────────────────────
 

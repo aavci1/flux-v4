@@ -116,7 +116,7 @@ Element Toggle::body() const {
       .vAlign = VerticalAlignment::Top,
       .children = {
         Rectangle {
-          .frame = {0.f, 0.f, trackWidth, trackHeight},
+          .offsetX = 0.f, .offsetY = 0.f, .width = trackWidth, .height = trackHeight,
           .cornerRadius = CornerRadius {trackHeight * 0.5f},
           .fill = FillStyle::solid(*trackFillAnim),
           .stroke = StrokeStyle::solid(focused ? focusColor : borderColor, borderWidth),
@@ -126,7 +126,7 @@ Element Toggle::body() const {
           .onTap = isDisabled ? nullptr : std::function<void()>{handleToggle},
         },
         Rectangle {
-          .frame = {*thumbXAnim, thumbInset, thumbSize, thumbSize},
+          .offsetX = *thumbXAnim, .offsetY = thumbInset, .width = thumbSize, .height = thumbSize,
           .cornerRadius = CornerRadius {thumbSize * 0.5f},
           .fill = FillStyle::solid(isDisabled ? disabledColor : thumbColor),
           .stroke = isDisabled ? StrokeStyle::solid(disabledColor, thumbBorderWidth) : StrokeStyle::solid(thumbBorderColor, thumbBorderWidth),

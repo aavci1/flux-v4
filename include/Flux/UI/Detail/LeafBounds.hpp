@@ -22,4 +22,16 @@ float vStackSlotOffsetX(float itemW, float slotW, HorizontalAlignment a);
 Rect resolveRectangleBounds(Rect const& frame, Rect const& childFrame, LayoutConstraints const& constraints,
                             LayoutHints const& hints);
 
+/// Single entry for leaf layout: \p explicitBox is \c {offsetX, offsetY, width, height} from the leaf
+/// (zeros mean expand from constraints). \p isRectangle enables stack cross-alignment behavior used by
+/// \c Rectangle only.
+inline Rect resolveLeafLayoutBounds(Rect const& explicitBox, Rect const& childFrame,
+                                  LayoutConstraints const& constraints, LayoutHints const& hints,
+                                  bool isRectangle) {
+  if (!isRectangle) {
+    return resolveLeafBounds(explicitBox, childFrame, constraints);
+  }
+  return resolveRectangleBounds(explicitBox, childFrame, constraints, hints);
+}
+
 } // namespace flux::detail

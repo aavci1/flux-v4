@@ -38,9 +38,9 @@ Element cursorSwatchRow(std::string name, Cursor cursor, Color chip) {
                             Text{.text = std::move(name),
                                  .font = {.size = 14.f, .weight = 600.f},
                                  .color = pal::label,
-                                 .frame = {152.f, 0.f, 0.f, 0.f}},
+                                 .offsetX = 152.f, .offsetY = 0.f, .width = 0.f, .height = 0.f},
                             Rectangle{
-                                .frame = {0.f, 0.f, 0.f, 44.f},
+                                .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 44.f,
                                 .cornerRadius = CornerRadius(8.f),
                                 .fill = FillStyle::solid(chip),
                                 .stroke = StrokeStyle::solid(Color::hex(0xC8C8D0), 1.f),
@@ -130,7 +130,7 @@ struct CursorDemo {
                                                                     .text = "Text + IBeam",
                                                                     .font = {.size = 14.f, .weight = 600.f},
                                                                     .color = pal::label,
-                                                                    .frame = {152.f, 0.f, 0.f, 0.f}},
+                                                                    .offsetX = 152.f, .offsetY = 0.f, .width = 0.f, .height = 0.f},
                                                                 Element{Text{
                                                                     .text = "Read-only label — cursor is I-beam over "
                                                                             "glyphs (no pointer handlers).",
@@ -143,7 +143,7 @@ struct CursorDemo {
                                                                     .wrapping = TextWrapping::Wrap,
                                                                     .padding = 10.f,
                                                                     .cornerRadius = CornerRadius(8.f),
-                                                                    .frame = {0.f, 0.f, 0.f, 0.f},
+                                                                    .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 0.f,
                                                                     .flexGrow = 1.f,
                                                                     .cursor = Cursor::IBeam,
                                                                 }}
@@ -166,7 +166,7 @@ struct CursorDemo {
                                                                                         .color = pal::label,
                                                                                     },
                                                                                     Rectangle{
-                                                                                        .frame = {0.f, 0.f, 0.f, 52.f},
+                                                                                        .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 52.f,
                                                                                         .cornerRadius = CornerRadius(10.f),
                                                                                         .fill = FillStyle::solid(pal::chipAccent),
                                                                                         .cursor = Cursor::ResizeAll,

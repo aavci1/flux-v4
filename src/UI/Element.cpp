@@ -13,6 +13,10 @@
 #include <Flux/Scene/Nodes.hpp>
 #include <Flux/Scene/SceneGraph.hpp>
 
+#include <Flux/UI/Views/Rectangle.hpp>
+#include <Flux/UI/Views/VStack.hpp>
+#include <Flux/UI/Views/ZStack.hpp>
+
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -35,6 +39,145 @@ TextLayoutOptions textViewLayoutOptions(Text const& v, LayoutConstraints const&,
   }
   return o;
 }
+
+Rect explicitLeafBox(Rectangle const& v) {
+  return {v.offsetX, v.offsetY, v.width, v.height};
+}
+
+Rect explicitLeafBox(Text const& v) {
+  return {v.offsetX, v.offsetY, v.width, v.height};
+}
+
+Rect explicitLeafBox(views::Image const& v) {
+  return {v.offsetX, v.offsetY, v.width, v.height};
+}
+
+struct PaddingModifier {
+  float amount{};
+  Element child;
+  Element body() const {
+    return Element{VStack{.padding = amount, .children = {child}}};
+  }
+};
+
+struct BackgroundModifier {
+  FillStyle fill;
+  Element child;
+  Element body() const {
+    return Element{ZStack{
+        .hAlign = HorizontalAlignment::Leading,
+        .vAlign = VerticalAlignment::Top,
+        .children =
+            {
+                Element{Rectangle{.width = 0.f, .height = 0.f, .fill = fill}},
+                child,
+            },
+    }};
+  }
+};
+
+struct FrameModifier {
+  float w{};
+  float h{};
+  Element child;
+  Element body() const {
+    return Element{ZStack{
+        .hAlign = HorizontalAlignment::Leading,
+        .vAlign = VerticalAlignment::Top,
+        .children =
+            {
+                Element{Rectangle{.width = w, .height = h, .fill = FillStyle::none()}},
+                child,
+            },
+    }};
+  }
+};
+
+struct BorderModifier {
+  StrokeStyle stroke;
+  Element child;
+  Element body() const {
+    return Element{ZStack{
+        .hAlign = HorizontalAlignment::Leading,
+        .vAlign = VerticalAlignment::Top,
+        .children =
+            {
+                Element{Rectangle{
+                    .width = 0.f,
+                    .height = 0.f,
+                    .fill = FillStyle::none(),
+                    .stroke = stroke,
+                }},
+                child,
+            },
+    }};
+  }
+};
+
+struct CornerModifier {
+  CornerRadius radius{};
+  Element child;
+  Element body() const {
+    return Element{ZStack{
+        .hAlign = HorizontalAlignment::Leading,
+        .vAlign = VerticalAlignment::Top,
+        .children =
+            {
+                Element{Rectangle{
+                    .cornerRadius = radius,
+                    .fill = FillStyle::none(),
+                }},
+                child,
+            },
+    }};
+  }
+};
+
+struct ClipModifier {
+  bool clip{};
+  Element child;
+  Element body() const {
+    return Element{ZStack{
+        .hAlign = HorizontalAlignment::Leading,
+        .vAlign = VerticalAlignment::Top,
+        .clip = clip,
+        .children = {child},
+    }};
+  }
+};
+
+struct OverlayModifier {
+  Element under;
+  Element over;
+  Element body() const {
+    return Element{ZStack{
+        .hAlign = HorizontalAlignment::Leading,
+        .vAlign = VerticalAlignment::Top,
+        .children = {under, over},
+    }};
+  }
+};
+
+struct TapModifier {
+  std::function<void()> onTap;
+  Element child;
+  Element body() const {
+    return Element{ZStack{
+        .hAlign = HorizontalAlignment::Leading,
+        .vAlign = VerticalAlignment::Top,
+        .children =
+            {
+                child,
+                Element{Rectangle{
+                    .width = 0.f,
+                    .height = 0.f,
+                    .fill = FillStyle::none(),
+                    .onTap = onTap,
+                }},
+            },
+    }};
+  }
+};
 
 } // namespace
 
@@ -137,8 +280,8 @@ Element Element::withFlex(float grow, float shrink, float minMain) && {
 void Element::Model<Rectangle>::build(BuildContext& ctx) const {
   ComponentKey const stableKey = ctx.leafComponentKey();
   ctx.advanceChildSlot();
-  Rect const bounds = flux::detail::resolveRectangleBounds(
-      value.frame, ctx.layoutEngine().consumeAssignedFrame(), ctx.constraints(), ctx.hints());
+  Rect const bounds = flux::detail::resolveLeafLayoutBounds(
+      explicitLeafBox(value), ctx.layoutEngine().consumeAssignedFrame(), ctx.constraints(), ctx.hints(), true);
   NodeId const id = ctx.graph().addRect(ctx.parentLayer(), RectNode{
       .bounds = bounds,
       .cornerRadius = value.cornerRadius,
@@ -172,8 +315,8 @@ void Element::Model<Rectangle>::build(BuildContext& ctx) const {
 Size Element::Model<Rectangle>::measure(BuildContext& ctx, LayoutConstraints const& c, LayoutHints const&,
                                           TextSystem&) const {
   ctx.advanceChildSlot();
-  if (value.frame.width > 0.f || value.frame.height > 0.f) {
-    return {value.frame.width, value.frame.height};
+  if (value.width > 0.f || value.height > 0.f) {
+    return {value.width, value.height};
   }
   float const w = std::isfinite(c.maxWidth) ? c.maxWidth : 0.f;
   return {w, 0.f};
@@ -209,8 +352,8 @@ Size Element::Model<LaidOutText>::measure(BuildContext& ctx, LayoutConstraints c
 void Element::Model<Text>::build(BuildContext& ctx) const {
   ComponentKey const stableKey = ctx.leafComponentKey();
   ctx.advanceChildSlot();
-  Rect const bounds = flux::detail::resolveLeafBounds(
-      value.frame, ctx.layoutEngine().consumeAssignedFrame(), ctx.constraints());
+  Rect const bounds = flux::detail::resolveLeafLayoutBounds(
+      explicitLeafBox(value), ctx.layoutEngine().consumeAssignedFrame(), ctx.constraints(), ctx.hints(), false);
   assert(value.text.empty() || (bounds.width > 0.f && bounds.height > 0.f));
 
   float const pad = std::max(0.f, value.padding);
@@ -285,28 +428,28 @@ Size Element::Model<Text>::measure(BuildContext& ctx, LayoutConstraints const& c
   TextLayoutOptions const opts = textViewLayoutOptions(value, c, hints);
 
   // Explicit box: both dimensions fixed.
-  if (value.frame.width > 0.f && value.frame.height > 0.f) {
-    return {value.frame.width, value.frame.height};
+  if (value.width > 0.f && value.height > 0.f) {
+    return {value.width, value.height};
   }
   // Fixed height, width from constraints / text (e.g. animated row height with width TBD).
-  if (value.frame.width <= 0.f && value.frame.height > 0.f) {
+  if (value.width <= 0.f && value.height > 0.f) {
     float const mw = std::isfinite(c.maxWidth) && c.maxWidth > pad ? c.maxWidth - pad : 0.f;
     Size const s = ts.measure(value.text, value.font, value.color, mw, opts);
     float w = s.width + pad;
     if (std::isfinite(c.maxWidth) && c.maxWidth > 0.f) {
       w = std::min(w, c.maxWidth);
     }
-    return {w, value.frame.height};
+    return {w, value.height};
   }
   // Fixed width, height from text measurement.
-  if (value.frame.width > 0.f && value.frame.height <= 0.f) {
-    float const mw = std::max(0.f, value.frame.width - pad);
+  if (value.width > 0.f && value.height <= 0.f) {
+    float const mw = std::max(0.f, value.width - pad);
     Size const s = ts.measure(value.text, value.font, value.color, mw, opts);
     float h = s.height + pad;
     if (std::isfinite(c.maxHeight) && c.maxHeight > 0.f) {
       h = std::min(h, c.maxHeight);
     }
-    return {value.frame.width, h};
+    return {value.width, h};
   }
 
   float const mw = std::isfinite(c.maxWidth) && c.maxWidth > pad ? c.maxWidth - pad : 0.f;
@@ -328,8 +471,8 @@ void Element::Model<views::Image>::build(BuildContext& ctx) const {
   if (!value.source) {
     return;
   }
-  Rect const bounds = flux::detail::resolveLeafBounds(
-      value.frame, ctx.layoutEngine().consumeAssignedFrame(), ctx.constraints());
+  Rect const bounds = flux::detail::resolveLeafLayoutBounds(
+      explicitLeafBox(value), ctx.layoutEngine().consumeAssignedFrame(), ctx.constraints(), ctx.hints(), false);
   NodeId const id = ctx.graph().addImage(ctx.parentLayer(), ImageNode{
       .image = value.source,
       .bounds = bounds,
@@ -347,8 +490,8 @@ void Element::Model<views::Image>::build(BuildContext& ctx) const {
 Size Element::Model<views::Image>::measure(BuildContext& ctx, LayoutConstraints const& c, LayoutHints const&,
                                              TextSystem&) const {
   ctx.advanceChildSlot();
-  if (value.frame.width > 0.f || value.frame.height > 0.f) {
-    return {value.frame.width, value.frame.height};
+  if (value.width > 0.f || value.height > 0.f) {
+    return {value.width, value.height};
   }
   float const w = std::isfinite(c.maxWidth) ? c.maxWidth : 0.f;
   float const h = std::isfinite(c.maxHeight) ? c.maxHeight : 0.f;
@@ -413,6 +556,53 @@ Size Element::Model<Line>::measure(BuildContext& ctx, LayoutConstraints const&, 
   float const minY = std::min(value.from.y, value.to.y);
   float const maxY = std::max(value.from.y, value.to.y);
   return {maxX - minX, maxY - minY};
+}
+
+Element Element::padding(float all) && {
+  return Element{PaddingModifier{all, std::move(*this)}};
+}
+
+Element Element::background(FillStyle fill) && {
+  return Element{BackgroundModifier{std::move(fill), std::move(*this)}};
+}
+
+Element Element::frame(float width, float height) && {
+  if (width <= 0.f && height <= 0.f) {
+    return std::move(*this);
+  }
+  return Element{FrameModifier{width, height, std::move(*this)}};
+}
+
+Element Element::border(StrokeStyle stroke) && {
+  return Element{BorderModifier{std::move(stroke), std::move(*this)}};
+}
+
+Element Element::cornerRadius(CornerRadius radius) && {
+  return Element{CornerModifier{radius, std::move(*this)}};
+}
+
+Element Element::opacity(float opacity) && {
+  return Element{LayerEffect{.opacity = opacity, .child = std::move(*this)}};
+}
+
+Element Element::offset(Vec2 delta) && {
+  return Element{LayerEffect{.offset = delta, .child = std::move(*this)}};
+}
+
+Element Element::offset(float dx, float dy) && {
+  return Element{LayerEffect{.offset = {dx, dy}, .child = std::move(*this)}};
+}
+
+Element Element::clipContent(bool clip) && {
+  return Element{ClipModifier{clip, std::move(*this)}};
+}
+
+Element Element::overlay(Element over) && {
+  return Element{OverlayModifier{std::move(*this), std::move(over)}};
+}
+
+Element Element::onTapGesture(std::function<void()> handler) && {
+  return Element{TapModifier{std::move(handler), std::move(*this)}};
 }
 
 } // namespace flux

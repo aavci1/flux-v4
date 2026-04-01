@@ -105,13 +105,13 @@ struct TextEditor {
                     .children =
                         {
                             Element{Rectangle{
-                                .frame = {0.f, 0.f, 0.f, 200.f},
+                                .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 200.f,
                                 .cornerRadius = CornerRadius(10.f),
                                 .fill = FillStyle::solid(focused ? Color::hex(0xE8F0FC) : Color::hex(0xFAFAFC)),
                                 .stroke = StrokeStyle::solid(focused ? Color::hex(0x3A7BD5) : Color::hex(0xC8C8D0),
                                                                focused ? 2.f : 1.f),
                                 .flexGrow = 1.f,
-                                .minSize = 120.f,
+                                .minMainSize = 120.f,
                                 .focusable = true,
                                 .onKeyDown =
                                     [text, selStart, selEnd](KeyCode k, Modifiers m) {

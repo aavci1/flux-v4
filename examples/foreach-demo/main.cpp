@@ -29,7 +29,7 @@ struct HoverRow {
 
     return ZStack{.children = {
                       Rectangle{
-                          .frame = {0.f, 0.f, 0.f, 44.f},
+                          .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 44.f,
                           .cornerRadius = CornerRadius(8.f),
                           .fill = FillStyle::solid(bgColor),
                           .stroke = StrokeStyle::solid(Color::hex(0xE0E0E6), 1.f),
@@ -65,7 +65,7 @@ struct ForEachDemo {
                                                 {
                                                     ZStack{.children = {
                                                               Rectangle{
-                                                                  .frame = {0.f, 0.f, 120.f, 36.f},
+                                                                  .offsetX = 0.f, .offsetY = 0.f, .width = 120.f, .height = 36.f,
                                                                   .cornerRadius = CornerRadius(8.f),
                                                                   .fill = FillStyle::solid(Color::hex(0x3A7BD5)),
                                                                   .cursor = Cursor::Hand,
@@ -77,7 +77,7 @@ struct ForEachDemo {
                                                           }},
                                                     ZStack{.children = {
                                                               Rectangle{
-                                                                  .frame = {0.f, 0.f, 120.f, 36.f},
+                                                                  .offsetX = 0.f, .offsetY = 0.f, .width = 120.f, .height = 36.f,
                                                                   .cornerRadius = CornerRadius(8.f),
                                                                   .fill = FillStyle::solid(Color::hex(0xD05A2B)),
                                                                   .cursor = Cursor::Hand,

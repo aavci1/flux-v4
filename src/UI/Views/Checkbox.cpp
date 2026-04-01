@@ -113,13 +113,13 @@ Element Checkbox::body() const {
       .vAlign = VerticalAlignment::Center,
       .children = {
           Rectangle {
-              .frame = {0.f, 0.f, boxSize, boxSize},
+              .offsetX = 0.f, .offsetY = 0.f, .width = boxSize, .height = boxSize,
               .cornerRadius = CornerRadius {cornerRadius},
               .fill = FillStyle::solid(*boxFillAnim),
               .stroke = boxStroke,
               .flexGrow = flexGrow,
               .flexShrink = flexShrink,
-              .minSize = minSize,
+              .minMainSize = minSize,
               .cursor = isDisabled ? Cursor::Inherit : Cursor::Hand,
               .focusable = !isDisabled,
               .onKeyDown = isDisabled ? nullptr : std::function<void(KeyCode, Modifiers)> {handleKey},
