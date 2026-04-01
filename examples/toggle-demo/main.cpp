@@ -53,7 +53,7 @@ struct ToggleDemoRoot {
     auto wifiEnabled = useState(true);
     auto bluetoothEnabled = useState(false);
     auto darkMode = useState(false);
-    auto notifications = useState(true);
+    auto notifications = useState(false);
     auto customColor = useState(true);
     auto smallToggle = useState(false);
 
@@ -126,7 +126,9 @@ struct ToggleDemoRoot {
                             Spacer{},
                             Toggle{
                                 .value = customColor,
-                                .onColor = theme.colorSuccess,
+                                .style = Toggle::Style {
+                                    .onColor = theme.colorSuccess,
+                                },
                             },
                         },
                     },
@@ -148,9 +150,11 @@ struct ToggleDemoRoot {
                             Spacer{},
                             Toggle{
                                 .value = smallToggle,
-                                .trackWidth = 34.f,
-                                .trackHeight = 20.f,
-                                .thumbInset = 2.f,
+                                .style = Toggle::Style {
+                                    .trackWidth = 34.f,
+                                    .trackHeight = 20.f,
+                                    .thumbInset = 2.f,
+                                },
                             },
                         },
                     },

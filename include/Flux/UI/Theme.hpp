@@ -104,7 +104,7 @@ struct FluxTheme {
 
   Color colorBorder = Color::hex(0xC8C8D0);
   Color colorBorderSubtle = Color::hex(0xE5E5EA);
-  Color colorBorderFocus = Color::hex(0x3A7BD5);
+  Color colorBorderFocus = Color::hex(0x7ABBF5);
 
   Color colorTextPrimary = Color::hex(0x111118);
   Color colorTextSecondary = Color::hex(0x6E6E80);
@@ -165,6 +165,16 @@ struct FluxTheme {
   float durationSlow = 0.30f;
 
   bool reducedMotion = false;
+
+  // Toggle
+  float toggleTrackWidth = 44.f;
+  float toggleTrackHeight = 26.f;
+  float toggleThumbInset = 3.f;
+  float toggleBorderWidth = 2.f;
+  Color toggleOnColor = Color::hex(0x3A7BD5);
+  Color toggleOffColor = Color::hex(0xE5E5EA);
+  Color toggleThumbColor = Color::hex(0xFFFFFF);
+  Color toggleBorderColor = Color::hex(0xE5E5EA);
 
   /// Bundled Material Symbols Rounded (override to swap icon sets globally).
   std::string iconFontFamily = "Material Symbols Rounded";
