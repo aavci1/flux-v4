@@ -309,166 +309,44 @@ Size Element::Model<C>::measure(BuildContext& ctx, LayoutConstraints const& cons
 
 namespace flux {
 
-template<>
-struct Element::Model<Rectangle> final : Concept {
-  Rectangle value;
-  explicit Model(Rectangle c) : value(std::move(c)) {}
-  std::unique_ptr<Concept> clone() const override {
-    return std::make_unique<Model<Rectangle>>(value);
+/// Generates a full Element::Model<T> specialization with standard flex delegates.
+/// Extra overrides (e.g. canMemoizeMeasure) go in the variadic tail.
+#define FLUX_ELEMENT_MODEL(Type, ...)                                                     \
+  template<>                                                                              \
+  struct Element::Model<Type> final : Concept {                                           \
+    Type value;                                                                           \
+    explicit Model(Type c) : value(std::move(c)) {}                                      \
+    std::unique_ptr<Concept> clone() const override {                                    \
+      return std::make_unique<Model<Type>>(value);                                       \
+    }                                                                                     \
+    void build(BuildContext& ctx) const override;                                         \
+    Size measure(BuildContext& ctx, LayoutConstraints const&, TextSystem&) const override; \
+    float flexGrow() const override { return detail::flexGrowOf(value); }                \
+    float flexShrink() const override { return detail::flexShrinkOf(value); }            \
+    float minMainSize() const override { return detail::minMainSizeOf(value); }          \
+    __VA_ARGS__                                                                           \
   }
-  void build(BuildContext& ctx) const override;
-  Size measure(BuildContext& ctx, LayoutConstraints const& constraints, TextSystem& textSystem) const override;
-  float flexGrow() const override { return detail::flexGrowOf(value); }
-  float flexShrink() const override { return detail::flexShrinkOf(value); }
-  float minMainSize() const override { return detail::minMainSizeOf(value); }
-  bool canMemoizeMeasure() const override { return true; }
-};
 
-template<>
-struct Element::Model<LaidOutText> final : Concept {
-  LaidOutText value;
-  explicit Model(LaidOutText c) : value(std::move(c)) {}
-  std::unique_ptr<Concept> clone() const override {
-    return std::make_unique<Model<LaidOutText>>(value);
-  }
-  void build(BuildContext& ctx) const override;
-  Size measure(BuildContext& ctx, LayoutConstraints const& constraints, TextSystem& textSystem) const override;
-  float flexGrow() const override { return detail::flexGrowOf(value); }
-  float flexShrink() const override { return detail::flexShrinkOf(value); }
-  float minMainSize() const override { return detail::minMainSizeOf(value); }
-  bool canMemoizeMeasure() const override { return true; }
-};
+// --- Leaf types (memoizable) ---------------------------------------------------
 
-template<>
-struct Element::Model<Text> final : Concept {
-  Text value;
-  explicit Model(Text c) : value(std::move(c)) {}
-  std::unique_ptr<Concept> clone() const override {
-    return std::make_unique<Model<Text>>(value);
-  }
-  void build(BuildContext& ctx) const override;
-  Size measure(BuildContext& ctx, LayoutConstraints const& constraints, TextSystem& textSystem) const override;
-  float flexGrow() const override { return detail::flexGrowOf(value); }
-  float flexShrink() const override { return detail::flexShrinkOf(value); }
-  float minMainSize() const override { return detail::minMainSizeOf(value); }
-  bool canMemoizeMeasure() const override { return true; }
-};
+FLUX_ELEMENT_MODEL(Rectangle,       bool canMemoizeMeasure() const override { return true; });
+FLUX_ELEMENT_MODEL(LaidOutText,     bool canMemoizeMeasure() const override { return true; });
+FLUX_ELEMENT_MODEL(Text,            bool canMemoizeMeasure() const override { return true; });
+FLUX_ELEMENT_MODEL(views::Image,    bool canMemoizeMeasure() const override { return true; });
+FLUX_ELEMENT_MODEL(PathShape,       bool canMemoizeMeasure() const override { return true; });
+FLUX_ELEMENT_MODEL(Line,            bool canMemoizeMeasure() const override { return true; });
 
-template<>
-struct Element::Model<views::Image> final : Concept {
-  views::Image value;
-  explicit Model(views::Image c) : value(std::move(c)) {}
-  std::unique_ptr<Concept> clone() const override {
-    return std::make_unique<Model<views::Image>>(value);
-  }
-  void build(BuildContext& ctx) const override;
-  Size measure(BuildContext& ctx, LayoutConstraints const& constraints, TextSystem& textSystem) const override;
-  float flexGrow() const override { return detail::flexGrowOf(value); }
-  float flexShrink() const override { return detail::flexShrinkOf(value); }
-  float minMainSize() const override { return detail::minMainSizeOf(value); }
-  bool canMemoizeMeasure() const override { return true; }
-};
+// --- Layout containers ---------------------------------------------------------
 
-template<>
-struct Element::Model<PathShape> final : Concept {
-  PathShape value;
-  explicit Model(PathShape c) : value(std::move(c)) {}
-  std::unique_ptr<Concept> clone() const override {
-    return std::make_unique<Model<PathShape>>(value);
-  }
-  void build(BuildContext& ctx) const override;
-  Size measure(BuildContext& ctx, LayoutConstraints const& constraints, TextSystem& textSystem) const override;
-  float flexGrow() const override { return detail::flexGrowOf(value); }
-  float flexShrink() const override { return detail::flexShrinkOf(value); }
-  float minMainSize() const override { return detail::minMainSizeOf(value); }
-  bool canMemoizeMeasure() const override { return true; }
-};
+FLUX_ELEMENT_MODEL(VStack);
+FLUX_ELEMENT_MODEL(HStack);
+FLUX_ELEMENT_MODEL(ZStack);
+FLUX_ELEMENT_MODEL(ScaleAroundCenter);
+FLUX_ELEMENT_MODEL(Grid);
+FLUX_ELEMENT_MODEL(OffsetView);
+FLUX_ELEMENT_MODEL(ScrollView);
 
-template<>
-struct Element::Model<Line> final : Concept {
-  Line value;
-  explicit Model(Line c) : value(std::move(c)) {}
-  std::unique_ptr<Concept> clone() const override {
-    return std::make_unique<Model<Line>>(value);
-  }
-  void build(BuildContext& ctx) const override;
-  Size measure(BuildContext& ctx, LayoutConstraints const& constraints, TextSystem& textSystem) const override;
-  float flexGrow() const override { return detail::flexGrowOf(value); }
-  float flexShrink() const override { return detail::flexShrinkOf(value); }
-  float minMainSize() const override { return detail::minMainSizeOf(value); }
-  bool canMemoizeMeasure() const override { return true; }
-};
-
-template<>
-struct Element::Model<VStack> final : Concept {
-  VStack value;
-  explicit Model(VStack c) : value(std::move(c)) {}
-  std::unique_ptr<Concept> clone() const override {
-    return std::make_unique<Model<VStack>>(value);
-  }
-  void build(BuildContext& ctx) const override;
-  Size measure(BuildContext& ctx, LayoutConstraints const& constraints, TextSystem& textSystem) const override;
-  float flexGrow() const override { return detail::flexGrowOf(value); }
-  float flexShrink() const override { return detail::flexShrinkOf(value); }
-  float minMainSize() const override { return detail::minMainSizeOf(value); }
-};
-
-template<>
-struct Element::Model<HStack> final : Concept {
-  HStack value;
-  explicit Model(HStack c) : value(std::move(c)) {}
-  std::unique_ptr<Concept> clone() const override {
-    return std::make_unique<Model<HStack>>(value);
-  }
-  void build(BuildContext& ctx) const override;
-  Size measure(BuildContext& ctx, LayoutConstraints const& constraints, TextSystem& textSystem) const override;
-  float flexGrow() const override { return detail::flexGrowOf(value); }
-  float flexShrink() const override { return detail::flexShrinkOf(value); }
-  float minMainSize() const override { return detail::minMainSizeOf(value); }
-};
-
-template<>
-struct Element::Model<ZStack> final : Concept {
-  ZStack value;
-  explicit Model(ZStack c) : value(std::move(c)) {}
-  std::unique_ptr<Concept> clone() const override {
-    return std::make_unique<Model<ZStack>>(value);
-  }
-  void build(BuildContext& ctx) const override;
-  Size measure(BuildContext& ctx, LayoutConstraints const& constraints, TextSystem& textSystem) const override;
-  float flexGrow() const override { return detail::flexGrowOf(value); }
-  float flexShrink() const override { return detail::flexShrinkOf(value); }
-  float minMainSize() const override { return detail::minMainSizeOf(value); }
-};
-
-template<>
-struct Element::Model<ScaleAroundCenter> final : Concept {
-  ScaleAroundCenter value;
-  explicit Model(ScaleAroundCenter c) : value(std::move(c)) {}
-  std::unique_ptr<Concept> clone() const override {
-    return std::make_unique<Model<ScaleAroundCenter>>(value);
-  }
-  void build(BuildContext& ctx) const override;
-  Size measure(BuildContext& ctx, LayoutConstraints const& constraints, TextSystem& textSystem) const override;
-  float flexGrow() const override { return detail::flexGrowOf(value); }
-  float flexShrink() const override { return detail::flexShrinkOf(value); }
-  float minMainSize() const override { return detail::minMainSizeOf(value); }
-};
-
-template<>
-struct Element::Model<Grid> final : Concept {
-  Grid value;
-  explicit Model(Grid c) : value(std::move(c)) {}
-  std::unique_ptr<Concept> clone() const override {
-    return std::make_unique<Model<Grid>>(value);
-  }
-  void build(BuildContext& ctx) const override;
-  Size measure(BuildContext& ctx, LayoutConstraints const& constraints, TextSystem& textSystem) const override;
-  float flexGrow() const override { return detail::flexGrowOf(value); }
-  float flexShrink() const override { return detail::flexShrinkOf(value); }
-  float minMainSize() const override { return detail::minMainSizeOf(value); }
-};
-
+// Spacer has fully custom flex behavior — not generated by the macro.
 template<>
 struct Element::Model<Spacer> final : Concept {
   Spacer value;
@@ -477,39 +355,11 @@ struct Element::Model<Spacer> final : Concept {
     return std::make_unique<Model<Spacer>>(value);
   }
   void build(BuildContext& ctx) const override;
-  Size measure(BuildContext& ctx, LayoutConstraints const& constraints, TextSystem& textSystem) const override;
+  Size measure(BuildContext& ctx, LayoutConstraints const&, TextSystem&) const override;
   float flexGrow() const override { return 1.f; }
   float flexShrink() const override { return 0.f; }
   float minMainSize() const override { return std::max(0.f, value.minLength); }
   bool canMemoizeMeasure() const override { return true; }
-};
-
-template<>
-struct Element::Model<OffsetView> final : Concept {
-  OffsetView value;
-  explicit Model(OffsetView c) : value(std::move(c)) {}
-  std::unique_ptr<Concept> clone() const override {
-    return std::make_unique<Model<OffsetView>>(value);
-  }
-  void build(BuildContext& ctx) const override;
-  Size measure(BuildContext& ctx, LayoutConstraints const& constraints, TextSystem& textSystem) const override;
-  float flexGrow() const override { return detail::flexGrowOf(value); }
-  float flexShrink() const override { return detail::flexShrinkOf(value); }
-  float minMainSize() const override { return detail::minMainSizeOf(value); }
-};
-
-template<>
-struct Element::Model<ScrollView> final : Concept {
-  ScrollView value;
-  explicit Model(ScrollView c) : value(std::move(c)) {}
-  std::unique_ptr<Concept> clone() const override {
-    return std::make_unique<Model<ScrollView>>(value);
-  }
-  void build(BuildContext& ctx) const override;
-  Size measure(BuildContext& ctx, LayoutConstraints const& constraints, TextSystem& textSystem) const override;
-  float flexGrow() const override { return detail::flexGrowOf(value); }
-  float flexShrink() const override { return detail::flexShrinkOf(value); }
-  float minMainSize() const override { return detail::minMainSizeOf(value); }
 };
 
 template<typename C>
@@ -523,18 +373,6 @@ Element::Element(C component)
 
 namespace flux {
 
-template<>
-struct Element::Model<PopoverCalloutShape> final : Concept {
-  PopoverCalloutShape value;
-  explicit Model(PopoverCalloutShape c) : value(std::move(c)) {}
-  std::unique_ptr<Concept> clone() const override {
-    return std::make_unique<Model<PopoverCalloutShape>>(value);
-  }
-  void build(BuildContext& ctx) const override;
-  Size measure(BuildContext& ctx, LayoutConstraints const& constraints, TextSystem& textSystem) const override;
-  float flexGrow() const override { return detail::flexGrowOf(value); }
-  float flexShrink() const override { return detail::flexShrinkOf(value); }
-  float minMainSize() const override { return detail::minMainSizeOf(value); }
-};
+FLUX_ELEMENT_MODEL(PopoverCalloutShape);
 
 } // namespace flux

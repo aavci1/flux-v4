@@ -27,7 +27,7 @@ concept RenderComponent = requires(T const& t, Canvas& c, Rect r, LayoutConstrai
 
 **Render components** (e.g. `Rectangle`, `Text`, `PathShape`, `Line`) implement `render(Canvas&, Rect)` and `measure(LayoutConstraints const&) -> Size`. They are scene-graph leaves that draw directly and report their intrinsic size.
 
-**Layout containers** (`VStack`, `HStack`, `ZStack`, `Grid`, `ScrollView`, `OffsetView`) are neither — they are plain structs with `std::vector<Element> children` that get **explicit `Element::Model<T>` specializations** in `Element.hpp`, with their `build`/`measure` implemented in `src/UI/Layout/Layout*.cpp`.
+**Layout containers** (`VStack`, `HStack`, `ZStack`, `Grid`, `ScrollView`, `OffsetView`) are neither — they are plain structs with `std::vector<Element> children` that get **explicit `Element::Model<T>` specializations** in `Element.hpp` (generated via the `FLUX_ELEMENT_MODEL` macro), with their `build`/`measure` implemented in `src/UI/Layout/Layout*.cpp`.
 
 ---
 
@@ -403,26 +403,19 @@ struct WrapStack {
 
 ### Step 2: Declare the `Element::Model` specialization
 
-Add to `include/Flux/UI/Element.hpp` alongside the other specializations:
+Add to `include/Flux/UI/Element.hpp` alongside the other specializations using the `FLUX_ELEMENT_MODEL` macro:
 
 ```cpp
-template<>
-struct Element::Model<WrapStack> final : Concept {
-  WrapStack value;
-  explicit Model(WrapStack c) : value(std::move(c)) {}
-  std::unique_ptr<Concept> clone() const override {
-    return std::make_unique<Model<WrapStack>>(value);
-  }
-  void build(BuildContext& ctx) const override;
-  Size measure(BuildContext& ctx, LayoutConstraints const& constraints,
-               TextSystem& textSystem) const override;
-  float flexGrow() const override { return detail::flexGrowOf(value); }
-  float flexShrink() const override { return detail::flexShrinkOf(value); }
-  float minMainSize() const override { return detail::minMainSizeOf(value); }
-};
+FLUX_ELEMENT_MODEL(WrapStack);
 ```
 
-The `flexGrowOf`/`flexShrinkOf`/`minMainSizeOf` helpers use SFINAE to read `flexGrow`/`flexShrink`/`minSize` fields if they exist on the struct, defaulting to 0.
+The macro generates the full `Element::Model<WrapStack>` specialization: `clone()`, `build()`/`measure()` declarations, and standard flex delegates (`flexGrowOf`/`flexShrinkOf`/`minMainSizeOf` — these use SFINAE to read `flexGrow`/`flexShrink`/`minSize` fields if they exist on the struct, defaulting to 0).
+
+For leaf types that support measure memoization, pass the override in the variadic tail:
+
+```cpp
+FLUX_ELEMENT_MODEL(MyLeaf, bool canMemoizeMeasure() const override { return true; });
+```
 
 ### Step 3: Implement `measure` and `build`
 
