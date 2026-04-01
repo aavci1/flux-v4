@@ -17,17 +17,22 @@ concept CompositeComponent = requires(T const& t) { { t.body() }; };
 
 // A render leaf draws directly and reports its own size.
 template<typename T>
-concept RenderComponent = requires(T const& t, Canvas& c, Rect r, LayoutConstraints const& cs) {
+concept RenderComponent = requires(T const& t, Canvas& c, Rect r, LayoutConstraints const& cs,
+                                 LayoutHints const& h) {
   { t.render(c, r) };
-  { t.measure(cs) } -> std::convertible_to<Size>;
+  { t.measure(cs, h) } -> std::convertible_to<Size>;
 } && !CompositeComponent<T>;
 ```
 
 **Composite components** (e.g. `Button`, `Slider`, `Toggle`) define `body()` returning an `Element`. They participate in layout indirectly — the framework measures and builds their `body()` subtree. They never draw or measure themselves.
 
-**Render components** (e.g. `Rectangle`, `Text`, `PathShape`, `Line`) implement `render(Canvas&, Rect)` and `measure(LayoutConstraints const&) -> Size`. They are scene-graph leaves that draw directly and report their intrinsic size.
+**Render components** (e.g. `Rectangle`, `Text`, `PathShape`, `Line`) implement `render(Canvas&, Rect)` and `measure(LayoutConstraints const&, LayoutHints const&) -> Size`. They are scene-graph leaves that draw directly and report their intrinsic size.
 
 **Layout containers** (`VStack`, `HStack`, `ZStack`, `Grid`, `ScrollView`, `OffsetView`) are neither — they are plain structs with `std::vector<Element> children` that get **explicit `Element::Model<T>` specializations** in `Element.hpp` (generated via the `FLUX_ELEMENT_MODEL` macro), with their `build`/`measure` implemented in `src/UI/Layout/Layout*.cpp`.
+
+### Child lists (`children()`)
+
+Brace-initialized `.children = { a, b, c }` goes through `std::initializer_list<Element>`, which **copies** each entry into the vector. For hot paths or large trees, use **`children(a, b, c)`** in `include/Flux/UI/Element.hpp` — a variadic helper that `reserve`s and `emplace_back`s each argument so components are moved into `Element` without the `initializer_list` copy path. Plain braced lists remain valid; they are just less efficient.
 
 ---
 

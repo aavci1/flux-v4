@@ -12,6 +12,7 @@
 | C. Debug assertions (`LayoutEngine`, constraint stack, `Element::measure`, flex warnings) | Done |
 | E. `FLUX_DEBUG_LAYOUT` stderr tree (constraints, measured, frame, flex) | Done |
 | **D. Decouple stack alignment from `LayoutConstraints`** (`LayoutHints` + `BuildContext::hints()`, measure/build threading) | Done |
+| **Variadic `children()`** (avoid `initializer_list` copies for `vector<Element>`) | Done |
 | F–H. Larger follow-ups (see `docs/friction-points.md`) | Not started |
 
 **D — intent:** `hStackCrossAlign` / `vStackCrossAlign` are not size constraints; they belong beside the constraint stack as `LayoutHints` so `LayoutConstraints` stays numeric bounds only.

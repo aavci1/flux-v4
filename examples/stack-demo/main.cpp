@@ -53,23 +53,23 @@ struct StackDemoRoot {
                         VStack {
                             .spacing = 10.f,
                             .hAlign = HorizontalAlignment::Center,
-                            .children = {
-                                Rectangle {
-                                    .frame = {0.f, 0.f, 160.f, 36.f},
-                                    .cornerRadius = CornerRadius{8.f},
-                                    .fill = FillStyle::solid(pal::coral),
-                                },
-                                Rectangle {
-                                    .frame = {0.f, 0.f, 200.f, 36.f},
-                                    .cornerRadius = CornerRadius{8.f},
-                                    .fill = FillStyle::solid(pal::teal),
-                                },
-                                Rectangle {
-                                    .frame = {0.f, 0.f, 120.f, 36.f},
-                                    .cornerRadius = CornerRadius{8.f},
-                                    .fill = FillStyle::solid(pal::indigo),
-                                },
-                            },
+                            .children =
+                                children(
+                                    Rectangle {
+                                        .frame = {0.f, 0.f, 160.f, 36.f},
+                                        .cornerRadius = CornerRadius{8.f},
+                                        .fill = FillStyle::solid(pal::coral),
+                                    },
+                                    Rectangle {
+                                        .frame = {0.f, 0.f, 200.f, 36.f},
+                                        .cornerRadius = CornerRadius{8.f},
+                                        .fill = FillStyle::solid(pal::teal),
+                                    },
+                                    Rectangle {
+                                        .frame = {0.f, 0.f, 120.f, 36.f},
+                                        .cornerRadius = CornerRadius{8.f},
+                                        .fill = FillStyle::solid(pal::indigo),
+                                    }),
                         },
                         Text {
                             .text = "HStack",

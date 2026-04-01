@@ -25,6 +25,7 @@
 #include <optional>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 namespace flux {
 
@@ -368,6 +369,16 @@ template<typename C>
 Element::Element(C component)
     : impl_(std::make_unique<Model<C>>(std::move(component)))
     , measureId_(detail::nextElementMeasureId()) {}
+
+/// Build \c std::vector<Element> from components without \c std::initializer_list (which forces
+/// copy-construction for each entry). Prefer this for \c VStack / \c HStack / \c .children lists.
+template<typename... Args>
+std::vector<Element> children(Args&&... args) {
+  std::vector<Element> v;
+  v.reserve(sizeof...(args));
+  (v.emplace_back(std::forward<Args>(args)), ...);
+  return v;
+}
 
 } // namespace flux
 
