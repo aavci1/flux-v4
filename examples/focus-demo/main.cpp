@@ -101,7 +101,6 @@ struct FocusDemoRoot {
                 Rectangle{.fill = FillStyle::solid(pal::bg)},
                 VStack{
                     .spacing = 20.f,
-                    .padding = 24.f,
                     .hAlign = HorizontalAlignment::Leading,
                     .children =
                         {
@@ -134,7 +133,7 @@ struct FocusDemoRoot {
                                     },
                             },
                         },
-                },
+                }.padding(24.f),
             },
     };
   }

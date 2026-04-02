@@ -180,7 +180,6 @@ Popover makePickerDropdownPopover(std::vector<PickerOption<T>> opts, std::functi
 
   Element rowList = VStack{
       .spacing = 0.f,
-      .clip = true,
       .children =
           {
               ForEach<int>{
@@ -214,7 +213,7 @@ Popover makePickerDropdownPopover(std::vector<PickerOption<T>> opts, std::functi
                   0.f,
               },
           },
-  };
+  }.clipContent(true);
 
   Size dropdownMax{};
   dropdownMax.width = std::max(triggerWidth, 8.f);

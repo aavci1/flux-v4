@@ -59,7 +59,6 @@ struct ThemeDemoRoot {
     auto pane = [&](char const* title, char const* subtitle, FluxTheme const& t) {
       return VStack{
           .spacing = windowTheme.space2,
-          .padding = windowTheme.space4,
           .hAlign = HorizontalAlignment::Leading,
           .children =
               {
@@ -85,7 +84,7 @@ struct ThemeDemoRoot {
                           .variant = ButtonVariant::Primary,
                           .onTap = [] {} },
               },
-      };
+      }.padding(windowTheme.space4);
     };
 
     return ZStack{
@@ -94,7 +93,6 @@ struct ThemeDemoRoot {
                 Rectangle{ .fill = FillStyle::solid(windowTheme.colorBackground) },
                 VStack{
                     .spacing = windowTheme.space4,
-                    .padding = windowTheme.space5,
                     .hAlign = HorizontalAlignment::Leading,
                     .children =
                         {
@@ -208,8 +206,8 @@ struct ThemeDemoRoot {
                                             .environment(FluxTheme::dark()),
                                     },
                             },
-                        },
-                },
+                    },
+                }.padding(windowTheme.space5),
             },
     };
   }

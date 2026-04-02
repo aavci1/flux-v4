@@ -18,7 +18,7 @@ Conventions for the `auto body() const` member that returns a Flux view (designa
 ## Structure
 
 - **Root** is often a scroll container (`ScrollView`, etc.) with layout fields (axis, flex) and a single **`.children`** entry that is the main stack.
-- **Stacks** (`VStack`, `HStack`, `ZStack`): set spacing, alignment, padding, then **`.children = {`** and list siblings in visual order.
+- **Stacks** (`VStack`, `HStack`, `ZStack`): set spacing and alignment, **`.children = {`** and list siblings; chain **`.padding(…)`** on the stack when you need inset (same as other `ViewModifiers`).
 - **Nesting:** each inner `VStack` / `HStack` is a full indented block at the depth of its siblings—do not outdent inner stacks so they look like they leave the parent’s `children` array.
 
 ## Wrapping and modifiers

@@ -40,7 +40,6 @@ struct ConfirmDialog {
             {
                 VStack{
                     .spacing = 12.f,
-                    .padding = 24.f,
                     .hAlign = HorizontalAlignment::Leading,
                     .children =
                         {
@@ -55,7 +54,6 @@ struct ConfirmDialog {
                                             .cornerRadius(CornerRadius(14.f)),
                                         VStack{
                                             .spacing = 12.f,
-                                            .padding = 24.f,
                                             .hAlign = HorizontalAlignment::Leading,
                                             .children =
                                                 {
@@ -130,11 +128,11 @@ struct ConfirmDialog {
                                                             },
                                                     },
                                                 },
-                                        },
+                                        }.padding(24.f),
                                     },
                             },
                         },
-                },
+                }.padding(24.f),
             },
     };
   }
@@ -152,7 +150,6 @@ struct FileManagerRow {
 
     return HStack{
         .spacing = 12.f,
-        .padding = 8.f,
         .children =
             {
                 Text{.text = filename, .font = {.size = 15.f, .weight = 400.f}, .color = pal::titleC}.flex(1.f),
@@ -197,7 +194,7 @@ struct FileManagerRow {
                         },
                 },
             },
-    };
+    }.padding(8.f);
   }
 };
 
@@ -209,7 +206,6 @@ struct OverlayConfirmRoot {
                 Rectangle{.fill = FillStyle::solid(pal::bg)},
                 VStack{
                     .spacing = 16.f,
-                    .padding = 24.f,
                     .hAlign = HorizontalAlignment::Leading,
                     .children =
                         {
@@ -233,7 +229,7 @@ struct OverlayConfirmRoot {
                             Element{FileManagerRow{.filename = "notes.txt", .onDelete = [] {}}}.flex(1.f),
                             Element{FileManagerRow{.filename = "draft.md", .onDelete = [] {}}}.flex(1.f),
                         },
-                },
+                }.padding(24.f),
             },
     };
   }

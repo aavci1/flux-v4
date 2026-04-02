@@ -18,7 +18,7 @@ void Element::Model<HStack>::build(BuildContext& ctx) const {
   ContainerBuildScope scope(ctx);
   float const assignedW = stackMainAxisSpan(scope.parentFrame.width, scope.outer.maxWidth);
   float const assignedH = stackMainAxisSpan(scope.parentFrame.height, scope.outer.maxHeight);
-  scope.pushStandardLayer(value.clip, assignedW, assignedH);
+  scope.pushStandardLayer(false, assignedW, assignedH);
 
   LayoutConstraints childCs = scope.outer;
   childCs.maxWidth = std::numeric_limits<float>::infinity();
@@ -26,7 +26,7 @@ void Element::Model<HStack>::build(BuildContext& ctx) const {
 
   std::size_t const n = value.children.size();
   if (n == 1 && std::isfinite(scope.outer.maxWidth) && scope.outer.maxWidth > 0.f) {
-    childCs.maxWidth = std::max(0.f, scope.outer.maxWidth - 2.f * value.padding);
+    childCs.maxWidth = std::max(0.f, scope.outer.maxWidth);
   }
 
   auto sizes = scope.measureChildren(value.children, childCs);
@@ -49,7 +49,7 @@ void Element::Model<HStack>::build(BuildContext& ctx) const {
 
   bool const widthConstrained = std::isfinite(assignedW) && assignedW > 0.f;
   if (widthConstrained && n > 0) {
-    float const innerW = std::max(0.f, assignedW - 2.f * value.padding);
+    float const innerW = std::max(0.f, assignedW);
     float const gaps = n > 1 ? static_cast<float>(n - 1) * value.spacing : 0.f;
     float const targetSum = std::max(0.f, innerW - gaps);
     float sumNat = 0.f;
@@ -66,14 +66,14 @@ void Element::Model<HStack>::build(BuildContext& ctx) const {
     warnFlexGrowIfParentMainAxisUnconstrained(value.children, widthConstrained);
   }
 
-  float x = value.padding;
+  float x = 0.f;
   for (std::size_t i = 0; i < n; ++i) {
     LayoutConstraints childBuild = innerForBuild;
     childBuild.maxWidth = allocW[i];
     childBuild.minWidth = value.children[i].minMainSize();
     LayoutHints rowHints{};
     rowHints.hStackCrossAlign = value.vAlign;
-    scope.buildChild(value.children[i], Rect{x, value.padding, allocW[i], rowInnerH}, childBuild, rowHints);
+    scope.buildChild(value.children[i], Rect{x, 0.f, allocW[i], rowInnerH}, childBuild, rowHints);
     x += allocW[i] + value.spacing;
   }
 }
@@ -87,10 +87,10 @@ Size Element::Model<HStack>::measure(BuildContext& ctx, LayoutConstraints const&
 
   std::size_t n = value.children.size();
   if (n == 1 && std::isfinite(constraints.maxWidth) && constraints.maxWidth > 0.f) {
-    childCs.maxWidth = std::max(0.f, constraints.maxWidth - 2.f * value.padding);
+    childCs.maxWidth = std::max(0.f, constraints.maxWidth);
   }
 
-  float sumW = 2.f * value.padding;
+  float sumW = 0.f;
   float maxH = 0.f;
   if (n > 1) {
     sumW += static_cast<float>(n - 1) * value.spacing;
@@ -100,7 +100,7 @@ Size Element::Model<HStack>::measure(BuildContext& ctx, LayoutConstraints const&
     sumW += s.width;
     maxH = std::max(maxH, s.height);
   }
-  return {sumW, maxH + 2.f * value.padding};
+  return {sumW, maxH};
 }
 
 } // namespace flux

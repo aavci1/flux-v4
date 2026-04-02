@@ -112,12 +112,11 @@ struct EditorPanel {
                     .cornerRadius(CornerRadius(12.f)),
                 VStack{
                     .spacing = 10.f,
-                    .padding = 14.f,
                     .children =
                         {
                             FocusField{.title = title},
                         },
-                },
+                }.padding(14.f),
             },
     };
   }
@@ -157,7 +156,6 @@ struct RequestFocusDemo {
                 Rectangle{.fill = FillStyle::solid(pal::bg)},
                 VStack{
                     .spacing = 20.f,
-                    .padding = 24.f,
                     .hAlign = HorizontalAlignment::Leading,
                     .children =
                         {
@@ -222,7 +220,7 @@ struct RequestFocusDemo {
                                     },
                             },
                         },
-                },
+                }.padding(24.f),
             },
     };
   }

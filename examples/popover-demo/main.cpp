@@ -229,7 +229,6 @@ struct PopoverDemoRoot {
 
     return VStack{
         .spacing = 0.f,
-        .padding = 0.f,
         .children =
             {
                 Text{.text = "Popover demo",
@@ -251,9 +250,8 @@ struct PopoverDemoRoot {
                         {
                             VStack{
                                 .spacing = 10.f,
-                                .padding = 20.f,
                                 .children = std::move(scrollChildren),
-                            },
+                            }.padding(20.f),
                         },
                 },
             },

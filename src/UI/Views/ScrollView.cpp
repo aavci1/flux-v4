@@ -46,10 +46,9 @@ Element ScrollView::body() const {
   ScrollAxis const ax = axis;
   std::vector<Element> contentChildren = children;
 
-  return Element{ZStack{
+  return ZStack{
       .hAlign = HorizontalAlignment::Leading,
       .vAlign = VerticalAlignment::Top,
-      .clip = true,
       .children =
           {
               OffsetView{
@@ -60,7 +59,8 @@ Element ScrollView::body() const {
                   .children = std::move(contentChildren),
               },
           },
-  }}
+  }
+      .clipContent(true)
       .onPointerDown(
           [dragging, offset, downPoint](Point p) {
             dragging = true;

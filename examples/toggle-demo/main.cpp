@@ -69,7 +69,6 @@ struct ToggleDemoRoot {
             Rectangle{.fill = FillStyle::solid(theme.colorBackground)},
             VStack{
                 .spacing = 20.f,
-                .padding = 24.f,
                 .hAlign = HorizontalAlignment::Leading,
                 .children = {
                     Text{
@@ -166,7 +165,7 @@ struct ToggleDemoRoot {
                         .wrapping = TextWrapping::Wrap,
                     },
                 },
-            },
+            }.padding(24.f),
         },
     };
   }

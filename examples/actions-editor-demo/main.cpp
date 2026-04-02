@@ -248,7 +248,6 @@ struct Toolbar {
 
     return HStack{
         .spacing = 8.f,
-        .padding = 8.f,
         .vAlign = VerticalAlignment::Center,
         .children =
             {
@@ -281,7 +280,7 @@ struct Toolbar {
                        }
                      }),
             },
-    };
+    }.padding(8.f);
   }
 };
 
@@ -307,7 +306,6 @@ struct EditorRoot {
                             Element{Toolbar{.text = text, .selStart = selStart, .selEnd = selEnd}},
                             VStack{
                                 .spacing = 12.f,
-                                .padding = 24.f,
                                 .hAlign = HorizontalAlignment::Leading,
                                 .children =
                                     {
@@ -340,7 +338,7 @@ struct EditorRoot {
                                         }
                                             .flex(1.f),
                                     },
-                            },
+                            }.padding(24.f),
                         },
                 },
             },

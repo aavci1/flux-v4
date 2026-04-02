@@ -117,7 +117,6 @@ struct IconDemoRoot {
             {
                 VStack{
                     .spacing = t.space5,
-                    .padding = t.space5,
                     .hAlign = HorizontalAlignment::Leading,
                     .children =
                         {
@@ -149,7 +148,7 @@ struct IconDemoRoot {
                                 .children = std::move(gridCells),
                             },
                         },
-                },
+                }.padding(t.space5),
             },
     };
   }

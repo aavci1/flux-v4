@@ -108,7 +108,7 @@ Standardize how views declare their size:
 - Eliminate `Rect frame` on leaves as a sizing mechanism (it conflates position and size)
 - Use explicit `float width = 0, height = 0` on all views (0 = fill parent)
 - Make `resolveLeafBounds` the single path, remove `resolveRectangleBounds` special case
-- **Decoration padding / backgrounds:** use **`Element` modifiers** (`padding()`, `background()`, …) — see **Element modifiers** in `docs/layout-system.md`. **Intrinsic layout padding** on containers (`VStack`/`HStack` **`.padding`**) remains separate.
+- **Decoration padding / backgrounds:** use **`Element` / `ViewModifiers`** (`padding()`, `background()`, …) — see **Element modifiers** in `docs/layout-system.md` (including **`HStack{…}.padding(…)`** on stacks and grid).
 
 **Progress:** `Text`/`Image` inline style/size fields were removed in favor of modifiers; **`Rectangle`** layout fields were moved to **`Element`** modifiers (`position`, `size`, etc.).
 

@@ -51,67 +51,80 @@ struct ForEachDemo {
     std::vector<int> indices(static_cast<std::size_t>(*count));
     std::iota(indices.begin(), indices.end(), 0);
 
-    return ZStack{.children = {
-                      Rectangle{.fill = FillStyle::solid(pal::bg)},
-                      VStack{.spacing = 16.f,
-                             .padding = 20.f,
-                             .children =
-                                 {
-                                     Text{.text = "ForEach demo",
-                                          .font = {.size = 22.f, .weight = 700.f},
-                                          .color = pal::label},
-                                     HStack{.spacing = 10.f,
-                                            .vAlign = VerticalAlignment::Center,
+    return ZStack{
+        .children =
+            {
+                Rectangle{.fill = FillStyle::solid(pal::bg)},
+                VStack{
+                    .spacing = 16.f,
+                    .children =
+                        {
+                            Text{.text = "ForEach demo",
+                                 .font = {.size = 22.f, .weight = 700.f},
+                                 .color = pal::label},
+                            HStack{
+                                .spacing = 10.f,
+                                .vAlign = VerticalAlignment::Center,
+                                .children =
+                                    {
+                                        ZStack{
                                             .children =
                                                 {
-                                                    ZStack{.children = {
-                                                              Rectangle{
-                                                                  .fill = FillStyle::solid(Color::hex(0x3A7BD5)),
-                                                              }
-                                                                  .size(120.f, 36.f)
-                                                                  .cursor(Cursor::Hand)
-                                                                  .onTap([count] { count = *count + 1; })
-                                                                  .cornerRadius(CornerRadius(8.f)),
-                                                              Text{.text = "+ Row",
-                                                                   .font = {.size = 14.f, .weight = 600.f},
-                                                                   .color = Color::hex(0xFFFFFF)},
-                                                          }},
-                                                    ZStack{.children = {
-                                                              Rectangle{
-                                                                  .fill = FillStyle::solid(Color::hex(0xD05A2B)),
-                                                              }
-                                                                  .size(120.f, 36.f)
-                                                                  .cursor(Cursor::Hand)
-                                                                  .onTap([count] {
-                                                                    if (*count > 0) {
-                                                                      count = *count - 1;
-                                                                    }
-                                                                  })
-                                                                  .cornerRadius(CornerRadius(8.f)),
-                                                              Text{.text = "- Row",
-                                                                   .font = {.size = 14.f, .weight = 600.f},
-                                                                   .color = Color::hex(0xFFFFFF)},
-                                                          }},
-                                                }},
-                                     ScrollView{
-                                         .flexGrow = 1.f,
-                                         .children =
-                                             {
-                                                 VStack{.spacing = 6.f,
-                                                        .padding = 12.f,
-                                                        .children =
-                                                            {
-                                                                ForEach<int>(
-                                                                    std::move(indices),
-                                                                    [](int i) {
-                                                                      return Element{HoverRow{.index = i}};
-                                                                    },
-                                                                    6.f),
-                                                            }},
-                                             },
-                                     },
-                                 }},
-                  }};
+                                                    Rectangle{
+                                                        .fill = FillStyle::solid(Color::hex(0x3A7BD5)),
+                                                    }
+                                                        .size(120.f, 36.f)
+                                                        .cursor(Cursor::Hand)
+                                                        .onTap([count] { count = *count + 1; })
+                                                        .cornerRadius(CornerRadius(8.f)),
+                                                    Text{.text = "+ Row",
+                                                         .font = {.size = 14.f, .weight = 600.f},
+                                                         .color = Color::hex(0xFFFFFF)},
+                                                },
+                                        },
+                                        ZStack{
+                                            .children =
+                                                {
+                                                    Rectangle{
+                                                        .fill = FillStyle::solid(Color::hex(0xD05A2B)),
+                                                    }
+                                                        .size(120.f, 36.f)
+                                                        .cursor(Cursor::Hand)
+                                                        .onTap([count] {
+                                                          if (*count > 0) {
+                                                            count = *count - 1;
+                                                          }
+                                                        })
+                                                        .cornerRadius(CornerRadius(8.f)),
+                                                    Text{.text = "- Row",
+                                                         .font = {.size = 14.f, .weight = 600.f},
+                                                         .color = Color::hex(0xFFFFFF)},
+                                                },
+                                        },
+                                    },
+                            },
+                            ScrollView{
+                                .flexGrow = 1.f,
+                                .children =
+                                    {
+                                        VStack{
+                                            .spacing = 6.f,
+                                            .children =
+                                                {
+                                                    ForEach<int>(
+                                                        std::move(indices),
+                                                        [](int i) {
+                                                          return Element{HoverRow{.index = i}};
+                                                        },
+                                                        6.f),
+                                                },
+                                        }.padding(12.f),
+                                    },
+                            },
+                        },
+                }.padding(20.f),
+            },
+    };
   }
 };
 

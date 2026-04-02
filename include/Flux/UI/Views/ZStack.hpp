@@ -12,9 +12,8 @@
 
 namespace flux {
 
-/// Overlays children in one stack. There is no padding field on `ZStack` (unlike `Grid`):
-/// inset the whole stack with a parent that applies padding (e.g. wrap in another stack or pad the
-/// outer frame in the tree) if you need margins inside the window.
+/// Overlays children in one stack. There is no padding field on `ZStack`: inset via **`.padding()`** on
+/// the wrapping `Element`, another stack, or the outer frame in the tree if you need margins.
 ///
 /// Layout uses the parent’s proposed size when finite; each child is measured against that box, then
 /// the stack’s reported size is `max` of that inner box and the largest child on each axis (after the
@@ -32,10 +31,12 @@ namespace flux {
 /// thumb `Rectangle` with `frame` positions relative to each other) should use `Leading` and `Top`
 /// so every layer keeps the same origin. Default `Center` is for centering independent children
 /// (e.g. label over a full-bleed background).
+///
+/// To clip children to the stack’s bounds (e.g. scroll viewport), chain **`.clipContent(true)`** on the
+/// `Element` that wraps this `ZStack` (same as other views).
 struct ZStack : ViewModifiers<ZStack> {
   HorizontalAlignment hAlign = HorizontalAlignment::Center;
   VerticalAlignment vAlign = VerticalAlignment::Center;
-  bool clip = false;
   std::vector<Element> children;
 };
 

@@ -103,7 +103,6 @@ struct RgbColorSelectorRoot {
         .children = {
             VStack {
                 .spacing = 20.f,
-                .padding = 24.f,
                 .hAlign = HorizontalAlignment::Leading,
                 .children = {
                     Text{
@@ -168,7 +167,7 @@ struct RgbColorSelectorRoot {
                         .activeColor = theme.colorAccent,
                     }}.flex(1.f),
                 },
-            },
+            }.padding(24.f),
         },
     };
   }

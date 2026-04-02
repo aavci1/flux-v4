@@ -66,12 +66,10 @@ struct CursorDemo {
                 Rectangle{.fill = FillStyle::solid(pal::bg)},
                 VStack{
                     .spacing = 0.f,
-                    .padding = 0.f,
                     .children =
                         {
                             VStack{
                                 .spacing = 6.f,
-                                .padding = 20.f,
                                 .hAlign = HorizontalAlignment::Leading,
                                 .children =
                                     {
@@ -93,7 +91,7 @@ struct CursorDemo {
                                                 },
                                         },
                                     },
-                            },
+                            }.padding(20.f),
                             ScrollView{
                                 .axis = ScrollAxis::Vertical,
                                 .flexGrow = 1.f,
@@ -101,7 +99,6 @@ struct CursorDemo {
                                     {
                                         VStack{
                                             .spacing = 10.f,
-                                            .padding = 20.f,
                                             .children =
                                                 {
                                                     cursorSwatchRow("Default", Cursor::Arrow,
@@ -178,7 +175,7 @@ struct CursorDemo {
                                                             },
                                                     },
                                                 },
-                                        },
+                                        }.padding(20.f),
                                     },
                             },
                         },

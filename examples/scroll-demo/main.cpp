@@ -31,7 +31,6 @@ int main(int argc, char* argv[]) {
 
   w.setView(VStack{
       .spacing = 0.f,
-      .padding = 0.f,
       .children =
           {
               Text{.text = "ScrollView",
@@ -47,9 +46,8 @@ int main(int argc, char* argv[]) {
                       {
                           VStack{
                               .spacing = 10.f,
-                              .padding = 20.f,
                               .children = std::move(rows),
-                          },
+                          }.padding(20.f),
                       },
               },
           },

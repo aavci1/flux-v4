@@ -21,7 +21,6 @@ struct NotesEditor {
 
     return VStack{
         .spacing = 8.f,
-        .padding = 16.f,
         .children =
             {
                 Text{.text = "Notes",
@@ -38,7 +37,7 @@ struct NotesEditor {
                     .onEscape = [text](std::string const&) { text = ""; },
                 },
             },
-    };
+    }.padding(16.f);
   }
 };
 

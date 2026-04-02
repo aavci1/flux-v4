@@ -51,10 +51,9 @@ Element Alert::body() const {
                                           .cornerRadius(cardCorner),
                                       VStack{
                                           .spacing = theme.space3,
-                                          .padding = theme.space6,
                                           .hAlign = HorizontalAlignment::Leading,
                                           .children = buildContent(titleC, msgC, theme),
-                                      },
+                                      }.padding(theme.space6),
                                   },
                           },
                           Spacer{}.flex(1.f),

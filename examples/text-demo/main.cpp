@@ -22,7 +22,6 @@ int main(int argc, char* argv[]) {
   w.setView(
     VStack {
       .spacing = 16.f,
-      .padding = 24.f,
       .children = {
         Text {
           .text = "Text in Flux",
@@ -91,7 +90,7 @@ int main(int argc, char* argv[]) {
           .color = Color::rgb(140, 140, 155),
         },
       },
-    }
+    }.padding(24.f)
   );
 
   return app.exec();

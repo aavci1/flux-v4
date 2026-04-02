@@ -77,7 +77,6 @@ struct MemoDemo {
         Rectangle{.fill = FillStyle::solid(pal::bg)},
         VStack{
             .spacing = 16.f,
-            .padding = 24.f,
             .hAlign = HorizontalAlignment::Leading,
             .children = {
                 Text{.text = "useMemo demo",
@@ -158,7 +157,7 @@ struct MemoDemo {
                     },
                 },
             },
-        },
+        }.padding(24.f),
     }};
   }
 };

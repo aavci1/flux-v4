@@ -74,7 +74,6 @@ struct HoverDemo {
                       Rectangle{.fill = FillStyle::solid(Color::hex(0xF2F2F7))},
                       VStack{
                           .spacing = 20.f,
-                          .padding = 32.f,
                           .hAlign = HorizontalAlignment::Leading,
                           .children =
                               {
@@ -110,7 +109,7 @@ struct HoverDemo {
                                       [](int i) -> Element { return Element{HoverListRow{.index = i}}; },
                                       6.f),
                               },
-                      },
+                      }.padding(32.f),
                   }};
   }
 };

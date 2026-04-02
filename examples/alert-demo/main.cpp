@@ -34,7 +34,6 @@ struct AlertDemoRoot {
                 Rectangle{.fill = FillStyle::solid(pal::bg)},
                 VStack{
                     .spacing = 16.f,
-                    .padding = 24.f,
                     .hAlign = HorizontalAlignment::Leading,
                     .children =
                         {
@@ -140,7 +139,7 @@ struct AlertDemoRoot {
                                     },
                             },
                         },
-                },
+                }.padding(24.f),
             },
     };
   }

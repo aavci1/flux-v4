@@ -18,10 +18,10 @@ void Element::Model<Grid>::build(BuildContext& ctx) const {
   ContainerBuildScope scope(ctx);
   float const assignedW = assignedSpan(scope.parentFrame.width, scope.outer.maxWidth);
   float const assignedH = assignedSpan(scope.parentFrame.height, scope.outer.maxHeight);
-  scope.pushStandardLayer(value.clip, assignedW, assignedH);
+  scope.pushStandardLayer(false, assignedW, assignedH);
 
-  float const innerW = std::max(0.f, assignedW - 2.f * value.padding);
-  float const innerH = std::max(0.f, assignedH - 2.f * value.padding);
+  float const innerW = std::max(0.f, assignedW);
+  float const innerH = std::max(0.f, assignedH);
   std::size_t const cols = std::max<std::size_t>(1, value.columns);
   std::size_t const n = value.children.size();
   std::size_t const rowCount = n == 0 ? 0 : (n + cols - 1) / cols;
@@ -58,9 +58,9 @@ void Element::Model<Grid>::build(BuildContext& ctx) const {
   innerForBuild.maxHeight =
       cellH > 0.f ? cellH : std::numeric_limits<float>::infinity();
 
-  float y = value.padding;
+  float y = 0.f;
   for (std::size_t r = 0; r < rowCount; ++r) {
-    float x = value.padding;
+    float x = 0.f;
     for (std::size_t c = 0; c < cols; ++c) {
       std::size_t const i = r * cols + c;
       if (i >= n) {
@@ -88,8 +88,8 @@ Size Element::Model<Grid>::measure(BuildContext& ctx, LayoutConstraints const& c
       std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;
   float const assignedH =
       std::isfinite(constraints.maxHeight) ? constraints.maxHeight : 0.f;
-  float const innerW = std::max(0.f, assignedW - 2.f * value.padding);
-  float const innerH = std::max(0.f, assignedH - 2.f * value.padding);
+  float const innerW = std::max(0.f, assignedW);
+  float const innerH = std::max(0.f, assignedH);
   std::size_t const cols = std::max<std::size_t>(1, value.columns);
   std::size_t const n = value.children.size();
   std::size_t const rowCount = n == 0 ? 0 : (n + cols - 1) / cols;
@@ -127,7 +127,7 @@ Size Element::Model<Grid>::measure(BuildContext& ctx, LayoutConstraints const& c
   if (cellH > 0.f && rowCount > 0) {
     totalH = assignedH;
   } else {
-    totalH = 2.f * value.padding;
+    totalH = 0.f;
     if (rowCount > 1) {
       totalH += static_cast<float>(rowCount - 1) * value.vSpacing;
     }

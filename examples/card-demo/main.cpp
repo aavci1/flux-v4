@@ -112,7 +112,7 @@ struct Card {
                   bodyOpacity = next ? 1.f : 0.f;
                 })
                 .cornerRadius(CornerRadius(14.f)),
-            VStack{.spacing = 10.f, .padding = 18.f, .children = std::move(rows)},
+            VStack{.spacing = 10.f, .children = std::move(rows)}.padding(18.f),
         },
     };
   }
@@ -130,7 +130,6 @@ struct CardListView {
             Rectangle{.fill = FillStyle::solid(pal::bg)},
             VStack{
                 .spacing = 12.f,
-                .padding = 24.f,
                 .hAlign = HorizontalAlignment::Leading,
                 .children = {
                     Text{.text = "Flux Components",
@@ -152,7 +151,7 @@ struct CardListView {
                          .detail = "Slot-map NodeStore, LayerNode, HitTester.",
                          .availableWidth = listContentWidth},
                 },
-            },
+            }.padding(24.f),
         },
     };
   }

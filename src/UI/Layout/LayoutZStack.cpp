@@ -18,7 +18,7 @@ void Element::Model<ZStack>::build(BuildContext& ctx) const {
   ContainerBuildScope scope(ctx);
   float const assignedW = assignedSpan(scope.parentFrame.width, scope.outer.maxWidth);
   float const assignedH = assignedSpan(scope.parentFrame.height, scope.outer.maxHeight);
-  scope.pushStandardLayer(value.clip, assignedW, assignedH);
+  scope.pushStandardLayer(false, assignedW, assignedH);
 
   float innerW = std::max(0.f, assignedW);
   float innerH = std::max(0.f, assignedH);
@@ -42,17 +42,8 @@ void Element::Model<ZStack>::build(BuildContext& ctx) const {
   if (innerH <= 0.f) {
     innerH = maxH;
   }
-  if (value.clip) {
-    if (assignedW > 0.f) {
-      innerW = assignedW;
-    }
-    if (assignedH > 0.f) {
-      innerH = assignedH;
-    }
-  } else {
-    innerW = std::max(innerW, maxW);
-    innerH = std::max(innerH, maxH);
-  }
+  innerW = std::max(innerW, maxW);
+  innerH = std::max(innerH, maxH);
 
   LayoutConstraints innerForBuild{};
   innerForBuild.maxWidth = innerW;
@@ -109,17 +100,8 @@ Size Element::Model<ZStack>::measure(BuildContext& ctx, LayoutConstraints const&
   if (innerH <= 0.f) {
     innerH = maxH;
   }
-  if (value.clip) {
-    if (assignedW > 0.f) {
-      innerW = assignedW;
-    }
-    if (assignedH > 0.f) {
-      innerH = assignedH;
-    }
-  } else {
-    innerW = std::max(innerW, maxW);
-    innerH = std::max(innerH, maxH);
-  }
+  innerW = std::max(innerW, maxW);
+  innerH = std::max(innerH, maxH);
   return {innerW, innerH};
 }
 

@@ -87,7 +87,6 @@ struct TooltipDemoRoot {
             Rectangle{.fill = FillStyle::solid(theme.colorBackground)},
             VStack{
                 .spacing = 24.f,
-                .padding = 24.f,
                 .hAlign = HorizontalAlignment::Leading,
                 .children = {
                     Text{
@@ -199,7 +198,7 @@ struct TooltipDemoRoot {
                         },
                     },
                 },
-            },
+            }.padding(24.f),
         },
     };
   }

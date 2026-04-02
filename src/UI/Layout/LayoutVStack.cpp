@@ -18,9 +18,9 @@ void Element::Model<VStack>::build(BuildContext& ctx) const {
   ContainerBuildScope scope(ctx);
   float const assignedW = stackMainAxisSpan(scope.parentFrame.width, scope.outer.maxWidth);
   float const assignedH = stackMainAxisSpan(scope.parentFrame.height, scope.outer.maxHeight);
-  scope.pushStandardLayer(value.clip, assignedW, assignedH);
+  scope.pushStandardLayer(false, assignedW, assignedH);
 
-  float innerW = std::max(0.f, assignedW - 2.f * value.padding);
+  float innerW = std::max(0.f, assignedW);
 
   LayoutConstraints childCs = scope.outer;
   childCs.maxHeight = std::numeric_limits<float>::infinity();
@@ -51,7 +51,7 @@ void Element::Model<VStack>::build(BuildContext& ctx) const {
 
   bool const heightConstrained = std::isfinite(assignedH) && assignedH > 0.f;
   if (heightConstrained && n > 0) {
-    float const innerH = std::max(0.f, assignedH - 2.f * value.padding);
+    float const innerH = std::max(0.f, assignedH);
     float const gaps = n > 1 ? static_cast<float>(n - 1) * value.spacing : 0.f;
     float const targetSum = std::max(0.f, innerH - gaps);
     float sumNat = 0.f;
@@ -68,7 +68,7 @@ void Element::Model<VStack>::build(BuildContext& ctx) const {
     warnFlexGrowIfParentMainAxisUnconstrained(value.children, heightConstrained);
   }
 
-  float y = value.padding;
+  float y = 0.f;
   for (std::size_t i = 0; i < n; ++i) {
     Size sz = sizes[i];
     sz.height = allocH[i];
@@ -78,7 +78,7 @@ void Element::Model<VStack>::build(BuildContext& ctx) const {
     childBuild.minHeight = value.children[i].minMainSize();
     LayoutHints rowHints{};
     rowHints.vStackCrossAlign = value.hAlign;
-    scope.buildChild(value.children[i], Rect{value.padding, y, rowW, sz.height}, childBuild, rowHints);
+    scope.buildChild(value.children[i], Rect{0.f, y, rowW, sz.height}, childBuild, rowHints);
     y += sz.height + value.spacing;
   }
 }
@@ -88,7 +88,7 @@ Size Element::Model<VStack>::measure(BuildContext& ctx, LayoutConstraints const&
   ContainerMeasureScope scope(ctx);
   float const assignedW =
       std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;
-  float innerW = std::max(0.f, assignedW - 2.f * value.padding);
+  float innerW = std::max(0.f, assignedW);
 
   LayoutConstraints childCs = constraints;
   childCs.maxHeight = std::numeric_limits<float>::infinity();
@@ -97,7 +97,7 @@ Size Element::Model<VStack>::measure(BuildContext& ctx, LayoutConstraints const&
   childHints.vStackCrossAlign = value.hAlign;
 
   float maxW = 0.f;
-  float sumH = 2.f * value.padding;
+  float sumH = 0.f;
   std::size_t n = value.children.size();
   if (n > 1) {
     sumH += static_cast<float>(n - 1) * value.spacing;
@@ -107,7 +107,7 @@ Size Element::Model<VStack>::measure(BuildContext& ctx, LayoutConstraints const&
     maxW = std::max(maxW, s.width);
     sumH += s.height;
   }
-  float w = maxW + 2.f * value.padding;
+  float w = maxW;
   if (std::isfinite(assignedW) && assignedW > 0.f) {
     w = std::max(w, assignedW);
   }

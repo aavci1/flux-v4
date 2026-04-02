@@ -214,7 +214,7 @@ Element{MyView{...}}.flex(/*grow=*/1.f, /*shrink=*/1.f, /*minMain=*/50.f)
 - **Measure**: constraints are tightened by padding before delegating to the inner implementation; reported size adds padding back; **`size`** / **`width`** / **`height`** modifiers can override width/height on the outer box.
 - **CRTP `ViewModifiers`**: view structs expose the same names as `Element` (`padding`, `background`, `flex`, `environment`, …). Chaining produces a single `Element` with accumulated modifier fields.
 - **`Rectangle`** carries only fill and stroke; **position** (layout-space offset within the parent cell), **size** / **width** / **height**, **flex**, and **rounded corners** use **`Element`** / **`ViewModifiers`**. The **`translate`** modifier is a **layer transform** (with opacity/clip), not a substitute for layout-space **`position`**.
-- **Containers** (`VStack`/`HStack` **`.padding`**) still mean “inset children in layout” on the container struct; that is separate from the **`padding()`** modifier on `Element`.
+- **Stacks / `Grid`**: outer inset uses the same **`padding()`** chain as other views (e.g. `HStack{…}.padding(16.f)`), not a field on the layout struct.
 
 Flex distribution follows CSS flexbox semantics:
 - **Grow**: extra space distributed proportional to `flexGrow` weight
@@ -230,14 +230,14 @@ All three follow the same pattern with axis-specific differences:
 
 ### VStack (vertical stack)
 
-**Measure**: Sum of children heights + spacing + 2×padding. Width = max(child widths) + 2×padding, clamped to `maxWidth`.
+**Measure**: Sum of children heights + spacing. Width = max(child widths), clamped to `maxWidth` when finite.
 
 **Build**:
-1. Compute `innerW` from assigned width minus padding
+1. Compute `innerW` from assigned width
 2. Measure all children with `maxHeight = ∞`, `maxWidth = innerW`
 3. Rewind key index
 4. If height-constrained: flex grow/shrink on the Y axis
-5. Place each child: `setChildFrame({padding, y, innerW, allocH[i]})`, advance `y`
+5. Place each child: `setChildFrame({0, y, innerW, allocH[i]})`, advance `y`
 
 Children get the **full column width** so nested HStacks can flex horizontally. Cross-axis alignment is communicated via `LayoutHints::vStackCrossAlign` (used by **`Text`** for glyph alignment and by **`Rectangle`** in **`resolveRectangleBounds`** for horizontal offset within each row). Modifier-wrapped **`Rectangle`** views still receive these hints via **`buildWithModifiers`** (see **Element modifiers** above).
 
@@ -245,12 +245,12 @@ Children get the **full column width** so nested HStacks can flex horizontally. 
 
 The horizontal dual of VStack:
 
-**Measure**: Sum of children widths + spacing + 2×padding. Height = max(child heights) + 2×padding.
+**Measure**: Sum of children widths + spacing. Height = max(child heights).
 
 **Build**:
 1. Measure all children with `maxWidth = ∞`
 2. If width-constrained: flex grow/shrink on the X axis
-3. Place each child: `setChildFrame({x, padding, allocW[i], rowInnerH})`, advance `x`
+3. Place each child: `setChildFrame({x, 0, allocW[i], rowInnerH})`, advance `x`
 
 Children get the **full row height**. Cross-axis alignment uses `LayoutHints::hStackCrossAlign`. Main-axis **flex** assigns wider **`allocW[i]`** in the child frame; **`Rectangle`** resolves final bounds in **`resolveRectangleBounds`** using that frame together with hints (taller-than-natural rows need **`hStackCrossAlign`** so flex width is not dropped). Modifier chains preserve hints the same way as for **`VStack`**.
 

@@ -73,13 +73,12 @@ struct PreviewView {
     auto body() const {
       return HStack{
         .spacing = 8.f,
-        .padding = 8.f,
         .children = {
           Element{SidebarView()}.flex(0.f, 0.0f, 240.0f),
           Element{EditorView()}.flex(1.f),
           Element{PreviewView()}.flex(1.f),
         },
-      };
+      }.padding(8.f);
     }
   };
 

@@ -32,7 +32,6 @@ struct ButtonDemoRoot {
                 Rectangle{ .fill = FillStyle::solid(Color::hex(0xF2F2F7)) },
                 VStack{
                     .spacing = 20.f,
-                    .padding = 24.f,
                     .hAlign = HorizontalAlignment::Leading,
                     .children =
                         {
@@ -156,7 +155,7 @@ struct ButtonDemoRoot {
                                     },
                             },
                         },
-                },
+                }.padding(24.f),
             },
     };
   }

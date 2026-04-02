@@ -22,7 +22,6 @@ struct TaskForm {
 
     return VStack{
         .spacing = 16.f,
-        .padding = 24.f,
         .hAlign = HorizontalAlignment::Leading,
         .children =
             {
@@ -128,7 +127,7 @@ struct TaskForm {
                         },
                 },
             },
-    };
+    }.padding(24.f);
   }
 };
 

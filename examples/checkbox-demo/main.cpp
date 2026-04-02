@@ -89,7 +89,6 @@ struct CheckboxDemoRoot {
                 Rectangle{.fill = FillStyle::solid(theme.colorBackground)},
                 VStack{
                     .spacing = 16.f,
-                    .padding = 24.f,
                     .hAlign = HorizontalAlignment::Leading,
                     .children =
                         {
@@ -171,7 +170,6 @@ struct CheckboxDemoRoot {
                                 .flex(1.f),
                             VStack{
                                         .spacing = 8.f,
-                                        .padding = 0.f,
                                         .children =
                                             {
                                                 HStack{
@@ -249,7 +247,7 @@ struct CheckboxDemoRoot {
                                 .wrapping = TextWrapping::Wrap,
                             },
                         },
-                },
+                }.padding(24.f),
             },
     };
   }

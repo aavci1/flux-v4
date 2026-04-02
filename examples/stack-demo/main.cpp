@@ -33,7 +33,6 @@ struct StackDemoRoot {
             .children = children(
                 VStack {
                     .spacing = 22.f,
-                    .padding = 24.f,
                     .hAlign = HorizontalAlignment::Leading,
                     .children = children(
                         Text {
@@ -78,13 +77,13 @@ struct StackDemoRoot {
                             .children = children(
                                 Rectangle {
                                     .fill = FillStyle::solid(pal::coral),
-                                }.size(56.f, 56.f).cornerRadius(CornerRadius{10.f}).flex(2.f),
+                                }.size(56.f, 56.f).cornerRadius(CornerRadius{10.f}).flex(2.f, 1.f, 0.f),
                                 Rectangle {
                                     .fill = FillStyle::solid(pal::teal),
                                 }.size(56.f, 72.f).cornerRadius(CornerRadius{10.f}),
                                 Rectangle {
                                     .fill = FillStyle::solid(pal::indigo),
-                                }.size(56.f, 40.f).cornerRadius(CornerRadius{10.f}).flex(1.f),
+                                }.size(56.f, 40.f).cornerRadius(CornerRadius{10.f}).flex(1.f, 1.f, 0.f),
                                 Rectangle {
                                     .fill = FillStyle::solid(pal::amber),
                                 }.size(56.f, 56.f).cornerRadius(CornerRadius{10.f})
@@ -166,7 +165,7 @@ struct StackDemoRoot {
                             ),
                         }
                     ),
-                }
+                }.padding(24.f)
             ),
         };
     }
