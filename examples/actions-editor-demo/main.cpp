@@ -104,7 +104,7 @@ struct TextEditor {
                     .spacing = 0.f,
                     .children =
                         {
-                            Element{Rectangle{
+                            Rectangle{
                                 .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 200.f,
                                 .cornerRadius = CornerRadius(10.f),
                                 .fill = FillStyle::solid(focused ? Color::hex(0xE8F0FC) : Color::hex(0xFAFAFC)),
@@ -192,7 +192,7 @@ struct TextEditor {
                                       selStart = p;
                                       selEnd = p;
                                     },
-                            }}
+                            }
                                 .withFlex(1.f),
                         },
                 },
@@ -200,10 +200,10 @@ struct TextEditor {
                     .spacing = 0.f,
                     .children =
                         {
-                            Element{Text{.text = (*text).empty() ? std::string("(empty)") : std::string(*text),
-                                        .font = {.size = 14.f, .weight = 400.f},
-                                        .color = Color::hex(0x3A3A44),
-                                        .wrapping = TextWrapping::Wrap}}
+                            Text{.text = (*text).empty() ? std::string("(empty)") : std::string(*text),
+                                 .font = {.size = 14.f, .weight = 400.f},
+                                 .color = Color::hex(0x3A3A44),
+                                 .wrapping = TextWrapping::Wrap}
                                 .withFlex(1.f),
                         },
                 },
@@ -320,26 +320,26 @@ struct EditorRoot {
                                             .spacing = 0.f,
                                             .children =
                                                 {
-                                                    Element{Text{
-                                                            .text = "Focus the editor. Toolbar buttons use the same shared "
-                                                                    "state; enabled flags follow isActionEnabled.",
-                                                            .font = {.size = 13.f, .weight = 400.f},
-                                                            .color = Color::hex(0x6E6E80),
-                                                            .wrapping = TextWrapping::Wrap,
-                                                        }}
+                                                    Text{
+                                                        .text = "Focus the editor. Toolbar buttons use the same shared "
+                                                                "state; enabled flags follow isActionEnabled.",
+                                                        .font = {.size = 13.f, .weight = 400.f},
+                                                        .color = Color::hex(0x6E6E80),
+                                                        .wrapping = TextWrapping::Wrap,
+                                                    }
                                                         .withFlex(1.f),
                                                 },
                                         },
-                                        Element{HStack{
-                                                    .spacing = 0.f,
-                                                    .children =
-                                                        {
-                                                            Element{TextEditor{.text = text,
-                                                                              .selStart = selStart,
-                                                                              .selEnd = selEnd}}
-                                                                .withFlex(1.f),
-                                                        },
-                                                }}
+                                        HStack{
+                                            .spacing = 0.f,
+                                            .children =
+                                                {
+                                                    Element{TextEditor{.text = text,
+                                                                      .selStart = selStart,
+                                                                      .selEnd = selEnd}}
+                                                        .withFlex(1.f),
+                                                },
+                                        }
                                             .withFlex(1.f),
                                     },
                             },

@@ -23,7 +23,7 @@ namespace flux {
 /// `Spacer` has no flex axis here (unlike `VStack` / `HStack`), but it remains a valid child: it is
 /// measured like other cells, occupies a full column in row-major order, and produces no output.
 /// Slot / key indices stay aligned by advancing the child cursor without calling `Spacer::build`.
-struct Grid {
+struct Grid : ViewModifiers<Grid> {
   /// Number of columns. Values below 1 are clamped to 1 during layout.
   std::size_t columns = 2;
   /// Gap between columns (horizontal) and between rows (vertical).

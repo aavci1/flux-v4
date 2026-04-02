@@ -27,7 +27,7 @@ struct AlertButton {
   std::function<void()> action;
 };
 
-struct Alert {
+struct Alert : ViewModifiers<Alert> {
   // ── Content ──────────────────────────────────────────────────────────────
 
   std::string title;

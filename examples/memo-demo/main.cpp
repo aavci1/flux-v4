@@ -88,13 +88,13 @@ struct MemoDemo {
                     .spacing = 0.f,
                     .children =
                         {
-                            Element{Text{.text = "Content: " + *text,
-                                         .font = {.size = 15.f, .weight = 400.f},
-                                         .background = FillStyle::solid(pal::surface),
-                                         .border = StrokeStyle::solid(pal::border, 1.f),
-                                         .color = pal::label,
-                                         .wrapping = TextWrapping::Wrap,
-                                         .padding = 12.f}}
+                            Text{.text = "Content: " + *text,
+                                 .font = {.size = 15.f, .weight = 400.f},
+                                 .background = FillStyle::solid(pal::surface),
+                                 .border = StrokeStyle::solid(pal::border, 1.f),
+                                 .color = pal::label,
+                                 .wrapping = TextWrapping::Wrap,
+                                 .padding = 12.f}
                                 .withFlex(1.f),
                         },
                 },

@@ -32,7 +32,7 @@ namespace flux {
 /// thumb `Rectangle` with `frame` positions relative to each other) should use `Leading` and `Top`
 /// so every layer keeps the same origin. Default `Center` is for centering independent children
 /// (e.g. label over a full-bleed background).
-struct ZStack {
+struct ZStack : ViewModifiers<ZStack> {
   HorizontalAlignment hAlign = HorizontalAlignment::Center;
   VerticalAlignment vAlign = VerticalAlignment::Center;
   bool clip = false;

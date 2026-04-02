@@ -9,6 +9,7 @@
 #include <Flux/Graphics/Image.hpp>
 #include <Flux/Graphics/ImageFillMode.hpp>
 #include <Flux/Graphics/Styles.hpp>
+#include <Flux/UI/ViewModifiers.hpp>
 
 #include <functional>
 #include <memory>
@@ -16,7 +17,7 @@
 namespace flux::views {
 
 /// Image view component. `source` references `flux::Image` (bitmap); distinct from this `Image` view type.
-struct Image {
+struct Image : ViewModifiers<Image> {
   std::shared_ptr<flux::Image> source;
   float offsetX = 0.f;
   float offsetY = 0.f;

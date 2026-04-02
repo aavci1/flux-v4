@@ -24,7 +24,7 @@ struct TextAreaHeight {
   float maxIntrinsic = 0.f;
 };
 
-struct TextArea {
+struct TextArea : ViewModifiers<TextArea> {
   State<std::string> value{};
   std::string placeholder;
 

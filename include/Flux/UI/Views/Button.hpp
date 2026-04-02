@@ -25,7 +25,7 @@ enum class ButtonVariant : std::uint8_t {
   Link,
 };
 
-struct Button {
+struct Button : ViewModifiers<Button> {
   // ── Content ──────────────────────────────────────────────────────────────
 
   /// Button label text.

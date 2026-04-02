@@ -11,7 +11,7 @@
 
 namespace flux {
 
-struct Icon {
+struct Icon : ViewModifiers<Icon> {
 
   // ── Required ────────────────────────────────────────────────────────
   IconName name {};

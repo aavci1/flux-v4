@@ -7,12 +7,13 @@
 
 #include <Flux/Graphics/TextLayoutOptions.hpp>
 #include <Flux/UI/Element.hpp>
+#include <Flux/UI/ViewModifiers.hpp>
 
 #include <vector>
 
 namespace flux {
 
-struct HStack {
+struct HStack : ViewModifiers<HStack> {
   float spacing = 8.f;
   float padding = 0.f;
   VerticalAlignment vAlign = VerticalAlignment::Center;

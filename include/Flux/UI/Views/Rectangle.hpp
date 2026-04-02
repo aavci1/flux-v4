@@ -7,6 +7,7 @@
 #include <Flux/Core/Cursor.hpp>
 #include <Flux/Core/Types.hpp>
 #include <Flux/Graphics/Styles.hpp>
+#include <Flux/UI/ViewModifiers.hpp>
 
 #include <functional>
 #include <string>
@@ -16,7 +17,7 @@ namespace flux {
 /// Axis-aligned rounded rect leaf. \c width / \c height are explicit sizes; \c 0 means expand along
 /// that axis from the proposed constraint box (see layout code). \c offsetX / \c offsetY shift the
 /// rect within the parent cell (e.g. ZStack overlays).
-struct Rectangle {
+struct Rectangle : ViewModifiers<Rectangle> {
 
   // ── Appearance ─────────────────────────────────────────────────────────────
 

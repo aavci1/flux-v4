@@ -30,7 +30,7 @@ Element cursorSwatchRow(std::string name, Cursor cursor, Color chip) {
       .spacing = 0.f,
       .children =
           {
-              Element{HStack{
+              HStack{
                     .spacing = 12.f,
                     .vAlign = VerticalAlignment::Center,
                     .children =
@@ -48,7 +48,7 @@ Element cursorSwatchRow(std::string name, Cursor cursor, Color chip) {
                                 .cursor = cursor,
                             },
                         },
-                }}
+                }
                   .withFlex(1.f),
           },
   };
@@ -81,13 +81,13 @@ struct CursorDemo {
                                             .spacing = 0.f,
                                             .children =
                                                 {
-                                                    Element{Text{
+                                                    Text{
                                                             .text = "Move the pointer over each swatch. Drag the resize strip — the "
                                                                     "cursor stays locked to that node during the drag.",
                                                             .font = {.size = 14.f, .weight = 400.f},
                                                             .color = pal::sub,
                                                             .wrapping = TextWrapping::Wrap,
-                                                        }}
+                                                        }
                                                         .withFlex(1.f),
                                                 },
                                         },
@@ -131,7 +131,7 @@ struct CursorDemo {
                                                                     .font = {.size = 14.f, .weight = 600.f},
                                                                     .color = pal::label,
                                                                     .offsetX = 152.f, .offsetY = 0.f, .width = 0.f, .height = 0.f},
-                                                                Element{Text{
+                                                                Text{
                                                                     .text = "Read-only label — cursor is I-beam over "
                                                                             "glyphs (no pointer handlers).",
                                                                     .font = {.size = 14.f, .weight = 400.f},
@@ -146,7 +146,7 @@ struct CursorDemo {
                                                                     .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 0.f,
                                                                     .flexGrow = 1.f,
                                                                     .cursor = Cursor::IBeam,
-                                                                }}
+                                                                }
                                                                     .withFlex(1.f),
                                                             },
                                                     },
@@ -155,7 +155,7 @@ struct CursorDemo {
                                                         .spacing = 0.f,
                                                         .children =
                                                             {
-                                                                Element{VStack{
+                                                                VStack{
                                                                             .spacing = 8.f,
                                                                             .hAlign = HorizontalAlignment::Leading,
                                                                             .children =
@@ -175,7 +175,7 @@ struct CursorDemo {
                                                                                         .onPointerMove = [](Point) {},
                                                                                     },
                                                                                 },
-                                                                        }}
+                                                                        }
                                                                     .withFlex(1.f),
                                                             },
                                                     },

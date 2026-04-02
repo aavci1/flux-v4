@@ -33,12 +33,12 @@ struct TaskForm {
                     .spacing = 0.f,
                     .children =
                         {
-                            Element{Text{
-                                    .text = "Tab to the pickers. Return / Space opens; arrows move; Escape dismisses.",
-                                    .font = {.size = 13.f, .weight = 400.f},
-                                    .color = Color::hex(0x6E6E80),
-                                    .wrapping = TextWrapping::Wrap,
-                                }}
+                            Text{
+                                .text = "Tab to the pickers. Return / Space opens; arrows move; Escape dismisses.",
+                                .font = {.size = 13.f, .weight = 400.f},
+                                .color = Color::hex(0x6E6E80),
+                                .wrapping = TextWrapping::Wrap,
+                            }
                                 .withFlex(1.f),
                         },
                 },
@@ -50,21 +50,21 @@ struct TaskForm {
                     .spacing = 0.f,
                     .children =
                         {
-                            Element{Picker<std::string>{
-                                        .value = language,
-                                        .options =
-                                            {
-                                                {"en", "English"},
-                                                {"tr", "Turkish"},
-                                                {"de", "German"},
-                                                {"fr", "French"},
-                                                {"ja", "Japanese"},
-                                            },
-                                        .placeholder = "Select language…",
-                                        .onChange = [](std::string const& v) {
-                                          std::fprintf(stderr, "[picker-demo] language: %s\n", v.c_str());
-                                        },
-                                    }}
+                            Picker<std::string>{
+                                .value = language,
+                                .options =
+                                    {
+                                        {"en", "English"},
+                                        {"tr", "Turkish"},
+                                        {"de", "German"},
+                                        {"fr", "French"},
+                                        {"ja", "Japanese"},
+                                    },
+                                .placeholder = "Select language…",
+                                .onChange = [](std::string const& v) {
+                                  std::fprintf(stderr, "[picker-demo] language: %s\n", v.c_str());
+                                },
+                            }
                                 .withFlex(1.f),
                         },
                 },
@@ -76,13 +76,13 @@ struct TaskForm {
                     .spacing = 0.f,
                     .children =
                         {
-                            Element{Picker<int>{
-                                        .value = count,
-                                        .options = {{1, "1"}, {2, "2"}, {3, "3"}, {5, "5"}, {10, "10"}},
-                                        .onChange = [](int v) {
-                                          std::fprintf(stderr, "[picker-demo] count: %d\n", v);
-                                        },
-                                    }}
+                            Picker<int>{
+                                .value = count,
+                                .options = {{1, "1"}, {2, "2"}, {3, "3"}, {5, "5"}, {10, "10"}},
+                                .onChange = [](int v) {
+                                  std::fprintf(stderr, "[picker-demo] count: %d\n", v);
+                                },
+                            }
                                 .withFlex(1.f),
                         },
                 },
@@ -94,15 +94,15 @@ struct TaskForm {
                     .spacing = 0.f,
                     .children =
                         {
-                            Element{Picker<Priority>{
-                                        .value = priority,
-                                        .options =
-                                            {
-                                                {Priority::Low, "Low"},
-                                                {Priority::Medium, "Medium"},
-                                                {Priority::High, "High"},
-                                            },
-                                    }}
+                            Picker<Priority>{
+                                .value = priority,
+                                .options =
+                                    {
+                                        {Priority::Low, "Low"},
+                                        {Priority::Medium, "Medium"},
+                                        {Priority::High, "High"},
+                                    },
+                            }
                                 .withFlex(1.f),
                         },
                 },
@@ -114,16 +114,16 @@ struct TaskForm {
                     .spacing = 0.f,
                     .children =
                         {
-                            Element{Picker<std::string>{
-                                        .value = language,
-                                        .options =
-                                            {
-                                                {"en", "English"},
-                                                {"tr", "Turkish"},
-                                            },
-                                        .placeholder = "Unavailable",
-                                        .disabled = true,
-                                    }}
+                            Picker<std::string>{
+                                .value = language,
+                                .options =
+                                    {
+                                        {"en", "English"},
+                                        {"tr", "Turkish"},
+                                    },
+                                .placeholder = "Unavailable",
+                                .disabled = true,
+                            }
                                 .withFlex(1.f),
                         },
                 },

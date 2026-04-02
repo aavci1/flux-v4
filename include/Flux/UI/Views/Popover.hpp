@@ -22,7 +22,7 @@ namespace flux {
 
 /// Floating card + optional arrow. Present/dismiss timing is owned by the overlay stack, not
 /// `FluxTheme::duration*` (those apply to in-body transitions such as `useAnimated` on controls).
-struct Popover {
+struct Popover : ViewModifiers<Popover> {
   // ── Content ──────────────────────────────────────────────────────────────
 
   /// The content to display inside the popover card.

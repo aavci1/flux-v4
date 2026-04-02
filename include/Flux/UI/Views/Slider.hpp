@@ -16,7 +16,7 @@ namespace flux {
 
 /// Horizontal slider for a bounded numeric \ref value. Supports pointer drag, scroll wheel where
 /// applicable, arrow keys with optional \c step snapping, and focus styling.
-struct Slider {
+struct Slider : ViewModifiers<Slider> {
   struct Style {
     Color activeColor = kFromTheme;
     Color inactiveColor = kFromTheme;

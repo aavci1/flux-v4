@@ -43,13 +43,13 @@ struct ButtonDemoRoot {
                                 .spacing = 0.f,
                                 .children =
                                     {
-                                        Element{Text{
+                                        Text{
                                                 .text = "Five variants, hover/press/focus, disabled state, and Tab navigation. "
                                                         "Link focus rings appear only after keyboard focus.",
                                                 .font = {.size = 14.f, .weight = 400.f},
                                                 .color = Color::hex(0x6E6E80),
                                                 .wrapping = TextWrapping::Wrap,
-                                            }}
+                                            }
                                             .withFlex(1.f),
                                     },
                             },

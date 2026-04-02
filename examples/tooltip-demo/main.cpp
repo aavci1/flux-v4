@@ -95,14 +95,14 @@ struct TooltipDemoRoot {
                         .font = theme.typeHeading.toFont(),
                         .color = theme.colorTextPrimary,
                     },
-                    Element{Text{
+                    Text{
                         .text = "Hover over any control for 600 ms to "
                                 "see its tooltip. Move the pointer away "
                                 "to dismiss. Tapping also dismisses.",
                         .font = theme.typeBody.toFont(),
                         .color = theme.colorTextSecondary,
                         .wrapping = TextWrapping::Wrap,
-                    }}.withFlex(1.f),
+                    }.withFlex(1.f),
 
                     // ── Placement variants ──────────────────────────
                     Text{

@@ -71,13 +71,13 @@ struct ThemeDemoRoot {
                       .spacing = 0.f,
                       .children =
                           {
-                              Element{Text{
+                              Text{
                                       .text = subtitle,
                                       .font = t.typeBody.toFont(),
                                       .color = t.colorTextSecondary,
                                       .wrapping = TextWrapping::Wrap,
                                       .lineHeight = t.typeBody.lineHeight,
-                                  }}
+                                  }
                                   .withFlex(1.f),
                           },
                   },
@@ -106,14 +106,14 @@ struct ThemeDemoRoot {
                                 .spacing = 0.f,
                                 .children =
                                     {
-                                        Element{Text{
+                                        Text{
                                                 .text = "Window theme drives defaults. The right column uses "
                                                         "Element::environment(FluxTheme::dark()) for a subtree override.",
                                                 .font = windowTheme.typeBody.toFont(),
                                                 .color = windowTheme.colorTextSecondary,
                                                 .wrapping = TextWrapping::Wrap,
                                                 .lineHeight = windowTheme.typeBody.lineHeight,
-                                            }}
+                                            }
                                             .withFlex(1.f),
                                     },
                             },
@@ -121,7 +121,7 @@ struct ThemeDemoRoot {
                                 .spacing = 0.f,
                                 .children =
                                     {
-                                        Element{Text{
+                                        Text{
                                                 .text = std::string("Window preset: ") + presetLabel(*windowPreset) +
                                                         "  (density " + std::to_string(windowTheme.density) +
                                                         ", horizontal spacing token space4=" +
@@ -130,7 +130,7 @@ struct ThemeDemoRoot {
                                                 .color = windowTheme.colorTextMuted,
                                                 .wrapping = TextWrapping::Wrap,
                                                 .lineHeight = windowTheme.typeBodySmall.lineHeight,
-                                            }}
+                                            }
                                             .withFlex(1.f),
                                     },
                             },
@@ -198,14 +198,14 @@ struct ThemeDemoRoot {
                                 .vAlign = VerticalAlignment::Top,
                                 .children =
                                     {
-                                        Element{ pane("Light pane",
-                                                      "Subtree explicitly set to FluxTheme::light().",
-                                                      FluxTheme::light()) }
-                                            .environment(FluxTheme::light()),
-                                        Element{ pane("Dark pane",
-                                                      "Subtree uses FluxTheme::dark() tokens.",
-                                                      FluxTheme::dark()) }
-                                            .environment(FluxTheme::dark()),
+                                        pane("Light pane",
+                                             "Subtree explicitly set to FluxTheme::light().",
+                                             FluxTheme::light())
+                                            .withEnvironment(FluxTheme::light()),
+                                        pane("Dark pane",
+                                             "Subtree uses FluxTheme::dark() tokens.",
+                                             FluxTheme::dark())
+                                            .withEnvironment(FluxTheme::dark()),
                                     },
                             },
                         },

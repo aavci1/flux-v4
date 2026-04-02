@@ -48,31 +48,6 @@ struct StackDemoRoot {
                             .wrapping = TextWrapping::Wrap
                         },
                         Text {
-                            .text = "Element modifier chain",
-                            .font = {.size = 15.f, .weight = 600.f},
-                            .color = pal::ink
-                        },
-                        Text {
-                            .text = "Wrap a view in Element { … } and chain .padding(), .background(), .cornerRadius(), .onTapGesture(), etc. "
-                                    "Each call wraps the previous subtree (first modifier sits closest to the content).",
-                            .font = {.size = 14.f, .weight = 400.f},
-                            .color = pal::muted,
-                            .wrapping = TextWrapping::Wrap
-                        },
-                        Element{
-                            Text {
-                                .text = "  Tap: stderr  ",
-                                .font = {.size = 14.f, .weight = 600.f},
-                                .color = pal::ink,
-                            }
-                        }
-                            .padding(14.f)
-                            .background(FillStyle::solid(Color::hex(0xE8E8EF)))
-                            .cornerRadius(CornerRadius{10.f})
-                            .onTapGesture([] {
-                              std::fprintf(stderr, "stack-demo: modifier chain tap\n");
-                            }),
-                        Text {
                             .text = "VStack",
                             .font = {.size = 15.f, .weight = 600.f},
                             .color = pal::ink
@@ -107,24 +82,20 @@ struct StackDemoRoot {
                             .spacing = 12.f,
                             .vAlign = VerticalAlignment::Center,
                             .children = {
-                                Element {
-                                    Rectangle {
-                                        .offsetX = 0.f, .offsetY = 0.f, .width = 56.f, .height = 56.f,
-                                        .cornerRadius = CornerRadius{10.f},
-                                        .fill = FillStyle::solid(pal::coral),
-                                    }
+                                Rectangle {
+                                    .offsetX = 0.f, .offsetY = 0.f, .width = 56.f, .height = 56.f,
+                                    .cornerRadius = CornerRadius{10.f},
+                                    .fill = FillStyle::solid(pal::coral),
                                 }.withFlex(2.f),
                                 Rectangle {
                                     .offsetX = 0.f, .offsetY = 0.f, .width = 56.f, .height = 72.f,
                                     .cornerRadius = CornerRadius{10.f},
                                     .fill = FillStyle::solid(pal::teal),
                                 },
-                                Element {
-                                    Rectangle {
-                                        .offsetX = 0.f, .offsetY = 0.f, .width = 56.f, .height = 40.f,
-                                        .cornerRadius = CornerRadius{10.f},
-                                        .fill = FillStyle::solid(pal::indigo),
-                                    }
+                                Rectangle {
+                                    .offsetX = 0.f, .offsetY = 0.f, .width = 56.f, .height = 40.f,
+                                    .cornerRadius = CornerRadius{10.f},
+                                    .fill = FillStyle::solid(pal::indigo),
                                 }.withFlex(1.f),
                                 Rectangle {
                                     .offsetX = 0.f, .offsetY = 0.f, .width = 56.f, .height = 56.f,

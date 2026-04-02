@@ -10,7 +10,7 @@
 namespace flux {
 
 /// Scales a single child around the center of the layout slot (used for press feedback).
-struct ScaleAroundCenter {
+struct ScaleAroundCenter : ViewModifiers<ScaleAroundCenter> {
   float scale = 1.f;
   float flexGrow = 0.f;
   float flexShrink = 0.f;

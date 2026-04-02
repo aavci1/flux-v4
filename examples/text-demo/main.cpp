@@ -45,7 +45,7 @@ int main(int argc, char* argv[]) {
             .spacing = 0.f,
             .children =
                 {
-                    Element{Text{
+                    Text{
                             .text = "TextLayout uses the same Core Text framesetter constraints as measure, so box sizing and rendered glyphs stay in sync when maxWidth is set. Resize the window to see reflow.",
                             .font = {.size = 16.f, .weight = 420.f},
                             .background = FillStyle::solid(Color::rgb(250, 250, 252)),
@@ -56,7 +56,7 @@ int main(int argc, char* argv[]) {
                             .wrapping = TextWrapping::Wrap,
                             .padding = 24.f,
                             .cornerRadius = CornerRadius(6.f, 6.f, 6.f, 6.f),
-                        }}
+                        }
                         .withFlex(1.f),
                 },
         },

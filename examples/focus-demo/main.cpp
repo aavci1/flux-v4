@@ -41,7 +41,7 @@ struct FocusField {
                     .spacing = 0.f,
                     .children =
                         {
-                            Element{Rectangle{
+                            Rectangle{
                                         .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 120.f,
                                         .cornerRadius = CornerRadius(10.f),
                                         .fill = FillStyle::solid(focused ? pal::editorBgFocus : pal::editorBg),
@@ -73,7 +73,7 @@ struct FocusField {
                                                 text = *text + chunk;
                                               }
                                             },
-                                    }}
+                                    }
                                 .withFlex(1.f),
                         },
                 },
@@ -81,10 +81,10 @@ struct FocusField {
                     .spacing = 0.f,
                     .children =
                         {
-                            Element{Text{.text = (*text).empty() ? std::string("(empty)") : std::string(*text),
+                            Text{.text = (*text).empty() ? std::string("(empty)") : std::string(*text),
                                         .font = {.size = 13.f, .weight = 400.f},
                                         .color = pal::sublabel,
-                                        .wrapping = TextWrapping::Wrap}}
+                                        .wrapping = TextWrapping::Wrap}
                                 .withFlex(1.f),
                         },
                 },
@@ -114,14 +114,14 @@ struct FocusDemoRoot {
                                 .spacing = 0.f,
                                 .children =
                                     {
-                                        Element{Text{
+                                        Text{
                                                 .text = "Click a field to focus. Type text; Delete removes a character; Esc "
                                                         "clears. Cmd+S appends a demo tag. Tab / Shift+Tab cycle fields "
                                                         "(A→B→C). Focus ring uses useFocus().",
                                                 .font = {.size = 14.f, .weight = 400.f},
                                                 .color = pal::sublabel,
                                                 .wrapping = TextWrapping::Wrap,
-                                            }}
+                                            }
                                             .withFlex(1.f),
                                     },
                             },

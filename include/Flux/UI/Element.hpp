@@ -417,4 +417,75 @@ namespace flux {
 
 FLUX_ELEMENT_MODEL(PopoverCalloutShape);
 
+// ── ViewModifiers<Derived> method implementations ───────────────────────────────
+// Defined here so Element is a complete type at the point of instantiation.
+// Method names use `with*` prefix to avoid collisions with same-named data members
+// on view structs (e.g. Text::padding, Rectangle::cornerRadius).
+
+template<typename Derived>
+Element ViewModifiers<Derived>::withPadding(float all) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.padding(all);
+}
+
+template<typename Derived>
+Element ViewModifiers<Derived>::withBackground(FillStyle fill) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.background(std::move(fill));
+}
+
+template<typename Derived>
+Element ViewModifiers<Derived>::withFrame(float width, float height) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.frame(width, height);
+}
+
+template<typename Derived>
+Element ViewModifiers<Derived>::withBorder(StrokeStyle stroke) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.border(std::move(stroke));
+}
+
+template<typename Derived>
+Element ViewModifiers<Derived>::withCornerRadius(CornerRadius radius) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.cornerRadius(radius);
+}
+
+template<typename Derived>
+Element ViewModifiers<Derived>::withOpacity(float o) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.opacity(o);
+}
+
+template<typename Derived>
+Element ViewModifiers<Derived>::withOffset(Vec2 delta) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.offset(delta);
+}
+
+template<typename Derived>
+Element ViewModifiers<Derived>::withOffset(float dx, float dy) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.offset(dx, dy);
+}
+
+template<typename Derived>
+Element ViewModifiers<Derived>::withClip(bool clip) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.clipContent(clip);
+}
+
+template<typename Derived>
+Element ViewModifiers<Derived>::withOverlay(Element over) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.overlay(std::move(over));
+}
+
+template<typename Derived>
+Element ViewModifiers<Derived>::withTapGesture(std::function<void()> handler) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.onTapGesture(std::move(handler));
+}
+
+template<typename Derived>
+Element ViewModifiers<Derived>::withFlex(float grow, float shrink, float minMain) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.withFlex(grow, shrink, minMain);
+}
+
+template<typename Derived>
+template<typename T>
+Element ViewModifiers<Derived>::withEnvironment(T value) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.environment(std::move(value));
+}
+
 } // namespace flux

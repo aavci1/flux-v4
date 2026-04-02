@@ -22,7 +22,7 @@ namespace flux {
 Point clampScrollOffset(ScrollAxis axis, Point o, Size const& viewport, Size const& content);
 
 /// Scrollable region: children are laid out in an \ref OffsetView and can be dragged or wheel-scrolled.
-struct ScrollView {
+struct ScrollView : ViewModifiers<ScrollView> {
   // ── Layout / axis ─────────────────────────────────────────────────────────
 
   ScrollAxis axis = ScrollAxis::Vertical;

@@ -40,11 +40,11 @@ struct PopoverDemoRoot {
             .spacing = 0.f,
             .children =
                 {
-                    Element{Text{.text = "Scroll so triggers sit near window edges to see flip.",
-                                 .font = {.size = 12.f, .weight = 400.f},
-                                 .color = pal::bodyC,
-                                 .wrapping = TextWrapping::Wrap,
-                                 .padding = 8.f}}
+                    Text{.text = "Scroll so triggers sit near window edges to see flip.",
+                         .font = {.size = 12.f, .weight = 400.f},
+                         .color = pal::bodyC,
+                         .wrapping = TextWrapping::Wrap,
+                         .padding = 8.f}
                         .withFlex(1.f),
                 },
         });
@@ -67,10 +67,10 @@ struct PopoverDemoRoot {
                                 .spacing = 0.f,
                                 .children =
                                     {
-                                        Element{Text{.text = "Placement follows preference when space allows.",
-                                                     .font = {.size = 13.f, .weight = 400.f},
-                                                     .color = pal::bodyC,
-                                                     .wrapping = TextWrapping::Wrap}}
+                                        Text{.text = "Placement follows preference when space allows.",
+                                             .font = {.size = 13.f, .weight = 400.f},
+                                             .color = pal::bodyC,
+                                             .wrapping = TextWrapping::Wrap}
                                             .withFlex(1.f),
                                     },
                             },
@@ -155,12 +155,12 @@ struct PopoverDemoRoot {
                               .spacing = 0.f,
                               .children =
                                   {
-                                      Element{Text{
-                                              .text = "ScrollView keeps layout rects updated; anchor follows the trigger.",
-                                              .font = {.size = 13.f, .weight = 400.f},
-                                              .color = pal::bodyC,
-                                              .wrapping = TextWrapping::Wrap,
-                                          }}
+                                      Text{
+                                          .text = "ScrollView keeps layout rects updated; anchor follows the trigger.",
+                                          .font = {.size = 13.f, .weight = 400.f},
+                                          .color = pal::bodyC,
+                                          .wrapping = TextWrapping::Wrap,
+                                      }
                                           .withFlex(1.f),
                                   },
                           },
@@ -201,12 +201,12 @@ struct PopoverDemoRoot {
                               .spacing = 0.f,
                               .children =
                                   {
-                                      Element{Text{
-                                              .text = "If there is not enough room below the anchor, placement flips to Above.",
-                                              .font = {.size = 13.f, .weight = 400.f},
-                                              .color = pal::bodyC,
-                                              .wrapping = TextWrapping::Wrap,
-                                          }}
+                                      Text{
+                                          .text = "If there is not enough room below the anchor, placement flips to Above.",
+                                          .font = {.size = 13.f, .weight = 400.f},
+                                          .color = pal::bodyC,
+                                          .wrapping = TextWrapping::Wrap,
+                                      }
                                           .withFlex(1.f),
                                   },
                           },

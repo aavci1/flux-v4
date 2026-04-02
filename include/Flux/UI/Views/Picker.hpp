@@ -53,7 +53,7 @@ struct PickerOption {
 
 /// One row in the dropdown menu (built by \ref detail::makePickerDropdownPopover).
 template<typename T>
-struct PickerRow {
+struct PickerRow : ViewModifiers<PickerRow<T>> {
   // ── Row data ─────────────────────────────────────────────────────────────
 
   PickerOption<T> option{};
@@ -113,7 +113,7 @@ struct PickerRow {
                                 .fill = FillStyle::none(),
                                 .stroke = StrokeStyle::none(),
                             },
-                            Element{HStack{
+                            HStack{
                                 .spacing = 8.f,
                                 .vAlign = VerticalAlignment::Center,
                                 .children =
@@ -149,7 +149,7 @@ struct PickerRow {
                                                 },
                                         },
                                     },
-                            }}
+                            }
                                 .withFlex(1.f),
                             Rectangle{
                                 .offsetX = 0.f, .offsetY = 0.f, .width = rowPaddingH, .height = rowHeight,
@@ -186,13 +186,13 @@ Popover makePickerDropdownPopover(std::vector<PickerOption<T>> opts, std::functi
       .clip = true,
       .children =
           {
-              Element{ForEach<int>{
+              ForEach<int>{
                   std::move(indices),
                   [opts, val, hide, onCh, keyboardCursor, rowPaddingH, rowCount, menuR, triggerRowHeight,
                    rowHoverColor = rowHoverColor, rowSelectedColor = rowSelectedColor, font = font,
                    textColor = textColor, checkColor = checkColor](int i) -> Element {
                     auto const idx = static_cast<std::size_t>(i);
-                    return Element{PickerRow<T>{
+                    return PickerRow<T>{
                         .option = opts[idx],
                         .selected = (opts[idx].value == *val),
                         .keyboardActive = (*keyboardCursor == i),
@@ -212,10 +212,10 @@ Popover makePickerDropdownPopover(std::vector<PickerOption<T>> opts, std::functi
                               }
                               hide();
                             },
-                    }};
+                    };
                   },
                   0.f,
-              }},
+              },
           },
   };
 
@@ -242,7 +242,7 @@ Popover makePickerDropdownPopover(std::vector<PickerOption<T>> opts, std::functi
 /// Field-style dropdown: tap opens a \ref Popover menu; keyboard navigates rows when open.
 template<typename T>
   requires std::equality_comparable<T>
-struct Picker {
+struct Picker : ViewModifiers<Picker<T>> {
   // ── Content ──────────────────────────────────────────────────────────────
 
   /// Bound selection; must stay in sync with \ref options entries.
@@ -493,8 +493,7 @@ struct Picker {
                                 .cursor = isDisabled ? Cursor::Inherit : Cursor::Hand,
                                 .onTap = isDisabled ? nullptr : std::function<void()>{onTriggerTap},
                             },
-                            Element{ZStack{
-                                // Hit rect + chevron share left edge; vertical center in the row.
+                            ZStack{
                                 .hAlign = HorizontalAlignment::Leading,
                                 .vAlign = VerticalAlignment::Center,
                                 .children =
@@ -515,7 +514,7 @@ struct Picker {
                                           .color = chvR,
                                       }
                                     },
-                            }},
+                            },
                             Rectangle{
                                 .offsetX = 0.f, .offsetY = 0.f, .width = padHResolved, .height = h,
                                 .fill = FillStyle::none(),

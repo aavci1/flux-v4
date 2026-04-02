@@ -98,14 +98,14 @@ struct CheckboxDemoRoot {
                                 .font = theme.typeHeading.toFont(),
                                 .color = theme.colorTextPrimary,
                             },
-                            Element{Text{
+                            Text{
                                         .text = "Boolean check with animated icon, "
                                                 "indeterminate state, focus ring, "
                                                 "and press scale.",
                                         .font = theme.typeBody.toFont(),
                                         .color = theme.colorTextSecondary,
                                         .wrapping = TextWrapping::Wrap,
-                                    }}
+                                    }
                                 .withFlex(1.f),
 
                             Text{
@@ -147,7 +147,7 @@ struct CheckboxDemoRoot {
                                 .font = theme.typeSubtitle.toFont(),
                                 .color = theme.colorTextPrimary,
                             },
-                            Element{HStack{
+                            HStack{
                                         .spacing = 10.f,
                                         .vAlign = VerticalAlignment::Center,
                                         .children =
@@ -167,14 +167,14 @@ struct CheckboxDemoRoot {
                                                     .color = theme.colorTextPrimary,
                                                 },
                                             },
-                                    }}
+                                    }
                                 .withFlex(1.f),
-                            Element{VStack{
+                            VStack{
                                         .spacing = 8.f,
                                         .padding = 0.f,
                                         .children =
                                             {
-                                                Element{HStack{
+                                                HStack{
                                                             .spacing = 10.f,
                                                             .children =
                                                                 {
@@ -187,9 +187,9 @@ struct CheckboxDemoRoot {
                                                                             }}
                                                                         .withFlex(1.f),
                                                                 },
-                                                        }}
+                                                        }
                                                     .withFlex(1.f),
-                                                Element{HStack{
+                                                HStack{
                                                             .spacing = 10.f,
                                                             .children =
                                                                 {
@@ -202,9 +202,9 @@ struct CheckboxDemoRoot {
                                                                             }}
                                                                         .withFlex(1.f),
                                                                 },
-                                                        }}
+                                                        }
                                                     .withFlex(1.f),
-                                                Element{HStack{
+                                                HStack{
                                                             .spacing = 10.f,
                                                             .children =
                                                                 {
@@ -217,10 +217,10 @@ struct CheckboxDemoRoot {
                                                                             }}
                                                                         .withFlex(1.f),
                                                                 },
-                                                        }}
+                                                        }
                                                     .withFlex(1.f),
                                             },
-                                    }}
+                                    }
                                 .withFlex(1.f),
 
                             Text{
@@ -228,7 +228,7 @@ struct CheckboxDemoRoot {
                                 .font = theme.typeSubtitle.toFont(),
                                 .color = theme.colorTextPrimary,
                             },
-                            Element{HStack{
+                            HStack{
                                         .spacing = 10.f,
                                         .vAlign = VerticalAlignment::Center,
                                         .children =
@@ -245,7 +245,7 @@ struct CheckboxDemoRoot {
                                                     .color = theme.colorTextPrimary,
                                                 },
                                             },
-                                    }}
+                                    }
                                 .withFlex(1.f),
 
                             Text{

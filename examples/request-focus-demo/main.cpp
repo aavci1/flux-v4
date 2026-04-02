@@ -43,33 +43,33 @@ struct FocusField {
                     .spacing = 0.f,
                     .children =
                         {
-                            Element{Rectangle{
-                                        .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 80.f,
-                                        .cornerRadius = CornerRadius(10.f),
-                                        .fill = FillStyle::solid(focused ? pal::editorFocus : pal::editorBg),
-                                        .stroke =
-                                            StrokeStyle::solid(focused ? pal::borderFocus : pal::border,
-                                                               focused ? 2.f : 1.f),
-                                        .flexGrow = 1.f,
-                                        .focusable = true,
-                                        .onKeyDown =
-                                            [text](KeyCode k, Modifiers) {
-                                              if (k == keys::Delete && !(*text).empty()) {
-                                                std::string s = *text;
-                                                s.pop_back();
-                                                text = std::move(s);
-                                              }
-                                              if (k == keys::Escape) {
-                                                text = std::string{};
-                                              }
-                                            },
-                                        .onTextInput =
-                                            [text](std::string const& chunk) {
-                                              if (!chunk.empty()) {
-                                                text = *text + chunk;
-                                              }
-                                            },
-                                    }}
+                            Rectangle{
+                                .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 80.f,
+                                .cornerRadius = CornerRadius(10.f),
+                                .fill = FillStyle::solid(focused ? pal::editorFocus : pal::editorBg),
+                                .stroke =
+                                    StrokeStyle::solid(focused ? pal::borderFocus : pal::border,
+                                                       focused ? 2.f : 1.f),
+                                .flexGrow = 1.f,
+                                .focusable = true,
+                                .onKeyDown =
+                                    [text](KeyCode k, Modifiers) {
+                                      if (k == keys::Delete && !(*text).empty()) {
+                                        std::string s = *text;
+                                        s.pop_back();
+                                        text = std::move(s);
+                                      }
+                                      if (k == keys::Escape) {
+                                        text = std::string{};
+                                      }
+                                    },
+                                .onTextInput =
+                                    [text](std::string const& chunk) {
+                                      if (!chunk.empty()) {
+                                        text = *text + chunk;
+                                      }
+                                    },
+                            }
                                 .withFlex(1.f),
                         },
                 },
@@ -77,10 +77,10 @@ struct FocusField {
                     .spacing = 0.f,
                     .children =
                         {
-                            Element{Text{.text = (*text).empty() ? "(empty)" : *text,
-                                        .font = {.size = 13.f},
-                                        .color = pal::sub,
-                                        .wrapping = TextWrapping::Wrap}}
+                            Text{.text = (*text).empty() ? "(empty)" : *text,
+                                 .font = {.size = 13.f},
+                                 .color = pal::sub,
+                                 .wrapping = TextWrapping::Wrap}
                                 .withFlex(1.f),
                         },
                 },
@@ -168,13 +168,13 @@ struct RequestFocusDemo {
                                 .spacing = 0.f,
                                 .children =
                                     {
-                                        Element{Text{
-                                                .text = "Click the buttons below to focus a field programmatically — "
-                                                        "without clicking on it.",
-                                                .font = {.size = 14.f},
-                                                .color = pal::sub,
-                                                .wrapping = TextWrapping::Wrap,
-                                            }}
+                                        Text{
+                                            .text = "Click the buttons below to focus a field programmatically — "
+                                                    "without clicking on it.",
+                                            .font = {.size = 14.f},
+                                            .color = pal::sub,
+                                            .wrapping = TextWrapping::Wrap,
+                                        }
                                             .withFlex(1.f),
                                     },
                             },
@@ -209,15 +209,15 @@ struct RequestFocusDemo {
                                 .spacing = 0.f,
                                 .children =
                                     {
-                                        Element{Text{
-                                                .text = "\"Focus A\" and \"Focus B\" call the requestFocus callable returned by "
-                                                        "useRequestFocus() inside each panel's body(). The callable finds the first "
-                                                        "focusable leaf in the panel's subtree and calls setFocus on it. Tab / "
-                                                        "Shift+Tab still cycle between fields normally.",
-                                                .font = {.size = 13.f},
-                                                .color = pal::sub,
-                                                .wrapping = TextWrapping::Wrap,
-                                            }}
+                                        Text{
+                                            .text = "\"Focus A\" and \"Focus B\" call the requestFocus callable returned by "
+                                                    "useRequestFocus() inside each panel's body(). The callable finds the first "
+                                                    "focusable leaf in the panel's subtree and calls setFocus on it. Tab / "
+                                                    "Shift+Tab still cycle between fields normally.",
+                                            .font = {.size = 13.f},
+                                            .color = pal::sub,
+                                            .wrapping = TextWrapping::Wrap,
+                                        }
                                             .withFlex(1.f),
                                     },
                             },

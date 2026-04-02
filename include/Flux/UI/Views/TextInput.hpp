@@ -18,7 +18,7 @@
 
 namespace flux {
 
-struct TextInput {
+struct TextInput : ViewModifiers<TextInput> {
   // ── Content ──────────────────────────────────────────────────────────────
 
   /// Binding to the text buffer. Caller owns this via useState<std::string>().

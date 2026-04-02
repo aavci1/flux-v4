@@ -30,12 +30,12 @@ Element Alert::body() const {
       .hAlign = HorizontalAlignment::Center,
       .children =
           {
-              Element{Spacer{}}.withFlex(1.f),
+              Spacer{}.withFlex(1.f),
               HStack{
                   .spacing = 0.f,
                   .children =
                       {
-                          Element{Spacer{}}.withFlex(1.f),
+                          Spacer{}.withFlex(1.f),
                           ZStack{
                               // Card + content share top-left; center alignment would offset each
                               // child by its own measured size and misalign the background.
@@ -58,10 +58,10 @@ Element Alert::body() const {
                                       },
                                   },
                           },
-                          Element{Spacer{}}.withFlex(1.f),
+                          Spacer{}.withFlex(1.f),
                       },
               },
-              Element{Spacer{}}.withFlex(1.f),
+              Spacer{}.withFlex(1.f),
           },
   };
 }
@@ -98,12 +98,12 @@ std::vector<Element> Alert::buildContent(Color titleC, Color msgC, FluxTheme con
         .children =
             {
                 Spacer{},
-                Element{Button{
+                Button{
                     .label = btn.label,
                     .variant = btn.variant,
                     .disabled = btn.disabled,
                     .onTap = btn.action,
-                }},
+                },
             },
     });
   } else {
@@ -111,12 +111,12 @@ std::vector<Element> Alert::buildContent(Color titleC, Color msgC, FluxTheme con
     buttonElems.reserve(buttons.size());
     for (auto const& btn : buttons) {
       buttonElems.push_back(
-          Element{Button{
-                      .label = btn.label,
-                      .variant = btn.variant,
-                      .disabled = btn.disabled,
-                      .onTap = btn.action,
-                  }}
+          Button{
+              .label = btn.label,
+              .variant = btn.variant,
+              .disabled = btn.disabled,
+              .onTap = btn.action,
+          }
               .withFlex(1.f));
     }
     rows.push_back(HStack{

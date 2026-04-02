@@ -80,12 +80,12 @@ struct HoverDemo {
                                       .spacing = 0.f,
                                       .children =
                                           {
-                                              Element{Text{.text = "Move over the button to see hover. "
-                                                                   "Click and hold to see press. "
-                                                                   "Drag outside while holding to confirm press stays active.",
-                                                           .font = {.size = 14.f},
-                                                           .color = Color::hex(0x6E6E80),
-                                                           .wrapping = TextWrapping::Wrap}}
+                                              Text{.text = "Move over the button to see hover. "
+                                                           "Click and hold to see press. "
+                                                           "Drag outside while holding to confirm press stays active.",
+                                                   .font = {.size = 14.f},
+                                                   .color = Color::hex(0x6E6E80),
+                                                   .wrapping = TextWrapping::Wrap}
                                                   .withFlex(1.f),
                                           },
                                   },

@@ -7,10 +7,11 @@
 
 #include <Flux/Core/Types.hpp>
 #include <Flux/Graphics/Styles.hpp>
+#include <Flux/UI/ViewModifiers.hpp>
 
 namespace flux {
 
-struct Line {
+struct Line : ViewModifiers<Line> {
   Point from{};
   Point to{};
   StrokeStyle stroke{};

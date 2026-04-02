@@ -35,12 +35,12 @@ struct TextInputForm {
                     .spacing = 0.f,
                     .children =
                         {
-                            Element{Text{
-                                    .text = "Tab / Shift+Tab between fields. Edit actions use the window action table.",
-                                    .font = {.size = 13.f, .weight = 400.f},
-                                    .color = Color::hex(0x6E6E80),
-                                    .wrapping = TextWrapping::Wrap,
-                                }}
+                            Text{
+                                .text = "Tab / Shift+Tab between fields. Edit actions use the window action table.",
+                                .font = {.size = 13.f, .weight = 400.f},
+                                .color = Color::hex(0x6E6E80),
+                                .wrapping = TextWrapping::Wrap,
+                            }
                                 .withFlex(1.f),
                         },
                 },
@@ -51,13 +51,13 @@ struct TextInputForm {
                     .spacing = 0.f,
                     .children =
                         {
-                            Element{TextInput{
-                                        .value = name,
-                                        .placeholder = "Your name",
-                                        .onSubmit = [](std::string const& v) {
-                                          std::fprintf(stderr, "[textinput-demo] submit name: %s\n", v.c_str());
-                                        },
-                                    }}
+                            TextInput{
+                                .value = name,
+                                .placeholder = "Your name",
+                                .onSubmit = [](std::string const& v) {
+                                  std::fprintf(stderr, "[textinput-demo] submit name: %s\n", v.c_str());
+                                },
+                            }
                                 .withFlex(1.f),
                         },
                 },
@@ -68,14 +68,14 @@ struct TextInputForm {
                     .spacing = 0.f,
                     .children =
                         {
-                            Element{TextInput{
-                                        .value = email,
-                                        .placeholder = "you@example.com",
-                                        .onChange = [](std::string const&) {},
-                                        .onSubmit = [](std::string const& v) {
-                                          std::fprintf(stderr, "[textinput-demo] submit email: %s\n", v.c_str());
-                                        },
-                                    }}
+                            TextInput{
+                                .value = email,
+                                .placeholder = "you@example.com",
+                                .onChange = [](std::string const&) {},
+                                .onSubmit = [](std::string const& v) {
+                                  std::fprintf(stderr, "[textinput-demo] submit email: %s\n", v.c_str());
+                                },
+                            }
                                 .withFlex(1.f),
                         },
                 },
@@ -86,12 +86,12 @@ struct TextInputForm {
                     .spacing = 0.f,
                     .children =
                         {
-                            Element{TextInput{
-                                        .value = notes,
-                                        .placeholder = "Optional",
-                                        .flexGrow = 1.f,
-                                        .minSize = 200.f,
-                                    }}
+                            TextInput{
+                                .value = notes,
+                                .placeholder = "Optional",
+                                .flexGrow = 1.f,
+                                .minSize = 200.f,
+                            }
                                 .withFlex(1.f),
                         },
                 },
@@ -102,7 +102,7 @@ struct TextInputForm {
                     .spacing = 0.f,
                     .children =
                         {
-                            Element{TextInput{.value = disabledSample, .placeholder = "N/A", .disabled = true}}
+                            TextInput{.value = disabledSample, .placeholder = "N/A", .disabled = true}
                                 .withFlex(1.f),
                         },
                 },

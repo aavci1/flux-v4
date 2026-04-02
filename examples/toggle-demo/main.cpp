@@ -77,14 +77,14 @@ struct ToggleDemoRoot {
                         .font = theme.typeHeading.toFont(),
                         .color = theme.colorTextPrimary,
                     },
-                    Element{Text{
+                    Text{
                         .text = "Boolean switch with animated thumb, "
                                 "focus ring, disabled state, and "
                                 "custom sizing.",
                         .font = theme.typeBody.toFont(),
                         .color = theme.colorTextSecondary,
                         .wrapping = TextWrapping::Wrap,
-                    }}.withFlex(1.f),
+                    }.withFlex(1.f),
 
                     Text{
                         .text = "Settings",

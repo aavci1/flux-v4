@@ -8,7 +8,7 @@
 
 namespace flux {
 
-struct Spacer {
+struct Spacer : ViewModifiers<Spacer> {
   /// Minimum size on the stack main axis before flex distribution.
   float minLength = 0.f;
 };

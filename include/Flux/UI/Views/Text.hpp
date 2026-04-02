@@ -10,6 +10,7 @@
 #include <Flux/Graphics/Font.hpp>
 #include <Flux/Graphics/Styles.hpp>
 #include <Flux/Graphics/TextLayoutOptions.hpp>
+#include <Flux/UI/ViewModifiers.hpp>
 
 #include <functional>
 #include <string>
@@ -19,7 +20,7 @@ namespace flux {
 /// UTF-8 text in a view box with optional background, border, and rounded corners.
 /// Size comes from \c width / \c height when set, or from layout constraints (e.g. full window width when both are 0).
 /// \c offsetX / \c offsetY shift the text box within the layout cell (same convention as \c Rectangle).
-struct Text {
+struct Text : ViewModifiers<Text> {
   std::string text;
   Font font{ .family = "", .size = 16.f, .weight = 400.f, .italic = false };
 

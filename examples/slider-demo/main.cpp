@@ -57,7 +57,7 @@ struct LabeledSlider {
     return VStack{
         .spacing = 6.f,
         .children = {
-            Element{HStack{
+            HStack{
                 .spacing = 8.f,
                 .vAlign = VerticalAlignment::Center,
                 .children = {
@@ -73,8 +73,8 @@ struct LabeledSlider {
                         .color = theme.colorTextSecondary,
                     },
                 },
-            }}.withFlex(1.f),
-            Element{Slider{
+            }.withFlex(1.f),
+            Slider{
                 .value = value,
                 .min = min,
                 .max = max,
@@ -82,7 +82,7 @@ struct LabeledSlider {
                 .style = Slider::Style {
                     .activeColor = activeColor,
                 },
-            }}.withFlex(1.f),
+            }.withFlex(1.f),
         },
     };
   }
@@ -111,13 +111,13 @@ struct RgbColorSelectorRoot {
                         .font = theme.typeHeading.toFont(),
                         .color = theme.colorTextPrimary,
                     },
-                    Element{Text{
+                    Text{
                         .text = "Adjust red, green, and blue channels (0–255). The preview updates "
                                 "as you drag or use the keyboard.",
                         .font = theme.typeBody.toFont(),
                         .color = theme.colorTextSecondary,
                         .wrapping = TextWrapping::Wrap,
-                    }}.withFlex(1.f),
+                    }.withFlex(1.f),
 
                     ZStack{
                         .hAlign = HorizontalAlignment::Center,

@@ -66,10 +66,10 @@ struct ConfirmDialog {
                                                         .spacing = 0.f,
                                                         .children =
                                                             {
-                                                                Element{Text{.text = message,
+                                                                Text{.text = message,
                                                                              .font = {.size = 14.f, .weight = 400.f},
                                                                              .color = pal::bodyC,
-                                                                             .wrapping = TextWrapping::Wrap}}
+                                                                             .wrapping = TextWrapping::Wrap}
                                                                     .withFlex(1.f),
                                                             },
                                                     },
@@ -77,7 +77,7 @@ struct ConfirmDialog {
                                                         .spacing = 10.f,
                                                         .children =
                                                             {
-                                                                Element{ZStack{
+                                                                ZStack{
                                                                     .children =
                                                                         {
                                                                             Rectangle{
@@ -101,8 +101,8 @@ struct ConfirmDialog {
                                                                                  .horizontalAlignment = HorizontalAlignment::Center,
                                                                                  .verticalAlignment = VerticalAlignment::Center},
                                                                         },
-                                                                }}.withFlex(1.f),
-                                                                Element{ZStack{
+                                                                }.withFlex(1.f),
+                                                                ZStack{
                                                                     .children =
                                                                         {
                                                                             Rectangle{
@@ -126,7 +126,7 @@ struct ConfirmDialog {
                                                                                  .horizontalAlignment = HorizontalAlignment::Center,
                                                                                  .verticalAlignment = VerticalAlignment::Center},
                                                                         },
-                                                                }}.withFlex(1.f),
+                                                                }.withFlex(1.f),
                                                             },
                                                     },
                                                 },
@@ -220,13 +220,13 @@ struct OverlayConfirmRoot {
                                 .spacing = 0.f,
                                 .children =
                                     {
-                                        Element{Text{
+                                        Text{
                                                 .text = "Tap Delete on a row. Modal overlay traps Tab between Cancel and Delete; "
                                                         "Escape or the buttons dismiss.",
                                                 .font = {.size = 14.f, .weight = 400.f},
                                                 .color = pal::bodyC,
                                                 .wrapping = TextWrapping::Wrap,
-                                            }}
+                                            }
                                             .withFlex(1.f),
                                     },
                             },

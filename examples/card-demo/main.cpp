@@ -87,14 +87,14 @@ struct Card {
           .spacing = 0.f,
           .children =
               {
-                  Element{Text{
+                  Text{
                               .text = detail,
                               .font = {.size = 15.f, .weight = 400.f},
                               .color = pal::sublabel,
                               .wrapping = TextWrapping::Wrap,
                               .width = 0.f,
                               .height = bodyOpacity * bodyTextHeight,
-                          }}
+                          }
                       .withFlex(1.f),
               },
       });
