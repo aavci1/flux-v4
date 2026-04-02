@@ -2,6 +2,7 @@
 
 #include <Flux/Core/Application.hpp>
 #include <Flux/Core/KeyCodes.hpp>
+#include <Flux/Detail/Runtime.hpp>
 #include <Flux/Core/Window.hpp>
 #include <Flux/Scene/HitTester.hpp>
 #include <Flux/Scene/SceneGraph.hpp>
@@ -56,10 +57,11 @@ bool shouldClaimFocus(EventHandlers const& h) { return h.focusable; }
 
 } // namespace
 
-InputDispatcher::InputDispatcher(Window& window, FocusController& focus, HoverController& hover,
-                                 GestureTracker& gesture, CursorController& cursor, BuildOrchestrator& build,
-                                 bool& windowHasFocus)
+InputDispatcher::InputDispatcher(Window& window, Runtime& runtime, FocusController& focus,
+                                   HoverController& hover, GestureTracker& gesture, CursorController& cursor,
+                                   BuildOrchestrator& build, bool& windowHasFocus)
     : window_(window)
+    , runtime_(runtime)
     , focus_(focus)
     , hover_(hover)
     , gesture_(gesture)
@@ -121,6 +123,12 @@ void InputDispatcher::onKeyDown(InputEvent const& e) {
   if (dbg) {
     std::fprintf(stderr, "[flux:input] KeyDown key=%u modifiers=%u\n", static_cast<unsigned>(e.key),
                  static_cast<unsigned>(e.modifiers));
+  }
+  if (windowHasFocus_ && e.key == keys::L &&
+      (e.modifiers & (Modifiers::Meta | Modifiers::Shift)) == (Modifiers::Meta | Modifiers::Shift)) {
+    runtime_.setLayoutOverlayEnabled(!runtime_.layoutOverlayEnabled());
+    window_.requestRedraw();
+    return;
   }
   if (window_.overlayManager().hasOverlays()) {
     OverlayEntry const* top = window_.overlayManager().top();

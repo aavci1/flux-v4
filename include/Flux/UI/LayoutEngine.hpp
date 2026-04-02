@@ -16,7 +16,7 @@ namespace flux {
 /// Cross-axis alignment propagated by stacks — not size constraints; carried beside
 /// \ref LayoutConstraints via \ref BuildContext::hints().
 struct LayoutHints {
-  /// Set by `HStack` for each row child (`HStack::vAlign`). Used by `resolveRectangleBounds` and
+  /// Set by `HStack` for each row child (`HStack::vAlign`). Used by `resolveLeafLayoutBounds` and
   /// similar. Cleared by `VStack` when building children so it does not leak into nested rows.
   std::optional<VerticalAlignment> hStackCrossAlign;
   /// Set by `VStack` / `ForEach` for each row (`VStack::hAlign`). `Text` applies via

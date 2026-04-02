@@ -151,6 +151,7 @@ add_library(flux STATIC
   src/Scene/NodeStore.cpp
   src/Scene/SceneGraph.cpp
   src/Scene/SceneRenderer.cpp
+  src/Scene/LayoutOverlayRenderer.cpp
   src/Scene/HitTester.cpp
   src/Scene/SceneGraphDump.cpp
   src/Graphics/Styles.cpp

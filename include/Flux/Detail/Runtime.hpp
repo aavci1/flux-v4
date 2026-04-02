@@ -62,6 +62,10 @@ public:
   /// Alias for overlay teardown checks (same as `shuttingDown()`).
   bool imploding() const noexcept;
 
+  /// When true, \ref Window::render draws a semi-transparent wireframe overlay for each layout node.
+  bool layoutOverlayEnabled() const noexcept { return layoutOverlayEnabled_; }
+  void setLayoutOverlayEnabled(bool enabled) noexcept { layoutOverlayEnabled_ = enabled; }
+
   void onOverlayPushed(OverlayEntry& entry);
   void onOverlayRemoved(OverlayEntry const& entry);
   void syncModalOverlayFocusAfterRebuild(OverlayEntry& entry);
@@ -83,6 +87,7 @@ private:
   bool windowHasFocus_ = true;
   bool shuttingDown_ = false;
   bool inputRegistered_ = false;
+  bool layoutOverlayEnabled_ = false;
 };
 
 } // namespace flux

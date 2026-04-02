@@ -399,7 +399,7 @@ void Rectangle::build(BuildContext& ctx) const {
     }
   }
   Rect const bounds = flux::detail::resolveLeafLayoutBounds(
-      explicitFromMods, ctx.layoutEngine().consumeAssignedFrame(), ctx.constraints(), ctx.hints(), true);
+      explicitFromMods, ctx.layoutEngine().consumeAssignedFrame(), ctx.constraints(), ctx.hints());
   CornerRadius cornerR{};
   if (ElementModifiers const* mods = ctx.activeElementModifiers()) {
     cornerR = mods->cornerRadius;
@@ -458,7 +458,7 @@ void Text::build(BuildContext& ctx) const {
   ComponentKey const stableKey = ctx.leafComponentKey();
   ctx.advanceChildSlot();
   Rect const bounds = flux::detail::resolveLeafLayoutBounds(
-      explicitLeafBox(*this), ctx.layoutEngine().consumeAssignedFrame(), ctx.constraints(), ctx.hints(), false);
+      explicitLeafBox(*this), ctx.layoutEngine().consumeAssignedFrame(), ctx.constraints(), ctx.hints());
   assert(text.empty() || (bounds.width > 0.f && bounds.height > 0.f));
 
   std::shared_ptr<TextLayout> textLayout;
@@ -507,7 +507,7 @@ void views::Image::build(BuildContext& ctx) const {
     return;
   }
   Rect const bounds = flux::detail::resolveLeafLayoutBounds(
-      explicitLeafBox(*this), ctx.layoutEngine().consumeAssignedFrame(), ctx.constraints(), ctx.hints(), false);
+      explicitLeafBox(*this), ctx.layoutEngine().consumeAssignedFrame(), ctx.constraints(), ctx.hints());
   NodeId const id = ctx.graph().addImage(ctx.parentLayer(), ImageNode{
       .image = source,
       .bounds = bounds,

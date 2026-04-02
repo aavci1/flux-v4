@@ -294,8 +294,8 @@ void Element::Model<C>::build(BuildContext& ctx) const {
   } else if constexpr (RenderComponent<C>) {
     ComponentKey const stableKey = ctx.leafComponentKey();
     ctx.advanceChildSlot();
-    Rect const frame = flux::detail::resolveLeafBounds(
-        {}, ctx.layoutEngine().consumeAssignedFrame(), ctx.constraints());
+    Rect const frame = flux::detail::resolveLeafLayoutBounds(
+        {}, ctx.layoutEngine().consumeAssignedFrame(), ctx.constraints(), ctx.hints());
 
     C const copy = value;
     NodeId const id = ctx.graph().addCustomRender(ctx.parentLayer(),

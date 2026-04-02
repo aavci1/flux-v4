@@ -7,6 +7,7 @@
 #include <Flux/Detail/RootHolder.hpp>
 #include <Flux/Detail/Runtime.hpp>
 #include <Flux/Graphics/Canvas.hpp>
+#include <Flux/Scene/LayoutOverlayRenderer.hpp>
 #include <Flux/Scene/SceneGraph.hpp>
 #include <Flux/Scene/SceneRenderer.hpp>
 #include <Flux/UI/Overlay.hpp>
@@ -204,6 +205,18 @@ void Window::render(Canvas& canvas) {
     canvas.transform(Mat3::translate(Point{entry.resolvedFrame.x, entry.resolvedFrame.y}));
     SceneRenderer{}.render(entry.graph, canvas);
     canvas.restore();
+  }
+  if (d->runtime_ && d->runtime_->layoutOverlayEnabled()) {
+    if (d->sceneGraph_) {
+      renderLayoutOverlay(*d->sceneGraph_, canvas);
+    }
+    for (std::unique_ptr<OverlayEntry> const& up : d->overlayMgr_.entries()) {
+      OverlayEntry const& entry = *up;
+      canvas.save();
+      canvas.transform(Mat3::translate(Point{entry.resolvedFrame.x, entry.resolvedFrame.y}));
+      renderLayoutOverlay(entry.graph, canvas);
+      canvas.restore();
+    }
   }
 }
 

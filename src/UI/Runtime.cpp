@@ -110,7 +110,7 @@ Runtime::Runtime(Window& window)
     : window_(window)
     , cursor_(window)
     , buildOrchestrator_(window, focus_, hover_, gesture_)
-    , dispatcher_(window, focus_, hover_, gesture_, cursor_, buildOrchestrator_, windowHasFocus_) {
+    , dispatcher_(window, *this, focus_, hover_, gesture_, cursor_, buildOrchestrator_, windowHasFocus_) {
   buildOrchestrator_.subscribeToRebuild([this]() { rebuild(std::nullopt); });
   subscribeInput();
   subscribeWindowEvents();

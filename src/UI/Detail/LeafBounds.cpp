@@ -31,18 +31,18 @@ float vStackSlotOffsetX(float itemW, float slotW, HorizontalAlignment a) {
   return 0.f;
 }
 
-Rect resolveRectangleBounds(Rect const& frame, Rect const& childFrame, LayoutConstraints const& constraints,
-                            LayoutHints const& hints) {
-  if (frame.width <= 0.f || frame.height <= 0.f) {
-    return resolveLeafBounds(frame, childFrame, constraints);
+Rect resolveLeafLayoutBounds(Rect const& explicitBox, Rect const& childFrame,
+                             LayoutConstraints const& constraints, LayoutHints const& hints) {
+  if (explicitBox.width <= 0.f || explicitBox.height <= 0.f) {
+    return resolveLeafBounds(explicitBox, childFrame, constraints);
   }
   if (childFrame.width <= 0.f && childFrame.height <= 0.f) {
-    return resolveLeafBounds(frame, childFrame, constraints);
+    return resolveLeafBounds(explicitBox, childFrame, constraints);
   }
-  if (hints.hStackCrossAlign && childFrame.height > frame.height + 1e-4f) {
+  // Explicit width and height from modifiers: align within stack-assigned childFrame using hints.
+  if (hints.hStackCrossAlign && childFrame.height > explicitBox.height + 1e-4f) {
     float const x = childFrame.x;
     float const w = childFrame.width;
-    float const h = frame.height;
     float y = childFrame.y;
     switch (*hints.hStackCrossAlign) {
     case VerticalAlignment::Top:
@@ -50,20 +50,21 @@ Rect resolveRectangleBounds(Rect const& frame, Rect const& childFrame, LayoutCon
       y = childFrame.y;
       break;
     case VerticalAlignment::Center:
-      y = childFrame.y + (childFrame.height - frame.height) * 0.5f;
+      y = childFrame.y + (childFrame.height - explicitBox.height) * 0.5f;
       break;
     case VerticalAlignment::Bottom:
-      y = childFrame.y + childFrame.height - frame.height;
+      y = childFrame.y + childFrame.height - explicitBox.height;
       break;
     }
-    return Rect{x, y, w, h};
+    return Rect{x, y, w, explicitBox.height};
   }
+  // When vStackCrossAlign is set, center (or lead/trail) the explicit box horizontally in the slot.
   if (hints.vStackCrossAlign) {
-    float const dx = vStackSlotOffsetX(frame.width, childFrame.width, *hints.vStackCrossAlign);
-    return Rect{childFrame.x + dx, childFrame.y, frame.width, frame.height};
+    float const dx = vStackSlotOffsetX(explicitBox.width, childFrame.width, *hints.vStackCrossAlign);
+    return Rect{childFrame.x + dx, childFrame.y, explicitBox.width, explicitBox.height};
   }
   // Explicit size from modifiers; layout-space offset is applied in Element::buildWithModifiers.
-  return Rect{childFrame.x, childFrame.y, frame.width, frame.height};
+  return Rect{childFrame.x, childFrame.y, explicitBox.width, explicitBox.height};
 }
 
 } // namespace flux::detail

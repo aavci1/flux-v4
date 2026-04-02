@@ -10,29 +10,20 @@
 
 namespace flux::detail {
 
+/// Fallback when there is no explicit width/height from modifiers: pick \p childFrame if non-zero,
+/// else expand from \p constraints.
 Rect resolveLeafBounds(Rect const& frame, Rect const& childFrame, LayoutConstraints const& constraints);
 
 float vStackSlotOffsetX(float itemW, float slotW, HorizontalAlignment a);
 
-/// `Rectangle` with explicit width/height from \ref ElementModifiers (`size` / `width` / `height`):
-/// stretch to cell width when an axis is unset; apply \ref LayoutHints `hStackCrossAlign` /
-/// `vStackCrossAlign` when the laid-out child frame is larger than the explicit box (HStack / VStack
-/// cells). When the child matches the explicit frame (full cell), alignment is a no-op. Comparisons
-/// use `1e-4f` tolerance for float coordinates. `Text` does not use this helper — it aligns runs via
-/// constraints in `Element::Model<Text>`.
-Rect resolveRectangleBounds(Rect const& frame, Rect const& childFrame, LayoutConstraints const& constraints,
-                            LayoutHints const& hints);
-
-/// Single entry for leaf layout: \p explicitBox carries explicit width/height when set by the leaf
-/// (e.g. from modifiers for \c Rectangle; zeros mean expand from constraints). \p isRectangle enables
-/// stack cross-alignment behavior used by \c Rectangle only.
-inline Rect resolveLeafLayoutBounds(Rect const& explicitBox, Rect const& childFrame,
-                                  LayoutConstraints const& constraints, LayoutHints const& hints,
-                                  bool isRectangle) {
-  if (!isRectangle) {
-    return resolveLeafBounds(explicitBox, childFrame, constraints);
-  }
-  return resolveRectangleBounds(explicitBox, childFrame, constraints, hints);
-}
+/// Resolves final window-space bounds for a leaf from optional explicit size (\p explicitBox from
+/// modifiers), the parent-assigned \p childFrame, numeric \p constraints, and stack \p hints.
+///
+/// When both explicit width and height are positive, applies \ref LayoutHints `hStackCrossAlign` /
+/// `vStackCrossAlign` the same way as for an explicitly sized rect in a stack cell (including when the
+/// child frame is larger than the explicit box on an axis). Otherwise delegates to \ref
+/// resolveLeafBounds (e.g. \c Text / \c Image with no explicit box, or partial explicit size).
+Rect resolveLeafLayoutBounds(Rect const& explicitBox, Rect const& childFrame,
+                             LayoutConstraints const& constraints, LayoutHints const& hints);
 
 } // namespace flux::detail

@@ -148,7 +148,7 @@ The build pass is a single depth-first traversal. For each node:
 
 **Render leaf** (has `render` + `measure`):
 1. `advanceChildSlot()` — consume a slot in the parent's child sequence
-2. Resolve bounds from `childFrame()` + constraints via `resolveLeafBounds`
+2. Resolve bounds from `childFrame()` + constraints via `resolveLeafLayoutBounds` (falls back to `resolveLeafBounds` when there is no explicit width/height from modifiers)
 3. Add a `CustomRenderNode` to the scene graph with a draw lambda
 4. Register event handlers in the `EventMap`
 
@@ -210,7 +210,7 @@ Element{MyView{...}}.flex(/*grow=*/1.f, /*shrink=*/1.f, /*minMain=*/50.f)
 `Element` can carry an optional **`ElementModifiers`** block (`include/Flux/UI/Element.hpp`): padding, background, border, corner radius, opacity, **layout-space** `position`, post-layout **`translate`**, clip, tap handler, optional fixed **`size`** / **`width`** / **`height`**, and an optional **overlay** subtree. When present, `Element::build`/`measure` apply these in one pass instead of nesting extra `VStack`/`ZStack`/`Rectangle` wrappers for each modifier.
 
 - **Build order** (outside-in): effect **layer** (opacity + translation + optional clip rect) when needed → **one** merged **`RectNode`** for fill/stroke/corners → **tap** on that decoration rect when set → **padding** tightens the frame/constraints for the inner view → `impl_->build` (and overlay build when set).
-- **Layout hints**: the modifier pass must **not** replace the parent’s **`LayoutHints`**. `Element::buildWithModifiers` saves `ctx.hints()` and calls `pushConstraints(innerCs, preservedHints)` so stacks still propagate **`vStackCrossAlign`** / **`hStackCrossAlign`** to inner leaves. Without that, `Rectangle` would miss **`resolveRectangleBounds`** alignment and flex slot width (e.g. `VStack { .hAlign = Center }` + **`.cornerRadius`**, or **`HStack`** + **`.flex(…)`** on a rounded rect). Overlay subtrees use `pushConstraints(overlayCs, ctx.hints())` after the inner build pops, so overlays see the same hint context as the decorated element’s parent.
+- **Layout hints**: the modifier pass must **not** replace the parent’s **`LayoutHints`**. `Element::buildWithModifiers` saves `ctx.hints()` and calls `pushConstraints(innerCs, preservedHints)` so stacks still propagate **`vStackCrossAlign`** / **`hStackCrossAlign`** to inner leaves. Without that, `Rectangle` would miss **`resolveLeafLayoutBounds`** alignment and flex slot width (e.g. `VStack { .hAlign = Center }` + **`.cornerRadius`**, or **`HStack`** + **`.flex(…)`** on a rounded rect). Overlay subtrees use `pushConstraints(overlayCs, ctx.hints())` after the inner build pops, so overlays see the same hint context as the decorated element’s parent.
 - **Measure**: constraints are tightened by padding before delegating to the inner implementation; reported size adds padding back; **`size`** / **`width`** / **`height`** modifiers can override width/height on the outer box.
 - **CRTP `ViewModifiers`**: view structs expose the same names as `Element` (`padding`, `background`, `flex`, `environment`, …). Chaining produces a single `Element` with accumulated modifier fields.
 - **`Rectangle`** carries only fill and stroke; **position** (layout-space offset within the parent cell), **size** / **width** / **height**, **flex**, and **rounded corners** use **`Element`** / **`ViewModifiers`**. The **`translate`** modifier is a **layer transform** (with opacity/clip), not a substitute for layout-space **`position`**.
@@ -239,7 +239,7 @@ All three follow the same pattern with axis-specific differences:
 4. If height-constrained: flex grow/shrink on the Y axis
 5. Place each child: `setChildFrame({0, y, innerW, allocH[i]})`, advance `y`
 
-Children get the **full column width** so nested HStacks can flex horizontally. Cross-axis alignment is communicated via `LayoutHints::vStackCrossAlign` (used by **`Text`** for glyph alignment and by **`Rectangle`** in **`resolveRectangleBounds`** for horizontal offset within each row). Modifier-wrapped **`Rectangle`** views still receive these hints via **`buildWithModifiers`** (see **Element modifiers** above).
+Children get the **full column width** so nested HStacks can flex horizontally. Cross-axis alignment is communicated via `LayoutHints::vStackCrossAlign` (used by **`Text`** for glyph alignment and by **`Rectangle`** in **`resolveLeafLayoutBounds`** for horizontal offset within each row). Modifier-wrapped **`Rectangle`** views still receive these hints via **`buildWithModifiers`** (see **Element modifiers** above).
 
 ### HStack (horizontal stack)
 
@@ -252,7 +252,7 @@ The horizontal dual of VStack:
 2. If width-constrained: flex grow/shrink on the X axis
 3. Place each child: `setChildFrame({x, 0, allocW[i], rowInnerH})`, advance `x`
 
-Children get the **full row height**. Cross-axis alignment uses `LayoutHints::hStackCrossAlign`. Main-axis **flex** assigns wider **`allocW[i]`** in the child frame; **`Rectangle`** resolves final bounds in **`resolveRectangleBounds`** using that frame together with hints (taller-than-natural rows need **`hStackCrossAlign`** so flex width is not dropped). Modifier chains preserve hints the same way as for **`VStack`**.
+Children get the **full row height**. Cross-axis alignment uses `LayoutHints::hStackCrossAlign`. Main-axis **flex** assigns wider **`allocW[i]`** in the child frame; **`Rectangle`** resolves final bounds in **`resolveLeafLayoutBounds`** using that frame together with hints (taller-than-natural rows need **`hStackCrossAlign`** so flex width is not dropped). Modifier chains preserve hints the same way as for **`VStack`**.
 
 ### ZStack (overlay stack)
 

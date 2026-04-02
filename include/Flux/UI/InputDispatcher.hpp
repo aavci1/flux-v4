@@ -13,6 +13,7 @@ namespace flux {
 
 struct OverlayEntry;
 
+class Runtime;
 class FocusController;
 class HoverController;
 class GestureTracker;
@@ -22,8 +23,9 @@ class Window;
 
 class InputDispatcher {
 public:
-  InputDispatcher(Window& window, FocusController& focus, HoverController& hover, GestureTracker& gesture,
-                    CursorController& cursor, BuildOrchestrator& build, bool& windowHasFocus);
+  InputDispatcher(Window& window, Runtime& runtime, FocusController& focus, HoverController& hover,
+                    GestureTracker& gesture, CursorController& cursor, BuildOrchestrator& build,
+                    bool& windowHasFocus);
 
   void dispatch(InputEvent const& e);
 
@@ -40,6 +42,7 @@ private:
   std::vector<OverlayEntry const*> overlayEntriesBottomFirst() const;
 
   Window& window_;
+  Runtime& runtime_;
   FocusController& focus_;
   HoverController& hover_;
   GestureTracker& gesture_;
