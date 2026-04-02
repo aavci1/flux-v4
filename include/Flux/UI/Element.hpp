@@ -348,7 +348,8 @@ void Element::Model<C>::build(BuildContext& ctx) const {
           static_cast<bool>(handlers.onTextInput);
     }
     if (handlers.onTap || handlers.onPointerDown || handlers.onPointerUp || handlers.onPointerMove ||
-        handlers.onScroll || handlers.onKeyDown || handlers.onKeyUp || handlers.onTextInput || handlers.focusable) {
+        handlers.onScroll || handlers.onKeyDown || handlers.onKeyUp || handlers.onTextInput || handlers.focusable ||
+        handlers.cursor != Cursor::Inherit) {
       ctx.eventMap().insert(id, std::move(handlers));
     }
   } else {

@@ -128,7 +128,8 @@ EventHandlers eventHandlersFromModifiers(ElementModifiers const& m, ComponentKey
 bool shouldInsertHandlers(EventHandlers const& h) {
   return static_cast<bool>(h.onTap) || static_cast<bool>(h.onPointerDown) || static_cast<bool>(h.onPointerUp) ||
          static_cast<bool>(h.onPointerMove) || static_cast<bool>(h.onScroll) || static_cast<bool>(h.onKeyDown) ||
-         static_cast<bool>(h.onKeyUp) || static_cast<bool>(h.onTextInput) || h.focusable;
+         static_cast<bool>(h.onKeyUp) || static_cast<bool>(h.onTextInput) || h.focusable ||
+         h.cursor != Cursor::Inherit;
 }
 
 } // namespace
