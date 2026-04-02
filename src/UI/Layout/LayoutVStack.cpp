@@ -1,6 +1,7 @@
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/BuildContext.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
+#include <Flux/UI/Views/VStack.hpp>
 
 #include "UI/Layout/ContainerScope.hpp"
 #include "UI/Layout/LayoutHelpers.hpp"
@@ -14,7 +15,7 @@
 namespace flux {
 using namespace flux::layout;
 
-void Element::Model<VStack>::build(BuildContext& ctx) const {
+void VStack::build(BuildContext& ctx) const {
   ContainerBuildScope scope(ctx);
   float const assignedW = stackMainAxisSpan(scope.parentFrame.width, scope.outer.maxWidth);
   float const assignedH = stackMainAxisSpan(scope.parentFrame.height, scope.outer.maxHeight);
@@ -27,10 +28,10 @@ void Element::Model<VStack>::build(BuildContext& ctx) const {
   childCs.maxWidth = innerW > 0.f ? innerW : std::numeric_limits<float>::infinity();
 
   LayoutHints measureHints{};
-  measureHints.vStackCrossAlign = value.hAlign;
-  auto sizes = scope.measureChildren(value.children, childCs, measureHints);
+  measureHints.vStackCrossAlign = hAlign;
+  auto sizes = scope.measureChildren(children, childCs, measureHints);
   scope.logContainer("VStack");
-  std::size_t const n = value.children.size();
+  std::size_t const n = children.size();
 
   float maxChildW = 0.f;
   for (Size s : sizes) {
@@ -46,13 +47,13 @@ void Element::Model<VStack>::build(BuildContext& ctx) const {
 
   std::vector<float> allocH(n);
   for (std::size_t i = 0; i < n; ++i) {
-    allocH[i] = std::max(sizes[i].height, value.children[i].minMainSize());
+    allocH[i] = std::max(sizes[i].height, children[i].minMainSize());
   }
 
   bool const heightConstrained = std::isfinite(assignedH) && assignedH > 0.f;
   if (heightConstrained && n > 0) {
     float const innerH = std::max(0.f, assignedH);
-    float const gaps = n > 1 ? static_cast<float>(n - 1) * value.spacing : 0.f;
+    float const gaps = n > 1 ? static_cast<float>(n - 1) * spacing : 0.f;
     float const targetSum = std::max(0.f, innerH - gaps);
     float sumNat = 0.f;
     for (float h : allocH) {
@@ -60,12 +61,12 @@ void Element::Model<VStack>::build(BuildContext& ctx) const {
     }
     float const extra = targetSum - sumNat;
     if (extra > kFlexEpsilon) {
-      flexGrowAlongMainAxis(allocH, value.children, extra);
+      flexGrowAlongMainAxis(allocH, children, extra);
     } else if (extra < -kFlexEpsilon) {
-      flexShrinkAlongMainAxis(allocH, value.children, targetSum);
+      flexShrinkAlongMainAxis(allocH, children, targetSum);
     }
   } else if (n > 0) {
-    warnFlexGrowIfParentMainAxisUnconstrained(value.children, heightConstrained);
+    warnFlexGrowIfParentMainAxisUnconstrained(children, heightConstrained);
   }
 
   float y = 0.f;
@@ -75,16 +76,16 @@ void Element::Model<VStack>::build(BuildContext& ctx) const {
     float const rowW = innerW > 0.f ? innerW : sz.width;
     LayoutConstraints childBuild = innerForBuild;
     childBuild.maxHeight = allocH[i];
-    childBuild.minHeight = value.children[i].minMainSize();
+    childBuild.minHeight = children[i].minMainSize();
     LayoutHints rowHints{};
-    rowHints.vStackCrossAlign = value.hAlign;
-    scope.buildChild(value.children[i], Rect{0.f, y, rowW, sz.height}, childBuild, rowHints);
-    y += sz.height + value.spacing;
+    rowHints.vStackCrossAlign = hAlign;
+    scope.buildChild(children[i], Rect{0.f, y, rowW, sz.height}, childBuild, rowHints);
+    y += sz.height + spacing;
   }
 }
 
-Size Element::Model<VStack>::measure(BuildContext& ctx, LayoutConstraints const& constraints,
-                                     LayoutHints const&, TextSystem& ts) const {
+Size VStack::measure(BuildContext& ctx, LayoutConstraints const& constraints, LayoutHints const&,
+                     TextSystem& ts) const {
   ContainerMeasureScope scope(ctx);
   float const assignedW =
       std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;
@@ -94,15 +95,15 @@ Size Element::Model<VStack>::measure(BuildContext& ctx, LayoutConstraints const&
   childCs.maxHeight = std::numeric_limits<float>::infinity();
   childCs.maxWidth = innerW > 0.f ? innerW : std::numeric_limits<float>::infinity();
   LayoutHints childHints{};
-  childHints.vStackCrossAlign = value.hAlign;
+  childHints.vStackCrossAlign = hAlign;
 
   float maxW = 0.f;
   float sumH = 0.f;
-  std::size_t n = value.children.size();
+  std::size_t n = children.size();
   if (n > 1) {
-    sumH += static_cast<float>(n - 1) * value.spacing;
+    sumH += static_cast<float>(n - 1) * spacing;
   }
-  for (Element const& ch : value.children) {
+  for (Element const& ch : children) {
     Size const s = ch.measure(ctx, childCs, childHints, ts);
     maxW = std::max(maxW, s.width);
     sumH += s.height;

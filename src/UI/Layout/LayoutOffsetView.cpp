@@ -1,6 +1,7 @@
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/BuildContext.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
+#include <Flux/UI/Views/OffsetView.hpp>
 
 #include <Flux/Scene/Nodes.hpp>
 #include <Flux/Scene/SceneGraph.hpp>
@@ -17,7 +18,7 @@
 namespace flux {
 using namespace flux::layout;
 
-void Element::Model<OffsetView>::build(BuildContext& ctx) const {
+void OffsetView::build(BuildContext& ctx) const {
   ContainerBuildScope scope(ctx);
   float const assignedW = assignedSpan(scope.parentFrame.width, scope.outer.maxWidth);
   float const assignedH = assignedSpan(scope.parentFrame.height, scope.outer.maxHeight);
@@ -36,12 +37,12 @@ void Element::Model<OffsetView>::build(BuildContext& ctx) const {
     viewportH = scope.outer.maxHeight;
   }
 
-  if (value.viewportSize.signal) {
-    value.viewportSize = Size{viewportW, viewportH};
+  if (viewportSize.signal) {
+    viewportSize = Size{viewportW, viewportH};
   }
 
   LayoutConstraints childCs = scope.outer;
-  switch (value.axis) {
+  switch (axis) {
   case ScrollAxis::Vertical:
     childCs.maxWidth = viewportW > 0.f ? viewportW : std::numeric_limits<float>::infinity();
     childCs.maxHeight = std::numeric_limits<float>::infinity();
@@ -56,14 +57,14 @@ void Element::Model<OffsetView>::build(BuildContext& ctx) const {
     break;
   }
 
-  auto sizes = scope.measureChildren(value.children, childCs);
+  auto sizes = scope.measureChildren(children, childCs);
   scope.logContainer("OffsetView");
 
-  std::size_t const n = value.children.size();
+  std::size_t const n = children.size();
   float totalW = 0.f;
   float totalH = 0.f;
 
-  if (value.axis == ScrollAxis::Horizontal) {
+  if (axis == ScrollAxis::Horizontal) {
     for (Size s : sizes) {
       totalW += s.width;
       totalH = std::max(totalH, s.height);
@@ -75,21 +76,21 @@ void Element::Model<OffsetView>::build(BuildContext& ctx) const {
     }
   }
 
-  if (value.contentSize.signal) {
-    value.contentSize = Size{totalW, totalH};
+  if (contentSize.signal) {
+    contentSize = Size{totalW, totalH};
   }
 
   LayerNode layer{};
-  float const ox = scope.parentFrame.x - value.offset.x;
-  float const oy = scope.parentFrame.y - value.offset.y;
+  float const ox = scope.parentFrame.x - offset.x;
+  float const oy = scope.parentFrame.y - offset.y;
   if (scope.parentFrame.width > 0.f || scope.parentFrame.height > 0.f ||
-      value.offset.x != 0.f || value.offset.y != 0.f) {
+      offset.x != 0.f || offset.y != 0.f) {
     layer.transform = Mat3::translate(ox, oy);
   }
   NodeId const layerId = ctx.graph().addLayer(ctx.parentLayer(), std::move(layer));
   scope.pushCustomLayer(layerId);
 
-  if (value.axis == ScrollAxis::Horizontal) {
+  if (axis == ScrollAxis::Horizontal) {
     float x = 0.f;
     for (std::size_t i = 0; i < n; ++i) {
       Size const sz = sizes[i];
@@ -98,7 +99,7 @@ void Element::Model<OffsetView>::build(BuildContext& ctx) const {
       LayoutConstraints childBuild = scope.outer;
       childBuild.maxWidth = sz.width;
       childBuild.maxHeight = rowH;
-      scope.buildChild(value.children[i], Rect{x, 0.f, sz.width, rowH}, childBuild);
+      scope.buildChild(children[i], Rect{x, 0.f, sz.width, rowH}, childBuild);
       x += sz.width;
     }
   } else {
@@ -110,14 +111,14 @@ void Element::Model<OffsetView>::build(BuildContext& ctx) const {
       LayoutConstraints childBuild = scope.outer;
       childBuild.maxWidth = rowW;
       childBuild.maxHeight = sz.height;
-      scope.buildChild(value.children[i], Rect{0.f, y, rowW, sz.height}, childBuild);
+      scope.buildChild(children[i], Rect{0.f, y, rowW, sz.height}, childBuild);
       y += sz.height;
     }
   }
 }
 
-Size Element::Model<OffsetView>::measure(BuildContext& ctx, LayoutConstraints const& constraints,
-                                         LayoutHints const&, TextSystem& ts) const {
+Size OffsetView::measure(BuildContext& ctx, LayoutConstraints const& constraints, LayoutHints const&,
+                         TextSystem& ts) const {
   ContainerMeasureScope scope(ctx);
   float const assignedW = std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;
   float const assignedH = std::isfinite(constraints.maxHeight) ? constraints.maxHeight : 0.f;
@@ -128,7 +129,7 @@ Size Element::Model<OffsetView>::measure(BuildContext& ctx, LayoutConstraints co
   float const viewportH = innerH;
 
   LayoutConstraints childCs = constraints;
-  switch (value.axis) {
+  switch (axis) {
   case ScrollAxis::Vertical:
     childCs.maxWidth = viewportW > 0.f ? viewportW : std::numeric_limits<float>::infinity();
     childCs.maxHeight = std::numeric_limits<float>::infinity();
@@ -145,14 +146,14 @@ Size Element::Model<OffsetView>::measure(BuildContext& ctx, LayoutConstraints co
 
   float totalW = 0.f;
   float totalH = 0.f;
-  if (value.axis == ScrollAxis::Horizontal) {
-    for (Element const& ch : value.children) {
+  if (axis == ScrollAxis::Horizontal) {
+    for (Element const& ch : children) {
       Size const s = ch.measure(ctx, childCs, LayoutHints{}, ts);
       totalW += s.width;
       totalH = std::max(totalH, s.height);
     }
   } else {
-    for (Element const& ch : value.children) {
+    for (Element const& ch : children) {
       Size const s = ch.measure(ctx, childCs, LayoutHints{}, ts);
       totalW = std::max(totalW, s.width);
       totalH += s.height;

@@ -9,6 +9,7 @@
 #include <Flux/Graphics/Font.hpp>
 #include <Flux/Graphics/Styles.hpp>
 #include <Flux/Graphics/TextLayoutOptions.hpp>
+#include <Flux/UI/Detail/PrimitiveForwards.hpp>
 #include <Flux/UI/ViewModifiers.hpp>
 
 #include <functional>
@@ -19,6 +20,11 @@ namespace flux {
 /// UTF-8 text in a view box. Size follows layout constraints; use \ref Element modifiers for
 /// interaction, padding, frames, backgrounds, and flex.
 struct Text : ViewModifiers<Text> {
+  static constexpr bool memoizable = true;
+
+  void build(BuildContext&) const;
+  Size measure(BuildContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
+
   std::string text;
   Font font{ .family = "", .size = 16.f, .weight = 400.f, .italic = false };
 

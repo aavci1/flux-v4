@@ -1,6 +1,7 @@
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/BuildContext.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
+#include <Flux/UI/Views/ScaleAroundCenter.hpp>
 
 #include <Flux/Scene/Nodes.hpp>
 #include <Flux/Scene/SceneGraph.hpp>
@@ -15,7 +16,7 @@
 namespace flux {
 using namespace flux::layout;
 
-void Element::Model<ScaleAroundCenter>::build(BuildContext& ctx) const {
+void ScaleAroundCenter::build(BuildContext& ctx) const {
   ContainerBuildScope scope(ctx);
   float const assignedW = assignedSpan(scope.parentFrame.width, scope.outer.maxWidth);
   float const assignedH = assignedSpan(scope.parentFrame.height, scope.outer.maxHeight);
@@ -27,7 +28,7 @@ void Element::Model<ScaleAroundCenter>::build(BuildContext& ctx) const {
   childCs.maxWidth = innerW > 0.f ? innerW : std::numeric_limits<float>::infinity();
   childCs.maxHeight = innerH > 0.f ? innerH : std::numeric_limits<float>::infinity();
 
-  Size const sz = scope.measureChild(value.child, childCs);
+  Size const sz = scope.measureChild(child, childCs);
   scope.logContainer("ScaleAroundCenter");
 
   if (innerW <= 0.f) {
@@ -42,7 +43,7 @@ void Element::Model<ScaleAroundCenter>::build(BuildContext& ctx) const {
 
   LayerNode layer{};
   Mat3 const t = Mat3::translate(scope.parentFrame.x, scope.parentFrame.y) *
-                 Mat3::translate(cx, cy) * Mat3::scale(value.scale) *
+                 Mat3::translate(cx, cy) * Mat3::scale(scale) *
                  Mat3::translate(-cx, -cy);
   layer.transform = t;
   NodeId const layerId = ctx.graph().addLayer(ctx.parentLayer(), std::move(layer));
@@ -56,11 +57,11 @@ void Element::Model<ScaleAroundCenter>::build(BuildContext& ctx) const {
   LayoutConstraints innerForBuild{};
   innerForBuild.maxWidth = innerW;
   innerForBuild.maxHeight = innerH;
-  scope.buildChild(value.child, Rect{x, y, childW, childH}, innerForBuild);
+  scope.buildChild(child, Rect{x, y, childW, childH}, innerForBuild);
 }
 
-Size Element::Model<ScaleAroundCenter>::measure(BuildContext& ctx, LayoutConstraints const& constraints,
-                                                LayoutHints const&, TextSystem& ts) const {
+Size ScaleAroundCenter::measure(BuildContext& ctx, LayoutConstraints const& constraints, LayoutHints const&,
+                                TextSystem& ts) const {
   ContainerMeasureScope scope(ctx);
   float const assignedW = std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;
   float const assignedH = std::isfinite(constraints.maxHeight) ? constraints.maxHeight : 0.f;
@@ -71,7 +72,7 @@ Size Element::Model<ScaleAroundCenter>::measure(BuildContext& ctx, LayoutConstra
   childCs.maxWidth = innerW > 0.f ? innerW : std::numeric_limits<float>::infinity();
   childCs.maxHeight = innerH > 0.f ? innerH : std::numeric_limits<float>::infinity();
 
-  return value.child.measure(ctx, childCs, LayoutHints{}, ts);
+  return child.measure(ctx, childCs, LayoutHints{}, ts);
 }
 
 } // namespace flux

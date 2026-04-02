@@ -71,6 +71,9 @@ float minMainSizeOf(C const& v) {
   if constexpr (requires { v.minSize; }) {
     return v.minSize;
   }
+  if constexpr (requires { v.minLength; }) {
+    return std::max(0.f, v.minLength);
+  }
   return 0.f;
 }
 
@@ -128,11 +131,12 @@ struct ElementModifiers {
   ~ElementModifiers();
 };
 
-/// Erased handle to a component model (\ref CompositeComponent with \c body(), or a render leaf).
+/// Erased handle to a component model (\ref CompositeComponent, \ref PrimitiveComponent, or \ref RenderComponent).
 /// Copying allocates a new \c measureId_ for memoization correctness.
 class Element {
 public:
-  /// Wraps a concrete component type; \c C must satisfy \ref CompositeComponent or \ref RenderComponent.
+  /// Wraps a concrete component type; \c C must satisfy \ref CompositeComponent, \ref PrimitiveComponent, or
+  /// \ref RenderComponent.
   template<typename C>
   Element(C component);
 
@@ -257,6 +261,11 @@ struct Element::Model : Concept {
   bool canMemoizeMeasure() const override {
     if constexpr (CompositeComponent<C>) {
       return false;
+    } else if constexpr (PrimitiveComponent<C>) {
+      if constexpr (requires { C::memoizable; }) {
+        return C::memoizable;
+      }
+      return false;
     } else if constexpr (RenderComponent<C>) {
       return true;
     }
@@ -352,11 +361,12 @@ void Element::Model<C>::build(BuildContext& ctx) const {
         handlers.cursor != Cursor::Inherit) {
       ctx.eventMap().insert(id, std::move(handlers));
     }
+  } else if constexpr (PrimitiveComponent<C>) {
+    value.build(ctx);
   } else {
     static_assert(alwaysFalse<C>,
-        "Missing Element::Model specialization for this component type. "
-        "Add body() for a composite, or render(Canvas&, Rect) + "
-        "measure(LayoutConstraints const&, LayoutHints const&) for a render component.");
+        "Component must satisfy CompositeComponent (body()), PrimitiveComponent (build + measure with "
+        "BuildContext), or RenderComponent (render + measure).");
   }
 }
 
@@ -384,75 +394,15 @@ Size Element::Model<C>::measure(BuildContext& ctx, LayoutConstraints const& cons
     ctx.advanceChildSlot();
     (void)textSystem;
     return value.measure(constraints, hints);
+  } else if constexpr (PrimitiveComponent<C>) {
+    return value.measure(ctx, constraints, hints, textSystem);
   } else {
     static_assert(alwaysFalse<C>,
-        "Missing Element::Model specialization for this component type. "
-        "Add body() for a composite, or render(Canvas&, Rect) + "
-        "measure(LayoutConstraints const&, LayoutHints const&) for a render component.");
+        "Component must satisfy CompositeComponent (body()), PrimitiveComponent (build + measure with "
+        "BuildContext), or RenderComponent (render + measure).");
     return {};
   }
 }
-
-} // namespace flux
-
-#include <Flux/Core/Types.hpp>
-#include <Flux/UI/Layout.hpp>
-#include <Flux/UI/Views/ScaleAroundCenter.hpp>
-
-namespace flux {
-
-/// Generates a full Element::Model<T> specialization with standard flex delegates.
-/// Extra overrides (e.g. canMemoizeMeasure) go in the variadic tail.
-#define FLUX_ELEMENT_MODEL(Type, ...)                                                     \
-  template<>                                                                              \
-  struct Element::Model<Type> final : Concept {                                           \
-    Type value;                                                                           \
-    explicit Model(Type c) : value(std::move(c)) {}                                      \
-    std::unique_ptr<Concept> clone() const override {                                    \
-      return std::make_unique<Model<Type>>(value);                                       \
-    }                                                                                     \
-    void build(BuildContext& ctx) const override;                                         \
-    Size measure(BuildContext& ctx, LayoutConstraints const&, LayoutHints const&, TextSystem&) const override; \
-    float flexGrow() const override { return detail::flexGrowOf(value); }                \
-    float flexShrink() const override { return detail::flexShrinkOf(value); }            \
-    float minMainSize() const override { return detail::minMainSizeOf(value); }          \
-    __VA_ARGS__                                                                           \
-  }
-
-// --- Leaf types (memoizable) ---------------------------------------------------
-
-FLUX_ELEMENT_MODEL(Rectangle,       bool canMemoizeMeasure() const override { return true; });
-FLUX_ELEMENT_MODEL(LaidOutText,     bool canMemoizeMeasure() const override { return true; });
-FLUX_ELEMENT_MODEL(Text,            bool canMemoizeMeasure() const override { return true; });
-FLUX_ELEMENT_MODEL(views::Image,    bool canMemoizeMeasure() const override { return true; });
-FLUX_ELEMENT_MODEL(PathShape,       bool canMemoizeMeasure() const override { return true; });
-FLUX_ELEMENT_MODEL(Line,            bool canMemoizeMeasure() const override { return true; });
-
-// --- Layout containers ---------------------------------------------------------
-
-FLUX_ELEMENT_MODEL(VStack);
-FLUX_ELEMENT_MODEL(HStack);
-FLUX_ELEMENT_MODEL(ZStack);
-FLUX_ELEMENT_MODEL(ScaleAroundCenter);
-FLUX_ELEMENT_MODEL(Grid);
-FLUX_ELEMENT_MODEL(OffsetView);
-FLUX_ELEMENT_MODEL(ScrollView);
-
-// Spacer has fully custom flex behavior — not generated by the macro.
-template<>
-struct Element::Model<Spacer> final : Concept {
-  Spacer value;
-  explicit Model(Spacer c) : value(std::move(c)) {}
-  std::unique_ptr<Concept> clone() const override {
-    return std::make_unique<Model<Spacer>>(value);
-  }
-  void build(BuildContext& ctx) const override;
-  Size measure(BuildContext& ctx, LayoutConstraints const&, LayoutHints const&, TextSystem&) const override;
-  float flexGrow() const override { return 1.f; }
-  float flexShrink() const override { return 0.f; }
-  float minMainSize() const override { return std::max(0.f, value.minLength); }
-  bool canMemoizeMeasure() const override { return true; }
-};
 
 template<typename C>
 Element::Element(C component)
@@ -471,11 +421,7 @@ std::vector<Element> children(Args&&... args) {
 
 } // namespace flux
 
-#include <Flux/UI/Views/PopoverCalloutShape.hpp>
-
 namespace flux {
-
-FLUX_ELEMENT_MODEL(PopoverCalloutShape);
 
 // ── ViewModifiers<Derived> method implementations ───────────────────────────────
 // Defined here so Element is a complete type at the point of instantiation.

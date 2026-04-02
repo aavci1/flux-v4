@@ -19,6 +19,9 @@ enum class ScrollAxis { Vertical, Horizontal, Both };
 /// Children are stacked along the scroll axis with no extra gap between siblings; use a single
 /// `VStack`/`HStack` (or similar) as the child when you need spacing.
 struct OffsetView : ViewModifiers<OffsetView> {
+  void build(BuildContext&) const;
+  Size measure(BuildContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
+
   Point offset{};
   ScrollAxis axis = ScrollAxis::Vertical;
   State<Size> viewportSize{};

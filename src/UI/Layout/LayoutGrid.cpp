@@ -1,6 +1,7 @@
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/BuildContext.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
+#include <Flux/UI/Views/Grid.hpp>
 
 #include "UI/Layout/ContainerScope.hpp"
 #include "UI/Layout/LayoutHelpers.hpp"
@@ -14,7 +15,7 @@
 namespace flux {
 using namespace flux::layout;
 
-void Element::Model<Grid>::build(BuildContext& ctx) const {
+void Grid::build(BuildContext& ctx) const {
   ContainerBuildScope scope(ctx);
   float const assignedW = assignedSpan(scope.parentFrame.width, scope.outer.maxWidth);
   float const assignedH = assignedSpan(scope.parentFrame.height, scope.outer.maxHeight);
@@ -22,14 +23,14 @@ void Element::Model<Grid>::build(BuildContext& ctx) const {
 
   float const innerW = std::max(0.f, assignedW);
   float const innerH = std::max(0.f, assignedH);
-  std::size_t const cols = std::max<std::size_t>(1, value.columns);
-  std::size_t const n = value.children.size();
+  std::size_t const cols = std::max<std::size_t>(1, columns);
+  std::size_t const n = children.size();
   std::size_t const rowCount = n == 0 ? 0 : (n + cols - 1) / cols;
   float const cellW =
       innerW > 0.f
-          ? std::max(0.f, (innerW - static_cast<float>(cols - 1) * value.hSpacing) / static_cast<float>(cols))
+          ? std::max(0.f, (innerW - static_cast<float>(cols - 1) * hSpacing) / static_cast<float>(cols))
           : 0.f;
-  float const cellH = gridCellHeight(innerH, rowCount, value.vSpacing);
+  float const cellH = gridCellHeight(innerH, rowCount, vSpacing);
 
   LayoutConstraints childCs = scope.outer;
   childCs.maxWidth =
@@ -37,7 +38,7 @@ void Element::Model<Grid>::build(BuildContext& ctx) const {
   childCs.maxHeight =
       cellH > 0.f ? cellH : std::numeric_limits<float>::infinity();
 
-  auto sizes = scope.measureChildren(value.children, childCs);
+  auto sizes = scope.measureChildren(children, childCs);
   scope.logContainer("Grid");
 
   std::vector<float> rowH(rowCount, 0.f);
@@ -69,20 +70,20 @@ void Element::Model<Grid>::build(BuildContext& ctx) const {
       Size const sz = sizes[i];
       float const frameW = cellW > 0.f ? cellW : sz.width;
       float const frameH = rowH[r] > 0.f ? rowH[r] : sz.height;
-      float const cx = x + hAlignOffset(sz.width, frameW, value.hAlign);
-      float const cy = y + vAlignOffset(sz.height, frameH, value.vAlign);
-      scope.buildChild(value.children[i], Rect{cx, cy, frameW, frameH}, innerForBuild);
-      x += cellW + value.hSpacing;
+      float const cx = x + hAlignOffset(sz.width, frameW, hAlign);
+      float const cy = y + vAlignOffset(sz.height, frameH, vAlign);
+      scope.buildChild(children[i], Rect{cx, cy, frameW, frameH}, innerForBuild);
+      x += cellW + hSpacing;
     }
     y += rowH[r];
     if (r + 1 < rowCount) {
-      y += value.vSpacing;
+      y += vSpacing;
     }
   }
 }
 
-Size Element::Model<Grid>::measure(BuildContext& ctx, LayoutConstraints const& constraints,
-                                   LayoutHints const&, TextSystem& ts) const {
+Size Grid::measure(BuildContext& ctx, LayoutConstraints const& constraints, LayoutHints const&,
+                   TextSystem& ts) const {
   ContainerMeasureScope scope(ctx);
   float const assignedW =
       std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;
@@ -90,14 +91,14 @@ Size Element::Model<Grid>::measure(BuildContext& ctx, LayoutConstraints const& c
       std::isfinite(constraints.maxHeight) ? constraints.maxHeight : 0.f;
   float const innerW = std::max(0.f, assignedW);
   float const innerH = std::max(0.f, assignedH);
-  std::size_t const cols = std::max<std::size_t>(1, value.columns);
-  std::size_t const n = value.children.size();
+  std::size_t const cols = std::max<std::size_t>(1, columns);
+  std::size_t const n = children.size();
   std::size_t const rowCount = n == 0 ? 0 : (n + cols - 1) / cols;
   float const cellW =
       innerW > 0.f
-          ? std::max(0.f, (innerW - static_cast<float>(cols - 1) * value.hSpacing) / static_cast<float>(cols))
+          ? std::max(0.f, (innerW - static_cast<float>(cols - 1) * hSpacing) / static_cast<float>(cols))
           : 0.f;
-  float const cellH = gridCellHeight(innerH, rowCount, value.vSpacing);
+  float const cellH = gridCellHeight(innerH, rowCount, vSpacing);
 
   LayoutConstraints childCs = constraints;
   childCs.maxWidth =
@@ -106,8 +107,8 @@ Size Element::Model<Grid>::measure(BuildContext& ctx, LayoutConstraints const& c
       cellH > 0.f ? cellH : std::numeric_limits<float>::infinity();
 
   std::vector<Size> sizes;
-  sizes.reserve(value.children.size());
-  for (Element const& ch : value.children) {
+  sizes.reserve(children.size());
+  for (Element const& ch : children) {
     sizes.push_back(ch.measure(ctx, childCs, LayoutHints{}, ts));
   }
 
@@ -129,7 +130,7 @@ Size Element::Model<Grid>::measure(BuildContext& ctx, LayoutConstraints const& c
   } else {
     totalH = 0.f;
     if (rowCount > 1) {
-      totalH += static_cast<float>(rowCount - 1) * value.vSpacing;
+      totalH += static_cast<float>(rowCount - 1) * vSpacing;
     }
     for (float h : rowH) {
       totalH += h;

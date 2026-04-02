@@ -17,6 +17,11 @@ namespace flux {
 
 /// Single filled/stroked path: rounded card + optional callout triangle (merged outline).
 struct PopoverCalloutShape : ViewModifiers<PopoverCalloutShape> {
+  static constexpr bool memoizable = true;
+
+  void build(BuildContext&) const;
+  Size measure(BuildContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
+
   PopoverPlacement placement = PopoverPlacement::Below;
   bool arrow = true;
   float padding = 12.f;

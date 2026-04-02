@@ -1,6 +1,7 @@
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/BuildContext.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
+#include <Flux/UI/Views/ZStack.hpp>
 
 #include "UI/Layout/ContainerScope.hpp"
 #include "UI/Layout/LayoutHelpers.hpp"
@@ -14,7 +15,7 @@
 namespace flux {
 using namespace flux::layout;
 
-void Element::Model<ZStack>::build(BuildContext& ctx) const {
+void ZStack::build(BuildContext& ctx) const {
   ContainerBuildScope scope(ctx);
   float const assignedW = assignedSpan(scope.parentFrame.width, scope.outer.maxWidth);
   float const assignedH = assignedSpan(scope.parentFrame.height, scope.outer.maxHeight);
@@ -29,7 +30,7 @@ void Element::Model<ZStack>::build(BuildContext& ctx) const {
 
   float maxW = 0.f;
   float maxH = 0.f;
-  auto sizes = scope.measureChildren(value.children, childCs);
+  auto sizes = scope.measureChildren(children, childCs);
   scope.logContainer("ZStack");
   for (Size const& s : sizes) {
     maxW = std::max(maxW, s.width);
@@ -57,13 +58,13 @@ void Element::Model<ZStack>::build(BuildContext& ctx) const {
   innerForBuild.maxWidth = innerW;
   innerForBuild.maxHeight = innerH;
 
-  for (std::size_t i = 0; i < value.children.size(); ++i) {
+  for (std::size_t i = 0; i < children.size(); ++i) {
     Size const sz = sizes[i];
     float const childW = std::max(sz.width, innerW);
     float const childH = std::max(sz.height, innerH);
     float alignW = childW;
     float alignH = childH;
-    Element const& childEl = value.children[i];
+    Element const& childEl = children[i];
     if (childEl.flexGrow() == 0.f) {
       if (sz.width > 0.f) {
         alignW = sz.width;
@@ -77,8 +78,8 @@ void Element::Model<ZStack>::build(BuildContext& ctx) const {
         alignH = childH;
       }
     }
-    float const x = hAlignOffset(alignW, innerW, value.hAlign);
-    float const y = vAlignOffset(alignH, innerH, value.vAlign);
+    float const x = hAlignOffset(alignW, innerW, hAlign);
+    float const y = vAlignOffset(alignH, innerH, vAlign);
     // Child layout rect must not exceed the stack's inner bounds. Otherwise a tall scroll child
     // (alignH > innerH) still received parentFrame.height == content height and ScrollView saw no range.
     float outW = alignW;
@@ -89,12 +90,12 @@ void Element::Model<ZStack>::build(BuildContext& ctx) const {
     if (innerH > 0.f) {
       outH = std::min(alignH, innerH);
     }
-    scope.buildChild(value.children[i], Rect{x, y, outW, outH}, innerForBuild);
+    scope.buildChild(children[i], Rect{x, y, outW, outH}, innerForBuild);
   }
 }
 
-Size Element::Model<ZStack>::measure(BuildContext& ctx, LayoutConstraints const& constraints,
-                                     LayoutHints const&, TextSystem& ts) const {
+Size ZStack::measure(BuildContext& ctx, LayoutConstraints const& constraints, LayoutHints const&,
+                     TextSystem& ts) const {
   ContainerMeasureScope scope(ctx);
   float const assignedW = std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;
   float const assignedH = std::isfinite(constraints.maxHeight) ? constraints.maxHeight : 0.f;
@@ -107,7 +108,7 @@ Size Element::Model<ZStack>::measure(BuildContext& ctx, LayoutConstraints const&
 
   float maxW = 0.f;
   float maxH = 0.f;
-  for (Element const& ch : value.children) {
+  for (Element const& ch : children) {
     Size const s = ch.measure(ctx, childCs, LayoutHints{}, ts);
     maxW = std::max(maxW, s.width);
     maxH = std::max(maxH, s.height);

@@ -1,6 +1,7 @@
 #include <Flux/UI/Element.hpp>
 
 #include <Flux/UI/BuildContext.hpp>
+#include <Flux/UI/Views/PopoverCalloutShape.hpp>
 #include <Flux/UI/Detail/LayoutDebugDump.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 #include <Flux/UI/StateStore.hpp>
@@ -72,28 +73,28 @@ LayoutConstraints innerConstraintsForPopoverContent(PopoverCalloutShape const& v
 
 } // namespace
 
-Size Element::Model<PopoverCalloutShape>::measure(BuildContext& ctx, LayoutConstraints const& constraints,
-                                                    LayoutHints const&, TextSystem& ts) const {
+Size PopoverCalloutShape::measure(BuildContext& ctx, LayoutConstraints const& constraints, LayoutHints const&,
+                                  TextSystem& ts) const {
   if (!ctx.consumeCompositeBodySubtreeRootSkip()) {
     ctx.advanceChildSlot();
   }
-  LayoutConstraints cc = innerConstraintsForPopoverContent(value, constraints);
+  LayoutConstraints cc = innerConstraintsForPopoverContent(*this, constraints);
 
   ctx.pushChildIndex();
-  Size const inner = value.content.measure(ctx, cc, LayoutHints{}, ts);
+  Size const inner = content.measure(ctx, cc, LayoutHints{}, ts);
   ctx.popChildIndex();
 
-  float const pad = value.padding;
+  float const pad = padding;
   float const ah = PopoverCalloutShape::kArrowH;
   float const awTri = PopoverCalloutShape::kArrowW;
 
   float const cardW = inner.width + 2.f * pad;
   float const cardH = inner.height + 2.f * pad;
 
-  if (!value.arrow) {
+  if (!arrow) {
     return {cardW, cardH};
   }
-  switch (value.placement) {
+  switch (placement) {
   case PopoverPlacement::Below:
   case PopoverPlacement::Above:
     return {cardW, cardH + ah};
@@ -104,7 +105,7 @@ Size Element::Model<PopoverCalloutShape>::measure(BuildContext& ctx, LayoutConst
   return {cardW, cardH};
 }
 
-void Element::Model<PopoverCalloutShape>::build(BuildContext& ctx) const {
+void PopoverCalloutShape::build(BuildContext& ctx) const {
   if (!ctx.consumeCompositeBodySubtreeRootSkip()) {
     ctx.advanceChildSlot();
   }
@@ -113,25 +114,25 @@ void Element::Model<PopoverCalloutShape>::build(BuildContext& ctx) const {
   LayoutConstraints outer = ctx.constraints();
   // Match measure(): intersect overlay constraints with the popover's intrinsic maxSize. Build used
   // to read only ctx.constraints(); if overlay maxSize was wrong, the card collapsed to one row.
-  if (value.maxSize) {
-    if (std::isfinite(value.maxSize->width) && value.maxSize->width > 0.f) {
-      outer.maxWidth = std::min(outer.maxWidth, value.maxSize->width);
+  if (maxSize) {
+    if (std::isfinite(maxSize->width) && maxSize->width > 0.f) {
+      outer.maxWidth = std::min(outer.maxWidth, maxSize->width);
     }
-    if (std::isfinite(value.maxSize->height) && value.maxSize->height > 0.f) {
-      outer.maxHeight = std::min(outer.maxHeight, value.maxSize->height);
+    if (std::isfinite(maxSize->height) && maxSize->height > 0.f) {
+      outer.maxHeight = std::min(outer.maxHeight, maxSize->height);
     }
   }
   layoutDebugLogContainer("PopoverCalloutShape", outer, parentFrame);
 
-  LayoutConstraints const ccInner = innerConstraintsForPopoverContent(value, outer);
+  LayoutConstraints const ccInner = innerConstraintsForPopoverContent(*this, outer);
   ctx.pushChildIndex();
-  Size const innerMeasured = value.content.measure(ctx, ccInner, LayoutHints{}, ctx.textSystem());
+  Size const innerMeasured = content.measure(ctx, ccInner, LayoutHints{}, ctx.textSystem());
   ctx.popChildIndex();
 
   float const assignedW = assignedSpan(parentFrame.width, outer.maxWidth);
   float const assignedH = assignedSpan(parentFrame.height, outer.maxHeight);
 
-  float const pad = value.padding;
+  float const pad = padding;
   float const ah = PopoverCalloutShape::kArrowH;
 
   float tw = std::max(0.f, assignedW);
@@ -140,12 +141,12 @@ void Element::Model<PopoverCalloutShape>::build(BuildContext& ctx) const {
   // Shrink-wrap height: overlay max height is often the full cap (e.g. 240px) while list content is
   // shorter. Do not clamp width — Popover max width matches the trigger; narrowing would clip it.
   float const cardHFromContent = innerMeasured.height + 2.f * pad;
-  if (!value.arrow) {
+  if (!arrow) {
     if (cardHFromContent > 1e-3f && cardHFromContent < th) {
       th = cardHFromContent;
     }
   } else {
-    switch (value.placement) {
+    switch (placement) {
     case PopoverPlacement::Below:
     case PopoverPlacement::Above: {
       float const layerH = cardHFromContent + ah;
@@ -177,11 +178,11 @@ void Element::Model<PopoverCalloutShape>::build(BuildContext& ctx) const {
   Rect cardRect{};
   Rect contentFrame{};
 
-  if (!value.arrow) {
+  if (!arrow) {
     cardRect = {0.f, 0.f, tw, th};
     contentFrame = {pad, pad, std::max(0.f, tw - 2.f * pad), std::max(0.f, th - 2.f * pad)};
   } else {
-    switch (value.placement) {
+    switch (placement) {
     case PopoverPlacement::Below:
       cardH = std::max(0.f, th - ah);
       cardRect = {0.f, ah, tw, cardH};
@@ -207,14 +208,14 @@ void Element::Model<PopoverCalloutShape>::build(BuildContext& ctx) const {
     }
   }
 
-  Path path = buildPopoverCalloutPath(value.placement, value.cornerRadius, value.arrow, PopoverCalloutShape::kArrowW,
+  Path path = buildPopoverCalloutPath(placement, cornerRadius, arrow, PopoverCalloutShape::kArrowW,
                                       ah, cardRect, {tw, th});
 
-  float const bw = std::max(1.f, value.borderWidth);
+  float const bw = std::max(1.f, borderWidth);
   Element pathEl = Element{PathShape{
       .path = std::move(path),
-      .fill = FillStyle::solid(value.backgroundColor),
-      .stroke = StrokeStyle::solid(value.borderColor, bw),
+      .fill = FillStyle::solid(backgroundColor),
+      .stroke = StrokeStyle::solid(borderColor, bw),
   }};
 
   ctx.pushChildIndex();
@@ -250,7 +251,7 @@ void Element::Model<PopoverCalloutShape>::build(BuildContext& ctx) const {
   contentCs.maxHeight = contentFrame.height;
   le.setChildFrame(contentFrame);
   ctx.pushConstraints(contentCs);
-  value.content.build(ctx);
+  content.build(ctx);
   ctx.popConstraints();
 
   ctx.popChildIndex();

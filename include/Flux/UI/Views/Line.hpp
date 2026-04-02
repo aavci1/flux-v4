@@ -7,11 +7,17 @@
 
 #include <Flux/Core/Types.hpp>
 #include <Flux/Graphics/Styles.hpp>
+#include <Flux/UI/Detail/PrimitiveForwards.hpp>
 #include <Flux/UI/ViewModifiers.hpp>
 
 namespace flux {
 
 struct Line : ViewModifiers<Line> {
+  static constexpr bool memoizable = true;
+
+  void build(BuildContext&) const;
+  Size measure(BuildContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
+
   Point from{};
   Point to{};
   StrokeStyle stroke{};

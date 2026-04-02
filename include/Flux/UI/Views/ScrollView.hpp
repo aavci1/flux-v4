@@ -31,9 +31,32 @@ struct ScrollView : ViewModifiers<ScrollView> {
   float minSize = 0.f;
   std::vector<Element> children;
 
+  /// Custom subtree hook (not the generic \ref CompositeComponent path in \ref Element::Model).
+  void build(BuildContext&) const;
+  Size measure(BuildContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
+
   // ── Component protocol ─────────────────────────────────────────────────────
 
   Element body() const;
+};
+
+// `ScrollView` is a composite (`body()`) but uses a dedicated `Element::Model` that matches this
+// subtree protocol instead of the default composite `Model<C>` implementation.
+template<>
+struct Element::Model<ScrollView> final : Element::Concept {
+  ScrollView value;
+  explicit Model(ScrollView c) : value(std::move(c)) {}
+  std::unique_ptr<Concept> clone() const override {
+    return std::make_unique<Model<ScrollView>>(value);
+  }
+  void build(BuildContext& ctx) const override { value.build(ctx); }
+  Size measure(BuildContext& ctx, LayoutConstraints const& c, LayoutHints const& h, TextSystem& ts) const override {
+    return value.measure(ctx, c, h, ts);
+  }
+  float flexGrow() const override { return detail::flexGrowOf(value); }
+  float flexShrink() const override { return detail::flexShrinkOf(value); }
+  float minMainSize() const override { return detail::minMainSizeOf(value); }
+  bool canMemoizeMeasure() const override { return false; }
 };
 
 } // namespace flux
