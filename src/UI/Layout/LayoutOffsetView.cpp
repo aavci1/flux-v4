@@ -24,12 +24,15 @@ void Element::Model<OffsetView>::build(BuildContext& ctx) const {
   float innerW = std::max(0.f, assignedW);
   float innerH = std::max(0.f, assignedH);
 
+  // Viewport size must match the **allocated** frame (innerW/innerH), not the constraint maximum.
+  // ZStack passes a finite maxHeight that can equal the child's intrinsic scroll height; using it
+  // here made viewportHeight == contentHeight (no scroll range).
   float viewportW = innerW;
   float viewportH = innerH;
-  if (std::isfinite(scope.outer.maxWidth) && scope.outer.maxWidth > 0.f) {
+  if (viewportW <= 0.f && std::isfinite(scope.outer.maxWidth) && scope.outer.maxWidth > 0.f) {
     viewportW = scope.outer.maxWidth;
   }
-  if (std::isfinite(scope.outer.maxHeight) && scope.outer.maxHeight > 0.f) {
+  if (viewportH <= 0.f && std::isfinite(scope.outer.maxHeight) && scope.outer.maxHeight > 0.f) {
     viewportH = scope.outer.maxHeight;
   }
 
@@ -121,14 +124,8 @@ Size Element::Model<OffsetView>::measure(BuildContext& ctx, LayoutConstraints co
   float innerW = std::max(0.f, assignedW);
   float innerH = std::max(0.f, assignedH);
 
-  float viewportW = innerW;
-  float viewportH = innerH;
-  if (std::isfinite(constraints.maxWidth) && constraints.maxWidth > 0.f) {
-    viewportW = constraints.maxWidth;
-  }
-  if (std::isfinite(constraints.maxHeight) && constraints.maxHeight > 0.f) {
-    viewportH = constraints.maxHeight;
-  }
+  float const viewportW = innerW;
+  float const viewportH = innerH;
 
   LayoutConstraints childCs = constraints;
   switch (value.axis) {

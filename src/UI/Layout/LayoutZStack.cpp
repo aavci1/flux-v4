@@ -44,6 +44,14 @@ void Element::Model<ZStack>::build(BuildContext& ctx) const {
   }
   innerW = std::max(innerW, maxW);
   innerH = std::max(innerH, maxH);
+  float const slotW = assignedSpan(scope.parentFrame.width, scope.outer.maxWidth);
+  float const slotH = assignedSpan(scope.parentFrame.height, scope.outer.maxHeight);
+  if (slotW > 0.f) {
+    innerW = std::min(innerW, slotW);
+  }
+  if (slotH > 0.f) {
+    innerH = std::min(innerH, slotH);
+  }
 
   LayoutConstraints innerForBuild{};
   innerForBuild.maxWidth = innerW;
@@ -71,7 +79,17 @@ void Element::Model<ZStack>::build(BuildContext& ctx) const {
     }
     float const x = hAlignOffset(alignW, innerW, value.hAlign);
     float const y = vAlignOffset(alignH, innerH, value.vAlign);
-    scope.buildChild(value.children[i], Rect{x, y, alignW, alignH}, innerForBuild);
+    // Child layout rect must not exceed the stack's inner bounds. Otherwise a tall scroll child
+    // (alignH > innerH) still received parentFrame.height == content height and ScrollView saw no range.
+    float outW = alignW;
+    float outH = alignH;
+    if (innerW > 0.f) {
+      outW = std::min(alignW, innerW);
+    }
+    if (innerH > 0.f) {
+      outH = std::min(alignH, innerH);
+    }
+    scope.buildChild(value.children[i], Rect{x, y, outW, outH}, innerForBuild);
   }
 }
 
@@ -102,6 +120,12 @@ Size Element::Model<ZStack>::measure(BuildContext& ctx, LayoutConstraints const&
   }
   innerW = std::max(innerW, maxW);
   innerH = std::max(innerH, maxH);
+  if (assignedW > 0.f) {
+    innerW = std::min(innerW, assignedW);
+  }
+  if (assignedH > 0.f) {
+    innerH = std::min(innerH, assignedH);
+  }
   return {innerW, innerH};
 }
 
