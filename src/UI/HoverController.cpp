@@ -53,8 +53,7 @@ void HoverController::updateForPoint(Point windowPoint, std::vector<OverlayEntry
     OverlayEntry const& oe = *p;
     Point const local{ windowPoint.x - oe.resolvedFrame.x, windowPoint.y - oe.resolvedFrame.y };
     auto const acceptFn = [&oe](NodeId id) -> bool {
-      EventHandlers const* h = oe.eventMap.find(id);
-      return h && !h->cursorPassthrough;
+      return oe.eventMap.find(id) != nullptr;
     };
     HitTester tester{};
     if (auto hit = tester.hitTest(oe.graph, local, acceptFn)) {
@@ -66,14 +65,7 @@ void HoverController::updateForPoint(Point windowPoint, std::vector<OverlayEntry
   }
 
   auto const acceptFn = [&mainEventMap](NodeId id) -> bool {
-    EventHandlers const* h = mainEventMap.find(id);
-    if (!h) {
-      return false;
-    }
-    if (h->cursorPassthrough) {
-      return false;
-    }
-    return true;
+    return mainEventMap.find(id) != nullptr;
   };
 
   auto hit = HitTester{}.hitTest(mainGraph, windowPoint, acceptFn);

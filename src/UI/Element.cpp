@@ -49,8 +49,7 @@ ElementModifiers::ElementModifiers(ElementModifiers const& o)
     , onKeyUp(o.onKeyUp)
     , onTextInput(o.onTextInput)
     , focusable(o.focusable)
-    , cursor(o.cursor)
-    , cursorPassthrough(o.cursorPassthrough) {}
+    , cursor(o.cursor) {}
 
 ElementModifiers& ElementModifiers::operator=(ElementModifiers const& o) {
   if (this != &o) {
@@ -76,7 +75,6 @@ ElementModifiers& ElementModifiers::operator=(ElementModifiers const& o) {
     onTextInput = o.onTextInput;
     focusable = o.focusable;
     cursor = o.cursor;
-    cursorPassthrough = o.cursorPassthrough;
   }
   return *this;
 }
@@ -124,15 +122,13 @@ EventHandlers eventHandlersFromModifiers(ElementModifiers const& m, ComponentKey
       .onTextInput = m.onTextInput,
       .focusable = effFocusable,
       .cursor = m.cursor,
-      .cursorPassthrough = m.cursorPassthrough,
   };
 }
 
 bool shouldInsertHandlers(EventHandlers const& h) {
   return static_cast<bool>(h.onTap) || static_cast<bool>(h.onPointerDown) || static_cast<bool>(h.onPointerUp) ||
          static_cast<bool>(h.onPointerMove) || static_cast<bool>(h.onScroll) || static_cast<bool>(h.onKeyDown) ||
-         static_cast<bool>(h.onKeyUp) || static_cast<bool>(h.onTextInput) || h.focusable ||
-         h.cursor != Cursor::Inherit || h.cursorPassthrough;
+         static_cast<bool>(h.onKeyUp) || static_cast<bool>(h.onTextInput) || h.focusable;
 }
 
 } // namespace
@@ -783,14 +779,6 @@ Element Element::cursor(Cursor c) && {
     modifiers_.emplace();
   }
   modifiers_->cursor = c;
-  return std::move(*this);
-}
-
-Element Element::cursorPassthrough(bool passthrough) && {
-  if (!modifiers_) {
-    modifiers_.emplace();
-  }
-  modifiers_->cursorPassthrough = passthrough;
   return std::move(*this);
 }
 

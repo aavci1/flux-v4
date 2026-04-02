@@ -392,7 +392,7 @@ The default `Element::Model<C>` template detects `RenderComponent` via the conce
 Render leaves support these optional event handler fields (detected via `requires` expressions):
 - `onTap`, `onPointerDown`, `onPointerUp`, `onPointerMove`, `onScroll`
 - `onKeyDown`, `onKeyUp`, `onTextInput`
-- `cursor`, `cursorPassthrough`, `focusable`
+- `cursor`, `focusable`
 
 ---
 

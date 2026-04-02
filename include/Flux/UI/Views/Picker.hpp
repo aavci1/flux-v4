@@ -129,8 +129,6 @@ struct PickerRow : ViewModifiers<PickerRow<T>> {
                                             .maxLines = 1,
                                             .firstBaselineOffset = 0.f,
                                         }
-                                            .onTap(onSelect)
-                                            .cursor(Cursor::Hand)
                                             .size(0.f, rowHeight)
                                             .flex(1.f),
                                         ZStack{
@@ -477,17 +475,13 @@ struct Picker : ViewModifiers<Picker<T>> {
                                 .maxLines = 1,
                                 .firstBaselineOffset = 0.f,
                             }
-                                .onTap(isDisabled ? std::function<void()>{} : std::function<void()>{onTriggerTap})
-                                .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
                                 .size(0.f, h)
                                 .flex(1.f),
                             Rectangle{
                                 .fill = FillStyle::none(),
                                 .stroke = StrokeStyle::none(),
                             }
-                                .size(padHResolved, h)
-                                .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
-                                .onTap(isDisabled ? std::function<void()>{} : std::function<void()>{onTriggerTap}),
+                                .size(padHResolved, h),
                             ZStack{
                                 .hAlign = HorizontalAlignment::Leading,
                                 .vAlign = VerticalAlignment::Center,
@@ -497,9 +491,7 @@ struct Picker : ViewModifiers<Picker<T>> {
                                             .fill = FillStyle::none(),
                                             .stroke = StrokeStyle::none(),
                                         }
-                                            .size(std::max(14.f, chevronIconSz), h)
-                                            .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
-                                            .onTap(isDisabled ? std::function<void()>{} : std::function<void()>{onTriggerTap}),
+                                            .size(std::max(14.f, chevronIconSz), h),
                                         Icon{
                                           .name = isOpen ? IconName::ExpandLess : IconName::ExpandMore,
                                           .size = chevronIconSz,
@@ -511,9 +503,7 @@ struct Picker : ViewModifiers<Picker<T>> {
                                 .fill = FillStyle::none(),
                                 .stroke = StrokeStyle::none(),
                             }
-                                .size(padHResolved, h)
-                                .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
-                                .onTap(isDisabled ? std::function<void()>{} : std::function<void()>{onTriggerTap}),
+                                .size(padHResolved, h),
                         },
                 },
             },

@@ -105,13 +105,12 @@ struct ElementModifiers {
   std::function<void(std::string const&)> onTextInput;
   bool focusable = false;
   Cursor cursor = Cursor::Inherit;
-  bool cursorPassthrough = false;
 
   bool hasInteraction() const noexcept {
     return static_cast<bool>(onTap) || static_cast<bool>(onPointerDown) || static_cast<bool>(onPointerUp) ||
            static_cast<bool>(onPointerMove) || static_cast<bool>(onScroll) || static_cast<bool>(onKeyDown) ||
            static_cast<bool>(onKeyUp) || static_cast<bool>(onTextInput) || focusable ||
-           cursor != Cursor::Inherit || cursorPassthrough;
+           cursor != Cursor::Inherit;
   }
 
   bool needsModifierPass() const {
@@ -195,7 +194,6 @@ public:
   Element onTextInput(std::function<void(std::string const&)> handler) &&;
   Element focusable(bool enabled) &&;
   Element cursor(Cursor c) &&;
-  Element cursorPassthrough(bool passthrough) &&;
 
 private:
   friend class LayoutEngine;
@@ -340,9 +338,6 @@ void Element::Model<C>::build(BuildContext& ctx) const {
     if constexpr (requires { value.cursor; }) {
       handlers.cursor = value.cursor;
     }
-    if constexpr (requires { value.cursorPassthrough; }) {
-      handlers.cursorPassthrough = value.cursorPassthrough;
-    }
     if constexpr (requires { value.focusable; }) {
       handlers.focusable =
           value.focusable || static_cast<bool>(handlers.onKeyDown) || static_cast<bool>(handlers.onKeyUp) ||
@@ -353,8 +348,7 @@ void Element::Model<C>::build(BuildContext& ctx) const {
           static_cast<bool>(handlers.onTextInput);
     }
     if (handlers.onTap || handlers.onPointerDown || handlers.onPointerUp || handlers.onPointerMove ||
-        handlers.onScroll || handlers.onKeyDown || handlers.onKeyUp || handlers.onTextInput || handlers.focusable ||
-        handlers.cursor != Cursor::Inherit || handlers.cursorPassthrough) {
+        handlers.onScroll || handlers.onKeyDown || handlers.onKeyUp || handlers.onTextInput || handlers.focusable) {
       ctx.eventMap().insert(id, std::move(handlers));
     }
   } else {
@@ -603,11 +597,6 @@ Element ViewModifiers<Derived>::focusable(bool enabled) && {
 template<typename Derived>
 Element ViewModifiers<Derived>::cursor(Cursor c) && {
   return Element{std::move(static_cast<Derived&>(*this))}.cursor(c);
-}
-
-template<typename Derived>
-Element ViewModifiers<Derived>::cursorPassthrough(bool passthrough) && {
-  return Element{std::move(static_cast<Derived&>(*this))}.cursorPassthrough(passthrough);
 }
 
 template<typename Derived>

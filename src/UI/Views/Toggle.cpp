@@ -132,8 +132,6 @@ Element Toggle::body() const {
         }
             .position(*thumbXAnim, thumbInset)
             .size(thumbSize, thumbSize)
-            .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
-            .cursorPassthrough(true)
             .cornerRadius(CornerRadius{thumbSize * 0.5f}),
       },
     },

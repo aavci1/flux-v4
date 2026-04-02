@@ -46,7 +46,6 @@ struct ViewModifiers {
   Element onTextInput(std::function<void(std::string const&)> handler) &&;
   Element focusable(bool enabled) &&;
   Element cursor(Cursor c) &&;
-  Element cursorPassthrough(bool passthrough) &&;
 
   Element flex(float grow, float shrink = 1.f, float minMain = 0.f) &&;
   template<typename T>

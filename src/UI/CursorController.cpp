@@ -40,9 +40,6 @@ void CursorController::updateForPoint(Point windowPoint, GestureTracker const& g
       if (!h) {
         return false;
       }
-      if (h->cursorPassthrough) {
-        return false;
-      }
       if (h->cursor == Cursor::Inherit) {
         return false;
       }
@@ -60,9 +57,6 @@ void CursorController::updateForPoint(Point windowPoint, GestureTracker const& g
   auto const acceptFn = [&mainEventMap](NodeId id) {
     EventHandlers const* h = mainEventMap.find(id);
     if (!h) {
-      return false;
-    }
-    if (h->cursorPassthrough) {
       return false;
     }
     if (h->cursor == Cursor::Inherit) {

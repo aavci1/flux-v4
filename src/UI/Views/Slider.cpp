@@ -210,8 +210,6 @@ Element Slider::body() const {
             }
                 .position(thumbX + thumbOffset, thumbY)
                 .size(thumbDiameter, thumbDiameter)
-                .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
-                .cursorPassthrough(!isDisabled)
                 .cornerRadius(CornerRadius{thumbDiameter * 0.5f}),
         },
     };

@@ -14,7 +14,7 @@
 
 namespace flux {
 
-/// Prefer non-cursorPassthrough targets; fall back to all targets if none found.
+/// First interactive node under the pointer (see \ref EventMap).
 std::optional<HitResult> hitTestPointerTarget(EventMap const& em, SceneGraph const& graph,
                                               Point windowPoint);
 

@@ -46,7 +46,7 @@ Element ScrollView::body() const {
   ScrollAxis const ax = axis;
   std::vector<Element> contentChildren = children;
 
-  return ZStack{
+  return Element{ZStack{
       .hAlign = HorizontalAlignment::Leading,
       .vAlign = VerticalAlignment::Top,
       .clip = true,
@@ -59,47 +59,41 @@ Element ScrollView::body() const {
                   .contentSize = content,
                   .children = std::move(contentChildren),
               },
-              Rectangle{
-                  .fill = FillStyle::none(),
-                  .stroke = StrokeStyle::none(),
-              }
-                  .cursorPassthrough(true)
-                  .onPointerDown(
-                      [dragging, offset, downPoint](Point p) {
-                        dragging = true;
-                        downPoint = Point{p.x + (*offset).x, p.y + (*offset).y};
-                      })
-                  .onPointerUp(
-                      [dragging](Point) {
-                        dragging = false;
-                      })
-                  .onPointerMove(
-                      [offset, downPoint, ax, content, dragging, effectiveViewport](Point p) {
-                        if (!*dragging) {
-                          return;
-                        }
-                        Point const next{(*downPoint).x - p.x, (*downPoint).y - p.y};
-                        offset = clampScrollOffset(ax, next, effectiveViewport, *content);
-                      })
-                  .onScroll(
-                      [offset, ax, content, effectiveViewport](Vec2 d) {
-                        Point next = *offset;
-                        // scrollingDelta* is expressed for non-flipped NSView coords (y up). Flux uses
-                        // a flipped space (y down), so negate to align. Natural Scrolling is already in
-                        // the delta sign from AppKit; this is only the coordinate-system fix.
-                        if (ax == ScrollAxis::Vertical || ax == ScrollAxis::Both) {
-                          next.y -= d.y;
-                        }
-                        if (ax == ScrollAxis::Horizontal || ax == ScrollAxis::Both) {
-                          next.x -= d.x;
-                        }
-                        Point const clamped =
-                            clampScrollOffset(ax, next, effectiveViewport, *content);
-                        offset = clamped;
-                      })
-                  .flex(1.f),
           },
-  };
+  }}
+      .onPointerDown(
+          [dragging, offset, downPoint](Point p) {
+            dragging = true;
+            downPoint = Point{p.x + (*offset).x, p.y + (*offset).y};
+          })
+      .onPointerUp(
+          [dragging](Point) {
+            dragging = false;
+          })
+      .onPointerMove(
+          [offset, downPoint, ax, content, dragging, effectiveViewport](Point p) {
+            if (!*dragging) {
+              return;
+            }
+            Point const next{(*downPoint).x - p.x, (*downPoint).y - p.y};
+            offset = clampScrollOffset(ax, next, effectiveViewport, *content);
+          })
+      .onScroll(
+          [offset, ax, content, effectiveViewport](Vec2 d) {
+            Point next = *offset;
+            // scrollingDelta* is expressed for non-flipped NSView coords (y up). Flux uses
+            // a flipped space (y down), so negate to align. Natural Scrolling is already in
+            // the delta sign from AppKit; this is only the coordinate-system fix.
+            if (ax == ScrollAxis::Vertical || ax == ScrollAxis::Both) {
+              next.y -= d.y;
+            }
+            if (ax == ScrollAxis::Horizontal || ax == ScrollAxis::Both) {
+              next.x -= d.x;
+            }
+            Point const clamped =
+                clampScrollOffset(ax, next, effectiveViewport, *content);
+            offset = clamped;
+          });
 }
 
 } // namespace flux

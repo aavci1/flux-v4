@@ -39,8 +39,6 @@ struct EventHandlers {
   bool focusable = false;
 
   Cursor cursor = Cursor::Inherit;
-  /// When true, cursor hit-testing skips this node so the shape under it (e.g. scroll content) wins.
-  bool cursorPassthrough = false;
 };
 
 struct NodeIdHash {
