@@ -200,10 +200,20 @@ struct MyView {
 Or override them on the `Element` wrapper:
 
 ```cpp
-Element{MyView{...}}.withFlex(/*grow=*/1.f, /*shrink=*/1.f, /*minMain=*/50.f)
+Element{MyView{...}}.flex(/*grow=*/1.f, /*shrink=*/1.f, /*minMain=*/50.f)
 ```
 
 `Spacer` has implicit `flexGrow = 1.f` and `flexShrink = 0.f`.
+
+### Element modifiers (flat storage)
+
+`Element` can carry an optional **`ElementModifiers`** block (`include/Flux/UI/Element.hpp`): padding, background, border, corner radius, opacity, offset, clip, tap handler, optional fixed **frame** sizes, and an optional **overlay** subtree. When present, `Element::build`/`measure` apply these in one pass instead of nesting extra `VStack`/`ZStack`/`Rectangle` wrappers for each modifier.
+
+- **Build order** (outside-in): effect **layer** (opacity + translation + optional clip rect) when needed → **one** merged **`RectNode`** for fill/stroke/corners → **tap** on that decoration rect when set → **padding** tightens the frame/constraints for the inner view → `impl_->build` (and overlay build when set).
+- **Measure**: constraints are tightened by padding before delegating to the inner implementation; reported size adds padding back; **frame** modifiers can override width/height on the outer box.
+- **CRTP `ViewModifiers`**: view structs expose the same names as `Element` (`padding`, `background`, `flex`, `environment`, …). Chaining produces a single `Element` with accumulated modifier fields.
+- **`Rectangle` layout fields** (`offsetX`/`offsetY`/`width`/`height`, flex on the struct) remain the primitive’s way to position/s size in stacks. The **`Element::offset`** modifier is a **layer transform** (with opacity/clip), not a substitute for that layout box.
+- **Containers** (`VStack`/`HStack` **`.padding`**) still mean “inset children in layout” on the container struct; that is separate from the **`padding()`** modifier on `Element`.
 
 Flex distribution follows CSS flexbox semantics:
 - **Grow**: extra space distributed proportional to `flexGrow` weight

@@ -23,7 +23,9 @@ Conventions for the `auto body() const` member that returns a Flux view (designa
 
 ## Wrapping and modifiers
 
-- Use **`Element { … }.withFlex(…)`** (and similar) when the inner view needs layout modifiers: put the inner view’s fields one indent inside `Element {`, and keep **`.withFlex(…)`** on the closing `}` before the comma.
+- Views that inherit **`ViewModifiers`** (e.g. `Text`, `Rectangle`, `Button`) can call **`padding`**, **`background`**, **`frame`**, **`flex`**, **`environment`**, etc. directly on the struct; each returns an **`Element`** so you can chain: `Text{…}.padding(8.f).background(fill).flex(1.f)`.
+- When you need an **`Element{…}`** wrapper (e.g. wrapping a composite that does not use `ViewModifiers`), put the inner view’s fields one indent inside **`Element {`**, and keep chained calls such as **`.flex(…)`** on the closing `}` before the comma.
+- See **Element modifiers** in [`layout-system.md`](layout-system.md) for how decoration maps to the scene graph (single merged `RectNode` / `LayerNode` path).
 
 ## Colors and `main`
 

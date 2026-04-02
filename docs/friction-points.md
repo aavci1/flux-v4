@@ -4,11 +4,11 @@ Here's my analysis, grounded in the concrete code I've read across the system.
 
 ## Friction Points for Consumers (App Developers)
 
-**1. No modifier/decoration chain.** Adding a background behind a `Text` requires wrapping it in a `ZStack` with a `Rectangle`. Adding padding? Some views have a `padding` field, others don't. There's no `.padding(8).background(color).frame(w, h)` chain — every decoration is a manual container nesting. Compare `Button::body()` where a simple styled button needs `ScaleAroundCenter > ZStack > [Rectangle, Text]` — three layers for one button.
+**1. Modifier / decoration chain — ✅ addressed (Element).** `Element` stores **flat modifiers** (`ElementModifiers`) and applies them in one build/measure path (merged `RectNode` / optional `LayerNode` instead of nesting a new `ZStack`/`Rectangle` per modifier). Views that inherit **`ViewModifiers`** can chain **`Text{…}.padding(8).background(…).frame(w,h).flex(…)`**. Composite controls (e.g. `Button::body()`) still use explicit **`ZStack`/`Rectangle`/`Text`** where the design is a custom layered control, not because every decoration must be manual nesting.
 
 **2. Verbose child list construction with hidden copies.** Children are `std::vector<Element>`, and brace-initialization goes through `std::initializer_list` which forces copies. Each copy clones the `impl_` (heap allocation) and allocates a new `measureId_`. For deeply nested UIs this is a lot of silent work at tree construction time.
 
-**3. The sizing model is inconsistent across leaf types.** `Rectangle` and `Text` use `Rect frame` for explicit sizing, where `{0,0,0,0}` means "fill parent." `Image` also uses `Rect frame`. But flex uses `float minSize`. Meanwhile `Spacer` uses `float minLength`. Some views have `padding`, some don't. The mental model for "how big will this be?" requires knowing which of three resolution paths applies (`resolveLeafBounds` vs `resolveRectangleBounds` vs the text-specific measuring), each with subtly different fallback logic.
+**3. The sizing model is still inconsistent across leaf types (partially improved).** **`Text`** no longer carries inline `width`/`height`/`padding` — use **`Element` modifiers** (`frame`, `padding`, `flex`, …) for box and flex. **`Image`** defers size/opacity/corners to **`Element`** modifiers where needed. **`Rectangle`** still keeps **`offsetX`/`offsetY`/`width`/`height`** and flex fields on the struct for ZStack layout positioning (distinct from **`Element::offset`**, which is a layer transform). **`Spacer`** still uses **`minLength`**. Resolving bounds still goes through **`resolveLeafBounds`** vs **`resolveRectangleBounds`** depending on the leaf; the mental model for “how big?” remains multi-path.
 
 **4. Flex silently does nothing in unconstrained parents.** Setting `flexGrow = 1.f` on a child has zero effect if the parent VStack/HStack itself has an unconstrained main axis. There's no warning — the child just gets its natural size. This is a common source of "why isn't this stretching?" confusion.
 
@@ -108,7 +108,9 @@ Standardize how views declare their size:
 - Eliminate `Rect frame` on leaves as a sizing mechanism (it conflates position and size)
 - Use explicit `float width = 0, height = 0` on all views (0 = fill parent)
 - Make `resolveLeafBounds` the single path, remove `resolveRectangleBounds` special case
-- Make `padding` available on all views through a common mechanism (environment or wrapper)
+- **Decoration padding / backgrounds:** use **`Element` modifiers** (`padding()`, `background()`, …) — see **Element modifiers** in `docs/layout-system.md`. **Intrinsic layout padding** on containers (`VStack`/`HStack` **`.padding`**) remains separate.
+
+**Progress:** `Text`/`Image` inline style/size fields were removed in favor of modifiers; **`Rectangle`** still uses explicit layout fields for stack positioning.
 
 ### G. Reduce `Element.hpp` compilation fan-out
 
