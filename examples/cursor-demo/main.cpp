@@ -38,7 +38,8 @@ Element cursorSwatchRow(std::string name, Cursor cursor, Color chip) {
                             Text{.text = std::move(name),
                                  .font = {.size = 14.f, .weight = 600.f},
                                  .color = pal::label,
-                                 .offsetX = 152.f, .offsetY = 0.f, .width = 0.f, .height = 0.f},
+                             }
+                                .frame(152.f, 0.f),
                             Rectangle{
                                 .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 44.f,
                                 .cornerRadius = CornerRadius(8.f),
@@ -49,7 +50,7 @@ Element cursorSwatchRow(std::string name, Cursor cursor, Color chip) {
                             },
                         },
                 }
-                  .withFlex(1.f),
+                  .flex(1.f),
           },
   };
 }
@@ -88,7 +89,7 @@ struct CursorDemo {
                                                             .color = pal::sub,
                                                             .wrapping = TextWrapping::Wrap,
                                                         }
-                                                        .withFlex(1.f),
+                                                        .flex(1.f),
                                                 },
                                         },
                                     },
@@ -130,24 +131,21 @@ struct CursorDemo {
                                                                     .text = "Text + IBeam",
                                                                     .font = {.size = 14.f, .weight = 600.f},
                                                                     .color = pal::label,
-                                                                    .offsetX = 152.f, .offsetY = 0.f, .width = 0.f, .height = 0.f},
+                                                                }
+                                                                    .frame(152.f, 0.f),
                                                                 Text{
                                                                     .text = "Read-only label — cursor is I-beam over "
                                                                             "glyphs (no pointer handlers).",
                                                                     .font = {.size = 14.f, .weight = 400.f},
-                                                                    .background = FillStyle::solid(
-                                                                        Color::hex(0xFFFFFF)),
-                                                                    .border = StrokeStyle::solid(
-                                                                        Color::hex(0xC8C8D0), 1.f),
                                                                     .color = pal::label,
                                                                     .wrapping = TextWrapping::Wrap,
-                                                                    .padding = 10.f,
-                                                                    .cornerRadius = CornerRadius(8.f),
-                                                                    .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 0.f,
-                                                                    .flexGrow = 1.f,
                                                                     .cursor = Cursor::IBeam,
                                                                 }
-                                                                    .withFlex(1.f),
+                                                                    .padding(10.f)
+                                                                    .background(FillStyle::solid(Color::hex(0xFFFFFF)))
+                                                                    .border(StrokeStyle::solid(Color::hex(0xC8C8D0), 1.f))
+                                                                    .cornerRadius(CornerRadius(8.f))
+                                                                    .flex(1.f),
                                                             },
                                                     },
 
@@ -176,7 +174,7 @@ struct CursorDemo {
                                                                                     },
                                                                                 },
                                                                         }
-                                                                    .withFlex(1.f),
+                                                                    .flex(1.f),
                                                             },
                                                     },
                                                 },

@@ -16,19 +16,18 @@ Element Icon::body() const {
 
     std::string utf8 = encodeUtf8(iconCodepoint(name));
 
-    return Text {
-        .text = std::move(utf8),
-        .font = Font {
-            .family = theme.iconFontFamily,
-            .size = sz * 1.25f,
-            .weight = wght * 1.25f,
-        },
-        .color = col,
-        .horizontalAlignment = HorizontalAlignment::Center,
-        .verticalAlignment = VerticalAlignment::Center,
-        .width = sz,
-        .height = sz,
-    };
+    return Text{
+               .text = std::move(utf8),
+               .font = Font{
+                   .family = theme.iconFontFamily,
+                   .size = sz * 1.25f,
+                   .weight = wght * 1.25f,
+               },
+               .color = col,
+               .horizontalAlignment = HorizontalAlignment::Center,
+               .verticalAlignment = VerticalAlignment::Center,
+           }
+        .frame(sz, sz);
 }
 
 } // namespace flux

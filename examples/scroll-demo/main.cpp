@@ -38,7 +38,8 @@ int main(int argc, char* argv[]) {
                    .font = {.size = 28.f, .weight = 600.f},
                    .color = Color::rgb(18, 18, 24),
                    .horizontalAlignment = HorizontalAlignment::Center,
-                   .padding = 16.f},
+               }
+                  .padding(16.f),
               ScrollView{
                   .axis = ScrollAxis::Vertical,
                   .flexGrow = 1.f,

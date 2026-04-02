@@ -211,7 +211,10 @@ Element Button::body() const {
     .children =
         {
             Rectangle{
-                .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = h ,
+                .offsetX = 0.f,
+                .offsetY = 0.f,
+                .width = 0.f,
+                .height = h,
                 .cornerRadius = cr,
                 .fill = FillStyle::solid(*fillAnim),
                 .stroke = stroke,
@@ -229,10 +232,10 @@ Element Button::body() const {
                 .color = *labelAnim,
                 .horizontalAlignment = isLink ? HorizontalAlignment::Leading : HorizontalAlignment::Center,
                 .verticalAlignment = VerticalAlignment::Center,
-                .padding = effPaddingH,
                 .onTap = effectivelyDisabled ? nullptr : std::function<void()>{ handleTap },
                 .cursor = effectivelyDisabled ? Cursor::Inherit : Cursor::Hand,
-            },
+            }
+                .padding(effPaddingH),
         },
   };
 

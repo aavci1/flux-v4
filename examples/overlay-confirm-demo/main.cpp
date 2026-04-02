@@ -70,7 +70,7 @@ struct ConfirmDialog {
                                                                              .font = {.size = 14.f, .weight = 400.f},
                                                                              .color = pal::bodyC,
                                                                              .wrapping = TextWrapping::Wrap}
-                                                                    .withFlex(1.f),
+                                                                    .flex(1.f),
                                                             },
                                                     },
                                                     HStack{
@@ -101,7 +101,7 @@ struct ConfirmDialog {
                                                                                  .horizontalAlignment = HorizontalAlignment::Center,
                                                                                  .verticalAlignment = VerticalAlignment::Center},
                                                                         },
-                                                                }.withFlex(1.f),
+                                                                }.flex(1.f),
                                                                 ZStack{
                                                                     .children =
                                                                         {
@@ -126,7 +126,7 @@ struct ConfirmDialog {
                                                                                  .horizontalAlignment = HorizontalAlignment::Center,
                                                                                  .verticalAlignment = VerticalAlignment::Center},
                                                                         },
-                                                                }.withFlex(1.f),
+                                                                }.flex(1.f),
                                                             },
                                                     },
                                                 },
@@ -155,7 +155,7 @@ struct FileManagerRow {
         .padding = 8.f,
         .children =
             {
-                Text{.text = filename, .font = {.size = 15.f, .weight = 400.f}, .color = pal::titleC, .flexGrow = 1.f},
+                Text{.text = filename, .font = {.size = 15.f, .weight = 400.f}, .color = pal::titleC}.flex(1.f),
                 ZStack{
                     .children =
                         {
@@ -227,11 +227,11 @@ struct OverlayConfirmRoot {
                                                 .color = pal::bodyC,
                                                 .wrapping = TextWrapping::Wrap,
                                             }
-                                            .withFlex(1.f),
+                                            .flex(1.f),
                                     },
                             },
-                            Element{FileManagerRow{.filename = "notes.txt", .onDelete = [] {}}}.withFlex(1.f),
-                            Element{FileManagerRow{.filename = "draft.md", .onDelete = [] {}}}.withFlex(1.f),
+                            Element{FileManagerRow{.filename = "notes.txt", .onDelete = [] {}}}.flex(1.f),
+                            Element{FileManagerRow{.filename = "draft.md", .onDelete = [] {}}}.flex(1.f),
                         },
                 },
             },

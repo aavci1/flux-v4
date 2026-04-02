@@ -74,7 +74,7 @@ struct FocusField {
                                               }
                                             },
                                     }
-                                .withFlex(1.f),
+                                .flex(1.f),
                         },
                 },
                 HStack{
@@ -85,7 +85,7 @@ struct FocusField {
                                         .font = {.size = 13.f, .weight = 400.f},
                                         .color = pal::sublabel,
                                         .wrapping = TextWrapping::Wrap}
-                                .withFlex(1.f),
+                                .flex(1.f),
                         },
                 },
             },
@@ -122,7 +122,7 @@ struct FocusDemoRoot {
                                                 .color = pal::sublabel,
                                                 .wrapping = TextWrapping::Wrap,
                                             }
-                                            .withFlex(1.f),
+                                            .flex(1.f),
                                     },
                             },
                             HStack{
@@ -130,9 +130,9 @@ struct FocusDemoRoot {
                                 .vAlign = VerticalAlignment::Top,
                                 .children =
                                     {
-                                        Element{FocusField{.title = "Field A — notes"}}.withFlex(1.f),
-                                        Element{FocusField{.title = "Field B — scratch"}}.withFlex(1.f),
-                                        Element{FocusField{.title = "Field C — extra"}}.withFlex(1.f),
+                                        Element{FocusField{.title = "Field A — notes"}}.flex(1.f),
+                                        Element{FocusField{.title = "Field B — scratch"}}.flex(1.f),
+                                        Element{FocusField{.title = "Field C — extra"}}.flex(1.f),
                                     },
                             },
                         },

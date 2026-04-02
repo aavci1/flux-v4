@@ -50,7 +50,7 @@ struct ButtonDemoRoot {
                                                 .color = Color::hex(0x6E6E80),
                                                 .wrapping = TextWrapping::Wrap,
                                             }
-                                            .withFlex(1.f),
+                                            .flex(1.f),
                                     },
                             },
                             Text{ .text = "Variants",

@@ -193,7 +193,7 @@ struct TextEditor {
                                       selEnd = p;
                                     },
                             }
-                                .withFlex(1.f),
+                                .flex(1.f),
                         },
                 },
                 HStack{
@@ -204,7 +204,7 @@ struct TextEditor {
                                  .font = {.size = 14.f, .weight = 400.f},
                                  .color = Color::hex(0x3A3A44),
                                  .wrapping = TextWrapping::Wrap}
-                                .withFlex(1.f),
+                                .flex(1.f),
                         },
                 },
             },
@@ -237,15 +237,15 @@ struct Toolbar {
 
     auto pill = [](char const* label, bool enabled, std::function<void()> tap) {
       return Text{
-          .text = label,
-          .font = {.size = 13.f, .weight = 600.f},
-          .background = FillStyle::solid(enabled ? Color::hex(0xECECF0) : Color::hex(0xF5F5F7)),
-          .border = StrokeStyle::solid(Color::hex(0xC8C8D0), 1.f),
-          .color = enabled ? Color::hex(0x111118) : Color::hex(0xAAAAAA),
-          .padding = 8.f,
-          .cornerRadius = CornerRadius(6.f),
-          .onTap = enabled ? std::move(tap) : std::function<void()>{},
-      };
+                 .text = label,
+                 .font = {.size = 13.f, .weight = 600.f},
+                 .color = enabled ? Color::hex(0x111118) : Color::hex(0xAAAAAA),
+                 .onTap = enabled ? std::move(tap) : std::function<void()>{},
+             }
+          .padding(8.f)
+          .background(FillStyle::solid(enabled ? Color::hex(0xECECF0) : Color::hex(0xF5F5F7)))
+          .border(StrokeStyle::solid(Color::hex(0xC8C8D0), 1.f))
+          .cornerRadius(CornerRadius(6.f));
     };
 
     return HStack{
@@ -327,7 +327,7 @@ struct EditorRoot {
                                                         .color = Color::hex(0x6E6E80),
                                                         .wrapping = TextWrapping::Wrap,
                                                     }
-                                                        .withFlex(1.f),
+                                                        .flex(1.f),
                                                 },
                                         },
                                         HStack{
@@ -337,10 +337,10 @@ struct EditorRoot {
                                                     Element{TextEditor{.text = text,
                                                                       .selStart = selStart,
                                                                       .selEnd = selEnd}}
-                                                        .withFlex(1.f),
+                                                        .flex(1.f),
                                                 },
                                         }
-                                            .withFlex(1.f),
+                                            .flex(1.f),
                                     },
                             },
                         },

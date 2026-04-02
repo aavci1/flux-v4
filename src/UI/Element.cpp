@@ -14,14 +14,50 @@
 #include <Flux/Scene/SceneGraph.hpp>
 
 #include <Flux/UI/Views/Rectangle.hpp>
-#include <Flux/UI/Views/VStack.hpp>
-#include <Flux/UI/Views/ZStack.hpp>
+
+#include "UI/Layout/ContainerScope.hpp"
+#include "UI/Layout/LayoutHelpers.hpp"
 
 #include <algorithm>
 #include <cassert>
 #include <cmath>
+#include <limits>
 
 namespace flux {
+
+using namespace flux::layout;
+
+ElementModifiers::ElementModifiers(ElementModifiers const& o)
+    : padding(o.padding)
+    , background(o.background)
+    , border(o.border)
+    , cornerRadius(o.cornerRadius)
+    , opacity(o.opacity)
+    , offset(o.offset)
+    , clip(o.clip)
+    , onTap(o.onTap)
+    , frameWidth(o.frameWidth)
+    , frameHeight(o.frameHeight)
+    , overlay(o.overlay ? std::make_unique<Element>(*o.overlay) : nullptr) {}
+
+ElementModifiers& ElementModifiers::operator=(ElementModifiers const& o) {
+  if (this != &o) {
+    padding = o.padding;
+    background = o.background;
+    border = o.border;
+    cornerRadius = o.cornerRadius;
+    opacity = o.opacity;
+    offset = o.offset;
+    clip = o.clip;
+    onTap = o.onTap;
+    frameWidth = o.frameWidth;
+    frameHeight = o.frameHeight;
+    overlay = o.overlay ? std::make_unique<Element>(*o.overlay) : nullptr;
+  }
+  return *this;
+}
+
+ElementModifiers::~ElementModifiers() = default;
 
 namespace {
 
@@ -44,140 +80,13 @@ Rect explicitLeafBox(Rectangle const& v) {
   return {v.offsetX, v.offsetY, v.width, v.height};
 }
 
-Rect explicitLeafBox(Text const& v) {
-  return {v.offsetX, v.offsetY, v.width, v.height};
+Rect explicitLeafBox(Text const&) {
+  return {};
 }
 
-Rect explicitLeafBox(views::Image const& v) {
-  return {v.offsetX, v.offsetY, v.width, v.height};
+Rect explicitLeafBox(views::Image const&) {
+  return {};
 }
-
-struct PaddingModifier {
-  float amount{};
-  Element child;
-  Element body() const {
-    return Element{VStack{.padding = amount, .children = {child}}};
-  }
-};
-
-struct BackgroundModifier {
-  FillStyle fill;
-  Element child;
-  Element body() const {
-    return Element{ZStack{
-        .hAlign = HorizontalAlignment::Leading,
-        .vAlign = VerticalAlignment::Top,
-        .children =
-            {
-                Element{Rectangle{.width = 0.f, .height = 0.f, .fill = fill}},
-                child,
-            },
-    }};
-  }
-};
-
-struct FrameModifier {
-  float w{};
-  float h{};
-  Element child;
-  Element body() const {
-    return Element{ZStack{
-        .hAlign = HorizontalAlignment::Leading,
-        .vAlign = VerticalAlignment::Top,
-        .children =
-            {
-                Element{Rectangle{.width = w, .height = h, .fill = FillStyle::none()}},
-                child,
-            },
-    }};
-  }
-};
-
-struct BorderModifier {
-  StrokeStyle stroke;
-  Element child;
-  Element body() const {
-    return Element{ZStack{
-        .hAlign = HorizontalAlignment::Leading,
-        .vAlign = VerticalAlignment::Top,
-        .children =
-            {
-                Element{Rectangle{
-                    .width = 0.f,
-                    .height = 0.f,
-                    .fill = FillStyle::none(),
-                    .stroke = stroke,
-                }},
-                child,
-            },
-    }};
-  }
-};
-
-struct CornerModifier {
-  CornerRadius radius{};
-  Element child;
-  Element body() const {
-    return Element{ZStack{
-        .hAlign = HorizontalAlignment::Leading,
-        .vAlign = VerticalAlignment::Top,
-        .children =
-            {
-                Element{Rectangle{
-                    .cornerRadius = radius,
-                    .fill = FillStyle::none(),
-                }},
-                child,
-            },
-    }};
-  }
-};
-
-struct ClipModifier {
-  bool clip{};
-  Element child;
-  Element body() const {
-    return Element{ZStack{
-        .hAlign = HorizontalAlignment::Leading,
-        .vAlign = VerticalAlignment::Top,
-        .clip = clip,
-        .children = {child},
-    }};
-  }
-};
-
-struct OverlayModifier {
-  Element under;
-  Element over;
-  Element body() const {
-    return Element{ZStack{
-        .hAlign = HorizontalAlignment::Leading,
-        .vAlign = VerticalAlignment::Top,
-        .children = {under, over},
-    }};
-  }
-};
-
-struct TapModifier {
-  std::function<void()> onTap;
-  Element child;
-  Element body() const {
-    return Element{ZStack{
-        .hAlign = HorizontalAlignment::Leading,
-        .vAlign = VerticalAlignment::Top,
-        .children =
-            {
-                child,
-                Element{Rectangle{
-                    .width = 0.f,
-                    .height = 0.f,
-                    .fill = FillStyle::none(),
-                    .onTap = onTap,
-                }},
-            },
-    }};
-  }
-};
 
 } // namespace
 
@@ -186,11 +95,125 @@ void Element::build(BuildContext& ctx) const {
   if (envLayer_) {
     EnvironmentStack::current().push(*envLayer_);
   }
-  impl_->build(ctx);
+  if (modifiers_ && modifiers_->needsModifierPass()) {
+    buildWithModifiers(ctx);
+  } else {
+    impl_->build(ctx);
+  }
   if (envLayer_) {
     EnvironmentStack::current().pop();
   }
   layoutDebugPopElementBuild();
+}
+
+void Element::buildWithModifiers(BuildContext& ctx) const {
+  ElementModifiers const& m = *modifiers_;
+  ComponentKey const stableKey = ctx.leafComponentKey();
+  ContainerBuildScope scope(ctx);
+  float const assignedW = assignedSpan(scope.parentFrame.width, scope.outer.maxWidth);
+  float const assignedH = assignedSpan(scope.parentFrame.height, scope.outer.maxHeight);
+  float outerW = std::max(0.f, assignedW);
+  float outerH = std::max(0.f, assignedH);
+
+  bool const needEffectLayer = m.opacity < 1.f - 1e-6f || std::fabs(m.offset.x) > 1e-6f ||
+                               std::fabs(m.offset.y) > 1e-6f || m.clip;
+  bool const needBg = !m.background.isNone() || !m.border.isNone() || !m.cornerRadius.isZero();
+
+  if (needEffectLayer) {
+    LayerNode layer{};
+    layer.opacity = m.opacity;
+    layer.transform =
+        Mat3::translate(scope.parentFrame.x + m.offset.x, scope.parentFrame.y + m.offset.y);
+    if (m.clip && outerW > 0.f && outerH > 0.f) {
+      layer.clip = Rect{0.f, 0.f, outerW, outerH};
+    }
+    NodeId const layerId = ctx.graph().addLayer(ctx.parentLayer(), std::move(layer));
+    scope.pushCustomLayer(layerId);
+  }
+
+  Rect const absOuter = scope.parentFrame;
+  Rect const localOuter{0.f, 0.f, outerW, outerH};
+  Rect const bgBounds = needEffectLayer ? localOuter : absOuter;
+
+  bool const needHitRect = needBg || static_cast<bool>(m.onTap);
+  if (needHitRect) {
+    FillStyle fill = FillStyle::none();
+    StrokeStyle stroke = StrokeStyle::none();
+    if (needBg) {
+      fill = m.background;
+      stroke = m.border;
+    }
+    NodeId const rid = ctx.graph().addRect(ctx.parentLayer(), RectNode{
+        .bounds = bgBounds,
+        .cornerRadius = m.cornerRadius,
+        .fill = std::move(fill),
+        .stroke = std::move(stroke),
+    });
+    if (m.onTap) {
+      ctx.eventMap().insert(rid, EventHandlers{.stableTargetKey = stableKey, .onTap = m.onTap});
+    }
+  }
+
+  float const pad = std::max(0.f, m.padding);
+  float innerW = std::max(0.f, outerW - 2.f * pad);
+  float innerH = std::max(0.f, outerH - 2.f * pad);
+  Rect const innerFrame = needEffectLayer ? Rect{pad, pad, innerW, innerH}
+                                          : Rect{absOuter.x + pad, absOuter.y + pad, innerW, innerH};
+
+  LayoutConstraints innerCs = scope.outer;
+  innerCs.maxWidth = innerW > 0.f ? innerW : std::numeric_limits<float>::infinity();
+  innerCs.maxHeight = innerH > 0.f ? innerH : std::numeric_limits<float>::infinity();
+
+  scope.le.setChildFrame(innerFrame);
+  ctx.pushConstraints(innerCs);
+  impl_->build(ctx);
+  ctx.popConstraints();
+
+  if (m.overlay) {
+    LayoutConstraints overlayCs = scope.outer;
+    overlayCs.maxWidth = outerW > 0.f ? outerW : std::numeric_limits<float>::infinity();
+    overlayCs.maxHeight = outerH > 0.f ? outerH : std::numeric_limits<float>::infinity();
+    Rect const overFrame = needEffectLayer ? localOuter : absOuter;
+    scope.le.setChildFrame(overFrame);
+    ctx.pushConstraints(overlayCs);
+    m.overlay->build(ctx);
+    ctx.popConstraints();
+  }
+}
+
+Size Element::measureWithModifiersImpl(BuildContext& ctx, LayoutConstraints const& constraints,
+                                       LayoutHints const& hints, TextSystem& textSystem) const {
+  ElementModifiers const& m = *modifiers_;
+  float const pad2 = m.padding * 2.f;
+  LayoutConstraints innerCs = constraints;
+  if (pad2 > 0.f) {
+    if (std::isfinite(innerCs.maxWidth)) {
+      innerCs.maxWidth -= pad2;
+    }
+    if (std::isfinite(innerCs.maxHeight)) {
+      innerCs.maxHeight -= pad2;
+    }
+  }
+
+  Size sz{};
+  if (m.overlay) {
+    ContainerMeasureScope scope(ctx);
+    Size const szUnder = impl_->measure(ctx, innerCs, hints, textSystem);
+    Size const szOver = m.overlay->measure(ctx, innerCs, hints, textSystem);
+    sz.width = std::max(szUnder.width, szOver.width) + pad2;
+    sz.height = std::max(szUnder.height, szOver.height) + pad2;
+  } else {
+    sz = impl_->measure(ctx, innerCs, hints, textSystem);
+    sz.width += pad2;
+    sz.height += pad2;
+  }
+  if (m.frameWidth > 0.f) {
+    sz.width = m.frameWidth;
+  }
+  if (m.frameHeight > 0.f) {
+    sz.height = m.frameHeight;
+  }
+  return sz;
 }
 
 Size Element::measure(BuildContext& ctx, LayoutConstraints const& constraints,
@@ -199,9 +222,24 @@ Size Element::measure(BuildContext& ctx, LayoutConstraints const& constraints,
     EnvironmentStack::current().push(*envLayer_);
   }
   Size sz{};
-  // `measureCache` is keyed by measureId + constraints (see MeasureCache.hpp), not by leaf content.
   MeasureCache* const mc = envLayer_ ? nullptr : ctx.measureCache();
-  if (mc && impl_->canMemoizeMeasure()) {
+  bool const canMemo =
+      mc && impl_->canMemoizeMeasure() && (!modifiers_ || !modifiers_->overlay);
+
+  if (modifiers_ && modifiers_->needsModifierPass()) {
+    if (canMemo) {
+      MeasureCacheKey const key = makeMeasureCacheKey(measureId_, constraints, hints);
+      if (std::optional<Size> const cached = mc->tryGet(key)) {
+        ctx.advanceChildSlot();
+        sz = *cached;
+      } else {
+        sz = measureWithModifiersImpl(ctx, constraints, hints, textSystem);
+        mc->put(key, sz);
+      }
+    } else {
+      sz = measureWithModifiersImpl(ctx, constraints, hints, textSystem);
+    }
+  } else if (canMemo) {
     MeasureCacheKey const key = makeMeasureCacheKey(measureId_, constraints, hints);
     if (std::optional<Size> const cached = mc->tryGet(key)) {
       ctx.advanceChildSlot();
@@ -244,6 +282,7 @@ Element::Element(Element const& other)
     , flexShrinkOverride_(other.flexShrinkOverride_)
     , minMainSizeOverride_(other.minMainSizeOverride_)
     , envLayer_(other.envLayer_)
+    , modifiers_(other.modifiers_)
     , measureId_(detail::nextElementMeasureId()) {}
 
 Element& Element::operator=(Element const& other) {
@@ -253,6 +292,7 @@ Element& Element::operator=(Element const& other) {
     flexShrinkOverride_ = other.flexShrinkOverride_;
     minMainSizeOverride_ = other.minMainSizeOverride_;
     envLayer_ = other.envLayer_;
+    modifiers_ = other.modifiers_;
     measureId_ = detail::nextElementMeasureId();
   }
   return *this;
@@ -270,7 +310,7 @@ float Element::minMainSize() const {
   return minMainSizeOverride_.value_or(impl_->minMainSize());
 }
 
-Element Element::withFlex(float grow, float shrink, float minMain) && {
+Element Element::flex(float grow, float shrink, float minMain) && {
   flexGrowOverride_ = grow;
   flexShrinkOverride_ = shrink;
   minMainSizeOverride_ = minMain;
@@ -313,7 +353,7 @@ void Element::Model<Rectangle>::build(BuildContext& ctx) const {
 }
 
 Size Element::Model<Rectangle>::measure(BuildContext& ctx, LayoutConstraints const& c, LayoutHints const&,
-                                          TextSystem&) const {
+                                        TextSystem&) const {
   ctx.advanceChildSlot();
   if (value.width > 0.f || value.height > 0.f) {
     return {value.width, value.height};
@@ -356,48 +396,17 @@ void Element::Model<Text>::build(BuildContext& ctx) const {
       explicitLeafBox(value), ctx.layoutEngine().consumeAssignedFrame(), ctx.constraints(), ctx.hints(), false);
   assert(value.text.empty() || (bounds.width > 0.f && bounds.height > 0.f));
 
-  float const pad = std::max(0.f, value.padding);
-  Rect inner{bounds.x + pad, bounds.y + pad, std::max(0.f, bounds.width - 2.f * pad),
-             std::max(0.f, bounds.height - 2.f * pad)};
-
   std::shared_ptr<TextLayout> layout;
   if (!value.text.empty()) {
     TextLayoutOptions const opts = textViewLayoutOptions(value, ctx.constraints(), ctx.hints());
-    layout = ctx.textSystem().layout(value.text, value.font, value.color, inner, opts);
-  }
-
-  bool const drawBackground = !value.background.isNone() || !value.border.isNone();
-  if (drawBackground) {
-    NodeId const id = ctx.graph().addRect(ctx.parentLayer(), RectNode{
-        .bounds = bounds,
-        .cornerRadius = value.cornerRadius,
-        .fill = value.background,
-        .stroke = value.border,
-    });
-    bool const focusable = value.focusable || static_cast<bool>(value.onKeyDown) ||
-                           static_cast<bool>(value.onKeyUp) || static_cast<bool>(value.onTextInput);
-    if (value.onTap || value.onPointerDown || value.onPointerUp || value.onPointerMove || value.onKeyDown ||
-        value.onKeyUp || value.onTextInput || value.focusable || value.cursor != Cursor::Inherit) {
-      ctx.eventMap().insert(id, EventHandlers{
-          .stableTargetKey = stableKey,
-          .onTap = value.onTap,
-          .onPointerDown = value.onPointerDown,
-          .onPointerUp = value.onPointerUp,
-          .onPointerMove = value.onPointerMove,
-          .onKeyDown = value.onKeyDown,
-          .onKeyUp = value.onKeyUp,
-          .onTextInput = value.onTextInput,
-          .focusable = focusable,
-          .cursor = value.cursor,
-      });
-    }
+    layout = ctx.textSystem().layout(value.text, value.font, value.color, bounds, opts);
   }
 
   if (layout && !layout->runs.empty()) {
     NodeId const textId = ctx.graph().addText(ctx.parentLayer(), TextNode{
         .layout = layout,
-        .origin = {inner.x, inner.y},
-        .allocation = inner,
+        .origin = {bounds.x, bounds.y},
+        .allocation = bounds,
     });
     bool const textFocusable = value.focusable || static_cast<bool>(value.onKeyDown) ||
                                static_cast<bool>(value.onKeyUp) || static_cast<bool>(value.onTextInput);
@@ -422,47 +431,18 @@ void Element::Model<Text>::build(BuildContext& ctx) const {
 }
 
 Size Element::Model<Text>::measure(BuildContext& ctx, LayoutConstraints const& c, LayoutHints const& hints,
-                                     TextSystem& ts) const {
+                                   TextSystem& ts) const {
   ctx.advanceChildSlot();
-  float const pad = value.padding * 2.f;
   TextLayoutOptions const opts = textViewLayoutOptions(value, c, hints);
-
-  // Explicit box: both dimensions fixed.
-  if (value.width > 0.f && value.height > 0.f) {
-    return {value.width, value.height};
-  }
-  // Fixed height, width from constraints / text (e.g. animated row height with width TBD).
-  if (value.width <= 0.f && value.height > 0.f) {
-    float const mw = std::isfinite(c.maxWidth) && c.maxWidth > pad ? c.maxWidth - pad : 0.f;
-    Size const s = ts.measure(value.text, value.font, value.color, mw, opts);
-    float w = s.width + pad;
-    if (std::isfinite(c.maxWidth) && c.maxWidth > 0.f) {
-      w = std::min(w, c.maxWidth);
-    }
-    return {w, value.height};
-  }
-  // Fixed width, height from text measurement.
-  if (value.width > 0.f && value.height <= 0.f) {
-    float const mw = std::max(0.f, value.width - pad);
-    Size const s = ts.measure(value.text, value.font, value.color, mw, opts);
-    float h = s.height + pad;
-    if (std::isfinite(c.maxHeight) && c.maxHeight > 0.f) {
-      h = std::min(h, c.maxHeight);
-    }
-    return {value.width, h};
-  }
-
-  float const mw = std::isfinite(c.maxWidth) && c.maxWidth > pad ? c.maxWidth - pad : 0.f;
+  float const mw = std::isfinite(c.maxWidth) ? c.maxWidth : 0.f;
   Size s = ts.measure(value.text, value.font, value.color, mw, opts);
-  float w = s.width + pad;
-  float h = s.height + pad;
   if (std::isfinite(c.maxWidth) && c.maxWidth > 0.f) {
-    w = std::min(w, c.maxWidth);
+    s.width = std::min(s.width, c.maxWidth);
   }
   if (std::isfinite(c.maxHeight) && c.maxHeight > 0.f) {
-    h = std::min(h, c.maxHeight);
+    s.height = std::min(s.height, c.maxHeight);
   }
-  return {w, h};
+  return s;
 }
 
 void Element::Model<views::Image>::build(BuildContext& ctx) const {
@@ -477,8 +457,6 @@ void Element::Model<views::Image>::build(BuildContext& ctx) const {
       .image = value.source,
       .bounds = bounds,
       .fillMode = value.fillMode,
-      .cornerRadius = value.cornerRadius,
-      .opacity = value.opacity,
   });
   if (value.onTap) {
     ctx.eventMap().insert(id, EventHandlers{.stableTargetKey = stableKey, .onTap = value.onTap});
@@ -488,11 +466,8 @@ void Element::Model<views::Image>::build(BuildContext& ctx) const {
 }
 
 Size Element::Model<views::Image>::measure(BuildContext& ctx, LayoutConstraints const& c, LayoutHints const&,
-                                             TextSystem&) const {
+                                            TextSystem&) const {
   ctx.advanceChildSlot();
-  if (value.width > 0.f || value.height > 0.f) {
-    return {value.width, value.height};
-  }
   float const w = std::isfinite(c.maxWidth) ? c.maxWidth : 0.f;
   float const h = std::isfinite(c.maxHeight) ? c.maxHeight : 0.f;
   return {w, h};
@@ -559,50 +534,92 @@ Size Element::Model<Line>::measure(BuildContext& ctx, LayoutConstraints const&, 
 }
 
 Element Element::padding(float all) && {
-  return Element{PaddingModifier{all, std::move(*this)}};
+  if (!modifiers_) {
+    modifiers_.emplace();
+  }
+  modifiers_->padding = all;
+  return std::move(*this);
 }
 
 Element Element::background(FillStyle fill) && {
-  return Element{BackgroundModifier{std::move(fill), std::move(*this)}};
+  if (!modifiers_) {
+    modifiers_.emplace();
+  }
+  modifiers_->background = std::move(fill);
+  return std::move(*this);
 }
 
 Element Element::frame(float width, float height) && {
-  if (width <= 0.f && height <= 0.f) {
-    return std::move(*this);
+  if (!modifiers_) {
+    modifiers_.emplace();
   }
-  return Element{FrameModifier{width, height, std::move(*this)}};
+  modifiers_->frameWidth = width;
+  modifiers_->frameHeight = height;
+  return std::move(*this);
 }
 
 Element Element::border(StrokeStyle stroke) && {
-  return Element{BorderModifier{std::move(stroke), std::move(*this)}};
+  if (!modifiers_) {
+    modifiers_.emplace();
+  }
+  modifiers_->border = std::move(stroke);
+  return std::move(*this);
 }
 
 Element Element::cornerRadius(CornerRadius radius) && {
-  return Element{CornerModifier{radius, std::move(*this)}};
+  if (!modifiers_) {
+    modifiers_.emplace();
+  }
+  modifiers_->cornerRadius = radius;
+  return std::move(*this);
 }
 
 Element Element::opacity(float opacity) && {
-  return Element{LayerEffect{.opacity = opacity, .child = std::move(*this)}};
+  if (!modifiers_) {
+    modifiers_.emplace();
+  }
+  modifiers_->opacity = opacity;
+  return std::move(*this);
 }
 
 Element Element::offset(Vec2 delta) && {
-  return Element{LayerEffect{.offset = delta, .child = std::move(*this)}};
+  if (!modifiers_) {
+    modifiers_.emplace();
+  }
+  modifiers_->offset = delta;
+  return std::move(*this);
 }
 
 Element Element::offset(float dx, float dy) && {
-  return Element{LayerEffect{.offset = {dx, dy}, .child = std::move(*this)}};
+  if (!modifiers_) {
+    modifiers_.emplace();
+  }
+  modifiers_->offset = {dx, dy};
+  return std::move(*this);
 }
 
 Element Element::clipContent(bool clip) && {
-  return Element{ClipModifier{clip, std::move(*this)}};
+  if (!modifiers_) {
+    modifiers_.emplace();
+  }
+  modifiers_->clip = clip;
+  return std::move(*this);
 }
 
 Element Element::overlay(Element over) && {
-  return Element{OverlayModifier{std::move(*this), std::move(over)}};
+  if (!modifiers_) {
+    modifiers_.emplace();
+  }
+  modifiers_->overlay = std::make_unique<Element>(std::move(over));
+  return std::move(*this);
 }
 
 Element Element::onTapGesture(std::function<void()> handler) && {
-  return Element{TapModifier{std::move(handler), std::move(*this)}};
+  if (!modifiers_) {
+    modifiers_.emplace();
+  }
+  modifiers_->onTap = std::move(handler);
+  return std::move(*this);
 }
 
 } // namespace flux

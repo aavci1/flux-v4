@@ -30,12 +30,12 @@ Element Alert::body() const {
       .hAlign = HorizontalAlignment::Center,
       .children =
           {
-              Spacer{}.withFlex(1.f),
+              Spacer{}.flex(1.f),
               HStack{
                   .spacing = 0.f,
                   .children =
                       {
-                          Spacer{}.withFlex(1.f),
+                          Spacer{}.flex(1.f),
                           ZStack{
                               // Card + content share top-left; center alignment would offset each
                               // child by its own measured size and misalign the background.
@@ -58,10 +58,10 @@ Element Alert::body() const {
                                       },
                                   },
                           },
-                          Spacer{}.withFlex(1.f),
+                          Spacer{}.flex(1.f),
                       },
               },
-              Spacer{}.withFlex(1.f),
+              Spacer{}.flex(1.f),
           },
   };
 }
@@ -71,24 +71,22 @@ std::vector<Element> Alert::buildContent(Color titleC, Color msgC, FluxTheme con
 
   float const contentW = std::max(0.f, cardWidth - 2.f * theme.space6);
   rows.push_back(Text{
-      .text = title,
-      .font = theme.typeTitle.toFont(),
-      .color = titleC,
-      .lineHeight = theme.typeTitle.lineHeight,
-      .width = contentW,
-      .height = 0.f,
-  });
+                     .text = title,
+                     .font = theme.typeTitle.toFont(),
+                     .color = titleC,
+                     .lineHeight = theme.typeTitle.lineHeight,
+                 }
+                     .frame(contentW, 0.f));
 
   if (!message.empty()) {
     rows.push_back(Text{
-        .text = message,
-        .font = theme.typeBody.toFont(),
-        .color = msgC,
-        .wrapping = TextWrapping::Wrap,
-        .lineHeight = theme.typeBody.lineHeight,
-        .width = contentW,
-        .height = 0.f,
-    });
+                       .text = message,
+                       .font = theme.typeBody.toFont(),
+                       .color = msgC,
+                       .wrapping = TextWrapping::Wrap,
+                       .lineHeight = theme.typeBody.lineHeight,
+                   }
+                       .frame(contentW, 0.f));
   }
 
   if (buttons.size() == 1) {
@@ -117,7 +115,7 @@ std::vector<Element> Alert::buildContent(Color titleC, Color msgC, FluxTheme con
               .disabled = btn.disabled,
               .onTap = btn.action,
           }
-              .withFlex(1.f));
+              .flex(1.f));
     }
     rows.push_back(HStack{
         .spacing = theme.space2,

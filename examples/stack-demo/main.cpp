@@ -86,7 +86,7 @@ struct StackDemoRoot {
                                     .offsetX = 0.f, .offsetY = 0.f, .width = 56.f, .height = 56.f,
                                     .cornerRadius = CornerRadius{10.f},
                                     .fill = FillStyle::solid(pal::coral),
-                                }.withFlex(2.f),
+                                }.flex(2.f),
                                 Rectangle {
                                     .offsetX = 0.f, .offsetY = 0.f, .width = 56.f, .height = 72.f,
                                     .cornerRadius = CornerRadius{10.f},
@@ -96,7 +96,7 @@ struct StackDemoRoot {
                                     .offsetX = 0.f, .offsetY = 0.f, .width = 56.f, .height = 40.f,
                                     .cornerRadius = CornerRadius{10.f},
                                     .fill = FillStyle::solid(pal::indigo),
-                                }.withFlex(1.f),
+                                }.flex(1.f),
                                 Rectangle {
                                     .offsetX = 0.f, .offsetY = 0.f, .width = 56.f, .height = 56.f,
                                     .cornerRadius = CornerRadius{10.f},
@@ -127,8 +127,8 @@ struct StackDemoRoot {
                                             .text = "A",
                                             .font = {.size = 13.f, .weight = 600.f},
                                             .color = pal::ink,
-                                            .padding = 6.f,
-                                        },
+                                        }
+                                            .padding(6.f),
                                     },
                                 },
                                 HStack {
@@ -145,8 +145,8 @@ struct StackDemoRoot {
                                             .text = "B",
                                             .font = {.size = 13.f, .weight = 600.f},
                                             .color = pal::ink,
-                                            .padding = 6.f,
-                                        },
+                                        }
+                                            .padding(6.f),
                                     },
                                 },
                                 HStack {
@@ -163,8 +163,8 @@ struct StackDemoRoot {
                                             .text = "C",
                                             .font = {.size = 13.f, .weight = 600.f},
                                             .color = pal::ink,
-                                            .padding = 6.f,
-                                        },
+                                        }
+                                            .padding(6.f),
                                     },
                                 },
                             },

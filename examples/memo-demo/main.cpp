@@ -58,7 +58,8 @@ struct MemoHoverButton {
                       Text{.text = "Hover me (rebuild, no text change)",
                            .font = {.size = 13.f},
                            .color = btnText,
-                           .padding = 10.f},
+                       }
+                          .padding(10.f),
                   }};
   }
 };
@@ -90,12 +91,13 @@ struct MemoDemo {
                         {
                             Text{.text = "Content: " + *text,
                                  .font = {.size = 15.f, .weight = 400.f},
-                                 .background = FillStyle::solid(pal::surface),
-                                 .border = StrokeStyle::solid(pal::border, 1.f),
                                  .color = pal::label,
                                  .wrapping = TextWrapping::Wrap,
-                                 .padding = 12.f}
-                                .withFlex(1.f),
+                             }
+                                .padding(12.f)
+                                .background(FillStyle::solid(pal::surface))
+                                .border(StrokeStyle::solid(pal::border, 1.f))
+                                .flex(1.f),
                         },
                 },
 
@@ -112,7 +114,8 @@ struct MemoDemo {
                         Text{.text = "+ Word",
                              .font = {.size = 14.f, .weight = 600.f},
                              .color = Color::hex(0xFFFFFF),
-                             .padding = 10.f},
+                         }
+                            .padding(10.f),
                     }},
                     MemoHoverButton{},
                     ZStack{.children = {
@@ -128,7 +131,8 @@ struct MemoDemo {
                         Text{.text = "Clear",
                              .font = {.size = 14.f},
                              .color = pal::label,
-                             .padding = 10.f},
+                         }
+                            .padding(10.f),
                     }},
                 }},
 

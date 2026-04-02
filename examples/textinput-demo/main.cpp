@@ -41,7 +41,7 @@ struct TextInputForm {
                                 .color = Color::hex(0x6E6E80),
                                 .wrapping = TextWrapping::Wrap,
                             }
-                                .withFlex(1.f),
+                                .flex(1.f),
                         },
                 },
                 Text{.text = "Name",
@@ -58,7 +58,7 @@ struct TextInputForm {
                                   std::fprintf(stderr, "[textinput-demo] submit name: %s\n", v.c_str());
                                 },
                             }
-                                .withFlex(1.f),
+                                .flex(1.f),
                         },
                 },
                 Text{.text = "Email",
@@ -76,7 +76,7 @@ struct TextInputForm {
                                   std::fprintf(stderr, "[textinput-demo] submit email: %s\n", v.c_str());
                                 },
                             }
-                                .withFlex(1.f),
+                                .flex(1.f),
                         },
                 },
                 Text{.text = "Notes",
@@ -92,7 +92,7 @@ struct TextInputForm {
                                 .flexGrow = 1.f,
                                 .minSize = 200.f,
                             }
-                                .withFlex(1.f),
+                                .flex(1.f),
                         },
                 },
                 Text{.text = "Disabled",
@@ -103,7 +103,7 @@ struct TextInputForm {
                     .children =
                         {
                             TextInput{.value = disabledSample, .placeholder = "N/A", .disabled = true}
-                                .withFlex(1.f),
+                                .flex(1.f),
                         },
                 },
             },

@@ -15,8 +15,8 @@
 namespace flux {
 
 /// Axis-aligned rounded rect leaf. \c width / \c height are explicit sizes; \c 0 means expand along
-/// that axis from the proposed constraint box (see layout code). \c offsetX / \c offsetY shift the
-/// rect within the parent cell (e.g. ZStack overlays).
+/// that axis from the proposed constraint box. \c offsetX / \c offsetY shift the rect within the
+/// parent cell (e.g. ZStack overlays). Use \ref Element modifiers for layer opacity/translation.
 struct Rectangle : ViewModifiers<Rectangle> {
 
   // ── Appearance ─────────────────────────────────────────────────────────────

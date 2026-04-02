@@ -38,7 +38,8 @@ struct HoverRow {
                       Text{.text = "Row " + std::to_string(index) + (hovered ? "  ← hovered" : ""),
                            .font = {.size = 14.f, .weight = 400.f},
                            .color = pal::label,
-                           .padding = 14.f},
+                       }
+                          .padding(14.f),
                   }};
   }
 };

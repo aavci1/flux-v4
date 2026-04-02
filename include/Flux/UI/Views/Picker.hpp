@@ -128,12 +128,11 @@ struct PickerRow : ViewModifiers<PickerRow<T>> {
                                             .lineHeight = 0.f,
                                             .maxLines = 1,
                                             .firstBaselineOffset = 0.f,
-                                            .width = 0.f,
-                                            .height = rowHeight,
-                                            .flexGrow = 1.f,
                                             .onTap = onSelect,
                                             .cursor = Cursor::Hand,
-                                        },
+                                        }
+                                            .frame(0.f, rowHeight)
+                                            .flex(1.f),
                                         ZStack{
                                             .hAlign = HorizontalAlignment::Leading,
                                             .vAlign = VerticalAlignment::Top,
@@ -150,7 +149,7 @@ struct PickerRow : ViewModifiers<PickerRow<T>> {
                                         },
                                     },
                             }
-                                .withFlex(1.f),
+                                .flex(1.f),
                             Rectangle{
                                 .offsetX = 0.f, .offsetY = 0.f, .width = rowPaddingH, .height = rowHeight,
                                 .fill = FillStyle::none(),
@@ -475,17 +474,14 @@ struct Picker : ViewModifiers<Picker<T>> {
                                 .horizontalAlignment = HorizontalAlignment::Leading,
                                 .verticalAlignment = VerticalAlignment::Center,
                                 .wrapping = TextWrapping::NoWrap,
-                                .padding = 0.f,
-                                .cornerRadius = {},
                                 .lineHeight = 0.f,
                                 .maxLines = 1,
                                 .firstBaselineOffset = 0.f,
-                                .width = 0.f,
-                                .height = h,
-                                .flexGrow = 1.f,
                                 .onTap = isDisabled ? nullptr : std::function<void()>{onTriggerTap},
                                 .cursor = isDisabled ? Cursor::Inherit : Cursor::Hand,
-                            },
+                            }
+                                .frame(0.f, h)
+                                .flex(1.f),
                             Rectangle{
                                 .offsetX = 0.f, .offsetY = 0.f, .width = padHResolved, .height = h,
                                 .fill = FillStyle::none(),

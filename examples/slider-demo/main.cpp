@@ -73,7 +73,7 @@ struct LabeledSlider {
                         .color = theme.colorTextSecondary,
                     },
                 },
-            }.withFlex(1.f),
+            }.flex(1.f),
             Slider{
                 .value = value,
                 .min = min,
@@ -82,7 +82,7 @@ struct LabeledSlider {
                 .style = Slider::Style {
                     .activeColor = activeColor,
                 },
-            }.withFlex(1.f),
+            }.flex(1.f),
         },
     };
   }
@@ -117,7 +117,7 @@ struct RgbColorSelectorRoot {
                         .font = theme.typeBody.toFont(),
                         .color = theme.colorTextSecondary,
                         .wrapping = TextWrapping::Wrap,
-                    }.withFlex(1.f),
+                    }.flex(1.f),
 
                     ZStack{
                         .hAlign = HorizontalAlignment::Center,
@@ -154,19 +154,19 @@ struct RgbColorSelectorRoot {
                         .valueText = fmtInt(*red),
                         .value = red,
                         .activeColor = theme.colorDanger,
-                    }}.withFlex(1.f),
+                    }}.flex(1.f),
                     Element{LabeledSlider{
                         .label = "Green",
                         .valueText = fmtInt(*green),
                         .value = green,
                         .activeColor = theme.colorSuccess,
-                    }}.withFlex(1.f),
+                    }}.flex(1.f),
                     Element{LabeledSlider{
                         .label = "Blue",
                         .valueText = fmtInt(*blue),
                         .value = blue,
                         .activeColor = theme.colorAccent,
-                    }}.withFlex(1.f),
+                    }}.flex(1.f),
                 },
             },
         },

@@ -84,7 +84,7 @@ struct ToggleDemoRoot {
                         .font = theme.typeBody.toFont(),
                         .color = theme.colorTextSecondary,
                         .wrapping = TextWrapping::Wrap,
-                    }.withFlex(1.f),
+                    }.flex(1.f),
 
                     Text{
                         .text = "Settings",
@@ -94,20 +94,20 @@ struct ToggleDemoRoot {
                     Element{LabeledToggle{
                         .label = "Wi-Fi",
                         .value = wifiEnabled,
-                    }}.withFlex(1.f),
+                    }}.flex(1.f),
                     Element{LabeledToggle{
                         .label = "Bluetooth",
                         .value = bluetoothEnabled,
-                    }}.withFlex(1.f),
+                    }}.flex(1.f),
                     Element{LabeledToggle{
                         .label = "Dark mode",
                         .value = darkMode,
-                    }}.withFlex(1.f),
+                    }}.flex(1.f),
                     Element{LabeledToggle{
                         .label = "Notifications (disabled)",
                         .value = notifications,
                         .disabled = true,
-                    }}.withFlex(1.f),
+                    }}.flex(1.f),
 
                     Text{
                         .text = "Custom colors",

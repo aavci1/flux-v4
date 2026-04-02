@@ -106,7 +106,7 @@ struct CheckboxDemoRoot {
                                         .color = theme.colorTextSecondary,
                                         .wrapping = TextWrapping::Wrap,
                                     }
-                                .withFlex(1.f),
+                                .flex(1.f),
 
                             Text{
                                 .text = "Form controls",
@@ -117,12 +117,12 @@ struct CheckboxDemoRoot {
                                         .label = "I accept the terms and conditions",
                                         .value = termsAccepted,
                                     }}
-                                .withFlex(1.f),
+                                .flex(1.f),
                             Element{LabeledCheckbox{
                                         .label = "Subscribe to newsletter",
                                         .value = newsletter,
                                     }}
-                                .withFlex(1.f),
+                                .flex(1.f),
 
                             Text{
                                 .text = "Disabled",
@@ -134,13 +134,13 @@ struct CheckboxDemoRoot {
                                         .value = newsletter,
                                         .disabled = true,
                                     }}
-                                .withFlex(1.f),
+                                .flex(1.f),
                             Element{LabeledCheckbox{
                                         .label = "Unchecked (disabled)",
                                         .value = termsAccepted,
                                         .disabled = true,
                                     }}
-                                .withFlex(1.f),
+                                .flex(1.f),
 
                             Text{
                                 .text = "Select all (indeterminate)",
@@ -168,7 +168,7 @@ struct CheckboxDemoRoot {
                                                 },
                                             },
                                     }
-                                .withFlex(1.f),
+                                .flex(1.f),
                             VStack{
                                         .spacing = 8.f,
                                         .padding = 0.f,
@@ -185,10 +185,10 @@ struct CheckboxDemoRoot {
                                                                                 .label = "Item A",
                                                                                 .value = itemA,
                                                                             }}
-                                                                        .withFlex(1.f),
+                                                                        .flex(1.f),
                                                                 },
                                                         }
-                                                    .withFlex(1.f),
+                                                    .flex(1.f),
                                                 HStack{
                                                             .spacing = 10.f,
                                                             .children =
@@ -200,10 +200,10 @@ struct CheckboxDemoRoot {
                                                                                 .label = "Item B",
                                                                                 .value = itemB,
                                                                             }}
-                                                                        .withFlex(1.f),
+                                                                        .flex(1.f),
                                                                 },
                                                         }
-                                                    .withFlex(1.f),
+                                                    .flex(1.f),
                                                 HStack{
                                                             .spacing = 10.f,
                                                             .children =
@@ -215,13 +215,13 @@ struct CheckboxDemoRoot {
                                                                                 .label = "Item C",
                                                                                 .value = itemC,
                                                                             }}
-                                                                        .withFlex(1.f),
+                                                                        .flex(1.f),
                                                                 },
                                                         }
-                                                    .withFlex(1.f),
+                                                    .flex(1.f),
                                             },
                                     }
-                                .withFlex(1.f),
+                                .flex(1.f),
 
                             Text{
                                 .text = "Custom color",
@@ -246,7 +246,7 @@ struct CheckboxDemoRoot {
                                                 },
                                             },
                                     }
-                                .withFlex(1.f),
+                                .flex(1.f),
 
                             Text{
                                 .text = status,

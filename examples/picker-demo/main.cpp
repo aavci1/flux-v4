@@ -39,7 +39,7 @@ struct TaskForm {
                                 .color = Color::hex(0x6E6E80),
                                 .wrapping = TextWrapping::Wrap,
                             }
-                                .withFlex(1.f),
+                                .flex(1.f),
                         },
                 },
 
@@ -65,7 +65,7 @@ struct TaskForm {
                                   std::fprintf(stderr, "[picker-demo] language: %s\n", v.c_str());
                                 },
                             }
-                                .withFlex(1.f),
+                                .flex(1.f),
                         },
                 },
 
@@ -83,7 +83,7 @@ struct TaskForm {
                                   std::fprintf(stderr, "[picker-demo] count: %d\n", v);
                                 },
                             }
-                                .withFlex(1.f),
+                                .flex(1.f),
                         },
                 },
 
@@ -103,7 +103,7 @@ struct TaskForm {
                                         {Priority::High, "High"},
                                     },
                             }
-                                .withFlex(1.f),
+                                .flex(1.f),
                         },
                 },
 
@@ -124,7 +124,7 @@ struct TaskForm {
                                 .placeholder = "Unavailable",
                                 .disabled = true,
                             }
-                                .withFlex(1.f),
+                                .flex(1.f),
                         },
                 },
             },

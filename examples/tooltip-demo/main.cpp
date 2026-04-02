@@ -102,7 +102,7 @@ struct TooltipDemoRoot {
                         .font = theme.typeBody.toFont(),
                         .color = theme.colorTextSecondary,
                         .wrapping = TextWrapping::Wrap,
-                    }.withFlex(1.f),
+                    }.flex(1.f),
 
                     // ── Placement variants ──────────────────────────
                     Text{

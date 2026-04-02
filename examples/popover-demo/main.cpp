@@ -31,7 +31,8 @@ struct PopoverDemoRoot {
           Text{.text = heading,
                .font = {.size = 13.f, .weight = 600.f},
                .color = pal::bodyC,
-               .padding = 8.f});
+           }
+              .padding(8.f));
     };
 
     addSection("Placement");
@@ -44,8 +45,9 @@ struct PopoverDemoRoot {
                          .font = {.size = 12.f, .weight = 400.f},
                          .color = pal::bodyC,
                          .wrapping = TextWrapping::Wrap,
-                         .padding = 8.f}
-                        .withFlex(1.f),
+                     }
+                        .padding(8.f)
+                        .flex(1.f),
                 },
         });
 
@@ -71,7 +73,7 @@ struct PopoverDemoRoot {
                                              .font = {.size = 13.f, .weight = 400.f},
                                              .color = pal::bodyC,
                                              .wrapping = TextWrapping::Wrap}
-                                            .withFlex(1.f),
+                                            .flex(1.f),
                                     },
                             },
                             Button{
@@ -135,7 +137,8 @@ struct PopoverDemoRoot {
           Text{.text = "Spacer row — scroll the list",
                .font = {.size = 13.f, .weight = 400.f},
                .color = pal::bodyC,
-               .padding = 6.f});
+           }
+              .padding(6.f));
     }
     scrollChildren.push_back(Button{
         .label = "Below — middle of scroll",
@@ -161,7 +164,7 @@ struct PopoverDemoRoot {
                                           .color = pal::bodyC,
                                           .wrapping = TextWrapping::Wrap,
                                       }
-                                          .withFlex(1.f),
+                                          .flex(1.f),
                                   },
                           },
                           Button{.label = "OK", .onTap = hidePopover},
@@ -181,7 +184,8 @@ struct PopoverDemoRoot {
           Text{.text = "Spacer row — scroll the list",
                .font = {.size = 13.f, .weight = 400.f},
                .color = pal::bodyC,
-               .padding = 6.f});
+           }
+              .padding(6.f));
     }
     scrollChildren.push_back(Button{
         .label = "Below — near bottom (may flip Above)",
@@ -207,7 +211,7 @@ struct PopoverDemoRoot {
                                           .color = pal::bodyC,
                                           .wrapping = TextWrapping::Wrap,
                                       }
-                                          .withFlex(1.f),
+                                          .flex(1.f),
                                   },
                           },
                           Button{.label = "OK", .onTap = hidePopover},
@@ -232,12 +236,14 @@ struct PopoverDemoRoot {
                      .font = {.size = 22.f, .weight = 700.f},
                      .color = pal::titleC,
                      .horizontalAlignment = HorizontalAlignment::Center,
-                     .padding = 16.f},
+                 }
+                    .padding(16.f),
                 Text{.text = popoverOpen ? "Popover visible" : "Popover hidden",
                      .font = {.size = 13.f, .weight = 500.f},
                      .color = pal::bodyC,
                      .horizontalAlignment = HorizontalAlignment::Center,
-                     .padding = 8.f},
+                 }
+                    .padding(8.f),
                 ScrollView{
                     .axis = ScrollAxis::Vertical,
                     .flexGrow = 1.f,

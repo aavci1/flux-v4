@@ -66,19 +66,17 @@ struct Card {
                 .text = title,
                 .font = {.size = 17.f, .weight = 600.f},
                 .color = pal::label,
-                .width = 0.f,
-                .height = 24.f,
-                .flexGrow = 1.f,
-            },
+            }
+                .frame(0.f, 24.f)
+                .flex(1.f),
             Text{
                 .text = expanded ? "⌄" : "›",
                 .font = {.size = 24.f, .weight = 600.f},
                 .color = pal::sublabel,
                 .horizontalAlignment = HorizontalAlignment::Center,
                 .verticalAlignment = VerticalAlignment::Center,
-                .width = 24.f,
-                .height = 24.f,
-            },
+            }
+                .frame(24.f, 24.f),
         },
     });
 
@@ -88,14 +86,13 @@ struct Card {
           .children =
               {
                   Text{
-                              .text = detail,
-                              .font = {.size = 15.f, .weight = 400.f},
-                              .color = pal::sublabel,
-                              .wrapping = TextWrapping::Wrap,
-                              .width = 0.f,
-                              .height = bodyOpacity * bodyTextHeight,
-                          }
-                      .withFlex(1.f),
+                      .text = detail,
+                      .font = {.size = 15.f, .weight = 400.f},
+                      .color = pal::sublabel,
+                      .wrapping = TextWrapping::Wrap,
+                  }
+                      .frame(0.f, bodyOpacity * bodyTextHeight)
+                      .flex(1.f),
               },
       });
     }

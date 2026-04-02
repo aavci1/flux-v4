@@ -37,7 +37,8 @@ struct ThreeStateButton {
                            .color = Color::hex(0xFFFFFF),
                            .horizontalAlignment = HorizontalAlignment::Center,
                            .verticalAlignment = VerticalAlignment::Center,
-                           .padding = 12.f},
+                       }
+                          .padding(12.f),
                   }};
   }
 };
@@ -58,7 +59,8 @@ struct HoverListRow {
                       Text{.text = "Item " + std::to_string(index) + (hovered ? "  ← pointer is here" : ""),
                            .font = {.size = 14.f},
                            .color = Color::hex(0x111118),
-                           .padding = 14.f},
+                       }
+                          .padding(14.f),
                   }};
   }
 };
@@ -86,7 +88,7 @@ struct HoverDemo {
                                                    .font = {.size = 14.f},
                                                    .color = Color::hex(0x6E6E80),
                                                    .wrapping = TextWrapping::Wrap}
-                                                  .withFlex(1.f),
+                                                  .flex(1.f),
                                           },
                                   },
                                   ThreeStateButton{

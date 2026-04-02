@@ -17,15 +17,10 @@
 namespace flux::views {
 
 /// Image view component. `source` references `flux::Image` (bitmap); distinct from this `Image` view type.
+/// Use \ref Element modifiers for size, opacity, and rounded corners.
 struct Image : ViewModifiers<Image> {
   std::shared_ptr<flux::Image> source;
-  float offsetX = 0.f;
-  float offsetY = 0.f;
-  float width = 0.f;
-  float height = 0.f;
   ImageFillMode fillMode = ImageFillMode::Cover;
-  CornerRadius cornerRadius{};
-  float opacity = 1.f;
   std::function<void()> onTap;
 };
 

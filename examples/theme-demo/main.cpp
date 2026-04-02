@@ -78,7 +78,7 @@ struct ThemeDemoRoot {
                                       .wrapping = TextWrapping::Wrap,
                                       .lineHeight = t.typeBody.lineHeight,
                                   }
-                                  .withFlex(1.f),
+                                  .flex(1.f),
                           },
                   },
                   Button{ .label = "Accent",
@@ -114,7 +114,7 @@ struct ThemeDemoRoot {
                                                 .wrapping = TextWrapping::Wrap,
                                                 .lineHeight = windowTheme.typeBody.lineHeight,
                                             }
-                                            .withFlex(1.f),
+                                            .flex(1.f),
                                     },
                             },
                             HStack{
@@ -131,7 +131,7 @@ struct ThemeDemoRoot {
                                                 .wrapping = TextWrapping::Wrap,
                                                 .lineHeight = windowTheme.typeBodySmall.lineHeight,
                                             }
-                                            .withFlex(1.f),
+                                            .flex(1.f),
                                     },
                             },
                             HStack{
@@ -201,11 +201,11 @@ struct ThemeDemoRoot {
                                         pane("Light pane",
                                              "Subtree explicitly set to FluxTheme::light().",
                                              FluxTheme::light())
-                                            .withEnvironment(FluxTheme::light()),
+                                            .environment(FluxTheme::light()),
                                         pane("Dark pane",
                                              "Subtree uses FluxTheme::dark() tokens.",
                                              FluxTheme::dark())
-                                            .withEnvironment(FluxTheme::dark()),
+                                            .environment(FluxTheme::dark()),
                                     },
                             },
                         },

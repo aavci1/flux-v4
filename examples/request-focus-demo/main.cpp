@@ -70,7 +70,7 @@ struct FocusField {
                                       }
                                     },
                             }
-                                .withFlex(1.f),
+                                .flex(1.f),
                         },
                 },
                 HStack{
@@ -81,7 +81,7 @@ struct FocusField {
                                  .font = {.size = 13.f},
                                  .color = pal::sub,
                                  .wrapping = TextWrapping::Wrap}
-                                .withFlex(1.f),
+                                .flex(1.f),
                         },
                 },
             },
@@ -146,7 +146,8 @@ struct RequestFocusDemo {
                        .color = Color::hex(0xFFFFFF),
                        .horizontalAlignment = HorizontalAlignment::Center,
                        .verticalAlignment = VerticalAlignment::Center,
-                       .padding = 10.f},
+                   }
+                      .padding(10.f),
               },
       };
     };
@@ -175,7 +176,7 @@ struct RequestFocusDemo {
                                             .color = pal::sub,
                                             .wrapping = TextWrapping::Wrap,
                                         }
-                                            .withFlex(1.f),
+                                            .flex(1.f),
                                     },
                             },
                             HStack{
@@ -184,9 +185,9 @@ struct RequestFocusDemo {
                                 .children =
                                     {
                                         Element{EditorPanel{.title = "Panel A", .focusFnOut = &focusPanelA}}
-                                            .withFlex(1.f),
+                                            .flex(1.f),
                                         Element{EditorPanel{.title = "Panel B", .focusFnOut = &focusPanelB}}
-                                            .withFlex(1.f),
+                                            .flex(1.f),
                                     },
                             },
                             HStack{
@@ -218,7 +219,7 @@ struct RequestFocusDemo {
                                             .color = pal::sub,
                                             .wrapping = TextWrapping::Wrap,
                                         }
-                                            .withFlex(1.f),
+                                            .flex(1.f),
                                     },
                             },
                         },
