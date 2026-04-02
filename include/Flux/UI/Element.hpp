@@ -26,6 +26,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <string>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -86,16 +87,34 @@ struct ElementModifiers {
   float opacity = 1.f;
   Vec2 offset{};
   bool clip = false;
-  std::function<void()> onTap;
   /// \c 0 on an axis means no fixed size on that axis (same as \ref Element::frame).
   float frameWidth = 0.f;
   float frameHeight = 0.f;
   std::unique_ptr<Element> overlay;
 
+  std::function<void()> onTap;
+  std::function<void(Point)> onPointerDown;
+  std::function<void(Point)> onPointerUp;
+  std::function<void(Point)> onPointerMove;
+  std::function<void(Vec2)> onScroll;
+  std::function<void(KeyCode, Modifiers)> onKeyDown;
+  std::function<void(KeyCode, Modifiers)> onKeyUp;
+  std::function<void(std::string const&)> onTextInput;
+  bool focusable = false;
+  Cursor cursor = Cursor::Inherit;
+  bool cursorPassthrough = false;
+
+  bool hasInteraction() const noexcept {
+    return static_cast<bool>(onTap) || static_cast<bool>(onPointerDown) || static_cast<bool>(onPointerUp) ||
+           static_cast<bool>(onPointerMove) || static_cast<bool>(onScroll) || static_cast<bool>(onKeyDown) ||
+           static_cast<bool>(onKeyUp) || static_cast<bool>(onTextInput) || focusable ||
+           cursor != Cursor::Inherit || cursorPassthrough;
+  }
+
   bool needsModifierPass() const {
     return padding > 0.f || !background.isNone() || !border.isNone() || !cornerRadius.isZero() ||
            opacity < 1.f - 1e-6f || std::fabs(offset.x) > 1e-6f || std::fabs(offset.y) > 1e-6f || clip ||
-           static_cast<bool>(onTap) || frameWidth > 0.f || frameHeight > 0.f || overlay != nullptr;
+           hasInteraction() || frameWidth > 0.f || frameHeight > 0.f || overlay != nullptr;
   }
 
   ElementModifiers() = default;
@@ -155,7 +174,18 @@ public:
   Element offset(float dx, float dy) &&;
   Element clipContent(bool clip) &&;
   Element overlay(Element over) &&;
-  Element onTapGesture(std::function<void()> handler) &&;
+
+  Element onTap(std::function<void()> handler) &&;
+  Element onPointerDown(std::function<void(Point)> handler) &&;
+  Element onPointerUp(std::function<void(Point)> handler) &&;
+  Element onPointerMove(std::function<void(Point)> handler) &&;
+  Element onScroll(std::function<void(Vec2)> handler) &&;
+  Element onKeyDown(std::function<void(KeyCode, Modifiers)> handler) &&;
+  Element onKeyUp(std::function<void(KeyCode, Modifiers)> handler) &&;
+  Element onTextInput(std::function<void(std::string const&)> handler) &&;
+  Element focusable(bool enabled) &&;
+  Element cursor(Cursor c) &&;
+  Element cursorPassthrough(bool passthrough) &&;
 
 private:
   friend class LayoutEngine;
@@ -496,8 +526,58 @@ Element ViewModifiers<Derived>::overlay(Element over) && {
 }
 
 template<typename Derived>
-Element ViewModifiers<Derived>::onTapGesture(std::function<void()> handler) && {
-  return Element{std::move(static_cast<Derived&>(*this))}.onTapGesture(std::move(handler));
+Element ViewModifiers<Derived>::onTap(std::function<void()> handler) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.onTap(std::move(handler));
+}
+
+template<typename Derived>
+Element ViewModifiers<Derived>::onPointerDown(std::function<void(Point)> handler) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.onPointerDown(std::move(handler));
+}
+
+template<typename Derived>
+Element ViewModifiers<Derived>::onPointerUp(std::function<void(Point)> handler) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.onPointerUp(std::move(handler));
+}
+
+template<typename Derived>
+Element ViewModifiers<Derived>::onPointerMove(std::function<void(Point)> handler) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.onPointerMove(std::move(handler));
+}
+
+template<typename Derived>
+Element ViewModifiers<Derived>::onScroll(std::function<void(Vec2)> handler) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.onScroll(std::move(handler));
+}
+
+template<typename Derived>
+Element ViewModifiers<Derived>::onKeyDown(std::function<void(KeyCode, Modifiers)> handler) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.onKeyDown(std::move(handler));
+}
+
+template<typename Derived>
+Element ViewModifiers<Derived>::onKeyUp(std::function<void(KeyCode, Modifiers)> handler) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.onKeyUp(std::move(handler));
+}
+
+template<typename Derived>
+Element ViewModifiers<Derived>::onTextInput(std::function<void(std::string const&)> handler) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.onTextInput(std::move(handler));
+}
+
+template<typename Derived>
+Element ViewModifiers<Derived>::focusable(bool enabled) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.focusable(enabled);
+}
+
+template<typename Derived>
+Element ViewModifiers<Derived>::cursor(Cursor c) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.cursor(c);
+}
+
+template<typename Derived>
+Element ViewModifiers<Derived>::cursorPassthrough(bool passthrough) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.cursorPassthrough(passthrough);
 }
 
 template<typename Derived>

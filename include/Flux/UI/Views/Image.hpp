@@ -11,17 +11,15 @@
 #include <Flux/Graphics/Styles.hpp>
 #include <Flux/UI/ViewModifiers.hpp>
 
-#include <functional>
 #include <memory>
 
 namespace flux::views {
 
 /// Image view component. `source` references `flux::Image` (bitmap); distinct from this `Image` view type.
-/// Use \ref Element modifiers for size, opacity, and rounded corners.
+/// Use \ref Element modifiers for interaction, size, opacity, and rounded corners.
 struct Image : ViewModifiers<Image> {
   std::shared_ptr<flux::Image> source;
   ImageFillMode fillMode = ImageFillMode::Cover;
-  std::function<void()> onTap;
 };
 
 } // namespace flux::views

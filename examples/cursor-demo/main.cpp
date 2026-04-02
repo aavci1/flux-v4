@@ -42,12 +42,12 @@ Element cursorSwatchRow(std::string name, Cursor cursor, Color chip) {
                                 .frame(152.f, 0.f),
                             Rectangle{
                                 .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 44.f,
-                                .cornerRadius = CornerRadius(8.f),
                                 .fill = FillStyle::solid(chip),
                                 .stroke = StrokeStyle::solid(Color::hex(0xC8C8D0), 1.f),
-                                .flexGrow = 1.f,
-                                .cursor = cursor,
-                            },
+                            }
+                                .cursor(cursor)
+                                .cornerRadius(CornerRadius(8.f))
+                                .flex(1.f),
                         },
                 }
                   .flex(1.f),
@@ -139,8 +139,8 @@ struct CursorDemo {
                                                                     .font = {.size = 14.f, .weight = 400.f},
                                                                     .color = pal::label,
                                                                     .wrapping = TextWrapping::Wrap,
-                                                                    .cursor = Cursor::IBeam,
                                                                 }
+                                                                    .cursor(Cursor::IBeam)
                                                                     .padding(10.f)
                                                                     .background(FillStyle::solid(Color::hex(0xFFFFFF)))
                                                                     .border(StrokeStyle::solid(Color::hex(0xC8C8D0), 1.f))
@@ -165,13 +165,13 @@ struct CursorDemo {
                                                                                     },
                                                                                     Rectangle{
                                                                                         .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 52.f,
-                                                                                        .cornerRadius = CornerRadius(10.f),
                                                                                         .fill = FillStyle::solid(pal::chipAccent),
-                                                                                        .cursor = Cursor::ResizeAll,
-                                                                                        .onPointerDown = [](Point) {},
-                                                                                        .onPointerUp = [](Point) {},
-                                                                                        .onPointerMove = [](Point) {},
-                                                                                    },
+                                                                                    }
+                                                                                        .cursor(Cursor::ResizeAll)
+                                                                                        .onPointerDown([](Point) {})
+                                                                                        .onPointerUp([](Point) {})
+                                                                                        .onPointerMove([](Point) {})
+                                                                                        .cornerRadius(CornerRadius(10.f)),
                                                                                 },
                                                                         }
                                                                     .flex(1.f),

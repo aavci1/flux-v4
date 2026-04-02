@@ -27,11 +27,11 @@ struct ThreeStateButton {
     return ZStack{.children = {
                       Rectangle{
                           .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 44.f,
-                          .cornerRadius = CornerRadius(10.f),
                           .fill = FillStyle::solid(bg),
-                          .cursor = Cursor::Hand,
-                          .onTap = onTap,
-                      },
+                      }
+                          .cursor(Cursor::Hand)
+                          .onTap(onTap)
+                          .cornerRadius(CornerRadius(10.f)),
                       Text{.text = label,
                            .font = {.size = 15.f, .weight = 600.f},
                            .color = Color::hex(0xFFFFFF),
@@ -52,10 +52,10 @@ struct HoverListRow {
     return ZStack{.children = {
                       Rectangle{
                           .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 48.f,
-                          .cornerRadius = CornerRadius(8.f),
                           .fill = FillStyle::solid(hovered ? Color::hex(0xDFDFE8) : Color::hex(0xFFFFFF)),
-                          .cursor = Cursor::Hand,
-                      },
+                      }
+                          .cursor(Cursor::Hand)
+                          .cornerRadius(CornerRadius(8.f)),
                       Text{.text = "Item " + std::to_string(index) + (hovered ? "  ← pointer is here" : ""),
                            .font = {.size = 14.f},
                            .color = Color::hex(0x111118),

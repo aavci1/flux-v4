@@ -215,26 +215,25 @@ Element Button::body() const {
                 .offsetY = 0.f,
                 .width = 0.f,
                 .height = h,
-                .cornerRadius = cr,
                 .fill = FillStyle::solid(*fillAnim),
                 .stroke = stroke,
-                .flexGrow = effFlexGrow,
-                .flexShrink = flexShrink,
-                .minMainSize = minSize,
-                .cursor = effectivelyDisabled ? Cursor::Inherit : Cursor::Hand,
-                .focusable = !effectivelyDisabled,
-                .onKeyDown = effectivelyDisabled ? nullptr : std::function<void(KeyCode, Modifiers)>{ handleKey },
-                .onTap = effectivelyDisabled ? nullptr : std::function<void()>{ handleTap },
-            },
+            }
+                .cursor(effectivelyDisabled ? Cursor::Inherit : Cursor::Hand)
+                .focusable(!effectivelyDisabled)
+                .onKeyDown(effectivelyDisabled ? std::function<void(KeyCode, Modifiers)>{}
+                                               : std::function<void(KeyCode, Modifiers)>{ handleKey })
+                .onTap(effectivelyDisabled ? std::function<void()>{} : std::function<void()>{ handleTap })
+                .cornerRadius(cr)
+                .flex(effFlexGrow, flexShrink, minSize),
             Text{
                 .text = label,
                 .font = fontResolved,
                 .color = *labelAnim,
                 .horizontalAlignment = isLink ? HorizontalAlignment::Leading : HorizontalAlignment::Center,
                 .verticalAlignment = VerticalAlignment::Center,
-                .onTap = effectivelyDisabled ? nullptr : std::function<void()>{ handleTap },
-                .cursor = effectivelyDisabled ? Cursor::Inherit : Cursor::Hand,
             }
+                .onTap(effectivelyDisabled ? std::function<void()>{} : std::function<void()>{ handleTap })
+                .cursor(effectivelyDisabled ? Cursor::Inherit : Cursor::Hand)
                 .padding(effPaddingH),
         },
   };

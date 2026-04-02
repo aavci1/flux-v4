@@ -35,10 +35,20 @@ ElementModifiers::ElementModifiers(ElementModifiers const& o)
     , opacity(o.opacity)
     , offset(o.offset)
     , clip(o.clip)
-    , onTap(o.onTap)
     , frameWidth(o.frameWidth)
     , frameHeight(o.frameHeight)
-    , overlay(o.overlay ? std::make_unique<Element>(*o.overlay) : nullptr) {}
+    , overlay(o.overlay ? std::make_unique<Element>(*o.overlay) : nullptr)
+    , onTap(o.onTap)
+    , onPointerDown(o.onPointerDown)
+    , onPointerUp(o.onPointerUp)
+    , onPointerMove(o.onPointerMove)
+    , onScroll(o.onScroll)
+    , onKeyDown(o.onKeyDown)
+    , onKeyUp(o.onKeyUp)
+    , onTextInput(o.onTextInput)
+    , focusable(o.focusable)
+    , cursor(o.cursor)
+    , cursorPassthrough(o.cursorPassthrough) {}
 
 ElementModifiers& ElementModifiers::operator=(ElementModifiers const& o) {
   if (this != &o) {
@@ -49,10 +59,20 @@ ElementModifiers& ElementModifiers::operator=(ElementModifiers const& o) {
     opacity = o.opacity;
     offset = o.offset;
     clip = o.clip;
-    onTap = o.onTap;
     frameWidth = o.frameWidth;
     frameHeight = o.frameHeight;
     overlay = o.overlay ? std::make_unique<Element>(*o.overlay) : nullptr;
+    onTap = o.onTap;
+    onPointerDown = o.onPointerDown;
+    onPointerUp = o.onPointerUp;
+    onPointerMove = o.onPointerMove;
+    onScroll = o.onScroll;
+    onKeyDown = o.onKeyDown;
+    onKeyUp = o.onKeyUp;
+    onTextInput = o.onTextInput;
+    focusable = o.focusable;
+    cursor = o.cursor;
+    cursorPassthrough = o.cursorPassthrough;
   }
   return *this;
 }
@@ -88,6 +108,33 @@ Rect explicitLeafBox(views::Image const&) {
   return {};
 }
 
+EventHandlers eventHandlersFromModifiers(ElementModifiers const& m, ComponentKey stableKey) {
+  bool const effFocusable =
+      m.focusable || static_cast<bool>(m.onKeyDown) || static_cast<bool>(m.onKeyUp) ||
+      static_cast<bool>(m.onTextInput);
+  return EventHandlers{
+      .stableTargetKey = stableKey,
+      .onTap = m.onTap,
+      .onPointerDown = m.onPointerDown,
+      .onPointerUp = m.onPointerUp,
+      .onPointerMove = m.onPointerMove,
+      .onScroll = m.onScroll,
+      .onKeyDown = m.onKeyDown,
+      .onKeyUp = m.onKeyUp,
+      .onTextInput = m.onTextInput,
+      .focusable = effFocusable,
+      .cursor = m.cursor,
+      .cursorPassthrough = m.cursorPassthrough,
+  };
+}
+
+bool shouldInsertHandlers(EventHandlers const& h) {
+  return static_cast<bool>(h.onTap) || static_cast<bool>(h.onPointerDown) || static_cast<bool>(h.onPointerUp) ||
+         static_cast<bool>(h.onPointerMove) || static_cast<bool>(h.onScroll) || static_cast<bool>(h.onKeyDown) ||
+         static_cast<bool>(h.onKeyUp) || static_cast<bool>(h.onTextInput) || h.focusable ||
+         h.cursor != Cursor::Inherit || h.cursorPassthrough;
+}
+
 } // namespace
 
 void Element::build(BuildContext& ctx) const {
@@ -117,7 +164,10 @@ void Element::buildWithModifiers(BuildContext& ctx) const {
 
   bool const needEffectLayer = m.opacity < 1.f - 1e-6f || std::fabs(m.offset.x) > 1e-6f ||
                                std::fabs(m.offset.y) > 1e-6f || m.clip;
-  bool const needBg = !m.background.isNone() || !m.border.isNone() || !m.cornerRadius.isZero();
+  /// Background/border decoration only — \c cornerRadius without fill/stroke is merged into leaves such
+  /// as \ref Rectangle via \ref BuildContext::activeElementModifiers.
+  bool const needBg = !m.background.isNone() || !m.border.isNone();
+  bool const needTransparentHit = !needBg && m.hasInteraction();
 
   if (needEffectLayer) {
     LayerNode layer{};
@@ -135,7 +185,7 @@ void Element::buildWithModifiers(BuildContext& ctx) const {
   Rect const localOuter{0.f, 0.f, outerW, outerH};
   Rect const bgBounds = needEffectLayer ? localOuter : absOuter;
 
-  bool const needHitRect = needBg || static_cast<bool>(m.onTap);
+  bool const needHitRect = needBg || needTransparentHit;
   if (needHitRect) {
     FillStyle fill = FillStyle::none();
     StrokeStyle stroke = StrokeStyle::none();
@@ -149,8 +199,13 @@ void Element::buildWithModifiers(BuildContext& ctx) const {
         .fill = std::move(fill),
         .stroke = std::move(stroke),
     });
-    if (m.onTap) {
-      ctx.eventMap().insert(rid, EventHandlers{.stableTargetKey = stableKey, .onTap = m.onTap});
+    if (needTransparentHit) {
+      EventHandlers const h = eventHandlersFromModifiers(m, stableKey);
+      bool const insertedHandlers = shouldInsertHandlers(h);
+      if (insertedHandlers) {
+        ctx.eventMap().insert(rid, h);
+      }
+      ctx.pushSuppressLeafModifierEvents(insertedHandlers);
     }
   }
 
@@ -164,9 +219,16 @@ void Element::buildWithModifiers(BuildContext& ctx) const {
   innerCs.maxWidth = innerW > 0.f ? innerW : std::numeric_limits<float>::infinity();
   innerCs.maxHeight = innerH > 0.f ? innerH : std::numeric_limits<float>::infinity();
 
+  LayoutHints const preservedHints = ctx.hints();
+
   scope.le.setChildFrame(innerFrame);
-  ctx.pushConstraints(innerCs);
+  ctx.pushConstraints(innerCs, preservedHints);
+  ctx.pushActiveElementModifiers(&m);
   impl_->build(ctx);
+  ctx.popActiveElementModifiers();
+  if (needTransparentHit) {
+    ctx.popSuppressLeafModifierEvents();
+  }
   ctx.popConstraints();
 
   if (m.overlay) {
@@ -175,7 +237,7 @@ void Element::buildWithModifiers(BuildContext& ctx) const {
     overlayCs.maxHeight = outerH > 0.f ? outerH : std::numeric_limits<float>::infinity();
     Rect const overFrame = needEffectLayer ? localOuter : absOuter;
     scope.le.setChildFrame(overFrame);
-    ctx.pushConstraints(overlayCs);
+    ctx.pushConstraints(overlayCs, ctx.hints());
     m.overlay->build(ctx);
     ctx.popConstraints();
   }
@@ -322,31 +384,23 @@ void Element::Model<Rectangle>::build(BuildContext& ctx) const {
   ctx.advanceChildSlot();
   Rect const bounds = flux::detail::resolveLeafLayoutBounds(
       explicitLeafBox(value), ctx.layoutEngine().consumeAssignedFrame(), ctx.constraints(), ctx.hints(), true);
+  CornerRadius cornerR{};
+  if (ElementModifiers const* mods = ctx.activeElementModifiers()) {
+    cornerR = mods->cornerRadius;
+  }
   NodeId const id = ctx.graph().addRect(ctx.parentLayer(), RectNode{
       .bounds = bounds,
-      .cornerRadius = value.cornerRadius,
+      .cornerRadius = cornerR,
       .fill = value.fill,
       .stroke = value.stroke,
   });
-  bool const focusable = value.focusable || static_cast<bool>(value.onKeyDown) ||
-                         static_cast<bool>(value.onKeyUp) || static_cast<bool>(value.onTextInput);
-  if (value.onTap || value.onPointerDown || value.onPointerUp || value.onPointerMove || value.onScroll ||
-      value.onKeyDown || value.onKeyUp || value.onTextInput || value.focusable ||
-      value.cursor != Cursor::Inherit || value.cursorPassthrough) {
-    ctx.eventMap().insert(id, EventHandlers{
-        .stableTargetKey = stableKey,
-        .onTap = value.onTap,
-        .onPointerDown = value.onPointerDown,
-        .onPointerUp = value.onPointerUp,
-        .onPointerMove = value.onPointerMove,
-        .onScroll = value.onScroll,
-        .onKeyDown = value.onKeyDown,
-        .onKeyUp = value.onKeyUp,
-        .onTextInput = value.onTextInput,
-        .focusable = focusable,
-        .cursor = value.cursor,
-        .cursorPassthrough = value.cursorPassthrough,
-    });
+  if (ElementModifiers const* mods = ctx.activeElementModifiers()) {
+    if (!ctx.suppressLeafModifierEvents()) {
+      EventHandlers const h = eventHandlersFromModifiers(*mods, stableKey);
+      if (shouldInsertHandlers(h)) {
+        ctx.eventMap().insert(id, h);
+      }
+    }
   }
   layoutDebugLogLeaf("Rectangle", ctx.constraints(), bounds, detail::flexGrowOf(value),
                      detail::flexShrinkOf(value), detail::minMainSizeOf(value));
@@ -408,22 +462,13 @@ void Element::Model<Text>::build(BuildContext& ctx) const {
         .origin = {bounds.x, bounds.y},
         .allocation = bounds,
     });
-    bool const textFocusable = value.focusable || static_cast<bool>(value.onKeyDown) ||
-                               static_cast<bool>(value.onKeyUp) || static_cast<bool>(value.onTextInput);
-    if (value.onTap || value.onPointerDown || value.onPointerUp || value.onPointerMove || value.onKeyDown ||
-        value.onKeyUp || value.onTextInput || value.focusable || value.cursor != Cursor::Inherit) {
-      ctx.eventMap().insert(textId, EventHandlers{
-          .stableTargetKey = stableKey,
-          .onTap = value.onTap,
-          .onPointerDown = value.onPointerDown,
-          .onPointerUp = value.onPointerUp,
-          .onPointerMove = value.onPointerMove,
-          .onKeyDown = value.onKeyDown,
-          .onKeyUp = value.onKeyUp,
-          .onTextInput = value.onTextInput,
-          .focusable = textFocusable,
-          .cursor = value.cursor,
-      });
+    if (ElementModifiers const* mods = ctx.activeElementModifiers()) {
+      if (!ctx.suppressLeafModifierEvents()) {
+        EventHandlers const h = eventHandlersFromModifiers(*mods, stableKey);
+        if (shouldInsertHandlers(h)) {
+          ctx.eventMap().insert(textId, h);
+        }
+      }
     }
   }
   layoutDebugLogLeaf("Text", ctx.constraints(), bounds, detail::flexGrowOf(value),
@@ -458,8 +503,13 @@ void Element::Model<views::Image>::build(BuildContext& ctx) const {
       .bounds = bounds,
       .fillMode = value.fillMode,
   });
-  if (value.onTap) {
-    ctx.eventMap().insert(id, EventHandlers{.stableTargetKey = stableKey, .onTap = value.onTap});
+  if (ElementModifiers const* mods = ctx.activeElementModifiers()) {
+    if (!ctx.suppressLeafModifierEvents()) {
+      EventHandlers const h = eventHandlersFromModifiers(*mods, stableKey);
+      if (shouldInsertHandlers(h)) {
+        ctx.eventMap().insert(id, h);
+      }
+    }
   }
   layoutDebugLogLeaf("Image", ctx.constraints(), bounds, detail::flexGrowOf(value),
                      detail::flexShrinkOf(value), detail::minMainSizeOf(value));
@@ -614,11 +664,91 @@ Element Element::overlay(Element over) && {
   return std::move(*this);
 }
 
-Element Element::onTapGesture(std::function<void()> handler) && {
+Element Element::onTap(std::function<void()> handler) && {
   if (!modifiers_) {
     modifiers_.emplace();
   }
   modifiers_->onTap = std::move(handler);
+  return std::move(*this);
+}
+
+Element Element::onPointerDown(std::function<void(Point)> handler) && {
+  if (!modifiers_) {
+    modifiers_.emplace();
+  }
+  modifiers_->onPointerDown = std::move(handler);
+  return std::move(*this);
+}
+
+Element Element::onPointerUp(std::function<void(Point)> handler) && {
+  if (!modifiers_) {
+    modifiers_.emplace();
+  }
+  modifiers_->onPointerUp = std::move(handler);
+  return std::move(*this);
+}
+
+Element Element::onPointerMove(std::function<void(Point)> handler) && {
+  if (!modifiers_) {
+    modifiers_.emplace();
+  }
+  modifiers_->onPointerMove = std::move(handler);
+  return std::move(*this);
+}
+
+Element Element::onScroll(std::function<void(Vec2)> handler) && {
+  if (!modifiers_) {
+    modifiers_.emplace();
+  }
+  modifiers_->onScroll = std::move(handler);
+  return std::move(*this);
+}
+
+Element Element::onKeyDown(std::function<void(KeyCode, Modifiers)> handler) && {
+  if (!modifiers_) {
+    modifiers_.emplace();
+  }
+  modifiers_->onKeyDown = std::move(handler);
+  return std::move(*this);
+}
+
+Element Element::onKeyUp(std::function<void(KeyCode, Modifiers)> handler) && {
+  if (!modifiers_) {
+    modifiers_.emplace();
+  }
+  modifiers_->onKeyUp = std::move(handler);
+  return std::move(*this);
+}
+
+Element Element::onTextInput(std::function<void(std::string const&)> handler) && {
+  if (!modifiers_) {
+    modifiers_.emplace();
+  }
+  modifiers_->onTextInput = std::move(handler);
+  return std::move(*this);
+}
+
+Element Element::focusable(bool enabled) && {
+  if (!modifiers_) {
+    modifiers_.emplace();
+  }
+  modifiers_->focusable = enabled;
+  return std::move(*this);
+}
+
+Element Element::cursor(Cursor c) && {
+  if (!modifiers_) {
+    modifiers_.emplace();
+  }
+  modifiers_->cursor = c;
+  return std::move(*this);
+}
+
+Element Element::cursorPassthrough(bool passthrough) && {
+  if (!modifiers_) {
+    modifiers_.emplace();
+  }
+  modifiers_->cursorPassthrough = passthrough;
   return std::move(*this);
 }
 

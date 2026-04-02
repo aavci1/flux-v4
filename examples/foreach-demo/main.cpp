@@ -30,11 +30,11 @@ struct HoverRow {
     return ZStack{.children = {
                       Rectangle{
                           .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 44.f,
-                          .cornerRadius = CornerRadius(8.f),
                           .fill = FillStyle::solid(bgColor),
                           .stroke = StrokeStyle::solid(Color::hex(0xE0E0E6), 1.f),
-                          .cursor = Cursor::Hand,
-                      },
+                      }
+                          .cursor(Cursor::Hand)
+                          .cornerRadius(CornerRadius(8.f)),
                       Text{.text = "Row " + std::to_string(index) + (hovered ? "  ← hovered" : ""),
                            .font = {.size = 14.f, .weight = 400.f},
                            .color = pal::label,
@@ -67,11 +67,11 @@ struct ForEachDemo {
                                                     ZStack{.children = {
                                                               Rectangle{
                                                                   .offsetX = 0.f, .offsetY = 0.f, .width = 120.f, .height = 36.f,
-                                                                  .cornerRadius = CornerRadius(8.f),
                                                                   .fill = FillStyle::solid(Color::hex(0x3A7BD5)),
-                                                                  .cursor = Cursor::Hand,
-                                                                  .onTap = [count] { count = *count + 1; },
-                                                              },
+                                                              }
+                                                                  .cursor(Cursor::Hand)
+                                                                  .onTap([count] { count = *count + 1; })
+                                                                  .cornerRadius(CornerRadius(8.f)),
                                                               Text{.text = "+ Row",
                                                                    .font = {.size = 14.f, .weight = 600.f},
                                                                    .color = Color::hex(0xFFFFFF)},
@@ -79,15 +79,15 @@ struct ForEachDemo {
                                                     ZStack{.children = {
                                                               Rectangle{
                                                                   .offsetX = 0.f, .offsetY = 0.f, .width = 120.f, .height = 36.f,
-                                                                  .cornerRadius = CornerRadius(8.f),
                                                                   .fill = FillStyle::solid(Color::hex(0xD05A2B)),
-                                                                  .cursor = Cursor::Hand,
-                                                                  .onTap = [count] {
+                                                              }
+                                                                  .cursor(Cursor::Hand)
+                                                                  .onTap([count] {
                                                                     if (*count > 0) {
                                                                       count = *count - 1;
                                                                     }
-                                                                  },
-                                                              },
+                                                                  })
+                                                                  .cornerRadius(CornerRadius(8.f)),
                                                               Text{.text = "- Row",
                                                                    .font = {.size = 14.f, .weight = 600.f},
                                                                    .color = Color::hex(0xFFFFFF)},

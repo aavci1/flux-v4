@@ -46,10 +46,10 @@ Element Alert::body() const {
                                       Rectangle{
                                           .width = cardWidth,
                                           .height = 0.f,
-                                          .cornerRadius = cardCorner,
                                           .fill = FillStyle::solid(card),
                                           .stroke = StrokeStyle::solid(stroke, 1.f),
-                                      },
+                                      }
+                                          .cornerRadius(cardCorner),
                                       VStack{
                                           .spacing = theme.space3,
                                           .padding = theme.space6,

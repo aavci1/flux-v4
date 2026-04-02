@@ -45,14 +45,13 @@ struct FocusField {
                         {
                             Rectangle{
                                 .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 80.f,
-                                .cornerRadius = CornerRadius(10.f),
                                 .fill = FillStyle::solid(focused ? pal::editorFocus : pal::editorBg),
                                 .stroke =
                                     StrokeStyle::solid(focused ? pal::borderFocus : pal::border,
                                                        focused ? 2.f : 1.f),
-                                .flexGrow = 1.f,
-                                .focusable = true,
-                                .onKeyDown =
+                            }
+                                .focusable(true)
+                                .onKeyDown(
                                     [text](KeyCode k, Modifiers) {
                                       if (k == keys::Delete && !(*text).empty()) {
                                         std::string s = *text;
@@ -62,14 +61,14 @@ struct FocusField {
                                       if (k == keys::Escape) {
                                         text = std::string{};
                                       }
-                                    },
-                                .onTextInput =
+                                    })
+                                .onTextInput(
                                     [text](std::string const& chunk) {
                                       if (!chunk.empty()) {
                                         text = *text + chunk;
                                       }
-                                    },
-                            }
+                                    })
+                                .cornerRadius(CornerRadius(10.f))
                                 .flex(1.f),
                         },
                 },
@@ -107,10 +106,10 @@ struct EditorPanel {
         .children =
             {
                 Rectangle{
-                    .cornerRadius = CornerRadius(12.f),
                     .fill = FillStyle::solid(pal::surface),
                     .stroke = StrokeStyle::solid(pal::border, 1.f),
-                },
+                }
+                    .cornerRadius(CornerRadius(12.f)),
                 VStack{
                     .spacing = 10.f,
                     .padding = 14.f,
@@ -136,11 +135,11 @@ struct RequestFocusDemo {
               {
                   Rectangle{
                       .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 36.f,
-                      .cornerRadius = CornerRadius(8.f),
                       .fill = FillStyle::solid(pal::accent),
-                      .cursor = Cursor::Hand,
-                      .onTap = std::move(action),
-                  },
+                  }
+                      .cursor(Cursor::Hand)
+                      .onTap(std::move(action))
+                      .cornerRadius(CornerRadius(8.f)),
                   Text{.text = std::move(label),
                        .font = {.size = 14.f, .weight = 600.f},
                        .color = Color::hex(0xFFFFFF),

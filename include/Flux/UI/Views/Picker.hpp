@@ -96,13 +96,13 @@ struct PickerRow : ViewModifiers<PickerRow<T>> {
             {
                 Rectangle{
                     .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = rowHeight,
-                    .cornerRadius = rowBgCorners,
                     .fill = FillStyle::solid(bg),
                     .stroke = StrokeStyle::none(),
-                    .flexGrow = 1.f,
-                    .cursor = Cursor::Hand,
-                    .onTap = onSelect,
-                },
+                }
+                    .cursor(Cursor::Hand)
+                    .onTap(onSelect)
+                    .cornerRadius(rowBgCorners)
+                    .flex(1.f),
                 HStack{
                     .spacing = 0.f,
                     .vAlign = VerticalAlignment::Center,
@@ -128,9 +128,9 @@ struct PickerRow : ViewModifiers<PickerRow<T>> {
                                             .lineHeight = 0.f,
                                             .maxLines = 1,
                                             .firstBaselineOffset = 0.f,
-                                            .onTap = onSelect,
-                                            .cursor = Cursor::Hand,
                                         }
+                                            .onTap(onSelect)
+                                            .cursor(Cursor::Hand)
                                             .frame(0.f, rowHeight)
                                             .flex(1.f),
                                         ZStack{
@@ -446,17 +446,16 @@ struct Picker : ViewModifiers<Picker<T>> {
             {
                 Rectangle{
                     .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = h,
-                    .cornerRadius = triggerCr,
                     .fill = FillStyle::solid(*fillAnim),
                     .stroke = StrokeStyle::solid(borderCol, borderW),
-                    .flexGrow = flexGrow,
-                    .flexShrink = flexShrink,
-                    .minMainSize = minSize,
-                    .cursor = isDisabled ? Cursor::Inherit : Cursor::Hand,
-                    .focusable = !isDisabled,
-                    .onKeyDown = isDisabled ? nullptr : std::function<void(KeyCode, Modifiers)>{onTriggerKey},
-                    .onTap = isDisabled ? nullptr : std::function<void()>{onTriggerTap},
-                },
+                }
+                    .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
+                    .focusable(!isDisabled)
+                    .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)>{}
+                                          : std::function<void(KeyCode, Modifiers)>{onTriggerKey})
+                    .onTap(isDisabled ? std::function<void()>{} : std::function<void()>{onTriggerTap})
+                    .cornerRadius(triggerCr)
+                    .flex(flexGrow, flexShrink, minSize),
                 HStack{
                     .spacing = 0.f,
                     .vAlign = VerticalAlignment::Center,
@@ -477,18 +476,18 @@ struct Picker : ViewModifiers<Picker<T>> {
                                 .lineHeight = 0.f,
                                 .maxLines = 1,
                                 .firstBaselineOffset = 0.f,
-                                .onTap = isDisabled ? nullptr : std::function<void()>{onTriggerTap},
-                                .cursor = isDisabled ? Cursor::Inherit : Cursor::Hand,
                             }
+                                .onTap(isDisabled ? std::function<void()>{} : std::function<void()>{onTriggerTap})
+                                .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
                                 .frame(0.f, h)
                                 .flex(1.f),
                             Rectangle{
                                 .offsetX = 0.f, .offsetY = 0.f, .width = padHResolved, .height = h,
                                 .fill = FillStyle::none(),
                                 .stroke = StrokeStyle::none(),
-                                .cursor = isDisabled ? Cursor::Inherit : Cursor::Hand,
-                                .onTap = isDisabled ? nullptr : std::function<void()>{onTriggerTap},
-                            },
+                            }
+                                .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
+                                .onTap(isDisabled ? std::function<void()>{} : std::function<void()>{onTriggerTap}),
                             ZStack{
                                 .hAlign = HorizontalAlignment::Leading,
                                 .vAlign = VerticalAlignment::Center,
@@ -501,9 +500,9 @@ struct Picker : ViewModifiers<Picker<T>> {
                                             .height = h,
                                             .fill = FillStyle::none(),
                                             .stroke = StrokeStyle::none(),
-                                            .cursor = isDisabled ? Cursor::Inherit : Cursor::Hand,
-                                            .onTap = isDisabled ? nullptr : std::function<void()>{onTriggerTap},
-                                        },
+                                        }
+                                            .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
+                                            .onTap(isDisabled ? std::function<void()>{} : std::function<void()>{onTriggerTap}),
                                         Icon{
                                           .name = isOpen ? IconName::ExpandLess : IconName::ExpandMore,
                                           .size = chevronIconSz,
@@ -515,9 +514,9 @@ struct Picker : ViewModifiers<Picker<T>> {
                                 .offsetX = 0.f, .offsetY = 0.f, .width = padHResolved, .height = h,
                                 .fill = FillStyle::none(),
                                 .stroke = StrokeStyle::none(),
-                                .cursor = isDisabled ? Cursor::Inherit : Cursor::Hand,
-                                .onTap = isDisabled ? nullptr : std::function<void()>{onTriggerTap},
-                            },
+                            }
+                                .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
+                                .onTap(isDisabled ? std::function<void()>{} : std::function<void()>{onTriggerTap}),
                         },
                 },
             },

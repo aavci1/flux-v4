@@ -49,10 +49,10 @@ struct ConfirmDialog {
                                     {
                                         Rectangle{
                                             .offsetX = 0.f, .offsetY = 0.f, .width = 360.f, .height = 0.f,
-                                            .cornerRadius = CornerRadius(14.f),
                                             .fill = FillStyle::solid(Color::hex(0xFFFFFF)),
                                             .stroke = StrokeStyle::solid(pal::cardStroke, 1.f),
-                                        },
+                                        }
+                                            .cornerRadius(CornerRadius(14.f)),
                                         VStack{
                                             .spacing = 12.f,
                                             .padding = 24.f,
@@ -82,19 +82,19 @@ struct ConfirmDialog {
                                                                         {
                                                                             Rectangle{
                                                                                 .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 44.f,
-                                                                                .cornerRadius = CornerRadius(8.f),
                                                                                 .fill = FillStyle::solid(Color::hex(0xF0F0F5)),
                                                                                 .stroke = StrokeStyle::solid(pal::cardStroke, 1.f),
-                                                                                .cursor = Cursor::Hand,
-                                                                                .focusable = true,
-                                                                                .onKeyDown =
+                                                                            }
+                                                                                .cursor(Cursor::Hand)
+                                                                                .focusable(true)
+                                                                                .onKeyDown(
                                                                                     [cb = onCancel](KeyCode k, Modifiers) {
                                                                                       if (k == keys::Return || k == keys::Space) {
                                                                                         cb();
                                                                                       }
-                                                                                    },
-                                                                                .onTap = onCancel,
-                                                                            },
+                                                                                    })
+                                                                                .onTap(onCancel)
+                                                                                .cornerRadius(CornerRadius(8.f)),
                                                                             Text{.text = "Cancel",
                                                                                  .font = {.size = 14.f, .weight = 500.f},
                                                                                  .color = pal::titleC,
@@ -107,19 +107,19 @@ struct ConfirmDialog {
                                                                         {
                                                                             Rectangle{
                                                                                 .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 44.f,
-                                                                                .cornerRadius = CornerRadius(8.f),
                                                                                 .fill = FillStyle::solid(confirmColor),
                                                                                 .stroke = StrokeStyle::none(),
-                                                                                .cursor = Cursor::Hand,
-                                                                                .focusable = true,
-                                                                                .onKeyDown =
+                                                                            }
+                                                                                .cursor(Cursor::Hand)
+                                                                                .focusable(true)
+                                                                                .onKeyDown(
                                                                                     [cb = onConfirm](KeyCode k, Modifiers) {
                                                                                       if (k == keys::Return || k == keys::Space) {
                                                                                         cb();
                                                                                       }
-                                                                                    },
-                                                                                .onTap = onConfirm,
-                                                                            },
+                                                                                    })
+                                                                                .onTap(onConfirm)
+                                                                                .cornerRadius(CornerRadius(8.f)),
                                                                             Text{.text = confirmLabel,
                                                                                  .font = {.size = 14.f, .weight = 600.f},
                                                                                  .color = Color::hex(0xFFFFFF),
@@ -161,11 +161,11 @@ struct FileManagerRow {
                         {
                             Rectangle{
                                 .offsetX = 0.f, .offsetY = 0.f, .width = 88.f, .height = 32.f,
-                                .cornerRadius = CornerRadius(6.f),
                                 .fill = FillStyle::solid(pal::dangerBg),
                                 .stroke = StrokeStyle::solid(pal::dangerStroke, 1.f),
-                                .cursor = Cursor::Hand,
-                                .onTap =
+                            }
+                                .cursor(Cursor::Hand)
+                                .onTap(
                                     [fn, del, showDialog, hideDialog] {
                                       showDialog(
                                           ConfirmDialog{
@@ -187,8 +187,8 @@ struct FileManagerRow {
                                               .dismissOnEscape = true,
                                               .onDismiss = hideDialog,
                                           });
-                                    },
-                            },
+                                    })
+                                .cornerRadius(CornerRadius(6.f)),
                             Text{.text = "Delete",
                                  .font = {.size = 13.f, .weight = 500.f},
                                  .color = pal::dangerText,

@@ -7,6 +7,7 @@
 ///
 /// Method bodies live at the bottom of Element.hpp (Element must be a complete type).
 
+#include <Flux/Core/Cursor.hpp>
 #include <Flux/Core/Types.hpp>
 #include <Flux/Graphics/Styles.hpp>
 
@@ -30,7 +31,19 @@ struct ViewModifiers {
   Element offset(float dx, float dy) &&;
   Element clipContent(bool clip) &&;
   Element overlay(Element over) &&;
-  Element onTapGesture(std::function<void()> handler) &&;
+
+  Element onTap(std::function<void()> handler) &&;
+  Element onPointerDown(std::function<void(Point)> handler) &&;
+  Element onPointerUp(std::function<void(Point)> handler) &&;
+  Element onPointerMove(std::function<void(Point)> handler) &&;
+  Element onScroll(std::function<void(Vec2)> handler) &&;
+  Element onKeyDown(std::function<void(KeyCode, Modifiers)> handler) &&;
+  Element onKeyUp(std::function<void(KeyCode, Modifiers)> handler) &&;
+  Element onTextInput(std::function<void(std::string const&)> handler) &&;
+  Element focusable(bool enabled) &&;
+  Element cursor(Cursor c) &&;
+  Element cursorPassthrough(bool passthrough) &&;
+
   Element flex(float grow, float shrink = 1.f, float minMain = 0.f) &&;
   template<typename T>
   Element environment(T value) &&;

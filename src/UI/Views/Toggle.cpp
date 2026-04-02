@@ -117,22 +117,23 @@ Element Toggle::body() const {
       .children = {
         Rectangle {
           .offsetX = 0.f, .offsetY = 0.f, .width = trackWidth, .height = trackHeight,
-          .cornerRadius = CornerRadius {trackHeight * 0.5f},
           .fill = FillStyle::solid(*trackFillAnim),
           .stroke = StrokeStyle::solid(focused ? focusColor : borderColor, borderWidth),
-          .cursor = isDisabled ? Cursor::Inherit : Cursor::Hand,
-          .focusable = !isDisabled,
-          .onKeyDown = isDisabled ? nullptr : std::function<void(KeyCode, Modifiers)>{handleKey},
-          .onTap = isDisabled ? nullptr : std::function<void()>{handleToggle},
-        },
+        }
+            .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
+            .focusable(!isDisabled)
+            .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)>{}
+                                  : std::function<void(KeyCode, Modifiers)>{handleKey})
+            .onTap(isDisabled ? std::function<void()>{} : std::function<void()>{handleToggle})
+            .cornerRadius(CornerRadius{trackHeight * 0.5f}),
         Rectangle {
           .offsetX = *thumbXAnim, .offsetY = thumbInset, .width = thumbSize, .height = thumbSize,
-          .cornerRadius = CornerRadius {thumbSize * 0.5f},
           .fill = FillStyle::solid(isDisabled ? disabledColor : thumbColor),
           .stroke = isDisabled ? StrokeStyle::solid(disabledColor, thumbBorderWidth) : StrokeStyle::solid(thumbBorderColor, thumbBorderWidth),
-          .cursor = isDisabled ? Cursor::Inherit : Cursor::Hand,
-          .cursorPassthrough = true,
-        },
+        }
+            .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
+            .cursorPassthrough(true)
+            .cornerRadius(CornerRadius{thumbSize * 0.5f}),
       },
     },
   };

@@ -180,33 +180,37 @@ Element Slider::body() const {
         .children = {
             Rectangle {
                 .offsetX = 0.f, .offsetY = 0.f, .width = componentWidth, .height = componentHeight,
-                .cursor = isDisabled ? Cursor::Inherit : Cursor::Hand,
-                .focusable = !isDisabled,
-                .onKeyDown = isDisabled ? nullptr : std::function<void(KeyCode, Modifiers)> {handleKey},
-                .onPointerDown = isDisabled ? nullptr : std::function<void(Point)> {handleDown},
-                .onPointerUp = isDisabled ? nullptr : std::function<void(Point)> {handleUp},
-                .onPointerMove = isDisabled ? nullptr : std::function<void(Point)> {handleMove},
-            },
+            }
+                .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
+                .focusable(!isDisabled)
+                .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)>{}
+                                      : std::function<void(KeyCode, Modifiers)>{handleKey})
+                .onPointerDown(isDisabled ? std::function<void(Point)>{}
+                                          : std::function<void(Point)> {handleDown})
+                .onPointerUp(isDisabled ? std::function<void(Point)>{}
+                                        : std::function<void(Point)> {handleUp})
+                .onPointerMove(isDisabled ? std::function<void(Point)>{}
+                                          : std::function<void(Point)> {handleMove}),
             Rectangle {
                 .offsetX = thumbSize * 0.5f, .offsetY = trackY, .width = trackWidth, .height = trackHeight,
-                .cornerRadius = CornerRadius {trackHeight * 0.5f},
                 .fill = FillStyle::solid(isDisabled ? theme.colorSurfaceDisabled : inactiveColor),
                 .stroke = StrokeStyle::none(),
-            },
+            }
+                .cornerRadius(CornerRadius{trackHeight * 0.5f}),
             Rectangle {
                 .offsetX = thumbSize * 0.5f, .offsetY = trackY, .width = filledWidth, .height = trackHeight,
-                .cornerRadius = CornerRadius {trackHeight * 0.5f},
                 .fill = FillStyle::solid(isDisabled ? theme.colorSurfaceDisabled : activeColor),
                 .stroke = StrokeStyle::none(),
-            },
+            }
+                .cornerRadius(CornerRadius{trackHeight * 0.5f}),
             Rectangle {
                 .offsetX = thumbX + thumbOffset, .offsetY = thumbY, .width = thumbDiameter, .height = thumbDiameter,
-                .cornerRadius = CornerRadius {thumbDiameter * 0.5f},
                 .fill = FillStyle::solid(isDisabled ? theme.colorTextDisabled : thumbColor),
                 .stroke = isDisabled ? StrokeStyle::solid(theme.colorTextDisabled, 1.f) : thumbStroke,
-                .cursor = isDisabled ? Cursor::Inherit : Cursor::Hand,
-                .cursorPassthrough = !isDisabled,
-            },
+            }
+                .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
+                .cursorPassthrough(!isDisabled)
+                .cornerRadius(CornerRadius{thumbDiameter * 0.5f}),
         },
     };
 }

@@ -106,14 +106,12 @@ struct TextEditor {
                         {
                             Rectangle{
                                 .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 200.f,
-                                .cornerRadius = CornerRadius(10.f),
                                 .fill = FillStyle::solid(focused ? Color::hex(0xE8F0FC) : Color::hex(0xFAFAFC)),
                                 .stroke = StrokeStyle::solid(focused ? Color::hex(0x3A7BD5) : Color::hex(0xC8C8D0),
                                                                focused ? 2.f : 1.f),
-                                .flexGrow = 1.f,
-                                .minMainSize = 120.f,
-                                .focusable = true,
-                                .onKeyDown =
+                            }
+                                .focusable(true)
+                                .onKeyDown(
                                     [text, selStart, selEnd](KeyCode k, Modifiers m) {
                                       (void)m;
                                       int a = *selStart;
@@ -174,8 +172,8 @@ struct TextEditor {
                                         text = std::move(cur);
                                         collapse(i0 + 1);
                                       }
-                                    },
-                                .onTextInput =
+                                    })
+                                .onTextInput(
                                     [text, selStart, selEnd](std::string const& chunk) {
                                       if (chunk.empty()) {
                                         return;
@@ -191,9 +189,9 @@ struct TextEditor {
                                       int const p = i0 + static_cast<int>(chunk.size());
                                       selStart = p;
                                       selEnd = p;
-                                    },
-                            }
-                                .flex(1.f),
+                                    })
+                                .cornerRadius(CornerRadius(10.f))
+                                .flex(1.f, 1.f, 120.f),
                         },
                 },
                 HStack{
@@ -240,8 +238,8 @@ struct Toolbar {
                  .text = label,
                  .font = {.size = 13.f, .weight = 600.f},
                  .color = enabled ? Color::hex(0x111118) : Color::hex(0xAAAAAA),
-                 .onTap = enabled ? std::move(tap) : std::function<void()>{},
              }
+          .onTap(enabled ? std::move(tap) : std::function<void()>{})
           .padding(8.f)
           .background(FillStyle::solid(enabled ? Color::hex(0xECECF0) : Color::hex(0xF5F5F7)))
           .border(StrokeStyle::solid(Color::hex(0xC8C8D0), 1.f))

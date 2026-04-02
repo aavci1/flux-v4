@@ -62,26 +62,26 @@ Element ScrollView::body() const {
               Rectangle{
                   .fill = FillStyle::none(),
                   .stroke = StrokeStyle::none(),
-                  .flexGrow = 1.f,
-                  .cursorPassthrough = true,
-                  .onPointerDown =
+              }
+                  .cursorPassthrough(true)
+                  .onPointerDown(
                       [dragging, offset, downPoint](Point p) {
                         dragging = true;
                         downPoint = Point{p.x + (*offset).x, p.y + (*offset).y};
-                      },
-                  .onPointerUp =
+                      })
+                  .onPointerUp(
                       [dragging](Point) {
                         dragging = false;
-                      },
-                  .onPointerMove =
+                      })
+                  .onPointerMove(
                       [offset, downPoint, ax, content, dragging, effectiveViewport](Point p) {
                         if (!*dragging) {
                           return;
                         }
                         Point const next{(*downPoint).x - p.x, (*downPoint).y - p.y};
                         offset = clampScrollOffset(ax, next, effectiveViewport, *content);
-                      },
-                  .onScroll =
+                      })
+                  .onScroll(
                       [offset, ax, content, effectiveViewport](Vec2 d) {
                         Point next = *offset;
                         // scrollingDelta* is expressed for non-flipped NSView coords (y up). Flux uses
@@ -96,8 +96,8 @@ Element ScrollView::body() const {
                         Point const clamped =
                             clampScrollOffset(ax, next, effectiveViewport, *content);
                         offset = clamped;
-                      },
-              },
+                      })
+                  .flex(1.f),
           },
   };
 }

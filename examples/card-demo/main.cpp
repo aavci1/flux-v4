@@ -59,9 +59,9 @@ struct Card {
         .children = {
             Rectangle{
                 .offsetX = 0, .offsetY = 0, .width = 14.f, .height = 14.f,
-                .cornerRadius = CornerRadius(7.f),
                 .fill = FillStyle::solid(accent),
-            },
+            }
+                .cornerRadius(CornerRadius(7.f)),
             Text{
                 .text = title,
                 .font = {.size = 17.f, .weight = 600.f},
@@ -102,16 +102,16 @@ struct Card {
         .vAlign = VerticalAlignment::Top,
         .children = {
             Rectangle{
-                .cornerRadius = CornerRadius(14.f),
                 .fill = FillStyle::solid(pal::surface),
                 .stroke = StrokeStyle::solid(pal::border, 1.f),
-                .onTap = [expanded, bodyOpacity] {
+            }
+                .onTap([expanded, bodyOpacity] {
                   bool const next = !expanded;
                   expanded = next;
                   WithTransition t{Transition::spring(500.f, 25.f, 0.5f)};
                   bodyOpacity = next ? 1.f : 0.f;
-                },
-            },
+                })
+                .cornerRadius(CornerRadius(14.f)),
             VStack{.spacing = 10.f, .padding = 18.f, .children = std::move(rows)},
         },
     };

@@ -21,6 +21,7 @@ class EventMap;
 class Runtime;
 class BuildOrchestrator;
 class MeasureCache;
+struct ElementModifiers;
 
 class BuildContext {
 public:
@@ -80,6 +81,18 @@ public:
 
   std::unordered_map<ComponentKey, NodeId, ComponentKeyHash> const& subtreeRootLayers() const;
 
+  /// While building a subtree wrapped in \ref Element modifiers, the innermost active modifiers
+  /// (for example \c cornerRadius for \ref Rectangle) are available to leaf \c build implementations.
+  void pushActiveElementModifiers(ElementModifiers const* m);
+  void popActiveElementModifiers();
+  ElementModifiers const* activeElementModifiers() const noexcept;
+
+  /// When true, leaves should not register \ref EventHandlers from \ref activeElementModifiers (already
+  /// applied to a full-bounds transparent hit rect in \ref Element::buildWithModifiers).
+  void pushSuppressLeafModifierEvents(bool suppress);
+  void popSuppressLeafModifierEvents();
+  bool suppressLeafModifierEvents() const noexcept;
+
 #ifndef NDEBUG
   /// Stack depth probes for \ref ContainerBuildScope / \ref ContainerMeasureScope balance checks.
   std::size_t debugLayerStackDepth() const noexcept { return layerStack_.size(); }
@@ -115,6 +128,8 @@ private:
   ComponentKey pendingCompositeSubtreeKey_{};
   std::unordered_map<ComponentKey, NodeId, ComponentKeyHash> subtreeRootLayers_{};
   MeasureCache* measureCache_{nullptr};
+  std::vector<ElementModifiers const*> activeElementModifiers_{};
+  std::vector<bool> suppressLeafModifierEvents_{};
 };
 
 } // namespace flux

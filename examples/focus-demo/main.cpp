@@ -43,14 +43,12 @@ struct FocusField {
                         {
                             Rectangle{
                                         .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 120.f,
-                                        .cornerRadius = CornerRadius(10.f),
                                         .fill = FillStyle::solid(focused ? pal::editorBgFocus : pal::editorBg),
                                         .stroke = StrokeStyle::solid(focused ? pal::borderFocus : pal::border,
                                                                      focused ? 2.f : 1.f),
-                                        .flexGrow = 1.f,
-                                        .minMainSize = 80.f,
-                                        .focusable = true,
-                                        .onKeyDown =
+                                    }
+                                .focusable(true)
+                                .onKeyDown(
                                             [text](KeyCode k, Modifiers m) {
                                               std::string const& cur = *text;
                                               if (k == keys::Delete && !cur.empty()) {
@@ -66,15 +64,15 @@ struct FocusField {
                                               if (k == keys::S && any(m & Modifiers::Meta)) {
                                                 text = cur + " [saved]";
                                               }
-                                            },
-                                        .onTextInput =
+                                            })
+                                .onTextInput(
                                             [text](std::string const& chunk) {
                                               if (!chunk.empty()) {
                                                 text = *text + chunk;
                                               }
-                                            },
-                                    }
-                                .flex(1.f),
+                                            })
+                                .cornerRadius(CornerRadius(10.f))
+                                .flex(1.f, 1.f, 80.f),
                         },
                 },
                 HStack{

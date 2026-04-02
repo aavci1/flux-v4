@@ -114,17 +114,16 @@ Element Checkbox::body() const {
       .children = {
           Rectangle {
               .offsetX = 0.f, .offsetY = 0.f, .width = boxSize, .height = boxSize,
-              .cornerRadius = CornerRadius {cornerRadius},
               .fill = FillStyle::solid(*boxFillAnim),
               .stroke = boxStroke,
-              .flexGrow = flexGrow,
-              .flexShrink = flexShrink,
-              .minMainSize = minSize,
-              .cursor = isDisabled ? Cursor::Inherit : Cursor::Hand,
-              .focusable = !isDisabled,
-              .onKeyDown = isDisabled ? nullptr : std::function<void(KeyCode, Modifiers)> {handleKey},
-              .onTap = isDisabled ? nullptr : std::function<void()> {handleToggle},
-          },
+          }
+              .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
+              .focusable(!isDisabled)
+              .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)>{}
+                                    : std::function<void(KeyCode, Modifiers)>{handleKey})
+              .onTap(isDisabled ? std::function<void()>{} : std::function<void()> {handleToggle})
+              .cornerRadius(CornerRadius{cornerRadius})
+              .flex(flexGrow, flexShrink, minSize),
           Icon {
               .name = iconName,
               .size = iconSz,

@@ -140,4 +140,34 @@ std::unordered_map<ComponentKey, NodeId, ComponentKeyHash> const& BuildContext::
   return subtreeRootLayers_;
 }
 
+void BuildContext::pushActiveElementModifiers(ElementModifiers const* m) {
+  activeElementModifiers_.push_back(m);
+}
+
+void BuildContext::popActiveElementModifiers() {
+#ifndef NDEBUG
+  assert(!activeElementModifiers_.empty());
+#endif
+  activeElementModifiers_.pop_back();
+}
+
+ElementModifiers const* BuildContext::activeElementModifiers() const noexcept {
+  return activeElementModifiers_.empty() ? nullptr : activeElementModifiers_.back();
+}
+
+void BuildContext::pushSuppressLeafModifierEvents(bool suppress) {
+  suppressLeafModifierEvents_.push_back(suppress);
+}
+
+void BuildContext::popSuppressLeafModifierEvents() {
+#ifndef NDEBUG
+  assert(!suppressLeafModifierEvents_.empty());
+#endif
+  suppressLeafModifierEvents_.pop_back();
+}
+
+bool BuildContext::suppressLeafModifierEvents() const noexcept {
+  return !suppressLeafModifierEvents_.empty() && suppressLeafModifierEvents_.back();
+}
+
 } // namespace flux

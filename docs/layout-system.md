@@ -210,9 +210,10 @@ Element{MyView{...}}.flex(/*grow=*/1.f, /*shrink=*/1.f, /*minMain=*/50.f)
 `Element` can carry an optional **`ElementModifiers`** block (`include/Flux/UI/Element.hpp`): padding, background, border, corner radius, opacity, offset, clip, tap handler, optional fixed **frame** sizes, and an optional **overlay** subtree. When present, `Element::build`/`measure` apply these in one pass instead of nesting extra `VStack`/`ZStack`/`Rectangle` wrappers for each modifier.
 
 - **Build order** (outside-in): effect **layer** (opacity + translation + optional clip rect) when needed → **one** merged **`RectNode`** for fill/stroke/corners → **tap** on that decoration rect when set → **padding** tightens the frame/constraints for the inner view → `impl_->build` (and overlay build when set).
+- **Layout hints**: the modifier pass must **not** replace the parent’s **`LayoutHints`**. `Element::buildWithModifiers` saves `ctx.hints()` and calls `pushConstraints(innerCs, preservedHints)` so stacks still propagate **`vStackCrossAlign`** / **`hStackCrossAlign`** to inner leaves. Without that, `Rectangle` would miss **`resolveRectangleBounds`** alignment and flex slot width (e.g. `VStack { .hAlign = Center }` + **`.cornerRadius`**, or **`HStack`** + **`.flex(…)`** on a rounded rect). Overlay subtrees use `pushConstraints(overlayCs, ctx.hints())` after the inner build pops, so overlays see the same hint context as the decorated element’s parent.
 - **Measure**: constraints are tightened by padding before delegating to the inner implementation; reported size adds padding back; **frame** modifiers can override width/height on the outer box.
 - **CRTP `ViewModifiers`**: view structs expose the same names as `Element` (`padding`, `background`, `flex`, `environment`, …). Chaining produces a single `Element` with accumulated modifier fields.
-- **`Rectangle` layout fields** (`offsetX`/`offsetY`/`width`/`height`, flex on the struct) remain the primitive’s way to position/s size in stacks. The **`Element::offset`** modifier is a **layer transform** (with opacity/clip), not a substitute for that layout box.
+- **`Rectangle` layout fields** (`offsetX`/`offsetY`/`width`/`height`) remain the primitive’s way to position/size in stacks; **flex** and **rounded corners** are **`Element::flex`**, **`Element::cornerRadius`**, etc. The **`Element::offset`** modifier is a **layer transform** (with opacity/clip), not a substitute for that layout box.
 - **Containers** (`VStack`/`HStack` **`.padding`**) still mean “inset children in layout” on the container struct; that is separate from the **`padding()`** modifier on `Element`.
 
 Flex distribution follows CSS flexbox semantics:
@@ -238,7 +239,7 @@ All three follow the same pattern with axis-specific differences:
 4. If height-constrained: flex grow/shrink on the Y axis
 5. Place each child: `setChildFrame({padding, y, innerW, allocH[i]})`, advance `y`
 
-Children get the **full column width** so nested HStacks can flex horizontally. Cross-axis alignment is communicated via `LayoutHints::vStackCrossAlign` (used by `Text` for glyph alignment).
+Children get the **full column width** so nested HStacks can flex horizontally. Cross-axis alignment is communicated via `LayoutHints::vStackCrossAlign` (used by **`Text`** for glyph alignment and by **`Rectangle`** in **`resolveRectangleBounds`** for horizontal offset within each row). Modifier-wrapped **`Rectangle`** views still receive these hints via **`buildWithModifiers`** (see **Element modifiers** above).
 
 ### HStack (horizontal stack)
 
@@ -251,7 +252,7 @@ The horizontal dual of VStack:
 2. If width-constrained: flex grow/shrink on the X axis
 3. Place each child: `setChildFrame({x, padding, allocW[i], rowInnerH})`, advance `x`
 
-Children get the **full row height**. Cross-axis alignment uses `LayoutHints::hStackCrossAlign`.
+Children get the **full row height**. Cross-axis alignment uses `LayoutHints::hStackCrossAlign`. Main-axis **flex** assigns wider **`allocW[i]`** in the child frame; **`Rectangle`** resolves final bounds in **`resolveRectangleBounds`** using that frame together with hints (taller-than-natural rows need **`hStackCrossAlign`** so flex width is not dropped). Modifier chains preserve hints the same way as for **`VStack`**.
 
 ### ZStack (overlay stack)
 

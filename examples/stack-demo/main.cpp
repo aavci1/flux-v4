@@ -30,12 +30,12 @@ struct StackDemoRoot {
         return ScrollView {
             .axis = ScrollAxis::Vertical,
             .flexGrow = 1.f,
-            .children = {
+            .children = children(
                 VStack {
                     .spacing = 22.f,
                     .padding = 24.f,
                     .hAlign = HorizontalAlignment::Leading,
-                    .children = {
+                    .children = children(
                         Text {
                             .text = "HStack & VStack",
                             .font = {.size = 26.f, .weight = 700.f},
@@ -55,23 +55,20 @@ struct StackDemoRoot {
                         VStack {
                             .spacing = 10.f,
                             .hAlign = HorizontalAlignment::Center,
-                            .children =
-                                children(
-                                    Rectangle {
-                                        .offsetX = 0.f, .offsetY = 0.f, .width = 160.f, .height = 36.f,
-                                        .cornerRadius = CornerRadius{8.f},
-                                        .fill = FillStyle::solid(pal::coral),
-                                    },
-                                    Rectangle {
-                                        .offsetX = 0.f, .offsetY = 0.f, .width = 200.f, .height = 36.f,
-                                        .cornerRadius = CornerRadius{8.f},
-                                        .fill = FillStyle::solid(pal::teal),
-                                    },
-                                    Rectangle {
-                                        .offsetX = 0.f, .offsetY = 0.f, .width = 120.f, .height = 36.f,
-                                        .cornerRadius = CornerRadius{8.f},
-                                        .fill = FillStyle::solid(pal::indigo),
-                                    }),
+                            .children = children(
+                                Rectangle {
+                                    .offsetX = 0.f, .offsetY = 0.f, .width = 160.f, .height = 36.f,
+                                    .fill = FillStyle::solid(pal::coral),
+                                }.cornerRadius(CornerRadius{8.f}),
+                                Rectangle {
+                                    .offsetX = 0.f, .offsetY = 0.f, .width = 200.f, .height = 36.f,
+                                    .fill = FillStyle::solid(pal::teal),
+                                }.cornerRadius(CornerRadius{8.f}),
+                                Rectangle {
+                                    .offsetX = 0.f, .offsetY = 0.f, .width = 120.f, .height = 36.f,
+                                    .fill = FillStyle::solid(pal::indigo),
+                                }.cornerRadius(CornerRadius{8.f})
+                            ),
                         },
                         Text {
                             .text = "HStack",
@@ -81,28 +78,24 @@ struct StackDemoRoot {
                         HStack {
                             .spacing = 12.f,
                             .vAlign = VerticalAlignment::Center,
-                            .children = {
+                            .children = children(
                                 Rectangle {
                                     .offsetX = 0.f, .offsetY = 0.f, .width = 56.f, .height = 56.f,
-                                    .cornerRadius = CornerRadius{10.f},
                                     .fill = FillStyle::solid(pal::coral),
-                                }.flex(2.f),
+                                }.cornerRadius(CornerRadius{10.f}).flex(2.f),
                                 Rectangle {
                                     .offsetX = 0.f, .offsetY = 0.f, .width = 56.f, .height = 72.f,
-                                    .cornerRadius = CornerRadius{10.f},
                                     .fill = FillStyle::solid(pal::teal),
-                                },
+                                }.cornerRadius(CornerRadius{10.f}),
                                 Rectangle {
                                     .offsetX = 0.f, .offsetY = 0.f, .width = 56.f, .height = 40.f,
-                                    .cornerRadius = CornerRadius{10.f},
                                     .fill = FillStyle::solid(pal::indigo),
-                                }.flex(1.f),
+                                }.cornerRadius(CornerRadius{10.f}).flex(1.f),
                                 Rectangle {
                                     .offsetX = 0.f, .offsetY = 0.f, .width = 56.f, .height = 56.f,
-                                    .cornerRadius = CornerRadius{10.f},
                                     .fill = FillStyle::solid(pal::amber),
-                                },
-                            },
+                                }.cornerRadius(CornerRadius{10.f})
+                            ),
                         },
                         Text {
                             .text = "Nested — HStack rows inside a VStack",
@@ -112,62 +105,53 @@ struct StackDemoRoot {
                         VStack {
                             .spacing = 8.f,
                             .hAlign = HorizontalAlignment::Leading,
-                            .children = {
+                            .children = children(
                                 HStack {
                                     .spacing = 8.f,
                                     .vAlign = VerticalAlignment::Center,
-                                    .children = {
+                                    .children = children(
                                         Rectangle {
                                             .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 28.f,
-                                            .cornerRadius = CornerRadius{6.f},
                                             .fill = FillStyle::solid(Color::hex(0xE8E8EF)),
-                                            .flexGrow = 1.f,
-                                        },
+                                        }.cornerRadius(CornerRadius{6.f}).flex(1.f),
                                         Text {
                                             .text = "A",
                                             .font = {.size = 13.f, .weight = 600.f},
                                             .color = pal::ink,
-                                        }
-                                            .padding(6.f),
-                                    },
+                                        }.padding(6.f)
+                                    ),
                                 },
                                 HStack {
                                     .spacing = 8.f,
                                     .vAlign = VerticalAlignment::Center,
-                                    .children = {
+                                    .children = children(
                                         Rectangle {
                                             .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 28.f,
-                                            .cornerRadius = CornerRadius{6.f},
                                             .fill = FillStyle::solid(Color::hex(0xE8E8EF)),
-                                            .flexGrow = 1.f,
-                                        },
+                                        }.cornerRadius(CornerRadius{6.f}).flex(1.f),
                                         Text {
                                             .text = "B",
                                             .font = {.size = 13.f, .weight = 600.f},
                                             .color = pal::ink,
-                                        }
-                                            .padding(6.f),
-                                    },
+                                        }.padding(6.f)
+                                    ),
                                 },
                                 HStack {
                                     .spacing = 8.f,
                                     .vAlign = VerticalAlignment::Center,
-                                    .children = {
+                                    .children = children(
                                         Rectangle {
                                             .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 28.f,
-                                            .cornerRadius = CornerRadius{6.f},
                                             .fill = FillStyle::solid(Color::hex(0xE8E8EF)),
-                                            .flexGrow = 1.f,
-                                        },
+                                        }.cornerRadius(CornerRadius{6.f}).flex(1.f),
                                         Text {
                                             .text = "C",
                                             .font = {.size = 13.f, .weight = 600.f},
                                             .color = pal::ink,
-                                        }
-                                            .padding(6.f),
-                                    },
-                                },
-                            },
+                                        }.padding(6.f)
+                                    ),
+                                }
+                            ),
                         },
                         Text {
                             .text = "HStack + Spacer (flex along the row)",
@@ -177,7 +161,7 @@ struct StackDemoRoot {
                         HStack {
                             .spacing = 0.f,
                             .vAlign = VerticalAlignment::Center,
-                            .children = {
+                            .children = children(
                                 Text {
                                     .text = "Leading",
                                     .font = {.size = 14.f, .weight = 500.f},
@@ -188,12 +172,12 @@ struct StackDemoRoot {
                                     .text = "Trailing",
                                     .font = {.size = 14.f, .weight = 500.f},
                                     .color = pal::ink
-                                },
-                            },
-                        },
-                    },
-                },
-            },
+                                }
+                            ),
+                        }
+                    ),
+                }
+            ),
         };
     }
 };

@@ -49,12 +49,11 @@ struct MemoHoverButton {
     return ZStack{.children = {
                       Rectangle{
                           .offsetX = 0, .offsetY = 0, .width = 0, .height = 36.f,
-                          .cornerRadius = CornerRadius(8.f),
                           .fill = FillStyle::solid(btnFill),
                           .stroke = StrokeStyle::solid(pal::border, 1.f),
-                          .flexGrow = 0.f,
-                          .cursor = Cursor::Hand,
-                      },
+                      }
+                          .cursor(Cursor::Hand)
+                          .cornerRadius(CornerRadius(8.f)),
                       Text{.text = "Hover me (rebuild, no text change)",
                            .font = {.size = 13.f},
                            .color = btnText,
@@ -105,12 +104,11 @@ struct MemoDemo {
                     ZStack{.children = {
                         Rectangle{
                             .offsetX = 0, .offsetY = 0, .width = 0, .height = 36.f,
-                            .cornerRadius = CornerRadius(8.f),
                             .fill = FillStyle::solid(pal::accent),
-                            .flexGrow = 0.f,
-                            .cursor = Cursor::Hand,
-                            .onTap = [text] { text = *text + " word"; },
-                        },
+                        }
+                            .cursor(Cursor::Hand)
+                            .onTap([text] { text = *text + " word"; })
+                            .cornerRadius(CornerRadius(8.f)),
                         Text{.text = "+ Word",
                              .font = {.size = 14.f, .weight = 600.f},
                              .color = Color::hex(0xFFFFFF),
@@ -121,13 +119,12 @@ struct MemoDemo {
                     ZStack{.children = {
                         Rectangle{
                             .offsetX = 0, .offsetY = 0, .width = 0, .height = 36.f,
-                            .cornerRadius = CornerRadius(8.f),
                             .fill = FillStyle::solid(pal::surface),
                             .stroke = StrokeStyle::solid(pal::border, 1.f),
-                            .flexGrow = 0.f,
-                            .cursor = Cursor::Hand,
-                            .onTap = [text] { text = std::string{}; },
-                        },
+                        }
+                            .cursor(Cursor::Hand)
+                            .onTap([text] { text = std::string{}; })
+                            .cornerRadius(CornerRadius(8.f)),
                         Text{.text = "Clear",
                              .font = {.size = 14.f},
                              .color = pal::label,

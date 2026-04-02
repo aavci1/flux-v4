@@ -125,11 +125,11 @@ struct RgbColorSelectorRoot {
                         .children = {
                             Rectangle{
                                 .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 160.f,
-                                .cornerRadius = CornerRadius{theme.radiusLarge},
                                 .fill = FillStyle::solid(preview),
                                 .stroke = StrokeStyle::solid(theme.colorBorder, 1.f),
-                                .flexGrow = 1.f,
-                            },
+                            }
+                                .cornerRadius(CornerRadius{theme.radiusLarge})
+                                .flex(1.f),
                             Text{
                                 .text = fmtHex(*red, *green, *blue),
                                 .font = theme.typeTitle.toFont(),
