@@ -211,13 +211,10 @@ Element Button::body() const {
     .children =
         {
             Rectangle{
-                .offsetX = 0.f,
-                .offsetY = 0.f,
-                .width = 0.f,
-                .height = h,
                 .fill = FillStyle::solid(*fillAnim),
                 .stroke = stroke,
             }
+                .height(h)
                 .cursor(effectivelyDisabled ? Cursor::Inherit : Cursor::Hand)
                 .focusable(!effectivelyDisabled)
                 .onKeyDown(effectivelyDisabled ? std::function<void(KeyCode, Modifiers)>{}

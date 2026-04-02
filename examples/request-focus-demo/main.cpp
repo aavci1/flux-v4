@@ -44,12 +44,12 @@ struct FocusField {
                     .children =
                         {
                             Rectangle{
-                                .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 80.f,
                                 .fill = FillStyle::solid(focused ? pal::editorFocus : pal::editorBg),
                                 .stroke =
                                     StrokeStyle::solid(focused ? pal::borderFocus : pal::border,
                                                        focused ? 2.f : 1.f),
                             }
+                                .height(80.f)
                                 .focusable(true)
                                 .onKeyDown(
                                     [text](KeyCode k, Modifiers) {
@@ -134,9 +134,9 @@ struct RequestFocusDemo {
           .children =
               {
                   Rectangle{
-                      .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 36.f,
                       .fill = FillStyle::solid(pal::accent),
                   }
+                      .height(36.f)
                       .cursor(Cursor::Hand)
                       .onTap(std::move(action))
                       .cornerRadius(CornerRadius(8.f)),

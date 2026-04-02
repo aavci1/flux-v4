@@ -27,7 +27,7 @@ Element Icon::body() const {
                .horizontalAlignment = HorizontalAlignment::Center,
                .verticalAlignment = VerticalAlignment::Center,
            }
-        .frame(sz, sz);
+        .size(sz, sz);
 }
 
 } // namespace flux

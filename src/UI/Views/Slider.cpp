@@ -178,9 +178,8 @@ Element Slider::body() const {
         .hAlign = HorizontalAlignment::Leading,
         .vAlign = VerticalAlignment::Top,
         .children = {
-            Rectangle {
-                .offsetX = 0.f, .offsetY = 0.f, .width = componentWidth, .height = componentHeight,
-            }
+            Rectangle {}
+                .size(componentWidth, componentHeight)
                 .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
                 .focusable(!isDisabled)
                 .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)>{}
@@ -192,22 +191,25 @@ Element Slider::body() const {
                 .onPointerMove(isDisabled ? std::function<void(Point)>{}
                                           : std::function<void(Point)> {handleMove}),
             Rectangle {
-                .offsetX = thumbSize * 0.5f, .offsetY = trackY, .width = trackWidth, .height = trackHeight,
                 .fill = FillStyle::solid(isDisabled ? theme.colorSurfaceDisabled : inactiveColor),
                 .stroke = StrokeStyle::none(),
             }
+                .position(thumbSize * 0.5f, trackY)
+                .size(trackWidth, trackHeight)
                 .cornerRadius(CornerRadius{trackHeight * 0.5f}),
             Rectangle {
-                .offsetX = thumbSize * 0.5f, .offsetY = trackY, .width = filledWidth, .height = trackHeight,
                 .fill = FillStyle::solid(isDisabled ? theme.colorSurfaceDisabled : activeColor),
                 .stroke = StrokeStyle::none(),
             }
+                .position(thumbSize * 0.5f, trackY)
+                .size(filledWidth, trackHeight)
                 .cornerRadius(CornerRadius{trackHeight * 0.5f}),
             Rectangle {
-                .offsetX = thumbX + thumbOffset, .offsetY = thumbY, .width = thumbDiameter, .height = thumbDiameter,
                 .fill = FillStyle::solid(isDisabled ? theme.colorTextDisabled : thumbColor),
                 .stroke = isDisabled ? StrokeStyle::solid(theme.colorTextDisabled, 1.f) : thumbStroke,
             }
+                .position(thumbX + thumbOffset, thumbY)
+                .size(thumbDiameter, thumbDiameter)
                 .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
                 .cursorPassthrough(!isDisabled)
                 .cornerRadius(CornerRadius{thumbDiameter * 0.5f}),

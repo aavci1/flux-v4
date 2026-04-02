@@ -110,16 +110,16 @@ Element Toggle::body() const {
   return ScaleAroundCenter {
     .scale = *scaleAnim,
     .child = ZStack {
-      // Leading/Top: track + thumb use local `frame` coords relative to the same origin; center
+      // Leading/Top: track + thumb use layout-space position/size modifiers; center
       // alignment would offset each child by its own intrinsic size and separate the layers.
       .hAlign = HorizontalAlignment::Leading,
       .vAlign = VerticalAlignment::Top,
       .children = {
         Rectangle {
-          .offsetX = 0.f, .offsetY = 0.f, .width = trackWidth, .height = trackHeight,
           .fill = FillStyle::solid(*trackFillAnim),
           .stroke = StrokeStyle::solid(focused ? focusColor : borderColor, borderWidth),
         }
+            .size(trackWidth, trackHeight)
             .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
             .focusable(!isDisabled)
             .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)>{}
@@ -127,10 +127,11 @@ Element Toggle::body() const {
             .onTap(isDisabled ? std::function<void()>{} : std::function<void()>{handleToggle})
             .cornerRadius(CornerRadius{trackHeight * 0.5f}),
         Rectangle {
-          .offsetX = *thumbXAnim, .offsetY = thumbInset, .width = thumbSize, .height = thumbSize,
           .fill = FillStyle::solid(isDisabled ? disabledColor : thumbColor),
           .stroke = isDisabled ? StrokeStyle::solid(disabledColor, thumbBorderWidth) : StrokeStyle::solid(thumbBorderColor, thumbBorderWidth),
         }
+            .position(*thumbXAnim, thumbInset)
+            .size(thumbSize, thumbSize)
             .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
             .cursorPassthrough(true)
             .cornerRadius(CornerRadius{thumbSize * 0.5f}),

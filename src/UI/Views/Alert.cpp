@@ -44,11 +44,10 @@ Element Alert::body() const {
                               .children =
                                   {
                                       Rectangle{
-                                          .width = cardWidth,
-                                          .height = 0.f,
                                           .fill = FillStyle::solid(card),
                                           .stroke = StrokeStyle::solid(stroke, 1.f),
                                       }
+                                          .size(cardWidth, 0.f)
                                           .cornerRadius(cardCorner),
                                       VStack{
                                           .spacing = theme.space3,
@@ -76,7 +75,7 @@ std::vector<Element> Alert::buildContent(Color titleC, Color msgC, FluxTheme con
                      .color = titleC,
                      .lineHeight = theme.typeTitle.lineHeight,
                  }
-                     .frame(contentW, 0.f));
+                     .size(contentW, 0.f));
 
   if (!message.empty()) {
     rows.push_back(Text{
@@ -86,7 +85,7 @@ std::vector<Element> Alert::buildContent(Color titleC, Color msgC, FluxTheme con
                        .wrapping = TextWrapping::Wrap,
                        .lineHeight = theme.typeBody.lineHeight,
                    }
-                       .frame(contentW, 0.f));
+                       .size(contentW, 0.f));
   }
 
   if (buttons.size() == 1) {

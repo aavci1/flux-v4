@@ -57,17 +57,14 @@ struct StackDemoRoot {
                             .hAlign = HorizontalAlignment::Center,
                             .children = children(
                                 Rectangle {
-                                    .offsetX = 0.f, .offsetY = 0.f, .width = 160.f, .height = 36.f,
                                     .fill = FillStyle::solid(pal::coral),
-                                }.cornerRadius(CornerRadius{8.f}),
+                                }.size(160.f, 36.f).cornerRadius(CornerRadius{8.f}),
                                 Rectangle {
-                                    .offsetX = 0.f, .offsetY = 0.f, .width = 200.f, .height = 36.f,
                                     .fill = FillStyle::solid(pal::teal),
-                                }.cornerRadius(CornerRadius{8.f}),
+                                }.size(200.f, 36.f).cornerRadius(CornerRadius{8.f}),
                                 Rectangle {
-                                    .offsetX = 0.f, .offsetY = 0.f, .width = 120.f, .height = 36.f,
                                     .fill = FillStyle::solid(pal::indigo),
-                                }.cornerRadius(CornerRadius{8.f})
+                                }.size(120.f, 36.f).cornerRadius(CornerRadius{8.f})
                             ),
                         },
                         Text {
@@ -80,21 +77,17 @@ struct StackDemoRoot {
                             .vAlign = VerticalAlignment::Center,
                             .children = children(
                                 Rectangle {
-                                    .offsetX = 0.f, .offsetY = 0.f, .width = 56.f, .height = 56.f,
                                     .fill = FillStyle::solid(pal::coral),
-                                }.cornerRadius(CornerRadius{10.f}).flex(2.f),
+                                }.size(56.f, 56.f).cornerRadius(CornerRadius{10.f}).flex(2.f),
                                 Rectangle {
-                                    .offsetX = 0.f, .offsetY = 0.f, .width = 56.f, .height = 72.f,
                                     .fill = FillStyle::solid(pal::teal),
-                                }.cornerRadius(CornerRadius{10.f}),
+                                }.size(56.f, 72.f).cornerRadius(CornerRadius{10.f}),
                                 Rectangle {
-                                    .offsetX = 0.f, .offsetY = 0.f, .width = 56.f, .height = 40.f,
                                     .fill = FillStyle::solid(pal::indigo),
-                                }.cornerRadius(CornerRadius{10.f}).flex(1.f),
+                                }.size(56.f, 40.f).cornerRadius(CornerRadius{10.f}).flex(1.f),
                                 Rectangle {
-                                    .offsetX = 0.f, .offsetY = 0.f, .width = 56.f, .height = 56.f,
                                     .fill = FillStyle::solid(pal::amber),
-                                }.cornerRadius(CornerRadius{10.f})
+                                }.size(56.f, 56.f).cornerRadius(CornerRadius{10.f})
                             ),
                         },
                         Text {
@@ -111,9 +104,8 @@ struct StackDemoRoot {
                                     .vAlign = VerticalAlignment::Center,
                                     .children = children(
                                         Rectangle {
-                                            .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 28.f,
                                             .fill = FillStyle::solid(Color::hex(0xE8E8EF)),
-                                        }.cornerRadius(CornerRadius{6.f}).flex(1.f),
+                                        }.height(28.f).cornerRadius(CornerRadius{6.f}).flex(1.f),
                                         Text {
                                             .text = "A",
                                             .font = {.size = 13.f, .weight = 600.f},
@@ -126,9 +118,8 @@ struct StackDemoRoot {
                                     .vAlign = VerticalAlignment::Center,
                                     .children = children(
                                         Rectangle {
-                                            .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 28.f,
                                             .fill = FillStyle::solid(Color::hex(0xE8E8EF)),
-                                        }.cornerRadius(CornerRadius{6.f}).flex(1.f),
+                                        }.height(28.f).cornerRadius(CornerRadius{6.f}).flex(1.f),
                                         Text {
                                             .text = "B",
                                             .font = {.size = 13.f, .weight = 600.f},
@@ -141,9 +132,8 @@ struct StackDemoRoot {
                                     .vAlign = VerticalAlignment::Center,
                                     .children = children(
                                         Rectangle {
-                                            .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 28.f,
                                             .fill = FillStyle::solid(Color::hex(0xE8E8EF)),
-                                        }.cornerRadius(CornerRadius{6.f}).flex(1.f),
+                                        }.height(28.f).cornerRadius(CornerRadius{6.f}).flex(1.f),
                                         Text {
                                             .text = "C",
                                             .font = {.size = 13.f, .weight = 600.f},

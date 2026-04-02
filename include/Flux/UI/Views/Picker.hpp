@@ -95,10 +95,10 @@ struct PickerRow : ViewModifiers<PickerRow<T>> {
         .children =
             {
                 Rectangle{
-                    .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = rowHeight,
                     .fill = FillStyle::solid(bg),
                     .stroke = StrokeStyle::none(),
                 }
+                    .height(rowHeight)
                     .cursor(Cursor::Hand)
                     .onTap(onSelect)
                     .cornerRadius(rowBgCorners)
@@ -109,10 +109,10 @@ struct PickerRow : ViewModifiers<PickerRow<T>> {
                     .children =
                         {
                             Rectangle{
-                                .offsetX = 0.f, .offsetY = 0.f, .width = rowPaddingH, .height = rowHeight,
                                 .fill = FillStyle::none(),
                                 .stroke = StrokeStyle::none(),
-                            },
+                            }
+                                .size(rowPaddingH, rowHeight),
                             HStack{
                                 .spacing = 8.f,
                                 .vAlign = VerticalAlignment::Center,
@@ -131,14 +131,14 @@ struct PickerRow : ViewModifiers<PickerRow<T>> {
                                         }
                                             .onTap(onSelect)
                                             .cursor(Cursor::Hand)
-                                            .frame(0.f, rowHeight)
+                                            .size(0.f, rowHeight)
                                             .flex(1.f),
                                         ZStack{
                                             .hAlign = HorizontalAlignment::Leading,
                                             .vAlign = VerticalAlignment::Top,
                                             .children =
                                                 {
-                                                    Rectangle{.offsetX = 0.f, .offsetY = 0.f, .width = checkColW, .height = rowHeight},
+                                                    Rectangle{}.size(checkColW, rowHeight),
                                                     selected ? Element{Icon{
                                                                    .name = IconName::Check,
                                                                    .size = iconSz,
@@ -151,10 +151,10 @@ struct PickerRow : ViewModifiers<PickerRow<T>> {
                             }
                                 .flex(1.f),
                             Rectangle{
-                                .offsetX = 0.f, .offsetY = 0.f, .width = rowPaddingH, .height = rowHeight,
                                 .fill = FillStyle::none(),
                                 .stroke = StrokeStyle::none(),
-                            },
+                            }
+                                .size(rowPaddingH, rowHeight),
                         },
                 },
             },
@@ -445,10 +445,10 @@ struct Picker : ViewModifiers<Picker<T>> {
         .children =
             {
                 Rectangle{
-                    .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = h,
                     .fill = FillStyle::solid(*fillAnim),
                     .stroke = StrokeStyle::solid(borderCol, borderW),
                 }
+                    .height(h)
                     .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
                     .focusable(!isDisabled)
                     .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)>{}
@@ -462,10 +462,10 @@ struct Picker : ViewModifiers<Picker<T>> {
                     .children =
                         {
                             Rectangle{
-                                .offsetX = 0.f, .offsetY = 0.f, .width = padHResolved, .height = h,
                                 .fill = FillStyle::none(),
                                 .stroke = StrokeStyle::none(),
-                            },
+                            }
+                                .size(padHResolved, h),
                             Text{
                                 .text = hasMatch ? selectedLabel : placeholder,
                                 .font = fontR,
@@ -479,13 +479,13 @@ struct Picker : ViewModifiers<Picker<T>> {
                             }
                                 .onTap(isDisabled ? std::function<void()>{} : std::function<void()>{onTriggerTap})
                                 .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
-                                .frame(0.f, h)
+                                .size(0.f, h)
                                 .flex(1.f),
                             Rectangle{
-                                .offsetX = 0.f, .offsetY = 0.f, .width = padHResolved, .height = h,
                                 .fill = FillStyle::none(),
                                 .stroke = StrokeStyle::none(),
                             }
+                                .size(padHResolved, h)
                                 .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
                                 .onTap(isDisabled ? std::function<void()>{} : std::function<void()>{onTriggerTap}),
                             ZStack{
@@ -494,13 +494,10 @@ struct Picker : ViewModifiers<Picker<T>> {
                                 .children =
                                     {
                                         Rectangle{
-                                            .offsetX = 0.f,
-                                            .offsetY = 0.f,
-                                            .width = std::max(14.f, chevronIconSz),
-                                            .height = h,
                                             .fill = FillStyle::none(),
                                             .stroke = StrokeStyle::none(),
                                         }
+                                            .size(std::max(14.f, chevronIconSz), h)
                                             .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
                                             .onTap(isDisabled ? std::function<void()>{} : std::function<void()>{onTriggerTap}),
                                         Icon{
@@ -511,10 +508,10 @@ struct Picker : ViewModifiers<Picker<T>> {
                                     },
                             },
                             Rectangle{
-                                .offsetX = 0.f, .offsetY = 0.f, .width = padHResolved, .height = h,
                                 .fill = FillStyle::none(),
                                 .stroke = StrokeStyle::none(),
                             }
+                                .size(padHResolved, h)
                                 .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
                                 .onTap(isDisabled ? std::function<void()>{} : std::function<void()>{onTriggerTap}),
                         },

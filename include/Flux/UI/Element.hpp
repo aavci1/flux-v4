@@ -85,11 +85,14 @@ struct ElementModifiers {
   StrokeStyle border = StrokeStyle::none();
   CornerRadius cornerRadius{};
   float opacity = 1.f;
-  Vec2 offset{};
+  Vec2 translation{};
   bool clip = false;
-  /// \c 0 on an axis means no fixed size on that axis (same as \ref Element::frame).
-  float frameWidth = 0.f;
-  float frameHeight = 0.f;
+  /// Layout-space offset within the parent's assigned cell (before post-layout transforms).
+  float positionX = 0.f;
+  float positionY = 0.f;
+  /// \c 0 on an axis means no fixed size on that axis (same as \ref Element::size).
+  float sizeWidth = 0.f;
+  float sizeHeight = 0.f;
   std::unique_ptr<Element> overlay;
 
   std::function<void()> onTap;
@@ -113,8 +116,9 @@ struct ElementModifiers {
 
   bool needsModifierPass() const {
     return padding > 0.f || !background.isNone() || !border.isNone() || !cornerRadius.isZero() ||
-           opacity < 1.f - 1e-6f || std::fabs(offset.x) > 1e-6f || std::fabs(offset.y) > 1e-6f || clip ||
-           hasInteraction() || frameWidth > 0.f || frameHeight > 0.f || overlay != nullptr;
+           opacity < 1.f - 1e-6f || std::fabs(translation.x) > 1e-6f || std::fabs(translation.y) > 1e-6f ||
+           clip || std::fabs(positionX) > 1e-6f || std::fabs(positionY) > 1e-6f || hasInteraction() ||
+           sizeWidth > 0.f || sizeHeight > 0.f || overlay != nullptr;
   }
 
   ElementModifiers() = default;
@@ -166,12 +170,18 @@ public:
   Element padding(float all) &&;
   Element background(FillStyle fill) &&;
   /// Fixed size in layout space (both axes); \c 0 leaves an axis unconstrained (fill).
-  Element frame(float width, float height) &&;
+  Element size(float width, float height) &&;
+  Element width(float w) &&;
+  Element height(float h) &&;
   Element border(StrokeStyle stroke) &&;
   Element cornerRadius(CornerRadius radius) &&;
   Element opacity(float opacity) &&;
-  Element offset(Vec2 delta) &&;
-  Element offset(float dx, float dy) &&;
+  /// Shifts the element within its parent's layout cell (before rendering).
+  Element position(Vec2 p) &&;
+  Element position(float x, float y) &&;
+  /// Post-layout layer transform (does not affect layout or sibling positioning).
+  Element translate(Vec2 delta) &&;
+  Element translate(float dx, float dy) &&;
   Element clipContent(bool clip) &&;
   Element overlay(Element over) &&;
 
@@ -486,8 +496,18 @@ Element ViewModifiers<Derived>::background(FillStyle fill) && {
 }
 
 template<typename Derived>
-Element ViewModifiers<Derived>::frame(float width, float height) && {
-  return Element{std::move(static_cast<Derived&>(*this))}.frame(width, height);
+Element ViewModifiers<Derived>::size(float width, float height) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.size(width, height);
+}
+
+template<typename Derived>
+Element ViewModifiers<Derived>::width(float w) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.width(w);
+}
+
+template<typename Derived>
+Element ViewModifiers<Derived>::height(float h) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.height(h);
 }
 
 template<typename Derived>
@@ -506,13 +526,23 @@ Element ViewModifiers<Derived>::opacity(float o) && {
 }
 
 template<typename Derived>
-Element ViewModifiers<Derived>::offset(Vec2 delta) && {
-  return Element{std::move(static_cast<Derived&>(*this))}.offset(delta);
+Element ViewModifiers<Derived>::position(Vec2 p) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.position(p);
 }
 
 template<typename Derived>
-Element ViewModifiers<Derived>::offset(float dx, float dy) && {
-  return Element{std::move(static_cast<Derived&>(*this))}.offset(dx, dy);
+Element ViewModifiers<Derived>::position(float x, float y) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.position(x, y);
+}
+
+template<typename Derived>
+Element ViewModifiers<Derived>::translate(Vec2 delta) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.translate(delta);
+}
+
+template<typename Derived>
+Element ViewModifiers<Derived>::translate(float dx, float dy) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.translate(dx, dy);
 }
 
 template<typename Derived>

@@ -4,11 +4,11 @@ Here's my analysis, grounded in the concrete code I've read across the system.
 
 ## Friction Points for Consumers (App Developers)
 
-**1. Modifier / decoration chain — ✅ addressed (Element).** `Element` stores **flat modifiers** (`ElementModifiers`) and applies them in one build/measure path (merged `RectNode` / optional `LayerNode` instead of nesting a new `ZStack`/`Rectangle` per modifier). Views that inherit **`ViewModifiers`** can chain **`Text{…}.padding(8).background(…).frame(w,h).flex(…)`**. Composite controls (e.g. `Button::body()`) still use explicit **`ZStack`/`Rectangle`/`Text`** where the design is a custom layered control, not because every decoration must be manual nesting.
+**1. Modifier / decoration chain — ✅ addressed (Element).** `Element` stores **flat modifiers** (`ElementModifiers`) and applies them in one build/measure path (merged `RectNode` / optional `LayerNode` instead of nesting a new `ZStack`/`Rectangle` per modifier). Views that inherit **`ViewModifiers`** can chain **`Text{…}.padding(8).background(…).size(w,h).flex(…)`**. Composite controls (e.g. `Button::body()`) still use explicit **`ZStack`/`Rectangle`/`Text`** where the design is a custom layered control, not because every decoration must be manual nesting.
 
 **2. Verbose child list construction with hidden copies.** Children are `std::vector<Element>`, and brace-initialization goes through `std::initializer_list` which forces copies. Each copy clones the `impl_` (heap allocation) and allocates a new `measureId_`. For deeply nested UIs this is a lot of silent work at tree construction time.
 
-**3. The sizing model is still inconsistent across leaf types (partially improved).** **`Text`** no longer carries inline `width`/`height`/`padding` — use **`Element` modifiers** (`frame`, `padding`, `flex`, …) for box and flex. **`Image`** defers size/opacity/corners to **`Element`** modifiers where needed. **`Rectangle`** still keeps **`offsetX`/`offsetY`/`width`/`height`** on the struct for ZStack layout positioning (distinct from **`Element::offset`**, which is a layer transform). Flex and corner radius use **`Element`** / **`ViewModifiers`** (e.g. **`flex`**, **`cornerRadius`**) like other decorated leaves. **`Spacer`** still uses **`minLength`**. Resolving bounds still goes through **`resolveLeafBounds`** vs **`resolveRectangleBounds`** depending on the leaf; the mental model for “how big?” remains multi-path.
+**3. The sizing model is still inconsistent across leaf types (partially improved).** **`Text`** no longer carries inline `width`/`height`/`padding` — use **`Element` modifiers** (`size`, `padding`, `flex`, …) for box and flex. **`Image`** defers size/opacity/corners to **`Element`** modifiers where needed. **`Rectangle`** uses **`position`** / **`size`** / **`width`** / **`height`** on **`Element`** for layout (distinct from **`translate`**, which is a layer transform). Flex and corner radius use **`Element`** / **`ViewModifiers`** (e.g. **`flex`**, **`cornerRadius`**) like other decorated leaves. **`Spacer`** still uses **`minLength`**. Resolving bounds still goes through **`resolveLeafBounds`** vs **`resolveRectangleBounds`** depending on the leaf; the mental model for “how big?” remains multi-path.
 
 **4. Flex silently does nothing in unconstrained parents.** Setting `flexGrow = 1.f` on a child has zero effect if the parent VStack/HStack itself has an unconstrained main axis. There's no warning — the child just gets its natural size. This is a common source of "why isn't this stretching?" confusion.
 
@@ -68,7 +68,7 @@ Missing `rewindChildKeyIndex` → keys diverge between measure and build, state 
 
 **6. Layout debugging (partially addressed).** With `FLUX_DEBUG_LAYOUT`, stderr prints a per-rebuild tree (constraints, measured size, frame, flex). Still missing: a visual overlay for layout bounds, and automated checks for child-outside-parent placement beyond existing asserts.
 
-**7. Bounds resolution is split into two ad-hoc paths.** `resolveLeafBounds` and `resolveRectangleBounds` handle the `frame` → `childFrame` → `constraints` fallback chain differently. `Rectangle` with an explicit `frame` uses `resolveRectangleBounds` which applies cross-axis alignment offsets. `Text` and custom `RenderComponent` leaves use `resolveLeafBounds` which just picks whichever rect is non-zero. The distinction is non-obvious and the naming doesn't explain when to use which.
+**7. Bounds resolution is split into two ad-hoc paths.** `resolveLeafBounds` and `resolveRectangleBounds` handle the explicit box → `childFrame` → `constraints` fallback chain differently. `Rectangle` with explicit **`size`** from modifiers uses `resolveRectangleBounds` which applies cross-axis alignment offsets. `Text` and custom `RenderComponent` leaves use `resolveLeafBounds` which just picks whichever rect is non-zero. The distinction is non-obvious and the naming doesn't explain when to use which.
 
 ---
 
@@ -110,7 +110,7 @@ Standardize how views declare their size:
 - Make `resolveLeafBounds` the single path, remove `resolveRectangleBounds` special case
 - **Decoration padding / backgrounds:** use **`Element` modifiers** (`padding()`, `background()`, …) — see **Element modifiers** in `docs/layout-system.md`. **Intrinsic layout padding** on containers (`VStack`/`HStack` **`.padding`**) remains separate.
 
-**Progress:** `Text`/`Image` inline style/size fields were removed in favor of modifiers; **`Rectangle`** still uses explicit layout fields for stack positioning.
+**Progress:** `Text`/`Image` inline style/size fields were removed in favor of modifiers; **`Rectangle`** layout fields were moved to **`Element`** modifiers (`position`, `size`, etc.).
 
 ### G. Reduce `Element.hpp` compilation fan-out
 

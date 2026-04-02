@@ -178,9 +178,7 @@ struct CheckboxDemoRoot {
                                                             .spacing = 10.f,
                                                             .children =
                                                                 {
-                                                                    Rectangle{
-                                                                        .offsetX = 0.f, .offsetY = 0.f, .width = 20.f, .height = 0.f,
-                                                                    },
+                                                                    Rectangle{}.width(20.f),
                                                                     Element{LabeledCheckbox{
                                                                                 .label = "Item A",
                                                                                 .value = itemA,
@@ -193,9 +191,7 @@ struct CheckboxDemoRoot {
                                                             .spacing = 10.f,
                                                             .children =
                                                                 {
-                                                                    Rectangle{
-                                                                        .offsetX = 0.f, .offsetY = 0.f, .width = 20.f, .height = 0.f,
-                                                                    },
+                                                                    Rectangle{}.width(20.f),
                                                                     Element{LabeledCheckbox{
                                                                                 .label = "Item B",
                                                                                 .value = itemB,
@@ -208,9 +204,7 @@ struct CheckboxDemoRoot {
                                                             .spacing = 10.f,
                                                             .children =
                                                                 {
-                                                                    Rectangle{
-                                                                        .offsetX = 0.f, .offsetY = 0.f, .width = 20.f, .height = 0.f,
-                                                                    },
+                                                                    Rectangle{}.width(20.f),
                                                                     Element{LabeledCheckbox{
                                                                                 .label = "Item C",
                                                                                 .value = itemC,

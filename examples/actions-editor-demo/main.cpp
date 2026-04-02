@@ -105,11 +105,11 @@ struct TextEditor {
                     .children =
                         {
                             Rectangle{
-                                .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 200.f,
                                 .fill = FillStyle::solid(focused ? Color::hex(0xE8F0FC) : Color::hex(0xFAFAFC)),
                                 .stroke = StrokeStyle::solid(focused ? Color::hex(0x3A7BD5) : Color::hex(0xC8C8D0),
                                                                focused ? 2.f : 1.f),
                             }
+                                .height(200.f)
                                 .focusable(true)
                                 .onKeyDown(
                                     [text, selStart, selEnd](KeyCode k, Modifiers m) {

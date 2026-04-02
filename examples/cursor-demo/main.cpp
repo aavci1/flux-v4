@@ -39,12 +39,12 @@ Element cursorSwatchRow(std::string name, Cursor cursor, Color chip) {
                                  .font = {.size = 14.f, .weight = 600.f},
                                  .color = pal::label,
                              }
-                                .frame(152.f, 0.f),
+                                .size(152.f, 0.f),
                             Rectangle{
-                                .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 44.f,
                                 .fill = FillStyle::solid(chip),
                                 .stroke = StrokeStyle::solid(Color::hex(0xC8C8D0), 1.f),
                             }
+                                .height(44.f)
                                 .cursor(cursor)
                                 .cornerRadius(CornerRadius(8.f))
                                 .flex(1.f),
@@ -132,7 +132,7 @@ struct CursorDemo {
                                                                     .font = {.size = 14.f, .weight = 600.f},
                                                                     .color = pal::label,
                                                                 }
-                                                                    .frame(152.f, 0.f),
+                                                                    .size(152.f, 0.f),
                                                                 Text{
                                                                     .text = "Read-only label — cursor is I-beam over "
                                                                             "glyphs (no pointer handlers).",
@@ -164,9 +164,9 @@ struct CursorDemo {
                                                                                         .color = pal::label,
                                                                                     },
                                                                                     Rectangle{
-                                                                                        .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 52.f,
                                                                                         .fill = FillStyle::solid(pal::chipAccent),
                                                                                     }
+                                                                                        .height(52.f)
                                                                                         .cursor(Cursor::ResizeAll)
                                                                                         .onPointerDown([](Point) {})
                                                                                         .onPointerUp([](Point) {})

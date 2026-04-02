@@ -48,10 +48,10 @@ struct ConfirmDialog {
                                 .children =
                                     {
                                         Rectangle{
-                                            .offsetX = 0.f, .offsetY = 0.f, .width = 360.f, .height = 0.f,
                                             .fill = FillStyle::solid(Color::hex(0xFFFFFF)),
                                             .stroke = StrokeStyle::solid(pal::cardStroke, 1.f),
                                         }
+                                            .width(360.f)
                                             .cornerRadius(CornerRadius(14.f)),
                                         VStack{
                                             .spacing = 12.f,
@@ -81,10 +81,10 @@ struct ConfirmDialog {
                                                                     .children =
                                                                         {
                                                                             Rectangle{
-                                                                                .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 44.f,
                                                                                 .fill = FillStyle::solid(Color::hex(0xF0F0F5)),
                                                                                 .stroke = StrokeStyle::solid(pal::cardStroke, 1.f),
                                                                             }
+                                                                                .height(44.f)
                                                                                 .cursor(Cursor::Hand)
                                                                                 .focusable(true)
                                                                                 .onKeyDown(
@@ -106,10 +106,10 @@ struct ConfirmDialog {
                                                                     .children =
                                                                         {
                                                                             Rectangle{
-                                                                                .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 44.f,
                                                                                 .fill = FillStyle::solid(confirmColor),
                                                                                 .stroke = StrokeStyle::none(),
                                                                             }
+                                                                                .height(44.f)
                                                                                 .cursor(Cursor::Hand)
                                                                                 .focusable(true)
                                                                                 .onKeyDown(
@@ -160,10 +160,10 @@ struct FileManagerRow {
                     .children =
                         {
                             Rectangle{
-                                .offsetX = 0.f, .offsetY = 0.f, .width = 88.f, .height = 32.f,
                                 .fill = FillStyle::solid(pal::dangerBg),
                                 .stroke = StrokeStyle::solid(pal::dangerStroke, 1.f),
                             }
+                                .size(88.f, 32.f)
                                 .cursor(Cursor::Hand)
                                 .onTap(
                                     [fn, del, showDialog, hideDialog] {

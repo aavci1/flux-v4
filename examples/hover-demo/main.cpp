@@ -24,22 +24,25 @@ struct ThreeStateButton {
 
     Color const bg = pressed ? Color::hex(0x2860B0) : hovered ? Color::hex(0x4A8BE0) : Color::hex(0x3A7BD5);
 
-    return ZStack{.children = {
-                      Rectangle{
-                          .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 44.f,
-                          .fill = FillStyle::solid(bg),
-                      }
-                          .cursor(Cursor::Hand)
-                          .onTap(onTap)
-                          .cornerRadius(CornerRadius(10.f)),
-                      Text{.text = label,
-                           .font = {.size = 15.f, .weight = 600.f},
-                           .color = Color::hex(0xFFFFFF),
-                           .horizontalAlignment = HorizontalAlignment::Center,
-                           .verticalAlignment = VerticalAlignment::Center,
-                       }
-                          .padding(12.f),
-                  }};
+    return ZStack{
+        .children = {
+            Rectangle {
+              .fill = FillStyle::solid(bg)
+            }
+            .height(44.f)
+            .cursor(Cursor::Hand)
+            .onTap(onTap)
+            .cornerRadius(CornerRadius(10.f)),
+            Text{
+                .text = label,
+                .font = {.size = 15.f, .weight = 600.f},
+                .color = Color::hex(0xFFFFFF),
+                .horizontalAlignment = HorizontalAlignment::Center,
+                .verticalAlignment = VerticalAlignment::Center,
+            }
+            .padding(12.f),
+        }
+                };
   }
 };
 
@@ -51,9 +54,9 @@ struct HoverListRow {
 
     return ZStack{.children = {
                       Rectangle{
-                          .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 48.f,
                           .fill = FillStyle::solid(hovered ? Color::hex(0xDFDFE8) : Color::hex(0xFFFFFF)),
                       }
+                          .height(48.f)
                           .cursor(Cursor::Hand)
                           .cornerRadius(CornerRadius(8.f)),
                       Text{.text = "Item " + std::to_string(index) + (hovered ? "  ← pointer is here" : ""),

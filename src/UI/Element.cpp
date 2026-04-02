@@ -33,10 +33,12 @@ ElementModifiers::ElementModifiers(ElementModifiers const& o)
     , border(o.border)
     , cornerRadius(o.cornerRadius)
     , opacity(o.opacity)
-    , offset(o.offset)
+    , translation(o.translation)
     , clip(o.clip)
-    , frameWidth(o.frameWidth)
-    , frameHeight(o.frameHeight)
+    , positionX(o.positionX)
+    , positionY(o.positionY)
+    , sizeWidth(o.sizeWidth)
+    , sizeHeight(o.sizeHeight)
     , overlay(o.overlay ? std::make_unique<Element>(*o.overlay) : nullptr)
     , onTap(o.onTap)
     , onPointerDown(o.onPointerDown)
@@ -57,10 +59,12 @@ ElementModifiers& ElementModifiers::operator=(ElementModifiers const& o) {
     border = o.border;
     cornerRadius = o.cornerRadius;
     opacity = o.opacity;
-    offset = o.offset;
+    translation = o.translation;
     clip = o.clip;
-    frameWidth = o.frameWidth;
-    frameHeight = o.frameHeight;
+    positionX = o.positionX;
+    positionY = o.positionY;
+    sizeWidth = o.sizeWidth;
+    sizeHeight = o.sizeHeight;
     overlay = o.overlay ? std::make_unique<Element>(*o.overlay) : nullptr;
     onTap = o.onTap;
     onPointerDown = o.onPointerDown;
@@ -94,10 +98,6 @@ TextLayoutOptions textViewLayoutOptions(Text const& v, LayoutConstraints const&,
     o.horizontalAlignment = *h.vStackCrossAlign;
   }
   return o;
-}
-
-Rect explicitLeafBox(Rectangle const& v) {
-  return {v.offsetX, v.offsetY, v.width, v.height};
 }
 
 Rect explicitLeafBox(Text const&) {
@@ -157,13 +157,15 @@ void Element::buildWithModifiers(BuildContext& ctx) const {
   ElementModifiers const& m = *modifiers_;
   ComponentKey const stableKey = ctx.leafComponentKey();
   ContainerBuildScope scope(ctx);
+  scope.parentFrame.x += m.positionX;
+  scope.parentFrame.y += m.positionY;
   float const assignedW = assignedSpan(scope.parentFrame.width, scope.outer.maxWidth);
   float const assignedH = assignedSpan(scope.parentFrame.height, scope.outer.maxHeight);
   float outerW = std::max(0.f, assignedW);
   float outerH = std::max(0.f, assignedH);
 
-  bool const needEffectLayer = m.opacity < 1.f - 1e-6f || std::fabs(m.offset.x) > 1e-6f ||
-                               std::fabs(m.offset.y) > 1e-6f || m.clip;
+  bool const needEffectLayer = m.opacity < 1.f - 1e-6f || std::fabs(m.translation.x) > 1e-6f ||
+                               std::fabs(m.translation.y) > 1e-6f || m.clip;
   /// Background/border decoration only — \c cornerRadius without fill/stroke is merged into leaves such
   /// as \ref Rectangle via \ref BuildContext::activeElementModifiers.
   bool const needBg = !m.background.isNone() || !m.border.isNone();
@@ -173,7 +175,7 @@ void Element::buildWithModifiers(BuildContext& ctx) const {
     LayerNode layer{};
     layer.opacity = m.opacity;
     layer.transform =
-        Mat3::translate(scope.parentFrame.x + m.offset.x, scope.parentFrame.y + m.offset.y);
+        Mat3::translate(scope.parentFrame.x + m.translation.x, scope.parentFrame.y + m.translation.y);
     if (m.clip && outerW > 0.f && outerH > 0.f) {
       layer.clip = Rect{0.f, 0.f, outerW, outerH};
     }
@@ -269,11 +271,11 @@ Size Element::measureWithModifiersImpl(BuildContext& ctx, LayoutConstraints cons
     sz.width += pad2;
     sz.height += pad2;
   }
-  if (m.frameWidth > 0.f) {
-    sz.width = m.frameWidth;
+  if (m.sizeWidth > 0.f) {
+    sz.width = m.sizeWidth;
   }
-  if (m.frameHeight > 0.f) {
-    sz.height = m.frameHeight;
+  if (m.sizeHeight > 0.f) {
+    sz.height = m.sizeHeight;
   }
   return sz;
 }
@@ -382,8 +384,17 @@ Element Element::flex(float grow, float shrink, float minMain) && {
 void Element::Model<Rectangle>::build(BuildContext& ctx) const {
   ComponentKey const stableKey = ctx.leafComponentKey();
   ctx.advanceChildSlot();
+  Rect explicitFromMods{};
+  if (ElementModifiers const* mods = ctx.activeElementModifiers()) {
+    if (mods->sizeWidth > 0.f) {
+      explicitFromMods.width = mods->sizeWidth;
+    }
+    if (mods->sizeHeight > 0.f) {
+      explicitFromMods.height = mods->sizeHeight;
+    }
+  }
   Rect const bounds = flux::detail::resolveLeafLayoutBounds(
-      explicitLeafBox(value), ctx.layoutEngine().consumeAssignedFrame(), ctx.constraints(), ctx.hints(), true);
+      explicitFromMods, ctx.layoutEngine().consumeAssignedFrame(), ctx.constraints(), ctx.hints(), true);
   CornerRadius cornerR{};
   if (ElementModifiers const* mods = ctx.activeElementModifiers()) {
     cornerR = mods->cornerRadius;
@@ -409,9 +420,6 @@ void Element::Model<Rectangle>::build(BuildContext& ctx) const {
 Size Element::Model<Rectangle>::measure(BuildContext& ctx, LayoutConstraints const& c, LayoutHints const&,
                                         TextSystem&) const {
   ctx.advanceChildSlot();
-  if (value.width > 0.f || value.height > 0.f) {
-    return {value.width, value.height};
-  }
   float const w = std::isfinite(c.maxWidth) ? c.maxWidth : 0.f;
   return {w, 0.f};
 }
@@ -599,12 +607,28 @@ Element Element::background(FillStyle fill) && {
   return std::move(*this);
 }
 
-Element Element::frame(float width, float height) && {
+Element Element::size(float width, float height) && {
   if (!modifiers_) {
     modifiers_.emplace();
   }
-  modifiers_->frameWidth = width;
-  modifiers_->frameHeight = height;
+  modifiers_->sizeWidth = width;
+  modifiers_->sizeHeight = height;
+  return std::move(*this);
+}
+
+Element Element::width(float w) && {
+  if (!modifiers_) {
+    modifiers_.emplace();
+  }
+  modifiers_->sizeWidth = w;
+  return std::move(*this);
+}
+
+Element Element::height(float h) && {
+  if (!modifiers_) {
+    modifiers_.emplace();
+  }
+  modifiers_->sizeHeight = h;
   return std::move(*this);
 }
 
@@ -632,19 +656,37 @@ Element Element::opacity(float opacity) && {
   return std::move(*this);
 }
 
-Element Element::offset(Vec2 delta) && {
+Element Element::position(Vec2 p) && {
   if (!modifiers_) {
     modifiers_.emplace();
   }
-  modifiers_->offset = delta;
+  modifiers_->positionX = p.x;
+  modifiers_->positionY = p.y;
   return std::move(*this);
 }
 
-Element Element::offset(float dx, float dy) && {
+Element Element::position(float x, float y) && {
   if (!modifiers_) {
     modifiers_.emplace();
   }
-  modifiers_->offset = {dx, dy};
+  modifiers_->positionX = x;
+  modifiers_->positionY = y;
+  return std::move(*this);
+}
+
+Element Element::translate(Vec2 delta) && {
+  if (!modifiers_) {
+    modifiers_.emplace();
+  }
+  modifiers_->translation = delta;
+  return std::move(*this);
+}
+
+Element Element::translate(float dx, float dy) && {
+  if (!modifiers_) {
+    modifiers_.emplace();
+  }
+  modifiers_->translation = {dx, dy};
   return std::move(*this);
 }
 

@@ -113,10 +113,10 @@ Element Checkbox::body() const {
       .vAlign = VerticalAlignment::Center,
       .children = {
           Rectangle {
-              .offsetX = 0.f, .offsetY = 0.f, .width = boxSize, .height = boxSize,
               .fill = FillStyle::solid(*boxFillAnim),
               .stroke = boxStroke,
           }
+              .size(boxSize, boxSize)
               .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
               .focusable(!isDisabled)
               .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)>{}

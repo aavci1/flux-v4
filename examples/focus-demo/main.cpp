@@ -42,11 +42,11 @@ struct FocusField {
                     .children =
                         {
                             Rectangle{
-                                        .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 120.f,
                                         .fill = FillStyle::solid(focused ? pal::editorBgFocus : pal::editorBg),
                                         .stroke = StrokeStyle::solid(focused ? pal::borderFocus : pal::border,
                                                                      focused ? 2.f : 1.f),
                                     }
+                                .height(120.f)
                                 .focusable(true)
                                 .onKeyDown(
                                             [text](KeyCode k, Modifiers m) {

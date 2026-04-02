@@ -48,10 +48,10 @@ struct MemoHoverButton {
     Color const btnText = hovered ? Color::hex(0xFFFFFF) : pal::label;
     return ZStack{.children = {
                       Rectangle{
-                          .offsetX = 0, .offsetY = 0, .width = 0, .height = 36.f,
                           .fill = FillStyle::solid(btnFill),
                           .stroke = StrokeStyle::solid(pal::border, 1.f),
                       }
+                          .height(36.f)
                           .cursor(Cursor::Hand)
                           .cornerRadius(CornerRadius(8.f)),
                       Text{.text = "Hover me (rebuild, no text change)",
@@ -103,9 +103,9 @@ struct MemoDemo {
                 HStack{.spacing = 12.f, .children = {
                     ZStack{.children = {
                         Rectangle{
-                            .offsetX = 0, .offsetY = 0, .width = 0, .height = 36.f,
                             .fill = FillStyle::solid(pal::accent),
                         }
+                            .height(36.f)
                             .cursor(Cursor::Hand)
                             .onTap([text] { text = *text + " word"; })
                             .cornerRadius(CornerRadius(8.f)),
@@ -118,10 +118,10 @@ struct MemoDemo {
                     MemoHoverButton{},
                     ZStack{.children = {
                         Rectangle{
-                            .offsetX = 0, .offsetY = 0, .width = 0, .height = 36.f,
                             .fill = FillStyle::solid(pal::surface),
                             .stroke = StrokeStyle::solid(pal::border, 1.f),
                         }
+                            .height(36.f)
                             .cursor(Cursor::Hand)
                             .onTap([text] { text = std::string{}; })
                             .cornerRadius(CornerRadius(8.f)),

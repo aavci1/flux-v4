@@ -23,12 +23,16 @@ template<typename Derived>
 struct ViewModifiers {
   Element padding(float all) &&;
   Element background(FillStyle fill) &&;
-  Element frame(float width, float height) &&;
+  Element size(float width, float height) &&;
+  Element width(float w) &&;
+  Element height(float h) &&;
   Element border(StrokeStyle stroke) &&;
   Element cornerRadius(CornerRadius radius) &&;
   Element opacity(float opacity) &&;
-  Element offset(Vec2 delta) &&;
-  Element offset(float dx, float dy) &&;
+  Element position(Vec2 p) &&;
+  Element position(float x, float y) &&;
+  Element translate(Vec2 delta) &&;
+  Element translate(float dx, float dy) &&;
   Element clipContent(bool clip) &&;
   Element overlay(Element over) &&;
 

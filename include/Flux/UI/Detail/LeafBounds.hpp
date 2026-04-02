@@ -14,17 +14,18 @@ Rect resolveLeafBounds(Rect const& frame, Rect const& childFrame, LayoutConstrai
 
 float vStackSlotOffsetX(float itemW, float slotW, HorizontalAlignment a);
 
-/// `Rectangle` with explicit `frame` size: stretch to cell width; apply \ref LayoutHints
-/// `hStackCrossAlign` / `vStackCrossAlign` when the laid-out child frame is larger than the explicit box (HStack / VStack
+/// `Rectangle` with explicit width/height from \ref ElementModifiers (`size` / `width` / `height`):
+/// stretch to cell width when an axis is unset; apply \ref LayoutHints `hStackCrossAlign` /
+/// `vStackCrossAlign` when the laid-out child frame is larger than the explicit box (HStack / VStack
 /// cells). When the child matches the explicit frame (full cell), alignment is a no-op. Comparisons
 /// use `1e-4f` tolerance for float coordinates. `Text` does not use this helper — it aligns runs via
 /// constraints in `Element::Model<Text>`.
 Rect resolveRectangleBounds(Rect const& frame, Rect const& childFrame, LayoutConstraints const& constraints,
                             LayoutHints const& hints);
 
-/// Single entry for leaf layout: \p explicitBox is \c {offsetX, offsetY, width, height} from the leaf
-/// (zeros mean expand from constraints). \p isRectangle enables stack cross-alignment behavior used by
-/// \c Rectangle only.
+/// Single entry for leaf layout: \p explicitBox carries explicit width/height when set by the leaf
+/// (e.g. from modifiers for \c Rectangle; zeros mean expand from constraints). \p isRectangle enables
+/// stack cross-alignment behavior used by \c Rectangle only.
 inline Rect resolveLeafLayoutBounds(Rect const& explicitBox, Rect const& childFrame,
                                   LayoutConstraints const& constraints, LayoutHints const& hints,
                                   bool isRectangle) {

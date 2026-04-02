@@ -29,10 +29,10 @@ struct HoverRow {
 
     return ZStack{.children = {
                       Rectangle{
-                          .offsetX = 0.f, .offsetY = 0.f, .width = 0.f, .height = 44.f,
                           .fill = FillStyle::solid(bgColor),
                           .stroke = StrokeStyle::solid(Color::hex(0xE0E0E6), 1.f),
                       }
+                          .height(44.f)
                           .cursor(Cursor::Hand)
                           .cornerRadius(CornerRadius(8.f)),
                       Text{.text = "Row " + std::to_string(index) + (hovered ? "  ← hovered" : ""),
@@ -66,9 +66,9 @@ struct ForEachDemo {
                                                 {
                                                     ZStack{.children = {
                                                               Rectangle{
-                                                                  .offsetX = 0.f, .offsetY = 0.f, .width = 120.f, .height = 36.f,
                                                                   .fill = FillStyle::solid(Color::hex(0x3A7BD5)),
                                                               }
+                                                                  .size(120.f, 36.f)
                                                                   .cursor(Cursor::Hand)
                                                                   .onTap([count] { count = *count + 1; })
                                                                   .cornerRadius(CornerRadius(8.f)),
@@ -78,9 +78,9 @@ struct ForEachDemo {
                                                           }},
                                                     ZStack{.children = {
                                                               Rectangle{
-                                                                  .offsetX = 0.f, .offsetY = 0.f, .width = 120.f, .height = 36.f,
                                                                   .fill = FillStyle::solid(Color::hex(0xD05A2B)),
                                                               }
+                                                                  .size(120.f, 36.f)
                                                                   .cursor(Cursor::Hand)
                                                                   .onTap([count] {
                                                                     if (*count > 0) {

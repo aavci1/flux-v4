@@ -58,16 +58,16 @@ struct Card {
         .vAlign = VerticalAlignment::Center,
         .children = {
             Rectangle{
-                .offsetX = 0, .offsetY = 0, .width = 14.f, .height = 14.f,
                 .fill = FillStyle::solid(accent),
             }
+                .size(14.f, 14.f)
                 .cornerRadius(CornerRadius(7.f)),
             Text{
                 .text = title,
                 .font = {.size = 17.f, .weight = 600.f},
                 .color = pal::label,
             }
-                .frame(0.f, 24.f)
+                .size(0.f, 24.f)
                 .flex(1.f),
             Text{
                 .text = expanded ? "⌄" : "›",
@@ -76,7 +76,7 @@ struct Card {
                 .horizontalAlignment = HorizontalAlignment::Center,
                 .verticalAlignment = VerticalAlignment::Center,
             }
-                .frame(24.f, 24.f),
+                .size(24.f, 24.f),
         },
     });
 
@@ -91,7 +91,7 @@ struct Card {
                       .color = pal::sublabel,
                       .wrapping = TextWrapping::Wrap,
                   }
-                      .frame(0.f, bodyOpacity * bodyTextHeight)
+                      .size(0.f, bodyOpacity * bodyTextHeight)
                       .flex(1.f),
               },
       });
