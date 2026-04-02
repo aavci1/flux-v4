@@ -70,6 +70,52 @@ Rect intersectRects(Rect const& a, Rect const& b) {
   return Rect::sharp(x0, y0, x1 - x0, y1 - y0);
 }
 
+/// When `vis` is the axis-aligned bbox of (roundRect ∩ clip), corners on cut edges must be sharp — the
+/// SDF round-rect assumes `vis` is the full shape, not a truncated round-rect (see Path::rect).
+CornerRadius cornerRadiiAfterAxisAlignedClip(Rect const& full, Rect const& vis, CornerRadius const& cr) {
+  constexpr float eps = 1e-3f;
+  CornerRadius out = cr;
+  if (vis.x > full.x + eps) {
+    out.topLeft = 0.f;
+    out.bottomLeft = 0.f;
+  }
+  if (vis.x + vis.width < full.x + full.width - eps) {
+    out.topRight = 0.f;
+    out.bottomRight = 0.f;
+  }
+  if (vis.y > full.y + eps) {
+    out.topLeft = 0.f;
+    out.topRight = 0.f;
+  }
+  if (vis.y + vis.height < full.y + full.height - eps) {
+    out.bottomLeft = 0.f;
+    out.bottomRight = 0.f;
+  }
+  return out;
+}
+
+void clampRoundRectCornerRadii(float w, float h, CornerRadius& r) {
+  if (w <= 0.f || h <= 0.f) {
+    return;
+  }
+  const float maxR = std::min(w, h) * 0.5f;
+  r.topLeft = std::min(r.topLeft, maxR);
+  r.topRight = std::min(r.topRight, maxR);
+  r.bottomRight = std::min(r.bottomRight, maxR);
+  r.bottomLeft = std::min(r.bottomLeft, maxR);
+  auto fixEdge = [](float& a, float& b, float len) {
+    if (a + b > len && len > 0.f) {
+      const float s = len / (a + b);
+      a *= s;
+      b *= s;
+    }
+  };
+  fixEdge(r.topLeft, r.topRight, w);
+  fixEdge(r.bottomLeft, r.bottomRight, w);
+  fixEdge(r.topLeft, r.bottomLeft, h);
+  fixEdge(r.topRight, r.bottomRight, h);
+}
+
 bool tryDecomposeRotationTranslation(Mat3 const& m, float* outAngle, float* outTx, float* outTy) {
   const float a = m.m[0], b = m.m[1], c = m.m[3], d = m.m[4];
   const float det = a * d - b * c;
@@ -492,6 +538,18 @@ public:
       drawR = inter;
     }
 
+    CornerRadius crEffective = cornerRadius;
+    {
+      constexpr float eps = 1e-3f;
+      bool const clipped =
+          std::abs(drawR.x - rect.x) > eps || std::abs(drawR.y - rect.y) > eps ||
+          std::abs(drawR.width - rect.width) > eps || std::abs(drawR.height - rect.height) > eps;
+      if (clipped) {
+        crEffective = cornerRadiiAfterAxisAlignedClip(rect, drawR, cornerRadius);
+        clampRoundRectCornerRadii(drawR.width, drawR.height, crEffective);
+      }
+    }
+
     float rotationRad = 0.f;
     float tx = 0.f;
     float ty = 0.f;
@@ -503,10 +561,10 @@ public:
 
     const float s = std::min(dpiScaleX_, dpiScaleY_);
     CornerRadius cr{};
-    cr.topLeft = cornerRadius.topLeft * s;
-    cr.topRight = cornerRadius.topRight * s;
-    cr.bottomRight = cornerRadius.bottomRight * s;
-    cr.bottomLeft = cornerRadius.bottomLeft * s;
+    cr.topLeft = crEffective.topLeft * s;
+    cr.topRight = crEffective.topRight * s;
+    cr.bottomRight = crEffective.bottomRight * s;
+    cr.bottomLeft = crEffective.bottomLeft * s;
     Rect device = Rect::sharp(mapped.x * dpiScaleX_, mapped.y * dpiScaleY_, mapped.width * dpiScaleX_,
                               mapped.height * dpiScaleY_);
     emitRect(device, cr, hasFill ? fillC : Color{0, 0, 0, 0}, hasStroke ? strokeC : Color{0, 0, 0, 0},
