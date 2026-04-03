@@ -1,5 +1,6 @@
 #include <Flux/UI/Element.hpp>
-#include <Flux/UI/BuildContext.hpp>
+#include <Flux/UI/LayoutContext.hpp>
+#include <Flux/UI/RenderContext.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 #include <Flux/UI/Views/ZStack.hpp>
 
@@ -15,8 +16,8 @@
 namespace flux {
 using namespace flux::layout;
 
-void ZStack::build(BuildContext& ctx) const {
-  ContainerBuildScope scope(ctx);
+void ZStack::layout(LayoutContext& ctx) const {
+  ContainerLayoutScope scope(ctx);
   float const assignedW = assignedSpan(scope.parentFrame.width, scope.outer.maxWidth);
   float const assignedH = assignedSpan(scope.parentFrame.height, scope.outer.maxHeight);
   scope.pushStandardLayer(false, assignedW, assignedH);
@@ -90,11 +91,13 @@ void ZStack::build(BuildContext& ctx) const {
     if (innerH > 0.f) {
       outH = std::min(alignH, innerH);
     }
-    scope.buildChild(children[i], Rect{x, y, outW, outH}, innerForBuild);
+    scope.layoutChild(children[i], Rect{x, y, outW, outH}, innerForBuild);
   }
 }
 
-Size ZStack::measure(BuildContext& ctx, LayoutConstraints const& constraints, LayoutHints const&,
+void ZStack::renderFromLayout(RenderContext&, LayoutNode const&) const {}
+
+Size ZStack::measure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const&,
                      TextSystem& ts) const {
   ContainerMeasureScope scope(ctx);
   float const assignedW = std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;

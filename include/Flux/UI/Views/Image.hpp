@@ -21,8 +21,9 @@ namespace flux::views {
 struct Image : ViewModifiers<Image> {
   static constexpr bool memoizable = true;
 
-  void build(::flux::BuildContext&) const;
-  ::flux::Size measure(::flux::BuildContext&, ::flux::LayoutConstraints const&, ::flux::LayoutHints const&,
+  void layout(::flux::LayoutContext&) const;
+  void renderFromLayout(::flux::RenderContext&, ::flux::LayoutNode const&) const;
+  ::flux::Size measure(::flux::LayoutContext&, ::flux::LayoutConstraints const&, ::flux::LayoutHints const&,
                        ::flux::TextSystem&) const;
 
   std::shared_ptr<flux::Image> source;

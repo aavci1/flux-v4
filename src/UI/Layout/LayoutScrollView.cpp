@@ -1,5 +1,6 @@
 #include <Flux/UI/Element.hpp>
-#include <Flux/UI/BuildContext.hpp>
+#include <Flux/UI/LayoutContext.hpp>
+#include <Flux/UI/RenderContext.hpp>
 #include <Flux/UI/Layout.hpp>
 #include <Flux/UI/StateStore.hpp>
 
@@ -7,7 +8,7 @@
 
 namespace flux {
 
-void ScrollView::build(BuildContext& ctx) const {
+void ScrollView::layout(LayoutContext& ctx) const {
   if (!ctx.consumeCompositeBodySubtreeRootSkip()) {
     ctx.advanceChildSlot();
   }
@@ -16,17 +17,19 @@ void ScrollView::build(BuildContext& ctx) const {
   if (store) {
     store->pushComponent(key);
   }
-  Element childEl{body()};
+  Element& childEl = ctx.pinElement(body());
   if (store) {
     store->popComponent();
   }
   ctx.beginCompositeBodySubtree(key);
   ctx.pushCompositeKeyTail(key);
-  childEl.build(ctx);
+  childEl.layout(ctx);
   ctx.popCompositeKeyTail();
 }
 
-Size ScrollView::measure(BuildContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
+void ScrollView::renderFromLayout(RenderContext&, LayoutNode const&) const {}
+
+Size ScrollView::measure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
                          TextSystem& ts) const {
   if (!ctx.consumeCompositeBodySubtreeRootSkip()) {
     ctx.advanceChildSlot();
@@ -36,7 +39,7 @@ Size ScrollView::measure(BuildContext& ctx, LayoutConstraints const& constraints
   if (store) {
     store->pushComponent(key);
   }
-  Element childEl{body()};
+  Element& childEl = ctx.pinElement(body());
   if (store) {
     store->popComponent();
   }

@@ -5,10 +5,13 @@
 /// Part of the Flux public API.
 
 
-#include <Flux/UI/BuildContext.hpp>
 #include <Flux/UI/ComponentKey.hpp>
-#include <Flux/Scene/SceneGraph.hpp>
 #include <Flux/Core/Types.hpp>
+
+namespace flux {
+class LayoutContext;
+class LayoutTree;
+} // namespace flux
 
 #include <optional>
 #include <unordered_map>
@@ -23,8 +26,8 @@ class StateStore;
 class LayoutRectCache {
 public:
   /// Called at end of `BuildOrchestrator::rebuild()`. Swaps generations and
-  /// fills `current_` from `ctx.subtreeRootLayers()`.
-  void fill(SceneGraph const& graph, BuildContext const& ctx);
+  /// fills `current_` from `ctx.subtreeRootLayouts()` and `tree`.
+  void fill(LayoutTree const& tree, LayoutContext const& ctx);
 
   /// Rect for the composite currently executing `body()`.
   /// Returns nullopt when called outside a build pass.

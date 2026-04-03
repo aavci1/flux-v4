@@ -12,8 +12,9 @@ namespace flux {
 struct Spacer : ViewModifiers<Spacer> {
   static constexpr bool memoizable = true;
 
-  void build(BuildContext&) const;
-  Size measure(BuildContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
+  void layout(LayoutContext&) const;
+  void renderFromLayout(RenderContext&, LayoutNode const&) const;
+  Size measure(LayoutContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
 
   /// Minimum size on the stack main axis before flex distribution.
   float minLength = 0.f;

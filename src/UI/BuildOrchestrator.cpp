@@ -5,8 +5,11 @@
 #include <Flux/Detail/Runtime.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Scene/SceneGraph.hpp>
-#include <Flux/UI/BuildContext.hpp>
 #include <Flux/UI/Element.hpp>
+#include <Flux/UI/LayoutContext.hpp>
+#include <Flux/UI/LayoutTree.hpp>
+#include <Flux/UI/RenderContext.hpp>
+#include <Flux/UI/RenderLayoutTree.hpp>
 #include <Flux/UI/Environment.hpp>
 #include <Flux/UI/Overlay.hpp>
 
@@ -59,7 +62,7 @@ BuildOrchestrator::~BuildOrchestrator() {
 void BuildOrchestrator::setRoot(std::unique_ptr<RootHolder> holder) {
   rootHolder_ = std::move(holder);
   // Do not call `rebuild()` here — `Runtime::setRoot` calls `Runtime::rebuild()` so `sCurrent`
-  // is set for hooks (`Runtime::current()`) during the build pass.
+  // is set for hooks (`Runtime::current()`) during the layout/render pass.
 }
 
 void BuildOrchestrator::subscribeToRebuild(std::function<void()> onFrameNeeded) {
@@ -84,23 +87,30 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
   StateStore::setCurrent(&stateStore_);
 
   EventMap newMap;
-  BuildContext ctx{ graph, newMap, Application::instance().textSystem(), layoutEngine_, &measureCache_ };
+  LayoutTree layoutTree;
+  layoutTree.clear();
+  LayoutContext lctx{Application::instance().textSystem(), layoutEngine_, layoutTree, &measureCache_};
   Size const raw = sizeOverride.value_or(window_.getSize());
   Size const sz = snapRootLayoutSize(raw);
   LayoutConstraints rootCs{};
   rootCs.maxWidth = sz.width;
   rootCs.maxHeight = sz.height;
-  ctx.pushConstraints(rootCs);
+  lctx.pushConstraints(rootCs);
   EnvironmentLayer windowEnvBaseline = window_.environmentLayer();
   EnvironmentStack::current().push(std::move(windowEnvBaseline));
   layoutEngine_.setChildFrame(Rect{0.f, 0.f, sz.width, sz.height});
   if (rootHolder_) {
-    rootHolder_->buildInto(ctx);
+    rootHolder_->layoutInto(lctx);
   }
   EnvironmentStack::current().pop();
-  ctx.popConstraints();
+  lctx.popConstraints();
 
-  layoutRects_.fill(graph, ctx);
+  RenderContext rctx{graph, newMap, Application::instance().textSystem()};
+  rctx.pushConstraints(rootCs);
+  renderLayoutTree(layoutTree, rctx);
+  rctx.popConstraints();
+
+  layoutRects_.fill(layoutTree, lctx);
   layoutDebugEndPass();
 
   StateStore::setCurrent(nullptr);

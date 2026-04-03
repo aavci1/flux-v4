@@ -5,7 +5,7 @@
 /// Part of the Flux public API.
 
 
-#include <Flux/UI/BuildContext.hpp>
+#include <Flux/UI/LayoutContext.hpp>
 #include <Flux/UI/Component.hpp>
 #include <Flux/UI/Element.hpp>
 
@@ -19,7 +19,7 @@ namespace flux {
 /// for the lifetime of the window.
 struct RootHolder {
   virtual ~RootHolder() = default;
-  virtual void buildInto(BuildContext& ctx) const = 0;
+  virtual void layoutInto(LayoutContext& ctx) const = 0;
 };
 
 template<typename C>
@@ -30,7 +30,7 @@ struct TypedRootHolder final : RootHolder {
   explicit TypedRootHolder(std::in_place_t, C const& c) : value(c) {}
   explicit TypedRootHolder(std::in_place_t, C&& c) : value(std::move(c)) {}
 
-  void buildInto(BuildContext& ctx) const override {
+  void layoutInto(LayoutContext& ctx) const override {
     if constexpr (CompositeComponent<C>) {
       ctx.pushChildIndex();
       ComponentKey const key = ctx.nextCompositeKey();
@@ -38,21 +38,21 @@ struct TypedRootHolder final : RootHolder {
       if (store) {
         store->pushComponent(key);
       }
-      Element child{value.body()};
+      Element& child = ctx.pinElement(Element{value.body()});
       if (store) {
         store->popComponent();
       }
       ctx.beginCompositeBodySubtree(key);
       ctx.pushCompositeKeyTail(key);
-      child.build(ctx);
+      child.layout(ctx);
       ctx.popCompositeKeyTail();
       ctx.popChildIndex();
     } else {
       static_assert(std::is_copy_constructible_v<C>,
           "Leaf root component must be copy-constructible. "
           "If C has Signal/Animated members, give it a body() method.");
-      Element leaf{value};
-      leaf.build(ctx);
+      Element& leaf = ctx.pinElement(Element{value});
+      leaf.layout(ctx);
     }
   }
 };

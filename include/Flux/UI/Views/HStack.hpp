@@ -16,8 +16,9 @@ namespace flux {
 /// Horizontal stack. Use **`.padding(float)`** / **`.clipContent(bool)`** on the wrapping `Element` for
 /// inset and clipping.
 struct HStack : ViewModifiers<HStack> {
-  void build(BuildContext&) const;
-  Size measure(BuildContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
+  void layout(LayoutContext&) const;
+  void renderFromLayout(RenderContext&, LayoutNode const&) const;
+  Size measure(LayoutContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
 
   float spacing = 8.f;
   VerticalAlignment vAlign = VerticalAlignment::Center;

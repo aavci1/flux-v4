@@ -13,7 +13,9 @@
 namespace flux {
 
 class Canvas;
-class BuildContext;
+class LayoutContext;
+class RenderContext;
+struct LayoutNode;
 class TextSystem;
 
 template<typename T>
@@ -36,10 +38,11 @@ concept RenderComponent = requires(T const& t, Canvas& c, Rect r, LayoutConstrai
 
 template<typename T>
 concept PrimitiveComponent =
-    requires(T const& t, BuildContext& ctx, LayoutConstraints const& c, LayoutHints const& h,
-             TextSystem& ts) {
-      { t.build(ctx) };
-      { t.measure(ctx, c, h, ts) } -> std::convertible_to<Size>;
+    requires(T const& t, LayoutContext& lctx, RenderContext& rctx, LayoutNode const& node,
+             LayoutConstraints const& c, LayoutHints const& h, TextSystem& ts) {
+      { t.layout(lctx) };
+      { t.measure(lctx, c, h, ts) } -> std::convertible_to<Size>;
+      { t.renderFromLayout(rctx, node) };
     } && !CompositeComponent<T> && !RenderComponent<T>;
 
 } // namespace flux

@@ -6,8 +6,11 @@
 #include <Flux/UI/Views/Popover.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Scene/SceneGraphBounds.hpp>
-#include <Flux/UI/BuildContext.hpp>
 #include <Flux/UI/Environment.hpp>
+#include <Flux/UI/LayoutContext.hpp>
+#include <Flux/UI/LayoutTree.hpp>
+#include <Flux/UI/RenderContext.hpp>
+#include <Flux/UI/RenderLayoutTree.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -188,17 +191,23 @@ void OverlayManager::rebuild(Size windowSize, Runtime& runtime) {
     layoutEngine_.resetForBuild();
     overlayMeasureCache_.clear();
     LayoutConstraints const cs = resolveConstraints(windowSize, entry.config);
-    BuildContext ctx{entry.graph, entry.eventMap, Application::instance().textSystem(), layoutEngine_,
-                     &overlayMeasureCache_};
-    ctx.pushConstraints(cs);
+    LayoutTree layoutTree;
+    layoutTree.clear();
+    LayoutContext lctx{Application::instance().textSystem(), layoutEngine_, layoutTree, &overlayMeasureCache_};
+    lctx.pushConstraints(cs);
     EnvironmentLayer windowEnvBaseline = runtime.window().environmentLayer();
     EnvironmentStack::current().push(std::move(windowEnvBaseline));
     layoutEngine_.setChildFrame(Rect{0.f, 0.f, cs.maxWidth, cs.maxHeight});
     if (entry.content.has_value()) {
-      entry.content->build(ctx);
+      entry.content->layout(lctx);
     }
     EnvironmentStack::current().pop();
-    ctx.popConstraints();
+    lctx.popConstraints();
+
+    RenderContext rctx{entry.graph, entry.eventMap, Application::instance().textSystem()};
+    rctx.pushConstraints(cs);
+    renderLayoutTree(layoutTree, rctx);
+    rctx.popConstraints();
 
     StateStore::setCurrent(prevCurrent);
     entry.stateStore->setOverlayScope(std::nullopt);

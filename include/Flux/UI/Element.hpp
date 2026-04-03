@@ -2,10 +2,12 @@
 
 /// \file Flux/UI/Element.hpp
 ///
-/// Type-erased UI component wrapper: holds any view or composite, dispatches \c build / \c measure,
-/// optional flex overrides, and per-subtree environment values.
+/// Type-erased UI component wrapper: holds any view or composite, dispatches \c layout / \c measure
+/// and render-phase emission, optional flex overrides, and per-subtree environment values.
 
-#include <Flux/UI/BuildContext.hpp>
+#include <Flux/UI/LayoutContext.hpp>
+#include <Flux/UI/LayoutTree.hpp>
+#include <Flux/UI/RenderContext.hpp>
 #include <Flux/UI/Component.hpp>
 #include <Flux/UI/Detail/LeafBounds.hpp>
 #include <Flux/UI/EventMap.hpp>
@@ -81,7 +83,7 @@ float minMainSizeOf(C const& v) {
 
 class TextSystem;
 
-/// Flat modifier state applied by \ref Element during \c build / \c measure (single decoration path).
+/// Flat modifier state applied by \ref Element during \c layout / \c measure (single decoration path).
 struct ElementModifiers {
   float padding = 0.f;
   FillStyle background = FillStyle::none();
@@ -147,8 +149,9 @@ public:
   Element(Element&&) noexcept = default;
   Element& operator=(Element&&) noexcept = default;
 
-  void build(BuildContext& ctx) const;
-  Size measure(BuildContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
+  void layout(LayoutContext& ctx) const;
+  void renderFromLayout(RenderContext& ctx, LayoutNode const& node) const;
+  Size measure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
                TextSystem& textSystem) const;
 
   /// Optional flex overrides on the wrapper (from \c flex()). When set, they replace the
@@ -160,7 +163,7 @@ public:
   /// Sets flex metadata for this child in its parent stack. Overrides struct-level flex fields.
   Element flex(float grow, float shrink = 1.f, float minMain = 0.f) &&;
 
-  /// Pushes environment values for this subtree's build and measure passes.
+  /// Pushes environment values for this subtree's layout and measure passes.
   template<typename T>
   Element environment(T value) && {
     if (!envLayer_) {
@@ -206,14 +209,15 @@ private:
   struct Concept {
     virtual ~Concept() = default;
     virtual std::unique_ptr<Concept> clone() const = 0;
-    virtual void build(BuildContext& ctx) const = 0;
-    virtual Size measure(BuildContext& ctx, LayoutConstraints const& constraints,
+    virtual void layout(LayoutContext& ctx) const = 0;
+    virtual void renderFromLayout(RenderContext& ctx, LayoutNode const& node) const = 0;
+    virtual Size measure(LayoutContext& ctx, LayoutConstraints const& constraints,
                          LayoutHints const& hints, TextSystem& textSystem) const = 0;
     virtual float flexGrow() const { return 0.f; }
     virtual float flexShrink() const { return 0.f; }
     virtual float minMainSize() const { return 0.f; }
     /// When true, \ref Element::measure may return a cached \ref Size for the same
-    /// `(measureId, constraints)` within a single rebuild after replaying \ref BuildContext::advanceChildSlot.
+    /// `(measureId, constraints)` within a single rebuild after replaying \ref LayoutContext::advanceChildSlot.
     /// Composites and layouts must return false. Memoization is safe because each `Element` has a stable
     /// \ref measureId_ and \ref MeasureCache is cleared every rebuild — the cache does not key on mutable
     /// content (e.g. string value); different instances get different ids. Leaves whose \ref measure
@@ -235,8 +239,8 @@ private:
   /// be recycled by the allocator across short-lived temporaries).
   std::uint64_t measureId_{};
 
-  void buildWithModifiers(BuildContext& ctx) const;
-  Size measureWithModifiersImpl(BuildContext& ctx, LayoutConstraints const& constraints,
+  void layoutWithModifiers(LayoutContext& ctx) const;
+  Size measureWithModifiersImpl(LayoutContext& ctx, LayoutConstraints const& constraints,
                                 LayoutHints const& hints, TextSystem& textSystem) const;
 };
 
@@ -252,8 +256,9 @@ struct Element::Model : Concept {
       std::abort();
     }
   }
-  void build(BuildContext& ctx) const override;
-  Size measure(BuildContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
+  void layout(LayoutContext& ctx) const override;
+  void renderFromLayout(RenderContext& ctx, LayoutNode const& node) const override;
+  Size measure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
                TextSystem& textSystem) const override;
   float flexGrow() const override { return detail::flexGrowOf(value); }
   float flexShrink() const override { return detail::flexShrinkOf(value); }
@@ -274,7 +279,7 @@ struct Element::Model : Concept {
 };
 
 template<typename C>
-void Element::Model<C>::build(BuildContext& ctx) const {
+void Element::Model<C>::layout(LayoutContext& ctx) const {
   if constexpr (CompositeComponent<C>) {
     ComponentKey const key = ctx.nextCompositeKey();
     StateStore* store = StateStore::current();
@@ -282,21 +287,45 @@ void Element::Model<C>::build(BuildContext& ctx) const {
       store->pushComponent(key);
       store->pushCompositeConstraints(ctx.constraints());
     }
-    Element child{value.body()};
+    Element& child = ctx.pinElement(Element{value.body()});
     if (store) {
       store->popCompositeConstraints();
       store->popComponent();
     }
     ctx.beginCompositeBodySubtree(key);
     ctx.pushCompositeKeyTail(key);
-    child.build(ctx);
+    child.layout(ctx);
     ctx.popCompositeKeyTail();
   } else if constexpr (RenderComponent<C>) {
     ComponentKey const stableKey = ctx.leafComponentKey();
     ctx.advanceChildSlot();
     Rect const frame = flux::detail::resolveLeafLayoutBounds(
         {}, ctx.layoutEngine().consumeAssignedFrame(), ctx.constraints(), ctx.hints());
+    LayoutNode n{};
+    n.kind = LayoutNode::Kind::Leaf;
+    n.frame = frame;
+    n.componentKey = stableKey;
+    n.element = ctx.currentElement();
+    n.isCustomRenderLeaf = true;
+    n.constraints = ctx.constraints();
+    n.hints = ctx.hints();
+    ctx.pushLayoutNode(std::move(n));
+  } else if constexpr (PrimitiveComponent<C>) {
+    value.layout(ctx);
+  } else {
+    static_assert(alwaysFalse<C>,
+        "Component must satisfy CompositeComponent (body()), PrimitiveComponent (layout + measure with "
+        "LayoutContext), or RenderComponent (render + measure).");
+  }
+}
 
+template<typename C>
+void Element::Model<C>::renderFromLayout(RenderContext& ctx, LayoutNode const& node) const {
+  if constexpr (CompositeComponent<C>) {
+    (void)ctx;
+    (void)node;
+  } else if constexpr (RenderComponent<C>) {
+    Rect const frame = node.frame;
     C const copy = value;
     NodeId const id = ctx.graph().addCustomRender(ctx.parentLayer(),
         CustomRenderNode{
@@ -305,12 +334,10 @@ void Element::Model<C>::build(BuildContext& ctx) const {
         });
 
     EventHandlers handlers{};
-    handlers.stableTargetKey = stableKey;
+    handlers.stableTargetKey = node.componentKey;
     if constexpr (requires { value.onTap; }) {
       handlers.onTap = value.onTap;
     }
-    // Pointer hits use the same coordinate space as `frame`. Convert to widget-local (0..size) so handlers
-    // do not depend on `Runtime::buildSlotRect()`, which may not match this node after nested layout.
     if constexpr (requires { value.onPointerDown; }) {
       if (value.onPointerDown) {
         handlers.onPointerDown = [pd = value.onPointerDown, frame](Point local) {
@@ -362,16 +389,14 @@ void Element::Model<C>::build(BuildContext& ctx) const {
       ctx.eventMap().insert(id, std::move(handlers));
     }
   } else if constexpr (PrimitiveComponent<C>) {
-    value.build(ctx);
+    value.renderFromLayout(ctx, node);
   } else {
-    static_assert(alwaysFalse<C>,
-        "Component must satisfy CompositeComponent (body()), PrimitiveComponent (build + measure with "
-        "BuildContext), or RenderComponent (render + measure).");
+    static_assert(alwaysFalse<C>, "Invalid component type for renderFromLayout.");
   }
 }
 
 template<typename C>
-Size Element::Model<C>::measure(BuildContext& ctx, LayoutConstraints const& constraints,
+Size Element::Model<C>::measure(LayoutContext& ctx, LayoutConstraints const& constraints,
                                 LayoutHints const& hints, TextSystem& textSystem) const {
   if constexpr (CompositeComponent<C>) {
     ComponentKey const key = ctx.nextCompositeKey();
@@ -398,8 +423,8 @@ Size Element::Model<C>::measure(BuildContext& ctx, LayoutConstraints const& cons
     return value.measure(ctx, constraints, hints, textSystem);
   } else {
     static_assert(alwaysFalse<C>,
-        "Component must satisfy CompositeComponent (body()), PrimitiveComponent (build + measure with "
-        "BuildContext), or RenderComponent (render + measure).");
+        "Component must satisfy CompositeComponent (body()), PrimitiveComponent (layout + measure with "
+        "LayoutContext), or RenderComponent (render + measure).");
     return {};
   }
 }

@@ -22,8 +22,9 @@ namespace flux {
 struct Text : ViewModifiers<Text> {
   static constexpr bool memoizable = true;
 
-  void build(BuildContext&) const;
-  Size measure(BuildContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
+  void layout(LayoutContext&) const;
+  void renderFromLayout(RenderContext&, LayoutNode const&) const;
+  Size measure(LayoutContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
 
   std::string text;
   Font font{ .family = "", .size = 16.f, .weight = 400.f, .italic = false };

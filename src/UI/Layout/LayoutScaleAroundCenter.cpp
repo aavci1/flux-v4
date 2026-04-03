@@ -1,10 +1,8 @@
 #include <Flux/UI/Element.hpp>
-#include <Flux/UI/BuildContext.hpp>
+#include <Flux/UI/LayoutContext.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
+#include <Flux/UI/RenderContext.hpp>
 #include <Flux/UI/Views/ScaleAroundCenter.hpp>
-
-#include <Flux/Scene/Nodes.hpp>
-#include <Flux/Scene/SceneGraph.hpp>
 
 #include "UI/Layout/ContainerScope.hpp"
 #include "UI/Layout/LayoutHelpers.hpp"
@@ -16,8 +14,8 @@
 namespace flux {
 using namespace flux::layout;
 
-void ScaleAroundCenter::build(BuildContext& ctx) const {
-  ContainerBuildScope scope(ctx);
+void ScaleAroundCenter::layout(LayoutContext& ctx) const {
+  ContainerLayoutScope scope(ctx);
   float const assignedW = assignedSpan(scope.parentFrame.width, scope.outer.maxWidth);
   float const assignedH = assignedSpan(scope.parentFrame.height, scope.outer.maxHeight);
 
@@ -41,13 +39,9 @@ void ScaleAroundCenter::build(BuildContext& ctx) const {
   float const cx = innerW * 0.5f;
   float const cy = innerH * 0.5f;
 
-  LayerNode layer{};
-  Mat3 const t = Mat3::translate(scope.parentFrame.x, scope.parentFrame.y) *
-                 Mat3::translate(cx, cy) * Mat3::scale(scale) *
-                 Mat3::translate(-cx, -cy);
-  layer.transform = t;
-  NodeId const layerId = ctx.graph().addLayer(ctx.parentLayer(), std::move(layer));
-  scope.pushCustomLayer(layerId);
+  Mat3 const t = Mat3::translate(scope.parentFrame.x, scope.parentFrame.y) * Mat3::translate(cx, cy) *
+                 Mat3::scale(scale) * Mat3::translate(-cx, -cy);
+  scope.pushScaleAroundCenterLayer(t);
 
   float const childW = std::max(sz.width, innerW);
   float const childH = std::max(sz.height, innerH);
@@ -57,10 +51,12 @@ void ScaleAroundCenter::build(BuildContext& ctx) const {
   LayoutConstraints innerForBuild{};
   innerForBuild.maxWidth = innerW;
   innerForBuild.maxHeight = innerH;
-  scope.buildChild(child, Rect{x, y, childW, childH}, innerForBuild);
+  scope.layoutChild(child, Rect{x, y, childW, childH}, innerForBuild);
 }
 
-Size ScaleAroundCenter::measure(BuildContext& ctx, LayoutConstraints const& constraints, LayoutHints const&,
+void ScaleAroundCenter::renderFromLayout(RenderContext&, LayoutNode const&) const {}
+
+Size ScaleAroundCenter::measure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const&,
                                 TextSystem& ts) const {
   ContainerMeasureScope scope(ctx);
   float const assignedW = std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;

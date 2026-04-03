@@ -5,12 +5,12 @@
 /// Part of the Flux public API.
 
 
+#include <Flux/Core/Types.hpp>
 #include <Flux/Graphics/TextLayoutOptions.hpp>
-#include <Flux/Scene/Nodes.hpp>
-#include <Flux/Scene/SceneGraph.hpp>
 #include <Flux/UI/Detail/LayoutDebugDump.hpp>
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
+#include <Flux/UI/LayoutTree.hpp>
 
 #include <algorithm>
 #include <cstddef>
@@ -54,8 +54,9 @@ struct Element::Model<ForEach<T>> final : Element::Concept {
     return std::make_unique<Model<ForEach<T>>>(value);
   }
 
-  void build(BuildContext& ctx) const override;
-  Size measure(BuildContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
+  void layout(LayoutContext& ctx) const override;
+  void renderFromLayout(RenderContext&, LayoutNode const&) const override {}
+  Size measure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
                TextSystem& ts) const override;
 
   float flexGrow() const override { return 0.f; }
@@ -64,7 +65,7 @@ struct Element::Model<ForEach<T>> final : Element::Concept {
 };
 
 template<typename T>
-void Element::Model<ForEach<T>>::build(BuildContext& ctx) const {
+void Element::Model<ForEach<T>>::layout(LayoutContext& ctx) const {
   LayoutEngine& le = ctx.layoutEngine();
   Rect const box = le.consumeAssignedFrame();
   LayoutConstraints const outer = ctx.constraints();
@@ -83,7 +84,7 @@ void Element::Model<ForEach<T>>::build(BuildContext& ctx) const {
   sizes.reserve(n);
 
   for (std::size_t i = 0; i < n; ++i) {
-    Element item{value.factory(value.items[i])};
+    Element& item = ctx.pinElement(value.factory(value.items[i]));
     ctx.pushCompositeKeyTail(forEachKey);
     ctx.setChildIndex(i);
     LayoutHints childHints{};
@@ -104,19 +105,24 @@ void Element::Model<ForEach<T>>::build(BuildContext& ctx) const {
     innerW = maxChildW;
   }
 
-  LayerNode fxLayer{};
-  if (box.width > 0.f || box.height > 0.f) {
-    fxLayer.transform = Mat3::translate(box.x, box.y);
-  }
-  NodeId const forEachLayerId = ctx.graph().addLayer(ctx.parentLayer(), std::move(fxLayer));
-  ctx.pushLayer(forEachLayerId);
+  ctx.pushLayerWorldTransform(Mat3::translate(box.x, box.y));
+
+  LayoutNode fx{};
+  fx.kind = LayoutNode::Kind::Container;
+  fx.frame = box;
+  fx.constraints = outer;
+  fx.hints = ctx.hints();
+  fx.containerSpec.kind = ContainerLayerSpec::Kind::Standard;
+  fx.element = ctx.currentElement();
+  LayoutNodeId const feId = ctx.pushLayoutNode(std::move(fx));
+  ctx.pushLayoutParent(feId);
 
   float y = 0.f;
   for (std::size_t i = 0; i < n; ++i) {
     if (i > 0) {
       y += value.spacing;
     }
-    Element item{value.factory(value.items[i])};
+    Element& item = ctx.pinElement(value.factory(value.items[i]));
     Size sz = sizes[i];
     float const rowW = innerW > 0.f ? innerW : sz.width;
     float const x = 0.f;
@@ -134,18 +140,19 @@ void Element::Model<ForEach<T>>::build(BuildContext& ctx) const {
 
     ctx.pushCompositeKeyTail(forEachKey);
     ctx.setChildIndex(i);
-    item.build(ctx);
+    item.layout(ctx);
     ctx.popCompositeKeyTail();
 
     ctx.popConstraints();
     y += sz.height;
   }
 
-  ctx.popLayer();
+  ctx.popLayoutParent();
+  ctx.popLayerWorldTransform();
 }
 
 template<typename T>
-Size Element::Model<ForEach<T>>::measure(BuildContext& ctx, LayoutConstraints const& constraints,
+Size Element::Model<ForEach<T>>::measure(LayoutContext& ctx, LayoutConstraints const& constraints,
                                             LayoutHints const&, TextSystem& ts) const {
   ComponentKey const forEachKey = ctx.nextCompositeKey();
   LayoutConstraints childCs = constraints;

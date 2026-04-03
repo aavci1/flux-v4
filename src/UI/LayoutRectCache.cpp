@@ -1,16 +1,18 @@
 #include <Flux/UI/LayoutRectCache.hpp>
 
-#include <Flux/Scene/SceneGraphBounds.hpp>
+#include <Flux/UI/LayoutContext.hpp>
+#include <Flux/UI/LayoutTree.hpp>
 #include <Flux/UI/StateStore.hpp>
 
 namespace flux {
 
-void LayoutRectCache::fill(SceneGraph const& graph, BuildContext const& ctx) {
+void LayoutRectCache::fill(LayoutTree const& tree, LayoutContext const& ctx) {
   prev_.swap(current_);
   current_.clear();
-  for (auto const& [key, nodeId] : ctx.subtreeRootLayers()) {
-    Mat3 const pw = subtreeAncestorWorldTransform(graph, nodeId);
-    current_[key] = unionSubtreeBounds(graph, nodeId, pw);
+  for (auto const& [key, nodeId] : ctx.subtreeRootLayouts()) {
+    if (nodeId.isValid()) {
+      current_[key] = tree.unionSubtreeWorldBounds(nodeId);
+    }
   }
 }
 
@@ -29,7 +31,6 @@ std::optional<Rect> LayoutRectCache::forKey(ComponentKey const& key) const {
   if (auto it = current_.find(key); it != current_.end()) {
     return it->second;
   }
-  // During a rebuild, `fill` swaps generations; exact key may live in `prev_` until this pass ends.
   if (auto it = prev_.find(key); it != prev_.end()) {
     return it->second;
   }

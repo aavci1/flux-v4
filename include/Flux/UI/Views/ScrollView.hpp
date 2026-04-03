@@ -6,6 +6,9 @@
 
 
 #include <Flux/Core/Types.hpp>
+#include <Flux/UI/LayoutContext.hpp>
+#include <Flux/UI/LayoutTree.hpp>
+#include <Flux/UI/RenderContext.hpp>
 #include <Flux/Graphics/Styles.hpp>
 #include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/Views/OffsetView.hpp>
@@ -32,8 +35,9 @@ struct ScrollView : ViewModifiers<ScrollView> {
   std::vector<Element> children;
 
   /// Custom subtree hook (not the generic \ref CompositeComponent path in \ref Element::Model).
-  void build(BuildContext&) const;
-  Size measure(BuildContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
+  void layout(LayoutContext&) const;
+  void renderFromLayout(RenderContext&, LayoutNode const&) const;
+  Size measure(LayoutContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
 
   // ── Component protocol ─────────────────────────────────────────────────────
 
@@ -49,8 +53,11 @@ struct Element::Model<ScrollView> final : Element::Concept {
   std::unique_ptr<Concept> clone() const override {
     return std::make_unique<Model<ScrollView>>(value);
   }
-  void build(BuildContext& ctx) const override { value.build(ctx); }
-  Size measure(BuildContext& ctx, LayoutConstraints const& c, LayoutHints const& h, TextSystem& ts) const override {
+  void layout(LayoutContext& ctx) const override { value.layout(ctx); }
+  void renderFromLayout(RenderContext& ctx, LayoutNode const& node) const override {
+    value.renderFromLayout(ctx, node);
+  }
+  Size measure(LayoutContext& ctx, LayoutConstraints const& c, LayoutHints const& h, TextSystem& ts) const override {
     return value.measure(ctx, c, h, ts);
   }
   float flexGrow() const override { return detail::flexGrowOf(value); }

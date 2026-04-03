@@ -62,11 +62,9 @@ struct ToggleDemoRoot {
         (*bluetoothEnabled ? "on" : "off") + " · Dark mode: " + (*darkMode ? "on" : "off") +
         " · Notifications: " + (*notifications ? "on" : "off");
 
-    return ZStack{
-        .hAlign = HorizontalAlignment::Leading,
-        .vAlign = VerticalAlignment::Top,
+    return ScrollView{
+        .axis = ScrollAxis::Vertical,
         .children = {
-            Rectangle{.fill = FillStyle::solid(theme.colorBackground)},
             VStack{
                 .spacing = 20.f,
                 .hAlign = HorizontalAlignment::Leading,

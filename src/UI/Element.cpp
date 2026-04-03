@@ -5,7 +5,8 @@
 #include <Flux/UI/Views/Popover.hpp>
 
 #include <Flux/Core/Cursor.hpp>
-#include <Flux/UI/BuildContext.hpp>
+#include <Flux/UI/LayoutContext.hpp>
+#include <Flux/UI/RenderContext.hpp>
 #include <Flux/UI/MeasureCache.hpp>
 #include <Flux/UI/Detail/LeafBounds.hpp>
 #include <Flux/UI/EventMap.hpp>
@@ -134,26 +135,33 @@ bool shouldInsertHandlers(EventHandlers const& h) {
 
 } // namespace
 
-void Element::build(BuildContext& ctx) const {
+void Element::layout(LayoutContext& ctx) const {
+  Element const* const prevEl = ctx.currentElement();
+  ctx.setCurrentElement(this);
   layoutDebugPushElementBuild(measureId_);
   if (envLayer_) {
     EnvironmentStack::current().push(*envLayer_);
   }
   if (modifiers_ && modifiers_->needsModifierPass()) {
-    buildWithModifiers(ctx);
+    layoutWithModifiers(ctx);
   } else {
-    impl_->build(ctx);
+    impl_->layout(ctx);
   }
   if (envLayer_) {
     EnvironmentStack::current().pop();
   }
+  ctx.setCurrentElement(prevEl);
   layoutDebugPopElementBuild();
 }
 
-void Element::buildWithModifiers(BuildContext& ctx) const {
+void Element::renderFromLayout(RenderContext& ctx, LayoutNode const& node) const {
+  impl_->renderFromLayout(ctx, node);
+}
+
+void Element::layoutWithModifiers(LayoutContext& ctx) const {
   ElementModifiers const& m = *modifiers_;
   ComponentKey const stableKey = ctx.leafComponentKey();
-  ContainerBuildScope scope(ctx);
+  ContainerLayoutScope scope(ctx);
   scope.parentFrame.x += m.positionX;
   scope.parentFrame.y += m.positionY;
   float const assignedW = assignedSpan(scope.parentFrame.width, scope.outer.maxWidth);
@@ -163,50 +171,32 @@ void Element::buildWithModifiers(BuildContext& ctx) const {
 
   bool const needEffectLayer = m.opacity < 1.f - 1e-6f || std::fabs(m.translation.x) > 1e-6f ||
                                std::fabs(m.translation.y) > 1e-6f || m.clip;
-  /// Background/border decoration only — \c cornerRadius without fill/stroke is merged into leaves such
-  /// as \ref Rectangle via \ref BuildContext::activeElementModifiers.
-  bool const needBg = !m.background.isNone() || !m.border.isNone();
-  bool const needTransparentHit = !needBg && m.hasInteraction();
 
   if (needEffectLayer) {
-    LayerNode layer{};
-    layer.opacity = m.opacity;
-    layer.transform =
+    Mat3 const L =
         Mat3::translate(scope.parentFrame.x + m.translation.x, scope.parentFrame.y + m.translation.y);
-    if (m.clip && outerW > 0.f && outerH > 0.f) {
-      layer.clip = Rect{0.f, 0.f, outerW, outerH};
-    }
-    NodeId const layerId = ctx.graph().addLayer(ctx.parentLayer(), std::move(layer));
-    scope.pushCustomLayer(layerId);
+    ctx.pushLayerWorldTransform(L);
   }
 
   Rect const absOuter = scope.parentFrame;
   Rect const localOuter{0.f, 0.f, outerW, outerH};
   Rect const bgBounds = needEffectLayer ? localOuter : absOuter;
 
-  bool const needHitRect = needBg || needTransparentHit;
-  if (needHitRect) {
-    FillStyle fill = FillStyle::none();
-    StrokeStyle stroke = StrokeStyle::none();
-    if (needBg) {
-      fill = m.background;
-      stroke = m.border;
-    }
-    NodeId const rid = ctx.graph().addRect(ctx.parentLayer(), RectNode{
-        .bounds = bgBounds,
-        .cornerRadius = m.cornerRadius,
-        .fill = std::move(fill),
-        .stroke = std::move(stroke),
-    });
-    if (needTransparentHit) {
-      EventHandlers const h = eventHandlersFromModifiers(m, stableKey);
-      bool const insertedHandlers = shouldInsertHandlers(h);
-      if (insertedHandlers) {
-        ctx.eventMap().insert(rid, h);
-      }
-      ctx.pushSuppressLeafModifierEvents(insertedHandlers);
-    }
+  LayoutNode mod{};
+  mod.kind = LayoutNode::Kind::Modifier;
+  mod.modifiers = &m;
+  mod.frame = bgBounds;
+  mod.componentKey = stableKey;
+  mod.element = ctx.currentElement();
+  mod.constraints = scope.outer;
+  mod.hints = ctx.hints();
+  if (needEffectLayer) {
+    mod.modifierHasEffectLayer = true;
+    mod.modifierLayerTransform =
+        Mat3::translate(scope.parentFrame.x + m.translation.x, scope.parentFrame.y + m.translation.y);
   }
+  LayoutNodeId const modId = ctx.pushLayoutNode(std::move(mod));
+  ctx.pushLayoutParent(modId);
 
   float const pad = std::max(0.f, m.padding);
   float innerW = std::max(0.f, outerW - 2.f * pad);
@@ -223,11 +213,8 @@ void Element::buildWithModifiers(BuildContext& ctx) const {
   scope.le.setChildFrame(innerFrame);
   ctx.pushConstraints(innerCs, preservedHints);
   ctx.pushActiveElementModifiers(&m);
-  impl_->build(ctx);
+  impl_->layout(ctx);
   ctx.popActiveElementModifiers();
-  if (needTransparentHit) {
-    ctx.popSuppressLeafModifierEvents();
-  }
   ctx.popConstraints();
 
   if (m.overlay) {
@@ -237,12 +224,17 @@ void Element::buildWithModifiers(BuildContext& ctx) const {
     Rect const overFrame = needEffectLayer ? localOuter : absOuter;
     scope.le.setChildFrame(overFrame);
     ctx.pushConstraints(overlayCs, ctx.hints());
-    m.overlay->build(ctx);
+    m.overlay->layout(ctx);
     ctx.popConstraints();
+  }
+
+  ctx.popLayoutParent();
+  if (needEffectLayer) {
+    ctx.popLayerWorldTransform();
   }
 }
 
-Size Element::measureWithModifiersImpl(BuildContext& ctx, LayoutConstraints const& constraints,
+Size Element::measureWithModifiersImpl(LayoutContext& ctx, LayoutConstraints const& constraints,
                                        LayoutHints const& hints, TextSystem& textSystem) const {
   ElementModifiers const& m = *modifiers_;
   float const pad2 = m.padding * 2.f;
@@ -285,7 +277,7 @@ Size Element::measureWithModifiersImpl(BuildContext& ctx, LayoutConstraints cons
   return sz;
 }
 
-Size Element::measure(BuildContext& ctx, LayoutConstraints const& constraints,
+Size Element::measure(LayoutContext& ctx, LayoutConstraints const& constraints,
                       LayoutHints const& hints, TextSystem& textSystem) const {
   if (envLayer_) {
     EnvironmentStack::current().push(*envLayer_);
@@ -386,7 +378,7 @@ Element Element::flex(float grow, float shrink, float minMain) && {
   return std::move(*this);
 }
 
-void Rectangle::build(BuildContext& ctx) const {
+void Rectangle::layout(LayoutContext& ctx) const {
   ComponentKey const stableKey = ctx.leafComponentKey();
   ctx.advanceChildSlot();
   Rect explicitFromMods{};
@@ -400,6 +392,21 @@ void Rectangle::build(BuildContext& ctx) const {
   }
   Rect const bounds = flux::detail::resolveLeafLayoutBounds(
       explicitFromMods, ctx.layoutEngine().consumeAssignedFrame(), ctx.constraints(), ctx.hints());
+  LayoutNode n{};
+  n.kind = LayoutNode::Kind::Leaf;
+  n.frame = bounds;
+  n.componentKey = stableKey;
+  n.element = ctx.currentElement();
+  n.constraints = ctx.constraints();
+  n.hints = ctx.hints();
+  ctx.pushLayoutNode(std::move(n));
+  layoutDebugLogLeaf("Rectangle", ctx.constraints(), bounds, detail::flexGrowOf(*this),
+                     detail::flexShrinkOf(*this), detail::minMainSizeOf(*this));
+}
+
+void Rectangle::renderFromLayout(RenderContext& ctx, LayoutNode const& node) const {
+  ComponentKey const stableKey = node.componentKey;
+  Rect const bounds = node.frame;
   CornerRadius cornerR{};
   if (ElementModifiers const* mods = ctx.activeElementModifiers()) {
     cornerR = mods->cornerRadius;
@@ -418,49 +425,75 @@ void Rectangle::build(BuildContext& ctx) const {
       }
     }
   }
-  layoutDebugLogLeaf("Rectangle", ctx.constraints(), bounds, detail::flexGrowOf(*this),
-                     detail::flexShrinkOf(*this), detail::minMainSizeOf(*this));
 }
 
-Size Rectangle::measure(BuildContext& ctx, LayoutConstraints const& c, LayoutHints const&, TextSystem&) const {
+Size Rectangle::measure(LayoutContext& ctx, LayoutConstraints const& c, LayoutHints const&, TextSystem&) const {
   ctx.advanceChildSlot();
   float const w = std::isfinite(c.maxWidth) ? c.maxWidth : 0.f;
   return {w, 0.f};
 }
 
-void LaidOutText::build(BuildContext& ctx) const {
+void LaidOutText::layout(LayoutContext& ctx) const {
   ctx.advanceChildSlot();
-  if (!layout) {
+  if (!textLayout) {
     return;
   }
-  Point o = origin;
   Rect const cf = ctx.layoutEngine().consumeAssignedFrame();
-  if (cf.width > 0.f || cf.height > 0.f) {
-    o = {cf.x, cf.y};
-  }
-  ctx.graph().addText(ctx.parentLayer(), TextNode{
-      .layout = layout,
-      .origin = o,
-  });
+  LayoutNode n{};
+  n.kind = LayoutNode::Kind::Leaf;
+  n.frame = cf;
+  n.element = ctx.currentElement();
+  n.constraints = ctx.constraints();
+  n.hints = ctx.hints();
+  ctx.pushLayoutNode(std::move(n));
   layoutDebugLogLeaf("LaidOutText", ctx.constraints(), cf, detail::flexGrowOf(*this),
                      detail::flexShrinkOf(*this), detail::minMainSizeOf(*this));
 }
 
-Size LaidOutText::measure(BuildContext& ctx, LayoutConstraints const&, LayoutHints const&, TextSystem&) const {
-  ctx.advanceChildSlot();
-  if (!layout) {
-    return {};
+void LaidOutText::renderFromLayout(RenderContext& ctx, LayoutNode const& node) const {
+  if (!textLayout) {
+    return;
   }
-  return layout->measuredSize;
+  Point o = origin;
+  Rect const cf = node.frame;
+  if (cf.width > 0.f || cf.height > 0.f) {
+    o = {cf.x, cf.y};
+  }
+  ctx.graph().addText(ctx.parentLayer(), TextNode{
+      .layout = textLayout,
+      .origin = o,
+  });
 }
 
-void Text::build(BuildContext& ctx) const {
+Size LaidOutText::measure(LayoutContext& ctx, LayoutConstraints const&, LayoutHints const&, TextSystem&) const {
+  ctx.advanceChildSlot();
+  if (!textLayout) {
+    return {};
+  }
+  return textLayout->measuredSize;
+}
+
+void Text::layout(LayoutContext& ctx) const {
   ComponentKey const stableKey = ctx.leafComponentKey();
   ctx.advanceChildSlot();
   Rect const bounds = flux::detail::resolveLeafLayoutBounds(
       explicitLeafBox(*this), ctx.layoutEngine().consumeAssignedFrame(), ctx.constraints(), ctx.hints());
   assert(text.empty() || (bounds.width > 0.f && bounds.height > 0.f));
+  LayoutNode n{};
+  n.kind = LayoutNode::Kind::Leaf;
+  n.frame = bounds;
+  n.componentKey = stableKey;
+  n.element = ctx.currentElement();
+  n.constraints = ctx.constraints();
+  n.hints = ctx.hints();
+  ctx.pushLayoutNode(std::move(n));
+  layoutDebugLogLeaf("Text", ctx.constraints(), bounds, detail::flexGrowOf(*this),
+                     detail::flexShrinkOf(*this), detail::minMainSizeOf(*this));
+}
 
+void Text::renderFromLayout(RenderContext& ctx, LayoutNode const& node) const {
+  ComponentKey const stableKey = node.componentKey;
+  Rect const bounds = node.frame;
   std::shared_ptr<TextLayout> textLayout;
   if (!text.empty()) {
     TextLayoutOptions const opts = textViewLayoutOptions(*this, ctx.constraints(), ctx.hints());
@@ -482,11 +515,9 @@ void Text::build(BuildContext& ctx) const {
       }
     }
   }
-  layoutDebugLogLeaf("Text", ctx.constraints(), bounds, detail::flexGrowOf(*this),
-                     detail::flexShrinkOf(*this), detail::minMainSizeOf(*this));
 }
 
-Size Text::measure(BuildContext& ctx, LayoutConstraints const& c, LayoutHints const& hints, TextSystem& ts) const {
+Size Text::measure(LayoutContext& ctx, LayoutConstraints const& c, LayoutHints const& hints, TextSystem& ts) const {
   ctx.advanceChildSlot();
   TextLayoutOptions const opts = textViewLayoutOptions(*this, c, hints);
   float const mw = std::isfinite(c.maxWidth) ? c.maxWidth : 0.f;
@@ -500,7 +531,7 @@ Size Text::measure(BuildContext& ctx, LayoutConstraints const& c, LayoutHints co
   return s;
 }
 
-void views::Image::build(BuildContext& ctx) const {
+void views::Image::layout(LayoutContext& ctx) const {
   ComponentKey const stableKey = ctx.leafComponentKey();
   ctx.advanceChildSlot();
   if (!source) {
@@ -508,6 +539,24 @@ void views::Image::build(BuildContext& ctx) const {
   }
   Rect const bounds = flux::detail::resolveLeafLayoutBounds(
       explicitLeafBox(*this), ctx.layoutEngine().consumeAssignedFrame(), ctx.constraints(), ctx.hints());
+  LayoutNode n{};
+  n.kind = LayoutNode::Kind::Leaf;
+  n.frame = bounds;
+  n.componentKey = stableKey;
+  n.element = ctx.currentElement();
+  n.constraints = ctx.constraints();
+  n.hints = ctx.hints();
+  ctx.pushLayoutNode(std::move(n));
+  layoutDebugLogLeaf("Image", ctx.constraints(), bounds, detail::flexGrowOf(*this),
+                     detail::flexShrinkOf(*this), detail::minMainSizeOf(*this));
+}
+
+void views::Image::renderFromLayout(RenderContext& ctx, LayoutNode const& node) const {
+  if (!source) {
+    return;
+  }
+  ComponentKey const stableKey = node.componentKey;
+  Rect const bounds = node.frame;
   NodeId const id = ctx.graph().addImage(ctx.parentLayer(), ImageNode{
       .image = source,
       .bounds = bounds,
@@ -521,21 +570,32 @@ void views::Image::build(BuildContext& ctx) const {
       }
     }
   }
-  layoutDebugLogLeaf("Image", ctx.constraints(), bounds, detail::flexGrowOf(*this),
-                     detail::flexShrinkOf(*this), detail::minMainSizeOf(*this));
 }
 
-Size views::Image::measure(BuildContext& ctx, LayoutConstraints const& c, LayoutHints const&, TextSystem&) const {
+Size views::Image::measure(LayoutContext& ctx, LayoutConstraints const& c, LayoutHints const&, TextSystem&) const {
   ctx.advanceChildSlot();
   float const w = std::isfinite(c.maxWidth) ? c.maxWidth : 0.f;
   float const h = std::isfinite(c.maxHeight) ? c.maxHeight : 0.f;
   return {w, h};
 }
 
-void PathShape::build(BuildContext& ctx) const {
+void PathShape::layout(LayoutContext& ctx) const {
   ctx.advanceChildSlot();
-  PathNode node{.path = path, .fill = fill, .stroke = stroke};
   Rect const cf = ctx.layoutEngine().consumeAssignedFrame();
+  LayoutNode n{};
+  n.kind = LayoutNode::Kind::Leaf;
+  n.frame = cf;
+  n.element = ctx.currentElement();
+  n.constraints = ctx.constraints();
+  n.hints = ctx.hints();
+  ctx.pushLayoutNode(std::move(n));
+  layoutDebugLogLeaf("PathShape", ctx.constraints(), cf, detail::flexGrowOf(*this),
+                     detail::flexShrinkOf(*this), detail::minMainSizeOf(*this));
+}
+
+void PathShape::renderFromLayout(RenderContext& ctx, LayoutNode const& node) const {
+  PathNode pathNode{.path = path, .fill = fill, .stroke = stroke};
+  Rect const cf = node.frame;
   Rect const pb = path.getBounds();
   float dx = 0.f;
   float dy = 0.f;
@@ -551,37 +611,45 @@ void PathShape::build(BuildContext& ctx) const {
     LayerNode layer{};
     layer.transform = Mat3::translate(tx, ty);
     NodeId const lid = ctx.graph().addLayer(ctx.parentLayer(), std::move(layer));
-    ctx.graph().addPath(lid, std::move(node));
+    ctx.graph().addPath(lid, std::move(pathNode));
   } else {
-    ctx.graph().addPath(ctx.parentLayer(), std::move(node));
+    ctx.graph().addPath(ctx.parentLayer(), std::move(pathNode));
   }
-  layoutDebugLogLeaf("PathShape", ctx.constraints(), cf, detail::flexGrowOf(*this),
-                     detail::flexShrinkOf(*this), detail::minMainSizeOf(*this));
 }
 
-Size PathShape::measure(BuildContext& ctx, LayoutConstraints const&, LayoutHints const&, TextSystem&) const {
+Size PathShape::measure(LayoutContext& ctx, LayoutConstraints const&, LayoutHints const&, TextSystem&) const {
   ctx.advanceChildSlot();
   Rect const b = path.getBounds();
   return {b.width, b.height};
 }
 
-void Line::build(BuildContext& ctx) const {
+void Line::layout(LayoutContext& ctx) const {
   ctx.advanceChildSlot();
-  ctx.graph().addLine(ctx.parentLayer(), LineNode{
-      .from = from,
-      .to = to,
-      .stroke = stroke,
-  });
   float const minX = std::min(from.x, to.x);
   float const maxX = std::max(from.x, to.x);
   float const minY = std::min(from.y, to.y);
   float const maxY = std::max(from.y, to.y);
   Rect const lineBounds{minX, minY, maxX - minX, maxY - minY};
+  LayoutNode n{};
+  n.kind = LayoutNode::Kind::Leaf;
+  n.frame = lineBounds;
+  n.element = ctx.currentElement();
+  n.constraints = ctx.constraints();
+  n.hints = ctx.hints();
+  ctx.pushLayoutNode(std::move(n));
   layoutDebugLogLeaf("Line", ctx.constraints(), lineBounds, detail::flexGrowOf(*this),
                      detail::flexShrinkOf(*this), detail::minMainSizeOf(*this));
 }
 
-Size Line::measure(BuildContext& ctx, LayoutConstraints const&, LayoutHints const&, TextSystem&) const {
+void Line::renderFromLayout(RenderContext& ctx, LayoutNode const&) const {
+  ctx.graph().addLine(ctx.parentLayer(), LineNode{
+      .from = from,
+      .to = to,
+      .stroke = stroke,
+  });
+}
+
+Size Line::measure(LayoutContext& ctx, LayoutConstraints const&, LayoutHints const&, TextSystem&) const {
   ctx.advanceChildSlot();
   float const minX = std::min(from.x, to.x);
   float const maxX = std::max(from.x, to.x);

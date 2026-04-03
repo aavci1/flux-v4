@@ -1,6 +1,8 @@
 #include <Flux/UI/Element.hpp>
 
-#include <Flux/UI/BuildContext.hpp>
+#include <Flux/UI/LayoutContext.hpp>
+#include <Flux/UI/LayoutTree.hpp>
+#include <Flux/UI/RenderContext.hpp>
 #include <Flux/UI/Views/PopoverCalloutShape.hpp>
 #include <Flux/UI/Detail/LayoutDebugDump.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
@@ -73,7 +75,7 @@ LayoutConstraints innerConstraintsForPopoverContent(PopoverCalloutShape const& v
 
 } // namespace
 
-Size PopoverCalloutShape::measure(BuildContext& ctx, LayoutConstraints const& constraints, LayoutHints const&,
+Size PopoverCalloutShape::measure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const&,
                                   TextSystem& ts) const {
   if (!ctx.consumeCompositeBodySubtreeRootSkip()) {
     ctx.advanceChildSlot();
@@ -105,15 +107,13 @@ Size PopoverCalloutShape::measure(BuildContext& ctx, LayoutConstraints const& co
   return {cardW, cardH};
 }
 
-void PopoverCalloutShape::build(BuildContext& ctx) const {
+void PopoverCalloutShape::layout(LayoutContext& ctx) const {
   if (!ctx.consumeCompositeBodySubtreeRootSkip()) {
     ctx.advanceChildSlot();
   }
   LayoutEngine& le = ctx.layoutEngine();
   Rect const parentFrame = le.consumeAssignedFrame();
   LayoutConstraints outer = ctx.constraints();
-  // Match measure(): intersect overlay constraints with the popover's intrinsic maxSize. Build used
-  // to read only ctx.constraints(); if overlay maxSize was wrong, the card collapsed to one row.
   if (maxSize) {
     if (std::isfinite(maxSize->width) && maxSize->width > 0.f) {
       outer.maxWidth = std::min(outer.maxWidth, maxSize->width);
@@ -138,8 +138,6 @@ void PopoverCalloutShape::build(BuildContext& ctx) const {
   float tw = std::max(0.f, assignedW);
   float th = std::max(0.f, assignedH);
 
-  // Shrink-wrap height: overlay max height is often the full cap (e.g. 240px) while list content is
-  // shorter. Do not clamp width — Popover max width matches the trigger; narrowing would clip it.
   float const cardHFromContent = innerMeasured.height + 2.f * pad;
   if (!arrow) {
     if (cardHFromContent > 1e-3f && cardHFromContent < th) {
@@ -164,15 +162,22 @@ void PopoverCalloutShape::build(BuildContext& ctx) const {
     }
   }
 
-  LayerNode layer{};
   if (parentFrame.width > 0.f || parentFrame.height > 0.f) {
-    layer.transform = Mat3::translate(parentFrame.x, parentFrame.y);
+    ctx.pushLayerWorldTransform(Mat3::translate(parentFrame.x, parentFrame.y));
   }
-  NodeId const layerId = ctx.graph().addLayer(ctx.parentLayer(), std::move(layer));
-  ctx.registerCompositeSubtreeRootIfPending(layerId);
-  ctx.pushLayer(layerId);
 
-  // Card size follows clamped tw/th so path + fill match content; still respects overlay max via outer.
+  LayoutNode shell{};
+  shell.kind = LayoutNode::Kind::Container;
+  shell.frame = Rect{0.f, 0.f, tw, th};
+  shell.constraints = outer;
+  shell.containerSpec.kind = ContainerLayerSpec::Kind::Standard;
+  shell.containerTag = LayoutNode::ContainerTag::PopoverCalloutShape;
+  shell.element = ctx.currentElement();
+  shell.hints = ctx.hints();
+  LayoutNodeId const shellId = ctx.pushLayoutNode(std::move(shell));
+  ctx.registerCompositeSubtreeRootIfPending(shellId);
+  ctx.pushLayoutParent(shellId);
+
   float cardW = tw;
   float cardH = th;
   Rect cardRect{};
@@ -212,11 +217,11 @@ void PopoverCalloutShape::build(BuildContext& ctx) const {
                                       ah, cardRect, {tw, th});
 
   float const bw = std::max(1.f, borderWidth);
-  Element pathEl = Element{PathShape{
+  Element& pathEl = ctx.pinElement(Element{PathShape{
       .path = std::move(path),
       .fill = FillStyle::solid(backgroundColor),
       .stroke = StrokeStyle::solid(borderColor, bw),
-  }};
+  }});
 
   ctx.pushChildIndex();
   if (StateStore* store = StateStore::current()) {
@@ -224,26 +229,13 @@ void PopoverCalloutShape::build(BuildContext& ctx) const {
   }
   ctx.rewindChildKeyIndex();
 
-  // PathNode is not hit-tested (see HitTester); a full-bounds rect absorbs pointer/hover/scroll so
-  // content below the overlay does not receive input in padding and non-rect areas.
-  NodeId const blockId = ctx.graph().addRect(ctx.parentLayer(), RectNode{
-      .bounds = {0.f, 0.f, tw, th},
-      .fill = FillStyle::none(),
-      .stroke = StrokeStyle::none(),
-  });
-  ctx.eventMap().insert(blockId, EventHandlers{
-      .stableTargetKey = {},
-      .onScroll = [](Vec2) {},
-      .cursor = Cursor::Arrow,
-  });
-
   LayoutConstraints innerForBuild{};
   innerForBuild.maxWidth = tw;
   innerForBuild.maxHeight = th;
 
   le.setChildFrame(Rect{0.f, 0.f, tw, th});
   ctx.pushConstraints(innerForBuild);
-  pathEl.build(ctx);
+  pathEl.layout(ctx);
   ctx.popConstraints();
 
   LayoutConstraints contentCs{};
@@ -251,11 +243,16 @@ void PopoverCalloutShape::build(BuildContext& ctx) const {
   contentCs.maxHeight = contentFrame.height;
   le.setChildFrame(contentFrame);
   ctx.pushConstraints(contentCs);
-  content.build(ctx);
+  content.layout(ctx);
   ctx.popConstraints();
 
   ctx.popChildIndex();
-  ctx.popLayer();
+  ctx.popLayoutParent();
+  if (parentFrame.width > 0.f || parentFrame.height > 0.f) {
+    ctx.popLayerWorldTransform();
+  }
 }
+
+void PopoverCalloutShape::renderFromLayout(RenderContext&, LayoutNode const&) const {}
 
 } // namespace flux

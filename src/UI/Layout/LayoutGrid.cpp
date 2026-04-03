@@ -1,5 +1,6 @@
 #include <Flux/UI/Element.hpp>
-#include <Flux/UI/BuildContext.hpp>
+#include <Flux/UI/LayoutContext.hpp>
+#include <Flux/UI/RenderContext.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 #include <Flux/UI/Views/Grid.hpp>
 
@@ -15,8 +16,8 @@
 namespace flux {
 using namespace flux::layout;
 
-void Grid::build(BuildContext& ctx) const {
-  ContainerBuildScope scope(ctx);
+void Grid::layout(LayoutContext& ctx) const {
+  ContainerLayoutScope scope(ctx);
   float const assignedW = assignedSpan(scope.parentFrame.width, scope.outer.maxWidth);
   float const assignedH = assignedSpan(scope.parentFrame.height, scope.outer.maxHeight);
   scope.pushStandardLayer(false, assignedW, assignedH);
@@ -72,7 +73,7 @@ void Grid::build(BuildContext& ctx) const {
       float const frameH = rowH[r] > 0.f ? rowH[r] : sz.height;
       float const cx = x + hAlignOffset(sz.width, frameW, hAlign);
       float const cy = y + vAlignOffset(sz.height, frameH, vAlign);
-      scope.buildChild(children[i], Rect{cx, cy, frameW, frameH}, innerForBuild);
+      scope.layoutChild(children[i], Rect{cx, cy, frameW, frameH}, innerForBuild);
       x += cellW + hSpacing;
     }
     y += rowH[r];
@@ -82,7 +83,9 @@ void Grid::build(BuildContext& ctx) const {
   }
 }
 
-Size Grid::measure(BuildContext& ctx, LayoutConstraints const& constraints, LayoutHints const&,
+void Grid::renderFromLayout(RenderContext&, LayoutNode const&) const {}
+
+Size Grid::measure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const&,
                    TextSystem& ts) const {
   ContainerMeasureScope scope(ctx);
   float const assignedW =

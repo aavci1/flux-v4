@@ -1,5 +1,6 @@
 #include <Flux/UI/Element.hpp>
-#include <Flux/UI/BuildContext.hpp>
+#include <Flux/UI/LayoutContext.hpp>
+#include <Flux/UI/RenderContext.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 
@@ -15,8 +16,8 @@
 namespace flux {
 using namespace flux::layout;
 
-void HStack::build(BuildContext& ctx) const {
-  ContainerBuildScope scope(ctx);
+void HStack::layout(LayoutContext& ctx) const {
+  ContainerLayoutScope scope(ctx);
   float const assignedW = stackMainAxisSpan(scope.parentFrame.width, scope.outer.maxWidth);
   float const assignedH = stackMainAxisSpan(scope.parentFrame.height, scope.outer.maxHeight);
   scope.pushStandardLayer(false, assignedW, assignedH);
@@ -74,12 +75,14 @@ void HStack::build(BuildContext& ctx) const {
     childBuild.minWidth = children[i].minMainSize();
     LayoutHints rowHints{};
     rowHints.hStackCrossAlign = vAlign;
-    scope.buildChild(children[i], Rect{x, 0.f, allocW[i], rowInnerH}, childBuild, rowHints);
+    scope.layoutChild(children[i], Rect{x, 0.f, allocW[i], rowInnerH}, childBuild, rowHints);
     x += allocW[i] + spacing;
   }
 }
 
-Size HStack::measure(BuildContext& ctx, LayoutConstraints const& constraints, LayoutHints const&,
+void HStack::renderFromLayout(RenderContext&, LayoutNode const&) const {}
+
+Size HStack::measure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const&,
                      TextSystem& ts) const {
   ContainerMeasureScope scope(ctx);
   LayoutConstraints childCs = constraints;

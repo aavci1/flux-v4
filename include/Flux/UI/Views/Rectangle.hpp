@@ -16,8 +16,9 @@ namespace flux {
 struct Rectangle : ViewModifiers<Rectangle> {
   static constexpr bool memoizable = true;
 
-  void build(BuildContext&) const;
-  Size measure(BuildContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
+  void layout(LayoutContext&) const;
+  void renderFromLayout(RenderContext&, LayoutNode const&) const;
+  Size measure(LayoutContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
 
   // ── Appearance ─────────────────────────────────────────────────────────────
 
