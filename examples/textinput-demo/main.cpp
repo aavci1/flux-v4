@@ -107,9 +107,7 @@ struct TextInputForm {
 int main(int argc, char* argv[]) {
   Application app(argc, argv);
   auto& w = app.createWindow<Window>({
-      .size = {520, 560},
-      .title = "Flux — TextInput",
-      .resizable = true,
+      .title = "Flux — TextInput"
   });
 
   w.registerAction("edit.copy", {.label = "Copy", .shortcut = shortcuts::Copy});

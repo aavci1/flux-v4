@@ -252,9 +252,7 @@ struct TypographyDemoRoot {
 int main(int argc, char* argv[]) {
   Application app(argc, argv);
   auto& w = app.createWindow<Window>({
-      .size = {520, 780},
-      .title = "Flux — Typography",
-      .resizable = true,
+      .title = "Flux — Typography"
   });
   w.setView<TypographyDemoRoot>();
   return app.exec();

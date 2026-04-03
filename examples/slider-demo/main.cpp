@@ -181,9 +181,7 @@ struct RgbColorSelectorRoot {
 int main(int argc, char* argv[]) {
   Application app(argc, argv);
   auto& w = app.createWindow<Window>({
-      .size = {480, 640},
-      .title = "Flux — RGB color",
-      .resizable = true,
+      .title = "Flux — RGB color"
   });
   w.setView<RgbColorSelectorRoot>();
   return app.exec();

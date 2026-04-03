@@ -175,9 +175,7 @@ struct StackDemoRoot {
 int main(int argc, char *argv[]) {
     Application app(argc, argv);
     auto &w = app.createWindow<Window>({
-        .size = {420, 640},
-        .title = "Flux — HStack & VStack",
-        .resizable = true,
+        .title = "Flux — HStack & VStack"
     });
     w.setView<StackDemoRoot>();
     return app.exec();

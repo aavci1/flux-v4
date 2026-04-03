@@ -162,9 +162,16 @@ std::optional<ComponentKey> Runtime::tapAnchorLeafKeySnapshot() const {
 }
 
 void Runtime::rebuild(std::optional<Size> sizeOverride) {
+  // Nested rebuilds can occur (e.g. `window_.resize` during auto-size measure triggers
+  // `windowDidResize` → `EventQueue::dispatch` → `Runtime::rebuild` on the same thread). Restore the
+  // previous TLS pointer when the nested pass returns so the outer build still sees `Runtime::current()`.
+  Runtime* const prevRuntime = sCurrent;
   sCurrent = this;
+  // Establish before BuildOrchestrator runs so composite measure (e.g. ScrollView::body + useState)
+  // always sees the window's store; nested work must not leave TLS null mid-pass.
+  StateStore::setCurrent(&buildOrchestrator_.stateStore());
   buildOrchestrator_.rebuild(sizeOverride, *this);
-  sCurrent = nullptr;
+  sCurrent = prevRuntime;
 }
 
 void Runtime::onOverlayPushed(OverlayEntry& entry) {

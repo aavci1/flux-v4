@@ -172,9 +172,7 @@ struct ToggleDemoRoot {
 int main(int argc, char* argv[]) {
   Application app(argc, argv);
   auto& w = app.createWindow<Window>({
-      .size = {480, 640},
-      .title = "Flux — Toggle demo",
-      .resizable = true,
+      .title = "Flux — Toggle demo"
   });
   w.setView<ToggleDemoRoot>();
   return app.exec();

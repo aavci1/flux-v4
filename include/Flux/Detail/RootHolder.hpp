@@ -20,6 +20,8 @@ namespace flux {
 struct RootHolder {
   virtual ~RootHolder() = default;
   virtual void layoutInto(LayoutContext& ctx) const = 0;
+  virtual Size measureRoot(LayoutContext& ctx, LayoutConstraints const& constraints,
+                           LayoutHints const& hints, TextSystem& textSystem) const = 0;
 };
 
 template<typename C>
@@ -53,6 +55,31 @@ struct TypedRootHolder final : RootHolder {
           "If C has Signal/Animated members, give it a body() method.");
       Element& leaf = ctx.pinElement(Element{value});
       leaf.layout(ctx);
+    }
+  }
+
+  Size measureRoot(LayoutContext& ctx, LayoutConstraints const& constraints,
+                   LayoutHints const& hints, TextSystem& textSystem) const override {
+    if constexpr (CompositeComponent<C>) {
+      ctx.pushChildIndex();
+      ComponentKey const key = ctx.nextCompositeKey();
+      StateStore* store = StateStore::current();
+      if (store) {
+        store->pushComponent(key);
+      }
+      Element child{value.body()};
+      if (store) {
+        store->popComponent();
+      }
+      Size sz = child.measure(ctx, constraints, hints, textSystem);
+      ctx.popChildIndex();
+      return sz;
+    } else {
+      static_assert(std::is_copy_constructible_v<C>,
+          "Leaf root component must be copy-constructible. "
+          "If C has Signal/Animated members, give it a body() method.");
+      Element leaf{value};
+      return leaf.measure(ctx, constraints, hints, textSystem);
     }
   }
 };

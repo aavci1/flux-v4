@@ -60,9 +60,9 @@ Element cursorSwatchRow(std::string name, Cursor cursor, Color chip, Theme const
 struct CursorDemo {
   auto body() const {
     Theme const& theme = useEnvironment<Theme>();
-    return ZStack{
+    return ScrollView{
+        .axis = ScrollAxis::Vertical,
         .children = children(
-                Rectangle{.fill = FillStyle::solid(pal::bg)},
                 VStack{
                     .spacing = 0.f,
                     .children = children(

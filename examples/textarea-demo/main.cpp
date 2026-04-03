@@ -55,9 +55,7 @@ struct NotesEditor {
 int main(int argc, char* argv[]) {
     Application app(argc, argv);
     auto& w = app.createWindow<Window>({
-        .size = {480, 560},
-        .title = "Flux — TextArea",
-        .resizable = true,
+        .title = "Flux — TextArea"
     });
 
     w.registerAction("edit.copy", {.label = "Copy", .shortcut = shortcuts::Copy});

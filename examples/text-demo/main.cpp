@@ -93,8 +93,7 @@ int main(int argc, char* argv[]) {
   Application app(argc, argv);
 
   auto& w = app.createWindow({
-      .size = {720, 640},
-      .title = "Flux — Text demo",
+      .title = "Flux — Text demo"
   });
 
   w.setView<TextDemoRoot>();

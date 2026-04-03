@@ -34,6 +34,7 @@ struct Window::Impl {
   std::unique_ptr<Runtime> runtime_;
   std::unordered_map<std::string, ActionDescriptor> actions_;
   EnvironmentLayer windowEnvironment_{};
+  bool autoSize_ = false;
 
   explicit Impl(Window&) {
     windowEnvironment_.set(Theme::light());
@@ -59,7 +60,12 @@ Window::Impl::~Impl() {
 
 Window::Window(const WindowConfig& config) {
   d = std::make_unique<Impl>(*this);
-  d->platform_ = detail::createPlatformWindow(config);
+  d->autoSize_ = config.size.isEmpty();
+  WindowConfig resolved = config;
+  if (resolved.size.isEmpty()) {
+    resolved.size = {1, 1};
+  }
+  d->platform_ = detail::createPlatformWindow(resolved);
   d->platform_->setFluxWindow(this);
   Application::instance().eventQueue().post(WindowLifecycleEvent{
       WindowLifecycleEvent::Kind::Registered,
@@ -79,6 +85,18 @@ Window::~Window() {
 
 Size Window::getSize() const {
   return d->platform_->currentSize();
+}
+
+void Window::resize(Size newSize) {
+  d->platform_->resize(newSize);
+}
+
+bool Window::needsAutoSize() const {
+  return d->autoSize_;
+}
+
+void Window::clearAutoSize() {
+  d->autoSize_ = false;
 }
 
 void Window::setTitle(std::string title) {

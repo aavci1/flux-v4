@@ -48,9 +48,7 @@ struct ClockView {
 int main(int argc, char* argv[]) {
   Application app(argc, argv);
   auto& w = app.createWindow<Window>({
-      .size = {800, 800},
-      .title = "Flux — Clock",
-      .resizable = true,
+      .title = "Flux — Clock"
   });
   w.setView<ClockView>();
 

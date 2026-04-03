@@ -41,6 +41,13 @@ bool inputDebugEnabled() {
   return cached != 0;
 }
 
+thread_local int gOrchestratorRebuildDepth = 0;
+
+struct OrchestratorRebuildDepthGuard {
+  OrchestratorRebuildDepthGuard() { ++gOrchestratorRebuildDepth; }
+  ~OrchestratorRebuildDepthGuard() { --gOrchestratorRebuildDepth; }
+};
+
 } // namespace
 
 BuildOrchestrator::BuildOrchestrator(Window& window, FocusController& focus, HoverController& hover,
@@ -70,6 +77,8 @@ void BuildOrchestrator::subscribeToRebuild(std::function<void()> onFrameNeeded) 
 }
 
 void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runtime) {
+  OrchestratorRebuildDepthGuard const rebuildDepthGuard{};
+
   if (sizeOverride.has_value()) {
     gesture_.clearPress();
   }
@@ -85,6 +94,29 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
 
   stateStore_.beginRebuild();
   StateStore::setCurrent(&stateStore_);
+
+  if (!sizeOverride.has_value() && window_.needsAutoSize() && rootHolder_) {
+    LayoutTree measureTree;
+    LayoutContext measureCtx{Application::instance().textSystem(), layoutEngine_, measureTree, &measureCache_};
+    LayoutConstraints unconstrained{};
+    measureCtx.pushConstraints(unconstrained);
+    EnvironmentLayer env = window_.environmentLayer();
+    EnvironmentStack::current().push(std::move(env));
+
+    Size contentSize = rootHolder_->measureRoot(
+        measureCtx, unconstrained, {}, Application::instance().textSystem());
+
+    EnvironmentStack::current().pop();
+    measureCtx.popConstraints();
+
+    contentSize = snapRootLayoutSize(contentSize);
+    window_.resize(contentSize);
+    window_.clearAutoSize();
+
+    stateStore_.resetSlotCursors();
+    measureCache_.clear();
+    layoutEngine_.resetForBuild();
+  }
 
   EventMap newMap;
   LayoutTree layoutTree;
@@ -113,7 +145,9 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
   layoutRects_.fill(layoutTree, lctx);
   layoutDebugEndPass();
 
-  StateStore::setCurrent(nullptr);
+  if (gOrchestratorRebuildDepth == 1) {
+    StateStore::setCurrent(nullptr);
+  }
   stateStore_.endRebuild();
 
   eventMap_ = std::move(newMap);

@@ -22,6 +22,7 @@ namespace flux {
 struct RootHolder;
 
 class Application;
+class BuildOrchestrator;
 class Canvas;
 class PlatformWindow;
 class SceneGraph;
@@ -29,7 +30,9 @@ class SceneGraph;
 class OverlayManager;
 
 struct WindowConfig {
-  Size size = {1280, 720};
+  /// Window dimensions. When left at the default (empty size), the window sizes
+  /// itself to the intrinsic size of its root view content on the first build.
+  Size size;
   std::string title = "Flux Application";
   bool fullscreen = false;
   bool resizable = true;
@@ -45,6 +48,7 @@ public:
   Window& operator=(Window&&) = delete;
 
   Size getSize() const;
+  void resize(Size newSize);
   void setTitle(std::string title);
   void setFullscreen(bool fullscreen);
   unsigned int handle() const;
@@ -132,8 +136,12 @@ protected:
   explicit Window(const WindowConfig& config);
 
 private:
+  friend class BuildOrchestrator;
   friend class Runtime;
   friend class InputDispatcher;
+
+  bool needsAutoSize() const;
+  void clearAutoSize();
 
   EnvironmentLayer& environmentLayerMut();
 

@@ -45,10 +45,12 @@ Size ScrollView::measure(LayoutContext& ctx, LayoutConstraints const& constraint
   }
   ctx.beginCompositeBodySubtree(key);
   ctx.pushCompositeKeyTail(key);
-  (void)childEl.measure(ctx, constraints, hints, ts);
+  Size const childSize = childEl.measure(ctx, constraints, hints, ts);
   ctx.popCompositeKeyTail();
-  float const w = std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;
-  float const h = std::isfinite(constraints.maxHeight) ? constraints.maxHeight : 0.f;
+  // Finite max = viewport from parent; infinity = unconstrained axis — use content intrinsic size
+  // (auto-sized windows measure with both axes infinite; 0 here made the window 1×1 px).
+  float const w = std::isfinite(constraints.maxWidth) ? constraints.maxWidth : childSize.width;
+  float const h = std::isfinite(constraints.maxHeight) ? constraints.maxHeight : childSize.height;
   return {w, h};
 }
 

@@ -248,8 +248,7 @@ int main(int argc, char* argv[]) {
   Application app(argc, argv);
 
   auto& w = app.createWindow({
-      .size = {420, 620},
-      .title = "Flux — Popover demo",
+      .title = "Flux — Popover demo"
   });
 
   w.setView(PopoverDemoRoot{});
