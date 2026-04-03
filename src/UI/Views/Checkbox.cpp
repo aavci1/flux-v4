@@ -111,24 +111,23 @@ Element Checkbox::body() const {
     .child = ZStack {
       .hAlign = HorizontalAlignment::Center,
       .vAlign = VerticalAlignment::Center,
-      .children = {
-          Rectangle {
-              .fill = FillStyle::solid(*boxFillAnim),
-              .stroke = boxStroke,
-          }
-              .size(boxSize, boxSize)
-              .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
-              .focusable(!isDisabled)
-              .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)>{}
-                                    : std::function<void(KeyCode, Modifiers)>{handleKey})
-              .onTap(isDisabled ? std::function<void()>{} : std::function<void()> {handleToggle})
-              .cornerRadius(CornerRadius{cornerRadius}),
-          Icon {
-              .name = iconName,
-              .size = iconSz,
-              .color = *iconColorAnim,
-          },
-      },
+      .children = flux::children(
+        Rectangle{
+          .fill = FillStyle::solid(*boxFillAnim),
+          .stroke = boxStroke,
+        }
+          .size(boxSize, boxSize)
+          .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
+          .focusable(!isDisabled)
+          .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)>{} : std::function<void(KeyCode, Modifiers)>{handleKey})
+          .onTap(isDisabled ? std::function<void()>{} : std::function<void()>{handleToggle})
+          .cornerRadius(CornerRadius {cornerRadius}),
+        Icon {
+          .name = iconName,
+          .size = iconSz,
+          .color = *iconColorAnim,
+        }
+      ),
     },
   };
 }

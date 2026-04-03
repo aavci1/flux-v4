@@ -27,41 +27,34 @@ Element Alert::body() const {
   // A lone ZStack under the full-window overlay expands every child to the window size
   // (see LayoutZStack — children share the stack's max proposed size). Spacers + flex center
   // the card so the inner ZStack only receives the card's intrinsic width/height.
-  Element cardBg =
-      Rectangle{
-          .fill = FillStyle::solid(card),
-          .stroke = StrokeStyle::solid(stroke, 1.f),
-      }
-          .size(cardWidth, 0.f)
-          .cornerRadius(cardCorner);
+  ZStack const cardStack{
+      // Card + content share top-left; center alignment would offset each
+      // child by its own measured size and misalign the background.
+      .hAlign = HorizontalAlignment::Leading,
+      .vAlign = VerticalAlignment::Top,
+      .children = flux::children(
+          Rectangle{
+              .fill = FillStyle::solid(card),
+              .stroke = StrokeStyle::solid(stroke, 1.f),
+          }
+              .size(cardWidth, 0.f)
+              .cornerRadius(cardCorner),
+          VStack{
+              .spacing = theme.space3,
+              .hAlign = HorizontalAlignment::Leading,
+              .children = buildContent(titleC, msgC, theme),
+          }.padding(theme.space6)),
+  };
 
-  Element cardBody =
-      VStack{
-          .spacing = theme.space3,
-          .hAlign = HorizontalAlignment::Leading,
-          .children = buildContent(titleC, msgC, theme),
-      }
-          .padding(theme.space6);
+  HStack const row{
+      .spacing = 0.f,
+      .children = flux::children(Spacer{}.flex(1.f), Element{cardStack}, Spacer{}.flex(1.f)),
+  };
 
   return VStack{
       .spacing = 0.f,
       .hAlign = HorizontalAlignment::Center,
-      .children = children(
-              Spacer{}.flex(1.f),
-              HStack{
-                  .spacing = 0.f,
-                  .children = children(
-                          Spacer{}.flex(1.f),
-                          ZStack{
-                              // Card + content share top-left; center alignment would offset each
-                              // child by its own measured size and misalign the background.
-                              .hAlign = HorizontalAlignment::Leading,
-                              .vAlign = VerticalAlignment::Top,
-                              .children = children(std::move(cardBg), std::move(cardBody)),
-                          },
-                          Spacer{}.flex(1.f)),
-              },
-              Spacer{}.flex(1.f)),
+      .children = flux::children(Spacer{}.flex(1.f), Element{row}, Spacer{}.flex(1.f)),
   };
 }
 
@@ -88,15 +81,16 @@ std::vector<Element> Alert::buildContent(Color titleC, Color msgC, Theme const& 
 
   if (buttons.size() == 1) {
     auto const& btn = buttons[0];
-    Element actionBtn = Button{
-        .label = btn.label,
-        .variant = btn.variant,
-        .disabled = btn.disabled,
-        .onTap = btn.action,
-    };
     rows.push_back(HStack{
         .spacing = theme.space2,
-        .children = children(Spacer{}, std::move(actionBtn)),
+        .children = flux::children(
+                Spacer{},
+                Button{
+                    .label = btn.label,
+                    .variant = btn.variant,
+                    .disabled = btn.disabled,
+                    .onTap = btn.action,
+                }),
     });
   } else {
     std::vector<Element> buttonElems;

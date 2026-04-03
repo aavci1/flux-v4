@@ -49,16 +49,15 @@ Element ScrollView::body() const {
   return ZStack{
       .hAlign = HorizontalAlignment::Leading,
       .vAlign = VerticalAlignment::Top,
-      .children =
-          {
-              OffsetView{
-                  .offset = *offset,
-                  .axis = ax,
-                  .viewportSize = viewport,
-                  .contentSize = content,
-                  .children = std::move(contentChildren),
-              },
-          },
+      .children = flux::children(
+        OffsetView {
+          .offset = *offset,
+          .axis = ax,
+          .viewportSize = viewport,
+          .contentSize = content,
+          .children = std::move(contentChildren),
+        }
+      ),
   }
       .clipContent(true)
       .onPointerDown(

@@ -33,7 +33,6 @@
 #include <Flux/UI/Views/ZStack.hpp>
 
 #include <algorithm>
-#include <utility>
 #include <concepts>
 #include <functional>
 #include <numeric>
@@ -90,21 +89,7 @@ struct PickerRow : ViewModifiers<PickerRow<T>> {
                    : selected       ? selectedColor
                                     : Colors::transparent;
 
-    Element labelEl =
-        Text{
-            .text = option.label,
-            .style = TextStyle::fromFont(font),
-            .color = textColor,
-            .horizontalAlignment = HorizontalAlignment::Leading,
-            .verticalAlignment = VerticalAlignment::Center,
-            .wrapping = TextWrapping::NoWrap,
-            .maxLines = 1,
-            .firstBaselineOffset = 0.f,
-        }
-            .size(0.f, rowHeight)
-            .flex(1.f);
-
-    Element iconOrEmpty =
+    Element const checkFace =
         selected ? Element{Icon{
                        .name = IconName::Check,
                        .size = iconSz,
@@ -112,51 +97,63 @@ struct PickerRow : ViewModifiers<PickerRow<T>> {
                    }}
                  : Element{Rectangle{}};
 
-    Element checkStack =
-        ZStack{
-            .hAlign = HorizontalAlignment::Leading,
-            .vAlign = VerticalAlignment::Top,
-            .children = children(Rectangle{}.size(checkColW, rowHeight), std::move(iconOrEmpty)),
-        };
+    ZStack const checkCol{
+        .hAlign = HorizontalAlignment::Leading,
+        .vAlign = VerticalAlignment::Top,
+        .children = flux::children(Rectangle{}.size(checkColW, rowHeight), checkFace),
+    };
 
-    Element rowForeground =
-        HStack{
-            .spacing = 0.f,
-            .vAlign = VerticalAlignment::Center,
-            .children = children(
-                    Rectangle{
-                        .fill = FillStyle::none(),
-                        .stroke = StrokeStyle::none(),
-                    }
-                        .size(rowPaddingH, rowHeight),
-                    HStack{
-                            .spacing = 8.f,
-                            .vAlign = VerticalAlignment::Center,
-                            .children = children(std::move(labelEl), std::move(checkStack)),
-                        }
-                        .flex(1.f),
-                    Rectangle{
-                        .fill = FillStyle::none(),
-                        .stroke = StrokeStyle::none(),
-                    }
-                        .size(rowPaddingH, rowHeight)),
-        };
+    HStack const labelRow{
+        .spacing = 8.f,
+        .vAlign = VerticalAlignment::Center,
+        .children = flux::children(
+            Text{
+                .text = option.label,
+                .style = TextStyle::fromFont(font),
+                .color = textColor,
+                .horizontalAlignment = HorizontalAlignment::Leading,
+                .verticalAlignment = VerticalAlignment::Center,
+                .wrapping = TextWrapping::NoWrap,
+                .maxLines = 1,
+                .firstBaselineOffset = 0.f,
+            }
+                .size(0.f, rowHeight)
+                .flex(1.f),
+            Element{checkCol}),
+    };
+
+    HStack const paddedRow{
+        .spacing = 0.f,
+        .vAlign = VerticalAlignment::Center,
+        .children = flux::children(
+            Rectangle{
+                .fill = FillStyle::none(),
+                .stroke = StrokeStyle::none(),
+            }
+                .size(rowPaddingH, rowHeight),
+            Element{labelRow}.flex(1.f),
+            Rectangle{
+                .fill = FillStyle::none(),
+                .stroke = StrokeStyle::none(),
+            }
+                .size(rowPaddingH, rowHeight)),
+    };
 
     // Row background + row content overlay: same origin (Leading/Top).
     return ZStack{
         .hAlign = HorizontalAlignment::Leading,
         .vAlign = VerticalAlignment::Top,
-        .children = children(
-                Rectangle{
-                    .fill = FillStyle::solid(bg),
-                    .stroke = StrokeStyle::none(),
-                }
-                    .height(rowHeight)
-                    .cursor(Cursor::Hand)
-                    .onTap(onSelect)
-                    .cornerRadius(rowBgCorners)
-                    .flex(1.f),
-                std::move(rowForeground)),
+        .children = flux::children(
+            Rectangle{
+                .fill = FillStyle::solid(bg),
+                .stroke = StrokeStyle::none(),
+            }
+                .height(rowHeight)
+                .cursor(Cursor::Hand)
+                .onTap(onSelect)
+                .cornerRadius(rowBgCorners)
+                .flex(1.f),
+            Element{paddedRow}),
     };
   }
 };
@@ -179,40 +176,39 @@ Popover makePickerDropdownPopover(std::vector<PickerOption<T>> opts, std::functi
   std::size_t const rowCount = opts.size();
   float const menuR = menuCornerRadius;
 
-  Element menuRows = Element{ForEach<int>{
-      std::move(indices),
-      [opts, val, hide, onCh, keyboardCursor, rowPaddingH, rowCount, menuR, triggerRowHeight,
-       rowHoverColor = rowHoverColor, rowSelectedColor = rowSelectedColor, font = font,
-       textColor = textColor, checkColor = checkColor](int i) -> Element {
-        auto const idx = static_cast<std::size_t>(i);
-        return Element{PickerRow<T>{
-            .option = opts[idx],
-            .selected = (opts[idx].value == *val),
-            .keyboardActive = (*keyboardCursor == i),
-            .rowPaddingH = rowPaddingH,
-            .rowHeight = triggerRowHeight,
-            .rowBgCorners = pickerMenuRowCorners(idx, rowCount, menuR),
-            .font = font,
-            .textColor = textColor,
-            .hoverColor = rowHoverColor,
-            .selectedColor = rowSelectedColor,
-            .checkmarkColor = checkColor,
-            .onSelect =
-                [val, hide, onCh, v = opts[idx].value]() {
-                  val = v;
-                  if (onCh) {
-                    onCh(v);
-                  }
-                  hide();
-                },
-        }};
-      },
-      0.f,
-  }};
-
   Element rowList = VStack{
       .spacing = 0.f,
-      .children = children(std::move(menuRows)),
+      .children = flux::children(
+              ForEach<int>{
+                  std::move(indices),
+                  [opts, val, hide, onCh, keyboardCursor, rowPaddingH, rowCount, menuR, triggerRowHeight,
+                   rowHoverColor = rowHoverColor, rowSelectedColor = rowSelectedColor, font = font,
+                   textColor = textColor, checkColor = checkColor](int i) -> Element {
+                    auto const idx = static_cast<std::size_t>(i);
+                    return PickerRow<T>{
+                        .option = opts[idx],
+                        .selected = (opts[idx].value == *val),
+                        .keyboardActive = (*keyboardCursor == i),
+                        .rowPaddingH = rowPaddingH,
+                        .rowHeight = triggerRowHeight,
+                        .rowBgCorners = pickerMenuRowCorners(idx, rowCount, menuR),
+                        .font = font,
+                        .textColor = textColor,
+                        .hoverColor = rowHoverColor,
+                        .selectedColor = rowSelectedColor,
+                        .checkmarkColor = checkColor,
+                        .onSelect =
+                            [val, hide, onCh, v = opts[idx].value]() {
+                              val = v;
+                              if (onCh) {
+                                onCh(v);
+                              }
+                              hide();
+                            },
+                    };
+                  },
+                  0.f,
+              }),
   }.clipContent(true);
 
   Size dropdownMax{};
@@ -474,78 +470,73 @@ struct Picker : ViewModifiers<Picker<T>> {
       }
     };
 
-    Element triggerLabelEl =
-        Text{
-            .text = hasMatch ? selectedLabel : placeholder,
-            .style = TextStyle::fromFont(fontR),
-            .color = hasMatch ? textR : plcR,
-            .horizontalAlignment = HorizontalAlignment::Leading,
-            .verticalAlignment = VerticalAlignment::Center,
-            .wrapping = TextWrapping::NoWrap,
-            .maxLines = 1,
-            .firstBaselineOffset = 0.f,
-        }
-            .size(0.f, h)
-            .flex(1.f);
+    ZStack const chevronCol{
+        .hAlign = HorizontalAlignment::Leading,
+        .vAlign = VerticalAlignment::Center,
+        .children = flux::children(
+            Rectangle{
+                .fill = FillStyle::none(),
+                .stroke = StrokeStyle::none(),
+            }
+                .size(std::max(14.f, chevronIconSz), h),
+            Icon{
+                .name = isOpen ? IconName::ExpandLess : IconName::ExpandMore,
+                .size = chevronIconSz,
+                .color = chvR,
+            }),
+    };
 
-    Element chevronStack =
-        ZStack{
-            .hAlign = HorizontalAlignment::Leading,
-            .vAlign = VerticalAlignment::Center,
-            .children = children(
-                    Rectangle{
-                        .fill = FillStyle::none(),
-                        .stroke = StrokeStyle::none(),
-                    }
-                        .size(std::max(14.f, chevronIconSz), h),
-                    Icon{
-                        .name = isOpen ? IconName::ExpandLess : IconName::ExpandMore,
-                        .size = chevronIconSz,
-                        .color = chvR,
-                    }),
-        };
-
-    Element triggerRow =
-        HStack{
-            .spacing = 0.f,
-            .vAlign = VerticalAlignment::Center,
-            .children = children(
-                    Rectangle{
-                        .fill = FillStyle::none(),
-                        .stroke = StrokeStyle::none(),
-                    }
-                        .size(padHResolved, h),
-                    std::move(triggerLabelEl),
-                    Rectangle{
-                        .fill = FillStyle::none(),
-                        .stroke = StrokeStyle::none(),
-                    }
-                        .size(padHResolved, h),
-                    std::move(chevronStack),
-                    Rectangle{
-                        .fill = FillStyle::none(),
-                        .stroke = StrokeStyle::none(),
-                    }
-                        .size(padHResolved, h)),
-        };
+    HStack const triggerRow{
+        .spacing = 0.f,
+        .vAlign = VerticalAlignment::Center,
+        .children = flux::children(
+            Rectangle{
+                .fill = FillStyle::none(),
+                .stroke = StrokeStyle::none(),
+            }
+                .size(padHResolved, h),
+            Text{
+                .text = hasMatch ? selectedLabel : placeholder,
+                .style = TextStyle::fromFont(fontR),
+                .color = hasMatch ? textR : plcR,
+                .horizontalAlignment = HorizontalAlignment::Leading,
+                .verticalAlignment = VerticalAlignment::Center,
+                .wrapping = TextWrapping::NoWrap,
+                .maxLines = 1,
+                .firstBaselineOffset = 0.f,
+            }
+                .size(0.f, h)
+                .flex(1.f),
+            Rectangle{
+                .fill = FillStyle::none(),
+                .stroke = StrokeStyle::none(),
+            }
+                .size(padHResolved, h),
+            Element{chevronCol},
+            Rectangle{
+                .fill = FillStyle::none(),
+                .stroke = StrokeStyle::none(),
+            }
+                .size(padHResolved, h)),
+    };
 
     return ZStack{
         .hAlign = HorizontalAlignment::Leading,
         .vAlign = VerticalAlignment::Center,
-        .children = children(
-                Rectangle{
-                    .fill = useOuterChromeFill ? outerDeco.bgFill : FillStyle::solid(*fillAnim),
-                    .stroke = strokeForTrigger,
-                }
-                    .height(h)
-                    .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
-                    .focusable(!isDisabled)
-                    .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)>{}
-                                          : std::function<void(KeyCode, Modifiers)>{onTriggerKey})
-                    .onTap(isDisabled ? std::function<void()>{} : std::function<void()>{onTriggerTap})
-                    .cornerRadius(cornerForTrigger)
-                    .flex(1.f, 1.f, 0.f),
-                std::move(triggerRow)),
+        .children = flux::children(
+            Rectangle{
+                .fill = useOuterChromeFill ? outerDeco.bgFill : FillStyle::solid(*fillAnim),
+                .stroke = strokeForTrigger,
+            }
+                .height(h)
+                .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
+                .focusable(!isDisabled)
+                .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)>{}
+                                      : std::function<void(KeyCode, Modifiers)>{onTriggerKey})
+                .onTap(isDisabled ? std::function<void()>{} : std::function<void()>{onTriggerTap})
+                .cornerRadius(cornerForTrigger)
+                .flex(1.f, 1.f, 0.f),
+            Element{triggerRow}),
     };
   }
 };

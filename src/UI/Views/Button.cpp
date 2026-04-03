@@ -211,35 +211,29 @@ Element Button::body() const {
                            .color = theme.shadowColor};
   }
 
-  Element labelEl =
+  auto content = ZStack {
+    .hAlign = HorizontalAlignment::Center,
+    .vAlign = VerticalAlignment::Center,
+    .children = flux::children(
+      Rectangle {
+          .fill = FillStyle::solid(*fillAnim),
+          .stroke = stroke,
+          .shadow = bgShadow,
+      }.height(h)
+        .cursor(effectivelyDisabled ? Cursor::Inherit : Cursor::Hand)
+        .focusable(!effectivelyDisabled)
+        .onKeyDown(effectivelyDisabled ? std::function<void(KeyCode, Modifiers)>{} : std::function<void(KeyCode, Modifiers)>{ handleKey })
+        .onTap(effectivelyDisabled ? std::function<void()>{} : std::function<void()>{ handleTap })
+        .cornerRadius(cr)
+        .flex(isLink ? 0.f : 1.f, 1.f, 0.f),
       Text{
-          .text = label,
-          .style = TextStyle::fromFont(fontResolved),
-          .color = *labelAnim,
-          .horizontalAlignment = isLink ? HorizontalAlignment::Leading : HorizontalAlignment::Center,
-          .verticalAlignment = VerticalAlignment::Center,
-      }
-          .padding(effPaddingH);
-
-  auto content = ZStack{
-      .hAlign = HorizontalAlignment::Center,
-      .vAlign = VerticalAlignment::Center,
-      .children =
-          children(
-              Rectangle{
-                  .fill = FillStyle::solid(*fillAnim),
-                  .stroke = stroke,
-                  .shadow = bgShadow,
-              }
-                  .height(h)
-                  .cursor(effectivelyDisabled ? Cursor::Inherit : Cursor::Hand)
-                  .focusable(!effectivelyDisabled)
-                  .onKeyDown(effectivelyDisabled ? std::function<void(KeyCode, Modifiers)>{}
-                                                 : std::function<void(KeyCode, Modifiers)>{ handleKey })
-                  .onTap(effectivelyDisabled ? std::function<void()>{} : std::function<void()>{ handleTap })
-                  .cornerRadius(cr)
-                  .flex(isLink ? 0.f : 1.f, 1.f, 0.f),
-              std::move(labelEl)),
+        .text = label,
+        .style = TextStyle::fromFont(fontResolved),
+        .color = *labelAnim,
+        .horizontalAlignment = isLink ? HorizontalAlignment::Leading : HorizontalAlignment::Center,
+        .verticalAlignment = VerticalAlignment::Center,
+      }.padding(effPaddingH)
+    )
   };
 
   if (isLink) {

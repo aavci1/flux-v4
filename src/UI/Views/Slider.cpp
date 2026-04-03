@@ -174,22 +174,19 @@ Element Slider::body() const {
     float const trackY = (componentHeight - trackHeight) * 0.5f;
     float const thumbY = (componentHeight - thumbDiameter) * 0.5f;
 
-    return ZStack {
+    return ZStack{
         .hAlign = HorizontalAlignment::Leading,
         .vAlign = VerticalAlignment::Top,
-        .children = {
-            Rectangle {}
+        .children = flux::children(
+            Rectangle {
+            }
                 .size(componentWidth, componentHeight)
                 .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
                 .focusable(!isDisabled)
-                .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)>{}
-                                      : std::function<void(KeyCode, Modifiers)>{handleKey})
-                .onPointerDown(isDisabled ? std::function<void(Point)>{}
-                                          : std::function<void(Point)> {handleDown})
-                .onPointerUp(isDisabled ? std::function<void(Point)>{}
-                                        : std::function<void(Point)> {handleUp})
-                .onPointerMove(isDisabled ? std::function<void(Point)>{}
-                                          : std::function<void(Point)> {handleMove}),
+                .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)>{} : std::function<void(KeyCode, Modifiers)>{handleKey})
+                .onPointerDown(isDisabled ? std::function<void(Point)>{} : std::function<void(Point)>{handleDown})
+                .onPointerUp(isDisabled ? std::function<void(Point)>{} : std::function<void(Point)>{handleUp})
+                .onPointerMove(isDisabled ? std::function<void(Point)>{} : std::function<void(Point)>{handleMove}),
             Rectangle {
                 .fill = FillStyle::solid(isDisabled ? theme.colorSurfaceDisabled : inactiveColor),
                 .stroke = StrokeStyle::none(),
@@ -207,15 +204,16 @@ Element Slider::body() const {
             Rectangle {
                 .fill = FillStyle::solid(isDisabled ? theme.colorTextDisabled : thumbColor),
                 .stroke = isDisabled ? StrokeStyle::solid(theme.colorTextDisabled, 1.f) : thumbStroke,
-                .shadow = isDisabled ? ShadowStyle::none()
-                                     : ShadowStyle{.radius = theme.shadowRadiusControl,
-                                                   .offset = {0.f, theme.shadowOffsetYControl},
-                                                   .color = theme.shadowColor},
+                .shadow = isDisabled ? ShadowStyle::none() : ShadowStyle {
+                    .radius = theme.shadowRadiusControl,
+                    .offset = {0.f, theme.shadowOffsetYControl},
+                    .color = theme.shadowColor
+                },
             }
                 .position(thumbX + thumbOffset, thumbY)
                 .size(thumbDiameter, thumbDiameter)
-                .cornerRadius(CornerRadius{thumbDiameter * 0.5f}),
-        },
+                .cornerRadius(CornerRadius{thumbDiameter * 0.5f})
+        ),
     };
 }
 
