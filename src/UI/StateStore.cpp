@@ -10,6 +10,7 @@ void StateStore::setCurrent(StateStore* s) noexcept { sCurrent = s; }
 
 void StateStore::beginRebuild() {
   compositeConstraintStack_.clear();
+  compositeElementModifierStack_.clear();
   visited_.clear();
   for (auto& [key, cs] : states_) {
     (void)key;
@@ -31,6 +32,7 @@ void StateStore::shutdown() {
   states_.clear();
   visited_.clear();
   activeStack_.clear();
+  compositeElementModifierStack_.clear();
 }
 
 void StateStore::resetSlotCursors() {
@@ -66,6 +68,22 @@ LayoutConstraints const* StateStore::currentCompositeConstraints() const {
     return nullptr;
   }
   return &compositeConstraintStack_.back();
+}
+
+void StateStore::pushCompositeElementModifiers(ElementModifiers const* m) {
+  compositeElementModifierStack_.push_back(m);
+}
+
+void StateStore::popCompositeElementModifiers() {
+  assert(!compositeElementModifierStack_.empty());
+  compositeElementModifierStack_.pop_back();
+}
+
+ElementModifiers const* StateStore::currentCompositeElementModifiers() const noexcept {
+  if (compositeElementModifierStack_.empty()) {
+    return nullptr;
+  }
+  return compositeElementModifierStack_.back();
 }
 
 ComponentKey const& StateStore::currentComponentKey() const {

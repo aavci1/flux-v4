@@ -24,6 +24,30 @@
 
 namespace flux {
 
+namespace {
+
+TextArea::Style resolveTextAreaStyle(TextArea::Style const& style, FluxTheme const& theme) {
+  return TextArea::Style{
+      .font = resolveFont(style.font, theme.typeBody.toFont()),
+      .textColor = resolveColor(style.textColor, theme.colorTextPrimary),
+      .placeholderColor = resolveColor(style.placeholderColor, theme.colorTextPlaceholder),
+      .backgroundColor = resolveColor(style.backgroundColor, theme.colorSurfaceField),
+      .borderColor = resolveColor(style.borderColor, theme.colorBorder),
+      .borderFocusColor = resolveColor(style.borderFocusColor, theme.colorBorderFocus),
+      .caretColor = resolveColor(style.caretColor, theme.colorAccent),
+      .selectionColor = resolveColor(style.selectionColor, theme.colorAccentSubtle),
+      .disabledColor = resolveColor(style.disabledColor, theme.colorSurfaceDisabled),
+      .borderWidth = resolveFloat(style.borderWidth, 1.f),
+      .borderFocusWidth = resolveFloat(style.borderFocusWidth, 2.f),
+      .cornerRadius = resolveFloat(style.cornerRadius, theme.radiusMedium),
+      .paddingH = resolveFloat(style.paddingH, theme.paddingFieldH),
+      .paddingV = resolveFloat(style.paddingV, theme.paddingFieldV),
+      .lineHeight = style.lineHeight,
+  };
+}
+
+} // namespace
+
 namespace detail {
 // Implemented in TextEditKernel.cpp (not in kernel header — TextArea-only consumer).
 int caretByteAtPoint(TextSystem&, std::string const&, Font const&, Color const&, TextLayout const&, Point);
@@ -97,7 +121,7 @@ struct TextAreaView {
       intrinsic = std::min(intrinsic, height.maxIntrinsic);
     }
     float const h = height.fixed > 0.f ? height.fixed : intrinsic;
-    return {std::max(minSize, contentW), h};
+    return {contentW, h};
   }
 
   void render(Canvas& canvas, Rect frame) const;
@@ -114,7 +138,6 @@ struct TextAreaView {
   Font font{};
   Color textColor{};
   Color placeholderColor{};
-  Color backgroundColor{};
   Color borderColor{};
   Color borderFocusColor{};
   Color caretColor{};
@@ -122,12 +145,14 @@ struct TextAreaView {
   Color disabledColor{};
   float borderWidth = 1.f;
   float borderFocusWidth = 2.f;
-  CornerRadius cornerRadius{};
+  FillStyle bgFillResolved = FillStyle::solid(Color::rgb(255, 255, 255));
+  StrokeStyle strokeNormalResolved = StrokeStyle::none();
+  StrokeStyle strokeFocusResolved = StrokeStyle::none();
+  CornerRadius cornerRadiusResolved{};
   TextAreaHeight height{};
   float paddingH = 12.f;
   float paddingV = 8.f;
   float lineHeight = 0.f;
-  float minSize = 0.f;
 
   float cachedCaretX = 0.f;
   float cachedCaretY = 0.f;
@@ -149,13 +174,14 @@ struct TextAreaView {
 };
 
 void TextAreaView::render(Canvas& canvas, Rect frame) const {
-  Color const bg = disabled ? disabledColor : backgroundColor;
-  Color const bc = disabled ? borderColor : (focused ? borderFocusColor : borderColor);
-  float const bw = disabled ? borderWidth : (focused ? borderFocusWidth : borderWidth);
+  FillStyle const fill = disabled ? FillStyle::solid(disabledColor) : bgFillResolved;
+  StrokeStyle const stroke =
+      disabled ? StrokeStyle::solid(borderColor, borderWidth)
+               : (focused ? strokeFocusResolved : strokeNormalResolved);
   Color const tc = disabled ? placeholderColor : textColor;
 
-  canvas.drawRect(frame, cornerRadius, FillStyle::solid(bg), StrokeStyle::none());
-  canvas.drawRect(frame, cornerRadius, FillStyle::none(), StrokeStyle::solid(bc, bw));
+  canvas.drawRect(frame, cornerRadiusResolved, fill, StrokeStyle::none());
+  canvas.drawRect(frame, cornerRadiusResolved, FillStyle::none(), stroke);
 
   Rect const content = {frame.x + paddingH, frame.y + paddingV, frame.width - 2.f * paddingH,
                         frame.height - 2.f * paddingV};
@@ -263,20 +289,39 @@ Element TextArea::body() const {
   using namespace std::chrono;
 
   FluxTheme const& theme = useEnvironment<FluxTheme>();
-  Font const fnt = resolveFont(font, theme.typeBody.toFont());
-  float const padHResolved = resolveFloat(paddingH, theme.paddingFieldH);
-  float const padVResolved = resolveFloat(paddingV, theme.paddingFieldV);
-  CornerRadius const crResolved{resolveFloat(cornerRadius, theme.radiusMedium)};
-  Color const tc = resolveColor(textColor, theme.colorTextPrimary);
-  Color const plc = resolveColor(placeholderColor, theme.colorTextPlaceholder);
-  Color const bg = resolveColor(backgroundColor, theme.colorSurfaceField);
-  Color const bc = resolveColor(borderColor, theme.colorBorder);
-  Color const bfc = resolveColor(borderFocusColor, theme.colorBorderFocus);
-  Color const cc = resolveColor(caretColor, theme.colorAccent);
-  Color const sc = resolveColor(selectionColor, theme.colorAccentSubtle);
-  Color const dc = resolveColor(disabledColor, theme.colorSurfaceDisabled);
+  TextArea::Style const s = resolveTextAreaStyle(style, theme);
+  Font const fnt = s.font;
+  float const padHResolved = s.paddingH;
+  float const padVResolved = s.paddingV;
+  CornerRadius const crResolved{s.cornerRadius};
+  Color const tc = s.textColor;
+  Color const plc = s.placeholderColor;
+  Color const bg = s.backgroundColor;
+  Color const bc = s.borderColor;
+  Color const bfc = s.borderFocusColor;
+  Color const cc = s.caretColor;
+  Color const sc = s.selectionColor;
+  Color const dc = s.disabledColor;
 
-  float const lineHeightOpt = lineHeight;
+  ElementModifiers const* const outerMods = useOuterElementModifiers();
+  FillStyle bgFill = FillStyle::solid(bg);
+  StrokeStyle strokeN = StrokeStyle::solid(bc, s.borderWidth);
+  StrokeStyle strokeF = StrokeStyle::solid(bfc, s.borderFocusWidth);
+  CornerRadius cr = crResolved;
+  if (outerMods) {
+    if (!outerMods->background.isNone()) {
+      bgFill = outerMods->background;
+    }
+    if (!outerMods->border.isNone()) {
+      strokeN = outerMods->border;
+      strokeF = StrokeStyle::solid(bfc, s.borderFocusWidth);
+    }
+    if (!outerMods->cornerRadius.isZero()) {
+      cr = outerMods->cornerRadius;
+    }
+  }
+
+  float const lineHeightOpt = s.lineHeight;
   std::string const placeholderText = placeholder;
 
   State<std::string> val = value;
@@ -351,6 +396,10 @@ Element TextArea::body() const {
       tc.b, tc.a, plc.r, plc.g, plc.b, plc.a);
 
   bool const isDisabled = disabled;
+  Cursor cursorResolved = isDisabled ? Cursor::Inherit : Cursor::IBeam;
+  if (!isDisabled && outerMods && outerMods->cursor != Cursor::Inherit) {
+    cursorResolved = outerMods->cursor;
+  }
   bool const focused = useFocus();
   bool const pressInSubtree = usePress();
   if (!pressInSubtree && *mouseDragSelecting) {
@@ -936,20 +985,21 @@ Element TextArea::body() const {
       .font = fnt,
       .textColor = tc,
       .placeholderColor = plc,
-      .backgroundColor = bg,
       .borderColor = bc,
       .borderFocusColor = bfc,
       .caretColor = cc,
       .selectionColor = sc,
       .disabledColor = dc,
-      .borderWidth = borderWidth,
-      .borderFocusWidth = borderFocusWidth,
-      .cornerRadius = crResolved,
+      .borderWidth = s.borderWidth,
+      .borderFocusWidth = s.borderFocusWidth,
+      .bgFillResolved = bgFill,
+      .strokeNormalResolved = strokeN,
+      .strokeFocusResolved = strokeF,
+      .cornerRadiusResolved = cr,
       .height = height,
       .paddingH = padHResolved,
       .paddingV = padVResolved,
       .lineHeight = lineHeightOpt,
-      .minSize = minSize,
       .cachedCaretX = cachedCaret.x,
       .cachedCaretY = cachedCaret.y,
       .cachedCaretH = cachedCaret.h,
@@ -962,7 +1012,7 @@ Element TextArea::body() const {
       .onPointerMove = std::move(onPointerMove),
       .onPointerUp = std::move(onPointerUp),
       .onScroll = std::move(onScrollHandler),
-      .cursor = isDisabled ? Cursor::Inherit : Cursor::IBeam,
+      .cursor = cursorResolved,
       .focusable = !isDisabled,
   }};
 }

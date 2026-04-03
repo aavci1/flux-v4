@@ -30,15 +30,16 @@ struct EditorView {
                 .text = "Notes",
                 .font = {.size = 13.f, .weight = 600.f},
             },
-            TextArea {
+            TextArea{
                 .value = text,
                 .placeholder = "Start typing…",
                 .onChange =
                     [](std::string const &v) {
-                        std::fprintf(stderr, "length=%zu\n", v.size());
+                      std::fprintf(stderr, "length=%zu\n", v.size());
                     },
                 .onEscape = [text](std::string const &) { text = ""; },
-            },
+            }
+                .flex(1.f, 1.f, 0.f),
         },
     };
   }
@@ -55,15 +56,16 @@ struct PreviewView {
                   .text = "Preview",
                   .font = {.size = 13.f, .weight = 600.f},
               },
-              TextArea {
+              TextArea{
                   .value = text,
                   .placeholder = "Start typing…",
                   .onChange =
                       [](std::string const &v) {
-                          std::fprintf(stderr, "length=%zu\n", v.size());
+                        std::fprintf(stderr, "length=%zu\n", v.size());
                       },
                   .onEscape = [text](std::string const &) { text = ""; },
-              },
+              }
+                  .flex(1.f, 1.f, 0.f),
           },
       };
     }

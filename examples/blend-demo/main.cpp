@@ -4,6 +4,7 @@
 #include <Flux/Graphics/Font.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/UI/UI.hpp>
+#include <Flux/UI/ViewModifiers.hpp>
 
 #include <array>
 #include <vector>
@@ -33,7 +34,7 @@ constexpr std::array<DemoCell, 12> kGrid{{
     {BlendMode::Dst, "Dst"},
 }};
 
-struct BlendCell {
+struct BlendCell : ViewModifiers<BlendCell> {
   static constexpr float kMargin = 24.f;
   static constexpr float kGap = 10.f;
   /// Default window size in `main` (explicit baseline; avoids relying on `WindowConfig` defaults).

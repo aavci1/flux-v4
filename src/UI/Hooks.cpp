@@ -81,4 +81,12 @@ LayoutConstraints const* useLayoutConstraints() {
   return store->currentCompositeConstraints();
 }
 
+ElementModifiers const* useOuterElementModifiers() noexcept {
+  StateStore* store = StateStore::current();
+  if (!store) {
+    return nullptr;
+  }
+  return store->currentCompositeElementModifiers();
+}
+
 } // namespace flux

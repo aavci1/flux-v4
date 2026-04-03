@@ -171,6 +171,13 @@ std::optional<Rect> useLayoutRect();
 /// Layout constraints for the current composite `body()` call (see `Runtime::pushCompositeConstraints`).
 LayoutConstraints const* useLayoutConstraints();
 
+struct ElementModifiers;
+
+/// Outer \ref Element wrapper modifiers during \c body() when the view uses chained
+/// \c .padding() / \c .background() / \c .border() / … (see \c StateStore::pushCompositeElementModifiers).
+/// \c nullptr when there is no modifier pass or outside \c body().
+ElementModifiers const* useOuterElementModifiers() noexcept;
+
 /// Registers a handler for the named action that fires only when the calling component subtree has focus.
 ///
 /// Must not be called from overlay subtrees: overlay `ComponentKey` paths can collide with the main tree,

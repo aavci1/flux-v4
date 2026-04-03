@@ -93,7 +93,6 @@ struct TextInputView {
   Font font{};
   Color textColor{};
   Color placeholderColor{};
-  Color backgroundColor{};
   Color borderColor{};
   Color borderFocusColor{};
   Color caretColor{};
@@ -101,7 +100,10 @@ struct TextInputView {
   Color disabledColor{};
   float borderWidth = 1.f;
   float borderFocusWidth = 2.f;
-  CornerRadius cornerRadius{};
+  FillStyle bgFillResolved = FillStyle::solid(Color::rgb(255, 255, 255));
+  StrokeStyle strokeNormalResolved = StrokeStyle::none();
+  StrokeStyle strokeFocusResolved = StrokeStyle::none();
+  CornerRadius cornerRadiusResolved{};
   float height = 0.f;
   float paddingH = 12.f;
   float paddingV = 8.f;
@@ -126,13 +128,14 @@ struct TextInputView {
 };
 
 void TextInputView::render(Canvas& canvas, Rect frame) const {
-  Color const bg = disabled ? disabledColor : backgroundColor;
-  Color const bc = disabled ? borderColor : (focused ? borderFocusColor : borderColor);
-  float const bw = disabled ? borderWidth : (focused ? borderFocusWidth : borderWidth);
+  FillStyle const fill = disabled ? FillStyle::solid(disabledColor) : bgFillResolved;
+  StrokeStyle const stroke =
+      disabled ? StrokeStyle::solid(borderColor, borderWidth)
+               : (focused ? strokeFocusResolved : strokeNormalResolved);
   Color const tc = disabled ? placeholderColor : textColor;
 
-  canvas.drawRect(frame, cornerRadius, FillStyle::solid(bg), StrokeStyle::none());
-  canvas.drawRect(frame, cornerRadius, FillStyle::none(), StrokeStyle::solid(bc, bw));
+  canvas.drawRect(frame, cornerRadiusResolved, fill, StrokeStyle::none());
+  canvas.drawRect(frame, cornerRadiusResolved, FillStyle::none(), stroke);
 
   Rect const content = {frame.x + paddingH, frame.y + paddingV, frame.width - 2.f * paddingH,
                         frame.height - 2.f * paddingV};
@@ -212,6 +215,23 @@ Element TextInput::body() const {
   Color const cc = resolveColor(caretColor, theme.colorAccent);
   Color const sc = resolveColor(selectionColor, theme.colorAccentSubtle);
   Color const dc = resolveColor(disabledColor, theme.colorSurfaceDisabled);
+
+  FillStyle bgFill = FillStyle::solid(bg);
+  StrokeStyle strokeN = StrokeStyle::solid(bc, borderWidth);
+  StrokeStyle strokeF = StrokeStyle::solid(bfc, borderFocusWidth);
+  CornerRadius cr = crResolved;
+  if (ElementModifiers const* outer = useOuterElementModifiers()) {
+    if (!outer->background.isNone()) {
+      bgFill = outer->background;
+    }
+    if (!outer->border.isNone()) {
+      strokeN = outer->border;
+      strokeF = StrokeStyle::solid(bfc, borderFocusWidth);
+    }
+    if (!outer->cornerRadius.isZero()) {
+      cr = outer->cornerRadius;
+    }
+  }
 
   State<std::string> val = value;
   auto caretByte = useState(0);
@@ -611,7 +631,6 @@ Element TextInput::body() const {
       .font = fnt,
       .textColor = tc,
       .placeholderColor = plc,
-      .backgroundColor = bg,
       .borderColor = bc,
       .borderFocusColor = bfc,
       .caretColor = cc,
@@ -619,7 +638,10 @@ Element TextInput::body() const {
       .disabledColor = dc,
       .borderWidth = borderWidth,
       .borderFocusWidth = borderFocusWidth,
-      .cornerRadius = crResolved,
+      .bgFillResolved = bgFill,
+      .strokeNormalResolved = strokeN,
+      .strokeFocusResolved = strokeF,
+      .cornerRadiusResolved = cr,
       .height = height,
       .paddingH = padHResolved,
       .paddingV = padVResolved,

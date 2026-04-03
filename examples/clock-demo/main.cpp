@@ -2,6 +2,7 @@
 #include <Flux/Core/Events.hpp>
 #include <Flux/Core/WindowUI.hpp>
 #include <Flux/UI/UI.hpp>
+#include <Flux/UI/ViewModifiers.hpp>
 
 #include <chrono>
 #include <cmath>
@@ -11,7 +12,7 @@
 
 using namespace flux;
 
-struct ClockFace {
+struct ClockFace : ViewModifiers<ClockFace> {
   Size measure(LayoutConstraints const& c, LayoutHints const&) const {
     float const s = std::min(
         std::isfinite(c.maxWidth) ? c.maxWidth : 360.f,
@@ -40,10 +41,12 @@ struct ClockFace {
 
 struct ClockView {
   auto body() const {
-    return ZStack{.children = {
-                      Rectangle{.fill = FillStyle::solid(Color::rgb(245, 245, 248))},
-                      ClockFace{},
-                  }};
+    return ZStack {
+      .children = {
+        Rectangle{.fill = FillStyle::solid(Color::rgb(245, 245, 248))},
+        ClockFace{},
+      },
+    };
   }
 };
 

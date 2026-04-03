@@ -8,6 +8,7 @@
 #include <Flux/UI/LayoutContext.hpp>
 #include <Flux/UI/RenderContext.hpp>
 #include <Flux/UI/MeasureCache.hpp>
+#include <Flux/UI/StateStore.hpp>
 #include <Flux/UI/Detail/LeafBounds.hpp>
 #include <Flux/UI/EventMap.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
@@ -191,7 +192,13 @@ void Element::layoutWithModifiers(LayoutContext& ctx) const {
   scope.le.setChildFrame(innerFrame);
   ctx.pushConstraints(innerCs, preservedHints);
   ctx.pushActiveElementModifiers(&m);
+  if (StateStore* const store = StateStore::current()) {
+    store->pushCompositeElementModifiers(&m);
+  }
   impl_->layout(ctx);
+  if (StateStore* const store = StateStore::current()) {
+    store->popCompositeElementModifiers();
+  }
   ctx.popActiveElementModifiers();
   ctx.popConstraints();
 
@@ -229,12 +236,24 @@ Size Element::measureWithModifiersImpl(LayoutContext& ctx, LayoutConstraints con
   Size sz{};
   if (m.overlay) {
     ContainerMeasureScope scope(ctx);
+    if (StateStore* const store = StateStore::current()) {
+      store->pushCompositeElementModifiers(&m);
+    }
     Size const szUnder = impl_->measure(ctx, innerCs, hints, textSystem);
+    if (StateStore* const store = StateStore::current()) {
+      store->popCompositeElementModifiers();
+    }
     Size const szOver = m.overlay->measure(ctx, innerCs, hints, textSystem);
     sz.width = std::max(szUnder.width, szOver.width) + pad2;
     sz.height = std::max(szUnder.height, szOver.height) + pad2;
   } else {
+    if (StateStore* const store = StateStore::current()) {
+      store->pushCompositeElementModifiers(&m);
+    }
     sz = impl_->measure(ctx, innerCs, hints, textSystem);
+    if (StateStore* const store = StateStore::current()) {
+      store->popCompositeElementModifiers();
+    }
     sz.width += pad2;
     sz.height += pad2;
   }

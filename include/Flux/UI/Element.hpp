@@ -131,6 +131,52 @@ struct ElementModifiers {
   ~ElementModifiers();
 };
 
+namespace detail {
+
+/// Merges \ref ElementModifiers interaction handlers into \p handlers for \ref RenderComponent leaves.
+/// Modifier callbacks override struct-derived handlers when set (same rule as primitives under a modifier node).
+inline void mergeRenderLeafHandlersWithActiveModifiers(EventHandlers& h, ElementModifiers const* mods,
+                                                       bool suppressLeafModifierEvents) {
+  if (!mods || suppressLeafModifierEvents) {
+    return;
+  }
+  if (mods->onTap) {
+    h.onTap = mods->onTap;
+  }
+  if (mods->onPointerDown) {
+    h.onPointerDown = mods->onPointerDown;
+  }
+  if (mods->onPointerUp) {
+    h.onPointerUp = mods->onPointerUp;
+  }
+  if (mods->onPointerMove) {
+    h.onPointerMove = mods->onPointerMove;
+  }
+  if (mods->onScroll) {
+    h.onScroll = mods->onScroll;
+  }
+  if (mods->onKeyDown) {
+    h.onKeyDown = mods->onKeyDown;
+  }
+  if (mods->onKeyUp) {
+    h.onKeyUp = mods->onKeyUp;
+  }
+  if (mods->onTextInput) {
+    h.onTextInput = mods->onTextInput;
+  }
+  bool const effModFocusable =
+      mods->focusable || static_cast<bool>(mods->onKeyDown) || static_cast<bool>(mods->onKeyUp) ||
+      static_cast<bool>(mods->onTextInput);
+  if (effModFocusable) {
+    h.focusable = true;
+  }
+  if (mods->cursor != Cursor::Inherit) {
+    h.cursor = mods->cursor;
+  }
+}
+
+} // namespace detail
+
 /// Erased handle to a component model (\ref CompositeComponent, \ref PrimitiveComponent, or \ref RenderComponent).
 /// Copying allocates a new \c measureId_ for memoization correctness.
 class Element {
@@ -378,6 +424,8 @@ void Element::Model<C>::renderFromLayout(RenderContext& ctx, LayoutNode const& n
           static_cast<bool>(handlers.onKeyDown) || static_cast<bool>(handlers.onKeyUp) ||
           static_cast<bool>(handlers.onTextInput);
     }
+    detail::mergeRenderLeafHandlersWithActiveModifiers(handlers, ctx.activeElementModifiers(),
+                                                       ctx.suppressLeafModifierEvents());
     detail::registerRenderLeafEvents(ctx, id, std::move(handlers));
   } else if constexpr (PrimitiveComponent<C>) {
     value.renderFromLayout(ctx, node);
