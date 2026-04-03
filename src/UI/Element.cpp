@@ -476,9 +476,16 @@ Size LaidOutText::measure(LayoutContext& ctx, LayoutConstraints const&, LayoutHi
 void Text::layout(LayoutContext& ctx) const {
   ComponentKey const stableKey = ctx.leafComponentKey();
   ctx.advanceChildSlot();
+  Rect const assigned = ctx.layoutEngine().consumeAssignedFrame();
+  LayoutConstraints const& cs = ctx.constraints();
   Rect const bounds = flux::detail::resolveLeafLayoutBounds(
-      explicitLeafBox(*this), ctx.layoutEngine().consumeAssignedFrame(), ctx.constraints(), ctx.hints());
-  assert(text.empty() || (bounds.width > 0.f && bounds.height > 0.f));
+      explicitLeafBox(*this), assigned, cs, ctx.hints());
+  // Degenerate axis is valid when the parent assigned no space there, or when constraints cap that axis at <= 0.
+  bool const widthExplained = bounds.width > 0.f || assigned.width <= 0.f ||
+                              (std::isfinite(cs.maxWidth) && cs.maxWidth <= 0.f);
+  bool const heightExplained = bounds.height > 0.f || assigned.height <= 0.f ||
+                               (std::isfinite(cs.maxHeight) && cs.maxHeight <= 0.f);
+  assert(text.empty() || (widthExplained && heightExplained));
   LayoutNode n{};
   n.kind = LayoutNode::Kind::Leaf;
   n.frame = bounds;

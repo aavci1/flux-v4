@@ -10,10 +10,13 @@ Rect resolveLeafBounds(Rect const& frame, Rect const& childFrame, LayoutConstrai
     bounds = childFrame;
   }
   if (bounds.width <= 0.f || bounds.height <= 0.f) {
-    float const w = std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;
-    float const h = std::isfinite(constraints.maxHeight) ? constraints.maxHeight : 0.f;
-    if (w > 0.f && h > 0.f) {
-      bounds = Rect{0, 0, w, h};
+    float const mxW = std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;
+    float const mxH = std::isfinite(constraints.maxHeight) ? constraints.maxHeight : 0.f;
+    if (bounds.width <= 0.f && mxW > 0.f) {
+      bounds.width = mxW;
+    }
+    if (bounds.height <= 0.f && mxH > 0.f) {
+      bounds.height = mxH;
     }
   }
   return bounds;
