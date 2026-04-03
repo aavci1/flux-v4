@@ -7,7 +7,6 @@
 
 /// Built-in leaf views (no `Element` dependency).
 #include <Flux/UI/Views/Rectangle.hpp>
-#include <Flux/UI/Views/LaidOutText.hpp>
 #include <Flux/UI/Views/Text.hpp>
 #include <Flux/UI/Views/Image.hpp>
 #include <Flux/UI/Views/PathShape.hpp>

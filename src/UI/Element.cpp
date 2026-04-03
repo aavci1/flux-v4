@@ -423,46 +423,6 @@ Size Rectangle::measure(LayoutContext& ctx, LayoutConstraints const& c, LayoutHi
   return {w, 0.f};
 }
 
-void LaidOutText::layout(LayoutContext& ctx) const {
-  ctx.advanceChildSlot();
-  if (!textLayout) {
-    return;
-  }
-  Rect const cf = ctx.layoutEngine().consumeAssignedFrame();
-  LayoutNode n{};
-  n.kind = LayoutNode::Kind::Leaf;
-  n.frame = cf;
-  n.element = ctx.currentElement();
-  n.constraints = ctx.constraints();
-  n.hints = ctx.hints();
-  ctx.pushLayoutNode(std::move(n));
-  layoutDebugLogLeaf("LaidOutText", ctx.constraints(), cf, detail::flexGrowOf(*this),
-                     detail::flexShrinkOf(*this), detail::minMainSizeOf(*this));
-}
-
-void LaidOutText::renderFromLayout(RenderContext& ctx, LayoutNode const& node) const {
-  if (!textLayout) {
-    return;
-  }
-  Point o = origin;
-  Rect const cf = node.frame;
-  if (cf.width > 0.f || cf.height > 0.f) {
-    o = {cf.x, cf.y};
-  }
-  ctx.graph().addText(ctx.parentLayer(), TextNode{
-      .layout = textLayout,
-      .origin = o,
-  });
-}
-
-Size LaidOutText::measure(LayoutContext& ctx, LayoutConstraints const&, LayoutHints const&, TextSystem&) const {
-  ctx.advanceChildSlot();
-  if (!textLayout) {
-    return {};
-  }
-  return textLayout->measuredSize;
-}
-
 void Text::layout(LayoutContext& ctx) const {
   ComponentKey const stableKey = ctx.leafComponentKey();
   ctx.advanceChildSlot();
