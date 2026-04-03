@@ -639,7 +639,8 @@ public:
     pushOp(std::move(op));
   }
 
-  void drawPath(Path const& path, FillStyle const& fs, StrokeStyle const& ss) override {
+  void drawPath(Path const& path, FillStyle const& fs, StrokeStyle const& ss,
+                ShadowStyle const& shadow) override {
     if (!inFrame_ || path.isEmpty()) {
       return;
     }
@@ -650,7 +651,7 @@ public:
         const float* d = cv.data;
         Rect r{d[0], d[1], d[2], d[3]};
         CornerRadius cr{d[4], d[5], d[6], d[7]};
-        drawRect(r, cr, fs, ss, ShadowStyle::none());
+        drawRect(r, cr, fs, ss, shadow);
         return;
       }
       const bool circlePrim = cv.type == Path::CommandType::Circle && cv.dataCount >= 3;
@@ -659,9 +660,14 @@ public:
         Color fc{};
         if (!fs.isNone() && fs.solidColor(&fc)) {
           if (circlePrim) {
-            drawCircle({cv.data[0], cv.data[1]}, cv.data[2], fs, ss);
+            float const rad = cv.data[2];
+            Rect r{cv.data[0] - rad, cv.data[1] - rad, rad * 2.f, rad * 2.f};
+            drawRect(r, CornerRadius::pill(r), fs, ss, shadow);
           } else {
-            drawCircle({cv.data[0], cv.data[1]}, std::max(cv.data[2], cv.data[3]), fs, ss);
+            float const rx = cv.data[2];
+            float const ry = cv.data[3];
+            Rect r{cv.data[0] - rx, cv.data[1] - ry, rx * 2.f, ry * 2.f};
+            drawRect(r, CornerRadius::pill(r), fs, ss, shadow);
           }
           return;
         }
@@ -692,6 +698,24 @@ public:
     CGSize drawableSize = metal_.layer().drawableSize;
     const float vw = static_cast<float>(drawableSize.width);
     const float vh = static_cast<float>(drawableSize.height);
+
+    // Mesh path: draw translated fill as drop shadow (no SDF blur; matches rect shadow intent via offset).
+    if (!shadow.isNone()) {
+      Color fillProbe{};
+      if (!fs.isNone() && fs.solidColor(&fillProbe)) {
+        (void)fillProbe;
+        save();
+        translate(shadow.offset.x, shadow.offset.y);
+        std::size_t const nShadow = frame_.ops.size();
+        metalPathRasterizeToMesh(path, FillStyle::solid(shadow.color), StrokeStyle::none(), currentState().transform,
+                                 dpiScaleX_, dpiScaleY_, effectiveOpacity(), vw, vh, frame_.pathVerts, frame_.ops,
+                                 currentState().blendMode);
+        if (frame_.ops.size() > nShadow) {
+          tagOpWithClip(frame_.ops.back(), clipScissorValid_, clipScissor_);
+        }
+        restore();
+      }
+    }
 
     std::size_t const nOpsBefore = frame_.ops.size();
     metalPathRasterizeToMesh(path, fs, ss, currentState().transform, dpiScaleX_, dpiScaleY_, effectiveOpacity(), vw,

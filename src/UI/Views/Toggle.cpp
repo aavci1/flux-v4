@@ -115,6 +115,7 @@ Element Toggle::body() const {
       .hAlign = HorizontalAlignment::Leading,
       .vAlign = VerticalAlignment::Top,
       .children = {
+        // track
         Rectangle {
           .fill = FillStyle::solid(*trackFillAnim),
           .stroke = StrokeStyle::solid(focused ? focusColor : borderColor, borderWidth),

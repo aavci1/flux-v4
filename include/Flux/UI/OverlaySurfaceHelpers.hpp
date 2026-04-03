@@ -1,0 +1,40 @@
+#pragma once
+
+/// \file Flux/UI/OverlaySurfaceHelpers.hpp
+///
+/// Shared theme resolution for floating card surfaces (\ref Alert card, \ref Popover body / backdrop).
+/// Not a substitute for \ref Element modifiers — keeps overlay colour math in one place.
+
+#include <Flux/Core/Types.hpp>
+#include <Flux/Graphics/Styles.hpp>
+
+namespace flux {
+
+struct FluxTheme;
+
+struct ResolvedAlertCardColors {
+  Color cardFill;
+  Color cardStroke;
+  CornerRadius cornerRadius;
+};
+
+ResolvedAlertCardColors resolveAlertCardColors(Color cardColor, Color cardStrokeColor, float cornerRadius,
+                                               FluxTheme const& theme);
+
+Color resolveAlertBackdropColor(Color backdropColor, FluxTheme const& theme);
+
+struct ResolvedPopoverCardBody {
+  Color background;
+  Color border;
+  float borderWidth;
+  CornerRadius cornerRadius;
+  float contentPadding;
+};
+
+ResolvedPopoverCardBody resolvePopoverCardBody(Color backgroundColor, Color borderColor, float borderWidth,
+                                               float cornerRadius, float contentPadding,
+                                               FluxTheme const& theme);
+
+Color resolvePopoverBackdropColor(Color backdropColor, FluxTheme const& theme);
+
+} // namespace flux

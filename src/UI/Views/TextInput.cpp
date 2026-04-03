@@ -6,6 +6,7 @@
 #include <Flux/Graphics/TextLayoutOptions.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/UI/StateStore.hpp>
+#include <Flux/UI/InputFieldChrome.hpp>
 #include <Flux/UI/InputFieldLayout.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Views/TextInput.hpp>
@@ -76,7 +77,7 @@ struct TextInputView {
   Size measure(LayoutConstraints const& cs, LayoutHints const&) const {
     float const w = std::isfinite(cs.maxWidth) ? cs.maxWidth : 200.f;
     float const h = resolvedInputFieldHeight(font, textColor, paddingV, height);
-    return {std::max(minSize, w), h};
+    return {std::max(cs.minWidth, w), h};
   }
 
   void render(Canvas& canvas, Rect frame) const;
@@ -107,7 +108,6 @@ struct TextInputView {
   float height = 0.f;
   float paddingH = 12.f;
   float paddingV = 8.f;
-  float minSize = 0.f;
 
   float cachedCaretX = 0.f;
   float cachedSelX0 = 0.f;
@@ -204,34 +204,36 @@ Element TextInput::body() const {
 
   FluxTheme const& theme = useEnvironment<FluxTheme>();
   Font const fnt = resolveFont(font, theme.typeBody.toFont());
-  float const padHResolved = resolveFloat(paddingH, theme.paddingFieldH);
-  float const padVResolved = resolveFloat(paddingV, theme.paddingFieldV);
-  CornerRadius const crResolved{resolveFloat(cornerRadius, theme.radiusMedium)};
-  Color const tc = resolveColor(textColor, theme.colorTextPrimary);
-  Color const plc = resolveColor(placeholderColor, theme.colorTextPlaceholder);
-  Color const bg = resolveColor(backgroundColor, theme.colorSurfaceField);
-  Color const bc = resolveColor(borderColor, theme.colorBorder);
-  Color const bfc = resolveColor(borderFocusColor, theme.colorBorderFocus);
-  Color const cc = resolveColor(caretColor, theme.colorAccent);
-  Color const sc = resolveColor(selectionColor, theme.colorAccentSubtle);
-  Color const dc = resolveColor(disabledColor, theme.colorSurfaceDisabled);
+  ResolvedInputFieldChrome const resolved =
+      resolveInputFieldChrome(InputFieldChromeSpec{.textColor = textColor,
+                                                   .placeholderColor = placeholderColor,
+                                                   .backgroundColor = backgroundColor,
+                                                   .borderColor = borderColor,
+                                                   .borderFocusColor = borderFocusColor,
+                                                   .caretColor = caretColor,
+                                                   .selectionColor = selectionColor,
+                                                   .disabledColor = disabledColor,
+                                                   .borderWidth = borderWidth,
+                                                   .borderFocusWidth = borderFocusWidth,
+                                                   .cornerRadius = cornerRadius,
+                                                   .paddingH = paddingH,
+                                                   .paddingV = paddingV},
+                              theme);
+  float const padHResolved = resolved.paddingH;
+  float const padVResolved = resolved.paddingV;
+  Color const tc = resolved.textColor;
+  Color const plc = resolved.placeholderColor;
+  Color const bc = resolved.borderColor;
+  Color const bfc = resolved.borderFocusColor;
+  Color const cc = resolved.caretColor;
+  Color const sc = resolved.selectionColor;
+  Color const dc = resolved.disabledColor;
 
-  FillStyle bgFill = FillStyle::solid(bg);
-  StrokeStyle strokeN = StrokeStyle::solid(bc, borderWidth);
-  StrokeStyle strokeF = StrokeStyle::solid(bfc, borderFocusWidth);
-  CornerRadius cr = crResolved;
-  if (ElementModifiers const* outer = useOuterElementModifiers()) {
-    if (!outer->background.isNone()) {
-      bgFill = outer->background;
-    }
-    if (!outer->border.isNone()) {
-      strokeN = outer->border;
-      strokeF = StrokeStyle::solid(bfc, borderFocusWidth);
-    }
-    if (!outer->cornerRadius.isZero()) {
-      cr = outer->cornerRadius;
-    }
-  }
+  InputFieldDecoration const deco = applyOuterInputFieldDecoration(resolved, useOuterElementModifiers());
+  FillStyle bgFill = deco.bgFill;
+  StrokeStyle strokeN = deco.strokeNormal;
+  StrokeStyle strokeF = deco.strokeFocus;
+  CornerRadius cr = deco.cornerRadius;
 
   State<std::string> val = value;
   auto caretByte = useState(0);
@@ -636,8 +638,8 @@ Element TextInput::body() const {
       .caretColor = cc,
       .selectionColor = sc,
       .disabledColor = dc,
-      .borderWidth = borderWidth,
-      .borderFocusWidth = borderFocusWidth,
+      .borderWidth = resolved.borderWidth,
+      .borderFocusWidth = resolved.borderFocusWidth,
       .bgFillResolved = bgFill,
       .strokeNormalResolved = strokeN,
       .strokeFocusResolved = strokeF,
@@ -645,7 +647,6 @@ Element TextInput::body() const {
       .height = height,
       .paddingH = padHResolved,
       .paddingV = padVResolved,
-      .minSize = minSize,
       .cachedCaretX = cachedCaretX,
       .cachedSelX0 = cachedSelX0,
       .cachedSelX1 = cachedSelX1,

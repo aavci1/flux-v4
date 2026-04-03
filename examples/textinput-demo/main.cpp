@@ -88,10 +88,8 @@ struct TextInputForm {
                             TextInput{
                                 .value = notes,
                                 .placeholder = "Optional",
-                                .flexGrow = 1.f,
-                                .minSize = 200.f,
                             }
-                                .flex(1.f),
+                                .flex(1.f, 1.f, 200.f),
                         },
                 },
                 Text{.text = "Disabled",

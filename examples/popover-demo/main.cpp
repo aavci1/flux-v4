@@ -245,7 +245,6 @@ struct PopoverDemoRoot {
                     .padding(8.f),
                 ScrollView{
                     .axis = ScrollAxis::Vertical,
-                    .flexGrow = 1.f,
                     .children =
                         {
                             VStack{

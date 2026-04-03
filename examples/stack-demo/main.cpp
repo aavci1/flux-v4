@@ -29,7 +29,6 @@ struct StackDemoRoot {
     auto body() const {
         return ScrollView {
             .axis = ScrollAxis::Vertical,
-            .flexGrow = 1.f,
             .children = children(
                 VStack {
                     .spacing = 22.f,

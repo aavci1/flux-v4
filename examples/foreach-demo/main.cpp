@@ -104,7 +104,6 @@ struct ForEachDemo {
                                     },
                             },
                             ScrollView{
-                                .flexGrow = 1.f,
                                 .children =
                                     {
                                         VStack{

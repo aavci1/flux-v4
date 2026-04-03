@@ -16,9 +16,6 @@ struct ScaleAroundCenter : ViewModifiers<ScaleAroundCenter> {
   Size measure(LayoutContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
 
   float scale = 1.f;
-  float flexGrow = 0.f;
-  float flexShrink = 0.f;
-  float minSize = 0.f;
   Element child;
 };
 

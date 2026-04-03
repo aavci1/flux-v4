@@ -128,7 +128,11 @@ fragment float4 rect_sdf_frag(RectFragmentIn in [[stage_in]], float4 fragCoord [
     float shA = in.fragShadowColor.a * soft;
     shadowP = float4(in.fragShadowColor.rgb * shA, shA);
   }
-  // Source-over: shape on top of shadow so opaque fill is not darkened by shadow (premultiplied).
+  // Block shadow under the shape's ink using geometric coverage (not premultiplied alpha), so
+  // semi-transparent fills (e.g. secondary buttons) do not show shadow through the interior.
+  float shapeMask = max(fillCoverage, strokeCoverage);
+  shadowP *= (1.0f - shapeMask);
+  // Source-over: shape on top of shadow (premultiplied).
   blended = blended + shadowP * (1.0f - blended.a);
 
   float outA = blended.a * in.fragOpacity;

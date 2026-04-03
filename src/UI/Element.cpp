@@ -591,7 +591,7 @@ void PathShape::layout(LayoutContext& ctx) const {
 }
 
 void PathShape::renderFromLayout(RenderContext& ctx, LayoutNode const& node) const {
-  PathNode pathNode{.path = path, .fill = fill, .stroke = stroke};
+  PathNode pathNode{.path = path, .fill = fill, .stroke = stroke, .shadow = shadow};
   Rect const cf = node.frame;
   Rect const pb = path.getBounds();
   float dx = 0.f;

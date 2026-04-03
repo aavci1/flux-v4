@@ -2,6 +2,7 @@
 #include <Flux/Detail/Runtime.hpp>
 #include <Flux/UI/StateStore.hpp>
 #include <Flux/UI/Theme.hpp>
+#include <Flux/UI/OverlaySurfaceHelpers.hpp>
 #include <Flux/UI/Views/Alert.hpp>
 #include <Flux/UI/Overlay.hpp>
 #include <Flux/UI/Views/HStack.hpp>
@@ -17,11 +18,12 @@ namespace flux {
 
 Element Alert::body() const {
   FluxTheme const& theme = useEnvironment<FluxTheme>();
-  Color const card = resolveColor(cardColor, theme.colorSurface);
-  Color const stroke = resolveColor(cardStrokeColor, theme.colorBorderSubtle);
+  ResolvedAlertCardColors const surface = resolveAlertCardColors(cardColor, cardStrokeColor, cornerRadius, theme);
+  Color const card = surface.cardFill;
+  Color const stroke = surface.cardStroke;
   Color const titleC = resolveColor(titleColor, theme.colorTextPrimary);
   Color const msgC = resolveColor(messageColor, theme.colorTextSecondary);
-  CornerRadius const cardCorner{resolveFloat(cornerRadius, theme.radiusXLarge)};
+  CornerRadius const cardCorner = surface.cornerRadius;
   // A lone ZStack under the full-window overlay expands every child to the window size
   // (see LayoutZStack — children share the stack's max proposed size). Spacers + flex center
   // the card so the inner ZStack only receives the card's intrinsic width/height.
@@ -163,7 +165,7 @@ std::tuple<std::function<void(Alert)>, std::function<void()>, bool> useAlert() {
     // show() runs outside a build pass — read window storage, not useEnvironment (backdrop is show-time).
     FluxTheme const* tp = wPtr->environmentValue<FluxTheme>();
     FluxTheme const theme = tp ? *tp : FluxTheme::light();
-    Color const backdrop = resolveColor(alert.backdropColor, theme.colorScrimModal);
+    Color const backdrop = resolveAlertBackdropColor(alert.backdropColor, theme);
     bool const dismissEsc = alert.dismissOnEscape;
 
     showOverlay(

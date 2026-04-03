@@ -55,11 +55,7 @@ struct Button : ViewModifiers<Button> {
   Color destructiveColor = kFromTheme;
 
   // ── Layout ───────────────────────────────────────────────────────────────
-
-  /// Always 0 for Link (ignored if set).
-  float flexGrow = 0.f;
-  float flexShrink = 0.f;
-  float minSize = 0.f;
+  // Flex: use chained `.flex(...)` on the `Element` from `body()`.
 
   // ── Behaviour ────────────────────────────────────────────────────────────
 

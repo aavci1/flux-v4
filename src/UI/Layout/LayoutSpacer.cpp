@@ -13,14 +13,25 @@ namespace flux {
 void Spacer::layout(LayoutContext& ctx) const {
   ctx.advanceChildSlot();
   Rect const r = ctx.layoutEngine().lastAssignedFrame();
-  layoutDebugLogLeaf("Spacer", ctx.constraints(), r, flexGrow, flexShrink, std::max(0.f, minLength));
+  float fg = 0.f;
+  float fs = 0.f;
+  float mm = 0.f;
+  if (Element const* el = ctx.currentElement()) {
+    fg = el->flexGrow();
+    fs = el->flexShrink();
+    mm = el->minMainSize();
+  }
+  layoutDebugLogLeaf("Spacer", ctx.constraints(), r, fg, fs, mm);
 }
 
 void Spacer::renderFromLayout(RenderContext&, LayoutNode const&) const {}
 
 Size Spacer::measure(LayoutContext& ctx, LayoutConstraints const&, LayoutHints const&, TextSystem&) const {
   ctx.advanceChildSlot();
-  float const m = std::max(0.f, minLength);
+  float m = 0.f;
+  if (Element const* el = ctx.currentElement()) {
+    m = std::max(0.f, el->minMainSize());
+  }
   return {m, m};
 }
 

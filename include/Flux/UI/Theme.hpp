@@ -173,7 +173,7 @@ struct FluxTheme {
   float toggleBorderWidth = 1.f;
   float toggleThumbBorderWidth = 0.f;
   Color toggleOnColor = Color::hex(0x3A7BD5);
-  Color toggleOffColor = Color::hex(0xEEEEEE);
+  Color toggleOffColor = Color::hex(0xD7D7D7);
   Color toggleThumbColor = Color::hex(0xFFFFFF);
   Color toggleThumbBorderColor = Color::hex(0xFFFFFF);
   Color toggleBorderColor = Color::hex(0xE5E5E5);
@@ -183,7 +183,7 @@ struct FluxTheme {
   float checkboxCornerRadius = 4.f;
   float checkboxBorderWidth = 2.0f;
   Color checkboxCheckedColor = Color::hex(0x3A7BD5);
-  Color checkboxUncheckedColor = Color::hex(0xE5E5E5);
+  Color checkboxUncheckedColor = Color::hex(0xD7D7D7);
   Color checkboxCheckColor = Color::hex(0xFFFFFF);
   Color checkboxBorderColor = Color::hex(0xEEEEEE);
 
@@ -203,6 +203,9 @@ struct FluxTheme {
   float shadowRadiusControl = 6.f;
   /// Drop shadow vertical offset (logical px); positive = downward.
   float shadowOffsetYControl = 0.f;
+  /// Popover / tooltip card shadow (path fill uses offset pass; radius reserved for future blur).
+  float shadowRadiusPopover = 4.f;
+  float shadowOffsetYPopover = 3.f;
 
   static FluxTheme light();
   static FluxTheme dark();

@@ -65,6 +65,7 @@ struct PathNode {
   Path path{};
   FillStyle fill = FillStyle::none();
   StrokeStyle stroke = StrokeStyle::none();
+  ShadowStyle shadow = ShadowStyle::none();
 };
 
 struct LineNode {

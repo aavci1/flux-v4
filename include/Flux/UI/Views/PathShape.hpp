@@ -23,6 +23,7 @@ struct PathShape : ViewModifiers<PathShape> {
   Path path{};
   FillStyle fill = FillStyle::none();
   StrokeStyle stroke = StrokeStyle::none();
+  ShadowStyle shadow = ShadowStyle::none();
 };
 
 } // namespace flux

@@ -59,10 +59,7 @@ struct TextInput : ViewModifiers<TextInput> {
   float paddingV = kFloatFromTheme;
 
   // ── Layout ───────────────────────────────────────────────────────────────
-
-  float flexGrow = 0.f;
-  float flexShrink = 0.f;
-  float minSize = 0.f;
+  // Flex / min main size: use chained `.flex(grow, shrink, minMain)` on the `Element` from `body()`.
 
   // ── Behaviour ──────────────────────────────────────────────────────────────
 

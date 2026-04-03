@@ -221,6 +221,7 @@ void PopoverCalloutShape::layout(LayoutContext& ctx) const {
       .path = std::move(path),
       .fill = FillStyle::solid(backgroundColor),
       .stroke = StrokeStyle::solid(borderColor, bw),
+      .shadow = shadow,
   }});
 
   ctx.pushChildIndex();

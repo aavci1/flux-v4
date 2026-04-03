@@ -94,7 +94,6 @@ struct CursorDemo {
                             }.padding(20.f),
                             ScrollView{
                                 .axis = ScrollAxis::Vertical,
-                                .flexGrow = 1.f,
                                 .children =
                                     {
                                         VStack{

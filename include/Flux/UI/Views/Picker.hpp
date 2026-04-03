@@ -18,6 +18,7 @@
 #include <Flux/Graphics/Styles.hpp>
 #include <Flux/Graphics/TextLayoutOptions.hpp>
 #include <Flux/UI/Element.hpp>
+#include <Flux/UI/InputFieldChrome.hpp>
 #include <Flux/UI/InputFieldLayout.hpp>
 #include <Flux/UI/Hooks.hpp>
 #include <Flux/Reactive/Transition.hpp>
@@ -248,6 +249,11 @@ struct Picker : ViewModifiers<Picker<T>> {
   std::string placeholder = "Select…";
 
   // ── Appearance ───────────────────────────────────────────────────────────
+  ///
+  /// Trigger chrome defaults apply when the control is not wrapped with outer `Element` modifiers.
+  /// Chained `.background()`, `.border()`, and `.cornerRadius()` on `Picker{…}` merge into the trigger
+  /// via `useOuterElementModifiers()` in `body()` (same idea as \ref TextInput). When `.background()`
+  /// is set, hover fill animation is disabled and the outer fill is used statically.
 
   Font font = kFontFromTheme;
 
@@ -275,10 +281,7 @@ struct Picker : ViewModifiers<Picker<T>> {
   float maxDropdownHeight = 240.f;
 
   // ── Layout ───────────────────────────────────────────────────────────────
-
-  float flexGrow = 0.f;
-  float flexShrink = 0.f;
-  float minSize = 0.f;
+  // Flex: use chained `.flex(...)` on the `Element` from `body()`.
 
   // ── Behaviour ────────────────────────────────────────────────────────────
 
@@ -289,25 +292,48 @@ struct Picker : ViewModifiers<Picker<T>> {
   /// Builds the trigger row, popover presentation, and input routing. Call only from a composite \c body().
   Element body() const {
     FluxTheme const& theme = useEnvironment<FluxTheme>();
-    float const padHResolved = resolveFloat(paddingH, theme.paddingFieldH);
-    float const padVResolved = resolveFloat(paddingV, theme.paddingFieldV);
-    CornerRadius const triggerCr{resolveFloat(cornerRadius, theme.radiusMedium)};
+    ResolvedPickerFieldChrome const pickerChrome =
+        resolvePickerFieldChrome(PickerFieldChromeSpec{.input = {.textColor = textColor,
+                                                                 .placeholderColor = placeholderColor,
+                                                                 .backgroundColor = backgroundColor,
+                                                                 .borderColor = borderColor,
+                                                                 .borderFocusColor = borderFocusColor,
+                                                                 .caretColor = kFromTheme,
+                                                                 .selectionColor = kFromTheme,
+                                                                 .disabledColor = disabledColor,
+                                                                 .borderWidth = borderWidth,
+                                                                 .borderFocusWidth = borderFocusWidth,
+                                                                 .cornerRadius = cornerRadius,
+                                                                 .paddingH = paddingH,
+                                                                 .paddingV = paddingV},
+                                                         .chevronColor = chevronColor,
+                                                         .rowHoverColor = rowHoverColor,
+                                                         .rowSelectedColor = rowSelectedColor},
+                                 theme);
+    ResolvedInputFieldChrome const& r = pickerChrome.input;
+    float const padHResolved = r.paddingH;
+    float const padVResolved = r.paddingV;
+    CornerRadius const triggerCr{r.cornerRadius};
     float const menuRadius = theme.radiusLarge;
     // Trigger background/hover cross-fade: `FluxTheme` motion tokens (cf. Button).
     Transition const trMed =
         theme.reducedMotion ? Transition::instant() : Transition::ease(theme.durationMedium);
 
     Font const fontR = resolveFont(font, theme.typeBody.toFont());
-    Color const textR = resolveColor(textColor, theme.colorTextPrimary);
-    Color const plcR = resolveColor(placeholderColor, theme.colorTextPlaceholder);
-    Color const bgR = resolveColor(backgroundColor, theme.colorSurfaceField);
-    Color const brdR = resolveColor(borderColor, theme.colorBorder);
-    Color const brdFocusR = resolveColor(borderFocusColor, theme.colorBorderFocus);
-    Color const chvR = resolveColor(chevronColor, theme.colorTextMuted);
-    Color const disR = resolveColor(disabledColor, theme.colorSurfaceDisabled);
-    Color const rowHoverR = resolveColor(rowHoverColor, theme.colorSurfaceRowHover);
-    Color const rowSelR = resolveColor(rowSelectedColor, theme.colorAccentSubtle);
+    Color const textR = r.textColor;
+    Color const plcR = r.placeholderColor;
+    Color const bgR = r.backgroundColor;
+    Color const brdR = r.borderColor;
+    Color const brdFocusR = r.borderFocusColor;
+    Color const chvR = pickerChrome.chevronColor;
+    Color const disR = r.disabledColor;
+    Color const rowHoverR = pickerChrome.rowHoverColor;
+    Color const rowSelR = pickerChrome.rowSelectedColor;
     Color const triggerHoverR = theme.colorSurfaceHover;
+
+    ElementModifiers const* const outerMods = useOuterElementModifiers();
+    bool const useOuterChromeFill = outerMods && !outerMods->background.isNone();
+    InputFieldDecoration const outerDeco = applyOuterInputFieldDecoration(r, outerMods);
 
     auto [showPopover, hidePopover, isOpen] = usePopover();
     auto requestFocus = useRequestFocus();
@@ -365,7 +391,20 @@ struct Picker : ViewModifiers<Picker<T>> {
 
     bool const showFocusBorder = (isOpen || (focused && kbFocus)) && !isDisabled;
     Color const borderCol = showFocusBorder ? brdFocusR : brdR;
-    float const borderW = showFocusBorder ? borderFocusWidth : borderWidth;
+    float const borderW = showFocusBorder ? r.borderFocusWidth : r.borderWidth;
+
+    StrokeStyle strokeForTrigger = StrokeStyle::solid(borderCol, borderW);
+    if (outerMods && !outerMods->border.isNone()) {
+      if (showFocusBorder) {
+        strokeForTrigger = StrokeStyle::solid(brdFocusR, r.borderFocusWidth);
+      } else {
+        strokeForTrigger = outerMods->border;
+      }
+    }
+    CornerRadius cornerForTrigger = triggerCr;
+    if (outerMods && !outerMods->cornerRadius.isZero()) {
+      cornerForTrigger = outerMods->cornerRadius;
+    }
 
     float const h = resolvedInputFieldHeight(fontR, textR, padVResolved, height);
 
@@ -442,8 +481,8 @@ struct Picker : ViewModifiers<Picker<T>> {
         .children =
             {
                 Rectangle{
-                    .fill = FillStyle::solid(*fillAnim),
-                    .stroke = StrokeStyle::solid(borderCol, borderW),
+                    .fill = useOuterChromeFill ? outerDeco.bgFill : FillStyle::solid(*fillAnim),
+                    .stroke = strokeForTrigger,
                 }
                     .height(h)
                     .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
@@ -451,8 +490,8 @@ struct Picker : ViewModifiers<Picker<T>> {
                     .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)>{}
                                           : std::function<void(KeyCode, Modifiers)>{onTriggerKey})
                     .onTap(isDisabled ? std::function<void()>{} : std::function<void()>{onTriggerTap})
-                    .cornerRadius(triggerCr)
-                    .flex(flexGrow, flexShrink, minSize),
+                    .cornerRadius(cornerForTrigger)
+                    .flex(1.f, 1.f, 0.f),
                 HStack{
                     .spacing = 0.f,
                     .vAlign = VerticalAlignment::Center,

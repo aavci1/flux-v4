@@ -29,9 +29,6 @@ struct ScrollView : ViewModifiers<ScrollView> {
   // ── Layout / axis ─────────────────────────────────────────────────────────
 
   ScrollAxis axis = ScrollAxis::Vertical;
-  float flexGrow = 1.f;
-  float flexShrink = 0.f;
-  float minSize = 0.f;
   std::vector<Element> children;
 
   /// Custom subtree hook (not the generic \ref CompositeComponent path in \ref Element::Model).
@@ -60,9 +57,10 @@ struct Element::Model<ScrollView> final : Element::Concept {
   Size measure(LayoutContext& ctx, LayoutConstraints const& c, LayoutHints const& h, TextSystem& ts) const override {
     return value.measure(ctx, c, h, ts);
   }
-  float flexGrow() const override { return detail::flexGrowOf(value); }
-  float flexShrink() const override { return detail::flexShrinkOf(value); }
-  float minMainSize() const override { return detail::minMainSizeOf(value); }
+  /// Matches previous struct defaults: grow along parent main axis unless `.flex(...)` overrides.
+  float flexGrow() const override { return 1.f; }
+  float flexShrink() const override { return 0.f; }
+  float minMainSize() const override { return 0.f; }
   bool canMemoizeMeasure() const override { return false; }
 };
 

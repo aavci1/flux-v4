@@ -1,3 +1,4 @@
+#include <Flux/UI/OverlaySurfaceHelpers.hpp>
 #include <Flux/UI/Views/Popover.hpp>
 
 #include <Flux/Core/Types.hpp>
@@ -108,18 +109,22 @@ OverlayConfig::Placement overlayPlacementFromPopover(PopoverPlacement p) {
 
 Element Popover::body() const {
   FluxTheme const& theme = useEnvironment<FluxTheme>();
-  Color const bg = resolveColor(backgroundColor, theme.colorSurfaceOverlay);
-  Color const bd = resolveColor(borderColor, theme.colorBorderSubtle);
-  float const padR = resolveFloat(contentPadding, theme.space3);
-  CornerRadius const crR{resolveFloat(cornerRadius, theme.radiusLarge)};
+  ResolvedPopoverCardBody const card =
+      resolvePopoverCardBody(backgroundColor, borderColor, borderWidth, cornerRadius, contentPadding, theme);
+  ShadowStyle const cardShadow{
+      .radius = theme.shadowRadiusPopover,
+      .offset = {0.f, theme.shadowOffsetYPopover},
+      .color = theme.shadowColor,
+  };
   return Element{PopoverCalloutShape{
       .placement = resolvedPlacement,
       .arrow = arrow,
-      .padding = padR,
-      .cornerRadius = crR,
-      .backgroundColor = bg,
-      .borderColor = bd,
-      .borderWidth = borderWidth,
+      .padding = card.contentPadding,
+      .cornerRadius = card.cornerRadius,
+      .backgroundColor = card.background,
+      .borderColor = card.border,
+      .borderWidth = card.borderWidth,
+      .shadow = cardShadow,
       .maxSize = maxSize,
       .content = content,
   }};
@@ -183,7 +188,7 @@ std::tuple<std::function<void(Popover)>, std::function<void()>, bool> usePopover
 
     Vec2 const offset = popoverOverlayGapOffset(resolved, gap);
 
-    Color const backdropResolved = resolveColor(popover.backdropColor, theme.colorScrimPopover);
+    Color const backdropResolved = resolvePopoverBackdropColor(popover.backdropColor, theme);
 
     showOverlay(
         Element{std::move(popover)},

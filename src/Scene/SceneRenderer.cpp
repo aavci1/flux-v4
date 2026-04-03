@@ -38,7 +38,7 @@ void SceneRenderer::renderNode(NodeId id, SceneGraph const& graph, Canvas& canva
             canvas.drawImage(*node.image, node.bounds, node.fillMode, node.cornerRadius, node.opacity);
           }
         } else if constexpr (std::is_same_v<T, PathNode>) {
-          canvas.drawPath(node.path, node.fill, node.stroke);
+          canvas.drawPath(node.path, node.fill, node.stroke, node.shadow);
         } else if constexpr (std::is_same_v<T, LineNode>) {
           canvas.drawLine(node.from, node.to, node.stroke);
         } else if constexpr (std::is_same_v<T, CustomRenderNode>) {

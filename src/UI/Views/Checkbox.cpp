@@ -122,8 +122,7 @@ Element Checkbox::body() const {
               .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)>{}
                                     : std::function<void(KeyCode, Modifiers)>{handleKey})
               .onTap(isDisabled ? std::function<void()>{} : std::function<void()> {handleToggle})
-              .cornerRadius(CornerRadius{cornerRadius})
-              .flex(flexGrow, flexShrink, minSize),
+              .cornerRadius(CornerRadius{cornerRadius}),
           Icon {
               .name = iconName,
               .size = iconSz,

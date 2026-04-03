@@ -112,7 +112,6 @@ struct IconDemoRoot {
 
     return ScrollView {
         .axis = ScrollAxis::Vertical,
-        .flexGrow = 1.f,
         .children =
             {
                 VStack{

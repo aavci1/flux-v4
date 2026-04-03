@@ -54,9 +54,9 @@ struct TextArea : ViewModifiers<TextArea> {
   /// Those override resolved \ref style tokens for the custom-draw chrome (`useOuterElementModifiers()` in
   /// \c body()). Optional \c .cursor() applies when not \c Inherit.
   ///
-  /// **Layout**: outer \c .padding() and \c .flex() are standard \c Element modifiers on the wrapper.
-  /// Flex (\c grow / \c shrink / \c minMain) is **only** from chained \c .flex(...) — there are no \c flexGrow
-  /// fields on \c TextArea. Inner \c style.paddingH / \c style.paddingV remain **content** insets inside the border.
+  /// **Layout**: outer \c .padding() and \c .flex() are standard \c Element modifiers on the wrapper (no struct
+  /// flex fields — same as other views). Inner \c style.paddingH / \c style.paddingV remain **content** insets
+  /// inside the border, not \c Element padding.
 
   Style style{};
 

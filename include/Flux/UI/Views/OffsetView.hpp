@@ -27,9 +27,6 @@ struct OffsetView : ViewModifiers<OffsetView> {
   ScrollAxis axis = ScrollAxis::Vertical;
   State<Size> viewportSize{};
   State<Size> contentSize{};
-  float flexGrow = 0.f;
-  float flexShrink = 0.f;
-  float minSize = 0.f;
   std::vector<Element> children;
 };
 

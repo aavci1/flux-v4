@@ -5,6 +5,7 @@
 #include <Flux/Graphics/TextLayoutOptions.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/UI/Hooks.hpp>
+#include <Flux/UI/InputFieldChrome.hpp>
 #include <Flux/UI/StateStore.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Views/TextArea.hpp>
@@ -27,21 +28,37 @@ namespace flux {
 namespace {
 
 TextArea::Style resolveTextAreaStyle(TextArea::Style const& style, FluxTheme const& theme) {
+  InputFieldChromeSpec const spec{
+      .textColor = style.textColor,
+      .placeholderColor = style.placeholderColor,
+      .backgroundColor = style.backgroundColor,
+      .borderColor = style.borderColor,
+      .borderFocusColor = style.borderFocusColor,
+      .caretColor = style.caretColor,
+      .selectionColor = style.selectionColor,
+      .disabledColor = style.disabledColor,
+      .borderWidth = style.borderWidth,
+      .borderFocusWidth = style.borderFocusWidth,
+      .cornerRadius = style.cornerRadius,
+      .paddingH = style.paddingH,
+      .paddingV = style.paddingV,
+  };
+  ResolvedInputFieldChrome const c = resolveInputFieldChrome(spec, theme);
   return TextArea::Style{
       .font = resolveFont(style.font, theme.typeBody.toFont()),
-      .textColor = resolveColor(style.textColor, theme.colorTextPrimary),
-      .placeholderColor = resolveColor(style.placeholderColor, theme.colorTextPlaceholder),
-      .backgroundColor = resolveColor(style.backgroundColor, theme.colorSurfaceField),
-      .borderColor = resolveColor(style.borderColor, theme.colorBorder),
-      .borderFocusColor = resolveColor(style.borderFocusColor, theme.colorBorderFocus),
-      .caretColor = resolveColor(style.caretColor, theme.colorAccent),
-      .selectionColor = resolveColor(style.selectionColor, theme.colorAccentSubtle),
-      .disabledColor = resolveColor(style.disabledColor, theme.colorSurfaceDisabled),
-      .borderWidth = resolveFloat(style.borderWidth, 1.f),
-      .borderFocusWidth = resolveFloat(style.borderFocusWidth, 2.f),
-      .cornerRadius = resolveFloat(style.cornerRadius, theme.radiusMedium),
-      .paddingH = resolveFloat(style.paddingH, theme.paddingFieldH),
-      .paddingV = resolveFloat(style.paddingV, theme.paddingFieldV),
+      .textColor = c.textColor,
+      .placeholderColor = c.placeholderColor,
+      .backgroundColor = c.backgroundColor,
+      .borderColor = c.borderColor,
+      .borderFocusColor = c.borderFocusColor,
+      .caretColor = c.caretColor,
+      .selectionColor = c.selectionColor,
+      .disabledColor = c.disabledColor,
+      .borderWidth = c.borderWidth,
+      .borderFocusWidth = c.borderFocusWidth,
+      .cornerRadius = c.cornerRadius,
+      .paddingH = c.paddingH,
+      .paddingV = c.paddingV,
       .lineHeight = style.lineHeight,
   };
 }
@@ -293,10 +310,8 @@ Element TextArea::body() const {
   Font const fnt = s.font;
   float const padHResolved = s.paddingH;
   float const padVResolved = s.paddingV;
-  CornerRadius const crResolved{s.cornerRadius};
   Color const tc = s.textColor;
   Color const plc = s.placeholderColor;
-  Color const bg = s.backgroundColor;
   Color const bc = s.borderColor;
   Color const bfc = s.borderFocusColor;
   Color const cc = s.caretColor;
@@ -304,22 +319,24 @@ Element TextArea::body() const {
   Color const dc = s.disabledColor;
 
   ElementModifiers const* const outerMods = useOuterElementModifiers();
-  FillStyle bgFill = FillStyle::solid(bg);
-  StrokeStyle strokeN = StrokeStyle::solid(bc, s.borderWidth);
-  StrokeStyle strokeF = StrokeStyle::solid(bfc, s.borderFocusWidth);
-  CornerRadius cr = crResolved;
-  if (outerMods) {
-    if (!outerMods->background.isNone()) {
-      bgFill = outerMods->background;
-    }
-    if (!outerMods->border.isNone()) {
-      strokeN = outerMods->border;
-      strokeF = StrokeStyle::solid(bfc, s.borderFocusWidth);
-    }
-    if (!outerMods->cornerRadius.isZero()) {
-      cr = outerMods->cornerRadius;
-    }
-  }
+  ResolvedInputFieldChrome const chrome{.textColor = tc,
+                                        .placeholderColor = plc,
+                                        .backgroundColor = s.backgroundColor,
+                                        .borderColor = bc,
+                                        .borderFocusColor = bfc,
+                                        .caretColor = cc,
+                                        .selectionColor = sc,
+                                        .disabledColor = dc,
+                                        .borderWidth = s.borderWidth,
+                                        .borderFocusWidth = s.borderFocusWidth,
+                                        .cornerRadius = s.cornerRadius,
+                                        .paddingH = padHResolved,
+                                        .paddingV = padVResolved};
+  InputFieldDecoration const deco = applyOuterInputFieldDecoration(chrome, outerMods);
+  FillStyle bgFill = deco.bgFill;
+  StrokeStyle strokeN = deco.strokeNormal;
+  StrokeStyle strokeF = deco.strokeFocus;
+  CornerRadius cr = deco.cornerRadius;
 
   float const lineHeightOpt = s.lineHeight;
   std::string const placeholderText = placeholder;

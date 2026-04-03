@@ -41,7 +41,6 @@ int main(int argc, char* argv[]) {
                   .padding(16.f),
               ScrollView{
                   .axis = ScrollAxis::Vertical,
-                  .flexGrow = 1.f,
                   .children =
                       {
                           VStack{

@@ -172,7 +172,6 @@ Element Button::body() const {
   float const h =
       isLink ? 0.f : (height > 0.f ? height : theme.controlHeightMedium);
   float const effPaddingH = isLink ? 0.f : resolveFloat(paddingH, theme.space4);
-  float const effFlexGrow = isLink ? 0.f : flexGrow;
 
   auto handleTap = [onTap = onTap, effectivelyDisabled]() {
     if (effectivelyDisabled) {
@@ -229,7 +228,7 @@ Element Button::body() const {
                                                : std::function<void(KeyCode, Modifiers)>{ handleKey })
                 .onTap(effectivelyDisabled ? std::function<void()>{} : std::function<void()>{ handleTap })
                 .cornerRadius(cr)
-                .flex(effFlexGrow, flexShrink, minSize),
+                .flex(isLink ? 0.f : 1.f, 1.f, 0.f),
             Text{
                 .text = label,
                 .font = fontResolved,

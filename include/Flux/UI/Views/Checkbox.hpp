@@ -28,10 +28,7 @@ struct Checkbox : ViewModifiers<Checkbox> {
   bool indeterminate = false;
 
   // ── Layout ───────────────────────────────────────────────────────────────
-
-  float flexGrow = 0.f;
-  float flexShrink = 0.f;
-  float minSize = 0.f;
+  // Flex: use chained `.flex(...)` on the `Element` from `body()`.
 
   // ── Behaviour ────────────────────────────────────────────────────────────
 
