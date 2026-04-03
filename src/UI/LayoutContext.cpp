@@ -149,19 +149,6 @@ ElementModifiers const* LayoutContext::activeElementModifiers() const noexcept {
   return activeElementModifiers_.empty() ? nullptr : activeElementModifiers_.back();
 }
 
-void LayoutContext::pushSuppressLeafModifierEvents(bool suppress) { suppressLeafModifierEvents_.push_back(suppress); }
-
-void LayoutContext::popSuppressLeafModifierEvents() {
-#ifndef NDEBUG
-  assert(!suppressLeafModifierEvents_.empty());
-#endif
-  suppressLeafModifierEvents_.pop_back();
-}
-
-bool LayoutContext::suppressLeafModifierEvents() const noexcept {
-  return !suppressLeafModifierEvents_.empty() && suppressLeafModifierEvents_.back();
-}
-
 void LayoutContext::pushLayerWorldTransform(Mat3 const& localToParentLayer) {
   Mat3 const combined = layerWorldStack_.back() * localToParentLayer;
   layerWorldStack_.push_back(combined);

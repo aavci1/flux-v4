@@ -42,7 +42,6 @@ public:
     if (clip && assignedW > 0.f && assignedH > 0.f) {
       // clip rect is in layer-local space — recorded on spec for render phase
     }
-    ctx.pushLayerWorldTransform(local);
 
     LayoutNode n{};
     n.kind = LayoutNode::Kind::Container;
@@ -54,7 +53,9 @@ public:
     n.containerSpec.clipW = assignedW;
     n.containerSpec.clipH = assignedH;
     n.element = ctx.currentElement();
+    // pushLayoutNode uses currentLayerWorldTransform() (parent's), then we push child transform.
     LayoutNodeId const id = ctx.pushLayoutNode(std::move(n));
+    ctx.pushLayerWorldTransform(local);
     ctx.registerCompositeSubtreeRootIfPending(id);
     ctx.pushLayoutParent(id);
     layerPushed_ = true;
@@ -64,7 +65,6 @@ public:
     float const ox = parentFrame.x - scrollOffset.x;
     float const oy = parentFrame.y - scrollOffset.y;
     Mat3 const local = Mat3::translate(ox, oy);
-    ctx.pushLayerWorldTransform(local);
 
     LayoutNode n{};
     n.kind = LayoutNode::Kind::Container;
@@ -74,15 +74,15 @@ public:
     n.containerSpec.kind = ContainerLayerSpec::Kind::OffsetScroll;
     n.containerSpec.scrollOffset = scrollOffset;
     n.element = ctx.currentElement();
+    // pushLayoutNode uses currentLayerWorldTransform() (parent's), then we push child transform.
     LayoutNodeId const id = ctx.pushLayoutNode(std::move(n));
+    ctx.pushLayerWorldTransform(local);
     ctx.registerCompositeSubtreeRootIfPending(id);
     ctx.pushLayoutParent(id);
     layerPushed_ = true;
   }
 
   void pushScaleAroundCenterLayer(Mat3 const& fullLayerTransform) {
-    ctx.pushLayerWorldTransform(fullLayerTransform);
-
     LayoutNode n{};
     n.kind = LayoutNode::Kind::Container;
     n.frame = parentFrame;
@@ -91,7 +91,9 @@ public:
     n.containerSpec.kind = ContainerLayerSpec::Kind::ScaleAroundCenter;
     n.containerSpec.customTransform = fullLayerTransform;
     n.element = ctx.currentElement();
+    // pushLayoutNode uses currentLayerWorldTransform() (parent's), then we push child transform.
     LayoutNodeId const id = ctx.pushLayoutNode(std::move(n));
+    ctx.pushLayerWorldTransform(fullLayerTransform);
     ctx.registerCompositeSubtreeRootIfPending(id);
     ctx.pushLayoutParent(id);
     layerPushed_ = true;

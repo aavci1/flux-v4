@@ -19,6 +19,8 @@ namespace detail {
 struct ElementPinStorage;
 }
 
+struct LayoutContextTestAccess;
+
 class TextSystem;
 class Runtime;
 class BuildOrchestrator;
@@ -67,10 +69,6 @@ public:
   void popActiveElementModifiers();
   ElementModifiers const* activeElementModifiers() const noexcept;
 
-  void pushSuppressLeafModifierEvents(bool suppress);
-  void popSuppressLeafModifierEvents();
-  bool suppressLeafModifierEvents() const noexcept;
-
   /// Layer-local → window transform stack (mirrors SceneGraph layer stack during layout).
   void pushLayerWorldTransform(Mat3 const& localToParentLayer);
   void popLayerWorldTransform();
@@ -102,6 +100,7 @@ private:
   friend class Runtime;
   friend class BuildOrchestrator;
   friend class OverlayManager;
+  friend struct LayoutContextTestAccess;
 
   LayoutContext(TextSystem& ts, LayoutEngine& layout, LayoutTree& tree, MeasureCache* measureCache = nullptr);
   ~LayoutContext();
@@ -124,7 +123,6 @@ private:
   std::unordered_map<ComponentKey, LayoutNodeId, ComponentKeyHash> subtreeRootLayouts_{};
   MeasureCache* measureCache_{nullptr};
   std::vector<ElementModifiers const*> activeElementModifiers_{};
-  std::vector<bool> suppressLeafModifierEvents_{};
 
   std::vector<Mat3> layerWorldStack_{};
   std::vector<LayoutNodeId> layoutParentStack_{};

@@ -15,7 +15,7 @@
 | E. Layout diagnostics (`FLUX_DEBUG_LAYOUT` stderr tree; **⌘⇧L** — Meta+Shift+L — toggles visual layout bounds overlay via `Runtime::layoutOverlayEnabled()`) | Done |
 | | |
 | F. Single leaf bounds resolver (`resolveLeafLayoutBounds`; former `resolveRectangleBounds` / `isRectangle` split removed) | Done |
-| G. Further reduce `Element.hpp` includes (e.g. move `RenderComponent` graph emission behind a boundary) | Not started |
-| H. Separate layout pass from scene graph emission | Not started (see `docs/friction-points.md`) |
+| G. Further reduce `Element.hpp` includes (e.g. move `RenderComponent` graph emission behind a boundary) | Done — `SceneGraph.hpp` and `Nodes.hpp` removed from `Element.hpp`; `RenderComponent` scene emission moved to `src/UI/Detail/RenderComponentEmit.cpp` |
+| H. Separate layout pass from scene graph emission | Done — `LayoutTree` + `LayoutContext` (Phase 1) and `renderLayoutTree` + `RenderContext` (Phase 2); `BuildContext` removed; unit tests in `tests/` |
 
 **D — intent:** `hStackCrossAlign` / `vStackCrossAlign` are not size constraints; they belong beside the constraint stack as `LayoutHints` so `LayoutConstraints` stays numeric bounds only.

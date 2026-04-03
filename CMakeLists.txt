@@ -121,6 +121,7 @@ add_library(flux STATIC
   src/UI/ComponentKey.cpp
   src/UI/ComponentKeyUtil.cpp
   src/UI/Detail/LeafBounds.cpp
+  src/UI/Detail/RenderComponentEmit.cpp
   src/UI/HitTestUtil.cpp
   src/UI/FocusController.cpp
   src/UI/HoverController.cpp
@@ -215,4 +216,40 @@ target_link_libraries(flux PRIVATE
 
 if(FLUX_BUILD_EXAMPLES)
   add_subdirectory(examples)
+endif()
+
+option(FLUX_BUILD_TESTS
+  "Build unit and integration tests under tests/."
+  OFF)
+
+if(FLUX_BUILD_TESTS)
+  FetchContent_Declare(doctest
+    GIT_REPOSITORY https://github.com/doctest/doctest.git
+    GIT_TAG v2.4.11
+    GIT_SHALLOW TRUE
+  )
+  set(CMAKE_POLICY_DEFAULT_CMP0048 NEW)
+  FetchContent_MakeAvailable(doctest)
+
+  enable_testing()
+
+  add_executable(flux_tests
+    tests/main.cpp
+    tests/LayoutTreeTests.cpp
+    tests/LayoutIntegrationTests.cpp
+  )
+
+  target_include_directories(flux_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+  )
+
+  target_link_libraries(flux_tests PRIVATE
+    flux
+    doctest::doctest
+  )
+
+  set_target_properties(flux_tests PROPERTIES CXX_STANDARD 23)
+
+  add_test(NAME flux_tests COMMAND flux_tests)
 endif()

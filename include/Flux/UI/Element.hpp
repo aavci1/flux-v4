@@ -16,10 +16,8 @@
 #include <Flux/UI/StateStore.hpp>
 #include <Flux/UI/Environment.hpp>
 
-#include <Flux/Graphics/Canvas.hpp>
 #include <Flux/Graphics/Styles.hpp>
-#include <Flux/Scene/Nodes.hpp>
-#include <Flux/Scene/SceneGraph.hpp>
+#include <Flux/UI/Detail/RenderComponentEmit.hpp>
 
 #include <algorithm>
 #include <cassert>
@@ -327,11 +325,8 @@ void Element::Model<C>::renderFromLayout(RenderContext& ctx, LayoutNode const& n
   } else if constexpr (RenderComponent<C>) {
     Rect const frame = node.frame;
     C const copy = value;
-    NodeId const id = ctx.graph().addCustomRender(ctx.parentLayer(),
-        CustomRenderNode{
-            .frame = frame,
-            .draw = [copy, frame](Canvas& canvas) { copy.render(canvas, frame); },
-        });
+    NodeId const id = detail::emitCustomRenderNode(ctx, frame,
+        [copy, frame](Canvas& canvas) { copy.render(canvas, frame); });
 
     EventHandlers handlers{};
     handlers.stableTargetKey = node.componentKey;
@@ -383,11 +378,7 @@ void Element::Model<C>::renderFromLayout(RenderContext& ctx, LayoutNode const& n
           static_cast<bool>(handlers.onKeyDown) || static_cast<bool>(handlers.onKeyUp) ||
           static_cast<bool>(handlers.onTextInput);
     }
-    if (handlers.onTap || handlers.onPointerDown || handlers.onPointerUp || handlers.onPointerMove ||
-        handlers.onScroll || handlers.onKeyDown || handlers.onKeyUp || handlers.onTextInput || handlers.focusable ||
-        handlers.cursor != Cursor::Inherit) {
-      ctx.eventMap().insert(id, std::move(handlers));
-    }
+    detail::registerRenderLeafEvents(ctx, id, std::move(handlers));
   } else if constexpr (PrimitiveComponent<C>) {
     value.renderFromLayout(ctx, node);
   } else {

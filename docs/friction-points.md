@@ -20,13 +20,13 @@ Here's my analysis, grounded in the concrete code across the system.
 
 **1. Model boilerplate — addressed.** Per-type **`Element::Model<T>`** specializations were replaced by a **single primary template** (`include/Flux/UI/Element.hpp`) that dispatches with **`if constexpr`** on **`CompositeComponent`**, **`PrimitiveComponent`**, and **`RenderComponent`**. Adding a primitive that satisfies the concept no longer requires a new specialization block.
 
-**2. The build protocol — addressed with RAII.** **`ContainerBuildScope`** + **`ContainerMeasureScope`** (`src/UI/Layout/ContainerScope.hpp`) encapsulate the slot/layer/child-index protocol for major stacks and grids.
+**2. The layout protocol — addressed with RAII.** **`ContainerLayoutScope`** + **`ContainerMeasureScope`** (`src/UI/Layout/ContainerScope.hpp`) encapsulate the slot/layer/child-index protocol for major stacks and grids. (`ContainerBuildScope` was the former name before the layout/render separation.)
 
 **3. `measure` and `build` duplication.** Shared scopes reduce preamble drift; the fundamental pattern (measure pass then build pass with rewind) is unchanged.
 
 **4. Single-slot `LayoutEngine` — guarded.** **`consumeAssignedFrame()`** asserts that the parent called **`setChildFrame`** for the current child.
 
-**5. `Element.hpp` compilation fan-out — reduced.** Model specializations no longer multiply includes. The header still pulls **`Canvas.hpp`**, **`SceneGraph.hpp`**, and **`Nodes.hpp`** for the **`RenderComponent`** **`build`** path (inline custom render registration). Further reduction would require moving that registration behind a non-template boundary.
+**5. `Element.hpp` compilation fan-out — reduced further.** `SceneGraph.hpp` and `Nodes.hpp` are no longer included from `Element.hpp`. The `RenderComponent` scene-emission code was moved to `src/UI/Detail/RenderComponentEmit.cpp` (non-template boundary). `Canvas.hpp` remains via `include/Flux/UI/Detail/RenderComponentEmit.hpp` since the draw lambda type requires it.
 
 **6. Layout debugging.** **`FLUX_DEBUG_LAYOUT`** prints a stderr tree per rebuild. **Visual overlay:** when **`Runtime::layoutOverlayEnabled()`** is on (toggle **⌘⇧L** — Meta+Shift+L on macOS), **`Window::render`** draws semi-transparent wireframes over each scene node’s layout bounds (`src/Scene/LayoutOverlayRenderer.cpp`). Automated checks for child-outside-parent placement remain future work.
 
@@ -40,9 +40,9 @@ Here's my analysis, grounded in the concrete code across the system.
 
 Replaced by **`PrimitiveComponent` / `CompositeComponent` / `RenderComponent`** and one **`Element::Model<C>`** implementation (no **`FLUX_ELEMENT_MODEL`** macro).
 
-### B. `ContainerBuildScope` — DONE
+### B. `ContainerLayoutScope` — DONE
 
-See **`src/UI/Layout/ContainerScope.hpp`** and layout refactors.
+See **`src/UI/Layout/ContainerScope.hpp`**. (`ContainerBuildScope` was the former name.)
 
 ### C. Debug assertions — DONE
 
@@ -61,16 +61,16 @@ Stack alignment lives beside **`LayoutConstraints`**.
 
 **`resolveLeafLayoutBounds(explicitBox, childFrame, constraints, hints)`** merges the former split between **`resolveRectangleBounds`** and **`resolveLeafBounds`**; the **`isRectangle`** flag is removed. Remaining long-term items (if desired): stricter consistency docs for every leaf, further use of modifiers vs ad hoc fields.
 
-### G. Reduce `Element.hpp` fan-out — optional future
+### G. Reduce `Element.hpp` fan-out — Done
 
-Splitting **`RenderComponent`** registration could trim includes; not required for correctness.
+`SceneGraph.hpp` and `Nodes.hpp` removed from `Element.hpp`; `RenderComponent` emission moved to `src/UI/Detail/RenderComponentEmit.cpp`.
 
-### H. Layout vs scene emission — future
+### H. Layout vs scene emission — Done
 
-Separating layout computation from scene graph emission remains a large architectural project (caching, tests without **`SceneGraph`**).
+The separation is complete. `LayoutTree` + `LayoutContext` handle Phase 1 (geometry, no SceneGraph/EventMap). `renderLayoutTree` + `RenderContext` handle Phase 2 (SceneGraph + EventMap from LayoutTree). `BuildContext` was removed entirely. Unit and integration tests in `tests/` cover `LayoutTree` data structures and container layout geometry without any SceneGraph/EventMap dependency. See `include/Flux/UI/LayoutTree.hpp`, `include/Flux/UI/LayoutContext.hpp`, `include/Flux/UI/RenderContext.hpp`, `src/UI/RenderLayoutTree.cpp`.
 
 ---
 
 ### Priority ranking (historical)
 
-Container scope, debug assertions, model unification, **`LayoutHints`**, stderr layout dump, and leaf **`resolveLeafLayoutBounds`** are in place. **H** remains the main structural follow-up when the component set is stable.
+Container scope, debug assertions, model unification, **`LayoutHints`**, stderr layout dump, leaf **`resolveLeafLayoutBounds`**, layout/render separation, `Element.hpp` fan-out reduction, and unit tests are all in place.
