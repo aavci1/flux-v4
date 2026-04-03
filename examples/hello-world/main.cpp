@@ -10,7 +10,7 @@ struct HelloRoot {
     return Text{
         .text = "Hello, World!",
         .style = theme.typeDisplay,
-        .color = Colors::darkGray,
+        .color = theme.colorTextPrimary,
         .horizontalAlignment = HorizontalAlignment::Center,
         .verticalAlignment = VerticalAlignment::Center,
     };
