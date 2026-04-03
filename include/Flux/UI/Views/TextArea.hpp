@@ -25,32 +25,42 @@ struct TextAreaHeight {
 };
 
 struct TextArea : ViewModifiers<TextArea> {
+  /// Visual tokens; any field may use \c kFromTheme / \c kFloatFromTheme to inherit from \ref FluxTheme.
+  /// Resolved in \c body() the same way as \ref Toggle::Style (see \c resolveStyle in \c TextArea.cpp).
+  struct Style {
+    Font font = kFontFromTheme;
+    Color textColor = kFromTheme;
+    Color placeholderColor = kFromTheme;
+    Color backgroundColor = kFromTheme;
+    Color borderColor = kFromTheme;
+    Color borderFocusColor = kFromTheme;
+    Color caretColor = kFromTheme;
+    Color selectionColor = kFromTheme;
+    Color disabledColor = kFromTheme;
+    float borderWidth = kFloatFromTheme;
+    float borderFocusWidth = kFloatFromTheme;
+    float cornerRadius = kFloatFromTheme;
+    float paddingH = kFloatFromTheme;
+    float paddingV = kFloatFromTheme;
+    float lineHeight = 0.f;
+  };
+
   State<std::string> value{};
   std::string placeholder;
 
-  Font font = kFontFromTheme;
+  /// **Modifier-first shell styling** (recommended): chain on the value returned from the initializer,
+  /// e.g. `TextArea{ .value = v, .placeholder = "…", .height = {…} }.background(FillStyle::solid(…))
+  /// .border(StrokeStyle::solid(…)).cornerRadius(CornerRadius{8.f}).clipContent(true).flex(1.f)`.
+  /// Those override resolved \ref style tokens for the custom-draw chrome (`useOuterElementModifiers()` in
+  /// \c body()). Optional \c .cursor() applies when not \c Inherit.
+  ///
+  /// **Layout**: outer \c .padding() and \c .flex() are standard \c Element modifiers on the wrapper.
+  /// Flex (\c grow / \c shrink / \c minMain) is **only** from chained \c .flex(...) — there are no \c flexGrow
+  /// fields on \c TextArea. Inner \c style.paddingH / \c style.paddingV remain **content** insets inside the border.
 
-  Color textColor = kFromTheme;
-  Color placeholderColor = kFromTheme;
-  Color backgroundColor = kFromTheme;
-  Color borderColor = kFromTheme;
-  Color borderFocusColor = kFromTheme;
-  Color caretColor = kFromTheme;
-  Color selectionColor = kFromTheme;
-  Color disabledColor = kFromTheme;
-
-  float borderWidth = 1.f;
-  float borderFocusWidth = 2.f;
-  float cornerRadius = kFloatFromTheme;
-  float paddingH = kFloatFromTheme;
-  float paddingV = kFloatFromTheme;
-  float lineHeight = 0.f;
+  Style style{};
 
   TextAreaHeight height{};
-
-  float flexGrow = 1.f;
-  float flexShrink = 0.f;
-  float minSize = 0.f;
 
   bool disabled = false;
   int maxLength = 0;

@@ -15,6 +15,8 @@ struct RectInstance {
   float2 strokeWidthOpacity;
   float2 viewport;
   float4 rotationPad;
+  float4 shadowColor;
+  float4 shadowGeom;
 };
 
 struct RectVertexOut {
@@ -30,6 +32,8 @@ struct RectVertexOut {
   float2 fragCenter;
   float fragAngle;
   float2 fragViewport;
+  float4 fragShadowColor;
+  float4 fragShadowGeom;
 };
 
 /// Same layout as `RectVertexOut`, but `clip` has no `[[position]]` so the fragment can also take `float4 [[position]]` for pixel coords (Metal allows only one `[[position]]` per fragment signature when using `[[stage_in]]`).
@@ -45,6 +49,8 @@ struct RectFragmentIn {
   float2 fragCenter;
   float fragAngle;
   float2 fragViewport;
+  float4 fragShadowColor;
+  float4 fragShadowGeom;
 };
 
 vertex RectVertexOut rect_sdf_vert(uint vid [[vertex_id]], uint iid [[instance_id]],
@@ -53,7 +59,11 @@ vertex RectVertexOut rect_sdf_vert(uint vid [[vertex_id]], uint iid [[instance_i
   RectInstance inst = instances[iid];
   float2 halfSize = inst.rect.zw * 0.5f;
   float2 center = inst.rect.xy + halfSize;
-  float pad = max(inst.strokeWidthOpacity.x, 1.0f);
+  float shadowPad = 0.0f;
+  if (inst.shadowColor.a > 0.0001f && inst.shadowGeom.z > 0.0f) {
+    shadowPad = inst.shadowGeom.z + length(inst.shadowGeom.xy);
+  }
+  float pad = max(max(inst.strokeWidthOpacity.x, 1.0f), shadowPad);
   float2 paddedHalf = halfSize + pad;
   float2 localOffset = quad[vid] * paddedHalf;
   float cr = cos(inst.rotationPad.x);
@@ -76,6 +86,8 @@ vertex RectVertexOut rect_sdf_vert(uint vid [[vertex_id]], uint iid [[instance_i
   out.fragCenter = center;
   out.fragAngle = inst.rotationPad.x;
   out.fragViewport = inst.viewport;
+  out.fragShadowColor = inst.shadowColor;
+  out.fragShadowGeom = inst.shadowGeom;
   return out;
 }
 
@@ -104,6 +116,21 @@ fragment float4 rect_sdf_frag(RectFragmentIn in [[stage_in]], float4 fragCoord [
   float4 fillP = float4(in.fragFillColor.rgb * fillA, fillA);
   float4 strokeP = float4(in.fragStrokeColor.rgb * strokeA, strokeA);
   float4 blended = strokeP + fillP * (1.0f - strokeP.a);
+
+  float4 shadowP = float4(0.0f);
+  if (in.fragShadowColor.a > 0.0001f && in.fragShadowGeom.z > 0.0f) {
+    float2 shadowOff = in.fragShadowGeom.xy;
+    float2 localShadow = float2(shadowOff.x * ca - shadowOff.y * sa, shadowOff.x * sa + shadowOff.y * ca);
+    float2 ps = p - localShadow;
+    float ds = roundedRectSDF(ps, in.fragHalfSize, in.fragCorners);
+    float blur = max(in.fragShadowGeom.z, 0.5f);
+    float soft = 1.0f - smoothstep(-blur, blur, ds);
+    float shA = in.fragShadowColor.a * soft;
+    shadowP = float4(in.fragShadowColor.rgb * shA, shA);
+  }
+  // Source-over: shape on top of shadow so opaque fill is not darkened by shadow (premultiplied).
+  blended = blended + shadowP * (1.0f - blended.a);
+
   float outA = blended.a * in.fragOpacity;
   if (outA < 0.001f)
     discard_fragment();
@@ -123,6 +150,8 @@ struct ImageInstance {
   float2 strokeWidthOpacity;
   float2 viewport;
   float4 rotationPad;
+  float4 shadowColor;
+  float4 shadowGeom;
   float4 uvBounds;
   float2 texSizeInv;
   float2 imageModePad;
@@ -167,7 +196,11 @@ vertex ImageVertexOut image_sdf_vert(uint vid [[vertex_id]], uint iid [[instance
   ImageInstance inst = instances[iid];
   float2 halfSize = inst.rect.zw * 0.5f;
   float2 center = inst.rect.xy + halfSize;
-  float pad = max(inst.strokeWidthOpacity.x, 1.0f);
+  float shadowPad = 0.0f;
+  if (inst.shadowColor.a > 0.0001f && inst.shadowGeom.z > 0.0f) {
+    shadowPad = inst.shadowGeom.z + length(inst.shadowGeom.xy);
+  }
+  float pad = max(max(inst.strokeWidthOpacity.x, 1.0f), shadowPad);
   float2 paddedHalf = halfSize + pad;
   float2 localOffset = quad[vid] * paddedHalf;
   float cr = cos(inst.rotationPad.x);
@@ -259,6 +292,8 @@ vertex RectVertexOut line_sdf_vert(uint vid [[vertex_id]], uint iid [[instance_i
   out.fragCenter = center;
   out.fragAngle = inst.rotationPad.x;
   out.fragViewport = inst.viewport;
+  out.fragShadowColor = float4(0.0f);
+  out.fragShadowGeom = float4(0.0f);
   return out;
 }
 

@@ -128,7 +128,11 @@ Element Toggle::body() const {
             .cornerRadius(CornerRadius{trackHeight * 0.5f}),
         Rectangle {
           .fill = FillStyle::solid(isDisabled ? disabledColor : thumbColor),
-          .stroke = isDisabled ? StrokeStyle::solid(disabledColor, thumbBorderWidth) : StrokeStyle::solid(thumbBorderColor, thumbBorderWidth),
+          .stroke = StrokeStyle::solid(thumbBorderColor, thumbBorderWidth),
+          .shadow = isDisabled ? ShadowStyle::none()
+                               : ShadowStyle{.radius = theme.shadowRadiusControl,
+                                             .offset = {0.f, theme.shadowOffsetYControl},
+                                             .color = theme.shadowColor},
         }
             .position(*thumbXAnim, thumbInset)
             .size(thumbSize, thumbSize)

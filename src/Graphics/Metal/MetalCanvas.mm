@@ -507,7 +507,7 @@ public:
   BlendMode blendMode() const override { return currentState().blendMode; }
 
   void drawRect(Rect const& rect, CornerRadius const& cornerRadius, FillStyle const& fs,
-                StrokeStyle const& ss) override {
+                StrokeStyle const& ss, ShadowStyle const& shadow) override {
     if (!inFrame_) {
       return;
     }
@@ -567,8 +567,19 @@ public:
     cr.bottomLeft = crEffective.bottomLeft * s;
     Rect device = Rect::sharp(mapped.x * dpiScaleX_, mapped.y * dpiScaleY_, mapped.width * dpiScaleX_,
                               mapped.height * dpiScaleY_);
+    Color shadowC{};
+    float shadowOx = 0.f;
+    float shadowOy = 0.f;
+    float shadowR = 0.f;
+    if (!shadow.isNone()) {
+      shadowC = shadow.color;
+      shadowC.a *= op;
+      shadowOx = shadow.offset.x * dpiScaleX_;
+      shadowOy = shadow.offset.y * dpiScaleY_;
+      shadowR = shadow.radius * s;
+    }
     emitRect(device, cr, hasFill ? fillC : Color{0, 0, 0, 0}, hasStroke ? strokeC : Color{0, 0, 0, 0},
-             hasStroke ? ss.width * s : 0.f, op, rotationRad);
+             hasStroke ? ss.width * s : 0.f, op, rotationRad, shadowC, shadowOx, shadowOy, shadowR);
   }
 
   void drawLine(Point a, Point b, StrokeStyle const& ss) override {
@@ -622,6 +633,8 @@ public:
         simd_make_float2(ss.width * std::min(dpiScaleX_, dpiScaleY_), paintOpacity);
     op.rectInst.viewport = simd_make_float2(vw, vh);
     op.rectInst.rotationPad = simd_make_float4(0.f, 0.f, 0.f, 0.f);
+    op.rectInst.shadowColor = simd_make_float4(0.f, 0.f, 0.f, 0.f);
+    op.rectInst.shadowGeom = simd_make_float4(0.f, 0.f, 0.f, 0.f);
     op.blendMode = currentState().blendMode;
     pushOp(std::move(op));
   }
@@ -637,7 +650,7 @@ public:
         const float* d = cv.data;
         Rect r{d[0], d[1], d[2], d[3]};
         CornerRadius cr{d[4], d[5], d[6], d[7]};
-        drawRect(r, cr, fs, ss);
+        drawRect(r, cr, fs, ss, ShadowStyle::none());
         return;
       }
       const bool circlePrim = cv.type == Path::CommandType::Circle && cv.dataCount >= 3;
@@ -690,7 +703,7 @@ public:
 
   void drawCircle(Point center, float radius, FillStyle const& fs, StrokeStyle const& ss) override {
     Rect r{center.x - radius, center.y - radius, radius * 2.f, radius * 2.f};
-    drawRect(r, CornerRadius::pill(r), fs, ss);
+    drawRect(r, CornerRadius::pill(r), fs, ss, ShadowStyle::none());
   }
 
   void drawImage(Image const& image, Rect const& src, Rect const& dst, CornerRadius const& corners,
@@ -970,7 +983,8 @@ private:
   }
 
   void emitRect(Rect const& deviceRect, CornerRadius const& corners, Color const& fillColor, Color const& strokeColor,
-                float strokeWidth, float opacity, float rotationRad) {
+                float strokeWidth, float opacity, float rotationRad, Color const& shadowColor, float shadowOffsetX,
+                float shadowOffsetY, float shadowRadius) {
     CGSize drawableSize = metal_.layer().drawableSize;
     const float vw = static_cast<float>(drawableSize.width);
     const float vh = static_cast<float>(drawableSize.height);
@@ -984,6 +998,8 @@ private:
     op.rectInst.strokeWidthOpacity = simd_make_float2(strokeWidth, opacity);
     op.rectInst.viewport = simd_make_float2(vw, vh);
     op.rectInst.rotationPad = simd_make_float4(rotationRad, 0.f, 0.f, 0.f);
+    op.rectInst.shadowColor = toSimd4(shadowColor);
+    op.rectInst.shadowGeom = simd_make_float4(shadowOffsetX, shadowOffsetY, shadowRadius, 0.f);
     op.blendMode = currentState().blendMode;
     pushOp(std::move(op));
   }
@@ -1003,6 +1019,8 @@ private:
     op.imageInst.sdf.strokeWidthOpacity = simd_make_float2(0.f, opacity);
     op.imageInst.sdf.viewport = simd_make_float2(vw, vh);
     op.imageInst.sdf.rotationPad = simd_make_float4(rotationRad, 0.f, 0.f, 0.f);
+    op.imageInst.sdf.shadowColor = simd_make_float4(0.f, 0.f, 0.f, 0.f);
+    op.imageInst.sdf.shadowGeom = simd_make_float4(0.f, 0.f, 0.f, 0.f);
     op.imageInst.uvBounds = uvBounds;
     op.imageInst.texSizeInv = texSizeInv;
     op.imageInst.imageModePad = simd_make_float2(imageMode, 0.f);

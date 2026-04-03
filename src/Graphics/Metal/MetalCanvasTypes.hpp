@@ -19,6 +19,10 @@ struct MetalRectInstance {
   vector_float2 strokeWidthOpacity;
   vector_float2 viewport;
   vector_float4 rotationPad;
+  /// Premultiplied shadow tint; .w is alpha scale.
+  vector_float4 shadowColor;
+  /// .xy = offset (device px), .z = blur radius (device px, uniform scale), .w unused.
+  vector_float4 shadowGeom;
 };
 
 static_assert(std::is_trivially_copyable_v<MetalRectInstance>);

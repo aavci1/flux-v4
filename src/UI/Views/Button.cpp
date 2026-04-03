@@ -205,6 +205,13 @@ Element Button::body() const {
     stroke = StrokeStyle::none();
   }
 
+  ShadowStyle bgShadow = ShadowStyle::none();
+  if (!isLink && variant != ButtonVariant::Ghost && !effectivelyDisabled) {
+    bgShadow = ShadowStyle{.radius = theme.shadowRadiusControl,
+                           .offset = {0.f, theme.shadowOffsetYControl},
+                           .color = theme.shadowColor};
+  }
+
   auto content = ZStack{
     .hAlign = HorizontalAlignment::Center,
     .vAlign = VerticalAlignment::Center,
@@ -213,6 +220,7 @@ Element Button::body() const {
             Rectangle{
                 .fill = FillStyle::solid(*fillAnim),
                 .stroke = stroke,
+                .shadow = bgShadow,
             }
                 .height(h)
                 .cursor(effectivelyDisabled ? Cursor::Inherit : Cursor::Hand)

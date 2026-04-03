@@ -171,12 +171,12 @@ struct FluxTheme {
   float toggleTrackHeight = 26.f;
   float toggleThumbInset = 4.f;
   float toggleBorderWidth = 1.f;
-  float toggleThumbBorderWidth = 2.f;
+  float toggleThumbBorderWidth = 0.f;
   Color toggleOnColor = Color::hex(0x3A7BD5);
-  Color toggleOffColor = Color::hex(0xE5E5E5);
+  Color toggleOffColor = Color::hex(0xEEEEEE);
   Color toggleThumbColor = Color::hex(0xFFFFFF);
   Color toggleThumbBorderColor = Color::hex(0xFFFFFF);
-  Color toggleBorderColor = Color::hex(0xEEEEEE);
+  Color toggleBorderColor = Color::hex(0xE5E5E5);
 
   // Checkbox
   float checkboxBoxSize = 20.f;
@@ -199,6 +199,10 @@ struct FluxTheme {
   std::string iconFontFamily = "Material Symbols Rounded";
 
   Color shadowColor = Color{0.f, 0.f, 0.f, 0.15f};
+  /// Drop shadow blur radius (logical px) for control thumbs, buttons, etc.
+  float shadowRadiusControl = 6.f;
+  /// Drop shadow vertical offset (logical px); positive = downward.
+  float shadowOffsetYControl = 0.f;
 
   static FluxTheme light();
   static FluxTheme dark();

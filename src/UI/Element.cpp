@@ -405,6 +405,7 @@ void Rectangle::renderFromLayout(RenderContext& ctx, LayoutNode const& node) con
       .cornerRadius = cornerR,
       .fill = fill,
       .stroke = stroke,
+      .shadow = shadow,
   });
   if (ElementModifiers const* mods = ctx.activeElementModifiers()) {
     if (!ctx.suppressLeafModifierEvents()) {

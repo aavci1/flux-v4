@@ -80,4 +80,15 @@ struct StrokeStyle {
   bool solidColor(Color* out) const;
 };
 
+/// Optional drop shadow for rects (logical points). When \c radius <= 0 or \c color.a <= 0, treated as off.
+struct ShadowStyle {
+  float radius = 0.f;
+  Point offset{};
+  Color color = Colors::transparent;
+
+  static ShadowStyle none() { return {}; }
+
+  bool isNone() const { return radius <= 0.f || color.a <= 0.f; }
+};
+
 } // namespace flux

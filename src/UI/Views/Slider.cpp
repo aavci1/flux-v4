@@ -207,6 +207,10 @@ Element Slider::body() const {
             Rectangle {
                 .fill = FillStyle::solid(isDisabled ? theme.colorTextDisabled : thumbColor),
                 .stroke = isDisabled ? StrokeStyle::solid(theme.colorTextDisabled, 1.f) : thumbStroke,
+                .shadow = isDisabled ? ShadowStyle::none()
+                                     : ShadowStyle{.radius = theme.shadowRadiusControl,
+                                                   .offset = {0.f, theme.shadowOffsetYControl},
+                                                   .color = theme.shadowColor},
             }
                 .position(thumbX + thumbOffset, thumbY)
                 .size(thumbDiameter, thumbDiameter)

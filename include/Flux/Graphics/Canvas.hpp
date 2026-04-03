@@ -85,7 +85,7 @@ public:
   // -------------------------------------------------------------------------
 
   virtual void drawRect(Rect const& rect, CornerRadius const& cornerRadius, FillStyle const& fill,
-                        StrokeStyle const& stroke) = 0;
+                        StrokeStyle const& stroke, ShadowStyle const& shadow = ShadowStyle::none()) = 0;
   virtual void drawLine(Point from, Point to, StrokeStyle const& stroke) = 0;
   virtual void drawPath(Path const& path, FillStyle const& fill, StrokeStyle const& stroke) = 0;
   virtual void drawCircle(Point center, float radius, FillStyle const& fill, StrokeStyle const& stroke) = 0;

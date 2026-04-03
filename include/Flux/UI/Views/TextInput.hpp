@@ -29,6 +29,11 @@ struct TextInput : ViewModifiers<TextInput> {
   std::string placeholder;
 
   // ── Appearance ───────────────────────────────────────────────────────────
+  ///
+  /// Field chrome defaults below apply when the control is not wrapped with outer
+  /// `Element` modifiers. Chained `.background()`, `.border()`, and `.cornerRadius()` on
+  /// `TextInput{…}` override `backgroundColor` / unfocused border / `cornerRadius` via
+  /// `useOuterElementModifiers()` in `body()`.
 
   Font font = kFontFromTheme;
 

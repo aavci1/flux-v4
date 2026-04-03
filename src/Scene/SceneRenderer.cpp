@@ -28,7 +28,7 @@ void SceneRenderer::renderNode(NodeId id, SceneGraph const& graph, Canvas& canva
         if constexpr (std::is_same_v<T, LayerNode>) {
           renderLayer(node, graph, canvas);
         } else if constexpr (std::is_same_v<T, RectNode>) {
-          canvas.drawRect(node.bounds, node.cornerRadius, node.fill, node.stroke);
+          canvas.drawRect(node.bounds, node.cornerRadius, node.fill, node.stroke, node.shadow);
         } else if constexpr (std::is_same_v<T, TextNode>) {
           if (node.layout) {
             canvas.drawTextLayout(*node.layout, node.origin);
