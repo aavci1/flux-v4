@@ -41,10 +41,11 @@ struct LabeledCheckbox {
                                    v ? "checked" : "unchecked");
                     },
                 },
-                Text{
+                Text {
                     .text = label,
                     .style = theme.typeBody,
                     .color = disabled ? theme.colorTextDisabled : theme.colorTextPrimary,
+                    .verticalAlignment = VerticalAlignment::Center,
                 }
             ),
     };
@@ -80,7 +81,9 @@ struct CheckboxDemoRoot {
                          " · Newsletter: " + (*newsletter ? "yes" : "no") + " · Items: " +
                          (*itemA ? "A" : "") + (*itemB ? "B" : "") + (*itemC ? "C" : "");
 
-    return
+    return ScrollView{
+        .axis = ScrollAxis::Vertical,
+        .children = children(
                 VStack{
                     .spacing = 16.f,
                     .hAlign = HorizontalAlignment::Leading,
@@ -156,6 +159,7 @@ struct CheckboxDemoRoot {
                                                     .text = "Select all items",
                                                     .style = theme.typeLabel,
                                                     .color = theme.colorTextPrimary,
+                                                    .verticalAlignment = VerticalAlignment::Center,
                                                 }
                                             ),
                                     }
@@ -234,7 +238,9 @@ struct CheckboxDemoRoot {
                                 .wrapping = TextWrapping::Wrap,
                             }
                         ),
-                }.padding(24.f);
+                }.padding(24.f)
+            )
+        };
   }
 };
 
