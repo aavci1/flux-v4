@@ -260,14 +260,6 @@ Size Element::measureWithModifiersImpl(LayoutContext& ctx, LayoutConstraints con
     sz.width += pad2;
     sz.height += pad2;
   }
-  if (m.clip) {
-    if (std::isfinite(constraints.maxWidth) && constraints.maxWidth > 0.f) {
-      sz.width = constraints.maxWidth;
-    }
-    if (std::isfinite(constraints.maxHeight) && constraints.maxHeight > 0.f) {
-      sz.height = constraints.maxHeight;
-    }
-  }
   if (m.sizeWidth > 0.f) {
     sz.width = m.sizeWidth;
   }
