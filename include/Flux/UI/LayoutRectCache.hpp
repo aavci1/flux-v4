@@ -27,6 +27,9 @@ class LayoutRectCache {
 public:
   /// Called at end of `BuildOrchestrator::rebuild()`. Swaps generations and
   /// fills `current_` from `ctx.subtreeRootLayouts()` and `tree`.
+  /// Each entry uses the subtree root node's \ref LayoutNode::worldBounds (the
+  /// composite container's allotted frame), not a union of all descendants — a
+  /// union can exceed the container when children overflow (e.g. flex rows).
   void fill(LayoutTree const& tree, LayoutContext const& ctx);
 
   /// Rect for the composite currently executing `body()`.

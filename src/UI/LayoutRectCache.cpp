@@ -11,7 +11,9 @@ void LayoutRectCache::fill(LayoutTree const& tree, LayoutContext const& ctx) {
   current_.clear();
   for (auto const& [key, nodeId] : ctx.subtreeRootLayouts()) {
     if (nodeId.isValid()) {
-      current_[key] = tree.unionSubtreeWorldBounds(nodeId);
+      if (LayoutNode const* n = tree.get(nodeId)) {
+        current_[key] = n->worldBounds;
+      }
     }
   }
 }

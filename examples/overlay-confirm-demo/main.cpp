@@ -128,7 +128,9 @@ struct ConfirmDialog {
                                                             },
                                                     },
                                                 },
-                                        }.padding(24.f),
+                                        }
+                                            .width(360.f)
+                                            .padding(24.f),
                                     },
                             },
                         },
