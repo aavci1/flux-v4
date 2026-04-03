@@ -10,7 +10,7 @@
 
 namespace flux {
 
-struct FluxTheme;
+struct Theme;
 
 struct ResolvedAlertCardColors {
   Color cardFill;
@@ -19,9 +19,9 @@ struct ResolvedAlertCardColors {
 };
 
 ResolvedAlertCardColors resolveAlertCardColors(Color cardColor, Color cardStrokeColor, float cornerRadius,
-                                               FluxTheme const& theme);
+                                               Theme const& theme);
 
-Color resolveAlertBackdropColor(Color backdropColor, FluxTheme const& theme);
+Color resolveAlertBackdropColor(Color backdropColor, Theme const& theme);
 
 struct ResolvedPopoverCardBody {
   Color background;
@@ -33,8 +33,8 @@ struct ResolvedPopoverCardBody {
 
 ResolvedPopoverCardBody resolvePopoverCardBody(Color backgroundColor, Color borderColor, float borderWidth,
                                                float cornerRadius, float contentPadding,
-                                               FluxTheme const& theme);
+                                               Theme const& theme);
 
-Color resolvePopoverBackdropColor(Color backdropColor, FluxTheme const& theme);
+Color resolvePopoverBackdropColor(Color backdropColor, Theme const& theme);
 
 } // namespace flux

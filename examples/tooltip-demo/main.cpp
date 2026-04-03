@@ -49,7 +49,7 @@ struct TooltipIcon {
   std::string tooltip;
 
   auto body() const {
-    FluxTheme const& theme = useEnvironment<FluxTheme>();
+    Theme const& theme = useEnvironment<Theme>();
 
     useTooltip(tooltip);
 
@@ -78,27 +78,27 @@ struct TooltipToggle {
 
 struct TooltipDemoRoot {
   auto body() const {
-    FluxTheme const& theme = useEnvironment<FluxTheme>();
+    Theme const& theme = useEnvironment<Theme>();
 
     return ZStack{
         .hAlign = HorizontalAlignment::Leading,
         .vAlign = VerticalAlignment::Top,
-        .children = {
+        .children = children(
             Rectangle{.fill = FillStyle::solid(theme.colorBackground)},
             VStack{
                 .spacing = 24.f,
                 .hAlign = HorizontalAlignment::Leading,
-                .children = {
+                .children = children(
                     Text{
                         .text = "Tooltip",
-                        .font = theme.typeHeading.toFont(),
+                        .style = theme.typeDisplay,
                         .color = theme.colorTextPrimary,
                     },
                     Text{
                         .text = "Hover over any control for 600 ms to "
                                 "see its tooltip. Move the pointer away "
                                 "to dismiss. Tapping also dismisses.",
-                        .font = theme.typeBody.toFont(),
+                        .style = theme.typeBody,
                         .color = theme.colorTextSecondary,
                         .wrapping = TextWrapping::Wrap,
                     }.flex(1.f),
@@ -106,13 +106,13 @@ struct TooltipDemoRoot {
                     // ── Placement variants ──────────────────────────
                     Text{
                         .text = "Placement",
-                        .font = theme.typeSubtitle.toFont(),
+                        .style = theme.typeHeading,
                         .color = theme.colorTextPrimary,
                     },
                     HStack{
                         .spacing = 12.f,
                         .vAlign = VerticalAlignment::Center,
-                        .children = {
+                        .children = children(
                             TooltipButton{
                                 .label = "Above",
                                 .tooltip = "Tooltip above the button",
@@ -132,20 +132,20 @@ struct TooltipDemoRoot {
                                 .label = "Start",
                                 .tooltip = "Tooltip to the left",
                                 .placement = PopoverPlacement::Start,
-                            },
-                        },
+                            }
+                        ),
                     },
 
                     // ── Icon tooltips ───────────────────────────────
                     Text{
                         .text = "Icon tooltips",
-                        .font = theme.typeSubtitle.toFont(),
+                        .style = theme.typeHeading,
                         .color = theme.colorTextPrimary,
                     },
                     HStack{
                         .spacing = 16.f,
                         .vAlign = VerticalAlignment::Center,
-                        .children = {
+                        .children = children(
                             TooltipIcon{
                                 .name = IconName::ContentCopy,
                                 .tooltip = "Copy to clipboard",
@@ -161,14 +161,14 @@ struct TooltipDemoRoot {
                             TooltipIcon{
                                 .name = IconName::Help,
                                 .tooltip = "Help & documentation",
-                            },
-                        },
+                            }
+                        ),
                     },
 
                     // ── Long tooltip text ───────────────────────────
                     Text{
                         .text = "Long text",
-                        .font = theme.typeSubtitle.toFont(),
+                        .style = theme.typeHeading,
                         .color = theme.colorTextPrimary,
                     },
                     TooltipButton{
@@ -181,25 +181,25 @@ struct TooltipDemoRoot {
                     // ── Toggle with tooltip ─────────────────────────
                     Text{
                         .text = "On other controls",
-                        .font = theme.typeSubtitle.toFont(),
+                        .style = theme.typeHeading,
                         .color = theme.colorTextPrimary,
                     },
                     HStack{
                         .spacing = 12.f,
                         .vAlign = VerticalAlignment::Center,
-                        .children = {
+                        .children = children(
                             Text{
                                 .text = "Notifications",
-                                .font = theme.typeBody.toFont(),
+                                .style = theme.typeBody,
                                 .color = theme.colorTextPrimary,
                             },
                             Spacer{},
-                            TooltipToggle{},
-                        },
-                    },
-                },
-            }.padding(24.f),
-        },
+                            TooltipToggle{}
+                        ),
+                    }
+                ),
+            }.padding(24.f)
+        ),
     };
   }
 };

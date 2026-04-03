@@ -22,15 +22,15 @@ struct LabeledToggle {
   bool disabled = false;
 
   auto body() const {
-    FluxTheme const& theme = useEnvironment<FluxTheme>();
+    Theme const& theme = useEnvironment<Theme>();
 
     return HStack{
         .spacing = 12.f,
         .vAlign = VerticalAlignment::Center,
-        .children = {
+        .children = children(
             Text{
                 .text = label,
-                .font = theme.typeBody.toFont(),
+                .style = theme.typeBody,
                 .color = disabled ? theme.colorTextDisabled : theme.colorTextPrimary,
             },
             Spacer{},
@@ -40,15 +40,15 @@ struct LabeledToggle {
                 .onChange = [label = label](bool v) {
                   std::fprintf(stderr, "[toggle-demo] %s → %s\n", label.c_str(), v ? "ON" : "OFF");
                 },
-            },
-        },
+            }
+        ),
     };
   }
 };
 
 struct ToggleDemoRoot {
   auto body() const {
-    FluxTheme const& theme = useEnvironment<FluxTheme>();
+    Theme const& theme = useEnvironment<Theme>();
 
     auto wifiEnabled = useState(true);
     auto bluetoothEnabled = useState(false);
@@ -64,28 +64,28 @@ struct ToggleDemoRoot {
 
     return ScrollView{
         .axis = ScrollAxis::Vertical,
-        .children = {
+        .children = children(
             VStack{
                 .spacing = 20.f,
                 .hAlign = HorizontalAlignment::Leading,
-                .children = {
+                .children = children(
                     Text{
                         .text = "Toggle",
-                        .font = theme.typeHeading.toFont(),
+                        .style = theme.typeDisplay,
                         .color = theme.colorTextPrimary,
                     },
                     Text{
                         .text = "Boolean switch with animated thumb, "
                                 "focus ring, disabled state, and "
                                 "custom sizing.",
-                        .font = theme.typeBody.toFont(),
+                        .style = theme.typeBody,
                         .color = theme.colorTextSecondary,
                         .wrapping = TextWrapping::Wrap,
                     }.flex(1.f),
 
                     Text{
                         .text = "Settings",
-                        .font = theme.typeSubtitle.toFont(),
+                        .style = theme.typeHeading,
                         .color = theme.colorTextPrimary,
                     },
                     Element{LabeledToggle{
@@ -108,16 +108,16 @@ struct ToggleDemoRoot {
 
                     Text{
                         .text = "Custom colors",
-                        .font = theme.typeSubtitle.toFont(),
+                        .style = theme.typeHeading,
                         .color = theme.colorTextPrimary,
                     },
                     HStack{
                         .spacing = 12.f,
                         .vAlign = VerticalAlignment::Center,
-                        .children = {
+                        .children = children(
                             Text{
                                 .text = "Green accent",
-                                .font = theme.typeBody.toFont(),
+                                .style = theme.typeBody,
                                 .color = theme.colorTextPrimary,
                             },
                             Spacer{},
@@ -126,22 +126,22 @@ struct ToggleDemoRoot {
                                 .style = Toggle::Style {
                                     .onColor = theme.colorSuccess,
                                 },
-                            },
-                        },
+                            }
+                        ),
                     },
 
                     Text{
                         .text = "Custom sizing",
-                        .font = theme.typeSubtitle.toFont(),
+                        .style = theme.typeHeading,
                         .color = theme.colorTextPrimary,
                     },
                     HStack{
                         .spacing = 12.f,
                         .vAlign = VerticalAlignment::Center,
-                        .children = {
+                        .children = children(
                             Text{
                                 .text = "Compact (34 × 20)",
-                                .font = theme.typeBody.toFont(),
+                                .style = theme.typeBody,
                                 .color = theme.colorTextPrimary,
                             },
                             Spacer{},
@@ -152,19 +152,19 @@ struct ToggleDemoRoot {
                                     .trackHeight = 20.f,
                                     .thumbInset = 2.f,
                                 },
-                            },
-                        },
+                            }
+                        ),
                     },
 
                     Text{
                         .text = statusText,
-                        .font = theme.typeBodySmall.toFont(),
+                        .style = theme.typeBodySmall,
                         .color = theme.colorTextMuted,
                         .wrapping = TextWrapping::Wrap,
-                    },
-                },
-            }.padding(24.f),
-        },
+                    }
+                ),
+            }.padding(24.f)
+        ),
     };
   }
 };

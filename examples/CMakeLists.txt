@@ -25,6 +25,9 @@ target_link_libraries(blend_demo PRIVATE flux)
 add_executable(text_demo text-demo/main.cpp)
 target_link_libraries(text_demo PRIVATE flux)
 
+add_executable(typography_demo typography-demo/main.cpp)
+target_link_libraries(typography_demo PRIVATE flux)
+
 add_executable(image_demo image-demo/main.cpp)
 target_link_libraries(image_demo PRIVATE flux)
 
@@ -111,6 +114,7 @@ set(FLUX_EXAMPLE_TARGETS
     clock_demo
     blend_demo
     text_demo
+    typography_demo
     image_demo
     scene_demo
     reactive_demo

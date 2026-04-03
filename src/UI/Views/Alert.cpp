@@ -17,7 +17,7 @@
 namespace flux {
 
 Element Alert::body() const {
-  FluxTheme const& theme = useEnvironment<FluxTheme>();
+  Theme const& theme = useEnvironment<Theme>();
   ResolvedAlertCardColors const surface = resolveAlertCardColors(cardColor, cardStrokeColor, cornerRadius, theme);
   Color const card = surface.cardFill;
   Color const stroke = surface.cardStroke;
@@ -27,82 +27,76 @@ Element Alert::body() const {
   // A lone ZStack under the full-window overlay expands every child to the window size
   // (see LayoutZStack — children share the stack's max proposed size). Spacers + flex center
   // the card so the inner ZStack only receives the card's intrinsic width/height.
+  Element cardBg =
+      Rectangle{
+          .fill = FillStyle::solid(card),
+          .stroke = StrokeStyle::solid(stroke, 1.f),
+      }
+          .size(cardWidth, 0.f)
+          .cornerRadius(cardCorner);
+
+  Element cardBody =
+      VStack{
+          .spacing = theme.space3,
+          .hAlign = HorizontalAlignment::Leading,
+          .children = buildContent(titleC, msgC, theme),
+      }
+          .padding(theme.space6);
+
   return VStack{
       .spacing = 0.f,
       .hAlign = HorizontalAlignment::Center,
-      .children =
-          {
+      .children = children(
               Spacer{}.flex(1.f),
               HStack{
                   .spacing = 0.f,
-                  .children =
-                      {
+                  .children = children(
                           Spacer{}.flex(1.f),
                           ZStack{
                               // Card + content share top-left; center alignment would offset each
                               // child by its own measured size and misalign the background.
                               .hAlign = HorizontalAlignment::Leading,
                               .vAlign = VerticalAlignment::Top,
-                              .children =
-                                  {
-                                      Rectangle{
-                                          .fill = FillStyle::solid(card),
-                                          .stroke = StrokeStyle::solid(stroke, 1.f),
-                                      }
-                                          .size(cardWidth, 0.f)
-                                          .cornerRadius(cardCorner),
-                                      VStack{
-                                          .spacing = theme.space3,
-                                          .hAlign = HorizontalAlignment::Leading,
-                                          .children = buildContent(titleC, msgC, theme),
-                                      }.padding(theme.space6),
-                                  },
+                              .children = children(std::move(cardBg), std::move(cardBody)),
                           },
-                          Spacer{}.flex(1.f),
-                      },
+                          Spacer{}.flex(1.f)),
               },
-              Spacer{}.flex(1.f),
-          },
+              Spacer{}.flex(1.f)),
   };
 }
 
-std::vector<Element> Alert::buildContent(Color titleC, Color msgC, FluxTheme const& theme) const {
+std::vector<Element> Alert::buildContent(Color titleC, Color msgC, Theme const& theme) const {
   std::vector<Element> rows;
 
   float const contentW = std::max(0.f, cardWidth - 2.f * theme.space6);
   rows.push_back(Text{
                      .text = title,
-                     .font = theme.typeTitle.toFont(),
+                     .style = theme.typeTitle,
                      .color = titleC,
-                     .lineHeight = theme.typeTitle.lineHeight,
                  }
                      .size(contentW, 0.f));
 
   if (!message.empty()) {
     rows.push_back(Text{
                        .text = message,
-                       .font = theme.typeBody.toFont(),
+                       .style = theme.typeBody,
                        .color = msgC,
                        .wrapping = TextWrapping::Wrap,
-                       .lineHeight = theme.typeBody.lineHeight,
                    }
                        .size(contentW, 0.f));
   }
 
   if (buttons.size() == 1) {
     auto const& btn = buttons[0];
+    Element actionBtn = Button{
+        .label = btn.label,
+        .variant = btn.variant,
+        .disabled = btn.disabled,
+        .onTap = btn.action,
+    };
     rows.push_back(HStack{
         .spacing = theme.space2,
-        .children =
-            {
-                Spacer{},
-                Button{
-                    .label = btn.label,
-                    .variant = btn.variant,
-                    .disabled = btn.disabled,
-                    .onTap = btn.action,
-                },
-            },
+        .children = children(Spacer{}, std::move(actionBtn)),
     });
   } else {
     std::vector<Element> buttonElems;
@@ -163,8 +157,8 @@ std::tuple<std::function<void(Alert)>, std::function<void()>, bool> useAlert() {
     }
 
     // show() runs outside a build pass — read window storage, not useEnvironment (backdrop is show-time).
-    FluxTheme const* tp = wPtr->environmentValue<FluxTheme>();
-    FluxTheme const theme = tp ? *tp : FluxTheme::light();
+    Theme const* tp = wPtr->environmentValue<Theme>();
+    Theme const theme = tp ? *tp : Theme::light();
     Color const backdrop = resolveAlertBackdropColor(alert.backdropColor, theme);
     bool const dismissEsc = alert.dismissOnEscape;
 

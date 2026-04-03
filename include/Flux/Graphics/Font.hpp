@@ -32,9 +32,19 @@ struct TextStyle {
   constexpr TextStyle(float sz, float wt, float lh = 0.f) : size(sz), weight(wt), lineHeight(lh) {}
 
   Font toFont() const;
+
+  /// Build a `TextStyle` from face metrics only (`lineHeight` left at 0 = natural line height).
+  static TextStyle fromFont(Font const& f) {
+    TextStyle s;
+    s.family = f.family;
+    s.size = f.size;
+    s.weight = f.weight;
+    s.italic = f.italic;
+    return s;
+  }
 };
 
-/// Sentinel: inherit `TextStyle` from `FluxTheme`.
+/// Sentinel: inherit `TextStyle` from `Theme`.
 inline constexpr TextStyle kStyleFromTheme{-1.f, 0.f};
 
 bool isFromTheme(TextStyle const& s);

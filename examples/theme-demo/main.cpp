@@ -1,4 +1,4 @@
-// Demonstrates FluxTheme, useEnvironment, Element::environment(), and window-level theme switching.
+// Demonstrates Theme, useEnvironment, Element::environment(), and window-level theme switching.
 #include <Flux.hpp>
 
 #include <string>
@@ -18,18 +18,18 @@ Window* gThemeDemoWindow = nullptr;
 
 namespace {
 
-FluxTheme themeForPreset(int preset) {
+Theme themeForPreset(int preset) {
   switch (preset) {
   case 0:
-    return FluxTheme::light();
+    return Theme::light();
   case 1:
-    return FluxTheme::dark();
+    return Theme::dark();
   case 2:
-    return FluxTheme::compact();
+    return Theme::compact();
   case 3:
-    return FluxTheme::comfortable();
+    return Theme::comfortable();
   default:
-    return FluxTheme::light();
+    return Theme::light();
   }
 }
 
@@ -54,89 +54,77 @@ struct ThemeDemoRoot {
   auto body() const {
     auto windowPreset = useState(0);
 
-    FluxTheme const& windowTheme = useEnvironment<FluxTheme>();
+    Theme const& windowTheme = useEnvironment<Theme>();
 
-    auto pane = [&](char const* title, char const* subtitle, FluxTheme const& t) {
+    auto pane = [&](char const* title, char const* subtitle, Theme const& t) {
       return VStack{
           .spacing = windowTheme.space2,
           .hAlign = HorizontalAlignment::Leading,
-          .children =
-              {
+          .children = children(
                   Text{ .text = title,
-                        .font = t.typeHeading.toFont(),
-                        .color = t.colorTextPrimary,
-                        .lineHeight = t.typeHeading.lineHeight },
+                        .style = t.typeTitle,
+                        .color = t.colorTextPrimary },
                   HStack{
                       .spacing = 0.f,
-                      .children =
-                          {
+                      .children = children(
                               Text{
                                       .text = subtitle,
-                                      .font = t.typeBody.toFont(),
+                                      .style = t.typeBody,
                                       .color = t.colorTextSecondary,
                                       .wrapping = TextWrapping::Wrap,
-                                      .lineHeight = t.typeBody.lineHeight,
                                   }
-                                  .flex(1.f),
-                          },
+                                  .flex(1.f)
+                          ),
                   },
                   Button{ .label = "Accent",
                           .variant = ButtonVariant::Primary,
-                          .onTap = [] {} },
-              },
+                          .onTap = [] {} }
+              ),
       }.padding(windowTheme.space4);
     };
 
     return ZStack{
-        .children =
-            {
+        .children = children(
                 Rectangle{ .fill = FillStyle::solid(windowTheme.colorBackground) },
                 VStack{
                     .spacing = windowTheme.space4,
                     .hAlign = HorizontalAlignment::Leading,
-                    .children =
-                        {
+                    .children = children(
                             Text{ .text = "Theme & environment",
-                                  .font = windowTheme.typeHeading.toFont(),
-                                  .color = windowTheme.colorTextPrimary,
-                                  .lineHeight = windowTheme.typeHeading.lineHeight },
+                                  .style = windowTheme.typeDisplay,
+                                  .color = windowTheme.colorTextPrimary },
                             HStack{
                                 .spacing = 0.f,
-                                .children =
-                                    {
+                                .children = children(
                                         Text{
                                                 .text = "Window theme drives defaults. The right column uses "
-                                                        "Element::environment(FluxTheme::dark()) for a subtree override.",
-                                                .font = windowTheme.typeBody.toFont(),
+                                                        "Element::environment(Theme::dark()) for a subtree override.",
+                                                .style = windowTheme.typeBody,
                                                 .color = windowTheme.colorTextSecondary,
                                                 .wrapping = TextWrapping::Wrap,
-                                                .lineHeight = windowTheme.typeBody.lineHeight,
                                             }
-                                            .flex(1.f),
-                                    },
+                                            .flex(1.f)
+                                    ),
                             },
                             HStack{
                                 .spacing = 0.f,
-                                .children =
-                                    {
+                                .children = children(
                                         Text{
                                                 .text = std::string("Window preset: ") + presetLabel(*windowPreset) +
                                                         "  (density " + std::to_string(windowTheme.density) +
                                                         ", horizontal spacing token space4=" +
                                                         std::to_string(windowTheme.space4) + "pt)",
-                                                .font = windowTheme.typeBodySmall.toFont(),
+                                                .style = windowTheme.typeBodySmall,
                                                 .color = windowTheme.colorTextMuted,
                                                 .wrapping = TextWrapping::Wrap,
-                                                .lineHeight = windowTheme.typeBodySmall.lineHeight,
                                             }
-                                            .flex(1.f),
-                                    },
+                                            .flex(1.f)
+                                    ),
                             },
                             HStack{
                                 .spacing = windowTheme.space2,
                                 .vAlign = VerticalAlignment::Center,
-                                .children =
-                                    {
+                                .children = children(
                                         Button{
                                             .label = "Light",
                                             .variant = *windowPreset == 0 ? ButtonVariant::Primary
@@ -188,27 +176,26 @@ struct ThemeDemoRoot {
                                               windowPreset = 3;
                                               Application::instance().markReactiveDirty();
                                             },
-                                        },
-                                    },
+                                        }
+                                    ),
                             },
                             HStack{
                                 .spacing = windowTheme.space3,
                                 .vAlign = VerticalAlignment::Top,
-                                .children =
-                                    {
+                                .children = children(
                                         pane("Light pane",
-                                             "Subtree explicitly set to FluxTheme::light().",
-                                             FluxTheme::light())
-                                            .environment(FluxTheme::light()),
+                                             "Subtree explicitly set to Theme::light().",
+                                             Theme::light())
+                                            .environment(Theme::light()),
                                         pane("Dark pane",
-                                             "Subtree uses FluxTheme::dark() tokens.",
-                                             FluxTheme::dark())
-                                            .environment(FluxTheme::dark()),
-                                    },
-                            },
-                    },
-                }.padding(windowTheme.space5),
-            },
+                                             "Subtree uses Theme::dark() tokens.",
+                                             Theme::dark())
+                                            .environment(Theme::dark())
+                                    ),
+                            }
+                    ),
+                }.padding(windowTheme.space5)
+            ),
     };
   }
 };

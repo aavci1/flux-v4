@@ -52,27 +52,27 @@ struct LabeledSlider {
   Color activeColor = kFromTheme;
 
   auto body() const {
-    FluxTheme const& theme = useEnvironment<FluxTheme>();
+    Theme const& theme = useEnvironment<Theme>();
 
     return VStack{
         .spacing = 6.f,
-        .children = {
+        .children = children(
             HStack{
                 .spacing = 8.f,
                 .vAlign = VerticalAlignment::Center,
-                .children = {
+                .children = children(
                     Text{
                         .text = label,
-                        .font = theme.typeBody.toFont(),
+                        .style = theme.typeLabel,
                         .color = theme.colorTextPrimary,
                     },
                     Spacer{},
                     Text{
                         .text = valueText,
-                        .font = theme.typeLabel.toFont(),
+                        .style = theme.typeLabel,
                         .color = theme.colorTextSecondary,
-                    },
-                },
+                    }
+                ),
             }.flex(1.f),
             Slider{
                 .value = value,
@@ -82,15 +82,15 @@ struct LabeledSlider {
                 .style = Slider::Style {
                     .activeColor = activeColor,
                 },
-            }.flex(1.f),
-        },
+            }.flex(1.f)
+        ),
     };
   }
 };
 
 struct RgbColorSelectorRoot {
   auto body() const {
-    FluxTheme const& theme = useEnvironment<FluxTheme>();
+    Theme const& theme = useEnvironment<Theme>();
 
     auto red = useState(90.f);
     auto green = useState(120.f);
@@ -100,20 +100,20 @@ struct RgbColorSelectorRoot {
                                 1.f};
 
     return ScrollView {
-        .children = {
+        .children = children(
             VStack {
                 .spacing = 20.f,
                 .hAlign = HorizontalAlignment::Leading,
-                .children = {
+                .children = children(
                     Text{
                         .text = "RGB color",
-                        .font = theme.typeHeading.toFont(),
+                        .style = theme.typeDisplay,
                         .color = theme.colorTextPrimary,
                     },
                     Text{
                         .text = "Adjust red, green, and blue channels (0–255). The preview updates "
                                 "as you drag or use the keyboard.",
-                        .font = theme.typeBody.toFont(),
+                        .style = theme.typeBody,
                         .color = theme.colorTextSecondary,
                         .wrapping = TextWrapping::Wrap,
                     }.flex(1.f),
@@ -121,7 +121,7 @@ struct RgbColorSelectorRoot {
                     ZStack{
                         .hAlign = HorizontalAlignment::Center,
                         .vAlign = VerticalAlignment::Center,
-                        .children = {
+                        .children = children(
                             Rectangle{
                                 .fill = FillStyle::solid(preview),
                                 .stroke = StrokeStyle::solid(theme.colorBorder, 1.f),
@@ -131,21 +131,21 @@ struct RgbColorSelectorRoot {
                                 .flex(1.f),
                             Text{
                                 .text = fmtHex(*red, *green, *blue),
-                                .font = theme.typeTitle.toFont(),
+                                .style = theme.typeTitle,
                                 .color = luminance(preview) > 0.55f ? theme.colorTextPrimary : theme.colorOnAccent,
-                            },
-                        },
+                            }
+                        ),
                     },
 
                     Text{
                         .text = fmtRgbLine(*red, *green, *blue),
-                        .font = theme.typeBodySmall.toFont(),
+                        .style = theme.typeBodySmall,
                         .color = theme.colorTextSecondary,
                     },
 
                     Text{
                         .text = "Channels",
-                        .font = theme.typeSubtitle.toFont(),
+                        .style = theme.typeHeading,
                         .color = theme.colorTextPrimary,
                     },
                     Element{LabeledSlider{
@@ -165,10 +165,10 @@ struct RgbColorSelectorRoot {
                         .valueText = fmtInt(*blue),
                         .value = blue,
                         .activeColor = theme.colorAccent,
-                    }}.flex(1.f),
-                },
-            }.padding(24.f),
-        },
+                    }}.flex(1.f)
+                ),
+            }.padding(24.f)
+        ),
     };
   }
 

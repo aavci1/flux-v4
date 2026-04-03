@@ -7,7 +7,6 @@
 
 #include <Flux/Core/Types.hpp>
 #include <Flux/Graphics/Font.hpp>
-#include <Flux/Graphics/Styles.hpp>
 #include <Flux/Graphics/TextLayoutOptions.hpp>
 #include <Flux/UI/Detail/PrimitiveForwards.hpp>
 #include <Flux/UI/ViewModifiers.hpp>
@@ -27,7 +26,7 @@ struct Text : ViewModifiers<Text> {
   Size measure(LayoutContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
 
   std::string text;
-  Font font{ .family = "", .size = 16.f, .weight = 400.f, .italic = false };
+  TextStyle style{};
 
   Color color = Colors::black;
 
@@ -35,7 +34,6 @@ struct Text : ViewModifiers<Text> {
   VerticalAlignment verticalAlignment = VerticalAlignment::Top;
   TextWrapping wrapping = TextWrapping::Wrap;
 
-  float lineHeight = 0.f;
   int maxLines = 0;
   float firstBaselineOffset = 0.f;
 };

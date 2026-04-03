@@ -8,7 +8,7 @@
 namespace flux {
 
 Element Icon::body() const {
-    FluxTheme const &theme = useEnvironment<FluxTheme>();
+    Theme const &theme = useEnvironment<Theme>();
 
     float const sz = resolveFloat(size, theme.typeBody.size);
     float const wght = resolveFloat(weight, theme.typeBody.weight);
@@ -18,11 +18,11 @@ Element Icon::body() const {
 
     return Text{
                .text = std::move(utf8),
-               .font = Font{
+               .style = TextStyle::fromFont(Font{
                    .family = theme.iconFontFamily,
                    .size = sz * 1.25f,
                    .weight = wght * 1.25f,
-               },
+               }),
                .color = col,
                .horizontalAlignment = HorizontalAlignment::Center,
                .verticalAlignment = VerticalAlignment::Center,

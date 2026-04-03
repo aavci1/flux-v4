@@ -1,6 +1,7 @@
 // Demonstrates Picker: string / int / enum values, keyboard navigation, disabled state.
 #include <Flux.hpp>
 #include <Flux/Core/WindowUI.hpp>
+#include <Flux/UI/Theme.hpp>
 #include <Flux/UI/UI.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Picker.hpp>
@@ -16,6 +17,7 @@ enum class Priority { Low, Medium, High };
 
 struct TaskForm {
   auto body() const {
+    Theme const& theme = useEnvironment<Theme>();
     auto language = useState(std::string{"en"});
     auto count = useState(3);
     auto priority = useState(Priority::Medium);
@@ -23,32 +25,28 @@ struct TaskForm {
     return VStack{
         .spacing = 16.f,
         .hAlign = HorizontalAlignment::Leading,
-        .children =
-            {
+        .children = children(
                 Text{.text = "Picker demo",
-                     .font = {.size = 22.f, .weight = 700.f},
-                     .color = Color::hex(0x111118)},
+                     .style = theme.typeDisplay,
+                     .color = theme.colorTextPrimary},
                 HStack{
                     .spacing = 0.f,
-                    .children =
-                        {
+                    .children = children(
                             Text{
                                 .text = "Tab to the pickers. Return / Space opens; arrows move; Escape dismisses.",
-                                .font = {.size = 13.f, .weight = 400.f},
-                                .color = Color::hex(0x6E6E80),
+                                .style = theme.typeBodySmall,
+                                .color = theme.colorTextSecondary,
                                 .wrapping = TextWrapping::Wrap,
-                            }
-                                .flex(1.f),
-                        },
+                            }.flex(1.f)
+                        ),
                 },
 
                 Text{.text = "Language",
-                     .font = {.size = 13.f, .weight = 600.f},
-                     .color = Color::hex(0x3A3A44)},
+                     .style = theme.typeLabel,
+                     .color = theme.colorTextPrimary},
                 HStack{
                     .spacing = 0.f,
-                    .children =
-                        {
+                    .children = children(
                             Picker<std::string>{
                                 .value = language,
                                 .options =
@@ -64,17 +62,16 @@ struct TaskForm {
                                   std::fprintf(stderr, "[picker-demo] language: %s\n", v.c_str());
                                 },
                             }
-                                .flex(1.f),
-                        },
+                                .flex(1.f)
+                        ),
                 },
 
                 Text{.text = "Count",
-                     .font = {.size = 13.f, .weight = 600.f},
-                     .color = Color::hex(0x3A3A44)},
+                     .style = theme.typeLabel,
+                     .color = theme.colorTextPrimary},
                 HStack{
                     .spacing = 0.f,
-                    .children =
-                        {
+                    .children = children(
                             Picker<int>{
                                 .value = count,
                                 .options = {{1, "1"}, {2, "2"}, {3, "3"}, {5, "5"}, {10, "10"}},
@@ -82,17 +79,16 @@ struct TaskForm {
                                   std::fprintf(stderr, "[picker-demo] count: %d\n", v);
                                 },
                             }
-                                .flex(1.f),
-                        },
+                                .flex(1.f)
+                        ),
                 },
 
                 Text{.text = "Priority",
-                     .font = {.size = 13.f, .weight = 600.f},
-                     .color = Color::hex(0x3A3A44)},
+                     .style = theme.typeLabel,
+                     .color = theme.colorTextPrimary},
                 HStack{
                     .spacing = 0.f,
-                    .children =
-                        {
+                    .children = children(
                             Picker<Priority>{
                                 .value = priority,
                                 .options =
@@ -102,17 +98,16 @@ struct TaskForm {
                                         {Priority::High, "High"},
                                     },
                             }
-                                .flex(1.f),
-                        },
+                                .flex(1.f)
+                        ),
                 },
 
                 Text{.text = "Disabled sample",
-                     .font = {.size = 13.f, .weight = 600.f},
-                     .color = Color::hex(0x3A3A44)},
+                     .style = theme.typeLabel,
+                     .color = theme.colorTextPrimary},
                 HStack{
                     .spacing = 0.f,
-                    .children =
-                        {
+                    .children = children(
                             Picker<std::string>{
                                 .value = language,
                                 .options =
@@ -123,10 +118,10 @@ struct TaskForm {
                                 .placeholder = "Unavailable",
                                 .disabled = true,
                             }
-                                .flex(1.f),
-                        },
-                },
-            },
+                                .flex(1.f)
+                        ),
+                }
+            ),
     }.padding(24.f);
   }
 };

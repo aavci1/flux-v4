@@ -17,7 +17,7 @@ inline constexpr Font kFontFromTheme{.size = -1.f};
 Font resolveFont(Font const& override, Font const& themeValue);
 
 /// Raw colour palette — 50 named swatches across 5 hues × 10 steps.
-/// Used to build FluxTheme presets; not consumed by components directly.
+/// Used to build Theme presets; not consumed by components directly.
 /// Step convention: 50 = lightest, 950 = darkest (same as Tailwind).
 struct FluxPalette {
   Color blue50 = Color::hex(0xEFF6FF);
@@ -77,7 +77,7 @@ struct FluxPalette {
   Color neutral950 = Color::hex(0x111118);
 };
 
-struct FluxTheme {
+struct Theme {
   Color colorAccent = Color::hex(0x3A7BD5);
   Color colorOnAccent = Color::hex(0xFFFFFF);
   Color colorAccentSubtle = Color{0.23f, 0.48f, 0.84f, 0.12f};
@@ -116,6 +116,14 @@ struct FluxTheme {
   Color colorScrimModal = Color{0.f, 0.f, 0.f, 0.45f};
   Color colorScrimPopover = Color{0.f, 0.f, 0.f, 0.f};
 
+  /// Typography scale — use these roles consistently (pair with `colorText*` for emphasis).
+  /// - `typeDisplay`: single screen / hero title.
+  /// - `typeHeading`: major section headings within a screen.
+  /// - `typeTitle`: card titles, modal sheets, and nested panel titles.
+  /// - `typeSubtitle`: subsections and group headings under a section.
+  /// - `typeLabel` / `typeLabelSmall`: field labels, compact control labels, footnotes.
+  /// - `typeBody` / `typeBodySmall`: paragraphs, descriptions, captions, supporting text.
+  /// - `typeCode`: monospace snippets.
   TextStyle typeDisplay{34.f, 700.f, 1.12f};
   TextStyle typeHeading{22.f, 700.f, 1.18f};
   TextStyle typeTitle{17.f, 600.f, 1.24f};
@@ -129,7 +137,7 @@ struct FluxTheme {
   // Spacing scale (8 pt grid). At density 1.0, space3 is 12 pt, space4 is 16 pt, etc.
   // `withDensity(d)` scales space1–space8 by d (and updates paddingFieldH/V to match space3/space2).
   // After compact/comfortable, spaceN are no longer fixed “name = 12 pt” constants — always read from
-  // `FluxTheme` so layout participates in density; hardcoded literals (e.g. 24.f) do not.
+  // `Theme` so layout participates in density; hardcoded literals (e.g. 24.f) do not.
   float space1 = 4.f;
   float space2 = 8.f;
   float space3 = 12.f;
@@ -207,12 +215,12 @@ struct FluxTheme {
   float shadowRadiusPopover = 4.f;
   float shadowOffsetYPopover = 3.f;
 
-  static FluxTheme light();
-  static FluxTheme dark();
-  static FluxTheme compact();
-  static FluxTheme comfortable();
+  static Theme light();
+  static Theme dark();
+  static Theme compact();
+  static Theme comfortable();
 
-  FluxTheme withDensity(float d) const;
+  Theme withDensity(float d) const;
 };
 
 } // namespace flux

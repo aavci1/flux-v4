@@ -69,12 +69,12 @@ struct IconCell {
     std::string label;
 
     auto body() const {
-        FluxTheme const &t = useEnvironment<FluxTheme>();
+        Theme const &t = useEnvironment<Theme>();
 
         return VStack {
             .spacing = 16.f,
             .hAlign = HorizontalAlignment::Center,
-            .children = {
+            .children = children(
                 Icon {
                     .name = name,
                     .size = 32.f,
@@ -83,21 +83,18 @@ struct IconCell {
                 },
                 Text {
                     .text = label,
-                    .font = Font {
-                        .size = 16.f,
-                        .weight = 400.f,
-                    },
+                    .style = t.typeBody,
                     .color = t.colorTextSecondary,
                     .wrapping = TextWrapping::NoWrap,
-                },
-            },
+                }
+            ),
         };
     }
 };
 
 struct IconDemoRoot {
   auto body() const {
-    FluxTheme const &t = useEnvironment<FluxTheme>();
+    Theme const &t = useEnvironment<Theme>();
 
     std::vector<Element> gridCells;
     gridCells.reserve(sizeof(kIcons) / sizeof(kIcons[0]));
@@ -112,32 +109,27 @@ struct IconDemoRoot {
 
     return ScrollView {
         .axis = ScrollAxis::Vertical,
-        .children =
-            {
+        .children = children(
                 VStack{
                     .spacing = t.space5,
                     .hAlign = HorizontalAlignment::Leading,
-                    .children =
-                        {
+                    .children = children(
                             Text{.text = "Icon demo",
-                                 .font = t.typeHeading.toFont(),
-                                 .color = t.colorTextPrimary,
-                                 .lineHeight = t.typeHeading.lineHeight},
+                                 .style = t.typeDisplay,
+                                 .color = t.colorTextPrimary},
                             Text{
                                 .text = "Material Symbols Rounded — curated "
                                         "IconName set. "
                                         "Resize the window; scroll for the "
                                         "full grid.",
-                                .font = t.typeBody.toFont(),
+                                .style = t.typeBody,
                                 .color = t.colorTextSecondary,
                                 .wrapping = TextWrapping::Wrap,
-                                .lineHeight = t.typeBody.lineHeight,
                             },
 
                             Text{.text = "All curated icons",
-                                 .font = t.typeTitle.toFont(),
-                                 .color = t.colorTextPrimary,
-                                 .lineHeight = t.typeTitle.lineHeight},
+                                 .style = t.typeHeading,
+                                 .color = t.colorTextPrimary},
                             Grid {
                                 .columns = 8,
                                 .hSpacing = 124.f,
@@ -145,10 +137,10 @@ struct IconDemoRoot {
                                 .hAlign = HorizontalAlignment::Center,
                                 .vAlign = VerticalAlignment::Top,
                                 .children = std::move(gridCells),
-                            },
-                        },
-                }.padding(t.space5),
-            },
+                            }
+                        ),
+                }.padding(t.space5)
+            ),
     };
   }
 };

@@ -4,6 +4,7 @@
 
 #include <Flux.hpp>
 #include <Flux/Core/WindowUI.hpp>
+#include <Flux/UI/Theme.hpp>
 #include <Flux/UI/UI.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
@@ -27,6 +28,7 @@ constexpr Color amber = Color::hex(0xF4A261);
 
 struct StackDemoRoot {
     auto body() const {
+        Theme const& theme = useEnvironment<Theme>();
         return ScrollView {
             .axis = ScrollAxis::Vertical,
             .children = children(
@@ -36,18 +38,18 @@ struct StackDemoRoot {
                     .children = children(
                         Text {
                             .text = "HStack & VStack",
-                            .font = {.size = 26.f, .weight = 700.f},
+                            .style = theme.typeDisplay,
                             .color = pal::ink
                         },
                         Text {
                             .text = "VStack arranges children top-to-bottom; HStack left-to-right. Use spacing, padding, and alignment to tune layout.",
-                            .font = {.size = 14.f, .weight = 400.f},
+                            .style = theme.typeBody,
                             .color = pal::muted,
                             .wrapping = TextWrapping::Wrap
                         },
                         Text {
                             .text = "VStack",
-                            .font = {.size = 15.f, .weight = 600.f},
+                            .style = theme.typeHeading,
                             .color = pal::ink
                         },
                         VStack {
@@ -67,7 +69,7 @@ struct StackDemoRoot {
                         },
                         Text {
                             .text = "HStack",
-                            .font = {.size = 15.f, .weight = 600.f},
+                            .style = theme.typeHeading,
                             .color = pal::ink
                         },
                         HStack {
@@ -90,7 +92,7 @@ struct StackDemoRoot {
                         },
                         Text {
                             .text = "Nested — HStack rows inside a VStack",
-                            .font = {.size = 15.f, .weight = 600.f},
+                            .style = theme.typeHeading,
                             .color = pal::ink
                         },
                         VStack {
@@ -106,7 +108,7 @@ struct StackDemoRoot {
                                         }.height(28.f).cornerRadius(CornerRadius{6.f}).flex(1.f),
                                         Text {
                                             .text = "A",
-                                            .font = {.size = 13.f, .weight = 600.f},
+                                            .style = theme.typeBody,
                                             .color = pal::ink,
                                         }.padding(6.f)
                                     ),
@@ -120,7 +122,7 @@ struct StackDemoRoot {
                                         }.height(28.f).cornerRadius(CornerRadius{6.f}).flex(1.f),
                                         Text {
                                             .text = "B",
-                                            .font = {.size = 13.f, .weight = 600.f},
+                                            .style = theme.typeBody,
                                             .color = pal::ink,
                                         }.padding(6.f)
                                     ),
@@ -134,7 +136,7 @@ struct StackDemoRoot {
                                         }.height(28.f).cornerRadius(CornerRadius{6.f}).flex(1.f),
                                         Text {
                                             .text = "C",
-                                            .font = {.size = 13.f, .weight = 600.f},
+                                            .style = theme.typeBody,
                                             .color = pal::ink,
                                         }.padding(6.f)
                                     ),
@@ -143,7 +145,7 @@ struct StackDemoRoot {
                         },
                         Text {
                             .text = "HStack + Spacer (flex along the row)",
-                            .font = {.size = 15.f, .weight = 600.f},
+                            .style = theme.typeHeading,
                             .color = pal::ink
                         },
                         HStack {
@@ -152,13 +154,13 @@ struct StackDemoRoot {
                             .children = children(
                                 Text {
                                     .text = "Leading",
-                                    .font = {.size = 14.f, .weight = 500.f},
+                                    .style = theme.typeLabel,
                                     .color = pal::ink
                                 },
                                 Spacer {},
                                 Text {
                                     .text = "Trailing",
-                                    .font = {.size = 14.f, .weight = 500.f},
+                                    .style = theme.typeLabel,
                                     .color = pal::ink
                                 }
                             ),

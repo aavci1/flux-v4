@@ -2,6 +2,7 @@
 #include <Flux.hpp>
 #include <Flux/Core/WindowUI.hpp>
 #include <Flux/Reactive/Reactive.hpp>
+#include <Flux/UI/Theme.hpp>
 #include <Flux/UI/UI.hpp>
 #include <Flux/UI/Views/Alert.hpp>
 #include <Flux/UI/Views/Button.hpp>
@@ -14,14 +15,9 @@
 
 using namespace flux;
 
-namespace pal {
-constexpr Color bg = Color::hex(0xF2F2F7);
-constexpr Color titleC = Color::hex(0x111118);
-constexpr Color bodyC = Color::hex(0x6E6E80);
-} // namespace pal
-
 struct AlertDemoRoot {
   auto body() const {
+    Theme const& theme = useEnvironment<Theme>();
     auto [showAlert, hideAlert, alertOpen] = useAlert();
     (void)alertOpen;
 
@@ -29,25 +25,23 @@ struct AlertDemoRoot {
     auto status = useState(std::string{"Tap a button to open an alert."});
 
     return ZStack{
-        .children =
-            {
-                Rectangle{.fill = FillStyle::solid(pal::bg)},
+        .children = children(
+                Rectangle{.fill = FillStyle::solid(theme.colorBackground)},
                 VStack{
                     .spacing = 16.f,
                     .hAlign = HorizontalAlignment::Leading,
-                    .children =
-                        {
+                    .children = children(
                             Text{.text = "Alert demo",
-                                 .font = {.size = 22.f, .weight = 700.f},
-                                 .color = pal::titleC},
+                                 .style = theme.typeDisplay,
+                                 .color = theme.colorTextPrimary},
                             Text{.text = "Modal alerts via useAlert(). Escape dismisses when enabled. "
                                          "Outside tap does not dismiss.",
-                                 .font = {.size = 14.f, .weight = 400.f},
-                                 .color = pal::bodyC,
+                                 .style = theme.typeBody,
+                                 .color = theme.colorTextSecondary,
                                  .wrapping = TextWrapping::Wrap},
                             Text{.text = *status,
-                                 .font = {.size = 13.f, .weight = 500.f},
-                                 .color = Color::hex(0x3A7BD5),
+                                 .style = theme.typeBodySmall,
+                                 .color = theme.colorAccent,
                                  .wrapping = TextWrapping::Wrap},
 
                             Button{
@@ -137,10 +131,10 @@ struct AlertDemoRoot {
                                               },
                                       });
                                     },
-                            },
-                        },
-                }.padding(24.f),
-            },
+                            }
+                        ),
+                }.padding(24.f)
+            ),
     };
   }
 };

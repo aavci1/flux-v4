@@ -24,8 +24,13 @@ struct TextLayoutOptions {
   HorizontalAlignment horizontalAlignment = HorizontalAlignment::Leading;
   VerticalAlignment verticalAlignment = VerticalAlignment::Top;
   TextWrapping wrapping = TextWrapping::Wrap;
-  float lineHeight = 0.f; ///< 0 = font natural line height.
-  int maxLines = 0;       ///< 0 = unlimited.
+  /// Absolute minimum and maximum line height in points (Core Text). 0 = do not set min/max; prefer
+  /// \c lineHeightMultiple when both come from a typographic multiplier.
+  float lineHeight = 0.f;
+  /// Core Text line-height multiple (0 = natural). Mutually preferred over \c lineHeight for theme-style
+  /// multipliers so lines never pack tighter than glyph bounds.
+  float lineHeightMultiple = 0.f;
+  int maxLines = 0; ///< 0 = unlimited.
 
   /// Distance from the box top to the desired first baseline (only for `VerticalAlignment::FirstBaseline`).
   /// With offset 0, the first baseline is placed on the box top edge (ascenders may draw above the box).

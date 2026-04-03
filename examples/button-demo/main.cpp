@@ -4,6 +4,7 @@
 #include <Flux/Core/Shortcut.hpp>
 #include <Flux/Core/WindowUI.hpp>
 #include <Flux/Reactive/Reactive.hpp>
+#include <Flux/UI/Theme.hpp>
 #include <Flux/UI/UI.hpp>
 #include <Flux/UI/Views/Button.hpp>
 #include <Flux/UI/Views/HStack.hpp>
@@ -24,42 +25,39 @@ bool gSaveActionEnabled = true;
 
 struct ButtonDemoRoot {
   auto body() const {
+    Theme const& theme = useEnvironment<Theme>();
     return ZStack{
         .hAlign = HorizontalAlignment::Leading,
         .vAlign = VerticalAlignment::Top,
-        .children =
-            {
-                Rectangle{ .fill = FillStyle::solid(Color::hex(0xF2F2F7)) },
+        .children = children(
+                Rectangle{ .fill = FillStyle::solid(theme.colorBackground) },
                 VStack{
                     .spacing = 20.f,
                     .hAlign = HorizontalAlignment::Leading,
-                    .children =
-                        {
+                    .children = children(
                             Text{ .text = "Button",
-                                  .font = { .size = 26.f, .weight = 700.f },
-                                  .color = Color::hex(0x111118) },
+                                  .style = theme.typeDisplay,
+                                  .color = theme.colorTextPrimary },
                             HStack{
                                 .spacing = 0.f,
-                                .children =
-                                    {
+                                .children = children(
                                         Text{
                                                 .text = "Five variants, hover/press/focus, disabled state, and Tab navigation. "
                                                         "Link focus rings appear only after keyboard focus.",
-                                                .font = {.size = 14.f, .weight = 400.f},
-                                                .color = Color::hex(0x6E6E80),
+                                                .style = theme.typeBody,
+                                                .color = theme.colorTextSecondary,
                                                 .wrapping = TextWrapping::Wrap,
                                             }
-                                            .flex(1.f),
-                                    },
+                                            .flex(1.f)
+                                    ),
                             },
                             Text{ .text = "Variants",
-                                  .font = { .size = 15.f, .weight = 600.f },
-                                  .color = Color::hex(0x111118) },
+                                  .style = theme.typeHeading,
+                                  .color = theme.colorTextPrimary },
                             HStack{
                                 .spacing = 8.f,
                                 .vAlign = VerticalAlignment::Center,
-                                .children =
-                                    {
+                                .children = children(
                                         Button{ .label = "Primary",
                                                 .variant = ButtonVariant::Primary,
                                                 .onTap = [] {
@@ -79,17 +77,16 @@ struct ButtonDemoRoot {
                                                 .variant = ButtonVariant::Ghost,
                                                 .onTap = [] {
                                                   std::fprintf(stderr, "[button-demo] Ghost\n");
-                                                } },
-                                    },
+                                                } }
+                                    ),
                             },
                             Text{ .text = "Disabled",
-                                  .font = { .size = 15.f, .weight = 600.f },
-                                  .color = Color::hex(0x111118) },
+                                  .style = theme.typeHeading,
+                                  .color = theme.colorTextPrimary },
                             HStack{
                                 .spacing = 8.f,
                                 .vAlign = VerticalAlignment::Center,
-                                .children =
-                                    {
+                                .children = children(
                                         Button{ .label = "Primary",
                                                 .variant = ButtonVariant::Primary,
                                                 .disabled = true },
@@ -101,33 +98,31 @@ struct ButtonDemoRoot {
                                                 .disabled = true },
                                         Button{ .label = "Ghost",
                                                 .variant = ButtonVariant::Ghost,
-                                                .disabled = true },
-                                    },
+                                                .disabled = true }
+                                    ),
                             },
                             HStack{
                                 .spacing = 4.f,
                                 .vAlign = VerticalAlignment::Center,
-                                .children =
-                                    {
+                                .children = children(
                                         Text{ .text = "Inline link —",
-                                              .font = { .size = 13.f, .weight = 400.f },
-                                              .color = Color::hex(0x6E6E80) },
+                                              .style = theme.typeBodySmall,
+                                              .color = theme.colorTextSecondary },
                                         Button{ .label = "Forgot password?",
                                                 .variant = ButtonVariant::Link,
-                                                .font = { .size = 13.f, .weight = 400.f },
+                                                .font = theme.typeBodySmall.toFont(),
                                                 .onTap = [] {
                                                   std::fprintf(stderr, "[button-demo] Link tap\n");
-                                                } },
-                                    },
+                                                } }
+                                    ),
                             },
                             Text{ .text = "Form (Tab between controls; Cmd+S when Save is enabled)",
-                                  .font = { .size = 15.f, .weight = 600.f },
-                                  .color = Color::hex(0x111118) },
+                                  .style = theme.typeHeading,
+                                  .color = theme.colorTextPrimary },
                             HStack{
                                 .spacing = 8.f,
                                 .vAlign = VerticalAlignment::Center,
-                                .children =
-                                    {
+                                .children = children(
                                         Button{
                                             .label = "Toggle save action",
                                             .variant = ButtonVariant::Ghost,
@@ -151,12 +146,12 @@ struct ButtonDemoRoot {
                                               std::fprintf(stderr, "[button-demo] Save (button or shortcut)\n");
                                             },
                                             .actionName = "demo.save",
-                                        },
-                                    },
-                            },
-                        },
-                }.padding(24.f),
-            },
+                                        }
+                                    ),
+                            }
+                        ),
+                }.padding(24.f)
+            ),
     };
   }
 };

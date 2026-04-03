@@ -1,6 +1,7 @@
 #include <Flux.hpp>
 #include <Flux/Core/WindowUI.hpp>
 #include <Flux/Reactive/Reactive.hpp>
+#include <Flux/UI/Theme.hpp>
 #include <Flux/UI/UI.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
@@ -26,21 +27,20 @@ struct FocusField {
   std::string title;
 
   auto body() const {
+    Theme const& theme = useEnvironment<Theme>();
     auto text = useState<std::string>(std::string{});
     bool const focused = useFocus();
 
     return VStack{
         .spacing = 8.f,
         .hAlign = HorizontalAlignment::Leading,
-        .children =
-            {
+        .children = children(
                 Text{.text = title,
-                     .font = {.size = 14.f, .weight = 600.f},
+                     .style = theme.typeLabel,
                      .color = pal::label},
                 HStack{
                     .spacing = 0.f,
-                    .children =
-                        {
+                    .children = children(
                             Rectangle{
                                         .fill = FillStyle::solid(focused ? pal::editorBgFocus : pal::editorBg),
                                         .stroke = StrokeStyle::solid(focused ? pal::borderFocus : pal::border,
@@ -72,69 +72,65 @@ struct FocusField {
                                               }
                                             })
                                 .cornerRadius(CornerRadius(10.f))
-                                .flex(1.f, 1.f, 80.f),
-                        },
+                                .flex(1.f, 1.f, 80.f)
+                        ),
                 },
                 HStack{
                     .spacing = 0.f,
-                    .children =
-                        {
+                    .children = children(
                             Text{.text = (*text).empty() ? std::string("(empty)") : std::string(*text),
-                                        .font = {.size = 13.f, .weight = 400.f},
+                                        .style = theme.typeBodySmall,
                                         .color = pal::sublabel,
                                         .wrapping = TextWrapping::Wrap}
-                                .flex(1.f),
-                        },
-                },
-            },
+                                .flex(1.f)
+                        ),
+                }
+            ),
     };
   }
 };
 
 struct FocusDemoRoot {
   auto body() const {
+    Theme const& theme = useEnvironment<Theme>();
     return ZStack{
         .hAlign = HorizontalAlignment::Leading,
         .vAlign = VerticalAlignment::Top,
-        .children =
-            {
+        .children = children(
                 Rectangle{.fill = FillStyle::solid(pal::bg)},
                 VStack{
                     .spacing = 20.f,
                     .hAlign = HorizontalAlignment::Leading,
-                    .children =
-                        {
+                    .children = children(
                             Text{.text = "Focus & keyboard",
-                                 .font = {.size = 26.f, .weight = 700.f},
+                                 .style = theme.typeDisplay,
                                  .color = pal::label},
                             HStack{
                                 .spacing = 0.f,
-                                .children =
-                                    {
+                                .children = children(
                                         Text{
                                                 .text = "Click a field to focus. Type text; Delete removes a character; Esc "
                                                         "clears. Cmd+S appends a demo tag. Tab / Shift+Tab cycle fields "
                                                         "(A→B→C). Focus ring uses useFocus().",
-                                                .font = {.size = 14.f, .weight = 400.f},
+                                                .style = theme.typeBody,
                                                 .color = pal::sublabel,
                                                 .wrapping = TextWrapping::Wrap,
                                             }
-                                            .flex(1.f),
-                                    },
+                                            .flex(1.f)
+                                    ),
                             },
                             HStack{
                                 .spacing = 16.f,
                                 .vAlign = VerticalAlignment::Top,
-                                .children =
-                                    {
+                                .children = children(
                                         Element{FocusField{.title = "Field A — notes"}}.flex(1.f),
                                         Element{FocusField{.title = "Field B — scratch"}}.flex(1.f),
-                                        Element{FocusField{.title = "Field C — extra"}}.flex(1.f),
-                                    },
-                            },
-                        },
-                }.padding(24.f),
-            },
+                                        Element{FocusField{.title = "Field C — extra"}}.flex(1.f)
+                                    ),
+                            }
+                        ),
+                }.padding(24.f)
+            ),
     };
   }
 };

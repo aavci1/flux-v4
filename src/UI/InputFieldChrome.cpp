@@ -6,7 +6,7 @@
 
 namespace flux {
 
-ResolvedInputFieldChrome resolveInputFieldChrome(InputFieldChromeSpec const& spec, FluxTheme const& theme) {
+ResolvedInputFieldChrome resolveInputFieldChrome(InputFieldChromeSpec const& spec, Theme const& theme) {
   return ResolvedInputFieldChrome{
       .textColor = resolveColor(spec.textColor, theme.colorTextPrimary),
       .placeholderColor = resolveColor(spec.placeholderColor, theme.colorTextPlaceholder),
@@ -24,7 +24,7 @@ ResolvedInputFieldChrome resolveInputFieldChrome(InputFieldChromeSpec const& spe
   };
 }
 
-ResolvedPickerFieldChrome resolvePickerFieldChrome(PickerFieldChromeSpec const& spec, FluxTheme const& theme) {
+ResolvedPickerFieldChrome resolvePickerFieldChrome(PickerFieldChromeSpec const& spec, Theme const& theme) {
   return ResolvedPickerFieldChrome{
       .input = resolveInputFieldChrome(spec.input, theme),
       .chevronColor = resolveColor(spec.chevronColor, theme.colorTextMuted),

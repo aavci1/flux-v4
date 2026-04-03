@@ -4,6 +4,7 @@
 #include <Flux/Core/Shortcut.hpp>
 #include <Flux/Core/WindowUI.hpp>
 #include <Flux/Reactive/Reactive.hpp>
+#include <Flux/UI/Theme.hpp>
 #include <Flux/UI/UI.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Text.hpp>
@@ -17,6 +18,7 @@ using namespace flux;
 
 struct TextInputForm {
   auto body() const {
+    Theme const& theme = useEnvironment<Theme>();
     auto name = useState(std::string{"Abdurrahman Avcı"});
     auto email = useState(std::string{"abdurrahmanavci@gmail.com"});
     auto notes = useState(std::string{"Try Cmd+A / C / X / V, Tab between fields."});
@@ -25,31 +27,28 @@ struct TextInputForm {
     return VStack{
         .spacing = 16.f,
         .hAlign = HorizontalAlignment::Leading,
-        .children =
-            {
+        .children = children(
                 Text{.text = "TextInput demo",
-                     .font = {.size = 22.f, .weight = 700.f},
-                     .color = Color::hex(0x111118)},
+                     .style = theme.typeDisplay,
+                     .color = theme.colorTextPrimary},
                 HStack{
                     .spacing = 0.f,
-                    .children =
-                        {
+                    .children = children(
                             Text{
                                 .text = "Tab / Shift+Tab between fields. Edit actions use the window action table.",
-                                .font = {.size = 13.f, .weight = 400.f},
-                                .color = Color::hex(0x6E6E80),
+                                .style = theme.typeBodySmall,
+                                .color = theme.colorTextSecondary,
                                 .wrapping = TextWrapping::Wrap,
                             }
-                                .flex(1.f),
-                        },
+                                .flex(1.f)
+                        ),
                 },
                 Text{.text = "Name",
-                     .font = {.size = 13.f, .weight = 600.f},
-                     .color = Color::hex(0x3A3A44)},
+                     .style = theme.typeLabel,
+                     .color = theme.colorTextPrimary},
                 HStack{
                     .spacing = 0.f,
-                    .children =
-                        {
+                    .children = children(
                             TextInput{
                                 .value = name,
                                 .placeholder = "Your name",
@@ -57,16 +56,15 @@ struct TextInputForm {
                                   std::fprintf(stderr, "[textinput-demo] submit name: %s\n", v.c_str());
                                 },
                             }
-                                .flex(1.f),
-                        },
+                                .flex(1.f)
+                        ),
                 },
                 Text{.text = "Email",
-                     .font = {.size = 13.f, .weight = 600.f},
-                     .color = Color::hex(0x3A3A44)},
+                     .style = theme.typeLabel,
+                     .color = theme.colorTextPrimary},
                 HStack{
                     .spacing = 0.f,
-                    .children =
-                        {
+                    .children = children(
                             TextInput{
                                 .value = email,
                                 .placeholder = "you@example.com",
@@ -75,35 +73,33 @@ struct TextInputForm {
                                   std::fprintf(stderr, "[textinput-demo] submit email: %s\n", v.c_str());
                                 },
                             }
-                                .flex(1.f),
-                        },
+                                .flex(1.f)
+                        ),
                 },
                 Text{.text = "Notes",
-                     .font = {.size = 13.f, .weight = 600.f},
-                     .color = Color::hex(0x3A3A44)},
+                     .style = theme.typeLabel,
+                     .color = theme.colorTextPrimary},
                 HStack{
                     .spacing = 0.f,
-                    .children =
-                        {
+                    .children = children(
                             TextInput{
                                 .value = notes,
                                 .placeholder = "Optional",
                             }
-                                .flex(1.f, 1.f, 200.f),
-                        },
+                                .flex(1.f, 1.f, 200.f)
+                        ),
                 },
                 Text{.text = "Disabled",
-                     .font = {.size = 13.f, .weight = 600.f},
-                     .color = Color::hex(0x3A3A44)},
+                     .style = theme.typeLabel,
+                     .color = theme.colorTextPrimary},
                 HStack{
                     .spacing = 0.f,
-                    .children =
-                        {
+                    .children = children(
                             TextInput{.value = disabledSample, .placeholder = "N/A", .disabled = true}
-                                .flex(1.f),
-                        },
-                },
-            },
+                                .flex(1.f)
+                        ),
+                }
+            ),
     }.padding(24.f);
   }
 };

@@ -1,5 +1,6 @@
 #include <Flux.hpp>
 #include <Flux/Core/WindowUI.hpp>
+#include <Flux/UI/Theme.hpp>
 #include <Flux/UI/UI.hpp>
 #include <Flux/UI/Views/ForEach.hpp>
 #include <Flux/UI/Views/HStack.hpp>
@@ -24,10 +25,11 @@ struct HoverRow {
   int index = 0;
 
   auto body() const {
+    Theme const& theme = useEnvironment<Theme>();
     bool const hovered = useHover();
     Color const bgColor = hovered ? Color::hex(0xDFDFE6) : Color::hex(0xFFFFFF);
 
-    return ZStack{.children = {
+    return ZStack{.children = children(
                       Rectangle{
                           .fill = FillStyle::solid(bgColor),
                           .stroke = StrokeStyle::solid(Color::hex(0xE0E0E6), 1.f),
@@ -36,40 +38,37 @@ struct HoverRow {
                           .cursor(Cursor::Hand)
                           .cornerRadius(CornerRadius(8.f)),
                       Text{.text = "Row " + std::to_string(index) + (hovered ? "  ← hovered" : ""),
-                           .font = {.size = 14.f, .weight = 400.f},
+                           .style = theme.typeBody,
                            .color = pal::label,
                        }
-                          .padding(14.f),
-                  }};
+                          .padding(14.f)
+                  )};
   }
 };
 
 struct ForEachDemo {
   auto body() const {
+    Theme const& theme = useEnvironment<Theme>();
     auto count = useState(5);
 
     std::vector<int> indices(static_cast<std::size_t>(*count));
     std::iota(indices.begin(), indices.end(), 0);
 
     return ZStack{
-        .children =
-            {
+        .children = children(
                 Rectangle{.fill = FillStyle::solid(pal::bg)},
                 VStack{
                     .spacing = 16.f,
-                    .children =
-                        {
+                    .children = children(
                             Text{.text = "ForEach demo",
-                                 .font = {.size = 22.f, .weight = 700.f},
+                                 .style = theme.typeDisplay,
                                  .color = pal::label},
                             HStack{
                                 .spacing = 10.f,
                                 .vAlign = VerticalAlignment::Center,
-                                .children =
-                                    {
+                                .children = children(
                                         ZStack{
-                                            .children =
-                                                {
+                                            .children = children(
                                                     Rectangle{
                                                         .fill = FillStyle::solid(Color::hex(0x3A7BD5)),
                                                     }
@@ -78,13 +77,12 @@ struct ForEachDemo {
                                                         .onTap([count] { count = *count + 1; })
                                                         .cornerRadius(CornerRadius(8.f)),
                                                     Text{.text = "+ Row",
-                                                         .font = {.size = 14.f, .weight = 600.f},
-                                                         .color = Color::hex(0xFFFFFF)},
-                                                },
+                                                         .style = theme.typeLabel,
+                                                         .color = theme.colorOnAccent}
+                                                ),
                                         },
                                         ZStack{
-                                            .children =
-                                                {
+                                            .children = children(
                                                     Rectangle{
                                                         .fill = FillStyle::solid(Color::hex(0xD05A2B)),
                                                     }
@@ -97,32 +95,30 @@ struct ForEachDemo {
                                                         })
                                                         .cornerRadius(CornerRadius(8.f)),
                                                     Text{.text = "- Row",
-                                                         .font = {.size = 14.f, .weight = 600.f},
-                                                         .color = Color::hex(0xFFFFFF)},
-                                                },
-                                        },
-                                    },
+                                                         .style = theme.typeLabel,
+                                                         .color = theme.colorOnAccent}
+                                                ),
+                                        }
+                                    ),
                             },
                             ScrollView{
-                                .children =
-                                    {
+                                .children = children(
                                         VStack{
                                             .spacing = 6.f,
-                                            .children =
-                                                {
+                                            .children = children(
                                                     ForEach<int>(
                                                         std::move(indices),
                                                         [](int i) {
                                                           return Element{HoverRow{.index = i}};
                                                         },
-                                                        6.f),
-                                                },
-                                        }.padding(12.f),
-                                    },
-                            },
-                        },
-                }.padding(20.f),
-            },
+                                                        6.f)
+                                                ),
+                                        }.padding(12.f)
+                                    ),
+                            }
+                        ),
+                }.padding(20.f)
+            ),
     };
   }
 };

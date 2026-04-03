@@ -35,16 +35,16 @@ struct Button : ViewModifiers<Button> {
 
   ButtonVariant variant = ButtonVariant::Primary;
 
-  /// Override fixed height (`<= 0` or `kHeightFromTheme` = `FluxTheme::controlHeightMedium`). Ignored for Link.
+  /// Override fixed height (`<= 0` or `kHeightFromTheme` = `Theme::controlHeightMedium`). Ignored for Link.
   float height = kHeightFromTheme;
 
   Font font = kFontFromTheme;
 
-  /// Horizontal padding between label and button edge (`kFloatFromTheme` = `FluxTheme::space4`).
+  /// Horizontal padding between label and button edge (`kFloatFromTheme` = `Theme::space4`).
   /// Ignored for Link (always 0).
   float paddingH = kFloatFromTheme;
 
-  /// Uniform corner radius in points (`kFloatFromTheme` = `FluxTheme::radiusMedium`). `body()` builds
+  /// Uniform corner radius in points (`kFloatFromTheme` = `Theme::radiusMedium`). `body()` builds
   /// `CornerRadius` from this value — all four corners match. Per-corner radii (e.g. top-only sheet
   /// rounding) are not expressible on this field; use a lower-level primitive with explicit `CornerRadius`.
   float cornerRadius = kFloatFromTheme;

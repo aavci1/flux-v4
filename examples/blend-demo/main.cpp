@@ -1,8 +1,8 @@
 #include <Flux.hpp>
 #include <Flux/Core/Application.hpp>
 #include <Flux/Core/WindowUI.hpp>
-#include <Flux/Graphics/Font.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
+#include <Flux/UI/Theme.hpp>
 #include <Flux/UI/UI.hpp>
 #include <Flux/UI/ViewModifiers.hpp>
 
@@ -75,9 +75,10 @@ struct BlendCell : ViewModifiers<BlendCell> {
     canvas.drawRect(cell, CornerRadius(4.f, 4.f, 4.f, 4.f), FillStyle::none(),
                     StrokeStyle::solid(Color::rgb(90, 90, 100), 1.2f));
 
-    Font const labelFont{.family = ".AppleSystemUIFont", .size = 16.f, .weight = 500.f};
+    Theme const theme = Theme::light();
+    Font const labelFont = theme.typeLabel.toFont();
     auto labelLayout =
-        Application::instance().textSystem().layout(title, labelFont, Color::rgb(38, 38, 45), 0.f);
+        Application::instance().textSystem().layout(title, labelFont, theme.colorTextPrimary, 0.f);
     Size const m = labelLayout->measuredSize;
     float const y = cell.y + cell.height - 16.f - m.height;
     float const x = cell.x + (cell.width - m.width) * 0.5f;

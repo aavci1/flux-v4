@@ -21,7 +21,7 @@
 namespace flux {
 
 /// Floating card + optional arrow. Present/dismiss timing is owned by the overlay stack, not
-/// `FluxTheme::duration*` (those apply to in-body transitions such as `useAnimated` on controls).
+/// `Theme::duration*` (those apply to in-body transitions such as `useAnimated` on controls).
 struct Popover : ViewModifiers<Popover> {
   // ── Content ──────────────────────────────────────────────────────────────
 
@@ -32,7 +32,7 @@ struct Popover : ViewModifiers<Popover> {
 
   PopoverPlacement placement = PopoverPlacement::Below;
 
-  /// Gap between the anchor edge and the popover card (`kFloatFromTheme` = `FluxTheme::space2`).
+  /// Gap between the anchor edge and the popover card (`kFloatFromTheme` = `Theme::space2`).
   float gap = kFloatFromTheme;
 
   /// When true, a callout triangle is drawn pointing at the anchor.
@@ -43,18 +43,18 @@ struct Popover : ViewModifiers<Popover> {
   Color backgroundColor = kFromTheme;
   Color borderColor = kFromTheme;
   float borderWidth = 1.f;
-  /// Uniform card radius (`kFloatFromTheme` = `FluxTheme::radiusLarge`). Per-corner control lives in
+  /// Uniform card radius (`kFloatFromTheme` = `Theme::radiusLarge`). Per-corner control lives in
   /// `PopoverCalloutShape` / path geometry, not this scalar.
   float cornerRadius = kFloatFromTheme;
 
-  /// Inset between the card outline and the popover content (`kFloatFromTheme` = `FluxTheme::space3`).
+  /// Inset between the card outline and the popover content (`kFloatFromTheme` = `Theme::space3`).
   float contentPadding = kFloatFromTheme;
 
   /// Maximum size of the popover content area (excluding arrow).
   /// nullopt = size to content, clamped to window bounds.
   std::optional<Size> maxSize;
 
-  /// Full-window dim behind the popover. Default `kFromTheme` uses `FluxTheme::colorScrimPopover`.
+  /// Full-window dim behind the popover. Default `kFromTheme` uses `Theme::colorScrimPopover`.
   Color backdropColor = kFromTheme;
 
   /// When set, the overlay anchor height is clamped to this value (use the trigger row height).

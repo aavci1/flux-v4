@@ -14,7 +14,7 @@
 
 namespace flux {
 
-/// Boolean box with optional indeterminate state and checkmark. Uses \ref FluxTheme checkbox tokens
+/// Boolean box with optional indeterminate state and checkmark. Uses \ref Theme checkbox tokens
 /// when style fields use sentinels.
 struct Checkbox : ViewModifiers<Checkbox> {
   // ── Binding ──────────────────────────────────────────────────────────────

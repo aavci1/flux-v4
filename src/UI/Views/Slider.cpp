@@ -34,7 +34,7 @@ float fractionForValue(float val, float lo, float hi) {
 
 } // namespace
 
-Slider::Style resolveStyle(Slider::Style const& style, FluxTheme const& theme) {
+Slider::Style resolveStyle(Slider::Style const& style, Theme const& theme) {
     return Slider::Style {
         .activeColor = resolveColor(style.activeColor, theme.colorAccent),
         .inactiveColor = resolveColor(style.inactiveColor, theme.colorSurfaceDisabled),
@@ -46,7 +46,7 @@ Slider::Style resolveStyle(Slider::Style const& style, FluxTheme const& theme) {
 }
 
 Element Slider::body() const {
-    FluxTheme const& theme = useEnvironment<FluxTheme>();
+    Theme const& theme = useEnvironment<Theme>();
 
     auto [
         activeColor,

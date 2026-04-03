@@ -2,6 +2,7 @@
 #include <Flux/Core/WindowUI.hpp>
 #include <Flux/Reactive/Reactive.hpp>
 #include <Flux/UI/Overlay.hpp>
+#include <Flux/UI/Theme.hpp>
 #include <Flux/UI/UI.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
@@ -33,19 +34,17 @@ struct ConfirmDialog {
   std::function<void()> onCancel;
 
   auto body() const {
+    Theme const& theme = useEnvironment<Theme>();
     return ZStack{
         .hAlign = HorizontalAlignment::Center,
         .vAlign = VerticalAlignment::Center,
-        .children =
-            {
+        .children = children(
                 VStack{
                     .spacing = 12.f,
                     .hAlign = HorizontalAlignment::Leading,
-                    .children =
-                        {
+                    .children = children(
                             ZStack{
-                                .children =
-                                    {
+                                .children = children(
                                         Rectangle{
                                             .fill = FillStyle::solid(Color::hex(0xFFFFFF)),
                                             .stroke = StrokeStyle::solid(pal::cardStroke, 1.f),
@@ -55,29 +54,25 @@ struct ConfirmDialog {
                                         VStack{
                                             .spacing = 12.f,
                                             .hAlign = HorizontalAlignment::Leading,
-                                            .children =
-                                                {
+                                            .children = children(
                                                     Text{.text = title,
-                                                         .font = {.size = 17.f, .weight = 600.f},
+                                                         .style = theme.typeTitle,
                                                          .color = pal::titleC},
                                                     HStack{
                                                         .spacing = 0.f,
-                                                        .children =
-                                                            {
+                                                        .children = children(
                                                                 Text{.text = message,
-                                                                             .font = {.size = 14.f, .weight = 400.f},
+                                                                             .style = theme.typeBody,
                                                                              .color = pal::bodyC,
                                                                              .wrapping = TextWrapping::Wrap}
-                                                                    .flex(1.f),
-                                                            },
+                                                                    .flex(1.f)
+                                                            ),
                                                     },
                                                     HStack{
                                                         .spacing = 10.f,
-                                                        .children =
-                                                            {
+                                                        .children = children(
                                                                 ZStack{
-                                                                    .children =
-                                                                        {
+                                                                    .children = children(
                                                                             Rectangle{
                                                                                 .fill = FillStyle::solid(Color::hex(0xF0F0F5)),
                                                                                 .stroke = StrokeStyle::solid(pal::cardStroke, 1.f),
@@ -94,15 +89,14 @@ struct ConfirmDialog {
                                                                                 .onTap(onCancel)
                                                                                 .cornerRadius(CornerRadius(8.f)),
                                                                             Text{.text = "Cancel",
-                                                                                 .font = {.size = 14.f, .weight = 500.f},
+                                                                                 .style = theme.typeLabel,
                                                                                  .color = pal::titleC,
                                                                                  .horizontalAlignment = HorizontalAlignment::Center,
-                                                                                 .verticalAlignment = VerticalAlignment::Center},
-                                                                        },
+                                                                                 .verticalAlignment = VerticalAlignment::Center}
+                                                                        ),
                                                                 }.flex(1.f),
                                                                 ZStack{
-                                                                    .children =
-                                                                        {
+                                                                    .children = children(
                                                                             Rectangle{
                                                                                 .fill = FillStyle::solid(confirmColor),
                                                                                 .stroke = StrokeStyle::none(),
@@ -119,23 +113,23 @@ struct ConfirmDialog {
                                                                                 .onTap(onConfirm)
                                                                                 .cornerRadius(CornerRadius(8.f)),
                                                                             Text{.text = confirmLabel,
-                                                                                 .font = {.size = 14.f, .weight = 600.f},
+                                                                                 .style = theme.typeLabel,
                                                                                  .color = Color::hex(0xFFFFFF),
                                                                                  .horizontalAlignment = HorizontalAlignment::Center,
-                                                                                 .verticalAlignment = VerticalAlignment::Center},
-                                                                        },
-                                                                }.flex(1.f),
-                                                            },
-                                                    },
-                                                },
+                                                                                 .verticalAlignment = VerticalAlignment::Center}
+                                                                        ),
+                                                                }.flex(1.f)
+                                                            ),
+                                                    }
+                                                ),
                                         }
                                             .width(360.f)
-                                            .padding(24.f),
-                                    },
-                            },
-                        },
-                }.padding(24.f),
-            },
+                                            .padding(24.f)
+                                    ),
+                            }
+                        ),
+                }.padding(24.f)
+            ),
     };
   }
 };
@@ -145,6 +139,7 @@ struct FileManagerRow {
   std::function<void()> onDelete;
 
   auto body() const {
+    Theme const& theme = useEnvironment<Theme>();
     auto [showDialog, hideDialog, isPresented] = useOverlay();
     (void)isPresented;
     std::string const fn = filename;
@@ -152,12 +147,10 @@ struct FileManagerRow {
 
     return HStack{
         .spacing = 12.f,
-        .children =
-            {
-                Text{.text = filename, .font = {.size = 15.f, .weight = 400.f}, .color = pal::titleC}.flex(1.f),
+        .children = children(
+                Text{.text = filename, .style = theme.typeBody, .color = pal::titleC}.flex(1.f),
                 ZStack{
-                    .children =
-                        {
+                    .children = children(
                             Rectangle{
                                 .fill = FillStyle::solid(pal::dangerBg),
                                 .stroke = StrokeStyle::solid(pal::dangerStroke, 1.f),
@@ -189,50 +182,48 @@ struct FileManagerRow {
                                     })
                                 .cornerRadius(CornerRadius(6.f)),
                             Text{.text = "Delete",
-                                 .font = {.size = 13.f, .weight = 500.f},
+                                 .style = theme.typeLabel,
                                  .color = pal::dangerText,
                                  .horizontalAlignment = HorizontalAlignment::Center,
-                                 .verticalAlignment = VerticalAlignment::Center},
-                        },
-                },
-            },
+                                 .verticalAlignment = VerticalAlignment::Center}
+                        ),
+                }
+            ),
     }.padding(8.f);
   }
 };
 
 struct OverlayConfirmRoot {
   auto body() const {
+    Theme const& theme = useEnvironment<Theme>();
     return ZStack{
-        .children =
-            {
+        .children = children(
                 Rectangle{.fill = FillStyle::solid(pal::bg)},
                 VStack{
                     .spacing = 16.f,
                     .hAlign = HorizontalAlignment::Leading,
-                    .children =
-                        {
+                    .children = children(
                             Text{.text = "Overlay — confirm dialog",
-                                 .font = {.size = 22.f, .weight = 700.f},
+                                 .style = theme.typeDisplay,
                                  .color = pal::titleC},
                             HStack{
                                 .spacing = 0.f,
-                                .children =
-                                    {
+                                .children = children(
                                         Text{
                                                 .text = "Tap Delete on a row. Modal overlay traps Tab between Cancel and Delete; "
                                                         "Escape or the buttons dismiss.",
-                                                .font = {.size = 14.f, .weight = 400.f},
+                                                .style = theme.typeBody,
                                                 .color = pal::bodyC,
                                                 .wrapping = TextWrapping::Wrap,
                                             }
-                                            .flex(1.f),
-                                    },
+                                            .flex(1.f)
+                                    ),
                             },
                             Element{FileManagerRow{.filename = "notes.txt", .onDelete = [] {}}}.flex(1.f),
-                            Element{FileManagerRow{.filename = "draft.md", .onDelete = [] {}}}.flex(1.f),
-                        },
-                }.padding(24.f),
-            },
+                            Element{FileManagerRow{.filename = "draft.md", .onDelete = [] {}}}.flex(1.f)
+                        ),
+                }.padding(24.f)
+            ),
     };
   }
 };

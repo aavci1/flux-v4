@@ -48,7 +48,7 @@ struct TextInput : ViewModifiers<TextInput> {
 
   float borderWidth = 1.f;
   float borderFocusWidth = 2.f;
-  /// Uniform field corner radius (`kFloatFromTheme` = `FluxTheme::radiusMedium`). Resolved to
+  /// Uniform field corner radius (`kFloatFromTheme` = `Theme::radiusMedium`). Resolved to
   /// `CornerRadius` in `body()`; per-corner overrides require a different view, not this field.
   float cornerRadius = kFloatFromTheme;
 

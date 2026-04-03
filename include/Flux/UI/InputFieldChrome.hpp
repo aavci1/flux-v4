@@ -11,7 +11,7 @@
 
 namespace flux {
 
-struct FluxTheme;
+struct Theme;
 struct ElementModifiers;
 
 /// Raw tokens matching \ref TextInput field chrome (sentinels \c kFromTheme / \c kFloatFromTheme allowed).
@@ -48,7 +48,7 @@ struct ResolvedInputFieldChrome {
   float paddingV;
 };
 
-ResolvedInputFieldChrome resolveInputFieldChrome(InputFieldChromeSpec const& spec, FluxTheme const& theme);
+ResolvedInputFieldChrome resolveInputFieldChrome(InputFieldChromeSpec const& spec, Theme const& theme);
 
 /// Picker adds menu/trigger colours on top of \ref InputFieldChromeSpec.
 struct PickerFieldChromeSpec {
@@ -65,7 +65,7 @@ struct ResolvedPickerFieldChrome {
   Color rowSelectedColor;
 };
 
-ResolvedPickerFieldChrome resolvePickerFieldChrome(PickerFieldChromeSpec const& spec, FluxTheme const& theme);
+ResolvedPickerFieldChrome resolvePickerFieldChrome(PickerFieldChromeSpec const& spec, Theme const& theme);
 
 /// Merges resolved chrome with optional outer \c Element modifiers (same rules as \ref TextInput::body).
 struct InputFieldDecoration {

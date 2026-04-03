@@ -26,13 +26,12 @@ struct LabeledCheckbox {
   bool disabled = false;
 
   auto body() const {
-    FluxTheme const& theme = useEnvironment<FluxTheme>();
+    Theme const& theme = useEnvironment<Theme>();
 
     return HStack{
         .spacing = 10.f,
         .vAlign = VerticalAlignment::Center,
-        .children =
-            {
+        .children = children(
                 Checkbox{
                     .value = value,
                     .indeterminate = indeterminate,
@@ -44,10 +43,10 @@ struct LabeledCheckbox {
                 },
                 Text{
                     .text = label,
-                    .font = theme.typeBody.toFont(),
+                    .style = theme.typeBody,
                     .color = disabled ? theme.colorTextDisabled : theme.colorTextPrimary,
-                },
-            },
+                }
+            ),
     };
   }
 };
@@ -56,7 +55,7 @@ struct LabeledCheckbox {
 
 struct CheckboxDemoRoot {
   auto body() const {
-    FluxTheme const& theme = useEnvironment<FluxTheme>();
+    Theme const& theme = useEnvironment<Theme>();
 
     auto termsAccepted = useState(false);
     auto newsletter = useState(true);
@@ -81,27 +80,21 @@ struct CheckboxDemoRoot {
                          " · Newsletter: " + (*newsletter ? "yes" : "no") + " · Items: " +
                          (*itemA ? "A" : "") + (*itemB ? "B" : "") + (*itemC ? "C" : "");
 
-    return ZStack{
-        .hAlign = HorizontalAlignment::Leading,
-        .vAlign = VerticalAlignment::Top,
-        .children =
-            {
-                Rectangle{.fill = FillStyle::solid(theme.colorBackground)},
+    return
                 VStack{
                     .spacing = 16.f,
                     .hAlign = HorizontalAlignment::Leading,
-                    .children =
-                        {
+                    .children = children(
                             Text{
                                 .text = "Checkbox",
-                                .font = theme.typeHeading.toFont(),
+                                .style = theme.typeDisplay,
                                 .color = theme.colorTextPrimary,
                             },
                             Text{
                                         .text = "Boolean check with animated icon, "
                                                 "indeterminate state, focus ring, "
                                                 "and press scale.",
-                                        .font = theme.typeBody.toFont(),
+                                        .style = theme.typeBody,
                                         .color = theme.colorTextSecondary,
                                         .wrapping = TextWrapping::Wrap,
                                     }
@@ -109,7 +102,7 @@ struct CheckboxDemoRoot {
 
                             Text{
                                 .text = "Form controls",
-                                .font = theme.typeSubtitle.toFont(),
+                                .style = theme.typeHeading,
                                 .color = theme.colorTextPrimary,
                             },
                             Element{LabeledCheckbox{
@@ -125,7 +118,7 @@ struct CheckboxDemoRoot {
 
                             Text{
                                 .text = "Disabled",
-                                .font = theme.typeSubtitle.toFont(),
+                                .style = theme.typeHeading,
                                 .color = theme.colorTextPrimary,
                             },
                             Element{LabeledCheckbox{
@@ -143,14 +136,13 @@ struct CheckboxDemoRoot {
 
                             Text{
                                 .text = "Select all (indeterminate)",
-                                .font = theme.typeSubtitle.toFont(),
+                                .style = theme.typeHeading,
                                 .color = theme.colorTextPrimary,
                             },
                             HStack{
                                         .spacing = 10.f,
                                         .vAlign = VerticalAlignment::Center,
-                                        .children =
-                                            {
+                                        .children = children(
                                                 Checkbox{
                                                     .value = selectAll,
                                                     .indeterminate = selectAllIndeterminate,
@@ -162,69 +154,64 @@ struct CheckboxDemoRoot {
                                                 },
                                                 Text{
                                                     .text = "Select all items",
-                                                    .font = {.size = 15.f, .weight = 500.f},
+                                                    .style = theme.typeLabel,
                                                     .color = theme.colorTextPrimary,
-                                                },
-                                            },
+                                                }
+                                            ),
                                     }
                                 .flex(1.f),
                             VStack{
                                         .spacing = 8.f,
-                                        .children =
-                                            {
+                                        .children = children(
                                                 HStack{
                                                             .spacing = 10.f,
-                                                            .children =
-                                                                {
+                                                            .children = children(
                                                                     Rectangle{}.width(20.f),
                                                                     Element{LabeledCheckbox{
                                                                                 .label = "Item A",
                                                                                 .value = itemA,
                                                                             }}
-                                                                        .flex(1.f),
-                                                                },
+                                                                        .flex(1.f)
+                                                                ),
                                                         }
                                                     .flex(1.f),
                                                 HStack{
                                                             .spacing = 10.f,
-                                                            .children =
-                                                                {
+                                                            .children = children(
                                                                     Rectangle{}.width(20.f),
                                                                     Element{LabeledCheckbox{
                                                                                 .label = "Item B",
                                                                                 .value = itemB,
                                                                             }}
-                                                                        .flex(1.f),
-                                                                },
+                                                                        .flex(1.f)
+                                                                ),
                                                         }
                                                     .flex(1.f),
                                                 HStack{
                                                             .spacing = 10.f,
-                                                            .children =
-                                                                {
+                                                            .children = children(
                                                                     Rectangle{}.width(20.f),
                                                                     Element{LabeledCheckbox{
                                                                                 .label = "Item C",
                                                                                 .value = itemC,
                                                                             }}
-                                                                        .flex(1.f),
-                                                                },
+                                                                        .flex(1.f)
+                                                                ),
                                                         }
-                                                    .flex(1.f),
-                                            },
+                                                    .flex(1.f)
+                                            ),
                                     }
                                 .flex(1.f),
 
                             Text{
                                 .text = "Custom color",
-                                .font = theme.typeSubtitle.toFont(),
+                                .style = theme.typeHeading,
                                 .color = theme.colorTextPrimary,
                             },
                             HStack{
                                         .spacing = 10.f,
                                         .vAlign = VerticalAlignment::Center,
-                                        .children =
-                                            {
+                                        .children = children(
                                                 Checkbox{
                                                     .value = greenCheck,
                                                     .style = Checkbox::Style {
@@ -233,23 +220,21 @@ struct CheckboxDemoRoot {
                                                 },
                                                 Text{
                                                     .text = "Green accent",
-                                                    .font = theme.typeBody.toFont(),
+                                                    .style = theme.typeBody,
                                                     .color = theme.colorTextPrimary,
-                                                },
-                                            },
+                                                }
+                                            ),
                                     }
                                 .flex(1.f),
 
                             Text{
                                 .text = status,
-                                .font = theme.typeBodySmall.toFont(),
+                                .style = theme.typeBodySmall,
                                 .color = theme.colorTextMuted,
                                 .wrapping = TextWrapping::Wrap,
-                            },
-                        },
-                }.padding(24.f),
-            },
-    };
+                            }
+                        ),
+                }.padding(24.f);
   }
 };
 

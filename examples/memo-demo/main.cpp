@@ -1,5 +1,6 @@
 #include <Flux.hpp>
 #include <Flux/Core/WindowUI.hpp>
+#include <Flux/UI/Theme.hpp>
 #include <Flux/UI/UI.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 
@@ -43,10 +44,11 @@ ParseResult expensiveParse(std::string const& text) {
 /// `useHover` / `usePress` patterns, see `examples/hover-demo/main.cpp`.
 struct MemoHoverButton {
   auto body() const {
+    Theme const& theme = useEnvironment<Theme>();
     bool const hovered = useHover();
     Color const btnFill = hovered ? pal::accent : pal::surface;
     Color const btnText = hovered ? Color::hex(0xFFFFFF) : pal::label;
-    return ZStack{.children = {
+    return ZStack{.children = children(
                       Rectangle{
                           .fill = FillStyle::solid(btnFill),
                           .stroke = StrokeStyle::solid(pal::border, 1.f),
@@ -55,16 +57,17 @@ struct MemoHoverButton {
                           .cursor(Cursor::Hand)
                           .cornerRadius(CornerRadius(8.f)),
                       Text{.text = "Hover me (rebuild, no text change)",
-                           .font = {.size = 13.f},
+                           .style = theme.typeBodySmall,
                            .color = btnText,
                        }
-                          .padding(10.f),
-                  }};
+                          .padding(10.f)
+                  )};
   }
 };
 
 struct MemoDemo {
   auto body() const {
+    Theme const& theme = useEnvironment<Theme>();
     ++gRebuildCount;
 
     auto text = useState<std::string>("Hello, world");
@@ -73,34 +76,33 @@ struct MemoDemo {
 
     int const cacheHits = gRebuildCount - gParseCalls;
 
-    return ZStack{.children = {
+    return ZStack{.children = children(
         Rectangle{.fill = FillStyle::solid(pal::bg)},
         VStack{
             .spacing = 16.f,
             .hAlign = HorizontalAlignment::Leading,
-            .children = {
+            .children = children(
                 Text{.text = "useMemo demo",
-                     .font = {.size = 22.f, .weight = 700.f},
+                     .style = theme.typeDisplay,
                      .color = pal::label},
 
                 HStack{
                     .spacing = 0.f,
-                    .children =
-                        {
+                    .children = children(
                             Text{.text = "Content: " + *text,
-                                 .font = {.size = 15.f, .weight = 400.f},
+                                 .style = theme.typeBody,
                                  .color = pal::label,
                                  .wrapping = TextWrapping::Wrap,
                              }
                                 .padding(12.f)
                                 .background(FillStyle::solid(pal::surface))
                                 .border(StrokeStyle::solid(pal::border, 1.f))
-                                .flex(1.f),
-                        },
+                                .flex(1.f)
+                        ),
                 },
 
-                HStack{.spacing = 12.f, .children = {
-                    ZStack{.children = {
+                HStack{.spacing = 12.f, .children = children(
+                    ZStack{.children = children(
                         Rectangle{
                             .fill = FillStyle::solid(pal::accent),
                         }
@@ -109,13 +111,13 @@ struct MemoDemo {
                             .onTap([text] { text = *text + " word"; })
                             .cornerRadius(CornerRadius(8.f)),
                         Text{.text = "+ Word",
-                             .font = {.size = 14.f, .weight = 600.f},
-                             .color = Color::hex(0xFFFFFF),
+                             .style = theme.typeLabel,
+                             .color = theme.colorOnAccent,
                          }
-                            .padding(10.f),
-                    }},
+                            .padding(10.f)
+                    )},
                     MemoHoverButton{},
-                    ZStack{.children = {
+                    ZStack{.children = children(
                         Rectangle{
                             .fill = FillStyle::solid(pal::surface),
                             .stroke = StrokeStyle::solid(pal::border, 1.f),
@@ -125,40 +127,40 @@ struct MemoDemo {
                             .onTap([text] { text = std::string{}; })
                             .cornerRadius(CornerRadius(8.f)),
                         Text{.text = "Clear",
-                             .font = {.size = 14.f},
+                             .style = theme.typeBody,
                              .color = pal::label,
                          }
-                            .padding(10.f),
-                    }},
-                }},
+                            .padding(10.f)
+                    )}
+                )},
 
                 VStack{
                     .spacing = 6.f,
                     .hAlign = HorizontalAlignment::Leading,
-                    .children = {
+                    .children = children(
                         Text{.text = "Words (useMemo): " + std::to_string(result.wordCount),
-                             .font = {.size = 15.f},
+                             .style = theme.typeBody,
                              .color = pal::label},
                         Text{.text = "Characters (useMemo): " + std::to_string(result.charCount),
-                             .font = {.size = 15.f},
+                             .style = theme.typeBody,
                              .color = pal::label},
                         Text{.text = "Parse calls (expensive fn): " + std::to_string(gParseCalls),
-                             .font = {.size = 15.f, .weight = 600.f},
+                             .style = theme.typeBodySmall,
                              .color = pal::accent},
                         Text{.text = "Total rebuilds: " + std::to_string(gRebuildCount) +
                                          " (×2 per event: measure + build pass)",
-                             .font = {.size = 15.f},
+                             .style = theme.typeBody,
                              .color = pal::sub},
                         Text{.text = "Cache hit ratio: " + std::to_string(cacheHits) + "/" +
                                          std::to_string(gRebuildCount) +
                                          " rebuilds skipped re-parse",
-                             .font = {.size = 13.f},
-                             .color = pal::sub},
-                    },
-                },
-            },
-        }.padding(24.f),
-    }};
+                             .style = theme.typeBodySmall,
+                             .color = pal::sub}
+                    ),
+                }
+            ),
+        }.padding(24.f)
+    )};
   }
 };
 

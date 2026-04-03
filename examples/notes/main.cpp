@@ -1,4 +1,5 @@
 #include <Flux.hpp>
+#include <Flux/UI/Theme.hpp>
 #include <Flux/UI/UI.hpp>
 #include <Flux/UI/Views/Text.hpp>
 #include <Flux/UI/Views/TextArea.hpp>
@@ -9,26 +10,29 @@ using namespace flux;
 
 struct SidebarView {
   auto body() const {
+    Theme const& theme = useEnvironment<Theme>();
     return VStack{
       .spacing = 8.f,
-      .children = {
-        Text {.text = "Sidebar", .font = {.size = 13.f, .weight = 600.f}},
+      .children = children(
+        Text {.text = "Sidebar", .style = theme.typeLabel, .color = theme.colorTextSecondary},
         Spacer{}
-      },
+      ),
     };
   }
 };
 
 struct EditorView {
   auto body() const {
+    Theme const& theme = useEnvironment<Theme>();
     auto text = useState(std::string{});
 
     return VStack{
         .spacing = 8.f,
-        .children = {
+        .children = children(
             Text {
                 .text = "Notes",
-                .font = {.size = 13.f, .weight = 600.f},
+                .style = theme.typeHeading,
+                .color = theme.colorTextPrimary,
             },
             TextArea{
                 .value = text,
@@ -39,22 +43,24 @@ struct EditorView {
                     },
                 .onEscape = [text](std::string const &) { text = ""; },
             }
-                .flex(1.f, 1.f, 0.f),
-        },
+                .flex(1.f, 1.f, 0.f)
+        ),
     };
   }
 };
 
 struct PreviewView {
     auto body() const {
+      Theme const& theme = useEnvironment<Theme>();
       auto text = useState(std::string{});
 
       return VStack{
           .spacing = 8.f,
-          .children = {
+          .children = children(
               Text {
                   .text = "Preview",
-                  .font = {.size = 13.f, .weight = 600.f},
+                  .style = theme.typeHeading,
+                  .color = theme.colorTextPrimary,
               },
               TextArea{
                   .value = text,
@@ -65,8 +71,8 @@ struct PreviewView {
                       },
                   .onEscape = [text](std::string const &) { text = ""; },
               }
-                  .flex(1.f, 1.f, 0.f),
-          },
+                  .flex(1.f, 1.f, 0.f)
+          ),
       };
     }
   };
@@ -75,11 +81,11 @@ struct PreviewView {
     auto body() const {
       return HStack{
         .spacing = 8.f,
-        .children = {
+        .children = children(
           Element{SidebarView()}.flex(0.f, 0.0f, 240.0f),
           Element{EditorView()}.flex(1.f),
-          Element{PreviewView()}.flex(1.f),
-        },
+          Element{PreviewView()}.flex(1.f)
+        ),
       }.padding(8.f);
     }
   };

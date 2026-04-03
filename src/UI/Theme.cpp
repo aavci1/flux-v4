@@ -11,10 +11,10 @@ Font resolveFont(Font const& override, Font const& themeValue) {
   return override;
 }
 
-FluxTheme FluxTheme::light() { return FluxTheme{}; }
+Theme Theme::light() { return Theme{}; }
 
-FluxTheme FluxTheme::dark() {
-  FluxTheme t;
+Theme Theme::dark() {
+  Theme t;
 
   t.colorAccent = Color::hex(0x5B9CF6);
   t.colorOnAccent = Color::hex(0x000000);
@@ -59,13 +59,13 @@ FluxTheme FluxTheme::dark() {
   return t;
 }
 
-FluxTheme FluxTheme::compact() { return FluxTheme::light().withDensity(0.75f); }
+Theme Theme::compact() { return Theme::light().withDensity(0.75f); }
 
-FluxTheme FluxTheme::comfortable() { return FluxTheme::light().withDensity(1.25f); }
+Theme Theme::comfortable() { return Theme::light().withDensity(1.25f); }
 
 namespace {
 
-// Nominal 8 pt grid at density = 1.0 (matches `FluxTheme` defaults in Theme.hpp).
+// Nominal 8 pt grid at density = 1.0 (matches `Theme` defaults in Theme.hpp).
 inline constexpr float kSpace1 = 4.f;
 inline constexpr float kSpace2 = 8.f;
 inline constexpr float kSpace3 = 12.f;
@@ -77,8 +77,8 @@ inline constexpr float kSpace8 = 48.f;
 
 } // namespace
 
-FluxTheme FluxTheme::withDensity(float d) const {
-  FluxTheme t = *this;
+Theme Theme::withDensity(float d) const {
+  Theme t = *this;
   t.density = d;
   // Scale the full space scale so components using `theme.spaceN` (Button, layouts, etc.)
   // participate in compact/comfortable, not only paddingFieldH/V.

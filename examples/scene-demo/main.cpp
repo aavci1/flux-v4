@@ -1,8 +1,8 @@
 #include <Flux.hpp>
 #include <Flux/Core/Events.hpp>
 #include <Flux/Graphics/Canvas.hpp>
-#include <Flux/Graphics/Font.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
+#include <Flux/UI/Theme.hpp>
 #include <Flux/Scene/HitTester.hpp>
 #include <Flux/Scene/Nodes.hpp>
 #include <Flux/Scene/SceneGraph.hpp>
@@ -103,8 +103,11 @@ public:
 
     float const margin = 28.f;
     TextSystem& ts = Application::instance().textSystem();
-    Font titleFont{.family = ".AppleSystemUIFont", .size = 26.f, .weight = 600.f};
-    auto titleLayout = ts.layout("Scene graph", titleFont, Color::rgb(235, 238, 245), s.width - margin * 2.f);
+    Theme const theme = Theme::dark();
+    Font const titleFont = theme.typeDisplay.toFont();
+    Font const hintFont = theme.typeBodySmall.toFont();
+    auto titleLayout =
+        ts.layout("Scene graph", titleFont, theme.colorTextPrimary, s.width - margin * 2.f);
     float const titleBand = titleLayout->measuredSize.height;
     float const rowTop = margin + titleBand + 18.f;
     float const rowH = 160.f;
@@ -154,10 +157,8 @@ public:
     float const titleX = margin + (s.width - margin * 2.f - titleW) * 0.5f;
     titleId_ = g.addText(root, TextNode{.layout = std::move(titleLayout), .origin = Point{titleX, margin}});
 
-    Font hintFont{.family = ".AppleSystemUIFont", .size = 14.f, .weight = 400.f};
-
     auto hintLayout =
-        ts.layout("Layer, clip, transform, rects, line, text, hit-test", hintFont, Color::rgb(140, 150, 170),
+        ts.layout("Layer, clip, transform, rects, line, text, hit-test", hintFont, theme.colorTextMuted,
                   s.width - margin * 2.f);
     float const hintW = hintLayout->measuredSize.width;
     float const hintX = margin + (s.width - margin * 2.f - hintW) * 0.5f;
@@ -173,9 +174,11 @@ public:
 
     float const margin = 28.f;
     TextSystem& ts = Application::instance().textSystem();
-    Font titleFont{.family = ".AppleSystemUIFont", .size = 26.f, .weight = 600.f};
+    Theme const theme = Theme::dark();
+    Font const titleFont = theme.typeDisplay.toFont();
+    Font const hintFont = theme.typeBodySmall.toFont();
     float const titleBand =
-        ts.layout("Scene graph", titleFont, Color::rgb(235, 238, 245), s.width - margin * 2.f)->measuredSize.height;
+        ts.layout("Scene graph", titleFont, theme.colorTextPrimary, s.width - margin * 2.f)->measuredSize.height;
     float const rowTop = margin + titleBand + 18.f;
     float const rowH = 160.f;
     float const gap = 18.f;
@@ -212,16 +215,14 @@ public:
     }
 
     if (TextNode* t = g.node<TextNode>(titleId_)) {
-      t->layout = ts.layout("Scene graph", titleFont, Color::rgb(235, 238, 245), s.width - margin * 2.f);
+      t->layout = ts.layout("Scene graph", titleFont, theme.colorTextPrimary, s.width - margin * 2.f);
       float const titleW = t->layout->measuredSize.width;
       t->origin = Point{margin + (s.width - margin * 2.f - titleW) * 0.5f, margin};
     }
 
-    Font hintFont{.family = ".AppleSystemUIFont", .size = 14.f, .weight = 400.f};
-
     if (TextNode* t = g.node<TextNode>(hintId_)) {
       t->layout = ts.layout("Layer, clip, transform, rects, line, text, hit-test", hintFont,
-                            Color::rgb(140, 150, 170), s.width - margin * 2.f);
+                            theme.colorTextMuted, s.width - margin * 2.f);
       float const hintW = t->layout->measuredSize.width;
       t->origin = Point{margin + (s.width - margin * 2.f - hintW) * 0.5f, margin + titleBand + 6.f};
     }

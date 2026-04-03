@@ -25,7 +25,7 @@ struct TextAreaHeight {
 };
 
 struct TextArea : ViewModifiers<TextArea> {
-  /// Visual tokens; any field may use \c kFromTheme / \c kFloatFromTheme to inherit from \ref FluxTheme.
+  /// Visual tokens; any field may use \c kFromTheme / \c kFloatFromTheme to inherit from \ref Theme.
   /// Resolved in \c body() the same way as \ref Toggle::Style (see \c resolveStyle in \c TextArea.cpp).
   struct Style {
     Font font = kFontFromTheme;

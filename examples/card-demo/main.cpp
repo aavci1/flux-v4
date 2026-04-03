@@ -4,6 +4,7 @@
 #include <Flux/Graphics/TextLayoutOptions.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Reactive/Reactive.hpp>
+#include <Flux/UI/Theme.hpp>
 #include <Flux/UI/UI.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 
@@ -40,6 +41,7 @@ struct Card {
   float availableWidth = 400.f;
 
   auto body() const {
+    Theme const& theme = useEnvironment<Theme>();
     auto expanded = useState<bool>(false);
     auto bodyOpacity = useAnimated<float>(0.f);
 
@@ -47,7 +49,7 @@ struct Card {
 
     float const bodyTextHeight = useMemo([&] {
       TextSystem& ts = Application::instance().textSystem();
-      Font const bodyFont{.size = 15.f, .weight = 400.f};
+      Font const bodyFont = theme.typeBody.toFont();
       TextLayoutOptions opts{.wrapping = TextWrapping::Wrap};
       return ts.measure(detail, bodyFont, pal::sublabel, innerTextWidth, opts).height;
     }, detail, availableWidth);
@@ -56,7 +58,7 @@ struct Card {
     rows.emplace_back(HStack{
         .spacing = 12.f,
         .vAlign = VerticalAlignment::Center,
-        .children = {
+        .children = children(
             Rectangle{
                 .fill = FillStyle::solid(accent),
             }
@@ -64,43 +66,42 @@ struct Card {
                 .cornerRadius(CornerRadius(7.f)),
             Text{
                 .text = title,
-                .font = {.size = 17.f, .weight = 600.f},
+                .style = theme.typeTitle,
                 .color = pal::label,
             }
                 .size(0.f, 24.f)
                 .flex(1.f),
             Text{
                 .text = expanded ? "⌄" : "›",
-                .font = {.size = 24.f, .weight = 600.f},
+                .style = theme.typeLabel,
                 .color = pal::sublabel,
                 .horizontalAlignment = HorizontalAlignment::Center,
                 .verticalAlignment = VerticalAlignment::Center,
             }
-                .size(24.f, 24.f),
-        },
+                .size(24.f, 24.f)
+        ),
     });
 
     if (bodyOpacity > 0.5f) {
       rows.emplace_back(HStack{
           .spacing = 0.f,
-          .children =
-              {
+          .children = children(
                   Text{
                       .text = detail,
-                      .font = {.size = 15.f, .weight = 400.f},
+                      .style = theme.typeBody,
                       .color = pal::sublabel,
                       .wrapping = TextWrapping::Wrap,
                   }
                       .size(0.f, bodyOpacity * bodyTextHeight)
-                      .flex(1.f),
-              },
+                      .flex(1.f)
+              ),
       });
     }
 
     return ZStack{
         .hAlign = HorizontalAlignment::Leading,
         .vAlign = VerticalAlignment::Top,
-        .children = {
+        .children = children(
             Rectangle{
                 .fill = FillStyle::solid(pal::surface),
                 .stroke = StrokeStyle::solid(pal::border, 1.f),
@@ -112,31 +113,32 @@ struct Card {
                   bodyOpacity = next ? 1.f : 0.f;
                 })
                 .cornerRadius(CornerRadius(14.f)),
-            VStack{.spacing = 10.f, .children = std::move(rows)}.padding(18.f),
-        },
+            VStack{.spacing = 10.f, .children = std::move(rows)}.padding(18.f)
+        ),
     };
   }
 };
 
 struct CardListView {
   auto body() const {
+    Theme const& theme = useEnvironment<Theme>();
     float const listContentWidth =
         gCardDemoWindow ? std::max(1.f, gCardDemoWindow->getSize().width - 48.f) : 432.f;
 
     return ZStack{
         .hAlign = HorizontalAlignment::Leading,
         .vAlign = VerticalAlignment::Top,
-        .children = {
+        .children = children(
             Rectangle{.fill = FillStyle::solid(pal::bg)},
             VStack{
                 .spacing = 12.f,
                 .hAlign = HorizontalAlignment::Leading,
-                .children = {
+                .children = children(
                     Text{.text = "Flux Components",
-                         .font = {.size = 28.f, .weight = 700.f},
+                         .style = theme.typeDisplay,
                          .color = pal::label},
                     Text{.text = "Tap a card to expand",
-                         .font = {.size = 14.f, .weight = 400.f},
+                         .style = theme.typeBody,
                          .color = pal::sublabel},
                     Card{.accent = pal::accent0,
                          .title = "Metal Renderer",
@@ -149,10 +151,10 @@ struct CardListView {
                     Card{.accent = pal::accent2,
                          .title = "Scene Graph",
                          .detail = "Slot-map NodeStore, LayerNode, HitTester.",
-                         .availableWidth = listContentWidth},
-                },
-            }.padding(24.f),
-        },
+                         .availableWidth = listContentWidth}
+                ),
+            }.padding(24.f)
+        ),
     };
   }
 };

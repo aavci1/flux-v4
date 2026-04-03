@@ -13,7 +13,7 @@
 
 namespace flux {
 
-Toggle::Style resolveStyle(Toggle::Style const& style, FluxTheme const& theme) {
+Toggle::Style resolveStyle(Toggle::Style const& style, Theme const& theme) {
   return Toggle::Style {
     .trackWidth = resolveFloat(style.trackWidth, theme.toggleTrackWidth),
     .trackHeight = resolveFloat(style.trackHeight, theme.toggleTrackHeight),
@@ -29,7 +29,7 @@ Toggle::Style resolveStyle(Toggle::Style const& style, FluxTheme const& theme) {
 }
 
 Element Toggle::body() const {
-  FluxTheme const &theme = useEnvironment<FluxTheme>();
+  Theme const &theme = useEnvironment<Theme>();
 
   auto [
     trackWidth,

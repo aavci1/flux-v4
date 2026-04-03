@@ -1,7 +1,21 @@
 #include <Flux.hpp>
+#include <Flux/UI/Theme.hpp>
 #include <Flux/UI/UI.hpp>
 
 using namespace flux;
+
+struct HelloRoot {
+  auto body() const {
+    Theme const& theme = useEnvironment<Theme>();
+    return Text{
+        .text = "Hello, World!",
+        .style = theme.typeDisplay,
+        .color = Colors::darkGray,
+        .horizontalAlignment = HorizontalAlignment::Center,
+        .verticalAlignment = VerticalAlignment::Center,
+    };
+  }
+};
 
 int main(int argc, char* argv[]) {
   Application app(argc, argv);
@@ -11,15 +25,7 @@ int main(int argc, char* argv[]) {
       .title = "Hello, World!",
   });
 
-  w.setView(
-    Text {
-      .text = "Hello, World!",
-      .font = {.size = 32.f, .weight = 500.f},
-      .color = Colors::darkGray,
-      .horizontalAlignment = HorizontalAlignment::Center,
-      .verticalAlignment = VerticalAlignment::Center,
-    }
-  );
+  w.setView<HelloRoot>();
 
   return app.exec();
 }

@@ -202,7 +202,7 @@ void TextInputView::render(Canvas& canvas, Rect frame) const {
 Element TextInput::body() const {
   using namespace std::chrono;
 
-  FluxTheme const& theme = useEnvironment<FluxTheme>();
+  Theme const& theme = useEnvironment<Theme>();
   Font const fnt = resolveFont(font, theme.typeBody.toFont());
   ResolvedInputFieldChrome const resolved =
       resolveInputFieldChrome(InputFieldChromeSpec{.textColor = textColor,

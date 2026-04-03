@@ -14,7 +14,7 @@
 
 namespace flux {
 
-Checkbox::Style resolveStyle(Checkbox::Style const& style, FluxTheme const& theme) {
+Checkbox::Style resolveStyle(Checkbox::Style const& style, Theme const& theme) {
   return Checkbox::Style {
     .boxSize = resolveFloat(style.boxSize, theme.checkboxBoxSize),
     .cornerRadius = resolveFloat(style.cornerRadius, theme.checkboxCornerRadius),
@@ -27,7 +27,7 @@ Checkbox::Style resolveStyle(Checkbox::Style const& style, FluxTheme const& them
 }
 
 Element Checkbox::body() const {
-  FluxTheme const& theme = useEnvironment<FluxTheme>();
+  Theme const& theme = useEnvironment<Theme>();
 
   auto [
     boxSize,

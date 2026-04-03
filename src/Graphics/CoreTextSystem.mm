@@ -280,7 +280,7 @@ static void applyParagraphStyleToMutable(NSMutableAttributedString* mas, TextLay
     lineBreak = kCTLineBreakByWordWrapping;
   }
 
-  CTParagraphStyleSetting settings[3];
+  CTParagraphStyleSetting settings[5];
   std::size_t n = 0;
   settings[n].spec = kCTParagraphStyleSpecifierLineBreakMode;
   settings[n].valueSize = sizeof(lineBreak);
@@ -289,7 +289,16 @@ static void applyParagraphStyleToMutable(NSMutableAttributedString* mas, TextLay
 
   CGFloat minLh = 0;
   CGFloat maxLh = 0;
-  if (options.lineHeight > 0.f) {
+  CGFloat lineMultiple = 0;
+  if (options.lineHeightMultiple > 0.f) {
+    // Multiplier on the font’s natural line height (theme-style 1.12, 1.4, …). Avoids fixed pt min/max
+    // that can be shorter than glyph bounds and cause inter-line overlap.
+    lineMultiple = static_cast<CGFloat>(options.lineHeightMultiple);
+    settings[n].spec = kCTParagraphStyleSpecifierLineHeightMultiple;
+    settings[n].valueSize = sizeof(lineMultiple);
+    settings[n].value = &lineMultiple;
+    ++n;
+  } else if (options.lineHeight > 0.f) {
     minLh = static_cast<CGFloat>(options.lineHeight);
     maxLh = static_cast<CGFloat>(options.lineHeight);
     settings[n].spec = kCTParagraphStyleSpecifierMinimumLineHeight;

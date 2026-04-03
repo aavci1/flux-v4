@@ -36,7 +36,7 @@ struct Window::Impl {
   EnvironmentLayer windowEnvironment_{};
 
   explicit Impl(Window&) {
-    windowEnvironment_.set(FluxTheme::light());
+    windowEnvironment_.set(Theme::light());
   }
   ~Impl();
 

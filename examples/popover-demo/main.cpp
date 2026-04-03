@@ -1,4 +1,5 @@
 #include <Flux.hpp>
+#include <Flux/UI/Theme.hpp>
 #include <Flux/UI/UI.hpp>
 #include <Flux/UI/Views/Button.hpp>
 #include <Flux/UI/Views/HStack.hpp>
@@ -12,25 +13,21 @@
 
 using namespace flux;
 
-namespace pal {
-constexpr Color titleC = Color::hex(0x111118);
-constexpr Color bodyC = Color::hex(0x6E6E80);
-constexpr Color accent = Color::hex(0x3A7BD5);
-} // namespace pal
-
 struct PopoverDemoRoot {
   auto body() const {
     auto showArrow = useState<bool>(true);
     auto dismissOutside = useState<bool>(true);
     auto [showPopover, hidePopover, popoverOpen] = usePopover();
 
+    Theme const& theme = useEnvironment<Theme>();
+
     std::vector<Element> scrollChildren;
 
     auto addSection = [&](char const* heading) {
       scrollChildren.push_back(
           Text{.text = heading,
-               .font = {.size = 13.f, .weight = 600.f},
-               .color = pal::bodyC,
+               .style = theme.typeHeading,
+               .color = theme.colorTextPrimary,
            }
               .padding(8.f));
     };
@@ -39,16 +36,15 @@ struct PopoverDemoRoot {
     scrollChildren.push_back(
         HStack{
             .spacing = 0.f,
-            .children =
-                {
+            .children = children(
                     Text{.text = "Scroll so triggers sit near window edges to see flip.",
-                         .font = {.size = 12.f, .weight = 400.f},
-                         .color = pal::bodyC,
+                         .style = theme.typeLabelSmall,
+                         .color = theme.colorTextSecondary,
                          .wrapping = TextWrapping::Wrap,
                      }
                         .padding(8.f)
-                        .flex(1.f),
-                },
+                        .flex(1.f)
+                ),
         });
 
     auto addPlacementButton = [&](char const* label, PopoverPlacement placement) {
@@ -60,28 +56,26 @@ struct PopoverDemoRoot {
                 .content = Element{VStack{
                     .spacing = 8.f,
                     .hAlign = HorizontalAlignment::Leading,
-                    .children =
-                        {
+                    .children = children(
                             Text{.text = std::string(label),
-                                 .font = {.size = 15.f, .weight = 600.f},
-                                 .color = pal::titleC},
+                                 .style = theme.typeSubtitle,
+                                 .color = theme.colorTextPrimary},
                             HStack{
                                 .spacing = 0.f,
-                                .children =
-                                    {
+                                .children = children(
                                         Text{.text = "Placement follows preference when space allows.",
-                                             .font = {.size = 13.f, .weight = 400.f},
-                                             .color = pal::bodyC,
+                                             .style = theme.typeBodySmall,
+                                             .color = theme.colorTextSecondary,
                                              .wrapping = TextWrapping::Wrap}
-                                            .flex(1.f),
-                                    },
+                                            .flex(1.f)
+                                    ),
                             },
                             Button{
                                 .label = "Close",
                                 .variant = ButtonVariant::Secondary,
                                 .onTap = hidePopover,
-                            },
-                        },
+                            }
+                        ),
                 }},
                 .placement = placement,
                 .arrow = *showArrow,
@@ -103,72 +97,68 @@ struct PopoverDemoRoot {
     scrollChildren.push_back(HStack{
         .spacing = 12.f,
         .vAlign = VerticalAlignment::Center,
-        .children =
-            {
+        .children = children(
                 Text{.text = "Arrow",
-                     .font = {.size = 14.f, .weight = 500.f},
-                     .color = pal::titleC},
+                     .style = theme.typeLabel,
+                     .color = theme.colorTextPrimary},
                 Button{
                     .label = *showArrow ? "On" : "Off",
                     .variant = ButtonVariant::Ghost,
                     .onTap = [=] { showArrow = !*showArrow; },
-                },
-            },
+                }
+            ),
     });
     scrollChildren.push_back(HStack{
         .spacing = 12.f,
         .vAlign = VerticalAlignment::Center,
-        .children =
-            {
+        .children = children(
                 Text{.text = "Dismiss outside tap",
-                     .font = {.size = 14.f, .weight = 500.f},
-                     .color = pal::titleC},
+                     .style = theme.typeLabel,
+                     .color = theme.colorTextPrimary},
                 Button{
                     .label = *dismissOutside ? "On" : "Off",
                     .variant = ButtonVariant::Ghost,
                     .onTap = [=] { dismissOutside = !*dismissOutside; },
-                },
-            },
+                }
+            ),
     });
 
     addSection("Anchor tracking (scroll)");
     for (int i = 0; i < 8; ++i) {
       scrollChildren.push_back(
           Text{.text = "Spacer row — scroll the list",
-               .font = {.size = 13.f, .weight = 400.f},
-               .color = pal::bodyC,
+               .style = theme.typeBodySmall,
+               .color = theme.colorTextSecondary,
            }
               .padding(6.f));
     }
     scrollChildren.push_back(Button{
         .label = "Below — middle of scroll",
         .variant = ButtonVariant::Primary,
-        .accentColor = pal::accent,
+        .accentColor = theme.colorAccent,
         .onTap = [=] {
           showPopover(Popover{
               .content = Element{VStack{
                   .spacing = 8.f,
                   .hAlign = HorizontalAlignment::Leading,
-                  .children =
-                      {
+                  .children = children(
                           Text{.text = "Popover anchored to this button.",
-                               .font = {.size = 17.f, .weight = 600.f},
-                               .color = pal::titleC},
+                               .style = theme.typeTitle,
+                               .color = theme.colorTextPrimary},
                           HStack{
                               .spacing = 0.f,
-                              .children =
-                                  {
+                              .children = children(
                                       Text{
                                           .text = "ScrollView keeps layout rects updated; anchor follows the trigger.",
-                                          .font = {.size = 13.f, .weight = 400.f},
-                                          .color = pal::bodyC,
+                                          .style = theme.typeBodySmall,
+                                          .color = theme.colorTextSecondary,
                                           .wrapping = TextWrapping::Wrap,
                                       }
-                                          .flex(1.f),
-                                  },
+                                          .flex(1.f)
+                                  ),
                           },
-                          Button{.label = "OK", .onTap = hidePopover},
-                      },
+                          Button{.label = "OK", .onTap = hidePopover}
+                      ),
               }},
               .placement = PopoverPlacement::Below,
               .arrow = *showArrow,
@@ -182,40 +172,38 @@ struct PopoverDemoRoot {
     for (int i = 0; i < 8; ++i) {
       scrollChildren.push_back(
           Text{.text = "Spacer row — scroll the list",
-               .font = {.size = 13.f, .weight = 400.f},
-               .color = pal::bodyC,
+               .style = theme.typeBodySmall,
+               .color = theme.colorTextSecondary,
            }
               .padding(6.f));
     }
     scrollChildren.push_back(Button{
         .label = "Below — near bottom (may flip Above)",
         .variant = ButtonVariant::Primary,
-        .accentColor = pal::accent,
+        .accentColor = theme.colorAccent,
         .onTap = [=] {
           showPopover(Popover{
               .content = Element{VStack{
                   .spacing = 8.f,
                   .hAlign = HorizontalAlignment::Leading,
-                  .children =
-                      {
+                  .children = children(
                           Text{.text = "Flip test",
-                               .font = {.size = 17.f, .weight = 600.f},
-                               .color = pal::titleC},
+                               .style = theme.typeTitle,
+                               .color = theme.colorTextPrimary},
                           HStack{
                               .spacing = 0.f,
-                              .children =
-                                  {
+                              .children = children(
                                       Text{
                                           .text = "If there is not enough room below the anchor, placement flips to Above.",
-                                          .font = {.size = 13.f, .weight = 400.f},
-                                          .color = pal::bodyC,
+                                          .style = theme.typeBodySmall,
+                                          .color = theme.colorTextSecondary,
                                           .wrapping = TextWrapping::Wrap,
                                       }
-                                          .flex(1.f),
-                                  },
+                                          .flex(1.f)
+                                  ),
                           },
-                          Button{.label = "OK", .onTap = hidePopover},
-                      },
+                          Button{.label = "OK", .onTap = hidePopover}
+                      ),
               }},
               .placement = PopoverPlacement::Below,
               .arrow = *showArrow,
@@ -229,31 +217,29 @@ struct PopoverDemoRoot {
 
     return VStack{
         .spacing = 0.f,
-        .children =
-            {
+        .children = children(
                 Text{.text = "Popover demo",
-                     .font = {.size = 22.f, .weight = 700.f},
-                     .color = pal::titleC,
+                     .style = theme.typeDisplay,
+                     .color = theme.colorTextPrimary,
                      .horizontalAlignment = HorizontalAlignment::Center,
                  }
                     .padding(16.f),
                 Text{.text = popoverOpen ? "Popover visible" : "Popover hidden",
-                     .font = {.size = 13.f, .weight = 500.f},
-                     .color = pal::bodyC,
+                     .style = theme.typeLabel,
+                     .color = theme.colorTextSecondary,
                      .horizontalAlignment = HorizontalAlignment::Center,
                  }
                     .padding(8.f),
                 ScrollView{
                     .axis = ScrollAxis::Vertical,
-                    .children =
-                        {
+                    .children = children(
                             VStack{
                                 .spacing = 10.f,
                                 .children = std::move(scrollChildren),
-                            }.padding(20.f),
-                        },
-                },
-            },
+                            }.padding(20.f)
+                        ),
+                }
+            ),
     };
   }
 };

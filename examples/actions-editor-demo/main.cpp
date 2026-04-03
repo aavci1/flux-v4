@@ -4,6 +4,7 @@
 #include <Flux/Core/Shortcut.hpp>
 #include <Flux/Core/WindowUI.hpp>
 #include <Flux/Reactive/Reactive.hpp>
+#include <Flux/UI/Theme.hpp>
 #include <Flux/UI/UI.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
@@ -94,16 +95,15 @@ struct TextEditor {
     });
 
     bool const focused = useFocus();
+    Theme const& theme = useEnvironment<Theme>();
 
     return VStack{
         .spacing = 8.f,
         .hAlign = HorizontalAlignment::Leading,
-        .children =
-            {
+        .children = children(
                 HStack{
                     .spacing = 0.f,
-                    .children =
-                        {
+                    .children = children(
                             Rectangle{
                                 .fill = FillStyle::solid(focused ? Color::hex(0xE8F0FC) : Color::hex(0xFAFAFC)),
                                 .stroke = StrokeStyle::solid(focused ? Color::hex(0x3A7BD5) : Color::hex(0xC8C8D0),
@@ -191,21 +191,20 @@ struct TextEditor {
                                       selEnd = p;
                                     })
                                 .cornerRadius(CornerRadius(10.f))
-                                .flex(1.f, 1.f, 120.f),
-                        },
+                                .flex(1.f, 1.f, 120.f)
+                        ),
                 },
                 HStack{
                     .spacing = 0.f,
-                    .children =
-                        {
+                    .children = children(
                             Text{.text = (*text).empty() ? std::string("(empty)") : std::string(*text),
-                                 .font = {.size = 14.f, .weight = 400.f},
-                                 .color = Color::hex(0x3A3A44),
+                                 .style = theme.typeBody,
+                                 .color = theme.colorTextPrimary,
                                  .wrapping = TextWrapping::Wrap}
-                                .flex(1.f),
-                        },
-                },
-            },
+                                .flex(1.f)
+                        ),
+                }
+            ),
     };
   }
 };
@@ -232,12 +231,13 @@ struct Toolbar {
 
     bool const canCopy = gActionsEditorWindow && gActionsEditorWindow->isActionEnabled("edit.copy");
     bool const canPaste = gActionsEditorWindow && gActionsEditorWindow->isActionEnabled("edit.paste");
+    Theme const& theme = useEnvironment<Theme>();
 
-    auto pill = [](char const* label, bool enabled, std::function<void()> tap) {
+    auto pill = [&](char const* label, bool enabled, std::function<void()> tap) {
       return Text{
                  .text = label,
-                 .font = {.size = 13.f, .weight = 600.f},
-                 .color = enabled ? Color::hex(0x111118) : Color::hex(0xAAAAAA),
+                 .style = theme.typeLabel,
+                 .color = enabled ? theme.colorTextPrimary : theme.colorTextDisabled,
              }
           .onTap(enabled ? std::move(tap) : std::function<void()>{})
           .padding(8.f)
@@ -249,8 +249,7 @@ struct Toolbar {
     return HStack{
         .spacing = 8.f,
         .vAlign = VerticalAlignment::Center,
-        .children =
-            {
+        .children = children(
                 pill("New", true, [text, selStart, selEnd] {
                   text = std::string{};
                   selStart = 0;
@@ -278,14 +277,15 @@ struct Toolbar {
                          selStart = p;
                          selEnd = p;
                        }
-                     }),
-            },
+                     })
+            ),
     }.padding(8.f);
   }
 };
 
 struct EditorRoot {
   auto body() const {
+    Theme const& theme = useEnvironment<Theme>();
     auto text = useState<std::string>(std::string{
         "Select text and try Cmd+C / Cmd+X / Cmd+V / Cmd+A.\n"
         "Cmd+S saves (stderr), Cmd+N clears, Cmd+Q quits."});
@@ -295,53 +295,48 @@ struct EditorRoot {
     return ZStack{
         .hAlign = HorizontalAlignment::Leading,
         .vAlign = VerticalAlignment::Top,
-        .children =
-            {
+        .children = children(
                 Rectangle{.fill = FillStyle::solid(Color::hex(0xF2F2F7))},
                 VStack{
                     .spacing = 0.f,
                     .hAlign = HorizontalAlignment::Leading,
-                    .children =
-                        {
+                    .children = children(
                             Element{Toolbar{.text = text, .selStart = selStart, .selEnd = selEnd}},
                             VStack{
                                 .spacing = 12.f,
                                 .hAlign = HorizontalAlignment::Leading,
-                                .children =
-                                    {
+                                .children = children(
                                         Text{.text = "Actions editor demo",
-                                             .font = {.size = 22.f, .weight = 700.f},
-                                             .color = Color::hex(0x111118)},
+                                             .style = theme.typeDisplay,
+                                             .color = theme.colorTextPrimary},
                                         HStack{
                                             .spacing = 0.f,
-                                            .children =
-                                                {
+                                            .children = children(
                                                     Text{
                                                         .text = "Focus the editor. Toolbar buttons use the same shared "
                                                                 "state; enabled flags follow isActionEnabled.",
-                                                        .font = {.size = 13.f, .weight = 400.f},
-                                                        .color = Color::hex(0x6E6E80),
+                                                        .style = theme.typeBodySmall,
+                                                        .color = theme.colorTextSecondary,
                                                         .wrapping = TextWrapping::Wrap,
                                                     }
-                                                        .flex(1.f),
-                                                },
+                                                        .flex(1.f)
+                                                ),
                                         },
                                         HStack{
                                             .spacing = 0.f,
-                                            .children =
-                                                {
+                                            .children = children(
                                                     Element{TextEditor{.text = text,
                                                                       .selStart = selStart,
                                                                       .selEnd = selEnd}}
-                                                        .flex(1.f),
-                                                },
+                                                        .flex(1.f)
+                                                ),
                                         }
-                                            .flex(1.f),
-                                    },
-                            }.padding(24.f),
-                        },
-                },
-            },
+                                            .flex(1.f)
+                                    ),
+                            }.padding(24.f)
+                        ),
+                }
+            ),
     };
   }
 };

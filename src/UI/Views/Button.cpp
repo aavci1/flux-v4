@@ -104,7 +104,7 @@ ButtonColors deriveColors(ButtonVariant variant, Color accent, Color destructive
 } // namespace
 
 Element Button::body() const {
-  FluxTheme const& theme = useEnvironment<FluxTheme>();
+  Theme const& theme = useEnvironment<Theme>();
   Color const accent = resolveColor(accentColor, theme.colorAccent);
   Color const destructive = resolveColor(destructiveColor, theme.colorDanger);
   Font const fontResolved = resolveFont(font, theme.typeLabel.toFont());
@@ -211,33 +211,35 @@ Element Button::body() const {
                            .color = theme.shadowColor};
   }
 
+  Element labelEl =
+      Text{
+          .text = label,
+          .style = TextStyle::fromFont(fontResolved),
+          .color = *labelAnim,
+          .horizontalAlignment = isLink ? HorizontalAlignment::Leading : HorizontalAlignment::Center,
+          .verticalAlignment = VerticalAlignment::Center,
+      }
+          .padding(effPaddingH);
+
   auto content = ZStack{
-    .hAlign = HorizontalAlignment::Center,
-    .vAlign = VerticalAlignment::Center,
-    .children =
-        {
-            Rectangle{
-                .fill = FillStyle::solid(*fillAnim),
-                .stroke = stroke,
-                .shadow = bgShadow,
-            }
-                .height(h)
-                .cursor(effectivelyDisabled ? Cursor::Inherit : Cursor::Hand)
-                .focusable(!effectivelyDisabled)
-                .onKeyDown(effectivelyDisabled ? std::function<void(KeyCode, Modifiers)>{}
-                                               : std::function<void(KeyCode, Modifiers)>{ handleKey })
-                .onTap(effectivelyDisabled ? std::function<void()>{} : std::function<void()>{ handleTap })
-                .cornerRadius(cr)
-                .flex(isLink ? 0.f : 1.f, 1.f, 0.f),
-            Text{
-                .text = label,
-                .font = fontResolved,
-                .color = *labelAnim,
-                .horizontalAlignment = isLink ? HorizontalAlignment::Leading : HorizontalAlignment::Center,
-                .verticalAlignment = VerticalAlignment::Center,
-            }
-                .padding(effPaddingH),
-        },
+      .hAlign = HorizontalAlignment::Center,
+      .vAlign = VerticalAlignment::Center,
+      .children =
+          children(
+              Rectangle{
+                  .fill = FillStyle::solid(*fillAnim),
+                  .stroke = stroke,
+                  .shadow = bgShadow,
+              }
+                  .height(h)
+                  .cursor(effectivelyDisabled ? Cursor::Inherit : Cursor::Hand)
+                  .focusable(!effectivelyDisabled)
+                  .onKeyDown(effectivelyDisabled ? std::function<void(KeyCode, Modifiers)>{}
+                                                 : std::function<void(KeyCode, Modifiers)>{ handleKey })
+                  .onTap(effectivelyDisabled ? std::function<void()>{} : std::function<void()>{ handleTap })
+                  .cornerRadius(cr)
+                  .flex(isLink ? 0.f : 1.f, 1.f, 0.f),
+              std::move(labelEl)),
   };
 
   if (isLink) {

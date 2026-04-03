@@ -49,7 +49,7 @@ struct Alert : ViewModifiers<Alert> {
   Color titleColor = kFromTheme;
   Color messageColor = kFromTheme;
   Color backdropColor = kFromTheme;
-  /// Uniform card corner radius (`kFloatFromTheme` = `FluxTheme::radiusXLarge`). Not a `CornerRadius`
+  /// Uniform card corner radius (`kFloatFromTheme` = `Theme::radiusXLarge`). Not a `CornerRadius`
   /// struct field — all corners share one value; asymmetric cards need a custom element.
   float cornerRadius = kFloatFromTheme;
 
@@ -64,7 +64,7 @@ struct Alert : ViewModifiers<Alert> {
   Element body() const;
 
 private:
-  std::vector<Element> buildContent(Color titleC, Color msgC, FluxTheme const& theme) const;
+  std::vector<Element> buildContent(Color titleC, Color msgC, Theme const& theme) const;
 };
 
 /// Hook: returns (show, hide, isPresented) for presenting an Alert.

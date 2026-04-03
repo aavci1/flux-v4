@@ -108,7 +108,7 @@ OverlayConfig::Placement overlayPlacementFromPopover(PopoverPlacement p) {
 }
 
 Element Popover::body() const {
-  FluxTheme const& theme = useEnvironment<FluxTheme>();
+  Theme const& theme = useEnvironment<Theme>();
   ResolvedPopoverCardBody const card =
       resolvePopoverCardBody(backgroundColor, borderColor, borderWidth, cornerRadius, contentPadding, theme);
   ShadowStyle const cardShadow{
@@ -172,8 +172,8 @@ std::tuple<std::function<void(Popover)>, std::function<void()>, bool> usePopover
       anchorRect->height = std::min(anchorRect->height, *popover.anchorMaxHeight);
     }
     Size const win = wPtr->getSize();
-    FluxTheme const* tp = wPtr->environmentValue<FluxTheme>();
-    FluxTheme const theme = tp ? *tp : FluxTheme::light();
+    Theme const* tp = wPtr->environmentValue<Theme>();
+    Theme const theme = tp ? *tp : Theme::light();
     float const gap = resolveFloat(popover.gap, theme.space2);
     // Space needed for flip heuristic: gap + arrow height (arrow is inside overlay bounds, not in offset).
     float const gapTotal = gap + (popover.arrow ? Popover::kArrowH : 0.f);

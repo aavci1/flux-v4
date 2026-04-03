@@ -1,5 +1,6 @@
 #include <Flux.hpp>
 #include <Flux/Core/WindowUI.hpp>
+#include <Flux/UI/Theme.hpp>
 #include <Flux/UI/UI.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
@@ -28,21 +29,20 @@ struct FocusField {
   std::string title;
 
   auto body() const {
+    Theme const& theme = useEnvironment<Theme>();
     auto text = useState<std::string>({});
     bool focused = useFocus();
 
     return VStack{
         .spacing = 6.f,
         .hAlign = HorizontalAlignment::Leading,
-        .children =
-            {
+        .children = children(
                 Text{.text = title,
-                     .font = {.size = 13.f, .weight = 600.f},
+                     .style = theme.typeLabel,
                      .color = pal::label},
                 HStack{
                     .spacing = 0.f,
-                    .children =
-                        {
+                    .children = children(
                             Rectangle{
                                 .fill = FillStyle::solid(focused ? pal::editorFocus : pal::editorBg),
                                 .stroke =
@@ -69,21 +69,20 @@ struct FocusField {
                                       }
                                     })
                                 .cornerRadius(CornerRadius(10.f))
-                                .flex(1.f),
-                        },
+                                .flex(1.f)
+                        ),
                 },
                 HStack{
                     .spacing = 0.f,
-                    .children =
-                        {
+                    .children = children(
                             Text{.text = (*text).empty() ? "(empty)" : *text,
-                                 .font = {.size = 13.f},
+                                 .style = theme.typeBodySmall,
                                  .color = pal::sub,
                                  .wrapping = TextWrapping::Wrap}
-                                .flex(1.f),
-                        },
-                },
-            },
+                                .flex(1.f)
+                        ),
+                }
+            ),
     };
   }
 };
@@ -103,8 +102,7 @@ struct EditorPanel {
     return ZStack{
         .hAlign = HorizontalAlignment::Leading,
         .vAlign = VerticalAlignment::Top,
-        .children =
-            {
+        .children = children(
                 Rectangle{
                     .fill = FillStyle::solid(pal::surface),
                     .stroke = StrokeStyle::solid(pal::border, 1.f),
@@ -112,12 +110,11 @@ struct EditorPanel {
                     .cornerRadius(CornerRadius(12.f)),
                 VStack{
                     .spacing = 10.f,
-                    .children =
-                        {
-                            FocusField{.title = title},
-                        },
-                }.padding(14.f),
-            },
+                    .children = children(
+                            FocusField{.title = title}
+                        ),
+                }.padding(14.f)
+            ),
     };
   }
 };
@@ -128,10 +125,10 @@ struct RequestFocusDemo {
   mutable std::function<void()> focusPanelB;
 
   auto body() const {
-    auto btn = [](std::string label, std::function<void()> action) -> Element {
+    Theme const& theme = useEnvironment<Theme>();
+    auto btn = [&](std::string label, std::function<void()> action) -> Element {
       return ZStack{
-          .children =
-              {
+          .children = children(
                   Rectangle{
                       .fill = FillStyle::solid(pal::accent),
                   }
@@ -140,57 +137,52 @@ struct RequestFocusDemo {
                       .onTap(std::move(action))
                       .cornerRadius(CornerRadius(8.f)),
                   Text{.text = std::move(label),
-                       .font = {.size = 14.f, .weight = 600.f},
-                       .color = Color::hex(0xFFFFFF),
+                       .style = theme.typeLabel,
+                       .color = theme.colorOnAccent,
                        .horizontalAlignment = HorizontalAlignment::Center,
                        .verticalAlignment = VerticalAlignment::Center,
                    }
-                      .padding(10.f),
-              },
+                      .padding(10.f)
+              ),
       };
     };
 
     return ZStack{
-        .children =
-            {
+        .children = children(
                 Rectangle{.fill = FillStyle::solid(pal::bg)},
                 VStack{
                     .spacing = 20.f,
                     .hAlign = HorizontalAlignment::Leading,
-                    .children =
-                        {
+                    .children = children(
                             Text{.text = "useRequestFocus demo",
-                                 .font = {.size = 22.f, .weight = 700.f},
+                                 .style = theme.typeDisplay,
                                  .color = pal::label},
                             HStack{
                                 .spacing = 0.f,
-                                .children =
-                                    {
+                                .children = children(
                                         Text{
                                             .text = "Click the buttons below to focus a field programmatically — "
                                                     "without clicking on it.",
-                                            .font = {.size = 14.f},
+                                            .style = theme.typeBody,
                                             .color = pal::sub,
                                             .wrapping = TextWrapping::Wrap,
                                         }
-                                            .flex(1.f),
-                                    },
+                                            .flex(1.f)
+                                    ),
                             },
                             HStack{
                                 .spacing = 16.f,
                                 .vAlign = VerticalAlignment::Top,
-                                .children =
-                                    {
+                                .children = children(
                                         Element{EditorPanel{.title = "Panel A", .focusFnOut = &focusPanelA}}
                                             .flex(1.f),
                                         Element{EditorPanel{.title = "Panel B", .focusFnOut = &focusPanelB}}
-                                            .flex(1.f),
-                                    },
+                                            .flex(1.f)
+                                    ),
                             },
                             HStack{
                                 .spacing = 10.f,
-                                .children =
-                                    {
+                                .children = children(
                                         btn("Focus A", [this] {
                                           if (focusPanelA) {
                                             focusPanelA();
@@ -200,28 +192,27 @@ struct RequestFocusDemo {
                                           if (focusPanelB) {
                                             focusPanelB();
                                           }
-                                        }),
-                                    },
+                                        })
+                                    ),
                             },
                             HStack{
                                 .spacing = 0.f,
-                                .children =
-                                    {
+                                .children = children(
                                         Text{
                                             .text = "\"Focus A\" and \"Focus B\" call the requestFocus callable returned by "
                                                     "useRequestFocus() inside each panel's body(). The callable finds the first "
                                                     "focusable leaf in the panel's subtree and calls setFocus on it. Tab / "
                                                     "Shift+Tab still cycle between fields normally.",
-                                            .font = {.size = 13.f},
+                                            .style = theme.typeBodySmall,
                                             .color = pal::sub,
                                             .wrapping = TextWrapping::Wrap,
                                         }
-                                            .flex(1.f),
-                                    },
-                            },
-                        },
-                }.padding(24.f),
-            },
+                                            .flex(1.f)
+                                    ),
+                            }
+                        ),
+                }.padding(24.f)
+            ),
     };
   }
 };

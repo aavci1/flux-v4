@@ -71,7 +71,7 @@ void ensureTooltipTimerBridge() {
 } // namespace
 
 void useTooltip(TooltipConfig const& config) {
-  FluxTheme const& theme = useEnvironment<FluxTheme>();
+  Theme const& theme = useEnvironment<Theme>();
 
   bool const hovered = useHover();
   bool const pressed = usePress();
@@ -110,7 +110,7 @@ void useTooltip(TooltipConfig const& config) {
     Popover popover{
         .content = Element{Text{
             .text = config.text,
-            .font = theme.typeBodySmall.toFont(),
+            .style = theme.typeBodySmall,
             .color = theme.colorTextPrimary,
             .wrapping = TextWrapping::Wrap,
         }},

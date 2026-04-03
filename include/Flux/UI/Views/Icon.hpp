@@ -19,13 +19,13 @@ struct Icon : ViewModifiers<Icon> {
   // ── Appearance ──────────────────────────────────────────────────────
 
   /// Icon size in points. Drives both the font size and the component's intrinsic frame.
-  /// `kFloatFromTheme` → `FluxTheme::typeBody.size` (24 pt).
+  /// `kFloatFromTheme` → `Theme::typeBody.size` (24 pt).
   float size = kFloatFromTheme;
 
-  /// 0 = use theme body weight (`FluxTheme::typeBody`).
+  /// 0 = use theme body weight (`Theme::typeBody`).
   float weight = kFloatFromTheme;
 
-  /// Icon colour. `kFromTheme` → `FluxTheme::colorTextPrimary`.
+  /// Icon colour. `kFromTheme` → `Theme::colorTextPrimary`.
   Color color = kFromTheme;
 
   // ── Component protocol ────────────────────────────────────────────────

@@ -27,7 +27,7 @@ namespace flux {
 
 namespace {
 
-TextArea::Style resolveTextAreaStyle(TextArea::Style const& style, FluxTheme const& theme) {
+TextArea::Style resolveTextAreaStyle(TextArea::Style const& style, Theme const& theme) {
   InputFieldChromeSpec const spec{
       .textColor = style.textColor,
       .placeholderColor = style.placeholderColor,
@@ -305,7 +305,7 @@ void TextAreaView::render(Canvas& canvas, Rect frame) const {
 Element TextArea::body() const {
   using namespace std::chrono;
 
-  FluxTheme const& theme = useEnvironment<FluxTheme>();
+  Theme const& theme = useEnvironment<Theme>();
   TextArea::Style const s = resolveTextAreaStyle(style, theme);
   Font const fnt = s.font;
   float const padHResolved = s.paddingH;
