@@ -1,0 +1,79 @@
+#pragma once
+
+#include <Flux.hpp>
+#include <Flux/Core/Cursor.hpp>
+#include <Flux/Core/WindowUI.hpp>
+#include <Flux/UI/Theme.hpp>
+#include <Flux/UI/Views/Views.hpp>
+
+using namespace flux;
+
+struct MessageBox : ViewModifiers<MessageBox> {
+    std::function<void(const std::string&)> onSend;
+    /// When true, send is ignored and the send control is dimmed (e.g. while a reply is streaming).
+    bool disabled = false;
+
+    auto body() const {
+        auto value = useState<std::string>("");
+
+        Theme const& theme = useEnvironment<Theme>();
+
+        return VStack {
+            .spacing = 16.f,
+            .alignment = Alignment::Start,
+            .children = children(
+                TextArea {
+                    .value = value,
+                    .placeholder = "Type your message here...",
+                    .style = TextArea::Style::plain()
+                },
+                HStack {
+                    .spacing = 16.f,
+                    .alignment = Alignment::Center,
+                    .children = children(
+                        Icon {
+                            .name = IconName::Attachment,
+                            .size = theme.typeBody.size,
+                            .weight = 300.f,
+                            .color = theme.colorTextSecondary,
+                        }.cursor(Cursor::Hand),
+                        Icon {
+                            .name = IconName::Settings,
+                            .size = theme.typeBody.size,
+                            .weight = 300.f,
+                            .color = theme.colorTextSecondary,
+                        }.cursor(Cursor::Hand),
+                        Spacer {},
+                        Icon {
+                            .name = IconName::Image,
+                            .size = theme.typeBody.size,
+                            .weight = 300.f,
+                            .color = theme.colorTextSecondary,
+                        }.cursor(Cursor::Hand),
+                        Icon {
+                            .name = IconName::Send,
+                            .size = theme.typeBody.size,
+                            .weight = 300.f,
+                            .color = disabled ? Color::hex(0xC5C5C5) : theme.colorTextSecondary,
+                        }.cursor(disabled ? Cursor::Arrow : Cursor::Hand)
+                        .onTap([value = value, onSend = onSend, disabled = disabled]() {
+                            if (disabled || !onSend) {
+                                return;
+                            }
+                            onSend(*value);
+                            value = "";
+                        })
+                    )
+                }
+            )
+        }
+        .fill(FillStyle::solid(Color::hex(0xF5F5F5)))
+        .cornerRadius(8.f)
+        // .shadow(ShadowStyle {
+        //     .radius = 2.f,
+        //     .offset = {0.f, 1.f},
+        //     .color = Color::hex(0xC0C0C0)
+        // })
+        .padding(16.f);
+    }
+};
