@@ -19,9 +19,11 @@ inline float assignedSpan(float parentSpan, float outerSpan) {
   if (parentSpan > 0.f) {
     return parentSpan;
   }
+
   if (std::isfinite(outerSpan) && outerSpan > 0.f) {
     return outerSpan;
   }
+
   return 0.f;
 }
 
@@ -29,10 +31,11 @@ inline float assignedSpan(float parentSpan, float outerSpan) {
 /// it is positive), when both a positive parent span and a positive finite constraint exist we use the
 /// **constraint cap** (`outerSpan`) so nested flex and stacks respect the viewport max width/height.
 inline float stackMainAxisSpan(float parentSpan, float outerSpan) {
-  if (parentSpan > 0.f && std::isfinite(outerSpan) && outerSpan > 0.f) {
+  if (std::isfinite(outerSpan) && outerSpan > 0.f) {
     return outerSpan;
   }
-  return assignedSpan(parentSpan, outerSpan);
+
+  return std::max(parentSpan, 0.f);
 }
 
 inline float hAlignOffset(float childW, float innerW, HorizontalAlignment a) {
