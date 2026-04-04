@@ -109,6 +109,9 @@ target_link_libraries(stack_demo PRIVATE flux)
 add_executable(notes_demo notes/main.cpp)
 target_link_libraries(notes_demo PRIVATE flux)
 
+add_executable(llm_studio llm-studio/main.cpp)
+target_link_libraries(llm_studio PRIVATE flux)
+
 set(FLUX_EXAMPLE_TARGETS
     hello_world
     clock_demo
@@ -142,6 +145,7 @@ set(FLUX_EXAMPLE_TARGETS
     theme_demo
     stack_demo
     notes_demo
+    llm_studio
 )
 foreach(t ${FLUX_EXAMPLE_TARGETS})
   flux_copy_example_resources(${t})

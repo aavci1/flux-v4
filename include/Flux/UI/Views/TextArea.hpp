@@ -43,6 +43,25 @@ struct TextArea : ViewModifiers<TextArea> {
     float paddingH = kFloatFromTheme;
     float paddingV = kFloatFromTheme;
     float lineHeight = 0.f;
+
+    static Style plain() {
+      return Style {
+        .font = kFontFromTheme,
+        .textColor = kFromTheme,
+        .placeholderColor = kFromTheme,
+        .backgroundColor = Colors::transparent,
+        .borderColor = Colors::transparent,
+        .borderFocusColor = Colors::transparent,
+        .caretColor = kFromTheme,
+        .selectionColor = kFromTheme,
+        .disabledColor = kFromTheme,
+        .borderWidth = 0.f,
+        .borderFocusWidth = 0.f,
+        .cornerRadius = 0.f,
+        .paddingH = 0.f,
+        .paddingV = 0.f,
+      };
+    }
   };
 
   State<std::string> value{};
