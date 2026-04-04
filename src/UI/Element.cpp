@@ -193,6 +193,17 @@ void Element::layoutWithModifiers(LayoutContext& ctx) const {
   LayoutConstraints innerCs = scope.outer;
   innerCs.maxWidth = innerW > 0.f ? innerW : std::numeric_limits<float>::infinity();
   innerCs.maxHeight = innerH > 0.f ? innerH : std::numeric_limits<float>::infinity();
+  if (pad > 0.f) {
+    float const pad2 = 2.f * pad;
+    innerCs.minWidth = std::max(0.f, innerCs.minWidth - pad2);
+    innerCs.minHeight = std::max(0.f, innerCs.minHeight - pad2);
+  }
+  if (std::isfinite(innerCs.maxWidth)) {
+    innerCs.minWidth = std::min(innerCs.minWidth, innerCs.maxWidth);
+  }
+  if (std::isfinite(innerCs.maxHeight)) {
+    innerCs.minHeight = std::min(innerCs.minHeight, innerCs.maxHeight);
+  }
 
   LayoutHints const preservedHints = ctx.hints();
 
@@ -238,6 +249,14 @@ Size Element::measureWithModifiersImpl(LayoutContext& ctx, LayoutConstraints con
     if (std::isfinite(innerCs.maxHeight)) {
       innerCs.maxHeight -= pad2;
     }
+    innerCs.minWidth = std::max(0.f, innerCs.minWidth - pad2);
+    innerCs.minHeight = std::max(0.f, innerCs.minHeight - pad2);
+  }
+  if (std::isfinite(innerCs.maxWidth)) {
+    innerCs.minWidth = std::min(innerCs.minWidth, innerCs.maxWidth);
+  }
+  if (std::isfinite(innerCs.maxHeight)) {
+    innerCs.minHeight = std::min(innerCs.minHeight, innerCs.maxHeight);
   }
 
   Size sz{};
