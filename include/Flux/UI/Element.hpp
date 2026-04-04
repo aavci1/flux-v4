@@ -516,6 +516,16 @@ Element ViewModifiers<Derived>::padding(float all) && {
 }
 
 template<typename Derived>
+Element ViewModifiers<Derived>::padding(EdgeInsets insets) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.padding(insets);
+}
+
+template<typename Derived>
+Element ViewModifiers<Derived>::padding(float top, float right, float bottom, float left) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.padding({top, right, bottom, left});
+}
+
+template<typename Derived>
 Element ViewModifiers<Derived>::fill(FillStyle style) && {
   return Element{std::move(static_cast<Derived&>(*this))}.fill(std::move(style));
 }
