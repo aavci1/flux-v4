@@ -95,14 +95,14 @@ struct Theme {
   Color colorWarningSubtle = Color{0.85f, 0.47f, 0.02f, 0.12f};
 
   Color colorBackground = Color::hex(0xF2F2F7);
-  Color colorSurface = Color::hex(0xFFFFFF);
+  Color colorSurface = Color::hex(0xF5F7F9);
   Color colorSurfaceOverlay = Color::hex(0xFFFFFF);
   Color colorSurfaceField = Color::hex(0xFFFFFF);
   Color colorSurfaceHover = Color::hex(0xF8F8FA);
   Color colorSurfaceRowHover = Color::hex(0xF0F0F5);
   Color colorSurfaceDisabled = Color::hex(0xE5E5EA);
 
-  Color colorBorder = Color::hex(0xC8C8D0);
+  Color colorBorder = Color::hex(0xDADCDE);
   Color colorBorderSubtle = Color::hex(0xE5E5EA);
   Color colorBorderFocus = Color::hex(0x7ABBF5);
 
@@ -124,15 +124,15 @@ struct Theme {
   /// - `typeLabel` / `typeLabelSmall`: field labels, compact control labels, footnotes.
   /// - `typeBody` / `typeBodySmall`: paragraphs, descriptions, captions, supporting text.
   /// - `typeCode`: monospace snippets.
-  TextStyle typeDisplay{34.f, 700.f, 1.12f};
-  TextStyle typeHeading{22.f, 700.f, 1.18f};
-  TextStyle typeTitle{17.f, 600.f, 1.24f};
-  TextStyle typeSubtitle{15.f, 600.f, 1.28f};
-  TextStyle typeBody{15.f, 400.f, 1.40f};
-  TextStyle typeBodySmall{13.f, 400.f, 1.40f};
-  TextStyle typeLabel{14.f, 500.f, 1.20f};
-  TextStyle typeLabelSmall{12.f, 500.f, 1.20f};
-  TextStyle typeCode{13.f, 400.f, 1.50f};
+  TextStyle typeDisplay{34.f, 700.f, 0.f};
+  TextStyle typeHeading{22.f, 700.f, 0.f};
+  TextStyle typeTitle{17.f, 400.f, 0.f};
+  TextStyle typeSubtitle{16.f, 400.f, 0.f};
+  TextStyle typeBody{15.f, 400.f, 0.f};
+  TextStyle typeBodySmall{13.f, 400.f, 0.f};
+  TextStyle typeLabel{14.f, 500.f, 0.f};
+  TextStyle typeLabelSmall{12.f, 500.f, 0.f};
+  TextStyle typeCode{13.f, 400.f, 0.f};
 
   // Spacing scale (8 pt grid). At density 1.0, space3 is 12 pt, space4 is 16 pt, etc.
   // `withDensity(d)` scales space1–space8 by d (and updates paddingFieldH/V to match space3/space2).

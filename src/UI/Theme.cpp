@@ -33,7 +33,7 @@ Theme Theme::dark() {
   t.colorWarningSubtle = Color{0.98f, 0.75f, 0.14f, 0.15f};
 
   t.colorBackground = Color::hex(0x000000);
-  t.colorSurface = Color::hex(0x1C1C1E);
+  t.colorSurface = Color::hex(0xF5F7F9);
   t.colorSurfaceOverlay = Color::hex(0x2C2C2E);
   t.colorSurfaceField = Color::hex(0x2C2C2E);
   t.colorSurfaceHover = Color::hex(0x3A3A3C);

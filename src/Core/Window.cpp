@@ -26,7 +26,7 @@ struct Window::Impl {
   std::unique_ptr<PlatformWindow> platform_;
   std::unique_ptr<Canvas> canvas_;
   std::optional<SceneGraph> sceneGraph_;
-  Color clearColor_{Color::hex(0xF2F2F7)};
+  Color clearColor_{Color::hex(0xF5F7F9)};
   /// Declared before `runtime_` so `~Runtime` (and `OverlayHookSlot` teardown calling `removeOverlay`)
   /// runs while `OverlayManager` is still alive. Reverse member destruction order would destroy
   /// `overlayMgr_` first and use-after-free on window close with an open overlay.
