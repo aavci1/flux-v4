@@ -28,9 +28,7 @@ struct ThreeStateButton {
 
     return ZStack{
         .children = children(
-            Rectangle {
-              .fill = FillStyle::solid(bg)
-            }
+            Rectangle{}.fill(FillStyle::solid(bg))
             .height(44.f)
             .cursor(Cursor::Hand)
             .onTap(onTap)
@@ -56,9 +54,7 @@ struct HoverListRow {
     bool const hovered = useHover();
 
     return ZStack{.children = children(
-                      Rectangle{
-                          .fill = FillStyle::solid(hovered ? Color::hex(0xDFDFE8) : Color::hex(0xFFFFFF)),
-                      }
+                      Rectangle{}.fill(FillStyle::solid(hovered ? Color::hex(0xDFDFE8) : Color::hex(0xFFFFFF)))
                           .height(48.f)
                           .cursor(Cursor::Hand)
                           .cornerRadius(CornerRadius(8.f)),
@@ -75,7 +71,7 @@ struct HoverDemo {
   auto body() const {
     Theme const& theme = useEnvironment<Theme>();
     return ZStack{.children = children(
-                      Rectangle{.fill = FillStyle::solid(theme.colorBackground)},
+                      Rectangle{}.fill(FillStyle::solid(theme.colorBackground)),
                       VStack{
                           .spacing = 20.f,
                           .alignment = Alignment::Start,

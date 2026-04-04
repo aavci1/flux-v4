@@ -41,7 +41,7 @@ struct ClockFace : ViewModifiers<ClockFace> {
 
 struct ClockView {
   auto body() const {
-    return ZStack{.children = children(Rectangle{.fill = FillStyle::solid(Color::hex(0xF5F5F8))}, ClockFace{})};
+    return ZStack{.children = children(Rectangle{}.fill(FillStyle::solid(Color::hex(0xF5F5F8))), ClockFace{})};
   }
 };
 

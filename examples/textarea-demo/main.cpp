@@ -1,5 +1,5 @@
 // Multiline TextArea: Escape clears notes (onEscape).
-// Styling uses chained Element modifiers (background, border, corner radius, clip, flex) instead of
+// Styling uses chained Element modifiers (fill, stroke, corner radius, clip, flex) instead of
 // duplicating chrome fields on the struct.
 
 #include <Flux.hpp>
@@ -33,7 +33,7 @@ struct NotesEditor {
                     .color = theme.colorTextPrimary,
                 },
                 Text {
-                    .text = "Shell styling uses .background(), .border(), .cornerRadius(), .clipContent(), and .flex() on the TextArea.",
+                    .text = "Shell styling uses .fill(), .stroke(), .cornerRadius(), .clipContent(), and .flex() on the TextArea.",
                     .style = theme.typeBody,
                     .color = theme.colorTextSecondary,
                     .wrapping = TextWrapping::Wrap

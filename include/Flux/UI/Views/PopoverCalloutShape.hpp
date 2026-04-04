@@ -30,7 +30,6 @@ struct PopoverCalloutShape : ViewModifiers<PopoverCalloutShape> {
   Color backgroundColor = Color::hex(0xFFFFFF);
   Color borderColor = Color::hex(0xE0E0E6);
   float borderWidth = 1.f;
-  ShadowStyle shadow = ShadowStyle::none();
   std::optional<Size> maxSize{};
   Element content{Rectangle{}};
 

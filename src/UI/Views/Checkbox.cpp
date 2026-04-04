@@ -112,15 +112,10 @@ Element Checkbox::body() const {
       .horizontalAlignment = Alignment::Center,
       .verticalAlignment = Alignment::Center,
       .children = flux::children(
-        Rectangle{
-          .fill = FillStyle::solid(*boxFillAnim),
-          .stroke = boxStroke,
-        }
+        Rectangle{}
+          .fill(FillStyle::solid(*boxFillAnim))
+          .stroke(boxStroke)
           .size(boxSize, boxSize)
-          .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
-          .focusable(!isDisabled)
-          .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)>{} : std::function<void(KeyCode, Modifiers)>{handleKey})
-          .onTap(isDisabled ? std::function<void()>{} : std::function<void()>{handleToggle})
           .cornerRadius(CornerRadius {cornerRadius}),
         Icon {
           .name = iconName,
@@ -128,7 +123,10 @@ Element Checkbox::body() const {
           .color = *iconColorAnim,
         }
       ),
-    },
+    }.cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
+    .focusable(!isDisabled)
+    .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)>{} : std::function<void(KeyCode, Modifiers)>{handleKey})
+    .onTap(isDisabled ? std::function<void()>{} : std::function<void()>{handleToggle}),
   };
 }
 

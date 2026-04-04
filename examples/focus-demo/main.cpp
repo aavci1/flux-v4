@@ -41,11 +41,10 @@ struct FocusField {
                 HStack{
                     .spacing = 0.f,
                     .children = children(
-                            Rectangle{
-                                        .fill = FillStyle::solid(focused ? pal::editorBgFocus : pal::editorBg),
-                                        .stroke = StrokeStyle::solid(focused ? pal::borderFocus : pal::border,
-                                                                     focused ? 2.f : 1.f),
-                                    }
+                            Rectangle{}
+                                .fill(FillStyle::solid(focused ? pal::editorBgFocus : pal::editorBg))
+                                .stroke(StrokeStyle::solid(focused ? pal::borderFocus : pal::border,
+                                                             focused ? 2.f : 1.f))
                                 .height(120.f)
                                 .focusable(true)
                                 .onKeyDown(
@@ -97,7 +96,7 @@ struct FocusDemoRoot {
         .horizontalAlignment = Alignment::Start,
         .verticalAlignment = Alignment::Start,
         .children = children(
-                Rectangle{.fill = FillStyle::solid(pal::bg)},
+                Rectangle{}.fill(FillStyle::solid(pal::bg)),
                 VStack{
                     .spacing = 20.f,
                     .alignment = Alignment::Start,

@@ -56,15 +56,9 @@ struct StackDemoRoot {
                             .spacing = 10.f,
                             .alignment = Alignment::Center,
                             .children = children(
-                                Rectangle {
-                                    .fill = FillStyle::solid(pal::coral),
-                                }.size(160.f, 36.f).cornerRadius(CornerRadius{8.f}),
-                                Rectangle {
-                                    .fill = FillStyle::solid(pal::teal),
-                                }.size(200.f, 36.f).cornerRadius(CornerRadius{8.f}),
-                                Rectangle {
-                                    .fill = FillStyle::solid(pal::indigo),
-                                }.size(120.f, 36.f).cornerRadius(CornerRadius{8.f})
+                                Rectangle{}.fill(FillStyle::solid(pal::coral)).size(160.f, 36.f).cornerRadius(CornerRadius{8.f}),
+                                Rectangle{}.fill(FillStyle::solid(pal::teal)).size(200.f, 36.f).cornerRadius(CornerRadius{8.f}),
+                                Rectangle{}.fill(FillStyle::solid(pal::indigo)).size(120.f, 36.f).cornerRadius(CornerRadius{8.f})
                             ),
                         },
                         Text {
@@ -76,18 +70,10 @@ struct StackDemoRoot {
                             .spacing = 12.f,
                             .alignment = Alignment::Center,
                             .children = children(
-                                Rectangle {
-                                    .fill = FillStyle::solid(pal::coral),
-                                }.size(56.f, 56.f).cornerRadius(CornerRadius{10.f}).flex(2.f, 1.f, 0.f),
-                                Rectangle {
-                                    .fill = FillStyle::solid(pal::teal),
-                                }.size(56.f, 72.f).cornerRadius(CornerRadius{10.f}),
-                                Rectangle {
-                                    .fill = FillStyle::solid(pal::indigo),
-                                }.size(56.f, 40.f).cornerRadius(CornerRadius{10.f}).flex(1.f, 1.f, 0.f),
-                                Rectangle {
-                                    .fill = FillStyle::solid(pal::amber),
-                                }.size(56.f, 56.f).cornerRadius(CornerRadius{10.f})
+                                Rectangle{}.fill(FillStyle::solid(pal::coral)).size(56.f, 56.f).cornerRadius(CornerRadius{10.f}).flex(2.f, 1.f, 0.f),
+                                Rectangle{}.fill(FillStyle::solid(pal::teal)).size(56.f, 72.f).cornerRadius(CornerRadius{10.f}),
+                                Rectangle{}.fill(FillStyle::solid(pal::indigo)).size(56.f, 40.f).cornerRadius(CornerRadius{10.f}).flex(1.f, 1.f, 0.f),
+                                Rectangle{}.fill(FillStyle::solid(pal::amber)).size(56.f, 56.f).cornerRadius(CornerRadius{10.f})
                             ),
                         },
                         Text {
@@ -103,9 +89,7 @@ struct StackDemoRoot {
                                     .spacing = 8.f,
                                     .alignment = Alignment::Center,
                                     .children = children(
-                                        Rectangle {
-                                            .fill = FillStyle::solid(Color::hex(0xE8E8EF)),
-                                        }.height(28.f).cornerRadius(CornerRadius{6.f}).flex(1.f),
+                                        Rectangle{}.fill(FillStyle::solid(Color::hex(0xE8E8EF))).height(28.f).cornerRadius(CornerRadius{6.f}).flex(1.f),
                                         Text {
                                             .text = "A",
                                             .style = theme.typeBody,
@@ -117,9 +101,7 @@ struct StackDemoRoot {
                                     .spacing = 8.f,
                                     .alignment = Alignment::Center,
                                     .children = children(
-                                        Rectangle {
-                                            .fill = FillStyle::solid(Color::hex(0xE8E8EF)),
-                                        }.height(28.f).cornerRadius(CornerRadius{6.f}).flex(1.f),
+                                        Rectangle{}.fill(FillStyle::solid(Color::hex(0xE8E8EF))).height(28.f).cornerRadius(CornerRadius{6.f}).flex(1.f),
                                         Text {
                                             .text = "B",
                                             .style = theme.typeBody,
@@ -131,9 +113,7 @@ struct StackDemoRoot {
                                     .spacing = 8.f,
                                     .alignment = Alignment::Center,
                                     .children = children(
-                                        Rectangle {
-                                            .fill = FillStyle::solid(Color::hex(0xE8E8EF)),
-                                        }.height(28.f).cornerRadius(CornerRadius{6.f}).flex(1.f),
+                                        Rectangle{}.fill(FillStyle::solid(Color::hex(0xE8E8EF))).height(28.f).cornerRadius(CornerRadius{6.f}).flex(1.f),
                                         Text {
                                             .text = "C",
                                             .style = theme.typeBody,

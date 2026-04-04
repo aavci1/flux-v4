@@ -40,11 +40,11 @@ InputFieldDecoration applyOuterInputFieldDecoration(ResolvedInputFieldChrome con
   StrokeStyle strokeF = StrokeStyle::solid(chrome.borderFocusColor, chrome.borderFocusWidth);
   CornerRadius cr{chrome.cornerRadius};
   if (outerMods) {
-    if (!outerMods->background.isNone()) {
-      bgFill = outerMods->background;
+    if (!outerMods->fill.isNone()) {
+      bgFill = outerMods->fill;
     }
-    if (!outerMods->border.isNone()) {
-      strokeN = outerMods->border;
+    if (!outerMods->stroke.isNone()) {
+      strokeN = outerMods->stroke;
       strokeF = StrokeStyle::solid(chrome.borderFocusColor, chrome.borderFocusWidth);
     }
     if (!outerMods->cornerRadius.isZero()) {

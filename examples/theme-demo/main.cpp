@@ -85,7 +85,7 @@ struct ThemeDemoRoot {
 
     return ZStack{
         .children = children(
-                Rectangle{ .fill = FillStyle::solid(windowTheme.colorBackground) },
+                Rectangle{}.fill(FillStyle::solid(windowTheme.colorBackground)),
                 VStack{
                     .spacing = windowTheme.space4,
                     .alignment = Alignment::Start,

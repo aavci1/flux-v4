@@ -22,11 +22,12 @@ class Element;
 template<typename Derived>
 struct ViewModifiers {
   Element padding(float all) &&;
-  Element background(FillStyle fill) &&;
+  Element fill(FillStyle style) &&;
+  Element shadow(ShadowStyle style) &&;
   Element size(float width, float height) &&;
   Element width(float w) &&;
   Element height(float h) &&;
-  Element border(StrokeStyle stroke) &&;
+  Element stroke(StrokeStyle style) &&;
   Element cornerRadius(CornerRadius radius) &&;
   Element opacity(float opacity) &&;
   Element position(Vec2 p) &&;

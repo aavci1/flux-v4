@@ -215,11 +215,11 @@ Element Button::body() const {
     .horizontalAlignment = Alignment::Center,
     .verticalAlignment = Alignment::Center,
     .children = flux::children(
-      Rectangle {
-          .fill = FillStyle::solid(*fillAnim),
-          .stroke = stroke,
-          .shadow = bgShadow,
-      }.height(h)
+      Rectangle{}
+          .fill(FillStyle::solid(*fillAnim))
+          .stroke(stroke)
+          .shadow(bgShadow)
+          .height(h)
         .cursor(effectivelyDisabled ? Cursor::Inherit : Cursor::Hand)
         .focusable(!effectivelyDisabled)
         .onKeyDown(effectivelyDisabled ? std::function<void(KeyCode, Modifiers)>{} : std::function<void(KeyCode, Modifiers)>{ handleKey })

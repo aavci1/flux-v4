@@ -30,10 +30,9 @@ struct HoverRow {
     Color const bgColor = hovered ? Color::hex(0xDFDFE6) : Color::hex(0xFFFFFF);
 
     return ZStack{.children = children(
-                      Rectangle{
-                          .fill = FillStyle::solid(bgColor),
-                          .stroke = StrokeStyle::solid(Color::hex(0xE0E0E6), 1.f),
-                      }
+                      Rectangle{}
+                          .fill(FillStyle::solid(bgColor))
+                          .stroke(StrokeStyle::solid(Color::hex(0xE0E0E6), 1.f))
                           .height(44.f)
                           .cursor(Cursor::Hand)
                           .cornerRadius(CornerRadius(8.f)),
@@ -56,7 +55,7 @@ struct ForEachDemo {
 
     return ZStack{
         .children = children(
-                Rectangle{.fill = FillStyle::solid(pal::bg)},
+                Rectangle{}.fill(FillStyle::solid(pal::bg)),
                 VStack{
                     .spacing = 16.f,
                     .children = children(
@@ -69,9 +68,8 @@ struct ForEachDemo {
                                 .children = children(
                                         ZStack{
                                             .children = children(
-                                                    Rectangle{
-                                                        .fill = FillStyle::solid(Color::hex(0x3A7BD5)),
-                                                    }
+                                                    Rectangle{}
+                                                        .fill(FillStyle::solid(Color::hex(0x3A7BD5)))
                                                         .size(120.f, 36.f)
                                                         .cursor(Cursor::Hand)
                                                         .onTap([count] { count = *count + 1; })
@@ -83,9 +81,8 @@ struct ForEachDemo {
                                         },
                                         ZStack{
                                             .children = children(
-                                                    Rectangle{
-                                                        .fill = FillStyle::solid(Color::hex(0xD05A2B)),
-                                                    }
+                                                    Rectangle{}
+                                                        .fill(FillStyle::solid(Color::hex(0xD05A2B)))
                                                         .size(120.f, 36.f)
                                                         .cursor(Cursor::Hand)
                                                         .onTap([count] {

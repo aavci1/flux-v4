@@ -39,10 +39,9 @@ Element cursorSwatchRow(std::string name, Cursor cursor, Color chip, Theme const
                                  .color = pal::label,
                              }
                                 .size(152.f, 0.f),
-                            Rectangle{
-                                .fill = FillStyle::solid(chip),
-                                .stroke = StrokeStyle::solid(Color::hex(0xC8C8D0), 1.f),
-                            }
+                            Rectangle{}
+                                .fill(FillStyle::solid(chip))
+                                .stroke(StrokeStyle::solid(Color::hex(0xC8C8D0), 1.f))
                                 .height(44.f)
                                 .cursor(cursor)
                                 .cornerRadius(CornerRadius(8.f))
@@ -62,7 +61,7 @@ struct CursorDemo {
     Theme const& theme = useEnvironment<Theme>();
     return ZStack{
         .children = children(
-                Rectangle{.fill = FillStyle::solid(pal::bg)},
+                Rectangle{}.fill(FillStyle::solid(pal::bg)),
                 VStack{
                     .spacing = 0.f,
                     .children = children(
@@ -131,8 +130,8 @@ struct CursorDemo {
                                                                 }
                                                                     .cursor(Cursor::IBeam)
                                                                     .padding(10.f)
-                                                                    .background(FillStyle::solid(Color::hex(0xFFFFFF)))
-                                                                    .border(StrokeStyle::solid(Color::hex(0xC8C8D0), 1.f))
+                                                                    .fill(FillStyle::solid(Color::hex(0xFFFFFF)))
+                                                                    .stroke(StrokeStyle::solid(Color::hex(0xC8C8D0), 1.f))
                                                                     .cornerRadius(CornerRadius(8.f))
                                                                     .flex(1.f)
                                                             ),
@@ -150,9 +149,8 @@ struct CursorDemo {
                                                                                         .style = theme.typeHeading,
                                                                                         .color = pal::label,
                                                                                     },
-                                                                                    Rectangle{
-                                                                                        .fill = FillStyle::solid(pal::chipAccent),
-                                                                                    }
+                                                                                    Rectangle{}
+                                                                                        .fill(FillStyle::solid(pal::chipAccent))
                                                                                         .height(52.f)
                                                                                         .cursor(Cursor::ResizeAll)
                                                                                         .onPointerDown([](Point) {})

@@ -45,10 +45,9 @@ struct ConfirmDialog {
                     .children = children(
                             ZStack{
                                 .children = children(
-                                        Rectangle{
-                                            .fill = FillStyle::solid(Color::hex(0xFFFFFF)),
-                                            .stroke = StrokeStyle::solid(pal::cardStroke, 1.f),
-                                        }
+                                        Rectangle{}
+                                            .fill(FillStyle::solid(Color::hex(0xFFFFFF)))
+                                            .stroke(StrokeStyle::solid(pal::cardStroke, 1.f))
                                             .width(360.f)
                                             .cornerRadius(CornerRadius(14.f)),
                                         VStack{
@@ -73,10 +72,9 @@ struct ConfirmDialog {
                                                         .children = children(
                                                                 ZStack{
                                                                     .children = children(
-                                                                            Rectangle{
-                                                                                .fill = FillStyle::solid(Color::hex(0xF0F0F5)),
-                                                                                .stroke = StrokeStyle::solid(pal::cardStroke, 1.f),
-                                                                            }
+                                                                            Rectangle{}
+                                                                                .fill(FillStyle::solid(Color::hex(0xF0F0F5)))
+                                                                                .stroke(StrokeStyle::solid(pal::cardStroke, 1.f))
                                                                                 .height(44.f)
                                                                                 .cursor(Cursor::Hand)
                                                                                 .focusable(true)
@@ -97,10 +95,8 @@ struct ConfirmDialog {
                                                                 }.flex(1.f),
                                                                 ZStack{
                                                                     .children = children(
-                                                                            Rectangle{
-                                                                                .fill = FillStyle::solid(confirmColor),
-                                                                                .stroke = StrokeStyle::none(),
-                                                                            }
+                                                                            Rectangle{}
+                                                                                .fill(FillStyle::solid(confirmColor))
                                                                                 .height(44.f)
                                                                                 .cursor(Cursor::Hand)
                                                                                 .focusable(true)
@@ -151,10 +147,9 @@ struct FileManagerRow {
                 Text{.text = filename, .style = theme.typeBody, .color = pal::titleC}.flex(1.f),
                 ZStack{
                     .children = children(
-                            Rectangle{
-                                .fill = FillStyle::solid(pal::dangerBg),
-                                .stroke = StrokeStyle::solid(pal::dangerStroke, 1.f),
-                            }
+                            Rectangle{}
+                                .fill(FillStyle::solid(pal::dangerBg))
+                                .stroke(StrokeStyle::solid(pal::dangerStroke, 1.f))
                                 .size(88.f, 32.f)
                                 .cursor(Cursor::Hand)
                                 .onTap(
@@ -198,7 +193,7 @@ struct OverlayConfirmRoot {
     Theme const& theme = useEnvironment<Theme>();
     return ZStack{
         .children = children(
-                Rectangle{.fill = FillStyle::solid(pal::bg)},
+                Rectangle{}.fill(FillStyle::solid(pal::bg)),
                 VStack{
                     .spacing = 16.f,
                     .alignment = Alignment::Start,

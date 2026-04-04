@@ -6,13 +6,13 @@
 
 
 #include <Flux/Graphics/Path.hpp>
-#include <Flux/Graphics/Styles.hpp>
 #include <Flux/UI/Detail/PrimitiveForwards.hpp>
 #include <Flux/UI/ViewModifiers.hpp>
 
 namespace flux {
 
-/// Scene path primitive (name avoids clashing with `flux::Path`).
+/// Scene path primitive (name avoids clashing with `flux::Path`). Fill, stroke, and shadow use \ref Element
+/// modifiers (\c fill, \c stroke, \c shadow).
 struct PathShape : ViewModifiers<PathShape> {
   static constexpr bool memoizable = true;
 
@@ -21,9 +21,6 @@ struct PathShape : ViewModifiers<PathShape> {
   Size measure(LayoutContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
 
   Path path{};
-  FillStyle fill = FillStyle::none();
-  StrokeStyle stroke = StrokeStyle::none();
-  ShadowStyle shadow = ShadowStyle::none();
 };
 
 } // namespace flux

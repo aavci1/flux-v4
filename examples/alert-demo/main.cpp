@@ -26,7 +26,7 @@ struct AlertDemoRoot {
 
     return ZStack{
         .children = children(
-                Rectangle{.fill = FillStyle::solid(theme.colorBackground)},
+                Rectangle{}.fill(FillStyle::solid(theme.colorBackground)),
                 VStack{
                     .spacing = 16.f,
                     .alignment = Alignment::Start,

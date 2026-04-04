@@ -33,10 +33,9 @@ Element Alert::body() const {
       .horizontalAlignment = Alignment::Start,
       .verticalAlignment = Alignment::Start,
       .children = flux::children(
-          Rectangle{
-              .fill = FillStyle::solid(card),
-              .stroke = StrokeStyle::solid(stroke, 1.f),
-          }
+          Rectangle{}
+              .fill(FillStyle::solid(card))
+              .stroke(StrokeStyle::solid(stroke, 1.f))
               .size(cardWidth, 0.f)
               .cornerRadius(cardCorner),
           VStack{

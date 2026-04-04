@@ -521,7 +521,7 @@ public:
     if (!ss.isNone() && ss.solidColor(&strokeC)) {
       hasStroke = true;
     }
-    if (!hasFill && !hasStroke) {
+    if (!hasFill && !hasStroke && shadow.isNone()) {
       return;
     }
     if (quickReject(rect)) {

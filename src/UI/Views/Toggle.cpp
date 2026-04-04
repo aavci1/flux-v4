@@ -113,30 +113,27 @@ Element Toggle::body() const {
           .horizontalAlignment = Alignment::Start,
           .verticalAlignment = Alignment::Start,
           .children = flux::children(
-            Rectangle {
-              .fill = FillStyle::solid(*trackFillAnim),
-              .stroke = StrokeStyle::solid(focused ? focusColor : borderColor, borderWidth),
-            }
+            Rectangle{}
+              .fill(FillStyle::solid(*trackFillAnim))
+              .stroke(StrokeStyle::solid(focused ? focusColor : borderColor, borderWidth))
               .size(trackWidth, trackHeight)
-              .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
-              .focusable(!isDisabled)
-              .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)>{}
-                                    : std::function<void(KeyCode, Modifiers)>{handleKey})
-              .onTap(isDisabled ? std::function<void()>{} : std::function<void()>{handleToggle})
               .cornerRadius(CornerRadius{trackHeight * 0.5f}),
-            Rectangle {
-              .fill = FillStyle::solid(isDisabled ? disabledColor : thumbColor),
-              .stroke = StrokeStyle::solid(thumbBorderColor, thumbBorderWidth),
-              .shadow = isDisabled ? ShadowStyle::none()
-                                    : ShadowStyle{.radius = theme.shadowRadiusControl,
-                                                  .offset = {0.f, theme.shadowOffsetYControl},
-                                                  .color = theme.shadowColor},
-            }
+            Rectangle{}
+              .fill(FillStyle::solid(isDisabled ? disabledColor : thumbColor))
+              .stroke(StrokeStyle::solid(thumbBorderColor, thumbBorderWidth))
+              .shadow(isDisabled ? ShadowStyle::none()
+                                 : ShadowStyle{.radius = theme.shadowRadiusControl,
+                                               .offset = {0.f, theme.shadowOffsetYControl},
+                                               .color = theme.shadowColor})
               .position(*thumbXAnim, thumbInset)
               .size(thumbSize, thumbSize)
               .cornerRadius(CornerRadius{thumbSize * 0.5f})
           ),
-      },
+      }.cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
+      .focusable(!isDisabled)
+      .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)>{}
+                            : std::function<void(KeyCode, Modifiers)>{handleKey})
+      .onTap(isDisabled ? std::function<void()>{} : std::function<void()>{handleToggle}),
   };
 }
 

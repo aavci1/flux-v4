@@ -49,10 +49,9 @@ struct MemoHoverButton {
     Color const btnFill = hovered ? pal::accent : pal::surface;
     Color const btnText = hovered ? Color::hex(0xFFFFFF) : pal::label;
     return ZStack{.children = children(
-                      Rectangle{
-                          .fill = FillStyle::solid(btnFill),
-                          .stroke = StrokeStyle::solid(pal::border, 1.f),
-                      }
+                      Rectangle{}
+                          .fill(FillStyle::solid(btnFill))
+                          .stroke(StrokeStyle::solid(pal::border, 1.f))
                           .height(36.f)
                           .cursor(Cursor::Hand)
                           .cornerRadius(CornerRadius(8.f)),
@@ -77,7 +76,7 @@ struct MemoDemo {
     int const cacheHits = gRebuildCount - gParseCalls;
 
     return ZStack{.children = children(
-        Rectangle{.fill = FillStyle::solid(pal::bg)},
+        Rectangle{}.fill(FillStyle::solid(pal::bg)),
         VStack{
             .spacing = 16.f,
             .alignment = Alignment::Start,
@@ -95,17 +94,16 @@ struct MemoDemo {
                                  .wrapping = TextWrapping::Wrap,
                              }
                                 .padding(12.f)
-                                .background(FillStyle::solid(pal::surface))
-                                .border(StrokeStyle::solid(pal::border, 1.f))
+                                .fill(FillStyle::solid(pal::surface))
+                                .stroke(StrokeStyle::solid(pal::border, 1.f))
                                 .flex(1.f)
                         ),
                 },
 
                 HStack{.spacing = 12.f, .children = children(
                     ZStack{.children = children(
-                        Rectangle{
-                            .fill = FillStyle::solid(pal::accent),
-                        }
+                        Rectangle{}
+                            .fill(FillStyle::solid(pal::accent))
                             .height(36.f)
                             .cursor(Cursor::Hand)
                             .onTap([text] { text = *text + " word"; })
@@ -118,10 +116,9 @@ struct MemoDemo {
                     )},
                     MemoHoverButton{},
                     ZStack{.children = children(
-                        Rectangle{
-                            .fill = FillStyle::solid(pal::surface),
-                            .stroke = StrokeStyle::solid(pal::border, 1.f),
-                        }
+                        Rectangle{}
+                            .fill(FillStyle::solid(pal::surface))
+                            .stroke(StrokeStyle::solid(pal::border, 1.f))
                             .height(36.f)
                             .cursor(Cursor::Hand)
                             .onTap([text] { text = std::string{}; })

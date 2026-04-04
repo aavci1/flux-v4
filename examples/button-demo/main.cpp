@@ -30,7 +30,7 @@ struct ButtonDemoRoot {
         .horizontalAlignment = Alignment::Start,
         .verticalAlignment = Alignment::Start,
         .children = children(
-                Rectangle{ .fill = FillStyle::solid(theme.colorBackground) },
+                Rectangle{}.fill(FillStyle::solid(theme.colorBackground)),
                 VStack{
                     .spacing = 20.f,
                     .alignment = Alignment::Start,

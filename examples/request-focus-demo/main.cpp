@@ -43,12 +43,10 @@ struct FocusField {
                 HStack{
                     .spacing = 0.f,
                     .children = children(
-                            Rectangle{
-                                .fill = FillStyle::solid(focused ? pal::editorFocus : pal::editorBg),
-                                .stroke =
-                                    StrokeStyle::solid(focused ? pal::borderFocus : pal::border,
-                                                       focused ? 2.f : 1.f),
-                            }
+                            Rectangle{}
+                                .fill(FillStyle::solid(focused ? pal::editorFocus : pal::editorBg))
+                                .stroke(StrokeStyle::solid(focused ? pal::borderFocus : pal::border,
+                                                           focused ? 2.f : 1.f))
                                 .height(80.f)
                                 .focusable(true)
                                 .onKeyDown(
@@ -103,10 +101,9 @@ struct EditorPanel {
         .horizontalAlignment = Alignment::Start,
         .verticalAlignment = Alignment::Start,
         .children = children(
-                Rectangle{
-                    .fill = FillStyle::solid(pal::surface),
-                    .stroke = StrokeStyle::solid(pal::border, 1.f),
-                }
+                Rectangle{}
+                    .fill(FillStyle::solid(pal::surface))
+                    .stroke(StrokeStyle::solid(pal::border, 1.f))
                     .cornerRadius(CornerRadius(12.f)),
                 VStack{
                     .spacing = 10.f,
@@ -129,9 +126,8 @@ struct RequestFocusDemo {
     auto btn = [&](std::string label, std::function<void()> action) -> Element {
       return ZStack{
           .children = children(
-                  Rectangle{
-                      .fill = FillStyle::solid(pal::accent),
-                  }
+                  Rectangle{}
+                      .fill(FillStyle::solid(pal::accent))
                       .height(36.f)
                       .cursor(Cursor::Hand)
                       .onTap(std::move(action))
@@ -149,7 +145,7 @@ struct RequestFocusDemo {
 
     return ZStack{
         .children = children(
-                Rectangle{.fill = FillStyle::solid(pal::bg)},
+                Rectangle{}.fill(FillStyle::solid(pal::bg)),
                 VStack{
                     .spacing = 20.f,
                     .alignment = Alignment::Start,

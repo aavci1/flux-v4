@@ -131,10 +131,9 @@ Element wrappingSection(Theme const& theme) {
 
 Element alignBand(Theme const& theme, char const* word, HorizontalAlignment h) {
   std::vector<Element> zs;
-  zs.push_back(Rectangle{
-                   .fill = FillStyle::solid(theme.colorSurfaceHover),
-                   .stroke = StrokeStyle::solid(theme.colorBorderSubtle, 1.f),
-               }
+  zs.push_back(Rectangle{}
+                   .fill(FillStyle::solid(theme.colorSurfaceHover))
+                   .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
                    .height(40.f));
   zs.push_back(Text{
       .text = word,

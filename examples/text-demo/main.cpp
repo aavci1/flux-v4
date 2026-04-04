@@ -48,8 +48,8 @@ struct TextDemoRoot {
                         .wrapping = TextWrapping::Wrap,
                     }
                     .padding(24.f)
-                    .background(FillStyle::solid(Color::rgb(250, 250, 252)))
-                    .border(StrokeStyle::solid(Color::rgb(200, 200, 210), 1.f))
+                    .fill(FillStyle::solid(Color::rgb(250, 250, 252)))
+                    .stroke(StrokeStyle::solid(Color::rgb(200, 200, 210), 1.f))
                     .cornerRadius(CornerRadius(6.f, 6.f, 6.f, 6.f))
                     .flex(1.f)
                 ),

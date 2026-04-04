@@ -23,8 +23,13 @@ void renderNode(LayoutNodeId id, LayoutTree const& tree, RenderContext& ctx);
 void renderModifier(LayoutNode const& node, LayoutTree const& tree, RenderContext& ctx) {
   ElementModifiers const& m = *node.modifiers;
   ComponentKey const stableKey = node.componentKey;
-  bool const needBg = !m.background.isNone() || !m.border.isNone();
-  bool const needTransparentHit = !needBg && m.hasInteraction();
+  bool const skipPrimitiveChrome =
+      node.element && node.element->leafDrawsFillStrokeShadowFromModifiers();
+  bool const needBgPaint =
+      !skipPrimitiveChrome && (!m.fill.isNone() || !m.stroke.isNone());
+  bool const needShadowPaint = !skipPrimitiveChrome && !m.shadow.isNone();
+  bool const needChrome = needBgPaint || needShadowPaint;
+  bool const needTransparentHit = !needChrome && m.hasInteraction();
 
   if (node.modifierHasEffectLayer) {
     LayerNode layer{};
@@ -40,19 +45,21 @@ void renderModifier(LayoutNode const& node, LayoutTree const& tree, RenderContex
   }
 
   Rect const bgBounds = node.frame;
-  bool const needHitRect = needBg || needTransparentHit;
+  bool const needHitRect = needChrome || needTransparentHit;
   if (needHitRect) {
     FillStyle fill = FillStyle::none();
     StrokeStyle stroke = StrokeStyle::none();
-    if (needBg) {
-      fill = m.background;
-      stroke = m.border;
+    if (needBgPaint) {
+      fill = m.fill;
+      stroke = m.stroke;
     }
+    ShadowStyle const shadowForChrome = needShadowPaint ? m.shadow : ShadowStyle::none();
     NodeId const rid = ctx.graph().addRect(ctx.parentLayer(), RectNode{
         .bounds = bgBounds,
         .cornerRadius = m.cornerRadius,
         .fill = std::move(fill),
         .stroke = std::move(stroke),
+        .shadow = shadowForChrome,
     });
     if (needTransparentHit) {
       EventHandlers const h = eventHandlersFromModifiers(m, stableKey);

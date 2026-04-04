@@ -111,11 +111,6 @@ Element Popover::body() const {
   Theme const& theme = useEnvironment<Theme>();
   ResolvedPopoverCardBody const card =
       resolvePopoverCardBody(backgroundColor, borderColor, borderWidth, cornerRadius, contentPadding, theme);
-  ShadowStyle const cardShadow{
-      .radius = theme.shadowRadiusPopover,
-      .offset = {0.f, theme.shadowOffsetYPopover},
-      .color = theme.shadowColor,
-  };
   return Element{PopoverCalloutShape{
       .placement = resolvedPlacement,
       .arrow = arrow,
@@ -124,7 +119,6 @@ Element Popover::body() const {
       .backgroundColor = card.background,
       .borderColor = card.border,
       .borderWidth = card.borderWidth,
-      .shadow = cardShadow,
       .maxSize = maxSize,
       .content = content,
   }};

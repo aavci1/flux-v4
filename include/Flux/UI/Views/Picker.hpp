@@ -127,16 +127,10 @@ struct PickerRow : ViewModifiers<PickerRow<T>> {
         .spacing = 0.f,
         .alignment = Alignment::Center,
         .children = flux::children(
-            Rectangle{
-                .fill = FillStyle::none(),
-                .stroke = StrokeStyle::none(),
-            }
+            Rectangle{}
                 .size(rowPaddingH, rowHeight),
             Element{labelRow}.flex(1.f),
-            Rectangle{
-                .fill = FillStyle::none(),
-                .stroke = StrokeStyle::none(),
-            }
+            Rectangle{}
                 .size(rowPaddingH, rowHeight)),
     };
 
@@ -145,10 +139,8 @@ struct PickerRow : ViewModifiers<PickerRow<T>> {
         .horizontalAlignment = Alignment::Start,
         .verticalAlignment = Alignment::Start,
         .children = flux::children(
-            Rectangle{
-                .fill = FillStyle::solid(bg),
-                .stroke = StrokeStyle::none(),
-            }
+            Rectangle{}
+                .fill(FillStyle::solid(bg))
                 .height(rowHeight)
                 .cursor(Cursor::Hand)
                 .onTap(onSelect)
@@ -247,8 +239,8 @@ struct Picker : ViewModifiers<Picker<T>> {
   // ── Appearance ───────────────────────────────────────────────────────────
   ///
   /// Trigger chrome defaults apply when the control is not wrapped with outer `Element` modifiers.
-  /// Chained `.background()`, `.border()`, and `.cornerRadius()` on `Picker{…}` merge into the trigger
-  /// via `useOuterElementModifiers()` in `body()` (same idea as \ref TextInput). When `.background()`
+  /// Chained `.fill()`, `.stroke()`, and `.cornerRadius()` on `Picker{…}` merge into the trigger
+  /// via `useOuterElementModifiers()` in `body()` (same idea as \ref TextInput). When `.fill()`
   /// is set, hover fill animation is disabled and the outer fill is used statically.
 
   Font font = kFontFromTheme;
@@ -328,7 +320,7 @@ struct Picker : ViewModifiers<Picker<T>> {
     Color const triggerHoverR = theme.colorSurfaceHover;
 
     ElementModifiers const* const outerMods = useOuterElementModifiers();
-    bool const useOuterChromeFill = outerMods && !outerMods->background.isNone();
+    bool const useOuterChromeFill = outerMods && !outerMods->fill.isNone();
     InputFieldDecoration const outerDeco = applyOuterInputFieldDecoration(r, outerMods);
 
     auto [showPopover, hidePopover, isOpen] = usePopover();
@@ -390,11 +382,11 @@ struct Picker : ViewModifiers<Picker<T>> {
     float const borderW = showFocusBorder ? r.borderFocusWidth : r.borderWidth;
 
     StrokeStyle strokeForTrigger = StrokeStyle::solid(borderCol, borderW);
-    if (outerMods && !outerMods->border.isNone()) {
+    if (outerMods && !outerMods->stroke.isNone()) {
       if (showFocusBorder) {
         strokeForTrigger = StrokeStyle::solid(brdFocusR, r.borderFocusWidth);
       } else {
-        strokeForTrigger = outerMods->border;
+        strokeForTrigger = outerMods->stroke;
       }
     }
     CornerRadius cornerForTrigger = triggerCr;
@@ -475,10 +467,7 @@ struct Picker : ViewModifiers<Picker<T>> {
         .horizontalAlignment = Alignment::Start,
         .verticalAlignment = Alignment::Center,
         .children = flux::children(
-            Rectangle{
-                .fill = FillStyle::none(),
-                .stroke = StrokeStyle::none(),
-            }
+            Rectangle{}
                 .size(std::max(14.f, chevronIconSz), h),
             Icon{
                 .name = isOpen ? IconName::ExpandLess : IconName::ExpandMore,
@@ -491,10 +480,7 @@ struct Picker : ViewModifiers<Picker<T>> {
         .spacing = 0.f,
         .alignment = Alignment::Center,
         .children = flux::children(
-            Rectangle{
-                .fill = FillStyle::none(),
-                .stroke = StrokeStyle::none(),
-            }
+            Rectangle{}
                 .size(padHResolved, h),
             Text{
                 .text = hasMatch ? selectedLabel : placeholder,
@@ -508,16 +494,10 @@ struct Picker : ViewModifiers<Picker<T>> {
             }
                 .size(0.f, h)
                 .flex(1.f),
-            Rectangle{
-                .fill = FillStyle::none(),
-                .stroke = StrokeStyle::none(),
-            }
+            Rectangle{}
                 .size(padHResolved, h),
             Element{chevronCol},
-            Rectangle{
-                .fill = FillStyle::none(),
-                .stroke = StrokeStyle::none(),
-            }
+            Rectangle{}
                 .size(padHResolved, h)),
     };
 
@@ -525,10 +505,9 @@ struct Picker : ViewModifiers<Picker<T>> {
         .horizontalAlignment = Alignment::Start,
         .verticalAlignment = Alignment::Center,
         .children = flux::children(
-            Rectangle{
-                .fill = useOuterChromeFill ? outerDeco.bgFill : FillStyle::solid(*fillAnim),
-                .stroke = strokeForTrigger,
-            }
+            Rectangle{}
+                .fill(useOuterChromeFill ? outerDeco.bgFill : FillStyle::solid(*fillAnim))
+                .stroke(strokeForTrigger)
                 .height(h)
                 .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
                 .focusable(!isDisabled)

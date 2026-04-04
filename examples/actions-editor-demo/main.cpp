@@ -104,11 +104,10 @@ struct TextEditor {
                 HStack{
                     .spacing = 0.f,
                     .children = children(
-                            Rectangle{
-                                .fill = FillStyle::solid(focused ? Color::hex(0xE8F0FC) : Color::hex(0xFAFAFC)),
-                                .stroke = StrokeStyle::solid(focused ? Color::hex(0x3A7BD5) : Color::hex(0xC8C8D0),
-                                                               focused ? 2.f : 1.f),
-                            }
+                            Rectangle{}
+                                .fill(FillStyle::solid(focused ? Color::hex(0xE8F0FC) : Color::hex(0xFAFAFC)))
+                                .stroke(StrokeStyle::solid(focused ? Color::hex(0x3A7BD5) : Color::hex(0xC8C8D0),
+                                                             focused ? 2.f : 1.f))
                                 .height(200.f)
                                 .focusable(true)
                                 .onKeyDown(
@@ -241,8 +240,8 @@ struct Toolbar {
              }
           .onTap(enabled ? std::move(tap) : std::function<void()>{})
           .padding(8.f)
-          .background(FillStyle::solid(enabled ? Color::hex(0xECECF0) : Color::hex(0xF5F5F7)))
-          .border(StrokeStyle::solid(Color::hex(0xC8C8D0), 1.f))
+          .fill(FillStyle::solid(enabled ? Color::hex(0xECECF0) : Color::hex(0xF5F5F7)))
+          .stroke(StrokeStyle::solid(Color::hex(0xC8C8D0), 1.f))
           .cornerRadius(CornerRadius(6.f));
     };
 
@@ -296,7 +295,7 @@ struct EditorRoot {
         .horizontalAlignment = Alignment::Start,
         .verticalAlignment = Alignment::Start,
         .children = children(
-                Rectangle{.fill = FillStyle::solid(Color::hex(0xF2F2F7))},
+                Rectangle{}.fill(FillStyle::solid(Color::hex(0xF2F2F7))),
                 VStack{
                     .spacing = 0.f,
                     .alignment = Alignment::Start,

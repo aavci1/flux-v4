@@ -9,6 +9,8 @@
 #include <Flux/UI/StateStore.hpp>
 #include <Flux/UI/Views/PathShape.hpp>
 #include <Flux/UI/Views/PopoverCalloutPath.hpp>
+#include <Flux/UI/Hooks.hpp>
+#include <Flux/UI/Theme.hpp>
 
 #include <Flux/Core/Cursor.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
@@ -217,12 +219,16 @@ void PopoverCalloutShape::layout(LayoutContext& ctx) const {
                                       ah, cardRect, {tw, th});
 
   float const bw = std::max(1.f, borderWidth);
-  Element& pathEl = ctx.pinElement(Element{PathShape{
-      .path = std::move(path),
-      .fill = FillStyle::solid(backgroundColor),
-      .stroke = StrokeStyle::solid(borderColor, bw),
-      .shadow = shadow,
-  }});
+  Theme const& theme = useEnvironment<Theme>();
+  ShadowStyle const cardShadow{
+      .radius = theme.shadowRadiusPopover,
+      .offset = {0.f, theme.shadowOffsetYPopover},
+      .color = theme.shadowColor,
+  };
+  Element& pathEl = ctx.pinElement(Element{PathShape{.path = std::move(path)}}
+                                       .fill(FillStyle::solid(backgroundColor))
+                                       .stroke(StrokeStyle::solid(borderColor, bw))
+                                       .shadow(cardShadow));
 
   ctx.pushChildIndex();
   if (StateStore* store = StateStore::current()) {

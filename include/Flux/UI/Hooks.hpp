@@ -174,7 +174,7 @@ LayoutConstraints const* useLayoutConstraints();
 struct ElementModifiers;
 
 /// Outer \ref Element wrapper modifiers during \c body() when the view uses chained
-/// \c .padding() / \c .background() / \c .border() / … (see \c StateStore::pushCompositeElementModifiers).
+/// \c .padding() / \c .fill() / \c .stroke() / … (see \c StateStore::pushCompositeElementModifiers).
 /// \c nullptr when there is no modifier pass or outside \c body().
 ElementModifiers const* useOuterElementModifiers() noexcept;
 

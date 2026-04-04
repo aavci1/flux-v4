@@ -59,9 +59,8 @@ struct Card {
         .spacing = 12.f,
         .alignment = Alignment::Center,
         .children = children(
-            Rectangle{
-                .fill = FillStyle::solid(accent),
-            }
+            Rectangle{}
+                .fill(FillStyle::solid(accent))
                 .size(14.f, 14.f)
                 .cornerRadius(CornerRadius(7.f)),
             Text{
@@ -102,10 +101,9 @@ struct Card {
         .horizontalAlignment = Alignment::Start,
         .verticalAlignment = Alignment::Start,
         .children = children(
-            Rectangle{
-                .fill = FillStyle::solid(pal::surface),
-                .stroke = StrokeStyle::solid(pal::border, 1.f),
-            }
+            Rectangle{}
+                .fill(FillStyle::solid(pal::surface))
+                .stroke(StrokeStyle::solid(pal::border, 1.f))
                 .onTap([expanded, bodyOpacity] {
                   bool const next = !expanded;
                   expanded = next;
@@ -129,7 +127,7 @@ struct CardListView {
         .horizontalAlignment = Alignment::Start,
         .verticalAlignment = Alignment::Start,
         .children = children(
-            Rectangle{.fill = FillStyle::solid(pal::bg)},
+            Rectangle{}.fill(FillStyle::solid(pal::bg)),
             VStack{
                 .spacing = 12.f,
                 .alignment = Alignment::Start,

@@ -31,7 +31,7 @@ struct TextInput : ViewModifiers<TextInput> {
   // ── Appearance ───────────────────────────────────────────────────────────
   ///
   /// Field chrome defaults below apply when the control is not wrapped with outer
-  /// `Element` modifiers. Chained `.background()`, `.border()`, and `.cornerRadius()` on
+  /// `Element` modifiers. Chained `.fill()`, `.stroke()`, and `.cornerRadius()` on
   /// `TextInput{…}` override `backgroundColor` / unfocused border / `cornerRadius` via
   /// `useOuterElementModifiers()` in `body()`.
 

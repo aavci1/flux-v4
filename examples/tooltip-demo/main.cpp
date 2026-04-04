@@ -84,7 +84,7 @@ struct TooltipDemoRoot {
         .horizontalAlignment = Alignment::Start,
         .verticalAlignment = Alignment::Start,
         .children = children(
-            Rectangle{.fill = FillStyle::solid(theme.colorBackground)},
+            Rectangle{}.fill(FillStyle::solid(theme.colorBackground)),
             VStack{
                 .spacing = 24.f,
                 .alignment = Alignment::Start,

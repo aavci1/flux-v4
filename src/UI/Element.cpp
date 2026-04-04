@@ -32,8 +32,9 @@ using namespace flux::layout;
 
 ElementModifiers::ElementModifiers(ElementModifiers const& o)
     : padding(o.padding)
-    , background(o.background)
-    , border(o.border)
+    , fill(o.fill)
+    , stroke(o.stroke)
+    , shadow(o.shadow)
     , cornerRadius(o.cornerRadius)
     , opacity(o.opacity)
     , translation(o.translation)
@@ -57,8 +58,9 @@ ElementModifiers::ElementModifiers(ElementModifiers const& o)
 ElementModifiers& ElementModifiers::operator=(ElementModifiers const& o) {
   if (this != &o) {
     padding = o.padding;
-    background = o.background;
-    border = o.border;
+    fill = o.fill;
+    stroke = o.stroke;
+    shadow = o.shadow;
     cornerRadius = o.cornerRadius;
     opacity = o.opacity;
     translation = o.translation;
@@ -440,15 +442,21 @@ void Rectangle::renderFromLayout(RenderContext& ctx, LayoutNode const& node) con
   ComponentKey const stableKey = node.componentKey;
   Rect const bounds = node.frame;
   CornerRadius cornerR{};
+  FillStyle fillEff = FillStyle::none();
+  StrokeStyle strokeEff = StrokeStyle::none();
+  ShadowStyle shadowEff = ShadowStyle::none();
   if (ElementModifiers const* mods = ctx.activeElementModifiers()) {
     cornerR = mods->cornerRadius;
+    fillEff = mods->fill;
+    strokeEff = mods->stroke;
+    shadowEff = mods->shadow;
   }
   NodeId const id = ctx.graph().addRect(ctx.parentLayer(), RectNode{
       .bounds = bounds,
       .cornerRadius = cornerR,
-      .fill = fill,
-      .stroke = stroke,
-      .shadow = shadow,
+      .fill = fillEff,
+      .stroke = strokeEff,
+      .shadow = shadowEff,
   });
   if (ElementModifiers const* mods = ctx.activeElementModifiers()) {
     if (!ctx.suppressLeafModifierEvents()) {
@@ -594,7 +602,15 @@ void PathShape::layout(LayoutContext& ctx) const {
 }
 
 void PathShape::renderFromLayout(RenderContext& ctx, LayoutNode const& node) const {
-  PathNode pathNode{.path = path, .fill = fill, .stroke = stroke, .shadow = shadow};
+  FillStyle fillEff = FillStyle::none();
+  StrokeStyle strokeEff = StrokeStyle::none();
+  ShadowStyle shadowEff = ShadowStyle::none();
+  if (ElementModifiers const* mods = ctx.activeElementModifiers()) {
+    fillEff = mods->fill;
+    strokeEff = mods->stroke;
+    shadowEff = mods->shadow;
+  }
+  PathNode pathNode{.path = path, .fill = fillEff, .stroke = strokeEff, .shadow = shadowEff};
   Rect const cf = node.frame;
   Rect const pb = path.getBounds();
   float dx = 0.f;
@@ -666,11 +682,19 @@ Element Element::padding(float all) && {
   return std::move(*this);
 }
 
-Element Element::background(FillStyle fill) && {
+Element Element::fill(FillStyle style) && {
   if (!modifiers_) {
     modifiers_.emplace();
   }
-  modifiers_->background = std::move(fill);
+  modifiers_->fill = std::move(style);
+  return std::move(*this);
+}
+
+Element Element::shadow(ShadowStyle style) && {
+  if (!modifiers_) {
+    modifiers_.emplace();
+  }
+  modifiers_->shadow = std::move(style);
   return std::move(*this);
 }
 
@@ -699,11 +723,11 @@ Element Element::height(float h) && {
   return std::move(*this);
 }
 
-Element Element::border(StrokeStyle stroke) && {
+Element Element::stroke(StrokeStyle style) && {
   if (!modifiers_) {
     modifiers_.emplace();
   }
-  modifiers_->border = std::move(stroke);
+  modifiers_->stroke = std::move(style);
   return std::move(*this);
 }
 

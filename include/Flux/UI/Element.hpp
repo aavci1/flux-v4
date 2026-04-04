@@ -84,8 +84,9 @@ class TextSystem;
 /// Flat modifier state applied by \ref Element during \c layout / \c measure (single decoration path).
 struct ElementModifiers {
   float padding = 0.f;
-  FillStyle background = FillStyle::none();
-  StrokeStyle border = StrokeStyle::none();
+  FillStyle fill = FillStyle::none();
+  StrokeStyle stroke = StrokeStyle::none();
+  ShadowStyle shadow = ShadowStyle::none();
   CornerRadius cornerRadius{};
   float opacity = 1.f;
   Vec2 translation{};
@@ -117,10 +118,11 @@ struct ElementModifiers {
   }
 
   bool needsModifierPass() const {
-    return padding > 0.f || !background.isNone() || !border.isNone() || !cornerRadius.isZero() ||
-           opacity < 1.f - 1e-6f || std::fabs(translation.x) > 1e-6f || std::fabs(translation.y) > 1e-6f ||
-           clip || std::fabs(positionX) > 1e-6f || std::fabs(positionY) > 1e-6f || hasInteraction() ||
-           sizeWidth > 0.f || sizeHeight > 0.f || overlay != nullptr;
+    return padding > 0.f || !fill.isNone() || !stroke.isNone() || !shadow.isNone() ||
+           !cornerRadius.isZero() || opacity < 1.f - 1e-6f || std::fabs(translation.x) > 1e-6f ||
+           std::fabs(translation.y) > 1e-6f || clip || std::fabs(positionX) > 1e-6f ||
+           std::fabs(positionY) > 1e-6f || hasInteraction() || sizeWidth > 0.f || sizeHeight > 0.f ||
+           overlay != nullptr;
   }
 
   ElementModifiers() = default;
@@ -204,6 +206,11 @@ public:
   float flexShrink() const;
   float minMainSize() const;
 
+  /// \c Rectangle / \c PathShape leaves draw modifier fill/stroke/shadow; skip duplicate modifier chrome.
+  bool leafDrawsFillStrokeShadowFromModifiers() const {
+    return impl_ && impl_->leafDrawsFillStrokeShadowFromModifiers();
+  }
+
   /// Sets flex metadata for this child in its parent stack. Overrides struct-level flex fields.
   Element flex(float grow, float shrink = 1.f, float minMain = 0.f) &&;
 
@@ -218,12 +225,13 @@ public:
   }
 
   Element padding(float all) &&;
-  Element background(FillStyle fill) &&;
+  Element fill(FillStyle style) &&;
+  Element shadow(ShadowStyle style) &&;
   /// Fixed size in layout space (both axes); \c 0 leaves an axis unconstrained (fill).
   Element size(float width, float height) &&;
   Element width(float w) &&;
   Element height(float h) &&;
-  Element border(StrokeStyle stroke) &&;
+  Element stroke(StrokeStyle style) &&;
   Element cornerRadius(CornerRadius radius) &&;
   Element opacity(float opacity) &&;
   /// Shifts the element within its parent's layout cell (before rendering).
@@ -268,6 +276,9 @@ private:
     /// depends on reactive state that is not part of the key should return false if that state can change
     /// between the first measure and a later replay in the same pass (see \ref MeasureCache).
     virtual bool canMemoizeMeasure() const { return false; }
+    /// When true, \ref RenderLayoutTree must not paint fill/stroke/shadow on the modifier chrome rect;
+    /// the leaf primitive applies those from \ref ElementModifiers (e.g. \ref Rectangle, \ref PathShape).
+    virtual bool leafDrawsFillStrokeShadowFromModifiers() const { return false; }
   };
 
   template<typename C>
@@ -316,6 +327,12 @@ struct Element::Model : Concept {
       }
       return false;
     } else if constexpr (RenderComponent<C>) {
+      return true;
+    }
+    return false;
+  }
+  bool leafDrawsFillStrokeShadowFromModifiers() const override {
+    if constexpr (std::is_same_v<C, Rectangle> || std::is_same_v<C, PathShape>) {
       return true;
     }
     return false;
@@ -496,8 +513,13 @@ Element ViewModifiers<Derived>::padding(float all) && {
 }
 
 template<typename Derived>
-Element ViewModifiers<Derived>::background(FillStyle fill) && {
-  return Element{std::move(static_cast<Derived&>(*this))}.background(std::move(fill));
+Element ViewModifiers<Derived>::fill(FillStyle style) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.fill(std::move(style));
+}
+
+template<typename Derived>
+Element ViewModifiers<Derived>::shadow(ShadowStyle style) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.shadow(std::move(style));
 }
 
 template<typename Derived>
@@ -516,8 +538,8 @@ Element ViewModifiers<Derived>::height(float h) && {
 }
 
 template<typename Derived>
-Element ViewModifiers<Derived>::border(StrokeStyle stroke) && {
-  return Element{std::move(static_cast<Derived&>(*this))}.border(std::move(stroke));
+Element ViewModifiers<Derived>::stroke(StrokeStyle style) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.stroke(std::move(style));
 }
 
 template<typename Derived>

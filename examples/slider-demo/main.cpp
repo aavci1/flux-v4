@@ -122,10 +122,9 @@ struct RgbColorSelectorRoot {
                         .horizontalAlignment = Alignment::Center,
                         .verticalAlignment = Alignment::Center,
                         .children = children(
-                            Rectangle{
-                                .fill = FillStyle::solid(preview),
-                                .stroke = StrokeStyle::solid(theme.colorBorder, 1.f),
-                            }
+                            Rectangle{}
+                                .fill(FillStyle::solid(preview))
+                                .stroke(StrokeStyle::solid(theme.colorBorder, 1.f))
                                 .height(160.f)
                                 .cornerRadius(CornerRadius{theme.radiusLarge})
                                 .flex(1.f),

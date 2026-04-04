@@ -49,8 +49,8 @@ struct TextArea : ViewModifiers<TextArea> {
   std::string placeholder;
 
   /// **Modifier-first shell styling** (recommended): chain on the value returned from the initializer,
-  /// e.g. `TextArea{ .value = v, .placeholder = "…", .height = {…} }.background(FillStyle::solid(…))
-  /// .border(StrokeStyle::solid(…)).cornerRadius(CornerRadius{8.f}).clipContent(true).flex(1.f)`.
+  /// e.g. `TextArea{ .value = v, .placeholder = "…", .height = {…} }.fill(FillStyle::solid(…))
+  /// .stroke(StrokeStyle::solid(…)).cornerRadius(CornerRadius{8.f}).clipContent(true).flex(1.f)`.
   /// Those override resolved \ref style tokens for the custom-draw chrome (`useOuterElementModifiers()` in
   /// \c body()). Optional \c .cursor() applies when not \c Inherit.
   ///
