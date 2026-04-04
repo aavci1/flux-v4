@@ -6,7 +6,7 @@
 
 
 #include <Flux/Core/Types.hpp>
-#include <Flux/Graphics/TextLayoutOptions.hpp>
+#include <Flux/UI/Alignment.hpp>
 #include <Flux/UI/Detail/LayoutDebugDump.hpp>
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
@@ -38,7 +38,7 @@ struct ForEach {
   std::vector<T> items;
   std::function<Element(T const&)> factory;
   float spacing = 0.f;
-  HorizontalAlignment hAlign = HorizontalAlignment::Leading;
+  Alignment alignment = Alignment::Start;
 
   ForEach(std::vector<T> itemsIn, std::function<Element(T const&)> factoryIn, float spacingIn = 0.f)
       : items(std::move(itemsIn)), factory(std::move(factoryIn)), spacing(spacingIn) {}
@@ -88,7 +88,7 @@ void Element::Model<ForEach<T>>::layout(LayoutContext& ctx) const {
     ctx.pushCompositeKeyTail(forEachKey);
     ctx.setChildIndex(i);
     LayoutHints childHints{};
-    childHints.vStackCrossAlign = value.hAlign;
+    childHints.vStackCrossAlign = value.alignment;
     sizes.push_back(item.measure(ctx, childCsMeasure, childHints, ctx.textSystem()));
     ctx.popCompositeKeyTail();
   }
@@ -135,7 +135,7 @@ void Element::Model<ForEach<T>>::layout(LayoutContext& ctx) const {
     childBuild.maxHeight = sz.height;
     childBuild.minHeight = item.minMainSize();
     LayoutHints rowHints{};
-    rowHints.vStackCrossAlign = value.hAlign;
+    rowHints.vStackCrossAlign = value.alignment;
     ctx.pushConstraints(childBuild, rowHints);
 
     ctx.pushCompositeKeyTail(forEachKey);
@@ -162,7 +162,7 @@ Size Element::Model<ForEach<T>>::measure(LayoutContext& ctx, LayoutConstraints c
       assignedW > 0.f ? assignedW : std::numeric_limits<float>::infinity();
 
   LayoutHints childHints{};
-  childHints.vStackCrossAlign = value.hAlign;
+  childHints.vStackCrossAlign = value.alignment;
 
   float totalW = 0.f;
   float totalH = 0.f;

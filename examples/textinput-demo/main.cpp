@@ -26,7 +26,7 @@ struct TextInputForm {
 
     return VStack{
         .spacing = 16.f,
-        .hAlign = HorizontalAlignment::Leading,
+        .alignment = Alignment::Start,
         .children = children(
                 Text{.text = "TextInput demo",
                      .style = theme.typeDisplay,

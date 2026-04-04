@@ -43,7 +43,7 @@ Element styleRow(Theme const& theme, char const* tokenName, TextStyle const& st,
                     .flex(1.f));
   return HStack{
       .spacing = theme.space3,
-      .vAlign = VerticalAlignment::Center,
+      .alignment = Alignment::Center,
       .children = std::move(row),
   };
 }
@@ -82,7 +82,7 @@ Element semanticColorsSection(Theme const& theme) {
   });
   return VStack{
       .spacing = theme.space2,
-      .hAlign = HorizontalAlignment::Leading,
+      .alignment = Alignment::Start,
       .children = std::move(items),
   };
 }
@@ -124,7 +124,7 @@ Element wrappingSection(Theme const& theme) {
   });
   return VStack{
       .spacing = theme.space2,
-      .hAlign = HorizontalAlignment::Leading,
+      .alignment = Alignment::Start,
       .children = std::move(items),
   };
 }
@@ -237,7 +237,7 @@ struct TypographyDemoRoot {
 
     Element column = VStack{
         .spacing = theme.space5,
-        .hAlign = HorizontalAlignment::Leading,
+        .alignment = Alignment::Start,
         .children = std::move(col),
     }
                          .padding(theme.space5);

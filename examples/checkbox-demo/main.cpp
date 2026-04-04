@@ -30,7 +30,7 @@ struct LabeledCheckbox {
 
     return HStack{
         .spacing = 10.f,
-        .vAlign = VerticalAlignment::Center,
+        .alignment = Alignment::Center,
         .children = children(
                 Checkbox{
                     .value = value,
@@ -86,7 +86,7 @@ struct CheckboxDemoRoot {
         .children = children(
                 VStack{
                     .spacing = 16.f,
-                    .hAlign = HorizontalAlignment::Leading,
+                    .alignment = Alignment::Start,
                     .children = children(
                             Text{
                                 .text = "Checkbox",
@@ -144,7 +144,7 @@ struct CheckboxDemoRoot {
                             },
                             HStack{
                                         .spacing = 10.f,
-                                        .vAlign = VerticalAlignment::Center,
+                                        .alignment = Alignment::Center,
                                         .children = children(
                                                 Checkbox{
                                                     .value = selectAll,
@@ -214,7 +214,7 @@ struct CheckboxDemoRoot {
                             },
                             HStack{
                                         .spacing = 10.f,
-                                        .vAlign = VerticalAlignment::Center,
+                                        .alignment = Alignment::Center,
                                         .children = children(
                                                 Checkbox{
                                                     .value = greenCheck,

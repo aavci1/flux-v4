@@ -36,12 +36,12 @@ struct ConfirmDialog {
   auto body() const {
     Theme const& theme = useEnvironment<Theme>();
     return ZStack{
-        .hAlign = HorizontalAlignment::Center,
-        .vAlign = VerticalAlignment::Center,
+        .horizontalAlignment = Alignment::Center,
+        .verticalAlignment = Alignment::Center,
         .children = children(
                 VStack{
                     .spacing = 12.f,
-                    .hAlign = HorizontalAlignment::Leading,
+                    .alignment = Alignment::Start,
                     .children = children(
                             ZStack{
                                 .children = children(
@@ -53,7 +53,7 @@ struct ConfirmDialog {
                                             .cornerRadius(CornerRadius(14.f)),
                                         VStack{
                                             .spacing = 12.f,
-                                            .hAlign = HorizontalAlignment::Leading,
+                                            .alignment = Alignment::Start,
                                             .children = children(
                                                     Text{.text = title,
                                                          .style = theme.typeTitle,
@@ -201,7 +201,7 @@ struct OverlayConfirmRoot {
                 Rectangle{.fill = FillStyle::solid(pal::bg)},
                 VStack{
                     .spacing = 16.f,
-                    .hAlign = HorizontalAlignment::Leading,
+                    .alignment = Alignment::Start,
                     .children = children(
                             Text{.text = "Overlay — confirm dialog",
                                  .style = theme.typeDisplay,

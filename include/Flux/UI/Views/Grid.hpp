@@ -5,7 +5,7 @@
 /// Part of the Flux public API.
 
 
-#include <Flux/Graphics/TextLayoutOptions.hpp>
+#include <Flux/UI/Alignment.hpp>
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/ViewModifiers.hpp>
 
@@ -35,11 +35,11 @@ struct Grid : ViewModifiers<Grid> {
   /// Number of columns. Values below 1 are clamped to 1 during layout.
   std::size_t columns = 2;
   /// Gap between columns (horizontal) and between rows (vertical).
-  float hSpacing = 8.f;
-  float vSpacing = 8.f;
+  float horizontalSpacing = 8.f;
+  float verticalSpacing = 8.f;
   /// Alignment of each child within its cell when the child is narrower or shorter than the cell.
-  HorizontalAlignment hAlign = HorizontalAlignment::Leading;
-  VerticalAlignment vAlign = VerticalAlignment::Top;
+  Alignment horizontalAlignment = Alignment::Center;
+  Alignment verticalAlignment = Alignment::Center;
   /// Children in row-major order (left-to-right, top-to-bottom).
   std::vector<Element> children;
 };

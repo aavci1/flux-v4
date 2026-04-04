@@ -109,8 +109,8 @@ Element Checkbox::body() const {
   return ScaleAroundCenter {
     .scale = *scaleAnim,
     .child = ZStack {
-      .hAlign = HorizontalAlignment::Center,
-      .vAlign = VerticalAlignment::Center,
+      .horizontalAlignment = Alignment::Center,
+      .verticalAlignment = Alignment::Center,
       .children = flux::children(
         Rectangle{
           .fill = FillStyle::solid(*boxFillAnim),

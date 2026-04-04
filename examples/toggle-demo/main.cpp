@@ -26,7 +26,7 @@ struct LabeledToggle {
 
     return HStack{
         .spacing = 12.f,
-        .vAlign = VerticalAlignment::Center,
+        .alignment = Alignment::Center,
         .children = children(
             Text{
                 .text = label,
@@ -67,7 +67,7 @@ struct ToggleDemoRoot {
         .children = children(
             VStack{
                 .spacing = 20.f,
-                .hAlign = HorizontalAlignment::Leading,
+                .alignment = Alignment::Start,
                 .children = children(
                     Text{
                         .text = "Toggle",
@@ -113,7 +113,7 @@ struct ToggleDemoRoot {
                     },
                     HStack{
                         .spacing = 12.f,
-                        .vAlign = VerticalAlignment::Center,
+                        .alignment = Alignment::Center,
                         .children = children(
                             Text{
                                 .text = "Green accent",
@@ -137,7 +137,7 @@ struct ToggleDemoRoot {
                     },
                     HStack{
                         .spacing = 12.f,
-                        .vAlign = VerticalAlignment::Center,
+                        .alignment = Alignment::Center,
                         .children = children(
                             Text{
                                 .text = "Compact (34 × 20)",

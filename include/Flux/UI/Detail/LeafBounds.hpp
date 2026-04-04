@@ -14,7 +14,7 @@ namespace flux::detail {
 /// else expand from \p constraints.
 Rect resolveLeafBounds(Rect const& frame, Rect const& childFrame, LayoutConstraints const& constraints);
 
-float vStackSlotOffsetX(float itemW, float slotW, HorizontalAlignment a);
+float vStackSlotOffsetX(float itemW, float slotW, Alignment a);
 
 /// Resolves final window-space bounds for a leaf from optional explicit size (\p explicitBox from
 /// modifiers), the parent-assigned \p childFrame, numeric \p constraints, and stack \p hints.

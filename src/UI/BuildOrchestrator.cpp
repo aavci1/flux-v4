@@ -93,6 +93,10 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
   Size const raw = sizeOverride.value_or(window_.getSize());
   Size const sz = snapRootLayoutSize(raw);
   LayoutConstraints rootCs{};
+  // Match a full-window proposal: min == max so the root subtree always expands to the
+  // drawable client area (padding/modifiers shrink the inner min/max together).
+  rootCs.minWidth = sz.width;
+  rootCs.minHeight = sz.height;
   rootCs.maxWidth = sz.width;
   rootCs.maxHeight = sz.height;
   lctx.pushConstraints(rootCs);

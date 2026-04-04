@@ -78,7 +78,7 @@ struct HoverDemo {
                       Rectangle{.fill = FillStyle::solid(theme.colorBackground)},
                       VStack{
                           .spacing = 20.f,
-                          .hAlign = HorizontalAlignment::Leading,
+                          .alignment = Alignment::Start,
                           .children = children(
                                   Text{.text = "useHover / usePress demo",
                                        .style = theme.typeDisplay,

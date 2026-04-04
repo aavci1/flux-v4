@@ -81,13 +81,13 @@ struct TooltipDemoRoot {
     Theme const& theme = useEnvironment<Theme>();
 
     return ZStack{
-        .hAlign = HorizontalAlignment::Leading,
-        .vAlign = VerticalAlignment::Top,
+        .horizontalAlignment = Alignment::Start,
+        .verticalAlignment = Alignment::Start,
         .children = children(
             Rectangle{.fill = FillStyle::solid(theme.colorBackground)},
             VStack{
                 .spacing = 24.f,
-                .hAlign = HorizontalAlignment::Leading,
+                .alignment = Alignment::Start,
                 .children = children(
                     Text{
                         .text = "Tooltip",
@@ -111,7 +111,7 @@ struct TooltipDemoRoot {
                     },
                     HStack{
                         .spacing = 12.f,
-                        .vAlign = VerticalAlignment::Center,
+                        .alignment = Alignment::Center,
                         .children = children(
                             TooltipButton{
                                 .label = "Above",
@@ -144,7 +144,7 @@ struct TooltipDemoRoot {
                     },
                     HStack{
                         .spacing = 16.f,
-                        .vAlign = VerticalAlignment::Center,
+                        .alignment = Alignment::Center,
                         .children = children(
                             TooltipIcon{
                                 .name = IconName::ContentCopy,
@@ -186,7 +186,7 @@ struct TooltipDemoRoot {
                     },
                     HStack{
                         .spacing = 12.f,
-                        .vAlign = VerticalAlignment::Center,
+                        .alignment = Alignment::Center,
                         .children = children(
                             Text{
                                 .text = "Notifications",

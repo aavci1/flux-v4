@@ -33,7 +33,7 @@ struct FocusField {
 
     return VStack{
         .spacing = 8.f,
-        .hAlign = HorizontalAlignment::Leading,
+        .alignment = Alignment::Start,
         .children = children(
                 Text{.text = title,
                      .style = theme.typeLabel,
@@ -94,13 +94,13 @@ struct FocusDemoRoot {
   auto body() const {
     Theme const& theme = useEnvironment<Theme>();
     return ZStack{
-        .hAlign = HorizontalAlignment::Leading,
-        .vAlign = VerticalAlignment::Top,
+        .horizontalAlignment = Alignment::Start,
+        .verticalAlignment = Alignment::Start,
         .children = children(
                 Rectangle{.fill = FillStyle::solid(pal::bg)},
                 VStack{
                     .spacing = 20.f,
-                    .hAlign = HorizontalAlignment::Leading,
+                    .alignment = Alignment::Start,
                     .children = children(
                             Text{.text = "Focus & keyboard",
                                  .style = theme.typeDisplay,
@@ -121,7 +121,7 @@ struct FocusDemoRoot {
                             },
                             HStack{
                                 .spacing = 16.f,
-                                .vAlign = VerticalAlignment::Top,
+                                .alignment = Alignment::Start,
                                 .children = children(
                                         Element{FocusField{.title = "Field A — notes"}}.flex(1.f),
                                         Element{FocusField{.title = "Field B — scratch"}}.flex(1.f),

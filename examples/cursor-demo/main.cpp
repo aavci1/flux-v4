@@ -32,7 +32,7 @@ Element cursorSwatchRow(std::string name, Cursor cursor, Color chip, Theme const
       .children = children(
               HStack{
                     .spacing = 12.f,
-                    .vAlign = VerticalAlignment::Center,
+                    .alignment = Alignment::Center,
                     .children = children(
                             Text{.text = std::move(name),
                                  .style = theme.typeLabel,
@@ -68,7 +68,7 @@ struct CursorDemo {
                     .children = children(
                             VStack{
                                 .spacing = 6.f,
-                                .hAlign = HorizontalAlignment::Leading,
+                                .alignment = Alignment::Start,
                                 .children = children(
                                         Text{.text = "Cursor shapes",
                                              .style = theme.typeDisplay,
@@ -114,7 +114,7 @@ struct CursorDemo {
 
                                                     HStack{
                                                         .spacing = 12.f,
-                                                        .vAlign = VerticalAlignment::Center,
+                                                        .alignment = Alignment::Center,
                                                         .children = children(
                                                                 Text{
                                                                     .text = "Text + IBeam",
@@ -143,7 +143,7 @@ struct CursorDemo {
                                                         .children = children(
                                                                 VStack{
                                                                             .spacing = 8.f,
-                                                                            .hAlign = HorizontalAlignment::Leading,
+                                                                            .alignment = Alignment::Start,
                                                                             .children = children(
                                                                                     Text{
                                                                                         .text = "Drag lock (ResizeAll)",

@@ -65,7 +65,7 @@ struct ForEachDemo {
                                  .color = pal::label},
                             HStack{
                                 .spacing = 10.f,
-                                .vAlign = VerticalAlignment::Center,
+                                .alignment = Alignment::Center,
                                 .children = children(
                                         ZStack{
                                             .children = children(

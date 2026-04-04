@@ -2,6 +2,7 @@
 
 #include <Flux/Core/Types.hpp>
 #include <Flux/UI/Element.hpp>
+#include <Flux/UI/Alignment.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -38,26 +39,38 @@ inline float stackMainAxisSpan(float parentSpan, float outerSpan) {
   return std::max(parentSpan, 0.f);
 }
 
-inline float hAlignOffset(float childW, float innerW, HorizontalAlignment a) {
+/// Ensures `minWidth` / `minHeight` do not exceed finite `maxWidth` / `maxHeight` (e.g. when a parent
+/// root uses min=max=window and a stack assigns a smaller cross-axis or main-axis cap to a child).
+inline void clampLayoutMinToMax(LayoutConstraints& c) noexcept {
+  if (std::isfinite(c.maxWidth) && c.minWidth > c.maxWidth) {
+    c.minWidth = c.maxWidth;
+  }
+  if (std::isfinite(c.maxHeight) && c.minHeight > c.maxHeight) {
+    c.minHeight = c.maxHeight;
+  }
+}
+
+inline float hAlignOffset(float childW, float innerW, Alignment a) {
   switch (a) {
-  case HorizontalAlignment::Leading:
+  case Alignment::Start:
+  case Alignment::Stretch:
     return 0.f;
-  case HorizontalAlignment::Center:
+  case Alignment::Center:
     return (innerW - childW) * 0.5f;
-  case HorizontalAlignment::Trailing:
+  case Alignment::End:
     return innerW - childW;
   }
   return 0.f;
 }
 
-inline float vAlignOffset(float childH, float innerH, VerticalAlignment a) {
+inline float vAlignOffset(float childH, float innerH, Alignment a) {
   switch (a) {
-  case VerticalAlignment::Top:
-  case VerticalAlignment::FirstBaseline:
+  case Alignment::Start:
+  case Alignment::Stretch:
     return 0.f;
-  case VerticalAlignment::Center:
+  case Alignment::Center:
     return (innerH - childH) * 0.5f;
-  case VerticalAlignment::Bottom:
+  case Alignment::End:
     return innerH - childH;
   }
   return 0.f;

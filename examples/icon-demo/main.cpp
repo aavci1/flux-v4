@@ -73,7 +73,7 @@ struct IconCell {
 
         return VStack {
             .spacing = 16.f,
-            .hAlign = HorizontalAlignment::Center,
+            .alignment = Alignment::Center,
             .children = children(
                 Icon {
                     .name = name,
@@ -112,7 +112,7 @@ struct IconDemoRoot {
         .children = children(
                 VStack{
                     .spacing = t.space5,
-                    .hAlign = HorizontalAlignment::Leading,
+                    .alignment = Alignment::Start,
                     .children = children(
                             Text{.text = "Icon demo",
                                  .style = t.typeDisplay,
@@ -132,10 +132,10 @@ struct IconDemoRoot {
                                  .color = t.colorTextPrimary},
                             Grid {
                                 .columns = 8,
-                                .hSpacing = 124.f,
-                                .vSpacing = 124.f,
-                                .hAlign = HorizontalAlignment::Center,
-                                .vAlign = VerticalAlignment::Top,
+                                .horizontalSpacing = 124.f,
+                                .verticalSpacing = 124.f,
+                                .horizontalAlignment = Alignment::Center,
+                                .verticalAlignment = Alignment::Start,
                                 .children = std::move(gridCells),
                             }
                         ),

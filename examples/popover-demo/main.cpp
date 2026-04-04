@@ -55,7 +55,7 @@ struct PopoverDemoRoot {
             showPopover(Popover{
                 .content = Element{VStack{
                     .spacing = 8.f,
-                    .hAlign = HorizontalAlignment::Leading,
+                    .alignment = Alignment::Start,
                     .children = children(
                             Text{.text = std::string(label),
                                  .style = theme.typeSubtitle,
@@ -96,7 +96,7 @@ struct PopoverDemoRoot {
     addSection("Options");
     scrollChildren.push_back(HStack{
         .spacing = 12.f,
-        .vAlign = VerticalAlignment::Center,
+        .alignment = Alignment::Center,
         .children = children(
                 Text{.text = "Arrow",
                      .style = theme.typeLabel,
@@ -110,7 +110,7 @@ struct PopoverDemoRoot {
     });
     scrollChildren.push_back(HStack{
         .spacing = 12.f,
-        .vAlign = VerticalAlignment::Center,
+        .alignment = Alignment::Center,
         .children = children(
                 Text{.text = "Dismiss outside tap",
                      .style = theme.typeLabel,
@@ -140,7 +140,7 @@ struct PopoverDemoRoot {
           showPopover(Popover{
               .content = Element{VStack{
                   .spacing = 8.f,
-                  .hAlign = HorizontalAlignment::Leading,
+                  .alignment = Alignment::Start,
                   .children = children(
                           Text{.text = "Popover anchored to this button.",
                                .style = theme.typeTitle,
@@ -185,7 +185,7 @@ struct PopoverDemoRoot {
           showPopover(Popover{
               .content = Element{VStack{
                   .spacing = 8.f,
-                  .hAlign = HorizontalAlignment::Leading,
+                  .alignment = Alignment::Start,
                   .children = children(
                           Text{.text = "Flip test",
                                .style = theme.typeTitle,

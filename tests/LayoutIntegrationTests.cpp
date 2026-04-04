@@ -180,6 +180,41 @@ TEST_CASE("HStack: 3 fixed-width rectangles side by side with no spacing") {
   CHECK(rectsNear(leaves[2]->frame, Rect{120.f, 0.f, 60.f, 50.f}));
 }
 
+TEST_CASE("HStack: stretch cross-axis expands explicit-height children to row height") {
+  auto tree = runLayout(
+      Element{HStack{
+          .spacing = 0.f,
+          .alignment = Alignment::Stretch,
+          .children = children(
+              Element{Rectangle{}}.size(40.f, 40.f),
+              Element{Rectangle{}}.size(40.f, 100.f)),
+      }},
+      200.f, 200.f);
+
+  auto leaves = leavesOf(tree);
+  REQUIRE(leaves.size() == 2);
+  // Row height is the max of intrinsic child heights; stretch gives each child that full height.
+  CHECK(rectsNear(leaves[0]->frame, Rect{0.f, 0.f, 40.f, 200.f}));
+  CHECK(rectsNear(leaves[1]->frame, Rect{40.f, 0.f, 40.f, 200.f}));
+}
+
+TEST_CASE("VStack: stretch cross-axis expands explicit-width children to column width") {
+  auto tree = runLayout(
+      Element{VStack{
+          .spacing = 0.f,
+          .alignment = Alignment::Stretch,
+          .children = children(
+              Element{Rectangle{}}.size(80.f, 30.f),
+              Element{Rectangle{}}.size(200.f, 30.f)),
+      }},
+      200.f, 300.f);
+
+  auto leaves = leavesOf(tree);
+  REQUIRE(leaves.size() == 2);
+  CHECK(rectsNear(leaves[0]->frame, Rect{0.f, 0.f, 200.f, 30.f}));
+  CHECK(rectsNear(leaves[1]->frame, Rect{0.f, 30.f, 200.f, 30.f}));
+}
+
 // ── ZStack ────────────────────────────────────────────────────────────────────
 
 TEST_CASE("ZStack: children share the same layer and the smaller is centered") {

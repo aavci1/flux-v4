@@ -24,7 +24,7 @@ struct TaskForm {
 
     return VStack{
         .spacing = 16.f,
-        .hAlign = HorizontalAlignment::Leading,
+        .alignment = Alignment::Start,
         .children = children(
                 Text{.text = "Picker demo",
                      .style = theme.typeDisplay,

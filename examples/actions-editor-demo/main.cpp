@@ -99,7 +99,7 @@ struct TextEditor {
 
     return VStack{
         .spacing = 8.f,
-        .hAlign = HorizontalAlignment::Leading,
+        .alignment = Alignment::Start,
         .children = children(
                 HStack{
                     .spacing = 0.f,
@@ -248,7 +248,7 @@ struct Toolbar {
 
     return HStack{
         .spacing = 8.f,
-        .vAlign = VerticalAlignment::Center,
+        .alignment = Alignment::Center,
         .children = children(
                 pill("New", true, [text, selStart, selEnd] {
                   text = std::string{};
@@ -293,18 +293,18 @@ struct EditorRoot {
     auto selEnd = useState<int>(0);
 
     return ZStack{
-        .hAlign = HorizontalAlignment::Leading,
-        .vAlign = VerticalAlignment::Top,
+        .horizontalAlignment = Alignment::Start,
+        .verticalAlignment = Alignment::Start,
         .children = children(
                 Rectangle{.fill = FillStyle::solid(Color::hex(0xF2F2F7))},
                 VStack{
                     .spacing = 0.f,
-                    .hAlign = HorizontalAlignment::Leading,
+                    .alignment = Alignment::Start,
                     .children = children(
                             Element{Toolbar{.text = text, .selStart = selStart, .selEnd = selEnd}},
                             VStack{
                                 .spacing = 12.f,
-                                .hAlign = HorizontalAlignment::Leading,
+                                .alignment = Alignment::Start,
                                 .children = children(
                                         Text{.text = "Actions editor demo",
                                              .style = theme.typeDisplay,

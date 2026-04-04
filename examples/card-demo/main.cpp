@@ -57,7 +57,7 @@ struct Card {
     std::vector<Element> rows;
     rows.emplace_back(HStack{
         .spacing = 12.f,
-        .vAlign = VerticalAlignment::Center,
+        .alignment = Alignment::Center,
         .children = children(
             Rectangle{
                 .fill = FillStyle::solid(accent),
@@ -99,8 +99,8 @@ struct Card {
     }
 
     return ZStack{
-        .hAlign = HorizontalAlignment::Leading,
-        .vAlign = VerticalAlignment::Top,
+        .horizontalAlignment = Alignment::Start,
+        .verticalAlignment = Alignment::Start,
         .children = children(
             Rectangle{
                 .fill = FillStyle::solid(pal::surface),
@@ -126,13 +126,13 @@ struct CardListView {
         gCardDemoWindow ? std::max(1.f, gCardDemoWindow->getSize().width - 48.f) : 432.f;
 
     return ZStack{
-        .hAlign = HorizontalAlignment::Leading,
-        .vAlign = VerticalAlignment::Top,
+        .horizontalAlignment = Alignment::Start,
+        .verticalAlignment = Alignment::Start,
         .children = children(
             Rectangle{.fill = FillStyle::solid(pal::bg)},
             VStack{
                 .spacing = 12.f,
-                .hAlign = HorizontalAlignment::Leading,
+                .alignment = Alignment::Start,
                 .children = children(
                     Text{.text = "Flux Components",
                          .style = theme.typeDisplay,

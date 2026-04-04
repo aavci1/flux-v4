@@ -5,7 +5,7 @@
 /// Part of the Flux public API.
 
 
-#include <Flux/Graphics/TextLayoutOptions.hpp>
+#include <Flux/UI/Alignment.hpp>
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/ViewModifiers.hpp>
 
@@ -20,7 +20,7 @@ struct VStack : ViewModifiers<VStack> {
   Size measure(LayoutContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
 
   float spacing = 8.f;
-  HorizontalAlignment hAlign = HorizontalAlignment::Leading;
+  Alignment alignment = Alignment::Start;
   std::vector<Element> children;
 };
 

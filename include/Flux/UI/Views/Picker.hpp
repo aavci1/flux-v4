@@ -18,6 +18,7 @@
 #include <Flux/Graphics/Styles.hpp>
 #include <Flux/Graphics/TextLayoutOptions.hpp>
 #include <Flux/UI/Element.hpp>
+#include <Flux/UI/Alignment.hpp>
 #include <Flux/UI/InputFieldChrome.hpp>
 #include <Flux/UI/InputFieldLayout.hpp>
 #include <Flux/UI/Hooks.hpp>
@@ -98,14 +99,14 @@ struct PickerRow : ViewModifiers<PickerRow<T>> {
                  : Element{Rectangle{}};
 
     ZStack const checkCol{
-        .hAlign = HorizontalAlignment::Leading,
-        .vAlign = VerticalAlignment::Top,
+        .horizontalAlignment = Alignment::Start,
+        .verticalAlignment = Alignment::Start,
         .children = flux::children(Rectangle{}.size(checkColW, rowHeight), checkFace),
     };
 
     HStack const labelRow{
         .spacing = 8.f,
-        .vAlign = VerticalAlignment::Center,
+        .alignment = Alignment::Center,
         .children = flux::children(
             Text{
                 .text = option.label,
@@ -124,7 +125,7 @@ struct PickerRow : ViewModifiers<PickerRow<T>> {
 
     HStack const paddedRow{
         .spacing = 0.f,
-        .vAlign = VerticalAlignment::Center,
+        .alignment = Alignment::Center,
         .children = flux::children(
             Rectangle{
                 .fill = FillStyle::none(),
@@ -141,8 +142,8 @@ struct PickerRow : ViewModifiers<PickerRow<T>> {
 
     // Row background + row content overlay: same origin (Leading/Top).
     return ZStack{
-        .hAlign = HorizontalAlignment::Leading,
-        .vAlign = VerticalAlignment::Top,
+        .horizontalAlignment = Alignment::Start,
+        .verticalAlignment = Alignment::Start,
         .children = flux::children(
             Rectangle{
                 .fill = FillStyle::solid(bg),
@@ -471,8 +472,8 @@ struct Picker : ViewModifiers<Picker<T>> {
     };
 
     ZStack const chevronCol{
-        .hAlign = HorizontalAlignment::Leading,
-        .vAlign = VerticalAlignment::Center,
+        .horizontalAlignment = Alignment::Start,
+        .verticalAlignment = Alignment::Center,
         .children = flux::children(
             Rectangle{
                 .fill = FillStyle::none(),
@@ -488,7 +489,7 @@ struct Picker : ViewModifiers<Picker<T>> {
 
     HStack const triggerRow{
         .spacing = 0.f,
-        .vAlign = VerticalAlignment::Center,
+        .alignment = Alignment::Center,
         .children = flux::children(
             Rectangle{
                 .fill = FillStyle::none(),
@@ -521,8 +522,8 @@ struct Picker : ViewModifiers<Picker<T>> {
     };
 
     return ZStack{
-        .hAlign = HorizontalAlignment::Leading,
-        .vAlign = VerticalAlignment::Center,
+        .horizontalAlignment = Alignment::Start,
+        .verticalAlignment = Alignment::Center,
         .children = flux::children(
             Rectangle{
                 .fill = useOuterChromeFill ? outerDeco.bgFill : FillStyle::solid(*fillAnim),

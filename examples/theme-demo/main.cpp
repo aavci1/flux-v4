@@ -59,7 +59,7 @@ struct ThemeDemoRoot {
     auto pane = [&](char const* title, char const* subtitle, Theme const& t) {
       return VStack{
           .spacing = windowTheme.space2,
-          .hAlign = HorizontalAlignment::Leading,
+          .alignment = Alignment::Start,
           .children = children(
                   Text{ .text = title,
                         .style = t.typeTitle,
@@ -88,7 +88,7 @@ struct ThemeDemoRoot {
                 Rectangle{ .fill = FillStyle::solid(windowTheme.colorBackground) },
                 VStack{
                     .spacing = windowTheme.space4,
-                    .hAlign = HorizontalAlignment::Leading,
+                    .alignment = Alignment::Start,
                     .children = children(
                             Text{ .text = "Theme & environment",
                                   .style = windowTheme.typeDisplay,
@@ -123,7 +123,7 @@ struct ThemeDemoRoot {
                             },
                             HStack{
                                 .spacing = windowTheme.space2,
-                                .vAlign = VerticalAlignment::Center,
+                                .alignment = Alignment::Center,
                                 .children = children(
                                         Button{
                                             .label = "Light",
@@ -181,7 +181,7 @@ struct ThemeDemoRoot {
                             },
                             HStack{
                                 .spacing = windowTheme.space3,
-                                .vAlign = VerticalAlignment::Top,
+                                .alignment = Alignment::Start,
                                 .children = children(
                                         pane("Light pane",
                                              "Subtree explicitly set to Theme::light().",

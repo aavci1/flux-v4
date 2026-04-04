@@ -47,8 +47,8 @@ Element ScrollView::body() const {
   std::vector<Element> contentChildren = children;
 
   return ZStack{
-      .hAlign = HorizontalAlignment::Leading,
-      .vAlign = VerticalAlignment::Top,
+      .horizontalAlignment = Alignment::Start,
+      .verticalAlignment = Alignment::Start,
       .children = flux::children(
         OffsetView {
           .offset = *offset,

@@ -34,7 +34,7 @@ struct StackDemoRoot {
             .children = children(
                 VStack {
                     .spacing = 22.f,
-                    .hAlign = HorizontalAlignment::Leading,
+                    .alignment = Alignment::Start,
                     .children = children(
                         Text {
                             .text = "HStack & VStack",
@@ -54,7 +54,7 @@ struct StackDemoRoot {
                         },
                         VStack {
                             .spacing = 10.f,
-                            .hAlign = HorizontalAlignment::Center,
+                            .alignment = Alignment::Center,
                             .children = children(
                                 Rectangle {
                                     .fill = FillStyle::solid(pal::coral),
@@ -74,7 +74,7 @@ struct StackDemoRoot {
                         },
                         HStack {
                             .spacing = 12.f,
-                            .vAlign = VerticalAlignment::Center,
+                            .alignment = Alignment::Center,
                             .children = children(
                                 Rectangle {
                                     .fill = FillStyle::solid(pal::coral),
@@ -97,11 +97,11 @@ struct StackDemoRoot {
                         },
                         VStack {
                             .spacing = 8.f,
-                            .hAlign = HorizontalAlignment::Leading,
+                            .alignment = Alignment::Start,
                             .children = children(
                                 HStack {
                                     .spacing = 8.f,
-                                    .vAlign = VerticalAlignment::Center,
+                                    .alignment = Alignment::Center,
                                     .children = children(
                                         Rectangle {
                                             .fill = FillStyle::solid(Color::hex(0xE8E8EF)),
@@ -115,7 +115,7 @@ struct StackDemoRoot {
                                 },
                                 HStack {
                                     .spacing = 8.f,
-                                    .vAlign = VerticalAlignment::Center,
+                                    .alignment = Alignment::Center,
                                     .children = children(
                                         Rectangle {
                                             .fill = FillStyle::solid(Color::hex(0xE8E8EF)),
@@ -129,7 +129,7 @@ struct StackDemoRoot {
                                 },
                                 HStack {
                                     .spacing = 8.f,
-                                    .vAlign = VerticalAlignment::Center,
+                                    .alignment = Alignment::Center,
                                     .children = children(
                                         Rectangle {
                                             .fill = FillStyle::solid(Color::hex(0xE8E8EF)),
@@ -150,7 +150,7 @@ struct StackDemoRoot {
                         },
                         HStack {
                             .spacing = 0.f,
-                            .vAlign = VerticalAlignment::Center,
+                            .alignment = Alignment::Center,
                             .children = children(
                                 Text {
                                     .text = "Leading",

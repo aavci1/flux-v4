@@ -175,8 +175,8 @@ Element Slider::body() const {
     float const thumbY = (componentHeight - thumbDiameter) * 0.5f;
 
     return ZStack{
-        .hAlign = HorizontalAlignment::Leading,
-        .vAlign = VerticalAlignment::Top,
+        .horizontalAlignment = Alignment::Start,
+        .verticalAlignment = Alignment::Start,
         .children = flux::children(
             Rectangle {
             }

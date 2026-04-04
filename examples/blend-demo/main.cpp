@@ -95,8 +95,8 @@ struct BlendDemoView {
     }
     return Grid{
                     .columns = 4,
-                    .hSpacing = BlendCell::kGap,
-                    .vSpacing = BlendCell::kGap,
+                    .horizontalSpacing = BlendCell::kGap,
+                    .verticalSpacing = BlendCell::kGap,
                     .children = std::move(cells),
     }.padding(BlendCell::kMargin);
   }

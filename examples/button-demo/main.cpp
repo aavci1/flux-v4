@@ -27,13 +27,13 @@ struct ButtonDemoRoot {
   auto body() const {
     Theme const& theme = useEnvironment<Theme>();
     return ZStack{
-        .hAlign = HorizontalAlignment::Leading,
-        .vAlign = VerticalAlignment::Top,
+        .horizontalAlignment = Alignment::Start,
+        .verticalAlignment = Alignment::Start,
         .children = children(
                 Rectangle{ .fill = FillStyle::solid(theme.colorBackground) },
                 VStack{
                     .spacing = 20.f,
-                    .hAlign = HorizontalAlignment::Leading,
+                    .alignment = Alignment::Start,
                     .children = children(
                             Text{ .text = "Button",
                                   .style = theme.typeDisplay,
@@ -56,7 +56,7 @@ struct ButtonDemoRoot {
                                   .color = theme.colorTextPrimary },
                             HStack{
                                 .spacing = 8.f,
-                                .vAlign = VerticalAlignment::Center,
+                                .alignment = Alignment::Center,
                                 .children = children(
                                         Button{ .label = "Primary",
                                                 .variant = ButtonVariant::Primary,
@@ -85,7 +85,7 @@ struct ButtonDemoRoot {
                                   .color = theme.colorTextPrimary },
                             HStack{
                                 .spacing = 8.f,
-                                .vAlign = VerticalAlignment::Center,
+                                .alignment = Alignment::Center,
                                 .children = children(
                                         Button{ .label = "Primary",
                                                 .variant = ButtonVariant::Primary,
@@ -103,7 +103,7 @@ struct ButtonDemoRoot {
                             },
                             HStack{
                                 .spacing = 4.f,
-                                .vAlign = VerticalAlignment::Center,
+                                .alignment = Alignment::Center,
                                 .children = children(
                                         Text{ .text = "Inline link —",
                                               .style = theme.typeBodySmall,
@@ -121,7 +121,7 @@ struct ButtonDemoRoot {
                                   .color = theme.colorTextPrimary },
                             HStack{
                                 .spacing = 8.f,
-                                .vAlign = VerticalAlignment::Center,
+                                .alignment = Alignment::Center,
                                 .children = children(
                                         Button{
                                             .label = "Toggle save action",

@@ -80,7 +80,7 @@ struct MemoDemo {
         Rectangle{.fill = FillStyle::solid(pal::bg)},
         VStack{
             .spacing = 16.f,
-            .hAlign = HorizontalAlignment::Leading,
+            .alignment = Alignment::Start,
             .children = children(
                 Text{.text = "useMemo demo",
                      .style = theme.typeDisplay,
@@ -136,7 +136,7 @@ struct MemoDemo {
 
                 VStack{
                     .spacing = 6.f,
-                    .hAlign = HorizontalAlignment::Leading,
+                    .alignment = Alignment::Start,
                     .children = children(
                         Text{.text = "Words (useMemo): " + std::to_string(result.wordCount),
                              .style = theme.typeBody,

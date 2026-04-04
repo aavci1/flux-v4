@@ -45,8 +45,8 @@ void ScaleAroundCenter::layout(LayoutContext& ctx) const {
 
   float const childW = std::max(sz.width, innerW);
   float const childH = std::max(sz.height, innerH);
-  float const x = hAlignOffset(childW, innerW, HorizontalAlignment::Center);
-  float const y = vAlignOffset(childH, innerH, VerticalAlignment::Center);
+  float const x = hAlignOffset(childW, innerW, Alignment::Center);
+  float const y = vAlignOffset(childH, innerH, Alignment::Center);
 
   LayoutConstraints innerForBuild{};
   innerForBuild.maxWidth = innerW;

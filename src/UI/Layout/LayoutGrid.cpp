@@ -29,15 +29,16 @@ void Grid::layout(LayoutContext& ctx) const {
   std::size_t const rowCount = n == 0 ? 0 : (n + cols - 1) / cols;
   float const cellW =
       innerW > 0.f
-          ? std::max(0.f, (innerW - static_cast<float>(cols - 1) * hSpacing) / static_cast<float>(cols))
+          ? std::max(0.f, (innerW - static_cast<float>(cols - 1) * horizontalSpacing) / static_cast<float>(cols))
           : 0.f;
-  float const cellH = gridCellHeight(innerH, rowCount, vSpacing);
+  float const cellH = gridCellHeight(innerH, rowCount, verticalSpacing);
 
   LayoutConstraints childCs = scope.outer;
   childCs.maxWidth =
       cellW > 0.f ? cellW : std::numeric_limits<float>::infinity();
   childCs.maxHeight =
       cellH > 0.f ? cellH : std::numeric_limits<float>::infinity();
+  clampLayoutMinToMax(childCs);
 
   auto sizes = scope.measureChildren(children, childCs);
   scope.logContainer("Grid");
@@ -59,6 +60,7 @@ void Grid::layout(LayoutContext& ctx) const {
       cellW > 0.f ? cellW : std::numeric_limits<float>::infinity();
   innerForBuild.maxHeight =
       cellH > 0.f ? cellH : std::numeric_limits<float>::infinity();
+  clampLayoutMinToMax(innerForBuild);
 
   float y = 0.f;
   for (std::size_t r = 0; r < rowCount; ++r) {
@@ -71,14 +73,14 @@ void Grid::layout(LayoutContext& ctx) const {
       Size const sz = sizes[i];
       float const frameW = cellW > 0.f ? cellW : sz.width;
       float const frameH = rowH[r] > 0.f ? rowH[r] : sz.height;
-      float const cx = x + hAlignOffset(sz.width, frameW, hAlign);
-      float const cy = y + vAlignOffset(sz.height, frameH, vAlign);
+      float const cx = x + hAlignOffset(sz.width, frameW, horizontalAlignment);
+      float const cy = y + vAlignOffset(sz.height, frameH, verticalAlignment);
       scope.layoutChild(children[i], Rect{cx, cy, frameW, frameH}, innerForBuild);
-      x += cellW + hSpacing;
+      x += cellW + horizontalSpacing;
     }
     y += rowH[r];
     if (r + 1 < rowCount) {
-      y += vSpacing;
+      y += verticalSpacing;
     }
   }
 }
@@ -99,15 +101,16 @@ Size Grid::measure(LayoutContext& ctx, LayoutConstraints const& constraints, Lay
   std::size_t const rowCount = n == 0 ? 0 : (n + cols - 1) / cols;
   float const cellW =
       innerW > 0.f
-          ? std::max(0.f, (innerW - static_cast<float>(cols - 1) * hSpacing) / static_cast<float>(cols))
+          ? std::max(0.f, (innerW - static_cast<float>(cols - 1) * horizontalSpacing) / static_cast<float>(cols))
           : 0.f;
-  float const cellH = gridCellHeight(innerH, rowCount, vSpacing);
+  float const cellH = gridCellHeight(innerH, rowCount, verticalSpacing);
 
   LayoutConstraints childCs = constraints;
   childCs.maxWidth =
       cellW > 0.f ? cellW : std::numeric_limits<float>::infinity();
   childCs.maxHeight =
       cellH > 0.f ? cellH : std::numeric_limits<float>::infinity();
+  clampLayoutMinToMax(childCs);
 
   std::vector<Size> sizes;
   sizes.reserve(children.size());
@@ -133,7 +136,7 @@ Size Grid::measure(LayoutContext& ctx, LayoutConstraints const& constraints, Lay
   } else {
     totalH = 0.f;
     if (rowCount > 1) {
-      totalH += static_cast<float>(rowCount - 1) * vSpacing;
+      totalH += static_cast<float>(rowCount - 1) * verticalSpacing;
     }
     for (float h : rowH) {
       totalH += h;

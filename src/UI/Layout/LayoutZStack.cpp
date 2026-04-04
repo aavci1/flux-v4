@@ -79,8 +79,8 @@ void ZStack::layout(LayoutContext& ctx) const {
         alignH = childH;
       }
     }
-    float const x = hAlignOffset(alignW, innerW, hAlign);
-    float const y = vAlignOffset(alignH, innerH, vAlign);
+    float const x = hAlignOffset(alignW, innerW, horizontalAlignment);
+    float const y = vAlignOffset(alignH, innerH, verticalAlignment);
     // Child layout rect must not exceed the stack's inner bounds. Otherwise a tall scroll child
     // (alignH > innerH) still received parentFrame.height == content height and ScrollView saw no range.
     float outW = alignW;

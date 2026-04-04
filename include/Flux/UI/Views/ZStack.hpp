@@ -5,7 +5,7 @@
 /// Part of the Flux public API.
 
 
-#include <Flux/Graphics/TextLayoutOptions.hpp>
+#include <Flux/UI/Alignment.hpp>
 #include <Flux/UI/Element.hpp>
 
 #include <vector>
@@ -24,11 +24,11 @@ namespace flux {
 /// During `build`, the shared inner width/height uses the same `max(proposed, largest child)` rule
 /// as `measure` before laying out children. Each child receives that box; child frames are expanded
 /// with `max(intrinsic, inner)` on each axis so nested flex (e.g. `HStack` + `Spacer`) still sees the
-/// full proposed size, then `hAlign` / `vAlign` offset each child's frame using its intrinsic size
+/// full proposed size, then \ref ZStack::horizontalAlignment / \ref ZStack::verticalAlignment offset each child's frame using its intrinsic size
 /// (or the expanded frame when `flexGrow > 0`) within that box.
 ///
 /// **Overlay composition:** siblings that share one coordinate system (e.g. a track `Rectangle` and a
-/// thumb `Rectangle` with `frame` positions relative to each other) should use `Leading` and `Top`
+/// thumb `Rectangle` with `frame` positions relative to each other) should use `Start` / `Start`
 /// so every layer keeps the same origin. Default `Center` is for centering independent children
 /// (e.g. label over a full-bleed background).
 ///
@@ -39,8 +39,8 @@ struct ZStack : ViewModifiers<ZStack> {
   void renderFromLayout(RenderContext&, LayoutNode const&) const;
   Size measure(LayoutContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
 
-  HorizontalAlignment hAlign = HorizontalAlignment::Center;
-  VerticalAlignment vAlign = VerticalAlignment::Center;
+  Alignment horizontalAlignment = Alignment::Center;
+  Alignment verticalAlignment = Alignment::Center;
   std::vector<Element> children;
 };
 

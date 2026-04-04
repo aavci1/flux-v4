@@ -35,7 +35,7 @@ struct FocusField {
 
     return VStack{
         .spacing = 6.f,
-        .hAlign = HorizontalAlignment::Leading,
+        .alignment = Alignment::Start,
         .children = children(
                 Text{.text = title,
                      .style = theme.typeLabel,
@@ -100,8 +100,8 @@ struct EditorPanel {
     }
 
     return ZStack{
-        .hAlign = HorizontalAlignment::Leading,
-        .vAlign = VerticalAlignment::Top,
+        .horizontalAlignment = Alignment::Start,
+        .verticalAlignment = Alignment::Start,
         .children = children(
                 Rectangle{
                     .fill = FillStyle::solid(pal::surface),
@@ -152,7 +152,7 @@ struct RequestFocusDemo {
                 Rectangle{.fill = FillStyle::solid(pal::bg)},
                 VStack{
                     .spacing = 20.f,
-                    .hAlign = HorizontalAlignment::Leading,
+                    .alignment = Alignment::Start,
                     .children = children(
                             Text{.text = "useRequestFocus demo",
                                  .style = theme.typeDisplay,
@@ -172,7 +172,7 @@ struct RequestFocusDemo {
                             },
                             HStack{
                                 .spacing = 16.f,
-                                .vAlign = VerticalAlignment::Top,
+                                .alignment = Alignment::Start,
                                 .children = children(
                                         Element{EditorPanel{.title = "Panel A", .focusFnOut = &focusPanelA}}
                                             .flex(1.f),

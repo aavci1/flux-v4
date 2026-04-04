@@ -64,9 +64,12 @@ void HStack::layout(LayoutContext& ctx) const {
     cs2.maxWidth = allocW[i];
     cs2.maxHeight = std::numeric_limits<float>::infinity();
     LayoutHints rh{};
-    rh.hStackCrossAlign = vAlign;
+    rh.hStackCrossAlign = alignment;
     Size const sz2 = children[i].measure(ctx, cs2, rh, ctx.textSystem());
     rowInnerH = std::max(rowInnerH, sz2.height);
+  }
+  if (alignment == Alignment::Stretch && std::isfinite(assignedH) && assignedH > 0.f) {
+    rowInnerH = std::max(rowInnerH, assignedH);
   }
   if (StateStore* store = StateStore::current()) {
     store->resetSlotCursors();
@@ -76,14 +79,16 @@ void HStack::layout(LayoutContext& ctx) const {
   LayoutConstraints innerForBuild = scope.outer;
   innerForBuild.maxWidth = std::numeric_limits<float>::infinity();
   innerForBuild.maxHeight = rowInnerH;
+  clampLayoutMinToMax(innerForBuild);
 
   float x = 0.f;
   for (std::size_t i = 0; i < n; ++i) {
     LayoutConstraints childBuild = innerForBuild;
     childBuild.maxWidth = allocW[i];
     childBuild.minWidth = children[i].minMainSize();
+    clampLayoutMinToMax(childBuild);
     LayoutHints rowHints{};
-    rowHints.hStackCrossAlign = vAlign;
+    rowHints.hStackCrossAlign = alignment;
     scope.layoutChild(children[i], Rect{x, 0.f, allocW[i], rowInnerH}, childBuild, rowHints);
     x += allocW[i] + spacing;
   }
@@ -156,7 +161,7 @@ Size HStack::measure(LayoutContext& ctx, LayoutConstraints const& constraints, L
     cs2.maxWidth = allocW[i];
     cs2.maxHeight = std::numeric_limits<float>::infinity();
     LayoutHints rh{};
-    rh.hStackCrossAlign = vAlign;
+    rh.hStackCrossAlign = alignment;
     Size const s2 = children[i].measure(ctx, cs2, rh, ts);
     maxH = std::max(maxH, s2.height);
   }
@@ -165,7 +170,12 @@ Size HStack::measure(LayoutContext& ctx, LayoutConstraints const& constraints, L
   }
   ctx.rewindChildKeyIndex();
 
-  return {sumW, maxH};
+  float const assignedHCross = stackMainAxisSpan(0.f, constraints.maxHeight);
+  float outH = maxH;
+  if (alignment == Alignment::Stretch && std::isfinite(assignedHCross) && assignedHCross > 0.f) {
+    outH = std::max(outH, assignedHCross);
+  }
+  return {sumW, outH};
 }
 
 } // namespace flux

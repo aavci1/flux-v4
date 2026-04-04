@@ -30,8 +30,8 @@ Element Alert::body() const {
   ZStack const cardStack{
       // Card + content share top-left; center alignment would offset each
       // child by its own measured size and misalign the background.
-      .hAlign = HorizontalAlignment::Leading,
-      .vAlign = VerticalAlignment::Top,
+      .horizontalAlignment = Alignment::Start,
+      .verticalAlignment = Alignment::Start,
       .children = flux::children(
           Rectangle{
               .fill = FillStyle::solid(card),
@@ -41,7 +41,7 @@ Element Alert::body() const {
               .cornerRadius(cardCorner),
           VStack{
               .spacing = theme.space3,
-              .hAlign = HorizontalAlignment::Leading,
+              .alignment = Alignment::Start,
               .children = buildContent(titleC, msgC, theme),
           }.padding(theme.space6)),
   };
@@ -53,7 +53,7 @@ Element Alert::body() const {
 
   return VStack{
       .spacing = 0.f,
-      .hAlign = HorizontalAlignment::Center,
+      .alignment = Alignment::Center,
       .children = flux::children(Spacer{}.flex(1.f), Element{row}, Spacer{}.flex(1.f)),
   };
 }

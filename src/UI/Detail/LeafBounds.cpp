@@ -22,13 +22,14 @@ Rect resolveLeafBounds(Rect const& frame, Rect const& childFrame, LayoutConstrai
   return bounds;
 }
 
-float vStackSlotOffsetX(float itemW, float slotW, HorizontalAlignment a) {
+float vStackSlotOffsetX(float itemW, float slotW, Alignment a) {
   switch (a) {
-  case HorizontalAlignment::Leading:
+  case Alignment::Start:
+  case Alignment::Stretch:
     return 0.f;
-  case HorizontalAlignment::Center:
+  case Alignment::Center:
     return (slotW - itemW) * 0.5f;
-  case HorizontalAlignment::Trailing:
+  case Alignment::End:
     return slotW - itemW;
   }
   return 0.f;
@@ -48,21 +49,26 @@ Rect resolveLeafLayoutBounds(Rect const& explicitBox, Rect const& childFrame,
     float const w = childFrame.width;
     float y = childFrame.y;
     switch (*hints.hStackCrossAlign) {
-    case VerticalAlignment::Top:
-    case VerticalAlignment::FirstBaseline:
+    case Alignment::Start:
+    case Alignment::Stretch:
       y = childFrame.y;
       break;
-    case VerticalAlignment::Center:
+    case Alignment::Center:
       y = childFrame.y + (childFrame.height - explicitBox.height) * 0.5f;
       break;
-    case VerticalAlignment::Bottom:
+    case Alignment::End:
       y = childFrame.y + childFrame.height - explicitBox.height;
       break;
     }
-    return Rect{x, y, w, explicitBox.height};
+    float const outH = *hints.hStackCrossAlign == Alignment::Stretch ? childFrame.height
+                                                                     : explicitBox.height;
+    return Rect{x, y, w, outH};
   }
   // When vStackCrossAlign is set, center (or lead/trail) the explicit box horizontally in the slot.
   if (hints.vStackCrossAlign) {
+    if (*hints.vStackCrossAlign == Alignment::Stretch) {
+      return Rect{childFrame.x, childFrame.y, childFrame.width, explicitBox.height};
+    }
     float const dx = vStackSlotOffsetX(explicitBox.width, childFrame.width, *hints.vStackCrossAlign);
     return Rect{childFrame.x + dx, childFrame.y, explicitBox.width, explicitBox.height};
   }

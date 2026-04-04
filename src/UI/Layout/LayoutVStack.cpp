@@ -28,7 +28,7 @@ void VStack::layout(LayoutContext& ctx) const {
   childCs.maxWidth = innerW > 0.f ? innerW : std::numeric_limits<float>::infinity();
 
   LayoutHints measureHints{};
-  measureHints.vStackCrossAlign = hAlign;
+  measureHints.vStackCrossAlign = alignment;
   auto sizes = scope.measureChildren(children, childCs, measureHints);
   scope.logContainer("VStack");
   std::size_t const n = children.size();
@@ -44,6 +44,7 @@ void VStack::layout(LayoutContext& ctx) const {
   LayoutConstraints innerForBuild = scope.outer;
   innerForBuild.maxWidth = innerW;
   innerForBuild.maxHeight = std::numeric_limits<float>::infinity();
+  clampLayoutMinToMax(innerForBuild);
 
   std::vector<float> allocH(n);
   for (std::size_t i = 0; i < n; ++i) {
@@ -77,8 +78,9 @@ void VStack::layout(LayoutContext& ctx) const {
     LayoutConstraints childBuild = innerForBuild;
     childBuild.maxHeight = allocH[i];
     childBuild.minHeight = children[i].minMainSize();
+    clampLayoutMinToMax(childBuild);
     LayoutHints rowHints{};
-    rowHints.vStackCrossAlign = hAlign;
+    rowHints.vStackCrossAlign = alignment;
     scope.layoutChild(children[i], Rect{0.f, y, rowW, sz.height}, childBuild, rowHints);
     y += sz.height + spacing;
   }
@@ -97,7 +99,7 @@ Size VStack::measure(LayoutContext& ctx, LayoutConstraints const& constraints, L
   childCs.maxHeight = std::numeric_limits<float>::infinity();
   childCs.maxWidth = innerW > 0.f ? innerW : std::numeric_limits<float>::infinity();
   LayoutHints childHints{};
-  childHints.vStackCrossAlign = hAlign;
+  childHints.vStackCrossAlign = alignment;
 
   float maxW = 0.f;
   float sumH = 0.f;

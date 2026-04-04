@@ -59,7 +59,7 @@ struct LabeledSlider {
         .children = children(
             HStack{
                 .spacing = 8.f,
-                .vAlign = VerticalAlignment::Center,
+                .alignment = Alignment::Center,
                 .children = children(
                     Text{
                         .text = label,
@@ -103,7 +103,7 @@ struct RgbColorSelectorRoot {
         .children = children(
             VStack {
                 .spacing = 20.f,
-                .hAlign = HorizontalAlignment::Leading,
+                .alignment = Alignment::Start,
                 .children = children(
                     Text{
                         .text = "RGB color",
@@ -119,8 +119,8 @@ struct RgbColorSelectorRoot {
                     }.flex(1.f),
 
                     ZStack{
-                        .hAlign = HorizontalAlignment::Center,
-                        .vAlign = VerticalAlignment::Center,
+                        .horizontalAlignment = Alignment::Center,
+                        .verticalAlignment = Alignment::Center,
                         .children = children(
                             Rectangle{
                                 .fill = FillStyle::solid(preview),

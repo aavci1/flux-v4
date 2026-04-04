@@ -110,8 +110,8 @@ Element Toggle::body() const {
   return ScaleAroundCenter{
       .scale = *scaleAnim,
       .child = ZStack {
-          .hAlign = HorizontalAlignment::Leading,
-          .vAlign = VerticalAlignment::Top,
+          .horizontalAlignment = Alignment::Start,
+          .verticalAlignment = Alignment::Start,
           .children = flux::children(
             Rectangle {
               .fill = FillStyle::solid(*trackFillAnim),
