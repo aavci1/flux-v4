@@ -31,6 +31,8 @@ struct ViewModifiers {
   Element height(float h) &&;
   Element stroke(StrokeStyle style) &&;
   Element cornerRadius(CornerRadius radius) &&;
+  /// Uniform radius on all corners (same as \c cornerRadius(CornerRadius{all})).
+  Element cornerRadius(float radius) &&;
   Element opacity(float opacity) &&;
   Element position(Vec2 p) &&;
   Element position(float x, float y) &&;

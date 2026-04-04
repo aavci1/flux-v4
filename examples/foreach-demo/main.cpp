@@ -35,7 +35,7 @@ struct HoverRow {
                           .stroke(StrokeStyle::solid(Color::hex(0xE0E0E6), 1.f))
                           .height(44.f)
                           .cursor(Cursor::Hand)
-                          .cornerRadius(CornerRadius(8.f)),
+                          .cornerRadius(8.f),
                       Text{.text = "Row " + std::to_string(index) + (hovered ? "  ← hovered" : ""),
                            .style = theme.typeBody,
                            .color = pal::label,
@@ -73,7 +73,7 @@ struct ForEachDemo {
                                                         .size(120.f, 36.f)
                                                         .cursor(Cursor::Hand)
                                                         .onTap([count] { count = *count + 1; })
-                                                        .cornerRadius(CornerRadius(8.f)),
+                                                        .cornerRadius(8.f),
                                                     Text{.text = "+ Row",
                                                          .style = theme.typeLabel,
                                                          .color = theme.colorOnAccent}
@@ -90,7 +90,7 @@ struct ForEachDemo {
                                                             count = *count - 1;
                                                           }
                                                         })
-                                                        .cornerRadius(CornerRadius(8.f)),
+                                                        .cornerRadius(8.f),
                                                     Text{.text = "- Row",
                                                          .style = theme.typeLabel,
                                                          .color = theme.colorOnAccent}

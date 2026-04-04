@@ -49,7 +49,7 @@ struct ConfirmDialog {
                                             .fill(FillStyle::solid(Color::hex(0xFFFFFF)))
                                             .stroke(StrokeStyle::solid(pal::cardStroke, 1.f))
                                             .width(360.f)
-                                            .cornerRadius(CornerRadius(14.f)),
+                                            .cornerRadius(14.f),
                                         VStack{
                                             .spacing = 12.f,
                                             .alignment = Alignment::Start,
@@ -85,7 +85,7 @@ struct ConfirmDialog {
                                                                                       }
                                                                                     })
                                                                                 .onTap(onCancel)
-                                                                                .cornerRadius(CornerRadius(8.f)),
+                                                                                .cornerRadius(8.f),
                                                                             Text{.text = "Cancel",
                                                                                  .style = theme.typeLabel,
                                                                                  .color = pal::titleC,
@@ -107,7 +107,7 @@ struct ConfirmDialog {
                                                                                       }
                                                                                     })
                                                                                 .onTap(onConfirm)
-                                                                                .cornerRadius(CornerRadius(8.f)),
+                                                                                .cornerRadius(8.f),
                                                                             Text{.text = confirmLabel,
                                                                                  .style = theme.typeLabel,
                                                                                  .color = Color::hex(0xFFFFFF),
@@ -175,7 +175,7 @@ struct FileManagerRow {
                                               .onDismiss = hideDialog,
                                           });
                                     })
-                                .cornerRadius(CornerRadius(6.f)),
+                                .cornerRadius(6.f),
                             Text{.text = "Delete",
                                  .style = theme.typeLabel,
                                  .color = pal::dangerText,

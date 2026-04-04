@@ -44,7 +44,7 @@ Element cursorSwatchRow(std::string name, Cursor cursor, Color chip, Theme const
                                 .stroke(StrokeStyle::solid(Color::hex(0xC8C8D0), 1.f))
                                 .height(44.f)
                                 .cursor(cursor)
-                                .cornerRadius(CornerRadius(8.f))
+                                .cornerRadius(8.f)
                                 .flex(1.f)
                         ),
                 }
@@ -132,7 +132,7 @@ struct CursorDemo {
                                                                     .padding(10.f)
                                                                     .fill(FillStyle::solid(Color::hex(0xFFFFFF)))
                                                                     .stroke(StrokeStyle::solid(Color::hex(0xC8C8D0), 1.f))
-                                                                    .cornerRadius(CornerRadius(8.f))
+                                                                    .cornerRadius(8.f)
                                                                     .flex(1.f)
                                                             ),
                                                     },
@@ -156,7 +156,7 @@ struct CursorDemo {
                                                                                         .onPointerDown([](Point) {})
                                                                                         .onPointerUp([](Point) {})
                                                                                         .onPointerMove([](Point) {})
-                                                                                        .cornerRadius(CornerRadius(10.f))
+                                                                                        .cornerRadius(10.f)
                                                                                 ),
                                                                         }
                                                                     .flex(1.f)

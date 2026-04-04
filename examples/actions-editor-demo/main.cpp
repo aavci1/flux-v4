@@ -189,7 +189,7 @@ struct TextEditor {
                                       selStart = p;
                                       selEnd = p;
                                     })
-                                .cornerRadius(CornerRadius(10.f))
+                                .cornerRadius(10.f)
                                 .flex(1.f, 1.f, 120.f)
                         ),
                 },
@@ -242,7 +242,7 @@ struct Toolbar {
           .padding(8.f)
           .fill(FillStyle::solid(enabled ? Color::hex(0xECECF0) : Color::hex(0xF5F5F7)))
           .stroke(StrokeStyle::solid(Color::hex(0xC8C8D0), 1.f))
-          .cornerRadius(CornerRadius(6.f));
+          .cornerRadius(6.f);
     };
 
     return HStack{

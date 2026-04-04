@@ -62,7 +62,7 @@ struct Card {
             Rectangle{}
                 .fill(FillStyle::solid(accent))
                 .size(14.f, 14.f)
-                .cornerRadius(CornerRadius(7.f)),
+                .cornerRadius(7.f),
             Text{
                 .text = title,
                 .style = theme.typeTitle,
@@ -110,7 +110,7 @@ struct Card {
                   WithTransition t{Transition::spring(500.f, 25.f, 0.5f)};
                   bodyOpacity = next ? 1.f : 0.f;
                 })
-                .cornerRadius(CornerRadius(14.f)),
+                .cornerRadius(14.f),
             VStack{.spacing = 10.f, .children = std::move(rows)}.padding(18.f)
         ),
     };

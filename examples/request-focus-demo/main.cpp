@@ -66,7 +66,7 @@ struct FocusField {
                                         text = *text + chunk;
                                       }
                                     })
-                                .cornerRadius(CornerRadius(10.f))
+                                .cornerRadius(10.f)
                                 .flex(1.f)
                         ),
                 },
@@ -104,7 +104,7 @@ struct EditorPanel {
                 Rectangle{}
                     .fill(FillStyle::solid(pal::surface))
                     .stroke(StrokeStyle::solid(pal::border, 1.f))
-                    .cornerRadius(CornerRadius(12.f)),
+                    .cornerRadius(12.f),
                 VStack{
                     .spacing = 10.f,
                     .children = children(
@@ -131,7 +131,7 @@ struct RequestFocusDemo {
                       .height(36.f)
                       .cursor(Cursor::Hand)
                       .onTap(std::move(action))
-                      .cornerRadius(CornerRadius(8.f)),
+                      .cornerRadius(8.f),
                   Text{.text = std::move(label),
                        .style = theme.typeLabel,
                        .color = theme.colorOnAccent,

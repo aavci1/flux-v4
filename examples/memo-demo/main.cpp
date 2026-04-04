@@ -54,7 +54,7 @@ struct MemoHoverButton {
                           .stroke(StrokeStyle::solid(pal::border, 1.f))
                           .height(36.f)
                           .cursor(Cursor::Hand)
-                          .cornerRadius(CornerRadius(8.f)),
+                          .cornerRadius(8.f),
                       Text{.text = "Hover me (rebuild, no text change)",
                            .style = theme.typeBodySmall,
                            .color = btnText,
@@ -107,7 +107,7 @@ struct MemoDemo {
                             .height(36.f)
                             .cursor(Cursor::Hand)
                             .onTap([text] { text = *text + " word"; })
-                            .cornerRadius(CornerRadius(8.f)),
+                            .cornerRadius(8.f),
                         Text{.text = "+ Word",
                              .style = theme.typeLabel,
                              .color = theme.colorOnAccent,
@@ -122,7 +122,7 @@ struct MemoDemo {
                             .height(36.f)
                             .cursor(Cursor::Hand)
                             .onTap([text] { text = std::string{}; })
-                            .cornerRadius(CornerRadius(8.f)),
+                            .cornerRadius(8.f),
                         Text{.text = "Clear",
                              .style = theme.typeBody,
                              .color = pal::label,

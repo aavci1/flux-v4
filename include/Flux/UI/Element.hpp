@@ -235,6 +235,7 @@ public:
   Element height(float h) &&;
   Element stroke(StrokeStyle style) &&;
   Element cornerRadius(CornerRadius radius) &&;
+  Element cornerRadius(float radius) &&;
   Element opacity(float opacity) &&;
   /// Shifts the element within its parent's layout cell (before rendering).
   Element position(Vec2 p) &&;
@@ -546,6 +547,11 @@ Element ViewModifiers<Derived>::stroke(StrokeStyle style) && {
 
 template<typename Derived>
 Element ViewModifiers<Derived>::cornerRadius(CornerRadius radius) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.cornerRadius(radius);
+}
+
+template<typename Derived>
+Element ViewModifiers<Derived>::cornerRadius(float radius) && {
   return Element{std::move(static_cast<Derived&>(*this))}.cornerRadius(radius);
 }
 

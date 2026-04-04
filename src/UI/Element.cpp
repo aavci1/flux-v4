@@ -756,6 +756,10 @@ Element Element::cornerRadius(CornerRadius radius) && {
   return std::move(*this);
 }
 
+Element Element::cornerRadius(float radius) && {
+  return std::move(*this).cornerRadius(CornerRadius(radius));
+}
+
 Element Element::opacity(float opacity) && {
   if (!modifiers_) {
     modifiers_.emplace();

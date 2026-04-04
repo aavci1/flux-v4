@@ -70,7 +70,7 @@ struct FocusField {
                                                 text = *text + chunk;
                                               }
                                             })
-                                .cornerRadius(CornerRadius(10.f))
+                                .cornerRadius(10.f)
                                 .flex(1.f, 1.f, 80.f)
                         ),
                 },

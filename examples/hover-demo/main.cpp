@@ -32,7 +32,7 @@ struct ThreeStateButton {
             .height(44.f)
             .cursor(Cursor::Hand)
             .onTap(onTap)
-            .cornerRadius(CornerRadius(10.f)),
+            .cornerRadius(10.f),
             Text{
                 .text = label,
                 .style = theme.typeLabel,
@@ -57,7 +57,7 @@ struct HoverListRow {
                       Rectangle{}.fill(FillStyle::solid(hovered ? Color::hex(0xDFDFE8) : Color::hex(0xFFFFFF)))
                           .height(48.f)
                           .cursor(Cursor::Hand)
-                          .cornerRadius(CornerRadius(8.f)),
+                          .cornerRadius(8.f),
                       Text{.text = "Item " + std::to_string(index) + (hovered ? "  ← pointer is here" : ""),
                            .style = theme.typeBody,
                            .color = theme.colorTextPrimary,
