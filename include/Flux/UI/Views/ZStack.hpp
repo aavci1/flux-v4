@@ -39,8 +39,8 @@ struct ZStack : ViewModifiers<ZStack> {
   void renderFromLayout(RenderContext&, LayoutNode const&) const;
   Size measure(LayoutContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
 
-  Alignment horizontalAlignment = Alignment::Center;
-  Alignment verticalAlignment = Alignment::Center;
+  Alignment horizontalAlignment = Alignment::Start;
+  Alignment verticalAlignment = Alignment::Start;
   std::vector<Element> children;
 };
 

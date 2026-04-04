@@ -39,12 +39,6 @@ struct ClockFace : ViewModifiers<ClockFace> {
   }
 };
 
-struct ClockView {
-  auto body() const {
-    return ZStack{.children = children(Rectangle{}.fill(FillStyle::solid(Color::hex(0xF5F5F8))), ClockFace{})};
-  }
-};
-
 int main(int argc, char* argv[]) {
   Application app(argc, argv);
   auto& w = app.createWindow<Window>({
@@ -52,7 +46,7 @@ int main(int argc, char* argv[]) {
       .title = "Flux — Clock",
       .resizable = true,
   });
-  w.setView<ClockView>();
+  w.setView<ClockFace>();
 
   // Redraw ~60 Hz so the hands track real time (scene rebuild is not required; `render()` reads `now()`).
   unsigned int const windowHandle = w.handle();

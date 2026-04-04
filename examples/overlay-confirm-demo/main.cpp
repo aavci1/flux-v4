@@ -44,6 +44,8 @@ struct ConfirmDialog {
                     .alignment = Alignment::Start,
                     .children = children(
                             ZStack{
+                                .horizontalAlignment = Alignment::Center,
+                                .verticalAlignment = Alignment::Center,
                                 .children = children(
                                         Rectangle{}
                                             .fill(FillStyle::solid(Color::hex(0xFFFFFF)))
@@ -71,6 +73,8 @@ struct ConfirmDialog {
                                                         .spacing = 10.f,
                                                         .children = children(
                                                                 ZStack{
+                                                                    .horizontalAlignment = Alignment::Center,
+                                                                    .verticalAlignment = Alignment::Center,
                                                                     .children = children(
                                                                             Rectangle{}
                                                                                 .fill(FillStyle::solid(Color::hex(0xF0F0F5)))
@@ -94,6 +98,8 @@ struct ConfirmDialog {
                                                                         ),
                                                                 }.flex(1.f),
                                                                 ZStack{
+                                                                    .horizontalAlignment = Alignment::Center,
+                                                                    .verticalAlignment = Alignment::Center,
                                                                     .children = children(
                                                                             Rectangle{}
                                                                                 .fill(FillStyle::solid(confirmColor))
@@ -146,6 +152,8 @@ struct FileManagerRow {
         .children = children(
                 Text{.text = filename, .style = theme.typeBody, .color = pal::titleC}.flex(1.f),
                 ZStack{
+                    .horizontalAlignment = Alignment::Center,
+                    .verticalAlignment = Alignment::Center,
                     .children = children(
                             Rectangle{}
                                 .fill(FillStyle::solid(pal::dangerBg))
