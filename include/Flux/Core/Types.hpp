@@ -181,6 +181,26 @@ constexpr CornerRadius CornerRadius::pill(Rect const& bounds) {
 }
 
 // -----------------------------------------------------------------------------
+// EdgeInsets — per-edge insets (e.g. `Element` padding). Order: top, right, bottom, left.
+// -----------------------------------------------------------------------------
+
+struct EdgeInsets {
+  float top = 0.f;
+  float right = 0.f;
+  float bottom = 0.f;
+  float left = 0.f;
+
+  /// Same inset on every side (equivalent to the single-argument `.padding(float)` modifier).
+  static constexpr EdgeInsets uniform(float v) { return EdgeInsets{v, v, v, v}; }
+
+  constexpr bool isZero() const {
+    return top == 0.f && right == 0.f && bottom == 0.f && left == 0.f;
+  }
+
+  constexpr bool operator==(EdgeInsets const& o) const = default;
+};
+
+// -----------------------------------------------------------------------------
 // Mat3 — 3×3 affine (column-major; column-vector multiply in `apply`)
 // Column 0: m[0], m[1], m[2]; column 1: m[3], m[4], m[5]; column 2 (translation): m[6], m[7], m[8].
 // -----------------------------------------------------------------------------

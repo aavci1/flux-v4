@@ -83,7 +83,7 @@ class TextSystem;
 
 /// Flat modifier state applied by \ref Element during \c layout / \c measure (single decoration path).
 struct ElementModifiers {
-  float padding = 0.f;
+  EdgeInsets padding{};
   FillStyle fill = FillStyle::none();
   StrokeStyle stroke = StrokeStyle::none();
   ShadowStyle shadow = ShadowStyle::none();
@@ -118,7 +118,7 @@ struct ElementModifiers {
   }
 
   bool needsModifierPass() const {
-    return padding > 0.f || !fill.isNone() || !stroke.isNone() || !shadow.isNone() ||
+    return !padding.isZero() || !fill.isNone() || !stroke.isNone() || !shadow.isNone() ||
            !cornerRadius.isZero() || opacity < 1.f - 1e-6f || std::fabs(translation.x) > 1e-6f ||
            std::fabs(translation.y) > 1e-6f || clip || std::fabs(positionX) > 1e-6f ||
            std::fabs(positionY) > 1e-6f || hasInteraction() || sizeWidth > 0.f || sizeHeight > 0.f ||
@@ -225,6 +225,8 @@ public:
   }
 
   Element padding(float all) &&;
+  Element padding(EdgeInsets insets) &&;
+  Element padding(float top, float right, float bottom, float left) &&;
   Element fill(FillStyle style) &&;
   Element shadow(ShadowStyle style) &&;
   /// Fixed size in layout space (both axes); \c 0 leaves an axis unconstrained (fill).

@@ -22,6 +22,8 @@ class Element;
 template<typename Derived>
 struct ViewModifiers {
   Element padding(float all) &&;
+  Element padding(EdgeInsets insets) &&;
+  Element padding(float top, float right, float bottom, float left) &&;
   Element fill(FillStyle style) &&;
   Element shadow(ShadowStyle style) &&;
   Element size(float width, float height) &&;

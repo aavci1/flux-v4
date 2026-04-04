@@ -203,19 +203,23 @@ void Element::layoutWithModifiers(LayoutContext& ctx) const {
   LayoutNodeId const modId = ctx.pushLayoutNode(std::move(mod));
   ctx.pushLayoutParent(modId);
 
-  float const pad = std::max(0.f, m.padding);
-  float innerW = std::max(0.f, outerW - 2.f * pad);
-  float innerH = std::max(0.f, outerH - 2.f * pad);
-  Rect const innerFrame = needEffectLayer ? Rect{pad, pad, innerW, innerH}
-                                          : Rect{absOuter.x + pad, absOuter.y + pad, innerW, innerH};
+  float const padL = std::max(0.f, m.padding.left);
+  float const padR = std::max(0.f, m.padding.right);
+  float const padT = std::max(0.f, m.padding.top);
+  float const padB = std::max(0.f, m.padding.bottom);
+  float const padW = padL + padR;
+  float const padH = padT + padB;
+  float innerW = std::max(0.f, outerW - padW);
+  float innerH = std::max(0.f, outerH - padH);
+  Rect const innerFrame = needEffectLayer ? Rect{padL, padT, innerW, innerH}
+                                          : Rect{absOuter.x + padL, absOuter.y + padT, innerW, innerH};
 
   LayoutConstraints innerCs = scope.outer;
   innerCs.maxWidth = innerW > 0.f ? innerW : std::numeric_limits<float>::infinity();
   innerCs.maxHeight = innerH > 0.f ? innerH : std::numeric_limits<float>::infinity();
-  if (pad > 0.f) {
-    float const pad2 = 2.f * pad;
-    innerCs.minWidth = std::max(0.f, innerCs.minWidth - pad2);
-    innerCs.minHeight = std::max(0.f, innerCs.minHeight - pad2);
+  if (padW > 0.f || padH > 0.f) {
+    innerCs.minWidth = std::max(0.f, innerCs.minWidth - padW);
+    innerCs.minHeight = std::max(0.f, innerCs.minHeight - padH);
   }
   if (std::isfinite(innerCs.maxWidth)) {
     innerCs.minWidth = std::min(innerCs.minWidth, innerCs.maxWidth);
@@ -259,17 +263,22 @@ void Element::layoutWithModifiers(LayoutContext& ctx) const {
 Size Element::measureWithModifiersImpl(LayoutContext& ctx, LayoutConstraints const& constraints,
                                        LayoutHints const& hints, TextSystem& textSystem) const {
   ElementModifiers const& m = *modifiers_;
-  float const pad2 = m.padding * 2.f;
+  float const padL = std::max(0.f, m.padding.left);
+  float const padR = std::max(0.f, m.padding.right);
+  float const padT = std::max(0.f, m.padding.top);
+  float const padB = std::max(0.f, m.padding.bottom);
+  float const padW = padL + padR;
+  float const padH = padT + padB;
   LayoutConstraints innerCs = constraints;
-  if (pad2 > 0.f) {
+  if (padW > 0.f || padH > 0.f) {
     if (std::isfinite(innerCs.maxWidth)) {
-      innerCs.maxWidth -= pad2;
+      innerCs.maxWidth -= padW;
     }
     if (std::isfinite(innerCs.maxHeight)) {
-      innerCs.maxHeight -= pad2;
+      innerCs.maxHeight -= padH;
     }
-    innerCs.minWidth = std::max(0.f, innerCs.minWidth - pad2);
-    innerCs.minHeight = std::max(0.f, innerCs.minHeight - pad2);
+    innerCs.minWidth = std::max(0.f, innerCs.minWidth - padW);
+    innerCs.minHeight = std::max(0.f, innerCs.minHeight - padH);
   }
   if (std::isfinite(innerCs.maxWidth)) {
     innerCs.minWidth = std::min(innerCs.minWidth, innerCs.maxWidth);
@@ -289,8 +298,8 @@ Size Element::measureWithModifiersImpl(LayoutContext& ctx, LayoutConstraints con
       store->popCompositeElementModifiers();
     }
     Size const szOver = m.overlay->measure(ctx, innerCs, hints, textSystem);
-    sz.width = std::max(szUnder.width, szOver.width) + pad2;
-    sz.height = std::max(szUnder.height, szOver.height) + pad2;
+    sz.width = std::max(szUnder.width, szOver.width) + padW;
+    sz.height = std::max(szUnder.height, szOver.height) + padH;
   } else {
     if (StateStore* const store = StateStore::current()) {
       store->pushCompositeElementModifiers(&m);
@@ -299,8 +308,8 @@ Size Element::measureWithModifiersImpl(LayoutContext& ctx, LayoutConstraints con
     if (StateStore* const store = StateStore::current()) {
       store->popCompositeElementModifiers();
     }
-    sz.width += pad2;
-    sz.height += pad2;
+    sz.width += padW;
+    sz.height += padH;
   }
   if (m.sizeWidth > 0.f) {
     sz.width = m.sizeWidth;
@@ -675,11 +684,19 @@ Size Line::measure(LayoutContext& ctx, LayoutConstraints const&, LayoutHints con
 }
 
 Element Element::padding(float all) && {
+  return std::move(*this).padding(EdgeInsets::uniform(all));
+}
+
+Element Element::padding(EdgeInsets insets) && {
   if (!modifiers_) {
     modifiers_.emplace();
   }
-  modifiers_->padding = all;
+  modifiers_->padding = std::move(insets);
   return std::move(*this);
+}
+
+Element Element::padding(float top, float right, float bottom, float left) && {
+  return std::move(*this).padding(EdgeInsets{.top = top, .right = right, .bottom = bottom, .left = left});
 }
 
 Element Element::fill(FillStyle style) && {
