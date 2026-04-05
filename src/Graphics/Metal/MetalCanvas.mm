@@ -208,6 +208,17 @@ void tagOpWithClip(MetalDrawOp& op, bool clipValid, MTLScissorRect const& clip) 
   }
 }
 
+bool sameScissorForBatch(MetalDrawOp const& a, MetalDrawOp const& b) {
+  if (a.scissorValid != b.scissorValid) {
+    return false;
+  }
+  if (!a.scissorValid) {
+    return true;
+  }
+  return a.scissorX == b.scissorX && a.scissorY == b.scissorY && a.scissorW == b.scissorW &&
+         a.scissorH == b.scissorH;
+}
+
 void setEncoderScissorForOp(id<MTLRenderCommandEncoder> enc, MetalDrawOp const& op, MTLScissorRect fullScissor,
                             MTLScissorRect* last, bool* haveLast) {
   MTLScissorRect sc = fullScissor;
@@ -341,30 +352,44 @@ public:
     NSUInteger instSlot = 0;
     NSUInteger imageSlot = 0;
     id<MTLBuffer> pathBuf = metal_.pathVertexArenaBuffer();
-    for (const MetalDrawOp& op : frame_.ops) {
-      setEncoderScissorForOp(enc, op, fullScissor, &lastScissor, &haveScissor);
+    std::size_t const opCount = frame_.ops.size();
+    std::size_t i = 0;
+    while (i < opCount) {
+      MetalDrawOp const& op = frame_.ops[i];
+      if (op.kind == MetalDrawOp::Rect || op.kind == MetalDrawOp::Line) {
+        std::size_t j = i + 1;
+        while (j < opCount) {
+          MetalDrawOp const& o2 = frame_.ops[j];
+          if (o2.kind != op.kind || o2.blendMode != op.blendMode || !sameScissorForBatch(op, o2)) {
+            break;
+          }
+          ++j;
+        }
+        std::size_t const runLen = j - i;
+        setEncoderScissorForOp(enc, op, fullScissor, &lastScissor, &haveScissor);
+        if (op.kind == MetalDrawOp::Rect) {
+          [enc setRenderPipelineState:metal_.rectPSO(op.blendMode)];
+          [enc setVertexBuffer:metal_.quadBuffer() offset:0 atIndex:0];
+          const NSUInteger off = instSlot * sizeof(MetalRectInstance);
+          instSlot += static_cast<NSUInteger>(runLen);
+          [enc setVertexBuffer:metal_.instanceArenaBuffer() offset:off atIndex:1];
+          [enc drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:kQuadStripCount
+                  instanceCount:static_cast<NSUInteger>(runLen)];
+        } else {
+          [enc setRenderPipelineState:metal_.linePSO(op.blendMode)];
+          [enc setVertexBuffer:metal_.quadBuffer() offset:0 atIndex:0];
+          const NSUInteger off = instSlot * sizeof(MetalRectInstance);
+          instSlot += static_cast<NSUInteger>(runLen);
+          [enc setVertexBuffer:metal_.instanceArenaBuffer() offset:off atIndex:1];
+          [enc drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:kQuadStripCount
+                  instanceCount:static_cast<NSUInteger>(runLen)];
+        }
+        i = j;
+        continue;
+      }
 
+      setEncoderScissorForOp(enc, op, fullScissor, &lastScissor, &haveScissor);
       switch (op.kind) {
-      case MetalDrawOp::Rect: {
-        [enc setRenderPipelineState:metal_.rectPSO(op.blendMode)];
-        [enc setVertexBuffer:metal_.quadBuffer() offset:0 atIndex:0];
-        const NSUInteger off = instSlot * sizeof(MetalRectInstance);
-        ++instSlot;
-        [enc setVertexBuffer:metal_.instanceArenaBuffer() offset:off atIndex:1];
-        [enc drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:kQuadStripCount
-                instanceCount:1];
-        break;
-      }
-      case MetalDrawOp::Line: {
-        [enc setRenderPipelineState:metal_.linePSO(op.blendMode)];
-        [enc setVertexBuffer:metal_.quadBuffer() offset:0 atIndex:0];
-        const NSUInteger off = instSlot * sizeof(MetalRectInstance);
-        ++instSlot;
-        [enc setVertexBuffer:metal_.instanceArenaBuffer() offset:off atIndex:1];
-        [enc drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:kQuadStripCount
-                instanceCount:1];
-        break;
-      }
       case MetalDrawOp::Image: {
         if (!op.texture) {
           break;
@@ -405,7 +430,12 @@ public:
         [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:static_cast<NSUInteger>(op.glyphVertexCount)];
         break;
       }
+      case MetalDrawOp::Rect:
+      case MetalDrawOp::Line:
+        assert(false && "rect/line batches must be handled before the image/path/glyph switch");
+        break;
       }
+      ++i;
     }
 
     [enc endEncoding];
