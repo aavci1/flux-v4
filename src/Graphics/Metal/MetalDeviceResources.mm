@@ -205,8 +205,9 @@ id<MTLRenderPipelineState> makePathPipeline(id<MTLDevice> device, id<MTLLibrary>
   return pso;
 }
 
-id<MTLRenderPipelineState> makeGlyphPipeline(id<MTLDevice> device, id<MTLLibrary> lib, MTLPixelFormat colorFormat,
-                                             BlendMode blendMode) {
+id<MTLRenderPipelineState> makeGlyphPipeline(id<MTLDevice> device, id<MTLLibrary> lib, MTLPixelFormat colorFormat, BlendMode blendMode) {
+  (void)blendMode;
+
   id<MTLFunction> vf = [lib newFunctionWithName:@"glyph_vert"];
   id<MTLFunction> ff = [lib newFunctionWithName:@"glyph_frag"];
   if (!vf || !ff) {
