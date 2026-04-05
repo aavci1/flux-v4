@@ -18,10 +18,10 @@ using namespace flux;
 
 struct AppRoot : ViewModifiers<AppRoot> {
     auto body() const {
-        auto chats = useState<std::vector<Chat>>({});
-        auto index = useState<size_t>(0);
         auto host = useState<std::string>(defaultOllamaBaseUrl());
         auto model = useState<std::string>(defaultOllamaModel());
+        auto chats = useState<std::vector<Chat>>({});
+        auto index = useState<size_t>(0);
 
         std::call_once(gOllamaUiHandler, [&]() {
             Application::instance().eventQueue().on<OllamaUiEvent>([chats](OllamaUiEvent const& e) {
@@ -61,7 +61,7 @@ struct AppRoot : ViewModifiers<AppRoot> {
 
         auto element = i >= c.size() ? Rectangle {}.flex(1.f, 1.f, 400.f) : ChatArea {
             .chat = c[i],
-            .onSend = [chats, index](const std::string& message) {
+            .onSend = [host, model, chats, index](const std::string& message) {
                 auto c = *chats;
                 auto i = *index;
 
@@ -80,8 +80,8 @@ struct AppRoot : ViewModifiers<AppRoot> {
                 std::move(chats) = std::move(c);
 
                 startOllamaChatStream(
-                    defaultOllamaBaseUrl(),
-                    defaultOllamaModel(),
+                    *host,
+                    *model,
                     std::move(payload),
                     streamChatId,
                     [](OllamaUiEvent ev) {
