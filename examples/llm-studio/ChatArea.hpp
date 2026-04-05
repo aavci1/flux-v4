@@ -23,7 +23,7 @@ std::once_flag gOllamaUiHandler;
 
 struct ChatArea : ViewModifiers<ChatArea> {
     Chat chat;
-    std::function<void(const std::string&)> onSend;
+    std::function<void(const std::string&, const std::string&)> onSend;
 
     auto body() const {
         auto& theme = useEnvironment<Theme>();
@@ -72,13 +72,13 @@ struct ChatArea : ViewModifiers<ChatArea> {
                     )
                 }.flex(1.f),
                 MessageEditor {
-                    .onSend = [sendHandler = onSend](const std::string& message) {
+                    .onSend = [modelName = chat.modelName,sendHandler = onSend](const std::string& message) {
                         if (message.empty()) {
                             return;
                         }
 
                         if (sendHandler) {
-                            sendHandler(message);
+                            sendHandler(modelName, message);
                         }
                     },
                     .disabled = *streaming

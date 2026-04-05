@@ -40,6 +40,7 @@ struct ChatMessage {
 };
 
 struct Chat {
+    std::string modelName {};
     std::string id {};
     std::string title {""};
     std::vector<ChatMessage> messages {};

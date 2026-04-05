@@ -61,7 +61,7 @@ struct AppRoot : ViewModifiers<AppRoot> {
 
         auto element = i >= c.size() ? Rectangle {}.flex(1.f, 1.f, 400.f) : ChatArea {
             .chat = c[i],
-            .onSend = [host, model, chats, index](const std::string& message) {
+            .onSend = [host, chats, index](const std::string& modelName, const std::string& message) {
                 auto c = *chats;
                 auto i = *index;
 
@@ -81,7 +81,7 @@ struct AppRoot : ViewModifiers<AppRoot> {
 
                 startOllamaChatStream(
                     *host,
-                    *model,
+                    modelName,
                     std::move(payload),
                     streamChatId,
                     [](OllamaUiEvent ev) {
@@ -101,9 +101,10 @@ struct AppRoot : ViewModifiers<AppRoot> {
                     .onChatSelected = [index](size_t selected) {
                         std::move(index) = selected;
                     },
-                    .onNewChat = [chats, index]() {
+                    .onNewChat = [model, chats, index]() {
                         auto c = *chats;
                         Chat fresh {};
+                        fresh.modelName = *model;
                         fresh.id = generateChatId();
                         fresh.title = std::string("Chat ") + std::to_string(c.size() + 1);
                         c.push_back(std::move(fresh));
