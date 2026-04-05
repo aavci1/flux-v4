@@ -1,6 +1,6 @@
 #include <Flux.hpp>
-#include <Flux/Core/Events.hpp>
 #include <Flux/Core/WindowUI.hpp>
+#include <Flux/Reactive/AnimationClock.hpp>
 #include <Flux/UI/UI.hpp>
 #include <Flux/UI/ViewModifiers.hpp>
 
@@ -48,19 +48,11 @@ int main(int argc, char* argv[]) {
   });
   w.setView<ClockFace>();
 
-  // Redraw ~60 Hz so the hands track real time (scene rebuild is not required; `render()` reads `now()`).
-  unsigned int const windowHandle = w.handle();
-  std::uint64_t const redrawTimerId =
-      app.scheduleRepeatingTimer(std::chrono::nanoseconds(1'000'000'000 / 60), windowHandle);
-  app.eventQueue().on<TimerEvent>([&w, windowHandle, redrawTimerId](TimerEvent const& e) {
-    if (e.timerId != redrawTimerId) {
-      return;
-    }
-    if (e.windowHandle != 0 && e.windowHandle != windowHandle) {
-      return;
-    }
+  // Shared ~60 Hz tick: smooth second hand always moves, so each tick warrants a redraw.
+  ObserverHandle const hRedraw = AnimationClock::instance().subscribe([&w](AnimationTick const&) {
     w.requestRedraw();
   });
+  (void)hRedraw;
 
   return app.exec();
 }

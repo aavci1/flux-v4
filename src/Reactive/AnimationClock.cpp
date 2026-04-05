@@ -41,6 +41,12 @@ void AnimationClock::install(EventQueue& q) {
 void AnimationClock::shutdown() {
   stopTimer();
   active_.clear();
+  subscribers_.clear();
+  nextSubscriberId_ = 1;
+}
+
+bool AnimationClock::needsTimer() const {
+  return !active_.empty() || !subscribers_.empty();
 }
 
 void AnimationClock::registerAnimated(AnimatedBase* animated) {
@@ -61,13 +67,37 @@ void AnimationClock::unregisterAnimated(AnimatedBase* animated) {
     return;
   }
   std::erase(active_, animated);
-  if (active_.empty()) {
+  if (!needsTimer()) {
+    stopTimer();
+  }
+}
+
+ObserverHandle AnimationClock::subscribe(std::function<void(AnimationTick const&)> callback) {
+  if (!callback) {
+    return {};
+  }
+  std::uint64_t const id = nextSubscriberId_++;
+  subscribers_.push_back(Subscriber{id, std::move(callback)});
+  if (!running_) {
+    startTimer();
+  }
+  return ObserverHandle{id};
+}
+
+void AnimationClock::unsubscribe(ObserverHandle handle) {
+  if (!handle.isValid()) {
+    return;
+  }
+  std::erase_if(subscribers_, [&](Subscriber const& s) { return s.id == handle.id; });
+  if (!needsTimer()) {
     stopTimer();
   }
 }
 
 void AnimationClock::onTick(std::int64_t deadlineNanos) {
   const double now = static_cast<double>(deadlineNanos) * 1e-9;
+  AnimationTick const tick{deadlineNanos, now};
+
   std::vector<AnimatedBase*> snapshot = active_;
   for (AnimatedBase* p : snapshot) {
     if (!p) {
@@ -77,7 +107,15 @@ void AnimationClock::onTick(std::int64_t deadlineNanos) {
       unregisterAnimated(p);
     }
   }
-  if (active_.empty()) {
+
+  std::vector<Subscriber> subSnap = subscribers_;
+  for (Subscriber const& s : subSnap) {
+    if (s.callback) {
+      s.callback(tick);
+    }
+  }
+
+  if (!needsTimer()) {
     stopTimer();
   }
 }

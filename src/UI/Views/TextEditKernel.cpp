@@ -1,7 +1,6 @@
 #include <Flux/Core/Application.hpp>
-#include <Flux/Core/EventQueue.hpp>
-#include <Flux/Core/Events.hpp>
 #include <Flux/Graphics/TextLayoutOptions.hpp>
+#include <Flux/Reactive/AnimationClock.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/Views/TextEditKernel.hpp>
@@ -11,10 +10,8 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
-#include <mutex>
 #include <string>
 #include <string_view>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -465,49 +462,75 @@ int caretByteAtPoint(TextSystem& ts, std::string const& buf, Font const& font, C
   return utf8Clamp(buf, a + rel);
 }
 
-// Caret blink timer registry: single definition in this TU (TextInput / TextArea link here only).
-// Named `flux::detail` scope — not a nested anonymous namespace — so there is exactly one bridge.
-std::unordered_set<std::uint64_t> gCaretBlinkTimerIds;
-std::once_flag gCaretBlinkTimerBridgeOnce;
+namespace {
+
+int gCaretBlinkRefs = 0;
+ObserverHandle gCaretBlinkHandle{};
+std::chrono::nanoseconds gCaretBlinkEpoch{};
+bool gCaretBlinkLastVisible = true;
+
+bool caretBlinkVisiblePhase(std::chrono::nanoseconds epoch) {
+  using namespace std::chrono;
+  auto const t0 = steady_clock::time_point(duration_cast<steady_clock::duration>(epoch));
+  double const elapsed = duration<double>(steady_clock::now() - t0).count();
+  return std::fmod(elapsed, 1.06) < 0.53;
+}
+
+void caretBlinkRetain() {
+  if (gCaretBlinkRefs == 0) {
+    gCaretBlinkLastVisible = caretBlinkVisiblePhase(gCaretBlinkEpoch);
+    gCaretBlinkHandle = AnimationClock::instance().subscribe([](AnimationTick const&) {
+      bool const visible = caretBlinkVisiblePhase(gCaretBlinkEpoch);
+      if (visible != gCaretBlinkLastVisible) {
+        gCaretBlinkLastVisible = visible;
+        if (Application::hasInstance()) {
+          Application::instance().requestRedraw();
+        }
+      }
+    });
+  }
+  ++gCaretBlinkRefs;
+}
+
+void caretBlinkRelease() {
+  if (gCaretBlinkRefs == 0) {
+    return;
+  }
+  --gCaretBlinkRefs;
+  if (gCaretBlinkRefs == 0) {
+    if (Application::hasInstance()) {
+      AnimationClock::instance().unsubscribe(gCaretBlinkHandle);
+    }
+    gCaretBlinkHandle = {};
+  }
+}
+
+} // namespace
 
 CaretBlinkTimerSlot::~CaretBlinkTimerSlot() {
-  cancel();
-}
-
-void CaretBlinkTimerSlot::cancel() {
-  if (timerId == 0) {
-    return;
-  }
-  gCaretBlinkTimerIds.erase(timerId);
-  if (Application::hasInstance()) {
-    Application::instance().cancelTimer(timerId);
-  }
-  timerId = 0;
-}
-
-void CaretBlinkTimerSlot::set(std::uint64_t id) {
-  if (id == timerId) {
-    return;
-  }
-  cancel();
-  timerId = id;
-  if (id != 0) {
-    gCaretBlinkTimerIds.insert(id);
+  if (holding) {
+    caretBlinkRelease();
+    holding = false;
   }
 }
 
-std::uint64_t CaretBlinkTimerSlot::get() const {
-  return timerId;
+void CaretBlinkTimerSlot::syncFocus(bool focused, bool disabled) {
+  bool const want = focused && !disabled;
+  if (want && !holding) {
+    caretBlinkRetain();
+    holding = true;
+  } else if (!want && holding) {
+    caretBlinkRelease();
+    holding = false;
+  }
+}
+
+void caretBlinkSyncEpoch(std::chrono::nanoseconds lastBlinkSinceEpoch) {
+  gCaretBlinkEpoch = lastBlinkSinceEpoch;
 }
 
 void ensureCaretBlinkTimerBridge() {
-  std::call_once(gCaretBlinkTimerBridgeOnce, [] {
-    Application::instance().eventQueue().on<TimerEvent>([](TimerEvent const& e) {
-      if (gCaretBlinkTimerIds.count(e.timerId)) {
-        Application::instance().requestRedraw();
-      }
-    });
-  });
+  // Caret blink uses `AnimationClock::subscribe` from `CaretBlinkTimerSlot::syncFocus`; retained for call sites.
 }
 
 int utf8CountChars(std::string const& s) {
