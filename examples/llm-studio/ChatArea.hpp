@@ -10,6 +10,7 @@
 #include "Message.hpp"
 #include "MessageBox.hpp"
 #include "OllamaClient.hpp"
+#include "Types.hpp"
 
 using namespace flux;
 using namespace llm_studio;
@@ -21,42 +22,19 @@ std::once_flag gOllamaUiHandler;
 } // namespace
 
 struct ChatArea : ViewModifiers<ChatArea> {
+    Chat chat;
+    std::function<void(const std::string&)> onSend;
+
     auto body() const {
         auto& theme = useEnvironment<Theme>();
-
-        auto messages = useState<std::vector<ChatMessage>>({});
         auto streaming = useState(false);
-
-        std::call_once(gOllamaUiHandler, [&]() {
-            Application::instance().eventQueue().on<OllamaUiEvent>([messages, streaming](OllamaUiEvent const& e) {
-                auto m = *messages;
-
-                if (e.kind == OllamaUiEvent::Kind::Chunk) {
-                    auto role = e.part == OllamaUiEvent::Part::Content ? ChatMessage::Role::Assistant : ChatMessage::Role::Reasoning;
-
-                    if (m.empty() || m.back().role != role) {
-                        m.push_back(ChatMessage {role, ""});
-                    }
-
-                    m.back().text += e.text;
-                }
-
-                if (e.kind == OllamaUiEvent::Kind::Done) {
-                    streaming = false;
-                }
-
-                messages = std::move(m);
-            });
-        });
 
         // UI
         std::vector<Element> messageElements;
-
-        auto messagesValue = *messages;
-        for (std::size_t i = 0; i < messagesValue.size(); ++i) {
+        for (auto &message : chat.messages) {
             messageElements.push_back(
-                Message{
-                    .message = messagesValue[i]
+                Message {
+                    .message = message
                 }
             );
         }
@@ -93,28 +71,16 @@ struct ChatArea : ViewModifiers<ChatArea> {
                         }
                     )
                 }.flex(1.f),
-                MessageBox {
-                    .onSend =
-                        [messages, streaming](const std::string& message) {
-                            if (*streaming) {
-                                return;
-                            }
-                            if (message.empty()) {
-                                return;
-                            }
-                            auto m = *messages;
-                            m.push_back(ChatMessage{ChatMessage::Role::User, message});
-                            messages = std::move(m);
-                            streaming = true;
+                MessageBox { 
+                    .onSend = [sendHandler = onSend](const std::string& message) {
+                        if (message.empty()) {
+                            return;
+                        }
 
-                            std::vector<ChatMessage> apiMessages = messagesForApi(*messages);
-                            nlohmann::json const payload = messagesToJson(apiMessages);
-
-                            startOllamaChatStream(defaultOllamaBaseUrl(), defaultOllamaModel(), std::move(payload),
-                                                  [](OllamaUiEvent ev) {
-                                                      Application::instance().eventQueue().post(std::move(ev));
-                                                  });
-                        },
+                        if (sendHandler) {
+                            sendHandler(message);
+                        }
+                    },
                     .disabled = *streaming
                 }
             )

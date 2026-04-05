@@ -11,10 +11,12 @@
 using namespace flux;
 
 struct PropertiesPanel : ViewModifiers<PropertiesPanel> {
+    std::string host {""};
+    std::string model {""};
+
     auto body() const {
         Theme const& theme = useEnvironment<Theme>();
-        std::string const host = defaultOllamaBaseUrl();
-        std::string const model = defaultOllamaModel();
+
         return VStack {
             .spacing = 8.f,
             .children = children(

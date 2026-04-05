@@ -56,11 +56,14 @@ struct MessageBox : ViewModifiers<MessageBox> {
                             .weight = 300.f,
                             .color = disabled ? Color::hex(0xC5C5C5) : theme.colorTextSecondary,
                         }.cursor(disabled ? Cursor::Arrow : Cursor::Hand)
-                        .onTap([value = value, onSend = onSend, disabled = disabled]() {
+                        .onTap([value, onSend = onSend, disabled = disabled]() {
+                            auto v = *value;
+
                             if (disabled || !onSend) {
                                 return;
                             }
-                            onSend(*value);
+
+                            onSend(v);
                             value = "";
                         })
                     )
@@ -69,11 +72,6 @@ struct MessageBox : ViewModifiers<MessageBox> {
         }
         .fill(FillStyle::solid(Color::hex(0xF5F5F5)))
         .cornerRadius(8.f)
-        // .shadow(ShadowStyle {
-        //     .radius = 2.f,
-        //     .offset = {0.f, 1.f},
-        //     .color = Color::hex(0xC0C0C0)
-        // })
         .padding(16.f);
     }
 };

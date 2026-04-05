@@ -11,17 +11,13 @@
 #include <utility>
 #include <vector>
 
-namespace llm_studio {
+#if defined(__APPLE__)
+#include <dispatch/dispatch.h>
+#endif
 
-struct ChatMessage {
-  /// `User` / `Assistant` are sent to the Ollama API. `Reasoning` is UI-only (thinking, tools, images).
-  enum class Role { User, Reasoning, Assistant };
-  Role role = Role::User;
-  /// User message, or assistant main reply (`content` from the model).
-  std::string text;
-  
-  constexpr bool operator==(ChatMessage const& o) const = default;
-};
+#include "Types.hpp"
+
+namespace llm_studio {
 
 struct OllamaUiEvent {
   enum class Kind { Chunk, Done, Error };
@@ -29,8 +25,37 @@ struct OllamaUiEvent {
   enum class Part { Content, Thinking, ToolCalls, Images };
   Kind kind = Kind::Done;
   Part part = Part::Content;
+  /// Identifies which chat this event belongs to (matches \c Chat::id).
+  std::string chatId;
   std::string text;
 };
+
+namespace detail {
+
+struct OllamaMainPostThunk {
+  std::function<void(OllamaUiEvent)> post;
+  OllamaUiEvent ev;
+};
+
+#if defined(__APPLE__)
+inline void ollamaInvokePostOnMain(void* ctx) {
+  auto* p = static_cast<OllamaMainPostThunk*>(ctx);
+  p->post(std::move(p->ev));
+  delete p;
+}
+#endif
+
+/// `EventQueue::post` is main-thread-only by API contract; CURL runs on a worker thread.
+inline void postOllamaEventToMain(std::function<void(OllamaUiEvent)> const& post, OllamaUiEvent ev) {
+#if defined(__APPLE__)
+  auto* ctx = new OllamaMainPostThunk{post, std::move(ev)};
+  dispatch_async_f(dispatch_get_main_queue(), ctx, ollamaInvokePostOnMain);
+#else
+  post(std::move(ev));
+#endif
+}
+
+} // namespace detail
 
 /// Emits one or more chunk events from an Ollama `message` object in a stream line.
 /// Order: thinking / tools / images before main content so the UI can treat "answer" as starting after reasoning.
@@ -130,8 +155,10 @@ inline size_t curlWriteCallback(char* ptr, size_t size, size_t nmemb, void* user
   return total;
 }
 
-/// Runs a streaming POST /api/chat on a detached thread; invokes \p post on the caller thread via EventQueue from main.
-inline void startOllamaChatStream(std::string baseUrl, std::string model, nlohmann::json messages, std::function<void(OllamaUiEvent)> post) {
+/// Runs a streaming POST /api/chat on a detached thread; delivers \p post on the main thread (macOS via GCD).
+/// Every \c OllamaUiEvent includes \p chatId so the UI can route chunks to the correct chat.
+inline void startOllamaChatStream(std::string baseUrl, std::string model, nlohmann::json messages, std::string chatId,
+                                  std::function<void(OllamaUiEvent)> post) {
   while (!baseUrl.empty() && (baseUrl.back() == '/' || baseUrl.back() == ' ')) {
     baseUrl.pop_back();
   }
@@ -144,15 +171,20 @@ inline void startOllamaChatStream(std::string baseUrl, std::string model, nlohma
   body["stream"] = true;
   std::string const payload = body.dump();
 
-  std::thread([url, payload, post = std::move(post)]() mutable {
+  std::thread([url, payload, chatId = std::move(chatId), userPost = std::move(post)]() mutable {
+    auto postOnMain = [userPost, chatId](OllamaUiEvent ev) {
+      ev.chatId = chatId;
+      detail::postOllamaEventToMain(userPost, std::move(ev));
+    };
+
     CURL* curl = curl_easy_init();
     if (!curl) {
-      post(OllamaUiEvent{.kind = OllamaUiEvent::Kind::Error, .text = "curl_easy_init failed"});
+      postOnMain(OllamaUiEvent{.kind = OllamaUiEvent::Kind::Error, .text = "curl_easy_init failed"});
       return;
     }
 
     WriteBuf wb;
-    wb.post = std::move(post);
+    wb.post = std::move(postOnMain);
 
     curl_slist* headers = nullptr;
     headers = curl_slist_append(headers, "Content-Type: application/json");
