@@ -8,7 +8,8 @@
 
 using namespace flux;
 
-struct MessageBox : ViewModifiers<MessageBox> {
+struct MessageEditor : ViewModifiers<MessageEditor> {
+    std::string modelName;
     std::function<void(const std::string&)> onSend;
     /// When true, send is ignored and the send control is dimmed (e.g. while a reply is streaming).
     bool disabled = false;
@@ -24,7 +25,7 @@ struct MessageBox : ViewModifiers<MessageBox> {
             .children = children(
                 TextArea {
                     .value = value,
-                    .placeholder = "Type your message here...",
+                    .placeholder = "Type your message here... (" + modelName + ")",
                     .style = TextArea::Style::plain()
                 },
                 HStack {

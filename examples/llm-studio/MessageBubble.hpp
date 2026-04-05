@@ -18,7 +18,7 @@ using namespace flux;
 using namespace llm_studio;
 
 /// Single chat row: user bubble, reasoning card, or assistant reply bubble.
-struct Message : ViewModifiers<Message> {
+struct MessageBubble : ViewModifiers<MessageBubble> {
     ChatMessage message;
 
     auto body() const {

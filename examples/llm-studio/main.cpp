@@ -8,10 +8,9 @@
 #include <string>
 
 #include "ChatArea.hpp"
-#include "ChatsPanel.hpp"
+#include "ChatList.hpp"
 #include "Divider.hpp"
-#include "Message.hpp"
-#include "MessageBox.hpp"
+#include "MessageEditor.hpp"
 #include "OllamaClient.hpp"
 #include "PropertiesPanel.hpp"
 
@@ -96,7 +95,7 @@ struct AppRoot : ViewModifiers<AppRoot> {
             .spacing = 16.f,
             .alignment = Alignment::Stretch,
             .children = children(
-                ChatsPanel {
+                ChatList {
                     .chats = c,
                     .selectedIndex = i,
                     .onChatSelected = [index](size_t selected) {

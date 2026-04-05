@@ -1,65 +1,15 @@
 #pragma once
 
 #include <Flux.hpp>
-#include <Flux/Core/EventQueue.hpp>
-#include <Flux/Core/WindowUI.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Views/Views.hpp>
 
+#include "ChatListRow.hpp"
 #include "Divider.hpp"
-#include "Types.hpp"
 
 using namespace flux;
 
-
-struct ChatItem : ViewModifiers<ChatItem> {
-    size_t index = 0;
-    std::string title;
-    bool selected = false;
-    std::function<void(size_t)> onSelect;
-
-    auto body() const {
-        Theme const& theme = useEnvironment<Theme>();
-
-        auto isHovered = useHover();
-
-        FillStyle const rowFill = selected
-            ? FillStyle::solid(Color::hex(0xDCE8F5))
-            : isHovered ? FillStyle::solid(Color::hex(0xEBEDEF)) : FillStyle::none();
-
-        return HStack {
-            .spacing = 12.f,
-            .alignment = Alignment::Center,
-            .children = children(
-                Text {
-                    .text = title,
-                    .style = theme.typeSubtitle,
-                    .color = theme.colorTextPrimary,
-                    .verticalAlignment = VerticalAlignment::Center,
-                    .wrapping = TextWrapping::NoWrap,
-                },
-                Spacer {},
-                Icon {
-                    .name = IconName::MoreHoriz,
-                    .size = theme.typeSubtitle.size,
-                    .weight = 300.f,
-                    .color = isHovered ? theme.colorTextPrimary : Colors::transparent,
-                }
-            )
-        }
-        .fill(rowFill)
-        .cursor(Cursor::Hand)
-        .padding(8.f)
-        .onTap([onSelect = onSelect, idx = index]() {
-            if (onSelect) {
-                onSelect(idx);
-            }
-        });
-    }
-};
-
-
-struct ChatsPanel : ViewModifiers<ChatsPanel> {
+struct ChatList : ViewModifiers<ChatList> {
     const std::vector<Chat> chats = {};
     size_t selectedIndex = 0;
 
@@ -75,7 +25,7 @@ struct ChatsPanel : ViewModifiers<ChatsPanel> {
             size_t i = index;
             elements.push_back(
                 Element {
-                    ChatItem {
+                    ChatListRow {
                         .index = i,
                         .title = chats[i].title,
                         .selected = (i == selectedIndex),

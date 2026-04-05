@@ -7,8 +7,8 @@
 #include <Flux/UI/Views/Views.hpp>
 
 #include "Divider.hpp"
-#include "Message.hpp"
-#include "MessageBox.hpp"
+#include "MessageBubble.hpp"
+#include "MessageEditor.hpp"
 #include "OllamaClient.hpp"
 #include "Types.hpp"
 
@@ -33,7 +33,7 @@ struct ChatArea : ViewModifiers<ChatArea> {
         std::vector<Element> messageElements;
         for (auto &message : chat.messages) {
             messageElements.push_back(
-                Message {
+                MessageBubble {
                     .message = message
                 }
             );
@@ -71,7 +71,7 @@ struct ChatArea : ViewModifiers<ChatArea> {
                         }
                     )
                 }.flex(1.f),
-                MessageBox { 
+                MessageEditor {
                     .onSend = [sendHandler = onSend](const std::string& message) {
                         if (message.empty()) {
                             return;
