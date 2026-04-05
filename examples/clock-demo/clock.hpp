@@ -2,7 +2,6 @@
 
 #include <Flux/Core/Types.hpp>
 #include <Flux/Graphics/Canvas.hpp>
-#include <Flux/Graphics/Path.hpp>
 #include <Flux/Graphics/Styles.hpp>
 
 #include <algorithm>
@@ -34,31 +33,27 @@ inline void drawClock(Canvas& c, Rect const& bounds, float hourAngleDeg, float m
 
   const float hourTickLength = radius / 10.f;
   const float hourTickWidth = 6.f;
-  Path hourMarks;
+  const StrokeStyle hourTickStroke = StrokeStyle::solid(Colors::black, hourTickWidth);
   for (int i = 0; i < 12; ++i) {
     const float angle = static_cast<float>(i) * 2.f * std::numbers::pi_v<float> / 12.f;
     const float x1 = center.x + (radius - 20.f - hourTickLength) * std::cos(angle);
     const float y1 = center.y + (radius - 20.f - hourTickLength) * std::sin(angle);
     const float x2 = center.x + (radius - 20.f) * std::cos(angle);
     const float y2 = center.y + (radius - 20.f) * std::sin(angle);
-    hourMarks.moveTo({x1, y1});
-    hourMarks.lineTo({x2, y2});
+    c.drawLine({x1, y1}, {x2, y2}, hourTickStroke);
   }
-  c.drawPath(hourMarks, FillStyle::none(), StrokeStyle::solid(Colors::black, hourTickWidth));
 
   const float minuteTickLength = radius / 10.f;
   const float minuteTickWidth = 2.f;
-  Path minuteMarks;
+  const StrokeStyle minuteTickStroke = StrokeStyle::solid(Colors::black, minuteTickWidth);
   for (int i = 0; i < 60; ++i) {
     const float angle = static_cast<float>(i) * 2.f * std::numbers::pi_v<float> / 60.f;
     const float x1 = center.x + (radius - 20.f - minuteTickLength) * std::cos(angle);
     const float y1 = center.y + (radius - 20.f - minuteTickLength) * std::sin(angle);
     const float x2 = center.x + (radius - 20.f) * std::cos(angle);
     const float y2 = center.y + (radius - 20.f) * std::sin(angle);
-    minuteMarks.moveTo({x1, y1});
-    minuteMarks.lineTo({x2, y2});
+    c.drawLine({x1, y1}, {x2, y2}, minuteTickStroke);
   }
-  c.drawPath(minuteMarks, FillStyle::none(), StrokeStyle::solid(Colors::black, minuteTickWidth));
 
   drawHand(c, center, radius * 0.4f, 12.f, hourAngleDeg, Colors::black);
   drawHand(c, center, radius * 0.55f, 8.f, minuteAngleDeg, Colors::black);
