@@ -72,6 +72,7 @@ struct ChatArea : ViewModifiers<ChatArea> {
                     )
                 }.flex(1.f),
                 MessageEditor {
+                    .modelName = chat.modelName,
                     .onSend = [modelName = chat.modelName,sendHandler = onSend](const std::string& message) {
                         if (message.empty()) {
                             return;

@@ -34,29 +34,21 @@ struct MessageEditor : ViewModifiers<MessageEditor> {
                     .children = children(
                         Icon {
                             .name = IconName::Attachment,
-                            .size = theme.typeBody.size,
-                            .weight = 300.f,
-                            .color = theme.colorTextSecondary,
-                        }.cursor(Cursor::Hand),
-                        Icon {
-                            .name = IconName::Settings,
-                            .size = theme.typeBody.size,
+                            .size = 20.f,
                             .weight = 300.f,
                             .color = theme.colorTextSecondary,
                         }.cursor(Cursor::Hand),
                         Spacer {},
                         Icon {
-                            .name = IconName::Image,
-                            .size = theme.typeBody.size,
-                            .weight = 300.f,
-                            .color = theme.colorTextSecondary,
-                        }.cursor(Cursor::Hand),
-                        Icon {
-                            .name = IconName::Send,
-                            .size = theme.typeBody.size,
+                            .name = IconName::ArrowUpward,
+                            .size = 16.f,
                             .weight = 300.f,
                             .color = disabled ? Color::hex(0xC5C5C5) : theme.colorTextSecondary,
-                        }.cursor(disabled ? Cursor::Arrow : Cursor::Hand)
+                        }
+                        .cursor(disabled ? Cursor::Arrow : Cursor::Hand)
+                        .stroke(StrokeStyle::solid(theme.colorTextSecondary, 2.f))
+                        .padding(4.f)
+                        .cornerRadius(12.f)
                         .onTap([value, onSend = onSend, disabled = disabled]() {
                             auto v = *value;
 
