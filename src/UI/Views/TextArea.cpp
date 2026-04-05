@@ -425,12 +425,10 @@ Element TextArea::body() const {
 
   if (focused && !isDisabled) {
     detail::ensureCaretBlinkTimerBridge();
-    if (blinkCaretTimer.get() == 0) {
-      std::uint64_t const id = Application::instance().scheduleRepeatingTimer(std::chrono::nanoseconds(530'000'000), 0);
-      blinkCaretTimer.set(id);
-    }
+    detail::caretBlinkSyncEpoch(*lastBlink);
+    blinkCaretTimer.syncFocus(true, false);
   } else {
-    blinkCaretTimer.cancel();
+    blinkCaretTimer.syncFocus(false, false);
   }
 
   std::function<void(std::string const&)> const onCh = onChange;

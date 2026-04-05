@@ -67,16 +67,18 @@ void replaceSelection(State<std::string> val, State<int> caretByte, State<int> s
 void resetBlink(State<std::chrono::nanoseconds> lastBlink);
 
 struct CaretBlinkTimerSlot {
-  std::uint64_t timerId = 0;
+  bool holding = false;
 
   ~CaretBlinkTimerSlot();
 
-  void cancel();
-  void set(std::uint64_t id);
-  std::uint64_t get() const;
+  /// Call each build: registers a shared animation-clock subscription while `focused && !disabled`.
+  void syncFocus(bool focused, bool disabled);
 };
 
 void ensureCaretBlinkTimerBridge();
+
+/// Updates the blink epoch used with `AnimationClock` (call each frame while a caret is shown).
+void caretBlinkSyncEpoch(std::chrono::nanoseconds lastBlinkSinceEpoch);
 
 } // namespace detail
 
