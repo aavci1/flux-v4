@@ -260,12 +260,6 @@ void Application::cancelTimer(std::uint64_t timerId) {
 int Application::exec() {
   [NSApp activate];
   while (!d->quit_) {
-    for (auto& w : d->windows_) {
-      if (w) {
-        w->platformWindow()->processEvents();
-      }
-    }
-
     {
       using namespace std::chrono;
       auto const now = steady_clock::now();
@@ -282,6 +276,12 @@ int Application::exec() {
     }
 
     d->eventQueue_.dispatch();
+
+    for (auto& w : d->windows_) {
+      if (w) {
+        w->platformWindow()->processEvents();
+      }
+    }
 
     if (d->reactiveDirty_) {
       d->reactiveDirty_ = false;
