@@ -362,7 +362,11 @@ inline PromptBuildResult buildPromptTokens(const llama_model* model,
 class LlamaEngine {
 public:
   LlamaEngine() = default;
-  ~LlamaEngine() { unload(); }
+  ~LlamaEngine() {
+    cancelGeneration();
+    joinWorker();
+    unload();
+  }
 
   LlamaEngine(LlamaEngine const&) = delete;
   LlamaEngine& operator=(LlamaEngine const&) = delete;
@@ -408,7 +412,7 @@ public:
     cancelled_.store(true, std::memory_order_relaxed);
   }
 
-  /// Start a streaming chat completion on a detached worker thread.
+  /// Start a streaming chat completion on a worker thread.
   /// `post` is called on the main thread (via GCD) for each token and on completion.
   void startChat(std::vector<ChatMessage> messages, std::string chatId,
                  std::function<void(LlmUiEvent)> post) {
@@ -421,19 +425,27 @@ public:
       return;
     }
 
+    cancelGeneration();
+    joinWorker();
+
     cancelled_.store(false, std::memory_order_relaxed);
 
-    std::thread([this,
-                 msgs = std::move(messages),
-                 chatId = std::move(chatId),
-                 userPost = std::move(post)]() mutable {
+    worker_ = std::thread([this,
+                            msgs = std::move(messages),
+                            chatId = std::move(chatId),
+                            userPost = std::move(post)]() mutable {
       runGeneration(std::move(msgs), std::move(chatId), std::move(userPost));
-    }).detach();
+    });
   }
 
 private:
+  void joinWorker() {
+    if (worker_.joinable()) worker_.join();
+  }
+
   void unloadLocked() {
     cancelGeneration();
+    joinWorker();
     vocab_      = nullptr;
     nGpuLayers_ = -1;
     model_.reset();
@@ -589,6 +601,7 @@ private:
   uint32_t nCtx_       = 8192;
   std::string modelPath_;
   std::atomic<bool> cancelled_{false};
+  std::thread worker_;
 };
 
 // ── Defaults (env vars) ─────────────────────────────────────────────────────
