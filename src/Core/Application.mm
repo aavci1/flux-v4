@@ -258,7 +258,7 @@ void Application::cancelTimer(std::uint64_t timerId) {
 }
 
 int Application::exec() {
-  [NSApp activateIgnoringOtherApps:YES];
+  [NSApp activate];
   while (!d->quit_) {
     for (auto& w : d->windows_) {
       if (w) {
