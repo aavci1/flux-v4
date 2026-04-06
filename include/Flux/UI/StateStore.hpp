@@ -96,9 +96,30 @@ public:
   static StateStore* current() noexcept;
   static void setCurrent(StateStore* s) noexcept;
 
+  /// Marks the owning composite dirty for a reactive slot (`Signal`, `Animated`, …).
+  void markSlotDirty(void* slot);
+  void markFullRebuild();
+
+  [[nodiscard]] bool needsFullRebuild() const { return fullRebuildRequired_; }
+  [[nodiscard]] std::vector<ComponentKey> const& dirtyKeys() const { return dirtyKeys_; }
+  void clearDirtyState();
+
+  /// When `StateStore::current()` is null (timer / input), routes to the owning store.
+  static void markSlotDirtyFromBridge(void* slot);
+
+  void beginPartialRebuild(ComponentKey const& key);
+  void endPartialRebuild();
+
 private:
+  void registerSlotOwner(void* slot, ComponentKey const& key);
+  void releaseAllSlotPointers(ComponentState& cs);
+
   std::unordered_map<ComponentKey, ComponentState, ComponentKeyHash> states_;
   std::unordered_set<ComponentKey, ComponentKeyHash> visited_;
+
+  std::unordered_map<void*, ComponentKey> slotOwners_;
+  std::vector<ComponentKey> dirtyKeys_;
+  bool fullRebuildRequired_ = true;
 
   // Stack of active component keys (depth > 1 when body() calls a helper
   // that returns an Element containing further composites — rare but valid).
@@ -108,6 +129,9 @@ private:
 
   std::vector<LayoutConstraints> compositeConstraintStack_{};
   std::vector<ElementModifiers const*> compositeElementModifierStack_{};
+
+  std::vector<ComponentKey> savedActiveStack_{};
+  bool inPartialRebuild_ = false;
 
   static thread_local StateStore* sCurrent;
 };
@@ -142,6 +166,7 @@ S& StateStore::claimSlot(Args&&... args) {
         delete static_cast<S*>(p);
       }),
       std::type_index(typeid(S))});
+  registerSlotOwner(static_cast<void*>(raw), key);
   return *raw;
 }
 

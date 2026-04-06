@@ -21,6 +21,13 @@ namespace flux {
 class EventQueue;
 class TextSystem;
 
+/// Coalesced main-loop work: `Rebuild` implies a repaint after reactive callbacks run.
+enum class FrameRequest : std::uint8_t { None = 0, Repaint = 1, Rebuild = 2 };
+
+constexpr bool operator>=(FrameRequest a, FrameRequest b) noexcept {
+  return static_cast<std::uint8_t>(a) >= static_cast<std::uint8_t>(b);
+}
+
 class Application {
 public:
   explicit Application(int argc = 0, char** argv = nullptr);
@@ -44,12 +51,17 @@ public:
   int exec();
   void quit();
 
-  /// Marks all windows for a render pass on the next `exec()` iteration and wakes the platform event wait.
-  void requestRedraw();
+  /// Marks all windows for a render pass on the next `exec()` iteration and wakes the platform event wait
+  /// (unless already inside `EventQueue::dispatch`).
+  void requestRepaint();
 
-  /// Presents pending frames immediately. Use when the main loop may not iterate (e.g. live window resize runs
-  /// the run loop in `NSEventTrackingRunLoopMode`, so `waitForEvents` in `NSDefaultRunLoopMode` does not return).
-  void flushRedraw();
+  /// Schedules reactive rebuild (`onNextFrameNeeded` callbacks) and wakes the event wait when not dispatching.
+  void requestRebuild();
+
+  /// Presents immediately when a repaint or rebuild is pending. Coalescing can leave `Rebuild`
+  /// after `requestRepaint`; that case still presents (e.g. live resize) while preserving `Rebuild`
+  /// for the next `exec()` iteration when reactive work remains.
+  void flushPending();
 
   /// Repeating timer using `std::chrono::steady_clock` in the main `exec()` loop; posts `TimerEvent` each tick.
   /// Returns an id for `cancelTimer`. `windowHandle` is optional metadata for handlers (e.g. redraw routing).
@@ -73,9 +85,6 @@ public:
   /// Batched callback: runs at most once per `exec()` iteration after any reactive update.
   ObserverHandle onNextFrameNeeded(std::function<void()> callback);
   void unobserveNextFrame(ObserverHandle handle);
-
-  /// Marks that reactive state changed; wakes the event loop. Used internally by the reactive layer.
-  void markReactiveDirty();
 
   friend class Window;
 

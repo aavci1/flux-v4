@@ -30,9 +30,12 @@ bool appendChild(NodeStore& store, NodeId parent, NodeId child) {
 SceneGraph::SceneGraph() {
   LayerNode root{};
   root_ = store_.insert(SceneNode{std::move(root)});
+  markDirty(); // First `needsRender()` must be true until `markRendered()`.
 }
 
 NodeId SceneGraph::addLayer(LayerNode node) { return addLayer(root_, std::move(node)); }
+
+void SceneGraph::markDirty() { ++generation_; }
 
 NodeId SceneGraph::addLayer(NodeId parent, LayerNode node) {
   SceneNode* p = store_.get(parent);
@@ -43,6 +46,7 @@ NodeId SceneGraph::addLayer(NodeId parent, LayerNode node) {
   if (!appendChild(store_, parent, id)) {
     return kInvalidNodeId;
   }
+  markDirty();
   return id;
 }
 
@@ -55,6 +59,7 @@ NodeId SceneGraph::addRect(NodeId parent, RectNode node) {
   if (!appendChild(store_, parent, id)) {
     return kInvalidNodeId;
   }
+  markDirty();
   return id;
 }
 
@@ -67,6 +72,7 @@ NodeId SceneGraph::addText(NodeId parent, TextNode node) {
   if (!appendChild(store_, parent, id)) {
     return kInvalidNodeId;
   }
+  markDirty();
   return id;
 }
 
@@ -79,6 +85,7 @@ NodeId SceneGraph::addImage(NodeId parent, ImageNode node) {
   if (!appendChild(store_, parent, id)) {
     return kInvalidNodeId;
   }
+  markDirty();
   return id;
 }
 
@@ -91,6 +98,7 @@ NodeId SceneGraph::addPath(NodeId parent, PathNode node) {
   if (!appendChild(store_, parent, id)) {
     return kInvalidNodeId;
   }
+  markDirty();
   return id;
 }
 
@@ -103,6 +111,7 @@ NodeId SceneGraph::addLine(NodeId parent, LineNode node) {
   if (!appendChild(store_, parent, id)) {
     return kInvalidNodeId;
   }
+  markDirty();
   return id;
 }
 
@@ -115,6 +124,8 @@ NodeId SceneGraph::addCustomRender(NodeId parent, CustomRenderNode node) {
   if (!appendChild(store_, parent, id)) {
     return kInvalidNodeId;
   }
+  ++customRenderCount_;
+  markDirty();
   return id;
 }
 
@@ -176,6 +187,11 @@ void SceneGraph::removeRecursive(NodeId id) {
   if (!sn) {
     return;
   }
+  if (std::holds_alternative<CustomRenderNode>(*sn)) {
+    if (customRenderCount_ > 0) {
+      --customRenderCount_;
+    }
+  }
   if (auto* layer = std::get_if<LayerNode>(sn)) {
     // Copy: each recursive step mutates this layer's `children` via eraseFromParentChildren, so we
     // must not iterate the live vector.
@@ -198,6 +214,7 @@ void SceneGraph::remove(NodeId id) {
     return;
   }
   removeRecursive(id);
+  markDirty();
 }
 
 void SceneGraph::clear() {
@@ -207,8 +224,23 @@ void SceneGraph::clear() {
   }
   std::vector<NodeId> const children = rootLayer->children;
   for (NodeId c : children) {
-    remove(c);
+    removeRecursive(c);
   }
+  customRenderCount_ = 0;
+  markDirty();
+}
+
+void SceneGraph::clearChildren(NodeId parentId) {
+  LayerNode* parent = node<LayerNode>(parentId);
+  if (!parent) {
+    return;
+  }
+  std::vector<NodeId> const ch = parent->children;
+  for (NodeId c : ch) {
+    removeRecursive(c);
+  }
+  parent->children.clear();
+  markDirty();
 }
 
 void SceneGraph::reparent(NodeId id, NodeId newParent, std::size_t index) {
@@ -239,6 +271,7 @@ void SceneGraph::reparent(NodeId id, NodeId newParent, std::size_t index) {
   } else {
     newLayer->children.insert(newLayer->children.begin() + static_cast<std::ptrdiff_t>(index), id);
   }
+  markDirty();
 }
 
 void SceneGraph::reorder(NodeId parent, std::vector<NodeId> const& orderedChildren) {
@@ -254,6 +287,7 @@ void SceneGraph::reorder(NodeId parent, std::vector<NodeId> const& orderedChildr
     return;
   }
   layer->children = orderedChildren;
+  markDirty();
 }
 
 } // namespace flux

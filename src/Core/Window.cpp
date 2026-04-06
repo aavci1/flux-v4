@@ -111,7 +111,7 @@ SceneGraph& Window::sceneGraph() {
 
 SceneGraph const& Window::sceneGraph() const { return const_cast<Window*>(this)->sceneGraph(); }
 
-void Window::requestRedraw() { postRedraw(handle()); }
+void Window::requestRepaint() { postRedraw(handle()); }
 
 void Window::setCursor(Cursor kind) {
   d->platform_->setCursor(kind);
@@ -126,7 +126,7 @@ void Window::postRedraw(unsigned int handle) {
   if (!Application::hasInstance()) {
     return;
   }
-  Application::instance().requestRedraw();
+  Application::instance().requestRepaint();
 }
 
 void Window::setClearColor(Color color) { d->clearColor_ = color; }
@@ -197,7 +197,15 @@ EnvironmentLayer const& Window::environmentLayer() const {
 
 void Window::render(Canvas& canvas) {
   if (d->sceneGraph_) {
-    SceneRenderer{}.render(*d->sceneGraph_, canvas, d->clearColor_);
+    SceneGraph& sg = *d->sceneGraph_;
+    bool const structureChanged = sg.needsRender();
+    bool const hasLive = sg.hasCustomRender();
+    if (structureChanged || hasLive) {
+      SceneRenderer{}.render(sg, canvas, d->clearColor_);
+      sg.markRendered();
+    } else {
+      canvas.replayLastFrame();
+    }
   }
   for (std::unique_ptr<OverlayEntry> const& up : d->overlayMgr_.entries()) {
     OverlayEntry const& entry = *up;

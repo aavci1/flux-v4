@@ -19,6 +19,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <unordered_map>
 #include <utility>
 
 namespace flux {
@@ -72,6 +73,16 @@ void BuildOrchestrator::subscribeToRebuild(std::function<void()> onFrameNeeded) 
 void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runtime) {
   if (sizeOverride.has_value()) {
     gesture_.clearPress();
+    stateStore_.markFullRebuild();
+  }
+
+  if (!stateStore_.needsFullRebuild() && !stateStore_.dirtyKeys().empty()) {
+    if (tryPartialRebuild(runtime)) {
+      stateStore_.clearDirtyState();
+      window_.requestRepaint();
+      return;
+    }
+    stateStore_.markFullRebuild();
   }
 
   SceneGraph& graph = window_.sceneGraph();
@@ -111,10 +122,14 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
 
   RenderContext rctx{graph, newMap, Application::instance().textSystem()};
   rctx.pushConstraints(rootCs);
+  std::unordered_map<ComponentKey, NodeId, ComponentKeyHash> compositeSceneParents{};
+  rctx.setCompositeSceneParentRecorder(&compositeSceneParents);
   renderLayoutTree(layoutTree, rctx);
+  rctx.setCompositeSceneParentRecorder(nullptr);
   rctx.popConstraints();
 
   layoutRects_.fill(layoutTree, lctx);
+  buildSnapshots(layoutTree, lctx, compositeSceneParents);
   layoutDebugEndPass();
 
   StateStore::setCurrent(nullptr);
@@ -132,7 +147,8 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
                  "[flux:input] rebuild layout=%.1fx%.1f scene root children (if any) updated\n",
                  static_cast<double>(sz.width), static_cast<double>(sz.height));
   }
-  window_.requestRedraw();
+  stateStore_.clearDirtyState();
+  window_.requestRepaint();
 }
 
 StateStore& BuildOrchestrator::stateStore() noexcept {
@@ -165,6 +181,47 @@ ActionRegistry const& BuildOrchestrator::actionRegistryCommitted() const noexcep
 
 Rect BuildOrchestrator::buildSlotRect() const {
   return layoutEngine_.lastAssignedFrame();
+}
+
+void BuildOrchestrator::buildSnapshots(LayoutTree const& tree, LayoutContext const& ctx,
+                                      std::unordered_map<ComponentKey, NodeId, ComponentKeyHash> const&
+                                          sceneParents) {
+  snapshots_.clear();
+  for (auto const& [key, nodeId] : ctx.subtreeRootLayouts()) {
+    if (!nodeId.isValid()) {
+      continue;
+    }
+    LayoutNode const* n = tree.get(nodeId);
+    if (!n || n->kind == LayoutNode::Kind::Tombstone) {
+      continue;
+    }
+    CompositeSnapshot snap;
+    snap.layoutRoot = nodeId;
+    snap.constraints = n->constraints;
+    snap.hints = n->hints;
+    snap.measuredSize = Size{n->frame.width, n->frame.height};
+    snap.element = n->element;
+    if (auto it = sceneParents.find(key); it != sceneParents.end()) {
+      snap.sceneLayerId = it->second;
+    }
+    snap.ancestorEnv = EnvironmentStack::current().snapshotLayers();
+    snapshots_[key] = std::move(snap);
+  }
+  if (char const* v = std::getenv("FLUX_DEBUG_INCREMENTAL")) {
+    if (v && v[0] != '\0' && std::strcmp(v, "0") != 0) {
+      std::fprintf(stderr, "[flux:incremental] built %zu composite snapshots\n", snapshots_.size());
+    }
+  }
+}
+
+bool BuildOrchestrator::tryPartialRebuild(Runtime& runtime) {
+  (void)runtime;
+  if (char const* v = std::getenv("FLUX_DEBUG_INCREMENTAL")) {
+    if (v && v[0] != '\0' && std::strcmp(v, "0") != 0) {
+      std::fprintf(stderr, "[flux:incremental] tryPartialRebuild: not implemented\n");
+    }
+  }
+  return false;
 }
 
 } // namespace flux

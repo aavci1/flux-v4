@@ -48,6 +48,9 @@ Rect LayoutTree::unionSubtreeWorldBounds(LayoutNodeId nodeId) const {
     if (!n) {
       return;
     }
+    if (n->kind == LayoutNode::Kind::Tombstone) {
+      return;
+    }
     Rect const& w = n->worldBounds;
     if (w.width > 0.f || w.height > 0.f || (w.x != 0.f || w.y != 0.f)) {
       minX = std::min(minX, w.x);
@@ -69,7 +72,7 @@ Rect LayoutTree::unionSubtreeWorldBounds(LayoutNodeId nodeId) const {
 
 std::optional<Rect> LayoutTree::rectForKey(ComponentKey const& key) const {
   for (LayoutNode const& n : nodes_) {
-    if (n.componentKey == key) {
+    if (n.kind != LayoutNode::Kind::Tombstone && n.componentKey == key) {
       return n.worldBounds;
     }
   }

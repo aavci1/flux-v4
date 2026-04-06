@@ -60,13 +60,13 @@ public:
   SceneGraph const& sceneGraph() const;
 
   /// Request a frame; `Application::exec()` renders all windows when the event pump runs.
-  void requestRedraw();
+  void requestRepaint();
 
   /// Sets the platform mouse cursor shape. Called by Runtime; safe to call
   /// from any code that has a Window reference.
   void setCursor(Cursor kind);
 
-  /// Like `requestRedraw()`; `handle` is reserved for future per-window scheduling.
+  /// Like `requestRepaint()`; `handle` is reserved for future per-window scheduling.
   static void postRedraw(unsigned int handle);
 
   /// Drawing only; `Application` wraps each call with `beginFrame` and `present` when handling redraw.

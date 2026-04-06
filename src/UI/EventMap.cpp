@@ -1,6 +1,25 @@
 #include <Flux/UI/EventMap.hpp>
 
+#include <Flux/Scene/Nodes.hpp>
+#include <Flux/Scene/SceneGraph.hpp>
+
+#include <algorithm>
+#include <vector>
+
 namespace flux {
+
+namespace {
+
+void collectSubtreeNodeIds(SceneGraph const& graph, NodeId id, std::vector<NodeId>& out) {
+  out.push_back(id);
+  if (auto const* layer = graph.node<LayerNode>(id)) {
+    for (NodeId c : layer->children) {
+      collectSubtreeNodeIds(graph, c, out);
+    }
+  }
+}
+
+} // namespace
 
 std::size_t NodeIdHash::operator()(NodeId id) const noexcept {
   return static_cast<std::size_t>(id.index) ^ (static_cast<std::size_t>(id.generation) << 16u);
@@ -11,6 +30,22 @@ void EventMap::insert(NodeId id, EventHandlers handlers) {
     focusOrder_.push_back(handlers.stableTargetKey);
   }
   map_.insert_or_assign(id, std::move(handlers));
+}
+
+void EventMap::removeSubtree(SceneGraph const& graph, NodeId subtreeRoot) {
+  std::vector<NodeId> nodes;
+  collectSubtreeNodeIds(graph, subtreeRoot, nodes);
+  for (NodeId id : nodes) {
+    auto it = map_.find(id);
+    if (it == map_.end()) {
+      continue;
+    }
+    EventHandlers const& h = it->second;
+    if (h.focusable && !h.stableTargetKey.empty()) {
+      std::erase(focusOrder_, h.stableTargetKey);
+    }
+    map_.erase(it);
+  }
 }
 
 EventHandlers const* EventMap::find(NodeId id) const {

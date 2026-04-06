@@ -8,6 +8,7 @@
 #include <Flux/UI/ComponentKey.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 
+#include <unordered_map>
 #include <vector>
 
 namespace flux {
@@ -43,6 +44,10 @@ public:
   void popSuppressLeafModifierEvents();
   bool suppressLeafModifierEvents() const noexcept;
 
+  /// During full render, records `parentLayer()` for each composite \ref LayoutNode::componentKey.
+  void setCompositeSceneParentRecorder(std::unordered_map<ComponentKey, NodeId, ComponentKeyHash>* out);
+  void recordCompositeSceneParent(ComponentKey const& key, NodeId parentLayer);
+
 private:
   SceneGraph& graph_;
   EventMap& eventMap_;
@@ -57,6 +62,8 @@ private:
 
   std::vector<ElementModifiers const*> activeElementModifiers_{};
   std::vector<bool> suppressLeafModifierEvents_{};
+
+  std::unordered_map<ComponentKey, NodeId, ComponentKeyHash>* compositeSceneParentRecorder_ = nullptr;
 };
 
 } // namespace flux

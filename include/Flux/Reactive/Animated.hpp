@@ -5,8 +5,9 @@
 /// Part of the Flux public API.
 
 
+#include <Flux/Reactive/Detail/ApplicationSignalBridge.hpp>
 #include <Flux/Reactive/Detail/DependencyTracker.hpp>
-#include <Flux/Reactive/Detail/AnimatedRebuild.hpp>
+#include <Flux/UI/StateStore.hpp>
 #include <Flux/Reactive/Detail/Notify.hpp>
 #include <Flux/Reactive/Detail/TypeTraits.hpp>
 #include <Flux/Reactive/Interpolatable.hpp>
@@ -154,10 +155,11 @@ void Animated<T>::unobserve(ObserverHandle handle) {
 
 template<Interpolatable T>
 void Animated<T>::notifyObservers() {
-  // `detail::notifyObserverList` only calls `markReactiveDirty` when explicit `observe()` callbacks
-  // exist. Views that read `Animated` in `body()` (without a Computed dependency tracker) have no
-  // callbacks, so animation ticks must still schedule a rebuild to refresh scene nodes.
-  detail::scheduleReactiveRebuildAfterAnimatedChange();
+  if (StateStore* store = StateStore::current()) {
+    store->markSlotDirty(this);
+  } else if (detail::signalBridgeApplicationHasInstance()) {
+    detail::signalBridgeMarkSlotDirty(this);
+  }
   detail::notifyObserverList(observers_);
 }
 

@@ -82,4 +82,15 @@ bool RenderContext::suppressLeafModifierEvents() const noexcept {
   return !suppressLeafModifierEvents_.empty() && suppressLeafModifierEvents_.back();
 }
 
+void RenderContext::setCompositeSceneParentRecorder(
+    std::unordered_map<ComponentKey, NodeId, ComponentKeyHash>* out) {
+  compositeSceneParentRecorder_ = out;
+}
+
+void RenderContext::recordCompositeSceneParent(ComponentKey const& key, NodeId parentLayer) {
+  if (compositeSceneParentRecorder_ && !key.empty()) {
+    (*compositeSceneParentRecorder_)[key] = parentLayer;
+  }
+}
+
 } // namespace flux

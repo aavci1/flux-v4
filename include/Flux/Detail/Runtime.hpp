@@ -70,6 +70,9 @@ public:
   void onOverlayRemoved(OverlayEntry const& entry);
   void syncModalOverlayFocusAfterRebuild(OverlayEntry& entry);
 
+  /// Ensures the next main-tree rebuild is a full pass (e.g. overlay stack changed).
+  void markMainTreeFullRebuild() noexcept;
+
 private:
   void rebuild(std::optional<Size> sizeOverride = std::nullopt);
   void subscribeInput();

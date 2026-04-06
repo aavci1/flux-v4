@@ -127,7 +127,7 @@ void InputDispatcher::onKeyDown(InputEvent const& e) {
   if (windowHasFocus_ && e.key == keys::L &&
       (e.modifiers & (Modifiers::Meta | Modifiers::Shift)) == (Modifiers::Meta | Modifiers::Shift)) {
     runtime_.setLayoutOverlayEnabled(!runtime_.layoutOverlayEnabled());
-    window_.requestRedraw();
+    window_.requestRepaint();
     return;
   }
   if (window_.overlayManager().hasOverlays()) {
@@ -325,7 +325,7 @@ void InputDispatcher::onPointerDown(InputEvent const& e) {
       }
       if (EventHandlers const* h = oe.eventMap.find(hit->nodeId)) {
         gesture_.recordPress(hit->nodeId, h->stableTargetKey, p, static_cast<bool>(h->onTap), oe.id);
-        Application::instance().markReactiveDirty();
+        Application::instance().requestRebuild();
         if (h->onPointerDown) {
           h->onPointerDown(hit->localPoint);
         }
@@ -367,7 +367,7 @@ void InputDispatcher::onPointerDown(InputEvent const& e) {
     }
     if (EventHandlers const* h = em.find(hit->nodeId)) {
       gesture_.recordPress(hit->nodeId, h->stableTargetKey, p, static_cast<bool>(h->onTap), std::nullopt);
-      Application::instance().markReactiveDirty();
+      Application::instance().requestRebuild();
       if (h->onPointerDown) {
         h->onPointerDown(hit->localPoint);
       }
@@ -484,7 +484,7 @@ void InputDispatcher::onPointerUp(InputEvent const& e) {
   }
   gesture_.clearPress();
   if (released) {
-    Application::instance().markReactiveDirty();
+    Application::instance().requestRebuild();
   }
 
   HitTester tester{};

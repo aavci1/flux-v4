@@ -50,7 +50,7 @@ int main(int argc, char* argv[]) {
 
   // Shared ~60 Hz tick: smooth second hand always moves, so each tick warrants a redraw.
   ObserverHandle const hRedraw = AnimationClock::instance().subscribe([&w](AnimationTick const&) {
-    w.requestRedraw();
+    w.requestRepaint();
   });
   (void)hRedraw;
 

@@ -8,16 +8,14 @@
 #include <Flux/UI/ComponentKey.hpp>
 #include <Flux/Core/Types.hpp>
 
-namespace flux {
-class LayoutContext;
-class LayoutTree;
-} // namespace flux
+#include <Flux/UI/LayoutTree.hpp>
 
 #include <optional>
 #include <unordered_map>
 
 namespace flux {
 
+class LayoutContext;
 class StateStore;
 
 /// Two-generation layout rect cache. Filled at the end of each rebuild pass.
@@ -31,6 +29,9 @@ public:
   /// composite container's allotted frame), not a union of all descendants — a
   /// union can exceed the container when children overflow (e.g. flex rows).
   void fill(LayoutTree const& tree, LayoutContext const& ctx);
+
+  /// Update only `current_` entries keyed by nodes under \p subtreeRoot (partial rebuild).
+  void fillSubtree(LayoutTree const& tree, LayoutNodeId subtreeRoot);
 
   /// Rect for the composite currently executing `body()`.
   /// Returns nullopt when called outside a build pass.

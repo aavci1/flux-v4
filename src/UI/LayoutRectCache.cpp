@@ -18,6 +18,25 @@ void LayoutRectCache::fill(LayoutTree const& tree, LayoutContext const& ctx) {
   }
 }
 
+void LayoutRectCache::fillSubtree(LayoutTree const& tree, LayoutNodeId subtreeRoot) {
+  auto const visit = [&](auto&& self, LayoutNodeId id) -> void {
+    LayoutNode const* n = tree.get(id);
+    if (!n) {
+      return;
+    }
+    if (n->kind == LayoutNode::Kind::Tombstone) {
+      return;
+    }
+    if (!n->componentKey.empty()) {
+      current_[n->componentKey] = n->worldBounds;
+    }
+    for (LayoutNodeId c : n->children) {
+      self(self, c);
+    }
+  };
+  visit(visit, subtreeRoot);
+}
+
 std::optional<Rect> LayoutRectCache::forCurrentComponent(StateStore const& store) const {
   ComponentKey const& key = store.currentComponentKey();
   if (auto it = current_.find(key); it != current_.end()) {

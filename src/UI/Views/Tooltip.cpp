@@ -62,7 +62,7 @@ void ensureTooltipTimerBridge() {
       if (gTooltipTimerIds.count(e.timerId)) {
         // Must schedule a full reactive rebuild so useTooltip runs again; requestRedraw() only
         // repaints the last scene graph and never re-evaluates the delay / showPopover path.
-        Application::instance().markReactiveDirty();
+        Application::instance().requestRebuild();
       }
     });
   });

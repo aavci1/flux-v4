@@ -346,6 +346,13 @@ Size Element::measure(LayoutContext& ctx, LayoutConstraints const& constraints,
   return sz;
 }
 
+std::optional<Element> Element::rebuildCompositeSubtree() const {
+  if (!impl_) {
+    return std::nullopt;
+  }
+  return impl_->rebuildCompositeSubtree();
+}
+
 namespace detail {
 
 std::uint64_t nextElementMeasureId() {

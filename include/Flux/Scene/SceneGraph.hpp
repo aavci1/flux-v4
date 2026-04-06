@@ -10,6 +10,7 @@
 #include <Flux/Scene/Nodes.hpp>
 
 #include <cstddef>
+#include <cstdint>
 #include <limits>
 #include <optional>
 #include <variant>
@@ -36,6 +37,9 @@ public:
   void remove(NodeId id);
   /// Removes every node under the root except the root itself (invalidates all other `NodeId`s).
   void clear();
+
+  /// Removes all descendants of \p parentId (layer node); keeps \p parentId.
+  void clearChildren(NodeId parentId);
 
   void reparent(NodeId id, NodeId newParent, std::size_t index = npos);
   /// No-op unless `orderedChildren` is a permutation of the parent's current children (same set of
@@ -68,6 +72,11 @@ public:
   /// Parent of \p child in the tree (`nullopt` if \p child is the root or unknown).
   std::optional<NodeId> parentOf(NodeId child) const;
 
+  void markDirty();
+  [[nodiscard]] bool needsRender() const { return generation_ != renderGeneration_; }
+  void markRendered() { renderGeneration_ = generation_; }
+  [[nodiscard]] bool hasCustomRender() const { return customRenderCount_ > 0; }
+
 private:
   std::optional<NodeId> findParent(NodeId subtree, NodeId target) const;
   bool isDescendant(NodeId ancestor, NodeId possibleDescendant) const;
@@ -76,6 +85,9 @@ private:
 
   NodeStore store_{};
   NodeId root_{};
+  std::uint64_t generation_ = 0;
+  std::uint64_t renderGeneration_ = 0;
+  std::uint32_t customRenderCount_ = 0;
 };
 
 } // namespace flux

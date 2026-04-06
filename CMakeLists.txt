@@ -94,7 +94,6 @@ add_library(flux STATIC
   src/Reactive/Computed.cpp
   src/Reactive/Easing.cpp
   src/Reactive/Transition.cpp
-  src/Reactive/AnimatedRebuild.cpp
   src/Reactive/AnimationClock.cpp
   src/Core/Window.cpp
   src/UI/LayoutTree.cpp

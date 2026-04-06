@@ -200,6 +200,9 @@ public:
   Size measure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
                TextSystem& textSystem) const;
 
+  /// Re-runs a composite's \c body() (same instance); nullopt if not a composite.
+  [[nodiscard]] std::optional<Element> rebuildCompositeSubtree() const;
+
   /// Optional flex overrides on the wrapper (from \c flex()). When set, they replace the
   /// underlying component's flex hints for layout.
   float flexGrow() const;
@@ -282,6 +285,7 @@ private:
     /// When true, \ref RenderLayoutTree must not paint fill/stroke/shadow on the modifier chrome rect;
     /// the leaf primitive applies those from \ref ElementModifiers (e.g. \ref Rectangle, \ref PathShape).
     virtual bool leafDrawsFillStrokeShadowFromModifiers() const { return false; }
+    virtual std::optional<Element> rebuildCompositeSubtree() const { return std::nullopt; }
   };
 
   template<typename C>
@@ -340,6 +344,12 @@ struct Element::Model : Concept {
     }
     return false;
   }
+  std::optional<Element> rebuildCompositeSubtree() const override {
+    if constexpr (CompositeComponent<C>) {
+      return Element{value.body()};
+    }
+    return std::nullopt;
+  }
 };
 
 template<typename C>
@@ -390,9 +400,9 @@ void Element::Model<C>::renderFromLayout(RenderContext& ctx, LayoutNode const& n
     (void)node;
   } else if constexpr (RenderComponent<C>) {
     Rect const frame = node.frame;
-    C const copy = value;
+    C const* ptr = &value;
     NodeId const id = detail::emitCustomRenderNode(ctx, frame,
-        [copy, frame](Canvas& canvas) { copy.render(canvas, frame); });
+        [ptr, frame](Canvas& canvas) { ptr->render(canvas, frame); });
 
     EventHandlers handlers{};
     handlers.stableTargetKey = node.componentKey;

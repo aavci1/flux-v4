@@ -135,7 +135,7 @@ struct ThemeDemoRoot {
                                               }
                                               gThemeDemoWindow->setEnvironmentValue(themeForPreset(0));
                                               windowPreset = 0;
-                                              Application::instance().markReactiveDirty();
+                                              Application::instance().requestRebuild();
                                             },
                                         },
                                         Button{
@@ -148,7 +148,7 @@ struct ThemeDemoRoot {
                                               }
                                               gThemeDemoWindow->setEnvironmentValue(themeForPreset(1));
                                               windowPreset = 1;
-                                              Application::instance().markReactiveDirty();
+                                              Application::instance().requestRebuild();
                                             },
                                         },
                                         Button{
@@ -161,7 +161,7 @@ struct ThemeDemoRoot {
                                               }
                                               gThemeDemoWindow->setEnvironmentValue(themeForPreset(2));
                                               windowPreset = 2;
-                                              Application::instance().markReactiveDirty();
+                                              Application::instance().requestRebuild();
                                             },
                                         },
                                         Button{
@@ -174,7 +174,7 @@ struct ThemeDemoRoot {
                                               }
                                               gThemeDemoWindow->setEnvironmentValue(themeForPreset(3));
                                               windowPreset = 3;
-                                              Application::instance().markReactiveDirty();
+                                              Application::instance().requestRebuild();
                                             },
                                         }
                                     ),

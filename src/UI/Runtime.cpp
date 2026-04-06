@@ -167,6 +167,10 @@ void Runtime::rebuild(std::optional<Size> sizeOverride) {
   sCurrent = nullptr;
 }
 
+void Runtime::markMainTreeFullRebuild() noexcept {
+  buildOrchestrator_.stateStore().markFullRebuild();
+}
+
 void Runtime::onOverlayPushed(OverlayEntry& entry) {
   focus_.onOverlayPushed(entry);
 }

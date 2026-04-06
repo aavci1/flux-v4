@@ -285,7 +285,7 @@ public:
       dispatch_semaphore_signal(frameSem_);
       cmdBuf_ = nil;
       if (Application::hasInstance()) {
-        Application::instance().requestRedraw();
+        Application::instance().requestRepaint();
       }
     }
     inFrame_ = (drawable_ != nil && cmdBuf_ != nil);
@@ -453,12 +453,24 @@ public:
       [cmdBuf_ commit];
     }
 
+    cachedFrame_.ops = std::move(frame_.ops);
+    cachedFrame_.pathVerts = std::move(frame_.pathVerts);
+    cachedFrame_.glyphVerts = std::move(frame_.glyphVerts);
     frame_.clear();
     glyphAtlas_->afterPresent();
 
     cmdBuf_ = nil;
     drawable_ = nil;
     inFrame_ = false;
+  }
+
+  void replayLastFrame() override {
+    if (cachedFrame_.ops.empty()) {
+      return;
+    }
+    frame_.ops = cachedFrame_.ops;
+    frame_.pathVerts = cachedFrame_.pathVerts;
+    frame_.glyphVerts = cachedFrame_.glyphVerts;
   }
 
   void save() override { pushState(); }
@@ -985,6 +997,7 @@ private:
   float dpiScaleY_{1.f};
 
   MetalFrameRecorder frame_;
+  MetalFrameRecorder cachedFrame_;
   std::vector<GpuState> stateStack_;
 
   MTLScissorRect clipScissor_{};

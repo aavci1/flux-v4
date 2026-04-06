@@ -41,6 +41,9 @@ public:
   virtual void beginFrame() = 0;
   virtual void present() = 0;
 
+  /// When the scene graph is unchanged, restore the last frame's draw list (Metal) instead of re-emitting ops.
+  virtual void replayLastFrame() {}
+
   // -------------------------------------------------------------------------
   // State stack
   // -------------------------------------------------------------------------

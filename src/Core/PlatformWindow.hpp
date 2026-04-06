@@ -41,7 +41,7 @@ public:
   /// Block until the next event or `timeoutMs` elapses; `timeoutMs < 0` waits indefinitely.
   virtual void waitForEvents(int /*timeoutMs*/) {}
 
-  /// Wake `waitForEvents` (e.g. after `requestRedraw`).
+  /// Wake `waitForEvents` (e.g. after `requestRepaint`).
   virtual void wakeEventLoop() {}
 
   virtual void setCursor(Cursor /*kind*/) {}

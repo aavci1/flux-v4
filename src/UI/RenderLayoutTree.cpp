@@ -153,10 +153,15 @@ void renderNode(LayoutNodeId id, LayoutTree const& tree, RenderContext& ctx) {
   case LayoutNode::Kind::Leaf:
   case LayoutNode::Kind::Composite:
     if (node.element) {
+      if (node.kind == LayoutNode::Kind::Composite) {
+        ctx.recordCompositeSceneParent(node.componentKey, ctx.parentLayer());
+      }
       ctx.pushConstraints(node.constraints, node.hints);
       node.element->renderFromLayout(ctx, node);
       ctx.popConstraints();
     }
+    break;
+  case LayoutNode::Kind::Tombstone:
     break;
   }
 }
@@ -169,6 +174,13 @@ void renderLayoutTree(LayoutTree const& tree, RenderContext& ctx) {
     return;
   }
   renderNode(root, tree, ctx);
+}
+
+void renderLayoutSubtree(LayoutTree const& tree, LayoutNodeId subtreeRoot, RenderContext& ctx) {
+  if (!subtreeRoot.isValid()) {
+    return;
+  }
+  renderNode(subtreeRoot, tree, ctx);
 }
 
 } // namespace flux

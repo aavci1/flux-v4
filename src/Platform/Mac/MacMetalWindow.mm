@@ -460,12 +460,13 @@ void postTextInput(FluxMetalView* view, std::string text) {
   // Live resize runs in NSEventTrackingRunLoopMode; our main loop waits in NSDefaultRunLoopMode, so it does not
   // run the redraw pass until tracking ends. Dispatch + flush presents immediately during the drag.
   flux::Application::instance().eventQueue().dispatch();
-  // `flushRedraw` only presents when `requestRedraw` has been set. Declarative windows get this from
-  // `Runtime`'s resize subscription; imperative apps must not rely on that — always request here.
-  flux::Application::instance().requestRedraw();
+  // `flushPending` presents when any frame work is pending (including coalesced `Rebuild` after
+  // `requestRepaint`). Declarative windows get rebuild from `Runtime`'s resize subscription;
+  // imperative apps must not rely on that — always request here.
+  flux::Application::instance().requestRepaint();
   platform->setMetalLayerPresentsWithTransaction(true);
   flux::setSyncPresentForCanvas(&fw->canvas(), true);
-  flux::Application::instance().flushRedraw();
+  flux::Application::instance().flushPending();
   platform->setMetalLayerPresentsWithTransaction(false);
 }
 
@@ -481,7 +482,7 @@ void postTextInput(FluxMetalView* view, std::string text) {
   }
   flux::Application::instance().eventQueue().post(
       flux::WindowEvent{flux::WindowEvent::Kind::FocusGained, fw->handle(), {}, 1.0f});
-  flux::Application::instance().requestRedraw();
+  flux::Application::instance().requestRepaint();
 }
 
 - (void)windowDidResignKey:(NSNotification*)notification {

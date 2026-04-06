@@ -88,7 +88,7 @@ void GestureTracker::cancelPress(Point windowPoint, std::vector<OverlayEntry con
     h->onPointerUp(local.value_or(Point{ 0.f, 0.f }));
   }
   activePress_ = std::nullopt;
-  Application::instance().markReactiveDirty();
+  Application::instance().requestRebuild();
 }
 
 bool GestureTracker::dispatchTap(PressState const& released,

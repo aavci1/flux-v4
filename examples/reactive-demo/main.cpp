@@ -46,7 +46,7 @@ class ReactiveDemoWindow : public Window {
 
 public:
   explicit ReactiveDemoWindow(WindowConfig const& c) : Window(c), lastLayout_{c.size} {
-    auto redraw = [this]() { Window::requestRedraw(); };
+    auto redraw = [this]() { Window::requestRepaint(); };
     hClicks_ = s_.clicks.observe(redraw);
     hFill_ = s_.fillColor.observe(redraw);
     hCircle_ = s_.circleCenter.observe(redraw);

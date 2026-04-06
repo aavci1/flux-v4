@@ -34,7 +34,7 @@ void HoverController::set(ComponentKey const& key, std::optional<OverlayId> over
   }
   hoveredKey_ = key;
   hoverInOverlay_ = overlayScope;
-  Application::instance().markReactiveDirty();
+  Application::instance().requestRebuild();
 }
 
 void HoverController::clear() {
@@ -43,7 +43,7 @@ void HoverController::clear() {
   }
   hoveredKey_.clear();
   hoverInOverlay_.reset();
-  Application::instance().markReactiveDirty();
+  Application::instance().requestRebuild();
 }
 
 void HoverController::updateForPoint(Point windowPoint, std::vector<OverlayEntry const*> const& overlayEntries,

@@ -484,7 +484,7 @@ void caretBlinkRetain() {
       if (visible != gCaretBlinkLastVisible) {
         gCaretBlinkLastVisible = visible;
         if (Application::hasInstance()) {
-          Application::instance().requestRedraw();
+          Application::instance().requestRepaint();
         }
       }
     });

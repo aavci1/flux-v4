@@ -76,6 +76,7 @@ struct LayoutNode {
     Leaf,
     Modifier,
     Composite,
+    Tombstone,
   };
   Kind kind = Kind::Leaf;
 

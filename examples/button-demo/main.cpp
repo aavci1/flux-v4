@@ -128,7 +128,7 @@ struct ButtonDemoRoot {
                                             .variant = ButtonVariant::Ghost,
                                             .onTap = [] {
                                               gSaveActionEnabled = !gSaveActionEnabled;
-                                              Application::instance().markReactiveDirty();
+                                              Application::instance().requestRebuild();
                                             },
                                         },
                                         Spacer{},

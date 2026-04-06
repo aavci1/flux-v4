@@ -13,18 +13,37 @@
 #include <Flux/UI/LayoutRectCache.hpp>
 #include <Flux/UI/MeasureCache.hpp>
 #include <Flux/UI/StateStore.hpp>
+#include <Flux/UI/LayoutTree.hpp>
+
+#include <Flux/Scene/NodeId.hpp>
+#include <Flux/UI/Environment.hpp>
 
 #include <functional>
 #include <memory>
 #include <optional>
+#include <unordered_map>
+#include <vector>
 
 namespace flux {
 
+class Element;
 class FocusController;
 class HoverController;
 class GestureTracker;
+class LayoutContext;
+class LayoutTree;
 class Runtime;
 class Window;
+
+struct CompositeSnapshot {
+  LayoutNodeId layoutRoot{};
+  NodeId sceneLayerId{};
+  LayoutConstraints constraints{};
+  LayoutHints hints{};
+  Size measuredSize{};
+  Element const* element = nullptr;
+  std::vector<EnvironmentLayer> ancestorEnv;
+};
 
 /// Drives the reactive rebuild loop for one window.
 /// Owns `StateStore`, `LayoutEngine`, `RootHolder`, and `LayoutRectCache`.
@@ -52,6 +71,10 @@ public:
   Rect buildSlotRect() const;
 
 private:
+  void buildSnapshots(LayoutTree const& tree, LayoutContext const& ctx,
+                      std::unordered_map<ComponentKey, NodeId, ComponentKeyHash> const& sceneParents);
+  bool tryPartialRebuild(Runtime& runtime);
+
   Window& window_;
   FocusController& focus_;
   HoverController& hover_;
@@ -66,6 +89,8 @@ private:
   ActionRegistry actionRegistryBuild_{};
   ActionRegistry actionRegistryCommitted_{};
   MeasureCache measureCache_{};
+
+  std::unordered_map<ComponentKey, CompositeSnapshot, ComponentKeyHash> snapshots_{};
 };
 
 } // namespace flux

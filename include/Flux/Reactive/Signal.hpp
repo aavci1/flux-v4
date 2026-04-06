@@ -6,6 +6,7 @@
 
 
 #include <Flux/Reactive/Detail/ApplicationSignalBridge.hpp>
+#include <Flux/UI/StateStore.hpp>
 #include <Flux/Reactive/Detail/DependencyTracker.hpp>
 #include <Flux/Reactive/Detail/Notify.hpp>
 #include <Flux/Reactive/Detail/TypeTraits.hpp>
@@ -90,11 +91,10 @@ void Signal<T>::unobserve(ObserverHandle handle) {
 
 template<typename T>
 void Signal<T>::notifyObservers() {
-  // `useState` / internal `Signal`s often have no `observe()` callbacks; `notifyObserverList` would
-  // otherwise skip `markReactiveDirty`, so `Runtime`'s next-frame rebuild never runs (resize still
-  // rebuilt via `WindowEvent::Resize`).
-  if (observers_.empty() && detail::signalBridgeApplicationHasInstance()) {
-    detail::signalBridgeMarkReactiveDirty();
+  if (StateStore* store = StateStore::current()) {
+    store->markSlotDirty(this);
+  } else if (detail::signalBridgeApplicationHasInstance()) {
+    detail::signalBridgeMarkSlotDirty(this);
   }
   detail::notifyObserverList(observers_);
 }

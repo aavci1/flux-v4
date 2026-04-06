@@ -19,6 +19,8 @@
 
 namespace flux {
 
+class SceneGraph;
+
 struct EventHandlers {
   /// When non-empty, identifies this logical target across scene rebuilds (same subtree path).
   ComponentKey stableTargetKey;
@@ -48,6 +50,8 @@ struct NodeIdHash {
 class EventMap {
 public:
   void insert(NodeId id, EventHandlers handlers);
+  /// Removes all `NodeId`s in the subtree rooted at \p subtreeRoot (including that id).
+  void removeSubtree(SceneGraph const& graph, NodeId subtreeRoot);
   EventHandlers const* find(NodeId id) const;
   /// First entry whose `stableTargetKey` matches \p key (O(n)); used when `NodeId` is stale after rebuild.
   std::pair<NodeId, EventHandlers const*> findWithIdByKey(ComponentKey const& key) const;

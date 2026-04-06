@@ -246,12 +246,13 @@ OverlayId OverlayManager::push(Element content, OverlayConfig config, Runtime* r
   overlays_.push_back(std::move(entry));
 
   if (runtime) {
+    runtime->markMainTreeFullRebuild();
     runtime->onOverlayPushed(*overlays_.back());
     Size const sz = runtime->window().getSize();
     rebuild(sz, *runtime);
-    runtime->window().requestRedraw();
+    runtime->window().requestRepaint();
   } else {
-    Application::instance().markReactiveDirty();
+    Application::instance().requestRebuild();
   }
   return overlays_.back()->id;
 }
@@ -265,10 +266,11 @@ void OverlayManager::remove(OverlayId id, Runtime* runtime) {
       std::unique_ptr<OverlayEntry> removed = std::move(*it);
       overlays_.erase(it);
       if (runtime) {
+        runtime->markMainTreeFullRebuild();
         runtime->onOverlayRemoved(*removed);
       }
       if (!runtime || !runtime->shuttingDown()) {
-        Application::instance().markReactiveDirty();
+        Application::instance().requestRebuild();
       }
       if (removed->config.onDismiss) {
         removed->config.onDismiss();
@@ -287,11 +289,12 @@ void OverlayManager::clear(Runtime* runtime, bool invokeDismissCallbacks) {
     std::unique_ptr<OverlayEntry> removed = std::move(overlays_.back());
     overlays_.pop_back();
     if (runtime) {
+      runtime->markMainTreeFullRebuild();
       runtime->onOverlayRemoved(*removed);
     }
   }
   if (!runtime || !runtime->shuttingDown()) {
-    Application::instance().markReactiveDirty();
+    Application::instance().requestRebuild();
   }
 }
 

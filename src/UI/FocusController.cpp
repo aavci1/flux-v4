@@ -41,7 +41,7 @@ void FocusController::set(ComponentKey const& key, std::optional<OverlayId> over
   focusedKey_ = key;
   focusInOverlay_ = overlayScope;
   lastInputKind_ = kind;
-  Application::instance().markReactiveDirty();
+  Application::instance().requestRebuild();
 }
 
 void FocusController::clear() {
@@ -50,7 +50,7 @@ void FocusController::clear() {
   }
   focusedKey_.clear();
   focusInOverlay_.reset();
-  Application::instance().markReactiveDirty();
+  Application::instance().requestRebuild();
 }
 
 void FocusController::cycleInMap(EventMap const& em, bool reverse, std::optional<OverlayId> overlayId) {

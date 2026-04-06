@@ -54,6 +54,9 @@ public:
 
   bool empty() const { return layers_.empty(); }
 
+  /// Stack copy for incremental rebuild snapshot comparison.
+  [[nodiscard]] std::vector<EnvironmentLayer> snapshotLayers() const { return layers_; }
+
 private:
   std::vector<EnvironmentLayer> layers_;
 };

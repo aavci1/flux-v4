@@ -1,5 +1,6 @@
 #include <Flux/Core/Application.hpp>
 
+#include <Flux/UI/StateStore.hpp>
 #include <Flux/Core/EventQueue.hpp>
 #include <Flux/Core/Events.hpp>
 #include <Flux/Core/Window.hpp>
@@ -33,8 +34,8 @@ bool signalBridgeApplicationHasInstance() {
   return Application::hasInstance();
 }
 
-void signalBridgeMarkReactiveDirty() {
-  Application::instance().markReactiveDirty();
+void signalBridgeMarkSlotDirty(void* slot) {
+  StateStore::markSlotDirtyFromBridge(slot);
 }
 
 } // namespace detail
@@ -57,8 +58,8 @@ struct Application::Impl {
   void* iconFont_ = nullptr;
 
   bool quit_ = false;
-  bool redraw_ = false;
-  bool reactiveDirty_ = false;
+  FrameRequest pending_ = FrameRequest::None;
+  bool insideDispatch_ = false;
 
   struct NextFrameEntry {
     std::uint64_t id = 0;
@@ -204,20 +205,26 @@ void Application::unobserveNextFrame(ObserverHandle handle) {
   std::erase_if(d->nextFrame_, [&](Impl::NextFrameEntry const& e) { return e.id == handle.id; });
 }
 
-void Application::markReactiveDirty() {
-  d->reactiveDirty_ = true;
-  for (auto& w : d->windows_) {
-    if (w) {
-      w->platformWindow()->wakeEventLoop();
+void Application::requestRepaint() {
+  d->pending_ = static_cast<FrameRequest>(std::max(static_cast<std::uint8_t>(d->pending_),
+                                                     static_cast<std::uint8_t>(FrameRequest::Repaint)));
+  if (!d->insideDispatch_) {
+    for (auto& w : d->windows_) {
+      if (w) {
+        w->platformWindow()->wakeEventLoop();
+      }
     }
   }
 }
 
-void Application::requestRedraw() {
-  d->redraw_ = true;
-  for (auto& w : d->windows_) {
-    if (w) {
-      w->platformWindow()->wakeEventLoop();
+void Application::requestRebuild() {
+  d->pending_ = static_cast<FrameRequest>(std::max(static_cast<std::uint8_t>(d->pending_),
+                                                   static_cast<std::uint8_t>(FrameRequest::Rebuild)));
+  if (!d->insideDispatch_) {
+    for (auto& w : d->windows_) {
+      if (w) {
+        w->platformWindow()->wakeEventLoop();
+      }
     }
   }
 }
@@ -234,11 +241,16 @@ void Application::presentAllWindows() {
   }
 }
 
-void Application::flushRedraw() {
-  if (!d->redraw_) {
+void Application::flushPending() {
+  if (d->pending_ < FrameRequest::Repaint) {
     return;
   }
-  d->redraw_ = false;
+  // Coalescing can leave `Rebuild` after `requestRepaint`; present anyway (live resize). Only
+  // clear `Repaint` so a pending `Rebuild` still runs `onNextFrameNeeded` on the next `exec()` tick.
+  FrameRequest const prev = d->pending_;
+  if (prev == FrameRequest::Repaint) {
+    d->pending_ = FrameRequest::None;
+  }
   presentAllWindows();
 }
 
@@ -275,7 +287,9 @@ int Application::exec() {
       }
     }
 
+    d->insideDispatch_ = true;
     d->eventQueue_.dispatch();
+    d->insideDispatch_ = false;
 
     for (auto& w : d->windows_) {
       if (w) {
@@ -283,8 +297,10 @@ int Application::exec() {
       }
     }
 
-    if (d->reactiveDirty_) {
-      d->reactiveDirty_ = false;
+    FrameRequest const req = d->pending_;
+    d->pending_ = FrameRequest::None;
+
+    if (req >= FrameRequest::Rebuild) {
       for (auto& e : d->nextFrame_) {
         if (e.callback) {
           e.callback();
@@ -292,13 +308,15 @@ int Application::exec() {
       }
     }
 
-    if (d->redraw_) {
-      d->redraw_ = false;
+    bool const needRepaint =
+        (req >= FrameRequest::Repaint) || (d->pending_ >= FrameRequest::Repaint);
+    if (needRepaint) {
+      d->pending_ = FrameRequest::None;
       presentAllWindows();
     }
 
     int timeoutMs = d->nextTimerTimeoutMs();
-    if (d->redraw_ || d->reactiveDirty_) {
+    if (d->pending_ != FrameRequest::None) {
       timeoutMs = 0;
     }
     if (!d->windows_.empty()) {
