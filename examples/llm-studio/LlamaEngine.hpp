@@ -85,9 +85,14 @@ inline std::string tokenToPiece(const llama_vocab* vocab, llama_token token) {
 }
 
 // ── Thinking-tag parser ─────────────────────────────────────────────────────
-// Detects <think>…</think> blocks in the streamed token text, mirroring the
+// Detects thinking blocks in the streamed token text, mirroring the
 // reasoning_content_delta / content_delta split that llama-cli's
 // task_result_state::update_chat_msg performs via common_chat_parse.
+//
+// Supported formats (from chat.cpp b8680):
+//   - Gemma 4 channels:  <|channel>thought\n … <channel|>
+//   - Paired tags:       <think> … </think>  (DeepSeek-R1, Qwen3, etc.)
+//   - Toggle token:      <|think|>           (generic)
 
 struct ThinkingParser {
   struct Segment {
@@ -119,19 +124,23 @@ private:
     return inThinking ? LlmUiEvent::Part::Thinking : LlmUiEvent::Part::Content;
   }
 
+  struct TagHit {
+    size_t pos = std::string::npos;
+    size_t len = 0;
+  };
+
   void flush(std::vector<Segment>& out) {
     for (;;) {
-      std::string const& tag = inThinking ? closeTag() : openTag();
-      auto pos = buffer.find(tag);
-      if (pos != std::string::npos) {
-        if (pos > 0) {
-          out.push_back({currentPart(), buffer.substr(0, pos)});
+      TagHit best = findNextTag();
+      if (best.pos != std::string::npos) {
+        if (best.pos > 0) {
+          out.push_back({currentPart(), buffer.substr(0, best.pos)});
         }
-        buffer = buffer.substr(pos + tag.size());
+        buffer = buffer.substr(best.pos + best.len);
         inThinking = !inThinking;
         continue;
       }
-      size_t keep = partialSuffix(buffer, tag);
+      size_t keep = maxPartialSuffix();
       if (keep < buffer.size()) {
         out.push_back({currentPart(), buffer.substr(0, buffer.size() - keep)});
         buffer = buffer.substr(buffer.size() - keep);
@@ -140,16 +149,41 @@ private:
     }
   }
 
-  static std::string const& openTag() {
-    static const std::string t = "<think>";
-    return t;
-  }
-  static std::string const& closeTag() {
-    static const std::string t = "</think>";
-    return t;
+  TagHit findNextTag() const {
+    TagHit best;
+    auto check = [&](std::string const& tag) {
+      auto pos = buffer.find(tag);
+      if (pos < best.pos) { best = {pos, tag.size()}; }
+    };
+    check(kToggle);
+    if (!inThinking) {
+      check(kOpen);
+      check(kChannelOpen);
+    } else {
+      check(kClose);
+      check(kChannelClose);
+    }
+    return best;
   }
 
-  /// How many chars at the end of `text` match a prefix of `tag`.
+  size_t maxPartialSuffix() const {
+    size_t keep = partialSuffix(buffer, kToggle);
+    if (!inThinking) {
+      keep = std::max(keep, partialSuffix(buffer, kOpen));
+      keep = std::max(keep, partialSuffix(buffer, kChannelOpen));
+    } else {
+      keep = std::max(keep, partialSuffix(buffer, kClose));
+      keep = std::max(keep, partialSuffix(buffer, kChannelClose));
+    }
+    return keep;
+  }
+
+  static inline const std::string kOpen         = "<think>";
+  static inline const std::string kClose        = "</think>";
+  static inline const std::string kToggle       = "<|think|>";
+  static inline const std::string kChannelOpen  = "<|channel>thought\n";
+  static inline const std::string kChannelClose = "<channel|>";
+
   static size_t partialSuffix(std::string const& text, std::string const& tag) {
     size_t maxLen = std::min(text.size(), tag.size() - 1);
     for (size_t len = maxLen; len > 0; --len) {
@@ -203,22 +237,27 @@ inline std::vector<llama_token> tokenizeTemplate(const llama_vocab* vocab,
   return toks;
 }
 
+struct PromptBuildResult {
+  std::vector<llama_token> tokens;
+  bool thinkingStarted = false;
+};
+
 /// Build the prompt token sequence for the given conversation.
 ///
 /// Strategy:
-///   1. Apply the model's chat template via llama_chat_apply_template.
-///      The returned string uses the vocabulary's own special-token piece strings
-///      (e.g. "<|turn>" for token 105 in Gemma 4), so tokenizeTemplate() with
-///      parse_special=true maps them back to the correct IDs.
-///   2. Fallback: construct the token sequence directly using the model's actual
-///      turn-token IDs — no string round-trip, so no mismatch between the template
-///      string names and the vocabulary piece strings.
-///      Turn tokens are found at runtime:
-///        end_of_turn  = smallest EOG token that is not the main EOS token
-///        start_of_turn = end_of_turn - 1  (true for all Gemma generations)
-inline std::vector<llama_token> buildPromptTokens(const llama_model* model,
-                                                   const llama_vocab* vocab,
-                                                   std::vector<ChatMessage> const& messages) {
+///   1. Try llama_chat_apply_template (only works for templates with
+///      hardcoded C++ support — NOT Jinja2 like Gemma 4).
+///   2. Fallback: construct the token sequence directly using the model's
+///      actual special-token IDs. Tokens are found by scanning the first
+///      512 vocab entries for known piece strings.
+///
+/// For thinking-mode models (Gemma 4), the generation prompt ends with
+/// <|channel>thought\n  (the Gemma 4 "thought channel" prefix, from chat.cpp).
+/// The returned thinkingStarted flag tells the caller to start the
+/// ThinkingParser in thinking-mode.
+inline PromptBuildResult buildPromptTokens(const llama_model* model,
+                                            const llama_vocab* vocab,
+                                            std::vector<ChatMessage> const& messages) {
   bool const addBos = llama_vocab_get_add_bos(vocab);
 
   // ── 1. Chat template path ────────────────────────────────────────────────
@@ -242,7 +281,7 @@ inline std::vector<llama_token> buildPromptTokens(const llama_model* model,
       auto toks = tokenizeTemplate(vocab, fmtStr, addBos);
       std::fprintf(stderr, "[LlamaEngine] chat template ok: %d chars -> %zu tokens\n",
                    len, toks.size());
-      return toks;
+      return {std::move(toks), false};
     }
     std::fprintf(stderr, "[LlamaEngine] chat template apply failed (len=%d), using fallback\n",
                  len);
@@ -251,16 +290,23 @@ inline std::vector<llama_token> buildPromptTokens(const llama_model* model,
   }
 
   // ── 2. Direct token-sequence fallback ────────────────────────────────────
-  llama_token eosTok = llama_vocab_eos(vocab);
-  llama_token eotTok = LLAMA_TOKEN_NULL;
-  for (llama_token t = 1; t < 512; ++t) {
-    if (t != eosTok && llama_vocab_is_eog(vocab, t)) { eotTok = t; break; }
+  // Scan the first 512 tokens for known special-token pieces.
+  llama_token sotTok        = LLAMA_TOKEN_NULL;   // <|turn>  or <start_of_turn>
+  llama_token eotTok        = LLAMA_TOKEN_NULL;   // <turn|>  or <end_of_turn>
+  llama_token channelOpen   = LLAMA_TOKEN_NULL;   // <|channel>   (Gemma 4)
+  llama_token channelClose  = LLAMA_TOKEN_NULL;   // <channel|>   (Gemma 4)
+  llama_token thinkTok      = LLAMA_TOKEN_NULL;   // <|think|>    (generic toggle)
+  for (llama_token t = 0; t < 512; ++t) {
+    std::string piece = tokenToPiece(vocab, t);
+    if      (piece == "<|turn>"  || piece == "<start_of_turn>")  sotTok       = t;
+    else if (piece == "<turn|>"  || piece == "<end_of_turn>")    eotTok       = t;
+    else if (piece == "<|channel>")                              channelOpen  = t;
+    else if (piece == "<channel|>")                              channelClose = t;
+    else if (piece == "<|think|>")                               thinkTok     = t;
   }
-  llama_token sotTok = (eotTok != LLAMA_TOKEN_NULL && eotTok > 0) ? eotTok - 1
-                                                                   : LLAMA_TOKEN_NULL;
 
-  std::fprintf(stderr, "[LlamaEngine] fallback turn tokens: sot=%d eot=%d\n",
-               (int)sotTok, (int)eotTok);
+  std::fprintf(stderr, "[LlamaEngine] fallback tokens: sot=%d eot=%d chOpen=%d chClose=%d think=%d\n",
+               (int)sotTok, (int)eotTok, (int)channelOpen, (int)channelClose, (int)thinkTok);
 
   std::vector<llama_token> toks;
   if (addBos) {
@@ -281,12 +327,31 @@ inline std::vector<llama_token> buildPromptTokens(const llama_model* model,
     if (eotTok != LLAMA_TOKEN_NULL) toks.push_back(eotTok);
     append(tokenizeText(vocab, kNL));
   }
+
+  // Generation prefix: <|turn>model\n
   if (sotTok != LLAMA_TOKEN_NULL) toks.push_back(sotTok);
   append(tokenizeText(vocab, "model"));
   append(tokenizeText(vocab, kNL));
 
-  std::fprintf(stderr, "[LlamaEngine] fallback prompt: %zu tokens\n", toks.size());
-  return toks;
+  // Enter thinking mode using the correct method for the model:
+  //   Gemma 4:  <|channel>thought\n   (channel-based, from chat.cpp)
+  //   Generic:  <|think|>             (toggle token)
+  bool thinkingStarted = false;
+  if (channelOpen != LLAMA_TOKEN_NULL) {
+    toks.push_back(channelOpen);
+    append(tokenizeText(vocab, "thought"));
+    append(tokenizeText(vocab, kNL));
+    thinkingStarted = true;
+    std::fprintf(stderr, "[LlamaEngine] injected thinking channel prefix: <|channel>thought\\n\n");
+  } else if (thinkTok != LLAMA_TOKEN_NULL) {
+    toks.push_back(thinkTok);
+    thinkingStarted = true;
+    std::fprintf(stderr, "[LlamaEngine] injected <|think|> toggle\n");
+  }
+
+  std::fprintf(stderr, "[LlamaEngine] fallback prompt: %zu tokens, thinkingStarted=%d\n",
+               toks.size(), (int)thinkingStarted);
+  return {std::move(toks), thinkingStarted};
 }
 
 // ── Engine ──────────────────────────────────────────────────────────────────
@@ -384,7 +449,8 @@ private:
 
     // ── 1. Apply chat template and tokenize ─────────────────────────────
     std::vector<ChatMessage> apiMsgs = messagesForApi(messages);
-    std::vector<llama_token> promptTokens = buildPromptTokens(model_.get(), vocab_, apiMsgs);
+    auto promptResult = buildPromptTokens(model_.get(), vocab_, apiMsgs);
+    auto& promptTokens = promptResult.tokens;
 
     if (promptTokens.empty()) {
       postOnMain(LlmUiEvent{.kind = LlmUiEvent::Kind::Error, .text = "Empty prompt after tokenization"});
@@ -395,6 +461,19 @@ private:
     int const nPredict = 4096;
 
     std::fprintf(stderr, "[LlamaEngine] prompt: %d tokens, max predict: %d\n", nPrompt, nPredict);
+
+    // Diagnostic: dump prompt tokens
+    std::fprintf(stderr, "[LlamaEngine] prompt tokens: ");
+    for (int j = 0; j < std::min(nPrompt, 30); ++j) {
+      std::fprintf(stderr, "%d ", (int)promptTokens[static_cast<size_t>(j)]);
+    }
+    if (nPrompt > 30) std::fprintf(stderr, "...");
+    std::fprintf(stderr, "\n");
+    std::fprintf(stderr, "[LlamaEngine] prompt text: ");
+    for (int j = 0; j < std::min(nPrompt, 30); ++j) {
+      std::fprintf(stderr, "|%s", tokenToPiece(vocab_, promptTokens[static_cast<size_t>(j)]).c_str());
+    }
+    std::fprintf(stderr, "|\n");
 
     // ── 2. Create context ───────────────────────────────────────────────
     uint32_t ctxSize = std::max(nCtx_, static_cast<uint32_t>(nPrompt + nPredict));
@@ -433,6 +512,10 @@ private:
 
     // ── 5. Token generation loop with thinking-tag detection ────────────
     ThinkingParser parser;
+    parser.inThinking = promptResult.thinkingStarted;
+    std::fprintf(stderr, "[LlamaEngine] parser.inThinking=%d (from prompt)\n",
+                 (int)parser.inThinking);
+    std::string rawAccum;
 
     for (int i = 0; i < nPredict; ++i) {
       if (cancelled_.load(std::memory_order_relaxed)) {
@@ -446,10 +529,18 @@ private:
       llama_token newToken = llama_sampler_sample(smpl.get(), ctx.get(), -1);
 
       if (llama_vocab_is_eog(vocab_, newToken)) {
+        std::fprintf(stderr, "[LlamaEngine] EOG token=%d at position %d\n", (int)newToken, i);
         break;
       }
 
       std::string piece = tokenToPiece(vocab_, newToken);
+
+      // Diagnostic: log first 50 tokens with their IDs and piece text
+      if (i < 50) {
+        std::fprintf(stderr, "[tok %3d] id=%-6d piece=|%s|\n", i, (int)newToken, piece.c_str());
+      }
+      rawAccum += piece;
+
       auto segments = parser.feed(piece);
 
       for (auto& seg : segments) {
@@ -468,6 +559,12 @@ private:
         return;
       }
     }
+
+    // Diagnostic: log raw output summary
+    std::fprintf(stderr, "[LlamaEngine] generation done. parser.inThinking=%d buffer_len=%zu\n",
+                 (int)parser.inThinking, parser.buffer.size());
+    std::fprintf(stderr, "[LlamaEngine] raw output (first 500 chars):\n%.500s\n[END]\n",
+                 rawAccum.c_str());
 
     for (auto& seg : parser.finish()) {
       postOnMain(LlmUiEvent{.kind = LlmUiEvent::Kind::Chunk, .part = seg.part, .text = std::move(seg.text)});
