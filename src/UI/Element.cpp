@@ -88,19 +88,6 @@ ElementModifiers::~ElementModifiers() = default;
 
 namespace {
 
-HorizontalAlignment textHorizontalFromVStackCross(Alignment a) {
-  switch (a) {
-  case Alignment::Start:
-  case Alignment::Stretch:
-    return HorizontalAlignment::Leading;
-  case Alignment::Center:
-    return HorizontalAlignment::Center;
-  case Alignment::End:
-    return HorizontalAlignment::Trailing;
-  }
-  return HorizontalAlignment::Leading;
-}
-
 TextLayoutOptions textViewLayoutOptions(Text const& v, LayoutConstraints const&,
                                         LayoutHints const& h) {
   TextLayoutOptions o{};
@@ -117,13 +104,6 @@ TextLayoutOptions textViewLayoutOptions(Text const& v, LayoutConstraints const&,
   }
   o.maxLines = v.maxLines;
   o.firstBaselineOffset = v.firstBaselineOffset;
-  if (h.vStackCrossAlign) {
-    o.horizontalAlignment = textHorizontalFromVStackCross(*h.vStackCrossAlign);
-  }
-  if (h.hStackCrossAlign && *h.hStackCrossAlign == Alignment::Stretch) {
-    // Layout stretch fills the row height; text aligns to the top of that box (no text "stretch").
-    o.verticalAlignment = VerticalAlignment::Top;
-  }
   return o;
 }
 
