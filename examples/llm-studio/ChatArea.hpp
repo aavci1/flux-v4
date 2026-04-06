@@ -9,17 +9,11 @@
 #include "Divider.hpp"
 #include "MessageBubble.hpp"
 #include "MessageEditor.hpp"
-#include "OllamaClient.hpp"
+#include "LlamaEngine.hpp"
 #include "Types.hpp"
 
 using namespace flux;
 using namespace llm_studio;
-
-namespace {
-
-std::once_flag gOllamaUiHandler;
-
-} // namespace
 
 struct ChatArea : ViewModifiers<ChatArea> {
     std::optional<Chat> chat;

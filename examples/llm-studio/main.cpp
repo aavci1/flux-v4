@@ -5,55 +5,77 @@
 #include <Flux/UI/Views/Views.hpp>
 
 #include <algorithm>
+#include <memory>
 #include <string>
+#include <thread>
 
 #include "ChatArea.hpp"
 #include "ChatList.hpp"
 #include "Divider.hpp"
 #include "MessageEditor.hpp"
-#include "OllamaClient.hpp"
+#include "LlamaEngine.hpp"
 #include "PropertiesPanel.hpp"
 
 using namespace flux;
+using namespace llm_studio;
+
+// Global engine — lives for the process lifetime, shared across chats
+static std::shared_ptr<LlamaEngine> gEngine = std::make_shared<LlamaEngine>();
+
+namespace {
+std::once_flag gLlmUiHandler;
+}
 
 struct AppRoot : ViewModifiers<AppRoot> {
     auto body() const {
-        auto host = useState<std::string>(defaultOllamaBaseUrl());
-        auto model = useState<std::string>(defaultOllamaModel());
+        auto modelPath = useState<std::string>(defaultModelPath());
+        auto modelName = useState<std::string>(defaultModelName());
         auto chats = useState<std::vector<Chat>>({});
         auto index = useState<size_t>(0);
 
-        std::call_once(gOllamaUiHandler, [&]() {
-            Application::instance().eventQueue().on<OllamaUiEvent>([chats](OllamaUiEvent const& e) {
+        std::call_once(gLlmUiHandler, [&]() {
+            Application::instance().eventQueue().on<LlmUiEvent>([chats](LlmUiEvent const& e) {
                 auto c = *chats;
-                auto it = std::find_if(c.begin(), c.end(), [&](Chat const& ch) { return ch.id == e.chatId; });
-                if (it == c.end()) {
-                    return;
-                }
+                auto it = std::find_if(c.begin(), c.end(),
+                    [&](Chat const& ch) { return ch.id == e.chatId; });
+                if (it == c.end()) return;
 
                 auto chat = *it;
 
-                if (e.kind == OllamaUiEvent::Kind::Chunk) {
-                    auto role = e.part == OllamaUiEvent::Part::Content ? ChatMessage::Role::Assistant : ChatMessage::Role::Reasoning;
+                if (e.kind == LlmUiEvent::Kind::Chunk) {
+                    auto role = e.part == LlmUiEvent::Part::Content
+                        ? ChatMessage::Role::Assistant
+                        : ChatMessage::Role::Reasoning;
 
                     if (chat.messages.empty() || chat.messages.back().role != role) {
-                        chat.messages.push_back(ChatMessage {role, ""});
+                        chat.messages.push_back(ChatMessage{role, ""});
                     }
-
                     chat.messages.back().text += e.text;
                 }
 
-                if (e.kind == OllamaUiEvent::Kind::Done) {
+                if (e.kind == LlmUiEvent::Kind::Done) {
                     chat.streaming = false;
                 }
 
-                if (e.kind == OllamaUiEvent::Kind::Error) {
+                if (e.kind == LlmUiEvent::Kind::Error) {
                     chat.streaming = false;
+                    chat.messages.push_back(ChatMessage{
+                        ChatMessage::Role::Assistant,
+                        std::string("[Error] ") + e.text,
+                    });
                 }
 
                 *it = chat;
                 chats = c;
             });
+
+            // Load model if path was provided via env var
+            std::string path = *modelPath;
+            if (!path.empty() && !gEngine->isLoaded()) {
+                std::thread([path]() {
+                    gEngine->load(path, defaultNGpuLayers());
+                }).detach();
+            }
         });
 
         auto c = *chats;
@@ -61,30 +83,24 @@ struct AppRoot : ViewModifiers<AppRoot> {
 
         auto element = ChatArea {
             .chat = c.size() > i ? std::optional<Chat>(c[i]) : std::nullopt,
-            .onSend = [host, chats, index](const std::string& modelName, const std::string& message) {
+            .onSend = [chats, index](const std::string& /*modelName*/, const std::string& message) {
                 auto c = *chats;
                 auto i = *index;
 
-                if (c[i].streaming) {
-                    return;
-                }
+                if (c[i].streaming) return;
 
-                c[i].messages.push_back(ChatMessage {ChatMessage::Role::User, message});
+                c[i].messages.push_back(ChatMessage{ChatMessage::Role::User, message});
                 c[i].streaming = true;
 
-                // Must build the request from `c` before `std::move(c)` into state — otherwise `c` is moved-from (UB).
-                std::vector<ChatMessage> apiMessages = messagesForApi(c[i].messages);
-                nlohmann::json payload = messagesToJson(apiMessages);
+                std::vector<ChatMessage> history = c[i].messages;
                 std::string const streamChatId = c[i].id;
 
                 std::move(chats) = std::move(c);
 
-                startOllamaChatStream(
-                    *host,
-                    modelName,
-                    std::move(payload),
+                gEngine->startChat(
+                    std::move(history),
                     streamChatId,
-                    [](OllamaUiEvent ev) {
+                    [](LlmUiEvent ev) {
                         Application::instance().eventQueue().post(std::move(ev));
                     }
                 );
@@ -101,22 +117,21 @@ struct AppRoot : ViewModifiers<AppRoot> {
                     .onChatSelected = [index](size_t selected) {
                         std::move(index) = selected;
                     },
-                    .onNewChat = [model, chats, index]() {
+                    .onNewChat = [modelName, chats, index]() {
                         auto c = *chats;
-                        Chat fresh {};
-                        fresh.modelName = *model;
+                        Chat fresh{};
+                        fresh.modelName = *modelName;
                         fresh.id = generateChatId();
                         fresh.title = std::string("Chat ") + std::to_string(c.size() + 1);
                         c.push_back(std::move(fresh));
-
                         std::move(index) = std::move(c.size() - 1);
                         std::move(chats) = std::move(c);
                     }
                 },
                 element,
                 PropertiesPanel {
-                    .host = host,
-                    .model = model,
+                    .host = gEngine->isLoaded() ? gEngine->modelPath() : "No model loaded",
+                    .model = *modelName,
                 }
             ),
         }.padding(16.f);
@@ -124,8 +139,6 @@ struct AppRoot : ViewModifiers<AppRoot> {
 };
 
 int main(int argc, char* argv[]) {
-    curl_global_init(CURL_GLOBAL_DEFAULT);
-
     Application app(argc, argv);
 
     auto& w = app.createWindow<Window>({
@@ -133,9 +146,13 @@ int main(int argc, char* argv[]) {
         .title = "LLM Studio",
     });
 
-    w.setView(AppRoot {});
+    w.setView(AppRoot{});
 
     int const code = app.exec();
-    curl_global_cleanup();
+
+    // Engine must be destroyed before llama_backend_free
+    gEngine.reset();
+    llama_backend_free();
+
     return code;
 }

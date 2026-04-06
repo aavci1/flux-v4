@@ -27,7 +27,7 @@ struct PropertiesPanel : ViewModifiers<PropertiesPanel> {
                 }.padding(16.f, 8.f, 8.f, 8.f),
                 Divider {},
                 Text {
-                    .text = std::string("Ollama: ") + host,
+                    .text = std::string("Model: ") + host,
                     .style = theme.typeBody,
                     .color = theme.colorTextSecondary,
                     .verticalAlignment = VerticalAlignment::Top,

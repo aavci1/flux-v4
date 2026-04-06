@@ -1,8 +1,5 @@
 # Sample apps (link the static `flux` library). Included when FLUX_BUILD_EXAMPLES=ON at the project root (default OFF).
 
-include(FetchContent)
-find_package(CURL REQUIRED)
-
 # Bundled fonts (Material Symbols, etc.) live next to each example binary so Application can register them at runtime.
 function(flux_copy_example_resources target_name)
   add_custom_command(
@@ -112,16 +109,15 @@ target_link_libraries(stack_demo PRIVATE flux)
 add_executable(notes_demo notes/main.cpp)
 target_link_libraries(notes_demo PRIVATE flux)
 
-FetchContent_Declare(
-  nlohmann_json
-  GIT_REPOSITORY https://github.com/nlohmann/json.git
-  GIT_TAG v3.11.3
-  GIT_SHALLOW TRUE
-)
-FetchContent_MakeAvailable(nlohmann_json)
+find_package(llama REQUIRED)
+find_package(ggml REQUIRED)
 
 add_executable(llm_studio llm-studio/main.cpp)
-target_link_libraries(llm_studio PRIVATE flux CURL::libcurl nlohmann_json::nlohmann_json)
+# llama already carries ggml::ggml as a transitive dep; link only llama here.
+target_link_libraries(llm_studio PRIVATE flux llama)
+# ggml::ggml does not export its include dir; add it explicitly so that
+# llama.h's transitive #include "ggml.h" resolves at compile time.
+target_include_directories(llm_studio PRIVATE "${GGML_INCLUDE_DIR}")
 
 set(FLUX_EXAMPLE_TARGETS
     hello_world

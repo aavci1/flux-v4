@@ -12,7 +12,7 @@
 #include <utility>
 #include <vector>
 
-#include "OllamaClient.hpp"
+#include "LlamaEngine.hpp"
 
 using namespace flux;
 using namespace llm_studio;
