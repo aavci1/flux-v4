@@ -22,26 +22,37 @@ std::once_flag gOllamaUiHandler;
 } // namespace
 
 struct ChatArea : ViewModifiers<ChatArea> {
-    Chat chat;
+    std::optional<Chat> chat;
     std::function<void(const std::string&, const std::string&)> onSend;
 
     auto body() const {
         auto& theme = useEnvironment<Theme>();
         auto streaming = useState(false);
 
-        // UI
-        std::vector<Element> messageElements;
-        for (auto &message : chat.messages) {
-            messageElements.push_back(
-                MessageBubble {
-                    .message = message
+        auto body = std::vector<Element>{};
+        if (!chat) {
+            body = children(
+                Text {
+                    .text = "No chat selected",
+                    .style = theme.typeHeading,
+                    .color = theme.colorTextMuted,
+                    .horizontalAlignment = HorizontalAlignment::Center,
+                    .verticalAlignment = VerticalAlignment::Center,
                 }
+                .flex(1.f)
             );
         }
+        else {
+            std::vector<Element> messageElements;
+            for (auto &message : chat->messages) {
+                messageElements.push_back(
+                    MessageBubble {
+                        .message = message
+                    }
+                );
+            }
 
-        return VStack {
-            .spacing = 8.f,
-            .children = children(
+            body = children(
                 HStack {
                     .spacing = 8.f,
                     .alignment = Alignment::Center,
@@ -72,8 +83,8 @@ struct ChatArea : ViewModifiers<ChatArea> {
                     )
                 }.flex(1.f),
                 MessageEditor {
-                    .modelName = chat.modelName,
-                    .onSend = [modelName = chat.modelName,sendHandler = onSend](const std::string& message) {
+                    .modelName = chat->modelName,
+                    .onSend = [modelName = chat->modelName,sendHandler = onSend](const std::string& message) {
                         if (message.empty()) {
                             return;
                         }
@@ -84,7 +95,13 @@ struct ChatArea : ViewModifiers<ChatArea> {
                     },
                     .disabled = *streaming
                 }
-            )
+            );
+        }
+
+        return VStack {
+            .spacing = 8.f,
+            .alignment = Alignment::Start,
+            .children = body
         }
         .fill(FillStyle::solid(Color::hex(0xFFFFFF)))
         .cornerRadius(8.f)

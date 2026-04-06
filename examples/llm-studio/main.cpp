@@ -59,8 +59,8 @@ struct AppRoot : ViewModifiers<AppRoot> {
         auto c = *chats;
         auto i = *index;
 
-        auto element = i >= c.size() ? Rectangle {}.flex(1.f, 1.f, 400.f) : ChatArea {
-            .chat = c[i],
+        auto element = ChatArea {
+            .chat = c.size() > i ? std::optional<Chat>(c[i]) : std::nullopt,
             .onSend = [host, chats, index](const std::string& modelName, const std::string& message) {
                 auto c = *chats;
                 auto i = *index;

@@ -25,7 +25,7 @@ struct MessageEditor : ViewModifiers<MessageEditor> {
             .children = children(
                 TextArea {
                     .value = value,
-                    .placeholder = "Type your message here... (" + modelName + ")",
+                    .placeholder = "Type your message here...",
                     .style = TextArea::Style::plain()
                 },
                 HStack {
