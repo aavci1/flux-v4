@@ -109,15 +109,17 @@ target_link_libraries(stack_demo PRIVATE flux)
 add_executable(notes_demo notes/main.cpp)
 target_link_libraries(notes_demo PRIVATE flux)
 
-find_package(llama REQUIRED)
-find_package(ggml REQUIRED)
+set(LLAMA_BUILD_COMMON ON CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_SERVER OFF CACHE BOOL "" FORCE)
+add_subdirectory(${CMAKE_SOURCE_DIR}/vendor/llama.cpp
+                 ${CMAKE_BINARY_DIR}/vendor/llama.cpp)
 
 add_executable(llm_studio llm-studio/main.cpp)
-# llama already carries ggml::ggml as a transitive dep; link only llama here.
-target_link_libraries(llm_studio PRIVATE flux llama)
-# ggml::ggml does not export its include dir; add it explicitly so that
-# llama.h's transitive #include "ggml.h" resolves at compile time.
-target_include_directories(llm_studio PRIVATE "${GGML_INCLUDE_DIR}")
+# common transitively provides llama + ggml + Threads and all include dirs.
+target_link_libraries(llm_studio PRIVATE flux common)
 
 set(FLUX_EXAMPLE_TARGETS
     hello_world

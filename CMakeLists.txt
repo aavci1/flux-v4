@@ -29,6 +29,7 @@ else()
 endif()
 
 if(FLUX_PLATFORM_MACOS)
+  enable_language(OBJC)
   enable_language(OBJCXX)
 endif()
 
