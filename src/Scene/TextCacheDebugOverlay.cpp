@@ -4,11 +4,9 @@
 #include <Flux/Graphics/Canvas.hpp>
 #include <Flux/Graphics/Font.hpp>
 #include <Flux/Graphics/Styles.hpp>
-#include <Flux/Graphics/TextCacheStats.hpp>
 #include <Flux/Graphics/TextLayoutOptions.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 
-#include <array>
 #include <cstdint>
 #include <sstream>
 #include <string>
@@ -56,21 +54,17 @@ std::string buildOverlayText(TextCacheStats const& oldest, TextCacheStats const&
 
 } // namespace
 
-void renderTextCacheDebugOverlay(Canvas& canvas, Rect viewport) {
-  static std::array<TextCacheStats, 60> ring{};
-  static std::size_t writeIdx = 0;
-  static std::size_t count = 0;
-
+void renderTextCacheDebugOverlay(Canvas& canvas, Rect viewport, TextCacheRingBuffer& ring) {
   TextCacheStats const cur = Application::instance().textSystem().stats();
-  ring[writeIdx] = cur;
-  writeIdx = (writeIdx + 1) % 60;
-  count = std::min(count + 1, std::size_t{60});
+  ring.samples[ring.writeIdx] = cur;
+  ring.writeIdx = (ring.writeIdx + 1) % 60;
+  ring.count = std::min(ring.count + 1, std::size_t{60});
 
-  std::size_t const newestIdx = (writeIdx + 60 - 1) % 60;
-  std::size_t const oldestIdx = (writeIdx + 60 - count) % 60;
-  TextCacheStats const& newest = ring[newestIdx];
-  TextCacheStats const& oldest = ring[oldestIdx];
-  std::size_t const windowFrames = count < 2 ? 1 : count;
+  std::size_t const newestIdx = (ring.writeIdx + 60 - 1) % 60;
+  std::size_t const oldestIdx = (ring.writeIdx + 60 - ring.count) % 60;
+  TextCacheStats const& newest = ring.samples[newestIdx];
+  TextCacheStats const& oldest = ring.samples[oldestIdx];
+  std::size_t const windowFrames = ring.count < 2 ? 1 : ring.count;
 
   std::string const text = buildOverlayText(oldest, newest, windowFrames);
 
@@ -82,8 +76,12 @@ void renderTextCacheDebugOverlay(Canvas& canvas, Rect viewport) {
   font.size = 11.f;
   font.weight = 400.f;
 
+  TextLayoutOptions opts{};
+  opts.wrapping = TextWrapping::Wrap;
+  opts.suppressCacheStats = true;
+
   auto layout = Application::instance().textSystem().layout(
-      text, font, Color{0.95f, 0.95f, 0.98f, 1.f}, panelW, TextLayoutOptions{.wrapping = TextWrapping::Wrap});
+      text, font, Color{0.95f, 0.95f, 0.98f, 1.f}, panelW, opts);
 
   canvas.save();
   canvas.translate(8.f, 8.f);

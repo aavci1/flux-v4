@@ -237,22 +237,10 @@ void trimTextLayoutToMaxLines(TextLayout& layout, int maxLines, bool normalizeAf
   }
 }
 
-std::shared_ptr<TextLayout const> TextSystem::layout(AttributedString const& text, Rect const& box,
-                                                     TextLayoutOptions const& options) {
+std::shared_ptr<TextLayout const> TextSystem::layoutBoxedImpl(AttributedString const& text, Rect const& box,
+                                                              TextLayoutOptions const& options) {
   float const maxWidth = options.wrapping == TextWrapping::NoWrap ? 0.f : box.width;
   std::shared_ptr<TextLayout const> base = layout(text, maxWidth, options);
-  if (!base) {
-    return nullptr;
-  }
-  std::shared_ptr<TextLayout> mut = cloneTextLayout(*base);
-  detail::applyBoxOptions(*mut, box, options);
-  return mut;
-}
-
-std::shared_ptr<TextLayout const> TextSystem::layout(std::string_view utf8, Font const& font, Color const& color,
-                                                     Rect const& box, TextLayoutOptions const& options) {
-  float const maxWidth = options.wrapping == TextWrapping::NoWrap ? 0.f : box.width;
-  std::shared_ptr<TextLayout const> base = layout(utf8, font, color, maxWidth, options);
   if (!base) {
     return nullptr;
   }

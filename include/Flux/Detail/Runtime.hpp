@@ -66,6 +66,10 @@ public:
   bool layoutOverlayEnabled() const noexcept { return layoutOverlayEnabled_; }
   void setLayoutOverlayEnabled(bool enabled) noexcept { layoutOverlayEnabled_ = enabled; }
 
+  /// When true, \ref Window::render draws the text-cache stats panel (independent of layout wireframes).
+  bool textCacheOverlayEnabled() const noexcept { return textCacheOverlayEnabled_; }
+  void setTextCacheOverlayEnabled(bool enabled) noexcept { textCacheOverlayEnabled_ = enabled; }
+
   void onOverlayPushed(OverlayEntry& entry);
   void onOverlayRemoved(OverlayEntry const& entry);
   void syncModalOverlayFocusAfterRebuild(OverlayEntry& entry);
@@ -88,6 +92,7 @@ private:
   bool shuttingDown_ = false;
   bool inputRegistered_ = false;
   bool layoutOverlayEnabled_ = false;
+  bool textCacheOverlayEnabled_ = false;
 };
 
 } // namespace flux

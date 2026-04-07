@@ -33,6 +33,7 @@ struct Window::Impl {
   /// `overlayMgr_` first and use-after-free on window close with an open overlay.
   OverlayManager overlayMgr_;
   std::unique_ptr<Runtime> runtime_;
+  TextCacheRingBuffer textCacheRing_{};
   std::unordered_map<std::string, ActionDescriptor> actions_;
   EnvironmentLayer windowEnvironment_{};
 
@@ -218,8 +219,10 @@ void Window::render(Canvas& canvas) {
       renderLayoutOverlay(entry.graph, canvas);
       canvas.restore();
     }
+  }
+  if (d->runtime_ && d->runtime_->textCacheOverlayEnabled()) {
     Rect const cb = canvas.clipBounds();
-    renderTextCacheDebugOverlay(canvas, cb);
+    renderTextCacheDebugOverlay(canvas, cb, d->textCacheRing_);
   }
 }
 

@@ -2,16 +2,27 @@
 
 /// \file Flux/Scene/TextCacheDebugOverlay.hpp
 ///
-/// When the layout debug overlay is enabled (\ref Runtime::setLayoutOverlayEnabled), draws a small
-/// "TEXT CACHE" panel with rolling hit rates (last ~60 frames) for each Core Text cache layer.
+/// Text-cache stats panel (enable via \ref Runtime::setTextCacheOverlayEnabled). Rolling window state is
+/// stored per \ref Window (see \ref TextCacheRingBuffer).
 
 #include <Flux/Core/Types.hpp>
+#include <Flux/Graphics/TextCacheStats.hpp>
+
+#include <array>
+#include <cstddef>
 
 namespace flux {
 
 class Canvas;
 
+/// Per-window rolling samples for the overlay (last 60 frames).
+struct TextCacheRingBuffer {
+  std::array<TextCacheStats, 60> samples{};
+  std::size_t writeIdx = 0;
+  std::size_t count = 0;
+};
+
 /// Draws the text-cache stats panel in the top-left of the window (call after scene + overlay render).
-void renderTextCacheDebugOverlay(Canvas& canvas, Rect viewport);
+void renderTextCacheDebugOverlay(Canvas& canvas, Rect viewport, TextCacheRingBuffer& ring);
 
 } // namespace flux

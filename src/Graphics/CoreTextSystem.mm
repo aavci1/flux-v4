@@ -86,12 +86,40 @@ struct FontKey {
   }
 };
 
+struct FontKeyView {
+  std::string_view family;
+  float weight = 400.f;
+  bool italic = false;
+};
+
 struct FontKeyHash {
-  std::size_t operator()(FontKey const& k) const noexcept {
-    std::size_t h = std::hash<std::string>{}(k.family);
-    h ^= std::hash<float>{}(k.weight) + 0x9e3779b9 + (h << 6) + (h >> 2);
-    h ^= std::hash<bool>{}(k.italic) + 0x9e3779b9 + (h << 6) + (h >> 2);
+  using is_transparent = void;
+
+  static std::size_t hashFields(std::string_view fam, float w, bool it) noexcept {
+    std::size_t h = std::hash<std::string_view>{}(fam);
+    h ^= std::hash<float>{}(w) + 0x9e3779b9 + (h << 6) + (h >> 2);
+    h ^= std::hash<bool>{}(it) + 0x9e3779b9 + (h << 6) + (h >> 2);
     return h;
+  }
+
+  std::size_t operator()(FontKey const& k) const noexcept {
+    return hashFields(k.family, k.weight, k.italic);
+  }
+  std::size_t operator()(FontKeyView const& k) const noexcept {
+    return hashFields(k.family, k.weight, k.italic);
+  }
+};
+
+struct FontKeyEq {
+  using is_transparent = void;
+  bool operator()(FontKey const& a, FontKey const& b) const noexcept {
+    return a.family == b.family && a.weight == b.weight && a.italic == b.italic;
+  }
+  bool operator()(FontKey const& a, FontKeyView const& b) const noexcept {
+    return std::string_view(a.family) == b.family && a.weight == b.weight && a.italic == b.italic;
+  }
+  bool operator()(FontKeyView const& a, FontKey const& b) const noexcept {
+    return a.family == std::string_view(b.family) && a.weight == b.weight && a.italic == b.italic;
   }
 };
 
@@ -326,19 +354,6 @@ static void utf16RangeToUtf8ByteRange(NSString* ns, NSRange r16, std::uint32_t& 
 
 // --- ContentHash (XXH3 128-bit) -------------------------------------------------
 
-static std::uint8_t weightBucketFromCss(float w) {
-  if (w <= 0.f) {
-    return 0;
-  }
-  if (w < 450.f) {
-    return 0;
-  }
-  if (w < 600.f) {
-    return 1;
-  }
-  return 2;
-}
-
 static std::uint32_t rgba8Pack(Color const& c) {
   auto ch = [](float x) -> std::uint32_t {
     return static_cast<std::uint32_t>(std::clamp(x, 0.f, 1.f) * 255.f + 0.5f);
@@ -346,50 +361,7 @@ static std::uint32_t rgba8Pack(Color const& c) {
   return (ch(c.r) << 24) | (ch(c.g) << 16) | (ch(c.b) << 8) | ch(c.a);
 }
 
-static ContentHash computeContentHash(CoreTextSystem& sys, AttributedString const& text,
-                                      std::vector<ResolvedStyle> const& resolved, TextLayoutOptions const& opt) {
-  XXH3_state_t st{};
-  XXH3_128bits_reset(&st);
-  if (!text.utf8.empty()) {
-    XXH3_128bits_update(&st, text.utf8.data(), text.utf8.size());
-  }
-  std::uint32_t const runCount = static_cast<std::uint32_t>(resolved.size());
-  XXH3_128bits_update(&st, &runCount, sizeof(runCount));
-  for (std::size_t i = 0; i < text.runs.size(); ++i) {
-    auto const& run = text.runs[i];
-    ResolvedStyle const& rs = resolved[i];
-    std::uint32_t const fid =
-        sys.resolveFontId(rs.font.family.empty() ? std::string_view(kDefaultFontFamily)
-                                                 : std::string_view(rs.font.family),
-                          rs.font.weight, rs.font.italic);
-    std::uint32_t const sizeQ8 = static_cast<std::uint32_t>(std::lround(rs.font.size * 4.f));
-    std::uint8_t const wb = weightBucketFromCss(rs.font.weight);
-    std::uint8_t const ital = rs.font.italic ? std::uint8_t{1} : std::uint8_t{0};
-    std::uint32_t const rgba = rgba8Pack(rs.color);
-    std::uint32_t b0 = run.start;
-    std::uint32_t b1 = run.end;
-    XXH3_128bits_update(&st, &b0, sizeof(b0));
-    XXH3_128bits_update(&st, &b1, sizeof(b1));
-    XXH3_128bits_update(&st, &fid, sizeof(fid));
-    XXH3_128bits_update(&st, &sizeQ8, sizeof(sizeQ8));
-    XXH3_128bits_update(&st, &wb, sizeof(wb));
-    XXH3_128bits_update(&st, &ital, sizeof(ital));
-    XXH3_128bits_update(&st, &rgba, sizeof(rgba));
-  }
-  std::uint8_t wrap = static_cast<std::uint8_t>(opt.wrapping);
-  std::uint32_t lhQ8 = 0;
-  std::uint32_t lhMulQ8 = 0;
-  if (opt.lineHeightMultiple > 0.f) {
-    lhMulQ8 = static_cast<std::uint32_t>(std::lround(opt.lineHeightMultiple * 256.f));
-  } else if (opt.lineHeight > 0.f) {
-    lhQ8 = static_cast<std::uint32_t>(std::lround(opt.lineHeight * 4.f));
-  }
-  XXH3_128bits_update(&st, &wrap, sizeof(wrap));
-  XXH3_128bits_update(&st, &lhQ8, sizeof(lhQ8));
-  XXH3_128bits_update(&st, &lhMulQ8, sizeof(lhMulQ8));
-  XXH128_hash_t const h = XXH3_128bits_digest(&st);
-  return ContentHash{h.high64, h.low64};
-}
+// computeContentHash / computeContentHashPlain are defined after CoreTextSystem::Impl (needs findFontId).
 
 static std::uint32_t quantizeWidth(float maxWidth) {
   if (maxWidth <= 0.f) {
@@ -577,13 +549,29 @@ struct FramesetterEntry {
   CTFramesetterRef framesetter = nullptr;
   flux::detail::SmallVector<MeasureSlot, 4> measures;
   flux::detail::SmallVector<LayoutSlot, 4> layouts;
-  std::vector<std::uint32_t> fontIds;
+  flux::detail::SmallVector<std::uint32_t, 4> fontIds;
   std::uint64_t lastTouchFrame = 0;
   std::uint32_t approxBytes = 0;
 };
 
+static std::size_t countStoredTextLayouts(FramesetterEntry const& e) {
+  std::size_t n = 0;
+  for (auto const& ls : e.layouts) {
+    if (ls.unboxed) {
+      ++n;
+    }
+    n += ls.boxes.size();
+  }
+  return n;
+}
+
+static std::uint32_t estimateEntryBytes(AttributedString const& text, std::size_t layoutPieces) {
+  return static_cast<std::uint32_t>(text.utf8.size() + text.runs.size() * 64 + 256 +
+                                    text.utf8.size() * 32 + layoutPieces * sizeof(TextLayout));
+}
+
 struct CoreTextSystem::Impl {
-  std::unordered_map<FontKey, std::uint32_t, FontKeyHash> fontIds_;
+  std::unordered_map<FontKey, std::uint32_t, FontKeyHash, FontKeyEq> fontIds_;
   std::vector<CTFontRef> fontById_;
   CGColorSpaceRef rgbColorSpace_ = nullptr;
 
@@ -608,6 +596,15 @@ struct CoreTextSystem::Impl {
   std::size_t budgetBytes_ = 48u * 1024u * 1024u;
   TextCacheStats stats_{};
 
+  std::optional<std::uint32_t> findFontId(std::string_view family, float weight, bool italic) const noexcept {
+    FontKeyView const kv{family, weight > 0.f ? weight : kDefaultFontWeight, italic};
+    auto it = fontIds_.find(kv);
+    if (it != fontIds_.end()) {
+      return it->second;
+    }
+    return std::nullopt;
+  }
+
   std::uint32_t fontIdForKey(FontKey const& key, CTFontRef font) {
     auto it = fontIds_.find(key);
     if (it != fontIds_.end()) {
@@ -619,6 +616,22 @@ struct CoreTextSystem::Impl {
     fontById_.push_back(font);
     return id;
   }
+
+  void bumpEntryApproxBytes(FramesetterEntry& e, AttributedString const& text);
+
+  FramesetterEntry& insertFramesetterMiss(ContentHash const& h, AttributedString const& text,
+                                          std::vector<ResolvedStyle> const& resolved,
+                                          TextLayoutOptions const& options, CoreTextSystem& sys);
+
+  FramesetterEntry& findOrInsertFramesetterEntry(ContentHash const& h, AttributedString const& text,
+                                                 std::vector<ResolvedStyle> const& resolved,
+                                                 TextLayoutOptions const& options, CoreTextSystem& sys);
+
+  ContentHash computeContentHash(CoreTextSystem& sys, AttributedString const& text,
+                                 std::vector<ResolvedStyle> const& resolved, TextLayoutOptions const& opt);
+
+  ContentHash computeContentHashPlain(CoreTextSystem& sys, std::string_view utf8, Font const& font,
+                                      Color const& color, TextLayoutOptions const& opt);
 
   void touchLruColor(std::uint32_t rgba) {
     auto it = colorMap_.find(rgba);
@@ -637,8 +650,8 @@ struct CoreTextSystem::Impl {
     }
     ++stats_.l1_color.misses;
     constexpr std::size_t kCap = 256;
-    while (colorMap_.size() >= kCap) {
-      auto last = colorOrder_.back();
+    while (colorMap_.size() > kCap) {
+      auto& last = colorOrder_.back();
       CGColorRelease(last.second);
       colorMap_.erase(last.first);
       colorOrder_.pop_back();
@@ -669,8 +682,8 @@ struct CoreTextSystem::Impl {
     }
     ++stats_.l0_sizedFont.misses;
     constexpr std::size_t kCap = 256;
-    while (sizedFontMap_.size() >= kCap) {
-      auto last = sizedFontOrder_.back();
+    while (sizedFontMap_.size() > kCap) {
+      auto& last = sizedFontOrder_.back();
       CFRelease(last.second);
       sizedFontMap_.erase(last.first);
       sizedFontOrder_.pop_back();
@@ -705,8 +718,8 @@ struct CoreTextSystem::Impl {
     }
     ++stats_.l1_paraStyle.misses;
     constexpr std::size_t kCap = 32;
-    while (paraMap_.size() >= kCap) {
-      auto last = paraOrder_.back();
+    while (paraMap_.size() > kCap) {
+      auto& last = paraOrder_.back();
       CFRelease(last.second);
       paraMap_.erase(last.first);
       paraOrder_.pop_back();
@@ -736,8 +749,8 @@ struct CoreTextSystem::Impl {
     }
     ++stats_.l1_runAttr.misses;
     constexpr std::size_t kCap = 1024;
-    while (runAttrMap_.size() >= kCap) {
-      auto last = runAttrOrder_.back();
+    while (runAttrMap_.size() > kCap) {
+      auto& last = runAttrOrder_.back();
       CFRelease(last.second);
       runAttrMap_.erase(last.first);
       runAttrOrder_.pop_back();
@@ -774,7 +787,12 @@ struct CoreTextSystem::Impl {
       NSRange range = utf8ByteRangeToNSRange(bytes, byteLen, run.start, run.end);
       std::string_view const fam =
           a.font.family.empty() ? std::string_view(kDefaultFontFamily) : std::string_view(a.font.family);
-      std::uint32_t const fid = sys.resolveFontId(fam, a.font.weight, a.font.italic);
+      std::uint32_t fid = 0;
+      if (auto const o = findFontId(fam, a.font.weight, a.font.italic)) {
+        fid = *o;
+      } else {
+        fid = sys.resolveFontId(fam, a.font.weight, a.font.italic);
+      }
       std::uint32_t const sizeQ8 = static_cast<std::uint32_t>(std::lround(a.font.size * 4.f));
       std::uint32_t const rgba = rgba8Pack(a.color);
       CFDictionaryRef attrs = runAttrDict(fid, sizeQ8, rgba);
@@ -849,13 +867,150 @@ struct CoreTextSystem::Impl {
   }
 };
 
+void CoreTextSystem::Impl::bumpEntryApproxBytes(FramesetterEntry& e, AttributedString const& text) {
+  std::size_t const pieces = countStoredTextLayouts(e);
+  std::uint32_t const newApprox = estimateEntryBytes(text, pieces);
+  std::uint32_t const old = e.approxBytes;
+  e.approxBytes = newApprox;
+  frameMapBytes_ += static_cast<std::size_t>(newApprox) - static_cast<std::size_t>(old);
+}
+
+FramesetterEntry& CoreTextSystem::Impl::insertFramesetterMiss(ContentHash const& h,
+                                                              AttributedString const& text,
+                                                              std::vector<ResolvedStyle> const& resolved,
+                                                              TextLayoutOptions const& options,
+                                                              CoreTextSystem& sys) {
+  if (!options.suppressCacheStats) {
+    ++stats_.l2_framesetter.misses;
+  }
+  auto entry = std::make_unique<FramesetterEntry>();
+  CFAttributedStringRef cf = createCFAttributed(sys, text, resolved, options);
+  entry->attrString = cf;
+  CTFramesetterRef fs = CTFramesetterCreateWithAttributedString(cf);
+  entry->framesetter = fs;
+  for (auto const& rs : resolved) {
+    std::string_view const fam =
+        rs.font.family.empty() ? std::string_view(kDefaultFontFamily) : std::string_view(rs.font.family);
+    entry->fontIds.push_back(sys.resolveFontId(fam, rs.font.weight, rs.font.italic));
+  }
+  entry->approxBytes = estimateEntryBytes(text, 0);
+  frameMapBytes_ += entry->approxBytes;
+  frameMap_[h] = std::move(entry);
+  return *frameMap_.find(h)->second;
+}
+
+FramesetterEntry& CoreTextSystem::Impl::findOrInsertFramesetterEntry(ContentHash const& h,
+                                                                     AttributedString const& text,
+                                                                     std::vector<ResolvedStyle> const& resolved,
+                                                                     TextLayoutOptions const& options,
+                                                                     CoreTextSystem& sys) {
+  auto it = frameMap_.find(h);
+  if (it != frameMap_.end()) {
+    if (!options.suppressCacheStats) {
+      ++stats_.l2_framesetter.hits;
+    }
+    it->second->lastTouchFrame = currentFrame_;
+    return *it->second;
+  }
+  return insertFramesetterMiss(h, text, resolved, options, sys);
+}
+
+static void hashLayoutOptions(XXH3_state_t& st, TextLayoutOptions const& opt) {
+  std::uint8_t wrap = static_cast<std::uint8_t>(opt.wrapping);
+  std::uint32_t lhQ8 = 0;
+  std::uint32_t lhMulQ8 = 0;
+  if (opt.lineHeightMultiple > 0.f) {
+    lhMulQ8 = static_cast<std::uint32_t>(std::lround(opt.lineHeightMultiple * 256.f));
+  } else if (opt.lineHeight > 0.f) {
+    lhQ8 = static_cast<std::uint32_t>(std::lround(opt.lineHeight * 4.f));
+  }
+  XXH3_128bits_update(&st, &wrap, sizeof(wrap));
+  XXH3_128bits_update(&st, &lhQ8, sizeof(lhQ8));
+  XXH3_128bits_update(&st, &lhMulQ8, sizeof(lhMulQ8));
+}
+
+ContentHash CoreTextSystem::Impl::computeContentHash(CoreTextSystem& sys, AttributedString const& text,
+                                                     std::vector<ResolvedStyle> const& resolved,
+                                                     TextLayoutOptions const& opt) {
+  XXH3_state_t st{};
+  XXH3_128bits_reset(&st);
+  if (!text.utf8.empty()) {
+    XXH3_128bits_update(&st, text.utf8.data(), text.utf8.size());
+  }
+  std::uint32_t const runCount = static_cast<std::uint32_t>(resolved.size());
+  XXH3_128bits_update(&st, &runCount, sizeof(runCount));
+  for (std::size_t i = 0; i < text.runs.size(); ++i) {
+    auto const& run = text.runs[i];
+    ResolvedStyle const& rs = resolved[i];
+    std::string_view const fam =
+        rs.font.family.empty() ? std::string_view(kDefaultFontFamily) : std::string_view(rs.font.family);
+    std::uint32_t fid = 0;
+    if (auto const o = findFontId(fam, rs.font.weight, rs.font.italic)) {
+      fid = *o;
+    } else {
+      fid = sys.resolveFontId(fam, rs.font.weight, rs.font.italic);
+    }
+    std::uint32_t const sizeQ8 = static_cast<std::uint32_t>(std::lround(rs.font.size * 4.f));
+    std::uint32_t const rgba = rgba8Pack(rs.color);
+    std::uint32_t b0 = run.start;
+    std::uint32_t b1 = run.end;
+    XXH3_128bits_update(&st, &b0, sizeof(b0));
+    XXH3_128bits_update(&st, &b1, sizeof(b1));
+    XXH3_128bits_update(&st, &fid, sizeof(fid));
+    XXH3_128bits_update(&st, &sizeQ8, sizeof(sizeQ8));
+    XXH3_128bits_update(&st, &rgba, sizeof(rgba));
+  }
+  hashLayoutOptions(st, opt);
+  XXH128_hash_t const h = XXH3_128bits_digest(&st);
+  return ContentHash{h.high64, h.low64};
+}
+
+ContentHash CoreTextSystem::Impl::computeContentHashPlain(CoreTextSystem& sys, std::string_view utf8,
+                                                          Font const& font, Color const& color,
+                                                          TextLayoutOptions const& opt) {
+  XXH3_state_t st{};
+  XXH3_128bits_reset(&st);
+  if (!utf8.empty()) {
+    XXH3_128bits_update(&st, utf8.data(), utf8.size());
+  }
+  std::uint32_t const runCount = 1;
+  XXH3_128bits_update(&st, &runCount, sizeof(runCount));
+
+  Font const resolved = resolveFont(baseDefaultsFont(), font);
+  std::string_view const fam =
+      resolved.family.empty() ? std::string_view(kDefaultFontFamily) : std::string_view(resolved.family);
+  std::uint32_t fid = 0;
+  if (auto const o = findFontId(fam, resolved.weight, resolved.italic)) {
+    fid = *o;
+  } else {
+    fid = sys.resolveFontId(fam, resolved.weight, resolved.italic);
+  }
+  std::uint32_t const sizeQ8 = static_cast<std::uint32_t>(std::lround(resolved.size * 4.f));
+  std::uint32_t const rgba = rgba8Pack(color);
+  std::uint32_t b0 = 0;
+  std::uint32_t b1 = static_cast<std::uint32_t>(utf8.size());
+  XXH3_128bits_update(&st, &b0, sizeof(b0));
+  XXH3_128bits_update(&st, &b1, sizeof(b1));
+  XXH3_128bits_update(&st, &fid, sizeof(fid));
+  XXH3_128bits_update(&st, &sizeQ8, sizeof(sizeQ8));
+  XXH3_128bits_update(&st, &rgba, sizeof(rgba));
+
+  hashLayoutOptions(st, opt);
+  XXH128_hash_t const h = XXH3_128bits_digest(&st);
+  return ContentHash{h.high64, h.low64};
+}
+
 CoreTextSystem::CoreTextSystem() : d(std::make_unique<Impl>()) {}
 
 CoreTextSystem::~CoreTextSystem() = default;
 
 std::uint32_t CoreTextSystem::resolveFontId(std::string_view fontFamily, float weight, bool italic) {
+  std::string_view const fam = fontFamily.empty() ? std::string_view(kDefaultFontFamily) : fontFamily;
+  if (auto const o = d->findFontId(fam, weight, italic)) {
+    return *o;
+  }
   FontKey key;
-  key.family = std::string(fontFamily.empty() ? kDefaultFontFamily : fontFamily);
+  key.family = std::string(fam);
   key.weight = weight > 0.f ? weight : kDefaultFontWeight;
   key.italic = italic;
   Font a;
@@ -997,11 +1152,6 @@ static void fillTextLayoutFromFramesetter(CoreTextSystem& sys, CTFramesetterRef 
   }
 }
 
-static std::uint32_t estimateEntryBytes(AttributedString const& text, std::size_t layoutCount) {
-  return static_cast<std::uint32_t>(text.utf8.size() + text.runs.size() * 64 + 256 +
-                                    text.utf8.size() * 32 + layoutCount * sizeof(TextLayout));
-}
-
 std::vector<std::uint8_t> CoreTextSystem::rasterizeGlyph(std::uint32_t fontId, std::uint16_t glyphId,
                                                         float size, std::uint32_t& outWidth,
                                                         std::uint32_t& outHeight, Point& outBearing) {
@@ -1084,33 +1234,11 @@ Size CoreTextSystem::measure(AttributedString const& text, float maxWidth, TextL
   validateRuns(text);
   std::vector<ResolvedStyle> resolved;
   accumulateInheritance(resolved, text);
-  ContentHash const h = computeContentHash(*this, text, resolved, options);
+  ContentHash const h = d->computeContentHash(*this, text, resolved, options);
   std::uint32_t const wq = quantizeWidth(maxWidth);
   std::int32_t const ml = options.maxLines;
 
-  auto it = d->frameMap_.find(h);
-  if (it == d->frameMap_.end()) {
-    ++d->stats_.l2_framesetter.misses;
-    auto entry = std::make_unique<FramesetterEntry>();
-    CFAttributedStringRef cf = d->createCFAttributed(*this, text, resolved, options);
-    entry->attrString = cf;
-    CTFramesetterRef fs = CTFramesetterCreateWithAttributedString(cf);
-    entry->framesetter = fs;
-    entry->fontIds.reserve(resolved.size());
-    for (auto const& rs : resolved) {
-      std::string_view const fam =
-          rs.font.family.empty() ? std::string_view(kDefaultFontFamily) : std::string_view(rs.font.family);
-      entry->fontIds.push_back(resolveFontId(fam, rs.font.weight, rs.font.italic));
-    }
-    entry->approxBytes = estimateEntryBytes(text, 0);
-    d->frameMapBytes_ += entry->approxBytes;
-    d->frameMap_[h] = std::move(entry);
-    it = d->frameMap_.find(h);
-  } else {
-    ++d->stats_.l2_framesetter.hits;
-  }
-  FramesetterEntry& e = *it->second;
-  e.lastTouchFrame = d->currentFrame_;
+  FramesetterEntry& e = d->findOrInsertFramesetterEntry(h, text, resolved, options, *this);
 
   for (std::size_t i = 0; i < e.measures.size(); ++i) {
     MeasureSlot& ms = e.measures[i];
@@ -1132,37 +1260,26 @@ Size CoreTextSystem::measure(std::string_view utf8, Font const& font, Color cons
     std::shared_ptr<TextLayout const> const L = layout(utf8, font, color, maxWidth, options);
     return L ? L->measuredSize : Size{};
   }
-  AttributedString as;
-  as.utf8 = std::string(utf8);
-  as.runs.push_back({0, static_cast<std::uint32_t>(utf8.size()), font, color});
-  std::vector<ResolvedStyle> resolved;
-  accumulateInheritance(resolved, as);
-  ContentHash const h = computeContentHash(*this, as, resolved, options);
+  ContentHash const h = d->computeContentHashPlain(*this, utf8, font, color, options);
   std::uint32_t const wq = quantizeWidth(maxWidth);
   std::int32_t const ml = options.maxLines;
 
-  auto it = d->frameMap_.find(h);
-  if (it == d->frameMap_.end()) {
-    ++d->stats_.l2_framesetter.misses;
-    auto entry = std::make_unique<FramesetterEntry>();
-    CFAttributedStringRef cf = d->createCFAttributedPlain(*this, utf8, font, color, options);
-    entry->attrString = cf;
-    CTFramesetterRef fs = CTFramesetterCreateWithAttributedString(cf);
-    entry->framesetter = fs;
-    for (auto const& rs : resolved) {
-      std::string_view const fam =
-          rs.font.family.empty() ? std::string_view(kDefaultFontFamily) : std::string_view(rs.font.family);
-      entry->fontIds.push_back(resolveFontId(fam, rs.font.weight, rs.font.italic));
+  FramesetterEntry& e = [&]() -> FramesetterEntry& {
+    auto it = d->frameMap_.find(h);
+    if (it != d->frameMap_.end()) {
+      if (!options.suppressCacheStats) {
+        ++d->stats_.l2_framesetter.hits;
+      }
+      it->second->lastTouchFrame = d->currentFrame_;
+      return *it->second;
     }
-    entry->approxBytes = estimateEntryBytes(as, 0);
-    d->frameMapBytes_ += entry->approxBytes;
-    d->frameMap_[h] = std::move(entry);
-    it = d->frameMap_.find(h);
-  } else {
-    ++d->stats_.l2_framesetter.hits;
-  }
-  FramesetterEntry& e = *it->second;
-  e.lastTouchFrame = d->currentFrame_;
+    AttributedString as;
+    as.utf8 = std::string(utf8);
+    as.runs.push_back({0, static_cast<std::uint32_t>(utf8.size()), font, color});
+    std::vector<ResolvedStyle> resolved;
+    accumulateInheritance(resolved, as);
+    return d->insertFramesetterMiss(h, as, resolved, options, *this);
+  }();
 
   for (std::size_t i = 0; i < e.measures.size(); ++i) {
     MeasureSlot& ms = e.measures[i];
@@ -1175,61 +1292,34 @@ Size CoreTextSystem::measure(std::string_view utf8, Font const& font, Color cons
   return sz;
 }
 
-std::shared_ptr<TextLayout const> CoreTextSystem::layout(std::string_view utf8, Font const& font,
-                                                         Color const& color, float maxWidth,
-                                                         TextLayoutOptions const& options) {
-  AttributedString as;
-  as.utf8 = std::string(utf8);
-  as.runs.push_back({0, static_cast<std::uint32_t>(utf8.size()), font, color});
-  return layout(as, maxWidth, options);
-}
-
-std::shared_ptr<TextLayout const> CoreTextSystem::layout(AttributedString const& text, float maxWidth,
-                                                         TextLayoutOptions const& options) {
+std::shared_ptr<TextLayout const> CoreTextSystem::layoutUnboxed(AttributedString const& text,
+                                                                TextLayoutOptions const& options,
+                                                                float maxWidth, bool hasPrecomputedHash,
+                                                                std::uint64_t preHi, std::uint64_t preLo) {
   if (text.utf8.empty()) {
     return std::shared_ptr<TextLayout const>(std::make_shared<TextLayout>());
   }
   validateRuns(text);
   std::vector<ResolvedStyle> resolved;
   accumulateInheritance(resolved, text);
-  ContentHash const h = computeContentHash(*this, text, resolved, options);
+  ContentHash const h =
+      hasPrecomputedHash ? ContentHash{preHi, preLo} : d->computeContentHash(*this, text, resolved, options);
+  FramesetterEntry& e = d->findOrInsertFramesetterEntry(h, text, resolved, options, *this);
   std::uint32_t const wq = quantizeWidth(maxWidth);
   std::int32_t const ml = options.maxLines;
-
-  auto it = d->frameMap_.find(h);
-  if (it == d->frameMap_.end()) {
-    ++d->stats_.l2_framesetter.misses;
-    auto entry = std::make_unique<FramesetterEntry>();
-    CFAttributedStringRef cf = d->createCFAttributed(*this, text, resolved, options);
-    entry->attrString = cf;
-    CTFramesetterRef fs = CTFramesetterCreateWithAttributedString(cf);
-    entry->framesetter = fs;
-    entry->fontIds.reserve(resolved.size());
-    for (auto const& rs : resolved) {
-      std::string_view const fam =
-          rs.font.family.empty() ? std::string_view(kDefaultFontFamily) : std::string_view(rs.font.family);
-      entry->fontIds.push_back(resolveFontId(fam, rs.font.weight, rs.font.italic));
-    }
-    entry->approxBytes = estimateEntryBytes(text, 0);
-    d->frameMapBytes_ += entry->approxBytes;
-    d->frameMap_[h] = std::move(entry);
-    it = d->frameMap_.find(h);
-  } else {
-    ++d->stats_.l2_framesetter.hits;
-  }
-  FramesetterEntry& e = *it->second;
-  e.lastTouchFrame = d->currentFrame_;
 
   for (std::size_t i = 0; i < e.layouts.size(); ++i) {
     LayoutSlot& ls = e.layouts[i];
     if (ls.maxWidthQ1 == wq && ls.maxLines == ml) {
-      if (ls.unboxed) {
+      if (!options.suppressCacheStats) {
         ++d->stats_.l3_layout.hits;
-        return ls.unboxed;
       }
+      return ls.unboxed;
     }
   }
-  ++d->stats_.l3_layout.misses;
+  if (!options.suppressCacheStats) {
+    ++d->stats_.l3_layout.misses;
+  }
 
   auto built = std::make_shared<TextLayout>();
   fillTextLayoutFromFramesetter(*this, e.framesetter, text, maxWidth, options, *built);
@@ -1239,23 +1329,81 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layout(AttributedString const&
   slot.maxLines = ml;
   slot.unboxed = result;
   e.layouts.push_back(std::move(slot));
-  e.approxBytes = estimateEntryBytes(text, e.layouts.size());
+  d->bumpEntryApproxBytes(e, text);
   return result;
 }
 
-std::shared_ptr<TextLayout const> CoreTextSystem::layout(AttributedString const& text, Rect const& box,
+std::shared_ptr<TextLayout const> CoreTextSystem::layout(std::string_view utf8, Font const& font,
+                                                         Color const& color, float maxWidth,
                                                          TextLayoutOptions const& options) {
+  if (utf8.empty()) {
+    return std::shared_ptr<TextLayout const>(std::make_shared<TextLayout>());
+  }
+  ContentHash const h = d->computeContentHashPlain(*this, utf8, font, color, options);
+  std::uint32_t const wq = quantizeWidth(maxWidth);
+  std::int32_t const ml = options.maxLines;
+
+  FramesetterEntry& e = [&]() -> FramesetterEntry& {
+    auto it = d->frameMap_.find(h);
+    if (it != d->frameMap_.end()) {
+      if (!options.suppressCacheStats) {
+        ++d->stats_.l2_framesetter.hits;
+      }
+      it->second->lastTouchFrame = d->currentFrame_;
+      return *it->second;
+    }
+    AttributedString as;
+    as.utf8 = std::string(utf8);
+    as.runs.push_back({0, static_cast<std::uint32_t>(utf8.size()), font, color});
+    std::vector<ResolvedStyle> resolved;
+    accumulateInheritance(resolved, as);
+    return d->insertFramesetterMiss(h, as, resolved, options, *this);
+  }();
+
+  for (std::size_t i = 0; i < e.layouts.size(); ++i) {
+    LayoutSlot& ls = e.layouts[i];
+    if (ls.maxWidthQ1 == wq && ls.maxLines == ml) {
+      if (!options.suppressCacheStats) {
+        ++d->stats_.l3_layout.hits;
+      }
+      return ls.unboxed;
+    }
+  }
+  if (!options.suppressCacheStats) {
+    ++d->stats_.l3_layout.misses;
+  }
+
+  AttributedString as;
+  as.utf8 = std::string(utf8);
+  as.runs.push_back({0, static_cast<std::uint32_t>(utf8.size()), font, color});
+  auto built = std::make_shared<TextLayout>();
+  fillTextLayoutFromFramesetter(*this, e.framesetter, as, maxWidth, options, *built);
+  std::shared_ptr<TextLayout const> result = built;
+  LayoutSlot slot;
+  slot.maxWidthQ1 = wq;
+  slot.maxLines = ml;
+  slot.unboxed = result;
+  e.layouts.push_back(std::move(slot));
+  d->bumpEntryApproxBytes(e, as);
+  return result;
+}
+
+std::shared_ptr<TextLayout const> CoreTextSystem::layout(AttributedString const& text, float maxWidth,
+                                                         TextLayoutOptions const& options) {
+  return layoutUnboxed(text, options, maxWidth, false, 0, 0);
+}
+
+std::shared_ptr<TextLayout const> CoreTextSystem::layoutBoxedImpl(AttributedString const& text, Rect const& box,
+                                                                  TextLayoutOptions const& options) {
   float const maxWidth = options.wrapping == TextWrapping::NoWrap ? 0.f : box.width;
-  std::shared_ptr<TextLayout const> base = layout(text, maxWidth, options);
+  validateRuns(text);
+  std::vector<ResolvedStyle> resolved;
+  accumulateInheritance(resolved, text);
+  ContentHash const h = d->computeContentHash(*this, text, resolved, options);
+  std::shared_ptr<TextLayout const> base = layoutUnboxed(text, options, maxWidth, true, h.hi, h.lo);
   if (!base) {
     return nullptr;
   }
-  ContentHash const h = [&]() {
-    validateRuns(text);
-    std::vector<ResolvedStyle> resolved;
-    accumulateInheritance(resolved, text);
-    return computeContentHash(*this, text, resolved, options);
-  }();
   std::uint32_t const wq = quantizeWidth(maxWidth);
   std::int32_t const ml = options.maxLines;
   std::uint32_t const boxWQ = quantizeWidth(box.width);
@@ -1280,36 +1428,32 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layout(AttributedString const&
       BoxSlot& bs = ls.boxes[bi];
       if (bs.boxWQ1 == boxWQ && bs.boxHQ1 == boxHQ && bs.hAlign == ha && bs.vAlign == va &&
           bs.firstBaselineQ8 == fbq && bs.layout) {
-        ++d->stats_.l4_boxLayout.hits;
+        if (!options.suppressCacheStats) {
+          ++d->stats_.l4_boxLayout.hits;
+        }
         return bs.layout;
       }
     }
-    ++d->stats_.l4_boxLayout.misses;
+    if (!options.suppressCacheStats) {
+      ++d->stats_.l4_boxLayout.misses;
+    }
     std::shared_ptr<TextLayout> mut = cloneTextLayout(*base);
     detail::applyBoxOptions(*mut, box, options);
     auto boxed = std::shared_ptr<TextLayout const>(mut);
-    BoxSlot bs;
-    bs.boxWQ1 = boxWQ;
-    bs.boxHQ1 = boxHQ;
-    bs.hAlign = ha;
-    bs.vAlign = va;
-    bs.firstBaselineQ8 = fbq;
-    bs.layout = boxed;
-    ls.boxes.push_back(std::move(bs));
+    ls.boxes.push_back(BoxSlot{
+        .boxWQ1 = boxWQ,
+        .boxHQ1 = boxHQ,
+        .hAlign = ha,
+        .vAlign = va,
+        .firstBaselineQ8 = fbq,
+        .layout = boxed,
+    });
+    d->bumpEntryApproxBytes(e, text);
     return boxed;
   }
   std::shared_ptr<TextLayout> mut = cloneTextLayout(*base);
   detail::applyBoxOptions(*mut, box, options);
   return std::shared_ptr<TextLayout const>(std::move(mut));
-}
-
-std::shared_ptr<TextLayout const> CoreTextSystem::layout(std::string_view utf8, Font const& font,
-                                                         Color const& color, Rect const& box,
-                                                         TextLayoutOptions const& options) {
-  AttributedString as;
-  as.utf8 = std::string(utf8);
-  as.runs.push_back({0, static_cast<std::uint32_t>(utf8.size()), font, color});
-  return layout(as, box, options);
 }
 
 void CoreTextSystem::onFrameBegin(std::uint64_t frameIndex) {
@@ -1318,26 +1462,35 @@ void CoreTextSystem::onFrameBegin(std::uint64_t frameIndex) {
 
 void CoreTextSystem::onFrameEnd() {
   while (d->frameMapBytes_ > d->budgetBytes_) {
-    std::optional<std::pair<std::uint64_t, ContentHash>> best;
+    std::vector<std::pair<std::uint64_t, ContentHash>> candidates;
+    candidates.reserve(d->frameMap_.size());
     for (auto const& p : d->frameMap_) {
       if (p.second->lastTouchFrame >= d->currentFrame_) {
         continue;
       }
-      if (!best || p.second->lastTouchFrame < best->first) {
-        best = std::make_pair(p.second->lastTouchFrame, p.first);
+      candidates.push_back({p.second->lastTouchFrame, p.first});
+    }
+    if (candidates.empty()) {
+      break;
+    }
+    std::sort(candidates.begin(), candidates.end(),
+              [](auto const& a, auto const& b) { return a.first < b.first; });
+    for (auto const& c : candidates) {
+      if (d->frameMapBytes_ <= d->budgetBytes_) {
+        break;
       }
+      auto it = d->frameMap_.find(c.second);
+      if (it == d->frameMap_.end()) {
+        continue;
+      }
+      if (it->second->lastTouchFrame >= d->currentFrame_) {
+        continue;
+      }
+      d->frameMapBytes_ -= it->second->approxBytes;
+      d->releaseFramesetterEntry(*it->second);
+      d->frameMap_.erase(it);
+      ++d->stats_.l2_framesetter.evictions;
     }
-    if (!best) {
-      break;
-    }
-    auto it = d->frameMap_.find(best->second);
-    if (it == d->frameMap_.end()) {
-      break;
-    }
-    d->frameMapBytes_ -= it->second->approxBytes;
-    d->releaseFramesetterEntry(*it->second);
-    d->frameMap_.erase(it);
-    ++d->stats_.l2_framesetter.evictions;
   }
   d->stats_.l2_framesetter.currentBytes = d->frameMapBytes_;
   if (d->frameMapBytes_ > d->stats_.l2_framesetter.peakBytes) {

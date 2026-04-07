@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <memory>
 #include <span>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -40,11 +41,18 @@ public:
   /// Drawing: `canvas.drawTextLayout(*result, {box.x, box.y})` — no further arithmetic.
   /// With `TextWrapping::NoWrap`, width is not limited to `box.width`; text may extend past the box unless the
   /// caller clips (e.g. canvas scissor).
-  virtual std::shared_ptr<TextLayout const> layout(AttributedString const& text, Rect const& box,
-                                                   TextLayoutOptions const& options = {});
+  std::shared_ptr<TextLayout const> layout(AttributedString const& text, Rect const& box,
+                                           TextLayoutOptions const& options = {}) {
+    return layoutBoxedImpl(text, box, options);
+  }
 
-  virtual std::shared_ptr<TextLayout const> layout(std::string_view utf8, Font const& font, Color const& color,
-                                                   Rect const& box, TextLayoutOptions const& options = {});
+  std::shared_ptr<TextLayout const> layout(std::string_view utf8, Font const& font, Color const& color,
+                                           Rect const& box, TextLayoutOptions const& options = {}) {
+    AttributedString as;
+    as.utf8 = std::string(utf8);
+    as.runs.push_back({0, static_cast<std::uint32_t>(utf8.size()), font, color});
+    return layoutBoxedImpl(as, box, options);
+  }
 
   // -----------------------------------------------------------------
   // Measure — CPU only, safe in layout pass, no canvas required
@@ -88,6 +96,10 @@ public:
   virtual std::vector<std::uint8_t> rasterizeGlyph(std::uint32_t fontId, std::uint16_t glyphId, float size,
                                                    std::uint32_t& outWidth, std::uint32_t& outHeight,
                                                    Point& outBearing) = 0;
+
+protected:
+  virtual std::shared_ptr<TextLayout const> layoutBoxedImpl(AttributedString const& text, Rect const& box,
+                                                            TextLayoutOptions const& options = {});
 };
 
 } // namespace flux

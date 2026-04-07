@@ -35,6 +35,9 @@ struct TextLayoutOptions {
   /// Distance from the box top to the desired first baseline (only for `VerticalAlignment::FirstBaseline`).
   /// With offset 0, the first baseline is placed on the box top edge (ascenders may draw above the box).
   float firstBaselineOffset = 0.f;
+
+  /// When true, Core Text cache layers do not update hit/miss counters (debug overlays / uncached paths).
+  bool suppressCacheStats = false;
 };
 
 } // namespace flux

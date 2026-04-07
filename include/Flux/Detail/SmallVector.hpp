@@ -49,6 +49,7 @@ public:
     if (other.size_ <= N) {
       for (std::size_t i = 0; i < other.size_; ++i) {
         new (inlinePtr(i)) T(std::move(*other.inlinePtr(i)));
+        other.inlinePtr(i)->~T();
       }
       size_ = other.size_;
       other.size_ = 0;
@@ -86,11 +87,11 @@ public:
   [[nodiscard]] std::size_t size() const noexcept { return size_; }
 
   [[nodiscard]] T* data() noexcept {
-    return size_ <= N ? inlinePtr(0) : heap_.data();
+    return heap_.empty() ? inlinePtr(0) : heap_.data();
   }
 
   [[nodiscard]] T const* data() const noexcept {
-    return size_ <= N ? const_cast<SmallVector*>(this)->inlinePtr(0) : heap_.data();
+    return heap_.empty() ? const_cast<SmallVector*>(this)->inlinePtr(0) : heap_.data();
   }
 
   [[nodiscard]] T& operator[](std::size_t i) noexcept { return data()[i]; }
