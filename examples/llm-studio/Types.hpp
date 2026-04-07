@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <iomanip>
 #include <random>
 #include <sstream>
@@ -47,4 +48,71 @@ struct Chat {
     bool streaming = false;
 
     constexpr bool operator==(Chat const& o) const = default;
+};
+
+// ── Model management types ──────────────────────────────────────────────────
+
+struct LocalModelInfo {
+    std::string repo;
+    std::string tag;
+    std::string path;
+    size_t      sizeBytes = 0;
+
+    std::string displayName() const {
+        if (!repo.empty()) {
+            return tag.empty() ? repo : repo + ":" + tag;
+        }
+        auto pos = path.rfind('/');
+        return (pos != std::string::npos) ? path.substr(pos + 1) : path;
+    }
+
+    bool operator==(LocalModelInfo const& o) const = default;
+};
+
+struct HfModelInfo {
+    std::string id;
+    int64_t     downloads = 0;
+    int64_t     likes     = 0;
+    std::string pipelineTag;
+
+    bool operator==(HfModelInfo const& o) const = default;
+};
+
+struct HfFileInfo {
+    std::string repoId;
+    std::string path;
+    size_t      sizeBytes = 0;
+
+    bool operator==(HfFileInfo const& o) const = default;
+};
+
+struct ModelManagerEvent {
+    enum class Kind {
+        LocalModelsReady,
+        HfSearchReady,
+        HfFilesReady,
+        DownloadDone,
+        DownloadError,
+        ModelLoaded,
+        ModelLoadError,
+    };
+
+    Kind kind = Kind::LocalModelsReady;
+
+    std::vector<LocalModelInfo> localModels;
+    std::vector<HfModelInfo>    hfModels;
+    std::vector<HfFileInfo>     hfFiles;
+    std::string                 error;
+    std::string                 modelPath;
+    std::string                 modelName;
+};
+
+struct SamplingParams {
+    float   temp      = 0.80f;
+    float   topP      = 0.95f;
+    int32_t topK      = 40;
+    int32_t maxTokens = 4096;
+    int32_t nGpuLayers = -1;
+
+    bool operator==(SamplingParams const& o) const = default;
 };

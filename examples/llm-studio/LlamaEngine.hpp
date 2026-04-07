@@ -141,6 +141,16 @@ public:
 
   std::string const& modelPath() const { return modelPath_; }
 
+  SamplingParams samplingParams() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return samplingParams_;
+  }
+
+  void setSamplingParams(SamplingParams const& sp) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    samplingParams_ = sp;
+  }
+
   void unload() {
     std::lock_guard<std::mutex> lock(mutex_);
     unloadLocked();
@@ -235,8 +245,14 @@ private:
       return;
     }
 
+    SamplingParams sp;
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      sp = samplingParams_;
+    }
+
     int const nPrompt  = static_cast<int>(promptTokens.size());
-    int const nPredict = 4096;
+    int const nPredict = sp.maxTokens;
 
     std::fprintf(stderr, "[LlamaEngine] prompt: %d tokens, max predict: %d\n", nPrompt, nPredict);
 
@@ -252,8 +268,14 @@ private:
       return;
     }
 
-    // ── 5. Sampler — same path as llama-cli ─────────────────────────────
-    common_sampler_ptr smpl(common_sampler_init(model_.get(), params_.sampling));
+    // ── 5. Sampler — apply user-configured sampling parameters ──────────
+    // common_sampler_init mutates its argument. Use a fresh struct each run so we
+    // never persist llama.cpp mutations inside params_.sampling.
+    common_params_sampling samp{};
+    samp.temp  = sp.temp;
+    samp.top_p = sp.topP;
+    samp.top_k = sp.topK;
+    common_sampler_ptr smpl(common_sampler_init(model_.get(), samp));
 
     // ── 6. Prompt evaluation (prefill) ───────────────────────────────────
     {
@@ -346,12 +368,13 @@ private:
     return msg;
   }
 
-  std::mutex                 mutex_;
+  mutable std::mutex         mutex_;
   common_params              params_;
   llama_model_ptr            model_;
   common_chat_templates_ptr  templates_;
   const llama_vocab*         vocab_ = nullptr;
   std::string                modelPath_;
+  SamplingParams             samplingParams_;
   std::atomic<bool>          cancelled_{false};
   std::thread                worker_;
 };
