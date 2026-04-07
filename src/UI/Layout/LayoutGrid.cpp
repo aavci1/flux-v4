@@ -13,8 +13,23 @@
 #include <limits>
 #include <vector>
 
-namespace flux {
 using namespace flux::layout;
+
+namespace flux {
+
+namespace layout {
+
+inline float gridCellSize(float span, std::size_t count, float gap) {
+  if (span <= 0.f || count == 0) {
+    return 0.f;
+  }
+
+  float const gaps = static_cast<float>(count - 1) * gap;
+
+  return (span - gaps) / static_cast<float>(count);
+}
+
+}
 
 void Grid::layout(LayoutContext& ctx) const {
   ContainerLayoutScope scope(ctx);
@@ -31,7 +46,7 @@ void Grid::layout(LayoutContext& ctx) const {
       innerW > 0.f
           ? std::max(0.f, (innerW - static_cast<float>(cols - 1) * horizontalSpacing) / static_cast<float>(cols))
           : 0.f;
-  float const cellH = gridCellHeight(innerH, rowCount, verticalSpacing);
+  float const cellH = gridCellSize(innerH, rowCount, verticalSpacing);
 
   LayoutConstraints childCs = scope.outer;
   childCs.maxWidth =
@@ -103,7 +118,7 @@ Size Grid::measure(LayoutContext& ctx, LayoutConstraints const& constraints, Lay
       innerW > 0.f
           ? std::max(0.f, (innerW - static_cast<float>(cols - 1) * horizontalSpacing) / static_cast<float>(cols))
           : 0.f;
-  float const cellH = gridCellHeight(innerH, rowCount, verticalSpacing);
+  float const cellH = gridCellSize(innerH, rowCount, verticalSpacing);
 
   LayoutConstraints childCs = constraints;
   childCs.maxWidth =

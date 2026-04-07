@@ -76,15 +76,6 @@ inline float vAlignOffset(float childH, float innerH, Alignment a) {
   return 0.f;
 }
 
-/// Per-row height when the grid has a finite inner height (`innerH > 0`); otherwise 0 (unconstrained).
-inline float gridCellHeight(float innerH, std::size_t rowCount, float vSpacing) {
-  if (innerH <= 0.f || rowCount == 0) {
-    return 0.f;
-  }
-  float const gaps = rowCount > 1 ? static_cast<float>(rowCount - 1) * vSpacing : 0.f;
-  return std::max(0.f, (innerH - gaps) / static_cast<float>(rowCount));
-}
-
 constexpr float kFlexEpsilon = 1e-4f;
 
 /// Opt-in layout diagnostics (same env as the layout tree dump). When set, stderr may include
