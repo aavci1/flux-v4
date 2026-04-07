@@ -9,6 +9,7 @@
 #include <Flux/Graphics/TextRun.hpp>
 
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 namespace flux {
@@ -55,5 +56,8 @@ void recomputeTextLayoutMetrics(TextLayout& layout);
 /// Drops runs on lines after the first `maxLines` distinct baselines, then optionally normalizes origins to the
 /// bounding box top-left (recommended when returning from a shaper).
 void trimTextLayoutToMaxLines(TextLayout& layout, int maxLines, bool normalizeAfter = true);
+
+/// Deep copy of a layout (mutable). Used when applying box options or other transforms.
+std::shared_ptr<TextLayout> cloneTextLayout(TextLayout const& src);
 
 } // namespace flux

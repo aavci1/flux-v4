@@ -159,6 +159,7 @@ add_library(flux STATIC
   src/Scene/SceneGraph.cpp
   src/Scene/SceneRenderer.cpp
   src/Scene/LayoutOverlayRenderer.cpp
+  src/Scene/TextCacheDebugOverlay.cpp
   src/Scene/HitTester.cpp
   src/Scene/SceneGraphDump.cpp
   src/Graphics/Styles.cpp
@@ -167,6 +168,7 @@ add_library(flux STATIC
   src/Graphics/Canvas.cpp
   src/Graphics/Metal/MetalFrameRecorder.mm
   src/Graphics/TextSystem.cpp
+  src/Graphics/xxhash_impl.c
   src/Graphics/CoreTextSystem.mm
   src/Graphics/Path.cpp
   src/Graphics/PathFlattener.cpp
@@ -187,6 +189,7 @@ target_include_directories(flux PUBLIC
 target_include_directories(flux PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
   ${CMAKE_CURRENT_BINARY_DIR}
+  ${CMAKE_CURRENT_SOURCE_DIR}/vendor
 )
 
 target_compile_options(flux PRIVATE

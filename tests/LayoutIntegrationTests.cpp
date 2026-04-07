@@ -26,12 +26,12 @@ using namespace flux;
 
 class NullTextSystem final : public TextSystem {
 public:
-  std::shared_ptr<TextLayout> layout(AttributedString const&, float,
-                                     TextLayoutOptions const&) override {
+  std::shared_ptr<TextLayout const> layout(AttributedString const&, float,
+                                           TextLayoutOptions const&) override {
     return nullptr;
   }
-  std::shared_ptr<TextLayout> layout(std::string_view, Font const&, Color const&, float,
-                                     TextLayoutOptions const&) override {
+  std::shared_ptr<TextLayout const> layout(std::string_view, Font const&, Color const&, float,
+                                           TextLayoutOptions const&) override {
     return nullptr;
   }
   Size measure(AttributedString const&, float, TextLayoutOptions const&) override { return {}; }

@@ -491,7 +491,7 @@ void Text::layout(LayoutContext& ctx) const {
 void Text::renderFromLayout(RenderContext& ctx, LayoutNode const& node) const {
   ComponentKey const stableKey = node.componentKey;
   Rect const bounds = node.frame;
-  std::shared_ptr<TextLayout> textLayout;
+  std::shared_ptr<TextLayout const> textLayout;
   if (!text.empty()) {
     TextLayoutOptions const opts = textViewLayoutOptions(*this, ctx.constraints(), ctx.hints());
     textLayout = ctx.textSystem().layout(text, style.toFont(), color, bounds, opts);

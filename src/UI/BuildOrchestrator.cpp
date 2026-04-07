@@ -78,6 +78,8 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
   graph.clear();
 
   layoutEngine_.resetForBuild();
+  ++textFrameIndex_;
+  Application::instance().textSystem().onFrameBegin(textFrameIndex_);
   measureCache_.clear();
   layoutDebugBeginPass();
 
@@ -132,6 +134,7 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
                  "[flux:input] rebuild layout=%.1fx%.1f scene root children (if any) updated\n",
                  static_cast<double>(sz.width), static_cast<double>(sz.height));
   }
+  Application::instance().textSystem().onFrameEnd();
   window_.requestRedraw();
 }
 

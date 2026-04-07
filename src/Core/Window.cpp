@@ -8,6 +8,7 @@
 #include <Flux/Detail/Runtime.hpp>
 #include <Flux/Graphics/Canvas.hpp>
 #include <Flux/Scene/LayoutOverlayRenderer.hpp>
+#include <Flux/Scene/TextCacheDebugOverlay.hpp>
 #include <Flux/Scene/SceneGraph.hpp>
 #include <Flux/Scene/SceneRenderer.hpp>
 #include <Flux/UI/Overlay.hpp>
@@ -217,6 +218,8 @@ void Window::render(Canvas& canvas) {
       renderLayoutOverlay(entry.graph, canvas);
       canvas.restore();
     }
+    Rect const cb = canvas.clipBounds();
+    renderTextCacheDebugOverlay(canvas, cb);
   }
 }
 

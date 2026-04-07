@@ -44,7 +44,7 @@ struct RectNode {
 
 struct TextNode {
   NodeId id{};
-  std::shared_ptr<TextLayout> layout;
+  std::shared_ptr<TextLayout const> layout;
   Point origin{};
   /// When non-empty, hit-testing and layout-rect union use this box (the Text `inner` rect) instead of
   /// `layout->measuredSize`, which can exceed the laid-out cell.

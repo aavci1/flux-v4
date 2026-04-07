@@ -1,5 +1,7 @@
 #include <Flux/Graphics/TextSystem.hpp>
 
+#include "Graphics/TextSystemPrivate.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -45,30 +47,6 @@ namespace {
 constexpr float kLineEps = 0.5f;
 
 bool nearLine(float a, float b) { return std::abs(a - b) < kLineEps; }
-
-void normalizeOriginsToTopLeft(TextLayout& L) {
-  if (L.runs.empty()) {
-    return;
-  }
-  float minX = std::numeric_limits<float>::infinity();
-  float minTop = std::numeric_limits<float>::infinity();
-  for (auto const& pr : L.runs) {
-    TextRun const& r = pr.run;
-    minX = std::min(minX, pr.origin.x);
-    minTop = std::min(minTop, pr.origin.y - r.ascent);
-  }
-  for (auto& pr : L.runs) {
-    pr.origin.x -= minX;
-    pr.origin.y -= minTop;
-  }
-  for (auto& lr : L.lines) {
-    lr.lineMinX -= minX;
-    lr.top -= minTop;
-    lr.bottom -= minTop;
-    lr.baseline -= minTop;
-  }
-  recomputeTextLayoutMetrics(L);
-}
 
 void applyHorizontalPerLine(TextLayout& layout, Rect const& box, HorizontalAlignment horizontalAlignment) {
   if (layout.runs.empty()) {
@@ -128,16 +106,43 @@ void applyHorizontalPerLine(TextLayout& layout, Rect const& box, HorizontalAlign
   recomputeTextLayoutMetrics(layout);
 }
 
-void applyBoxOptions(std::shared_ptr<TextLayout> const& layout, Rect const& box,
-                     TextLayoutOptions const& options) {
-  if (!layout) {
+} // namespace
+
+namespace detail {
+
+void normalizeOriginsToTopLeft(TextLayout& L) {
+  if (L.runs.empty()) {
+    return;
+  }
+  float minX = std::numeric_limits<float>::infinity();
+  float minTop = std::numeric_limits<float>::infinity();
+  for (auto const& pr : L.runs) {
+    TextRun const& r = pr.run;
+    minX = std::min(minX, pr.origin.x);
+    minTop = std::min(minTop, pr.origin.y - r.ascent);
+  }
+  for (auto& pr : L.runs) {
+    pr.origin.x -= minX;
+    pr.origin.y -= minTop;
+  }
+  for (auto& lr : L.lines) {
+    lr.lineMinX -= minX;
+    lr.top -= minTop;
+    lr.bottom -= minTop;
+    lr.baseline -= minTop;
+  }
+  recomputeTextLayoutMetrics(L);
+}
+
+void applyBoxOptions(TextLayout& layout, Rect const& box, TextLayoutOptions const& options) {
+  if (layout.runs.empty()) {
     return;
   }
 
-  normalizeOriginsToTopLeft(*layout);
-  applyHorizontalPerLine(*layout, box, options.horizontalAlignment);
+  normalizeOriginsToTopLeft(layout);
+  applyHorizontalPerLine(layout, box, options.horizontalAlignment);
 
-  float const h = layout->measuredSize.height;
+  float const h = layout.measuredSize.height;
 
   float dy = 0.f;
   switch (options.verticalAlignment) {
@@ -145,7 +150,7 @@ void applyBoxOptions(std::shared_ptr<TextLayout> const& layout, Rect const& box,
     dy = 0.f;
     break;
   case VerticalAlignment::FirstBaseline:
-    dy = options.firstBaselineOffset - layout->firstBaseline;
+    dy = options.firstBaselineOffset - layout.firstBaseline;
     break;
   case VerticalAlignment::Center:
     dy = (box.height - h) * 0.5f;
@@ -155,18 +160,28 @@ void applyBoxOptions(std::shared_ptr<TextLayout> const& layout, Rect const& box,
     break;
   }
 
-  for (auto& pr : layout->runs) {
+  for (auto& pr : layout.runs) {
     pr.origin.y += dy;
   }
-  for (auto& lr : layout->lines) {
+  for (auto& lr : layout.lines) {
     lr.top += dy;
     lr.bottom += dy;
     lr.baseline += dy;
   }
-  recomputeTextLayoutMetrics(*layout);
+  recomputeTextLayoutMetrics(layout);
 }
 
-} // namespace
+} // namespace detail
+
+std::shared_ptr<TextLayout> cloneTextLayout(TextLayout const& src) {
+  auto out = std::make_shared<TextLayout>();
+  out->runs = src.runs;
+  out->lines = src.lines;
+  out->measuredSize = src.measuredSize;
+  out->firstBaseline = src.firstBaseline;
+  out->lastBaseline = src.lastBaseline;
+  return out;
+}
 
 void trimTextLayoutToMaxLines(TextLayout& layout, int maxLines, bool normalizeAfter) {
   if (maxLines <= 0 || layout.runs.empty()) {
@@ -216,27 +231,34 @@ void trimTextLayoutToMaxLines(TextLayout& layout, int maxLines, bool normalizeAf
                      layout.lines.end());
 
   if (normalizeAfter) {
-    normalizeOriginsToTopLeft(layout);
+    detail::normalizeOriginsToTopLeft(layout);
   } else {
     recomputeTextLayoutMetrics(layout);
   }
 }
 
-std::shared_ptr<TextLayout> TextSystem::layout(AttributedString const& text, Rect const& box,
-                                               TextLayoutOptions const& options) {
-  // NoWrap uses maxWidth 0; lines are not broken to box.width and may extend past the box horizontally.
+std::shared_ptr<TextLayout const> TextSystem::layout(AttributedString const& text, Rect const& box,
+                                                     TextLayoutOptions const& options) {
   float const maxWidth = options.wrapping == TextWrapping::NoWrap ? 0.f : box.width;
-  std::shared_ptr<TextLayout> result = layout(text, maxWidth, options);
-  applyBoxOptions(result, box, options);
-  return result;
+  std::shared_ptr<TextLayout const> base = layout(text, maxWidth, options);
+  if (!base) {
+    return nullptr;
+  }
+  std::shared_ptr<TextLayout> mut = cloneTextLayout(*base);
+  detail::applyBoxOptions(*mut, box, options);
+  return mut;
 }
 
-std::shared_ptr<TextLayout> TextSystem::layout(std::string_view utf8, Font const& font, Color const& color,
-                                               Rect const& box, TextLayoutOptions const& options) {
+std::shared_ptr<TextLayout const> TextSystem::layout(std::string_view utf8, Font const& font, Color const& color,
+                                                     Rect const& box, TextLayoutOptions const& options) {
   float const maxWidth = options.wrapping == TextWrapping::NoWrap ? 0.f : box.width;
-  std::shared_ptr<TextLayout> result = layout(utf8, font, color, maxWidth, options);
-  applyBoxOptions(result, box, options);
-  return result;
+  std::shared_ptr<TextLayout const> base = layout(utf8, font, color, maxWidth, options);
+  if (!base) {
+    return nullptr;
+  }
+  std::shared_ptr<TextLayout> mut = cloneTextLayout(*base);
+  detail::applyBoxOptions(*mut, box, options);
+  return mut;
 }
 
 } // namespace flux

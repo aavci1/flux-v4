@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Flux/Graphics/TextCacheStats.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 
 namespace flux {
@@ -12,16 +13,32 @@ public:
   CoreTextSystem(CoreTextSystem const&) = delete;
   CoreTextSystem& operator=(CoreTextSystem const&) = delete;
 
-  std::shared_ptr<TextLayout> layout(AttributedString const& text, float maxWidth,
-                                     TextLayoutOptions const& options) override;
+  std::shared_ptr<TextLayout const> layout(AttributedString const& text, float maxWidth,
+                                           TextLayoutOptions const& options) override;
 
-  std::shared_ptr<TextLayout> layout(std::string_view utf8, Font const& font, Color const& color, float maxWidth,
-                                     TextLayoutOptions const& options) override;
+  std::shared_ptr<TextLayout const> layout(std::string_view utf8, Font const& font, Color const& color,
+                                           float maxWidth, TextLayoutOptions const& options) override;
+
+  std::shared_ptr<TextLayout const> layout(AttributedString const& text, Rect const& box,
+                                           TextLayoutOptions const& options) override;
+
+  std::shared_ptr<TextLayout const> layout(std::string_view utf8, Font const& font, Color const& color,
+                                           Rect const& box, TextLayoutOptions const& options) override;
 
   Size measure(AttributedString const& text, float maxWidth, TextLayoutOptions const& options) override;
 
   Size measure(std::string_view utf8, Font const& font, Color const& color, float maxWidth,
                TextLayoutOptions const& options) override;
+
+  void onFrameBegin(std::uint64_t frameIndex) override;
+
+  void onFrameEnd() override;
+
+  void invalidateAll() override;
+
+  void invalidateForFontChange(std::span<std::uint32_t const> fontIds) override;
+
+  [[nodiscard]] TextCacheStats stats() const override;
 
   std::uint32_t resolveFontId(std::string_view fontFamily, float weight, bool italic) override;
 

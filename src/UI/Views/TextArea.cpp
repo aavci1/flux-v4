@@ -104,7 +104,7 @@ float caretLayoutXForByte(std::string const& cur, int byte, float fieldW, float 
   float const ch = std::max(0.f, fieldH - 2.f * padV);
   Rect const box{0.f, 0.f, cw, ch};
   bool const empty = cur.empty();
-  std::shared_ptr<TextLayout> const layout =
+  std::shared_ptr<TextLayout const> const layout =
       empty ? ts.layout(placeholderText, fnt, plc, box, opts) : ts.layout(cur, fnt, tc, box, opts);
   std::string const& text = empty ? placeholderText : cur;
   Color const col = empty ? plc : tc;
@@ -216,7 +216,7 @@ void TextAreaView::render(Canvas& canvas, Rect frame) const {
   opts.lineHeight = lineHeight;
 
   Color const phc = placeholderColor;
-  std::shared_ptr<TextLayout> const layout =
+  std::shared_ptr<TextLayout const> const layout =
       empty ? ts.layout(placeholder, font, phc, content, opts) : ts.layout(buf, font, tc, content, opts);
 
   std::string const& textForMetrics = empty ? placeholder : buf;
@@ -392,7 +392,7 @@ Element TextArea::body() const {
         opts.verticalAlignment = VerticalAlignment::Top;
         opts.lineHeight = lineHeightOpt;
         Rect const box{0.f, 0.f, contentW, 10000.f};
-        std::shared_ptr<TextLayout> const layout =
+        std::shared_ptr<TextLayout const> const layout =
             bufCopy.empty() ? ts.layout(placeholderText, fnt, plc, box, opts) : ts.layout(bufCopy, fnt, tc, box, opts);
         auto lines = detail::buildLineMetrics(text, *layout, ts, fnt, col);
         int const li = detail::lineIndexForByte(lines, cbKey, text);
@@ -537,7 +537,7 @@ Element TextArea::body() const {
 
     auto touchCaret = [&]() { detail::resetBlink(lastBlink); };
 
-    auto layoutForEdit = [&]() -> std::shared_ptr<TextLayout> {
+    auto layoutForEdit = [&]() -> std::shared_ptr<TextLayout const> {
       TextSystem& ts = Application::instance().textSystem();
       TextLayoutOptions opts{};
       opts.wrapping = TextWrapping::Wrap;
@@ -910,7 +910,7 @@ Element TextArea::body() const {
     float const scroll = *scrollOffsetY;
     Point const contentPt{local.x - padH, local.y - padV + scroll};
     if (buf.empty()) {
-      std::shared_ptr<TextLayout> const layout = ts.layout(placeholderText, fnt, plc, content, opts);
+      std::shared_ptr<TextLayout const> const layout = ts.layout(placeholderText, fnt, plc, content, opts);
       int const pos = detail::caretByteAtPoint(ts, placeholderText, fnt, plc, *layout, contentPt);
       mouseDragAnchorByte = pos;
       caretByte = pos;
@@ -919,7 +919,7 @@ Element TextArea::body() const {
       updateStickyColumnFromCaret(*val, *caretByte);
       return;
     }
-    std::shared_ptr<TextLayout> const layout = ts.layout(buf, fnt, tc, content, opts);
+    std::shared_ptr<TextLayout const> const layout = ts.layout(buf, fnt, tc, content, opts);
     int const pos = detail::caretByteAtPoint(ts, buf, fnt, tc, *layout, contentPt);
     mouseDragAnchorByte = pos;
     caretByte = pos;
@@ -948,7 +948,7 @@ Element TextArea::body() const {
     Point const contentPt{local.x - padH, local.y - padV + scroll};
     int const anchor = *mouseDragAnchorByte;
     if (buf.empty()) {
-      std::shared_ptr<TextLayout> const layout = ts.layout(placeholderText, fnt, plc, content, opts);
+      std::shared_ptr<TextLayout const> const layout = ts.layout(placeholderText, fnt, plc, content, opts);
       int const pos = detail::caretByteAtPoint(ts, placeholderText, fnt, plc, *layout, contentPt);
       caretByte = pos;
       selAnchor = anchor;
@@ -956,7 +956,7 @@ Element TextArea::body() const {
       updateStickyColumnFromCaret(*val, *caretByte);
       return;
     }
-    std::shared_ptr<TextLayout> const layout = ts.layout(buf, fnt, tc, content, opts);
+    std::shared_ptr<TextLayout const> const layout = ts.layout(buf, fnt, tc, content, opts);
     int const pos = detail::caretByteAtPoint(ts, buf, fnt, tc, *layout, contentPt);
     caretByte = pos;
     selAnchor = anchor;
@@ -977,7 +977,7 @@ Element TextArea::body() const {
     float const cw = std::max(0.f, fieldW - 2.f * padH);
     float const ch = std::max(0.f, fieldH - 2.f * padV);
     Rect const content{0.f, 0.f, cw, ch};
-    std::shared_ptr<TextLayout> const layout =
+    std::shared_ptr<TextLayout const> const layout =
         buf.empty() ? ts.layout(placeholderText, fnt, plc, content, opts) : ts.layout(buf, fnt, tc, content, opts);
     float const contentH = layout->measuredSize.height;
     float s = *scrollOffsetY;

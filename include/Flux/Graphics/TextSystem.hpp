@@ -8,11 +8,13 @@
 #include <Flux/Core/Types.hpp>
 #include <Flux/Graphics/AttributedString.hpp>
 #include <Flux/Graphics/Font.hpp>
+#include <Flux/Graphics/TextCacheStats.hpp>
 #include <Flux/Graphics/TextLayout.hpp>
 #include <Flux/Graphics/TextLayoutOptions.hpp>
 
 #include <cstdint>
 #include <memory>
+#include <span>
 #include <string_view>
 #include <vector>
 
@@ -23,25 +25,26 @@ public:
   virtual ~TextSystem() = default;
 
   // -----------------------------------------------------------------
-  // Layout — returns a TextLayout with PlacedRun origins in layout space
+  // Layout — returns immutable TextLayout (cache entries are shared).
   // -----------------------------------------------------------------
 
   /// Unconstrained: no box, no alignment. `maxWidth == 0` means no wrapping.
-  virtual std::shared_ptr<TextLayout> layout(AttributedString const& text, float maxWidth = 0.f,
-                                             TextLayoutOptions const& options = {}) = 0;
+  virtual std::shared_ptr<TextLayout const> layout(AttributedString const& text, float maxWidth = 0.f,
+                                                   TextLayoutOptions const& options = {}) = 0;
 
-  virtual std::shared_ptr<TextLayout> layout(std::string_view utf8, Font const& font, Color const& color,
-                                             float maxWidth = 0.f, TextLayoutOptions const& options = {}) = 0;
+  virtual std::shared_ptr<TextLayout const> layout(std::string_view utf8, Font const& font, Color const& color,
+                                                   float maxWidth = 0.f,
+                                                   TextLayoutOptions const& options = {}) = 0;
 
   /// Box-constrained: PlacedRun origins are pre-offset for alignment within the box.
   /// Drawing: `canvas.drawTextLayout(*result, {box.x, box.y})` — no further arithmetic.
   /// With `TextWrapping::NoWrap`, width is not limited to `box.width`; text may extend past the box unless the
   /// caller clips (e.g. canvas scissor).
-  std::shared_ptr<TextLayout> layout(AttributedString const& text, Rect const& box,
-                                     TextLayoutOptions const& options = {});
+  virtual std::shared_ptr<TextLayout const> layout(AttributedString const& text, Rect const& box,
+                                                   TextLayoutOptions const& options = {});
 
-  std::shared_ptr<TextLayout> layout(std::string_view utf8, Font const& font, Color const& color, Rect const& box,
-                                     TextLayoutOptions const& options = {});
+  virtual std::shared_ptr<TextLayout const> layout(std::string_view utf8, Font const& font, Color const& color,
+                                                   Rect const& box, TextLayoutOptions const& options = {});
 
   // -----------------------------------------------------------------
   // Measure — CPU only, safe in layout pass, no canvas required
@@ -52,6 +55,29 @@ public:
 
   virtual Size measure(std::string_view utf8, Font const& font, Color const& color, float maxWidth = 0.f,
                        TextLayoutOptions const& options = {}) = 0;
+
+  // -----------------------------------------------------------------
+  // Frame lifecycle — call from build orchestrator once per frame
+  // -----------------------------------------------------------------
+
+  virtual void onFrameBegin(std::uint64_t frameIndex) { (void)frameIndex; }
+
+  virtual void onFrameEnd() {}
+
+  // -----------------------------------------------------------------
+  // Invalidation
+  // -----------------------------------------------------------------
+
+  virtual void invalidateAll() {}
+
+  /// Drop cache entries that reference any of the given font ids (resolved font registry indices).
+  virtual void invalidateForFontChange(std::span<std::uint32_t const> fontIds) { (void)fontIds; }
+
+  // -----------------------------------------------------------------
+  // Diagnostics
+  // -----------------------------------------------------------------
+
+  [[nodiscard]] virtual TextCacheStats stats() const { return {}; }
 
   // -----------------------------------------------------------------
   // Backend interface (called by GlyphAtlas — not for app code)

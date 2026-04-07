@@ -156,7 +156,7 @@ void TextInputView::render(Canvas& canvas, Rect frame) const {
 
   Point const textOrigin{content.x - scroll, content.y};
   Color const phc = placeholderColor;
-  std::shared_ptr<TextLayout> const layout =
+  std::shared_ptr<TextLayout const> const layout =
       empty ? ts.layout(placeholder, font, phc, content, opts) : ts.layout(buf, font, tc, content, opts);
 
   float lineTop = 0.f;

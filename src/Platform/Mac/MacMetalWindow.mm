@@ -9,6 +9,7 @@
 #include <Flux/Core/Events.hpp>
 #include <Flux/Core/Application.hpp>
 #include <Flux/Core/Window.hpp>
+#include <Flux/Graphics/TextSystem.hpp>
 
 #include "Core/PlatformWindow.hpp"
 #include "Core/PlatformWindowCreate.hpp"
@@ -117,6 +118,7 @@ void postTextInput(FluxMetalView* view, std::string text);
   if (metalLayer && self.window) {
     metalLayer.contentsScale = self.window.backingScaleFactor;
   }
+  flux::Application::instance().textSystem().invalidateAll();
   [self updateDrawableSize];
 }
 

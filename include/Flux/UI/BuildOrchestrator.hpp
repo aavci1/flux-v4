@@ -66,6 +66,7 @@ private:
   ActionRegistry actionRegistryBuild_{};
   ActionRegistry actionRegistryCommitted_{};
   MeasureCache measureCache_{};
+  std::uint64_t textFrameIndex_{0};
 };
 
 } // namespace flux
