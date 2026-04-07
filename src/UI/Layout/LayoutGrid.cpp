@@ -90,7 +90,7 @@ void Grid::layout(LayoutContext& ctx) const {
       float const frameH = rowH[r] > 0.f ? rowH[r] : sz.height;
       float const cx = x + hAlignOffset(sz.width, frameW, horizontalAlignment);
       float const cy = y + vAlignOffset(sz.height, frameH, verticalAlignment);
-      scope.layoutChild(children[i], Rect{cx, cy, frameW, frameH}, innerForBuild);
+      scope.layoutChild(children[i], Rect{cx, cy, sz.width, sz.height}, innerForBuild);
       x += cellW + horizontalSpacing;
     }
     y += rowH[r];
