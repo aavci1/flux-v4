@@ -650,7 +650,7 @@ struct CoreTextSystem::Impl {
     }
     ++stats_.l1_color.misses;
     constexpr std::size_t kCap = 256;
-    while (colorMap_.size() > kCap) {
+    while (colorMap_.size() >= kCap) {
       auto& last = colorOrder_.back();
       CGColorRelease(last.second);
       colorMap_.erase(last.first);
@@ -682,7 +682,7 @@ struct CoreTextSystem::Impl {
     }
     ++stats_.l0_sizedFont.misses;
     constexpr std::size_t kCap = 256;
-    while (sizedFontMap_.size() > kCap) {
+    while (sizedFontMap_.size() >= kCap) {
       auto& last = sizedFontOrder_.back();
       CFRelease(last.second);
       sizedFontMap_.erase(last.first);
@@ -718,7 +718,7 @@ struct CoreTextSystem::Impl {
     }
     ++stats_.l1_paraStyle.misses;
     constexpr std::size_t kCap = 32;
-    while (paraMap_.size() > kCap) {
+    while (paraMap_.size() >= kCap) {
       auto& last = paraOrder_.back();
       CFRelease(last.second);
       paraMap_.erase(last.first);
@@ -749,7 +749,7 @@ struct CoreTextSystem::Impl {
     }
     ++stats_.l1_runAttr.misses;
     constexpr std::size_t kCap = 1024;
-    while (runAttrMap_.size() > kCap) {
+    while (runAttrMap_.size() >= kCap) {
       auto& last = runAttrOrder_.back();
       CFRelease(last.second);
       runAttrMap_.erase(last.first);
