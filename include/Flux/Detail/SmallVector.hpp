@@ -86,6 +86,8 @@ public:
 
   [[nodiscard]] std::size_t size() const noexcept { return size_; }
 
+  /// Inline storage holds at most \p N elements; the heap is used only after \c emplace_back spills.
+  /// Invariant: \c heap_.empty() iff elements live in inline storage (equivalently \c size_ <= \p N).
   [[nodiscard]] T* data() noexcept {
     return heap_.empty() ? inlinePtr(0) : heap_.data();
   }
@@ -121,22 +123,12 @@ public:
     size_ = 0;
   }
 
+  /// Does not move inline elements to the heap; capacity beyond \p N is acquired only via \c push_back /
+  /// \c emplace_back spill. When already on the heap, forwards to \c std::vector::reserve.
   void reserve(std::size_t cap) {
-    if (cap <= N || size_ > N) {
-      if (size_ > N) {
-        heap_.reserve(cap);
-      }
-      return;
-    }
-    // spill inline to heap if cap > N and we have elements
-    if (cap > N && size_ > 0) {
-      std::vector<T> tmp;
-      tmp.reserve(cap);
-      for (std::size_t i = 0; i < size_; ++i) {
-        tmp.push_back(std::move(*inlinePtr(i)));
-        inlinePtr(i)->~T();
-      }
-      heap_ = std::move(tmp);
+    (void)cap;
+    if (size_ > N) {
+      heap_.reserve(cap);
     }
   }
 

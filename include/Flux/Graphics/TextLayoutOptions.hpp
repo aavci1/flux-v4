@@ -37,6 +37,9 @@ struct TextLayoutOptions {
   float firstBaselineOffset = 0.f;
 
   /// When true, Core Text cache layers do not update hit/miss counters (debug overlays / uncached paths).
+  /// A suppressed call that populates L2 still skips L2 miss accounting; a later normal query for the same
+  /// content may count as an L2 hit, so cumulative hits + misses can diverge from total queries (hit rate is
+  /// still meaningful).
   bool suppressCacheStats = false;
 };
 

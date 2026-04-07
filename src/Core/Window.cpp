@@ -32,8 +32,9 @@ struct Window::Impl {
   /// runs while `OverlayManager` is still alive. Reverse member destruction order would destroy
   /// `overlayMgr_` first and use-after-free on window close with an open overlay.
   OverlayManager overlayMgr_;
-  std::unique_ptr<Runtime> runtime_;
+  /// Declared before `runtime_` so the ring outlives `~Runtime` if teardown ever touches the overlay buffer.
   TextCacheRingBuffer textCacheRing_{};
+  std::unique_ptr<Runtime> runtime_;
   std::unordered_map<std::string, ActionDescriptor> actions_;
   EnvironmentLayer windowEnvironment_{};
 

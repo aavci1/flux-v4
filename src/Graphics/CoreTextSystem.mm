@@ -13,6 +13,7 @@
 #include <Flux/Graphics/TextLayout.hpp>
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <cstring>
 #include <limits>
@@ -1413,47 +1414,46 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layoutBoxedImpl(AttributedStri
   std::uint16_t const fbq = quantizeFirstBaseline(options.firstBaselineOffset);
 
   auto it = d->frameMap_.find(h);
-  if (it == d->frameMap_.end()) {
-    std::shared_ptr<TextLayout> mut = cloneTextLayout(*base);
-    detail::applyBoxOptions(*mut, box, options);
-    return std::shared_ptr<TextLayout const>(std::move(mut));
-  }
+  assert(it != d->frameMap_.end() && "layoutUnboxed must have inserted the framesetter entry");
   FramesetterEntry& e = *it->second;
+
+  LayoutSlot* layoutSlot = nullptr;
   for (std::size_t li = 0; li < e.layouts.size(); ++li) {
     LayoutSlot& ls = e.layouts[li];
-    if (ls.maxWidthQ1 != wq || ls.maxLines != ml) {
-      continue;
+    if (ls.maxWidthQ1 == wq && ls.maxLines == ml) {
+      layoutSlot = &ls;
+      break;
     }
-    for (std::size_t bi = 0; bi < ls.boxes.size(); ++bi) {
-      BoxSlot& bs = ls.boxes[bi];
-      if (bs.boxWQ1 == boxWQ && bs.boxHQ1 == boxHQ && bs.hAlign == ha && bs.vAlign == va &&
-          bs.firstBaselineQ8 == fbq && bs.layout) {
-        if (!options.suppressCacheStats) {
-          ++d->stats_.l4_boxLayout.hits;
-        }
-        return bs.layout;
+  }
+  assert(layoutSlot && "layoutUnboxed must have populated a matching LayoutSlot");
+  LayoutSlot& ls = *layoutSlot;
+
+  for (std::size_t bi = 0; bi < ls.boxes.size(); ++bi) {
+    BoxSlot& bs = ls.boxes[bi];
+    if (bs.boxWQ1 == boxWQ && bs.boxHQ1 == boxHQ && bs.hAlign == ha && bs.vAlign == va &&
+        bs.firstBaselineQ8 == fbq && bs.layout) {
+      if (!options.suppressCacheStats) {
+        ++d->stats_.l4_boxLayout.hits;
       }
+      return bs.layout;
     }
-    if (!options.suppressCacheStats) {
-      ++d->stats_.l4_boxLayout.misses;
-    }
-    std::shared_ptr<TextLayout> mut = cloneTextLayout(*base);
-    detail::applyBoxOptions(*mut, box, options);
-    auto boxed = std::shared_ptr<TextLayout const>(mut);
-    ls.boxes.push_back(BoxSlot{
-        .boxWQ1 = boxWQ,
-        .boxHQ1 = boxHQ,
-        .hAlign = ha,
-        .vAlign = va,
-        .firstBaselineQ8 = fbq,
-        .layout = boxed,
-    });
-    d->bumpEntryApproxBytes(e, text);
-    return boxed;
+  }
+  if (!options.suppressCacheStats) {
+    ++d->stats_.l4_boxLayout.misses;
   }
   std::shared_ptr<TextLayout> mut = cloneTextLayout(*base);
   detail::applyBoxOptions(*mut, box, options);
-  return std::shared_ptr<TextLayout const>(std::move(mut));
+  auto boxed = std::shared_ptr<TextLayout const>(mut);
+  ls.boxes.push_back(BoxSlot{
+      .boxWQ1 = boxWQ,
+      .boxHQ1 = boxHQ,
+      .hAlign = ha,
+      .vAlign = va,
+      .firstBaselineQ8 = fbq,
+      .layout = boxed,
+  });
+  d->bumpEntryApproxBytes(e, text);
+  return boxed;
 }
 
 void CoreTextSystem::onFrameBegin(std::uint64_t frameIndex) {
