@@ -872,7 +872,7 @@ void CoreTextSystem::Impl::bumpEntryApproxBytes(FramesetterEntry& e, AttributedS
   std::uint32_t const newApprox = estimateEntryBytes(text, pieces);
   std::uint32_t const old = e.approxBytes;
   e.approxBytes = newApprox;
-  frameMapBytes_ += static_cast<std::size_t>(newApprox) - static_cast<std::size_t>(old);
+  frameMapBytes_ = frameMapBytes_ - static_cast<std::size_t>(old) + static_cast<std::size_t>(newApprox);
 }
 
 FramesetterEntry& CoreTextSystem::Impl::insertFramesetterMiss(ContentHash const& h,
