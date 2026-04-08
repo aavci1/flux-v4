@@ -3,7 +3,16 @@
 #include <Flux/Graphics/TextCacheStats.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 
+#include <memory>
+
 namespace flux {
+
+class CoreTextSystem;
+
+namespace detail {
+std::shared_ptr<TextLayout const> paragraphCacheFullAssemblyForTest(
+    CoreTextSystem& sys, AttributedString const& text, float maxWidth, TextLayoutOptions const& options);
+}
 
 class CoreTextSystem final : public TextSystem {
 public:
@@ -44,6 +53,9 @@ public:
   std::vector<std::uint8_t> rasterizeGlyph(std::uint32_t fontId, std::uint16_t glyphId, float size,
                                            std::uint32_t& outWidth, std::uint32_t& outHeight,
                                            Point& outBearing) override;
+
+  friend std::shared_ptr<TextLayout const> detail::paragraphCacheFullAssemblyForTest(
+      CoreTextSystem& sys, AttributedString const& text, float maxWidth, TextLayoutOptions const& options);
 
 private:
   struct Impl;

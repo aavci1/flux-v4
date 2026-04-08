@@ -57,11 +57,11 @@ struct TextLayout {
   float firstBaseline = 0.f; ///< Distance from layout top to first line baseline.
   float lastBaseline = 0.f;  ///< Distance from layout top to last line baseline.
 
-  /// Keeps backing storage alive for non-owning spans in `runs` (fast-path paragraph variant cache).
-  /// Holds `std::shared_ptr<ShapedParagraph const>` as type-erased `void`; do not dereference from API code.
-  flux::detail::SmallVector<std::shared_ptr<void>, 8> paragraphRefs;
+  /// Keeps backing storage alive for non-owning spans in `runs` (paragraph layout variant glyph arenas).
+  /// Holds `std::shared_ptr` to internal variant storage as type-erased `void`; do not dereference from API code.
+  flux::detail::SmallVector<std::shared_ptr<void>, 8> variantRefs;
 
-  /// Slow-path / cloned owning storage when spans point here instead of into `paragraphRefs`.
+  /// Slow-path / cloned owning storage when spans point here instead of into `variantRefs`.
   std::unique_ptr<TextLayoutStorage> ownedStorage;
 };
 
@@ -72,7 +72,7 @@ void recomputeTextLayoutMetrics(TextLayout& layout);
 /// bounding box top-left (recommended when returning from a shaper).
 void trimTextLayoutToMaxLines(TextLayout& layout, int maxLines, bool normalizeAfter = true);
 
-/// Deep copy of a layout (mutable). Copies glyph data into `ownedStorage`; clears `paragraphRefs`.
+/// Deep copy of a layout (mutable). Copies glyph data into `ownedStorage`; clears `variantRefs`.
 std::shared_ptr<TextLayout> cloneTextLayout(TextLayout const& src);
 
 } // namespace flux

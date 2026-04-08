@@ -14,8 +14,8 @@ namespace flux {
 
 /// One Core Text `CTRun`-equivalent: resolved style, shaped glyphs, and metrics. Glyph `positions` are
 /// relative to this run's baseline-left; `y` is positive downward (canvas space). `glyphIds` and
-/// `positions` are non-owning views; backing storage is owned by `TextLayout::ownedStorage` or by a
-/// `ShapedParagraph` layout variant.
+/// `positions` are non-owning views; backing storage is owned by `TextLayout::ownedStorage` or kept alive via
+/// `TextLayout::variantRefs` (paragraph layout variant arenas).
 struct TextRun {
   std::uint32_t fontId = 0;
   float fontSize = 0.f;

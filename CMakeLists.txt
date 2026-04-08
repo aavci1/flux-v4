@@ -208,6 +208,20 @@ else()
   target_compile_definitions(flux PRIVATE FLUX_ENABLE_DEFAULT_EVENT_LOGGING=0)
 endif()
 
+option(FLUX_DISABLE_VARIANT_REFS
+  "Deep-copy paragraph cache layouts (revert to clone on fast path); disables variant shared_ptr retention."
+  OFF)
+if(FLUX_DISABLE_VARIANT_REFS)
+  target_compile_definitions(flux PRIVATE FLUX_DISABLE_VARIANT_REFS=1)
+endif()
+
+option(FLUX_ENABLE_PARAGRAPH_CACHE_PARALLEL_ASSERT
+  "Debug: compare incremental vs full paragraph-cache assembly (non-NDEBUG only)."
+  OFF)
+if(FLUX_ENABLE_PARAGRAPH_CACHE_PARALLEL_ASSERT)
+  target_compile_definitions(flux PRIVATE FLUX_PARAGRAPH_CACHE_PARALLEL_ASSERT=1)
+endif()
+
 target_compile_definitions(flux PRIVATE FLUX_PLATFORM_MACOS=1)
 
 target_link_libraries(flux PRIVATE
@@ -229,8 +243,8 @@ option(FLUX_BUILD_TESTS
   OFF)
 
 if(FLUX_BUILD_TESTS)
-  # doctest's CMakeLists may require a minimum policy on CMake 4+; if configure fails, add:
-  #   -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+  # doctest's CMakeLists may require a minimum policy on CMake 4+.
+  set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "" FORCE)
   if(POLICY CMP0127)
     cmake_policy(SET CMP0127 NEW)
   endif()
@@ -249,6 +263,7 @@ if(FLUX_BUILD_TESTS)
     tests/LayoutTreeTests.cpp
     tests/LayoutIntegrationTests.cpp
     tests/ParagraphCacheTests.cpp
+    tests/ParagraphCacheIncrementalTests.cpp
   )
 
   target_include_directories(flux_tests PRIVATE

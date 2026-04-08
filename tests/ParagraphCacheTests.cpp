@@ -3,6 +3,7 @@
 #if defined(__APPLE__)
 
 #include "Graphics/CoreTextSystem.hpp"
+#include "Graphics/TextSystemPrivate.hpp"
 
 #include <Flux/Graphics/AttributedString.hpp>
 #include <Flux/Graphics/TextCacheStats.hpp>
@@ -57,6 +58,51 @@ TEST_CASE("Paragraph cache: stats layers exist after layout") {
   (void)sys.layout(as, 300.f, TextLayoutOptions{});
   TextCacheStats const st = sys.stats();
   CHECK(st.l2_5_paragraph.misses + st.l2_5_paragraph.hits >= 1);
+}
+
+TEST_CASE("Paragraph cache: variant refs survive per-paragraph LRU eviction") {
+  std::string body;
+  for (int i = 0; i < 6; ++i) {
+    body += std::string(100, static_cast<char>('a' + (i % 26))) + "\n";
+  }
+  Font f{};
+  f.family = ".AppleSystemUIFont";
+  f.size = 14.f;
+  f.weight = 400.f;
+  AttributedString const as = AttributedString::plain(body, f, Colors::black);
+  TextLayoutOptions opt{};
+  opt.wrapping = TextWrapping::Wrap;
+
+  float const wA = 170.f;
+  CoreTextSystem sys;
+  auto const held = sys.layout(as, wA, opt);
+  REQUIRE(held != nullptr);
+  auto const snapshot = cloneTextLayout(*held);
+
+  (void)sys.layout(as, 410.f, opt);
+  (void)sys.layout(as, 540.f, opt);
+
+  CHECK(detail::paragraphCacheLayoutsStructurallyEqual(*held, *snapshot));
+}
+
+TEST_CASE("Paragraph cache: notdefGlyphFilteringMatchesCoreText") {
+  Font f{};
+  f.family = ".AppleSystemUIFont";
+  f.size = 15.f;
+  // Emoji + ASCII: Core Text may emit leading `.notdef` (gid 0) in CTRun glyph arrays; storage must filter.
+  std::string const txt = "Hello \xF0\x9F\x98\x80 world\n";
+  AttributedString const as = AttributedString::plain(txt, f, Colors::black);
+  TextLayoutOptions opt{};
+  opt.wrapping = TextWrapping::Wrap;
+  CoreTextSystem sys;
+  auto const ly = sys.layout(as, 400.f, opt);
+  REQUIRE(ly != nullptr);
+  REQUIRE(ly->measuredSize.width > 0.f);
+  for (auto const& pr : ly->runs) {
+    for (std::uint16_t g : pr.run.glyphIds) {
+      CHECK(g != 0);
+    }
+  }
 }
 
 #else

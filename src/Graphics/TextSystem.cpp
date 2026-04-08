@@ -7,6 +7,7 @@
 #include <cmath>
 #include <limits>
 #include <span>
+#include <string>
 #include <unordered_set>
 #include <vector>
 
@@ -170,6 +171,17 @@ void applyBoxOptions(TextLayout& layout, Rect const& box, TextLayoutOptions cons
   recomputeTextLayoutMetrics(layout);
 }
 
+std::vector<std::size_t> filterDrawableGlyphs(std::span<std::uint16_t const> gids) {
+  std::vector<std::size_t> kept;
+  kept.reserve(gids.size());
+  for (std::size_t i = 0; i < gids.size(); ++i) {
+    if (gids[i] != 0) {
+      kept.push_back(i);
+    }
+  }
+  return kept;
+}
+
 } // namespace detail
 
 namespace {
@@ -185,27 +197,103 @@ std::size_t cloneTextLayoutOutputGlyphCount(TextLayout const& src) noexcept {
     if (n == 0) {
       continue;
     }
-    bool hasZeroGlyph = false;
-    for (std::size_t i = 0; i < n; ++i) {
-      if (pr.run.glyphIds[i] == 0) {
-        hasZeroGlyph = true;
-        break;
-      }
-    }
-    if (!hasZeroGlyph) {
-      total += n;
-      continue;
-    }
-    for (std::size_t i = 0; i < n; ++i) {
-      if (pr.run.glyphIds[i] != 0) {
-        ++total;
-      }
-    }
+    total += detail::filterDrawableGlyphs({pr.run.glyphIds.data(), n}).size();
   }
   return total;
 }
 
 } // namespace
+
+namespace detail {
+
+bool paragraphCacheLayoutsStructurallyEqual(TextLayout const& a, TextLayout const& b, std::string* dumpOut) {
+  auto feq = [](float x, float y) { return std::fabs(x - y) < 1e-4f; };
+  // Incremental assembly sometimes reuses memo-derived baselines; full assembly always recomputes metrics.
+  auto feqLayout = [](float x, float y) { return std::fabs(x - y) < 0.25f; };
+  auto fail = [&](char const* msg) {
+    if (dumpOut) {
+      *dumpOut += msg;
+      *dumpOut += '\n';
+    }
+    return false;
+  };
+  if (a.runs.size() != b.runs.size()) {
+    return fail("runs.size mismatch");
+  }
+  if (a.lines.size() != b.lines.size()) {
+    return fail("lines.size mismatch");
+  }
+  bool const variantRefsComparable = !a.variantRefs.empty() && !b.variantRefs.empty();
+  if (variantRefsComparable && a.variantRefs.size() != b.variantRefs.size()) {
+    return fail("variantRefs.size mismatch");
+  }
+  if (!feqLayout(a.measuredSize.width, b.measuredSize.width) ||
+      !feqLayout(a.measuredSize.height, b.measuredSize.height)) {
+    return fail("measuredSize mismatch");
+  }
+  if (!feqLayout(a.firstBaseline, b.firstBaseline) || !feqLayout(a.lastBaseline, b.lastBaseline)) {
+    return fail("first/lastBaseline mismatch");
+  }
+  for (std::size_t i = 0; i < a.runs.size(); ++i) {
+    auto const& x = a.runs[i];
+    auto const& y = b.runs[i];
+    if (x.run.fontId != y.run.fontId) {
+      return fail("run fontId mismatch");
+    }
+    if (!feq(x.run.fontSize, y.run.fontSize)) {
+      return fail("run fontSize mismatch");
+    }
+    if (!(x.run.color == y.run.color)) {
+      return fail("run color mismatch");
+    }
+    if (!feq(x.run.ascent, y.run.ascent) || !feq(x.run.descent, y.run.descent) || !feq(x.run.width, y.run.width)) {
+      return fail("run metrics mismatch");
+    }
+    if (x.run.glyphIds.size() != y.run.glyphIds.size()) {
+      return fail("glyphIds.size mismatch");
+    }
+    if (x.run.positions.size() != y.run.positions.size()) {
+      return fail("positions.size mismatch");
+    }
+    for (std::size_t g = 0; g < x.run.glyphIds.size(); ++g) {
+      if (x.run.glyphIds[g] != y.run.glyphIds[g]) {
+        return fail("glyphIds value mismatch");
+      }
+    }
+    for (std::size_t g = 0; g < x.run.positions.size(); ++g) {
+      if (!feq(x.run.positions[g].x, y.run.positions[g].x) ||
+          !feq(x.run.positions[g].y, y.run.positions[g].y)) {
+        return fail("positions value mismatch");
+      }
+    }
+    if (!feq(x.origin.x, y.origin.x) || !feq(x.origin.y, y.origin.y)) {
+      return fail("PlacedRun origin mismatch");
+    }
+    if (x.utf8Begin != y.utf8Begin || x.utf8End != y.utf8End) {
+      return fail("PlacedRun utf8 range mismatch");
+    }
+    if (x.ctLineIndex != y.ctLineIndex) {
+      return fail("ctLineIndex mismatch");
+    }
+  }
+  for (std::size_t i = 0; i < a.lines.size(); ++i) {
+    auto const& x = a.lines[i];
+    auto const& y = b.lines[i];
+    if (x.ctLineIndex != y.ctLineIndex) {
+      return fail("LineRange ctLineIndex mismatch");
+    }
+    if (x.byteStart != y.byteStart || x.byteEnd != y.byteEnd) {
+      return fail("LineRange byte range mismatch");
+    }
+    if (!feqLayout(x.lineMinX, y.lineMinX) || !feqLayout(x.top, y.top) || !feqLayout(x.bottom, y.bottom) ||
+        !feqLayout(x.baseline, y.baseline)) {
+      return fail("LineRange geometry mismatch");
+    }
+  }
+  return true;
+}
+
+} // namespace detail
 
 std::shared_ptr<TextLayout> cloneTextLayout(TextLayout const& src) {
   auto out = std::make_shared<TextLayout>();
@@ -213,7 +301,7 @@ std::shared_ptr<TextLayout> cloneTextLayout(TextLayout const& src) {
   out->measuredSize = src.measuredSize;
   out->firstBaseline = src.firstBaseline;
   out->lastBaseline = src.lastBaseline;
-  out->paragraphRefs.clear();
+  out->variantRefs.clear();
 
   auto storage = std::make_unique<TextLayoutStorage>();
   std::size_t const totalGlyphs = cloneTextLayoutOutputGlyphCount(src);
@@ -232,15 +320,15 @@ std::shared_ptr<TextLayout> cloneTextLayout(TextLayout const& src) {
       continue;
     }
 
-    bool hasZeroGlyph = false;
-    for (std::size_t i = 0; i < n; ++i) {
-      if (pr.run.glyphIds[i] == 0) {
-        hasZeroGlyph = true;
-        break;
-      }
+    std::vector<std::size_t> const kept = detail::filterDrawableGlyphs({pr.run.glyphIds.data(), n});
+    if (kept.empty()) {
+      copy.run.glyphIds = {};
+      copy.run.positions = {};
+      out->runs.push_back(std::move(copy));
+      continue;
     }
 
-    if (!hasZeroGlyph) {
+    if (kept.size() == n) {
       std::size_t const gGlyphStart = storage->glyphArena.size();
       std::size_t const gPosStart = storage->positionArena.size();
       storage->glyphArena.insert(storage->glyphArena.end(), pr.run.glyphIds.begin(),
@@ -254,22 +342,7 @@ std::shared_ptr<TextLayout> cloneTextLayout(TextLayout const& src) {
       continue;
     }
 
-    // OpenType GID 0 is `.notdef`. Shaping should not emit it in the drawable sequence; if it appears
-    // (or spans read as zero), compact here so owned layouts match what `appendPlacedRunToStorage` would
-    // store: drop zeros and re-anchor relative positions to the first kept glyph (same as CT path).
-    std::vector<std::size_t> kept;
-    kept.reserve(n);
-    for (std::size_t i = 0; i < n; ++i) {
-      if (pr.run.glyphIds[i] != 0) {
-        kept.push_back(i);
-      }
-    }
-    if (kept.empty()) {
-      copy.run.glyphIds = {};
-      copy.run.positions = {};
-      out->runs.push_back(std::move(copy));
-      continue;
-    }
+    // `.notdef` (gid 0) filtered — re-anchor relative positions to the first kept glyph (matches CT path).
     std::size_t const fi = kept[0];
     std::size_t const newN = kept.size();
     std::size_t const gGlyphStart = storage->glyphArena.size();

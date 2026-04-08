@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <cmath>
 #include <cstring>
@@ -498,8 +499,7 @@ static void styleFromCTFont(CTFontRef ctFont, CGColorRef cgColor, CoreTextSystem
   outFontId = sys.resolveFontId(fam, cssWeight, italic);
 }
 
-/// OpenType GID 0 is `.notdef`. Core Text sometimes inserts it at run/line edges; keeping it mis-anchors
-/// the run (origin + widths) and drawing it shows a box. Count only non-zero glyphs for arena sizing.
+/// Count drawable (non-`.notdef`) glyphs for arena sizing — see \c detail::filterDrawableGlyphs.
 static std::size_t countDrawableGlyphsInRun(CTRunRef run) {
   CFIndex const glyphCount = CTRunGetGlyphCount(run);
   if (glyphCount <= 0) {
@@ -507,13 +507,9 @@ static std::size_t countDrawableGlyphsInRun(CTRunRef run) {
   }
   std::vector<CGGlyph> gids(static_cast<std::size_t>(glyphCount));
   CTRunGetGlyphs(run, CFRangeMake(0, 0), gids.data());
-  std::size_t n = 0;
-  for (std::size_t gi = 0; gi < static_cast<std::size_t>(glyphCount); ++gi) {
-    if (gids[gi] != 0) {
-      ++n;
-    }
-  }
-  return n;
+  return detail::filterDrawableGlyphs(std::span<std::uint16_t const>(
+             reinterpret_cast<std::uint16_t const*>(gids.data()), static_cast<std::size_t>(glyphCount)))
+      .size();
 }
 
 /// One `CTRun` appended to `TextLayoutStorage` arenas. Glyph positions are relative to the run's
@@ -540,13 +536,8 @@ static void appendPlacedRunToStorage(CTRunRef run, CGPoint lineOrigin, CGFloat f
   std::vector<CGGlyph> gids(static_cast<std::size_t>(glyphCount));
   CTRunGetGlyphs(run, CFRangeMake(0, 0), gids.data());
 
-  std::vector<std::size_t> kept;
-  kept.reserve(static_cast<std::size_t>(glyphCount));
-  for (CFIndex gi = 0; gi < glyphCount; ++gi) {
-    if (gids[static_cast<std::size_t>(gi)] != 0) {
-      kept.push_back(static_cast<std::size_t>(gi));
-    }
-  }
+  std::vector<std::size_t> const kept = detail::filterDrawableGlyphs(std::span<std::uint16_t const>(
+      reinterpret_cast<std::uint16_t const*>(gids.data()), static_cast<std::size_t>(glyphCount)));
   if (kept.empty()) {
     return;
   }
@@ -674,8 +665,12 @@ struct ShapedParagraph {
   CFIndex utf16Length = 0;
   std::uint32_t approxBytes = 0;
   std::uint64_t lastTouchFrame = 0;
-  flux::detail::SmallVector<ParagraphLayoutVariant, 2> variants{};
+  flux::detail::SmallVector<std::shared_ptr<ParagraphLayoutVariant>, 2> variants{};
 };
+
+static std::shared_ptr<void> typeErasedVariantRef(std::shared_ptr<ParagraphLayoutVariant> const& v) noexcept {
+  return std::static_pointer_cast<void>(v);
+}
 
 static std::uint32_t computeVariantApproxBytes(ParagraphLayoutVariant const& v) noexcept {
   return static_cast<std::uint32_t>(
@@ -686,8 +681,10 @@ static std::uint32_t computeVariantApproxBytes(ParagraphLayoutVariant const& v) 
 
 static std::uint32_t recomputeShapedParagraphApproxBytes(ShapedParagraph const& sp) noexcept {
   std::uint32_t vsum = 0;
-  for (auto const& v : sp.variants) {
-    vsum += v.approxBytes;
+  for (auto const& vp : sp.variants) {
+    if (vp) {
+      vsum += vp->approxBytes;
+    }
   }
   return sp.byteLength + sp.byteLength * 8u + 256u + static_cast<std::uint32_t>(sizeof(ShapedParagraph)) + vsum;
 }
@@ -860,8 +857,10 @@ private:
   void updateVariantStatsBytes() noexcept {
     std::uint64_t vb = 0;
     for (auto const& p : map_) {
-      for (auto const& v : p.second->variants) {
-        vb += static_cast<std::uint64_t>(v.approxBytes);
+      for (auto const& vp : p.second->variants) {
+        if (vp) {
+          vb += static_cast<std::uint64_t>(vp->approxBytes);
+        }
       }
     }
     variantStats_.currentBytes = vb;
@@ -1008,8 +1007,12 @@ struct CoreTextSystem::Impl {
     std::int32_t byteDelta = 0;          ///< newLen - oldLen.
   };
 
-  /// Returns std::nullopt when an incremental split is not possible (e.g. run structure changed
-  /// significantly) so the caller should fall back to the full splitIntoParagraphs path.
+  /// Returns std::nullopt when an incremental split is not possible so the caller should fall back to the
+  /// full \c splitIntoParagraphs path. Bail conditions: empty previous memo (\c prevUtf8 / \c prevParagraphs);
+  /// identical strings (no-op); attributed run count changed; font/color mismatch on any run entirely
+  /// outside the single dirty byte interval (prefix/suffix stable region); no old paragraph intersects the
+  /// dirty region (\c firstChangedOld == prevParas.size()). The prefix/suffix diff always yields one
+  /// contiguous changed region in the buffer (not multiple disjoint edits).
   std::optional<IncrementalSplitResult> tryIncrementalSplit(
       CoreTextSystem& sys, AttributedString const& text,
       std::vector<ResolvedStyle> const& resolved, TextLayoutOptions const& opt);
@@ -1021,15 +1024,13 @@ struct CoreTextSystem::Impl {
   std::shared_ptr<TextLayout const> layoutViaParagraphCache(
       CoreTextSystem& sys, AttributedString const& text, float maxWidth,
       TextLayoutOptions const& options, std::vector<ResolvedStyle> const& resolved,
-      flux::detail::SmallVector<Paragraph, 32>&& paragraphs,
-      IncrementalSplitResult const* incr = nullptr);
+      flux::detail::SmallVector<Paragraph, 32>&& paragraphs, IncrementalSplitResult const* incr = nullptr,
+      bool noMemoSideEffects = false);
 
-  ParagraphLayoutVariant& buildParagraphVariant(CoreTextSystem& sys, ParagraphHash const& hash,
-                                                ShapedParagraph& sp, Paragraph const& para,
-                                                AttributedString const& text,
-                                                std::vector<ResolvedStyle> const& resolved,
-                                                float maxWidth, TextLayoutOptions const& options,
-                                                bool suppressStats);
+  std::shared_ptr<ParagraphLayoutVariant> buildParagraphVariant(
+      CoreTextSystem& sys, ParagraphHash const& hash, ShapedParagraph& sp, Paragraph const& para,
+      AttributedString const& text, std::vector<ResolvedStyle> const& resolved, float maxWidth,
+      TextLayoutOptions const& options, bool suppressStats);
 
   std::optional<std::uint32_t> findFontId(std::string_view family, float weight, bool italic) const noexcept {
     FontKeyView const kv{family, weight > 0.f ? weight : kDefaultFontWeight, italic};
@@ -1665,8 +1666,9 @@ static void fillTextLayoutFromFramesetter(CoreTextSystem& sys, CTFramesetterRef 
   }
 }
 
-static ParagraphLayoutVariant* findVariant(ShapedParagraph& sp, std::uint32_t wq, TextLayoutOptions const& opt,
-                                           ParagraphShapeCache& pec, bool suppressStats) {
+static std::shared_ptr<ParagraphLayoutVariant> findVariant(ShapedParagraph& sp, std::uint32_t wq,
+                                                           TextLayoutOptions const& opt,
+                                                           ParagraphShapeCache& pec, bool suppressStats) {
   std::uint32_t lhQ8 = 0;
   std::uint32_t lhMulQ8 = 0;
   if (opt.lineHeightMultiple > 0.f) {
@@ -1675,20 +1677,22 @@ static ParagraphLayoutVariant* findVariant(ShapedParagraph& sp, std::uint32_t wq
     lhQ8 = static_cast<std::uint32_t>(std::lround(opt.lineHeight * 4.f));
   }
   std::uint8_t const wrap = static_cast<std::uint8_t>(opt.wrapping);
-  for (auto& v : sp.variants) {
-    if (v.maxWidthQ1 == wq && v.wrap == wrap && v.lhQ8 == lhQ8 && v.lhMulQ8 == lhMulQ8) {
+  for (auto const& vp : sp.variants) {
+    if (!vp) {
+      continue;
+    }
+    if (vp->maxWidthQ1 == wq && vp->wrap == wrap && vp->lhQ8 == lhQ8 && vp->lhMulQ8 == lhMulQ8) {
       pec.recordVariantHit(suppressStats);
-      return &v;
+      return vp;
     }
   }
   return nullptr;
 }
 
-ParagraphLayoutVariant& CoreTextSystem::Impl::buildParagraphVariant(CoreTextSystem& sys,
-                                                     ParagraphHash const& hash, ShapedParagraph& sp,
-                                                     Paragraph const& para, AttributedString const& text,
-                                                     std::vector<ResolvedStyle> const& resolved, float maxWidth,
-                                                     TextLayoutOptions const& options, bool suppressStats) {
+std::shared_ptr<ParagraphLayoutVariant> CoreTextSystem::Impl::buildParagraphVariant(
+    CoreTextSystem& sys, ParagraphHash const& hash, ShapedParagraph& sp, Paragraph const& para,
+    AttributedString const& text, std::vector<ResolvedStyle> const& resolved, float maxWidth,
+    TextLayoutOptions const& options, bool suppressStats) {
   paragraphCache_.recordVariantMiss(suppressStats);
   std::uint32_t const oldAb = sp.approxBytes;
   if (sp.variants.size() == kMaxVariantsPerParagraph) {
@@ -1697,13 +1701,13 @@ ParagraphLayoutVariant& CoreTextSystem::Impl::buildParagraphVariant(CoreTextSyst
     sp.variants.pop_back();
   }
   std::uint32_t const wq = quantizeWidth(maxWidth);
-  ParagraphLayoutVariant v{};
-  v.maxWidthQ1 = wq;
-  v.wrap = static_cast<std::uint8_t>(options.wrapping);
+  auto v = std::make_shared<ParagraphLayoutVariant>();
+  v->maxWidthQ1 = wq;
+  v->wrap = static_cast<std::uint8_t>(options.wrapping);
   if (options.lineHeightMultiple > 0.f) {
-    v.lhMulQ8 = static_cast<std::uint32_t>(std::lround(options.lineHeightMultiple * 256.f));
+    v->lhMulQ8 = static_cast<std::uint32_t>(std::lround(options.lineHeightMultiple * 256.f));
   } else if (options.lineHeight > 0.f) {
-    v.lhQ8 = static_cast<std::uint32_t>(std::lround(options.lineHeight * 4.f));
+    v->lhQ8 = static_cast<std::uint32_t>(std::lround(options.lineHeight * 4.f));
   }
 
   // Use CTFramesetter for paragraph variants so multi-line ink matches `fillTextLayoutFromFramesetter` /
@@ -1727,11 +1731,11 @@ ParagraphLayoutVariant& CoreTextSystem::Impl::buildParagraphVariant(CoreTextSyst
     }
     CFAttributedStringRef attr = createCFAttributed(sys, paraText, paraResolved, options);
     if (!attr) {
-      v.approxBytes = computeVariantApproxBytes(v);
-      sp.variants.push_back(std::move(v));
+      v->approxBytes = computeVariantApproxBytes(*v);
+      sp.variants.push_back(v);
       sp.approxBytes = recomputeShapedParagraphApproxBytes(sp);
       paragraphCache_.adjustParagraphBytes(hash, oldAb, sp.approxBytes);
-      return sp.variants.back();
+      return v;
     }
     CTFramesetterRef fs = CTFramesetterCreateWithAttributedString(attr);
     CFRelease(attr);
@@ -1746,28 +1750,28 @@ ParagraphLayoutVariant& CoreTextSystem::Impl::buildParagraphVariant(CoreTextSyst
     }
     assert(sumGlyphs == stor.glyphArena.size() && "run glyph counts must match arenas");
 #endif
-    v.runs = std::move(partial.runs);
-    v.lines = std::move(partial.lines);
-    v.height = partial.measuredSize.height;
-    v.maxLineWidth = partial.measuredSize.width;
-    v.glyphStorage = std::move(stor.glyphArena);
-    v.positionStorage = std::move(stor.positionArena);
+    v->runs = std::move(partial.runs);
+    v->lines = std::move(partial.lines);
+    v->height = partial.measuredSize.height;
+    v->maxLineWidth = partial.measuredSize.width;
+    v->glyphStorage = std::move(stor.glyphArena);
+    v->positionStorage = std::move(stor.positionArena);
     std::size_t off = 0;
-    for (auto& pr : v.runs) {
+    for (auto& pr : v->runs) {
       std::size_t const n = pr.run.glyphIds.size();
-      assert(off + n <= v.glyphStorage.size() && "variant glyph span overflow");
-      pr.run.glyphIds = std::span<std::uint16_t const>(v.glyphStorage.data() + off, n);
-      pr.run.positions = std::span<Point const>(v.positionStorage.data() + off, n);
+      assert(off + n <= v->glyphStorage.size() && "variant glyph span overflow");
+      pr.run.glyphIds = std::span<std::uint16_t const>(v->glyphStorage.data() + off, n);
+      pr.run.positions = std::span<Point const>(v->positionStorage.data() + off, n);
       off += n;
     }
-    assert(off == v.glyphStorage.size() && off == v.positionStorage.size() && "variant repoint must cover arenas");
+    assert(off == v->glyphStorage.size() && off == v->positionStorage.size() && "variant repoint must cover arenas");
   }
 
-  v.approxBytes = computeVariantApproxBytes(v);
-  sp.variants.push_back(std::move(v));
+  v->approxBytes = computeVariantApproxBytes(*v);
+  sp.variants.push_back(v);
   sp.approxBytes = recomputeShapedParagraphApproxBytes(sp);
   paragraphCache_.adjustParagraphBytes(hash, oldAb, sp.approxBytes);
-  return sp.variants.back();
+  return v;
 }
 
 
@@ -2040,38 +2044,45 @@ ShapedParagraph CoreTextSystem::Impl::shapeParagraphForCache(CoreTextSystem& sys
 std::shared_ptr<TextLayout const> CoreTextSystem::Impl::layoutViaParagraphCache(
     CoreTextSystem& sys, AttributedString const& text, float maxWidth, TextLayoutOptions const& options,
     std::vector<ResolvedStyle> const& resolved, flux::detail::SmallVector<Paragraph, 32>&& paragraphs,
-    IncrementalSplitResult const* incr) {
+    IncrementalSplitResult const* incr, bool const noMemoSideEffects) {
+#if defined(FLUX_PARAGRAPH_CACHE_PARALLEL_ASSERT) && !defined(NDEBUG)
+  flux::detail::SmallVector<Paragraph, 32> parallelRefParagraphs;
+  if (incr != nullptr) {
+    parallelRefParagraphs = paragraphs;
+  }
+#endif
   bool const suppressStats = options.suppressCacheStats;
   std::uint32_t const wq = quantizeWidth(maxWidth);
   std::size_t const paraCount = paragraphs.size();
 
   // On the incremental path (incr != nullptr) the content provably changed, so the memoKey
   // check would always miss.  Skip the O(N) phashes build and hash computation entirely.
-  if (incr == nullptr) {
-    flux::detail::SmallVector<ParagraphHash, 32> phashes;
-    phashes.reserve(paraCount);
-    for (std::size_t i = 0; i < paraCount; ++i) {
-      phashes.push_back(paragraphs[i].hash);
+  if (!noMemoSideEffects) {
+    if (incr == nullptr) {
+      flux::detail::SmallVector<ParagraphHash, 32> phashes;
+      phashes.reserve(paraCount);
+      for (std::size_t i = 0; i < paraCount; ++i) {
+        phashes.push_back(paragraphs[i].hash);
+      }
+      LayoutMemoKey const memoKey = computeLayoutMemoKey(phashes, wq, options);
+      if (lastLayout_.layout && lastLayout_.keyHi == memoKey.hi && lastLayout_.keyLo == memoKey.lo) {
+        if (!suppressStats) ++memoStats_.hits;
+        return lastLayout_.layout;
+      }
+      if (!suppressStats) ++memoStats_.misses;
+      lastLayout_.keyHi = memoKey.hi;
+      lastLayout_.keyLo = memoKey.lo;
+    } else {
+      if (!suppressStats) ++memoStats_.misses;
+      // Invalidate stale memoKey so a non-incremental caller doesn't get a false hit.
+      lastLayout_.keyHi = 0;
+      lastLayout_.keyLo = 0;
     }
-    LayoutMemoKey const memoKey = computeLayoutMemoKey(phashes, wq, options);
-    if (lastLayout_.layout && lastLayout_.keyHi == memoKey.hi && lastLayout_.keyLo == memoKey.lo) {
-      if (!suppressStats) ++memoStats_.hits;
-      return lastLayout_.layout;
-    }
-    if (!suppressStats) ++memoStats_.misses;
-    lastLayout_.keyHi = memoKey.hi;
-    lastLayout_.keyLo = memoKey.lo;
-  } else {
-    if (!suppressStats) ++memoStats_.misses;
-    // Invalidate stale memoKey so a non-incremental caller doesn't get a false hit.
-    lastLayout_.keyHi = 0;
-    lastLayout_.keyLo = 0;
   }
 
   // Can we do incremental assembly (bulk-copy prefix+suffix, rebuild only dirty paragraphs)?
   bool const canIncrAssemble =
-      incr != nullptr &&
-      lastLayout_.layout != nullptr &&
+      !noMemoSideEffects && incr != nullptr && lastLayout_.layout != nullptr &&
       lastLayout_.paraRunStarts.size() == lastLayout_.prevParagraphs.size() + 1u &&
       incr->lastChangedExclOld <= lastLayout_.prevParagraphs.size();
 
@@ -2084,7 +2095,7 @@ std::shared_ptr<TextLayout const> CoreTextSystem::Impl::layoutViaParagraphCache(
   auto out = std::make_shared<TextLayout>();
   out->runs.reserve(paraCount);
   out->lines.reserve(paraCount);
-  out->paragraphRefs.reserve(paraCount);
+  out->variantRefs.reserve(paraCount);
   float yCursor = 0.f;
   std::uint32_t ctBase = 0;
   float maxDocWidth = 0.f;
@@ -2106,16 +2117,16 @@ std::shared_ptr<TextLayout const> CoreTextSystem::Impl::layoutViaParagraphCache(
     if (!sp) return false;
 
 #if defined(FLUX_DISABLE_VARIANT_CACHE)
-    ParagraphLayoutVariant* v = nullptr;
+    std::shared_ptr<ParagraphLayoutVariant> v;
 #else
-    ParagraphLayoutVariant* v = findVariant(*sp, wq, options, paragraphCache_, suppressStats);
+    std::shared_ptr<ParagraphLayoutVariant> v = findVariant(*sp, wq, options, paragraphCache_, suppressStats);
 #endif
     if (!v) {
-      v = &buildParagraphVariant(sys, para.hash, *sp, para, text, resolved, maxWidth, options,
-                                  suppressStats);
+      v = buildParagraphVariant(sys, para.hash, *sp, para, text, resolved, maxWidth, options,
+                                suppressStats);
     }
 
-    out->paragraphRefs.push_back(sp);
+    out->variantRefs.push_back(typeErasedVariantRef(v));
     std::size_t const runBase = out->runs.size();
     out->runs.resize(runBase + v->runs.size());
     for (std::size_t i = 0; i < v->runs.size(); ++i) {
@@ -2171,8 +2182,8 @@ std::shared_ptr<TextLayout const> CoreTextSystem::Impl::layoutViaParagraphCache(
           prev.lines.begin(),
           prev.lines.begin() + static_cast<std::ptrdiff_t>(prefixLineEnd));
     }
-    for (std::size_t i = 0; i < fco && i < prev.paragraphRefs.size(); ++i) {
-      out->paragraphRefs.push_back(prev.paragraphRefs[i]);
+    for (std::size_t i = 0; i < fco && i < prev.variantRefs.size(); ++i) {
+      out->variantRefs.push_back(prev.variantRefs[i]);
     }
     yCursor = lastLayout_.paraYCursors[fco];
     ctBase  = lastLayout_.paraCtBases[fco];
@@ -2225,8 +2236,8 @@ std::shared_ptr<TextLayout const> CoreTextSystem::Impl::layoutViaParagraphCache(
       out->lines[i].ctLineIndex = static_cast<std::uint32_t>(
           static_cast<std::int32_t>(out->lines[i].ctLineIndex) + dCt);
     }
-    for (std::size_t i = lceo; i < prev.paragraphRefs.size(); ++i) {
-      out->paragraphRefs.push_back(prev.paragraphRefs[i]);
+    for (std::size_t i = lceo; i < prev.variantRefs.size(); ++i) {
+      out->variantRefs.push_back(prev.variantRefs[i]);
     }
     // Suffix per-paragraph index entries.
     for (std::size_t j = 0; lce + j < paraCount; ++j) {
@@ -2284,18 +2295,37 @@ std::shared_ptr<TextLayout const> CoreTextSystem::Impl::layoutViaParagraphCache(
     recomputeTextLayoutMetrics(*out);
   }
 
-  // Copy glyph/position bytes into ownedStorage so layouts do not retain non-owning spans into
-  // `ParagraphLayoutVariant` arenas (those vectors can be freed when the shape cache evicts a variant).
+#if defined(FLUX_DISABLE_VARIANT_REFS)
+  // Deep-copy glyphs into owned storage (rollback when variant reference-counting is disabled).
   std::shared_ptr<TextLayout const> const result = cloneTextLayout(*out);
-  // keyHi/keyLo already written in the non-incremental branch above (or zeroed for incremental).
-  lastLayout_.layout = result;
+#else
+  std::shared_ptr<TextLayout const> const result = std::const_pointer_cast<TextLayout const>(out);
+#endif
 
-  // Persist per-paragraph tables for the next incremental assembly.
-  lastLayout_.prevParagraphs.assign(paragraphs.begin(), paragraphs.end());
-  lastLayout_.paraRunStarts  = std::move(newRunStarts);
-  lastLayout_.paraLineStarts = std::move(newLineStarts);
-  lastLayout_.paraYCursors   = std::move(newYCursors);
-  lastLayout_.paraCtBases    = std::move(newCtBases);
+#if defined(FLUX_PARAGRAPH_CACHE_PARALLEL_ASSERT) && !defined(NDEBUG)
+  if (!noMemoSideEffects && canIncrAssemble && incr != nullptr) {
+    std::string dump;
+    auto const ref =
+        layoutViaParagraphCache(sys, text, maxWidth, options, resolved, std::move(parallelRefParagraphs), nullptr,
+                                true);
+    if (ref && !detail::paragraphCacheLayoutsStructurallyEqual(*result, *ref, &dump)) {
+      std::fprintf(stderr, "paragraph cache parallel assert mismatch:\n%s\n", dump.c_str());
+      assert(false && "paragraph cache parallel assert");
+    }
+  }
+#endif
+
+  if (!noMemoSideEffects) {
+    // keyHi/keyLo already written in the non-incremental branch above (or zeroed for incremental).
+    lastLayout_.layout = result;
+
+    // Persist per-paragraph tables for the next incremental assembly.
+    lastLayout_.prevParagraphs.assign(paragraphs.begin(), paragraphs.end());
+    lastLayout_.paraRunStarts  = std::move(newRunStarts);
+    lastLayout_.paraLineStarts = std::move(newLineStarts);
+    lastLayout_.paraYCursors   = std::move(newYCursors);
+    lastLayout_.paraCtBases    = std::move(newCtBases);
+  }
 
   return result;
 }
@@ -2806,5 +2836,22 @@ void CoreTextSystem::setParagraphCacheBudget(std::size_t bytes) {
   d->paragraphCacheBudgetBytes_ = bytes;
   d->paragraphCache_.setBudget(bytes);
 }
+
+namespace detail {
+
+std::shared_ptr<TextLayout const> paragraphCacheFullAssemblyForTest(
+    CoreTextSystem& sys, AttributedString const& text, float maxWidth, TextLayoutOptions const& options) {
+  validateRuns(text);
+  if (!paragraphCachePredicate(text, options)) {
+    return nullptr;
+  }
+  std::vector<ResolvedStyle> resolved;
+  accumulateInheritance(resolved, text);
+  auto paras = sys.d->splitIntoParagraphs(sys, text, resolved, options);
+  return sys.d->layoutViaParagraphCache(sys, text, maxWidth, options, resolved, std::move(paras), nullptr,
+                                        true);
+}
+
+} // namespace detail
 
 } // namespace flux
