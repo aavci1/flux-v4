@@ -97,6 +97,54 @@ int main() {
     std::cout << "B3 T_assembly cold: " << tCold << " s, warm: " << tWarm << " s\n";
   }
 
+  // B4: per-keystroke latency on a warm cache.
+  {
+    flux::CoreTextSystem sys;
+    (void)sys.layout(as, 800.f, opt);  // warm the cache
+
+    // Mutate: append 'x' to the middle paragraph.
+    std::string edited = doc;
+    std::size_t const mid = kParas / 2;
+    std::size_t const insertAt = mid * (kCharsPerPara + 1) + 40;  // middle of paragraph 2500
+    edited.insert(insertAt, 1, 'x');
+    AttributedString const asEdited = AttributedString::plain(edited, f, Colors::black);
+
+    auto const t0 = std::chrono::steady_clock::now();
+    (void)sys.layout(asEdited, 800.f, opt);
+    double const tEdit = secondsSince(t0);
+    std::cout << "B4 T_keystroke (1 paragraph changed, 4999 cached): " << tEdit << " s\n";
+  }
+
+  // B5: resize — all variants rebuild on first resize, then hit cache on second.
+  {
+    flux::CoreTextSystem sys;
+    (void)sys.layout(as, 800.f, opt);  // prime paragraph cache at 800px
+
+    // First resize to 600px: all paragraph variants must rebuild (cache miss)
+    auto const t0 = std::chrono::steady_clock::now();
+    (void)sys.layout(as, 600.f, opt);
+    double const tResize = secondsSince(t0);
+    std::cout << "B5 T_resize_cold (all variants rebuild, 600px): " << tResize << " s\n";
+
+    // Second layout at 600px: all paragraph variants hit the cache
+    auto const t1 = std::chrono::steady_clock::now();
+    (void)sys.layout(as, 600.f, opt);
+    double const tResizeWarm = secondsSince(t1);
+    std::cout << "B5 T_resize_warm (variant cache hit, 600px): " << tResizeWarm << " s\n";
+
+    // Back to 800px: variant cache should still have 800px variants (kMaxVariantsPerParagraph=2)
+    auto const t2 = std::chrono::steady_clock::now();
+    (void)sys.layout(as, 800.f, opt);
+    double const tBack = secondsSince(t2);
+    std::cout << "B5 T_resize_back (variant cache hit, 800px): " << tBack << " s\n";
+
+    // Repeat exact call: memo hit
+    auto const t3 = std::chrono::steady_clock::now();
+    (void)sys.layout(as, 800.f, opt);
+    double const tMemo = secondsSince(t3);
+    std::cout << "B5 T_memo_hit (exact repeat, should be <0.1ms): " << (tMemo * 1000.0) << " ms\n";
+  }
+
   return 0;
 #endif
 }

@@ -8,18 +8,20 @@
 #include <Flux/Core/Types.hpp>
 
 #include <cstdint>
-#include <vector>
+#include <span>
 
 namespace flux {
 
 /// One Core Text `CTRun`-equivalent: resolved style, shaped glyphs, and metrics. Glyph `positions` are
-/// relative to this run’s baseline-left; `y` is positive downward (canvas space).
+/// relative to this run's baseline-left; `y` is positive downward (canvas space). `glyphIds` and
+/// `positions` are non-owning views; backing storage is owned by `TextLayout::ownedStorage` or by a
+/// `ShapedParagraph` layout variant.
 struct TextRun {
   std::uint32_t fontId = 0;
   float fontSize = 0.f;
   Color color = Colors::black;
-  std::vector<std::uint16_t> glyphIds;
-  std::vector<Point> positions;
+  std::span<std::uint16_t const> glyphIds;
+  std::span<Point const> positions;
   float ascent = 0.f;
   float descent = 0.f;
   float width = 0.f;

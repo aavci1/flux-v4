@@ -49,8 +49,10 @@ std::string buildOverlayText(TextCacheStats const& oldest, TextCacheStats const&
   o << formatLayer("L2.5 para", hitRateWindow(oldest.l2_5_paragraph, newest.l2_5_paragraph),
                    newest.l2_5_paragraph)
     << "\n";
-  o << formatLayer("L2.5 asm", hitRateWindow(oldest.l2_5_assembly, newest.l2_5_assembly),
-                   newest.l2_5_assembly)
+  o << formatLayer("L2.5 variant", hitRateWindow(oldest.l2_5_variant, newest.l2_5_variant),
+                   newest.l2_5_variant)
+    << "\n";
+  o << formatLayer("L2.5 memo", hitRateWindow(oldest.l2_5_memo, newest.l2_5_memo), newest.l2_5_memo)
     << "\n";
   o << formatLayer("L3 layout", hitRateWindow(oldest.l3_layout, newest.l3_layout), newest.l3_layout) << "\n";
   o << formatLayer("L4 box", hitRateWindow(oldest.l4_boxLayout, newest.l4_boxLayout), newest.l4_boxLayout) << "\n";

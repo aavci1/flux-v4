@@ -6,6 +6,7 @@
 
 
 #include <Flux/Core/Types.hpp>
+#include <Flux/Detail/SmallVector.hpp>
 #include <Flux/Graphics/TextRun.hpp>
 
 #include <cstdint>
@@ -13,6 +14,13 @@
 #include <vector>
 
 namespace flux {
+
+/// Owning glyph arenas for layouts produced on the slow path or by `cloneTextLayout`. Spans in `runs`
+/// point into these vectors.
+struct TextLayoutStorage {
+  std::vector<std::uint16_t> glyphArena;
+  std::vector<Point> positionArena;
+};
 
 /// Laid-out text: runs plus placement in layout space. `origin` passed to `Canvas::drawTextLayout` is the layout
 /// top-left; each `PlacedRun::origin` is the baseline-left of that run relative to that point (`y` down).
@@ -48,6 +56,13 @@ struct TextLayout {
   Size measuredSize{};
   float firstBaseline = 0.f; ///< Distance from layout top to first line baseline.
   float lastBaseline = 0.f;  ///< Distance from layout top to last line baseline.
+
+  /// Keeps backing storage alive for non-owning spans in `runs` (fast-path paragraph variant cache).
+  /// Holds `std::shared_ptr<ShapedParagraph const>` as type-erased `void`; do not dereference from API code.
+  flux::detail::SmallVector<std::shared_ptr<void>, 8> paragraphRefs;
+
+  /// Slow-path / cloned owning storage when spans point here instead of into `paragraphRefs`.
+  std::unique_ptr<TextLayoutStorage> ownedStorage;
 };
 
 /// Recomputes `measuredSize`, `firstBaseline`, and `lastBaseline` from current run geometry.
@@ -57,7 +72,7 @@ void recomputeTextLayoutMetrics(TextLayout& layout);
 /// bounding box top-left (recommended when returning from a shaper).
 void trimTextLayoutToMaxLines(TextLayout& layout, int maxLines, bool normalizeAfter = true);
 
-/// Deep copy of a layout (mutable). Used when applying box options or other transforms.
+/// Deep copy of a layout (mutable). Copies glyph data into `ownedStorage`; clears `paragraphRefs`.
 std::shared_ptr<TextLayout> cloneTextLayout(TextLayout const& src);
 
 } // namespace flux

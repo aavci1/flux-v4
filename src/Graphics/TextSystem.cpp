@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <span>
 #include <unordered_set>
 #include <vector>
 
@@ -175,11 +176,25 @@ void applyBoxOptions(TextLayout& layout, Rect const& box, TextLayoutOptions cons
 
 std::shared_ptr<TextLayout> cloneTextLayout(TextLayout const& src) {
   auto out = std::make_shared<TextLayout>();
-  out->runs = src.runs;
   out->lines = src.lines;
   out->measuredSize = src.measuredSize;
   out->firstBaseline = src.firstBaseline;
   out->lastBaseline = src.lastBaseline;
+  out->paragraphRefs.clear();
+
+  auto storage = std::make_unique<TextLayoutStorage>();
+  out->runs.reserve(src.runs.size());
+  for (auto const& pr : src.runs) {
+    TextLayout::PlacedRun copy = pr;
+    std::size_t const gidCount = pr.run.glyphIds.size();
+    std::size_t const gStart = storage->glyphArena.size();
+    storage->glyphArena.insert(storage->glyphArena.end(), pr.run.glyphIds.begin(), pr.run.glyphIds.end());
+    storage->positionArena.insert(storage->positionArena.end(), pr.run.positions.begin(), pr.run.positions.end());
+    copy.run.glyphIds = std::span<std::uint16_t const>(storage->glyphArena.data() + gStart, gidCount);
+    copy.run.positions = std::span<Point const>(storage->positionArena.data() + gStart, gidCount);
+    out->runs.push_back(std::move(copy));
+  }
+  out->ownedStorage = std::move(storage);
   return out;
 }
 
