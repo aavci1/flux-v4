@@ -3,6 +3,7 @@
 #include "Graphics/TextSystemPrivate.hpp"
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <limits>
 #include <span>
@@ -171,6 +172,41 @@ void applyBoxOptions(TextLayout& layout, Rect const& box, TextLayoutOptions cons
 
 } // namespace detail
 
+namespace {
+
+/// Total glyphs written by `cloneTextLayout` (must match the main loop). Used to `reserve` arenas so
+/// `glyphArena` never reallocates while earlier `PlacedRun::run.glyphIds` spans still point into it.
+std::size_t cloneTextLayoutOutputGlyphCount(TextLayout const& src) noexcept {
+  std::size_t total = 0;
+  for (auto const& pr : src.runs) {
+    std::size_t const gidCount = pr.run.glyphIds.size();
+    std::size_t const posCount = pr.run.positions.size();
+    std::size_t const n = std::min(gidCount, posCount);
+    if (n == 0) {
+      continue;
+    }
+    bool hasZeroGlyph = false;
+    for (std::size_t i = 0; i < n; ++i) {
+      if (pr.run.glyphIds[i] == 0) {
+        hasZeroGlyph = true;
+        break;
+      }
+    }
+    if (!hasZeroGlyph) {
+      total += n;
+      continue;
+    }
+    for (std::size_t i = 0; i < n; ++i) {
+      if (pr.run.glyphIds[i] != 0) {
+        ++total;
+      }
+    }
+  }
+  return total;
+}
+
+} // namespace
+
 std::shared_ptr<TextLayout> cloneTextLayout(TextLayout const& src) {
   auto out = std::make_shared<TextLayout>();
   out->lines = src.lines;
@@ -180,6 +216,9 @@ std::shared_ptr<TextLayout> cloneTextLayout(TextLayout const& src) {
   out->paragraphRefs.clear();
 
   auto storage = std::make_unique<TextLayoutStorage>();
+  std::size_t const totalGlyphs = cloneTextLayoutOutputGlyphCount(src);
+  storage->glyphArena.reserve(totalGlyphs);
+  storage->positionArena.reserve(totalGlyphs);
   out->runs.reserve(src.runs.size());
   for (auto const& pr : src.runs) {
     TextLayout::PlacedRun copy = pr;
@@ -192,17 +231,64 @@ std::shared_ptr<TextLayout> cloneTextLayout(TextLayout const& src) {
       out->runs.push_back(std::move(copy));
       continue;
     }
+
+    bool hasZeroGlyph = false;
+    for (std::size_t i = 0; i < n; ++i) {
+      if (pr.run.glyphIds[i] == 0) {
+        hasZeroGlyph = true;
+        break;
+      }
+    }
+
+    if (!hasZeroGlyph) {
+      std::size_t const gGlyphStart = storage->glyphArena.size();
+      std::size_t const gPosStart = storage->positionArena.size();
+      storage->glyphArena.insert(storage->glyphArena.end(), pr.run.glyphIds.begin(),
+                                 pr.run.glyphIds.begin() + static_cast<std::ptrdiff_t>(n));
+      storage->positionArena.insert(storage->positionArena.end(), pr.run.positions.begin(),
+                                    pr.run.positions.begin() + static_cast<std::ptrdiff_t>(n));
+      copy.run.glyphIds =
+          std::span<std::uint16_t const>(storage->glyphArena.data() + gGlyphStart, n);
+      copy.run.positions = std::span<Point const>(storage->positionArena.data() + gPosStart, n);
+      out->runs.push_back(std::move(copy));
+      continue;
+    }
+
+    // OpenType GID 0 is `.notdef`. Shaping should not emit it in the drawable sequence; if it appears
+    // (or spans read as zero), compact here so owned layouts match what `appendPlacedRunToStorage` would
+    // store: drop zeros and re-anchor relative positions to the first kept glyph (same as CT path).
+    std::vector<std::size_t> kept;
+    kept.reserve(n);
+    for (std::size_t i = 0; i < n; ++i) {
+      if (pr.run.glyphIds[i] != 0) {
+        kept.push_back(i);
+      }
+    }
+    if (kept.empty()) {
+      copy.run.glyphIds = {};
+      copy.run.positions = {};
+      out->runs.push_back(std::move(copy));
+      continue;
+    }
+    std::size_t const fi = kept[0];
+    std::size_t const newN = kept.size();
     std::size_t const gGlyphStart = storage->glyphArena.size();
     std::size_t const gPosStart = storage->positionArena.size();
-    storage->glyphArena.insert(storage->glyphArena.end(), pr.run.glyphIds.begin(),
-                               pr.run.glyphIds.begin() + static_cast<std::ptrdiff_t>(n));
-    storage->positionArena.insert(storage->positionArena.end(), pr.run.positions.begin(),
-                                  pr.run.positions.begin() + static_cast<std::ptrdiff_t>(n));
+    for (std::size_t j = 0; j < newN; ++j) {
+      std::size_t const oi = kept[j];
+      storage->glyphArena.push_back(pr.run.glyphIds[oi]);
+      float const dx = pr.run.positions[oi].x - pr.run.positions[fi].x;
+      float const dy = pr.run.positions[oi].y - pr.run.positions[fi].y;
+      storage->positionArena.push_back(Point{dx, dy});
+    }
     copy.run.glyphIds =
-        std::span<std::uint16_t const>(storage->glyphArena.data() + gGlyphStart, n);
-    copy.run.positions = std::span<Point const>(storage->positionArena.data() + gPosStart, n);
+        std::span<std::uint16_t const>(storage->glyphArena.data() + gGlyphStart, newN);
+    copy.run.positions = std::span<Point const>(storage->positionArena.data() + gPosStart, newN);
     out->runs.push_back(std::move(copy));
   }
+#ifndef NDEBUG
+  assert(storage->glyphArena.size() == totalGlyphs && storage->positionArena.size() == totalGlyphs);
+#endif
   out->ownedStorage = std::move(storage);
   return out;
 }

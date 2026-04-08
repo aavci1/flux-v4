@@ -498,12 +498,30 @@ static void styleFromCTFont(CTFontRef ctFont, CGColorRef cgColor, CoreTextSystem
   outFontId = sys.resolveFontId(fam, cssWeight, italic);
 }
 
+/// OpenType GID 0 is `.notdef`. Core Text sometimes inserts it at run/line edges; keeping it mis-anchors
+/// the run (origin + widths) and drawing it shows a box. Count only non-zero glyphs for arena sizing.
+static std::size_t countDrawableGlyphsInRun(CTRunRef run) {
+  CFIndex const glyphCount = CTRunGetGlyphCount(run);
+  if (glyphCount <= 0) {
+    return 0;
+  }
+  std::vector<CGGlyph> gids(static_cast<std::size_t>(glyphCount));
+  CTRunGetGlyphs(run, CFRangeMake(0, 0), gids.data());
+  std::size_t n = 0;
+  for (std::size_t gi = 0; gi < static_cast<std::size_t>(glyphCount); ++gi) {
+    if (gids[gi] != 0) {
+      ++n;
+    }
+  }
+  return n;
+}
+
 /// One `CTRun` appended to `TextLayoutStorage` arenas. Glyph positions are relative to the run's
 /// baseline-left; `origin` is baseline-left in layout space (top-left origin, Y down).
 /// `frameHeight` is the CT frame path height (Quartz, Y up).
 static void appendPlacedRunToStorage(CTRunRef run, CGPoint lineOrigin, CGFloat frameHeight, CoreTextSystem& sys,
                                      TextLayout& layout, TextLayoutStorage& storage, NSString* fullString,
-                                     CFIndex ctLineIndex) {
+                                     CFIndex ctLineIndex, std::size_t& arenaWrite) {
   CFIndex const glyphCount = CTRunGetGlyphCount(run);
   if (glyphCount <= 0) {
     return;
@@ -519,22 +537,38 @@ static void appendPlacedRunToStorage(CTRunRef run, CGPoint lineOrigin, CGFloat f
 
   std::vector<CGPoint> cpos(static_cast<std::size_t>(glyphCount));
   CTRunGetPositions(run, CFRangeMake(0, 0), cpos.data());
+  std::vector<CGGlyph> gids(static_cast<std::size_t>(glyphCount));
+  CTRunGetGlyphs(run, CFRangeMake(0, 0), gids.data());
+
+  std::vector<std::size_t> kept;
+  kept.reserve(static_cast<std::size_t>(glyphCount));
+  for (CFIndex gi = 0; gi < glyphCount; ++gi) {
+    if (gids[static_cast<std::size_t>(gi)] != 0) {
+      kept.push_back(static_cast<std::size_t>(gi));
+    }
+  }
+  if (kept.empty()) {
+    return;
+  }
+  std::size_t const fi = kept[0];
 
   CGFloat ascent = 0, descent = 0, leading = 0;
-  double const runWidth = CTRunGetTypographicBounds(run, CFRangeMake(0, 0), &ascent, &descent, &leading);
+  double const runWidth = CTRunGetTypographicBounds(
+      run, CFRangeMake(static_cast<CFIndex>(fi), glyphCount - static_cast<CFIndex>(fi)), &ascent, &descent, &leading);
 
-  std::size_t const gOff = storage.glyphArena.size();
-  storage.glyphArena.resize(gOff + static_cast<std::size_t>(glyphCount));
-  storage.positionArena.resize(gOff + static_cast<std::size_t>(glyphCount));
-  CTRunGetGlyphs(run, CFRangeMake(0, 0), reinterpret_cast<CGGlyph*>(storage.glyphArena.data() + gOff));
+  std::size_t const gOff = arenaWrite;
+  std::size_t const n = kept.size();
+  assert(gOff + n <= storage.glyphArena.size() && gOff + n <= storage.positionArena.size());
+  arenaWrite += n;
 
-  // LTR: positions are anchored to glyph index 0. For RTL (`kCTRunStatusRightToLeft`), index 0 is not
-  // necessarily the visual left edge; relative dx/dy would need a different anchor when RTL is supported.
-  for (CFIndex gi = 0; gi < glyphCount; ++gi) {
-    float const dx = static_cast<float>(cpos[static_cast<std::size_t>(gi)].x - cpos[0].x);
+  // LTR: anchor to first drawable glyph (`fi`). For RTL, a different anchor would be needed.
+  for (std::size_t j = 0; j < n; ++j) {
+    std::size_t const gi = kept[j];
+    storage.glyphArena[gOff + j] = static_cast<std::uint16_t>(gids[gi]);
+    float const dx = static_cast<float>(cpos[gi].x - cpos[fi].x);
     float const dy =
-        -static_cast<float>(cpos[static_cast<std::size_t>(gi)].y - cpos[0].y); // Quartz Y up â canvas Y down
-    storage.positionArena[gOff + static_cast<std::size_t>(gi)] = Point{dx, dy};
+        -static_cast<float>(cpos[gi].y - cpos[fi].y); // Quartz Y up -> canvas Y down
+    storage.positionArena[gOff + j] = Point{dx, dy};
   }
 
   TextLayout::PlacedRun placed{};
@@ -544,13 +578,11 @@ static void appendPlacedRunToStorage(CTRunRef run, CGPoint lineOrigin, CGFloat f
   placed.run.ascent = static_cast<float>(ascent);
   placed.run.descent = static_cast<float>(descent);
   placed.run.width = static_cast<float>(runWidth);
-  placed.run.glyphIds = std::span<std::uint16_t const>(storage.glyphArena.data() + gOff,
-                                                        static_cast<std::size_t>(glyphCount));
-  placed.run.positions = std::span<Point const>(storage.positionArena.data() + gOff,
-                                                static_cast<std::size_t>(glyphCount));
+  placed.run.glyphIds = std::span<std::uint16_t const>(storage.glyphArena.data() + gOff, n);
+  placed.run.positions = std::span<Point const>(storage.positionArena.data() + gOff, n);
 
-  CGFloat const baselineX = lineOrigin.x + cpos[0].x;
-  CGFloat const baselineY = lineOrigin.y + cpos[0].y;
+  CGFloat const baselineX = lineOrigin.x + cpos[fi].x;
+  CGFloat const baselineY = lineOrigin.y + cpos[fi].y;
   placed.origin.x = static_cast<float>(baselineX);
   placed.origin.y = static_cast<float>(frameHeight - baselineY);
 
@@ -1560,6 +1592,22 @@ static void fillTextLayoutFromFramesetter(CoreTextSystem& sys, CTFramesetterRef 
 
   NSString* const nsFull = [NSString stringWithUTF8String:text.utf8.c_str()];
 
+  // Single allocation: count glyphs, resize arenas once, then fill with a write cursor so we never call
+  // `vector::resize` during append (which could reallocate and invalidate earlier `std::span`s).
+  std::size_t totalGlyphs = 0;
+  for (CFIndex li = 0; li < lineCount; ++li) {
+    CTLineRef const line = (CTLineRef)CFArrayGetValueAtIndex(lines, li);
+    CFArrayRef const glyphRuns = CTLineGetGlyphRuns(line);
+    CFIndex const runCount = CFArrayGetCount(glyphRuns);
+    for (CFIndex ri = 0; ri < runCount; ++ri) {
+      CTRunRef const run = (CTRunRef)CFArrayGetValueAtIndex(glyphRuns, ri);
+      totalGlyphs += countDrawableGlyphsInRun(run);
+    }
+  }
+  storage.glyphArena.resize(totalGlyphs);
+  storage.positionArena.resize(totalGlyphs);
+  std::size_t arenaWrite = 0;
+
   for (CFIndex li = 0; li < lineCount; ++li) {
     CTLineRef line = (CTLineRef)CFArrayGetValueAtIndex(lines, li);
     CGPoint const lineOrigin = origins[static_cast<std::size_t>(li)];
@@ -1567,9 +1615,10 @@ static void fillTextLayoutFromFramesetter(CoreTextSystem& sys, CTFramesetterRef 
     CFIndex const runCount = CFArrayGetCount(glyphRuns);
     for (CFIndex ri = 0; ri < runCount; ++ri) {
       CTRunRef run = (CTRunRef)CFArrayGetValueAtIndex(glyphRuns, ri);
-      appendPlacedRunToStorage(run, lineOrigin, fh, sys, out, storage, nsFull, li);
+      appendPlacedRunToStorage(run, lineOrigin, fh, sys, out, storage, nsFull, li, arenaWrite);
     }
   }
+  assert(arenaWrite == totalGlyphs);
 
   out.lines.clear();
   out.lines.reserve(static_cast<std::size_t>(std::max(lineCount, CFIndex{0})));
@@ -1635,171 +1684,6 @@ static ParagraphLayoutVariant* findVariant(ShapedParagraph& sp, std::uint32_t wq
   return nullptr;
 }
 
-/// Builds variant runs/lines from `sp.typesetter` (no re-shaping).
-/// Returns false if the typesetter is unavailable; caller falls back to the CTFramesetter path.
-static bool buildVariantFromTypesetter(CoreTextSystem& sys, ShapedParagraph const& sp,
-                                       AttributedString const& fullText, Paragraph const& para,
-                                       float maxWidth, TextLayoutOptions const& options,
-                                       ParagraphLayoutVariant& v) {
-  CTTypesetterRef ts = sp.typesetter;
-  if (!ts || sp.utf16Length <= 0) {
-    return false;
-  }
-  NSString* const paraStr = [[NSString alloc]
-      initWithBytes:fullText.utf8.data() + para.byteStart
-             length:sp.byteLength
-           encoding:NSUTF8StringEncoding];
-  if (!paraStr) {
-    return false;
-  }
-
-  bool const noWrap = (maxWidth <= 0.f || options.wrapping == TextWrapping::NoWrap);
-  CFIndex const utf16Len = sp.utf16Length;
-
-  // --- Pass 1: create CTLines and count total glyphs ---
-  std::vector<CTLineRef> ctLines;
-  {
-    CFIndex pos = 0;
-    while (pos < utf16Len) {
-      CFIndex lineLen;
-      if (noWrap) {
-        lineLen = utf16Len - pos;
-      } else {
-        lineLen = CTTypesetterSuggestLineBreakWithOffset(ts, pos,
-            static_cast<double>(maxWidth), 0.0);
-        if (lineLen <= 0) break;
-      }
-      CTLineRef ctLine = CTTypesetterCreateLineWithOffset(ts,
-          CFRangeMake(pos, lineLen), 0.0);
-      if (!ctLine) break;
-      ctLines.push_back(ctLine);
-      pos += lineLen;
-      if (noWrap) break;
-    }
-  }
-  if (ctLines.empty()) {
-    return true;
-  }
-
-  CFIndex totalGlyphs = 0;
-  for (CTLineRef ctLine : ctLines) {
-    CFArrayRef glyphRuns = CTLineGetGlyphRuns(ctLine);
-    CFIndex const rc = CFArrayGetCount(glyphRuns);
-    for (CFIndex ri = 0; ri < rc; ++ri) {
-      totalGlyphs += CTRunGetGlyphCount(
-          static_cast<CTRunRef>(CFArrayGetValueAtIndex(glyphRuns, ri)));
-    }
-  }
-
-  // Pre-allocate flat storage (no reallocations → spans remain stable in pass 2)
-  v.glyphStorage.resize(static_cast<std::size_t>(totalGlyphs));
-  v.positionStorage.resize(static_cast<std::size_t>(totalGlyphs));
-  std::size_t gOff = 0;
-
-  // --- Pass 2: fill glyph/position data, build PlacedRuns and LineRanges ---
-  float yCursor = 0.f;
-  std::uint32_t ctLineIdx = 0;
-  for (CTLineRef ctLine : ctLines) {
-    CGFloat ascent = 0, descent = 0, leading = 0;
-    double const lineWidth = CTLineGetTypographicBounds(ctLine, &ascent, &descent, &leading);
-    float const baselineY = yCursor + static_cast<float>(ascent);
-
-    CFArrayRef glyphRuns = CTLineGetGlyphRuns(ctLine);
-    CFIndex const runCount = CFArrayGetCount(glyphRuns);
-    std::size_t const firstRunInLine = v.runs.size();
-
-    for (CFIndex ri = 0; ri < runCount; ++ri) {
-      CTRunRef run = static_cast<CTRunRef>(CFArrayGetValueAtIndex(glyphRuns, ri));
-      CFIndex const glyphCount = CTRunGetGlyphCount(run);
-      if (glyphCount <= 0) continue;
-
-      NSDictionary* attrs = (__bridge NSDictionary*)CTRunGetAttributes(run);
-      CTFontRef ctFont = (__bridge CTFontRef)attrs[(id)kCTFontAttributeName];
-      CGColorRef cgColor = (__bridge CGColorRef)attrs[(id)kCTForegroundColorAttributeName];
-      std::uint32_t fontId = 0;
-      float fontSize = 0.f;
-      Color color = Colors::black;
-      styleFromCTFont(ctFont, cgColor, sys, fontId, fontSize, color);
-
-      std::vector<CGPoint> cpos(static_cast<std::size_t>(glyphCount));
-      CTRunGetPositions(run, CFRangeMake(0, 0), cpos.data());
-      CGFloat runAscent = 0, runDescent = 0, runLeading = 0;
-      double const runWidth = CTRunGetTypographicBounds(run, CFRangeMake(0, 0),
-          &runAscent, &runDescent, &runLeading);
-
-      CTRunGetGlyphs(run, CFRangeMake(0, 0),
-          reinterpret_cast<CGGlyph*>(v.glyphStorage.data() + gOff));
-      for (CFIndex gi = 0; gi < glyphCount; ++gi) {
-        std::size_t const idx = static_cast<std::size_t>(gi);
-        float const dx = static_cast<float>(cpos[idx].x - cpos[0].x);
-        float const dy = -static_cast<float>(cpos[idx].y - cpos[0].y);
-        v.positionStorage[gOff + idx] = Point{dx, dy};
-      }
-
-      TextLayout::PlacedRun placed{};
-      placed.run.fontId = fontId;
-      placed.run.fontSize = fontSize;
-      placed.run.color = color;
-      placed.run.ascent = static_cast<float>(runAscent);
-      placed.run.descent = static_cast<float>(runDescent);
-      placed.run.width = static_cast<float>(runWidth);
-      placed.run.glyphIds = std::span<std::uint16_t const>(
-          v.glyphStorage.data() + gOff, static_cast<std::size_t>(glyphCount));
-      placed.run.positions = std::span<Point const>(
-          v.positionStorage.data() + gOff, static_cast<std::size_t>(glyphCount));
-      placed.origin.x = static_cast<float>(cpos[0].x);
-      placed.origin.y = baselineY;
-      CFRange const strRange = CTRunGetStringRange(run);
-      NSRange const nsr = NSMakeRange(static_cast<NSUInteger>(strRange.location),
-                                      static_cast<NSUInteger>(strRange.length));
-      utf16RangeToUtf8ByteRange(paraStr, nsr, placed.utf8Begin, placed.utf8End);
-      placed.ctLineIndex = ctLineIdx;
-      v.runs.push_back(std::move(placed));
-      gOff += static_cast<std::size_t>(glyphCount);
-    }
-
-    // Build LineRange for this CTLine
-    {
-      CFRange const lineRange = CTLineGetStringRange(ctLine);
-      NSRange const nsr = NSMakeRange(static_cast<NSUInteger>(lineRange.location),
-                                      static_cast<NSUInteger>(lineRange.length));
-      TextLayout::LineRange lr{};
-      lr.ctLineIndex = ctLineIdx;
-      std::uint32_t b0 = 0, b1 = 0;
-      utf16RangeToUtf8ByteRange(paraStr, nsr, b0, b1);
-      lr.byteStart = static_cast<int>(b0);
-      lr.byteEnd = static_cast<int>(b1);
-      float lineBaseline = baselineY;
-      float minTop = baselineY - static_cast<float>(ascent);
-      float maxBot = baselineY + static_cast<float>(descent);
-      float minOx = 0.f;
-      bool hasRun = false;
-      for (std::size_t i = firstRunInLine; i < v.runs.size(); ++i) {
-        auto const& pr = v.runs[i];
-        if (!hasRun) { minOx = pr.origin.x; hasRun = true; }
-        else minOx = std::min(minOx, pr.origin.x);
-        lineBaseline = std::max(lineBaseline, pr.origin.y);
-        minTop = std::min(minTop, pr.origin.y - pr.run.ascent);
-        maxBot = std::max(maxBot, pr.origin.y + pr.run.descent);
-      }
-      lr.baseline = lineBaseline;
-      lr.top = minTop;
-      lr.bottom = maxBot;
-      lr.lineMinX = hasRun ? minOx : 0.f;
-      v.lines.push_back(lr);
-    }
-
-    float const lineHeight = static_cast<float>(ascent + descent + std::max(leading, 0.0));
-    yCursor += lineHeight;
-    v.maxLineWidth = std::max(v.maxLineWidth, static_cast<float>(lineWidth));
-    ++ctLineIdx;
-  }
-
-  v.height = yCursor;
-  for (CTLineRef ctLine : ctLines) CFRelease(ctLine);
-  return true;
-}
-
 ParagraphLayoutVariant& CoreTextSystem::Impl::buildParagraphVariant(CoreTextSystem& sys,
                                                      ParagraphHash const& hash, ShapedParagraph& sp,
                                                      Paragraph const& para, AttributedString const& text,
@@ -1822,11 +1706,9 @@ ParagraphLayoutVariant& CoreTextSystem::Impl::buildParagraphVariant(CoreTextSyst
     v.lhQ8 = static_cast<std::uint32_t>(std::lround(options.lineHeight * 4.f));
   }
 
-  // Fast path: use the pre-built CTTypesetter (avoids double text-shaping).
-  bool const builtFromTypesetter = buildVariantFromTypesetter(sys, sp, text, para, maxWidth, options, v);
-
-  if (!builtFromTypesetter) {
-    // Fallback: CTFramesetter path (used when typesetter is unavailable).
+  // Use CTFramesetter for paragraph variants so multi-line ink matches `fillTextLayoutFromFramesetter` /
+  // `layoutUnboxed`. The previous CTTypesetter-only layout could diverge (wrong per-line geometry / glyphs).
+  {
     AttributedString paraText{};
     paraText.utf8 = text.utf8.substr(para.byteStart, para.byteEnd - para.byteStart);
     std::vector<ResolvedStyle> paraResolved;
@@ -1857,6 +1739,13 @@ ParagraphLayoutVariant& CoreTextSystem::Impl::buildParagraphVariant(CoreTextSyst
     TextLayoutStorage stor{};
     fillTextLayoutFromFramesetter(sys, fs, paraText, maxWidth, options, partial, stor);
     CFRelease(fs);
+#ifndef NDEBUG
+    std::size_t sumGlyphs = 0;
+    for (auto const& pr : partial.runs) {
+      sumGlyphs += pr.run.glyphIds.size();
+    }
+    assert(sumGlyphs == stor.glyphArena.size() && "run glyph counts must match arenas");
+#endif
     v.runs = std::move(partial.runs);
     v.lines = std::move(partial.lines);
     v.height = partial.measuredSize.height;
@@ -1866,10 +1755,12 @@ ParagraphLayoutVariant& CoreTextSystem::Impl::buildParagraphVariant(CoreTextSyst
     std::size_t off = 0;
     for (auto& pr : v.runs) {
       std::size_t const n = pr.run.glyphIds.size();
+      assert(off + n <= v.glyphStorage.size() && "variant glyph span overflow");
       pr.run.glyphIds = std::span<std::uint16_t const>(v.glyphStorage.data() + off, n);
       pr.run.positions = std::span<Point const>(v.positionStorage.data() + off, n);
       off += n;
     }
+    assert(off == v.glyphStorage.size() && off == v.positionStorage.size() && "variant repoint must cover arenas");
   }
 
   v.approxBytes = computeVariantApproxBytes(v);
@@ -2393,7 +2284,9 @@ std::shared_ptr<TextLayout const> CoreTextSystem::Impl::layoutViaParagraphCache(
     recomputeTextLayoutMetrics(*out);
   }
 
-  std::shared_ptr<TextLayout const> result = out;
+  // Copy glyph/position bytes into ownedStorage so layouts do not retain non-owning spans into
+  // `ParagraphLayoutVariant` arenas (those vectors can be freed when the shape cache evicts a variant).
+  std::shared_ptr<TextLayout const> const result = cloneTextLayout(*out);
   // keyHi/keyLo already written in the non-incremental branch above (or zeroed for incremental).
   lastLayout_.layout = result;
 
@@ -2585,7 +2478,7 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layoutUnboxed(AttributedString
   auto stor = std::make_unique<TextLayoutStorage>();
   fillTextLayoutFromFramesetter(*this, e.framesetter, text, maxWidth, options, *built, *stor);
   built->ownedStorage = std::move(stor);
-  std::shared_ptr<TextLayout const> result = built;
+  std::shared_ptr<TextLayout const> result = cloneTextLayout(*built);
   LayoutSlot slot;
   slot.maxWidthQ1 = wq;
   slot.maxWidthExact = maxWidth;
@@ -2647,7 +2540,7 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layout(std::string_view utf8, 
   auto stor2 = std::make_unique<TextLayoutStorage>();
   fillTextLayoutFromFramesetter(*this, e.framesetter, as, maxWidth, options, *built, *stor2);
   built->ownedStorage = std::move(stor2);
-  std::shared_ptr<TextLayout const> result = built;
+  std::shared_ptr<TextLayout const> result = cloneTextLayout(*built);
   LayoutSlot slot;
   slot.maxWidthQ1 = wq;
   slot.maxWidthExact = maxWidth;
