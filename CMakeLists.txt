@@ -229,6 +229,11 @@ option(FLUX_BUILD_TESTS
   OFF)
 
 if(FLUX_BUILD_TESTS)
+  # doctest's CMakeLists may require a minimum policy on CMake 4+; if configure fails, add:
+  #   -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+  if(POLICY CMP0127)
+    cmake_policy(SET CMP0127 NEW)
+  endif()
   FetchContent_Declare(doctest
     GIT_REPOSITORY https://github.com/doctest/doctest.git
     GIT_TAG v2.4.11
@@ -243,6 +248,7 @@ if(FLUX_BUILD_TESTS)
     tests/main.cpp
     tests/LayoutTreeTests.cpp
     tests/LayoutIntegrationTests.cpp
+    tests/ParagraphCacheTests.cpp
   )
 
   target_include_directories(flux_tests PRIVATE
@@ -258,4 +264,21 @@ if(FLUX_BUILD_TESTS)
   set_target_properties(flux_tests PROPERTIES CXX_STANDARD 23)
 
   add_test(NAME flux_tests COMMAND flux_tests)
+endif()
+
+option(FLUX_BUILD_BENCHMARKS "Build paragraph cache micro-benchmark (bench/paragraph_cache)." OFF)
+
+if(FLUX_BUILD_BENCHMARKS)
+  add_executable(paragraph_cache_bench
+    bench/paragraph_cache/bench.mm
+  )
+  target_include_directories(paragraph_cache_bench PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+  )
+  target_link_libraries(paragraph_cache_bench PRIVATE flux)
+  set_target_properties(paragraph_cache_bench PROPERTIES CXX_STANDARD 23)
+  if(APPLE)
+    target_compile_options(paragraph_cache_bench PRIVATE $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>)
+  endif()
 endif()

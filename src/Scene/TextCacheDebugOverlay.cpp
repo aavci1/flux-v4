@@ -46,6 +46,12 @@ std::string buildOverlayText(TextCacheStats const& oldest, TextCacheStats const&
   o << formatLayer("L2 framesetter", hitRateWindow(oldest.l2_framesetter, newest.l2_framesetter),
                    newest.l2_framesetter)
     << "\n";
+  o << formatLayer("L2.5 para", hitRateWindow(oldest.l2_5_paragraph, newest.l2_5_paragraph),
+                   newest.l2_5_paragraph)
+    << "\n";
+  o << formatLayer("L2.5 asm", hitRateWindow(oldest.l2_5_assembly, newest.l2_5_assembly),
+                   newest.l2_5_assembly)
+    << "\n";
   o << formatLayer("L3 layout", hitRateWindow(oldest.l3_layout, newest.l3_layout), newest.l3_layout) << "\n";
   o << formatLayer("L4 box", hitRateWindow(oldest.l4_boxLayout, newest.l4_boxLayout), newest.l4_boxLayout) << "\n";
   o << "collisions: " << newest.contentHashCollisions;
@@ -69,7 +75,7 @@ void renderTextCacheDebugOverlay(Canvas& canvas, Rect viewport, TextCacheRingBuf
   std::string const text = buildOverlayText(oldest, newest, windowFrames);
 
   float const panelW = std::min(420.f, std::max(120.f, viewport.width - 16.f));
-  float const panelH = std::min(220.f, std::max(80.f, viewport.height - 16.f));
+  float const panelH = std::min(280.f, std::max(80.f, viewport.height - 16.f));
 
   Font font{};
   font.family = ".AppleSystemUIFont";

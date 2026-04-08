@@ -24,6 +24,8 @@ struct TextCacheStats {
   LayerStats l2_framesetter{};
   LayerStats l3_layout{};
   LayerStats l4_boxLayout{};
+  LayerStats l2_5_paragraph{};
+  LayerStats l2_5_assembly{};
 
   std::uint64_t contentHashCollisions = 0;
 };

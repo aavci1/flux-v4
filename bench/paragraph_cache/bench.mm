@@ -1,0 +1,102 @@
+// Micro-benchmarks for paragraph shape cache (macOS + Core Text).
+// Build: cmake -B build -DFLUX_BUILD_BENCHMARKS=ON && cmake --build build --target paragraph_cache_bench
+
+#include "Graphics/CoreTextSystem.hpp"
+
+#include <Flux/Graphics/AttributedString.hpp>
+#include <Flux/Graphics/TextLayoutOptions.hpp>
+
+#include <chrono>
+#include <iostream>
+#include <string>
+
+namespace {
+
+constexpr int kParas = 5000;
+constexpr int kCharsPerPara = 80;
+
+static std::string makeDocument() {
+  std::string s;
+  s.reserve(static_cast<std::size_t>(kParas) * (kCharsPerPara + 1));
+  for (int i = 0; i < kParas; ++i) {
+    s.append(static_cast<std::size_t>(kCharsPerPara), static_cast<char>('a' + (i % 26)));
+    s.push_back('\n');
+  }
+  return s;
+}
+
+static double secondsSince(std::chrono::steady_clock::time_point t0) {
+  auto const t1 = std::chrono::steady_clock::now();
+  return std::chrono::duration<double>(t1 - t0).count();
+}
+
+} // namespace
+
+int main() {
+#if !defined(__APPLE__)
+  std::cerr << "paragraph_cache_bench is only supported on Apple platforms.\n";
+  return 0;
+#else
+  using namespace flux;
+  std::string const doc = makeDocument();
+  Font f{};
+  f.family = ".AppleSystemUIFont";
+  f.size = 13.f;
+  f.weight = 400.f;
+  AttributedString const as = AttributedString::plain(doc, f, Colors::black);
+  TextLayoutOptions opt{};
+
+  // B1 baseline: full-document framesetter path (disable paragraph cache).
+  double tFull = 0;
+  {
+    flux::CoreTextSystem sys;
+    setenv("FLUX_DISABLE_PARAGRAPH_CACHE", "1", 1);
+    auto const t0 = std::chrono::steady_clock::now();
+    (void)sys.layout(as, 800.f, opt);
+    tFull = secondsSince(t0);
+    unsetenv("FLUX_DISABLE_PARAGRAPH_CACHE");
+    std::cout << "B1 T_full (slow path): " << tFull << " s\n";
+  }
+
+  // B2: one framesetter for whole document vs sum of per-paragraph typesetter builds (approximate isolation).
+  {
+    flux::CoreTextSystem sys;
+    setenv("FLUX_DISABLE_PARAGRAPH_CACHE", "1", 1);
+    auto const t0 = std::chrono::steady_clock::now();
+    (void)sys.layout(as, 800.f, opt);
+    double const tDoc = secondsSince(t0);
+    unsetenv("FLUX_DISABLE_PARAGRAPH_CACHE");
+    double sum = 0;
+    std::size_t off = 0;
+    while (off < doc.size()) {
+      std::size_t const nl = doc.find('\n', off);
+      std::size_t const end = (nl == std::string::npos) ? doc.size() : nl;
+      std::string const slice = doc.substr(off, end - off);
+      AttributedString one = AttributedString::plain(slice, f, Colors::black);
+      auto const t1 = std::chrono::steady_clock::now();
+      (void)sys.layout(one, 800.f, opt);
+      sum += secondsSince(t1);
+      if (nl == std::string::npos) {
+        break;
+      }
+      off = nl + 1;
+    }
+    std::cout << "B2 T_doc (one framesetter pass): " << tDoc << " s\n";
+    std::cout << "B2 T_sum (5000 layout() calls per paragraph, slow path): " << sum << " s\n";
+  }
+
+  // B3: paragraph-cache layout: cold vs warm assembly.
+  {
+    flux::CoreTextSystem sys;
+    auto const t0 = std::chrono::steady_clock::now();
+    (void)sys.layout(as, 800.f, opt);
+    double const tCold = secondsSince(t0);
+    auto const t0b = std::chrono::steady_clock::now();
+    (void)sys.layout(as, 800.f, opt);
+    double const tWarm = secondsSince(t0b);
+    std::cout << "B3 T_assembly cold: " << tCold << " s, warm: " << tWarm << " s\n";
+  }
+
+  return 0;
+#endif
+}

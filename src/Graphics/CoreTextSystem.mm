@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstdlib>
 #include <cmath>
 #include <cstring>
 #include <limits>
@@ -37,6 +38,36 @@ struct ContentHash {
 
 struct ContentHashHasher {
   std::size_t operator()(ContentHash const& h) const noexcept { return static_cast<std::size_t>(h.lo); }
+};
+
+/// 128-bit paragraph identity for `ParagraphShapeCache` (must not be mixed with `ContentHash`).
+struct ParagraphHash {
+  std::uint64_t hi = 0;
+  std::uint64_t lo = 0;
+  bool operator==(ParagraphHash const& o) const noexcept { return hi == o.hi && lo == o.lo; }
+};
+
+struct ParagraphHashHasher {
+  std::size_t operator()(ParagraphHash const& h) const noexcept { return static_cast<std::size_t>(h.lo); }
+};
+
+struct AssemblyKey {
+  std::uint64_t hi = 0;
+  std::uint64_t lo = 0;
+  bool operator==(AssemblyKey const& o) const noexcept { return hi == o.hi && lo == o.lo; }
+};
+
+struct AssemblyKeyHasher {
+  std::size_t operator()(AssemblyKey const& k) const noexcept { return static_cast<std::size_t>(k.lo); }
+};
+
+/// One paragraph slice for the paragraph shape cache (UTF-8 byte offsets into the source buffer).
+struct Paragraph {
+  std::uint32_t byteStart = 0;
+  std::uint32_t byteEnd = 0;
+  std::uint32_t runStart = 0;
+  std::uint32_t runEnd = 0;
+  ParagraphHash hash{};
 };
 
 struct ParagraphStyleKey {
@@ -77,6 +108,14 @@ constexpr char const* kDefaultFontFamily = ".AppleSystemUIFont";
 constexpr float kDefaultFontSize = 14.f;
 constexpr float kDefaultFontWeight = 400.f;
 constexpr float kPadPx = 1.f;
+
+constexpr std::size_t kMinFastPathBytes = 512u;
+constexpr std::uint32_t kMinHardLineBreaks = 4u;
+
+static bool paragraphCacheDisabledByEnv() noexcept {
+  char const* const s = std::getenv("FLUX_DISABLE_PARAGRAPH_CACHE");
+  return s != nullptr && s[0] == '1' && s[1] == '\0';
+}
 
 struct FontKey {
   std::string family;
@@ -571,6 +610,348 @@ static std::uint32_t estimateEntryBytes(AttributedString const& text, std::size_
                                     text.utf8.size() * 32 + layoutPieces * sizeof(TextLayout));
 }
 
+struct ShapedParagraph {
+  CTTypesetterRef typesetter = nullptr;
+  CFAttributedStringRef attrString = nullptr;
+  flux::detail::SmallVector<std::uint32_t, 4> fontIds;
+  std::uint32_t byteLength = 0;
+  std::uint32_t approxBytes = 0;
+  std::uint64_t lastTouchFrame = 0;
+};
+
+struct AssemblyEntry {
+  flux::detail::SmallVector<ParagraphHash, 32> paragraphHashes;
+  std::uint32_t maxWidthQ1 = 0;
+  std::int32_t maxLines = 0;
+  std::uint8_t wrap = 0;
+  std::uint32_t lhQ8 = 0;
+  std::uint32_t lhMulQ8 = 0;
+  std::shared_ptr<TextLayout const> layout;
+  std::uint64_t lastTouchFrame = 0;
+  std::size_t approxBytes = 0;
+};
+
+class ParagraphShapeCache {
+public:
+  ShapedParagraph const* find(ParagraphHash const& h, bool suppressStats) {
+    auto it = map_.find(h);
+    if (it == map_.end()) {
+      return nullptr;
+    }
+    it->second.lastTouchFrame = currentFrame_;
+    if (!suppressStats) {
+      ++stats_.hits;
+    }
+    return &it->second;
+  }
+
+  ShapedParagraph const& insert(ParagraphHash const& h, ShapedParagraph&& sp, bool suppressStats) {
+    if (!suppressStats) {
+      ++stats_.misses;
+    }
+    auto const oldIt = map_.find(h);
+    if (oldIt != map_.end()) {
+      totalBytes_ -= static_cast<std::size_t>(oldIt->second.approxBytes);
+      releaseEntry(oldIt->second);
+      map_.erase(oldIt);
+    }
+    std::uint32_t const ab = sp.approxBytes;
+    totalBytes_ += static_cast<std::size_t>(ab);
+    sp.lastTouchFrame = currentFrame_;
+    auto const ins = map_.emplace(h, std::move(sp));
+    stats_.currentBytes = totalBytes_;
+    if (totalBytes_ > stats_.peakBytes) {
+      stats_.peakBytes = totalBytes_;
+    }
+    return ins.first->second;
+  }
+
+  void onFrameBegin(std::uint64_t frameIndex) { currentFrame_ = frameIndex; }
+
+  /// Evicts entries not touched this frame (oldest `lastTouchFrame` first) until under budget.
+  /// Returns hashes that were removed (for assembly-cache invalidation).
+  std::vector<ParagraphHash> onFrameEnd(std::size_t byteBudget) {
+    std::vector<ParagraphHash> evicted;
+    while (totalBytes_ > byteBudget) {
+      std::vector<std::pair<std::uint64_t, ParagraphHash>> candidates;
+      candidates.reserve(map_.size());
+      for (auto const& p : map_) {
+        if (p.second.lastTouchFrame >= currentFrame_) {
+          continue;
+        }
+        candidates.push_back({p.second.lastTouchFrame, p.first});
+      }
+      if (candidates.empty()) {
+        break;
+      }
+      std::sort(candidates.begin(), candidates.end(),
+                [](auto const& a, auto const& b) { return a.first < b.first; });
+      bool progressed = false;
+      for (auto const& c : candidates) {
+        if (totalBytes_ <= byteBudget) {
+          break;
+        }
+        auto it = map_.find(c.second);
+        if (it == map_.end()) {
+          continue;
+        }
+        if (it->second.lastTouchFrame >= currentFrame_) {
+          continue;
+        }
+        totalBytes_ -= static_cast<std::size_t>(it->second.approxBytes);
+        evicted.push_back(it->first);
+        releaseEntry(it->second);
+        map_.erase(it);
+        ++stats_.evictions;
+        progressed = true;
+      }
+      if (!progressed) {
+        break;
+      }
+    }
+    stats_.currentBytes = totalBytes_;
+    if (totalBytes_ > stats_.peakBytes) {
+      stats_.peakBytes = totalBytes_;
+    }
+    return evicted;
+  }
+
+  void invalidateAll() {
+    for (auto& p : map_) {
+      releaseEntry(p.second);
+    }
+    map_.clear();
+    totalBytes_ = 0;
+    stats_.currentBytes = 0;
+  }
+
+  std::vector<ParagraphHash> invalidateForFontChange(std::span<std::uint32_t const> fontIds) {
+    std::unordered_set<std::uint32_t> const want(fontIds.begin(), fontIds.end());
+    std::vector<ParagraphHash> toErase;
+    for (auto const& p : map_) {
+      for (std::uint32_t fid : p.second.fontIds) {
+        if (want.count(fid)) {
+          toErase.push_back(p.first);
+          break;
+        }
+      }
+    }
+    std::vector<ParagraphHash> removed;
+    for (ParagraphHash const& h : toErase) {
+      auto it = map_.find(h);
+      if (it != map_.end()) {
+        totalBytes_ -= static_cast<std::size_t>(it->second.approxBytes);
+        releaseEntry(it->second);
+        map_.erase(it);
+        removed.push_back(h);
+      }
+    }
+    stats_.currentBytes = totalBytes_;
+    return removed;
+  }
+
+  [[nodiscard]] TextCacheStats::LayerStats const& stats() const noexcept { return stats_; }
+
+  void setBudget(std::size_t bytes) noexcept { budgetBytes_ = bytes; }
+  [[nodiscard]] std::size_t budget() const noexcept { return budgetBytes_; }
+
+private:
+  static void releaseEntry(ShapedParagraph& e) noexcept {
+    if (e.typesetter) {
+      CFRelease(e.typesetter);
+      e.typesetter = nullptr;
+    }
+    if (e.attrString) {
+      CFRelease(e.attrString);
+      e.attrString = nullptr;
+    }
+    e.fontIds.clear();
+    e.approxBytes = 0;
+    e.byteLength = 0;
+  }
+
+  std::unordered_map<ParagraphHash, ShapedParagraph, ParagraphHashHasher> map_;
+  std::size_t totalBytes_ = 0;
+  std::uint64_t currentFrame_ = 0;
+  std::size_t budgetBytes_ = 64u * 1024u * 1024u;
+  TextCacheStats::LayerStats stats_{};
+};
+
+class AssemblyCache {
+public:
+  std::shared_ptr<TextLayout const> find(flux::detail::SmallVector<ParagraphHash, 32> const& hashes,
+                                         std::uint32_t maxWidthQ1, TextLayoutOptions const& opt,
+                                         bool suppressStats) {
+    AssemblyKey const key = computeKey(hashes, maxWidthQ1, opt);
+    auto it = map_.find(key);
+    if (it == map_.end()) {
+      return nullptr;
+    }
+    it->second.lastTouchFrame = currentFrame_;
+    if (!suppressStats) {
+      ++stats_.hits;
+    }
+    return it->second.layout;
+  }
+
+  void insert(AssemblyKey const& key, flux::detail::SmallVector<ParagraphHash, 32>&& hashes,
+              std::uint32_t maxWidthQ1, TextLayoutOptions const& opt, std::shared_ptr<TextLayout const> layout,
+              bool suppressStats) {
+    if (!suppressStats) {
+      ++stats_.misses;
+    }
+    auto oldIt = map_.find(key);
+    if (oldIt != map_.end()) {
+      totalBytes_ -= oldIt->second.approxBytes;
+      map_.erase(oldIt);
+    }
+    AssemblyEntry e{};
+    e.paragraphHashes = std::move(hashes);
+    e.maxWidthQ1 = maxWidthQ1;
+    e.maxLines = opt.maxLines;
+    e.wrap = static_cast<std::uint8_t>(opt.wrapping);
+    e.lhQ8 = 0;
+    e.lhMulQ8 = 0;
+    if (opt.lineHeightMultiple > 0.f) {
+      e.lhMulQ8 = static_cast<std::uint32_t>(std::lround(opt.lineHeightMultiple * 256.f));
+    } else if (opt.lineHeight > 0.f) {
+      e.lhQ8 = static_cast<std::uint32_t>(std::lround(opt.lineHeight * 4.f));
+    }
+    e.layout = std::move(layout);
+    e.lastTouchFrame = currentFrame_;
+    e.approxBytes = estimateAssemblyEntryBytes(e);
+    totalBytes_ += e.approxBytes;
+    map_.emplace(key, std::move(e));
+    stats_.currentBytes = totalBytes_;
+    if (totalBytes_ > stats_.peakBytes) {
+      stats_.peakBytes = totalBytes_;
+    }
+  }
+
+  static AssemblyKey computeKey(flux::detail::SmallVector<ParagraphHash, 32> const& hashes,
+                                std::uint32_t maxWidthQ1, TextLayoutOptions const& opt) {
+    XXH3_state_t st{};
+    XXH3_128bits_reset(&st);
+    for (std::size_t i = 0; i < hashes.size(); ++i) {
+      ParagraphHash const& h = hashes[i];
+      XXH3_128bits_update(&st, &h.hi, sizeof(h.hi));
+      XXH3_128bits_update(&st, &h.lo, sizeof(h.lo));
+    }
+    XXH3_128bits_update(&st, &maxWidthQ1, sizeof(maxWidthQ1));
+    std::int32_t const ml = opt.maxLines;
+    XXH3_128bits_update(&st, &ml, sizeof(ml));
+    std::uint8_t const w = static_cast<std::uint8_t>(opt.wrapping);
+    XXH3_128bits_update(&st, &w, sizeof(w));
+    std::uint32_t lhQ8 = 0;
+    std::uint32_t lhMulQ8 = 0;
+    if (opt.lineHeightMultiple > 0.f) {
+      lhMulQ8 = static_cast<std::uint32_t>(std::lround(opt.lineHeightMultiple * 256.f));
+    } else if (opt.lineHeight > 0.f) {
+      lhQ8 = static_cast<std::uint32_t>(std::lround(opt.lineHeight * 4.f));
+    }
+    XXH3_128bits_update(&st, &lhQ8, sizeof(lhQ8));
+    XXH3_128bits_update(&st, &lhMulQ8, sizeof(lhMulQ8));
+    XXH128_hash_t const d = XXH3_128bits_digest(&st);
+    return AssemblyKey{d.high64, d.low64};
+  }
+
+  void onFrameBegin(std::uint64_t frameIndex) { currentFrame_ = frameIndex; }
+
+  void onFrameEnd(std::size_t byteBudget) {
+    while (totalBytes_ > byteBudget) {
+      std::vector<std::pair<std::uint64_t, AssemblyKey>> candidates;
+      candidates.reserve(map_.size());
+      for (auto const& p : map_) {
+        if (p.second.lastTouchFrame >= currentFrame_) {
+          continue;
+        }
+        candidates.push_back({p.second.lastTouchFrame, p.first});
+      }
+      if (candidates.empty()) {
+        break;
+      }
+      std::sort(candidates.begin(), candidates.end(),
+                [](auto const& a, auto const& b) { return a.first < b.first; });
+      bool progressed = false;
+      for (auto const& c : candidates) {
+        if (totalBytes_ <= byteBudget) {
+          break;
+        }
+        auto it = map_.find(c.second);
+        if (it == map_.end()) {
+          continue;
+        }
+        if (it->second.lastTouchFrame >= currentFrame_) {
+          continue;
+        }
+        totalBytes_ -= it->second.approxBytes;
+        map_.erase(it);
+        ++stats_.evictions;
+        progressed = true;
+      }
+      if (!progressed) {
+        break;
+      }
+    }
+    stats_.currentBytes = totalBytes_;
+    if (totalBytes_ > stats_.peakBytes) {
+      stats_.peakBytes = totalBytes_;
+    }
+  }
+
+  void invalidateAll() {
+    map_.clear();
+    totalBytes_ = 0;
+    stats_.currentBytes = 0;
+  }
+
+  void invalidateIntersecting(std::unordered_set<ParagraphHash, ParagraphHashHasher> const& evicted) {
+    if (evicted.empty()) {
+      return;
+    }
+    std::vector<AssemblyKey> toErase;
+    for (auto const& p : map_) {
+      for (std::size_t i = 0; i < p.second.paragraphHashes.size(); ++i) {
+        if (evicted.count(p.second.paragraphHashes[i])) {
+          toErase.push_back(p.first);
+          break;
+        }
+      }
+    }
+    for (AssemblyKey const& k : toErase) {
+      auto it = map_.find(k);
+      if (it != map_.end()) {
+        totalBytes_ -= it->second.approxBytes;
+        map_.erase(it);
+      }
+    }
+    stats_.currentBytes = totalBytes_;
+  }
+
+  [[nodiscard]] TextCacheStats::LayerStats const& stats() const noexcept { return stats_; }
+
+  void setBudget(std::size_t bytes) noexcept { budgetBytes_ = bytes; }
+  [[nodiscard]] std::size_t budget() const noexcept { return budgetBytes_; }
+
+private:
+  static std::size_t estimateAssemblyEntryBytes(AssemblyEntry const& e) noexcept {
+    std::size_t n = sizeof(AssemblyEntry);
+    n += e.paragraphHashes.size() * sizeof(ParagraphHash);
+    if (e.layout) {
+      n += sizeof(TextLayout);
+      n += e.layout->runs.size() * sizeof(TextLayout::PlacedRun);
+      n += e.layout->lines.size() * sizeof(TextLayout::LineRange);
+    }
+    return n;
+  }
+
+  std::unordered_map<AssemblyKey, AssemblyEntry, AssemblyKeyHasher> map_;
+  std::size_t totalBytes_ = 0;
+  std::uint64_t currentFrame_ = 0;
+  std::size_t budgetBytes_ = 32u * 1024u * 1024u;
+  TextCacheStats::LayerStats stats_{};
+};
+
 struct CoreTextSystem::Impl {
   std::unordered_map<FontKey, std::uint32_t, FontKeyHash, FontKeyEq> fontIds_;
   std::vector<CTFontRef> fontById_;
@@ -596,6 +977,29 @@ struct CoreTextSystem::Impl {
   std::uint64_t currentFrame_ = 0;
   std::size_t budgetBytes_ = 48u * 1024u * 1024u;
   TextCacheStats stats_{};
+
+  ParagraphShapeCache paragraphCache_;
+  AssemblyCache assemblyCache_;
+  std::size_t paragraphCacheBudgetBytes_ = 64u * 1024u * 1024u;
+  std::size_t assemblyCacheBudgetBytes_ = 32u * 1024u * 1024u;
+
+  ParagraphHash hashParagraph(CoreTextSystem& sys, char const* paraUtf8, std::uint32_t byteLen,
+                              std::vector<ResolvedStyle> const& resolved, AttributedString const& text,
+                              std::uint32_t runStart, std::uint32_t runEnd, std::uint32_t byteStart,
+                              TextLayoutOptions const& opt);
+
+  flux::detail::SmallVector<Paragraph, 32> splitIntoParagraphs(
+      CoreTextSystem& sys, AttributedString const& text, std::vector<ResolvedStyle> const& resolved,
+      TextLayoutOptions const& opt);
+
+  ShapedParagraph shapeParagraphForCache(CoreTextSystem& sys, AttributedString const& text,
+                                           std::vector<ResolvedStyle> const& resolved,
+                                           Paragraph const& para, TextLayoutOptions const& options);
+
+  std::shared_ptr<TextLayout const> layoutViaParagraphCache(
+      CoreTextSystem& sys, AttributedString const& text, float maxWidth,
+      TextLayoutOptions const& options, std::vector<ResolvedStyle> const& resolved,
+      flux::detail::SmallVector<Paragraph, 32>&& paragraphs);
 
   std::optional<std::uint32_t> findFontId(std::string_view family, float weight, bool italic) const noexcept {
     FontKeyView const kv{family, weight > 0.f ? weight : kDefaultFontWeight, italic};
@@ -832,6 +1236,8 @@ struct CoreTextSystem::Impl {
   }
 
   ~Impl() {
+    paragraphCache_.invalidateAll();
+    assemblyCache_.invalidateAll();
     for (auto& p : frameMap_) {
       releaseFramesetterEntry(*p.second);
     }
@@ -1001,7 +1407,61 @@ ContentHash CoreTextSystem::Impl::computeContentHashPlain(CoreTextSystem& sys, s
   return ContentHash{h.high64, h.low64};
 }
 
-CoreTextSystem::CoreTextSystem() : d(std::make_unique<Impl>()) {}
+ParagraphHash CoreTextSystem::Impl::hashParagraph(CoreTextSystem& sys, char const* paraUtf8,
+                                                  std::uint32_t byteLen,
+                                                  std::vector<ResolvedStyle> const& resolved,
+                                                  AttributedString const& text, std::uint32_t runStart,
+                                                  std::uint32_t runEnd, std::uint32_t byteStart,
+                                                  TextLayoutOptions const& opt) {
+  XXH3_state_t st{};
+  XXH3_128bits_reset(&st);
+  if (byteLen > 0 && paraUtf8) {
+    XXH3_128bits_update(&st, paraUtf8, byteLen);
+  }
+  std::uint32_t clipCount = 0;
+  std::uint32_t const byteEnd = byteStart + byteLen;
+  for (std::uint32_t ri = runStart; ri < runEnd; ++ri) {
+    auto const& run = text.runs[ri];
+    std::uint32_t const cs = std::max(run.start, byteStart);
+    std::uint32_t const ce = std::min(run.end, byteEnd);
+    if (cs < ce) {
+      ++clipCount;
+    }
+  }
+  XXH3_128bits_update(&st, &clipCount, sizeof(clipCount));
+  for (std::uint32_t ri = runStart; ri < runEnd; ++ri) {
+    auto const& run = text.runs[ri];
+    std::uint32_t const cs = std::max(run.start, byteStart);
+    std::uint32_t const ce = std::min(run.end, byteEnd);
+    if (cs >= ce) {
+      continue;
+    }
+    std::uint32_t const len = ce - cs;
+    ResolvedStyle const& rs = resolved[ri];
+    std::string_view const fam =
+        rs.font.family.empty() ? std::string_view(kDefaultFontFamily) : std::string_view(rs.font.family);
+    std::uint32_t fid = 0;
+    if (auto const o = findFontId(fam, rs.font.weight, rs.font.italic)) {
+      fid = *o;
+    } else {
+      fid = sys.resolveFontId(fam, rs.font.weight, rs.font.italic);
+    }
+    std::uint32_t const sizeQ8 = static_cast<std::uint32_t>(std::lround(rs.font.size * 4.f));
+    std::uint32_t const rgba = rgba8Pack(rs.color);
+    XXH3_128bits_update(&st, &len, sizeof(len));
+    XXH3_128bits_update(&st, &fid, sizeof(fid));
+    XXH3_128bits_update(&st, &sizeQ8, sizeof(sizeQ8));
+    XXH3_128bits_update(&st, &rgba, sizeof(rgba));
+  }
+  hashLayoutOptions(st, opt);
+  XXH128_hash_t const h = XXH3_128bits_digest(&st);
+  return ParagraphHash{h.high64, h.low64};
+}
+
+CoreTextSystem::CoreTextSystem() : d(std::make_unique<Impl>()) {
+  d->paragraphCache_.setBudget(d->paragraphCacheBudgetBytes_);
+  d->assemblyCache_.setBudget(d->assemblyCacheBudgetBytes_);
+}
 
 CoreTextSystem::~CoreTextSystem() = default;
 
@@ -1151,6 +1611,205 @@ static void fillTextLayoutFromFramesetter(CoreTextSystem& sys, CTFramesetterRef 
   if (options.maxLines > 0) {
     trimTextLayoutToMaxLines(out, options.maxLines, true);
   }
+}
+
+static std::uint32_t countNewlines(std::string const& utf8) noexcept {
+  std::uint32_t n = 0;
+  for (char const c : utf8) {
+    if (c == '\n') {
+      ++n;
+    }
+  }
+  return n;
+}
+
+static bool paragraphCachePredicate(AttributedString const& text, TextLayoutOptions const& opt) noexcept {
+  if (paragraphCacheDisabledByEnv()) {
+    return false;
+  }
+  if (text.utf8.size() < kMinFastPathBytes) {
+    return false;
+  }
+  if (opt.wrapping == TextWrapping::WrapAnywhere) {
+    return false;
+  }
+  if (opt.maxLines != 0) {
+    return false;
+  }
+  if (countNewlines(text.utf8) < kMinHardLineBreaks) {
+    return false;
+  }
+  return true;
+}
+
+flux::detail::SmallVector<Paragraph, 32> CoreTextSystem::Impl::splitIntoParagraphs(
+    CoreTextSystem& sys, AttributedString const& text, std::vector<ResolvedStyle> const& resolved,
+    TextLayoutOptions const& opt) {
+  flux::detail::SmallVector<Paragraph, 32> out;
+  char const* const bytes = text.utf8.data();
+  std::uint32_t const n = static_cast<std::uint32_t>(text.utf8.size());
+  std::uint32_t seg = 0;
+  while (seg < n) {
+    std::uint32_t const paraStart = seg;
+    while (seg < n && bytes[seg] != '\n') {
+      ++seg;
+    }
+    std::uint32_t const paraEnd = seg;
+    if (seg < n && bytes[seg] == '\n') {
+      ++seg;
+    }
+    std::uint32_t runStart = 0;
+    while (runStart < text.runs.size() && text.runs[runStart].end <= paraStart) {
+      ++runStart;
+    }
+    std::uint32_t runEnd = runStart;
+    while (runEnd < text.runs.size() && text.runs[runEnd].start < paraEnd) {
+      ++runEnd;
+    }
+    Paragraph p{};
+    p.byteStart = paraStart;
+    p.byteEnd = paraEnd;
+    p.runStart = runStart;
+    p.runEnd = runEnd;
+    char const* pUtf8 = bytes + paraStart;
+    std::uint32_t const blen = paraEnd - paraStart;
+    p.hash = hashParagraph(sys, pUtf8, blen, resolved, text, runStart, runEnd, paraStart, opt);
+    out.push_back(p);
+  }
+  return out;
+}
+
+static void mergeParagraphLayoutInto(TextLayout& out, TextLayout const& partial, float deltaY,
+                                     std::uint32_t byteOffset, std::uint32_t ctLineBase) {
+  for (auto const& pr : partial.runs) {
+    TextLayout::PlacedRun copy = pr;
+    copy.origin.y += deltaY;
+    if (byteOffset != 0) {
+      copy.utf8Begin += byteOffset;
+      copy.utf8End += byteOffset;
+    }
+    copy.ctLineIndex += ctLineBase;
+    out.runs.push_back(std::move(copy));
+  }
+  for (auto const& lr : partial.lines) {
+    TextLayout::LineRange lr2 = lr;
+    lr2.byteStart += static_cast<int>(byteOffset);
+    lr2.byteEnd += static_cast<int>(byteOffset);
+    lr2.ctLineIndex += ctLineBase;
+    lr2.top += deltaY;
+    lr2.bottom += deltaY;
+    lr2.baseline += deltaY;
+    out.lines.push_back(lr2);
+  }
+}
+
+ShapedParagraph CoreTextSystem::Impl::shapeParagraphForCache(CoreTextSystem& sys,
+                                                             AttributedString const& text,
+                                                             std::vector<ResolvedStyle> const& resolved,
+                                                             Paragraph const& para,
+                                                             TextLayoutOptions const& options) {
+  ShapedParagraph sp{};
+  sp.byteLength = para.byteEnd - para.byteStart;
+  AttributedString paraText{};
+  std::vector<ResolvedStyle> paraResolved;
+  paraText.utf8 = text.utf8.substr(para.byteStart, sp.byteLength);
+  for (std::uint32_t ri = para.runStart; ri < para.runEnd; ++ri) {
+    auto const& run = text.runs[ri];
+    std::uint32_t const cs = std::max(run.start, para.byteStart);
+    std::uint32_t const ce = std::min(run.end, para.byteEnd);
+    if (cs >= ce) {
+      continue;
+    }
+    AttributedRun nr{};
+    nr.start = cs - para.byteStart;
+    nr.end = ce - para.byteStart;
+    nr.font = run.font;
+    nr.color = run.color;
+    paraText.runs.push_back(nr);
+    paraResolved.push_back(resolved[ri]);
+  }
+  CFAttributedStringRef const cf = createCFAttributed(sys, paraText, paraResolved, options);
+  CTTypesetterRef const ts = CTTypesetterCreateWithAttributedString(cf);
+  sp.typesetter = ts;
+  sp.attrString = (CFAttributedStringRef)CFRetain(cf);
+  CFRelease(cf);
+  std::unordered_set<std::uint32_t> fidSeen;
+  for (auto const& rs : paraResolved) {
+    std::string_view const fam =
+        rs.font.family.empty() ? std::string_view(kDefaultFontFamily) : std::string_view(rs.font.family);
+    std::uint32_t const fid = sys.resolveFontId(fam, rs.font.weight, rs.font.italic);
+    if (fidSeen.insert(fid).second) {
+      sp.fontIds.push_back(fid);
+    }
+  }
+  sp.approxBytes = sp.byteLength + sp.byteLength * 8u + 256u;
+  return sp;
+}
+
+std::shared_ptr<TextLayout const> CoreTextSystem::Impl::layoutViaParagraphCache(
+    CoreTextSystem& sys, AttributedString const& text, float maxWidth, TextLayoutOptions const& options,
+    std::vector<ResolvedStyle> const& resolved, flux::detail::SmallVector<Paragraph, 32>&& paragraphs) {
+  bool const suppressStats = options.suppressCacheStats;
+  std::uint32_t const wq = quantizeWidth(maxWidth);
+  flux::detail::SmallVector<ParagraphHash, 32> phashes;
+  phashes.reserve(paragraphs.size());
+  for (std::size_t i = 0; i < paragraphs.size(); ++i) {
+    phashes.push_back(paragraphs[i].hash);
+  }
+  AssemblyKey const akey = AssemblyCache::computeKey(phashes, wq, options);
+  if (auto hit = assemblyCache_.find(phashes, wq, options, suppressStats)) {
+    return hit;
+  }
+  std::vector<ShapedParagraph const*> shapedPtrs;
+  shapedPtrs.reserve(paragraphs.size());
+  for (std::size_t pi = 0; pi < paragraphs.size(); ++pi) {
+    Paragraph const& para = paragraphs[pi];
+    ShapedParagraph const* sp = paragraphCache_.find(para.hash, suppressStats);
+    if (!sp) {
+      ShapedParagraph shaped = shapeParagraphForCache(sys, text, resolved, para, options);
+      sp = &paragraphCache_.insert(para.hash, std::move(shaped), suppressStats);
+    }
+    shapedPtrs.push_back(sp);
+  }
+  TextLayout merged{};
+  float yCursor = 0.f;
+  std::uint32_t ctBase = 0;
+  for (std::size_t pi = 0; pi < paragraphs.size(); ++pi) {
+    Paragraph const& para = paragraphs[pi];
+    ShapedParagraph const* sp = shapedPtrs[pi];
+    if (!sp || !sp->attrString) {
+      return std::shared_ptr<TextLayout const>(std::make_shared<TextLayout>());
+    }
+    CTFramesetterRef const fs = CTFramesetterCreateWithAttributedString(sp->attrString);
+    AttributedString paraText{};
+    paraText.utf8 = text.utf8.substr(para.byteStart, para.byteEnd - para.byteStart);
+    std::vector<ResolvedStyle> paraResolved;
+    for (std::uint32_t ri = para.runStart; ri < para.runEnd; ++ri) {
+      auto const& run = text.runs[ri];
+      std::uint32_t const cs = std::max(run.start, para.byteStart);
+      std::uint32_t const ce = std::min(run.end, para.byteEnd);
+      if (cs >= ce) {
+        continue;
+      }
+      AttributedRun nr{};
+      nr.start = cs - para.byteStart;
+      nr.end = ce - para.byteStart;
+      nr.font = run.font;
+      nr.color = run.color;
+      paraText.runs.push_back(nr);
+      paraResolved.push_back(resolved[ri]);
+    }
+    TextLayout partial{};
+    fillTextLayoutFromFramesetter(sys, fs, paraText, maxWidth, options, partial);
+    CFRelease(fs);
+    mergeParagraphLayoutInto(merged, partial, yCursor, para.byteStart, ctBase);
+    yCursor += partial.measuredSize.height;
+    ctBase += static_cast<std::uint32_t>(partial.lines.size());
+  }
+  recomputeTextLayoutMetrics(merged);
+  auto result = std::make_shared<TextLayout const>(std::move(merged));
+  assemblyCache_.insert(akey, std::move(phashes), wq, options, result, suppressStats);
+  return result;
 }
 
 std::vector<std::uint8_t> CoreTextSystem::rasterizeGlyph(std::uint32_t fontId, std::uint16_t glyphId,
@@ -1391,6 +2050,16 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layout(std::string_view utf8, 
 
 std::shared_ptr<TextLayout const> CoreTextSystem::layout(AttributedString const& text, float maxWidth,
                                                          TextLayoutOptions const& options) {
+  if (text.utf8.empty()) {
+    return std::shared_ptr<TextLayout const>(std::make_shared<TextLayout>());
+  }
+  validateRuns(text);
+  std::vector<ResolvedStyle> resolved;
+  accumulateInheritance(resolved, text);
+  if (paragraphCachePredicate(text, options)) {
+    auto paras = d->splitIntoParagraphs(*this, text, resolved, options);
+    return d->layoutViaParagraphCache(*this, text, maxWidth, options, resolved, std::move(paras));
+  }
   return layoutUnboxed(text, options, maxWidth, false, 0, 0);
 }
 
@@ -1458,6 +2127,8 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layoutBoxedImpl(AttributedStri
 
 void CoreTextSystem::onFrameBegin(std::uint64_t frameIndex) {
   d->currentFrame_ = frameIndex;
+  d->paragraphCache_.onFrameBegin(frameIndex);
+  d->assemblyCache_.onFrameBegin(frameIndex);
 }
 
 void CoreTextSystem::onFrameEnd() {
@@ -1496,9 +2167,21 @@ void CoreTextSystem::onFrameEnd() {
   if (d->frameMapBytes_ > d->stats_.l2_framesetter.peakBytes) {
     d->stats_.l2_framesetter.peakBytes = d->frameMapBytes_;
   }
+
+  std::vector<ParagraphHash> const evictedPara =
+      d->paragraphCache_.onFrameEnd(d->paragraphCacheBudgetBytes_);
+  std::unordered_set<ParagraphHash, ParagraphHashHasher> evictedHashes;
+  evictedHashes.reserve(evictedPara.size());
+  for (ParagraphHash const& h : evictedPara) {
+    evictedHashes.insert(h);
+  }
+  d->assemblyCache_.invalidateIntersecting(evictedHashes);
+  d->assemblyCache_.onFrameEnd(d->assemblyCacheBudgetBytes_);
 }
 
 void CoreTextSystem::invalidateAll() {
+  d->paragraphCache_.invalidateAll();
+  d->assemblyCache_.invalidateAll();
   for (auto& p : d->frameMap_) {
     d->releaseFramesetterEntry(*p.second);
   }
@@ -1507,6 +2190,14 @@ void CoreTextSystem::invalidateAll() {
 }
 
 void CoreTextSystem::invalidateForFontChange(std::span<std::uint32_t const> fontIds) {
+  std::vector<ParagraphHash> const removedPara = d->paragraphCache_.invalidateForFontChange(fontIds);
+  std::unordered_set<ParagraphHash, ParagraphHashHasher> paraHashes;
+  paraHashes.reserve(removedPara.size());
+  for (ParagraphHash const& h : removedPara) {
+    paraHashes.insert(h);
+  }
+  d->assemblyCache_.invalidateIntersecting(paraHashes);
+
   std::unordered_set<std::uint32_t> idset(fontIds.begin(), fontIds.end());
   std::vector<ContentHash> toErase;
   for (auto const& p : d->frameMap_) {
@@ -1528,7 +2219,15 @@ void CoreTextSystem::invalidateForFontChange(std::span<std::uint32_t const> font
 }
 
 TextCacheStats CoreTextSystem::stats() const {
-  return d->stats_;
+  TextCacheStats s = d->stats_;
+  s.l2_5_paragraph = d->paragraphCache_.stats();
+  s.l2_5_assembly = d->assemblyCache_.stats();
+  return s;
+}
+
+void CoreTextSystem::setParagraphCacheBudget(std::size_t bytes) {
+  d->paragraphCacheBudgetBytes_ = bytes;
+  d->paragraphCache_.setBudget(bytes);
 }
 
 } // namespace flux

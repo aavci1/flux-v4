@@ -35,6 +35,8 @@ public:
 
   void invalidateForFontChange(std::span<std::uint32_t const> fontIds) override;
 
+  void setParagraphCacheBudget(std::size_t bytes) override;
+
   [[nodiscard]] TextCacheStats stats() const override;
 
   std::uint32_t resolveFontId(std::string_view fontFamily, float weight, bool italic) override;

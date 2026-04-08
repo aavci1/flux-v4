@@ -81,6 +81,9 @@ public:
   /// Drop cache entries that reference any of the given font ids (resolved font registry indices).
   virtual void invalidateForFontChange(std::span<std::uint32_t const> fontIds) { (void)fontIds; }
 
+  /// Byte budget for the paragraph shape cache (Core Text backend only). Default is implementation-defined.
+  virtual void setParagraphCacheBudget(std::size_t bytes) { (void)bytes; }
+
   // -----------------------------------------------------------------
   // Diagnostics
   // -----------------------------------------------------------------
