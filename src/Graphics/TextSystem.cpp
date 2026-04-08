@@ -57,27 +57,24 @@ void applyHorizontalPerLine(TextLayout& layout, Rect const& box, HorizontalAlign
     return;
   }
 
-  std::vector<float> baselines;
-  baselines.reserve(layout.runs.size());
+  // Group by ctLineIndex, not baseline Y epsilon. Runs on the same CTLine can differ in baseline Y by
+  // more than kLineEps (e.g. mixed fonts, attachment glyphs); splitting them yields different lineDx per
+  // run and garbles center/trailing alignment (narrow stacked ink on earlier lines, last line OK).
+  std::vector<std::uint32_t> lineOrder;
+  std::unordered_set<std::uint32_t> seenLine;
+  lineOrder.reserve(layout.runs.size());
+  seenLine.reserve(layout.runs.size());
   for (auto const& pr : layout.runs) {
-    float const y = pr.origin.y;
-    bool found = false;
-    for (float b : baselines) {
-      if (nearLine(b, y)) {
-        found = true;
-        break;
-      }
-    }
-    if (!found) {
-      baselines.push_back(y);
+    if (seenLine.insert(pr.ctLineIndex).second) {
+      lineOrder.push_back(pr.ctLineIndex);
     }
   }
 
-  for (float ly : baselines) {
+  for (std::uint32_t const lineId : lineOrder) {
     float minL = std::numeric_limits<float>::infinity();
     float maxR = -std::numeric_limits<float>::infinity();
     for (auto const& pr : layout.runs) {
-      if (!nearLine(pr.origin.y, ly)) {
+      if (pr.ctLineIndex != lineId) {
         continue;
       }
       minL = std::min(minL, pr.origin.x);
@@ -94,12 +91,12 @@ void applyHorizontalPerLine(TextLayout& layout, Rect const& box, HorizontalAlign
       lineDx = box.width - lineWidth - minL;
     }
     for (auto& pr : layout.runs) {
-      if (nearLine(pr.origin.y, ly)) {
+      if (pr.ctLineIndex == lineId) {
         pr.origin.x += lineDx;
       }
     }
     for (auto& lr : layout.lines) {
-      if (nearLine(lr.baseline, ly)) {
+      if (lr.ctLineIndex == lineId) {
         lr.lineMinX += lineDx;
       }
     }
@@ -187,11 +184,23 @@ std::shared_ptr<TextLayout> cloneTextLayout(TextLayout const& src) {
   for (auto const& pr : src.runs) {
     TextLayout::PlacedRun copy = pr;
     std::size_t const gidCount = pr.run.glyphIds.size();
-    std::size_t const gStart = storage->glyphArena.size();
-    storage->glyphArena.insert(storage->glyphArena.end(), pr.run.glyphIds.begin(), pr.run.glyphIds.end());
-    storage->positionArena.insert(storage->positionArena.end(), pr.run.positions.begin(), pr.run.positions.end());
-    copy.run.glyphIds = std::span<std::uint16_t const>(storage->glyphArena.data() + gStart, gidCount);
-    copy.run.positions = std::span<Point const>(storage->positionArena.data() + gStart, gidCount);
+    std::size_t const posCount = pr.run.positions.size();
+    std::size_t const n = std::min(gidCount, posCount);
+    if (n == 0) {
+      copy.run.glyphIds = {};
+      copy.run.positions = {};
+      out->runs.push_back(std::move(copy));
+      continue;
+    }
+    std::size_t const gGlyphStart = storage->glyphArena.size();
+    std::size_t const gPosStart = storage->positionArena.size();
+    storage->glyphArena.insert(storage->glyphArena.end(), pr.run.glyphIds.begin(),
+                               pr.run.glyphIds.begin() + static_cast<std::ptrdiff_t>(n));
+    storage->positionArena.insert(storage->positionArena.end(), pr.run.positions.begin(),
+                                  pr.run.positions.begin() + static_cast<std::ptrdiff_t>(n));
+    copy.run.glyphIds =
+        std::span<std::uint16_t const>(storage->glyphArena.data() + gGlyphStart, n);
+    copy.run.positions = std::span<Point const>(storage->positionArena.data() + gPosStart, n);
     out->runs.push_back(std::move(copy));
   }
   out->ownedStorage = std::move(storage);

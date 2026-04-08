@@ -919,7 +919,8 @@ public:
 
       float const physicalFontSize = text.fontSize * dpiScaleX_;
 
-      for (std::size_t i = 0; i < text.glyphIds.size(); ++i) {
+      std::size_t const glyphCount = std::min(text.glyphIds.size(), text.positions.size());
+      for (std::size_t i = 0; i < glyphCount; ++i) {
         GlyphKey key{};
         key.fontId = text.fontId;
         key.glyphId = text.glyphIds[i];

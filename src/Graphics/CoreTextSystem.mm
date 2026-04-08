@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstdint>
 #include <cstdlib>
 #include <cmath>
 #include <cstring>
@@ -574,6 +575,9 @@ struct MeasureSlot {
 struct BoxSlot {
   std::uint32_t boxWQ1 = 0;
   std::uint32_t boxHQ1 = 0;
+  /// Exact box dimensions (layout uses these for center/trailing alignment, not only quantized keys).
+  float boxW = 0.f;
+  float boxH = 0.f;
   std::uint8_t hAlign = 0;
   std::uint8_t vAlign = 0;
   std::uint16_t firstBaselineQ8 = 0;
@@ -582,6 +586,8 @@ struct BoxSlot {
 
 struct LayoutSlot {
   std::uint32_t maxWidthQ1 = 0;
+  /// Must match layout requests: `quantizeWidth` alone can collide for different float maxWidth values.
+  float maxWidthExact = 0.f;
   std::int32_t maxLines = 0;
   std::shared_ptr<TextLayout const> unboxed;
   flux::detail::SmallVector<BoxSlot, 4> boxes;
@@ -923,6 +929,31 @@ struct CoreTextSystem::Impl {
     char const* utf8Ptr = nullptr;
     std::size_t utf8Size = 0;
     std::shared_ptr<TextLayout const> layout;
+
+    // --- Incremental split/assembly state ---
+    /// Copy of the previous UTF-8 string, used by tryIncrementalSplit to locate the diff region.
+    std::string prevUtf8;
+    /// Copy of the previous run list (for attribute-change detection outside the dirty region).
+    std::vector<AttributedRun> prevRuns;
+    /// Paragraph split that produced `layout` (cached to avoid re-scanning on the next keystroke).
+    std::vector<Paragraph> prevParagraphs;
+    /// paraRunStarts[i]  = index of the first run  in `layout->runs`  belonging to paragraph i.
+    /// paraRunStarts[N]  = layout->runs.size().
+    std::vector<std::uint32_t> paraRunStarts;
+    /// paraLineStarts[i] = index of the first line in `layout->lines` belonging to paragraph i.
+    /// paraLineStarts[N] = layout->lines.size().
+    std::vector<std::uint32_t> paraLineStarts;
+    /// paraYCursors[i]   = yCursor (accumulated paragraph height) at the START of paragraph i.
+    /// paraYCursors[N]   = total document height.
+    std::vector<float> paraYCursors;
+    /// paraCtBases[i]    = ctLineIndex base at the START of paragraph i.
+    /// paraCtBases[N]    = total CTLine count.
+    std::vector<std::uint32_t> paraCtBases;
+    /// Maximum line width (= layout->measuredSize.width) of the last produced layout, stored to
+    /// allow the incremental path to skip the O(prefix_runs) maxDocWidth scan.
+    float prevMaxDocWidth = 0.f;
+    /// firstBaseline of the last produced layout (copy of layout->firstBaseline).
+    float prevFirstBaseline = 0.f;
   };
   LastLayoutMemo lastLayout_;
   TextCacheStats::LayerStats memoStats_{};
@@ -936,6 +967,21 @@ struct CoreTextSystem::Impl {
       CoreTextSystem& sys, AttributedString const& text, std::vector<ResolvedStyle> const& resolved,
       TextLayoutOptions const& opt);
 
+  struct IncrementalSplitResult {
+    flux::detail::SmallVector<Paragraph, 32> paragraphs;
+    std::size_t firstChanged = 0;        ///< First dirty paragraph index in the NEW list.
+    std::size_t lastChangedExcl = 0;     ///< Exclusive end of dirty range in the NEW list.
+    std::size_t firstChangedOld = 0;     ///< First dirty paragraph index in the OLD list.
+    std::size_t lastChangedExclOld = 0;  ///< Exclusive end of dirty range in the OLD list.
+    std::int32_t byteDelta = 0;          ///< newLen - oldLen.
+  };
+
+  /// Returns std::nullopt when an incremental split is not possible (e.g. run structure changed
+  /// significantly) so the caller should fall back to the full splitIntoParagraphs path.
+  std::optional<IncrementalSplitResult> tryIncrementalSplit(
+      CoreTextSystem& sys, AttributedString const& text,
+      std::vector<ResolvedStyle> const& resolved, TextLayoutOptions const& opt);
+
   ShapedParagraph shapeParagraphForCache(CoreTextSystem& sys, AttributedString const& text,
                                            std::vector<ResolvedStyle> const& resolved,
                                            Paragraph const& para, TextLayoutOptions const& options);
@@ -943,7 +989,8 @@ struct CoreTextSystem::Impl {
   std::shared_ptr<TextLayout const> layoutViaParagraphCache(
       CoreTextSystem& sys, AttributedString const& text, float maxWidth,
       TextLayoutOptions const& options, std::vector<ResolvedStyle> const& resolved,
-      flux::detail::SmallVector<Paragraph, 32>&& paragraphs);
+      flux::detail::SmallVector<Paragraph, 32>&& paragraphs,
+      IncrementalSplitResult const* incr = nullptr);
 
   ParagraphLayoutVariant& buildParagraphVariant(CoreTextSystem& sys, ParagraphHash const& hash,
                                                 ShapedParagraph& sp, Paragraph const& para,
@@ -1492,7 +1539,12 @@ static void fillTextLayoutFromFramesetter(CoreTextSystem& sys, CTFramesetterRef 
   CGFloat const fh = std::max(static_cast<CGFloat>(sz.height), static_cast<CGFloat>(1e-6));
   out.measuredSize = Size{static_cast<float>(fw), static_cast<float>(fh)};
 
-  CGPathRef path = CGPathCreateWithRect(CGRectMake(0, 0, fw, fh), nullptr);
+  // Path width must match the constraint used by CTFramesetterSuggestFrameSizeWithConstraints above.
+  // Using only the tight sz.width can reflow lines into a narrower column than the measurement pass
+  // (constraint maxWidth), which produced stacked/overlapping ink while the last line looked fine.
+  CGFloat const pathW = maxWidth > 0.f ? static_cast<CGFloat>(maxWidth) : fw;
+
+  CGPathRef path = CGPathCreateWithRect(CGRectMake(0, 0, pathW, fh), nullptr);
   CTFrameRef frame = CTFramesetterCreateFrame(fs, CFRangeMake(0, 0), path, nullptr);
   CFRelease(path);
   if (!frame) {
@@ -1583,6 +1635,171 @@ static ParagraphLayoutVariant* findVariant(ShapedParagraph& sp, std::uint32_t wq
   return nullptr;
 }
 
+/// Builds variant runs/lines from `sp.typesetter` (no re-shaping).
+/// Returns false if the typesetter is unavailable; caller falls back to the CTFramesetter path.
+static bool buildVariantFromTypesetter(CoreTextSystem& sys, ShapedParagraph const& sp,
+                                       AttributedString const& fullText, Paragraph const& para,
+                                       float maxWidth, TextLayoutOptions const& options,
+                                       ParagraphLayoutVariant& v) {
+  CTTypesetterRef ts = sp.typesetter;
+  if (!ts || sp.utf16Length <= 0) {
+    return false;
+  }
+  NSString* const paraStr = [[NSString alloc]
+      initWithBytes:fullText.utf8.data() + para.byteStart
+             length:sp.byteLength
+           encoding:NSUTF8StringEncoding];
+  if (!paraStr) {
+    return false;
+  }
+
+  bool const noWrap = (maxWidth <= 0.f || options.wrapping == TextWrapping::NoWrap);
+  CFIndex const utf16Len = sp.utf16Length;
+
+  // --- Pass 1: create CTLines and count total glyphs ---
+  std::vector<CTLineRef> ctLines;
+  {
+    CFIndex pos = 0;
+    while (pos < utf16Len) {
+      CFIndex lineLen;
+      if (noWrap) {
+        lineLen = utf16Len - pos;
+      } else {
+        lineLen = CTTypesetterSuggestLineBreakWithOffset(ts, pos,
+            static_cast<double>(maxWidth), 0.0);
+        if (lineLen <= 0) break;
+      }
+      CTLineRef ctLine = CTTypesetterCreateLineWithOffset(ts,
+          CFRangeMake(pos, lineLen), 0.0);
+      if (!ctLine) break;
+      ctLines.push_back(ctLine);
+      pos += lineLen;
+      if (noWrap) break;
+    }
+  }
+  if (ctLines.empty()) {
+    return true;
+  }
+
+  CFIndex totalGlyphs = 0;
+  for (CTLineRef ctLine : ctLines) {
+    CFArrayRef glyphRuns = CTLineGetGlyphRuns(ctLine);
+    CFIndex const rc = CFArrayGetCount(glyphRuns);
+    for (CFIndex ri = 0; ri < rc; ++ri) {
+      totalGlyphs += CTRunGetGlyphCount(
+          static_cast<CTRunRef>(CFArrayGetValueAtIndex(glyphRuns, ri)));
+    }
+  }
+
+  // Pre-allocate flat storage (no reallocations → spans remain stable in pass 2)
+  v.glyphStorage.resize(static_cast<std::size_t>(totalGlyphs));
+  v.positionStorage.resize(static_cast<std::size_t>(totalGlyphs));
+  std::size_t gOff = 0;
+
+  // --- Pass 2: fill glyph/position data, build PlacedRuns and LineRanges ---
+  float yCursor = 0.f;
+  std::uint32_t ctLineIdx = 0;
+  for (CTLineRef ctLine : ctLines) {
+    CGFloat ascent = 0, descent = 0, leading = 0;
+    double const lineWidth = CTLineGetTypographicBounds(ctLine, &ascent, &descent, &leading);
+    float const baselineY = yCursor + static_cast<float>(ascent);
+
+    CFArrayRef glyphRuns = CTLineGetGlyphRuns(ctLine);
+    CFIndex const runCount = CFArrayGetCount(glyphRuns);
+    std::size_t const firstRunInLine = v.runs.size();
+
+    for (CFIndex ri = 0; ri < runCount; ++ri) {
+      CTRunRef run = static_cast<CTRunRef>(CFArrayGetValueAtIndex(glyphRuns, ri));
+      CFIndex const glyphCount = CTRunGetGlyphCount(run);
+      if (glyphCount <= 0) continue;
+
+      NSDictionary* attrs = (__bridge NSDictionary*)CTRunGetAttributes(run);
+      CTFontRef ctFont = (__bridge CTFontRef)attrs[(id)kCTFontAttributeName];
+      CGColorRef cgColor = (__bridge CGColorRef)attrs[(id)kCTForegroundColorAttributeName];
+      std::uint32_t fontId = 0;
+      float fontSize = 0.f;
+      Color color = Colors::black;
+      styleFromCTFont(ctFont, cgColor, sys, fontId, fontSize, color);
+
+      std::vector<CGPoint> cpos(static_cast<std::size_t>(glyphCount));
+      CTRunGetPositions(run, CFRangeMake(0, 0), cpos.data());
+      CGFloat runAscent = 0, runDescent = 0, runLeading = 0;
+      double const runWidth = CTRunGetTypographicBounds(run, CFRangeMake(0, 0),
+          &runAscent, &runDescent, &runLeading);
+
+      CTRunGetGlyphs(run, CFRangeMake(0, 0),
+          reinterpret_cast<CGGlyph*>(v.glyphStorage.data() + gOff));
+      for (CFIndex gi = 0; gi < glyphCount; ++gi) {
+        std::size_t const idx = static_cast<std::size_t>(gi);
+        float const dx = static_cast<float>(cpos[idx].x - cpos[0].x);
+        float const dy = -static_cast<float>(cpos[idx].y - cpos[0].y);
+        v.positionStorage[gOff + idx] = Point{dx, dy};
+      }
+
+      TextLayout::PlacedRun placed{};
+      placed.run.fontId = fontId;
+      placed.run.fontSize = fontSize;
+      placed.run.color = color;
+      placed.run.ascent = static_cast<float>(runAscent);
+      placed.run.descent = static_cast<float>(runDescent);
+      placed.run.width = static_cast<float>(runWidth);
+      placed.run.glyphIds = std::span<std::uint16_t const>(
+          v.glyphStorage.data() + gOff, static_cast<std::size_t>(glyphCount));
+      placed.run.positions = std::span<Point const>(
+          v.positionStorage.data() + gOff, static_cast<std::size_t>(glyphCount));
+      placed.origin.x = static_cast<float>(cpos[0].x);
+      placed.origin.y = baselineY;
+      CFRange const strRange = CTRunGetStringRange(run);
+      NSRange const nsr = NSMakeRange(static_cast<NSUInteger>(strRange.location),
+                                      static_cast<NSUInteger>(strRange.length));
+      utf16RangeToUtf8ByteRange(paraStr, nsr, placed.utf8Begin, placed.utf8End);
+      placed.ctLineIndex = ctLineIdx;
+      v.runs.push_back(std::move(placed));
+      gOff += static_cast<std::size_t>(glyphCount);
+    }
+
+    // Build LineRange for this CTLine
+    {
+      CFRange const lineRange = CTLineGetStringRange(ctLine);
+      NSRange const nsr = NSMakeRange(static_cast<NSUInteger>(lineRange.location),
+                                      static_cast<NSUInteger>(lineRange.length));
+      TextLayout::LineRange lr{};
+      lr.ctLineIndex = ctLineIdx;
+      std::uint32_t b0 = 0, b1 = 0;
+      utf16RangeToUtf8ByteRange(paraStr, nsr, b0, b1);
+      lr.byteStart = static_cast<int>(b0);
+      lr.byteEnd = static_cast<int>(b1);
+      float lineBaseline = baselineY;
+      float minTop = baselineY - static_cast<float>(ascent);
+      float maxBot = baselineY + static_cast<float>(descent);
+      float minOx = 0.f;
+      bool hasRun = false;
+      for (std::size_t i = firstRunInLine; i < v.runs.size(); ++i) {
+        auto const& pr = v.runs[i];
+        if (!hasRun) { minOx = pr.origin.x; hasRun = true; }
+        else minOx = std::min(minOx, pr.origin.x);
+        lineBaseline = std::max(lineBaseline, pr.origin.y);
+        minTop = std::min(minTop, pr.origin.y - pr.run.ascent);
+        maxBot = std::max(maxBot, pr.origin.y + pr.run.descent);
+      }
+      lr.baseline = lineBaseline;
+      lr.top = minTop;
+      lr.bottom = maxBot;
+      lr.lineMinX = hasRun ? minOx : 0.f;
+      v.lines.push_back(lr);
+    }
+
+    float const lineHeight = static_cast<float>(ascent + descent + std::max(leading, 0.0));
+    yCursor += lineHeight;
+    v.maxLineWidth = std::max(v.maxLineWidth, static_cast<float>(lineWidth));
+    ++ctLineIdx;
+  }
+
+  v.height = yCursor;
+  for (CTLineRef ctLine : ctLines) CFRelease(ctLine);
+  return true;
+}
+
 ParagraphLayoutVariant& CoreTextSystem::Impl::buildParagraphVariant(CoreTextSystem& sys,
                                                      ParagraphHash const& hash, ShapedParagraph& sp,
                                                      Paragraph const& para, AttributedString const& text,
@@ -1604,52 +1821,57 @@ ParagraphLayoutVariant& CoreTextSystem::Impl::buildParagraphVariant(CoreTextSyst
   } else if (options.lineHeight > 0.f) {
     v.lhQ8 = static_cast<std::uint32_t>(std::lround(options.lineHeight * 4.f));
   }
-  AttributedString paraText{};
-  paraText.utf8 = text.utf8.substr(para.byteStart, para.byteEnd - para.byteStart);
-  std::vector<ResolvedStyle> paraResolved;
-  for (std::uint32_t ri = para.runStart; ri < para.runEnd; ++ri) {
-    auto const& run = text.runs[ri];
-    std::uint32_t const cs = std::max(run.start, para.byteStart);
-    std::uint32_t const ce = std::min(run.end, para.byteEnd);
-    if (cs >= ce) {
-      continue;
+
+  // Fast path: use the pre-built CTTypesetter (avoids double text-shaping).
+  bool const builtFromTypesetter = buildVariantFromTypesetter(sys, sp, text, para, maxWidth, options, v);
+
+  if (!builtFromTypesetter) {
+    // Fallback: CTFramesetter path (used when typesetter is unavailable).
+    AttributedString paraText{};
+    paraText.utf8 = text.utf8.substr(para.byteStart, para.byteEnd - para.byteStart);
+    std::vector<ResolvedStyle> paraResolved;
+    for (std::uint32_t ri = para.runStart; ri < para.runEnd; ++ri) {
+      auto const& run = text.runs[ri];
+      std::uint32_t const cs = std::max(run.start, para.byteStart);
+      std::uint32_t const ce = std::min(run.end, para.byteEnd);
+      if (cs >= ce) continue;
+      AttributedRun nr{};
+      nr.start = cs - para.byteStart;
+      nr.end = ce - para.byteStart;
+      nr.font = run.font;
+      nr.color = run.color;
+      paraText.runs.push_back(nr);
+      paraResolved.push_back(resolved[ri]);
     }
-    AttributedRun nr{};
-    nr.start = cs - para.byteStart;
-    nr.end = ce - para.byteStart;
-    nr.font = run.font;
-    nr.color = run.color;
-    paraText.runs.push_back(nr);
-    paraResolved.push_back(resolved[ri]);
+    CFAttributedStringRef attr = createCFAttributed(sys, paraText, paraResolved, options);
+    if (!attr) {
+      v.approxBytes = computeVariantApproxBytes(v);
+      sp.variants.push_back(std::move(v));
+      sp.approxBytes = recomputeShapedParagraphApproxBytes(sp);
+      paragraphCache_.adjustParagraphBytes(hash, oldAb, sp.approxBytes);
+      return sp.variants.back();
+    }
+    CTFramesetterRef fs = CTFramesetterCreateWithAttributedString(attr);
+    CFRelease(attr);
+    TextLayout partial{};
+    TextLayoutStorage stor{};
+    fillTextLayoutFromFramesetter(sys, fs, paraText, maxWidth, options, partial, stor);
+    CFRelease(fs);
+    v.runs = std::move(partial.runs);
+    v.lines = std::move(partial.lines);
+    v.height = partial.measuredSize.height;
+    v.maxLineWidth = partial.measuredSize.width;
+    v.glyphStorage = std::move(stor.glyphArena);
+    v.positionStorage = std::move(stor.positionArena);
+    std::size_t off = 0;
+    for (auto& pr : v.runs) {
+      std::size_t const n = pr.run.glyphIds.size();
+      pr.run.glyphIds = std::span<std::uint16_t const>(v.glyphStorage.data() + off, n);
+      pr.run.positions = std::span<Point const>(v.positionStorage.data() + off, n);
+      off += n;
+    }
   }
-  CFAttributedStringRef attr = createCFAttributed(sys, paraText, paraResolved, options);
-  if (!attr) {
-    v.approxBytes = computeVariantApproxBytes(v);
-    sp.variants.push_back(std::move(v));
-    sp.approxBytes = recomputeShapedParagraphApproxBytes(sp);
-    paragraphCache_.adjustParagraphBytes(hash, oldAb, sp.approxBytes);
-    return sp.variants.back();
-  }
-  CTFramesetterRef fs = CTFramesetterCreateWithAttributedString(attr);
-  CFRelease(attr);
-  TextLayout partial{};
-  TextLayoutStorage stor{};
-  fillTextLayoutFromFramesetter(sys, fs, paraText, maxWidth, options, partial, stor);
-  CFRelease(fs);
-  v.runs = std::move(partial.runs);
-  v.lines = std::move(partial.lines);
-  v.height = partial.measuredSize.height;
-  v.maxLineWidth = partial.measuredSize.width;
-  v.glyphStorage = std::move(stor.glyphArena);
-  v.positionStorage = std::move(stor.positionArena);
-  // Fix up spans to point into moved-to storage
-  std::size_t off = 0;
-  for (auto& pr : v.runs) {
-    std::size_t const n = pr.run.glyphIds.size();
-    pr.run.glyphIds = std::span<std::uint16_t const>(v.glyphStorage.data() + off, n);
-    pr.run.positions = std::span<Point const>(v.positionStorage.data() + off, n);
-    off += n;
-  }
+
   v.approxBytes = computeVariantApproxBytes(v);
   sp.variants.push_back(std::move(v));
   sp.approxBytes = recomputeShapedParagraphApproxBytes(sp);
@@ -1724,29 +1946,160 @@ flux::detail::SmallVector<Paragraph, 32> CoreTextSystem::Impl::splitIntoParagrap
   return out;
 }
 
-static void mergeParagraphLayoutInto(TextLayout& out, TextLayout const& partial, float deltaY,
-                                     std::uint32_t byteOffset, std::uint32_t ctLineBase) {
-  for (auto const& pr : partial.runs) {
-    TextLayout::PlacedRun copy = pr;
-    copy.origin.y += deltaY;
-    if (byteOffset != 0) {
-      copy.utf8Begin += byteOffset;
-      copy.utf8End += byteOffset;
+std::optional<CoreTextSystem::Impl::IncrementalSplitResult>
+CoreTextSystem::Impl::tryIncrementalSplit(CoreTextSystem& sys, AttributedString const& text,
+                                          std::vector<ResolvedStyle> const& resolved,
+                                          TextLayoutOptions const& opt) {
+  if (lastLayout_.prevUtf8.empty() || lastLayout_.prevParagraphs.empty()) {
+    return std::nullopt;
+  }
+
+  std::string const& prev = lastLayout_.prevUtf8;
+  std::string const& curr = text.utf8;
+
+  // Find common prefix length.
+  auto const [prevIt, currIt] = std::mismatch(prev.begin(), prev.end(), curr.begin(), curr.end());
+  std::size_t const prefixLen = static_cast<std::size_t>(prevIt - prev.begin());
+  if (prevIt == prev.end() && currIt == curr.end()) {
+    return std::nullopt; // identical — should not happen here, but safe
+  }
+
+  std::int32_t const delta =
+      static_cast<std::int32_t>(curr.size()) - static_cast<std::int32_t>(prev.size());
+
+  // Find common suffix length (capped so the two dirty windows can't overlap).
+  // Use memcmp in a binary-search pattern so the fast path (all equal) costs one SIMD memcmp,
+  // replacing the old scalar byte-by-byte backward loop that was ~3ms for a 202KB suffix.
+  std::size_t suffixLen = 0;
+  {
+    std::size_t const maxOldSuffix = prev.size() - prefixLen;
+    std::size_t const maxNewSuffix = curr.size() - prefixLen;
+    std::size_t const maxSuffix = std::min(maxOldSuffix, maxNewSuffix);
+    if (maxSuffix > 0) {
+      char const* const prevEnd = prev.data() + prev.size();
+      char const* const currEnd = curr.data() + curr.size();
+      if (std::memcmp(prevEnd - maxSuffix, currEnd - maxSuffix, maxSuffix) == 0) {
+        // Fast path: the entire trailing region is identical.
+        suffixLen = maxSuffix;
+      } else {
+        // Binary-search for the exact length of the common suffix.
+        std::size_t lo = 0, hi = maxSuffix;
+        while (lo + 1 < hi) {
+          std::size_t const mid = (lo + hi) / 2;
+          if (std::memcmp(prevEnd - mid, currEnd - mid, mid) == 0) {
+            lo = mid; // suffix length >= mid
+          } else {
+            hi = mid; // suffix length < mid
+          }
+        }
+        suffixLen = lo;
+      }
     }
-    copy.ctLineIndex += ctLineBase;
-    out.runs.push_back(std::move(copy));
   }
-  for (auto const& lr : partial.lines) {
-    TextLayout::LineRange lr2 = lr;
-    lr2.byteStart += static_cast<int>(byteOffset);
-    lr2.byteEnd += static_cast<int>(byteOffset);
-    lr2.ctLineIndex += ctLineBase;
-    lr2.top += deltaY;
-    lr2.bottom += deltaY;
-    lr2.baseline += deltaY;
-    out.lines.push_back(lr2);
+  std::size_t const dirtyOldEnd = prev.size() - suffixLen;
+
+  // If the run count changed, we can't safely reuse suffix-paragraph hashes.
+  auto const& prevRuns = lastLayout_.prevRuns;
+  if (text.runs.size() != prevRuns.size()) {
+    return std::nullopt;
   }
+
+  // If any run's attributes changed outside the dirty byte region, fall back.
+  for (std::size_t i = 0; i < prevRuns.size(); ++i) {
+    auto const& pr = prevRuns[i];
+    auto const& cr = text.runs[i];
+    bool const outsideDirty = (pr.end <= prefixLen) || (pr.start >= dirtyOldEnd);
+    if (outsideDirty) {
+      if (pr.font.family != cr.font.family || pr.font.size != cr.font.size ||
+          pr.font.weight != cr.font.weight || pr.font.italic != cr.font.italic ||
+          !(pr.color == cr.color)) {
+        return std::nullopt;
+      }
+    }
+  }
+
+  auto const& prevParas = lastLayout_.prevParagraphs;
+
+  // Locate the first old paragraph that touches the dirty region.
+  std::size_t firstChangedOld = prevParas.size();
+  for (std::size_t i = 0; i < prevParas.size(); ++i) {
+    if (prevParas[i].byteEnd > prefixLen) {
+      firstChangedOld = i;
+      break;
+    }
+  }
+  if (firstChangedOld == prevParas.size()) {
+    return std::nullopt;
+  }
+
+  // Locate the exclusive end of old paragraphs that touch the dirty region.
+  std::size_t lastChangedExclOld = firstChangedOld;
+  for (std::size_t i = firstChangedOld; i < prevParas.size(); ++i) {
+    if (prevParas[i].byteStart < dirtyOldEnd) {
+      lastChangedExclOld = i + 1u;
+    } else {
+      break;
+    }
+  }
+
+  // Compute the new string's "dirty end" (in terms of bytes in the new string):
+  // the suffix starts at (prev.size() - suffixLen) in old = (curr.size() - suffixLen) in new.
+  std::uint32_t const newDirtyEnd = static_cast<std::uint32_t>(curr.size() - suffixLen);
+
+  IncrementalSplitResult res;
+  res.firstChangedOld = firstChangedOld;
+  res.lastChangedExclOld = lastChangedExclOld;
+  res.byteDelta = delta;
+
+  // Prefix paragraphs: identical in old and new.
+  for (std::size_t i = 0; i < firstChangedOld; ++i) {
+    res.paragraphs.push_back(prevParas[i]);
+  }
+  res.firstChanged = res.paragraphs.size();
+
+  // Re-scan the dirty window in the NEW string.
+  char const* const newBytes = curr.data();
+  std::uint32_t const newLen = static_cast<std::uint32_t>(curr.size());
+  std::uint32_t seg = prevParas[firstChangedOld].byteStart;
+  while (seg < newDirtyEnd && seg < newLen) {
+    std::uint32_t const paraStart = seg;
+    while (seg < newLen && newBytes[seg] != '\n') ++seg;
+    std::uint32_t const paraEnd = seg;
+    if (seg < newLen) ++seg; // consume '\n'
+    std::uint32_t runStart = 0;
+    while (runStart < static_cast<std::uint32_t>(text.runs.size()) &&
+           text.runs[runStart].end <= paraStart) {
+      ++runStart;
+    }
+    std::uint32_t runEnd = runStart;
+    while (runEnd < static_cast<std::uint32_t>(text.runs.size()) &&
+           text.runs[runEnd].start < paraEnd) {
+      ++runEnd;
+    }
+    Paragraph p{};
+    p.byteStart = paraStart;
+    p.byteEnd = paraEnd;
+    p.runStart = runStart;
+    p.runEnd = runEnd;
+    p.hash = hashParagraph(sys, newBytes + paraStart, paraEnd - paraStart, resolved, text,
+                           runStart, runEnd, paraStart, opt);
+    res.paragraphs.push_back(p);
+    if (paraEnd >= newLen) break;
+  }
+  res.lastChangedExcl = res.paragraphs.size();
+
+  // Suffix paragraphs: same content, byte positions shifted by delta.
+  for (std::size_t i = lastChangedExclOld; i < prevParas.size(); ++i) {
+    Paragraph p = prevParas[i];
+    p.byteStart = static_cast<std::uint32_t>(static_cast<std::int32_t>(p.byteStart) + delta);
+    p.byteEnd = static_cast<std::uint32_t>(static_cast<std::int32_t>(p.byteEnd) + delta);
+    // runStart/runEnd indices are valid (same run count and ordering).
+    res.paragraphs.push_back(p);
+  }
+
+  return res;
 }
+
 
 ShapedParagraph CoreTextSystem::Impl::shapeParagraphForCache(CoreTextSystem& sys,
                                                              AttributedString const& text,
@@ -1791,37 +2144,67 @@ ShapedParagraph CoreTextSystem::Impl::shapeParagraphForCache(CoreTextSystem& sys
   return sp;
 }
 
+// Helpers used only by layoutViaParagraphCache.
+
 std::shared_ptr<TextLayout const> CoreTextSystem::Impl::layoutViaParagraphCache(
     CoreTextSystem& sys, AttributedString const& text, float maxWidth, TextLayoutOptions const& options,
-    std::vector<ResolvedStyle> const& resolved, flux::detail::SmallVector<Paragraph, 32>&& paragraphs) {
+    std::vector<ResolvedStyle> const& resolved, flux::detail::SmallVector<Paragraph, 32>&& paragraphs,
+    IncrementalSplitResult const* incr) {
   bool const suppressStats = options.suppressCacheStats;
   std::uint32_t const wq = quantizeWidth(maxWidth);
-  flux::detail::SmallVector<ParagraphHash, 32> phashes;
-  phashes.reserve(paragraphs.size());
-  for (std::size_t i = 0; i < paragraphs.size(); ++i) {
-    phashes.push_back(paragraphs[i].hash);
+  std::size_t const paraCount = paragraphs.size();
+
+  // On the incremental path (incr != nullptr) the content provably changed, so the memoKey
+  // check would always miss.  Skip the O(N) phashes build and hash computation entirely.
+  if (incr == nullptr) {
+    flux::detail::SmallVector<ParagraphHash, 32> phashes;
+    phashes.reserve(paraCount);
+    for (std::size_t i = 0; i < paraCount; ++i) {
+      phashes.push_back(paragraphs[i].hash);
+    }
+    LayoutMemoKey const memoKey = computeLayoutMemoKey(phashes, wq, options);
+    if (lastLayout_.layout && lastLayout_.keyHi == memoKey.hi && lastLayout_.keyLo == memoKey.lo) {
+      if (!suppressStats) ++memoStats_.hits;
+      return lastLayout_.layout;
+    }
+    if (!suppressStats) ++memoStats_.misses;
+    lastLayout_.keyHi = memoKey.hi;
+    lastLayout_.keyLo = memoKey.lo;
+  } else {
+    if (!suppressStats) ++memoStats_.misses;
+    // Invalidate stale memoKey so a non-incremental caller doesn't get a false hit.
+    lastLayout_.keyHi = 0;
+    lastLayout_.keyLo = 0;
   }
 
-  LayoutMemoKey const memoKey = computeLayoutMemoKey(phashes, wq, options);
-  if (lastLayout_.layout && lastLayout_.keyHi == memoKey.hi && lastLayout_.keyLo == memoKey.lo) {
-    if (!suppressStats) {
-      ++memoStats_.hits;
-    }
-    return lastLayout_.layout;
-  }
-  if (!suppressStats) {
-    ++memoStats_.misses;
-  }
+  // Can we do incremental assembly (bulk-copy prefix+suffix, rebuild only dirty paragraphs)?
+  bool const canIncrAssemble =
+      incr != nullptr &&
+      lastLayout_.layout != nullptr &&
+      lastLayout_.paraRunStarts.size() == lastLayout_.prevParagraphs.size() + 1u &&
+      incr->lastChangedExclOld <= lastLayout_.prevParagraphs.size();
+
+  // Per-paragraph tracking tables (filled during assembly, stored in memo afterwards).
+  std::vector<std::uint32_t> newRunStarts(paraCount + 1u, 0u);
+  std::vector<std::uint32_t> newLineStarts(paraCount + 1u, 0u);
+  std::vector<float>         newYCursors(paraCount + 1u, 0.f);
+  std::vector<std::uint32_t> newCtBases(paraCount + 1u, 0u);
 
   auto out = std::make_shared<TextLayout>();
-  out->runs.reserve(paragraphs.size());
-  out->lines.reserve(paragraphs.size());
-  out->paragraphRefs.reserve(paragraphs.size());
+  out->runs.reserve(paraCount);
+  out->lines.reserve(paraCount);
+  out->paragraphRefs.reserve(paraCount);
   float yCursor = 0.f;
   std::uint32_t ctBase = 0;
   float maxDocWidth = 0.f;
 
-  for (std::size_t pi = 0; pi < paragraphs.size(); ++pi) {
+  // Assemble one paragraph: look up shape cache, find/build variant, append to `out`.
+  auto assembleParagraph = [&](std::size_t pi) -> bool {
+    newRunStarts[pi]  = static_cast<std::uint32_t>(out->runs.size());
+    newLineStarts[pi] = static_cast<std::uint32_t>(out->lines.size());
+    newYCursors[pi]   = yCursor;
+    newCtBases[pi]    = ctBase;
+
     Paragraph const& para = paragraphs[pi];
     std::shared_ptr<ShapedParagraph> sp = paragraphCache_.findShared(para.hash, suppressStats);
     if (!sp) {
@@ -1829,9 +2212,7 @@ std::shared_ptr<TextLayout const> CoreTextSystem::Impl::layoutViaParagraphCache(
       paragraphCache_.insert(para.hash, std::move(shaped), suppressStats);
       sp = paragraphCache_.findShared(para.hash, true);
     }
-    if (!sp) {
-      return std::make_shared<TextLayout const>();
-    }
+    if (!sp) return false;
 
 #if defined(FLUX_DISABLE_VARIANT_CACHE)
     ParagraphLayoutVariant* v = nullptr;
@@ -1844,45 +2225,188 @@ std::shared_ptr<TextLayout const> CoreTextSystem::Impl::layoutViaParagraphCache(
     }
 
     out->paragraphRefs.push_back(sp);
-
     std::size_t const runBase = out->runs.size();
     out->runs.resize(runBase + v->runs.size());
     for (std::size_t i = 0; i < v->runs.size(); ++i) {
       TextLayout::PlacedRun& dst = out->runs[runBase + i];
       dst = v->runs[i];
-      dst.origin.y += yCursor;
-      dst.utf8Begin += para.byteStart;
-      dst.utf8End += para.byteStart;
+      dst.origin.y    += yCursor;
+      dst.utf8Begin   += para.byteStart;
+      dst.utf8End     += para.byteStart;
       dst.ctLineIndex += ctBase;
     }
-
     std::size_t const lineBase = out->lines.size();
     out->lines.resize(lineBase + v->lines.size());
     for (std::size_t i = 0; i < v->lines.size(); ++i) {
       TextLayout::LineRange& dst = out->lines[lineBase + i];
       dst = v->lines[i];
-      dst.top += yCursor;
-      dst.bottom += yCursor;
-      dst.baseline += yCursor;
-      dst.byteStart += static_cast<int>(para.byteStart);
-      dst.byteEnd += static_cast<int>(para.byteStart);
+      dst.top         += yCursor;
+      dst.bottom      += yCursor;
+      dst.baseline    += yCursor;
+      dst.byteStart   += static_cast<int>(para.byteStart);
+      dst.byteEnd     += static_cast<int>(para.byteStart);
       dst.ctLineIndex += ctBase;
     }
+    yCursor     += v->height;
+    ctBase      += static_cast<std::uint32_t>(v->lines.size());
+    maxDocWidth  = std::max(maxDocWidth, v->maxLineWidth);
+    return true;
+  };
 
-    yCursor += v->height;
-    ctBase += static_cast<std::uint32_t>(v->lines.size());
-    maxDocWidth = std::max(maxDocWidth, v->maxLineWidth);
+  if (canIncrAssemble) {
+    TextLayout const& prev = *lastLayout_.layout;
+    std::size_t const fc   = incr->firstChanged;
+    std::size_t const lce  = incr->lastChangedExcl;
+    std::size_t const fco  = incr->firstChangedOld;
+    std::size_t const lceo = incr->lastChangedExclOld;
+    std::int32_t const bd  = incr->byteDelta;
+
+    // Prefix: copy index entries from old memo, bulk-copy data from old layout.
+    for (std::size_t i = 0; i < fc; ++i) {
+      newRunStarts[i]  = lastLayout_.paraRunStarts[i];
+      newLineStarts[i] = lastLayout_.paraLineStarts[i];
+      newYCursors[i]   = lastLayout_.paraYCursors[i];
+      newCtBases[i]    = lastLayout_.paraCtBases[i];
+    }
+    std::uint32_t const prefixRunEnd  = lastLayout_.paraRunStarts[fco];
+    std::uint32_t const prefixLineEnd = lastLayout_.paraLineStarts[fco];
+    if (prefixRunEnd > 0) {
+      out->runs.insert(out->runs.end(),
+          prev.runs.begin(),
+          prev.runs.begin() + static_cast<std::ptrdiff_t>(prefixRunEnd));
+    }
+    if (prefixLineEnd > 0) {
+      out->lines.insert(out->lines.end(),
+          prev.lines.begin(),
+          prev.lines.begin() + static_cast<std::ptrdiff_t>(prefixLineEnd));
+    }
+    for (std::size_t i = 0; i < fco && i < prev.paragraphRefs.size(); ++i) {
+      out->paragraphRefs.push_back(prev.paragraphRefs[i]);
+    }
+    yCursor = lastLayout_.paraYCursors[fco];
+    ctBase  = lastLayout_.paraCtBases[fco];
+    // Seed maxDocWidth from memo — avoids re-scanning all prefix runs.
+    maxDocWidth = lastLayout_.prevMaxDocWidth;
+
+    // Dirty range: full assembly (updates maxDocWidth for new dirty paragraph).
+    for (std::size_t pi = fc; pi < lce; ++pi) {
+      if (!assembleParagraph(pi)) return std::make_shared<TextLayout const>();
+    }
+
+    // Suffix: bulk-copy from old layout with byte/Y/ctLine adjustments.
+    float const deltaY = yCursor - lastLayout_.paraYCursors[lceo];
+    std::int32_t const dCt =
+        static_cast<std::int32_t>(ctBase) - static_cast<std::int32_t>(lastLayout_.paraCtBases[lceo]);
+    std::uint32_t const sufRunStart  = lastLayout_.paraRunStarts[lceo];
+    std::uint32_t const sufRunEnd    = lastLayout_.paraRunStarts.back();
+    std::uint32_t const sufLineStart = lastLayout_.paraLineStarts[lceo];
+    std::uint32_t const sufLineEnd   = lastLayout_.paraLineStarts.back();
+    std::size_t   const sufRunBase   = out->runs.size();
+    std::size_t   const sufLineBase  = out->lines.size();
+
+    if (sufRunEnd > sufRunStart) {
+      out->runs.insert(out->runs.end(),
+          prev.runs.begin() + static_cast<std::ptrdiff_t>(sufRunStart),
+          prev.runs.begin() + static_cast<std::ptrdiff_t>(sufRunEnd));
+    }
+    if (sufLineEnd > sufLineStart) {
+      out->lines.insert(out->lines.end(),
+          prev.lines.begin() + static_cast<std::ptrdiff_t>(sufLineStart),
+          prev.lines.begin() + static_cast<std::ptrdiff_t>(sufLineEnd));
+    }
+    // Adjust suffix runs: apply Y, byte, ctLine deltas.
+    // No maxDocWidth scan needed — suffix widths are unchanged from the previous layout.
+    for (std::size_t i = sufRunBase; i < out->runs.size(); ++i) {
+      out->runs[i].origin.y   += deltaY;
+      out->runs[i].utf8Begin   = static_cast<std::uint32_t>(
+          static_cast<std::int32_t>(out->runs[i].utf8Begin) + bd);
+      out->runs[i].utf8End     = static_cast<std::uint32_t>(
+          static_cast<std::int32_t>(out->runs[i].utf8End) + bd);
+      out->runs[i].ctLineIndex = static_cast<std::uint32_t>(
+          static_cast<std::int32_t>(out->runs[i].ctLineIndex) + dCt);
+    }
+    for (std::size_t i = sufLineBase; i < out->lines.size(); ++i) {
+      out->lines[i].top       += deltaY;
+      out->lines[i].bottom    += deltaY;
+      out->lines[i].baseline  += deltaY;
+      out->lines[i].byteStart += bd;
+      out->lines[i].byteEnd   += bd;
+      out->lines[i].ctLineIndex = static_cast<std::uint32_t>(
+          static_cast<std::int32_t>(out->lines[i].ctLineIndex) + dCt);
+    }
+    for (std::size_t i = lceo; i < prev.paragraphRefs.size(); ++i) {
+      out->paragraphRefs.push_back(prev.paragraphRefs[i]);
+    }
+    // Suffix per-paragraph index entries.
+    for (std::size_t j = 0; lce + j < paraCount; ++j) {
+      std::size_t const pi_new = lce + j;
+      std::size_t const pi_old = lceo + j;
+      newRunStarts[pi_new]  = static_cast<std::uint32_t>(sufRunBase) +
+          (lastLayout_.paraRunStarts[pi_old]  - sufRunStart);
+      newLineStarts[pi_new] = static_cast<std::uint32_t>(sufLineBase) +
+          (lastLayout_.paraLineStarts[pi_old] - sufLineStart);
+      newYCursors[pi_new]   = lastLayout_.paraYCursors[pi_old] + deltaY;
+      newCtBases[pi_new]    = static_cast<std::uint32_t>(
+          static_cast<std::int32_t>(lastLayout_.paraCtBases[pi_old]) + dCt);
+    }
+    yCursor = lastLayout_.paraYCursors.back() + deltaY;
+    ctBase  = static_cast<std::uint32_t>(
+        static_cast<std::int32_t>(lastLayout_.paraCtBases.back()) + dCt);
+
+  } else {
+    // Full (non-incremental) assembly.
+    for (std::size_t pi = 0; pi < paraCount; ++pi) {
+      if (!assembleParagraph(pi)) return std::make_shared<TextLayout const>();
+    }
   }
 
+  // Terminating sentinel entries.
+  newRunStarts[paraCount]  = static_cast<std::uint32_t>(out->runs.size());
+  newLineStarts[paraCount] = static_cast<std::uint32_t>(out->lines.size());
+  newYCursors[paraCount]   = yCursor;
+  newCtBases[paraCount]    = ctBase;
+
   out->measuredSize = {maxDocWidth, yCursor};
-  recomputeTextLayoutMetrics(*out);
+
+  if (canIncrAssemble && !out->runs.empty()) {
+    // Incremental path: derive firstBaseline/lastBaseline from the memo without an O(N) scan.
+    //
+    // firstBaseline = min_baseline_y - min_top, where min values are from the first line.
+    // If the prefix is non-empty (fc > 0), the first paragraph is unchanged → reuse memo.
+    // If the prefix is empty (fc == 0), the first line may have new metrics → recompute.
+    //
+    // lastBaseline = last run's baseline - min_top.
+    // If the suffix is non-empty (lce < paraCount), the last line came from the suffix, which was
+    // shifted uniformly by heightDelta → lastBaseline_new = lastBaseline_old + heightDelta.
+    // If the suffix is empty (lce == paraCount), the last line is from the dirty range → recompute.
+    bool const prefixNonEmpty = (incr->firstChanged > 0);
+    bool const suffixNonEmpty = (incr->lastChangedExcl < paraCount);
+    if (prefixNonEmpty && suffixNonEmpty) {
+      float const prevTotalH  = lastLayout_.paraYCursors.back();
+      float const heightDelta = yCursor - prevTotalH;
+      out->firstBaseline = lastLayout_.prevFirstBaseline;
+      out->lastBaseline  = lastLayout_.layout->lastBaseline + heightDelta;
+    } else {
+      recomputeTextLayoutMetrics(*out);
+    }
+  } else {
+    recomputeTextLayoutMetrics(*out);
+  }
 
   std::shared_ptr<TextLayout const> result = out;
-  lastLayout_.keyHi = memoKey.hi;
-  lastLayout_.keyLo = memoKey.lo;
+  // keyHi/keyLo already written in the non-incremental branch above (or zeroed for incremental).
   lastLayout_.layout = result;
+
+  // Persist per-paragraph tables for the next incremental assembly.
+  lastLayout_.prevParagraphs.assign(paragraphs.begin(), paragraphs.end());
+  lastLayout_.paraRunStarts  = std::move(newRunStarts);
+  lastLayout_.paraLineStarts = std::move(newLineStarts);
+  lastLayout_.paraYCursors   = std::move(newYCursors);
+  lastLayout_.paraCtBases    = std::move(newCtBases);
+
   return result;
 }
+
 
 std::vector<std::uint8_t> CoreTextSystem::rasterizeGlyph(std::uint32_t fontId, std::uint16_t glyphId,
                                                         float size, std::uint32_t& outWidth,
@@ -2042,12 +2566,16 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layoutUnboxed(AttributedString
 
   for (std::size_t i = 0; i < e.layouts.size(); ++i) {
     LayoutSlot& ls = e.layouts[i];
-    if (ls.maxWidthQ1 == wq && ls.maxLines == ml) {
-      if (!options.suppressCacheStats) {
-        ++d->stats_.l3_layout.hits;
-      }
-      return ls.unboxed;
+    if (ls.maxWidthQ1 != wq || ls.maxLines != ml) {
+      continue;
     }
+    if (std::abs(ls.maxWidthExact - maxWidth) > 1e-5f) {
+      continue;
+    }
+    if (!options.suppressCacheStats) {
+      ++d->stats_.l3_layout.hits;
+    }
+    return ls.unboxed;
   }
   if (!options.suppressCacheStats) {
     ++d->stats_.l3_layout.misses;
@@ -2060,6 +2588,7 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layoutUnboxed(AttributedString
   std::shared_ptr<TextLayout const> result = built;
   LayoutSlot slot;
   slot.maxWidthQ1 = wq;
+  slot.maxWidthExact = maxWidth;
   slot.maxLines = ml;
   slot.unboxed = result;
   e.layouts.push_back(std::move(slot));
@@ -2096,12 +2625,16 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layout(std::string_view utf8, 
 
   for (std::size_t i = 0; i < e.layouts.size(); ++i) {
     LayoutSlot& ls = e.layouts[i];
-    if (ls.maxWidthQ1 == wq && ls.maxLines == ml) {
-      if (!options.suppressCacheStats) {
-        ++d->stats_.l3_layout.hits;
-      }
-      return ls.unboxed;
+    if (ls.maxWidthQ1 != wq || ls.maxLines != ml) {
+      continue;
     }
+    if (std::abs(ls.maxWidthExact - maxWidth) > 1e-5f) {
+      continue;
+    }
+    if (!options.suppressCacheStats) {
+      ++d->stats_.l3_layout.hits;
+    }
+    return ls.unboxed;
   }
   if (!options.suppressCacheStats) {
     ++d->stats_.l3_layout.misses;
@@ -2117,6 +2650,7 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layout(std::string_view utf8, 
   std::shared_ptr<TextLayout const> result = built;
   LayoutSlot slot;
   slot.maxWidthQ1 = wq;
+  slot.maxWidthExact = maxWidth;
   slot.maxLines = ml;
   slot.unboxed = result;
   e.layouts.push_back(std::move(slot));
@@ -2133,49 +2667,84 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layout(AttributedString const&
   std::vector<ResolvedStyle> resolved;
   accumulateInheritance(resolved, text);
   std::uint32_t const wq = quantizeWidth(maxWidth);
-  // Fast exact-repeat check: short-circuits before any O(N) work.
+
+  // --- Tier 0: pointer-identity exact-repeat (same string object, same width) ---
   if (d->lastLayout_.layout && wq == d->lastLayout_.contentWidthQ1) {
-    // Pointer identity fast path: same string object + same width → guaranteed hit.
     bool const samePtr = (text.utf8.data() == d->lastLayout_.utf8Ptr &&
                           text.utf8.size() == d->lastLayout_.utf8Size);
     if (samePtr) {
-      if (!options.suppressCacheStats) {
-        ++d->memoStats_.hits;
-      }
+      if (!options.suppressCacheStats) ++d->memoStats_.hits;
       return d->lastLayout_.layout;
     }
-    // Full content hash check for different string objects with same width.
+  }
+
+  // Helper: update the memo after a successful layout.
+  // chComputed=true  → also update contentHash (caller already has it).
+  // chComputed=false → caller has no hash (incremental path); leave contentHash stale so Tier-2
+  //                    still re-derives it on the next same-width miss — that is correct.
+  auto updateMemoIds = [&](std::shared_ptr<TextLayout const> const& result,
+                           ContentHash const& ch, bool chComputed) {
+    if (!result) return;
+    d->lastLayout_.contentWidthQ1 = wq;
+    if (chComputed) {
+      d->lastLayout_.contentHash = ch;
+    }
+    d->lastLayout_.utf8Ptr  = text.utf8.data();
+    d->lastLayout_.utf8Size = text.utf8.size();
+    d->lastLayout_.prevUtf8 = text.utf8;
+    d->lastLayout_.prevRuns.assign(text.runs.begin(), text.runs.end());
+    if (result) {
+      d->lastLayout_.prevMaxDocWidth  = result->measuredSize.width;
+      d->lastLayout_.prevFirstBaseline = result->firstBaseline;
+    }
+  };
+
+  // --- Tier 1: incremental paragraph split + assembly ---
+  // Bypass content-hash and full splitIntoParagraphs on single-keystroke changes.
+  if (d->lastLayout_.layout &&
+      !d->lastLayout_.prevParagraphs.empty() &&
+      !d->lastLayout_.prevUtf8.empty() &&
+      !paragraphCacheDisabledByEnv() &&
+      text.utf8.size() >= kMinFastPathBytes &&
+      options.wrapping != TextWrapping::WrapAnywhere &&
+      options.maxLines == 0) {
+    if (auto incr = d->tryIncrementalSplit(*this, text, resolved, options)) {
+      auto parasCopy = incr->paragraphs; // SmallVector copy; incr still valid for the pointer
+      auto result = d->layoutViaParagraphCache(*this, text, maxWidth, options, resolved,
+          std::move(parasCopy), &*incr);
+      updateMemoIds(result, ContentHash{}, false);
+      return result;
+    }
+  }
+
+  // --- Tier 2: content-hash exact-repeat check ---
+  if (d->lastLayout_.layout && wq == d->lastLayout_.contentWidthQ1) {
     ContentHash const ch = d->computeContentHash(*this, text, resolved, options);
     if (ch == d->lastLayout_.contentHash) {
-      if (!options.suppressCacheStats) {
-        ++d->memoStats_.hits;
-      }
+      if (!options.suppressCacheStats) ++d->memoStats_.hits;
+      // Update pointer identity for future Tier-0 hits.
+      d->lastLayout_.utf8Ptr  = text.utf8.data();
+      d->lastLayout_.utf8Size = text.utf8.size();
       return d->lastLayout_.layout;
     }
-    // Fall through: cache miss.
+    // Cache miss at same width.
     if (paragraphCachePredicate(text, options)) {
       auto paras = d->splitIntoParagraphs(*this, text, resolved, options);
-      auto result = d->layoutViaParagraphCache(*this, text, maxWidth, options, resolved, std::move(paras));
-      if (result) {
-        d->lastLayout_.contentHash = ch;
-        d->lastLayout_.contentWidthQ1 = wq;
-        d->lastLayout_.utf8Ptr = text.utf8.data();
-        d->lastLayout_.utf8Size = text.utf8.size();
-      }
+      auto result = d->layoutViaParagraphCache(*this, text, maxWidth, options, resolved,
+                                               std::move(paras));
+      updateMemoIds(result, ch, true);
       return result;
     }
     return layoutUnboxed(text, options, maxWidth, false, 0, 0);
   }
+
+  // --- Tier 3: cold path (different width or no memo) ---
   if (paragraphCachePredicate(text, options)) {
     ContentHash const ch = d->computeContentHash(*this, text, resolved, options);
     auto paras = d->splitIntoParagraphs(*this, text, resolved, options);
-    auto result = d->layoutViaParagraphCache(*this, text, maxWidth, options, resolved, std::move(paras));
-    if (result) {
-      d->lastLayout_.contentHash = ch;
-      d->lastLayout_.contentWidthQ1 = wq;
-      d->lastLayout_.utf8Ptr = text.utf8.data();
-      d->lastLayout_.utf8Size = text.utf8.size();
-    }
+    auto result = d->layoutViaParagraphCache(*this, text, maxWidth, options, resolved,
+                                             std::move(paras));
+    updateMemoIds(result, ch, true);
     return result;
   }
   return layoutUnboxed(text, options, maxWidth, false, 0, 0);
@@ -2207,7 +2776,7 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layoutBoxedImpl(AttributedStri
   LayoutSlot* layoutSlot = nullptr;
   for (std::size_t li = 0; li < e.layouts.size(); ++li) {
     LayoutSlot& ls = e.layouts[li];
-    if (ls.maxWidthQ1 == wq && ls.maxLines == ml) {
+    if (ls.maxWidthQ1 == wq && ls.maxLines == ml && std::abs(ls.maxWidthExact - maxWidth) <= 1e-5f) {
       layoutSlot = &ls;
       break;
     }
@@ -2218,7 +2787,7 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layoutBoxedImpl(AttributedStri
   for (std::size_t bi = 0; bi < ls.boxes.size(); ++bi) {
     BoxSlot& bs = ls.boxes[bi];
     if (bs.boxWQ1 == boxWQ && bs.boxHQ1 == boxHQ && bs.hAlign == ha && bs.vAlign == va &&
-        bs.firstBaselineQ8 == fbq && bs.layout) {
+        bs.firstBaselineQ8 == fbq && bs.layout && bs.boxW == box.width && bs.boxH == box.height) {
       if (!options.suppressCacheStats) {
         ++d->stats_.l4_boxLayout.hits;
       }
@@ -2234,6 +2803,8 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layoutBoxedImpl(AttributedStri
   ls.boxes.push_back(BoxSlot{
       .boxWQ1 = boxWQ,
       .boxHQ1 = boxHQ,
+      .boxW = box.width,
+      .boxH = box.height,
       .hAlign = ha,
       .vAlign = va,
       .firstBaselineQ8 = fbq,
