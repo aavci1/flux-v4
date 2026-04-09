@@ -1625,6 +1625,7 @@ static void fillTextLayoutFromFramesetter(CoreTextSystem& sys, CTFramesetterRef 
   out.lines.reserve(static_cast<std::size_t>(std::max(lineCount, CFIndex{0})));
   for (CFIndex li = 0; li < lineCount; ++li) {
     CTLineRef line = (CTLineRef)CFArrayGetValueAtIndex(lines, li);
+    CGPoint const lineOrigin = origins[static_cast<std::size_t>(li)];
     CFRange const rng = CTLineGetStringRange(line);
     NSRange const nsr = NSMakeRange(static_cast<NSUInteger>(rng.location), static_cast<NSUInteger>(rng.length));
     TextLayout::LineRange lr{};
@@ -1648,10 +1649,24 @@ static void fillTextLayoutFromFramesetter(CoreTextSystem& sys, CTFramesetterRef 
       maxBot = std::max(maxBot, pr.origin.y + pr.run.descent);
       minOx = std::min(minOx, pr.origin.x);
     }
-    lr.baseline = baselineY;
-    lr.top = minTop;
-    lr.bottom = maxBot;
-    lr.lineMinX = std::isfinite(minOx) ? minOx : 0.f;
+    // No drawable runs on this line (e.g. newline-only, filtered glyphs): still need typographic bounds
+    // so `LineRange` matches `CTLineGetTypographicBounds` / caret height when text exists on other lines.
+    if (!std::isfinite(minTop) || !std::isfinite(maxBot) || !(maxBot > minTop + 1e-4f)) {
+      CGFloat ascent = 0;
+      CGFloat descent = 0;
+      CGFloat leading = 0;
+      (void)CTLineGetTypographicBounds(line, &ascent, &descent, &leading);
+      float const baselineCanvas = static_cast<float>(fh - lineOrigin.y);
+      lr.baseline = baselineCanvas;
+      lr.top = baselineCanvas - static_cast<float>(ascent);
+      lr.bottom = baselineCanvas + static_cast<float>(descent);
+      lr.lineMinX = std::isfinite(minOx) ? minOx : static_cast<float>(lineOrigin.x);
+    } else {
+      lr.baseline = baselineY;
+      lr.top = minTop;
+      lr.bottom = maxBot;
+      lr.lineMinX = std::isfinite(minOx) ? minOx : 0.f;
+    }
     out.lines.push_back(lr);
   }
 
@@ -2476,7 +2491,65 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layoutUnboxed(AttributedString
                                                                 float maxWidth, bool hasPrecomputedHash,
                                                                 std::uint64_t preHi, std::uint64_t preLo) {
   if (text.utf8.empty()) {
-    return std::shared_ptr<TextLayout const>(std::make_shared<TextLayout>());
+    validateRuns(text);
+    std::vector<ResolvedStyle> resolved;
+    accumulateInheritance(resolved, text);
+    ContentHash const h =
+        hasPrecomputedHash ? ContentHash{preHi, preLo} : d->computeContentHash(*this, text, resolved, options);
+    FramesetterEntry& e = d->findOrInsertFramesetterEntry(h, text, resolved, options, *this);
+    std::uint32_t const wq = quantizeWidth(maxWidth);
+    std::int32_t const ml = options.maxLines;
+
+    for (std::size_t i = 0; i < e.layouts.size(); ++i) {
+      LayoutSlot& ls = e.layouts[i];
+      if (ls.maxWidthQ1 != wq || ls.maxLines != ml) {
+        continue;
+      }
+      if (std::abs(ls.maxWidthExact - maxWidth) > 1e-5f) {
+        continue;
+      }
+      if (!options.suppressCacheStats) {
+        ++d->stats_.l3_layout.hits;
+      }
+      return ls.unboxed;
+    }
+    if (!options.suppressCacheStats) {
+      ++d->stats_.l3_layout.misses;
+    }
+
+    // Empty UTF-8 yields no CT lines from the framesetter; shape a one-space probe with the same
+    // styles/options, then drop runs so nothing is drawn but line metrics match typed text.
+    std::shared_ptr<TextLayout> builtProbe = std::make_shared<TextLayout>();
+    if (!resolved.empty()) {
+      AttributedString probe;
+      probe.utf8 = " ";
+      probe.runs.push_back({0, 1, resolved[0].font, resolved[0].color});
+      std::vector<ResolvedStyle> probeResolved;
+      accumulateInheritance(probeResolved, probe);
+      CFAttributedStringRef const cf = d->createCFAttributed(*this, probe, probeResolved, options);
+      CTFramesetterRef const fs = CTFramesetterCreateWithAttributedString(cf);
+      CFRelease(cf);
+      auto stor = std::make_unique<TextLayoutStorage>();
+      fillTextLayoutFromFramesetter(*this, fs, probe, maxWidth, options, *builtProbe, *stor);
+      CFRelease(fs);
+      builtProbe->runs.clear();
+      builtProbe->variantRefs.clear();
+      builtProbe->ownedStorage.reset();
+      for (auto& lr : builtProbe->lines) {
+        lr.byteStart = 0;
+        lr.byteEnd = 0;
+      }
+      recomputeTextLayoutMetrics(*builtProbe);
+    }
+    std::shared_ptr<TextLayout const> result = cloneTextLayout(*builtProbe);
+    LayoutSlot slot;
+    slot.maxWidthQ1 = wq;
+    slot.maxWidthExact = maxWidth;
+    slot.maxLines = ml;
+    slot.unboxed = result;
+    e.layouts.push_back(std::move(slot));
+    d->bumpEntryApproxBytes(e, text);
+    return result;
   }
   validateRuns(text);
   std::vector<ResolvedStyle> resolved;
@@ -2523,7 +2596,10 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layout(std::string_view utf8, 
                                                          Color const& color, float maxWidth,
                                                          TextLayoutOptions const& options) {
   if (utf8.empty()) {
-    return std::shared_ptr<TextLayout const>(std::make_shared<TextLayout>());
+    AttributedString as;
+    as.utf8 = "";
+    as.runs.push_back({0, 0, font, color});
+    return layoutUnboxed(as, options, maxWidth, false, 0, 0);
   }
   ContentHash const h = d->computeContentHashPlain(*this, utf8, font, color, options);
   std::uint32_t const wq = quantizeWidth(maxWidth);
@@ -2583,9 +2659,6 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layout(std::string_view utf8, 
 
 std::shared_ptr<TextLayout const> CoreTextSystem::layout(AttributedString const& text, float maxWidth,
                                                          TextLayoutOptions const& options) {
-  if (text.utf8.empty()) {
-    return std::shared_ptr<TextLayout const>(std::make_shared<TextLayout>());
-  }
   validateRuns(text);
   std::vector<ResolvedStyle> resolved;
   accumulateInheritance(resolved, text);

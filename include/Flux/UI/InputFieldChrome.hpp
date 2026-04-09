@@ -2,9 +2,9 @@
 
 /// \file Flux/UI/InputFieldChrome.hpp
 ///
-/// Shared theme resolution for single-line field controls (\ref TextInput, \ref Picker trigger) and
-/// \ref TextArea::Style — avoids duplicating \c resolveColor / \c resolveFloat blocks. Shell
-/// decoration merged with \ref useOuterElementModifiers() uses \ref applyOuterInputFieldDecoration.
+/// Shared theme resolution for field-style controls (e.g. \ref Picker trigger) — avoids duplicating
+/// \c resolveColor / \c resolveFloat blocks. Shell decoration merged with \ref useOuterElementModifiers()
+/// uses \ref applyOuterInputFieldDecoration.
 
 #include <Flux/Core/Types.hpp>
 #include <Flux/Graphics/Styles.hpp>
@@ -67,7 +67,7 @@ struct ResolvedPickerFieldChrome {
 
 ResolvedPickerFieldChrome resolvePickerFieldChrome(PickerFieldChromeSpec const& spec, Theme const& theme);
 
-/// Merges resolved chrome with optional outer \c Element modifiers (same rules as \ref TextInput::body).
+/// Merges resolved chrome with optional outer \c Element modifiers (e.g. \ref Picker trigger \c body()).
 struct InputFieldDecoration {
   FillStyle bgFill;
   StrokeStyle strokeNormal;

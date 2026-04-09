@@ -4,9 +4,9 @@
 ///
 /// Part of the Flux public API.
 
-
 #include <Flux/Core/Cursor.hpp>
 #include <Flux/Core/Types.hpp>
+#include <Flux/Graphics/AttributedString.hpp>
 #include <Flux/Graphics/Font.hpp>
 #include <Flux/Graphics/Styles.hpp>
 #include <Flux/UI/Element.hpp>
@@ -19,62 +19,48 @@
 namespace flux {
 
 struct TextInput : ViewModifiers<TextInput> {
-  // ── Content ──────────────────────────────────────────────────────────────
+  struct Style {
+    Font font = kFontFromTheme;
+    Color textColor = kFromTheme;
+    Color placeholderColor = kFromTheme;
+    Color backgroundColor = kFromTheme;
+    Color borderColor = kFromTheme;
+    Color borderFocusColor = kFromTheme;
+    Color caretColor = kFromTheme;
+    Color selectionColor = kFromTheme;
+    Color disabledColor = kFromTheme;
+    float borderWidth = kFloatFromTheme;
+    float borderFocusWidth = kFloatFromTheme;
+    float cornerRadius = kFloatFromTheme;
+    float paddingH = kFloatFromTheme;
+    float paddingV = kFloatFromTheme;
+    float height = 0.f;
 
-  /// Binding to the text buffer. Caller owns this via useState<std::string>().
+    static Style plain() {
+      return Style{.backgroundColor = Colors::transparent,
+                   .borderColor = Colors::transparent,
+                   .borderFocusColor = Colors::transparent,
+                   .borderWidth = 0.f,
+                   .borderFocusWidth = 0.f,
+                   .cornerRadius = 0.f,
+                   .paddingH = 0.f,
+                   .paddingV = 0.f};
+    }
+  };
+
   State<std::string> value{};
-
-  /// Shown when value is empty and the field is not focused.
-  /// Shown (in placeholder colour) when value is empty and focused.
   std::string placeholder;
 
-  // ── Appearance ───────────────────────────────────────────────────────────
-  ///
-  /// Field chrome defaults below apply when the control is not wrapped with outer
-  /// `Element` modifiers. Chained `.fill()`, `.stroke()`, and `.cornerRadius()` on
-  /// `TextInput{…}` override `backgroundColor` / unfocused border / `cornerRadius` via
-  /// `useOuterElementModifiers()` in `body()`.
+  std::function<std::vector<AttributedRun>(std::string_view)> styler;
+  std::function<Color(std::string_view)> validationColor;
 
-  Font font = kFontFromTheme;
-
-  Color textColor = kFromTheme;
-  Color placeholderColor = kFromTheme;
-  Color backgroundColor = kFromTheme;
-  Color borderColor = kFromTheme;
-  Color borderFocusColor = kFromTheme;
-  Color caretColor = kFromTheme;
-  Color selectionColor = kFromTheme;
-  Color disabledColor = kFromTheme;
-
-  float borderWidth = 1.f;
-  float borderFocusWidth = 2.f;
-  /// Uniform field corner radius (`kFloatFromTheme` = `Theme::radiusMedium`). Resolved to
-  /// `CornerRadius` in `body()`; per-corner overrides require a different view, not this field.
-  float cornerRadius = kFloatFromTheme;
-
-  /// Total vertical height of the field. 0 = \ref resolvedInputFieldHeight (same default as \ref Picker).
-  float height = 0.f;
-
-  float paddingH = kFloatFromTheme;
-  float paddingV = kFloatFromTheme;
-
-  // ── Layout ───────────────────────────────────────────────────────────────
-  // Flex / min main size: use chained `.flex(grow, shrink, minMain)` on the `Element` from `body()`.
-
-  // ── Behaviour ──────────────────────────────────────────────────────────────
+  Style style{};
 
   bool disabled = false;
-
-  /// Maximum number of UTF-8 characters accepted. 0 = unlimited.
   int maxLength = 0;
 
-  /// Called after every change to value.
   std::function<void(std::string const&)> onChange;
-
-  /// Called when Return is pressed.
   std::function<void(std::string const&)> onSubmit;
-
-  // ── Component protocol ─────────────────────────────────────────────────────
 
   Element body() const;
 };

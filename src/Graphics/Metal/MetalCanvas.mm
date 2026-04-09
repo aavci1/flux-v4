@@ -637,7 +637,9 @@ public:
     const float dx = tb.x - ta.x;
     const float dy = tb.y - ta.y;
     const float len = std::sqrt(dx * dx + dy * dy);
-    if (len < 1e-4f) {
+    // Reject only true degenerates. A threshold like 1e-4f dropped vertical carets when
+    // `line.bottom - line.top` was tiny-but-positive (Core Text / float noise) or subpixel after transform.
+    if (!std::isfinite(len) || len <= 0.f) {
       return;
     }
     const float w = len + pad * 2.f;

@@ -15,6 +15,34 @@ namespace flux {
 
 void recomputeTextLayoutMetrics(TextLayout& L) {
   if (L.runs.empty()) {
+    if (!L.lines.empty()) {
+      float minTop = std::numeric_limits<float>::infinity();
+      float maxBot = -std::numeric_limits<float>::infinity();
+      float minBaselineY = std::numeric_limits<float>::infinity();
+      float maxBaselineY = -std::numeric_limits<float>::infinity();
+      for (auto const& lr : L.lines) {
+        if (std::isfinite(lr.top) && std::isfinite(lr.bottom) && lr.bottom > lr.top) {
+          minTop = std::min(minTop, lr.top);
+          maxBot = std::max(maxBot, lr.bottom);
+        }
+        if (std::isfinite(lr.baseline)) {
+          minBaselineY = std::min(minBaselineY, lr.baseline);
+          maxBaselineY = std::max(maxBaselineY, lr.baseline);
+        }
+      }
+      if (std::isfinite(minTop) && std::isfinite(maxBot) && maxBot > minTop) {
+        L.measuredSize.width = 0.f;
+        L.measuredSize.height = std::max(0.f, maxBot - minTop);
+        if (std::isfinite(minBaselineY) && std::isfinite(maxBaselineY)) {
+          L.firstBaseline = minBaselineY - minTop;
+          L.lastBaseline = maxBaselineY - minTop;
+        } else {
+          L.firstBaseline = 0.f;
+          L.lastBaseline = 0.f;
+        }
+        return;
+      }
+    }
     L.measuredSize = {};
     L.firstBaseline = 0.f;
     L.lastBaseline = 0.f;

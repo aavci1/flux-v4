@@ -240,7 +240,7 @@ struct Picker : ViewModifiers<Picker<T>> {
   ///
   /// Trigger chrome defaults apply when the control is not wrapped with outer `Element` modifiers.
   /// Chained `.fill()`, `.stroke()`, and `.cornerRadius()` on `Picker{…}` merge into the trigger
-  /// via `useOuterElementModifiers()` in `body()` (same idea as \ref TextInput). When `.fill()`
+  /// via `useOuterElementModifiers()` in `body()`. When `.fill()`
   /// is set, hover fill animation is disabled and the outer fill is used statically.
 
   Font font = kFontFromTheme;

@@ -139,7 +139,8 @@ add_library(flux STATIC
   src/UI/InputFieldLayout.cpp
   src/UI/InputFieldChrome.cpp
   src/UI/OverlaySurfaceHelpers.cpp
-  src/UI/Views/TextEditKernel.cpp
+  src/UI/Views/TextEditUtils.cpp
+  src/UI/Views/TextEditBehavior.cpp
   src/UI/Views/TextInput.cpp
   src/UI/Views/TextArea.cpp
   src/UI/Views/Button.cpp
@@ -264,6 +265,7 @@ if(FLUX_BUILD_TESTS)
     tests/LayoutIntegrationTests.cpp
     tests/ParagraphCacheTests.cpp
     tests/ParagraphCacheIncrementalTests.cpp
+    tests/TextEditUtilsTests.cpp
   )
 
   target_include_directories(flux_tests PRIVATE

@@ -10,7 +10,7 @@ namespace flux {
 
 namespace {
 
-// Keep in sync with TextInput.cpp (selection clip slack below the line).
+// Selection clip slack below the line (single-line inputs, TextInput).
 constexpr float kSelectionVerticalSlackPx = 4.f;
 
 } // namespace

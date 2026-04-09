@@ -7,6 +7,7 @@
 
 #include <Flux/Core/Cursor.hpp>
 #include <Flux/Core/Types.hpp>
+#include <Flux/Graphics/AttributedString.hpp>
 #include <Flux/Graphics/Font.hpp>
 #include <Flux/Graphics/Styles.hpp>
 #include <Flux/UI/Element.hpp>
@@ -15,6 +16,7 @@
 
 #include <functional>
 #include <string>
+#include <vector>
 
 namespace flux {
 
@@ -67,19 +69,11 @@ struct TextArea : ViewModifiers<TextArea> {
   State<std::string> value{};
   std::string placeholder;
 
-  /// **Modifier-first shell styling** (recommended): chain on the value returned from the initializer,
-  /// e.g. `TextArea{ .value = v, .placeholder = "…", .height = {…} }.fill(FillStyle::solid(…))
-  /// .stroke(StrokeStyle::solid(…)).cornerRadius(CornerRadius{8.f}).clipContent(true).flex(1.f)`.
-  /// Those override resolved \ref style tokens for the custom-draw chrome (`useOuterElementModifiers()` in
-  /// \c body()). Optional \c .cursor() applies when not \c Inherit.
-  ///
-  /// **Layout**: outer \c .padding() and \c .flex() are standard \c Element modifiers on the wrapper (no struct
-  /// flex fields — same as other views). Inner \c style.paddingH / \c style.paddingV remain **content** insets
-  /// inside the border, not \c Element padding.
-
   Style style{};
 
   TextAreaHeight height{};
+
+  std::function<std::vector<AttributedRun>(std::string_view)> styler;
 
   bool disabled = false;
   int maxLength = 0;

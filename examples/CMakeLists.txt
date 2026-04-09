@@ -76,6 +76,9 @@ target_link_libraries(textinput_demo PRIVATE flux)
 add_executable(textarea_demo textarea-demo/main.cpp)
 target_link_libraries(textarea_demo PRIVATE flux)
 
+add_executable(markdown_styler_demo markdown-styler-demo/main.cpp)
+target_link_libraries(markdown_styler_demo PRIVATE flux)
+
 add_executable(button_demo button-demo/main.cpp)
 target_link_libraries(button_demo PRIVATE flux)
 
@@ -143,6 +146,7 @@ set(FLUX_EXAMPLE_TARGETS
     actions_editor_demo
     textinput_demo
     textarea_demo
+    markdown_styler_demo
     button_demo
     toggle_demo
     checkbox_demo
