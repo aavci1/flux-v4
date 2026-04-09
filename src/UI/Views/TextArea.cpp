@@ -297,7 +297,7 @@ struct TextAreaView {
     }
 
     canvas.save();
-    canvas.clipRect(Rect{innerLeft, innerTop, contentW, contentH});
+    canvas.clipRect(Rect{innerLeft - 1.f, innerTop, contentW + 2.f, contentH});
     // Scroll the text by offsetting the layout origin instead of `translate` after `clipRect`.
     // Combining clip + translate updates the clip via `boundsOfTransformedRect` and can incorrectly
     // cull primitives (e.g. caret) at the left edge of the content box.
