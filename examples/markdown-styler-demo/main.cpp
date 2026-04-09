@@ -195,7 +195,6 @@ struct MarkdownEditor {
                 TextArea {
                     .value = doc,
                     .placeholder = "Write markdown-like text…",
-                    .style = TextArea::Style::plain(),
                     .height = {.minIntrinsic = 200.f, .maxIntrinsic = 560.f},
                     .styler = [theme, baseFont, baseColor](std::string_view s) {
                       return simpleMarkdownStyler(s, theme, baseFont, baseColor);
