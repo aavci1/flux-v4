@@ -282,7 +282,7 @@ struct TextAreaView {
       float const cx = innerLeft + detail::caretXForByte(*layout, line, behavior->caretByte());
       auto const [caretY0, caretY1] = detail::lineCaretYRangeInLayout(*layout, line);
       float const phase = behavior->caretBlinkPhase();
-      float const alpha = phase > 0.5f ? 1.f : 0.f;
+      float const alpha = phase <= 0.5f ? 1.f : 0.f;
       Color cc = rs.caretColor;
       cc.a *= alpha;
       canvas.drawLine(Point{cx, scrollOffsetY + caretY0}, Point{cx, scrollOffsetY + caretY1},

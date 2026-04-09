@@ -255,7 +255,7 @@ struct TextInputView {
           detail::caretXForByte(*layout, line0, behavior->caretByte()) + textOrigin.x;
       auto const [caretY0, caretY1] = detail::lineCaretYRangeInLayout(*layout, line0);
       float const phase = behavior->caretBlinkPhase();
-      float const alpha = phase > 0.5f ? 1.f : 0.f;
+      float const alpha = phase <= 0.5f ? 1.f : 0.f;
       Color cc = rs.caretColor;
       cc.a *= alpha;
       canvas.drawLine(Point{cx, innerTop + caretY0}, Point{cx, innerTop + caretY1},

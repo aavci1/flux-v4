@@ -17,7 +17,7 @@ namespace flux {
 namespace {
 
 /// Full blink cycle duration (seconds). Lower = faster caret blink.
-constexpr double kCaretBlinkPeriodSec = 2.f;
+constexpr double kCaretBlinkPeriodSec = 0.55f;
 
 bool hasMod(Modifiers m, Modifiers bit) noexcept {
   return (static_cast<std::uint32_t>(m) & static_cast<std::uint32_t>(bit)) != 0;
