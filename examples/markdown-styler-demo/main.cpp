@@ -10,6 +10,8 @@
 #include <Flux/UI/Views/TextArea.hpp>
 #include <Flux/UI/Views/VStack.hpp>
 
+#include <iostream>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -17,9 +19,19 @@ using namespace flux;
 
 namespace {
 
+
+enum class Elements {
+  h1,
+  h2,
+  h3,
+  body,
+  code
+};
+
+
+
 /// Maps the full UTF-8 buffer to non-overlapping attributed runs (required by \c TextArea).
-std::vector<AttributedRun> simpleMarkdownStyler(std::string_view sv, Theme const& theme, Font const& baseFont,
-                                                  Color const& baseColor) {
+std::vector<AttributedRun> markdownStyler(std::string_view sv) {
   std::string const text(sv);
   std::uint32_t const n = static_cast<std::uint32_t>(text.size());
   std::vector<AttributedRun> runs;
@@ -27,8 +39,24 @@ std::vector<AttributedRun> simpleMarkdownStyler(std::string_view sv, Theme const
     return runs;
   }
 
-  Font headingFont = resolveFont(kFontFromTheme, theme.typeHeading.toFont());
-  Font codeFont = resolveFont(kFontFromTheme, theme.typeCode.toFont());
+  auto baseFont = Font { .family = "Menlo", .size = 14.f, .weight = 400.f };
+  auto fonts = std::map<Elements, Font> {};
+  fonts[Elements::h1] = Font { .size = baseFont.size * 2.0f, .weight = baseFont.weight * 1.25f };
+  fonts[Elements::h2] = Font { .size = baseFont.size * 1.6f, .weight = baseFont.weight * 1.25f };
+  fonts[Elements::h3] = Font { .size = baseFont.size * 1.3f, .weight = baseFont.weight * 1.25f };
+  fonts[Elements::body] = baseFont;
+  fonts[Elements::code] = baseFont;
+
+  auto baseColor = Color::hex(0xC2C2C2);
+  auto colors = std::map<Elements, Color> {};
+  colors[Elements::h1] = baseColor;
+  colors[Elements::h2] = baseColor;
+  colors[Elements::h3] = baseColor;
+  colors[Elements::body] = baseColor;
+  colors[Elements::code] = baseColor;
+
+  Font headingFont = resolveFont(kFontFromTheme, fonts[Elements::h1]);
+  Font codeFont = resolveFont(kFontFromTheme, fonts[Elements::code]);
   Font boldFont = baseFont;
   boldFont.weight = (boldFont.weight > 0.f ? boldFont.weight : 400.f) + 250.f;
   if (boldFont.weight > 900.f) {
@@ -68,7 +96,7 @@ std::vector<AttributedRun> simpleMarkdownStyler(std::string_view sv, Theme const
         }
         if (q < lineEnd) {
           push(p, p + 1, baseFont, baseColor);
-          push(p + 1, q, codeFont, theme.colorAccent);
+          push(p + 1, q, codeFont, colors[Elements::code]);
           push(q, q + 1, baseFont, baseColor);
           p = q + 1;
           continue;
@@ -110,14 +138,17 @@ std::vector<AttributedRun> simpleMarkdownStyler(std::string_view sv, Theme const
     }
     if (hashes > 0 && i < contentEnd && text[static_cast<std::size_t>(i)] == ' ') {
       ++i;
-      Color hc = theme.colorAccent;
+      Font f = fonts[Elements::h1];
+      Color c = colors[Elements::h1];
       if (hashes >= 2) {
-        hc = theme.colorTextPrimary;
+        f = fonts[Elements::h2];
+        c = colors[Elements::h2];
       }
       if (hashes >= 3) {
-        hc = theme.colorTextSecondary;
+        f = fonts[Elements::h3];
+        c = colors[Elements::h3];
       }
-      push(ls, contentEnd, headingFont, hc);
+      push(ls, contentEnd, f, c);
       if (endsNl) {
         push(contentEnd, le, baseFont, baseColor);
       }
@@ -130,7 +161,7 @@ std::vector<AttributedRun> simpleMarkdownStyler(std::string_view sv, Theme const
     }
     if (j < contentEnd && text[static_cast<std::size_t>(j)] == '-' && j + 1 < contentEnd &&
         text[static_cast<std::size_t>(j + 1)] == ' ') {
-      push(ls, j + 2, baseFont, theme.colorTextMuted);
+      push(ls, j + 2, baseFont, baseColor);
       parseInline(j + 2, contentEnd);
       if (endsNl) {
         push(contentEnd, le, baseFont, baseColor);
@@ -144,15 +175,17 @@ std::vector<AttributedRun> simpleMarkdownStyler(std::string_view sv, Theme const
     }
   };
 
-  std::uint32_t lineStart = 0;
-  for (std::uint32_t i = 0; i < n; ++i) {
-    if (text[static_cast<std::size_t>(i)] == '\n') {
-      processLine(lineStart, i + 1);
-      lineStart = i + 1;
+  std::uint32_t ls = 0;
+  while (ls < n) {
+    std::uint32_t le = ls;
+    while (le < n) {
+      if (text[static_cast<std::size_t>(le)] == '\n') {
+        break;
+      }
+      le++;
     }
-  }
-  if (lineStart < n) {
-    processLine(lineStart, n);
+    processLine(ls, le + 1);
+    ls = le + 1;
   }
 
   return runs;
@@ -164,15 +197,17 @@ struct MarkdownEditor {
   auto body() const {
     Theme const& theme = useEnvironment<Theme>();
     auto doc = useState(std::string {
-        "# Markdown styler\n"
-        "## TextArea `.styler`\n"
-        "This demo uses a small **attributed-text** callback. Edit this buffer — headings, list lines, "
-        "`inline code`, and **bold** update as you type.\n"
-        "\n"
-        "### Try it\n"
-        "- Use `#` / `##` / `###` at line start\n"
-        "- Wrap **bold** in double asterisks\n"
-        "- Use `backticks` for code-colored spans\n"});
+R"(# Header 1
+
+## Header 2
+
+### Header 3
+
+This is **bold**.
+
+This is `inline-code`.
+)"
+      });
 
     Font const baseFont = resolveFont(kFontFromTheme, theme.typeBody.toFont());
     Color const baseColor = theme.colorTextPrimary;
@@ -195,10 +230,10 @@ struct MarkdownEditor {
                 TextArea {
                     .value = doc,
                     .placeholder = "Write markdown-like text…",
-                    .height = {.minIntrinsic = 200.f, .maxIntrinsic = 560.f},
-                    .styler = [theme, baseFont, baseColor](std::string_view s) {
-                      return simpleMarkdownStyler(s, theme, baseFont, baseColor);
+                    .style = {
+                      .backgroundColor = Color::hex(0x1F1F1F),
                     },
+                    .styler = markdownStyler,
                 }.flex(1.f, 1.f, 0.f)),
     }
         .padding(20.f)
