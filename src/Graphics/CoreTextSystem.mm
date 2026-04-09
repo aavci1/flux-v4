@@ -23,6 +23,7 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <string>
 #include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
@@ -1758,6 +1759,47 @@ std::shared_ptr<ParagraphLayoutVariant> CoreTextSystem::Impl::buildParagraphVari
     TextLayoutStorage stor{};
     fillTextLayoutFromFramesetter(sys, fs, paraText, maxWidth, options, partial, stor);
     CFRelease(fs);
+    // Empty paragraph (consecutive `\n` segments): CTFramesetter reports 0 height and no lines, so
+    // multi-paragraph assembly would not advance `yCursor` and blank lines visually collapse.
+    if (para.byteStart == para.byteEnd) {
+      Font baseFont{};
+      if (!text.runs.empty()) {
+        baseFont = text.runs[0].font;
+      } else {
+        baseFont.family = kDefaultFontFamily;
+        baseFont.size = 12.f;
+      }
+      if (baseFont.size <= 0.f) {
+        baseFont.size = 16.f;
+      }
+      std::string_view const fam =
+          baseFont.family.empty() ? std::string_view(kDefaultFontFamily) : std::string_view(baseFont.family);
+      std::uint32_t const fid = sys.resolveFontId(fam, baseFont.weight, baseFont.italic);
+      std::uint32_t const sizeQ8 = static_cast<std::uint32_t>(std::lround(baseFont.size * 4.f));
+      CTFontRef const ct = sizedFont(fid, sizeQ8);
+      CGFloat const ascent = CTFontGetAscent(ct);
+      CGFloat const descent = CTFontGetDescent(ct);
+      CGFloat const leading = CTFontGetLeading(ct);
+      float lineH = static_cast<float>(ascent + descent + leading);
+      if (options.lineHeight > 0.f) {
+        lineH = std::max(lineH, options.lineHeight);
+      }
+      if (options.lineHeightMultiple > 0.f) {
+        lineH *= options.lineHeightMultiple;
+      }
+      TextLayout::LineRange lr{};
+      lr.ctLineIndex = 0;
+      lr.top = 0.f;
+      lr.baseline = static_cast<float>(ascent);
+      lr.bottom = lineH;
+      lr.byteStart = static_cast<int>(para.byteStart);
+      lr.byteEnd = static_cast<int>(para.byteEnd);
+      lr.lineMinX = 0.f;
+      partial.runs.clear();
+      partial.lines.clear();
+      partial.lines.push_back(lr);
+      recomputeTextLayoutMetrics(partial);
+    }
 #ifndef NDEBUG
     std::size_t sumGlyphs = 0;
     for (auto const& pr : partial.runs) {
