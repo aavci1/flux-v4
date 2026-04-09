@@ -135,10 +135,22 @@ struct ElementModifiers {
 
 namespace detail {
 
+/// Wrap one pointer callback (e.g. struct-level \c onPointerDown on a \c RenderComponent).
+inline std::function<void(Point)> pointerCallbackInLocalSpace(std::function<void(Point)> cb, Rect const& frame) {
+  if (!cb) {
+    return {};
+  }
+  return [cb = std::move(cb), frame](Point local) {
+    cb(Point{local.x - frame.x, local.y - frame.y});
+  };
+}
+
 /// Merges \ref ElementModifiers interaction handlers into \p handlers for \ref RenderComponent leaves.
 /// Modifier callbacks override struct-derived handlers when set (same rule as primitives under a modifier node).
+/// Pointer positions are adjusted by \p frame (\ref detail::pointerCallbackInLocalSpace).
 inline void mergeRenderLeafHandlersWithActiveModifiers(EventHandlers& h, ElementModifiers const* mods,
-                                                       bool suppressLeafModifierEvents) {
+                                                       bool suppressLeafModifierEvents,
+                                                       Rect const& frame) {
   if (!mods || suppressLeafModifierEvents) {
     return;
   }
@@ -146,13 +158,13 @@ inline void mergeRenderLeafHandlersWithActiveModifiers(EventHandlers& h, Element
     h.onTap = mods->onTap;
   }
   if (mods->onPointerDown) {
-    h.onPointerDown = mods->onPointerDown;
+    h.onPointerDown = pointerCallbackInLocalSpace(mods->onPointerDown, frame);
   }
   if (mods->onPointerUp) {
-    h.onPointerUp = mods->onPointerUp;
+    h.onPointerUp = pointerCallbackInLocalSpace(mods->onPointerUp, frame);
   }
   if (mods->onPointerMove) {
-    h.onPointerMove = mods->onPointerMove;
+    h.onPointerMove = pointerCallbackInLocalSpace(mods->onPointerMove, frame);
   }
   if (mods->onScroll) {
     h.onScroll = mods->onScroll;
@@ -401,23 +413,17 @@ void Element::Model<C>::renderFromLayout(RenderContext& ctx, LayoutNode const& n
     }
     if constexpr (requires { value.onPointerDown; }) {
       if (value.onPointerDown) {
-        handlers.onPointerDown = [pd = value.onPointerDown, frame](Point local) {
-          pd(Point{local.x - frame.x, local.y - frame.y});
-        };
+        handlers.onPointerDown = detail::pointerCallbackInLocalSpace(value.onPointerDown, frame);
       }
     }
     if constexpr (requires { value.onPointerUp; }) {
       if (value.onPointerUp) {
-        handlers.onPointerUp = [pu = value.onPointerUp, frame](Point local) {
-          pu(Point{local.x - frame.x, local.y - frame.y});
-        };
+        handlers.onPointerUp = detail::pointerCallbackInLocalSpace(value.onPointerUp, frame);
       }
     }
     if constexpr (requires { value.onPointerMove; }) {
       if (value.onPointerMove) {
-        handlers.onPointerMove = [pm = value.onPointerMove, frame](Point local) {
-          pm(Point{local.x - frame.x, local.y - frame.y});
-        };
+        handlers.onPointerMove = detail::pointerCallbackInLocalSpace(value.onPointerMove, frame);
       }
     }
     if constexpr (requires { value.onScroll; }) {
@@ -445,7 +451,7 @@ void Element::Model<C>::renderFromLayout(RenderContext& ctx, LayoutNode const& n
           static_cast<bool>(handlers.onTextInput);
     }
     detail::mergeRenderLeafHandlersWithActiveModifiers(handlers, ctx.activeElementModifiers(),
-                                                       ctx.suppressLeafModifierEvents());
+                                                       ctx.suppressLeafModifierEvents(), frame);
     detail::registerRenderLeafEvents(ctx, id, std::move(handlers));
   } else if constexpr (PrimitiveComponent<C>) {
     value.renderFromLayout(ctx, node);

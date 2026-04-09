@@ -449,9 +449,9 @@ void Rectangle::renderFromLayout(RenderContext& ctx, LayoutNode const& node) con
   });
   if (ElementModifiers const* mods = ctx.activeElementModifiers()) {
     if (!ctx.suppressLeafModifierEvents()) {
-      EventHandlers const h = eventHandlersFromModifiers(*mods, stableKey);
+      EventHandlers h = eventHandlersFromModifiers(*mods, stableKey, bounds);
       if (shouldInsertHandlers(h)) {
-        ctx.eventMap().insert(id, h);
+        ctx.eventMap().insert(id, std::move(h));
       }
     }
   }
@@ -505,9 +505,9 @@ void Text::renderFromLayout(RenderContext& ctx, LayoutNode const& node) const {
     });
     if (ElementModifiers const* mods = ctx.activeElementModifiers()) {
       if (!ctx.suppressLeafModifierEvents()) {
-        EventHandlers const h = eventHandlersFromModifiers(*mods, stableKey);
+        EventHandlers h = eventHandlersFromModifiers(*mods, stableKey, bounds);
         if (shouldInsertHandlers(h)) {
-          ctx.eventMap().insert(textId, h);
+          ctx.eventMap().insert(textId, std::move(h));
         }
       }
     }
@@ -561,9 +561,9 @@ void views::Image::renderFromLayout(RenderContext& ctx, LayoutNode const& node) 
   });
   if (ElementModifiers const* mods = ctx.activeElementModifiers()) {
     if (!ctx.suppressLeafModifierEvents()) {
-      EventHandlers const h = eventHandlersFromModifiers(*mods, stableKey);
+      EventHandlers h = eventHandlersFromModifiers(*mods, stableKey, bounds);
       if (shouldInsertHandlers(h)) {
-        ctx.eventMap().insert(id, h);
+        ctx.eventMap().insert(id, std::move(h));
       }
     }
   }

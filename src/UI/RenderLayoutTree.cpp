@@ -62,18 +62,18 @@ void renderModifier(LayoutNode const& node, LayoutTree const& tree, RenderContex
         .stroke = std::move(stroke),
         .shadow = shadowForChrome,
     });
-    EventHandlers const h = eventHandlersFromModifiers(m, stableKey);
+    EventHandlers h = eventHandlersFromModifiers(m, stableKey, bgBounds);
     if (needTransparentHit) {
       bool const insertedHandlers = shouldInsertHandlers(h);
       if (insertedHandlers) {
-        ctx.eventMap().insert(rid, h);
+        ctx.eventMap().insert(rid, std::move(h));
       }
       ctx.pushSuppressLeafModifierEvents(insertedHandlers);
       suppressPushed = true;
     } else if (needChrome && shouldInsertHandlers(h)) {
       // Without this, painted modifier rects are hit-tested but rejected by EventMap, so hover misses
       // the gap outside leaf geometry (e.g. padded row area).
-      ctx.eventMap().insert(rid, h);
+      ctx.eventMap().insert(rid, std::move(h));
       ctx.pushSuppressLeafModifierEvents(true);
       suppressPushed = true;
     }

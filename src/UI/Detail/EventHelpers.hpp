@@ -11,16 +11,17 @@
 
 namespace flux::detail {
 
-inline EventHandlers eventHandlersFromModifiers(ElementModifiers const& m, ComponentKey stableKey) {
+/// Modifier handlers for a scene node whose \c Rect bounds match \p bounds in parent space.
+inline EventHandlers eventHandlersFromModifiers(ElementModifiers const& m, ComponentKey stableKey, Rect const& bounds) {
   bool const effFocusable =
       m.focusable || static_cast<bool>(m.onKeyDown) || static_cast<bool>(m.onKeyUp) ||
       static_cast<bool>(m.onTextInput);
   return EventHandlers{
       .stableTargetKey = stableKey,
       .onTap = m.onTap,
-      .onPointerDown = m.onPointerDown,
-      .onPointerUp = m.onPointerUp,
-      .onPointerMove = m.onPointerMove,
+      .onPointerDown = m.onPointerDown ? pointerCallbackInLocalSpace(m.onPointerDown, bounds) : nullptr,
+      .onPointerUp = m.onPointerUp ? pointerCallbackInLocalSpace(m.onPointerUp, bounds) : nullptr,
+      .onPointerMove = m.onPointerMove ? pointerCallbackInLocalSpace(m.onPointerMove, bounds) : nullptr,
       .onScroll = m.onScroll,
       .onKeyDown = m.onKeyDown,
       .onKeyUp = m.onKeyUp,
