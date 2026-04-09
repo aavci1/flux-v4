@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 
@@ -18,6 +19,15 @@ namespace {
 
 /// Full blink cycle duration (seconds). Lower = faster caret blink.
 constexpr double kCaretBlinkPeriodSec = 0.55f;
+
+/// Caret/selection live in TextEditBehavior, not in the bound `Signal<std::string>`, so moving the caret does
+/// not mark reactive state dirty. Pointer paths call `markReactiveDirty()` in InputDispatcher; keyboard
+/// navigation must request a redraw the same way.
+void markTextUiDirty() {
+  if (Application::hasInstance()) {
+    Application::instance().markReactiveDirty();
+  }
+}
 
 bool hasMod(Modifiers m, Modifiers bit) noexcept {
   return (static_cast<std::uint32_t>(m) & static_cast<std::uint32_t>(bit)) != 0;
@@ -131,6 +141,7 @@ void TextEditBehavior::moveCaretTo(int byte, bool extendSelection) {
   }
   ensureCaretVisible_ = true;
   resetBlinkEpoch();
+  markTextUiDirty();
 }
 
 void TextEditBehavior::selectAll() {
@@ -139,10 +150,15 @@ void TextEditBehavior::selectAll() {
   caret_ = static_cast<int>(s.size());
   ensureCaretVisible_ = true;
   resetBlinkEpoch();
+  markTextUiDirty();
 }
 
 void TextEditBehavior::clearSelection() {
+  if (anchor_ == caret_) {
+    return;
+  }
   anchor_ = caret_;
+  markTextUiDirty();
 }
 
 bool TextEditBehavior::consumeEnsureCaretVisibleRequest() {
@@ -183,6 +199,7 @@ void TextEditBehavior::mutateValue(std::string next, int newCaret, int newAnchor
     anchor_ = na;
     ensureCaretVisible_ = true;
     resetBlinkEpoch();
+    markTextUiDirty();
     return;
   }
 
@@ -570,6 +587,7 @@ bool TextEditBehavior::handlePointerDown(int byte, bool shift) {
   }
   ensureCaretVisible_ = true;
   resetBlinkEpoch();
+  markTextUiDirty();
   return true;
 }
 
@@ -581,6 +599,7 @@ void TextEditBehavior::handlePointerDrag(int byte) {
   caret_ = detail::utf8Clamp(s, byte);
   ensureCaretVisible_ = true;
   resetBlinkEpoch();
+  markTextUiDirty();
 }
 
 void TextEditBehavior::handlePointerUp() {

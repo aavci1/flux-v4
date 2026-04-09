@@ -14,7 +14,9 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <functional>
 #include <optional>
+#include <utility>
 
 namespace flux {
 
@@ -50,6 +52,11 @@ bool attributedRunsFullyCoverBuffer(std::vector<AttributedRun> const& runs, std:
 struct TextAreaSnap {
   std::shared_ptr<TextLayout const> layout;
   std::vector<detail::LineMetrics> lines;
+  /// Last buffer string used to build `layout` (hit-test invalidates when this differs from `beh.value()`).
+  std::string layoutSource;
+  /// Last layout pass frame/content width (from `render` or hit-test relayout when cache was cold).
+  float layoutFrameW = 0.f;
+  float layoutContentW = 0.f;
 };
 
 struct StylerMemo {
@@ -137,18 +144,29 @@ int verticalMove(TextAreaSnap const& snap, std::string const& buf, int currentBy
   if (targetIdx == li) {
     return currentByte;
   }
-  float const x = detail::caretXForByte(tl, snap.lines[static_cast<std::size_t>(li)], currentByte);
-  return detail::caretByteAtX(tl, snap.lines[static_cast<std::size_t>(targetIdx)], x, buf);
+  auto const& srcLine = snap.lines[static_cast<std::size_t>(li)];
+  auto const& dstLine = snap.lines[static_cast<std::size_t>(targetIdx)];
+  float const x = detail::caretXForByte(tl, srcLine, currentByte);
+  int const out = detail::caretByteAtX(tl, dstLine, x, buf);
+  return out;
 }
 
-int lineIndexAtY(std::vector<detail::LineMetrics> const& lines, float layoutY) {
+std::pair<int, bool> lineIndexAtYWithFallback(std::vector<detail::LineMetrics> const& lines, float layoutY) {
   if (lines.empty()) {
-    return 0;
+    return {0, false};
+  }
+  auto const& first = lines.front();
+  auto const& last = lines.back();
+  if (layoutY < first.top) {
+    return {0, true};
+  }
+  if (layoutY >= last.bottom) {
+    return {static_cast<int>(lines.size()) - 1, true};
   }
   for (int i = 0; i < static_cast<int>(lines.size()); ++i) {
     auto const& L = lines[static_cast<std::size_t>(i)];
     if (layoutY >= L.top && layoutY < L.bottom) {
-      return i;
+      return {i, false};
     }
   }
   float bestD = 1e9f;
@@ -161,22 +179,50 @@ int lineIndexAtY(std::vector<detail::LineMetrics> const& lines, float layoutY) {
       best = i;
     }
   }
-  return best;
+  return {best, true};
 }
 
-int hitTestByte(std::string const& placeholderText, TextEditBehavior& beh, ResolvedTextAreaStyle const& rs,
-                TextAreaSnap& snap, float, Point local, float scrollY, bool showPh) {
-  if (!snap.layout || snap.lines.empty()) {
+int hitTestByte(TextEditBehavior& beh, ResolvedTextAreaStyle const& rs, std::string const& placeholder,
+                std::function<std::vector<AttributedRun>(std::string_view)> const& styler,
+                StylerMemo& stylerMemo, Font const& defaultFont, bool focused, TextAreaSnap& snap,
+                float frameW, Point local, float scrollY) {
+  std::string const& buf = beh.value();
+  if (buf.empty()) {
     return 0;
   }
-  std::string const& buf = beh.value();
+  bool const showPh = buf.empty() && !focused;
+  float const contentW = std::max(1.f, frameW - 2.f * (rs.borderWidth + rs.paddingH));
+  // Hit-test must not rebuild layout on pointer vs render width mismatch: `render()` lays out every
+  // paint and updates `snap` for the current frame width. Comparing `useLayoutRect().width` to the last
+  // paint's `frame.width` caused relayout thrash on pointer moves (OOM/crash on large paste). Invalidate
+  // only when the text buffer changed vs the cached layout or the cache is empty.
+  bool const needRelayout = !snap.layout || snap.lines.empty() || buf != snap.layoutSource;
+  if (needRelayout) {
+    TextSystem& ts = Application::instance().textSystem();
+    AttributedString text =
+        buildAttributedString(placeholder, styler, rs, defaultFont, buf, showPh, stylerMemo);
+    TextLayoutOptions opts{};
+    opts.wrapping = TextWrapping::Wrap;
+    if (rs.lineHeight > 0.f) {
+      opts.lineHeight = rs.lineHeight;
+    }
+    auto layout = ts.layout(text, contentW, opts);
+    if (!layout) {
+      return 0;
+    }
+    snap.layout = layout;
+    snap.lines = detail::buildLineMetrics(*layout);
+    snap.layoutSource = buf;
+    snap.layoutFrameW = frameW;
+    snap.layoutContentW = contentW;
+  }
   float const innerPad = rs.borderWidth + rs.paddingH;
   float const layoutY = local.y - rs.borderWidth - rs.paddingV + scrollY;
-  int const li = lineIndexAtY(snap.lines, layoutY);
+  auto const [li, yFallback] = lineIndexAtYWithFallback(snap.lines, layoutY);
   detail::LineMetrics const& line = snap.lines[static_cast<std::size_t>(li)];
   float const lx = local.x - innerPad;
-  std::string const& sliceBuf = showPh ? placeholderText : buf;
-  return detail::caretByteAtX(*snap.layout, line, lx, sliceBuf);
+  int const ret = detail::caretByteAtX(*snap.layout, line, lx, buf);
+  return ret;
 }
 
 struct TextAreaView {
@@ -227,8 +273,15 @@ struct TextAreaView {
     }
     snap->layout = layout;
     snap->lines = detail::buildLineMetrics(*layout);
+    snap->layoutSource = buf;
+    snap->layoutFrameW = frame.width;
+    snap->layoutContentW = contentW;
 
-    float sy = *scrollY;
+    float const maxScroll = std::max(0.f, layout->measuredSize.height - contentH);
+    float sy = std::clamp(*scrollY, 0.f, maxScroll);
+    if (sy != *scrollY) {
+      scrollY = sy;
+    }
     if (behavior->consumeEnsureCaretVisibleRequest() && !snap->lines.empty()) {
       int const li = detail::lineIndexForByte(snap->lines, behavior->caretByte());
       auto const& L = snap->lines[static_cast<std::size_t>(li)];
@@ -239,7 +292,6 @@ struct TextAreaView {
       } else if (caretb > sy + contentH - kCaretScrollMarginPx) {
         sy = caretb - contentH + kCaretScrollMarginPx;
       }
-      float const maxScroll = std::max(0.f, layout->measuredSize.height - contentH);
       sy = std::clamp(sy, 0.f, maxScroll);
       scrollY = sy;
     }
@@ -362,16 +414,38 @@ Element TextArea::body() const {
       .cursor(Cursor::IBeam)
       .onKeyDown([&beh](KeyCode k, Modifiers m) { beh.handleKey(KeyEvent{k, m}); })
       .onTextInput([&beh](std::string const& t) { beh.handleTextInput(t); })
-      .onPointerDown([ph = placeholder, &beh, &snap, rs, layoutRect, focused, scrollY](Point local) {
+      .onPointerDown([this, &beh, &snap, rs, &stylerMemo, defaultFont, focused, scrollY, layoutRect](
+                         Point local) {
         float const fw = layoutRect ? layoutRect->width : 400.f;
-        bool const showPh = beh.value().empty() && !focused;
-        int const byte = hitTestByte(ph, beh, rs, snap, fw, local, *scrollY, showPh);
+        float const fh = layoutRect ? layoutRect->height : 200.f;
+        float const contentH = std::max(1.f, fh - 2.f * (rs.borderWidth + rs.paddingV));
+        float sy = *scrollY;
+        if (snap.layout) {
+          float const maxScroll = std::max(0.f, snap.layout->measuredSize.height - contentH);
+          sy = std::clamp(sy, 0.f, maxScroll);
+          if (sy != *scrollY) {
+            scrollY = sy;
+          }
+        }
+        int const byte = hitTestByte(beh, rs, placeholder, styler, stylerMemo, defaultFont, focused, snap, fw,
+                                     local, sy);
         beh.handlePointerDown(byte, false);
       })
-      .onPointerMove([ph = placeholder, &beh, &snap, rs, layoutRect, focused, scrollY](Point local) {
+      .onPointerMove([this, &beh, &snap, rs, &stylerMemo, defaultFont, focused, scrollY, layoutRect](
+                         Point local) {
         float const fw = layoutRect ? layoutRect->width : 400.f;
-        bool const showPh = beh.value().empty() && !focused;
-        int const byte = hitTestByte(ph, beh, rs, snap, fw, local, *scrollY, showPh);
+        float const fh = layoutRect ? layoutRect->height : 200.f;
+        float const contentH = std::max(1.f, fh - 2.f * (rs.borderWidth + rs.paddingV));
+        float sy = *scrollY;
+        if (snap.layout) {
+          float const maxScroll = std::max(0.f, snap.layout->measuredSize.height - contentH);
+          sy = std::clamp(sy, 0.f, maxScroll);
+          if (sy != *scrollY) {
+            scrollY = sy;
+          }
+        }
+        int const byte = hitTestByte(beh, rs, placeholder, styler, stylerMemo, defaultFont, focused, snap, fw,
+                                     local, sy);
         beh.handlePointerDrag(byte);
       })
       .onPointerUp([&beh](Point) { beh.handlePointerUp(); })

@@ -166,9 +166,11 @@ void InputDispatcher::onKeyDown(InputEvent const& e) {
     focus_.cycleInMap(build_.mainEventMap(), reverse, std::nullopt);
     return;
   }
+  bool shortcutConsumed = false;
   if (windowHasFocus_) {
-    if (build_.actionRegistryCommitted().dispatchShortcut(focus_.focusedKey(), e.key, e.modifiers,
-                                                          window_.actionDescriptors())) {
+    shortcutConsumed = build_.actionRegistryCommitted().dispatchShortcut(
+        focus_.focusedKey(), e.key, e.modifiers, window_.actionDescriptors());
+    if (shortcutConsumed) {
       return;
     }
   }
