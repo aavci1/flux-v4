@@ -511,7 +511,13 @@ void Text::renderFromLayout(RenderContext& ctx, LayoutNode const& node) const {
 Size Text::measure(LayoutContext& ctx, LayoutConstraints const& c, LayoutHints const& hints, TextSystem& ts) const {
   ctx.advanceChildSlot();
   TextLayoutOptions const opts = textViewLayoutOptions(*this, c, hints);
-  float const mw = std::isfinite(c.maxWidth) ? c.maxWidth : 0.f;
+  // Match boxed layout (`layoutBoxedImpl`): NoWrap uses maxWidth 0 so Core Text measures one line.
+  // A finite maxWidth here would wrap during measure (e.g. ScrollView passes viewport width) and inflate
+  // height while render still lays out as nowrap.
+  float mw = std::isfinite(c.maxWidth) ? c.maxWidth : 0.f;
+  if (wrapping == TextWrapping::NoWrap) {
+    mw = 0.f;
+  }
   Size s = ts.measure(text, font, color, mw, opts);
   if (std::isfinite(c.maxWidth) && c.maxWidth > 0.f) {
     s.width = std::min(s.width, c.maxWidth);
