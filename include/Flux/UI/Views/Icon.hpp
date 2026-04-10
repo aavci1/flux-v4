@@ -13,23 +13,21 @@ namespace flux {
 
 struct Icon : ViewModifiers<Icon> {
 
-  // ── Required ────────────────────────────────────────────────────────
-  IconName name {};
+    // ── Properties ───────────────────────────────────────────────────────────
+    IconName name {};
 
-  // ── Appearance ──────────────────────────────────────────────────────
+    /// Icon size in points. Drives both the font size and the component's intrinsic frame.
+    /// `kFloatFromTheme` → `Theme::typeBody.size`.
+    float size = kFloatFromTheme;
 
-  /// Icon size in points. Drives both the font size and the component's intrinsic frame.
-  /// `kFloatFromTheme` → `Theme::typeBody.size` (24 pt).
-  float size = kFloatFromTheme;
+    /// Icon weight. `kFloatFromTheme` → `Theme::typeBody.weight`.
+    float weight = kFloatFromTheme;
 
-  /// 0 = use theme body weight (`Theme::typeBody`).
-  float weight = kFloatFromTheme;
+    /// Icon color. `kColorFromTheme` → `Theme::colorTextPrimary`.
+    Color color = kColorFromTheme;
 
-  /// Icon colour. `kColorFromTheme` → `Theme::colorTextPrimary`.
-  Color color = kColorFromTheme;
-
-  // ── Component protocol ────────────────────────────────────────────────
-  Element body() const;
+    // ── Component protocol ───────────────────────────────────────────────────
+    Element body() const;
 };
 
 } // namespace flux
