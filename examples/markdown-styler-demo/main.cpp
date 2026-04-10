@@ -197,15 +197,97 @@ struct MarkdownEditor {
   auto body() const {
     Theme const& theme = useEnvironment<Theme>();
     auto doc = useState(std::string {
-R"(# Header 1
+R"(# TextInput / TextArea / Kernel / Behavior reimplementation
 
-## Header 2
+## Constraints from your instructions
 
-### Header 3
+- **Do not read or port from** [`src/UI/Views/TextInput.cpp`](src/UI/Views/TextInput.cpp) or [`src/UI/Views/TextArea.cpp`](src/UI/Views/TextArea.cpp); treat them as deleted and implement from the specs only.
+- **Backwards compatibility**: only what the specs require; migrate in-tree callers of the new `TextInput::Style` layout.
 
-This is **bold**.
+## API alignment notes (spec vs repo)
 
-This is `inline-code`.
+| Spec | Repo reality |
+|------|----------------|
+| `useTextSystem()` | Use [`Application::instance().textSystem()`](include/Flux/Core/Application.hpp) (same as current views). Optionally add a one-liner `useTextSystem()` in [`Hooks.hpp`](include/Flux/UI/Hooks.hpp) if you want the spec’s ergonomics. |
+| `handleKey(KeyEvent const&)` | Flux uses [`onKeyDown(KeyCode, Modifiers)`](include/Flux/UI/Element.hpp). Define a small `KeyEvent { KeyCode key; Modifiers modifiers; }` (or implement `handleKey(KeyCode, Modifiers)`) in [`TextEditBehavior.hpp`](include/Flux/UI/Views/TextEditBehavior.hpp) and forward from the view. |
+| `Clipboard::getText` / `setText` | Actual API: [`Clipboard::readText`](include/Flux/Core/Clipboard.hpp) / `writeText`; access via `Application::instance().clipboard()`. |
+| `LineMetrics` in §4 | Algorithms in §5 reference `line.ctLineIndex`. **Add `std::uint32_t ctLineIndex`** (copy from each [`TextLayout::LineRange`](include/Flux/Graphics/TextLayout.hpp)) so `caretXForByte` / `caretByteAtX` can filter runs without ambiguity. |
+
+## Architecture
+
+```mermaid
+flowchart LR
+  subgraph components [Views]
+    TI[TextInput]
+    TA[TextArea]
+  end
+  subgraph behavior [Stateful layer]
+    UTEB[useTextEditBehavior]
+    TEB[TextEditBehavior]
+  end
+  subgraph kernel [Pure helpers]
+    TEK[TextEditKernel detail]
+  end
+  subgraph layout [Layout]
+    TL[TextLayout from TextSystem]
+  end
+  TI --> UTEB
+  TA --> UTEB
+  UTEB --> TEB
+  TI --> TL
+  TA --> TL
+  TI --> TEK
+  TA --> TEK
+  TEB --> TEK
+```
+
+## Phase 1 — `TextEditKernel`
+
+1. **Replace** [`include/Flux/UI/Views/TextEditKernel.hpp`](include/Flux/UI/Views/TextEditKernel.hpp) with the reduced API: UTF-8 helpers (unchanged list), `shouldCoalesceInsert`, `LineMetrics` (+ `ctLineIndex`), `buildLineMetrics(TextLayout const&)`, `lineIndexForByte` (no `buf` arg), `caretXForByte`, `caretByteAtX(..., std::string const& buf)`, `orderedSelection`. Remove `TextSystem`, `replaceSelection`, blink types, and measure-based caret APIs.
+2. **Rewrite** [`src/UI/Views/TextEditKernel.cpp`](src/UI/Views/TextEditKernel.cpp) from the spec’s algorithms:
+   - `buildLineMetrics`: iterate [`layout.lines`](include/Flux/Graphics/TextLayout.hpp); for each line, `lineMinX` = min `PlacedRun::origin.x` among runs with matching `ctLineIndex`; fill `byteStart`/`byteEnd`/`top`/`bottom`/`baseline` from `LineRange`.
+   - `caretXForByte` / `caretByteAtX`: walk matching runs sorted by `origin.x`; use [`TextRun::positions`](include/Flux/Graphics/TextRun.hpp) / `width` for intra-run math; UTF-8 clamp via existing helpers + `buf`.
+3. **Delete** all `TextSystem::measure` usage from this translation unit (per spec §8).
+
+## Phase 2 — `TextEditBehavior`
+
+1. **Add** [`include/Flux/UI/Views/TextEditBehavior.hpp`](include/Flux/UI/Views/TextEditBehavior.hpp): `TextEditBehaviorOptions` (include `verticalResolver`, `std::function<int(int,int)>`; capture-on-first-call + update callbacks/`maxLength`/`acceptsTab` on later builds; debug-assert if `multiline` changes), `TextEditBehavior` class per spec §3, and `useTextEditBehavior(State<std::string>, options)`.
+2. **Add** [`src/UI/Views/TextEditBehavior.cpp`](src/UI/Views/TextEditBehavior.cpp):
+   - **State**: `Signal<std::string>*` from `State<std::string>`, caret/anchor `int`s, `focused`/`disabled`, undo/redo deques (`UndoEntry` per §3.2), redo clear on mutation, coalescing with `shouldCoalesceInsert` + time window.
+   - **Blink**: Move/refactor logic now in [`CaretBlinkTimerSlot`](src/UI/Views/TextEditKernel.cpp) / global `AnimationClock` subscription into private members of `TextEditBehavior` (subscribe when `focused && !disabled`, unsubscribe on blur/destruct).
+   - **Mutations**: Internal `insertText` / `deleteRange` replacing old `replaceSelection` (same value/caret/anchor/`onChange`/max-length rules from current kernel behavior, now calling `utf8TruncateToChars` where needed).
+   - **Keyboard**: Map [`keys::*`](include/Flux/Core/KeyCodes.hpp) + [`Modifiers`](include/Flux/Core/Types.hpp) (Cmd = `Meta` on macOS) to navigation, selection, clipboard, undo, Enter/Tab/Escape per §3.1; for Up/Down when `multiline`, call `verticalResolver` if set.
+   - **Clipboard**: `Application::instance().clipboard()`.
+   - **`consumeEnsureCaretVisibleRequest`**: set after mutations that should trigger scroll; components read once per frame/build.
+3. **CMake**: Add `src/UI/Views/TextEditBehavior.cpp` beside existing [`TextEditKernel.cpp` line](CMakeLists.txt).
+
+## Phase 3 — `TextInput`
+
+1. **Update** [`include/Flux/UI/Views/TextInput.hpp`](include/Flux/UI/Views/TextInput.hpp): nested `Style` with `Style::plain()`, move chrome fields under `style`, add `styler` and `validationColor`, keep `value` / `placeholder` / `onChange` / `onSubmit` / `maxLength` / `disabled`.
+2. **Rewrite** [`src/UI/Views/TextInput.cpp`](src/UI/Views/TextInput.cpp) (new file content only): `resolveStyle` using [`InputFieldChromeSpec`](include/Flux/UI/InputFieldChrome.hpp) + theme (same tokens as today’s flat fields); `useTextEditBehavior` with `multiline=false`, `submitsOnEnter=true`, `acceptsTab=false`; `ts.layout(..., NoWrap, width)` inside measure/render path where final width is known; `buildLineMetrics` → single `LineMetrics`; horizontal scroll via `State<int> scrollStartByte` + `consumeEnsureCaretVisibleRequest`; custom-draw selection/caret/text using `caretXForByte` / `caretByteAtX` with scroll correction on hit-testing; wire focus/pointer/key/text handlers to behavior.
+3. **Migration**: Grep for `TextInput` initializers using removed top-level fields; convert to `.style = { ... }`. Current grep shows most sites only set `value` / `placeholder` / handlers — **likely zero or few style migrations**.
+
+## Phase 4 — `TextArea`
+
+1. **Update** [`include/Flux/UI/Views/TextArea.hpp`](include/Flux/UI/Views/TextArea.hpp): add optional `styler` only (per spec).
+2. **Rewrite** [`src/UI/Views/TextArea.cpp`](src/UI/Views/TextArea.cpp): `useTextEditBehavior` with `multiline=true`, `acceptsTab=true`, `submitsOnEnter=false`, `onEscape`, `verticalResolver` lambda calling a `resolveVerticalMove` helper using **captured** `TextLayout` + `lineMetrics` from the current build; `StylerCache` memoization when `styler` is set; `buildLineMetrics` for all lines; vertical scroll `State<float> scrollY` + wheel forwarding; multi-line selection loop per spec §2.4–2.5.
+3. Keep existing `TextArea::Style` and `resolveStyle` **behavior** (conceptually) — re-express in the new file without copying the old implementation verbatim (read only [`TextArea.hpp`](include/Flux/UI/Views/TextArea.hpp) + shared chrome helpers as needed).
+
+## Phase 5 — Tests and docs
+
+1. **Unit tests** (extend [`CMakeLists.txt`](CMakeLists.txt) `flux_tests` when `FLUX_BUILD_TESTS`): new files e.g. `tests/TextEditKernelTests.cpp` and `tests/TextEditBehaviorTests.cpp` covering items in spec §8–9 (UTF-8, `buildLineMetrics` invariants, caret monotonicity / round-trip on ASCII, `shouldCoalesceInsert`, undo coalescing, max length, clipboard round-trip where feasible headlessly).
+2. **Docs**: Update [`docs/TextArea-spec.md`](docs/TextArea-spec.md) to reference the new kernel API (`caretXForByte` / `buildLineMetrics(TextLayout)`).
+3. **Comments**: Fix stale references (e.g. [`src/UI/InputFieldLayout.cpp`](src/UI/InputFieldLayout.cpp) “Keep in sync with TextInput.cpp”).
+4. **“Visual tests” from spec**: There is **no** automated screenshot harness in-repo. Practical approach: rely on **manual** checks via [`examples/textinput-demo`](examples/textinput-demo/main.cpp) and [`examples/textarea-demo`](examples/textarea-demo/main.cpp), and optional **new** example snippets for styler/selection if desired later.
+
+## In-tree consumers to touch
+
+- Examples: [`examples/textinput-demo/main.cpp`](examples/textinput-demo/main.cpp), [`examples/llm-studio/ModelBrowser.hpp`](examples/llm-studio/ModelBrowser.hpp) — only if `TextInput` initializer breaks compile.
+- Any file including [`TextEditKernel.hpp`](include/Flux/UI/Views/TextEditKernel.hpp) for removed symbols (today: only kernel cpp + the two view cpps being rewritten).
+
+## Risk / order
+
+Ship **kernel → behavior → views** so each layer compiles before the next. `TextEditBehavior` is the largest piece (keyboard matrix + undo + blink + clipboard).
 )"
       });
 
