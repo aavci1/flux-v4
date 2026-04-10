@@ -86,7 +86,6 @@ ResolvedTextInputStyle resolveTextInputStyle(TextInput::Style const& style, Them
 
 AttributedString buildAttributedString(std::string const& placeholderText,
                                        std::function<std::vector<AttributedRun>(std::string_view)> const& styler,
-                                       std::function<Color(std::string_view)> const& validationColor,
                                        ResolvedTextInputStyle const& rs, Font const& defaultFont,
                                        std::string const& val, bool showPlaceholder) {
   if (showPlaceholder) {
@@ -106,15 +105,14 @@ AttributedString buildAttributedString(std::string const& placeholderText,
       as.runs.push_back(AttributedRun{0, n, defaultFont, rs.textColor});
     }
   } else {
-    Color const c = validationColor ? validationColor(val) : rs.textColor;
-    as.runs.push_back(AttributedRun{0, static_cast<std::uint32_t>(val.size()), defaultFont, c});
+    as.runs.push_back(AttributedRun{0, static_cast<std::uint32_t>(val.size()), defaultFont, rs.textColor});
   }
   return as;
 }
 
 int hitTestByte(std::string const& placeholderText,
                 std::function<std::vector<AttributedRun>(std::string_view)> const& styler,
-                std::function<Color(std::string_view)> const& validationColor, TextEditBehavior& beh,
+                TextEditBehavior& beh,
                 ResolvedTextInputStyle const& rs, Font const& defaultFont, float frameWidth, Point local,
                 int scrollByte, bool showPh) {
   TextSystem& ts = Application::instance().textSystem();
@@ -122,7 +120,7 @@ int hitTestByte(std::string const& placeholderText,
   float const contentW =
       std::max(1.f, frameWidth - 2.f * (rs.borderWidth + rs.paddingH));
   AttributedString text =
-      buildAttributedString(placeholderText, styler, validationColor, rs, defaultFont, buf, showPh);
+      buildAttributedString(placeholderText, styler, rs, defaultFont, buf, showPh);
   TextLayoutOptions opts{};
   opts.wrapping = TextWrapping::NoWrap;
   auto layout = ts.layout(text, contentW, opts);
@@ -144,7 +142,6 @@ struct TextInputView {
   /// Copied from \c TextInput in \c body() — the view outlives the temporary component value.
   std::string placeholder;
   std::function<std::vector<AttributedRun>(std::string_view)> styler;
-  std::function<Color(std::string_view)> validationColor;
   TextEditBehavior* behavior = nullptr;
   /// Copy of \c State handle (same \c Signal* as \c useState in \c body) — must not be a pointer to a
   /// stack \c State local, which would dangle after \c body() returns.
@@ -160,7 +157,7 @@ struct TextInputView {
     std::string const& buf = behavior->value();
     bool const showPh = buf.empty() && !focused;
     AttributedString text =
-        buildAttributedString(placeholder, styler, validationColor, rs, defaultFont, buf, showPh);
+        buildAttributedString(placeholder, styler, rs, defaultFont, buf, showPh);
 
     StrokeStyle const stroke =
         focused ? StrokeStyle::solid(rs.borderFocusColor, rs.borderFocusWidth)
@@ -306,7 +303,6 @@ Element TextInput::body() const {
   TextInputView view{};
   view.placeholder = placeholder;
   view.styler = styler;
-  view.validationColor = validationColor;
   view.behavior = &beh;
   view.scroll = scrollByte;
   view.rs = resolved;
@@ -320,20 +316,20 @@ Element TextInput::body() const {
       .cursor(Cursor::IBeam)
       .onKeyDown([&beh](KeyCode k, Modifiers m) { beh.handleKey(k, m); })
       .onTextInput([&beh](std::string const& t) { beh.handleTextInput(t); })
-      .onPointerDown([ph = placeholder, stylerFn = styler, validationFn = validationColor, &beh, scrollByte,
+      .onPointerDown([ph = placeholder, stylerFn = styler, &beh, scrollByte,
                       resolved, defaultFont, layoutRect, focused](Point local) {
         float const fw = layoutRect ? layoutRect->width : 400.f;
         bool const showPh = beh.value().empty() && !focused;
         int const byte =
-            hitTestByte(ph, stylerFn, validationFn, beh, resolved, defaultFont, fw, local, *scrollByte, showPh);
+            hitTestByte(ph, stylerFn, beh, resolved, defaultFont, fw, local, *scrollByte, showPh);
         beh.handlePointerDown(byte, false);
       })
-      .onPointerMove([ph = placeholder, stylerFn = styler, validationFn = validationColor, &beh, scrollByte,
+      .onPointerMove([ph = placeholder, stylerFn = styler, &beh, scrollByte,
                       resolved, defaultFont, layoutRect, focused](Point local) {
         float const fw = layoutRect ? layoutRect->width : 400.f;
         bool const showPh = beh.value().empty() && !focused;
         int const byte =
-            hitTestByte(ph, stylerFn, validationFn, beh, resolved, defaultFont, fw, local, *scrollByte, showPh);
+            hitTestByte(ph, stylerFn, beh, resolved, defaultFont, fw, local, *scrollByte, showPh);
         beh.handlePointerDrag(byte);
       })
       .onPointerUp([&beh](Point) { beh.handlePointerUp(); });

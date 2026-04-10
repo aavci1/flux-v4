@@ -52,7 +52,6 @@ struct TextInput : ViewModifiers<TextInput> {
   std::string placeholder;
 
   std::function<std::vector<AttributedRun>(std::string_view)> styler;
-  std::function<Color(std::string_view)> validationColor;
 
   Style style{};
 
