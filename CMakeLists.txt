@@ -89,7 +89,6 @@ add_custom_target(flux_shaders DEPENDS ${FLUX_METALLIB_EMBED_H})
 add_library(flux STATIC
   src/Core/Application.mm
   src/Core/EventQueue.cpp
-  src/Core/Utf8.cpp
   src/Reactive/Signal.cpp
   src/Reactive/Observer.cpp
   src/Reactive/Computed.cpp
