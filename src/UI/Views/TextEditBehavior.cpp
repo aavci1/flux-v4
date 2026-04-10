@@ -369,17 +369,16 @@ void TextEditBehavior::moveChar(int dir, bool extend) {
   moveCaretTo(n, extend);
 }
 
-bool TextEditBehavior::handleKey(KeyEvent const& e) {
+bool TextEditBehavior::handleKey(KeyCode const& k, Modifiers const& m) {
   if (disabled_) {
     return false;
   }
 
-  Modifiers const m = e.modifiers;
   bool const shift = hasMod(m, Modifiers::Shift);
   bool const alt = hasMod(m, Modifiers::Alt);
   bool const cmd = cmdLike(m);
 
-  if (e.key == keys::Escape) {
+  if (k == keys::Escape) {
     if (opts_.onEscape) {
       opts_.onEscape(value_->get());
       return true;
@@ -387,23 +386,23 @@ bool TextEditBehavior::handleKey(KeyEvent const& e) {
     return false;
   }
 
-  if (cmd && !shift && e.key == keys::A) {
+  if (cmd && !shift && k == keys::A) {
     selectAll();
     return true;
   }
-  if (cmd && !shift && e.key == keys::C) {
+  if (cmd && !shift && k == keys::C) {
     copySelection(false);
     return true;
   }
-  if (cmd && !shift && e.key == keys::X) {
+  if (cmd && !shift && k == keys::X) {
     copySelection(true);
     return true;
   }
-  if (cmd && !shift && e.key == keys::V) {
+  if (cmd && !shift && k == keys::V) {
     paste();
     return true;
   }
-  if (cmd && e.key == keys::Z) {
+  if (cmd && k == keys::Z) {
     if (shift) {
       redo();
     } else {
@@ -412,7 +411,7 @@ bool TextEditBehavior::handleKey(KeyEvent const& e) {
     return true;
   }
 
-  if (e.key == keys::Tab) {
+  if (k == keys::Tab) {
     if (opts_.acceptsTab && opts_.multiline) {
       insertAtCaret("\t", false);
       return true;
@@ -420,7 +419,7 @@ bool TextEditBehavior::handleKey(KeyEvent const& e) {
     return false;
   }
 
-  if (e.key == keys::Return) {
+  if (k == keys::Return) {
     if (opts_.submitsOnEnter) {
       if (opts_.onChange) {
         opts_.onChange(value_->get());
@@ -437,7 +436,7 @@ bool TextEditBehavior::handleKey(KeyEvent const& e) {
     return false;
   }
 
-  if (e.key == keys::Delete) {
+  if (k == keys::Delete) {
     if (alt) {
       deleteWord(false);
     } else {
@@ -445,7 +444,7 @@ bool TextEditBehavior::handleKey(KeyEvent const& e) {
     }
     return true;
   }
-  if (e.key == keys::ForwardDelete) {
+  if (k == keys::ForwardDelete) {
     if (alt) {
       deleteWord(true);
     } else {
@@ -454,7 +453,7 @@ bool TextEditBehavior::handleKey(KeyEvent const& e) {
     return true;
   }
 
-  if (e.key == keys::LeftArrow) {
+  if (k == keys::LeftArrow) {
     if (cmd && !opts_.multiline) {
       moveCaretTo(0, shift);
       return true;
@@ -470,7 +469,7 @@ bool TextEditBehavior::handleKey(KeyEvent const& e) {
     moveChar(-1, shift);
     return true;
   }
-  if (e.key == keys::RightArrow) {
+  if (k == keys::RightArrow) {
     if (cmd && !opts_.multiline) {
       moveCaretTo(static_cast<int>(value_->get().size()), shift);
       return true;
@@ -487,16 +486,16 @@ bool TextEditBehavior::handleKey(KeyEvent const& e) {
     return true;
   }
 
-  if (e.key == keys::Home) {
+  if (k == keys::Home) {
     moveLineBoundary(false, shift);
     return true;
   }
-  if (e.key == keys::End) {
+  if (k == keys::End) {
     moveLineBoundary(true, shift);
     return true;
   }
 
-  if (e.key == keys::UpArrow) {
+  if (k == keys::UpArrow) {
     if (cmd && opts_.multiline) {
       moveDocumentBoundary(false, shift);
       return true;
@@ -508,7 +507,7 @@ bool TextEditBehavior::handleKey(KeyEvent const& e) {
     }
     return false;
   }
-  if (e.key == keys::DownArrow) {
+  if (k == keys::DownArrow) {
     if (cmd && opts_.multiline) {
       moveDocumentBoundary(true, shift);
       return true;

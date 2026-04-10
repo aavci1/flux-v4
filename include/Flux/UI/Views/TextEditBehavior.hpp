@@ -19,11 +19,6 @@
 
 namespace flux {
 
-struct KeyEvent {
-  KeyCode key = 0;
-  Modifiers modifiers = Modifiers::None;
-};
-
 struct TextEditBehaviorOptions {
   bool multiline = false;
   int maxLength = 0;
@@ -60,7 +55,7 @@ public:
   void selectAll();
   void clearSelection();
 
-  bool handleKey(KeyEvent const& e);
+  bool handleKey(KeyCode const& k, Modifiers const &m);
   bool handleTextInput(std::string_view utf8);
   bool handlePointerDown(int byte, bool shift);
   void handlePointerDrag(int byte);

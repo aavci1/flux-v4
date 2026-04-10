@@ -318,7 +318,7 @@ Element TextInput::body() const {
   return Element{view}
       .focusable(!disabled)
       .cursor(Cursor::IBeam)
-      .onKeyDown([&beh](KeyCode key, Modifiers mods) { beh.handleKey(KeyEvent{key, mods}); })
+      .onKeyDown([&beh](KeyCode k, Modifiers m) { beh.handleKey(k, m); })
       .onTextInput([&beh](std::string const& t) { beh.handleTextInput(t); })
       .onPointerDown([ph = placeholder, stylerFn = styler, validationFn = validationColor, &beh, scrollByte,
                       resolved, defaultFont, layoutRect, focused](Point local) {

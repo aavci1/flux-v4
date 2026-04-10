@@ -412,7 +412,7 @@ Element TextArea::body() const {
   return Element{view}
       .focusable(!disabled)
       .cursor(Cursor::IBeam)
-      .onKeyDown([&beh](KeyCode k, Modifiers m) { beh.handleKey(KeyEvent{k, m}); })
+      .onKeyDown([&beh](KeyCode k, Modifiers m) { beh.handleKey(k, m); })
       .onTextInput([&beh](std::string const& t) { beh.handleTextInput(t); })
       .onPointerDown([this, &beh, &snap, rs, &stylerMemo, defaultFont, focused, scrollY, layoutRect](
                          Point local) {
