@@ -4,13 +4,12 @@
 ///
 /// Part of the Flux public API.
 
-
 #include <Flux/Core/Types.hpp>
+#include <Flux/Graphics/Styles.hpp>
+#include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/LayoutContext.hpp>
 #include <Flux/UI/LayoutTree.hpp>
 #include <Flux/UI/RenderContext.hpp>
-#include <Flux/Graphics/Styles.hpp>
-#include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/Views/OffsetView.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/ZStack.hpp>
@@ -22,46 +21,46 @@ namespace flux {
 
 /// Clamps \p o so the scrolled content does not overscroll past the viewport for \p axis.
 /// Non-scrolling axes are zeroed (horizontal-only keeps `o.y == 0`, vertical-only keeps `o.x == 0`).
-Point clampScrollOffset(ScrollAxis axis, Point o, Size const& viewport, Size const& content);
+Point clampScrollOffset(ScrollAxis axis, Point o, Size const &viewport, Size const &content);
 
 /// Scrollable region: children are laid out in an \ref OffsetView and can be dragged or wheel-scrolled.
 struct ScrollView : ViewModifiers<ScrollView> {
-  // ── Layout / axis ─────────────────────────────────────────────────────────
+    // ── Layout / axis ─────────────────────────────────────────────────────────
 
-  ScrollAxis axis = ScrollAxis::Vertical;
-  std::vector<Element> children;
+    ScrollAxis axis = ScrollAxis::Vertical;
+    std::vector<Element> children;
 
-  /// Custom subtree hook (not the generic \ref CompositeComponent path in \ref Element::Model).
-  void layout(LayoutContext&) const;
-  void renderFromLayout(RenderContext&, LayoutNode const&) const;
-  Size measure(LayoutContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
+    /// Custom subtree hook (not the generic \ref CompositeComponent path in \ref Element::Model).
+    void layout(LayoutContext &) const;
+    void renderFromLayout(RenderContext &, LayoutNode const &) const;
+    Size measure(LayoutContext &, LayoutConstraints const &, LayoutHints const &, TextSystem &) const;
 
-  // ── Component protocol ─────────────────────────────────────────────────────
+    // ── Component protocol ─────────────────────────────────────────────────────
 
-  Element body() const;
+    Element body() const;
 };
 
 // `ScrollView` is a composite (`body()`) but uses a dedicated `Element::Model` that matches this
 // subtree protocol instead of the default composite `Model<C>` implementation.
-template<>
+template <>
 struct Element::Model<ScrollView> final : Element::Concept {
-  ScrollView value;
-  explicit Model(ScrollView c) : value(std::move(c)) {}
-  std::unique_ptr<Concept> clone() const override {
-    return std::make_unique<Model<ScrollView>>(value);
-  }
-  void layout(LayoutContext& ctx) const override { value.layout(ctx); }
-  void renderFromLayout(RenderContext& ctx, LayoutNode const& node) const override {
-    value.renderFromLayout(ctx, node);
-  }
-  Size measure(LayoutContext& ctx, LayoutConstraints const& c, LayoutHints const& h, TextSystem& ts) const override {
-    return value.measure(ctx, c, h, ts);
-  }
-  /// Matches previous struct defaults: grow along parent main axis unless `.flex(...)` overrides.
-  float flexGrow() const override { return 1.f; }
-  float flexShrink() const override { return 0.f; }
-  float minMainSize() const override { return 0.f; }
-  bool canMemoizeMeasure() const override { return false; }
+    ScrollView value;
+    explicit Model(ScrollView c) : value(std::move(c)) {}
+    std::unique_ptr<Concept> clone() const override {
+        return std::make_unique<Model<ScrollView>>(value);
+    }
+    void layout(LayoutContext &ctx) const override { value.layout(ctx); }
+    void renderFromLayout(RenderContext &ctx, LayoutNode const &node) const override {
+        value.renderFromLayout(ctx, node);
+    }
+    Size measure(LayoutContext &ctx, LayoutConstraints const &c, LayoutHints const &h, TextSystem &ts) const override {
+        return value.measure(ctx, c, h, ts);
+    }
+    /// `ScrollView` keeps its measured viewport size by default; opt into fill with `.flex(...)`.
+    float flexGrow() const override { return 0.f; }
+    float flexShrink() const override { return 0.f; }
+    float minMainSize() const override { return 0.f; }
+    bool canMemoizeMeasure() const override { return false; }
 };
 
 } // namespace flux
