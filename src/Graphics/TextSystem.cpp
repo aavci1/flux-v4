@@ -395,46 +395,41 @@ std::shared_ptr<TextLayout> cloneTextLayout(TextLayout const& src) {
 }
 
 void trimTextLayoutToMaxLines(TextLayout& layout, int maxLines, bool normalizeAfter) {
-  if (maxLines <= 0 || layout.runs.empty()) {
+  if (maxLines <= 0 || (layout.runs.empty() && layout.lines.empty())) {
     return;
   }
 
-  std::vector<float> baselines;
-  baselines.reserve(layout.runs.size());
-  for (auto const& pr : layout.runs) {
-    float const y = pr.origin.y;
-    bool found = false;
-    for (float b : baselines) {
-      if (nearLine(b, y)) {
-        found = true;
-        break;
+  std::vector<std::uint32_t> lineOrder;
+  if (!layout.lines.empty()) {
+    lineOrder.reserve(layout.lines.size());
+    for (auto const& lr : layout.lines) {
+      lineOrder.push_back(lr.ctLineIndex);
+    }
+  } else {
+    std::unordered_set<std::uint32_t> seenLine;
+    lineOrder.reserve(layout.runs.size());
+    seenLine.reserve(layout.runs.size());
+    for (auto const& pr : layout.runs) {
+      if (seenLine.insert(pr.ctLineIndex).second) {
+        lineOrder.push_back(pr.ctLineIndex);
       }
     }
-    if (!found) {
-      baselines.push_back(y);
-    }
   }
-  std::sort(baselines.begin(), baselines.end());
-  if (static_cast<int>(baselines.size()) <= maxLines) {
+  if (static_cast<int>(lineOrder.size()) <= maxLines) {
     return;
   }
 
-  std::vector<float> const keep(baselines.begin(), baselines.begin() + static_cast<std::ptrdiff_t>(maxLines));
+  std::unordered_set<std::uint32_t> keptLineIndices;
+  keptLineIndices.reserve(static_cast<std::size_t>(maxLines));
+  for (int i = 0; i < maxLines; ++i) {
+    keptLineIndices.insert(lineOrder[static_cast<std::size_t>(i)]);
+  }
+
   auto newEnd = std::remove_if(layout.runs.begin(), layout.runs.end(), [&](TextLayout::PlacedRun const& pr) {
-    for (float k : keep) {
-      if (nearLine(k, pr.origin.y)) {
-        return false;
-      }
-    }
-    return true;
+    return keptLineIndices.count(pr.ctLineIndex) == 0;
   });
   layout.runs.erase(newEnd, layout.runs.end());
 
-  std::unordered_set<std::uint32_t> keptLineIndices;
-  keptLineIndices.reserve(layout.runs.size());
-  for (auto const& pr : layout.runs) {
-    keptLineIndices.insert(pr.ctLineIndex);
-  }
   layout.lines.erase(std::remove_if(layout.lines.begin(), layout.lines.end(),
                                     [&](TextLayout::LineRange const& lr) {
                                       return keptLineIndices.count(lr.ctLineIndex) == 0;

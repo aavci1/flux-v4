@@ -339,6 +339,51 @@ TEST_CASE("Text render resolves theme font and color before TextSystem") {
   rctx.popConstraints();
 }
 
+TEST_CASE("trimTextLayoutToMaxLines keeps all runs from the first ctLineIndex") {
+  TextLayout layout;
+
+  auto storage = std::make_unique<TextLayoutStorage>();
+  storage->glyphArena = {1, 2, 3};
+  storage->positionArena = {{0.f, 0.f}, {8.f, 0.f}, {0.f, 0.f}};
+
+  TextLayout::PlacedRun runA{};
+  runA.run.glyphIds = std::span<std::uint16_t const>(storage->glyphArena.data(), 1);
+  runA.run.positions = std::span<Point const>(storage->positionArena.data(), 1);
+  runA.run.ascent = 8.f;
+  runA.run.descent = 2.f;
+  runA.run.width = 8.f;
+  runA.origin = {0.f, 10.f};
+  runA.ctLineIndex = 0;
+
+  TextLayout::PlacedRun runB = runA;
+  runB.run.glyphIds = std::span<std::uint16_t const>(storage->glyphArena.data() + 1, 1);
+  runB.run.positions = std::span<Point const>(storage->positionArena.data() + 1, 1);
+  runB.origin = {8.f, 12.f};
+  runB.ctLineIndex = 0;
+
+  TextLayout::PlacedRun runC = runA;
+  runC.run.glyphIds = std::span<std::uint16_t const>(storage->glyphArena.data() + 2, 1);
+  runC.run.positions = std::span<Point const>(storage->positionArena.data() + 2, 1);
+  runC.origin = {0.f, 30.f};
+  runC.ctLineIndex = 1;
+
+  layout.runs = {runA, runB, runC};
+  layout.lines = {
+      TextLayout::LineRange{.ctLineIndex = 0, .top = 2.f, .bottom = 14.f, .baseline = 10.f},
+      TextLayout::LineRange{.ctLineIndex = 1, .top = 22.f, .bottom = 34.f, .baseline = 30.f},
+  };
+  layout.ownedStorage = std::move(storage);
+  recomputeTextLayoutMetrics(layout);
+
+  trimTextLayoutToMaxLines(layout, 1, false);
+
+  REQUIRE(layout.runs.size() == 2);
+  CHECK(layout.runs[0].ctLineIndex == 0);
+  CHECK(layout.runs[1].ctLineIndex == 0);
+  REQUIRE(layout.lines.size() == 1);
+  CHECK(layout.lines[0].ctLineIndex == 0);
+}
+
 TEST_CASE("VStack: stretch cross-axis expands explicit-width children to column width") {
   auto tree = runLayout(
       Element{VStack{
