@@ -41,7 +41,6 @@ struct EditorView {
                     [](std::string const &v) {
                       std::fprintf(stderr, "length=%zu\n", v.size());
                     },
-                .onEscape = [text](std::string const &) { text = ""; },
             }
                 .flex(1.f, 1.f, 0.f)
         ),
@@ -69,7 +68,6 @@ struct PreviewView {
                       [](std::string const &v) {
                         std::fprintf(stderr, "length=%zu\n", v.size());
                       },
-                  .onEscape = [text](std::string const &) { text = ""; },
               }
                   .flex(1.f, 1.f, 0.f)
           ),

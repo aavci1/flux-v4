@@ -475,7 +475,9 @@ void Text::layout(LayoutContext& ctx) const {
                               (std::isfinite(cs.maxWidth) && cs.maxWidth <= 0.f);
   bool const heightExplained = bounds.height > 0.f || assigned.height <= 0.f ||
                                (std::isfinite(cs.maxHeight) && cs.maxHeight <= 0.f);
-  assert(text.empty() || (widthExplained && heightExplained));
+  bool const hasAttributedContent = attributed.has_value() && !attributed->utf8.empty();
+  bool const hasPlainContent = !attributed.has_value() && !text.empty();
+  assert(!(hasAttributedContent || hasPlainContent) || (widthExplained && heightExplained));
   LayoutNode n{};
   n.kind = LayoutNode::Kind::Leaf;
   n.frame = bounds;
@@ -492,9 +494,13 @@ void Text::renderFromLayout(RenderContext& ctx, LayoutNode const& node) const {
   ComponentKey const stableKey = node.componentKey;
   Rect const bounds = node.frame;
   std::shared_ptr<TextLayout const> textLayout;
-  if (!text.empty()) {
-    TextLayoutOptions const opts = textViewLayoutOptions(*this, ctx.constraints(), ctx.hints());
-    textLayout = ctx.textSystem().layout(text, style.toFont(), color, bounds, opts);
+  TextLayoutOptions const opts = textViewLayoutOptions(*this, ctx.constraints(), ctx.hints());
+  if (attributed.has_value()) {
+    if (!attributed->utf8.empty()) {
+      textLayout = ctx.textSystem().layout(*attributed, bounds, opts);
+    }
+  } else if (!text.empty()) {
+    textLayout = ctx.textSystem().layout(AttributedString::plain(text, style.toFont(), color), bounds, opts);
   }
 
   if (textLayout && !textLayout->runs.empty()) {
@@ -518,7 +524,12 @@ Size Text::measure(LayoutContext& ctx, LayoutConstraints const& c, LayoutHints c
   ctx.advanceChildSlot();
   TextLayoutOptions const opts = textViewLayoutOptions(*this, c, hints);
   float const mw = std::isfinite(c.maxWidth) ? c.maxWidth : 0.f;
-  Size s = ts.measure(text, style.toFont(), color, mw, opts);
+  Size s{};
+  if (attributed.has_value()) {
+    s = ts.measure(*attributed, mw, opts);
+  } else {
+    s = ts.measure(AttributedString::plain(text, style.toFont(), color), mw, opts);
+  }
   if (std::isfinite(c.maxWidth) && c.maxWidth > 0.f) {
     s.width = std::min(s.width, c.maxWidth);
   }

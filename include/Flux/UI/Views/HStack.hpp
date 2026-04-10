@@ -21,7 +21,7 @@ struct HStack : ViewModifiers<HStack> {
   Size measure(LayoutContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
 
   float spacing = 8.f;
-  Alignment alignment = Alignment::Center;
+  Alignment alignment = Alignment::Stretch;
   std::vector<Element> children;
 };
 

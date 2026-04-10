@@ -26,7 +26,6 @@ struct TextInputForm {
 
     return VStack{
         .spacing = 16.f,
-        .alignment = Alignment::Start,
         .children = children(
                 Text{.text = "TextInput demo",
                      .style = theme.typeDisplay,
@@ -112,11 +111,6 @@ int main(int argc, char* argv[]) {
       .resizable = true,
   });
 
-  w.registerAction("edit.copy", {.label = "Copy", .shortcut = shortcuts::Copy});
-  w.registerAction("edit.cut", {.label = "Cut", .shortcut = shortcuts::Cut});
-  w.registerAction("edit.paste", {.label = "Paste", .shortcut = shortcuts::Paste});
-  w.registerAction("edit.selectAll", {.label = "Select All", .shortcut = shortcuts::SelectAll});
-  w.registerAction("app.quit", {.label = "Quit", .shortcut = shortcuts::Quit, .isEnabled = [] { return true; }});
 
   w.setView<TextInputForm>();
   return app.exec();

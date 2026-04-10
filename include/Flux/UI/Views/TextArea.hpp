@@ -20,66 +20,53 @@
 
 namespace flux {
 
-struct TextAreaHeight {
-  float fixed = 0.f;
-  float minIntrinsic = 80.f;
-  float maxIntrinsic = 0.f;
-};
-
 struct TextArea : ViewModifiers<TextArea> {
-  /// Visual tokens; any field may use \c kFromTheme / \c kFloatFromTheme to inherit from \ref Theme.
-  /// Resolved in \c body() the same way as \ref Toggle::Style (see \c resolveStyle in \c TextArea.cpp).
-  struct Style {
-    Font font = kFontFromTheme;
-    Color textColor = kFromTheme;
-    Color placeholderColor = kFromTheme;
-    Color backgroundColor = kFromTheme;
-    Color borderColor = kFromTheme;
-    Color borderFocusColor = kFromTheme;
-    Color caretColor = kFromTheme;
-    Color selectionColor = kFromTheme;
-    Color disabledColor = kFromTheme;
-    float borderWidth = kFloatFromTheme;
-    float borderFocusWidth = kFloatFromTheme;
-    float cornerRadius = kFloatFromTheme;
-    float paddingH = kFloatFromTheme;
-    float paddingV = kFloatFromTheme;
-    float lineHeight = 0.f;
+  // ── Types ──────────────────────────────────────────────────────────────────
 
-    static Style plain() {
-      return Style {
-        .font = kFontFromTheme,
-        .textColor = kFromTheme,
-        .placeholderColor = kFromTheme,
-        .backgroundColor = Colors::transparent,
-        .borderColor = Colors::transparent,
-        .borderFocusColor = Colors::transparent,
-        .caretColor = kFromTheme,
-        .selectionColor = kFromTheme,
-        .disabledColor = kFromTheme,
-        .borderWidth = 0.f,
-        .borderFocusWidth = 0.f,
-        .cornerRadius = 0.f,
-        .paddingH = 0.f,
-        .paddingV = 0.f,
-      };
-    }
+  struct Style {
+      Font font = kFontFromTheme;
+
+      Color backgroundColor = kFromTheme;
+
+      Color borderColor = kFromTheme;
+      float borderWidth = kFloatFromTheme;
+
+      float cornerRadius = kFloatFromTheme;
+
+      EdgeInsets padding = EdgeInsets(0.f);
+
+      Color textColor = kFromTheme;
+      Color placeholderColor = kFromTheme;
+      Color caretColor = kFromTheme;
+
+      static TextArea::Style plain() {
+          return TextArea::Style {
+            .backgroundColor = Colors::transparent,
+            .borderColor = Colors::transparent,
+            .borderWidth = 0.f,
+            .cornerRadius = 0.f
+          };
+      }
   };
 
-  State<std::string> value{};
+  // ── State ──────────────────────────────────────────────────────────────────
+
+  State<std::string> value {};
+
+  // ── Properties ─────────────────────────────────────────────────────────────
+
+  Style style;
   std::string placeholder;
-
-  Style style{};
-
-  TextAreaHeight height{};
-
-  std::function<std::vector<AttributedRun>(std::string_view)> styler;
-
+  TextWrapping wrapping = TextWrapping::Wrap;
   bool disabled = false;
-  int maxLength = 0;
+
+  std::optional<std::function<AttributedString(std::string_view)>> formatter;
+
+  // ── Events ─────────────────────────────────────────────────────────────────
 
   std::function<void(std::string const&)> onChange;
-  std::function<void(std::string const&)> onEscape;
+
+  // ── Component protocol ─────────────────────────────────────────────────────
 
   Element body() const;
 };

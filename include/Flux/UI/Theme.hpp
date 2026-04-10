@@ -215,6 +215,25 @@ struct Theme {
   float shadowRadiusPopover = 4.f;
   float shadowOffsetYPopover = 3.f;
 
+  // TextArea
+
+  Font textAreaFont = Font {};
+  Color textAreaTextColor = Theme::colorTextPrimary;
+  Color textAreaPlaceholderColor = Theme::colorTextPlaceholder;
+  Color textAreaBackgroundColor = Theme::colorSurfaceField;
+  Color textAreaBorderColor = Theme::colorBorder;
+  Color textAreaCaretColor = Theme::colorAccent;
+  float textAreaBorderWidth = 1.f;
+  float textAreaCornerRadius = 8.f;
+
+  // // Inputs
+  // Font inputFont = Font { .family = "system", .size = 14.f, weight = 400 };
+  // Color inputBackgroundColor = Color::hex(0xF5F7F9);
+  // Color inputBorderColor = 
+  // Color inputForegroundColor = Color::hex(0x111118);
+  // Color inputPlaceholderColor = Color::hex(0x8E8E9A);
+  
+
   static Theme light();
   static Theme dark();
   static Theme compact();

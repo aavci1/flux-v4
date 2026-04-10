@@ -28,22 +28,20 @@ enum class Elements {
   code
 };
 
-
-
 /// Maps the full UTF-8 buffer to non-overlapping attributed runs (required by \c TextArea).
-std::vector<AttributedRun> markdownStyler(std::string_view sv) {
+AttributedString markdownFormatter(std::string_view sv) {
   std::string const text(sv);
   std::uint32_t const n = static_cast<std::uint32_t>(text.size());
   std::vector<AttributedRun> runs;
   if (n == 0) {
-    return runs;
+    return AttributedString { .utf8 = std::string(sv), .runs = runs };
   }
 
-  auto baseFont = Font { .family = "Menlo", .size = 14.f, .weight = 400.f };
+  auto baseFont = Font {.family = "Menlo", .size = 14.f, .weight = 400.f};
   auto fonts = std::map<Elements, Font> {};
-  fonts[Elements::h1] = Font { .size = baseFont.size * 2.0f, .weight = baseFont.weight * 1.25f };
-  fonts[Elements::h2] = Font { .size = baseFont.size * 1.6f, .weight = baseFont.weight * 1.25f };
-  fonts[Elements::h3] = Font { .size = baseFont.size * 1.3f, .weight = baseFont.weight * 1.25f };
+  fonts[Elements::h1] = Font {.size = baseFont.size * 2.0f, .weight = baseFont.weight * 1.25f};
+  fonts[Elements::h2] = Font {.size = baseFont.size * 1.6f, .weight = baseFont.weight * 1.25f};
+  fonts[Elements::h3] = Font {.size = baseFont.size * 1.3f, .weight = baseFont.weight * 1.25f};
   fonts[Elements::body] = baseFont;
   fonts[Elements::code] = baseFont;
 
@@ -65,15 +63,15 @@ std::vector<AttributedRun> markdownStyler(std::string_view sv) {
 
   auto push = [&](std::uint32_t a, std::uint32_t b, Font const& f, Color c) {
     if (a < b) {
-      runs.push_back(AttributedRun{a, b, f, c});
+      runs.push_back(AttributedRun {a, b, f, c});
     }
-  };
+    };
 
   auto parseInline = [&](std::uint32_t lineStart, std::uint32_t lineEnd) {
     std::uint32_t p = lineStart;
     while (p < lineEnd) {
       if (p + 1 < lineEnd && text[static_cast<std::size_t>(p)] == '*' &&
-          text[static_cast<std::size_t>(p + 1)] == '*') {
+        text[static_cast<std::size_t>(p + 1)] == '*') {
         std::uint32_t q = p + 2;
         while (q + 1 < lineEnd) {
           if (text[static_cast<std::size_t>(q)] == '*' && text[static_cast<std::size_t>(q + 1)] == '*') {
@@ -113,7 +111,7 @@ std::vector<AttributedRun> markdownStyler(std::string_view sv) {
       }
       push(start, p, baseFont, baseColor);
     }
-  };
+    };
 
   auto processLine = [&](std::uint32_t ls, std::uint32_t le) {
     if (ls >= le) {
@@ -160,7 +158,7 @@ std::vector<AttributedRun> markdownStyler(std::string_view sv) {
       ++j;
     }
     if (j < contentEnd && text[static_cast<std::size_t>(j)] == '-' && j + 1 < contentEnd &&
-        text[static_cast<std::size_t>(j + 1)] == ' ') {
+      text[static_cast<std::size_t>(j + 1)] == ' ') {
       push(ls, j + 2, baseFont, baseColor);
       parseInline(j + 2, contentEnd);
       if (endsNl) {
@@ -173,7 +171,7 @@ std::vector<AttributedRun> markdownStyler(std::string_view sv) {
     if (endsNl) {
       push(contentEnd, le, baseFont, baseColor);
     }
-  };
+    };
 
   std::uint32_t ls = 0;
   while (ls < n) {
@@ -188,7 +186,10 @@ std::vector<AttributedRun> markdownStyler(std::string_view sv) {
     ls = le + 1;
   }
 
-  return runs;
+  return AttributedString { 
+    .utf8 = std::string(sv), 
+    .runs = runs
+  };
 }
 
 } // namespace
@@ -311,15 +312,15 @@ Ship **kernel → behavior → views** so each layer compiles before the next. `
                 },
                 TextArea {
                     .value = doc,
-                    .placeholder = "Write markdown-like text…",
                     .style = {
                       .backgroundColor = Color::hex(0x1F1F1F),
                     },
-                    .styler = markdownStyler,
+                    .placeholder = "Write markdown-like text…",
+                    .formatter = markdownFormatter,
                 }.flex(1.f, 1.f, 0.f)),
     }
-        .padding(20.f)
-        .flex(1.f, 1.f, 0.f);
+    .padding(20.f)
+      .flex(1.f, 1.f, 0.f);
   }
 };
 
@@ -329,13 +330,7 @@ int main(int argc, char* argv[]) {
       .size = {520, 620},
       .title = "Flux — Markdown styler",
       .resizable = true,
-  });
-
-  w.registerAction("edit.copy", {.label = "Copy", .shortcut = shortcuts::Copy});
-  w.registerAction("edit.cut", {.label = "Cut", .shortcut = shortcuts::Cut});
-  w.registerAction("edit.paste", {.label = "Paste", .shortcut = shortcuts::Paste});
-  w.registerAction("edit.selectAll", {.label = "Select All", .shortcut = shortcuts::SelectAll});
-  w.registerAction("app.quit", {.label = "Quit", .shortcut = shortcuts::Quit, .isEnabled = [] { return true; }});
+    });
 
   w.setView<MarkdownEditor>();
   return app.exec();

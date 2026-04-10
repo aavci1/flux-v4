@@ -59,26 +59,25 @@ struct TextDemoRoot {
                 .style = theme.typeHeading,
                 .color = theme.colorTextPrimary,
             },
-            HStack {
-                .spacing = 16.f,
-                .children = children(
-                    Text {
-                        .text = "Swift",
-                        .style = theme.typeTitle,
-                        .color = Colors::blue,
-                    },
-                    Text {
-                        .text = "UIKit",
-                        .style = theme.typeTitle,
-                        .color = Color::rgb(180, 60, 50),
-                    },
-                    Text {
-                        .text = "AppKit",
-                        .style = theme.typeTitle,
-                        .color = Color::rgb(40, 140, 75),
-                    }
-                ),
-            },
+            [&] {
+              Font const f = theme.typeTitle.toFont();
+              Color const sep = theme.colorTextSecondary;
+              AttributedString rich;
+              rich.utf8 = "Swift / UIKit / AppKit";
+              rich.runs = {
+                  {0, 5, f, Colors::blue},
+                  {5, 8, f, sep},
+                  {8, 13, f, Color::rgb(180, 60, 50)},
+                  {13, 16, f, sep},
+                  {16, 22, f, Color::rgb(40, 140, 75)},
+              };
+              return Text{
+                  .style = theme.typeTitle,
+                  .color = theme.colorTextPrimary,
+                  .attributed = std::move(rich),
+                  .horizontalAlignment = HorizontalAlignment::Center,
+              };
+            }(),
             Text {
                 .text = "firstBaseline → lastBaseline: layout metrics for alignment APIs.",
                 .style = theme.typeLabelSmall,

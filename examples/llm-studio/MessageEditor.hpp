@@ -21,13 +21,12 @@ struct MessageEditor : ViewModifiers<MessageEditor> {
 
         return VStack {
             .spacing = 16.f,
-            .alignment = Alignment::Start,
             .children = children(
                 TextArea {
                     .value = value,
+                    .style = TextArea::Style::plain(),
                     .placeholder = "Type your message here...",
-                    .style = TextArea::Style::plain()
-                },
+                }.flex(1.f, 1.f, 0.f),
                 HStack {
                     .spacing = 16.f,
                     .alignment = Alignment::Center,

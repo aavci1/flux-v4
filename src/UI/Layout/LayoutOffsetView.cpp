@@ -23,12 +23,15 @@ void OffsetView::layout(LayoutContext& ctx) const {
   float innerW = std::max(0.f, assignedW);
   float innerH = std::max(0.f, assignedH);
 
+  // Visible scroll viewport: use the parent's layout constraint (scroll slot), not only the assigned
+  // frame. ZStack gives a content-sized frame when content is shorter/narrower than the slot, but
+  // scroll clamping, hit-testing, and scroll indicators need the full slot size.
   float viewportW = innerW;
   float viewportH = innerH;
-  if (viewportW <= 0.f && std::isfinite(scope.outer.maxWidth) && scope.outer.maxWidth > 0.f) {
+  if (std::isfinite(scope.outer.maxWidth) && scope.outer.maxWidth > 0.f) {
     viewportW = scope.outer.maxWidth;
   }
-  if (viewportH <= 0.f && std::isfinite(scope.outer.maxHeight) && scope.outer.maxHeight > 0.f) {
+  if (std::isfinite(scope.outer.maxHeight) && scope.outer.maxHeight > 0.f) {
     viewportH = scope.outer.maxHeight;
   }
 
