@@ -50,24 +50,8 @@ bool attributedRunsFullyCoverBuffer(std::vector<AttributedRun> const& runs, std:
   return pos >= n;
 }
 
-struct ResolvedTextInputStyle {
-  Color textColor;
-  Color placeholderColor;
-  Color backgroundColor;
-  Color borderColor;
-  Color borderFocusColor;
-  Color caretColor;
-  Color selectionColor;
-  Color disabledColor;
-  float borderWidth;
-  float borderFocusWidth;
-  float cornerRadius;
-  float paddingH;
-  float paddingV;
-};
-
-ResolvedTextInputStyle resolveTextInputStyle(TextInput::Style const& style, Theme const& theme) {
-  return ResolvedTextInputStyle{
+TextInput::Style resolveStyle(TextInput::Style const& style, Theme const& theme) {
+  return TextInput::Style {
       .textColor = resolveColor(style.textColor, theme.colorTextPrimary),
       .placeholderColor = resolveColor(style.placeholderColor, theme.colorTextPlaceholder),
       .backgroundColor = resolveColor(style.backgroundColor, theme.colorSurfaceField),
@@ -86,7 +70,7 @@ ResolvedTextInputStyle resolveTextInputStyle(TextInput::Style const& style, Them
 
 AttributedString buildAttributedString(std::string const& placeholderText,
                                        std::function<std::vector<AttributedRun>(std::string_view)> const& styler,
-                                       ResolvedTextInputStyle const& rs, Font const& defaultFont,
+                                       TextInput::Style const& rs, Font const& defaultFont,
                                        std::string const& val, bool showPlaceholder) {
   if (showPlaceholder) {
     AttributedString ph;
@@ -113,7 +97,7 @@ AttributedString buildAttributedString(std::string const& placeholderText,
 int hitTestByte(std::string const& placeholderText,
                 std::function<std::vector<AttributedRun>(std::string_view)> const& styler,
                 TextEditBehavior& beh,
-                ResolvedTextInputStyle const& rs, Font const& defaultFont, float frameWidth, Point local,
+                TextInput::Style const& rs, Font const& defaultFont, float frameWidth, Point local,
                 int scrollByte, bool showPh) {
   TextSystem& ts = Application::instance().textSystem();
   std::string const& buf = beh.value();
@@ -146,7 +130,7 @@ struct TextInputView {
   /// Copy of \c State handle (same \c Signal* as \c useState in \c body) — must not be a pointer to a
   /// stack \c State local, which would dangle after \c body() returns.
   State<int> scroll{};
-  ResolvedTextInputStyle rs{};
+  TextInput::Style rs{};
   Font defaultFont{};
   float explicitHeight = 0.f;
   bool disabled = false;
@@ -281,7 +265,7 @@ struct TextInputView {
 
 Element TextInput::body() const {
   Theme const& theme = useEnvironment<Theme>();
-  ResolvedTextInputStyle const resolved = resolveTextInputStyle(style, theme);
+  TextInput::Style const resolved = resolveStyle(style, theme);
   Font const defaultFont = resolveFont(style.font, theme.typeBody.toFont());
 
   auto& beh = useTextEditBehavior(value, {.multiline = false,

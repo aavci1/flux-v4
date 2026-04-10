@@ -64,25 +64,9 @@ struct StylerMemo {
   std::vector<AttributedRun> runs;
 };
 
-struct ResolvedTextAreaStyle {
-  Color textColor;
-  Color placeholderColor;
-  Color backgroundColor;
-  Color borderColor;
-  Color borderFocusColor;
-  Color caretColor;
-  Color selectionColor;
-  Color disabledColor;
-  float borderWidth;
-  float borderFocusWidth;
-  float cornerRadius;
-  float paddingH;
-  float paddingV;
-  float lineHeight = 0.f;
-};
 
-ResolvedTextAreaStyle resolveTextAreaStyle(TextArea::Style const& style, Theme const& theme) {
-  return ResolvedTextAreaStyle{
+TextArea::Style resolveStyle(TextArea::Style const& style, Theme const& theme) {
+  return TextArea::Style {
       .textColor = resolveColor(style.textColor, theme.colorTextPrimary),
       .placeholderColor = resolveColor(style.placeholderColor, theme.colorTextPlaceholder),
       .backgroundColor = resolveColor(style.backgroundColor, theme.colorSurfaceField),
@@ -102,7 +86,7 @@ ResolvedTextAreaStyle resolveTextAreaStyle(TextArea::Style const& style, Theme c
 
 AttributedString buildAttributedString(std::string const& placeholderText,
                                        std::function<std::vector<AttributedRun>(std::string_view)> const& styler,
-                                       ResolvedTextAreaStyle const& rs, Font const& defFont, std::string const& val,
+                                       TextArea::Style const& rs, Font const& defFont, std::string const& val,
                                        bool showPlaceholder, StylerMemo& memo) {
   if (showPlaceholder) {
     AttributedString ph;
@@ -182,7 +166,7 @@ std::pair<int, bool> lineIndexAtYWithFallback(std::vector<detail::LineMetrics> c
   return {best, true};
 }
 
-int hitTestByte(TextEditBehavior& beh, ResolvedTextAreaStyle const& rs, std::string const& placeholder,
+int hitTestByte(TextEditBehavior& beh, TextArea::Style const& rs, std::string const& placeholder,
                 std::function<std::vector<AttributedRun>(std::string_view)> const& styler,
                 StylerMemo& stylerMemo, Font const& defaultFont, bool focused, TextAreaSnap& snap,
                 float frameW, Point local, float scrollY) {
@@ -234,7 +218,7 @@ struct TextAreaView {
   StylerMemo* stylerMemo = nullptr;
   /// Copy of \c State handle — must not be a pointer to a stack \c State local.
   State<float> scrollY{};
-  ResolvedTextAreaStyle rs{};
+  TextArea::Style rs{};
   Font defaultFont{};
   float fixedHeight = 0.f;
   float minIntrinsic = 80.f;
@@ -370,7 +354,7 @@ struct TextAreaView {
 
 Element TextArea::body() const {
   Theme const& theme = useEnvironment<Theme>();
-  ResolvedTextAreaStyle const rs = resolveTextAreaStyle(style, theme);
+  TextArea::Style const rs = resolveStyle(style, theme);
   Font const defaultFont = resolveFont(style.font, theme.typeBody.toFont());
 
   TextAreaSnap& snap = StateStore::current()->claimSlot<TextAreaSnap>();
