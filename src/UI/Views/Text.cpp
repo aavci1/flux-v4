@@ -49,6 +49,11 @@ std::pair<Font, Color> resolveStyle(Text const& v) {
   };
 }
 
+bool hasRenderableTextGeometry(TextLayout const& layout) {
+  return !layout.runs.empty() || !layout.lines.empty() || layout.measuredSize.width > 0.f ||
+         layout.measuredSize.height > 0.f;
+}
+
 } // namespace
 
 using flux::detail::eventHandlersFromModifiers;
@@ -89,7 +94,7 @@ void Text::renderFromLayout(RenderContext& ctx, LayoutNode const& node) const {
     textLayout = ctx.textSystem().layout(text, font, color, bounds, opts);
   }
 
-  if (textLayout && !textLayout->runs.empty()) {
+  if (textLayout && hasRenderableTextGeometry(*textLayout)) {
     NodeId const textId = ctx.graph().addText(ctx.parentLayer(), TextNode{
         .layout = textLayout,
         .origin = {bounds.x, bounds.y},

@@ -16,6 +16,7 @@
 #include <Flux/UI/Views/ZStack.hpp>
 
 #include <Flux/Scene/SceneGraph.hpp>
+#include <Flux/Scene/SceneGraphBounds.hpp>
 
 #include <Flux/UI/EventMap.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
@@ -106,6 +107,42 @@ public:
 
   std::uint32_t resolveFontId(std::string_view, float, bool) override { return 0; }
 
+  std::vector<std::uint8_t> rasterizeGlyph(std::uint32_t, std::uint16_t, float, std::uint32_t&,
+                                           std::uint32_t&, Point&) override {
+    return {};
+  }
+};
+
+class LineOnlyLayoutTextSystem final : public TextSystem {
+public:
+  std::shared_ptr<TextLayout const> layout(AttributedString const&, float,
+                                           TextLayoutOptions const&) override {
+    return nullptr;
+  }
+
+  std::shared_ptr<TextLayout const> layout(std::string_view, Font const&, Color const&, float,
+                                           TextLayoutOptions const&) override {
+    auto layout = std::make_shared<TextLayout>();
+    layout->lines.push_back(TextLayout::LineRange{
+        .ctLineIndex = 0,
+        .byteStart = 0,
+        .byteEnd = 1,
+        .lineMinX = 0.f,
+        .top = 0.f,
+        .bottom = 12.f,
+        .baseline = 9.f,
+    });
+    layout->measuredSize = {0.f, 12.f};
+    layout->firstBaseline = 9.f;
+    layout->lastBaseline = 9.f;
+    return layout;
+  }
+
+  Size measure(AttributedString const&, float, TextLayoutOptions const&) override { return {}; }
+  Size measure(std::string_view, Font const&, Color const&, float, TextLayoutOptions const&) override {
+    return {};
+  }
+  std::uint32_t resolveFontId(std::string_view, float, bool) override { return 0; }
   std::vector<std::uint8_t> rasterizeGlyph(std::uint32_t, std::uint16_t, float, std::uint32_t&,
                                            std::uint32_t&, Point&) override {
     return {};
@@ -382,6 +419,40 @@ TEST_CASE("trimTextLayoutToMaxLines keeps all runs from the first ctLineIndex") 
   CHECK(layout.runs[1].ctLineIndex == 0);
   REQUIRE(layout.lines.size() == 1);
   CHECK(layout.lines[0].ctLineIndex == 0);
+}
+
+TEST_CASE("Text render emits a TextNode for line-only layouts") {
+  LineOnlyLayoutTextSystem ts;
+  SceneGraph graph;
+  EventMap eventMap;
+  RenderContext rctx{graph, eventMap, ts};
+
+  LayoutConstraints cs{};
+  cs.maxWidth = 200.f;
+  cs.maxHeight = 50.f;
+  rctx.pushConstraints(cs, {});
+
+  Text text{.text = "\n"};
+  LayoutNode node{};
+  node.frame = Rect{5.f, 7.f, 100.f, 20.f};
+  text.renderFromLayout(rctx, node);
+
+  auto const* root = graph.node<LayerNode>(graph.root());
+  REQUIRE(root != nullptr);
+  REQUIRE(root->children.size() == 1);
+  auto const* textNode = graph.node<TextNode>(root->children[0]);
+  REQUIRE(textNode != nullptr);
+  CHECK(textNode->layout != nullptr);
+  CHECK(textNode->layout->runs.empty());
+  CHECK(textNode->layout->lines.size() == 1);
+
+  Rect const bounds = measureRootContentBounds(graph);
+  CHECK(bounds.x == doctest::Approx(5.f));
+  CHECK(bounds.y == doctest::Approx(7.f));
+  CHECK(bounds.width == doctest::Approx(100.f));
+  CHECK(bounds.height == doctest::Approx(20.f));
+
+  rctx.popConstraints();
 }
 
 TEST_CASE("VStack: stretch cross-axis expands explicit-width children to column width") {
