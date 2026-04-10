@@ -1,0 +1,13 @@
+# .clang-format dosyası içeriği
+Language=Cpp
+Standard=Latest
+AllowShortBlocksOnASingleLine: Empty
+BracedInitializerIndentWidth: -1
+BreakBeforeBraces: Attach
+BreakAfterOpenBracketBracedList: true
+BreakBeforeCloseBracketFunction: true
+BreakBeforeCloseBracketBracedList: true
+BreakBeforeTernaryOperators: false
+ColumnLimit: 0
+IndentWidth: 4
+SpaceBeforeCpp11BracedList: true
