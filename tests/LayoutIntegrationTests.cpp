@@ -4,13 +4,20 @@
 #include <Flux/UI/LayoutContext.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 #include <Flux/UI/LayoutTree.hpp>
+#include <Flux/UI/RenderContext.hpp>
 #include <Flux/UI/StateStore.hpp>
+#include <Flux/UI/Theme.hpp>
+#include <Flux/UI/Environment.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/Spacer.hpp>
+#include <Flux/UI/Views/Text.hpp>
 #include <Flux/UI/Views/VStack.hpp>
 #include <Flux/UI/Views/ZStack.hpp>
 
+#include <Flux/Scene/SceneGraph.hpp>
+
+#include <Flux/UI/EventMap.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 
 #include <cmath>
@@ -47,6 +54,64 @@ public:
   }
 };
 
+class RecordingTextSystem final : public TextSystem {
+public:
+  Font lastMeasureFont{};
+  Color lastMeasureColor{};
+  Font lastLayoutFont{};
+  Color lastLayoutColor{};
+  bool measured = false;
+  bool laidOut = false;
+
+  std::shared_ptr<TextLayout const> layout(AttributedString const&, float,
+                                           TextLayoutOptions const&) override {
+    return nullptr;
+  }
+
+  std::shared_ptr<TextLayout const> layout(std::string_view, Font const& font, Color const& color, float,
+                                           TextLayoutOptions const&) override {
+    laidOut = true;
+    lastLayoutFont = font;
+    lastLayoutColor = color;
+
+    auto layout = std::make_shared<TextLayout>();
+    layout->ownedStorage = std::make_unique<TextLayoutStorage>();
+    layout->ownedStorage->glyphArena = {1};
+    layout->ownedStorage->positionArena = {{0.f, 0.f}};
+
+    TextLayout::PlacedRun run{};
+    run.run.fontId = 1;
+    run.run.fontSize = font.size;
+    run.run.color = color;
+    run.run.glyphIds = std::span<std::uint16_t const>(layout->ownedStorage->glyphArena.data(), 1);
+    run.run.positions = std::span<Point const>(layout->ownedStorage->positionArena.data(), 1);
+    run.run.ascent = 8.f;
+    run.run.descent = 2.f;
+    run.run.width = 10.f;
+    run.origin = {0.f, 8.f};
+    layout->runs.push_back(run);
+    recomputeTextLayoutMetrics(*layout);
+    return layout;
+  }
+
+  Size measure(AttributedString const&, float, TextLayoutOptions const&) override { return {}; }
+
+  Size measure(std::string_view, Font const& font, Color const& color, float,
+               TextLayoutOptions const&) override {
+    measured = true;
+    lastMeasureFont = font;
+    lastMeasureColor = color;
+    return {10.f, 10.f};
+  }
+
+  std::uint32_t resolveFontId(std::string_view, float, bool) override { return 0; }
+
+  std::vector<std::uint8_t> rasterizeGlyph(std::uint32_t, std::uint16_t, float, std::uint32_t&,
+                                           std::uint32_t&, Point&) override {
+    return {};
+  }
+};
+
 // ── Test-accessible LayoutContext factory ──────────────────────────────────────
 // LayoutContextTestAccess is declared as a friend in LayoutContext.hpp.
 
@@ -63,6 +128,11 @@ struct LayoutContextDeleter {
   void operator()(flux::LayoutContext* p) const { flux::LayoutContextTestAccess::destroy(p); }
 };
 using LayoutContextPtr = std::unique_ptr<flux::LayoutContext, LayoutContextDeleter>;
+
+struct EnvironmentGuard {
+  explicit EnvironmentGuard(EnvironmentLayer layer) { EnvironmentStack::current().push(std::move(layer)); }
+  ~EnvironmentGuard() { EnvironmentStack::current().pop(); }
+};
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -102,6 +172,18 @@ static std::vector<LayoutNode const*> leavesOf(LayoutTree const& tree) {
     }
   }
   return out;
+}
+
+static LayoutContextPtr makeLayoutContext(TextSystem& ts, LayoutEngine& le, LayoutTree& tree, float maxW,
+                                          float maxH) {
+  le.resetForBuild();
+  LayoutContextPtr ctx{flux::LayoutContextTestAccess::create(ts, le, tree)};
+  LayoutConstraints rootCs{};
+  rootCs.maxWidth = maxW;
+  rootCs.maxHeight = maxH;
+  ctx->pushConstraints(rootCs);
+  le.setChildFrame(Rect{0.f, 0.f, maxW, maxH});
+  return ctx;
 }
 
 // ── VStack ────────────────────────────────────────────────────────────────────
@@ -196,6 +278,65 @@ TEST_CASE("HStack: stretch cross-axis expands explicit-height children to row he
   // Row height is the max of intrinsic child heights; stretch gives each child that full height.
   CHECK(rectsNear(leaves[0]->frame, Rect{0.f, 0.f, 40.f, 200.f}));
   CHECK(rectsNear(leaves[1]->frame, Rect{40.f, 0.f, 40.f, 200.f}));
+}
+
+TEST_CASE("Text measure resolves theme font and color before TextSystem") {
+  RecordingTextSystem ts;
+  LayoutEngine le;
+  LayoutTree tree;
+  LayoutContextPtr ctx = makeLayoutContext(ts, le, tree, 200.f, 100.f);
+
+  Theme theme = Theme::light();
+  theme.fontBody = Font{.family = "Theme Body", .size = 19.f, .weight = 510.f};
+  theme.colorTextPrimary = Color::hex(0x123456);
+  EnvironmentLayer layer;
+  layer.set<Theme>(theme);
+  EnvironmentGuard guard(std::move(layer));
+
+  Text text{.text = "hello"};
+  Size const measured = text.measure(*ctx, LayoutConstraints{.maxWidth = 200.f, .maxHeight = 100.f}, {}, ts);
+
+  CHECK(ts.measured);
+  CHECK(measured.width == doctest::Approx(10.f));
+  CHECK(measured.height == doctest::Approx(10.f));
+  CHECK(ts.lastMeasureFont.family == "Theme Body");
+  CHECK(ts.lastMeasureFont.size == doctest::Approx(19.f));
+  CHECK(ts.lastMeasureFont.weight == doctest::Approx(510.f));
+  CHECK(ts.lastMeasureColor == Color::hex(0x123456));
+
+  ctx->popConstraints();
+}
+
+TEST_CASE("Text render resolves theme font and color before TextSystem") {
+  RecordingTextSystem ts;
+  SceneGraph graph;
+  EventMap eventMap;
+  RenderContext rctx{graph, eventMap, ts};
+
+  Theme theme = Theme::light();
+  theme.fontBody = Font{.family = "Render Theme", .size = 17.f, .weight = 480.f};
+  theme.colorTextPrimary = Color::hex(0xABCDEF);
+  EnvironmentLayer layer;
+  layer.set<Theme>(theme);
+  EnvironmentGuard guard(std::move(layer));
+
+  LayoutConstraints cs{};
+  cs.maxWidth = 200.f;
+  cs.maxHeight = 50.f;
+  rctx.pushConstraints(cs, {});
+
+  Text text{.text = "icon-like"};
+  LayoutNode node{};
+  node.frame = Rect{0.f, 0.f, 100.f, 20.f};
+  text.renderFromLayout(rctx, node);
+
+  CHECK(ts.laidOut);
+  CHECK(ts.lastLayoutFont.family == "Render Theme");
+  CHECK(ts.lastLayoutFont.size == doctest::Approx(17.f));
+  CHECK(ts.lastLayoutFont.weight == doctest::Approx(480.f));
+  CHECK(ts.lastLayoutColor == Color::hex(0xABCDEF));
+
+  rctx.popConstraints();
 }
 
 TEST_CASE("VStack: stretch cross-axis expands explicit-width children to column width") {

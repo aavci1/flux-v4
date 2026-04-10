@@ -3,8 +3,10 @@
 #include <Flux/UI/Detail/LayoutDebugDump.hpp>
 #include <Flux/UI/Detail/LeafBounds.hpp>
 #include <Flux/UI/EventMap.hpp>
+#include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/LayoutContext.hpp>
 #include <Flux/UI/RenderContext.hpp>
+#include <Flux/UI/Theme.hpp>
 
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Scene/Nodes.hpp>
@@ -17,6 +19,7 @@
 #include <cassert>
 #include <cmath>
 #include <memory>
+#include <utility>
 
 namespace flux {
 
@@ -36,6 +39,14 @@ TextLayoutOptions textViewLayoutOptions(Text const& v, LayoutConstraints const&,
 
 Rect explicitLeafBox(Text const&) {
   return {};
+}
+
+std::pair<Font, Color> resolveStyle(Text const& v) {
+  Theme const& theme = useEnvironment<Theme>();
+  return {
+      resolveFont(v.font, theme.fontBody),
+      resolveColor(v.color, theme.colorTextPrimary),
+  };
 }
 
 } // namespace
@@ -73,6 +84,7 @@ void Text::renderFromLayout(RenderContext& ctx, LayoutNode const& node) const {
   Rect const bounds = node.frame;
   std::shared_ptr<TextLayout const> textLayout;
   if (!text.empty()) {
+    auto [font, color] = resolveStyle(*this);
     TextLayoutOptions const opts = textViewLayoutOptions(*this, ctx.constraints(), ctx.hints());
     textLayout = ctx.textSystem().layout(text, font, color, bounds, opts);
   }
@@ -96,6 +108,7 @@ void Text::renderFromLayout(RenderContext& ctx, LayoutNode const& node) const {
 
 Size Text::measure(LayoutContext& ctx, LayoutConstraints const& c, LayoutHints const& hints, TextSystem& ts) const {
   ctx.advanceChildSlot();
+  auto [font, color] = resolveStyle(*this);
   TextLayoutOptions const opts = textViewLayoutOptions(*this, c, hints);
   // Match boxed layout (`layoutBoxedImpl`): NoWrap uses maxWidth 0 so Core Text measures one line.
   // A finite maxWidth here would wrap during measure (e.g. ScrollView passes viewport width) and inflate
