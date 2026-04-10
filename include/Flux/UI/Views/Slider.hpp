@@ -18,10 +18,10 @@ namespace flux {
 /// applicable, arrow keys with optional \c step snapping, and focus styling.
 struct Slider : ViewModifiers<Slider> {
   struct Style {
-    Color activeColor = kFromTheme;
-    Color inactiveColor = kFromTheme;
-    Color thumbColor = kFromTheme;
-    Color thumbBorderColor = kFromTheme;
+    Color activeColor = kColorFromTheme;
+    Color inactiveColor = kColorFromTheme;
+    Color thumbColor = kColorFromTheme;
+    Color thumbBorderColor = kColorFromTheme;
     float trackHeight = kFloatFromTheme;
     float thumbSize = kFloatFromTheme;
   };

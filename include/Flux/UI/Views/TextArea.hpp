@@ -27,18 +27,18 @@ struct TextAreaHeight {
 };
 
 struct TextArea : ViewModifiers<TextArea> {
-  /// Visual tokens; any field may use \c kFromTheme / \c kFloatFromTheme to inherit from \ref Theme.
+  /// Visual tokens; any field may use \c kColorFromTheme / \c kFloatFromTheme to inherit from \ref Theme.
   /// Resolved in \c body() the same way as \ref Toggle::Style (see \c resolveStyle in \c TextArea.cpp).
   struct Style {
     Font font = kFontFromTheme;
-    Color textColor = kFromTheme;
-    Color placeholderColor = kFromTheme;
-    Color backgroundColor = kFromTheme;
-    Color borderColor = kFromTheme;
-    Color borderFocusColor = kFromTheme;
-    Color caretColor = kFromTheme;
-    Color selectionColor = kFromTheme;
-    Color disabledColor = kFromTheme;
+    Color textColor = kColorFromTheme;
+    Color placeholderColor = kColorFromTheme;
+    Color backgroundColor = kColorFromTheme;
+    Color borderColor = kColorFromTheme;
+    Color borderFocusColor = kColorFromTheme;
+    Color caretColor = kColorFromTheme;
+    Color selectionColor = kColorFromTheme;
+    Color disabledColor = kColorFromTheme;
     float borderWidth = kFloatFromTheme;
     float borderFocusWidth = kFloatFromTheme;
     float cornerRadius = kFloatFromTheme;
@@ -49,14 +49,14 @@ struct TextArea : ViewModifiers<TextArea> {
     static Style plain() {
       return Style {
         .font = kFontFromTheme,
-        .textColor = kFromTheme,
-        .placeholderColor = kFromTheme,
+        .textColor = kColorFromTheme,
+        .placeholderColor = kColorFromTheme,
         .backgroundColor = Colors::transparent,
         .borderColor = Colors::transparent,
         .borderFocusColor = Colors::transparent,
-        .caretColor = kFromTheme,
-        .selectionColor = kFromTheme,
-        .disabledColor = kFromTheme,
+        .caretColor = kColorFromTheme,
+        .selectionColor = kColorFromTheme,
+        .disabledColor = kColorFromTheme,
         .borderWidth = 0.f,
         .borderFocusWidth = 0.f,
         .cornerRadius = 0.f,

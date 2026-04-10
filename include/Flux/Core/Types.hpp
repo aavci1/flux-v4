@@ -109,7 +109,7 @@ struct Color {
 };
 
 /// Sentinel: inherit from `Theme` (see `resolveColor`).
-inline constexpr Color kFromTheme{0.f, 0.f, 0.f, -1.f};
+inline constexpr Color kColorFromTheme{0.f, 0.f, 0.f, -1.f};
 
 constexpr inline Color resolveColor(Color override, Color themeValue) {
   return (override.a < 0.f) ? themeValue : override;

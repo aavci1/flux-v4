@@ -25,8 +25,8 @@ struct Icon : ViewModifiers<Icon> {
   /// 0 = use theme body weight (`Theme::typeBody`).
   float weight = kFloatFromTheme;
 
-  /// Icon colour. `kFromTheme` → `Theme::colorTextPrimary`.
-  Color color = kFromTheme;
+  /// Icon colour. `kColorFromTheme` → `Theme::colorTextPrimary`.
+  Color color = kColorFromTheme;
 
   // ── Component protocol ────────────────────────────────────────────────
   Element body() const;

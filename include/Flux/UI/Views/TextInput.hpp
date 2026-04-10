@@ -21,14 +21,14 @@ namespace flux {
 struct TextInput : ViewModifiers<TextInput> {
   struct Style {
     Font font = kFontFromTheme;
-    Color textColor = kFromTheme;
-    Color placeholderColor = kFromTheme;
-    Color backgroundColor = kFromTheme;
-    Color borderColor = kFromTheme;
-    Color borderFocusColor = kFromTheme;
-    Color caretColor = kFromTheme;
-    Color selectionColor = kFromTheme;
-    Color disabledColor = kFromTheme;
+    Color textColor = kColorFromTheme;
+    Color placeholderColor = kColorFromTheme;
+    Color backgroundColor = kColorFromTheme;
+    Color borderColor = kColorFromTheme;
+    Color borderFocusColor = kColorFromTheme;
+    Color caretColor = kColorFromTheme;
+    Color selectionColor = kColorFromTheme;
+    Color disabledColor = kColorFromTheme;
     float borderWidth = kFloatFromTheme;
     float borderFocusWidth = kFloatFromTheme;
     float cornerRadius = kFloatFromTheme;

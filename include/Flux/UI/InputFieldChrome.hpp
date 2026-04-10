@@ -14,16 +14,16 @@ namespace flux {
 struct Theme;
 struct ElementModifiers;
 
-/// Raw tokens matching \ref TextInput field chrome (sentinels \c kFromTheme / \c kFloatFromTheme allowed).
+/// Raw tokens matching \ref TextInput field chrome (sentinels \c kColorFromTheme / \c kFloatFromTheme allowed).
 struct InputFieldChromeSpec {
-  Color textColor = kFromTheme;
-  Color placeholderColor = kFromTheme;
-  Color backgroundColor = kFromTheme;
-  Color borderColor = kFromTheme;
-  Color borderFocusColor = kFromTheme;
-  Color caretColor = kFromTheme;
-  Color selectionColor = kFromTheme;
-  Color disabledColor = kFromTheme;
+  Color textColor = kColorFromTheme;
+  Color placeholderColor = kColorFromTheme;
+  Color backgroundColor = kColorFromTheme;
+  Color borderColor = kColorFromTheme;
+  Color borderFocusColor = kColorFromTheme;
+  Color caretColor = kColorFromTheme;
+  Color selectionColor = kColorFromTheme;
+  Color disabledColor = kColorFromTheme;
   float borderWidth = 1.f;
   float borderFocusWidth = 2.f;
   float cornerRadius = kFloatFromTheme;
@@ -53,9 +53,9 @@ ResolvedInputFieldChrome resolveInputFieldChrome(InputFieldChromeSpec const& spe
 /// Picker adds menu/trigger colours on top of \ref InputFieldChromeSpec.
 struct PickerFieldChromeSpec {
   InputFieldChromeSpec input{};
-  Color chevronColor = kFromTheme;
-  Color rowHoverColor = kFromTheme;
-  Color rowSelectedColor = kFromTheme;
+  Color chevronColor = kColorFromTheme;
+  Color rowHoverColor = kColorFromTheme;
+  Color rowSelectedColor = kColorFromTheme;
 };
 
 struct ResolvedPickerFieldChrome {

@@ -40,10 +40,10 @@ struct Checkbox : ViewModifiers<Checkbox> {
     float boxSize = kFloatFromTheme;
     float cornerRadius = kFloatFromTheme;
     float borderWidth = kFloatFromTheme;
-    Color checkedColor = kFromTheme;
-    Color uncheckedColor = kFromTheme;
-    Color checkColor = kFromTheme;
-    Color borderColor = kFromTheme;
+    Color checkedColor = kColorFromTheme;
+    Color uncheckedColor = kColorFromTheme;
+    Color checkColor = kColorFromTheme;
+    Color borderColor = kColorFromTheme;
   };
 
   Style style { };

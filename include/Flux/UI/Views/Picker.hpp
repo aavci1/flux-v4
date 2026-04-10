@@ -245,16 +245,16 @@ struct Picker : ViewModifiers<Picker<T>> {
 
   Font font = kFontFromTheme;
 
-  Color textColor = kFromTheme;
-  Color placeholderColor = kFromTheme;
-  Color backgroundColor = kFromTheme;
-  Color borderColor = kFromTheme;
-  Color borderFocusColor = kFromTheme;
-  Color chevronColor = kFromTheme;
-  Color disabledColor = kFromTheme;
+  Color textColor = kColorFromTheme;
+  Color placeholderColor = kColorFromTheme;
+  Color backgroundColor = kColorFromTheme;
+  Color borderColor = kColorFromTheme;
+  Color borderFocusColor = kColorFromTheme;
+  Color chevronColor = kColorFromTheme;
+  Color disabledColor = kColorFromTheme;
 
-  Color rowHoverColor = kFromTheme;
-  Color rowSelectedColor = kFromTheme;
+  Color rowHoverColor = kColorFromTheme;
+  Color rowSelectedColor = kColorFromTheme;
 
   float borderWidth = 1.f;
   float borderFocusWidth = 2.f;
@@ -286,8 +286,8 @@ struct Picker : ViewModifiers<Picker<T>> {
                                                                  .backgroundColor = backgroundColor,
                                                                  .borderColor = borderColor,
                                                                  .borderFocusColor = borderFocusColor,
-                                                                 .caretColor = kFromTheme,
-                                                                 .selectionColor = kFromTheme,
+                                                                 .caretColor = kColorFromTheme,
+                                                                 .selectionColor = kColorFromTheme,
                                                                  .disabledColor = disabledColor,
                                                                  .borderWidth = borderWidth,
                                                                  .borderFocusWidth = borderFocusWidth,

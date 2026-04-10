@@ -50,9 +50,9 @@ struct Button : ViewModifiers<Button> {
   float cornerRadius = kFloatFromTheme;
 
   /// Accent colour: Primary/Ghost/Secondary/Link label and focus ring.
-  Color accentColor = kFromTheme;
+  Color accentColor = kColorFromTheme;
   /// Danger colour: Destructive fill and focus ring.
-  Color destructiveColor = kFromTheme;
+  Color destructiveColor = kColorFromTheme;
 
   // ── Layout ───────────────────────────────────────────────────────────────
   // Flex: use chained `.flex(...)` on the `Element` from `body()`.

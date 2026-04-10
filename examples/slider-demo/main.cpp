@@ -49,7 +49,7 @@ struct LabeledSlider {
   float min = 0.f;
   float max = 255.f;
   float step = 1.f;
-  Color activeColor = kFromTheme;
+  Color activeColor = kColorFromTheme;
 
   auto body() const {
     Theme const& theme = useEnvironment<Theme>();
