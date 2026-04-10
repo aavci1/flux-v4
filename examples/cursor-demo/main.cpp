@@ -35,7 +35,7 @@ Element cursorSwatchRow(std::string name, Cursor cursor, Color chip, Theme const
                     .alignment = Alignment::Center,
                     .children = children(
                             Text{.text = std::move(name),
-                                 .style = theme.typeLabel,
+                                 .font = theme.fontLabel,
                                  .color = pal::label,
                              }
                                 .size(152.f, 0.f),
@@ -70,7 +70,7 @@ struct CursorDemo {
                                 .alignment = Alignment::Start,
                                 .children = children(
                                         Text{.text = "Cursor shapes",
-                                             .style = theme.typeDisplay,
+                                             .font = theme.fontDisplay,
                                              .color = pal::label},
                                         HStack{
                                             .spacing = 0.f,
@@ -78,7 +78,7 @@ struct CursorDemo {
                                                     Text{
                                                             .text = "Move the pointer over each swatch. Drag the resize strip — the "
                                                                     "cursor stays locked to that node during the drag.",
-                                                            .style = theme.typeBody,
+                                                            .font = theme.fontBody,
                                                             .color = pal::sub,
                                                             .wrapping = TextWrapping::Wrap,
                                                         }
@@ -117,14 +117,14 @@ struct CursorDemo {
                                                         .children = children(
                                                                 Text{
                                                                     .text = "Text + IBeam",
-                                                                    .style = theme.typeLabel,
+                                                                    .font = theme.fontLabel,
                                                                     .color = pal::label,
                                                                 }
                                                                     .size(152.f, 0.f),
                                                                 Text{
                                                                     .text = "Read-only label — cursor is I-beam over "
                                                                             "glyphs (no pointer handlers).",
-                                                                    .style = theme.typeBody,
+                                                                    .font = theme.fontBody,
                                                                     .color = pal::label,
                                                                     .wrapping = TextWrapping::Wrap,
                                                                 }
@@ -146,7 +146,7 @@ struct CursorDemo {
                                                                             .children = children(
                                                                                     Text{
                                                                                         .text = "Drag lock (ResizeAll)",
-                                                                                        .style = theme.typeHeading,
+                                                                                        .font = theme.fontHeading,
                                                                                         .color = pal::label,
                                                                                     },
                                                                                     Rectangle{}

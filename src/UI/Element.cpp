@@ -94,14 +94,8 @@ TextLayoutOptions textViewLayoutOptions(Text const& v, LayoutConstraints const&,
   o.horizontalAlignment = v.horizontalAlignment;
   o.verticalAlignment = v.verticalAlignment;
   o.wrapping = v.wrapping;
-  // TextStyle::lineHeight is a typographic multiplier (e.g. 1.4). Pass through as Core Text
-  // line-height multiple so spacing scales with the font’s natural line height (avoids fixed pt min/max
-  // shorter than glyph bounds, which caused inter-line overlap).
   o.lineHeight = 0.f;
   o.lineHeightMultiple = 0.f;
-  if (v.style.lineHeight > 0.f) {
-    o.lineHeightMultiple = v.style.lineHeight;
-  }
   o.maxLines = v.maxLines;
   o.firstBaselineOffset = v.firstBaselineOffset;
   return o;
@@ -494,7 +488,7 @@ void Text::renderFromLayout(RenderContext& ctx, LayoutNode const& node) const {
   std::shared_ptr<TextLayout const> textLayout;
   if (!text.empty()) {
     TextLayoutOptions const opts = textViewLayoutOptions(*this, ctx.constraints(), ctx.hints());
-    textLayout = ctx.textSystem().layout(text, style.toFont(), color, bounds, opts);
+    textLayout = ctx.textSystem().layout(text, font, color, bounds, opts);
   }
 
   if (textLayout && !textLayout->runs.empty()) {
@@ -518,7 +512,7 @@ Size Text::measure(LayoutContext& ctx, LayoutConstraints const& c, LayoutHints c
   ctx.advanceChildSlot();
   TextLayoutOptions const opts = textViewLayoutOptions(*this, c, hints);
   float const mw = std::isfinite(c.maxWidth) ? c.maxWidth : 0.f;
-  Size s = ts.measure(text, style.toFont(), color, mw, opts);
+  Size s = ts.measure(text, font, color, mw, opts);
   if (std::isfinite(c.maxWidth) && c.maxWidth > 0.f) {
     s.width = std::min(s.width, c.maxWidth);
   }

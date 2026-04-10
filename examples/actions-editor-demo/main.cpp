@@ -197,7 +197,7 @@ struct TextEditor {
                     .spacing = 0.f,
                     .children = children(
                             Text{.text = (*text).empty() ? std::string("(empty)") : std::string(*text),
-                                 .style = theme.typeBody,
+                                 .font = theme.fontBody,
                                  .color = theme.colorTextPrimary,
                                  .wrapping = TextWrapping::Wrap}
                                 .flex(1.f)
@@ -235,7 +235,7 @@ struct Toolbar {
     auto pill = [&](char const* label, bool enabled, std::function<void()> tap) {
       return Text{
                  .text = label,
-                 .style = theme.typeLabel,
+                 .font = theme.fontLabel,
                  .color = enabled ? theme.colorTextPrimary : theme.colorTextDisabled,
              }
           .onTap(enabled ? std::move(tap) : std::function<void()>{})
@@ -306,7 +306,7 @@ struct EditorRoot {
                                 .alignment = Alignment::Start,
                                 .children = children(
                                         Text{.text = "Actions editor demo",
-                                             .style = theme.typeDisplay,
+                                             .font = theme.fontDisplay,
                                              .color = theme.colorTextPrimary},
                                         HStack{
                                             .spacing = 0.f,
@@ -314,7 +314,7 @@ struct EditorRoot {
                                                     Text{
                                                         .text = "Focus the editor. Toolbar buttons use the same shared "
                                                                 "state; enabled flags follow isActionEnabled.",
-                                                        .style = theme.typeBodySmall,
+                                                        .font = theme.fontBodySmall,
                                                         .color = theme.colorTextSecondary,
                                                         .wrapping = TextWrapping::Wrap,
                                                     }

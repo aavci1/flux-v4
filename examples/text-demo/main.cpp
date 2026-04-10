@@ -20,19 +20,19 @@ struct TextDemoRoot {
         .children = children(
             Text {
                 .text = "Text in Flux",
-                .style = theme.typeDisplay,
+                .font = theme.fontDisplay,
                 .color = theme.colorTextPrimary,
                 .horizontalAlignment = HorizontalAlignment::Center,
             },
             Text {
                 .text = "layout · measure · wrap · attributed runs",
-                .style = theme.typeBody,
+                .font = theme.fontBody,
                 .color = theme.colorTextSecondary,
                 .horizontalAlignment = HorizontalAlignment::Center,
             },
             Text {
                 .text = "Line wrapping",
-                .style = theme.typeHeading,
+                .font = theme.fontHeading,
                 .color = theme.colorTextPrimary,
             },
             HStack {
@@ -41,7 +41,7 @@ struct TextDemoRoot {
                     Text {
                         .text = "TextLayout uses the same Core Text framesetter constraints as measure, so box "
                                 "sizing and rendered glyphs stay in sync when maxWidth is set. Resize the window to see reflow.",
-                        .style = theme.typeBody,
+                        .font = theme.fontBody,
                         .color = theme.colorTextPrimary,
                         .horizontalAlignment = HorizontalAlignment::Center,
                         .verticalAlignment = VerticalAlignment::Top,
@@ -56,7 +56,7 @@ struct TextDemoRoot {
             },
             Text {
                 .text = "Attributed string",
-                .style = theme.typeHeading,
+                .font = theme.fontHeading,
                 .color = theme.colorTextPrimary,
             },
             HStack {
@@ -64,24 +64,24 @@ struct TextDemoRoot {
                 .children = children(
                     Text {
                         .text = "Swift",
-                        .style = theme.typeTitle,
+                        .font = theme.fontTitle,
                         .color = Colors::blue,
                     },
                     Text {
                         .text = "UIKit",
-                        .style = theme.typeTitle,
+                        .font = theme.fontTitle,
                         .color = Color::rgb(180, 60, 50),
                     },
                     Text {
                         .text = "AppKit",
-                        .style = theme.typeTitle,
+                        .font = theme.fontTitle,
                         .color = Color::rgb(40, 140, 75),
                     }
                 ),
             },
             Text {
                 .text = "firstBaseline → lastBaseline: layout metrics for alignment APIs.",
-                .style = theme.typeLabelSmall,
+                .font = theme.fontLabelSmall,
                 .color = theme.colorTextMuted,
             }
         )

@@ -32,15 +32,15 @@ struct AlertDemoRoot {
                     .alignment = Alignment::Start,
                     .children = children(
                             Text{.text = "Alert demo",
-                                 .style = theme.typeDisplay,
+                                 .font = theme.fontDisplay,
                                  .color = theme.colorTextPrimary},
                             Text{.text = "Modal alerts via useAlert(). Escape dismisses when enabled. "
                                          "Outside tap does not dismiss.",
-                                 .style = theme.typeBody,
+                                 .font = theme.fontBody,
                                  .color = theme.colorTextSecondary,
                                  .wrapping = TextWrapping::Wrap},
                             Text{.text = *status,
-                                 .style = theme.typeBodySmall,
+                                 .font = theme.fontBodySmall,
                                  .color = theme.colorAccent,
                                  .wrapping = TextWrapping::Wrap},
 

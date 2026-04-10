@@ -38,7 +38,7 @@ struct FocusField {
         .alignment = Alignment::Start,
         .children = children(
                 Text{.text = title,
-                     .style = theme.typeLabel,
+                     .font = theme.fontLabel,
                      .color = pal::label},
                 HStack{
                     .spacing = 0.f,
@@ -74,7 +74,7 @@ struct FocusField {
                     .spacing = 0.f,
                     .children = children(
                             Text{.text = (*text).empty() ? "(empty)" : *text,
-                                 .style = theme.typeBodySmall,
+                                 .font = theme.fontBodySmall,
                                  .color = pal::sub,
                                  .wrapping = TextWrapping::Wrap}
                                 .flex(1.f)
@@ -133,7 +133,7 @@ struct RequestFocusDemo {
                       .onTap(std::move(action))
                       .cornerRadius(8.f),
                   Text{.text = std::move(label),
-                       .style = theme.typeLabel,
+                       .font = theme.fontLabel,
                        .color = theme.colorOnAccent,
                        .horizontalAlignment = HorizontalAlignment::Center,
                        .verticalAlignment = VerticalAlignment::Center,
@@ -151,7 +151,7 @@ struct RequestFocusDemo {
                     .alignment = Alignment::Start,
                     .children = children(
                             Text{.text = "useRequestFocus demo",
-                                 .style = theme.typeDisplay,
+                                 .font = theme.fontDisplay,
                                  .color = pal::label},
                             HStack{
                                 .spacing = 0.f,
@@ -159,7 +159,7 @@ struct RequestFocusDemo {
                                         Text{
                                             .text = "Click the buttons below to focus a field programmatically — "
                                                     "without clicking on it.",
-                                            .style = theme.typeBody,
+                                            .font = theme.fontBody,
                                             .color = pal::sub,
                                             .wrapping = TextWrapping::Wrap,
                                         }
@@ -199,7 +199,7 @@ struct RequestFocusDemo {
                                                     "useRequestFocus() inside each panel's body(). The callable finds the first "
                                                     "focusable leaf in the panel's subtree and calls setFocus on it. Tab / "
                                                     "Shift+Tab still cycle between fields normally.",
-                                            .style = theme.typeBodySmall,
+                                            .font = theme.fontBodySmall,
                                             .color = pal::sub,
                                             .wrapping = TextWrapping::Wrap,
                                         }

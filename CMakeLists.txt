@@ -164,7 +164,6 @@ add_library(flux STATIC
   src/Scene/HitTester.cpp
   src/Scene/SceneGraphDump.cpp
   src/Graphics/Styles.cpp
-  src/Graphics/Font.cpp
   src/Graphics/AttributedString.cpp
   src/Graphics/Canvas.cpp
   src/Graphics/Metal/MetalFrameRecorder.mm

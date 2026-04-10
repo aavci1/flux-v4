@@ -41,7 +41,7 @@ struct ChatArea : ViewModifiers<ChatArea> {
             stackChildren.push_back(Element {
                 Text {
                     .text = "No chat selected",
-                    .style = theme.typeHeading,
+                    .font = theme.fontHeading,
                     .color = theme.colorTextMuted,
                     .horizontalAlignment = HorizontalAlignment::Center,
                     .verticalAlignment = VerticalAlignment::Center,
@@ -62,7 +62,7 @@ struct ChatArea : ViewModifiers<ChatArea> {
             headerChildren.push_back(Element {
                 Text {
                     .text = "Chat",
-                    .style = theme.typeTitle,
+                    .font = theme.fontTitle,
                     .color = theme.colorTextPrimary,
                 }.padding(4.f, 8.f, 4.f, 8.f)
             });
@@ -84,7 +84,7 @@ struct ChatArea : ViewModifiers<ChatArea> {
             headerChildren.push_back(Element {
                 Icon {
                     .name = IconName::MoreHoriz,
-                    .size = theme.typeTitle.size + 4.f,
+                    .size = theme.fontTitle.size + 4.f,
                     .weight = 300.f,
                     .color = theme.colorTextPrimary,
                 }.padding(4.f, 8.f, 4.f, 8.f)

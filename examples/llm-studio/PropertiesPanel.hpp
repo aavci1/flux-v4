@@ -34,13 +34,13 @@ struct ParamSlider {
                     .children = children(
                         Text {
                             .text = label,
-                            .style = theme.typeBodySmall,
+                            .font = theme.fontBodySmall,
                             .color = theme.colorTextPrimary,
                         },
                         Spacer {},
                         Text {
                             .text = valueText,
-                            .style = theme.typeBodySmall,
+                            .font = theme.fontBodySmall,
                             .color = theme.colorTextSecondary,
                         }
                     )
@@ -91,26 +91,26 @@ struct PropertiesPanel : ViewModifiers<PropertiesPanel> {
                     .children = children(
                         Text {
                             .text = "Properties",
-                            .style = theme.typeTitle,
+                            .font = theme.fontTitle,
                             .color = theme.colorTextPrimary,
                         }.padding(16.f, 8.f, 8.f, 8.f),
                         Divider {},
                         Text {
                             .text = statusText,
-                            .style = theme.typeBody,
+                            .font = theme.fontBody,
                             .color = theme.colorTextSecondary,
                             .wrapping = TextWrapping::Wrap,
                         }.padding(8.f, 16.f, 4.f, 16.f),
                         Text {
                             .text = modelPath.empty() ? std::string{} : modelPath,
-                            .style = theme.typeBodySmall,
+                            .font = theme.fontBodySmall,
                             .color = theme.colorTextMuted,
                             .wrapping = TextWrapping::Wrap,
                         }.padding(0.f, 16.f, 8.f, 16.f),
                         Divider {},
                         Text {
                             .text = "Sampling",
-                            .style = theme.typeLabel,
+                            .font = theme.fontLabel,
                             .color = theme.colorTextPrimary,
                         }.padding(8.f, 16.f, 4.f, 16.f),
                         Element { ParamSlider {

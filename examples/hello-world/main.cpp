@@ -9,7 +9,7 @@ struct HelloRoot {
     Theme const& theme = useEnvironment<Theme>();
     return Text{
         .text = "Hello, World!",
-        .style = theme.typeDisplay,
+        .font = theme.fontDisplay,
         .color = theme.colorTextPrimary,
         .horizontalAlignment = HorizontalAlignment::Center,
         .verticalAlignment = VerticalAlignment::Center,

@@ -57,13 +57,13 @@ struct ConfirmDialog {
                                             .alignment = Alignment::Start,
                                             .children = children(
                                                     Text{.text = title,
-                                                         .style = theme.typeTitle,
+                                                         .font = theme.fontTitle,
                                                          .color = pal::titleC},
                                                     HStack{
                                                         .spacing = 0.f,
                                                         .children = children(
                                                                 Text{.text = message,
-                                                                             .style = theme.typeBody,
+                                                                             .font = theme.fontBody,
                                                                              .color = pal::bodyC,
                                                                              .wrapping = TextWrapping::Wrap}
                                                                     .flex(1.f)
@@ -91,7 +91,7 @@ struct ConfirmDialog {
                                                                                 .onTap(onCancel)
                                                                                 .cornerRadius(8.f),
                                                                             Text{.text = "Cancel",
-                                                                                 .style = theme.typeLabel,
+                                                                                 .font = theme.fontLabel,
                                                                                  .color = pal::titleC,
                                                                                  .horizontalAlignment = HorizontalAlignment::Center,
                                                                                  .verticalAlignment = VerticalAlignment::Center}
@@ -115,7 +115,7 @@ struct ConfirmDialog {
                                                                                 .onTap(onConfirm)
                                                                                 .cornerRadius(8.f),
                                                                             Text{.text = confirmLabel,
-                                                                                 .style = theme.typeLabel,
+                                                                                 .font = theme.fontLabel,
                                                                                  .color = Color::hex(0xFFFFFF),
                                                                                  .horizontalAlignment = HorizontalAlignment::Center,
                                                                                  .verticalAlignment = VerticalAlignment::Center}
@@ -150,7 +150,7 @@ struct FileManagerRow {
     return HStack{
         .spacing = 12.f,
         .children = children(
-                Text{.text = filename, .style = theme.typeBody, .color = pal::titleC}.flex(1.f),
+                Text{.text = filename, .font = theme.fontBody, .color = pal::titleC}.flex(1.f),
                 ZStack{
                     .horizontalAlignment = Alignment::Center,
                     .verticalAlignment = Alignment::Center,
@@ -185,7 +185,7 @@ struct FileManagerRow {
                                     })
                                 .cornerRadius(6.f),
                             Text{.text = "Delete",
-                                 .style = theme.typeLabel,
+                                 .font = theme.fontLabel,
                                  .color = pal::dangerText,
                                  .horizontalAlignment = HorizontalAlignment::Center,
                                  .verticalAlignment = VerticalAlignment::Center}
@@ -207,7 +207,7 @@ struct OverlayConfirmRoot {
                     .alignment = Alignment::Start,
                     .children = children(
                             Text{.text = "Overlay — confirm dialog",
-                                 .style = theme.typeDisplay,
+                                 .font = theme.fontDisplay,
                                  .color = pal::titleC},
                             HStack{
                                 .spacing = 0.f,
@@ -215,7 +215,7 @@ struct OverlayConfirmRoot {
                                         Text{
                                                 .text = "Tap Delete on a row. Modal overlay traps Tab between Cancel and Delete; "
                                                         "Escape or the buttons dismiss.",
-                                                .style = theme.typeBody,
+                                                .font = theme.fontBody,
                                                 .color = pal::bodyC,
                                                 .wrapping = TextWrapping::Wrap,
                                             }

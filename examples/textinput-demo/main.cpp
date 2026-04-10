@@ -29,14 +29,14 @@ struct TextInputForm {
         .alignment = Alignment::Start,
         .children = children(
                 Text{.text = "TextInput demo",
-                     .style = theme.typeDisplay,
+                     .font = theme.fontDisplay,
                      .color = theme.colorTextPrimary},
                 HStack{
                     .spacing = 0.f,
                     .children = children(
                             Text{
                                 .text = "Tab / Shift+Tab between fields. Edit actions use the window action table.",
-                                .style = theme.typeBodySmall,
+                                .font = theme.fontBodySmall,
                                 .color = theme.colorTextSecondary,
                                 .wrapping = TextWrapping::Wrap,
                             }
@@ -44,7 +44,7 @@ struct TextInputForm {
                         ),
                 },
                 Text{.text = "Name",
-                     .style = theme.typeLabel,
+                     .font = theme.fontLabel,
                      .color = theme.colorTextPrimary},
                 HStack{
                     .spacing = 0.f,
@@ -60,7 +60,7 @@ struct TextInputForm {
                         ),
                 },
                 Text{.text = "Email",
-                     .style = theme.typeLabel,
+                     .font = theme.fontLabel,
                      .color = theme.colorTextPrimary},
                 HStack{
                     .spacing = 0.f,
@@ -77,7 +77,7 @@ struct TextInputForm {
                         ),
                 },
                 Text{.text = "Notes",
-                     .style = theme.typeLabel,
+                     .font = theme.fontLabel,
                      .color = theme.colorTextPrimary},
                 HStack{
                     .spacing = 0.f,
@@ -90,7 +90,7 @@ struct TextInputForm {
                         ),
                 },
                 Text{.text = "Disabled",
-                     .style = theme.typeLabel,
+                     .font = theme.fontLabel,
                      .color = theme.colorTextPrimary},
                 HStack{
                     .spacing = 0.f,

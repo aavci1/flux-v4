@@ -110,7 +110,7 @@ void useTooltip(TooltipConfig const& config) {
     Popover popover{
         .content = Element{Text{
             .text = config.text,
-            .style = theme.typeBodySmall,
+            .font = theme.fontBodySmall,
             .color = theme.colorTextPrimary,
             .wrapping = TextWrapping::Wrap,
         }},

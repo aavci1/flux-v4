@@ -45,13 +45,13 @@ struct LocalModelRow : ViewModifiers<LocalModelRow> {
                     .children = children(
                         Text {
                             .text = label,
-                            .style = theme.typeBody,
+                            .font = theme.fontBody,
                             .color = active ? theme.colorAccent : theme.colorTextPrimary,
                             .wrapping = TextWrapping::Wrap,
                         },
                         Text {
                             .text = size.empty() ? (model.tag.empty() ? std::string{} : model.tag) : size,
-                            .style = theme.typeBodySmall,
+                            .font = theme.fontBodySmall,
                             .color = theme.colorTextSecondary,
                         }
                     )
@@ -98,7 +98,7 @@ struct HfModelRow : ViewModifiers<HfModelRow> {
             .children = children(
                 Text {
                     .text = model.id,
-                    .style = theme.typeBody,
+                    .font = theme.fontBody,
                     .color = theme.colorTextPrimary,
                     .wrapping = TextWrapping::Wrap,
                 },
@@ -112,12 +112,12 @@ struct HfModelRow : ViewModifiers<HfModelRow> {
                         },
                         Text {
                             .text = downloads,
-                            .style = theme.typeBodySmall,
+                            .font = theme.fontBodySmall,
                             .color = theme.colorTextSecondary,
                         },
                         Text {
                             .text = model.pipelineTag,
-                            .style = theme.typeBodySmall,
+                            .font = theme.fontBodySmall,
                             .color = theme.colorTextMuted,
                         }
                     )
@@ -157,13 +157,13 @@ struct HfFileRow : ViewModifiers<HfFileRow> {
             .children = children(
                 Text {
                     .text = file.path,
-                    .style = theme.typeBodySmall,
+                    .font = theme.fontBodySmall,
                     .color = theme.colorTextPrimary,
                     .wrapping = TextWrapping::Wrap,
                 }.flex(1.f),
                 Text {
                     .text = size,
-                    .style = theme.typeBodySmall,
+                    .font = theme.fontBodySmall,
                     .color = theme.colorTextSecondary,
                 },
                 Icon {
@@ -222,7 +222,7 @@ struct ModelBrowser : ViewModifiers<ModelBrowser> {
             localRows.push_back(Element {
                 Text {
                     .text = "No local models found",
-                    .style = theme.typeBodySmall,
+                    .font = theme.fontBodySmall,
                     .color = theme.colorTextMuted,
                 }.padding(8.f, 12.f, 8.f, 12.f)
             });
@@ -274,7 +274,7 @@ struct ModelBrowser : ViewModifiers<ModelBrowser> {
             .children = children(
                 Text {
                     .text = "Local",
-                    .style = theme.typeLabel,
+                    .font = theme.fontLabel,
                     .color = currentTab == 0 ? theme.colorAccent : theme.colorTextSecondary,
                 }
                 .padding(8.f, 12.f, 8.f, 12.f)
@@ -282,7 +282,7 @@ struct ModelBrowser : ViewModifiers<ModelBrowser> {
                 .onTap([tab]() { tab = 0; }),
                 Text {
                     .text = "Hugging Face",
-                    .style = theme.typeLabel,
+                    .font = theme.fontLabel,
                     .color = currentTab == 1 ? theme.colorAccent : theme.colorTextSecondary,
                 }
                 .padding(8.f, 12.f, 8.f, 12.f)
@@ -308,7 +308,7 @@ struct ModelBrowser : ViewModifiers<ModelBrowser> {
                         .children = children(
                             Text {
                                 .text = "Models",
-                                .style = theme.typeLabel,
+                                .font = theme.fontLabel,
                                 .color = theme.colorTextPrimary,
                             },
                             Spacer {},
@@ -356,7 +356,7 @@ struct ModelBrowser : ViewModifiers<ModelBrowser> {
             hfChildren.push_back(Element {
                 Text {
                     .text = "Downloading...",
-                    .style = theme.typeBodySmall,
+                    .font = theme.fontBodySmall,
                     .color = theme.colorAccent,
                 }.padding(4.f, 12.f, 4.f, 12.f)
             });

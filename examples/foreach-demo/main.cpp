@@ -37,7 +37,7 @@ struct HoverRow {
                           .cursor(Cursor::Hand)
                           .cornerRadius(8.f),
                       Text{.text = "Row " + std::to_string(index) + (hovered ? "  ← hovered" : ""),
-                           .style = theme.typeBody,
+                           .font = theme.fontBody,
                            .color = pal::label,
                        }
                           .padding(14.f)
@@ -60,7 +60,7 @@ struct ForEachDemo {
                     .spacing = 16.f,
                     .children = children(
                             Text{.text = "ForEach demo",
-                                 .style = theme.typeDisplay,
+                                 .font = theme.fontDisplay,
                                  .color = pal::label},
                             HStack{
                                 .spacing = 10.f,
@@ -75,7 +75,7 @@ struct ForEachDemo {
                                                         .onTap([count] { count = *count + 1; })
                                                         .cornerRadius(8.f),
                                                     Text{.text = "+ Row",
-                                                         .style = theme.typeLabel,
+                                                         .font = theme.fontLabel,
                                                          .color = theme.colorOnAccent}
                                                 ),
                                         },
@@ -92,7 +92,7 @@ struct ForEachDemo {
                                                         })
                                                         .cornerRadius(8.f),
                                                     Text{.text = "- Row",
-                                                         .style = theme.typeLabel,
+                                                         .font = theme.fontLabel,
                                                          .color = theme.colorOnAccent}
                                                 ),
                                         }

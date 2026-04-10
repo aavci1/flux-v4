@@ -91,14 +91,14 @@ struct TooltipDemoRoot {
                 .children = children(
                     Text{
                         .text = "Tooltip",
-                        .style = theme.typeDisplay,
+                        .font = theme.fontDisplay,
                         .color = theme.colorTextPrimary,
                     },
                     Text{
                         .text = "Hover over any control for 600 ms to "
                                 "see its tooltip. Move the pointer away "
                                 "to dismiss. Tapping also dismisses.",
-                        .style = theme.typeBody,
+                        .font = theme.fontBody,
                         .color = theme.colorTextSecondary,
                         .wrapping = TextWrapping::Wrap,
                     }.flex(1.f),
@@ -106,7 +106,7 @@ struct TooltipDemoRoot {
                     // ── Placement variants ──────────────────────────
                     Text{
                         .text = "Placement",
-                        .style = theme.typeHeading,
+                        .font = theme.fontHeading,
                         .color = theme.colorTextPrimary,
                     },
                     HStack{
@@ -139,7 +139,7 @@ struct TooltipDemoRoot {
                     // ── Icon tooltips ───────────────────────────────
                     Text{
                         .text = "Icon tooltips",
-                        .style = theme.typeHeading,
+                        .font = theme.fontHeading,
                         .color = theme.colorTextPrimary,
                     },
                     HStack{
@@ -168,7 +168,7 @@ struct TooltipDemoRoot {
                     // ── Long tooltip text ───────────────────────────
                     Text{
                         .text = "Long text",
-                        .style = theme.typeHeading,
+                        .font = theme.fontHeading,
                         .color = theme.colorTextPrimary,
                     },
                     TooltipButton{
@@ -181,7 +181,7 @@ struct TooltipDemoRoot {
                     // ── Toggle with tooltip ─────────────────────────
                     Text{
                         .text = "On other controls",
-                        .style = theme.typeHeading,
+                        .font = theme.fontHeading,
                         .color = theme.colorTextPrimary,
                     },
                     HStack{
@@ -190,7 +190,7 @@ struct TooltipDemoRoot {
                         .children = children(
                             Text{
                                 .text = "Notifications",
-                                .style = theme.typeBody,
+                                .font = theme.fontBody,
                                 .color = theme.colorTextPrimary,
                             },
                             Spacer{},

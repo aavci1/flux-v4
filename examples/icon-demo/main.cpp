@@ -83,7 +83,7 @@ struct IconCell {
                 },
                 Text {
                     .text = label,
-                    .style = t.typeBody,
+                    .font = t.fontBody,
                     .color = t.colorTextSecondary,
                     .wrapping = TextWrapping::NoWrap,
                 }
@@ -115,20 +115,20 @@ struct IconDemoRoot {
                     .alignment = Alignment::Start,
                     .children = children(
                             Text{.text = "Icon demo",
-                                 .style = t.typeDisplay,
+                                 .font = t.fontDisplay,
                                  .color = t.colorTextPrimary},
                             Text{
                                 .text = "Material Symbols Rounded — curated "
                                         "IconName set. "
                                         "Resize the window; scroll for the "
                                         "full grid.",
-                                .style = t.typeBody,
+                                .font = t.fontBody,
                                 .color = t.colorTextSecondary,
                                 .wrapping = TextWrapping::Wrap,
                             },
 
                             Text{.text = "All curated icons",
-                                 .style = t.typeHeading,
+                                 .font = t.fontHeading,
                                  .color = t.colorTextPrimary},
                             Grid {
                                 .columns = 8,

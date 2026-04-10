@@ -209,7 +209,7 @@ This is `inline-code`.
 )"
       });
 
-    Font const baseFont = resolveFont(kFontFromTheme, theme.typeBody.toFont());
+    Font const baseFont = resolveFont(kFontFromTheme, theme.fontBody);
     Color const baseColor = theme.colorTextPrimary;
 
     return VStack {
@@ -218,12 +218,12 @@ This is `inline-code`.
             children(
                 Text {
                     .text = "Markdown styler (TextArea)",
-                    .style = theme.typeDisplay,
+                    .font = theme.fontDisplay,
                     .color = theme.colorTextPrimary,
                 },
                 Text {
                     .text = "The `.styler` field receives the full document and returns AttributedRun ranges.",
-                    .style = theme.typeBody,
+                    .font = theme.fontBody,
                     .color = theme.colorTextSecondary,
                     .wrapping = TextWrapping::Wrap,
                 },

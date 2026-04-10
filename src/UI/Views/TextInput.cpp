@@ -285,7 +285,7 @@ struct TextInputView {
 Element TextInput::body() const {
   Theme const& theme = useEnvironment<Theme>();
   ResolvedTextInputStyle const resolved = resolveTextInputStyle(style, theme);
-  Font const defaultFont = resolveFont(style.font, theme.typeBody.toFont());
+  Font const defaultFont = resolveFont(style.font, theme.fontBody);
 
   auto& beh = useTextEditBehavior(value, {.multiline = false,
                                             .maxLength = maxLength,

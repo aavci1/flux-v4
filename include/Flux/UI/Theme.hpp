@@ -117,22 +117,22 @@ struct Theme {
   Color colorScrimPopover = Color{0.f, 0.f, 0.f, 0.f};
 
   /// Typography scale — use these roles consistently (pair with `colorText*` for emphasis).
-  /// - `typeDisplay`: single screen / hero title.
-  /// - `typeHeading`: major section headings within a screen.
-  /// - `typeTitle`: card titles, modal sheets, and nested panel titles.
-  /// - `typeSubtitle`: subsections and group headings under a section.
-  /// - `typeLabel` / `typeLabelSmall`: field labels, compact control labels, footnotes.
-  /// - `typeBody` / `typeBodySmall`: paragraphs, descriptions, captions, supporting text.
-  /// - `typeCode`: monospace snippets.
-  TextStyle typeDisplay{34.f, 700.f, 0.f};
-  TextStyle typeHeading{22.f, 700.f, 0.f};
-  TextStyle typeTitle{17.f, 400.f, 0.f};
-  TextStyle typeSubtitle{16.f, 400.f, 0.f};
-  TextStyle typeBody{15.f, 400.f, 0.f};
-  TextStyle typeBodySmall{13.f, 400.f, 0.f};
-  TextStyle typeLabel{14.f, 500.f, 0.f};
-  TextStyle typeLabelSmall{12.f, 500.f, 0.f};
-  TextStyle typeCode{13.f, 400.f, 0.f};
+  /// - `fontDisplay`: single screen / hero title.
+  /// - `fontHeading`: major section headings within a screen.
+  /// - `fontTitle`: card titles, modal sheets, and nested panel titles.
+  /// - `fontSubtitle`: subsections and group headings under a section.
+  /// - `fontLabel` / `fontLabelSmall`: field labels, compact control labels, footnotes.
+  /// - `fontBody` / `fontBodySmall`: paragraphs, descriptions, captions, supporting text.
+  /// - `fontCode`: monospace snippets.
+  Font fontDisplay{.size = 34.f, .weight = 700.f};
+  Font fontHeading{.size = 22.f, .weight = 700.f};
+  Font fontTitle{.size = 17.f, .weight = 400.f};
+  Font fontSubtitle{.size = 16.f, .weight = 400.f};
+  Font fontBody{.size = 15.f, .weight = 400.f};
+  Font fontBodySmall{.size = 13.f, .weight = 400.f};
+  Font fontLabel{.size = 14.f, .weight = 500.f};
+  Font fontLabelSmall{.size = 12.f, .weight = 500.f};
+  Font fontCode{.size = 13.f, .weight = 400.f};
 
   // Spacing scale (8 pt grid). At density 1.0, space3 is 12 pt, space4 is 16 pt, etc.
   // `withDensity(d)` scales space1–space8 by d (and updates paddingFieldH/V to match space3/space2).

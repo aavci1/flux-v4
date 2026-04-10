@@ -36,7 +36,7 @@ struct FocusField {
         .alignment = Alignment::Start,
         .children = children(
                 Text{.text = title,
-                     .style = theme.typeLabel,
+                     .font = theme.fontLabel,
                      .color = pal::label},
                 HStack{
                     .spacing = 0.f,
@@ -78,7 +78,7 @@ struct FocusField {
                     .spacing = 0.f,
                     .children = children(
                             Text{.text = (*text).empty() ? std::string("(empty)") : std::string(*text),
-                                        .style = theme.typeBodySmall,
+                                        .font = theme.fontBodySmall,
                                         .color = pal::sublabel,
                                         .wrapping = TextWrapping::Wrap}
                                 .flex(1.f)
@@ -102,7 +102,7 @@ struct FocusDemoRoot {
                     .alignment = Alignment::Start,
                     .children = children(
                             Text{.text = "Focus & keyboard",
-                                 .style = theme.typeDisplay,
+                                 .font = theme.fontDisplay,
                                  .color = pal::label},
                             HStack{
                                 .spacing = 0.f,
@@ -111,7 +111,7 @@ struct FocusDemoRoot {
                                                 .text = "Click a field to focus. Type text; Delete removes a character; Esc "
                                                         "clears. Cmd+S appends a demo tag. Tab / Shift+Tab cycle fields "
                                                         "(A→B→C). Focus ring uses useFocus().",
-                                                .style = theme.typeBody,
+                                                .font = theme.fontBody,
                                                 .color = pal::sublabel,
                                                 .wrapping = TextWrapping::Wrap,
                                             }

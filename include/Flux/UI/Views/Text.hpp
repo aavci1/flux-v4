@@ -9,6 +9,7 @@
 #include <Flux/Graphics/Font.hpp>
 #include <Flux/Graphics/TextLayoutOptions.hpp>
 #include <Flux/UI/Detail/PrimitiveForwards.hpp>
+#include <Flux/UI/Theme.hpp>
 #include <Flux/UI/ViewModifiers.hpp>
 
 #include <functional>
@@ -26,14 +27,12 @@ struct Text : ViewModifiers<Text> {
   Size measure(LayoutContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
 
   std::string text;
-  TextStyle style{};
-
-  Color color = Colors::black;
+  Font font = kFontFromTheme;
+  Color color = kColorFromTheme;
 
   HorizontalAlignment horizontalAlignment = HorizontalAlignment::Leading;
   VerticalAlignment verticalAlignment = VerticalAlignment::Top;
-  TextWrapping wrapping = TextWrapping::Wrap;
-
+  TextWrapping wrapping = TextWrapping::NoWrap;
   int maxLines = 0;
   float firstBaselineOffset = 0.f;
 };

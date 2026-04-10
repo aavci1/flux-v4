@@ -104,8 +104,8 @@ public:
     float const margin = 28.f;
     TextSystem& ts = Application::instance().textSystem();
     Theme const theme = Theme::dark();
-    Font const titleFont = theme.typeDisplay.toFont();
-    Font const hintFont = theme.typeBodySmall.toFont();
+    Font const titleFont = theme.fontDisplay;
+    Font const hintFont = theme.fontBodySmall;
     auto titleLayout =
         ts.layout("Scene graph", titleFont, theme.colorTextPrimary, s.width - margin * 2.f);
     float const titleBand = titleLayout->measuredSize.height;
@@ -175,8 +175,8 @@ public:
     float const margin = 28.f;
     TextSystem& ts = Application::instance().textSystem();
     Theme const theme = Theme::dark();
-    Font const titleFont = theme.typeDisplay.toFont();
-    Font const hintFont = theme.typeBodySmall.toFont();
+    Font const titleFont = theme.fontDisplay;
+    Font const hintFont = theme.fontBodySmall;
     float const titleBand =
         ts.layout("Scene graph", titleFont, theme.colorTextPrimary, s.width - margin * 2.f)->measuredSize.height;
     float const rowTop = margin + titleBand + 18.f;

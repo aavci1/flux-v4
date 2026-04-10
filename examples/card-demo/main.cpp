@@ -49,7 +49,7 @@ struct Card {
 
     float const bodyTextHeight = useMemo([&] {
       TextSystem& ts = Application::instance().textSystem();
-      Font const bodyFont = theme.typeBody.toFont();
+      Font const bodyFont = theme.fontBody;
       TextLayoutOptions opts{.wrapping = TextWrapping::Wrap};
       return ts.measure(detail, bodyFont, pal::sublabel, innerTextWidth, opts).height;
     }, detail, availableWidth);
@@ -65,14 +65,14 @@ struct Card {
                 .cornerRadius(7.f),
             Text{
                 .text = title,
-                .style = theme.typeTitle,
+                .font = theme.fontTitle,
                 .color = pal::label,
             }
                 .size(0.f, 24.f)
                 .flex(1.f),
             Text{
                 .text = expanded ? "⌄" : "›",
-                .style = theme.typeLabel,
+                .font = theme.fontLabel,
                 .color = pal::sublabel,
                 .horizontalAlignment = HorizontalAlignment::Center,
                 .verticalAlignment = VerticalAlignment::Center,
@@ -87,7 +87,7 @@ struct Card {
           .children = children(
                   Text{
                       .text = detail,
-                      .style = theme.typeBody,
+                      .font = theme.fontBody,
                       .color = pal::sublabel,
                       .wrapping = TextWrapping::Wrap,
                   }
@@ -133,10 +133,10 @@ struct CardListView {
                 .alignment = Alignment::Start,
                 .children = children(
                     Text{.text = "Flux Components",
-                         .style = theme.typeDisplay,
+                         .font = theme.fontDisplay,
                          .color = pal::label},
                     Text{.text = "Tap a card to expand",
-                         .style = theme.typeBody,
+                         .font = theme.fontBody,
                          .color = pal::sublabel},
                     Card{.accent = pal::accent0,
                          .title = "Metal Renderer",

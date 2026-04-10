@@ -27,14 +27,14 @@ struct TaskForm {
         .alignment = Alignment::Start,
         .children = children(
                 Text{.text = "Picker demo",
-                     .style = theme.typeDisplay,
+                     .font = theme.fontDisplay,
                      .color = theme.colorTextPrimary},
                 HStack{
                     .spacing = 0.f,
                     .children = children(
                             Text{
                                 .text = "Tab to the pickers. Return / Space opens; arrows move; Escape dismisses.",
-                                .style = theme.typeBodySmall,
+                                .font = theme.fontBodySmall,
                                 .color = theme.colorTextSecondary,
                                 .wrapping = TextWrapping::Wrap,
                             }.flex(1.f)
@@ -42,7 +42,7 @@ struct TaskForm {
                 },
 
                 Text{.text = "Language",
-                     .style = theme.typeLabel,
+                     .font = theme.fontLabel,
                      .color = theme.colorTextPrimary},
                 HStack{
                     .spacing = 0.f,
@@ -67,7 +67,7 @@ struct TaskForm {
                 },
 
                 Text{.text = "Count",
-                     .style = theme.typeLabel,
+                     .font = theme.fontLabel,
                      .color = theme.colorTextPrimary},
                 HStack{
                     .spacing = 0.f,
@@ -84,7 +84,7 @@ struct TaskForm {
                 },
 
                 Text{.text = "Priority",
-                     .style = theme.typeLabel,
+                     .font = theme.fontLabel,
                      .color = theme.colorTextPrimary},
                 HStack{
                     .spacing = 0.f,
@@ -103,7 +103,7 @@ struct TaskForm {
                 },
 
                 Text{.text = "Disabled sample",
-                     .style = theme.typeLabel,
+                     .font = theme.fontLabel,
                      .color = theme.colorTextPrimary},
                 HStack{
                     .spacing = 0.f,

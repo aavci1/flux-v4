@@ -371,7 +371,7 @@ struct TextAreaView {
 Element TextArea::body() const {
   Theme const& theme = useEnvironment<Theme>();
   ResolvedTextAreaStyle const rs = resolveTextAreaStyle(style, theme);
-  Font const defaultFont = resolveFont(style.font, theme.typeBody.toFont());
+  Font const defaultFont = resolveFont(style.font, theme.fontBody);
 
   TextAreaSnap& snap = StateStore::current()->claimSlot<TextAreaSnap>();
   StylerMemo& stylerMemo = StateStore::current()->claimSlot<StylerMemo>();

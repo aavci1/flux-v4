@@ -27,7 +27,7 @@ struct ChatListRow : ViewModifiers<ChatListRow> {
             .children = children(
                 Text {
                     .text = title,
-                    .style = theme.typeSubtitle,
+                    .font = theme.fontSubtitle,
                     .color = theme.colorTextPrimary,
                     .verticalAlignment = VerticalAlignment::Center,
                     .wrapping = TextWrapping::NoWrap,
@@ -35,7 +35,7 @@ struct ChatListRow : ViewModifiers<ChatListRow> {
                 Spacer {},
                 Icon {
                     .name = IconName::MoreHoriz,
-                    .size = theme.typeSubtitle.size,
+                    .size = theme.fontSubtitle.size,
                     .weight = 300.f,
                     .color = isHovered ? theme.colorTextPrimary : Colors::transparent,
                 }

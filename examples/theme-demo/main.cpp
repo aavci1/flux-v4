@@ -62,14 +62,14 @@ struct ThemeDemoRoot {
           .alignment = Alignment::Start,
           .children = children(
                   Text{ .text = title,
-                        .style = t.typeTitle,
+                        .font = t.fontTitle,
                         .color = t.colorTextPrimary },
                   HStack{
                       .spacing = 0.f,
                       .children = children(
                               Text{
                                       .text = subtitle,
-                                      .style = t.typeBody,
+                                      .font = t.fontBody,
                                       .color = t.colorTextSecondary,
                                       .wrapping = TextWrapping::Wrap,
                                   }
@@ -91,7 +91,7 @@ struct ThemeDemoRoot {
                     .alignment = Alignment::Start,
                     .children = children(
                             Text{ .text = "Theme & environment",
-                                  .style = windowTheme.typeDisplay,
+                                  .font = windowTheme.fontDisplay,
                                   .color = windowTheme.colorTextPrimary },
                             HStack{
                                 .spacing = 0.f,
@@ -99,7 +99,7 @@ struct ThemeDemoRoot {
                                         Text{
                                                 .text = "Window theme drives defaults. The right column uses "
                                                         "Element::environment(Theme::dark()) for a subtree override.",
-                                                .style = windowTheme.typeBody,
+                                                .font = windowTheme.fontBody,
                                                 .color = windowTheme.colorTextSecondary,
                                                 .wrapping = TextWrapping::Wrap,
                                             }
@@ -114,7 +114,7 @@ struct ThemeDemoRoot {
                                                         "  (density " + std::to_string(windowTheme.density) +
                                                         ", horizontal spacing token space4=" +
                                                         std::to_string(windowTheme.space4) + "pt)",
-                                                .style = windowTheme.typeBodySmall,
+                                                .font = windowTheme.fontBodySmall,
                                                 .color = windowTheme.colorTextMuted,
                                                 .wrapping = TextWrapping::Wrap,
                                             }

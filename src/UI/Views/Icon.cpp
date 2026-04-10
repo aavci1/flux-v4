@@ -10,19 +10,19 @@ namespace flux {
 Element Icon::body() const {
     Theme const& theme = useEnvironment<Theme>();
 
-    float const s = resolveFloat(size, theme.typeBody.size);
-    float const w = resolveFloat(weight, theme.typeBody.weight);
+    float const s = resolveFloat(size, theme.fontBody.size);
+    float const w = resolveFloat(weight, theme.fontBody.weight);
     Color const c = resolveColor(color, theme.colorTextPrimary);
 
     std::string utf8 = encodeUtf8(static_cast<char32_t>(name));
 
     return Text {
         .text = std::move(utf8),
-        .style = TextStyle::fromFont(Font{
+        .font = Font {
             .family = theme.iconFontFamily,
             .size = s,
             .weight = w,
-        }),
+        },
         .color = c,
         .horizontalAlignment = HorizontalAlignment::Center,
         .verticalAlignment = VerticalAlignment::Center,

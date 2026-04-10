@@ -26,17 +26,17 @@ char const* kLoremShort =
 char const* kLongUnbroken =
     "Supercalifragilisticexpialidocious_pseudopseudohypoparathyroidism_abcdefghijklmnopqrstuvwxyz";
 
-Element styleRow(Theme const& theme, char const* tokenName, TextStyle const& st, char const* sample) {
+Element styleRow(Theme const& theme, char const* tokenName, Font const& st, char const* sample) {
   std::vector<Element> row;
   row.push_back(Text{
                     .text = tokenName,
-                    .style = theme.typeLabelSmall,
+                    .font = theme.fontLabelSmall,
                     .color = theme.colorTextMuted,
                 }
                     .size(128.f, 0.f));
   row.push_back(Text{
                     .text = sample,
-                    .style = st,
+                    .font = st,
                     .color = theme.colorTextPrimary,
                     .wrapping = TextWrapping::Wrap,
                 }
@@ -52,31 +52,31 @@ Element semanticColorsSection(Theme const& theme) {
   std::vector<Element> items;
   items.push_back(Text{
       .text = "colorTextPrimary — main ink on surfaces.",
-      .style = theme.typeBody,
+      .font = theme.fontBody,
       .color = theme.colorTextPrimary,
       .wrapping = TextWrapping::Wrap,
   });
   items.push_back(Text{
       .text = "colorTextSecondary — de-emphasised descriptions.",
-      .style = theme.typeBody,
+      .font = theme.fontBody,
       .color = theme.colorTextSecondary,
       .wrapping = TextWrapping::Wrap,
   });
   items.push_back(Text{
       .text = "colorTextMuted — hints and tertiary detail.",
-      .style = theme.typeBody,
+      .font = theme.fontBody,
       .color = theme.colorTextMuted,
       .wrapping = TextWrapping::Wrap,
   });
   items.push_back(Text{
       .text = "colorAccent — links and interactive emphasis.",
-      .style = theme.typeBody,
+      .font = theme.fontBody,
       .color = theme.colorAccent,
       .wrapping = TextWrapping::Wrap,
   });
   items.push_back(Text{
       .text = "colorDanger — destructive or error context.",
-      .style = theme.typeBody,
+      .font = theme.fontBody,
       .color = theme.colorDanger,
       .wrapping = TextWrapping::Wrap,
   });
@@ -91,34 +91,34 @@ Element wrappingSection(Theme const& theme) {
   std::vector<Element> items;
   items.push_back(Text{
       .text = "Wrap (default)",
-      .style = theme.typeLabel,
+      .font = theme.fontLabel,
       .color = theme.colorTextPrimary,
   });
   items.push_back(Text{
       .text = kLoremShort,
-      .style = theme.typeBody,
+      .font = theme.fontBody,
       .color = theme.colorTextPrimary,
       .wrapping = TextWrapping::Wrap,
   });
   items.push_back(Text{
       .text = "NoWrap — single line; may clip horizontally when space is tight.",
-      .style = theme.typeLabel,
+      .font = theme.fontLabel,
       .color = theme.colorTextPrimary,
   });
   items.push_back(Text{
       .text = kLongUnbroken,
-      .style = theme.typeBodySmall,
+      .font = theme.fontBodySmall,
       .color = theme.colorTextSecondary,
       .wrapping = TextWrapping::NoWrap,
   });
   items.push_back(Text{
       .text = "WrapAnywhere — breaks inside long tokens when needed.",
-      .style = theme.typeLabel,
+      .font = theme.fontLabel,
       .color = theme.colorTextPrimary,
   });
   items.push_back(Text{
       .text = kLongUnbroken,
-      .style = theme.typeBodySmall,
+      .font = theme.fontBodySmall,
       .color = theme.colorTextSecondary,
       .wrapping = TextWrapping::WrapAnywhere,
   });
@@ -137,7 +137,7 @@ Element alignBand(Theme const& theme, char const* word, HorizontalAlignment h) {
                    .height(40.f));
   zs.push_back(Text{
       .text = word,
-      .style = theme.typeBody,
+      .font = theme.fontBody,
       .color = theme.colorTextPrimary,
       .horizontalAlignment = h,
   }
@@ -167,66 +167,66 @@ struct TypographyDemoRoot {
     std::vector<Element> col;
     col.push_back(Text{
         .text = "Typography",
-        .style = theme.typeDisplay,
+        .font = theme.fontDisplay,
         .color = theme.colorTextPrimary,
     });
     col.push_back(Text{
         .text = "Theme text styles, semantic colours, wrapping modes, alignment, and maxLines.",
-        .style = theme.typeBody,
+        .font = theme.fontBody,
         .color = theme.colorTextSecondary,
         .wrapping = TextWrapping::Wrap,
     });
 
     col.push_back(Text{
         .text = "Theme scale",
-        .style = theme.typeHeading,
+        .font = theme.fontHeading,
         .color = theme.colorTextPrimary,
     });
-    col.push_back(styleRow(theme, "typeDisplay", theme.typeDisplay, "Hero / screen title"));
-    col.push_back(styleRow(theme, "typeHeading", theme.typeHeading, "Major section heading"));
-    col.push_back(styleRow(theme, "typeTitle", theme.typeTitle, "Card or dialog title"));
-    col.push_back(styleRow(theme, "typeSubtitle", theme.typeSubtitle, "Subsection or group heading"));
-    col.push_back(styleRow(theme, "typeBody", theme.typeBody, "Body paragraph — primary reading text."));
-    col.push_back(styleRow(theme, "typeBodySmall", theme.typeBodySmall, "Supporting text and captions."));
-    col.push_back(styleRow(theme, "typeLabel", theme.typeLabel, "Field and control labels"));
-    col.push_back(styleRow(theme, "typeLabelSmall", theme.typeLabelSmall, "Compact labels and footnotes"));
-    col.push_back(styleRow(theme, "typeCode", theme.typeCode, "monospace_line_height"));
+    col.push_back(styleRow(theme, "fontDisplay", theme.fontDisplay, "Hero / screen title"));
+    col.push_back(styleRow(theme, "fontHeading", theme.fontHeading, "Major section heading"));
+    col.push_back(styleRow(theme, "fontTitle", theme.fontTitle, "Card or dialog title"));
+    col.push_back(styleRow(theme, "fontSubtitle", theme.fontSubtitle, "Subsection or group heading"));
+    col.push_back(styleRow(theme, "fontBody", theme.fontBody, "Body paragraph — primary reading text."));
+    col.push_back(styleRow(theme, "fontBodySmall", theme.fontBodySmall, "Supporting text and captions."));
+    col.push_back(styleRow(theme, "fontLabel", theme.fontLabel, "Field and control labels"));
+    col.push_back(styleRow(theme, "fontLabelSmall", theme.fontLabelSmall, "Compact labels and footnotes"));
+    col.push_back(styleRow(theme, "fontCode", theme.fontCode, "monospace_line_height"));
 
     col.push_back(Text{
         .text = "Semantic colours",
-        .style = theme.typeHeading,
+        .font = theme.fontHeading,
         .color = theme.colorTextPrimary,
     });
     col.push_back(semanticColorsSection(theme));
 
     col.push_back(Text{
         .text = "Wrapping",
-        .style = theme.typeHeading,
+        .font = theme.fontHeading,
         .color = theme.colorTextPrimary,
     });
     col.push_back(wrappingSection(theme));
 
     col.push_back(Text{
         .text = "Horizontal alignment",
-        .style = theme.typeHeading,
+        .font = theme.fontHeading,
         .color = theme.colorTextPrimary,
     });
     col.push_back(alignmentSection(theme));
 
     col.push_back(Text{
         .text = "maxLines",
-        .style = theme.typeHeading,
+        .font = theme.fontHeading,
         .color = theme.colorTextPrimary,
     });
     col.push_back(Text{
         .text = "The paragraph below is limited to two lines (long copy is clipped for layout).",
-        .style = theme.typeBodySmall,
+        .font = theme.fontBodySmall,
         .color = theme.colorTextSecondary,
         .wrapping = TextWrapping::Wrap,
     });
     col.push_back(Text{
         .text = kLoremShort + std::string(" ") + kLoremShort,
-        .style = theme.typeBody,
+        .font = theme.fontBody,
         .color = theme.colorTextPrimary,
         .wrapping = TextWrapping::Wrap,
         .maxLines = 2,

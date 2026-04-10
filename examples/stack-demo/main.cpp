@@ -38,18 +38,18 @@ struct StackDemoRoot {
                     .children = children(
                         Text {
                             .text = "HStack & VStack",
-                            .style = theme.typeDisplay,
+                            .font = theme.fontDisplay,
                             .color = pal::ink
                         },
                         Text {
                             .text = "VStack arranges children top-to-bottom; HStack left-to-right. Use spacing, padding, and alignment to tune layout.",
-                            .style = theme.typeBody,
+                            .font = theme.fontBody,
                             .color = pal::muted,
                             .wrapping = TextWrapping::Wrap
                         },
                         Text {
                             .text = "VStack",
-                            .style = theme.typeHeading,
+                            .font = theme.fontHeading,
                             .color = pal::ink
                         },
                         VStack {
@@ -63,7 +63,7 @@ struct StackDemoRoot {
                         },
                         Text {
                             .text = "HStack",
-                            .style = theme.typeHeading,
+                            .font = theme.fontHeading,
                             .color = pal::ink
                         },
                         HStack {
@@ -78,7 +78,7 @@ struct StackDemoRoot {
                         },
                         Text {
                             .text = "Nested — HStack rows inside a VStack",
-                            .style = theme.typeHeading,
+                            .font = theme.fontHeading,
                             .color = pal::ink
                         },
                         VStack {
@@ -92,7 +92,7 @@ struct StackDemoRoot {
                                         Rectangle{}.fill(FillStyle::solid(Color::hex(0xE8E8EF))).height(28.f).cornerRadius(CornerRadius{6.f}).flex(1.f),
                                         Text {
                                             .text = "A",
-                                            .style = theme.typeBody,
+                                            .font = theme.fontBody,
                                             .color = pal::ink,
                                         }.padding(6.f)
                                     ),
@@ -104,7 +104,7 @@ struct StackDemoRoot {
                                         Rectangle{}.fill(FillStyle::solid(Color::hex(0xE8E8EF))).height(28.f).cornerRadius(CornerRadius{6.f}).flex(1.f),
                                         Text {
                                             .text = "B",
-                                            .style = theme.typeBody,
+                                            .font = theme.fontBody,
                                             .color = pal::ink,
                                         }.padding(6.f)
                                     ),
@@ -116,7 +116,7 @@ struct StackDemoRoot {
                                         Rectangle{}.fill(FillStyle::solid(Color::hex(0xE8E8EF))).height(28.f).cornerRadius(CornerRadius{6.f}).flex(1.f),
                                         Text {
                                             .text = "C",
-                                            .style = theme.typeBody,
+                                            .font = theme.fontBody,
                                             .color = pal::ink,
                                         }.padding(6.f)
                                     ),
@@ -125,7 +125,7 @@ struct StackDemoRoot {
                         },
                         Text {
                             .text = "HStack + Spacer (flex along the row)",
-                            .style = theme.typeHeading,
+                            .font = theme.fontHeading,
                             .color = pal::ink
                         },
                         HStack {
@@ -134,13 +134,13 @@ struct StackDemoRoot {
                             .children = children(
                                 Text {
                                     .text = "Leading",
-                                    .style = theme.typeLabel,
+                                    .font = theme.fontLabel,
                                     .color = pal::ink
                                 },
                                 Spacer {},
                                 Text {
                                     .text = "Trailing",
-                                    .style = theme.typeLabel,
+                                    .font = theme.fontLabel,
                                     .color = pal::ink
                                 }
                             ),

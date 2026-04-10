@@ -26,7 +26,7 @@ struct PopoverDemoRoot {
     auto addSection = [&](char const* heading) {
       scrollChildren.push_back(
           Text{.text = heading,
-               .style = theme.typeHeading,
+               .font = theme.fontHeading,
                .color = theme.colorTextPrimary,
            }
               .padding(8.f));
@@ -38,7 +38,7 @@ struct PopoverDemoRoot {
             .spacing = 0.f,
             .children = children(
                     Text{.text = "Scroll so triggers sit near window edges to see flip.",
-                         .style = theme.typeLabelSmall,
+                         .font = theme.fontLabelSmall,
                          .color = theme.colorTextSecondary,
                          .wrapping = TextWrapping::Wrap,
                      }
@@ -58,13 +58,13 @@ struct PopoverDemoRoot {
                     .alignment = Alignment::Start,
                     .children = children(
                             Text{.text = std::string(label),
-                                 .style = theme.typeSubtitle,
+                                 .font = theme.fontSubtitle,
                                  .color = theme.colorTextPrimary},
                             HStack{
                                 .spacing = 0.f,
                                 .children = children(
                                         Text{.text = "Placement follows preference when space allows.",
-                                             .style = theme.typeBodySmall,
+                                             .font = theme.fontBodySmall,
                                              .color = theme.colorTextSecondary,
                                              .wrapping = TextWrapping::Wrap}
                                             .flex(1.f)
@@ -99,7 +99,7 @@ struct PopoverDemoRoot {
         .alignment = Alignment::Center,
         .children = children(
                 Text{.text = "Arrow",
-                     .style = theme.typeLabel,
+                     .font = theme.fontLabel,
                      .color = theme.colorTextPrimary},
                 Button{
                     .label = *showArrow ? "On" : "Off",
@@ -113,7 +113,7 @@ struct PopoverDemoRoot {
         .alignment = Alignment::Center,
         .children = children(
                 Text{.text = "Dismiss outside tap",
-                     .style = theme.typeLabel,
+                     .font = theme.fontLabel,
                      .color = theme.colorTextPrimary},
                 Button{
                     .label = *dismissOutside ? "On" : "Off",
@@ -127,7 +127,7 @@ struct PopoverDemoRoot {
     for (int i = 0; i < 8; ++i) {
       scrollChildren.push_back(
           Text{.text = "Spacer row — scroll the list",
-               .style = theme.typeBodySmall,
+               .font = theme.fontBodySmall,
                .color = theme.colorTextSecondary,
            }
               .padding(6.f));
@@ -143,14 +143,14 @@ struct PopoverDemoRoot {
                   .alignment = Alignment::Start,
                   .children = children(
                           Text{.text = "Popover anchored to this button.",
-                               .style = theme.typeTitle,
+                               .font = theme.fontTitle,
                                .color = theme.colorTextPrimary},
                           HStack{
                               .spacing = 0.f,
                               .children = children(
                                       Text{
                                           .text = "ScrollView keeps layout rects updated; anchor follows the trigger.",
-                                          .style = theme.typeBodySmall,
+                                          .font = theme.fontBodySmall,
                                           .color = theme.colorTextSecondary,
                                           .wrapping = TextWrapping::Wrap,
                                       }
@@ -172,7 +172,7 @@ struct PopoverDemoRoot {
     for (int i = 0; i < 8; ++i) {
       scrollChildren.push_back(
           Text{.text = "Spacer row — scroll the list",
-               .style = theme.typeBodySmall,
+               .font = theme.fontBodySmall,
                .color = theme.colorTextSecondary,
            }
               .padding(6.f));
@@ -188,14 +188,14 @@ struct PopoverDemoRoot {
                   .alignment = Alignment::Start,
                   .children = children(
                           Text{.text = "Flip test",
-                               .style = theme.typeTitle,
+                               .font = theme.fontTitle,
                                .color = theme.colorTextPrimary},
                           HStack{
                               .spacing = 0.f,
                               .children = children(
                                       Text{
                                           .text = "If there is not enough room below the anchor, placement flips to Above.",
-                                          .style = theme.typeBodySmall,
+                                          .font = theme.fontBodySmall,
                                           .color = theme.colorTextSecondary,
                                           .wrapping = TextWrapping::Wrap,
                                       }
@@ -219,13 +219,13 @@ struct PopoverDemoRoot {
         .spacing = 0.f,
         .children = children(
                 Text{.text = "Popover demo",
-                     .style = theme.typeDisplay,
+                     .font = theme.fontDisplay,
                      .color = theme.colorTextPrimary,
                      .horizontalAlignment = HorizontalAlignment::Center,
                  }
                     .padding(16.f),
                 Text{.text = popoverOpen ? "Popover visible" : "Popover hidden",
-                     .style = theme.typeLabel,
+                     .font = theme.fontLabel,
                      .color = theme.colorTextSecondary,
                      .horizontalAlignment = HorizontalAlignment::Center,
                  }

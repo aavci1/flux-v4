@@ -107,7 +107,7 @@ Element Button::body() const {
   Theme const& theme = useEnvironment<Theme>();
   Color const accent = resolveColor(accentColor, theme.colorAccent);
   Color const destructive = resolveColor(destructiveColor, theme.colorDanger);
-  Font const fontResolved = resolveFont(font, theme.typeLabel.toFont());
+  Font const fontResolved = resolveFont(font, theme.fontLabel);
 
   Transition const trFast =
       theme.reducedMotion ? Transition::instant() : Transition::ease(theme.durationFast);
@@ -228,7 +228,7 @@ Element Button::body() const {
         .flex(isLink ? 0.f : 1.f, 1.f, 0.f),
       Text{
         .text = label,
-        .style = TextStyle::fromFont(fontResolved),
+        .font = fontResolved,
         .color = *labelAnim,
         .horizontalAlignment = isLink ? HorizontalAlignment::Leading : HorizontalAlignment::Center,
         .verticalAlignment = VerticalAlignment::Center,

@@ -43,7 +43,7 @@ struct LabeledCheckbox {
                 },
                 Text {
                     .text = label,
-                    .style = theme.typeBody,
+                    .font = theme.fontBody,
                     .color = disabled ? theme.colorTextDisabled : theme.colorTextPrimary,
                     .verticalAlignment = VerticalAlignment::Center,
                 }
@@ -90,14 +90,14 @@ struct CheckboxDemoRoot {
                     .children = children(
                             Text{
                                 .text = "Checkbox",
-                                .style = theme.typeDisplay,
+                                .font = theme.fontDisplay,
                                 .color = theme.colorTextPrimary,
                             },
                             Text{
                                         .text = "Boolean check with animated icon, "
                                                 "indeterminate state, focus ring, "
                                                 "and press scale.",
-                                        .style = theme.typeBody,
+                                        .font = theme.fontBody,
                                         .color = theme.colorTextSecondary,
                                         .wrapping = TextWrapping::Wrap,
                                     }
@@ -105,7 +105,7 @@ struct CheckboxDemoRoot {
 
                             Text{
                                 .text = "Form controls",
-                                .style = theme.typeHeading,
+                                .font = theme.fontHeading,
                                 .color = theme.colorTextPrimary,
                             },
                             Element{LabeledCheckbox{
@@ -121,7 +121,7 @@ struct CheckboxDemoRoot {
 
                             Text{
                                 .text = "Disabled",
-                                .style = theme.typeHeading,
+                                .font = theme.fontHeading,
                                 .color = theme.colorTextPrimary,
                             },
                             Element{LabeledCheckbox{
@@ -139,7 +139,7 @@ struct CheckboxDemoRoot {
 
                             Text{
                                 .text = "Select all (indeterminate)",
-                                .style = theme.typeHeading,
+                                .font = theme.fontHeading,
                                 .color = theme.colorTextPrimary,
                             },
                             HStack{
@@ -157,7 +157,7 @@ struct CheckboxDemoRoot {
                                                 },
                                                 Text{
                                                     .text = "Select all items",
-                                                    .style = theme.typeLabel,
+                                                    .font = theme.fontLabel,
                                                     .color = theme.colorTextPrimary,
                                                     .verticalAlignment = VerticalAlignment::Center,
                                                 }
@@ -209,7 +209,7 @@ struct CheckboxDemoRoot {
 
                             Text{
                                 .text = "Custom color",
-                                .style = theme.typeHeading,
+                                .font = theme.fontHeading,
                                 .color = theme.colorTextPrimary,
                             },
                             HStack{
@@ -224,7 +224,7 @@ struct CheckboxDemoRoot {
                                                 },
                                                 Text{
                                                     .text = "Green accent",
-                                                    .style = theme.typeBody,
+                                                    .font = theme.fontBody,
                                                     .color = theme.colorTextPrimary,
                                                 }
                                             ),
@@ -233,7 +233,7 @@ struct CheckboxDemoRoot {
 
                             Text{
                                 .text = status,
-                                .style = theme.typeBodySmall,
+                                .font = theme.fontBodySmall,
                                 .color = theme.colorTextMuted,
                                 .wrapping = TextWrapping::Wrap,
                             }

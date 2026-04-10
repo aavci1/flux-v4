@@ -17,10 +17,10 @@ struct Icon : ViewModifiers<Icon> {
     IconName name {};
 
     /// Icon size in points. Drives both the font size and the component's intrinsic frame.
-    /// `kFloatFromTheme` → `Theme::typeBody.size`.
+    /// `kFloatFromTheme` → `Theme::fontBody.size`.
     float size = kFloatFromTheme;
 
-    /// Icon weight. `kFloatFromTheme` → `Theme::typeBody.weight`.
+    /// Icon weight. `kFloatFromTheme` → `Theme::fontBody.weight`.
     float weight = kFloatFromTheme;
 
     /// Icon color. `kColorFromTheme` → `Theme::colorTextPrimary`.

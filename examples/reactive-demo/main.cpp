@@ -132,8 +132,8 @@ public:
     c.drawCircle(center, r, FillStyle::solid(Color::rgb(255, 255, 255)), StrokeStyle::solid(Color::rgb(40, 44, 55), 2.f));
 
     Theme const theme = Theme::light();
-    Font const bodyFont = theme.typeBody.toFont();
-    Font const hintFont = theme.typeBodySmall.toFont();
+    Font const bodyFont = theme.fontBody;
+    Font const hintFont = theme.fontBodySmall;
 
     std::string const line = std::string("Signal<int> clicks: ") + std::to_string(s_.clicks.get()) +
                              "  |  Computed<float> dist: " +

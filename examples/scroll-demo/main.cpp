@@ -21,7 +21,7 @@ struct ScrollDemoRoot {
       line << "Row " << i << " — drag or scroll wheel / trackpad";
       rows.push_back(
           Text{.text = line.str(),
-               .style = theme.typeBody,
+               .font = theme.fontBody,
                .color = Color::rgb(28, 28, 36),
                .horizontalAlignment = HorizontalAlignment::Leading});
     }
@@ -30,7 +30,7 @@ struct ScrollDemoRoot {
         .spacing = 0.f,
         .children = children(
                 Text{.text = "ScrollView",
-                     .style = theme.typeDisplay,
+                     .font = theme.fontDisplay,
                      .color = Color::rgb(18, 18, 24),
                      .horizontalAlignment = HorizontalAlignment::Center,
                  }

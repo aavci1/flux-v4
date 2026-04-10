@@ -76,7 +76,7 @@ struct BlendCell : ViewModifiers<BlendCell> {
                     StrokeStyle::solid(Color::rgb(90, 90, 100), 1.2f));
 
     Theme const theme = Theme::light();
-    Font const labelFont = theme.typeLabel.toFont();
+    Font const labelFont = theme.fontLabel;
     auto labelLayout =
         Application::instance().textSystem().layout(title, labelFont, theme.colorTextPrimary, 0.f);
     Size const m = labelLayout->measuredSize;

@@ -30,7 +30,7 @@ struct LabeledToggle {
         .children = children(
             Text{
                 .text = label,
-                .style = theme.typeBody,
+                .font = theme.fontBody,
                 .color = disabled ? theme.colorTextDisabled : theme.colorTextPrimary,
             },
             Spacer{},
@@ -71,21 +71,21 @@ struct ToggleDemoRoot {
                 .children = children(
                     Text{
                         .text = "Toggle",
-                        .style = theme.typeDisplay,
+                        .font = theme.fontDisplay,
                         .color = theme.colorTextPrimary,
                     },
                     Text{
                         .text = "Boolean switch with animated thumb, "
                                 "focus ring, disabled state, and "
                                 "custom sizing.",
-                        .style = theme.typeBody,
+                        .font = theme.fontBody,
                         .color = theme.colorTextSecondary,
                         .wrapping = TextWrapping::Wrap,
                     }.flex(1.f),
 
                     Text{
                         .text = "Settings",
-                        .style = theme.typeHeading,
+                        .font = theme.fontHeading,
                         .color = theme.colorTextPrimary,
                     },
                     Element{LabeledToggle{
@@ -108,7 +108,7 @@ struct ToggleDemoRoot {
 
                     Text{
                         .text = "Custom colors",
-                        .style = theme.typeHeading,
+                        .font = theme.fontHeading,
                         .color = theme.colorTextPrimary,
                     },
                     HStack{
@@ -117,7 +117,7 @@ struct ToggleDemoRoot {
                         .children = children(
                             Text{
                                 .text = "Green accent",
-                                .style = theme.typeBody,
+                                .font = theme.fontBody,
                                 .color = theme.colorTextPrimary,
                             },
                             Spacer{},
@@ -132,7 +132,7 @@ struct ToggleDemoRoot {
 
                     Text{
                         .text = "Custom sizing",
-                        .style = theme.typeHeading,
+                        .font = theme.fontHeading,
                         .color = theme.colorTextPrimary,
                     },
                     HStack{
@@ -141,7 +141,7 @@ struct ToggleDemoRoot {
                         .children = children(
                             Text{
                                 .text = "Compact (34 × 20)",
-                                .style = theme.typeBody,
+                                .font = theme.fontBody,
                                 .color = theme.colorTextPrimary,
                             },
                             Spacer{},
@@ -158,7 +158,7 @@ struct ToggleDemoRoot {
 
                     Text{
                         .text = statusText,
-                        .style = theme.typeBodySmall,
+                        .font = theme.fontBodySmall,
                         .color = theme.colorTextMuted,
                         .wrapping = TextWrapping::Wrap,
                     }

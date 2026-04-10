@@ -63,13 +63,13 @@ struct LabeledSlider {
                 .children = children(
                     Text{
                         .text = label,
-                        .style = theme.typeLabel,
+                        .font = theme.fontLabel,
                         .color = theme.colorTextPrimary,
                     },
                     Spacer{},
                     Text{
                         .text = valueText,
-                        .style = theme.typeLabel,
+                        .font = theme.fontLabel,
                         .color = theme.colorTextSecondary,
                     }
                 ),
@@ -107,13 +107,13 @@ struct RgbColorSelectorRoot {
                 .children = children(
                     Text{
                         .text = "RGB color",
-                        .style = theme.typeDisplay,
+                        .font = theme.fontDisplay,
                         .color = theme.colorTextPrimary,
                     },
                     Text{
                         .text = "Adjust red, green, and blue channels (0–255). The preview updates "
                                 "as you drag or use the keyboard.",
-                        .style = theme.typeBody,
+                        .font = theme.fontBody,
                         .color = theme.colorTextSecondary,
                         .wrapping = TextWrapping::Wrap,
                     }.flex(1.f),
@@ -130,7 +130,7 @@ struct RgbColorSelectorRoot {
                                 .flex(1.f),
                             Text{
                                 .text = fmtHex(*red, *green, *blue),
-                                .style = theme.typeTitle,
+                                .font = theme.fontTitle,
                                 .color = luminance(preview) > 0.55f ? theme.colorTextPrimary : theme.colorOnAccent,
                             }
                         ),
@@ -138,13 +138,13 @@ struct RgbColorSelectorRoot {
 
                     Text{
                         .text = fmtRgbLine(*red, *green, *blue),
-                        .style = theme.typeBodySmall,
+                        .font = theme.fontBodySmall,
                         .color = theme.colorTextSecondary,
                     },
 
                     Text{
                         .text = "Channels",
-                        .style = theme.typeHeading,
+                        .font = theme.fontHeading,
                         .color = theme.colorTextPrimary,
                     },
                     Element{LabeledSlider{

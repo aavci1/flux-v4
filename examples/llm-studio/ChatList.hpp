@@ -45,13 +45,13 @@ struct ChatList : ViewModifiers<ChatList> {
                     .children = children(
                         Text {
                             .text = "Chats",
-                            .style = theme.typeTitle,
+                            .font = theme.fontTitle,
                             .color = theme.colorTextPrimary
                         },
                         Spacer {},
                         Icon {
                             .name = IconName::Add,
-                            .size = theme.typeTitle.size,
+                            .size = theme.fontTitle.size,
                             .color = theme.colorTextPrimary
                         }.cursor(Cursor::Hand)
                         .onTap([oc]() {

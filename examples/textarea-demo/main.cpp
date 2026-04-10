@@ -39,7 +39,7 @@ Etiam ornare neque quis ante porttitor sodales eget sit amet urna. Phasellus nec
             .children = children(
                 Text {
                     .text = "Text Area",
-                    .style = theme.typeDisplay,
+                    .font = theme.fontDisplay,
                     .color = theme.colorTextPrimary,
                 },
                 TextArea {

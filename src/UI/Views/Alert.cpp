@@ -63,7 +63,7 @@ std::vector<Element> Alert::buildContent(Color titleC, Color msgC, Theme const& 
   float const contentW = std::max(0.f, cardWidth - 2.f * theme.space6);
   rows.push_back(Text{
                      .text = title,
-                     .style = theme.typeTitle,
+                     .font = theme.fontTitle,
                      .color = titleC,
                  }
                      .size(contentW, 0.f));
@@ -71,7 +71,7 @@ std::vector<Element> Alert::buildContent(Color titleC, Color msgC, Theme const& 
   if (!message.empty()) {
     rows.push_back(Text{
                        .text = message,
-                       .style = theme.typeBody,
+                       .font = theme.fontBody,
                        .color = msgC,
                        .wrapping = TextWrapping::Wrap,
                    }

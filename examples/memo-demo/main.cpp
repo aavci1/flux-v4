@@ -56,7 +56,7 @@ struct MemoHoverButton {
                           .cursor(Cursor::Hand)
                           .cornerRadius(8.f),
                       Text{.text = "Hover me (rebuild, no text change)",
-                           .style = theme.typeBodySmall,
+                           .font = theme.fontBodySmall,
                            .color = btnText,
                        }
                           .padding(10.f)
@@ -82,14 +82,14 @@ struct MemoDemo {
             .alignment = Alignment::Start,
             .children = children(
                 Text{.text = "useMemo demo",
-                     .style = theme.typeDisplay,
+                     .font = theme.fontDisplay,
                      .color = pal::label},
 
                 HStack{
                     .spacing = 0.f,
                     .children = children(
                             Text{.text = "Content: " + *text,
-                                 .style = theme.typeBody,
+                                 .font = theme.fontBody,
                                  .color = pal::label,
                                  .wrapping = TextWrapping::Wrap,
                              }
@@ -109,7 +109,7 @@ struct MemoDemo {
                             .onTap([text] { text = *text + " word"; })
                             .cornerRadius(8.f),
                         Text{.text = "+ Word",
-                             .style = theme.typeLabel,
+                             .font = theme.fontLabel,
                              .color = theme.colorOnAccent,
                          }
                             .padding(10.f)
@@ -124,7 +124,7 @@ struct MemoDemo {
                             .onTap([text] { text = std::string{}; })
                             .cornerRadius(8.f),
                         Text{.text = "Clear",
-                             .style = theme.typeBody,
+                             .font = theme.fontBody,
                              .color = pal::label,
                          }
                             .padding(10.f)
@@ -136,22 +136,22 @@ struct MemoDemo {
                     .alignment = Alignment::Start,
                     .children = children(
                         Text{.text = "Words (useMemo): " + std::to_string(result.wordCount),
-                             .style = theme.typeBody,
+                             .font = theme.fontBody,
                              .color = pal::label},
                         Text{.text = "Characters (useMemo): " + std::to_string(result.charCount),
-                             .style = theme.typeBody,
+                             .font = theme.fontBody,
                              .color = pal::label},
                         Text{.text = "Parse calls (expensive fn): " + std::to_string(gParseCalls),
-                             .style = theme.typeBodySmall,
+                             .font = theme.fontBodySmall,
                              .color = pal::accent},
                         Text{.text = "Total rebuilds: " + std::to_string(gRebuildCount) +
                                          " (×2 per event: measure + build pass)",
-                             .style = theme.typeBody,
+                             .font = theme.fontBody,
                              .color = pal::sub},
                         Text{.text = "Cache hit ratio: " + std::to_string(cacheHits) + "/" +
                                          std::to_string(gRebuildCount) +
                                          " rebuilds skipped re-parse",
-                             .style = theme.typeBodySmall,
+                             .font = theme.fontBodySmall,
                              .color = pal::sub}
                     ),
                 }

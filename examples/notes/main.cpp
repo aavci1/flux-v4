@@ -14,7 +14,7 @@ struct SidebarView {
     return VStack{
       .spacing = 8.f,
       .children = children(
-        Text {.text = "Sidebar", .style = theme.typeLabel, .color = theme.colorTextSecondary},
+        Text {.text = "Sidebar", .font = theme.fontLabel, .color = theme.colorTextSecondary},
         Spacer{}
       ),
     };
@@ -31,7 +31,7 @@ struct EditorView {
         .children = children(
             Text {
                 .text = "Notes",
-                .style = theme.typeHeading,
+                .font = theme.fontHeading,
                 .color = theme.colorTextPrimary,
             },
             TextArea{
@@ -59,7 +59,7 @@ struct PreviewView {
           .children = children(
               Text {
                   .text = "Preview",
-                  .style = theme.typeHeading,
+                  .font = theme.fontHeading,
                   .color = theme.colorTextPrimary,
               },
               TextArea{

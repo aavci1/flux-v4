@@ -82,7 +82,7 @@ struct PickerRow : ViewModifiers<PickerRow<T>> {
   Element body() const {
     bool const hovered = useHover();
     Theme const& theme = useEnvironment<Theme>();
-    float const iconSz = resolveFloat(kFloatFromTheme, theme.typeBody.size);
+    float const iconSz = resolveFloat(kFloatFromTheme, theme.fontBody.size);
     float const checkColW = std::max(12.f, iconSz);
 
     Color const bg = keyboardActive ? hoverColor
@@ -110,7 +110,7 @@ struct PickerRow : ViewModifiers<PickerRow<T>> {
         .children = flux::children(
             Text{
                 .text = option.label,
-                .style = TextStyle::fromFont(font),
+                .font = font,
                 .color = textColor,
                 .horizontalAlignment = HorizontalAlignment::Leading,
                 .verticalAlignment = VerticalAlignment::Center,
@@ -307,7 +307,7 @@ struct Picker : ViewModifiers<Picker<T>> {
     Transition const trMed =
         theme.reducedMotion ? Transition::instant() : Transition::ease(theme.durationMedium);
 
-    Font const fontR = resolveFont(font, theme.typeBody.toFont());
+    Font const fontR = resolveFont(font, theme.fontBody);
     Color const textR = r.textColor;
     Color const plcR = r.placeholderColor;
     Color const bgR = r.backgroundColor;
@@ -366,7 +366,7 @@ struct Picker : ViewModifiers<Picker<T>> {
 
     std::optional<Rect> const layoutRect = useLayoutRect();
     float const triggerWidth = layoutRect ? layoutRect->width : 200.f;
-    float const chevronIconSz = resolveFloat(kFloatFromTheme, theme.typeBody.size);
+    float const chevronIconSz = resolveFloat(kFloatFromTheme, theme.fontBody.size);
 
     auto fillAnim = useAnimated<Color>(bgR);
     {
@@ -484,7 +484,7 @@ struct Picker : ViewModifiers<Picker<T>> {
                 .size(padHResolved, h),
             Text{
                 .text = hasMatch ? selectedLabel : placeholder,
-                .style = TextStyle::fromFont(fontR),
+                .font = fontR,
                 .color = hasMatch ? textR : plcR,
                 .horizontalAlignment = HorizontalAlignment::Leading,
                 .verticalAlignment = VerticalAlignment::Center,

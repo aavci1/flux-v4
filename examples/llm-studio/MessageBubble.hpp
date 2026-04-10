@@ -39,7 +39,7 @@ struct MessageBubble : ViewModifiers<MessageBubble> {
 
         return Text {
             .text = message.text,
-            .style = theme.typeBody,
+            .font = theme.fontBody,
             .color = theme.colorTextPrimary,
             .verticalAlignment = VerticalAlignment::Top,
             .wrapping = TextWrapping::Wrap,

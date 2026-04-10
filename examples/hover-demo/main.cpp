@@ -35,7 +35,7 @@ struct ThreeStateButton {
             .cornerRadius(10.f),
             Text{
                 .text = label,
-                .style = theme.typeLabel,
+                .font = theme.fontLabel,
                 .color = theme.colorOnAccent,
                 .horizontalAlignment = HorizontalAlignment::Center,
                 .verticalAlignment = VerticalAlignment::Center,
@@ -59,7 +59,7 @@ struct HoverListRow {
                           .cursor(Cursor::Hand)
                           .cornerRadius(8.f),
                       Text{.text = "Item " + std::to_string(index) + (hovered ? "  ← pointer is here" : ""),
-                           .style = theme.typeBody,
+                           .font = theme.fontBody,
                            .color = theme.colorTextPrimary,
                        }
                           .padding(14.f)
@@ -77,7 +77,7 @@ struct HoverDemo {
                           .alignment = Alignment::Start,
                           .children = children(
                                   Text{.text = "useHover / usePress demo",
-                                       .style = theme.typeDisplay,
+                                       .font = theme.fontDisplay,
                                        .color = theme.colorTextPrimary},
                                   HStack{
                                       .spacing = 0.f,
@@ -85,7 +85,7 @@ struct HoverDemo {
                                               Text{.text = "Move over the button to see hover. "
                                                            "Click and hold to see press. "
                                                            "Drag outside while holding to confirm press stays active.",
-                                                   .style = theme.typeBody,
+                                                   .font = theme.fontBody,
                                                    .color = theme.colorTextSecondary,
                                                    .wrapping = TextWrapping::Wrap}
                                                   .flex(1.f)
@@ -96,7 +96,7 @@ struct HoverDemo {
                                       .onTap = [] {},
                                   },
                                   Text{.text = "Hover rows (no click needed):",
-                                       .style = theme.typeHeading,
+                                       .font = theme.fontHeading,
                                        .color = theme.colorTextPrimary},
                                   ForEach<int>(
                                       [] {

@@ -36,7 +36,7 @@ struct ButtonDemoRoot {
                     .alignment = Alignment::Start,
                     .children = children(
                             Text{ .text = "Button",
-                                  .style = theme.typeDisplay,
+                                  .font = theme.fontDisplay,
                                   .color = theme.colorTextPrimary },
                             HStack{
                                 .spacing = 0.f,
@@ -44,7 +44,7 @@ struct ButtonDemoRoot {
                                         Text{
                                                 .text = "Five variants, hover/press/focus, disabled state, and Tab navigation. "
                                                         "Link focus rings appear only after keyboard focus.",
-                                                .style = theme.typeBody,
+                                                .font = theme.fontBody,
                                                 .color = theme.colorTextSecondary,
                                                 .wrapping = TextWrapping::Wrap,
                                             }
@@ -52,7 +52,7 @@ struct ButtonDemoRoot {
                                     ),
                             },
                             Text{ .text = "Variants",
-                                  .style = theme.typeHeading,
+                                  .font = theme.fontHeading,
                                   .color = theme.colorTextPrimary },
                             HStack{
                                 .spacing = 8.f,
@@ -81,7 +81,7 @@ struct ButtonDemoRoot {
                                     ),
                             },
                             Text{ .text = "Disabled",
-                                  .style = theme.typeHeading,
+                                  .font = theme.fontHeading,
                                   .color = theme.colorTextPrimary },
                             HStack{
                                 .spacing = 8.f,
@@ -106,18 +106,18 @@ struct ButtonDemoRoot {
                                 .alignment = Alignment::Center,
                                 .children = children(
                                         Text{ .text = "Inline link —",
-                                              .style = theme.typeBodySmall,
+                                              .font = theme.fontBodySmall,
                                               .color = theme.colorTextSecondary },
                                         Button{ .label = "Forgot password?",
                                                 .variant = ButtonVariant::Link,
-                                                .font = theme.typeBodySmall.toFont(),
+                                                .font = theme.fontBodySmall,
                                                 .onTap = [] {
                                                   std::fprintf(stderr, "[button-demo] Link tap\n");
                                                 } }
                                     ),
                             },
                             Text{ .text = "Form (Tab between controls; Cmd+S when Save is enabled)",
-                                  .style = theme.typeHeading,
+                                  .font = theme.fontHeading,
                                   .color = theme.colorTextPrimary },
                             HStack{
                                 .spacing = 8.f,
