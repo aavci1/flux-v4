@@ -5,7 +5,6 @@
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/UI/InputFieldLayout.hpp>
 #include <Flux/UI/Theme.hpp>
-#include <Flux/UI/Views/TextArea.hpp>
 #include <Flux/UI/Views/TextEditBehavior.hpp>
 #include <Flux/UI/Views/TextEditUtils.hpp>
 
@@ -13,6 +12,7 @@
 #include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/StateStore.hpp>
 
+#include "UI/Views/TextInputMultiline.hpp"
 #include "UI/Views/TextSupport.hpp"
 
 #include <algorithm>
@@ -85,26 +85,6 @@ ResolvedTextInputStyle resolveTextInputStyle(TextInput::Style const &style, Them
         .cornerRadius = resolveFloat(style.cornerRadius, theme.radiusMedium),
         .paddingH = resolveFloat(style.paddingH, theme.paddingFieldH),
         .paddingV = resolveFloat(style.paddingV, theme.paddingFieldV),
-    };
-}
-
-TextArea::Style asTextAreaStyle(TextInput::Style const &style) {
-    return TextArea::Style {
-        .font = style.font,
-        .textColor = style.textColor,
-        .placeholderColor = style.placeholderColor,
-        .backgroundColor = style.backgroundColor,
-        .borderColor = style.borderColor,
-        .borderFocusColor = style.borderFocusColor,
-        .caretColor = style.caretColor,
-        .selectionColor = style.selectionColor,
-        .disabledColor = style.disabledColor,
-        .borderWidth = style.borderWidth,
-        .borderFocusWidth = style.borderFocusWidth,
-        .cornerRadius = style.cornerRadius,
-        .paddingH = style.paddingH,
-        .paddingV = style.paddingV,
-        .lineHeight = style.lineHeight,
     };
 }
 
@@ -319,22 +299,7 @@ struct TextInputView {
 
 Element TextInput::body() const {
     if (multiline) {
-        return TextArea {
-            .value = value,
-            .placeholder = placeholder,
-            .style = asTextAreaStyle(style),
-            .height =
-                TextAreaHeight {
-                    .fixed = multilineHeight.fixed,
-                    .minIntrinsic = multilineHeight.minIntrinsic,
-                    .maxIntrinsic = multilineHeight.maxIntrinsic,
-                },
-            .styler = styler,
-            .disabled = disabled,
-            .maxLength = maxLength,
-            .onChange = onChange,
-            .onEscape = onEscape,
-        };
+        return text_input_detail::buildMultilineTextInput(*this);
     }
 
     Theme const &theme = useEnvironment<Theme>();
