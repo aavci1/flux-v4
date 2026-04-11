@@ -16,6 +16,9 @@ endfunction()
 add_executable(hello_world hello-world/main.cpp)
 target_link_libraries(hello_world PRIVATE flux)
 
+add_executable(lambda-studio lambda-studio/main.cpp)
+target_link_libraries(lambda-studio PRIVATE flux)
+
 add_executable(clock_demo clock-demo/main.cpp)
 target_link_libraries(clock_demo PRIVATE flux)
 
@@ -123,6 +126,7 @@ target_link_libraries(llm_studio PRIVATE flux common)
 
 set(FLUX_EXAMPLE_TARGETS
     hello_world
+    lambda-studio
     clock_demo
     blend_demo
     text_demo
