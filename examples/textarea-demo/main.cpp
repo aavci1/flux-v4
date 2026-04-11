@@ -1,4 +1,4 @@
-// Multiline TextArea: Escape clears notes (onEscape).
+// Multiline TextInput: Escape clears notes (onEscape).
 // Styling uses chained Element modifiers (fill, stroke, corner radius, clip, flex) instead of
 // duplicating chrome fields on the struct.
 
@@ -10,7 +10,7 @@
 #include <Flux/Reactive/Reactive.hpp>
 #include <Flux/UI/UI.hpp>
 #include <Flux/UI/Views/Text.hpp>
-#include <Flux/UI/Views/TextArea.hpp>
+#include <Flux/UI/Views/TextInput.hpp>
 #include <Flux/UI/Views/VStack.hpp>
 
 #include <cstdio>
@@ -42,9 +42,10 @@ Etiam ornare neque quis ante porttitor sodales eget sit amet urna. Phasellus nec
                     .font = theme.fontDisplay,
                     .color = theme.colorTextPrimary,
                 },
-                TextArea {
+                TextInput {
                     .value = text,
                     .placeholder = "Start typing…",
+                    .multiline = true,
                 }.flex(1.f, 1.f, 0.f)
             ),
         }.padding(20.f);
@@ -55,7 +56,7 @@ int main(int argc, char* argv[]) {
     Application app(argc, argv);
     auto& w = app.createWindow<Window>({
         .size = {480, 560},
-        .title = "Flux — TextArea",
+        .title = "Flux — Multiline TextInput",
         .resizable = true,
     });
 

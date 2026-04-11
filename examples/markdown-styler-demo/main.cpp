@@ -1,4 +1,4 @@
-// TextArea `.styler` demo: lightweight markdown-inspired highlighting (headings, bold, `code`).
+// Multiline TextInput `.styler` demo: lightweight markdown-inspired highlighting (headings, bold, `code`).
 
 #include <Flux.hpp>
 #include <Flux/Core/WindowUI.hpp>
@@ -7,7 +7,7 @@
 #include <Flux/Reactive/Reactive.hpp>
 #include <Flux/UI/UI.hpp>
 #include <Flux/UI/Views/Text.hpp>
-#include <Flux/UI/Views/TextArea.hpp>
+#include <Flux/UI/Views/TextInput.hpp>
 #include <Flux/UI/Views/VStack.hpp>
 
 #include <iostream>
@@ -30,7 +30,7 @@ enum class Elements {
 
 
 
-/// Maps the full UTF-8 buffer to non-overlapping attributed runs (required by \c TextArea).
+/// Maps the full UTF-8 buffer to non-overlapping attributed runs (required by multiline \c TextInput).
 std::vector<AttributedRun> markdownStyler(std::string_view sv) {
   std::string const text(sv);
   std::uint32_t const n = static_cast<std::uint32_t>(text.size());
@@ -217,7 +217,7 @@ This is `inline-code`.
         .children =
             children(
                 Text {
-                    .text = "Markdown styler (TextArea)",
+                    .text = "Markdown styler (multiline TextInput)",
                     .font = theme.fontDisplay,
                     .color = theme.colorTextPrimary,
                 },
@@ -227,13 +227,14 @@ This is `inline-code`.
                     .color = theme.colorTextSecondary,
                     .wrapping = TextWrapping::Wrap,
                 },
-                TextArea {
+                TextInput {
                     .value = doc,
                     .placeholder = "Write markdown-like text…",
+                    .styler = markdownStyler,
                     .style = {
                       .backgroundColor = Color::hex(0x1F1F1F),
                     },
-                    .styler = markdownStyler,
+                    .multiline = true,
                 }.flex(1.f, 1.f, 0.f)),
     }
         .padding(20.f)

@@ -2,8 +2,8 @@
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/UI.hpp>
 #include <Flux/UI/Views/Text.hpp>
-#include <Flux/UI/Views/TextArea.hpp>
 #include <Flux/UI/Views/Spacer.hpp>
+#include <Flux/UI/Views/TextInput.hpp>
 #include <Flux/UI/Views/VStack.hpp>
 
 using namespace flux;
@@ -34,9 +34,10 @@ struct EditorView {
                 .font = theme.fontHeading,
                 .color = theme.colorTextPrimary,
             },
-            TextArea{
+            TextInput{
                 .value = text,
                 .placeholder = "Start typing…",
+                .multiline = true,
                 .onChange =
                     [](std::string const &v) {
                       std::fprintf(stderr, "length=%zu\n", v.size());
@@ -62,9 +63,10 @@ struct PreviewView {
                   .font = theme.fontHeading,
                   .color = theme.colorTextPrimary,
               },
-              TextArea{
+              TextInput{
                   .value = text,
                   .placeholder = "Start typing…",
+                  .multiline = true,
                   .onChange =
                       [](std::string const &v) {
                         std::fprintf(stderr, "length=%zu\n", v.size());

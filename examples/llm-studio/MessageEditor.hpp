@@ -23,10 +23,11 @@ struct MessageEditor : ViewModifiers<MessageEditor> {
             .spacing = 16.f,
             .alignment = Alignment::Start,
             .children = children(
-                TextArea {
+                TextInput {
                     .value = value,
                     .placeholder = "Type your message here...",
-                    .style = TextArea::Style::plain()
+                    .style = TextInput::Style::plain(),
+                    .multiline = true,
                 },
                 HStack {
                     .spacing = 16.f,
