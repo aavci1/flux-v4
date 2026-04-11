@@ -1,260 +1,227 @@
-// Typography: every Theme text style, semantic colours, wrapping, alignment, and line limits.
 #include <Flux.hpp>
-#include <Flux/Core/WindowUI.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/UI.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/ScrollView.hpp>
-#include <Flux/UI/Views/Spacer.hpp>
 #include <Flux/UI/Views/Text.hpp>
 #include <Flux/UI/Views/VStack.hpp>
 #include <Flux/UI/Views/ZStack.hpp>
 
 #include <string>
-#include <utility>
-#include <vector>
 
 using namespace flux;
 
 namespace {
 
-char const* kLoremShort =
-    "Resize the window to see wrapping reflow. Flux lays out UTF-8 text with the same constraints used "
-    "for measurement.";
-
-char const* kLongUnbroken =
-    "Supercalifragilisticexpialidocious_pseudopseudohypoparathyroidism_abcdefghijklmnopqrstuvwxyz";
-
-Element styleRow(Theme const& theme, char const* tokenName, Font const& st, char const* sample) {
-  std::vector<Element> row;
-  row.push_back(Text{
-                    .text = tokenName,
-                    .font = theme.fontLabelSmall,
-                    .color = theme.colorTextMuted,
-                }
-                    .size(128.f, 0.f));
-  row.push_back(Text{
-                    .text = sample,
-                    .font = st,
-                    .color = theme.colorTextPrimary,
-                    .wrapping = TextWrapping::Wrap,
-                }
-                    .flex(1.f));
-  return HStack{
-      .spacing = theme.space3,
-      .alignment = Alignment::Center,
-      .children = std::move(row),
-  };
+Element section(Theme const &theme, std::string title, std::string body, Element content) {
+    return VStack {
+        .spacing = theme.space3,
+        .alignment = Alignment::Start,
+        .children = children(
+            Text {
+                .text = std::move(title),
+                .font = theme.fontHeading,
+                .color = theme.colorTextPrimary,
+            },
+            Text {
+                .text = std::move(body),
+                .font = theme.fontBody,
+                .color = theme.colorTextSecondary,
+                .wrapping = TextWrapping::Wrap,
+            },
+            std::move(content)
+        )
+    }
+        .padding(theme.space4)
+        .fill(FillStyle::solid(theme.colorSurfaceOverlay))
+        .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
+        .cornerRadius(theme.radiusLarge);
 }
 
-Element semanticColorsSection(Theme const& theme) {
-  std::vector<Element> items;
-  items.push_back(Text{
-      .text = "colorTextPrimary — main ink on surfaces.",
-      .font = theme.fontBody,
-      .color = theme.colorTextPrimary,
-      .wrapping = TextWrapping::Wrap,
-  });
-  items.push_back(Text{
-      .text = "colorTextSecondary — de-emphasised descriptions.",
-      .font = theme.fontBody,
-      .color = theme.colorTextSecondary,
-      .wrapping = TextWrapping::Wrap,
-  });
-  items.push_back(Text{
-      .text = "colorTextMuted — hints and tertiary detail.",
-      .font = theme.fontBody,
-      .color = theme.colorTextMuted,
-      .wrapping = TextWrapping::Wrap,
-  });
-  items.push_back(Text{
-      .text = "colorAccent — links and interactive emphasis.",
-      .font = theme.fontBody,
-      .color = theme.colorAccent,
-      .wrapping = TextWrapping::Wrap,
-  });
-  items.push_back(Text{
-      .text = "colorDanger — destructive or error context.",
-      .font = theme.fontBody,
-      .color = theme.colorDanger,
-      .wrapping = TextWrapping::Wrap,
-  });
-  return VStack{
-      .spacing = theme.space2,
-      .alignment = Alignment::Start,
-      .children = std::move(items),
-  };
+Element typeRow(Theme const &theme, std::string tokenName, Font const &font, std::string sample) {
+    return HStack {
+        .spacing = theme.space3,
+        .alignment = Alignment::Start,
+        .children = children(
+            Text {
+                .text = std::move(tokenName),
+                .font = theme.fontLabelSmall,
+                .color = theme.colorTextMuted,
+            }
+                .size(130.f, 0.f),
+            Text {
+                .text = std::move(sample),
+                .font = font,
+                .color = theme.colorTextPrimary,
+                .wrapping = TextWrapping::Wrap,
+            }
+                .flex(1.f)
+        )
+    };
 }
 
-Element wrappingSection(Theme const& theme) {
-  std::vector<Element> items;
-  items.push_back(Text{
-      .text = "Wrap (default)",
-      .font = theme.fontLabel,
-      .color = theme.colorTextPrimary,
-  });
-  items.push_back(Text{
-      .text = kLoremShort,
-      .font = theme.fontBody,
-      .color = theme.colorTextPrimary,
-      .wrapping = TextWrapping::Wrap,
-  });
-  items.push_back(Text{
-      .text = "NoWrap — single line; may clip horizontally when space is tight.",
-      .font = theme.fontLabel,
-      .color = theme.colorTextPrimary,
-  });
-  items.push_back(Text{
-      .text = kLongUnbroken,
-      .font = theme.fontBodySmall,
-      .color = theme.colorTextSecondary,
-      .wrapping = TextWrapping::NoWrap,
-  });
-  items.push_back(Text{
-      .text = "WrapAnywhere — breaks inside long tokens when needed.",
-      .font = theme.fontLabel,
-      .color = theme.colorTextPrimary,
-  });
-  items.push_back(Text{
-      .text = kLongUnbroken,
-      .font = theme.fontBodySmall,
-      .color = theme.colorTextSecondary,
-      .wrapping = TextWrapping::WrapAnywhere,
-  });
-  return VStack{
-      .spacing = theme.space2,
-      .alignment = Alignment::Start,
-      .children = std::move(items),
-  };
-}
-
-Element alignBand(Theme const& theme, char const* word, HorizontalAlignment h) {
-  std::vector<Element> zs;
-  zs.push_back(Rectangle{}
-                   .fill(FillStyle::solid(theme.colorSurfaceHover))
-                   .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
-                   .height(40.f));
-  zs.push_back(Text{
-      .text = word,
-      .font = theme.fontBody,
-      .color = theme.colorTextPrimary,
-      .horizontalAlignment = h,
-  }
-                   .padding(8.f));
-  return ZStack{
-      .children = std::move(zs),
-  };
-}
-
-Element alignmentSection(Theme const& theme) {
-  std::vector<Element> items;
-  items.push_back(alignBand(theme, "Leading", HorizontalAlignment::Leading));
-  items.push_back(alignBand(theme, "Center", HorizontalAlignment::Center));
-  items.push_back(alignBand(theme, "Trailing", HorizontalAlignment::Trailing));
-  return VStack{
-      .spacing = theme.space2,
-      .children = std::move(items),
-  };
+Element colorTile(Theme const &theme, std::string name, Color swatch, Color textColor, std::string note) {
+    return VStack {
+        .spacing = theme.space2,
+        .alignment = Alignment::Start,
+        .children = children(
+            Rectangle {}
+                .height(46.f)
+                .fill(FillStyle::solid(swatch))
+                .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
+                .cornerRadius(theme.radiusMedium),
+            Text {
+                .text = std::move(name),
+                .font = theme.fontLabel,
+                .color = textColor,
+            },
+            Text {
+                .text = std::move(note),
+                .font = theme.fontBodySmall,
+                .color = theme.colorTextSecondary,
+                .wrapping = TextWrapping::Wrap,
+            }
+        )
+    }
+        .flex(1.f);
 }
 
 } // namespace
 
 struct TypographyDemoRoot {
-  auto body() const {
-    Theme const& theme = useEnvironment<Theme>();
+    auto body() const {
+        Theme const &theme = useEnvironment<Theme>();
 
-    std::vector<Element> col;
-    col.push_back(Text{
-        .text = "Typography",
-        .font = theme.fontDisplay,
-        .color = theme.colorTextPrimary,
-    });
-    col.push_back(Text{
-        .text = "Theme text styles, semantic colours, wrapping modes, alignment, and maxLines.",
-        .font = theme.fontBody,
-        .color = theme.colorTextSecondary,
-        .wrapping = TextWrapping::Wrap,
-    });
+        Element scaleSection = section(
+            theme, "Theme Scale",
+            "Each token has a role. The point is consistency of meaning, not just different font sizes.",
+            VStack {
+                .spacing = theme.space3,
+                .alignment = Alignment::Start,
+                .children = children(
+                    typeRow(theme, "fontDisplay", theme.fontDisplay, "Screen or hero headline"),
+                    typeRow(theme, "fontHeading", theme.fontHeading, "Major section heading"),
+                    typeRow(theme, "fontTitle", theme.fontTitle, "Card, modal, or nested panel title"),
+                    typeRow(theme, "fontSubtitle", theme.fontSubtitle, "Grouped subsection heading"),
+                    typeRow(theme, "fontBody", theme.fontBody, "Primary reading text for paragraphs and descriptions."),
+                    typeRow(theme, "fontBodySmall", theme.fontBodySmall, "Supporting text, captions, and metadata."),
+                    typeRow(theme, "fontLabel", theme.fontLabel, "Control labels and compact headers"),
+                    typeRow(theme, "fontLabelSmall", theme.fontLabelSmall, "Footnotes and dense UI labels"),
+                    typeRow(theme, "fontCode", theme.fontCode, "cache_key = typography_demo")
+                )
+            }
+        );
 
-    col.push_back(Text{
-        .text = "Theme scale",
-        .font = theme.fontHeading,
-        .color = theme.colorTextPrimary,
-    });
-    col.push_back(styleRow(theme, "fontDisplay", theme.fontDisplay, "Hero / screen title"));
-    col.push_back(styleRow(theme, "fontHeading", theme.fontHeading, "Major section heading"));
-    col.push_back(styleRow(theme, "fontTitle", theme.fontTitle, "Card or dialog title"));
-    col.push_back(styleRow(theme, "fontSubtitle", theme.fontSubtitle, "Subsection or group heading"));
-    col.push_back(styleRow(theme, "fontBody", theme.fontBody, "Body paragraph — primary reading text."));
-    col.push_back(styleRow(theme, "fontBodySmall", theme.fontBodySmall, "Supporting text and captions."));
-    col.push_back(styleRow(theme, "fontLabel", theme.fontLabel, "Field and control labels"));
-    col.push_back(styleRow(theme, "fontLabelSmall", theme.fontLabelSmall, "Compact labels and footnotes"));
-    col.push_back(styleRow(theme, "fontCode", theme.fontCode, "monospace_line_height"));
+        Element toneSection = section(
+            theme, "Semantic Tone",
+            "The semantic colors below should communicate hierarchy and intent before any icon or shape does.",
+            HStack {
+                .spacing = theme.space3,
+                .alignment = Alignment::Start,
+                .children = children(
+                    colorTile(theme, "Primary", theme.colorTextPrimary, theme.colorTextPrimary,
+                              "Main ink for titles and body copy."),
+                    colorTile(theme, "Secondary", theme.colorTextSecondary, theme.colorTextSecondary,
+                              "Supportive descriptions and less prominent text."),
+                    colorTile(theme, "Muted", theme.colorTextMuted, theme.colorTextMuted,
+                              "Hints, metadata, and tertiary detail.")
+                )
+            }
+        );
 
-    col.push_back(Text{
-        .text = "Semantic colours",
-        .font = theme.fontHeading,
-        .color = theme.colorTextPrimary,
-    });
-    col.push_back(semanticColorsSection(theme));
+        Element accentSection = section(
+            theme, "Accent States",
+            "Accent, success, warning, and danger should feel like semantic shifts, not random color changes.",
+            HStack {
+                .spacing = theme.space3,
+                .alignment = Alignment::Start,
+                .children = children(
+                    colorTile(theme, "Accent", theme.colorAccent, theme.colorAccent,
+                              "Interactive emphasis and active states."),
+                    colorTile(theme, "Success", theme.colorSuccess, theme.colorSuccess,
+                              "Positive outcomes and confirmations."),
+                    colorTile(theme, "Warning", theme.colorWarning, theme.colorWarning,
+                              "Cautionary context without full failure."),
+                    colorTile(theme, "Danger", theme.colorDanger, theme.colorDanger,
+                              "Destructive actions and error context.")
+                )
+            }
+        );
 
-    col.push_back(Text{
-        .text = "Wrapping",
-        .font = theme.fontHeading,
-        .color = theme.colorTextPrimary,
-    });
-    col.push_back(wrappingSection(theme));
+        Element compositionSection = section(
+            theme, "Composition Example",
+            "A good screen usually mixes only a few levels of type at once: one headline, one body voice, and one supporting voice.",
+            VStack {
+                .spacing = theme.space2,
+                .alignment = Alignment::Start,
+                .children = children(
+                    Text {
+                        .text = "Project Overview",
+                        .font = theme.fontTitle,
+                        .color = theme.colorTextPrimary,
+                    },
+                    Text {
+                        .text = "Typography feels polished when the hierarchy is obvious at a glance and calm to read for long stretches.",
+                        .font = theme.fontBody,
+                        .color = theme.colorTextPrimary,
+                        .wrapping = TextWrapping::Wrap,
+                    },
+                    Text {
+                        .text = "Updated 12 minutes ago by Design Systems",
+                        .font = theme.fontBodySmall,
+                        .color = theme.colorTextSecondary,
+                        .wrapping = TextWrapping::Wrap,
+                    },
+                    Text {
+                        .text = "Stable",
+                        .font = theme.fontLabel,
+                        .color = theme.colorSuccess,
+                    }
+                )
+            }
+        );
 
-    col.push_back(Text{
-        .text = "Horizontal alignment",
-        .font = theme.fontHeading,
-        .color = theme.colorTextPrimary,
-    });
-    col.push_back(alignmentSection(theme));
+        Element content = VStack {
+            .spacing = theme.space5,
+            .alignment = Alignment::Start,
+            .children = children(
+                Text {
+                    .text = "Typography Demo",
+                    .font = theme.fontDisplay,
+                    .color = theme.colorTextPrimary,
+                },
+                Text {
+                    .text = "A clean reference for the theme text scale, semantic colors, and tone.",
+                    .font = theme.fontBody,
+                    .color = theme.colorTextSecondary,
+                    .wrapping = TextWrapping::Wrap,
+                },
+                std::move(scaleSection),
+                std::move(toneSection),
+                std::move(accentSection),
+                std::move(compositionSection)
+            )
+        }
+                              .padding(theme.space5);
 
-    col.push_back(Text{
-        .text = "maxLines",
-        .font = theme.fontHeading,
-        .color = theme.colorTextPrimary,
-    });
-    col.push_back(Text{
-        .text = "The paragraph below is limited to two lines (long copy is clipped for layout).",
-        .font = theme.fontBodySmall,
-        .color = theme.colorTextSecondary,
-        .wrapping = TextWrapping::Wrap,
-    });
-    col.push_back(Text{
-        .text = kLoremShort + std::string(" ") + kLoremShort,
-        .font = theme.fontBody,
-        .color = theme.colorTextPrimary,
-        .wrapping = TextWrapping::Wrap,
-        .maxLines = 2,
-    });
-
-    col.push_back(Spacer{}.height(theme.space4));
-
-    Element column = VStack{
-        .spacing = theme.space5,
-        .alignment = Alignment::Start,
-        .children = std::move(col),
+        return ScrollView {
+            .axis = ScrollAxis::Vertical,
+            .children = children(std::move(content)),
+        }
+            .fill(FillStyle::solid(theme.colorBackground));
     }
-                         .padding(theme.space5);
-
-    return ScrollView{
-        .axis = ScrollAxis::Vertical,
-        .children = children(std::move(column)),
-    };
-  }
 };
 
-int main(int argc, char* argv[]) {
-  Application app(argc, argv);
-  auto& w = app.createWindow<Window>({
-      .size = {520, 780},
-      .title = "Flux — Typography",
-      .resizable = true,
-  });
-  w.setView<TypographyDemoRoot>();
-  return app.exec();
+int main(int argc, char *argv[]) {
+    Application app(argc, argv);
+
+    auto &w = app.createWindow<Window>({
+        .size = {900, 820},
+        .title = "Flux — Typography Demo",
+        .resizable = true,
+    });
+
+    w.setView<TypographyDemoRoot>();
+    return app.exec();
 }
