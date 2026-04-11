@@ -83,6 +83,7 @@ struct TextEditMutation {
 };
 
 std::vector<LineMetrics> buildLineMetrics(TextLayout const &layout);
+void normalizeLineMetricsForEditing(std::vector<LineMetrics> &lines, int textByteCount) noexcept;
 TextEditLayoutResult makeTextEditLayoutResult(std::shared_ptr<TextLayout const> layout, int textByteCount,
                                               float contentWidth);
 TextEditSelection clampSelection(std::string const &text, TextEditSelection selection) noexcept;
@@ -103,6 +104,8 @@ TextEditMutation insertText(std::string const &text, TextEditSelection const &se
 TextEditMutation eraseSelectionOrChar(std::string const &text, TextEditSelection const &selection,
                                       bool forward) noexcept;
 TextEditMutation eraseWord(std::string const &text, TextEditSelection const &selection, bool forward) noexcept;
+TextEditMutation eraseToLineBoundary(std::string const &text, TextEditSelection const &selection,
+                                     bool forward) noexcept;
 
 /// Binary search over sorted `byteStart`. Returns index of the line containing `byteOffset`, clamped.
 int lineIndexForByte(std::vector<LineMetrics> const &lines, int byteOffset) noexcept;
@@ -134,7 +137,7 @@ int caretByteAtX(TextLayout const &layout, LineMetrics const &line, float layout
 
 std::pair<int, int> orderedSelection(int caret, int anchor) noexcept;
 std::vector<Rect> selectionRects(TextEditLayoutResult const &result, TextEditSelection const &selection,
-                                 float originX = 0.f, float originY = 0.f,
+                                 std::string const *text = nullptr, float originX = 0.f, float originY = 0.f,
                                  float extraBottomPx = 0.f) noexcept;
 
 } // namespace detail

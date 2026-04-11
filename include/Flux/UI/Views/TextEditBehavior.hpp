@@ -90,6 +90,7 @@ class TextEditBehavior {
     void insertAtCaret(std::string_view text, bool fromTyping);
     void deleteSelectionOrChar(bool forward);
     void deleteWord(bool forward);
+    void deleteToLineBoundary(bool forward);
     void copySelection(bool cut);
     void paste();
     void moveLineBoundary(bool end, bool extend);

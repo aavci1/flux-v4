@@ -1,8 +1,11 @@
 #include <doctest/doctest.h>
 
+#include <Flux/UI/Views/TextEditBehavior.hpp>
 #include <Flux/UI/Views/TextEditUtils.hpp>
 
+#include <Flux/Core/KeyCodes.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
+#include <Flux/Reactive/Signal.hpp>
 
 #include <string>
 
@@ -135,6 +138,37 @@ TEST_CASE("TextEditUtils: eraseWord handles both directions") {
     CHECK(forward.selection.caretByte == 0);
 }
 
+TEST_CASE("TextEditUtils: word navigation crosses punctuation groups") {
+    std::string const text = "foo.bar, baz";
+    CHECK(utf8NextWord(text, 3) == 4);
+    CHECK(utf8NextWord(text, 7) == 8);
+    CHECK(utf8PrevWord(text, 4) == 3);
+    CHECK(utf8PrevWord(text, 8) == 7);
+}
+
+TEST_CASE("TextEditUtils: eraseToLineBoundary deletes to start and end of line") {
+    TextEditMutation backward =
+        eraseToLineBoundary("abc\ndef", TextEditSelection {.caretByte = 6, .anchorByte = 6}, false);
+    CHECK(backward.text == "abc\nf");
+    CHECK(backward.selection.caretByte == 4);
+
+    TextEditMutation forward =
+        eraseToLineBoundary("abc\ndef", TextEditSelection {.caretByte = 1, .anchorByte = 1}, true);
+    CHECK(forward.text == "a\ndef");
+    CHECK(forward.selection.caretByte == 1);
+}
+
+TEST_CASE("TextEditBehavior: cmd-backspace deletes to line start") {
+    Signal<std::string> value {std::string {"abc\ndef"}};
+    TextEditBehavior behavior {value, {.multiline = true}};
+    behavior.moveCaretTo(6, false);
+
+    bool const handled = behavior.handleKey(KeyEvent {.key = keys::Delete, .modifiers = Modifiers::Meta});
+    CHECK(handled);
+    CHECK(value.get() == "abc\nf");
+    CHECK(behavior.caretByte() == 4);
+}
+
 TEST_CASE("TextEditUtils: lineIndexForByte") {
     std::vector<LineMetrics> lines;
     LineMetrics a {};
@@ -149,6 +183,32 @@ TEST_CASE("TextEditUtils: lineIndexForByte") {
     CHECK(lineIndexForByte(lines, 4) == 0);
     CHECK(lineIndexForByte(lines, 5) == 1);
     CHECK(lineIndexForByte(lines, 9) == 1);
+}
+
+TEST_CASE("TextEditUtils: lineIndexForByte prefers exact visual line starts at empty-line boundaries") {
+    std::vector<LineMetrics> lines = {
+        LineMetrics {.byteStart = 0, .byteEnd = 5},
+        LineMetrics {.byteStart = 5, .byteEnd = 6},
+        LineMetrics {.byteStart = 6, .byteEnd = 10},
+    };
+    CHECK(lineIndexForByte(lines, 5) == 1);
+    CHECK(lineIndexForByte(lines, 6) == 2);
+}
+
+TEST_CASE("TextEditUtils: lineIndexForByte keeps caret on the current visual line at half-open line ends") {
+    std::vector<LineMetrics> lines = {
+        LineMetrics {.byteStart = 0, .byteEnd = 20},
+        LineMetrics {.byteStart = 21, .byteEnd = 22},
+        LineMetrics {.byteStart = 22, .byteEnd = 46},
+        LineMetrics {.byteStart = 47, .byteEnd = 48},
+        LineMetrics {.byteStart = 48, .byteEnd = 64},
+    };
+
+    CHECK(lineIndexForByte(lines, 20) == 0);
+    CHECK(lineIndexForByte(lines, 21) == 1);
+    CHECK(lineIndexForByte(lines, 46) == 2);
+    CHECK(lineIndexForByte(lines, 47) == 3);
+    CHECK(lineIndexForByte(lines, 48) == 4);
 }
 
 TEST_CASE("TextEditUtils: makeTextEditLayoutResult builds line metrics") {
@@ -171,6 +231,25 @@ TEST_CASE("TextEditUtils: makeTextEditLayoutResult builds line metrics") {
     CHECK(result.lines[0].ctLineIndex == 4);
     CHECK(result.lines[0].byteStart == 0);
     CHECK(result.lines[0].byteEnd == 5);
+}
+
+TEST_CASE("TextEditUtils: normalizeLineMetricsForEditing repairs zero-length empty lines from neighboring spans") {
+    std::vector<LineMetrics> lines = {
+        LineMetrics {.ctLineIndex = 0, .byteStart = 0, .byteEnd = 20},
+        LineMetrics {.ctLineIndex = 1, .byteStart = 42, .byteEnd = 42},
+        LineMetrics {.ctLineIndex = 2, .byteStart = 22, .byteEnd = 46},
+    };
+
+    normalizeLineMetricsForEditing(lines, 64);
+
+    CHECK(lines[0].byteStart == 0);
+    CHECK(lines[0].byteEnd == 20);
+    CHECK(lines[1].byteStart == 21);
+    CHECK(lines[1].byteEnd == 22);
+    CHECK(lines[2].byteStart == 22);
+    CHECK(lines[2].byteEnd == 46);
+    CHECK(lineIndexForByte(lines, 21) == 1);
+    CHECK(lineIndexForByte(lines, 22) == 2);
 }
 
 TEST_CASE("TextEditUtils: selectionRects spans wrapped lines") {
@@ -207,7 +286,7 @@ TEST_CASE("TextEditUtils: selectionRects spans wrapped lines") {
 
     TextEditLayoutResult const result = makeTextEditLayoutResult(layout, 4, 100.f);
     std::vector<Rect> const rects =
-        selectionRects(result, TextEditSelection {.caretByte = 4, .anchorByte = 1}, 5.f, 7.f, 3.f);
+        selectionRects(result, TextEditSelection {.caretByte = 4, .anchorByte = 1}, nullptr, 5.f, 7.f, 3.f);
 
     REQUIRE(rects.size() == 2);
     CHECK(rects[0].x == doctest::Approx(15.f));
@@ -220,11 +299,26 @@ TEST_CASE("TextEditUtils: selectionRects spans wrapped lines") {
     CHECK(rects[1].height == doctest::Approx(13.f));
 }
 
+TEST_CASE("TextEditUtils: selectionRects uses caret-width highlight for empty visual line") {
+    auto layout = std::make_shared<TextLayout>();
+    layout->lines = {
+        TextLayout::LineRange {.ctLineIndex = 0, .byteStart = 0, .byteEnd = 1, .lineMinX = 0.f, .top = 0.f, .bottom = 10.f, .baseline = 8.f},
+    };
+
+    TextEditLayoutResult const result = makeTextEditLayoutResult(layout, 1, 100.f);
+    std::string const text = "\n";
+    std::vector<Rect> const rects =
+        selectionRects(result, TextEditSelection {.caretByte = 1, .anchorByte = 0}, &text, 0.f, 0.f, 0.f);
+
+    REQUIRE(rects.size() == 1);
+    CHECK(rects[0].width == doctest::Approx(kTextCaretStrokeWidthPx));
+}
+
 TEST_CASE("TextEditUtils: lineHitAtY clamps and locates lines") {
     TextEditLayoutResult result;
     result.lines = {
-        LineMetrics {.top = 0.f, .bottom = 10.f, .byteStart = 0, .byteEnd = 2},
-        LineMetrics {.top = 16.f, .bottom = 28.f, .byteStart = 2, .byteEnd = 4},
+        LineMetrics {.top = 0.f, .bottom = 10.f, .baseline = 8.f, .byteStart = 0, .byteEnd = 2},
+        LineMetrics {.top = 16.f, .bottom = 28.f, .baseline = 24.f, .byteStart = 2, .byteEnd = 4},
     };
 
     auto const above = lineHitAtY(result, -5.f);
@@ -238,6 +332,36 @@ TEST_CASE("TextEditUtils: lineHitAtY clamps and locates lines") {
     auto const below = lineHitAtY(result, 40.f);
     CHECK(below.lineIndex == 1);
     CHECK(below.clamped);
+}
+
+TEST_CASE("TextEditUtils: lineHitAtY uses nearest-line partition for empty lines") {
+    auto layout = std::make_shared<TextLayout>();
+    auto storage = std::make_unique<TextLayoutStorage>();
+    storage->glyphArena = {1};
+    storage->positionArena = {{0.f, 0.f}};
+
+    TextLayout::PlacedRun run {};
+    run.run.glyphIds = std::span<std::uint16_t const>(storage->glyphArena.data(), 1);
+    run.run.positions = std::span<Point const>(storage->positionArena.data(), 1);
+    run.run.ascent = 8.f;
+    run.run.descent = 2.f;
+    run.run.width = 10.f;
+    run.origin = {0.f, 8.f};
+    run.utf8Begin = 0;
+    run.utf8End = 1;
+    run.ctLineIndex = 0;
+
+    layout->runs = {run};
+    layout->lines = {
+        TextLayout::LineRange {.ctLineIndex = 0, .byteStart = 0, .byteEnd = 2, .lineMinX = 0.f, .top = 0.f, .bottom = 10.f, .baseline = 8.f},
+        TextLayout::LineRange {.ctLineIndex = 1, .byteStart = 2, .byteEnd = 3, .lineMinX = 0.f, .top = 11.f, .bottom = 11.5f, .baseline = 18.f},
+        TextLayout::LineRange {.ctLineIndex = 2, .byteStart = 3, .byteEnd = 4, .lineMinX = 0.f, .top = 24.f, .bottom = 34.f, .baseline = 32.f},
+    };
+    layout->ownedStorage = std::move(storage);
+
+    TextEditLayoutResult const result = makeTextEditLayoutResult(layout, 4, 100.f);
+    auto const hit = lineHitAtY(result, 17.f);
+    CHECK(hit.lineIndex == 1);
 }
 
 TEST_CASE("TextEditUtils: caretByteAtPoint and moveCaretVertically use layout result") {
@@ -277,6 +401,34 @@ TEST_CASE("TextEditUtils: caretByteAtPoint and moveCaretVertically use layout re
     CHECK(caretByteAtPoint(result, Point {15.f, 20.f}, "abcd") == 3);
     CHECK(moveCaretVertically(result, "abcd", 1, 1) == 3);
     CHECK(moveCaretVertically(result, "abcd", 3, -1) == 1);
+}
+
+TEST_CASE("TextEditUtils: caretByteAtPoint clamps to visual line end before newline") {
+    auto layout = std::make_shared<TextLayout>();
+    auto storage = std::make_unique<TextLayoutStorage>();
+    storage->glyphArena = {1, 2, 3};
+    storage->positionArena = {{0.f, 0.f}, {10.f, 0.f}, {20.f, 0.f}};
+
+    TextLayout::PlacedRun run {};
+    run.run.glyphIds = std::span<std::uint16_t const>(storage->glyphArena.data(), 3);
+    run.run.positions = std::span<Point const>(storage->positionArena.data(), 3);
+    run.run.ascent = 8.f;
+    run.run.descent = 2.f;
+    run.run.width = 30.f;
+    run.origin = {0.f, 8.f};
+    run.utf8Begin = 0;
+    run.utf8End = 3;
+    run.ctLineIndex = 0;
+
+    layout->runs = {run};
+    layout->lines = {
+        TextLayout::LineRange {.ctLineIndex = 0, .byteStart = 0, .byteEnd = 4, .lineMinX = 0.f, .top = 0.f, .bottom = 10.f, .baseline = 8.f},
+        TextLayout::LineRange {.ctLineIndex = 1, .byteStart = 4, .byteEnd = 5, .lineMinX = 0.f, .top = 16.f, .bottom = 26.f, .baseline = 24.f},
+    };
+    layout->ownedStorage = std::move(storage);
+
+    TextEditLayoutResult const result = makeTextEditLayoutResult(layout, 5, 100.f);
+    CHECK(caretByteAtPoint(result, Point {200.f, 5.f}, "abc\nx") == 3);
 }
 
 TEST_CASE("TextEditUtils: caretRect returns caret geometry for a byte") {

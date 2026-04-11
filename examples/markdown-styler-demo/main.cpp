@@ -19,243 +19,247 @@ using namespace flux;
 
 namespace {
 
-
 enum class Elements {
-  h1,
-  h2,
-  h3,
-  body,
-  code
+    h1,
+    h2,
+    h3,
+    body,
+    code
 };
-
-
 
 /// Maps the full UTF-8 buffer to non-overlapping attributed runs (required by multiline \c TextInput).
 std::vector<AttributedRun> markdownStyler(std::string_view sv) {
-  std::string const text(sv);
-  std::uint32_t const n = static_cast<std::uint32_t>(text.size());
-  std::vector<AttributedRun> runs;
-  if (n == 0) {
+    std::string const text(sv);
+    std::uint32_t const n = static_cast<std::uint32_t>(text.size());
+    std::vector<AttributedRun> runs;
+    if (n == 0) {
+        return runs;
+    }
+
+    auto baseFont = Font {.family = "Menlo", .size = 14.f, .weight = 400.f};
+    auto fonts = std::map<Elements, Font> {};
+    fonts[Elements::h1] = Font {.size = baseFont.size * 2.0f, .weight = baseFont.weight * 1.25f};
+    fonts[Elements::h2] = Font {.size = baseFont.size * 1.6f, .weight = baseFont.weight * 1.25f};
+    fonts[Elements::h3] = Font {.size = baseFont.size * 1.3f, .weight = baseFont.weight * 1.25f};
+    fonts[Elements::body] = baseFont;
+    fonts[Elements::code] = baseFont;
+
+    auto baseColor = Color::hex(0xC2C2C2);
+    auto colors = std::map<Elements, Color> {};
+    colors[Elements::h1] = baseColor;
+    colors[Elements::h2] = baseColor;
+    colors[Elements::h3] = baseColor;
+    colors[Elements::body] = baseColor;
+    colors[Elements::code] = baseColor;
+
+    Font headingFont = resolveFont(kFontFromTheme, fonts[Elements::h1]);
+    Font codeFont = resolveFont(kFontFromTheme, fonts[Elements::code]);
+    Font boldFont = baseFont;
+    boldFont.weight = (boldFont.weight > 0.f ? boldFont.weight : 400.f) + 250.f;
+    if (boldFont.weight > 900.f) {
+        boldFont.weight = 900.f;
+    }
+
+    auto push = [&](std::uint32_t a, std::uint32_t b, Font const &f, Color c) {
+        if (a < b) {
+            runs.push_back(AttributedRun {a, b, f, c});
+        }
+    };
+
+    auto parseInline = [&](std::uint32_t lineStart, std::uint32_t lineEnd) {
+        std::uint32_t p = lineStart;
+        while (p < lineEnd) {
+            if (p + 1 < lineEnd && text[static_cast<std::size_t>(p)] == '*' &&
+                text[static_cast<std::size_t>(p + 1)] == '*') {
+                std::uint32_t q = p + 2;
+                while (q + 1 < lineEnd) {
+                    if (text[static_cast<std::size_t>(q)] == '*' && text[static_cast<std::size_t>(q + 1)] == '*') {
+                        break;
+                    }
+                    ++q;
+                }
+                if (q + 1 < lineEnd && text[q] == '*' && text[q + 1] == '*') {
+                    push(p, p + 2, baseFont, baseColor);
+                    push(p + 2, q, boldFont, baseColor);
+                    push(q, q + 2, baseFont, baseColor);
+                    p = q + 2;
+                    continue;
+                }
+            }
+            if (text[static_cast<std::size_t>(p)] == '`') {
+                std::uint32_t q = p + 1;
+                while (q < lineEnd && text[static_cast<std::size_t>(q)] != '`') {
+                    ++q;
+                }
+                if (q < lineEnd) {
+                    push(p, p + 1, baseFont, baseColor);
+                    push(p + 1, q, codeFont, colors[Elements::code]);
+                    push(q, q + 1, baseFont, baseColor);
+                    p = q + 1;
+                    continue;
+                }
+            }
+            std::uint32_t const start = p;
+            ++p;
+            while (p < lineEnd) {
+                char const ch = text[static_cast<std::size_t>(p)];
+                if (ch == '`' || (p + 1 < lineEnd && ch == '*' && text[static_cast<std::size_t>(p + 1)] == '*')) {
+                    break;
+                }
+                ++p;
+            }
+            push(start, p, baseFont, baseColor);
+        }
+    };
+
+    auto processLine = [&](std::uint32_t ls, std::uint32_t le) {
+        if (ls >= le) {
+            return;
+        }
+        std::uint32_t contentEnd = le;
+        bool const endsNl = contentEnd > ls && text[static_cast<std::size_t>(contentEnd - 1)] == '\n';
+        if (endsNl) {
+            --contentEnd;
+        }
+
+        if (contentEnd <= ls) {
+            push(ls, le, baseFont, baseColor);
+            return;
+        }
+
+        std::uint32_t i = ls;
+        int hashes = 0;
+        while (i < contentEnd && hashes < 3 && text[static_cast<std::size_t>(i)] == '#') {
+            ++hashes;
+            ++i;
+        }
+        if (hashes > 0 && i < contentEnd && text[static_cast<std::size_t>(i)] == ' ') {
+            ++i;
+            Font f = fonts[Elements::h1];
+            Color c = colors[Elements::h1];
+            if (hashes >= 2) {
+                f = fonts[Elements::h2];
+                c = colors[Elements::h2];
+            }
+            if (hashes >= 3) {
+                f = fonts[Elements::h3];
+                c = colors[Elements::h3];
+            }
+            push(ls, contentEnd, f, c);
+            if (endsNl) {
+                push(contentEnd, le, baseFont, baseColor);
+            }
+            return;
+        }
+
+        std::uint32_t j = ls;
+        while (j < contentEnd && text[static_cast<std::size_t>(j)] == ' ') {
+            ++j;
+        }
+        if (j < contentEnd && text[static_cast<std::size_t>(j)] == '-' && j + 1 < contentEnd &&
+            text[static_cast<std::size_t>(j + 1)] == ' ') {
+            push(ls, j + 2, baseFont, baseColor);
+            parseInline(j + 2, contentEnd);
+            if (endsNl) {
+                push(contentEnd, le, baseFont, baseColor);
+            }
+            return;
+        }
+
+        parseInline(ls, contentEnd);
+        if (endsNl) {
+            push(contentEnd, le, baseFont, baseColor);
+        }
+    };
+
+    std::uint32_t ls = 0;
+    while (ls < n) {
+        std::uint32_t le = ls;
+        while (le < n) {
+            if (text[static_cast<std::size_t>(le)] == '\n') {
+                break;
+            }
+            le++;
+        }
+        processLine(ls, le + 1);
+        ls = le + 1;
+    }
+
     return runs;
-  }
-
-  auto baseFont = Font { .family = "Menlo", .size = 14.f, .weight = 400.f };
-  auto fonts = std::map<Elements, Font> {};
-  fonts[Elements::h1] = Font { .size = baseFont.size * 2.0f, .weight = baseFont.weight * 1.25f };
-  fonts[Elements::h2] = Font { .size = baseFont.size * 1.6f, .weight = baseFont.weight * 1.25f };
-  fonts[Elements::h3] = Font { .size = baseFont.size * 1.3f, .weight = baseFont.weight * 1.25f };
-  fonts[Elements::body] = baseFont;
-  fonts[Elements::code] = baseFont;
-
-  auto baseColor = Color::hex(0xC2C2C2);
-  auto colors = std::map<Elements, Color> {};
-  colors[Elements::h1] = baseColor;
-  colors[Elements::h2] = baseColor;
-  colors[Elements::h3] = baseColor;
-  colors[Elements::body] = baseColor;
-  colors[Elements::code] = baseColor;
-
-  Font headingFont = resolveFont(kFontFromTheme, fonts[Elements::h1]);
-  Font codeFont = resolveFont(kFontFromTheme, fonts[Elements::code]);
-  Font boldFont = baseFont;
-  boldFont.weight = (boldFont.weight > 0.f ? boldFont.weight : 400.f) + 250.f;
-  if (boldFont.weight > 900.f) {
-    boldFont.weight = 900.f;
-  }
-
-  auto push = [&](std::uint32_t a, std::uint32_t b, Font const& f, Color c) {
-    if (a < b) {
-      runs.push_back(AttributedRun{a, b, f, c});
-    }
-  };
-
-  auto parseInline = [&](std::uint32_t lineStart, std::uint32_t lineEnd) {
-    std::uint32_t p = lineStart;
-    while (p < lineEnd) {
-      if (p + 1 < lineEnd && text[static_cast<std::size_t>(p)] == '*' &&
-          text[static_cast<std::size_t>(p + 1)] == '*') {
-        std::uint32_t q = p + 2;
-        while (q + 1 < lineEnd) {
-          if (text[static_cast<std::size_t>(q)] == '*' && text[static_cast<std::size_t>(q + 1)] == '*') {
-            break;
-          }
-          ++q;
-        }
-        if (q + 1 < lineEnd && text[q] == '*' && text[q + 1] == '*') {
-          push(p, p + 2, baseFont, baseColor);
-          push(p + 2, q, boldFont, baseColor);
-          push(q, q + 2, baseFont, baseColor);
-          p = q + 2;
-          continue;
-        }
-      }
-      if (text[static_cast<std::size_t>(p)] == '`') {
-        std::uint32_t q = p + 1;
-        while (q < lineEnd && text[static_cast<std::size_t>(q)] != '`') {
-          ++q;
-        }
-        if (q < lineEnd) {
-          push(p, p + 1, baseFont, baseColor);
-          push(p + 1, q, codeFont, colors[Elements::code]);
-          push(q, q + 1, baseFont, baseColor);
-          p = q + 1;
-          continue;
-        }
-      }
-      std::uint32_t const start = p;
-      ++p;
-      while (p < lineEnd) {
-        char const ch = text[static_cast<std::size_t>(p)];
-        if (ch == '`' || (p + 1 < lineEnd && ch == '*' && text[static_cast<std::size_t>(p + 1)] == '*')) {
-          break;
-        }
-        ++p;
-      }
-      push(start, p, baseFont, baseColor);
-    }
-  };
-
-  auto processLine = [&](std::uint32_t ls, std::uint32_t le) {
-    if (ls >= le) {
-      return;
-    }
-    std::uint32_t contentEnd = le;
-    bool const endsNl = contentEnd > ls && text[static_cast<std::size_t>(contentEnd - 1)] == '\n';
-    if (endsNl) {
-      --contentEnd;
-    }
-
-    if (contentEnd <= ls) {
-      push(ls, le, baseFont, baseColor);
-      return;
-    }
-
-    std::uint32_t i = ls;
-    int hashes = 0;
-    while (i < contentEnd && hashes < 3 && text[static_cast<std::size_t>(i)] == '#') {
-      ++hashes;
-      ++i;
-    }
-    if (hashes > 0 && i < contentEnd && text[static_cast<std::size_t>(i)] == ' ') {
-      ++i;
-      Font f = fonts[Elements::h1];
-      Color c = colors[Elements::h1];
-      if (hashes >= 2) {
-        f = fonts[Elements::h2];
-        c = colors[Elements::h2];
-      }
-      if (hashes >= 3) {
-        f = fonts[Elements::h3];
-        c = colors[Elements::h3];
-      }
-      push(ls, contentEnd, f, c);
-      if (endsNl) {
-        push(contentEnd, le, baseFont, baseColor);
-      }
-      return;
-    }
-
-    std::uint32_t j = ls;
-    while (j < contentEnd && text[static_cast<std::size_t>(j)] == ' ') {
-      ++j;
-    }
-    if (j < contentEnd && text[static_cast<std::size_t>(j)] == '-' && j + 1 < contentEnd &&
-        text[static_cast<std::size_t>(j + 1)] == ' ') {
-      push(ls, j + 2, baseFont, baseColor);
-      parseInline(j + 2, contentEnd);
-      if (endsNl) {
-        push(contentEnd, le, baseFont, baseColor);
-      }
-      return;
-    }
-
-    parseInline(ls, contentEnd);
-    if (endsNl) {
-      push(contentEnd, le, baseFont, baseColor);
-    }
-  };
-
-  std::uint32_t ls = 0;
-  while (ls < n) {
-    std::uint32_t le = ls;
-    while (le < n) {
-      if (text[static_cast<std::size_t>(le)] == '\n') {
-        break;
-      }
-      le++;
-    }
-    processLine(ls, le + 1);
-    ls = le + 1;
-  }
-
-  return runs;
 }
 
 } // namespace
 
 struct MarkdownEditor {
-  auto body() const {
-    Theme const& theme = useEnvironment<Theme>();
-    auto doc = useState(std::string {
-R"(# Header 1
+    auto body() const {
+        Theme const &theme = useEnvironment<Theme>();
+        auto doc = useState(std::string {
+            R"(# Flux Layout System
 
-## Header 2
+## Architecture Overview
 
-### Header 3
+Flux uses a **two-phase, type-erased layout** model. There is no base `View` class — views are plain structs that satisfy one of three C++ concepts. A universal wrapper called `Element` type-erases them and dispatches `layout`, `measure`, and `renderFromLayout` through a virtual `Concept`/`Model<C>` pattern.
 
-This is **bold**.
+The pipeline for each rebuild has three distinct phases:
 
-This is `inline-code`.
+```
+Phase 1: Layout   — Element tree → LayoutTree
+Phase 2: Render   — LayoutTree + EventMap + SceneGraph
+Phase 3: Paint    — SceneGraph → Canvas (unchanged each frame; pure renderer)
+```
+
+**Phase 1** walks the element tree, runs `measure` and flex distribution, and writes a `LayoutTree` of `LayoutNode`s — geometry and structure only, no SceneGraph, no EventMap. The only dependencies are `LayoutConstraints`, `LayoutHints`, and `TextSystem` (for text measurement).
+
+**Phase 2** walks the `LayoutTree` and emits SceneGraph nodes (`RectNode`, `TextNode`, `LayerNode`, etc.) and `EventMap` entries via `renderLayoutTree`. Each `LayoutNode` carries the resolved `frame`, so the render phase only creates the appropriate node at the computed position.
+
+**Phase 3** is `SceneRenderer::render`, which walks the SceneGraph and draws to Canvas. Already fully separated; unchanged by the layout/render split.
+
 )"
-      });
+        });
 
-    Font const baseFont = resolveFont(kFontFromTheme, theme.fontBody);
-    Color const baseColor = theme.colorTextPrimary;
+        Font const baseFont = resolveFont(kFontFromTheme, theme.fontBody);
+        Color const baseColor = theme.colorTextPrimary;
 
-    return VStack {
-        .spacing = 12.f,
-        .children =
-            children(
-                Text {
-                    .text = "Markdown styler (multiline TextInput)",
-                    .font = theme.fontDisplay,
-                    .color = theme.colorTextPrimary,
-                },
-                Text {
-                    .text = "The `.styler` field receives the full document and returns AttributedRun ranges.",
-                    .font = theme.fontBody,
-                    .color = theme.colorTextSecondary,
-                    .wrapping = TextWrapping::Wrap,
-                },
-                TextInput {
-                    .value = doc,
-                    .placeholder = "Write markdown-like text…",
-                    .styler = markdownStyler,
-                    .style = {
-                      .backgroundColor = Color::hex(0x1F1F1F),
+        return VStack {
+            .spacing = 12.f,
+            .children =
+                children(
+                    Text {
+                        .text = "Markdown styler (multiline TextInput)",
+                        .font = theme.fontDisplay,
+                        .color = theme.colorTextPrimary,
                     },
-                    .multiline = true,
-                }.flex(1.f, 1.f, 0.f)),
+                    Text {
+                        .text = "The `.styler` field receives the full document and returns AttributedRun ranges.",
+                        .font = theme.fontBody,
+                        .color = theme.colorTextSecondary,
+                        .wrapping = TextWrapping::Wrap,
+                    },
+                    TextInput {
+                        .value = doc,
+                        .placeholder = "Write markdown-like text…",
+                        .styler = markdownStyler,
+                        .style = {
+                            .backgroundColor = Color::hex(0x1F1F1F),
+                        },
+                        .multiline = true,
+                    }
+                        .flex(1.f, 1.f, 0.f)
+                ),
+        }
+            .padding(20.f)
+            .flex(1.f, 1.f, 0.f);
     }
-        .padding(20.f)
-        .flex(1.f, 1.f, 0.f);
-  }
 };
 
-int main(int argc, char* argv[]) {
-  Application app(argc, argv);
-  auto& w = app.createWindow<Window>({
-      .size = {520, 620},
-      .title = "Flux — Markdown styler",
-      .resizable = true,
-  });
+int main(int argc, char *argv[]) {
+    Application app(argc, argv);
+    auto &w = app.createWindow<Window>({
+        .size = {1024, 768},
+        .title = "Flux — Markdown styler",
+        .resizable = true,
+    });
 
-  w.registerAction("edit.copy", {.label = "Copy", .shortcut = shortcuts::Copy});
-  w.registerAction("edit.cut", {.label = "Cut", .shortcut = shortcuts::Cut});
-  w.registerAction("edit.paste", {.label = "Paste", .shortcut = shortcuts::Paste});
-  w.registerAction("edit.selectAll", {.label = "Select All", .shortcut = shortcuts::SelectAll});
-  w.registerAction("app.quit", {.label = "Quit", .shortcut = shortcuts::Quit, .isEnabled = [] { return true; }});
-
-  w.setView<MarkdownEditor>();
-  return app.exec();
+    w.setView<MarkdownEditor>();
+    return app.exec();
 }

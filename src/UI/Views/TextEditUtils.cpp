@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <limits>
 #include <string>
 #include <string_view>
@@ -67,6 +69,18 @@ bool isWordChar(char32_t cp) {
         return false;
     }
     return true;
+}
+
+bool isPunctuationChar(char32_t cp) {
+    return !isSpaceChar(cp) && !isWordChar(cp);
+}
+
+bool textInputDebugEnabled() {
+    static bool const enabled = [] {
+        char const *env = std::getenv("FLUX_DEBUG_TEXT_INPUT");
+        return env && env[0] != '\0' && env[0] != '0';
+    }();
+    return enabled;
 }
 
 int utf8NextCharImpl(std::string const &s, int pos) {
@@ -135,6 +149,17 @@ int utf8PrevWordImpl(std::string const &s, int pos) {
         }
         p = prevStart;
     }
+    if (p <= 0) {
+        return 0;
+    }
+    int const anchorStart = utf8PrevCharImpl(s, p);
+    char32_t anchorCp = 0;
+    int anchorLen = 1;
+    if (!utf8DecodeAt(s, anchorStart, anchorCp, anchorLen)) {
+        return anchorStart;
+    }
+    bool const wantWord = isWordChar(anchorCp);
+    bool const wantPunct = isPunctuationChar(anchorCp);
     while (p > 0) {
         int const prevStart = utf8PrevCharImpl(s, p);
         char32_t cp = 0;
@@ -143,7 +168,7 @@ int utf8PrevWordImpl(std::string const &s, int pos) {
             p = prevStart;
             continue;
         }
-        if (!isWordChar(cp)) {
+        if ((wantWord && !isWordChar(cp)) || (wantPunct && !isPunctuationChar(cp))) {
             break;
         }
         p = prevStart;
@@ -166,6 +191,16 @@ int utf8NextWordImpl(std::string const &s, int pos) {
         }
         p += len;
     }
+    if (p >= n) {
+        return n;
+    }
+    char32_t anchorCp = 0;
+    int anchorLen = 1;
+    if (!utf8DecodeAt(s, p, anchorCp, anchorLen)) {
+        return utf8NextCharImpl(s, p);
+    }
+    bool const wantWord = isWordChar(anchorCp);
+    bool const wantPunct = isPunctuationChar(anchorCp);
     while (p < n) {
         char32_t cp = 0;
         int len = 1;
@@ -173,7 +208,7 @@ int utf8NextWordImpl(std::string const &s, int pos) {
             p = utf8NextCharImpl(s, p);
             continue;
         }
-        if (!isWordChar(cp)) {
+        if ((wantWord && !isWordChar(cp)) || (wantPunct && !isPunctuationChar(cp))) {
             break;
         }
         p += len;
@@ -256,6 +291,23 @@ int byteAtLocalXInRun(flux::TextLayout::PlacedRun const &pr, float localX, std::
         p = flux::detail::utf8NextChar(buf, p);
     }
     return flux::detail::utf8Clamp(buf, std::min(p, b1));
+}
+
+int visualLineEndByte(flux::detail::LineMetrics const &line, std::string const &buf) {
+    int end = flux::detail::utf8Clamp(buf, line.byteEnd);
+    while (end > line.byteStart) {
+        int const prev = flux::detail::utf8PrevChar(buf, end);
+        char32_t cp = 0;
+        int len = 1;
+        if (!utf8DecodeAt(buf, prev, cp, len)) {
+            break;
+        }
+        if (cp != '\n' && cp != '\r') {
+            break;
+        }
+        end = prev;
+    }
+    return std::max(line.byteStart, end);
 }
 
 } // namespace
@@ -459,6 +511,72 @@ std::vector<LineMetrics> buildLineMetrics(TextLayout const &layout) {
     return out;
 }
 
+void normalizeLineMetricsForEditing(std::vector<LineMetrics> &lines, int textByteCount) noexcept {
+    if (lines.empty()) {
+        return;
+    }
+
+    int const textEnd = std::max(0, textByteCount);
+
+    for (std::size_t i = 0; i < lines.size();) {
+        if (lines[i].byteStart != lines[i].byteEnd) {
+            ++i;
+            continue;
+        }
+
+        std::size_t const runStart = i;
+        while (i < lines.size() && lines[i].byteStart == lines[i].byteEnd) {
+            ++i;
+        }
+        std::size_t const runEnd = i;
+        int const emptyCount = static_cast<int>(runEnd - runStart);
+
+        int prevEnd = -1;
+        for (std::size_t j = runStart; j-- > 0;) {
+            if (lines[j].byteStart != lines[j].byteEnd) {
+                prevEnd = lines[j].byteEnd;
+                break;
+            }
+        }
+
+        int nextStart = textEnd;
+        bool foundNext = false;
+        for (std::size_t j = runEnd; j < lines.size(); ++j) {
+            if (lines[j].byteStart != lines[j].byteEnd) {
+                nextStart = lines[j].byteStart;
+                foundNext = true;
+                break;
+            }
+        }
+
+        int const firstAssignable = std::max(0, prevEnd + 1);
+        int const lastExclusive = foundNext ? nextStart : textEnd;
+        int const capacity = std::max(0, lastExclusive - firstAssignable);
+
+        if (capacity <= 0) {
+            continue;
+        }
+
+        int const assignCount = std::min(emptyCount, capacity);
+        for (int k = 0; k < assignCount; ++k) {
+            LineMetrics &line = lines[runStart + static_cast<std::size_t>(k)];
+            line.byteStart = firstAssignable + k;
+            line.byteEnd = line.byteStart + 1;
+        }
+    }
+
+    if (textInputDebugEnabled()) {
+        for (std::size_t i = 0; i < lines.size(); ++i) {
+            auto const &line = lines[i];
+            std::fprintf(stderr,
+                         "[TextInputLines] line=%zu ctLine=%u bytes=[%d,%d] box=(%.1f,%.1f,%.1f) baseline=%.1f\n",
+                         i, static_cast<unsigned>(line.ctLineIndex), line.byteStart, line.byteEnd, line.lineMinX,
+                         line.top, line.bottom - line.top, line.baseline);
+        }
+        std::fflush(stderr);
+    }
+}
+
 TextEditLayoutResult makeTextEditLayoutResult(std::shared_ptr<TextLayout const> layout, int textByteCount,
                                               float contentWidth) {
     TextEditLayoutResult result {};
@@ -467,6 +585,7 @@ TextEditLayoutResult makeTextEditLayoutResult(std::shared_ptr<TextLayout const> 
     result.layout = std::move(layout);
     if (result.layout) {
         result.lines = buildLineMetrics(*result.layout);
+        normalizeLineMetricsForEditing(result.lines, result.textByteCount);
     }
     return result;
 }
@@ -647,6 +766,37 @@ TextEditMutation eraseWord(std::string const &text, TextEditSelection const &sel
     return mutation;
 }
 
+TextEditMutation eraseToLineBoundary(std::string const &text, TextEditSelection const &selection,
+                                     bool forward) noexcept {
+    TextEditMutation mutation {};
+    mutation.text = text;
+
+    auto const [orderedStart, orderedEnd] = clampSelection(text, selection).ordered();
+    if (orderedStart < orderedEnd) {
+        mutation.text.erase(static_cast<std::size_t>(orderedStart),
+                            static_cast<std::size_t>(orderedEnd - orderedStart));
+        mutation.selection = TextEditSelection {.caretByte = orderedStart, .anchorByte = orderedStart};
+        mutation.valueChanged = true;
+        return mutation;
+    }
+
+    int const caret = utf8Clamp(text, selection.caretByte);
+    int const edge = moveSelectionToLineBoundary(text, TextEditSelection {.caretByte = caret, .anchorByte = caret},
+                                                 forward, false)
+                         .caretByte;
+    if (edge == caret) {
+        mutation.selection = TextEditSelection {.caretByte = caret, .anchorByte = caret};
+        return mutation;
+    }
+
+    int const start = std::min(caret, edge);
+    int const end = std::max(caret, edge);
+    mutation.text.erase(static_cast<std::size_t>(start), static_cast<std::size_t>(end - start));
+    mutation.selection = TextEditSelection {.caretByte = start, .anchorByte = start};
+    mutation.valueChanged = true;
+    return mutation;
+}
+
 int lineIndexForByte(std::vector<LineMetrics> const &lines, int byteOffset) noexcept {
     if (lines.empty()) {
         return 0;
@@ -663,6 +813,15 @@ int lineIndexForByte(std::vector<LineMetrics> const &lines, int byteOffset) noex
         k = maxB;
     }
 
+    // Caret positions that land exactly on a visual line start belong to that line, even if the
+    // preceding line's UTF-8 span also "contains" the same byte (for example around newline-only lines).
+    for (int i = 0; i < static_cast<int>(lines.size()); ++i) {
+        auto const &L = lines[static_cast<std::size_t>(i)];
+        if (L.byteStart == k) {
+            return i;
+        }
+    }
+
     for (int i = 0; i < static_cast<int>(lines.size()); ++i) {
         auto const &L = lines[static_cast<std::size_t>(i)];
         if (k >= L.byteStart && k < L.byteEnd) {
@@ -675,10 +834,20 @@ int lineIndexForByte(std::vector<LineMetrics> const &lines, int byteOffset) noex
             return i;
         }
     }
-    if (k >= lines.back().byteStart) {
-        return static_cast<int>(lines.size()) - 1;
+
+    // When raw visual line ranges come from shaped text, the caret position at a visual line end can sit
+    // exactly on a boundary that is not included in any half-open [byteStart, byteEnd) span. In that case
+    // the caret still belongs to the most recent visual line whose start is <= k.
+    int best = 0;
+    for (int i = 0; i < static_cast<int>(lines.size()); ++i) {
+        auto const &L = lines[static_cast<std::size_t>(i)];
+        if (L.byteStart <= k) {
+            best = i;
+        } else {
+            break;
+        }
     }
-    return 0;
+    return best;
 }
 
 int lineIndexForByte(TextEditLayoutResult const &result, int byteOffset) noexcept {
@@ -689,32 +858,38 @@ TextEditLineHit lineHitAtY(TextEditLayoutResult const &result, float layoutY) no
     if (result.lines.empty()) {
         return {};
     }
-    auto const &first = result.lines.front();
-    auto const &last = result.lines.back();
-    if (layoutY < first.top) {
+    if (result.lines.size() == 1) {
         return {.lineIndex = 0, .clamped = true};
     }
-    if (layoutY >= last.bottom) {
+    std::vector<float> baselines;
+    baselines.reserve(result.lines.size());
+    for (auto const &line : result.lines) {
+        baselines.push_back(line.baseline);
+    }
+    if (result.lines.size() == 2) {
+        float const boundary = (baselines[0] + baselines[1]) * 0.5f;
+        bool const clamped = layoutY < baselines[0] || layoutY >= baselines[1];
+        return {.lineIndex = layoutY < boundary ? 0 : 1, .clamped = clamped};
+    }
+    float const firstBoundary = (baselines[0] + baselines[1]) * 0.5f;
+    if (layoutY < firstBoundary) {
+        return {.lineIndex = 0, .clamped = true};
+    }
+    float const lastBoundary =
+        (baselines[baselines.size() - 2] + baselines[baselines.size() - 1]) * 0.5f;
+    if (layoutY >= lastBoundary) {
         return {.lineIndex = static_cast<int>(result.lines.size()) - 1, .clamped = true};
     }
-    for (int i = 0; i < static_cast<int>(result.lines.size()); ++i) {
-        auto const &line = result.lines[static_cast<std::size_t>(i)];
-        if (layoutY >= line.top && layoutY < line.bottom) {
+    for (int i = 1; i < static_cast<int>(baselines.size()) - 1; ++i) {
+        float const prevBoundary =
+            (baselines[static_cast<std::size_t>(i - 1)] + baselines[static_cast<std::size_t>(i)]) * 0.5f;
+        float const nextBoundary =
+            (baselines[static_cast<std::size_t>(i)] + baselines[static_cast<std::size_t>(i + 1)]) * 0.5f;
+        if (layoutY >= prevBoundary && layoutY < nextBoundary) {
             return {.lineIndex = i, .clamped = false};
         }
     }
-    float bestDistance = std::numeric_limits<float>::infinity();
-    int bestIndex = 0;
-    for (int i = 0; i < static_cast<int>(result.lines.size()); ++i) {
-        auto const &line = result.lines[static_cast<std::size_t>(i)];
-        float const mid = (line.top + line.bottom) * 0.5f;
-        float const distance = std::abs(layoutY - mid);
-        if (distance < bestDistance) {
-            bestDistance = distance;
-            bestIndex = i;
-        }
-    }
-    return {.lineIndex = bestIndex, .clamped = true};
+    return {.lineIndex = static_cast<int>(result.lines.size()) - 1, .clamped = false};
 }
 
 float caretXForByte(TextLayout const &layout, LineMetrics const &line, int byteOffset) noexcept {
@@ -833,7 +1008,7 @@ std::pair<float, float> lineCaretYRangeInLayout(TextEditLayoutResult const &resu
 int caretByteAtX(TextLayout const &layout, LineMetrics const &line, float layoutX, std::string const &buf) noexcept {
     auto sorted = runsForLineSorted(layout, line.ctLineIndex);
     if (sorted.empty()) {
-        return utf8Clamp(buf, line.byteStart);
+        return utf8Clamp(buf, visualLineEndByte(line, buf));
     }
 
     auto const *rightmost = sorted.back();
@@ -842,7 +1017,7 @@ int caretByteAtX(TextLayout const &layout, LineMetrics const &line, float layout
         return utf8Clamp(buf, line.byteStart);
     }
     if (layoutX >= rightEdge) {
-        return utf8Clamp(buf, line.byteEnd);
+        return utf8Clamp(buf, visualLineEndByte(line, buf));
     }
 
     for (auto const *pr : sorted) {
@@ -951,7 +1126,7 @@ Rect caretRect(TextEditLayoutResult const &result, int byteOffset, float originX
 }
 
 std::vector<Rect> selectionRects(TextEditLayoutResult const &result, TextEditSelection const &selection,
-                                 float originX, float originY, float extraBottomPx) noexcept {
+                                 std::string const *text, float originX, float originY, float extraBottomPx) noexcept {
     std::vector<Rect> rects;
     if (!result.layout || result.lines.empty() || !selection.hasSelection()) {
         return rects;
@@ -969,6 +1144,12 @@ std::vector<Rect> selectionRects(TextEditLayoutResult const &result, TextEditSel
         float x1 = caretXForByte(*result.layout, line, b) + originX;
         if (x0 > x1) {
             std::swap(x0, x1);
+        }
+        if (text && std::abs(x1 - x0) < 1e-3f && a < b) {
+            int const visualEnd = visualLineEndByte(line, *text);
+            if (b > visualEnd) {
+                x1 = x0 + kTextCaretStrokeWidthPx;
+            }
         }
         rects.push_back(Rect {x0, originY + line.top, x1 - x0, (line.bottom - line.top) + extraBottomPx});
     }

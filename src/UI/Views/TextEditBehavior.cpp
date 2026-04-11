@@ -12,6 +12,8 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 
 namespace flux {
 
@@ -35,6 +37,96 @@ bool hasMod(Modifiers m, Modifiers bit) noexcept {
 
 bool cmdLike(Modifiers m) noexcept {
     return hasMod(m, Modifiers::Meta) || hasMod(m, Modifiers::Ctrl);
+}
+
+bool textInputDebugEnabled() {
+    static bool const enabled = [] {
+        char const *env = std::getenv("FLUX_DEBUG_TEXT_INPUT");
+        return env && env[0] != '\0' && env[0] != '0';
+    }();
+    return enabled;
+}
+
+char const *keyName(KeyCode key) noexcept {
+    switch (key) {
+    case keys::A:
+        return "A";
+    case keys::C:
+        return "C";
+    case keys::V:
+        return "V";
+    case keys::X:
+        return "X";
+    case keys::Z:
+        return "Z";
+    case keys::Return:
+        return "Return";
+    case keys::Tab:
+        return "Tab";
+    case keys::Delete:
+        return "Delete";
+    case keys::ForwardDelete:
+        return "ForwardDelete";
+    case keys::Escape:
+        return "Escape";
+    case keys::LeftArrow:
+        return "LeftArrow";
+    case keys::RightArrow:
+        return "RightArrow";
+    case keys::UpArrow:
+        return "UpArrow";
+    case keys::DownArrow:
+        return "DownArrow";
+    case keys::Home:
+        return "Home";
+    case keys::End:
+        return "End";
+    default:
+        return "Unknown";
+    }
+}
+
+void formatModifiers(char *buffer, std::size_t size, Modifiers m) {
+    if (size == 0) {
+        return;
+    }
+    buffer[0] = '\0';
+    if (m == Modifiers::None) {
+        std::snprintf(buffer, size, "None");
+        return;
+    }
+
+    std::size_t used = 0;
+    bool first = true;
+    auto append = [&](char const *label, Modifiers flag) {
+        if (!hasMod(m, flag)) {
+            return;
+        }
+        int const written =
+            std::snprintf(buffer + used, size > used ? size - used : 0, "%s%s", first ? "" : "+", label);
+        if (written > 0) {
+            used += static_cast<std::size_t>(written);
+        }
+        first = false;
+    };
+    append("Shift", Modifiers::Shift);
+    append("Ctrl", Modifiers::Ctrl);
+    append("Alt", Modifiers::Alt);
+    append("Meta", Modifiers::Meta);
+}
+
+void logTextInputDebug(char const *phase, char const *event, detail::TextEditState const &state, std::string const &value,
+                       char const *extra = nullptr) {
+    if (!textInputDebugEnabled()) {
+        return;
+    }
+    auto [a, b] = state.selection.ordered();
+    std::fprintf(stderr,
+                 "[TextInput] %s event=%s caret=%d anchor=%d selection=[%d,%d] len=%zu focused=%d disabled=%d dragging=%d%s%s\n",
+                 phase, event, state.selection.caretByte, state.selection.anchorByte, a, b, value.size(),
+                 state.focused ? 1 : 0, state.disabled ? 1 : 0, state.draggingSelection ? 1 : 0,
+                 extra ? " " : "", extra ? extra : "");
+    std::fflush(stderr);
 }
 
 } // namespace
@@ -129,6 +221,7 @@ void TextEditBehavior::setFocused(bool f) {
     resetBlinkEpoch();
     syncBlinkSubscription();
     markTextUiDirty();
+    logTextInputDebug("post", "focus", state_, value_->get(), f ? "focused=1" : "focused=0");
 }
 
 void TextEditBehavior::setDisabled(bool d) {
@@ -139,6 +232,7 @@ void TextEditBehavior::setDisabled(bool d) {
     resetBlinkEpoch();
     syncBlinkSubscription();
     markTextUiDirty();
+    logTextInputDebug("post", "disabled", state_, value_->get(), d ? "disabled=1" : "disabled=0");
 }
 
 void TextEditBehavior::moveCaretTo(int byte, bool extendSelection) {
@@ -147,6 +241,7 @@ void TextEditBehavior::moveCaretTo(int byte, bool extendSelection) {
     ensureCaretVisible_ = true;
     resetBlinkEpoch();
     markTextUiDirty();
+    logTextInputDebug("post", "moveCaretTo", state_, s);
 }
 
 void TextEditBehavior::selectAll() {
@@ -155,6 +250,7 @@ void TextEditBehavior::selectAll() {
     ensureCaretVisible_ = true;
     resetBlinkEpoch();
     markTextUiDirty();
+    logTextInputDebug("post", "selectAll", state_, s);
 }
 
 void TextEditBehavior::clearSelection() {
@@ -163,6 +259,7 @@ void TextEditBehavior::clearSelection() {
     }
     state_.selection = detail::clearSelection(state_.selection);
     markTextUiDirty();
+    logTextInputDebug("post", "clearSelection", state_, value_->get());
 }
 
 bool TextEditBehavior::consumeEnsureCaretVisibleRequest() {
@@ -204,6 +301,7 @@ void TextEditBehavior::mutateValue(std::string next, int newCaret, int newAnchor
         ensureCaretVisible_ = true;
         resetBlinkEpoch();
         markTextUiDirty();
+        logTextInputDebug("post", "mutate(no-value-change)", state_, next);
         return;
     }
 
@@ -230,6 +328,7 @@ void TextEditBehavior::mutateValue(std::string next, int newCaret, int newAnchor
     }
     ensureCaretVisible_ = true;
     resetBlinkEpoch();
+    logTextInputDebug("post", "mutate", state_, value_->get());
 }
 
 void TextEditBehavior::insertAtCaret(std::string_view insert, bool fromTyping) {
@@ -245,6 +344,11 @@ void TextEditBehavior::deleteSelectionOrChar(bool forward) {
 
 void TextEditBehavior::deleteWord(bool forward) {
     detail::TextEditMutation mutation = detail::eraseWord(value_->get(), state_.selection, forward);
+    mutateValue(std::move(mutation.text), mutation.selection.caretByte, mutation.selection.anchorByte, true, false);
+}
+
+void TextEditBehavior::deleteToLineBoundary(bool forward) {
+    detail::TextEditMutation mutation = detail::eraseToLineBoundary(value_->get(), state_.selection, forward);
     mutateValue(std::move(mutation.text), mutation.selection.caretByte, mutation.selection.anchorByte, true, false);
 }
 
@@ -308,6 +412,7 @@ void TextEditBehavior::moveChar(int dir, bool extend) {
 
 bool TextEditBehavior::handleKey(KeyEvent const &e) {
     if (state_.disabled) {
+        logTextInputDebug("pre", "key(ignored-disabled)", state_, value_->get());
         return false;
     }
 
@@ -315,30 +420,39 @@ bool TextEditBehavior::handleKey(KeyEvent const &e) {
     bool const shift = hasMod(m, Modifiers::Shift);
     bool const alt = hasMod(m, Modifiers::Alt);
     bool const cmd = cmdLike(m);
+    char mods[32];
+    formatModifiers(mods, sizeof(mods), m);
+    char extra[96];
+    std::snprintf(extra, sizeof(extra), "key=%s(0x%X) mods=%s", keyName(e.key), static_cast<unsigned>(e.key), mods);
+    logTextInputDebug("pre", "key", state_, value_->get(), extra);
+    auto finish = [&](bool handled) {
+        logTextInputDebug("post", handled ? "key" : "key(unhandled)", state_, value_->get(), extra);
+        return handled;
+    };
 
     if (e.key == keys::Escape) {
         if (opts_.onEscape) {
             opts_.onEscape(value_->get());
-            return true;
+            return finish(true);
         }
-        return false;
+        return finish(false);
     }
 
     if (cmd && !shift && e.key == keys::A) {
         selectAll();
-        return true;
+        return finish(true);
     }
     if (cmd && !shift && e.key == keys::C) {
         copySelection(false);
-        return true;
+        return finish(true);
     }
     if (cmd && !shift && e.key == keys::X) {
         copySelection(true);
-        return true;
+        return finish(true);
     }
     if (cmd && !shift && e.key == keys::V) {
         paste();
-        return true;
+        return finish(true);
     }
     if (cmd && e.key == keys::Z) {
         if (shift) {
@@ -346,15 +460,15 @@ bool TextEditBehavior::handleKey(KeyEvent const &e) {
         } else {
             undo();
         }
-        return true;
+        return finish(true);
     }
 
     if (e.key == keys::Tab) {
         if (opts_.acceptsTab && opts_.multiline) {
             insertAtCaret("\t", false);
-            return true;
+            return finish(true);
         }
-        return false;
+        return finish(false);
     }
 
     if (e.key == keys::Return) {
@@ -365,100 +479,104 @@ bool TextEditBehavior::handleKey(KeyEvent const &e) {
             if (opts_.onSubmit) {
                 opts_.onSubmit(value_->get());
             }
-            return true;
+            return finish(true);
         }
         if (opts_.multiline) {
             insertAtCaret("\n", false);
-            return true;
+            return finish(true);
         }
-        return false;
+        return finish(false);
     }
 
     if (e.key == keys::Delete) {
-        if (alt) {
+        if (cmd) {
+            deleteToLineBoundary(false);
+        } else if (alt) {
             deleteWord(false);
         } else {
             deleteSelectionOrChar(false);
         }
-        return true;
+        return finish(true);
     }
     if (e.key == keys::ForwardDelete) {
-        if (alt) {
+        if (cmd) {
+            deleteToLineBoundary(true);
+        } else if (alt) {
             deleteWord(true);
         } else {
             deleteSelectionOrChar(true);
         }
-        return true;
+        return finish(true);
     }
 
     if (e.key == keys::LeftArrow) {
         if (cmd && !opts_.multiline) {
             moveCaretTo(0, shift);
-            return true;
+            return finish(true);
         }
         if (cmd && opts_.multiline) {
             moveLineBoundary(false, shift);
-            return true;
+            return finish(true);
         }
         if (alt) {
             moveWord(-1, shift);
-            return true;
+            return finish(true);
         }
         moveChar(-1, shift);
-        return true;
+        return finish(true);
     }
     if (e.key == keys::RightArrow) {
         if (cmd && !opts_.multiline) {
             moveCaretTo(static_cast<int>(value_->get().size()), shift);
-            return true;
+            return finish(true);
         }
         if (cmd && opts_.multiline) {
             moveLineBoundary(true, shift);
-            return true;
+            return finish(true);
         }
         if (alt) {
             moveWord(1, shift);
-            return true;
+            return finish(true);
         }
         moveChar(1, shift);
-        return true;
+        return finish(true);
     }
 
     if (e.key == keys::Home) {
         moveLineBoundary(false, shift);
-        return true;
+        return finish(true);
     }
     if (e.key == keys::End) {
         moveLineBoundary(true, shift);
-        return true;
+        return finish(true);
     }
 
     if (e.key == keys::UpArrow) {
         if (cmd && opts_.multiline) {
             moveDocumentBoundary(false, shift);
-            return true;
+            return finish(true);
         }
         if (opts_.multiline && opts_.verticalResolver) {
             int const n = opts_.verticalResolver(state_.selection.caretByte, -1);
             moveCaretTo(n, shift);
-            return true;
+            return finish(true);
         }
-        return false;
+        return finish(false);
     }
     if (e.key == keys::DownArrow) {
         if (cmd && opts_.multiline) {
             moveDocumentBoundary(true, shift);
-            return true;
+            return finish(true);
         }
         if (opts_.multiline && opts_.verticalResolver) {
             int const n = opts_.verticalResolver(state_.selection.caretByte, 1);
             moveCaretTo(n, shift);
-            return true;
+            return finish(true);
         }
-        return false;
+        return finish(false);
     }
 
-    return false;
+    return finish(false);
 }
 
 bool TextEditBehavior::canUndo() const {
@@ -505,16 +623,29 @@ void TextEditBehavior::redo() {
 
 bool TextEditBehavior::handleTextInput(std::string_view utf8) {
     if (state_.disabled || utf8.empty()) {
+        char extra[96];
+        std::snprintf(extra, sizeof(extra), "bytes=%zu ignored=%d", static_cast<std::size_t>(utf8.size()),
+                      (state_.disabled || utf8.empty()) ? 1 : 0);
+        logTextInputDebug("pre", "text", state_, value_->get(), extra);
         return false;
     }
+    char extra[96];
+    std::snprintf(extra, sizeof(extra), "bytes=%zu", static_cast<std::size_t>(utf8.size()));
+    logTextInputDebug("pre", "text", state_, value_->get(), extra);
     insertAtCaret(utf8, true);
     return true;
 }
 
 bool TextEditBehavior::handlePointerDown(int byte, bool shift) {
     if (state_.disabled) {
+        char extra[96];
+        std::snprintf(extra, sizeof(extra), "byte=%d shift=%d ignored=1", byte, shift ? 1 : 0);
+        logTextInputDebug("pre", "pointerDown", state_, value_->get(), extra);
         return false;
     }
+    char extra[96];
+    std::snprintf(extra, sizeof(extra), "byte=%d shift=%d", byte, shift ? 1 : 0);
+    logTextInputDebug("pre", "pointerDown", state_, value_->get(), extra);
     state_.draggingSelection = true;
     std::string const &s = value_->get();
     int const b = detail::utf8Clamp(s, byte);
@@ -525,22 +656,31 @@ bool TextEditBehavior::handlePointerDown(int byte, bool shift) {
     ensureCaretVisible_ = true;
     resetBlinkEpoch();
     markTextUiDirty();
+    logTextInputDebug("post", "pointerDown", state_, value_->get(), extra);
     return true;
 }
 
 void TextEditBehavior::handlePointerDrag(int byte) {
     if (!state_.draggingSelection || state_.disabled) {
+        char extra[96];
+        std::snprintf(extra, sizeof(extra), "byte=%d ignored=1", byte);
+        logTextInputDebug("pre", "pointerDrag", state_, value_->get(), extra);
         return;
     }
+    char extra[96];
+    std::snprintf(extra, sizeof(extra), "byte=%d", byte);
+    logTextInputDebug("pre", "pointerDrag", state_, value_->get(), extra);
     std::string const &s = value_->get();
     state_.selection.caretByte = detail::utf8Clamp(s, byte);
     ensureCaretVisible_ = true;
     resetBlinkEpoch();
     markTextUiDirty();
+    logTextInputDebug("post", "pointerDrag", state_, value_->get(), extra);
 }
 
 void TextEditBehavior::handlePointerUp() {
     state_.draggingSelection = false;
+    logTextInputDebug("post", "pointerUp", state_, value_->get());
 }
 
 TextEditBehavior &useTextEditBehavior(State<std::string> value, TextEditBehaviorOptions const &opts) {
