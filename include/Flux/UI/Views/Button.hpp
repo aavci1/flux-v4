@@ -4,13 +4,12 @@
 ///
 /// Part of the Flux public API.
 
-
 #include <Flux/Core/Types.hpp>
 #include <Flux/Graphics/Font.hpp>
-#include <Flux/UI/Theme.hpp>
 #include <Flux/Graphics/Styles.hpp>
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/Hooks.hpp>
+#include <Flux/UI/Theme.hpp>
 
 #include <functional>
 #include <string>
@@ -18,60 +17,42 @@
 namespace flux {
 
 enum class ButtonVariant : std::uint8_t {
-  Primary,
-  Secondary,
-  Destructive,
-  Ghost,
-  Link,
+    Primary,
+    Secondary,
+    Destructive,
+    Ghost,
 };
 
 struct Button : ViewModifiers<Button> {
-  // ── Content ──────────────────────────────────────────────────────────────
+    struct Style {
+        float height = kHeightFromTheme;
+        Font font = kFontFromTheme;
+        float paddingH = kFloatFromTheme;
+        float cornerRadius = kFloatFromTheme;
+        Color accentColor = kColorFromTheme;
+        Color destructiveColor = kColorFromTheme;
+    };
 
-  /// Button label text.
-  std::string label;
+    std::string label;
+    ButtonVariant variant = ButtonVariant::Primary;
+    bool disabled = false;
+    Style style {};
+    std::function<void()> onTap;
+    Element body() const;
+};
 
-  // ── Variant & appearance ─────────────────────────────────────────────────
+struct LinkButton : ViewModifiers<LinkButton> {
+    struct Style {
+        Font font = kFontFromTheme;
+        Color color = kColorFromTheme;
+    };
 
-  ButtonVariant variant = ButtonVariant::Primary;
+    std::string label;
+    bool disabled = false;
+    Style style {};
+    std::function<void()> onTap;
 
-  /// Override fixed height (`<= 0` or `kHeightFromTheme` = `Theme::controlHeightMedium`). Ignored for Link.
-  float height = kHeightFromTheme;
-
-  Font font = kFontFromTheme;
-
-  /// Horizontal padding between label and button edge (`kFloatFromTheme` = `Theme::space4`).
-  /// Ignored for Link (always 0).
-  float paddingH = kFloatFromTheme;
-
-  /// Uniform corner radius in points (`kFloatFromTheme` = `Theme::radiusMedium`). `body()` builds
-  /// `CornerRadius` from this value — all four corners match. Per-corner radii (e.g. top-only sheet
-  /// rounding) are not expressible on this field; use a lower-level primitive with explicit `CornerRadius`.
-  float cornerRadius = kFloatFromTheme;
-
-  /// Accent colour: Primary/Ghost/Secondary/Link label and focus ring.
-  Color accentColor = kColorFromTheme;
-  /// Danger colour: Destructive fill and focus ring.
-  Color destructiveColor = kColorFromTheme;
-
-  // ── Layout ───────────────────────────────────────────────────────────────
-  // Flex: use chained `.flex(...)` on the `Element` from `body()`.
-
-  // ── Behaviour ────────────────────────────────────────────────────────────
-
-  bool disabled = false;
-
-  /// Primary tap handler.
-  std::function<void()> onTap;
-
-  /// Optional: name of a window action. The button reads
-  /// `Window::isActionEnabled(actionName)` to derive its own enabled state,
-  /// and registers `useWindowAction` so the shortcut fires the same handler.
-  std::string actionName;
-
-  // ── Component protocol ───────────────────────────────────────────────────
-
-  Element body() const;
+    Element body() const;
 };
 
 } // namespace flux

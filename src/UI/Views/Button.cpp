@@ -1,5 +1,3 @@
-#include <Flux/Core/Window.hpp>
-#include <Flux/Detail/Runtime.hpp>
 #include <Flux/Reactive/Interpolatable.hpp>
 #include <Flux/Reactive/Transition.hpp>
 #include <Flux/UI/Theme.hpp>
@@ -19,228 +17,281 @@ namespace flux {
 namespace {
 
 Color lighten(Color c, float t) {
-  Color const w = Colors::white;
-  return Color{ lerp(c.r, w.r, t), lerp(c.g, w.g, t), lerp(c.b, w.b, t), c.a };
+    Color const w = Colors::white;
+    return Color {lerp(c.r, w.r, t), lerp(c.g, w.g, t), lerp(c.b, w.b, t), c.a};
 }
 
 Color darken(Color c, float t) {
-  Color const b = Colors::black;
-  return Color{ lerp(c.r, b.r, t), lerp(c.g, b.g, t), lerp(c.b, b.b, t), c.a };
+    Color const b = Colors::black;
+    return Color {lerp(c.r, b.r, t), lerp(c.g, b.g, t), lerp(c.b, b.b, t), c.a};
 }
 
 struct ButtonColors {
-  Color fill{};
-  Color fillHover{};
-  Color fillPress{};
-  Color label{};
-  Color labelHover{};
-  Color labelPress{};
-  Color border{};
-  Color focusRing{};
+    Color fill {};
+    Color fillHover {};
+    Color fillPress {};
+    Color label {};
+    Color labelHover {};
+    Color labelPress {};
+    Color border {};
+    Color focusRing {};
+    ShadowStyle shadow = ShadowStyle::none();
 };
 
+Button::Style resolveStyle(Button::Style const &style, Theme const &theme) {
+    return Button::Style {
+        .height = resolveFloat(style.height, theme.controlHeightMedium),
+        .font = resolveFont(style.font, theme.fontLabel),
+        .paddingH = resolveFloat(style.paddingH, theme.space4),
+        .cornerRadius = resolveFloat(style.cornerRadius, theme.radiusMedium * 0.5f),
+        .accentColor = resolveColor(style.accentColor, theme.colorAccent),
+        .destructiveColor = resolveColor(style.destructiveColor, theme.colorDanger),
+    };
+}
+
+LinkButton::Style resolveStyle(LinkButton::Style const &style, Theme const &theme) {
+    return LinkButton::Style {
+        .font = resolveFont(style.font, theme.fontBody),
+        .color = resolveColor(style.color, theme.colorAccent),
+    };
+}
+
 ButtonColors deriveColors(ButtonVariant variant, Color accent, Color destructive, Color onAccent,
-                          Color onDanger) {
-  switch (variant) {
-  case ButtonVariant::Primary:
-    return {
-        .fill = accent,
-        .fillHover = lighten(accent, 0.08f),
-        .fillPress = darken(accent, 0.08f),
-        .label = onAccent,
-        .labelHover = onAccent,
-        .labelPress = onAccent,
-        .border = Colors::transparent,
-        .focusRing = accent,
-    };
-  case ButtonVariant::Secondary:
-    return {
-        .fill = Color{ accent.r, accent.g, accent.b, 0.08f },
-        .fillHover = Color{ accent.r, accent.g, accent.b, 0.14f },
-        .fillPress = Color{ accent.r, accent.g, accent.b, 0.20f },
-        .label = accent,
-        .labelHover = accent,
-        .labelPress = accent,
-        .border = Color{ accent.r, accent.g, accent.b, 0.35f },
-        .focusRing = accent,
-    };
-  case ButtonVariant::Destructive:
-    return {
-        .fill = destructive,
-        .fillHover = lighten(destructive, 0.08f),
-        .fillPress = darken(destructive, 0.08f),
-        .label = onDanger,
-        .labelHover = onDanger,
-        .labelPress = onDanger,
-        .border = Colors::transparent,
-        .focusRing = destructive,
-    };
-  case ButtonVariant::Ghost:
-    return {
-        .fill = Colors::transparent,
-        .fillHover = Color{ accent.r, accent.g, accent.b, 0.08f },
-        .fillPress = Color{ accent.r, accent.g, accent.b, 0.14f },
-        .label = accent,
-        .labelHover = accent,
-        .labelPress = accent,
-        .border = Colors::transparent,
-        .focusRing = accent,
-    };
-  case ButtonVariant::Link:
-    return {
-        .fill = Colors::transparent,
-        .fillHover = Colors::transparent,
-        .fillPress = Colors::transparent,
-        .label = accent,
-        .labelHover = lighten(accent, 0.12f),
-        .labelPress = darken(accent, 0.12f),
-        .border = Colors::transparent,
-        .focusRing = accent,
-    };
-  }
-  return {};
+                          Color onDanger, Theme const &theme) {
+    switch (variant) {
+    case ButtonVariant::Primary:
+        return {
+            .fill = accent,
+            .fillHover = lighten(accent, 0.08f),
+            .fillPress = darken(accent, 0.08f),
+            .label = onAccent,
+            .labelHover = onAccent,
+            .labelPress = onAccent,
+            .border = Colors::transparent,
+            .focusRing = theme.colorBorderFocus,
+            .shadow = ShadowStyle {.radius = theme.shadowRadiusControl, .offset = {0.f, theme.shadowOffsetYControl}, .color = theme.shadowColor},
+        };
+    case ButtonVariant::Secondary:
+        return {
+            .fill = theme.colorSurfaceOverlay,
+            .fillHover = theme.colorSurfaceHover,
+            .fillPress = theme.colorSurfaceDisabled,
+            .label = theme.colorTextPrimary,
+            .labelHover = theme.colorTextPrimary,
+            .labelPress = theme.colorTextPrimary,
+            .border = theme.colorBorder,
+            .focusRing = theme.colorBorderFocus,
+            .shadow = ShadowStyle::none(),
+        };
+    case ButtonVariant::Destructive:
+        return {
+            .fill = destructive,
+            .fillHover = lighten(destructive, 0.08f),
+            .fillPress = darken(destructive, 0.08f),
+            .label = onDanger,
+            .labelHover = onDanger,
+            .labelPress = onDanger,
+            .border = Colors::transparent,
+            .focusRing = theme.colorBorderFocus,
+            .shadow = ShadowStyle {.radius = theme.shadowRadiusControl, .offset = {0.f, theme.shadowOffsetYControl}, .color = theme.shadowColor},
+        };
+    case ButtonVariant::Ghost:
+        return {
+            .fill = Colors::transparent,
+            .fillHover = theme.colorAccentSubtle,
+            .fillPress = Color {theme.colorAccentSubtle.r, theme.colorAccentSubtle.g, theme.colorAccentSubtle.b, std::min(theme.colorAccentSubtle.a + 0.08f, 1.f)},
+            .label = accent,
+            .labelHover = accent,
+            .labelPress = accent,
+            .border = Colors::transparent,
+            .focusRing = theme.colorBorderFocus,
+            .shadow = ShadowStyle::none(),
+        };
+    }
+    return {};
 }
 
 } // namespace
 
 Element Button::body() const {
-  Theme const& theme = useEnvironment<Theme>();
-  Color const accent = resolveColor(accentColor, theme.colorAccent);
-  Color const destructive = resolveColor(destructiveColor, theme.colorDanger);
-  Font const fontResolved = resolveFont(font, theme.fontLabel);
+    Theme const &theme = useEnvironment<Theme>();
+    auto [heightResolved, fontResolved, paddingResolved, radiusResolved, accent, destructive] =
+        resolveStyle(style, theme);
+    bool const isDisabled = disabled;
 
-  Transition const trFast =
-      theme.reducedMotion ? Transition::instant() : Transition::ease(theme.durationFast);
-  Transition const trMed =
-      theme.reducedMotion ? Transition::instant() : Transition::ease(theme.durationMedium);
+    Transition const trInstant = Transition::instant();
+    Transition const trFast =
+        theme.reducedMotion ? trInstant : Transition::ease(theme.durationFast);
+    Transition const trMed =
+        theme.reducedMotion ? trInstant : Transition::ease(theme.durationMedium);
+    Transition const tr = isDisabled ? trInstant : trMed;
 
-  bool const hovered = useHover();
-  bool const pressed = usePress();
-  bool const focused = useFocus();
-  bool const keyboardFocused = useKeyboardFocus();
-  bool const isLink = (variant == ButtonVariant::Link);
+    bool const hovered = useHover();
+    bool const pressed = usePress();
+    bool const focused = useFocus();
+    ButtonColors const colors =
+        deriveColors(variant, accent, destructive, theme.colorOnAccent, theme.colorOnDanger, theme);
 
-  bool effectivelyDisabled = disabled;
-  if (!effectivelyDisabled && !actionName.empty()) {
-    if (Runtime* rt = Runtime::current()) {
-      effectivelyDisabled = !rt->window().isActionEnabled(actionName);
+    auto fillAnim = useAnimated<Color>(colors.fill);
+    {
+        Color const fillTarget =
+            isDisabled ? theme.colorSurfaceDisabled : pressed ? colors.fillPress :
+                                                  hovered     ? colors.fillHover :
+                                                                colors.fill;
+        if (*fillAnim != fillTarget) {
+            fillAnim.set(fillTarget, tr);
+        }
     }
-  }
 
-  ButtonColors const colors =
-      deriveColors(variant, accent, destructive, theme.colorOnAccent, theme.colorOnDanger);
-
-  auto fillAnim = useAnimated<Color>(colors.fill);
-  if (!isLink) {
-    Color const fillTarget =
-        effectivelyDisabled ? theme.colorSurfaceDisabled
-                            : pressed ? colors.fillPress
-                            : hovered ? colors.fillHover
-                                      : colors.fill;
-    if (*fillAnim != fillTarget) {
-      fillAnim.set(fillTarget, trMed);
+    auto labelAnim = useAnimated<Color>(colors.label);
+    {
+        Color const labelTarget =
+            isDisabled ? theme.colorTextDisabled : pressed ? colors.labelPress :
+                                               hovered     ? colors.labelHover :
+                                                             colors.label;
+        if (*labelAnim != labelTarget) {
+            labelAnim.set(labelTarget, tr);
+        }
     }
-  }
 
-  auto labelAnim = useAnimated<Color>(colors.label);
-  {
-    Color const labelTarget =
-        effectivelyDisabled
-            ? theme.colorTextDisabled
-            : (isLink ? (pressed ? colors.labelPress : hovered ? colors.labelHover : colors.label) : colors.label);
-    if (*labelAnim != labelTarget) {
-      labelAnim.set(labelTarget, trMed);
+    auto scaleAnim = useAnimated<float>(1.f);
+    {
+        float const scaleTarget = (pressed && !isDisabled) ? 0.97f : 1.f;
+        if (std::abs(*scaleAnim - scaleTarget) > 0.001f) {
+            scaleAnim.set(scaleTarget, trFast);
+        }
     }
-  }
 
-  auto scaleAnim = useAnimated<float>(1.f);
-  if (!isLink) {
-    float const scaleTarget = (pressed && !effectivelyDisabled) ? 0.97f : 1.f;
-    if (std::abs(*scaleAnim - scaleTarget) > 0.001f) {
-      scaleAnim.set(scaleTarget, trFast);
+    ShadowStyle shadow = ShadowStyle::none();
+    if (!isDisabled) {
+        if (pressed) {
+            shadow = ShadowStyle {.radius = theme.shadowRadiusControl + 2.f, .offset = {0.f, theme.shadowOffsetYControl + 1.f}, .color = Color {theme.shadowColor.r, theme.shadowColor.g, theme.shadowColor.b, std::min(theme.shadowColor.a + 0.08f, 1.f)}};
+        } else if (hovered) {
+            shadow = colors.shadow.isNone() ? ShadowStyle {.radius = theme.shadowRadiusControl * 0.8f, .offset = {0.f, theme.shadowOffsetYControl + 0.5f}, .color = Color {theme.shadowColor.r, theme.shadowColor.g, theme.shadowColor.b, theme.shadowColor.a * 0.7f}} : colors.shadow;
+        } else {
+            shadow = colors.shadow;
+        }
     }
-  }
 
-  if (!actionName.empty() && onTap) {
-    useWindowAction(actionName, [onTap = onTap, effectivelyDisabled] {
-      if (!effectivelyDisabled) {
-        onTap();
-      }
-    }, [effectivelyDisabled] { return !effectivelyDisabled; });
-  }
+    auto handleTap = [onTap = onTap, isDisabled]() {
+        if (isDisabled) {
+            return;
+        }
+        if (onTap) {
+            onTap();
+        }
+    };
+    auto handleKey = [handleTap](KeyCode k, Modifiers) {
+        if (k == keys::Return || k == keys::Space) {
+            handleTap();
+        }
+    };
 
-  float const h =
-      isLink ? 0.f : (height > 0.f ? height : theme.controlHeightMedium);
-  float const effPaddingH = isLink ? 0.f : resolveFloat(paddingH, theme.space4);
+    bool const showFocusRing = !isDisabled && focused;
+    CornerRadius const cr {radiusResolved};
 
-  auto handleTap = [onTap = onTap, effectivelyDisabled]() {
-    if (effectivelyDisabled) {
-      return;
+    StrokeStyle stroke {};
+    if (showFocusRing) {
+        stroke = StrokeStyle::solid(colors.focusRing, 2.f);
+    } else if (!isDisabled && colors.border.a > 0.01f) {
+        stroke = StrokeStyle::solid(colors.border, 1.f);
+    } else {
+        stroke = StrokeStyle::none();
     }
-    if (onTap) {
-      onTap();
+
+    Element content = Element {ZStack {
+                                   .horizontalAlignment = Alignment::Center,
+                                   .verticalAlignment = Alignment::Center,
+                                   .children = flux::children(
+                                       Rectangle {}
+                                           .fill(FillStyle::solid(*fillAnim))
+                                           .stroke(stroke)
+                                           .shadow(shadow)
+                                           .height(heightResolved)
+                                           .cornerRadius(cr)
+                                           .flex(1.f, 1.f, 0.f),
+                                       Text {
+                                           .text = label,
+                                           .font = fontResolved,
+                                           .color = *labelAnim,
+                                           .horizontalAlignment = HorizontalAlignment::Center,
+                                           .verticalAlignment = VerticalAlignment::Center,
+                                       }
+                                           .padding(paddingResolved)
+                                   )
+                               }}
+                          .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
+                          .focusable(!isDisabled)
+                          .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})
+                          .onTap(isDisabled ? std::function<void()> {} : std::function<void()> {handleTap});
+
+    return Element {ScaleAroundCenter {.scale = *scaleAnim, .child = std::move(content)}};
+}
+
+Element LinkButton::body() const {
+    Theme const &theme = useEnvironment<Theme>();
+    auto [fontResolved, accentResolved] = resolveStyle(style, theme);
+    bool const isDisabled = disabled;
+    bool const hovered = useHover();
+    bool const pressed = usePress();
+    bool const focused = useFocus();
+    bool const keyboardFocused = useKeyboardFocus();
+
+    Transition const trMed =
+        theme.reducedMotion ? Transition::instant() : Transition::ease(theme.durationMedium);
+
+    auto labelAnim = useAnimated<Color>(accentResolved);
+    {
+        Color const target =
+            isDisabled ? theme.colorTextDisabled : pressed ? darken(accentResolved, 0.12f) :
+                                               hovered     ? lighten(accentResolved, 0.12f) :
+                                                             accentResolved;
+        if (*labelAnim != target) {
+            labelAnim.set(target, trMed);
+        }
     }
-  };
-  auto handleKey = [handleTap](KeyCode k, Modifiers) {
-    if (k == keys::Return || k == keys::Space) {
-      handleTap();
+
+    auto handleTap = [onTap = onTap, isDisabled]() {
+        if (isDisabled) {
+            return;
+        }
+        if (onTap) {
+            onTap();
+        }
+    };
+    auto handleKey = [handleTap](KeyCode k, Modifiers) {
+        if (k == keys::Return || k == keys::Space) {
+            handleTap();
+        }
+    };
+
+    StrokeStyle focusStroke = StrokeStyle::none();
+    if (!isDisabled && focused && keyboardFocused) {
+        focusStroke = StrokeStyle::solid(theme.colorBorderFocus, 2.f);
     }
-  };
 
-  bool const showFocusRing = !effectivelyDisabled && focused &&
-                             (isLink ? keyboardFocused : true);
-  float const radiusResolved =
-      isLink ? theme.radiusXSmall : resolveFloat(cornerRadius, theme.radiusMedium);
-  CornerRadius const cr{radiusResolved};
-
-  // Focus is drawn as this rectangle's stroke (inset along the edge), not a separate outset ring: true
-  // outside gap would need layout/`resolveLeafBounds` support or a dedicated FocusRing primitive.
-  StrokeStyle stroke{};
-  if (showFocusRing) {
-    stroke = StrokeStyle::solid(colors.focusRing, 2.f);
-  } else if (!effectivelyDisabled && colors.border.a > 0.01f) {
-    stroke = StrokeStyle::solid(colors.border, 1.f);
-  } else {
-    stroke = StrokeStyle::none();
-  }
-
-  ShadowStyle bgShadow = ShadowStyle::none();
-  if (!isLink && variant != ButtonVariant::Ghost && !effectivelyDisabled) {
-    bgShadow = ShadowStyle{.radius = theme.shadowRadiusControl,
-                           .offset = {0.f, theme.shadowOffsetYControl},
-                           .color = theme.shadowColor};
-  }
-
-  auto content = ZStack {
-    .horizontalAlignment = Alignment::Center,
-    .verticalAlignment = Alignment::Center,
-    .children = flux::children(
-      Rectangle{}
-          .fill(FillStyle::solid(*fillAnim))
-          .stroke(stroke)
-          .shadow(bgShadow)
-          .height(h)
-        .cursor(effectivelyDisabled ? Cursor::Inherit : Cursor::Hand)
-        .focusable(!effectivelyDisabled)
-        .onKeyDown(effectivelyDisabled ? std::function<void(KeyCode, Modifiers)>{} : std::function<void(KeyCode, Modifiers)>{ handleKey })
-        .onTap(effectivelyDisabled ? std::function<void()>{} : std::function<void()>{ handleTap })
-        .cornerRadius(cr)
-        .flex(isLink ? 0.f : 1.f, 1.f, 0.f),
-      Text{
-        .text = label,
-        .font = fontResolved,
-        .color = *labelAnim,
-        .horizontalAlignment = isLink ? HorizontalAlignment::Leading : HorizontalAlignment::Center,
-        .verticalAlignment = VerticalAlignment::Center,
-      }.padding(effPaddingH)
-    )
-  };
-
-  if (isLink) {
-    return Element{ std::move(content) };
-  }
-
-  return Element{ ScaleAroundCenter{ .scale = *scaleAnim, .child = Element{ std::move(content) } } };
+    return Element {ZStack {
+                        .horizontalAlignment = Alignment::Center,
+                        .verticalAlignment = Alignment::Center,
+                        .children = flux::children(
+                            Rectangle {}
+                                .fill(FillStyle::none())
+                                .stroke(focusStroke)
+                                .cornerRadius(CornerRadius {theme.radiusXSmall}),
+                            Text {
+                                .text = label,
+                                .font = fontResolved,
+                                .color = *labelAnim,
+                                .horizontalAlignment = HorizontalAlignment::Leading,
+                                .verticalAlignment = VerticalAlignment::Center,
+                            }
+                                .padding(2.f, 3.f, 2.f, 3.f)
+                        )
+                    }}
+        .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
+        .focusable(!isDisabled)
+        .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})
+        .onTap(isDisabled ? std::function<void()> {} : std::function<void()> {handleTap});
 }
 
 } // namespace flux

@@ -1,176 +1,571 @@
-// Demonstrates Button: variants, disabled state, Tab focus, Link inline text, and window actions.
 #include <Flux.hpp>
 #include <Flux/Core/Action.hpp>
 #include <Flux/Core/Shortcut.hpp>
 #include <Flux/Core/WindowUI.hpp>
-#include <Flux/Reactive/Reactive.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/UI.hpp>
 #include <Flux/UI/Views/Button.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
+#include <Flux/UI/Views/ScrollView.hpp>
 #include <Flux/UI/Views/Spacer.hpp>
 #include <Flux/UI/Views/Text.hpp>
 #include <Flux/UI/Views/VStack.hpp>
+#include <Flux/UI/Views/ZStack.hpp>
 
 #include <cstdio>
+#include <string>
 
 using namespace flux;
 
 namespace {
 
-bool gSaveActionEnabled = true;
+Element makeSectionCard(Theme const &theme, std::string title, std::string caption, Element content) {
+    return VStack {
+        .spacing = theme.space3,
+        .children = children(
+            Text {
+                .text = std::move(title),
+                .font = theme.fontTitle,
+                .color = theme.colorTextPrimary,
+                .horizontalAlignment = HorizontalAlignment::Leading,
+            },
+            Text {
+                .text = std::move(caption),
+                .font = theme.fontBodySmall,
+                .color = theme.colorTextSecondary,
+                .horizontalAlignment = HorizontalAlignment::Leading,
+                .wrapping = TextWrapping::Wrap,
+            },
+            std::move(content)
+        )
+    } //
+        .padding(theme.space4)
+        .fill(FillStyle::solid(theme.colorSurfaceOverlay))
+        .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
+        .cornerRadius(CornerRadius {theme.radiusLarge});
+}
+
+Element makeBadge(Theme const &theme, std::string label, Color fill, Color textColor) {
+    return ZStack {
+        .horizontalAlignment = Alignment::Center,
+        .verticalAlignment = Alignment::Center,
+        .children = children(
+            Rectangle {}
+                .fill(FillStyle::solid(fill))
+                .cornerRadius(CornerRadius {theme.radiusLarge}),
+            Text {
+                .text = std::move(label),
+                .font = theme.fontLabelSmall,
+                .color = textColor,
+                .horizontalAlignment = HorizontalAlignment::Center,
+                .verticalAlignment = VerticalAlignment::Center,
+            }
+                .padding(6.f, 10.f, 6.f, 10.f)
+        )
+    };
+}
+
+Element makeMetricTile(Theme const &theme, std::string value, std::string label, Color accent) {
+    return VStack {
+        .spacing = theme.space1,
+        .alignment = Alignment::Start,
+        .children = children(
+            Text {
+                .text = std::move(value),
+                .font = theme.fontTitle,
+                .color = accent,
+                .horizontalAlignment = HorizontalAlignment::Leading,
+            },
+            Text {
+                .text = std::move(label),
+                .font = theme.fontBodySmall,
+                .color = theme.colorTextSecondary,
+                .horizontalAlignment = HorizontalAlignment::Leading,
+            }
+        )
+    } //
+        .padding(theme.space3)
+        .fill(FillStyle::solid(theme.colorBackground))
+        .cornerRadius(CornerRadius {theme.radiusMedium})
+        .flex(1.f, 1.f, 0.f);
+}
+
+Element makeHeroDemo(Theme const &theme, State<bool> dirty, State<bool> reviewPassed, State<int> saveCount,
+                     State<std::string> lastEvent) {
+    auto saveDraft = [dirty, saveCount, lastEvent] {
+        if (!*dirty) {
+            return;
+        }
+        dirty = false;
+        saveCount = *saveCount + 1;
+        lastEvent = "Draft saved. Cmd+S is wired to the same action.";
+        std::fprintf(stderr, "[button-demo] Save draft\n");
+    };
+
+    auto markDirty = [dirty, lastEvent] {
+        dirty = true;
+        lastEvent = "Draft marked dirty again to show the disabled and enabled transitions.";
+        std::fprintf(stderr, "[button-demo] Mark dirty\n");
+    };
+    std::function<void()> const heroLinkAction = *dirty ? std::function<void()> {saveDraft} : std::function<void()> {markDirty};
+
+    return makeSectionCard(
+        theme, "Editorial Hero",
+        "A primary action should feel obvious, while the supporting actions stay nearby without competing for attention.",
+        VStack {
+            .spacing = theme.space3,
+            .children = children(
+                HStack {
+                    .spacing = theme.space3,
+                    .alignment = Alignment::Center,
+                    .children = children(
+                        VStack {
+                            .spacing = theme.space1,
+                            .alignment = Alignment::Start,
+                            .children = children(
+                                Text {
+                                    .text = "Spring release brief",
+                                    .font = theme.fontSubtitle,
+                                    .color = theme.colorTextPrimary,
+                                    .horizontalAlignment = HorizontalAlignment::Leading,
+                                },
+                                Text {
+                                    .text = "Buttons feel strongest when the layout makes one decision unmistakably primary.",
+                                    .font = theme.fontBodySmall,
+                                    .color = theme.colorTextSecondary,
+                                    .horizontalAlignment = HorizontalAlignment::Leading,
+                                    .wrapping = TextWrapping::Wrap,
+                                }
+                            )
+                        } //
+                            .flex(1.f, 1.f, 0.f),
+                        makeBadge(theme, *dirty ? "Dirty" : "Saved",
+                                  *dirty ? theme.colorWarningSubtle : theme.colorSuccessSubtle,
+                                  *dirty ? theme.colorWarning : theme.colorSuccess),
+                        makeBadge(theme, *reviewPassed ? "Approved" : "Needs review",
+                                  *reviewPassed ? theme.colorSuccessSubtle : theme.colorAccentSubtle,
+                                  *reviewPassed ? theme.colorSuccess : theme.colorAccent)
+                    )
+                },
+                VStack {
+                    .spacing = theme.space2,
+                    .children = children(
+                        HStack {
+                            .spacing = theme.space2,
+                            .alignment = Alignment::Center,
+                            .children = children(
+                                Button {
+                                    .label = "Save Draft",
+                                    .variant = ButtonVariant::Primary,
+                                    .disabled = !*dirty,
+                                    .onTap = saveDraft,
+                                },
+                                Button {
+                                    .label = "Preview",
+                                    .variant = ButtonVariant::Secondary,
+                                    .onTap =
+                                        [lastEvent] {
+                                            lastEvent = "Preview opened. Secondary buttons are useful when they support the main flow.";
+                                            std::fprintf(stderr, "[button-demo] Preview\n");
+                                        },
+                                },
+                                Button {
+                                    .label = "Share Review Link",
+                                    .variant = ButtonVariant::Ghost,
+                                    .onTap =
+                                        [reviewPassed, lastEvent] {
+                                            reviewPassed = true;
+                                            lastEvent = "Review link shared. The draft is now marked approved.";
+                                            std::fprintf(stderr, "[button-demo] Share review link\n");
+                                        },
+                                }
+                            )
+                        },
+                        HStack {
+                            .spacing = 4.f,
+                            .alignment = Alignment::Center,
+                            .children = children(
+                                Text {
+                                    .text = *dirty ? "Need to show the saved state?" : "Need to bring the dirty state back?",
+                                    .font = theme.fontBodySmall,
+                                    .color = theme.colorTextSecondary,
+                                },
+                                LinkButton {
+                                    .label = *dirty ? "Save with Cmd+S" : "Mark this draft dirty again",
+                                    .style = LinkButton::Style {.font = theme.fontBodySmall},
+                                    .onTap = heroLinkAction,
+                                }
+                            )
+                        }
+                    )
+                } //
+                    .padding(theme.space3)
+                    .fill(FillStyle::solid(theme.colorBackground))
+                    .cornerRadius(CornerRadius {theme.radiusMedium}),
+                Text {
+                    .text = *lastEvent,
+                    .font = theme.fontBodySmall,
+                    .color = theme.colorTextSecondary,
+                    .horizontalAlignment = HorizontalAlignment::Leading,
+                    .wrapping = TextWrapping::Wrap,
+                }
+            )
+        }
+    );
+}
+
+Element makeVariantTile(Theme const &theme, std::string title, std::string caption, Element action) {
+    return VStack {
+        .spacing = theme.space2,
+        .alignment = Alignment::Start,
+        .children = children(
+            Text {
+                .text = std::move(title),
+                .font = theme.fontSubtitle,
+                .color = theme.colorTextPrimary,
+                .horizontalAlignment = HorizontalAlignment::Leading,
+            },
+            Text {
+                .text = std::move(caption),
+                .font = theme.fontBodySmall,
+                .color = theme.colorTextSecondary,
+                .horizontalAlignment = HorizontalAlignment::Leading,
+                .wrapping = TextWrapping::Wrap,
+            },
+            Spacer {},
+            std::move(action)
+        )
+    } //
+        .padding(theme.space3)
+        .fill(FillStyle::solid(theme.colorBackground))
+        .cornerRadius(CornerRadius {theme.radiusMedium})
+        .height(184.f)
+        .flex(1.f, 1.f, 0.f);
+}
+
+Element makeVariantGallery(Theme const &theme, State<std::string> lastEvent) {
+    return makeSectionCard(
+        theme, "Variants In Context",
+        "Each button style gets a believable job: primary commits, secondary supports, ghost stays quiet, and destructive asks for intent.",
+        VStack {
+            .spacing = theme.space3,
+            .children = children(
+                HStack {
+                    .spacing = theme.space3,
+                    .alignment = Alignment::Stretch,
+                    .children = children(
+                        makeVariantTile(
+                            theme, "Primary",
+                            "Use one per cluster when the screen has a clear next step.",
+                            Button {
+                                .label = "Create Invoice",
+                                .variant = ButtonVariant::Primary,
+                                .onTap =
+                                    [lastEvent] {
+                                        lastEvent = "Primary pressed: a single obvious action works best when it carries the most visual weight.";
+                                        std::fprintf(stderr, "[button-demo] Create invoice\n");
+                                    },
+                            }
+                        ),
+                        makeVariantTile(
+                            theme, "Secondary",
+                            "Supportive tasks can stay prominent without overpowering the primary action.",
+                            Button {
+                                .label = "Compare Plans",
+                                .variant = ButtonVariant::Secondary,
+                                .onTap =
+                                    [lastEvent] {
+                                        lastEvent = "Secondary pressed: supportive actions should remain easy to find but visually lighter.";
+                                        std::fprintf(stderr, "[button-demo] Compare plans\n");
+                                    },
+                            }
+                        )
+                    )
+                },
+                HStack {
+                    .spacing = theme.space3,
+                    .alignment = Alignment::Stretch,
+                    .children = children(
+                        makeVariantTile(
+                            theme, "Destructive",
+                            "Reserve this for irreversible or expensive actions so it keeps its signal.",
+                            Button {
+                                .label = "Delete Workspace",
+                                .variant = ButtonVariant::Destructive,
+                                .onTap =
+                                    [lastEvent] {
+                                        lastEvent = "Destructive pressed: this variant should feel deliberate, not routine.";
+                                        std::fprintf(stderr, "[button-demo] Delete workspace\n");
+                                    },
+                            }
+                        ),
+                        makeVariantTile(
+                            theme, "Ghost",
+                            "Low-chrome buttons fit quiet utility rows, filters, and lightweight dismissal actions.",
+                            Button {
+                                .label = "Skip For Now",
+                                .variant = ButtonVariant::Ghost,
+                                .onTap =
+                                    [lastEvent] {
+                                        lastEvent = "Ghost pressed: subtle actions still need a clear hover and focus state.";
+                                        std::fprintf(stderr, "[button-demo] Skip for now\n");
+                                    },
+                            }
+                        )
+                    )
+                }
+            )
+        }
+    );
+}
+
+Element makeToolbarDemo(Theme const &theme, State<bool> dirty, State<bool> reviewPassed, State<int> saveCount,
+                        State<int> publishCount, State<std::string> lastEvent) {
+    auto saveDraft = [dirty, saveCount, lastEvent] {
+        if (!*dirty) {
+            return;
+        }
+        dirty = false;
+        saveCount = *saveCount + 1;
+        lastEvent = "Toolbar save completed. Keyboard and button paths stay aligned.";
+        std::fprintf(stderr, "[button-demo] Toolbar save\n");
+    };
+
+    return makeSectionCard(
+        theme, "Toolbar Composition",
+        "Dense layouts need hierarchy too. Ghost buttons handle utility actions, while the trailing save and publish buttons carry the stronger affordances.",
+        VStack {
+            .spacing = theme.space3,
+            .children = children(
+                HStack {
+                    .spacing = theme.space2,
+                    .alignment = Alignment::Center,
+                    .children = children(
+                        Button {
+                            .label = "Back",
+                            .variant = ButtonVariant::Ghost,
+                            .onTap =
+                                [lastEvent] {
+                                    lastEvent = "Back pressed. Ghost buttons are useful for low-risk navigation inside dense toolbars.";
+                                    std::fprintf(stderr, "[button-demo] Back\n");
+                                },
+                        },
+                        Button {
+                            .label = "Comments",
+                            .variant = ButtonVariant::Ghost,
+                            .onTap =
+                                [lastEvent] {
+                                    lastEvent = "Comments opened.";
+                                    std::fprintf(stderr, "[button-demo] Comments\n");
+                                },
+                        },
+                        Button {
+                            .label = "History",
+                            .variant = ButtonVariant::Ghost,
+                            .onTap =
+                                [lastEvent] {
+                                    lastEvent = "Version history opened.";
+                                    std::fprintf(stderr, "[button-demo] History\n");
+                                },
+                        },
+                        Spacer {},
+                        Button {
+                            .label = *reviewPassed ? "Reset Review" : "Request Review",
+                            .variant = ButtonVariant::Secondary,
+                            .onTap =
+                                [reviewPassed, lastEvent] {
+                                    reviewPassed = !*reviewPassed;
+                                    lastEvent = *reviewPassed ? "Review requested and marked ready." : "Review reset. Publish is disabled again.";
+                                    std::fprintf(stderr, "[button-demo] Toggle review\n");
+                                },
+                        },
+                        Button {
+                            .label = "Save",
+                            .variant = ButtonVariant::Primary,
+                            .disabled = !*dirty,
+                            .onTap = saveDraft,
+                        },
+                        Button {
+                            .label = "Publish",
+                            .variant = ButtonVariant::Primary,
+                            .disabled = *dirty || !*reviewPassed,
+                            .onTap =
+                                [dirty, reviewPassed, publishCount, lastEvent] {
+                                    if (*dirty || !*reviewPassed) {
+                                        return;
+                                    }
+                                    publishCount = *publishCount + 1;
+                                    lastEvent = "Published successfully. The primary action becomes available only when the workflow is truly ready.";
+                                    std::fprintf(stderr, "[button-demo] Publish\n");
+                                },
+                        }
+                    )
+                } //
+                    .padding(theme.space3)
+                    .fill(FillStyle::solid(theme.colorBackground))
+                    .cornerRadius(CornerRadius {theme.radiusMedium}),
+                HStack {
+                    .spacing = theme.space3,
+                    .alignment = Alignment::Stretch,
+                    .children = children(
+                        makeMetricTile(theme, std::to_string(*saveCount), "Saves", theme.colorAccent),
+                        makeMetricTile(theme, std::to_string(*publishCount), "Publishes", theme.colorSuccess),
+                        makeMetricTile(theme, *reviewPassed ? "Ready" : "Blocked", "Review status",
+                                       *reviewPassed ? theme.colorSuccess : theme.colorWarning)
+                    )
+                }
+            )
+        }
+    );
+}
+
+Element makeInlineDemo(Theme const &theme, State<bool> reviewPassed, State<std::string> lastEvent) {
+    return makeSectionCard(
+        theme, "Inline Actions",
+        "Links should read like part of the sentence, not like disguised boxed buttons. They work well for help, secondary disclosure, and low-friction follow-up actions.",
+        VStack {
+            .spacing = theme.space3,
+            .alignment = Alignment::Start,
+            .children = children(
+                HStack {
+                    .spacing = 4.f,
+                    .alignment = Alignment::Center,
+                    .children = children(
+                        Text {
+                            .text = "Need copy guidance before publishing?",
+                            .font = theme.fontBody,
+                            .color = theme.colorTextPrimary,
+                            .wrapping = TextWrapping::Wrap,
+                        },
+                        LinkButton {
+                            .label = "Open the editorial checklist",
+                            .style = LinkButton::Style {.font = theme.fontBody},
+                            .onTap =
+                                [lastEvent] {
+                                    lastEvent = "Checklist opened from an inline link.";
+                                    std::fprintf(stderr, "[button-demo] Open checklist\n");
+                                },
+                        }
+                    )
+                },
+                HStack {
+                    .spacing = 4.f,
+                    .alignment = Alignment::Center,
+                    .children = children(
+                        Text {
+                            .text = *reviewPassed ? "Review already passed." : "Still waiting on approval?",
+                            .font = theme.fontBodySmall,
+                            .color = theme.colorTextSecondary,
+                        },
+                        LinkButton {
+                            .label = *reviewPassed ? "Mark review as pending" : "Mark review as approved",
+                            .style = LinkButton::Style {.font = theme.fontBodySmall},
+                            .onTap =
+                                [reviewPassed, lastEvent] {
+                                    reviewPassed = !*reviewPassed;
+                                    lastEvent = *reviewPassed ? "Review approved from an inline link." : "Review set back to pending from an inline link.";
+                                    std::fprintf(stderr, "[button-demo] Toggle inline review\n");
+                                },
+                        },
+                        Text {
+                            .text = "or",
+                            .font = theme.fontBodySmall,
+                            .color = theme.colorTextSecondary,
+                        },
+                        LinkButton {
+                            .label = "contact support",
+                            .disabled = true,
+                            .style = LinkButton::Style {.font = theme.fontBodySmall},
+                        }
+                    )
+                },
+                Text {
+                    .text = "The disabled support link stays readable but no longer behaves like an active target.",
+                    .font = theme.fontBodySmall,
+                    .color = theme.colorTextSecondary,
+                    .horizontalAlignment = HorizontalAlignment::Leading,
+                    .wrapping = TextWrapping::Wrap,
+                }
+            )
+        }
+    );
+}
 
 } // namespace
 
 struct ButtonDemoRoot {
-  auto body() const {
-    Theme const& theme = useEnvironment<Theme>();
-    return ZStack{
-        .horizontalAlignment = Alignment::Start,
-        .verticalAlignment = Alignment::Start,
-        .children = children(
-                Rectangle{}.fill(FillStyle::solid(theme.colorBackground)),
-                VStack{
-                    .spacing = 20.f,
-                    .alignment = Alignment::Start,
+    Element body() const {
+        Theme const &theme = useEnvironment<Theme>();
+
+        auto dirty = useState(true);
+        auto reviewPassed = useState(false);
+        auto saveCount = useState(3);
+        auto publishCount = useState(1);
+        auto lastEvent = useState(std::string {
+            "Try the sections below. Save is also available from the keyboard with Cmd+S when the draft is dirty."
+        });
+
+        useWindowAction(
+            "demo.save",
+            [dirty, saveCount, lastEvent] {
+                if (!*dirty) {
+                    return;
+                }
+                dirty = false;
+                saveCount = *saveCount + 1;
+                lastEvent = "Draft saved from the keyboard shortcut.";
+                std::fprintf(stderr, "[button-demo] Cmd+S save\n");
+            },
+            [dirty] { return *dirty; }
+        );
+
+        return ScrollView {
+            .axis = ScrollAxis::Vertical,
+            .children = children(
+                VStack {
+                    .spacing = theme.space4,
                     .children = children(
-                            Text{ .text = "Button",
-                                  .font = theme.fontDisplay,
-                                  .color = theme.colorTextPrimary },
-                            HStack{
-                                .spacing = 0.f,
-                                .children = children(
-                                        Text{
-                                                .text = "Five variants, hover/press/focus, disabled state, and Tab navigation. "
-                                                        "Link focus rings appear only after keyboard focus.",
-                                                .font = theme.fontBody,
-                                                .color = theme.colorTextSecondary,
-                                                .wrapping = TextWrapping::Wrap,
-                                            }
-                                            .flex(1.f)
-                                    ),
-                            },
-                            Text{ .text = "Variants",
-                                  .font = theme.fontHeading,
-                                  .color = theme.colorTextPrimary },
-                            HStack{
-                                .spacing = 8.f,
-                                .alignment = Alignment::Center,
-                                .children = children(
-                                        Button{ .label = "Primary",
-                                                .variant = ButtonVariant::Primary,
-                                                .onTap = [] {
-                                                  std::fprintf(stderr, "[button-demo] Primary\n");
-                                                } },
-                                        Button{ .label = "Secondary",
-                                                .variant = ButtonVariant::Secondary,
-                                                .onTap = [] {
-                                                  std::fprintf(stderr, "[button-demo] Secondary\n");
-                                                } },
-                                        Button{ .label = "Destructive",
-                                                .variant = ButtonVariant::Destructive,
-                                                .onTap = [] {
-                                                  std::fprintf(stderr, "[button-demo] Destructive\n");
-                                                } },
-                                        Button{ .label = "Ghost",
-                                                .variant = ButtonVariant::Ghost,
-                                                .onTap = [] {
-                                                  std::fprintf(stderr, "[button-demo] Ghost\n");
-                                                } }
-                                    ),
-                            },
-                            Text{ .text = "Disabled",
-                                  .font = theme.fontHeading,
-                                  .color = theme.colorTextPrimary },
-                            HStack{
-                                .spacing = 8.f,
-                                .alignment = Alignment::Center,
-                                .children = children(
-                                        Button{ .label = "Primary",
-                                                .variant = ButtonVariant::Primary,
-                                                .disabled = true },
-                                        Button{ .label = "Secondary",
-                                                .variant = ButtonVariant::Secondary,
-                                                .disabled = true },
-                                        Button{ .label = "Destructive",
-                                                .variant = ButtonVariant::Destructive,
-                                                .disabled = true },
-                                        Button{ .label = "Ghost",
-                                                .variant = ButtonVariant::Ghost,
-                                                .disabled = true }
-                                    ),
-                            },
-                            HStack{
-                                .spacing = 4.f,
-                                .alignment = Alignment::Center,
-                                .children = children(
-                                        Text{ .text = "Inline link —",
-                                              .font = theme.fontBodySmall,
-                                              .color = theme.colorTextSecondary },
-                                        Button{ .label = "Forgot password?",
-                                                .variant = ButtonVariant::Link,
-                                                .font = theme.fontBodySmall,
-                                                .onTap = [] {
-                                                  std::fprintf(stderr, "[button-demo] Link tap\n");
-                                                } }
-                                    ),
-                            },
-                            Text{ .text = "Form (Tab between controls; Cmd+S when Save is enabled)",
-                                  .font = theme.fontHeading,
-                                  .color = theme.colorTextPrimary },
-                            HStack{
-                                .spacing = 8.f,
-                                .alignment = Alignment::Center,
-                                .children = children(
-                                        Button{
-                                            .label = "Toggle save action",
-                                            .variant = ButtonVariant::Ghost,
-                                            .onTap = [] {
-                                              gSaveActionEnabled = !gSaveActionEnabled;
-                                              Application::instance().markReactiveDirty();
-                                            },
-                                        },
-                                        Spacer{},
-                                        Button{
-                                            .label = "Cancel",
-                                            .variant = ButtonVariant::Secondary,
-                                            .onTap = [] {
-                                              std::fprintf(stderr, "[button-demo] Cancel\n");
-                                            },
-                                        },
-                                        Button{
-                                            .label = "Save",
-                                            .variant = ButtonVariant::Primary,
-                                            .onTap = [] {
-                                              std::fprintf(stderr, "[button-demo] Save (button or shortcut)\n");
-                                            },
-                                            .actionName = "demo.save",
-                                        }
-                                    ),
-                            }
-                        ),
-                }.padding(24.f)
-            ),
-    };
-  }
+                        Text {
+                            .text = "Button Demo",
+                            .font = theme.fontDisplay,
+                            .color = theme.colorTextPrimary,
+                            .horizontalAlignment = HorizontalAlignment::Leading,
+                        },
+                        Text {
+                            .text = "A cleaner button showcase with real layout context: one strong primary action, calm supporting controls, inline links, and a compact toolbar.",
+                            .font = theme.fontBody,
+                            .color = theme.colorTextSecondary,
+                            .horizontalAlignment = HorizontalAlignment::Leading,
+                            .wrapping = TextWrapping::Wrap,
+                        },
+                        makeHeroDemo(theme, dirty, reviewPassed, saveCount, lastEvent),
+                        makeVariantGallery(theme, lastEvent),
+                        makeToolbarDemo(theme, dirty, reviewPassed, saveCount, publishCount, lastEvent),
+                        makeInlineDemo(theme, reviewPassed, lastEvent)
+                    )
+                } //
+                    .padding(theme.space5)
+            )
+        } //
+            .fill(FillStyle::solid(theme.colorBackground));
+    }
 };
 
-int main(int argc, char* argv[]) {
-  Application app(argc, argv);
-  auto& w = app.createWindow<Window>({
-      .size = { 640, 720 },
-      .title = "Flux — Button demo",
-      .resizable = true,
-  });
+int main(int argc, char *argv[]) {
+    Application app(argc, argv);
 
-  w.registerAction("demo.save",
-                   {
-                       .label = "Save",
-                       .shortcut = shortcuts::Save,
-                       .isEnabled = [] { return gSaveActionEnabled; },
-                   });
+    auto &w = app.createWindow({
+        .size = {960, 920},
+        .title = "Flux - Button demo",
+    });
 
-  w.setView<ButtonDemoRoot>();
-  return app.exec();
+    w.registerAction("demo.save",
+                     {
+                         .label = "Save draft",
+                         .shortcut = shortcuts::Save,
+                     });
+
+    w.setView<ButtonDemoRoot>();
+    return app.exec();
 }
