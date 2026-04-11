@@ -1,10 +1,10 @@
 #include <Flux/UI/Views/Slider.hpp>
 
 #include <Flux/Core/KeyCodes.hpp>
-#include <Flux/UI/Hooks.hpp>
 #include <Flux/Detail/Runtime.hpp>
 #include <Flux/Reactive/Interpolatable.hpp>
 #include <Flux/Reactive/Transition.hpp>
+#include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/ZStack.hpp>
@@ -34,7 +34,7 @@ float fractionForValue(float val, float lo, float hi) {
 
 } // namespace
 
-Slider::Style resolveStyle(Slider::Style const& style, Theme const& theme) {
+Slider::Style resolveStyle(Slider::Style const &style, Theme const &theme) {
     return Slider::Style {
         .activeColor = resolveColor(style.activeColor, theme.colorAccent),
         .inactiveColor = resolveColor(style.inactiveColor, theme.colorSurfaceDisabled),
@@ -46,16 +46,14 @@ Slider::Style resolveStyle(Slider::Style const& style, Theme const& theme) {
 }
 
 Element Slider::body() const {
-    Theme const& theme = useEnvironment<Theme>();
+    Theme const &theme = useEnvironment<Theme>();
 
-    auto [
-        activeColor,
-        inactiveColor,
-        thumbColor,
-        thumbBorderColor,
-        trackHeight,
-        thumbSize
-    ] = resolveStyle(style, theme);
+    auto [activeColor,
+          inactiveColor,
+          thumbColor,
+          thumbBorderColor,
+          trackHeight,
+          thumbSize] = resolveStyle(style, theme);
     auto focusColor = theme.colorBorderFocus;
 
     auto isDisabled = disabled;
@@ -73,13 +71,13 @@ Element Slider::body() const {
         }
     }
 
-    LayoutConstraints const* const lc = useLayoutConstraints();
+    LayoutConstraints const *const lc = useLayoutConstraints();
     float capW = std::numeric_limits<float>::infinity();
     if (lc && std::isfinite(lc->maxWidth) && lc->maxWidth > 0.f) {
         capW = lc->maxWidth;
     }
     std::optional<Rect> const layoutRect = useLayoutRect();
-    Rect const slot = Runtime::current() ? Runtime::current()->buildSlotRect() : Rect{};
+    Rect const slot = Runtime::current() ? Runtime::current()->buildSlotRect() : Rect {};
     float componentWidth = thumbSize;
     if (slot.width > 0.f) {
         componentWidth = std::min(slot.width, capW);
@@ -169,44 +167,41 @@ Element Slider::body() const {
     float const thumbDiameter = thumbSize * *thumbScaleAnim;
     float const thumbOffset = (thumbSize - thumbDiameter) * 0.5f;
 
-    float const trackWidth = componentWidth - thumbSize;
-    float const filledWidth = std::max(trackWidth * fraction, trackHeight);
+    float const filledWidth = std::max(componentWidth * fraction, trackHeight);
     float const trackY = (componentHeight - trackHeight) * 0.5f;
     float const thumbY = (componentHeight - thumbDiameter) * 0.5f;
 
-    return ZStack{
+    return ZStack {
         .horizontalAlignment = Alignment::Start,
         .verticalAlignment = Alignment::Start,
         .children = flux::children(
-            Rectangle{}
+            Rectangle {}
                 .size(componentWidth, componentHeight),
-            Rectangle{}
+            Rectangle {}
                 .fill(FillStyle::solid(isDisabled ? theme.colorSurfaceDisabled : inactiveColor))
-                .position(thumbSize * 0.5f, trackY)
-                .size(trackWidth, trackHeight)
-                .cornerRadius(CornerRadius{trackHeight * 0.5f}),
-            Rectangle{}
+                .position(0.f, trackY)
+                .size(componentWidth, trackHeight)
+                .cornerRadius(CornerRadius {trackHeight * 0.5f}),
+            Rectangle {}
                 .fill(FillStyle::solid(isDisabled ? theme.colorSurfaceDisabled : activeColor))
-                .position(thumbSize * 0.5f, trackY)
+                .position(0.f, trackY)
                 .size(filledWidth, trackHeight)
-                .cornerRadius(CornerRadius{trackHeight * 0.5f}),
-            Rectangle{}
+                .cornerRadius(CornerRadius {trackHeight * 0.5f}),
+            Rectangle {}
                 .fill(FillStyle::solid(isDisabled ? theme.colorTextDisabled : thumbColor))
                 .stroke(isDisabled ? StrokeStyle::solid(theme.colorTextDisabled, 1.f) : thumbStroke)
-                .shadow(isDisabled ? ShadowStyle::none()
-                                   : ShadowStyle{.radius = theme.shadowRadiusControl,
-                                                 .offset = {0.f, theme.shadowOffsetYControl},
-                                                 .color = theme.shadowColor})
+                .shadow(isDisabled ? ShadowStyle::none() : ShadowStyle {.radius = theme.shadowRadiusControl, .offset = {0.f, theme.shadowOffsetYControl}, .color = theme.shadowColor})
                 .position(thumbX + thumbOffset, thumbY)
                 .size(thumbDiameter, thumbDiameter)
-                .cornerRadius(CornerRadius{thumbDiameter * 0.5f})
+                .cornerRadius(CornerRadius {thumbDiameter * 0.5f})
         ),
-    }.cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
-    .focusable(!isDisabled)
-    .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)>{} : std::function<void(KeyCode, Modifiers)>{handleKey})
-    .onPointerDown(isDisabled ? std::function<void(Point)>{} : std::function<void(Point)>{handleDown})
-    .onPointerUp(isDisabled ? std::function<void(Point)>{} : std::function<void(Point)>{handleUp})
-    .onPointerMove(isDisabled ? std::function<void(Point)>{} : std::function<void(Point)>{handleMove});
+    }
+        .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
+        .focusable(!isDisabled)
+        .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})
+        .onPointerDown(isDisabled ? std::function<void(Point)> {} : std::function<void(Point)> {handleDown})
+        .onPointerUp(isDisabled ? std::function<void(Point)> {} : std::function<void(Point)> {handleUp})
+        .onPointerMove(isDisabled ? std::function<void(Point)> {} : std::function<void(Point)> {handleMove});
 }
 
 } // namespace flux
