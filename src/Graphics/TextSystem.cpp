@@ -75,10 +75,6 @@ void recomputeTextLayoutMetrics(TextLayout &L) {
 
 namespace {
 
-constexpr float kLineEps = 0.5f;
-
-bool nearLine(float a, float b) { return std::abs(a - b) < kLineEps; }
-
 void applyHorizontalPerLine(TextLayout &layout, Rect const &box, HorizontalAlignment horizontalAlignment) {
     if (layout.runs.empty()) {
         return;
