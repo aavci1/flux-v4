@@ -1,256 +1,204 @@
-// Demonstrates Checkbox: checked, unchecked, indeterminate, disabled,
-// custom colors, labeled rows, and a select-all pattern.
 #include <Flux.hpp>
-#include <Flux/Core/WindowUI.hpp>
-#include <Flux/Reactive/Reactive.hpp>
+#include <Flux/UI/Theme.hpp>
 #include <Flux/UI/UI.hpp>
 #include <Flux/UI/Views/Checkbox.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
+#include <Flux/UI/Views/ScrollView.hpp>
 #include <Flux/UI/Views/Spacer.hpp>
 #include <Flux/UI/Views/Text.hpp>
 #include <Flux/UI/Views/VStack.hpp>
-#include <Flux/UI/Views/ZStack.hpp>
 
 #include <cstdio>
 #include <string>
 
 using namespace flux;
 
-// ── Reusable labeled checkbox ──────────────────────────────────────────────
+namespace {
 
-struct LabeledCheckbox {
-  std::string label;
-  State<bool> value{};
-  bool indeterminate = false;
-  bool disabled = false;
+Element makeSectionCard(Theme const &theme, std::string title, std::string caption, Element content) {
+    return VStack {
+        .spacing = theme.space3,
+        .children = children(
+            Text {
+                .text = std::move(title),
+                .font = theme.fontTitle,
+                .color = theme.colorTextPrimary,
+                .horizontalAlignment = HorizontalAlignment::Leading,
+            },
+            Text {
+                .text = std::move(caption),
+                .font = theme.fontBodySmall,
+                .color = theme.colorTextSecondary,
+                .horizontalAlignment = HorizontalAlignment::Leading,
+                .wrapping = TextWrapping::Wrap,
+            },
+            std::move(content)
+        )
+    } //
+        .padding(theme.space4)
+        .fill(FillStyle::solid(theme.colorSurfaceOverlay))
+        .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
+        .cornerRadius(CornerRadius {theme.radiusLarge});
+}
 
-  auto body() const {
-    Theme const& theme = useEnvironment<Theme>();
-
-    return HStack{
-        .spacing = 10.f,
+Element checkboxRow(Theme const &theme, std::string label, std::string detail, Element control) {
+    return HStack {
+        .spacing = theme.space3,
         .alignment = Alignment::Center,
         .children = children(
-                Checkbox{
-                    .value = value,
-                    .indeterminate = indeterminate,
-                    .disabled = disabled,
-                    .onChange = [label = label](bool v) {
-                      std::fprintf(stderr, "[checkbox-demo] %s → %s\n", label.c_str(),
-                                   v ? "checked" : "unchecked");
+            std::move(control),
+            VStack {
+                .spacing = theme.space1,
+                .alignment = Alignment::Start,
+                .children = children(
+                    Text {
+                        .text = std::move(label),
+                        .font = theme.fontLabel,
+                        .color = theme.colorTextPrimary,
+                        .horizontalAlignment = HorizontalAlignment::Leading,
                     },
-                },
-                Text {
-                    .text = label,
-                    .font = theme.fontBody,
-                    .color = disabled ? theme.colorTextDisabled : theme.colorTextPrimary,
-                    .verticalAlignment = VerticalAlignment::Center,
-                }
-            ),
-    };
-  }
-};
+                    Text {
+                        .text = std::move(detail),
+                        .font = theme.fontBodySmall,
+                        .color = theme.colorTextSecondary,
+                        .horizontalAlignment = HorizontalAlignment::Leading,
+                        .wrapping = TextWrapping::Wrap,
+                    }
+                )
+            } //
+                .flex(1.f, 1.f, 0.f)
+        )
+    } //
+        .padding(theme.space3)
+        .fill(FillStyle::solid(theme.colorBackground))
+        .cornerRadius(CornerRadius {theme.radiusMedium});
+}
 
-// ── Root view ──────────────────────────────────────────────────────────────
+Element summaryTile(Theme const &theme, std::string value, std::string label, Color accent) {
+    return VStack {
+        .spacing = theme.space1,
+        .alignment = Alignment::Start,
+        .children = children(
+            Text {.text = std::move(value), .font = theme.fontTitle, .color = accent},
+            Text {.text = std::move(label), .font = theme.fontBodySmall, .color = theme.colorTextSecondary}
+        )
+    } //
+        .padding(theme.space3)
+        .fill(FillStyle::solid(theme.colorBackground))
+        .cornerRadius(CornerRadius {theme.radiusMedium})
+        .flex(1.f, 1.f, 0.f);
+}
+
+} // namespace
 
 struct CheckboxDemoRoot {
-  auto body() const {
-    Theme const& theme = useEnvironment<Theme>();
+    Element body() const {
+        Theme const &theme = useEnvironment<Theme>();
 
-    auto termsAccepted = useState(false);
-    auto newsletter = useState(true);
+        auto termsAccepted = useState(false);
+        auto newsletter = useState(true);
+        auto itemA = useState(true);
+        auto itemB = useState(false);
+        auto itemC = useState(true);
+        auto greenCheck = useState(true);
 
-    auto itemA = useState(true);
-    auto itemB = useState(false);
-    auto itemC = useState(true);
+        bool const allChecked = *itemA && *itemB && *itemC;
+        bool const noneChecked = !*itemA && !*itemB && !*itemC;
+        bool const selectAllValue = allChecked;
+        bool const selectAllIndeterminate = !allChecked && !noneChecked;
+        auto selectAll = useState(selectAllValue);
+        if (*selectAll != selectAllValue) {
+            selectAll = selectAllValue;
+        }
 
-    bool const allChecked = *itemA && *itemB && *itemC;
-    bool const noneChecked = !*itemA && !*itemB && !*itemC;
-    bool const selectAllValue = allChecked;
-    bool const selectAllIndeterminate = !allChecked && !noneChecked;
+        int const selectedCount = static_cast<int>(*itemA) + static_cast<int>(*itemB) + static_cast<int>(*itemC);
 
-    auto selectAll = useState(selectAllValue);
-    if (*selectAll != selectAllValue) {
-      selectAll = selectAllValue;
-    }
-
-    auto greenCheck = useState(true);
-
-    std::string status = std::string("Terms: ") + (*termsAccepted ? "yes" : "no") +
-                         " · Newsletter: " + (*newsletter ? "yes" : "no") + " · Items: " +
-                         (*itemA ? "A" : "") + (*itemB ? "B" : "") + (*itemC ? "C" : "");
-
-    return ScrollView{
-        .axis = ScrollAxis::Vertical,
-        .children = children(
-                VStack{
-                    .spacing = 16.f,
-                    .alignment = Alignment::Start,
+        return ScrollView {
+            .axis = ScrollAxis::Vertical,
+            .children = children(
+                VStack {
+                    .spacing = theme.space4,
                     .children = children(
-                            Text{
-                                .text = "Checkbox",
-                                .font = theme.fontDisplay,
-                                .color = theme.colorTextPrimary,
-                            },
-                            Text{
-                                        .text = "Boolean check with animated icon, "
-                                                "indeterminate state, focus ring, "
-                                                "and press scale.",
-                                        .font = theme.fontBody,
-                                        .color = theme.colorTextSecondary,
-                                        .wrapping = TextWrapping::Wrap,
-                                    }
-                                .flex(1.f),
-
-                            Text{
-                                .text = "Form controls",
-                                .font = theme.fontHeading,
-                                .color = theme.colorTextPrimary,
-                            },
-                            Element{LabeledCheckbox{
-                                        .label = "I accept the terms and conditions",
-                                        .value = termsAccepted,
-                                    }}
-                                .flex(1.f),
-                            Element{LabeledCheckbox{
-                                        .label = "Subscribe to newsletter",
-                                        .value = newsletter,
-                                    }}
-                                .flex(1.f),
-
-                            Text{
-                                .text = "Disabled",
-                                .font = theme.fontHeading,
-                                .color = theme.colorTextPrimary,
-                            },
-                            Element{LabeledCheckbox{
-                                        .label = "Checked (disabled)",
-                                        .value = newsletter,
-                                        .disabled = true,
-                                    }}
-                                .flex(1.f),
-                            Element{LabeledCheckbox{
-                                        .label = "Unchecked (disabled)",
-                                        .value = termsAccepted,
-                                        .disabled = true,
-                                    }}
-                                .flex(1.f),
-
-                            Text{
-                                .text = "Select all (indeterminate)",
-                                .font = theme.fontHeading,
-                                .color = theme.colorTextPrimary,
-                            },
-                            HStack{
-                                        .spacing = 10.f,
-                                        .alignment = Alignment::Center,
-                                        .children = children(
-                                                Checkbox{
-                                                    .value = selectAll,
-                                                    .indeterminate = selectAllIndeterminate,
-                                                    .onChange = [itemA, itemB, itemC](bool v) {
-                                                      itemA = v;
-                                                      itemB = v;
-                                                      itemC = v;
-                                                    },
-                                                },
-                                                Text{
-                                                    .text = "Select all items",
-                                                    .font = theme.fontLabel,
-                                                    .color = theme.colorTextPrimary,
-                                                    .verticalAlignment = VerticalAlignment::Center,
-                                                }
-                                            ),
-                                    }
-                                .flex(1.f),
-                            VStack{
-                                        .spacing = 8.f,
-                                        .children = children(
-                                                HStack{
-                                                            .spacing = 10.f,
-                                                            .children = children(
-                                                                    Rectangle{}.width(20.f),
-                                                                    Element{LabeledCheckbox{
-                                                                                .label = "Item A",
-                                                                                .value = itemA,
-                                                                            }}
-                                                                        .flex(1.f)
-                                                                ),
-                                                        }
-                                                    .flex(1.f),
-                                                HStack{
-                                                            .spacing = 10.f,
-                                                            .children = children(
-                                                                    Rectangle{}.width(20.f),
-                                                                    Element{LabeledCheckbox{
-                                                                                .label = "Item B",
-                                                                                .value = itemB,
-                                                                            }}
-                                                                        .flex(1.f)
-                                                                ),
-                                                        }
-                                                    .flex(1.f),
-                                                HStack{
-                                                            .spacing = 10.f,
-                                                            .children = children(
-                                                                    Rectangle{}.width(20.f),
-                                                                    Element{LabeledCheckbox{
-                                                                                .label = "Item C",
-                                                                                .value = itemC,
-                                                                            }}
-                                                                        .flex(1.f)
-                                                                ),
-                                                        }
-                                                    .flex(1.f)
-                                            ),
-                                    }
-                                .flex(1.f),
-
-                            Text{
-                                .text = "Custom color",
-                                .font = theme.fontHeading,
-                                .color = theme.colorTextPrimary,
-                            },
-                            HStack{
-                                        .spacing = 10.f,
-                                        .alignment = Alignment::Center,
-                                        .children = children(
-                                                Checkbox{
-                                                    .value = greenCheck,
-                                                    .style = Checkbox::Style {
-                                                        .checkedColor = theme.colorSuccess,
-                                                    },
-                                                },
-                                                Text{
-                                                    .text = "Green accent",
-                                                    .font = theme.fontBody,
-                                                    .color = theme.colorTextPrimary,
-                                                }
-                                            ),
-                                    }
-                                .flex(1.f),
-
-                            Text{
-                                .text = status,
-                                .font = theme.fontBodySmall,
-                                .color = theme.colorTextMuted,
-                                .wrapping = TextWrapping::Wrap,
+                        Text {
+                            .text = "Checkbox Demo",
+                            .font = theme.fontDisplay,
+                            .color = theme.colorTextPrimary,
+                            .horizontalAlignment = HorizontalAlignment::Leading,
+                        },
+                        Text {
+                            .text = "A more realistic checkbox showcase with form consent, tri-state selection, disabled rows, and a restrained style variation.",
+                            .font = theme.fontBody,
+                            .color = theme.colorTextSecondary,
+                            .horizontalAlignment = HorizontalAlignment::Leading,
+                            .wrapping = TextWrapping::Wrap,
+                        },
+                        makeSectionCard(
+                            theme, "Form Consent",
+                            "Checkboxes fit best when users are confirming independent choices rather than flipping live settings.",
+                            VStack {
+                                .spacing = theme.space2,
+                                .children = children(
+                                    checkboxRow(
+                                        theme, "Accept terms and conditions",
+                                        "Required before creating the workspace.",
+                                        Checkbox {
+                                            .value = termsAccepted,
+                                            .onChange = [](bool v) {
+                                                std::fprintf(stderr, "[checkbox-demo] Terms -> %s\n", v ? "checked" : "unchecked");
+                                            },
+                                        }
+                                    ),
+                                    checkboxRow(theme, "Subscribe to newsletter", "An optional follow-up preference that doesn’t block the primary task.", Checkbox {
+                                                                                                                                                               .value = newsletter,
+                                                                                                                                                               .onChange = [](bool v) {
+                                                                                                                                                                   std::fprintf(stderr, "[checkbox-demo] Newsletter -> %s\n", v ? "checked" : "unchecked");
+                                                                                                                                                               },
+                                                                                                                                                           }),
+                                    checkboxRow(theme, "Disabled example", "Useful for unavailable or inherited defaults that still need to remain visible.", Checkbox {
+                                                                                                                                                                  .value = newsletter,
+                                                                                                                                                                  .disabled = true,
+                                                                                                                                                              })
+                                )
                             }
                         ),
-                }.padding(24.f)
+                        makeSectionCard(theme, "Tri-State Selection", "The parent checkbox reflects the aggregate state of its children. This is where the indeterminate state earns its keep.", VStack {.spacing = theme.space2, .children = children(checkboxRow(theme, "Select all assets", "Toggles the full selection at once.", Checkbox {
+                                                                                                                                                                                                                                                                                                                                          .value = selectAll,
+                                                                                                                                                                                                                                                                                                                                          .indeterminate = selectAllIndeterminate,
+                                                                                                                                                                                                                                                                                                                                          .onChange = [itemA, itemB, itemC](bool v) {
+                                                                                                                                                                                                                                                                                                                                              itemA = v;
+                                                                                                                                                                                                                                                                                                                                              itemB = v;
+                                                                                                                                                                                                                                                                                                                                              itemC = v;
+                                                                                                                                                                                                                                                                                                                                          },
+                                                                                                                                                                                                                                                                                                                                      }),
+                                                                                                                                                                                                                                                       HStack {.spacing = theme.space3, .alignment = Alignment::Stretch, .children = children(summaryTile(theme, std::to_string(selectedCount), "Selected", theme.colorAccent), summaryTile(theme, selectAllIndeterminate ? "Mixed" : (allChecked ? "All" : "None"), "State", selectAllIndeterminate ? theme.colorWarning : theme.colorSuccess))}, checkboxRow(theme, "Homepage illustrations", "Ready for this week’s rollout.", Checkbox {.value = itemA}), checkboxRow(theme, "Campaign copy deck", "Still waiting on final review.", Checkbox {.value = itemB}), checkboxRow(theme, "Pricing screenshots", "Approved and ready to export.", Checkbox {.value = itemC}))}),
+                        makeSectionCard(theme, "Style Variation", "A small token change can adapt the control without changing its meaning.", checkboxRow(theme, "Success accent", "A green checked state works for positive checklist flows like “completed” or “verified”.", Checkbox {
+                                                                                                                                                                                                                                                                                   .value = greenCheck,
+                                                                                                                                                                                                                                                                                   .style = Checkbox::Style {.checkedColor = theme.colorSuccess},
+                                                                                                                                                                                                                                                                               })),
+                        Text {
+                            .text = "Try keyboard focus here too: Tab onto a checkbox and use Space or Return to toggle it.",
+                            .font = theme.fontBodySmall,
+                            .color = theme.colorTextMuted,
+                            .horizontalAlignment = HorizontalAlignment::Leading,
+                            .wrapping = TextWrapping::Wrap,
+                        }
+                    )
+                } //
+                    .padding(theme.space5)
             )
-        };
-  }
+        } //
+            .fill(FillStyle::solid(theme.colorBackground));
+    }
 };
 
-int main(int argc, char* argv[]) {
-  Application app(argc, argv);
-  auto& w = app.createWindow<Window>({
-      .size = {480, 720},
-      .title = "Flux — Checkbox demo",
-      .resizable = true,
-  });
-  w.setView<CheckboxDemoRoot>();
-  return app.exec();
+int main(int argc, char *argv[]) {
+    Application app(argc, argv);
+    auto &w = app.createWindow<Window>({
+        .size = {760, 860},
+        .title = "Flux - Checkbox demo",
+        .resizable = true,
+    });
+    w.setView<CheckboxDemoRoot>();
+    return app.exec();
 }

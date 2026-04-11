@@ -1,181 +1,209 @@
-// Demonstrates Toggle: on/off, disabled, custom colors, sizing, labeled rows.
 #include <Flux.hpp>
-#include <Flux/Core/WindowUI.hpp>
-#include <Flux/Reactive/Reactive.hpp>
+#include <Flux/UI/Theme.hpp>
 #include <Flux/UI/UI.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
+#include <Flux/UI/Views/ScrollView.hpp>
 #include <Flux/UI/Views/Spacer.hpp>
 #include <Flux/UI/Views/Text.hpp>
 #include <Flux/UI/Views/Toggle.hpp>
 #include <Flux/UI/Views/VStack.hpp>
-#include <Flux/UI/Views/ZStack.hpp>
 
 #include <cstdio>
 #include <string>
 
 using namespace flux;
 
-struct LabeledToggle {
-  std::string label;
-  State<bool> value{};
-  bool disabled = false;
+namespace {
 
-  auto body() const {
-    Theme const& theme = useEnvironment<Theme>();
+Element makeSectionCard(Theme const &theme, std::string title, std::string caption, Element content) {
+    return VStack {
+        .spacing = theme.space3,
+        .children = children(
+            Text {
+                .text = std::move(title),
+                .font = theme.fontTitle,
+                .color = theme.colorTextPrimary,
+                .horizontalAlignment = HorizontalAlignment::Leading,
+            },
+            Text {
+                .text = std::move(caption),
+                .font = theme.fontBodySmall,
+                .color = theme.colorTextSecondary,
+                .horizontalAlignment = HorizontalAlignment::Leading,
+                .wrapping = TextWrapping::Wrap,
+            },
+            std::move(content)
+        )
+    } //
+        .padding(theme.space4)
+        .fill(FillStyle::solid(theme.colorSurfaceOverlay))
+        .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
+        .cornerRadius(CornerRadius {theme.radiusLarge});
+}
 
-    return HStack{
-        .spacing = 12.f,
+Element settingRow(Theme const &theme, std::string title, std::string detail, Element control) {
+    return HStack {
+        .spacing = theme.space3,
         .alignment = Alignment::Center,
         .children = children(
-            Text{
-                .text = label,
-                .font = theme.fontBody,
-                .color = disabled ? theme.colorTextDisabled : theme.colorTextPrimary,
-            },
-            Spacer{},
-            Toggle{
-                .value = value,
-                .disabled = disabled,
-                .onChange = [label = label](bool v) {
-                  std::fprintf(stderr, "[toggle-demo] %s → %s\n", label.c_str(), v ? "ON" : "OFF");
-                },
-            }
-        ),
-    };
-  }
-};
-
-struct ToggleDemoRoot {
-  auto body() const {
-    Theme const& theme = useEnvironment<Theme>();
-
-    auto wifiEnabled = useState(true);
-    auto bluetoothEnabled = useState(false);
-    auto darkMode = useState(false);
-    auto notifications = useState(false);
-    auto customColor = useState(true);
-    auto smallToggle = useState(false);
-
-    std::string statusText =
-        std::string("Wi-Fi: ") + (*wifiEnabled ? "on" : "off") + " · Bluetooth: " +
-        (*bluetoothEnabled ? "on" : "off") + " · Dark mode: " + (*darkMode ? "on" : "off") +
-        " · Notifications: " + (*notifications ? "on" : "off");
-
-    return ScrollView{
-        .axis = ScrollAxis::Vertical,
-        .children = children(
-            VStack{
-                .spacing = 20.f,
+            VStack {
+                .spacing = theme.space1,
                 .alignment = Alignment::Start,
                 .children = children(
-                    Text{
-                        .text = "Toggle",
-                        .font = theme.fontDisplay,
+                    Text {
+                        .text = std::move(title),
+                        .font = theme.fontLabel,
                         .color = theme.colorTextPrimary,
+                        .horizontalAlignment = HorizontalAlignment::Leading,
                     },
-                    Text{
-                        .text = "Boolean switch with animated thumb, "
-                                "focus ring, disabled state, and "
-                                "custom sizing.",
-                        .font = theme.fontBody,
-                        .color = theme.colorTextSecondary,
-                        .wrapping = TextWrapping::Wrap,
-                    }.flex(1.f),
-
-                    Text{
-                        .text = "Settings",
-                        .font = theme.fontHeading,
-                        .color = theme.colorTextPrimary,
-                    },
-                    Element{LabeledToggle{
-                        .label = "Wi-Fi",
-                        .value = wifiEnabled,
-                    }}.flex(1.f),
-                    Element{LabeledToggle{
-                        .label = "Bluetooth",
-                        .value = bluetoothEnabled,
-                    }}.flex(1.f),
-                    Element{LabeledToggle{
-                        .label = "Dark mode",
-                        .value = darkMode,
-                    }}.flex(1.f),
-                    Element{LabeledToggle{
-                        .label = "Notifications (disabled)",
-                        .value = notifications,
-                        .disabled = true,
-                    }}.flex(1.f),
-
-                    Text{
-                        .text = "Custom colors",
-                        .font = theme.fontHeading,
-                        .color = theme.colorTextPrimary,
-                    },
-                    HStack{
-                        .spacing = 12.f,
-                        .alignment = Alignment::Center,
-                        .children = children(
-                            Text{
-                                .text = "Green accent",
-                                .font = theme.fontBody,
-                                .color = theme.colorTextPrimary,
-                            },
-                            Spacer{},
-                            Toggle{
-                                .value = customColor,
-                                .style = Toggle::Style {
-                                    .onColor = theme.colorSuccess,
-                                },
-                            }
-                        ),
-                    },
-
-                    Text{
-                        .text = "Custom sizing",
-                        .font = theme.fontHeading,
-                        .color = theme.colorTextPrimary,
-                    },
-                    HStack{
-                        .spacing = 12.f,
-                        .alignment = Alignment::Center,
-                        .children = children(
-                            Text{
-                                .text = "Compact (34 × 20)",
-                                .font = theme.fontBody,
-                                .color = theme.colorTextPrimary,
-                            },
-                            Spacer{},
-                            Toggle{
-                                .value = smallToggle,
-                                .style = Toggle::Style {
-                                    .trackWidth = 34.f,
-                                    .trackHeight = 20.f,
-                                    .thumbInset = 2.f,
-                                },
-                            }
-                        ),
-                    },
-
-                    Text{
-                        .text = statusText,
+                    Text {
+                        .text = std::move(detail),
                         .font = theme.fontBodySmall,
-                        .color = theme.colorTextMuted,
+                        .color = theme.colorTextSecondary,
+                        .horizontalAlignment = HorizontalAlignment::Leading,
                         .wrapping = TextWrapping::Wrap,
                     }
-                ),
-            }.padding(24.f)
-        ),
-    };
-  }
+                )
+            } //
+                .flex(1.f, 1.f, 0.f),
+            std::move(control)
+        )
+    } //
+        .padding(theme.space3)
+        .fill(FillStyle::solid(theme.colorBackground))
+        .cornerRadius(CornerRadius {theme.radiusMedium});
+}
+
+Element metricTile(Theme const &theme, std::string value, std::string label, Color accent) {
+    return VStack {
+        .spacing = theme.space1,
+        .alignment = Alignment::Start,
+        .children = children(
+            Text {
+                .text = std::move(value),
+                .font = theme.fontTitle,
+                .color = accent,
+            },
+            Text {
+                .text = std::move(label),
+                .font = theme.fontBodySmall,
+                .color = theme.colorTextSecondary,
+            }
+        )
+    } //
+        .padding(theme.space3)
+        .fill(FillStyle::solid(theme.colorBackground))
+        .cornerRadius(CornerRadius {theme.radiusMedium})
+        .flex(1.f, 1.f, 0.f);
+}
+
+} // namespace
+
+struct ToggleDemoRoot {
+    Element body() const {
+        Theme const &theme = useEnvironment<Theme>();
+
+        auto wifiEnabled = useState(true);
+        auto bluetoothEnabled = useState(false);
+        auto syncEnabled = useState(true);
+        auto notificationsEnabled = useState(false);
+        auto compactEnabled = useState(false);
+        auto greenAccent = useState(true);
+
+        int const enabledCount = static_cast<int>(*wifiEnabled) + static_cast<int>(*bluetoothEnabled) +
+                                 static_cast<int>(*syncEnabled) + static_cast<int>(*notificationsEnabled);
+
+        return ScrollView {
+            .axis = ScrollAxis::Vertical,
+            .children = children(
+                VStack {
+                    .spacing = theme.space4,
+                    .children = children(
+                        Text {
+                            .text = "Toggle Demo",
+                            .font = theme.fontDisplay,
+                            .color = theme.colorTextPrimary,
+                            .horizontalAlignment = HorizontalAlignment::Leading,
+                        },
+                        Text {
+                            .text = "A cleaner toggle showcase with realistic settings rows, styling variations, and compact control density.",
+                            .font = theme.fontBody,
+                            .color = theme.colorTextSecondary,
+                            .horizontalAlignment = HorizontalAlignment::Leading,
+                            .wrapping = TextWrapping::Wrap,
+                        },
+                        makeSectionCard(
+                            theme, "Preferences",
+                            "Toggles work best in quiet settings rows where the label carries the meaning and the switch only answers yes or no.",
+                            VStack {
+                                .spacing = theme.space2,
+                                .children = children(
+                                    settingRow(
+                                        theme, "Wi-Fi", "Keep the workspace online for syncing and collaboration.",
+                                        Toggle {
+                                            .value = wifiEnabled,
+                                            .onChange = [](bool v) {
+                                                std::fprintf(stderr, "[toggle-demo] Wi-Fi -> %s\n", v ? "on" : "off");
+                                            },
+                                        }
+                                    ),
+                                    settingRow(theme, "Bluetooth", "Enable accessory pairing for keyboards, trackpads, and audio.", Toggle {
+                                                                                                                                        .value = bluetoothEnabled,
+                                                                                                                                        .onChange = [](bool v) {
+                                                                                                                                            std::fprintf(stderr, "[toggle-demo] Bluetooth -> %s\n", v ? "on" : "off");
+                                                                                                                                        },
+                                                                                                                                    }),
+                                    settingRow(theme, "Background sync", "This row is intentionally disabled to show the non-interactive state.", Toggle {
+                                                                                                                                                      .value = syncEnabled,
+                                                                                                                                                      .disabled = true,
+                                                                                                                                                  }),
+                                    settingRow(theme, "Notifications", "Promote status changes without pushing users into a modal flow.", Toggle {
+                                                                                                                                              .value = notificationsEnabled,
+                                                                                                                                              .onChange = [](bool v) {
+                                                                                                                                                  std::fprintf(stderr, "[toggle-demo] Notifications -> %s\n", v ? "on" : "off");
+                                                                                                                                              },
+                                                                                                                                          })
+                                ),
+                            }
+                        ),
+                        makeSectionCard(theme, "States", "A small summary helps show the control in a real context instead of as an isolated widget.", HStack {.spacing = theme.space3, .alignment = Alignment::Stretch, .children = children(metricTile(theme, std::to_string(enabledCount), "Enabled settings", theme.colorAccent), metricTile(theme, *notificationsEnabled ? "Live" : "Quiet", "Notifications", *notificationsEnabled ? theme.colorSuccess : theme.colorWarning), metricTile(theme, *wifiEnabled ? "Online" : "Offline", "Connectivity", *wifiEnabled ? theme.colorSuccess : theme.colorTextSecondary))}), makeSectionCard(theme, "Styling", "Style tokens should support subtle variations without turning the control into a different component.", VStack {.spacing = theme.space2, .children = children(settingRow(theme, "Success accent", "Useful when a toggle implies a positive enabled state.", Toggle {
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 .value = greenAccent,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 .style = Toggle::Style {
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     .onColor = theme.colorSuccess,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 },
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             }),
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               settingRow(theme, "Compact density", "A narrower track works for table rows and denser settings surfaces.", Toggle {
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               .value = compactEnabled,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               .style = Toggle::Style {
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   .trackWidth = 34.f,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   .trackHeight = 20.f,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   .thumbInset = 2.f,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               },
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           }))}),
+                        Text {
+                            .text = "Try keyboard focus as well: Tab to a toggle, then use Space or Return.",
+                            .font = theme.fontBodySmall,
+                            .color = theme.colorTextMuted,
+                            .horizontalAlignment = HorizontalAlignment::Leading,
+                            .wrapping = TextWrapping::Wrap,
+                        }
+                    )
+                } //
+                    .padding(theme.space5)
+            )
+        } //
+            .fill(FillStyle::solid(theme.colorBackground));
+    }
 };
 
-int main(int argc, char* argv[]) {
-  Application app(argc, argv);
-  auto& w = app.createWindow<Window>({
-      .size = {480, 640},
-      .title = "Flux — Toggle demo",
-      .resizable = true,
-  });
-  w.setView<ToggleDemoRoot>();
-  return app.exec();
+int main(int argc, char *argv[]) {
+    Application app(argc, argv);
+    auto &w = app.createWindow<Window>({
+        .size = {760, 760},
+        .title = "Flux - Toggle demo",
+        .resizable = true,
+    });
+    w.setView<ToggleDemoRoot>();
+    return app.exec();
 }
