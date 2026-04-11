@@ -362,6 +362,10 @@ Element buildMultilineTextInput(TextInput const &input) {
     view.focused = focused;
 
     Element editor = Element {view}
+                         .focusable(!input.disabled)
+                         .cursor(Cursor::IBeam)
+                         .onKeyDown([&behavior](KeyCode key, Modifiers mods) { behavior.handleKey(KeyEvent {key, mods}); })
+                         .onTextInput([&behavior](std::string const &text) { behavior.handleTextInput(text); })
                          .onPointerDown([placeholder = input.placeholder, styler = input.styler, &behavior, &snap, rs, &stylerMemo,
                                          defaultFont, focused, scrollOffset, layoutRect](Point local) {
                              float const frameWidth = layoutRect ? layoutRect->width : 400.f;
@@ -394,10 +398,6 @@ Element buildMultilineTextInput(TextInput const &input) {
     StrokeStyle const stroke = focused ? StrokeStyle::solid(rs.borderFocusColor, rs.borderFocusWidth) : StrokeStyle::solid(rs.borderColor, rs.borderWidth);
 
     Element field = std::move(scroller)
-                        .focusable(!input.disabled)
-                        .cursor(Cursor::IBeam)
-                        .onKeyDown([&behavior](KeyCode key, Modifiers mods) { behavior.handleKey(KeyEvent {key, mods}); })
-                        .onTextInput([&behavior](std::string const &text) { behavior.handleTextInput(text); })
                         .fill(FillStyle::solid(rs.backgroundColor))
                         .stroke(stroke)
                         .cornerRadius(CornerRadius {rs.cornerRadius})
