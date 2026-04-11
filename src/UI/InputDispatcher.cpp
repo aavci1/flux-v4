@@ -396,9 +396,6 @@ void InputDispatcher::onPointerMove(InputEvent const& e) {
 
   static int moveLogCounter = 0;
 
-  if (gesture_.press() && !(e.pressedButtons & 1)) {
-    gesture_.cancelPress(p, overlays, graph, em);
-  }
   bool const logThisMove = dbgMove || (dbg && (++moveLogCounter % 15 == 0));
   if (logThisMove) {
     std::fprintf(stderr, "[flux:input] PointerMove pos=(%.1f,%.1f) activePress=%s\n",

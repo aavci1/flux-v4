@@ -260,6 +260,7 @@ if(FLUX_BUILD_TESTS)
 
   add_executable(flux_tests
     tests/main.cpp
+    tests/EventMapTests.cpp
     tests/LayoutTreeTests.cpp
     tests/LayoutIntegrationTests.cpp
     tests/ParagraphCacheTests.cpp

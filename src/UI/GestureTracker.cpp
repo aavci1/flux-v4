@@ -29,22 +29,22 @@ std::pair<NodeId, EventHandlers const*> GestureTracker::findPressHandlers(
         continue;
       }
       if (EventHandlers const* h = e.eventMap.find(ps.nodeId)) {
-        return { ps.nodeId, h };
+        return {ps.nodeId, h};
       }
       if (!ps.stableTargetKey.empty()) {
-        return e.eventMap.findWithIdByKey(ps.stableTargetKey);
+        return e.eventMap.findClosestWithIdByKey(ps.stableTargetKey);
       }
-      return { kInvalidNodeId, nullptr };
+      return {kInvalidNodeId, nullptr};
     }
-    return { kInvalidNodeId, nullptr };
+    return {kInvalidNodeId, nullptr};
   }
   if (EventHandlers const* h = mainEventMap.find(ps.nodeId)) {
-    return { ps.nodeId, h };
+    return {ps.nodeId, h};
   }
   if (!ps.stableTargetKey.empty()) {
-    return mainEventMap.findWithIdByKey(ps.stableTargetKey);
+    return mainEventMap.findClosestWithIdByKey(ps.stableTargetKey);
   }
-  return { kInvalidNodeId, nullptr };
+  return {kInvalidNodeId, nullptr};
 }
 
 SceneGraph const* GestureTracker::sceneGraphForPress(PressState const& ps,
@@ -85,7 +85,7 @@ void GestureTracker::cancelPress(Point windowPoint, std::vector<OverlayEntry con
     if (!local) {
       local = tester.localPointForNode(graph, windowPoint, currentId);
     }
-    h->onPointerUp(local.value_or(Point{ 0.f, 0.f }));
+    h->onPointerUp(local.value_or(Point{0.f, 0.f}));
   }
   activePress_ = std::nullopt;
   Application::instance().markReactiveDirty();
@@ -106,7 +106,7 @@ bool GestureTracker::dispatchTap(PressState const& released,
       if (p->id != *released.overlayScope) {
         continue;
       }
-      auto const [id, h] = p->eventMap.findWithIdByKey(released.stableTargetKey);
+      auto const [id, h] = p->eventMap.findClosestWithIdByKey(released.stableTargetKey);
       (void)id;
       if (h && h->onTap) {
         pendingTapLeafKey_ = released.stableTargetKey;
@@ -119,7 +119,7 @@ bool GestureTracker::dispatchTap(PressState const& released,
     return false;
   }
 
-  auto const [id, h] = mainEventMap.findWithIdByKey(released.stableTargetKey);
+  auto const [id, h] = mainEventMap.findClosestWithIdByKey(released.stableTargetKey);
   (void)id;
   if (h && h->onTap) {
     pendingTapLeafKey_ = released.stableTargetKey;

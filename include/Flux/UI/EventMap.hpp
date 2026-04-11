@@ -4,7 +4,6 @@
 ///
 /// Part of the Flux public API.
 
-
 #include <Flux/Core/Cursor.hpp>
 #include <Flux/Core/Types.hpp>
 #include <Flux/Scene/NodeId.hpp>
@@ -51,6 +50,9 @@ public:
   EventHandlers const* find(NodeId id) const;
   /// First entry whose `stableTargetKey` matches \p key (O(n)); used when `NodeId` is stale after rebuild.
   std::pair<NodeId, EventHandlers const*> findWithIdByKey(ComponentKey const& key) const;
+  /// Best-effort fallback when the exact `stableTargetKey` changed across a rebuild.
+  /// Returns the nearest ancestor/descendant relation to \p key (never a sibling/cousin).
+  std::pair<NodeId, EventHandlers const*> findClosestWithIdByKey(ComponentKey const& key) const;
   void clear();
 
   /// Stable keys of all focusable nodes, in build order.
