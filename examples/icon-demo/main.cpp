@@ -72,7 +72,7 @@ struct IconCell {
         Theme const &t = useEnvironment<Theme>();
 
         return VStack {
-            .spacing = 16.f,
+            .spacing = t.space2,
             .alignment = Alignment::Center,
             .children = children(
                 Icon {
@@ -83,12 +83,13 @@ struct IconCell {
                 },
                 Text {
                     .text = label,
-                    .font = t.fontBody,
+                    .font = t.fontBodySmall,
                     .color = t.colorTextSecondary,
-                    .wrapping = TextWrapping::NoWrap,
+                    .horizontalAlignment = HorizontalAlignment::Center,
+                    .wrapping = TextWrapping::Wrap,
                 }
             ),
-        };
+        }.padding(t.space2);
     }
 };
 
@@ -132,10 +133,10 @@ struct IconDemoRoot {
                                  .color = t.colorTextPrimary},
                             Grid {
                                 .columns = 8,
-                                .horizontalSpacing = 124.f,
-                                .verticalSpacing = 124.f,
+                                .horizontalSpacing = t.space2,
+                                .verticalSpacing = t.space4,
                                 .horizontalAlignment = Alignment::Center,
-                                .verticalAlignment = Alignment::Start,
+                                .verticalAlignment = Alignment::Center,
                                 .children = std::move(gridCells),
                             }
                         ),
