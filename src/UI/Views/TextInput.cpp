@@ -167,6 +167,54 @@ bool ensureLayout(TextInputLayoutSnap &snap, std::string const &placeholderText,
     return !snap.layoutResult.empty();
 }
 
+StrokeStyle inputBorderStroke(ResolvedTextInputStyle const &rs, bool focused) {
+    return focused ? StrokeStyle::solid(rs.borderFocusColor, rs.borderFocusWidth) : StrokeStyle::solid(rs.borderColor, rs.borderWidth);
+}
+
+void drawInputChrome(Canvas &canvas, Rect frame, ResolvedTextInputStyle const &rs, bool focused) {
+    canvas.drawRect(frame, CornerRadius {rs.cornerRadius}, FillStyle::solid(rs.backgroundColor),
+                    inputBorderStroke(rs, focused));
+}
+
+void drawInputSelection(Canvas &canvas, detail::TextEditLayoutResult const &layoutResult,
+                        detail::TextEditSelection const &selection, Point textOrigin,
+                        ResolvedTextInputStyle const &rs) {
+    for (Rect const &rect :
+         detail::selectionRects(layoutResult, selection, textOrigin.x, textOrigin.y, kSelectionExtraBottomPx)) {
+        canvas.drawRect(rect, CornerRadius {}, FillStyle::solid(rs.selectionColor), StrokeStyle::none());
+    }
+}
+
+void drawInputCaret(Canvas &canvas, detail::TextEditLayoutResult const &layoutResult, int caretByte, Point textOrigin,
+                    ResolvedTextInputStyle const &rs, float blinkPhase) {
+    Rect const caretRect =
+        detail::caretRect(layoutResult, caretByte, textOrigin.x, textOrigin.y, detail::kTextCaretStrokeWidthPx);
+    Color caretColor = rs.caretColor;
+    caretColor.a *= blinkPhase <= 0.5f ? 1.f : 0.f;
+    float const centerX = caretRect.x + caretRect.width * 0.5f;
+    canvas.drawLine(Point {centerX, caretRect.y}, Point {centerX, caretRect.y + caretRect.height},
+                    StrokeStyle::solid(caretColor, caretRect.width));
+}
+
+void drawDisabledOverlay(Canvas &canvas, Rect frame, ResolvedTextInputStyle const &rs) {
+    Color overlay = rs.disabledColor;
+    overlay.a *= 0.35f;
+    canvas.drawRect(frame, CornerRadius {rs.cornerRadius}, FillStyle::solid(overlay), StrokeStyle::none());
+}
+
+Element decorateInputField(Element field, ResolvedTextInputStyle const &rs, bool focused, bool disabled) {
+    field = std::move(field)
+                .fill(FillStyle::solid(rs.backgroundColor))
+                .stroke(inputBorderStroke(rs, focused))
+                .cornerRadius(CornerRadius {rs.cornerRadius});
+    if (disabled) {
+        Color overlay = rs.disabledColor;
+        overlay.a *= 0.35f;
+        field = std::move(field).overlay(Rectangle {}.fill(FillStyle::solid(overlay)));
+    }
+    return field;
+}
+
 int hitTestByte(TextInputLayoutSnap &snap, std::string const &placeholderText,
                 std::function<std::vector<AttributedRun>(std::string_view)> const &styler,
                 std::function<Color(std::string_view)> const &validationColor, TextEditBehavior &beh,
@@ -207,9 +255,7 @@ struct TextInputView {
         std::string const &buf = behavior->value();
         bool const showPh = buf.empty() && !focused;
 
-        StrokeStyle const stroke =
-            focused ? StrokeStyle::solid(rs.borderFocusColor, rs.borderFocusWidth) : StrokeStyle::solid(rs.borderColor, rs.borderWidth);
-        canvas.drawRect(frame, CornerRadius {rs.cornerRadius}, FillStyle::solid(rs.backgroundColor), stroke);
+        drawInputChrome(canvas, frame, rs, focused);
 
         float const innerLeft = frame.x + rs.borderWidth + rs.paddingH;
         float const innerTop = frame.y + rs.borderWidth + rs.paddingV;
@@ -231,9 +277,7 @@ struct TextInputView {
             scroll = sb;
             canvas.drawTextLayout(*snap->layoutResult.layout, textOrigin);
             if (disabled) {
-                Color dc = rs.disabledColor;
-                dc.a *= 0.35f;
-                canvas.drawRect(frame, CornerRadius {rs.cornerRadius}, FillStyle::solid(dc), StrokeStyle::none());
+                drawDisabledOverlay(canvas, frame, rs);
             }
             return;
         }
@@ -259,31 +303,18 @@ struct TextInputView {
                 .caretByte = detail::utf8Clamp(buf, behavior->caretByte()),
                 .anchorByte = detail::utf8Clamp(buf, behavior->selectionAnchorByte()),
             };
-            for (Rect const &r : detail::selectionRects(snap->layoutResult, selection, textOrigin.x, innerTop,
-                                                        kSelectionExtraBottomPx)) {
-                canvas.drawRect(r, CornerRadius {}, FillStyle::solid(rs.selectionColor), StrokeStyle::none());
-            }
+            drawInputSelection(canvas, snap->layoutResult, selection, textOrigin, rs);
         }
 
         canvas.drawTextLayout(*snap->layoutResult.layout, textOrigin);
 
         if (focused && !disabled && !showPh) {
-            Rect const caretRect =
-                detail::caretRect(snap->layoutResult, behavior->caretByte(), textOrigin.x, innerTop,
-                                  detail::kTextCaretStrokeWidthPx);
-            float const phase = behavior->caretBlinkPhase();
-            float const alpha = phase <= 0.5f ? 1.f : 0.f;
-            Color cc = rs.caretColor;
-            cc.a *= alpha;
-            float const centerX = caretRect.x + caretRect.width * 0.5f;
-            canvas.drawLine(Point {centerX, caretRect.y}, Point {centerX, caretRect.y + caretRect.height},
-                            StrokeStyle::solid(cc, caretRect.width));
+            drawInputCaret(canvas, snap->layoutResult, behavior->caretByte(), textOrigin, rs,
+                           behavior->caretBlinkPhase());
         }
 
         if (disabled) {
-            Color dc = rs.disabledColor;
-            dc.a *= 0.35f;
-            canvas.drawRect(frame, CornerRadius {rs.cornerRadius}, FillStyle::solid(dc), StrokeStyle::none());
+            drawDisabledOverlay(canvas, frame, rs);
         }
     }
 
@@ -364,22 +395,14 @@ struct MultilineTextInputView {
                 .caretByte = detail::utf8Clamp(buf, behavior->caretByte()),
                 .anchorByte = detail::utf8Clamp(buf, behavior->selectionAnchorByte()),
             };
-            for (Rect const &rect :
-                 detail::selectionRects(snap->layoutResult, selection, innerLeft, innerTop, kSelectionExtraBottomPx)) {
-                canvas.drawRect(rect, CornerRadius {}, FillStyle::solid(rs.selectionColor), StrokeStyle::none());
-            }
+            drawInputSelection(canvas, snap->layoutResult, selection, textOrigin, rs);
         }
 
         canvas.drawTextLayout(*snap->layoutResult.layout, textOrigin);
 
         if (focused && !disabled && !showPlaceholder && !snap->layoutResult.lines.empty()) {
-            Rect const caretRect = detail::caretRect(snap->layoutResult, behavior->caretByte(), innerLeft, innerTop,
-                                                     detail::kTextCaretStrokeWidthPx);
-            Color caretColor = rs.caretColor;
-            caretColor.a *= behavior->caretBlinkPhase() <= 0.5f ? 1.f : 0.f;
-            float const centerX = caretRect.x + caretRect.width * 0.5f;
-            canvas.drawLine(Point {centerX, caretRect.y}, Point {centerX, caretRect.y + caretRect.height},
-                            StrokeStyle::solid(caretColor, caretRect.width));
+            drawInputCaret(canvas, snap->layoutResult, behavior->caretByte(), textOrigin, rs,
+                           behavior->caretBlinkPhase());
         }
     }
 
@@ -475,21 +498,8 @@ Element buildMultilineTextInput(TextInput const &input) {
         .children = children(std::move(editor)),
     }};
 
-    StrokeStyle const stroke = focused ? StrokeStyle::solid(resolved.borderFocusColor, resolved.borderFocusWidth) : StrokeStyle::solid(resolved.borderColor, resolved.borderWidth);
-
-    Element field = std::move(scroller)
-                        .fill(FillStyle::solid(resolved.backgroundColor))
-                        .stroke(stroke)
-                        .cornerRadius(CornerRadius {resolved.cornerRadius})
-                        .height(input.multilineHeight.fixed > 0.f ? input.multilineHeight.fixed : input.multilineHeight.minIntrinsic);
-
-    if (input.disabled) {
-        Color overlay = resolved.disabledColor;
-        overlay.a *= 0.35f;
-        field = std::move(field).overlay(Rectangle {}.fill(FillStyle::solid(overlay)));
-    }
-
-    return field;
+    return decorateInputField(std::move(scroller), resolved, focused, input.disabled)
+        .height(input.multilineHeight.fixed > 0.f ? input.multilineHeight.fixed : input.multilineHeight.minIntrinsic);
 }
 
 } // namespace
