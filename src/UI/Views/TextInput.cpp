@@ -10,6 +10,7 @@
 
 #include <Flux/Graphics/Font.hpp>
 #include <Flux/UI/Hooks.hpp>
+#include <Flux/UI/StateStore.hpp>
 
 #include "UI/Views/TextSupport.hpp"
 
@@ -86,6 +87,13 @@ ResolvedTextInputStyle resolveTextInputStyle(TextInput::Style const &style, Them
     };
 }
 
+struct TextInputSnap {
+    detail::TextEditLayoutResult layoutResult;
+    std::string layoutSource;
+    float layoutContentW = 0.f;
+    bool showingPlaceholder = false;
+};
+
 AttributedString buildAttributedString(std::string const &placeholderText,
                                        std::function<std::vector<AttributedRun>(std::string_view)> const &styler,
                                        std::function<Color(std::string_view)> const &validationColor,
@@ -113,29 +121,48 @@ AttributedString buildAttributedString(std::string const &placeholderText,
     return as;
 }
 
-int hitTestByte(std::string const &placeholderText,
+bool ensureLayout(TextInputSnap &snap, std::string const &placeholderText,
+                  std::function<std::vector<AttributedRun>(std::string_view)> const &styler,
+                  std::function<Color(std::string_view)> const &validationColor, ResolvedTextInputStyle const &rs,
+                  Font const &defaultFont, std::string const &value, float contentW, bool showPlaceholder) {
+    TextSystem &ts = Application::instance().textSystem();
+    std::string const &layoutSource = showPlaceholder ? placeholderText : value;
+    bool const widthChanged = std::abs(snap.layoutContentW - contentW) > 0.5f;
+    bool const needRelayout =
+        snap.layoutResult.empty() || widthChanged || snap.layoutSource != layoutSource || snap.showingPlaceholder != showPlaceholder;
+    if (!needRelayout) {
+        return !snap.layoutResult.empty();
+    }
+
+    AttributedString text =
+        buildAttributedString(placeholderText, styler, validationColor, rs, defaultFont, value, showPlaceholder);
+    TextLayoutOptions const opts = text_detail::makeTextLayoutOptions(TextWrapping::NoWrap);
+    auto layout = ts.layout(text, contentW, opts);
+    snap.layoutResult = detail::makeTextEditLayoutResult(layout, static_cast<int>(text.utf8.size()), contentW);
+    snap.layoutSource = text.utf8;
+    snap.layoutContentW = contentW;
+    snap.showingPlaceholder = showPlaceholder;
+    return !snap.layoutResult.empty();
+}
+
+int hitTestByte(TextInputSnap &snap, std::string const &placeholderText,
                 std::function<std::vector<AttributedRun>(std::string_view)> const &styler,
                 std::function<Color(std::string_view)> const &validationColor, TextEditBehavior &beh,
                 ResolvedTextInputStyle const &rs, Font const &defaultFont, float frameWidth, Point local,
                 int scrollByte, bool showPh) {
-    TextSystem &ts = Application::instance().textSystem();
     std::string const &buf = beh.value();
-    float const contentW =
-        std::max(1.f, frameWidth - 2.f * (rs.borderWidth + rs.paddingH));
-    AttributedString text =
-        buildAttributedString(placeholderText, styler, validationColor, rs, defaultFont, buf, showPh);
-    TextLayoutOptions const opts = text_detail::makeTextLayoutOptions(TextWrapping::NoWrap);
-    auto layout = ts.layout(text, contentW, opts);
-    detail::TextEditLayoutResult const layoutResult =
-        detail::makeTextEditLayoutResult(layout, static_cast<int>(text.utf8.size()), contentW);
-    if (layoutResult.empty() || layoutResult.lines.empty()) {
+    float const contentW = std::max(1.f, frameWidth - 2.f * (rs.borderWidth + rs.paddingH));
+    if (!ensureLayout(snap, placeholderText, styler, validationColor, rs, defaultFont, buf, contentW, showPh)) {
         return 0;
     }
-    detail::LineMetrics const &line0 = layoutResult.lines[0];
-    float const scrollX = detail::caretXForByte(*layoutResult.layout, line0, detail::utf8Clamp(buf, scrollByte));
+    if (snap.layoutResult.lines.empty()) {
+        return 0;
+    }
+    detail::LineMetrics const &line0 = snap.layoutResult.lines[0];
+    float const scrollX = detail::caretXForByte(*snap.layoutResult.layout, line0, detail::utf8Clamp(buf, scrollByte));
     float const lx = local.x - rs.borderWidth - rs.paddingH + scrollX;
     std::string const &sliceBuf = showPh ? placeholderText : buf;
-    return detail::caretByteAtX(*layoutResult.layout, line0, lx, sliceBuf);
+    return detail::caretByteAtX(*snap.layoutResult.layout, line0, lx, sliceBuf);
 }
 
 struct TextInputView {
@@ -144,6 +171,7 @@ struct TextInputView {
     std::function<std::vector<AttributedRun>(std::string_view)> styler;
     std::function<Color(std::string_view)> validationColor;
     TextEditBehavior *behavior = nullptr;
+    TextInputSnap *snap = nullptr;
     /// Copy of \c State handle (same \c Signal* as \c useState in \c body) — must not be a pointer to a
     /// stack \c State local, which would dangle after \c body() returns.
     State<int> scroll {};
@@ -154,11 +182,8 @@ struct TextInputView {
     bool focused = false;
 
     void render(Canvas &canvas, Rect frame) const {
-        TextSystem &ts = Application::instance().textSystem();
         std::string const &buf = behavior->value();
         bool const showPh = buf.empty() && !focused;
-        AttributedString text =
-            buildAttributedString(placeholder, styler, validationColor, rs, defaultFont, buf, showPh);
 
         StrokeStyle const stroke =
             focused ? StrokeStyle::solid(rs.borderFocusColor, rs.borderFocusWidth) : StrokeStyle::solid(rs.borderColor, rs.borderWidth);
@@ -169,14 +194,10 @@ struct TextInputView {
         float const contentW =
             std::max(1.f, frame.width - 2.f * (rs.borderWidth + rs.paddingH));
 
-        TextLayoutOptions const opts = text_detail::makeTextLayoutOptions(TextWrapping::NoWrap);
-        auto layout = ts.layout(text, contentW, opts);
-        detail::TextEditLayoutResult const layoutResult =
-            detail::makeTextEditLayoutResult(layout, static_cast<int>(text.utf8.size()), contentW);
-        if (layoutResult.empty()) {
+        if (!ensureLayout(*snap, placeholder, styler, validationColor, rs, defaultFont, buf, contentW, showPh)) {
             return;
         }
-        if (layoutResult.lines.empty()) {
+        if (snap->layoutResult.lines.empty()) {
             Point textOrigin {innerLeft, innerTop};
             int sb = *scroll;
             if (!showPh) {
@@ -185,7 +206,7 @@ struct TextInputView {
                 sb = 0;
             }
             scroll = sb;
-            canvas.drawTextLayout(*layoutResult.layout, textOrigin);
+            canvas.drawTextLayout(*snap->layoutResult.layout, textOrigin);
             if (disabled) {
                 Color dc = rs.disabledColor;
                 dc.a *= 0.35f;
@@ -193,7 +214,7 @@ struct TextInputView {
             }
             return;
         }
-        detail::LineMetrics const &line0 = layoutResult.lines[0];
+        detail::LineMetrics const &line0 = snap->layoutResult.lines[0];
 
         Point textOrigin {innerLeft, innerTop};
         int sb = *scroll;
@@ -207,8 +228,8 @@ struct TextInputView {
         if (behavior->consumeEnsureCaretVisibleRequest() && !showPh) {
             int cur = sb;
             for (int iter = 0; iter < 128; ++iter) {
-                float const cx = detail::caretXForByte(*layoutResult.layout, line0, behavior->caretByte());
-                float const rel = cx - detail::caretXForByte(*layoutResult.layout, line0, cur);
+                float const cx = detail::caretXForByte(*snap->layoutResult.layout, line0, behavior->caretByte());
+                float const rel = cx - detail::caretXForByte(*snap->layoutResult.layout, line0, cur);
                 if (rel >= kCaretScrollMarginPx && rel <= contentW - kCaretScrollMarginPx) {
                     break;
                 }
@@ -227,7 +248,7 @@ struct TextInputView {
             scroll = cur;
         }
 
-        float const scrollX2 = detail::caretXForByte(*layoutResult.layout, line0, *scroll);
+        float const scrollX2 = detail::caretXForByte(*snap->layoutResult.layout, line0, *scroll);
         textOrigin.x -= scrollX2;
 
         if (!showPh && behavior->hasSelection()) {
@@ -235,18 +256,18 @@ struct TextInputView {
                 .caretByte = detail::utf8Clamp(buf, behavior->caretByte()),
                 .anchorByte = detail::utf8Clamp(buf, behavior->selectionAnchorByte()),
             };
-            for (Rect const &r : detail::selectionRects(layoutResult, selection, textOrigin.x, innerTop,
+            for (Rect const &r : detail::selectionRects(snap->layoutResult, selection, textOrigin.x, innerTop,
                                                         kSelectionExtraBottomPx)) {
                 canvas.drawRect(r, CornerRadius {}, FillStyle::solid(rs.selectionColor), StrokeStyle::none());
             }
         }
 
-        canvas.drawTextLayout(*layoutResult.layout, textOrigin);
+        canvas.drawTextLayout(*snap->layoutResult.layout, textOrigin);
 
         if (focused && !disabled && !showPh) {
             float const cx =
-                detail::caretXForByte(*layoutResult.layout, line0, behavior->caretByte()) + textOrigin.x;
-            auto const [caretY0, caretY1] = detail::lineCaretYRangeInLayout(*layoutResult.layout, line0);
+                detail::caretXForByte(*snap->layoutResult.layout, line0, behavior->caretByte()) + textOrigin.x;
+            auto const [caretY0, caretY1] = detail::lineCaretYRangeInLayout(*snap->layoutResult.layout, line0);
             float const phase = behavior->caretBlinkPhase();
             float const alpha = phase <= 0.5f ? 1.f : 0.f;
             Color cc = rs.caretColor;
@@ -293,6 +314,7 @@ Element TextInput::body() const {
     bool const focused = useFocus();
     beh.setFocused(focused);
 
+    TextInputSnap &snap = StateStore::current()->claimSlot<TextInputSnap>();
     State<int> scrollByte = useState(0);
     std::optional<Rect> layoutRect = useLayoutRect();
 
@@ -301,6 +323,7 @@ Element TextInput::body() const {
     view.styler = styler;
     view.validationColor = validationColor;
     view.behavior = &beh;
+    view.snap = &snap;
     view.scroll = scrollByte;
     view.rs = resolved;
     view.defaultFont = defaultFont;
@@ -313,20 +336,20 @@ Element TextInput::body() const {
         .cursor(Cursor::IBeam)
         .onKeyDown([&beh](KeyCode key, Modifiers mods) { beh.handleKey(KeyEvent {key, mods}); })
         .onTextInput([&beh](std::string const &t) { beh.handleTextInput(t); })
-        .onPointerDown([ph = placeholder, stylerFn = styler, validationFn = validationColor, &beh, scrollByte,
+        .onPointerDown([ph = placeholder, stylerFn = styler, validationFn = validationColor, &beh, &snap, scrollByte,
                         resolved, defaultFont, layoutRect, focused](Point local) {
             float const fw = layoutRect ? layoutRect->width : 400.f;
             bool const showPh = beh.value().empty() && !focused;
             int const byte =
-                hitTestByte(ph, stylerFn, validationFn, beh, resolved, defaultFont, fw, local, *scrollByte, showPh);
+                hitTestByte(snap, ph, stylerFn, validationFn, beh, resolved, defaultFont, fw, local, *scrollByte, showPh);
             beh.handlePointerDown(byte, false);
         })
-        .onPointerMove([ph = placeholder, stylerFn = styler, validationFn = validationColor, &beh, scrollByte,
+        .onPointerMove([ph = placeholder, stylerFn = styler, validationFn = validationColor, &beh, &snap, scrollByte,
                         resolved, defaultFont, layoutRect, focused](Point local) {
             float const fw = layoutRect ? layoutRect->width : 400.f;
             bool const showPh = beh.value().empty() && !focused;
             int const byte =
-                hitTestByte(ph, stylerFn, validationFn, beh, resolved, defaultFont, fw, local, *scrollByte, showPh);
+                hitTestByte(snap, ph, stylerFn, validationFn, beh, resolved, defaultFont, fw, local, *scrollByte, showPh);
             beh.handlePointerDrag(byte);
         })
         .onPointerUp([&beh](Point) { beh.handlePointerUp(); });
