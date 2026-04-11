@@ -85,6 +85,14 @@ TextEditSelection moveSelectionToByte(std::string const &text, TextEditSelection
                                       bool extendSelection) noexcept;
 TextEditSelection selectAllSelection(std::string const &text) noexcept;
 TextEditSelection clearSelection(TextEditSelection selection) noexcept;
+TextEditSelection moveSelectionByChar(std::string const &text, TextEditSelection selection, int direction,
+                                      bool extendSelection) noexcept;
+TextEditSelection moveSelectionByWord(std::string const &text, TextEditSelection selection, int direction,
+                                      bool extendSelection) noexcept;
+TextEditSelection moveSelectionToLineBoundary(std::string const &text, TextEditSelection selection, bool end,
+                                              bool extendSelection) noexcept;
+TextEditSelection moveSelectionToDocumentBoundary(std::string const &text, TextEditSelection selection, bool end,
+                                                  bool extendSelection) noexcept;
 TextEditMutation insertText(std::string const &text, TextEditSelection const &selection, std::string_view insert,
                             int maxLength = 0);
 TextEditMutation eraseSelectionOrChar(std::string const &text, TextEditSelection const &selection,

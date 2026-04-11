@@ -54,6 +54,35 @@ TEST_CASE("TextEditUtils: selection movement helpers") {
     CHECK(cleared.anchorByte == 3);
 }
 
+TEST_CASE("TextEditUtils: caret movement helpers") {
+    std::string const text = "ab cd\nef";
+
+    TextEditSelection charMove =
+        moveSelectionByChar(text, TextEditSelection {.caretByte = 2, .anchorByte = 2}, 1, false);
+    CHECK(charMove.caretByte == 3);
+    CHECK(charMove.anchorByte == 3);
+
+    TextEditSelection wordMove =
+        moveSelectionByWord(text, TextEditSelection {.caretByte = 0, .anchorByte = 0}, 1, false);
+    CHECK(wordMove.caretByte == 2);
+    CHECK(wordMove.anchorByte == 2);
+
+    TextEditSelection lineEnd =
+        moveSelectionToLineBoundary(text, TextEditSelection {.caretByte = 1, .anchorByte = 1}, true, false);
+    CHECK(lineEnd.caretByte == 5);
+    CHECK(lineEnd.anchorByte == 5);
+
+    TextEditSelection lineStart =
+        moveSelectionToLineBoundary(text, TextEditSelection {.caretByte = 7, .anchorByte = 7}, false, false);
+    CHECK(lineStart.caretByte == 6);
+    CHECK(lineStart.anchorByte == 6);
+
+    TextEditSelection docEnd =
+        moveSelectionToDocumentBoundary(text, TextEditSelection {.caretByte = 1, .anchorByte = 1}, true, true);
+    CHECK(docEnd.caretByte == static_cast<int>(text.size()));
+    CHECK(docEnd.anchorByte == 1);
+}
+
 TEST_CASE("TextEditUtils: shouldCoalesceInsert") {
     std::string const prev = "hello";
     CHECK(shouldCoalesceInsert(prev, 5, "x") == true);

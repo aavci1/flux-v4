@@ -500,6 +500,47 @@ TextEditSelection clearSelection(TextEditSelection selection) noexcept {
     return selection;
 }
 
+TextEditSelection moveSelectionByChar(std::string const &text, TextEditSelection selection, int direction,
+                                      bool extendSelection) noexcept {
+    int const caret = utf8Clamp(text, selection.caretByte);
+    int const next = direction > 0 ? utf8NextChar(text, caret) : utf8PrevChar(text, caret);
+    return moveSelectionToByte(text, selection, next, extendSelection);
+}
+
+TextEditSelection moveSelectionByWord(std::string const &text, TextEditSelection selection, int direction,
+                                      bool extendSelection) noexcept {
+    int const caret = utf8Clamp(text, selection.caretByte);
+    int const next = direction > 0 ? utf8NextWord(text, caret) : utf8PrevWord(text, caret);
+    return moveSelectionToByte(text, selection, next, extendSelection);
+}
+
+TextEditSelection moveSelectionToLineBoundary(std::string const &text, TextEditSelection selection, bool end,
+                                              bool extendSelection) noexcept {
+    int const caret = utf8Clamp(text, selection.caretByte);
+    int target = end ? static_cast<int>(text.size()) : 0;
+    if (end) {
+        for (int i = caret; i < static_cast<int>(text.size()); ++i) {
+            if (text[static_cast<std::size_t>(i)] == '\n') {
+                target = i;
+                break;
+            }
+        }
+    } else {
+        for (int i = caret - 1; i >= 0; --i) {
+            if (text[static_cast<std::size_t>(i)] == '\n') {
+                target = utf8Clamp(text, i + 1);
+                break;
+            }
+        }
+    }
+    return moveSelectionToByte(text, selection, target, extendSelection);
+}
+
+TextEditSelection moveSelectionToDocumentBoundary(std::string const &text, TextEditSelection selection, bool end,
+                                                  bool extendSelection) noexcept {
+    return moveSelectionToByte(text, selection, end ? static_cast<int>(text.size()) : 0, extendSelection);
+}
+
 TextEditMutation insertText(std::string const &text, TextEditSelection const &selection, std::string_view insert,
                             int maxLength) {
     TextEditMutation mutation {};

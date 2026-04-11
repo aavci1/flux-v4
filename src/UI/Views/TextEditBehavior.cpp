@@ -37,27 +37,6 @@ bool cmdLike(Modifiers m) noexcept {
     return hasMod(m, Modifiers::Meta) || hasMod(m, Modifiers::Ctrl);
 }
 
-int lineStartByte(std::string const &s, int caret) noexcept {
-    int const c = detail::utf8Clamp(s, caret);
-    for (int i = c - 1; i >= 0; --i) {
-        if (s[static_cast<std::size_t>(i)] == '\n') {
-            return detail::utf8Clamp(s, i + 1);
-        }
-    }
-    return 0;
-}
-
-int lineEndByte(std::string const &s, int caret) noexcept {
-    int const c = detail::utf8Clamp(s, caret);
-    int const n = static_cast<int>(s.size());
-    for (int i = c; i < n; ++i) {
-        if (s[static_cast<std::size_t>(i)] == '\n') {
-            return i;
-        }
-    }
-    return n;
-}
-
 } // namespace
 
 TextEditBehavior::TextEditBehavior(Signal<std::string> &value, TextEditBehaviorOptions const &opts)
@@ -273,28 +252,31 @@ void TextEditBehavior::paste() {
 }
 
 void TextEditBehavior::moveLineBoundary(bool end, bool extend) {
-    std::string const &s = value_->get();
-    int const t = end ? lineEndByte(s, state_.selection.caretByte) : lineStartByte(s, state_.selection.caretByte);
-    moveCaretTo(t, extend);
+    state_.selection = detail::moveSelectionToLineBoundary(value_->get(), state_.selection, end, extend);
+    ensureCaretVisible_ = true;
+    resetBlinkEpoch();
+    markTextUiDirty();
 }
 
 void TextEditBehavior::moveDocumentBoundary(bool end, bool extend) {
-    std::string const &s = value_->get();
-    moveCaretTo(end ? static_cast<int>(s.size()) : 0, extend);
+    state_.selection = detail::moveSelectionToDocumentBoundary(value_->get(), state_.selection, end, extend);
+    ensureCaretVisible_ = true;
+    resetBlinkEpoch();
+    markTextUiDirty();
 }
 
 void TextEditBehavior::moveWord(int dir, bool extend) {
-    std::string const &s = value_->get();
-    int c = detail::utf8Clamp(s, state_.selection.caretByte);
-    int n = dir > 0 ? detail::utf8NextWord(s, c) : detail::utf8PrevWord(s, c);
-    moveCaretTo(n, extend);
+    state_.selection = detail::moveSelectionByWord(value_->get(), state_.selection, dir, extend);
+    ensureCaretVisible_ = true;
+    resetBlinkEpoch();
+    markTextUiDirty();
 }
 
 void TextEditBehavior::moveChar(int dir, bool extend) {
-    std::string const &s = value_->get();
-    int c = detail::utf8Clamp(s, state_.selection.caretByte);
-    int n = dir > 0 ? detail::utf8NextChar(s, c) : detail::utf8PrevChar(s, c);
-    moveCaretTo(n, extend);
+    state_.selection = detail::moveSelectionByChar(value_->get(), state_.selection, dir, extend);
+    ensureCaretVisible_ = true;
+    resetBlinkEpoch();
+    markTextUiDirty();
 }
 
 bool TextEditBehavior::handleKey(KeyEvent const &e) {
