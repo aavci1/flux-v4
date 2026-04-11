@@ -88,6 +88,7 @@ struct RunAttrKey {
   std::uint32_t fontId = 0;
   std::uint32_t sizeQ8 = 0;
   std::uint32_t rgba = 0;
+  std::uint32_t backgroundRgba = 0;
   bool operator==(RunAttrKey const& o) const noexcept = default;
 };
 
@@ -96,6 +97,7 @@ struct RunAttrKeyHash {
     std::size_t h = k.fontId;
     h = h * 31 + k.sizeQ8;
     h = h * 31 + k.rgba;
+    h = h * 31 + k.backgroundRgba;
     return h;
   }
 };
@@ -106,6 +108,7 @@ constexpr char const* kDefaultFontFamily = ".AppleSystemUIFont";
 constexpr float kDefaultFontSize = 14.f;
 constexpr float kDefaultFontWeight = 400.f;
 constexpr float kPadPx = 1.f;
+NSString* const kFluxBackgroundColorAttributeName = @"FluxBackgroundColorRGBA";
 
 constexpr std::size_t kMinFastPathBytes = 512u;
 constexpr std::uint32_t kMinHardLineBreaks = 4u;
@@ -217,6 +220,7 @@ void validateRuns(AttributedString const& text) {
 struct ResolvedStyle {
   Font font;
   Color color;
+  std::optional<Color> backgroundColor;
 };
 
 Font resolveFont(Font const& base, Font const& run) {
@@ -251,6 +255,7 @@ void accumulateInheritance(std::vector<ResolvedStyle>& out, AttributedString con
     Font const& rf = run.font;
     out[i].font = resolveFont(inherited, rf);
     out[i].color = run.color;
+    out[i].backgroundColor = run.backgroundColor;
     if (!rf.family.empty()) {
       inherited.family = rf.family;
     }
@@ -399,6 +404,11 @@ static std::uint32_t rgba8Pack(Color const& c) {
   return (ch(c.r) << 24) | (ch(c.g) << 16) | (ch(c.b) << 8) | ch(c.a);
 }
 
+static Color rgba8Unpack(std::uint32_t rgba) {
+  auto ch = [](std::uint32_t x) -> float { return static_cast<float>(x) / 255.f; };
+  return Color{ch((rgba >> 24) & 0xFFu), ch((rgba >> 16) & 0xFFu), ch((rgba >> 8) & 0xFFu), ch(rgba & 0xFFu)};
+}
+
 // computeContentHash / computeContentHashPlain are defined after CoreTextSystem::Impl (needs findFontId).
 
 static std::uint32_t quantizeWidth(float maxWidth) {
@@ -526,6 +536,7 @@ static void appendPlacedRunToStorage(CTRunRef run, CGPoint lineOrigin, CGFloat f
   NSDictionary* attrs = (__bridge NSDictionary*)CTRunGetAttributes(run);
   CTFontRef ctFont = (__bridge CTFontRef)attrs[(id)kCTFontAttributeName];
   CGColorRef cgColor = (__bridge CGColorRef)attrs[(id)kCTForegroundColorAttributeName];
+  NSNumber* bgPacked = attrs[kFluxBackgroundColorAttributeName];
 
   std::uint32_t fontId = 0;
   float fontSize = 0.f;
@@ -567,6 +578,9 @@ static void appendPlacedRunToStorage(CTRunRef run, CGPoint lineOrigin, CGFloat f
   placed.run.fontId = fontId;
   placed.run.fontSize = fontSize;
   placed.run.color = color;
+  if (bgPacked != nil) {
+    placed.run.backgroundColor = rgba8Unpack(static_cast<std::uint32_t>(bgPacked.unsignedIntValue));
+  }
   placed.run.ascent = static_cast<float>(ascent);
   placed.run.descent = static_cast<float>(descent);
   placed.run.width = static_cast<float>(runWidth);
@@ -1176,8 +1190,9 @@ struct CoreTextSystem::Impl {
     runAttrOrder_.splice(runAttrOrder_.begin(), runAttrOrder_, it->second);
   }
 
-  CFDictionaryRef runAttrDict(std::uint32_t fontId, std::uint32_t sizeQ8, std::uint32_t rgba) {
-    RunAttrKey const key{fontId, sizeQ8, rgba};
+  CFDictionaryRef runAttrDict(std::uint32_t fontId, std::uint32_t sizeQ8, std::uint32_t rgba,
+                              std::uint32_t backgroundRgba) {
+    RunAttrKey const key{fontId, sizeQ8, rgba, backgroundRgba};
     auto it = runAttrMap_.find(key);
     if (it != runAttrMap_.end()) {
       touchLruRunAttr(key);
@@ -1195,10 +1210,19 @@ struct CoreTextSystem::Impl {
     }
     CTFontRef font = sizedFont(fontId, sizeQ8);
     CGColorRef cg = colorRef(rgba);
-    NSDictionary* attrs = @{
-      (id)kCTFontAttributeName : (__bridge id)font,
-      (id)kCTForegroundColorAttributeName : (__bridge id)cg,
-    };
+    NSDictionary* attrs = nil;
+    if (backgroundRgba != 0) {
+      attrs = @{
+        (id)kCTFontAttributeName : (__bridge id)font,
+        (id)kCTForegroundColorAttributeName : (__bridge id)cg,
+        kFluxBackgroundColorAttributeName : @(backgroundRgba),
+      };
+    } else {
+      attrs = @{
+        (id)kCTFontAttributeName : (__bridge id)font,
+        (id)kCTForegroundColorAttributeName : (__bridge id)cg,
+      };
+    }
     CFDictionaryRef stored = (__bridge_retained CFDictionaryRef)attrs;
     runAttrOrder_.push_front(std::pair<RunAttrKey, CFDictionaryRef>{key, stored});
     runAttrMap_[key] = runAttrOrder_.begin();
@@ -1232,7 +1256,8 @@ struct CoreTextSystem::Impl {
       }
       std::uint32_t const sizeQ8 = static_cast<std::uint32_t>(std::lround(a.font.size * 4.f));
       std::uint32_t const rgba = rgba8Pack(a.color);
-      CFDictionaryRef attrs = runAttrDict(fid, sizeQ8, rgba);
+      std::uint32_t const backgroundRgba = a.backgroundColor.has_value() ? rgba8Pack(*a.backgroundColor) : 0;
+      CFDictionaryRef attrs = runAttrDict(fid, sizeQ8, rgba, backgroundRgba);
       [mas addAttributes:(__bridge id)attrs range:range];
     }
 
@@ -1246,7 +1271,10 @@ struct CoreTextSystem::Impl {
                                                 Color const& color, TextLayoutOptions const& options) {
     AttributedString as;
     as.utf8 = std::string(utf8);
-    as.runs.push_back({0, static_cast<std::uint32_t>(utf8.size()), font, color});
+    as.runs.push_back({.start = 0,
+                       .end = static_cast<std::uint32_t>(utf8.size()),
+                       .font = font,
+                       .color = color});
     std::vector<ResolvedStyle> resolved;
     accumulateInheritance(resolved, as);
     return createCFAttributed(sys, as, resolved, options);
@@ -1391,6 +1419,7 @@ ContentHash CoreTextSystem::Impl::computeContentHash(CoreTextSystem& sys, Attrib
     }
     std::uint32_t const sizeQ8 = static_cast<std::uint32_t>(std::lround(rs.font.size * 4.f));
     std::uint32_t const rgba = rgba8Pack(rs.color);
+    std::uint32_t const backgroundRgba = rs.backgroundColor.has_value() ? rgba8Pack(*rs.backgroundColor) : 0;
     std::uint32_t b0 = run.start;
     std::uint32_t b1 = run.end;
     XXH3_128bits_update(&st, &b0, sizeof(b0));
@@ -1398,6 +1427,7 @@ ContentHash CoreTextSystem::Impl::computeContentHash(CoreTextSystem& sys, Attrib
     XXH3_128bits_update(&st, &fid, sizeof(fid));
     XXH3_128bits_update(&st, &sizeQ8, sizeof(sizeQ8));
     XXH3_128bits_update(&st, &rgba, sizeof(rgba));
+    XXH3_128bits_update(&st, &backgroundRgba, sizeof(backgroundRgba));
   }
   hashLayoutOptions(st, opt);
   XXH128_hash_t const h = XXH3_128bits_digest(&st);
@@ -1480,10 +1510,12 @@ ParagraphHash CoreTextSystem::Impl::hashParagraph(CoreTextSystem& sys, char cons
     }
     std::uint32_t const sizeQ8 = static_cast<std::uint32_t>(std::lround(rs.font.size * 4.f));
     std::uint32_t const rgba = rgba8Pack(rs.color);
+    std::uint32_t const backgroundRgba = rs.backgroundColor.has_value() ? rgba8Pack(*rs.backgroundColor) : 0;
     XXH3_128bits_update(&st, &len, sizeof(len));
     XXH3_128bits_update(&st, &fid, sizeof(fid));
     XXH3_128bits_update(&st, &sizeQ8, sizeof(sizeQ8));
     XXH3_128bits_update(&st, &rgba, sizeof(rgba));
+    XXH3_128bits_update(&st, &backgroundRgba, sizeof(backgroundRgba));
   }
   hashLayoutOptions(st, opt);
   XXH128_hash_t const h = XXH3_128bits_digest(&st);
@@ -1742,6 +1774,7 @@ std::shared_ptr<ParagraphLayoutVariant> CoreTextSystem::Impl::buildParagraphVari
       nr.end = ce - para.byteStart;
       nr.font = run.font;
       nr.color = run.color;
+      nr.backgroundColor = run.backgroundColor;
       paraText.runs.push_back(nr);
       paraResolved.push_back(resolved[ri]);
     }
@@ -2075,6 +2108,7 @@ ShapedParagraph CoreTextSystem::Impl::shapeParagraphForCache(CoreTextSystem& sys
     nr.end = ce - para.byteStart;
     nr.font = run.font;
     nr.color = run.color;
+    nr.backgroundColor = run.backgroundColor;
     paraText.runs.push_back(nr);
     paraResolved.push_back(resolved[ri]);
   }
@@ -2511,7 +2545,10 @@ Size CoreTextSystem::measure(std::string_view utf8, Font const& font, Color cons
     }
     AttributedString as;
     as.utf8 = std::string(utf8);
-    as.runs.push_back({0, static_cast<std::uint32_t>(utf8.size()), font, color});
+    as.runs.push_back({.start = 0,
+                       .end = static_cast<std::uint32_t>(utf8.size()),
+                       .font = font,
+                       .color = color});
     std::vector<ResolvedStyle> resolved;
     accumulateInheritance(resolved, as);
     return d->insertFramesetterMiss(h, as, resolved, options, *this);
@@ -2565,7 +2602,7 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layoutUnboxed(AttributedString
     if (!resolved.empty()) {
       AttributedString probe;
       probe.utf8 = " ";
-      probe.runs.push_back({0, 1, resolved[0].font, resolved[0].color});
+      probe.runs.push_back({.start = 0, .end = 1, .font = resolved[0].font, .color = resolved[0].color});
       std::vector<ResolvedStyle> probeResolved;
       accumulateInheritance(probeResolved, probe);
       CFAttributedStringRef const cf = d->createCFAttributed(*this, probe, probeResolved, options);
@@ -2640,7 +2677,7 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layout(std::string_view utf8, 
   if (utf8.empty()) {
     AttributedString as;
     as.utf8 = "";
-    as.runs.push_back({0, 0, font, color});
+    as.runs.push_back({.start = 0, .end = 0, .font = font, .color = color});
     return layoutUnboxed(as, options, maxWidth, false, 0, 0);
   }
   ContentHash const h = d->computeContentHashPlain(*this, utf8, font, color, options);
@@ -2658,7 +2695,10 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layout(std::string_view utf8, 
     }
     AttributedString as;
     as.utf8 = std::string(utf8);
-    as.runs.push_back({0, static_cast<std::uint32_t>(utf8.size()), font, color});
+    as.runs.push_back({.start = 0,
+                       .end = static_cast<std::uint32_t>(utf8.size()),
+                       .font = font,
+                       .color = color});
     std::vector<ResolvedStyle> resolved;
     accumulateInheritance(resolved, as);
     return d->insertFramesetterMiss(h, as, resolved, options, *this);
@@ -2683,7 +2723,10 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layout(std::string_view utf8, 
 
   AttributedString as;
   as.utf8 = std::string(utf8);
-  as.runs.push_back({0, static_cast<std::uint32_t>(utf8.size()), font, color});
+  as.runs.push_back({.start = 0,
+                     .end = static_cast<std::uint32_t>(utf8.size()),
+                     .font = font,
+                     .color = color});
   auto built = std::make_shared<TextLayout>();
   auto stor2 = std::make_unique<TextLayoutStorage>();
   fillTextLayoutFromFramesetter(*this, e.framesetter, as, maxWidth, options, *built, *stor2);

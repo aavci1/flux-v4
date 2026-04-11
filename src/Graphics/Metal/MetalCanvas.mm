@@ -906,12 +906,16 @@ public:
     std::uint32_t const glyphStart = static_cast<std::uint32_t>(frame_.glyphVerts.size());
     for (auto const& placed : layout.runs) {
       TextRun const& text = placed.run;
+      float const baselineY = origin.y + placed.origin.y;
+      float const x = origin.x + placed.origin.x;
+
+      if (text.backgroundColor.has_value() && text.width > 0.f) {
+        drawRect(Rect{x, baselineY - text.ascent, text.width, text.ascent + text.descent}, CornerRadius{}, FillStyle::solid(*text.backgroundColor), StrokeStyle::none(), ShadowStyle::none());
+      }
+
       if (text.glyphIds.empty()) {
         continue;
       }
-
-      float const baselineY = origin.y + placed.origin.y;
-      float const x = origin.x + placed.origin.x;
 
       float const effectiveAlpha = text.color.a * op;
       vector_float4 const premul = simd_make_float4(text.color.r * effectiveAlpha,

@@ -4,10 +4,10 @@
 ///
 /// Part of the Flux public API.
 
-
 #include <Flux/Core/Types.hpp>
 
 #include <cstdint>
+#include <optional>
 #include <span>
 
 namespace flux {
@@ -17,14 +17,15 @@ namespace flux {
 /// `positions` are non-owning views; backing storage is owned by `TextLayout::ownedStorage` or kept alive via
 /// `TextLayout::variantRefs` (paragraph layout variant arenas).
 struct TextRun {
-  std::uint32_t fontId = 0;
-  float fontSize = 0.f;
-  Color color = Colors::black;
-  std::span<std::uint16_t const> glyphIds;
-  std::span<Point const> positions;
-  float ascent = 0.f;
-  float descent = 0.f;
-  float width = 0.f;
+    std::uint32_t fontId = 0;
+    float fontSize = 0.f;
+    Color color = Colors::black;
+    std::optional<Color> backgroundColor;
+    std::span<std::uint16_t const> glyphIds;
+    std::span<Point const> positions;
+    float ascent = 0.f;
+    float descent = 0.f;
+    float width = 0.f;
 };
 
 } // namespace flux

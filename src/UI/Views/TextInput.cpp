@@ -123,7 +123,7 @@ AttributedString buildAttributedString(std::string const &placeholderText,
     if (showPlaceholder) {
         AttributedString ph;
         ph.utf8 = placeholderText;
-        ph.runs.push_back(AttributedRun {0, static_cast<std::uint32_t>(placeholderText.size()), defaultFont, rs.placeholderColor});
+        ph.runs.push_back(AttributedRun {.start = 0, .end = static_cast<std::uint32_t>(placeholderText.size()), .font = defaultFont, .color = rs.placeholderColor});
         return ph;
     }
     AttributedString as;
@@ -141,14 +141,16 @@ AttributedString buildAttributedString(std::string const &placeholderText,
         }
         if (as.runs.empty() || !attributedRunsFullyCoverBuffer(as.runs, n)) {
             as.runs.clear();
-            as.runs.push_back(AttributedRun {0, n, defaultFont, rs.textColor});
+            as.runs.push_back(
+                AttributedRun {.start = 0, .end = n, .font = defaultFont, .color = rs.textColor}
+            );
             if (memo) {
                 memo->runs = as.runs;
             }
         }
     } else {
         Color const c = validationColor ? validationColor(val) : rs.textColor;
-        as.runs.push_back(AttributedRun {0, static_cast<std::uint32_t>(val.size()), defaultFont, c});
+        as.runs.push_back(AttributedRun {.start = 0, .end = static_cast<std::uint32_t>(val.size()), .font = defaultFont, .color = c});
     }
     return as;
 }
