@@ -181,16 +181,20 @@ float inputShellInset(ResolvedTextInputStyle const &rs) {
 }
 
 Element decorateInputField(Element field, ResolvedTextInputStyle const &rs, bool focused, bool disabled) {
-    field = std::move(field)
-                .fill(FillStyle::solid(rs.backgroundColor))
-                .stroke(inputBorderStroke(rs, focused))
-                .cornerRadius(CornerRadius {rs.cornerRadius});
+    Element shell = Element {ZStack {
+        .horizontalAlignment = Alignment::Start,
+        .verticalAlignment = Alignment::Start,
+        .children = children(std::move(field)),
+    }}
+        .fill(FillStyle::solid(rs.backgroundColor))
+        .stroke(inputBorderStroke(rs, focused))
+        .cornerRadius(CornerRadius {rs.cornerRadius});
     if (disabled) {
         Color overlay = rs.disabledColor;
         overlay.a *= 0.35f;
-        field = std::move(field).overlay(Rectangle {}.fill(FillStyle::solid(overlay)));
+        shell = std::move(shell).overlay(Rectangle {}.fill(FillStyle::solid(overlay)));
     }
-    return field;
+    return shell;
 }
 
 struct TextLayoutDisplay {
