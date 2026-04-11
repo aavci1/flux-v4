@@ -137,11 +137,7 @@ void TextEditBehavior::setDisabled(bool d) {
 
 void TextEditBehavior::moveCaretTo(int byte, bool extendSelection) {
     std::string const &s = value_->get();
-    int const b = detail::utf8Clamp(s, byte);
-    state_.selection.caretByte = b;
-    if (!extendSelection) {
-        state_.selection.anchorByte = b;
-    }
+    state_.selection = detail::moveSelectionToByte(s, state_.selection, byte, extendSelection);
     ensureCaretVisible_ = true;
     resetBlinkEpoch();
     markTextUiDirty();
@@ -149,8 +145,7 @@ void TextEditBehavior::moveCaretTo(int byte, bool extendSelection) {
 
 void TextEditBehavior::selectAll() {
     std::string const &s = value_->get();
-    state_.selection.anchorByte = 0;
-    state_.selection.caretByte = static_cast<int>(s.size());
+    state_.selection = detail::selectAllSelection(s);
     ensureCaretVisible_ = true;
     resetBlinkEpoch();
     markTextUiDirty();
@@ -160,7 +155,7 @@ void TextEditBehavior::clearSelection() {
     if (!state_.selection.hasSelection()) {
         return;
     }
-    state_.selection.anchorByte = state_.selection.caretByte;
+    state_.selection = detail::clearSelection(state_.selection);
     markTextUiDirty();
 }
 
@@ -232,89 +227,19 @@ void TextEditBehavior::mutateValue(std::string next, int newCaret, int newAnchor
 }
 
 void TextEditBehavior::insertAtCaret(std::string_view insert, bool fromTyping) {
-    std::string buf = value_->get();
-    auto [i0, i1] = state_.selection.ordered();
-    i0 = detail::utf8Clamp(buf, i0);
-    i1 = detail::utf8Clamp(buf, i1);
-
-    std::string ins(insert);
-    if (opts_.maxLength > 0) {
-        int const before = detail::utf8CountChars(buf.substr(0, static_cast<std::size_t>(i0)));
-        int const after = detail::utf8CountChars(buf.substr(static_cast<std::size_t>(i1)));
-        int remaining = opts_.maxLength - (before + after);
-        if (remaining < 0) {
-            remaining = 0;
-        }
-        ins = detail::utf8TruncateToChars(ins, remaining);
-    }
-
-    bool const coalesce =
-        fromTyping && ins.size() == 1 && detail::shouldCoalesceInsert(buf, i0, insert);
-
-    buf.erase(static_cast<std::size_t>(i0), static_cast<std::size_t>(i1 - i0));
-    buf.insert(static_cast<std::size_t>(i0), ins);
-    int const newPos = i0 + static_cast<int>(ins.size());
-    mutateValue(std::move(buf), newPos, newPos, true, coalesce);
+    detail::TextEditMutation mutation = detail::insertText(value_->get(), state_.selection, insert, opts_.maxLength);
+    mutateValue(std::move(mutation.text), mutation.selection.caretByte, mutation.selection.anchorByte, true,
+                fromTyping && mutation.coalescableTyping);
 }
 
 void TextEditBehavior::deleteSelectionOrChar(bool forward) {
-    std::string buf = value_->get();
-    auto [i0, i1] = state_.selection.ordered();
-    i0 = detail::utf8Clamp(buf, i0);
-    i1 = detail::utf8Clamp(buf, i1);
-
-    if (i0 < i1) {
-        mutateValue(buf.substr(0, static_cast<std::size_t>(i0)) + buf.substr(static_cast<std::size_t>(i1)), i0, i0, true,
-                    false);
-        return;
-    }
-
-    int at = detail::utf8Clamp(buf, state_.selection.caretByte);
-    if (forward) {
-        int const n = static_cast<int>(buf.size());
-        if (at >= n) {
-            return;
-        }
-        int const next = detail::utf8NextChar(buf, at);
-        mutateValue(buf.substr(0, static_cast<std::size_t>(at)) + buf.substr(static_cast<std::size_t>(next)), at, at,
-                    true, false);
-    } else {
-        if (at <= 0) {
-            return;
-        }
-        int const prev = detail::utf8PrevChar(buf, at);
-        mutateValue(buf.substr(0, static_cast<std::size_t>(prev)) + buf.substr(static_cast<std::size_t>(at)), prev, prev,
-                    true, false);
-    }
+    detail::TextEditMutation mutation = detail::eraseSelectionOrChar(value_->get(), state_.selection, forward);
+    mutateValue(std::move(mutation.text), mutation.selection.caretByte, mutation.selection.anchorByte, true, false);
 }
 
 void TextEditBehavior::deleteWord(bool forward) {
-    std::string buf = value_->get();
-    auto [i0, i1] = state_.selection.ordered();
-    i0 = detail::utf8Clamp(buf, i0);
-    i1 = detail::utf8Clamp(buf, i1);
-    if (i0 < i1) {
-        mutateValue(buf.substr(0, static_cast<std::size_t>(i0)) + buf.substr(static_cast<std::size_t>(i1)), i0, i0, true,
-                    false);
-        return;
-    }
-
-    int at = detail::utf8Clamp(buf, state_.selection.caretByte);
-    if (forward) {
-        int const end = detail::utf8NextWord(buf, at);
-        if (end == at) {
-            return;
-        }
-        mutateValue(buf.substr(0, static_cast<std::size_t>(at)) + buf.substr(static_cast<std::size_t>(end)), at, at, true,
-                    false);
-    } else {
-        int const start = detail::utf8PrevWord(buf, at);
-        if (start == at) {
-            return;
-        }
-        mutateValue(buf.substr(0, static_cast<std::size_t>(start)) + buf.substr(static_cast<std::size_t>(at)), start,
-                    start, true, false);
-    }
+    detail::TextEditMutation mutation = detail::eraseWord(value_->get(), state_.selection, forward);
+    mutateValue(std::move(mutation.text), mutation.selection.caretByte, mutation.selection.anchorByte, true, false);
 }
 
 void TextEditBehavior::copySelection(bool cut) {

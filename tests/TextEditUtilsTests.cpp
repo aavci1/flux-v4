@@ -33,12 +33,77 @@ TEST_CASE("TextEditUtils: TextEditSelection ordered and selection state") {
     CHECK(b == 8);
 }
 
+TEST_CASE("TextEditUtils: selection movement helpers") {
+    std::string const text = "hello";
+
+    TextEditSelection moved = moveSelectionToByte(text, TextEditSelection {.caretByte = 1, .anchorByte = 1}, 4, false);
+    CHECK(moved.caretByte == 4);
+    CHECK(moved.anchorByte == 4);
+
+    TextEditSelection extended =
+        moveSelectionToByte(text, TextEditSelection {.caretByte = 1, .anchorByte = 1}, 4, true);
+    CHECK(extended.caretByte == 4);
+    CHECK(extended.anchorByte == 1);
+
+    TextEditSelection all = selectAllSelection(text);
+    CHECK(all.anchorByte == 0);
+    CHECK(all.caretByte == 5);
+
+    TextEditSelection cleared = clearSelection(TextEditSelection {.caretByte = 3, .anchorByte = 1});
+    CHECK(cleared.caretByte == 3);
+    CHECK(cleared.anchorByte == 3);
+}
+
 TEST_CASE("TextEditUtils: shouldCoalesceInsert") {
     std::string const prev = "hello";
     CHECK(shouldCoalesceInsert(prev, 5, "x") == true);
     CHECK(shouldCoalesceInsert(prev, 5, " ") == false);
     CHECK(shouldCoalesceInsert("hello ", 6, "w") == false);
     CHECK(shouldCoalesceInsert(prev, 5, "xy") == false);
+}
+
+TEST_CASE("TextEditUtils: insertText replaces selection and respects max length") {
+    TextEditMutation const inserted = insertText("hello", TextEditSelection {.caretByte = 5, .anchorByte = 2}, "yy", 0);
+    CHECK(inserted.text == "heyyo");
+    CHECK(inserted.selection.caretByte == 4);
+    CHECK(inserted.selection.anchorByte == 4);
+    CHECK(inserted.valueChanged);
+
+    TextEditMutation const limited = insertText("hello", TextEditSelection {.caretByte = 5, .anchorByte = 5}, " world", 6);
+    CHECK(limited.text == "hello ");
+    CHECK(limited.selection.caretByte == 6);
+    CHECK(limited.valueChanged);
+}
+
+TEST_CASE("TextEditUtils: eraseSelectionOrChar handles selection and single char deletes") {
+    TextEditMutation const eraseSelection =
+        eraseSelectionOrChar("hello", TextEditSelection {.caretByte = 4, .anchorByte = 1}, false);
+    CHECK(eraseSelection.text == "ho");
+    CHECK(eraseSelection.selection.caretByte == 1);
+    CHECK(eraseSelection.selection.anchorByte == 1);
+    CHECK(eraseSelection.valueChanged);
+
+    TextEditMutation const backspace =
+        eraseSelectionOrChar("hello", TextEditSelection {.caretByte = 3, .anchorByte = 3}, false);
+    CHECK(backspace.text == "helo");
+    CHECK(backspace.selection.caretByte == 2);
+
+    TextEditMutation const forwardDelete =
+        eraseSelectionOrChar("hello", TextEditSelection {.caretByte = 1, .anchorByte = 1}, true);
+    CHECK(forwardDelete.text == "hllo");
+    CHECK(forwardDelete.selection.caretByte == 1);
+}
+
+TEST_CASE("TextEditUtils: eraseWord handles both directions") {
+    TextEditMutation const backward =
+        eraseWord("hello world", TextEditSelection {.caretByte = 11, .anchorByte = 11}, false);
+    CHECK(backward.text == "hello ");
+    CHECK(backward.selection.caretByte == 6);
+
+    TextEditMutation const forward =
+        eraseWord("hello world", TextEditSelection {.caretByte = 0, .anchorByte = 0}, true);
+    CHECK(forward.text == " world");
+    CHECK(forward.selection.caretByte == 0);
 }
 
 TEST_CASE("TextEditUtils: lineIndexForByte") {

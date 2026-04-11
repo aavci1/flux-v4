@@ -471,6 +471,141 @@ TextEditLayoutResult makeTextEditLayoutResult(std::shared_ptr<TextLayout const> 
     return result;
 }
 
+TextEditSelection clampSelection(std::string const &text, TextEditSelection selection) noexcept {
+    selection.caretByte = utf8Clamp(text, selection.caretByte);
+    selection.anchorByte = utf8Clamp(text, selection.anchorByte);
+    return selection;
+}
+
+TextEditSelection moveSelectionToByte(std::string const &text, TextEditSelection selection, int byte,
+                                      bool extendSelection) noexcept {
+    selection.caretByte = utf8Clamp(text, byte);
+    if (!extendSelection) {
+        selection.anchorByte = selection.caretByte;
+    } else {
+        selection.anchorByte = utf8Clamp(text, selection.anchorByte);
+    }
+    return selection;
+}
+
+TextEditSelection selectAllSelection(std::string const &text) noexcept {
+    return TextEditSelection {
+        .caretByte = static_cast<int>(text.size()),
+        .anchorByte = 0,
+    };
+}
+
+TextEditSelection clearSelection(TextEditSelection selection) noexcept {
+    selection.anchorByte = selection.caretByte;
+    return selection;
+}
+
+TextEditMutation insertText(std::string const &text, TextEditSelection const &selection, std::string_view insert,
+                            int maxLength) {
+    TextEditMutation mutation {};
+    mutation.text = text;
+    auto const [orderedStart, orderedEnd] = clampSelection(text, selection).ordered();
+
+    std::string inserted(insert);
+    if (maxLength > 0) {
+        int const before = utf8CountChars(text.substr(0, static_cast<std::size_t>(orderedStart)));
+        int const after = utf8CountChars(text.substr(static_cast<std::size_t>(orderedEnd)));
+        int remaining = maxLength - (before + after);
+        if (remaining < 0) {
+            remaining = 0;
+        }
+        inserted = utf8TruncateToChars(inserted, remaining);
+    }
+
+    mutation.coalescableTyping =
+        inserted.size() == 1 && shouldCoalesceInsert(text, orderedStart, inserted);
+    mutation.text.erase(static_cast<std::size_t>(orderedStart), static_cast<std::size_t>(orderedEnd - orderedStart));
+    mutation.text.insert(static_cast<std::size_t>(orderedStart), inserted);
+    int const newPos = orderedStart + static_cast<int>(inserted.size());
+    mutation.selection = TextEditSelection {
+        .caretByte = newPos,
+        .anchorByte = newPos,
+    };
+    mutation.valueChanged = mutation.text != text;
+    return mutation;
+}
+
+TextEditMutation eraseSelectionOrChar(std::string const &text, TextEditSelection const &selection,
+                                      bool forward) noexcept {
+    TextEditMutation mutation {};
+    mutation.text = text;
+
+    auto const [orderedStart, orderedEnd] = clampSelection(text, selection).ordered();
+    if (orderedStart < orderedEnd) {
+        mutation.text.erase(static_cast<std::size_t>(orderedStart),
+                            static_cast<std::size_t>(orderedEnd - orderedStart));
+        mutation.selection = TextEditSelection {
+            .caretByte = orderedStart,
+            .anchorByte = orderedStart,
+        };
+        mutation.valueChanged = true;
+        return mutation;
+    }
+
+    int const caret = utf8Clamp(text, selection.caretByte);
+    if (forward) {
+        int const size = static_cast<int>(text.size());
+        if (caret >= size) {
+            mutation.selection = TextEditSelection {.caretByte = caret, .anchorByte = caret};
+            return mutation;
+        }
+        int const next = utf8NextChar(text, caret);
+        mutation.text.erase(static_cast<std::size_t>(caret), static_cast<std::size_t>(next - caret));
+        mutation.selection = TextEditSelection {.caretByte = caret, .anchorByte = caret};
+        mutation.valueChanged = true;
+        return mutation;
+    }
+
+    if (caret <= 0) {
+        mutation.selection = TextEditSelection {.caretByte = 0, .anchorByte = 0};
+        return mutation;
+    }
+    int const prev = utf8PrevChar(text, caret);
+    mutation.text.erase(static_cast<std::size_t>(prev), static_cast<std::size_t>(caret - prev));
+    mutation.selection = TextEditSelection {.caretByte = prev, .anchorByte = prev};
+    mutation.valueChanged = true;
+    return mutation;
+}
+
+TextEditMutation eraseWord(std::string const &text, TextEditSelection const &selection, bool forward) noexcept {
+    TextEditMutation mutation {};
+    mutation.text = text;
+
+    auto const [orderedStart, orderedEnd] = clampSelection(text, selection).ordered();
+    if (orderedStart < orderedEnd) {
+        mutation.text.erase(static_cast<std::size_t>(orderedStart),
+                            static_cast<std::size_t>(orderedEnd - orderedStart));
+        mutation.selection = TextEditSelection {
+            .caretByte = orderedStart,
+            .anchorByte = orderedStart,
+        };
+        mutation.valueChanged = true;
+        return mutation;
+    }
+
+    int const caret = utf8Clamp(text, selection.caretByte);
+    int const edge = forward ? utf8NextWord(text, caret) : utf8PrevWord(text, caret);
+    if (edge == caret) {
+        mutation.selection = TextEditSelection {.caretByte = caret, .anchorByte = caret};
+        return mutation;
+    }
+
+    int const start = std::min(caret, edge);
+    int const end = std::max(caret, edge);
+    mutation.text.erase(static_cast<std::size_t>(start), static_cast<std::size_t>(end - start));
+    mutation.selection = TextEditSelection {
+        .caretByte = start,
+        .anchorByte = start,
+    };
+    mutation.valueChanged = true;
+    return mutation;
+}
+
 int lineIndexForByte(std::vector<LineMetrics> const &lines, int byteOffset) noexcept {
     if (lines.empty()) {
         return 0;

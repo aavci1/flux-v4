@@ -70,9 +70,26 @@ struct TextEditLayoutResult {
     [[nodiscard]] bool empty() const noexcept { return !layout; }
 };
 
+struct TextEditMutation {
+    std::string text;
+    TextEditSelection selection {};
+    bool valueChanged = false;
+    bool coalescableTyping = false;
+};
+
 std::vector<LineMetrics> buildLineMetrics(TextLayout const &layout);
 TextEditLayoutResult makeTextEditLayoutResult(std::shared_ptr<TextLayout const> layout, int textByteCount,
                                               float contentWidth);
+TextEditSelection clampSelection(std::string const &text, TextEditSelection selection) noexcept;
+TextEditSelection moveSelectionToByte(std::string const &text, TextEditSelection selection, int byte,
+                                      bool extendSelection) noexcept;
+TextEditSelection selectAllSelection(std::string const &text) noexcept;
+TextEditSelection clearSelection(TextEditSelection selection) noexcept;
+TextEditMutation insertText(std::string const &text, TextEditSelection const &selection, std::string_view insert,
+                            int maxLength = 0);
+TextEditMutation eraseSelectionOrChar(std::string const &text, TextEditSelection const &selection,
+                                      bool forward) noexcept;
+TextEditMutation eraseWord(std::string const &text, TextEditSelection const &selection, bool forward) noexcept;
 
 /// Binary search over sorted `byteStart`. Returns index of the line containing `byteOffset`, clamped.
 int lineIndexForByte(std::vector<LineMetrics> const &lines, int byteOffset) noexcept;
