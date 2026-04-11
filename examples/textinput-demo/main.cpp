@@ -1,4 +1,5 @@
-// Demonstrates single-line TextInput: Tab focus, clipboard actions, Return submit.
+// Unified TextInput demo: single-line and multiline modes in one example.
+
 #include <Flux.hpp>
 #include <Flux/Core/Action.hpp>
 #include <Flux/Core/Shortcut.hpp>
@@ -16,108 +17,179 @@
 
 using namespace flux;
 
-struct TextInputForm {
-  auto body() const {
-    Theme const& theme = useEnvironment<Theme>();
-    auto name = useState(std::string{"Abdurrahman Avcı"});
-    auto email = useState(std::string{"abdurrahmanavci@gmail.com"});
-    auto notes = useState(std::string{"Try Cmd+A / C / X / V, Tab between fields."});
-    auto disabledSample = useState(std::string{"read-only"});
+namespace {
 
-    return VStack{
-        .spacing = 16.f,
+Element sectionCard(Theme const &theme, std::string title, std::string body, Element content) {
+    return VStack {
+        .spacing = theme.space3,
         .alignment = Alignment::Start,
         .children = children(
-                Text{.text = "TextInput demo",
-                     .font = theme.fontDisplay,
-                     .color = theme.colorTextPrimary},
-                HStack{
-                    .spacing = 0.f,
-                    .children = children(
-                            Text{
-                                .text = "Tab / Shift+Tab between fields. Edit actions use the window action table.",
-                                .font = theme.fontBodySmall,
-                                .color = theme.colorTextSecondary,
-                                .wrapping = TextWrapping::Wrap,
-                            }
-                                .flex(1.f)
-                        ),
+            Text {
+                .text = std::move(title),
+                .font = theme.fontTitle,
+                .color = theme.colorTextPrimary,
+            },
+            Text {
+                .text = std::move(body),
+                .font = theme.fontBodySmall,
+                .color = theme.colorTextSecondary,
+                .wrapping = TextWrapping::Wrap,
+            },
+            std::move(content)
+        )
+    }
+        .padding(theme.space4)
+        .fill(FillStyle::solid(theme.colorSurfaceOverlay))
+        .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
+        .cornerRadius(CornerRadius {theme.radiusLarge});
+}
+
+Element labeledField(Theme const &theme, std::string label, Element field) {
+    return VStack {
+        .spacing = theme.space2,
+        .alignment = Alignment::Start,
+        .children = children(
+            Text {
+                .text = std::move(label),
+                .font = theme.fontLabel,
+                .color = theme.colorTextPrimary,
+            },
+            std::move(field)
+        )
+    };
+}
+
+} // namespace
+
+struct TextInputShowcase {
+    auto body() const {
+        Theme const &theme = useEnvironment<Theme>();
+
+        auto name = useState(std::string {"Abdurrahman Avci"});
+        auto email = useState(std::string {"hello@flux.dev"});
+        auto search = useState(std::string {});
+        auto bio = useState(std::string {
+            "Flux now uses one TextInput component for both single-line and multiline editing.\n\n"
+            "Try clicking, selecting, scrolling, and using the normal edit shortcuts."
+        });
+        auto draft = useState(std::string {
+            "Daily notes\n"
+            "- Review the unified text input stack\n"
+            "- Check caret visibility while scrolling\n"
+            "- Validate focus and selection behavior"
+        });
+        auto disabled = useState(std::string {"Disabled example"});
+
+        Color const okColor = theme.colorTextPrimary;
+        Color const badColor = theme.colorDanger;
+
+        return VStack {
+            .spacing = theme.space4,
+            .alignment = Alignment::Start,
+            .children = children(
+                Text {
+                    .text = "TextInput",
+                    .font = theme.fontDisplay,
+                    .color = theme.colorTextPrimary,
                 },
-                Text{.text = "Name",
-                     .font = theme.fontLabel,
-                     .color = theme.colorTextPrimary},
-                HStack{
-                    .spacing = 0.f,
-                    .children = children(
-                            TextInput{
-                                .value = name,
-                                .placeholder = "Your name",
-                                .onSubmit = [](std::string const& v) {
-                                  std::fprintf(stderr, "[textinput-demo] submit name: %s\n", v.c_str());
-                                },
-                            }
-                                .flex(1.f)
-                        ),
+                Text {
+                    .text =
+                        "One control, two modes. This example covers submit-driven single-line fields, "
+                        "validation, plain styling, multiline editing, and disabled states.",
+                    .font = theme.fontBody,
+                    .color = theme.colorTextSecondary,
+                    .wrapping = TextWrapping::Wrap,
                 },
-                Text{.text = "Email",
-                     .font = theme.fontLabel,
-                     .color = theme.colorTextPrimary},
-                HStack{
-                    .spacing = 0.f,
+                HStack {
+                    .spacing = theme.space4,
+                    .alignment = Alignment::Start,
                     .children = children(
-                            TextInput{
-                                .value = email,
-                                .placeholder = "you@example.com",
-                                .onChange = [](std::string const&) {},
-                                .onSubmit = [](std::string const& v) {
-                                  std::fprintf(stderr, "[textinput-demo] submit email: %s\n", v.c_str());
-                                },
+                        sectionCard(
+                            theme, "Single-Line",
+                            "Tab between fields, press Return to submit, and use the normal clipboard shortcuts.",
+                            VStack {
+                                .spacing = theme.space3,
+                                .children = children(
+                                    labeledField(
+                                        theme, "Name",
+                                        TextInput {
+                                            .value = name,
+                                            .placeholder = "Your name",
+                                            .onSubmit = [](std::string const &v) {
+                                                std::fprintf(stderr, "[textinput-demo] submit name: %s\n", v.c_str());
+                                            },
+                                        }
+                                    ),
+                                    labeledField(theme, "Email", TextInput {
+                                                                     .value = email,
+                                                                     .placeholder = "you@example.com",
+                                                                     .validationColor = [okColor, badColor](std::string_view v) { return v.find('@') == std::string_view::npos ? badColor : okColor; },
+                                                                     .onSubmit = [](std::string const &v) { std::fprintf(stderr, "[textinput-demo] submit email: %s\n", v.c_str()); },
+                                                                 }),
+                                    labeledField(theme, "Search", TextInput {
+                                                                      .value = search,
+                                                                      .placeholder = "Search…",
+                                                                      .style = TextInput::Style::plain(),
+                                                                  }
+                                                                      .padding(theme.space3)
+                                                                      .fill(FillStyle::solid(theme.colorSurface))
+                                                                      .stroke(StrokeStyle::solid(theme.colorBorder, 1.f))
+                                                                      .cornerRadius(CornerRadius {theme.radiusMedium})),
+                                    labeledField(theme, "Disabled", TextInput {
+                                                                        .value = disabled,
+                                                                        .placeholder = "N/A",
+                                                                        .disabled = true,
+                                                                    })
+                                )
                             }
-                                .flex(1.f)
-                        ),
-                },
-                Text{.text = "Notes",
-                     .font = theme.fontLabel,
-                     .color = theme.colorTextPrimary},
-                HStack{
-                    .spacing = 0.f,
-                    .children = children(
-                            TextInput{
-                                .value = notes,
-                                .placeholder = "Optional",
-                            }
-                                .flex(1.f, 1.f, 200.f)
-                        ),
-                },
-                Text{.text = "Disabled",
-                     .font = theme.fontLabel,
-                     .color = theme.colorTextPrimary},
-                HStack{
-                    .spacing = 0.f,
-                    .children = children(
-                            TextInput{.value = disabledSample, .placeholder = "N/A", .disabled = true}
-                                .flex(1.f)
-                        ),
+                        )
+                            .flex(1.f, 1.f, 0.f),
+                        sectionCard(theme, "Multiline", "Multiline mode scrolls inside the field, keeps the caret visible, and uses the same "
+                                                        "editing model.",
+                                    VStack {.spacing = theme.space3, .children = children(labeledField(theme, "Profile Bio", TextInput {
+                                                                                                                                 .value = bio,
+                                                                                                                                 .placeholder = "Tell us about yourself…",
+                                                                                                                                 .multiline = true,
+                                                                                                                                 .multilineHeight = {.fixed = 180.f},
+                                                                                                                             }),
+                                                                                          labeledField(theme, "Working Draft", TextInput {
+                                                                                                                                   .value = draft,
+                                                                                                                                   .placeholder = "Write longer notes…",
+                                                                                                                                   .multiline = true,
+                                                                                                                                   .multilineHeight = {.fixed = 220.f},
+                                                                                                                                   .onEscape = [draft](std::string const &) { draft = ""; },
+                                                                                                                               }),
+                                                                                          labeledField(theme, "Disabled Multiline", TextInput {
+                                                                                                                                        .value = disabled,
+                                                                                                                                        .placeholder = "N/A",
+                                                                                                                                        .multiline = true,
+                                                                                                                                        .disabled = true,
+                                                                                                                                        .multilineHeight = {.fixed = 120.f},
+                                                                                                                                    }))})
+                            .flex(1.f, 1.f, 0.f)
+                    )
                 }
-            ),
-    }.padding(24.f);
-  }
+                    .flex(1.f, 1.f, 0.f)
+            )
+        }
+            .padding(24.f);
+    }
 };
 
-int main(int argc, char* argv[]) {
-  Application app(argc, argv);
-  auto& w = app.createWindow<Window>({
-      .size = {520, 560},
-      .title = "Flux — TextInput",
-      .resizable = true,
-  });
+int main(int argc, char *argv[]) {
+    Application app(argc, argv);
+    auto &w = app.createWindow<Window>({
+        .size = {1040, 760},
+        .title = "Flux — TextInput",
+        .resizable = true,
+    });
 
-  w.registerAction("edit.copy", {.label = "Copy", .shortcut = shortcuts::Copy});
-  w.registerAction("edit.cut", {.label = "Cut", .shortcut = shortcuts::Cut});
-  w.registerAction("edit.paste", {.label = "Paste", .shortcut = shortcuts::Paste});
-  w.registerAction("edit.selectAll", {.label = "Select All", .shortcut = shortcuts::SelectAll});
-  w.registerAction("app.quit", {.label = "Quit", .shortcut = shortcuts::Quit, .isEnabled = [] { return true; }});
+    w.registerAction("edit.copy", {.label = "Copy", .shortcut = shortcuts::Copy});
+    w.registerAction("edit.cut", {.label = "Cut", .shortcut = shortcuts::Cut});
+    w.registerAction("edit.paste", {.label = "Paste", .shortcut = shortcuts::Paste});
+    w.registerAction("edit.selectAll", {.label = "Select All", .shortcut = shortcuts::SelectAll});
+    w.registerAction("app.quit", {.label = "Quit", .shortcut = shortcuts::Quit, .isEnabled = [] { return true; }});
 
-  w.setView<TextInputForm>();
-  return app.exec();
+    w.setView<TextInputShowcase>();
+    return app.exec();
 }
