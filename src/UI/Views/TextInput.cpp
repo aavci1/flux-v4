@@ -24,8 +24,6 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <cstdio>
-#include <cstdlib>
 #include <functional>
 #include <optional>
 #include <string>
@@ -34,39 +32,6 @@
 namespace flux {
 
 namespace {
-
-bool textInputDebugEnabled() {
-    static bool const enabled = [] {
-        char const *env = std::getenv("FLUX_DEBUG_TEXT_INPUT");
-        return env && env[0] != '\0' && env[0] != '0';
-    }();
-    return enabled;
-}
-
-void logTextInputUiEvent(char const *mode, char const *event, Point local, int byte, float auxA = 0.f, float auxB = 0.f) {
-    if (!textInputDebugEnabled()) {
-        return;
-    }
-    std::fprintf(stderr,
-                 "[TextInputUI] mode=%s event=%s local=(%.1f,%.1f) byte=%d aux=(%.1f,%.1f)\n",
-                 mode, event, local.x, local.y, byte, auxA, auxB);
-    std::fflush(stderr);
-}
-
-void logCaretGeometry(char const *mode, detail::TextEditLayoutResult const &result, std::string const &buf, int caretByte) {
-    if (!textInputDebugEnabled() || !result.layout || result.lines.empty()) {
-        return;
-    }
-    int const clampedCaret = detail::utf8Clamp(buf, caretByte);
-    int const lineIndex = detail::lineIndexForByte(result, clampedCaret);
-    auto const &line = result.lines[static_cast<std::size_t>(lineIndex)];
-    Rect const caret = detail::caretRect(result, clampedCaret);
-    std::fprintf(stderr,
-                 "[TextInputGeom] mode=%s caret=%d line=%d ctLine=%u lineBytes=[%d,%d] lineBox=(%.1f,%.1f,%.1f) caretRect=(%.1f,%.1f,%.1f,%.1f)\n",
-                 mode, clampedCaret, lineIndex, static_cast<unsigned>(line.ctLineIndex), line.byteStart, line.byteEnd,
-                 line.lineMinX, line.top, line.bottom - line.top, caret.x, caret.y, caret.width, caret.height);
-    std::fflush(stderr);
-}
 
 constexpr float kSelectionExtraBottomPx = 4.f;
 constexpr float kCaretScrollMarginPx = 8.f;
@@ -382,7 +347,6 @@ Element buildMultilineTextInput(TextInput const &input) {
                                                            return detail::moveCaretVertically(snap.layoutResult, *st, cur, dir);
                                                        }});
     behavior.setDisabled(input.disabled);
-    State<long long> lastDebugSignature = useState(-1LL);
 
     bool const focused = useFocus();
     behavior.setFocused(focused);
@@ -405,15 +369,8 @@ Element buildMultilineTextInput(TextInput const &input) {
 
     std::vector<Element> contentChildren;
     if (snap.layoutResult.layout) {
-        int const caretByte = detail::utf8Clamp(buf, behavior.caretByte());
-        int const lineIndex = detail::lineIndexForByte(snap.layoutResult, caretByte);
-        long long const signature = (static_cast<long long>(caretByte) << 32) ^ static_cast<unsigned>(lineIndex);
-        if (signature != *lastDebugSignature) {
-            logCaretGeometry("multiline", snap.layoutResult, buf, caretByte);
-            lastDebugSignature = signature;
-        }
         auto selection = detail::TextEditSelection {
-            .caretByte = caretByte,
+            .caretByte = detail::utf8Clamp(buf, behavior.caretByte()),
             .anchorByte = detail::utf8Clamp(buf, behavior.selectionAnchorByte()),
         };
         auto overlayChildren = makeSelectionAndCaretElements(snap.layoutResult,
@@ -453,7 +410,6 @@ Element buildMultilineTextInput(TextInput const &input) {
                              int const byte =
                                  hitTestLineWrapByte(behavior, resolved, placeholder, styler, stylerMemo, defaultFont,
                                                      focused, snap, frameWidth, local, scroll);
-                             logTextInputUiEvent("multiline", "pointerDown", local, byte, frameWidth, scroll);
                              behavior.handlePointerDown(byte, false);
                          })
                          .onPointerMove([placeholder = input.placeholder, styler = input.styler, &behavior, &snap, resolved,
@@ -463,13 +419,9 @@ Element buildMultilineTextInput(TextInput const &input) {
                              int const byte =
                                  hitTestLineWrapByte(behavior, resolved, placeholder, styler, stylerMemo, defaultFont,
                                                      focused, snap, frameWidth, local, scroll);
-                             logTextInputUiEvent("multiline", "pointerMove", local, byte, frameWidth, scroll);
                              behavior.handlePointerDrag(byte);
                          })
-                         .onPointerUp([&behavior](Point local) {
-                             logTextInputUiEvent("multiline", "pointerUp", local, behavior.caretByte());
-                             behavior.handlePointerUp();
-                         });
+                         .onPointerUp([&behavior](Point) { behavior.handlePointerUp(); });
 
     Element scroller = Element {ScrollView {
         .axis = ScrollAxis::Vertical,
@@ -572,7 +524,6 @@ Element TextInput::body() const {
             bool const showPh = beh.value().empty() && !focused;
             int const byte =
                 hitTestByte(snap, ph, stylerFn, validationFn, beh, resolved, defaultFont, fw, local, *scrollByte, showPh);
-            logTextInputUiEvent("singleline", "pointerDown", local, byte, fw, static_cast<float>(*scrollByte));
             beh.handlePointerDown(byte, false);
         })
         .onPointerMove([ph = placeholder, stylerFn = styler, validationFn = validationColor, &beh, &snap, scrollByte,
@@ -581,13 +532,9 @@ Element TextInput::body() const {
             bool const showPh = beh.value().empty() && !focused;
             int const byte =
                 hitTestByte(snap, ph, stylerFn, validationFn, beh, resolved, defaultFont, fw, local, *scrollByte, showPh);
-            logTextInputUiEvent("singleline", "pointerMove", local, byte, fw, static_cast<float>(*scrollByte));
             beh.handlePointerDrag(byte);
         })
-        .onPointerUp([&beh](Point local) {
-            logTextInputUiEvent("singleline", "pointerUp", local, beh.caretByte());
-            beh.handlePointerUp();
-        });
+        .onPointerUp([&beh](Point) { beh.handlePointerUp(); });
 }
 
 } // namespace flux

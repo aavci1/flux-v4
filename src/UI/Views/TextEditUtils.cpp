@@ -3,8 +3,6 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <cstdio>
-#include <cstdlib>
 #include <limits>
 #include <string>
 #include <string_view>
@@ -73,14 +71,6 @@ bool isWordChar(char32_t cp) {
 
 bool isPunctuationChar(char32_t cp) {
     return !isSpaceChar(cp) && !isWordChar(cp);
-}
-
-bool textInputDebugEnabled() {
-    static bool const enabled = [] {
-        char const *env = std::getenv("FLUX_DEBUG_TEXT_INPUT");
-        return env && env[0] != '\0' && env[0] != '0';
-    }();
-    return enabled;
 }
 
 int utf8NextCharImpl(std::string const &s, int pos) {
@@ -563,17 +553,6 @@ void normalizeLineMetricsForEditing(std::vector<LineMetrics> &lines, int textByt
             line.byteStart = firstAssignable + k;
             line.byteEnd = line.byteStart + 1;
         }
-    }
-
-    if (textInputDebugEnabled()) {
-        for (std::size_t i = 0; i < lines.size(); ++i) {
-            auto const &line = lines[i];
-            std::fprintf(stderr,
-                         "[TextInputLines] line=%zu ctLine=%u bytes=[%d,%d] box=(%.1f,%.1f,%.1f) baseline=%.1f\n",
-                         i, static_cast<unsigned>(line.ctLineIndex), line.byteStart, line.byteEnd, line.lineMinX,
-                         line.top, line.bottom - line.top, line.baseline);
-        }
-        std::fflush(stderr);
     }
 }
 

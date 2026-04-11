@@ -235,9 +235,9 @@ TEST_CASE("TextEditUtils: makeTextEditLayoutResult builds line metrics") {
 
 TEST_CASE("TextEditUtils: normalizeLineMetricsForEditing repairs zero-length empty lines from neighboring spans") {
     std::vector<LineMetrics> lines = {
-        LineMetrics {.ctLineIndex = 0, .byteStart = 0, .byteEnd = 20},
-        LineMetrics {.ctLineIndex = 1, .byteStart = 42, .byteEnd = 42},
-        LineMetrics {.ctLineIndex = 2, .byteStart = 22, .byteEnd = 46},
+        LineMetrics {.byteStart = 0, .byteEnd = 20, .ctLineIndex = 0},
+        LineMetrics {.byteStart = 42, .byteEnd = 42, .ctLineIndex = 1},
+        LineMetrics {.byteStart = 22, .byteEnd = 46, .ctLineIndex = 2},
     };
 
     normalizeLineMetricsForEditing(lines, 64);
