@@ -143,7 +143,6 @@ add_library(flux STATIC
   src/UI/Views/Text.cpp
   src/UI/Views/TextInput.cpp
   src/UI/Views/TextInputMultiline.cpp
-  src/UI/Views/TextArea.cpp
   src/UI/Views/Button.cpp
   src/UI/Views/Toggle.cpp
   src/UI/Views/Slider.cpp

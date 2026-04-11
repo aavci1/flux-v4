@@ -30,7 +30,7 @@ namespace {
 constexpr float kSelectionExtraBottomPx = 4.f;
 constexpr float kCaretScrollMarginPx = 8.f;
 
-/// Same rule as TextArea: styler runs must cover every UTF-8 byte without gaps.
+/// Same rule as multiline TextInput: styler runs must cover every UTF-8 byte without gaps.
 bool attributedRunsFullyCoverBuffer(std::vector<AttributedRun> const &runs, std::uint32_t n) {
     if (n == 0) {
         return true;

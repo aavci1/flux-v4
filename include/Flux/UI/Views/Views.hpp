@@ -21,7 +21,6 @@
 #include <Flux/UI/Views/Spacer.hpp>
 #include <Flux/UI/Views/ScrollView.hpp>
 #include <Flux/UI/Views/TextInput.hpp>
-#include <Flux/UI/Views/TextArea.hpp>
 #include <Flux/UI/Views/Toggle.hpp>
 #include <Flux/UI/Views/Slider.hpp>
 #include <Flux/UI/Views/Checkbox.hpp>
