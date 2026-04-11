@@ -285,7 +285,7 @@ Element LinkButton::body() const {
                                 .horizontalAlignment = HorizontalAlignment::Leading,
                                 .verticalAlignment = VerticalAlignment::Center,
                             }
-                                .padding(2.f, 3.f, 2.f, 3.f)
+                                .padding(0.f, 3.f, 0.f, 3.f)
                         )
                     }}
         .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
