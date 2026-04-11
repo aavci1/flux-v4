@@ -9,6 +9,7 @@
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Environment.hpp>
 #include <Flux/UI/Views/HStack.hpp>
+#include <Flux/UI/Views/Grid.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/Spacer.hpp>
 #include <Flux/UI/Views/Text.hpp>
@@ -317,6 +318,24 @@ TEST_CASE("HStack: stretch cross-axis expands explicit-height children to row he
   CHECK(rectsNear(leaves[1]->frame, Rect{40.f, 0.f, 40.f, 200.f}));
 }
 
+TEST_CASE("HStack: measure reflects flexed widths under finite constraint") {
+  NullTextSystem ts;
+  LayoutEngine le;
+  LayoutTree tree;
+  LayoutContextPtr ctx = makeLayoutContext(ts, le, tree, 200.f, 100.f);
+
+  Element el{HStack{
+      .spacing = 0.f,
+      .children = children(
+          Element{Rectangle{}}.size(40.f, 20.f),
+          Element{Rectangle{}}.flex(1.f, 1.f, 0.f),
+          Element{Rectangle{}}.size(40.f, 20.f)),
+  }};
+
+  Size const measured = el.measure(*ctx, LayoutConstraints{.maxWidth = 200.f, .maxHeight = 100.f}, {}, ts);
+  CHECK(measured.width == doctest::Approx(200.f));
+}
+
 TEST_CASE("Text measure resolves theme font and color before TextSystem") {
   RecordingTextSystem ts;
   LayoutEngine le;
@@ -470,6 +489,72 @@ TEST_CASE("VStack: stretch cross-axis expands explicit-width children to column 
   REQUIRE(leaves.size() == 2);
   CHECK(rectsNear(leaves[0]->frame, Rect{0.f, 0.f, 200.f, 30.f}));
   CHECK(rectsNear(leaves[1]->frame, Rect{0.f, 30.f, 200.f, 30.f}));
+}
+
+TEST_CASE("VStack: measure reflects flexed heights under finite constraint") {
+  NullTextSystem ts;
+  LayoutEngine le;
+  LayoutTree tree;
+  LayoutContextPtr ctx = makeLayoutContext(ts, le, tree, 100.f, 200.f);
+
+  Element el{VStack{
+      .spacing = 0.f,
+      .children = children(
+          Element{Rectangle{}}.size(100.f, 40.f),
+          Element{Rectangle{}}.flex(1.f, 1.f, 0.f),
+          Element{Rectangle{}}.size(100.f, 40.f)),
+  }};
+
+  Size const measured = el.measure(*ctx, LayoutConstraints{.maxWidth = 100.f, .maxHeight = 200.f}, {}, ts);
+  CHECK(measured.height == doctest::Approx(200.f));
+}
+
+// ── Grid ──────────────────────────────────────────────────────────────────────
+
+TEST_CASE("Grid: unconstrained width uses intrinsic column widths without overlap") {
+  auto tree = runLayout(
+      Element{Grid{
+          .columns = 2,
+          .horizontalSpacing = 10.f,
+          .verticalSpacing = 12.f,
+          .horizontalAlignment = Alignment::Start,
+          .verticalAlignment = Alignment::Start,
+          .children = children(
+              Element{Rectangle{}}.size(80.f, 30.f),
+              Element{Rectangle{}}.size(50.f, 30.f),
+              Element{Rectangle{}}.size(60.f, 40.f),
+              Element{Rectangle{}}.size(40.f, 40.f)),
+      }},
+      0.f, 0.f);
+
+  auto leaves = leavesOf(tree);
+  REQUIRE(leaves.size() == 4);
+  CHECK(rectsNear(leaves[0]->frame, Rect{0.f, 0.f, 80.f, 30.f}));
+  CHECK(rectsNear(leaves[1]->frame, Rect{90.f, 0.f, 50.f, 30.f}));
+  CHECK(rectsNear(leaves[2]->frame, Rect{0.f, 42.f, 60.f, 40.f}));
+  CHECK(rectsNear(leaves[3]->frame, Rect{90.f, 42.f, 40.f, 40.f}));
+}
+
+TEST_CASE("Grid: measure reports intrinsic width when width is unconstrained") {
+  NullTextSystem ts;
+  LayoutEngine le;
+  LayoutTree tree;
+  LayoutContextPtr ctx = makeLayoutContext(ts, le, tree, 0.f, 0.f);
+
+  Element el{Grid{
+      .columns = 2,
+      .horizontalSpacing = 10.f,
+      .verticalSpacing = 12.f,
+      .children = children(
+          Element{Rectangle{}}.size(80.f, 30.f),
+          Element{Rectangle{}}.size(50.f, 30.f),
+          Element{Rectangle{}}.size(60.f, 40.f),
+          Element{Rectangle{}}.size(40.f, 40.f)),
+  }};
+
+  Size const measured = el.measure(*ctx, LayoutConstraints{}, {}, ts);
+  CHECK(measured.width == doctest::Approx(140.f));
+  CHECK(measured.height == doctest::Approx(82.f));
 }
 
 // ── ZStack ────────────────────────────────────────────────────────────────────

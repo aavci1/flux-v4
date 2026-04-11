@@ -106,8 +106,8 @@ target_link_libraries(icon_demo PRIVATE flux)
 add_executable(theme_demo theme-demo/main.cpp)
 target_link_libraries(theme_demo PRIVATE flux)
 
-add_executable(stack_demo stack-demo/main.cpp)
-target_link_libraries(stack_demo PRIVATE flux)
+add_executable(layout_demo layout-demo/main.cpp)
+target_link_libraries(layout_demo PRIVATE flux)
 
 add_executable(notes_demo notes/main.cpp)
 target_link_libraries(notes_demo PRIVATE flux)
@@ -156,7 +156,7 @@ set(FLUX_EXAMPLE_TARGETS
     picker_demo
     icon_demo
     theme_demo
-    stack_demo
+    layout_demo
     notes_demo
     llm_studio
 )

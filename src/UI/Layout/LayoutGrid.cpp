@@ -59,6 +59,7 @@ void Grid::layout(LayoutContext& ctx) const {
   scope.logContainer("Grid");
 
   std::vector<float> rowH(rowCount, 0.f);
+  std::vector<float> colW(cols, 0.f);
   if (cellH > 0.f && rowCount > 0) {
     for (std::size_t r = 0; r < rowCount; ++r) {
       rowH[r] = cellH;
@@ -67,6 +68,12 @@ void Grid::layout(LayoutContext& ctx) const {
     for (std::size_t i = 0; i < n; ++i) {
       std::size_t const row = i / cols;
       rowH[row] = std::max(rowH[row], sizes[i].height);
+    }
+  }
+  if (cellW <= 0.f) {
+    for (std::size_t i = 0; i < n; ++i) {
+      std::size_t const col = i % cols;
+      colW[col] = std::max(colW[col], sizes[i].width);
     }
   }
 
@@ -91,7 +98,11 @@ void Grid::layout(LayoutContext& ctx) const {
       float const cx = x + hAlignOffset(sz.width, frameW, horizontalAlignment);
       float const cy = y + vAlignOffset(sz.height, frameH, verticalAlignment);
       scope.layoutChild(children[i], Rect{cx, cy, sz.width, sz.height}, innerForBuild);
-      x += cellW + horizontalSpacing;
+      float const advanceW = cellW > 0.f ? cellW : colW[c];
+      x += advanceW;
+      if (c + 1 < cols && i + 1 < n) {
+        x += horizontalSpacing;
+      }
     }
     y += rowH[r];
     if (r + 1 < rowCount) {
@@ -134,6 +145,7 @@ Size Grid::measure(LayoutContext& ctx, LayoutConstraints const& constraints, Lay
   }
 
   std::vector<float> rowH(rowCount, 0.f);
+  std::vector<float> colW(cols, 0.f);
   if (cellH > 0.f && rowCount > 0) {
     for (std::size_t r = 0; r < rowCount; ++r) {
       rowH[r] = cellH;
@@ -142,6 +154,12 @@ Size Grid::measure(LayoutContext& ctx, LayoutConstraints const& constraints, Lay
     for (std::size_t i = 0; i < n; ++i) {
       std::size_t const row = i / cols;
       rowH[row] = std::max(rowH[row], sizes[i].height);
+    }
+  }
+  if (cellW <= 0.f) {
+    for (std::size_t i = 0; i < n; ++i) {
+      std::size_t const col = i % cols;
+      colW[col] = std::max(colW[col], sizes[i].width);
     }
   }
 
@@ -158,7 +176,19 @@ Size Grid::measure(LayoutContext& ctx, LayoutConstraints const& constraints, Lay
     }
   }
 
-  float const totalW = innerW > 0.f ? assignedW : 0.f;
+  float totalW;
+  if (innerW > 0.f) {
+    totalW = assignedW;
+  } else {
+    totalW = 0.f;
+    std::size_t const usedCols = std::min(cols, n);
+    if (usedCols > 1) {
+      totalW += static_cast<float>(usedCols - 1) * horizontalSpacing;
+    }
+    for (std::size_t c = 0; c < usedCols; ++c) {
+      totalW += colW[c];
+    }
+  }
   return {totalW, totalH};
 }
 

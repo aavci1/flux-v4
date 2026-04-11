@@ -112,16 +112,11 @@ Size HStack::measure(LayoutContext& ctx, LayoutConstraints const& constraints, L
     return {0.f, 0.f};
   }
 
-  float sumW = 0.f;
   std::vector<Size> sizes;
   sizes.reserve(n);
-  if (n > 1) {
-    sumW += static_cast<float>(n - 1) * spacing;
-  }
   for (Element const& ch : children) {
     Size const s = ch.measure(ctx, childCs, LayoutHints{}, ts);
     sizes.push_back(s);
-    sumW += s.width;
   }
 
   float const assignedW = stackMainAxisSpan(0.f, constraints.maxWidth);
@@ -175,7 +170,14 @@ Size HStack::measure(LayoutContext& ctx, LayoutConstraints const& constraints, L
   if (alignment == Alignment::Stretch && std::isfinite(assignedHCross) && assignedHCross > 0.f) {
     outH = std::max(outH, assignedHCross);
   }
-  return {sumW, outH};
+  float outW = 0.f;
+  if (n > 1) {
+    outW += static_cast<float>(n - 1) * spacing;
+  }
+  for (float w : allocW) {
+    outW += w;
+  }
+  return {outW, outH};
 }
 
 } // namespace flux

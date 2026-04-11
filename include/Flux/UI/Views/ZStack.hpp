@@ -29,8 +29,8 @@ namespace flux {
 ///
 /// **Overlay composition:** siblings that share one coordinate system (e.g. a track `Rectangle` and a
 /// thumb `Rectangle` with `frame` positions relative to each other) should use `Start` / `Start`
-/// so every layer keeps the same origin. Default `Center` is for centering independent children
-/// (e.g. label over a full-bleed background).
+/// so every layer keeps the same origin. Set the alignments to `Center` when you want to center
+/// independent children (e.g. a label over a full-bleed background).
 ///
 /// To clip children to the stack’s bounds (e.g. scroll viewport), chain **`.clipContent(true)`** on the
 /// `Element` that wraps this `ZStack` (same as other views).
