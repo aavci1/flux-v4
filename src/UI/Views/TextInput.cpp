@@ -101,6 +101,12 @@ struct TextInputLayoutSnap {
     std::string layoutSource;
     float layoutContentW = 0.f;
     bool showingPlaceholder = false;
+    Font layoutFont {};
+    Color layoutTextColor {};
+    Color layoutPlaceholderColor {};
+    TextWrapping layoutWrapping = TextWrapping::NoWrap;
+    float layoutLineHeight = 0.f;
+    bool layoutUsedStyler = false;
 };
 
 struct TextInputStylerMemo {
@@ -154,9 +160,18 @@ bool ensureLayout(TextInputLayoutSnap &snap, std::string const &placeholderText,
                   TextWrapping wrapping, TextInputStylerMemo *memo = nullptr) {
     TextSystem &ts = Application::instance().textSystem();
     std::string const &layoutSource = showPlaceholder ? placeholderText : value;
+    Color const layoutTextColor =
+        showPlaceholder ? rs.placeholderColor : (validationColor ? validationColor(value) : rs.textColor);
+    bool const styleChanged =
+        snap.layoutFont.family != defaultFont.family || snap.layoutFont.size != defaultFont.size ||
+        snap.layoutFont.weight != defaultFont.weight || snap.layoutFont.italic != defaultFont.italic ||
+        snap.layoutTextColor != layoutTextColor || snap.layoutPlaceholderColor != rs.placeholderColor ||
+        snap.layoutWrapping != wrapping || snap.layoutLineHeight != rs.lineHeight ||
+        snap.layoutUsedStyler != static_cast<bool>(styler);
     bool const widthChanged = std::abs(snap.layoutContentW - contentW) > 0.5f;
     bool const needRelayout =
-        snap.layoutResult.empty() || widthChanged || snap.layoutSource != layoutSource || snap.showingPlaceholder != showPlaceholder;
+        snap.layoutResult.empty() || widthChanged || styleChanged || snap.layoutSource != layoutSource ||
+        snap.showingPlaceholder != showPlaceholder;
     if (!needRelayout) {
         return !snap.layoutResult.empty();
     }
@@ -169,6 +184,12 @@ bool ensureLayout(TextInputLayoutSnap &snap, std::string const &placeholderText,
     snap.layoutSource = text.utf8;
     snap.layoutContentW = contentW;
     snap.showingPlaceholder = showPlaceholder;
+    snap.layoutFont = defaultFont;
+    snap.layoutTextColor = layoutTextColor;
+    snap.layoutPlaceholderColor = rs.placeholderColor;
+    snap.layoutWrapping = wrapping;
+    snap.layoutLineHeight = rs.lineHeight;
+    snap.layoutUsedStyler = static_cast<bool>(styler);
     return !snap.layoutResult.empty();
 }
 
