@@ -31,8 +31,6 @@ struct ButtonColors {
     Color fillHover {};
     Color fillPress {};
     Color label {};
-    Color labelHover {};
-    Color labelPress {};
     Color border {};
     Color focusRing {};
     ShadowStyle shadow = ShadowStyle::none();
@@ -64,8 +62,6 @@ ButtonColors deriveColors(ButtonVariant variant, Color accent, Color destructive
             .fillHover = lighten(accent, 0.08f),
             .fillPress = darken(accent, 0.08f),
             .label = onAccent,
-            .labelHover = onAccent,
-            .labelPress = onAccent,
             .border = Colors::transparent,
             .focusRing = theme.colorBorderFocus,
             .shadow = ShadowStyle {.radius = theme.shadowRadiusControl, .offset = {0.f, theme.shadowOffsetYControl}, .color = theme.shadowColor},
@@ -76,8 +72,6 @@ ButtonColors deriveColors(ButtonVariant variant, Color accent, Color destructive
             .fillHover = theme.colorSurfaceHover,
             .fillPress = theme.colorSurfaceDisabled,
             .label = theme.colorTextPrimary,
-            .labelHover = theme.colorTextPrimary,
-            .labelPress = theme.colorTextPrimary,
             .border = theme.colorBorder,
             .focusRing = theme.colorBorderFocus,
             .shadow = ShadowStyle::none(),
@@ -88,8 +82,6 @@ ButtonColors deriveColors(ButtonVariant variant, Color accent, Color destructive
             .fillHover = lighten(destructive, 0.08f),
             .fillPress = darken(destructive, 0.08f),
             .label = onDanger,
-            .labelHover = onDanger,
-            .labelPress = onDanger,
             .border = Colors::transparent,
             .focusRing = theme.colorBorderFocus,
             .shadow = ShadowStyle {.radius = theme.shadowRadiusControl, .offset = {0.f, theme.shadowOffsetYControl}, .color = theme.shadowColor},
@@ -100,8 +92,6 @@ ButtonColors deriveColors(ButtonVariant variant, Color accent, Color destructive
             .fillHover = theme.colorAccentSubtle,
             .fillPress = Color {theme.colorAccentSubtle.r, theme.colorAccentSubtle.g, theme.colorAccentSubtle.b, std::min(theme.colorAccentSubtle.a + 0.08f, 1.f)},
             .label = accent,
-            .labelHover = accent,
-            .labelPress = accent,
             .border = Colors::transparent,
             .focusRing = theme.colorBorderFocus,
             .shadow = ShadowStyle::none(),
@@ -116,6 +106,7 @@ Element Button::body() const {
     Theme const &theme = useEnvironment<Theme>();
     auto [fontResolved, paddingResolved, radiusResolved, accent, destructive] = resolveStyle(style, theme);
     bool const isDisabled = disabled;
+    ButtonColors const colors = deriveColors(variant, accent, destructive, theme.colorOnAccent, theme.colorOnDanger, theme);
 
     Transition const trInstant = Transition::instant();
     Transition const trFast = theme.reducedMotion ? trInstant : Transition::ease(theme.durationFast);
@@ -125,34 +116,27 @@ Element Button::body() const {
     bool const hovered = useHover();
     bool const pressed = usePress();
     bool const focused = useFocus();
-    ButtonColors const colors = deriveColors(variant, accent, destructive, theme.colorOnAccent, theme.colorOnDanger, theme);
+
+    Color const fillTarget = isDisabled ? theme.colorSurfaceDisabled :
+                             pressed    ? colors.fillPress :
+                             hovered    ? colors.fillHover :
+                                          colors.fill;
+    Color const labelTarget = isDisabled ? theme.colorTextDisabled : colors.label;
 
     auto fillAnim = useAnimated<Color>(colors.fill);
-    {
-        Color const fillTarget = isDisabled ? theme.colorSurfaceDisabled : pressed ? colors.fillPress :
-                                                                       hovered     ? colors.fillHover :
-                                                                                     colors.fill;
-        if (*fillAnim != fillTarget) {
-            fillAnim.set(fillTarget, tr);
-        }
+    if (*fillAnim != fillTarget) {
+        fillAnim.set(fillTarget, tr);
     }
 
     auto labelAnim = useAnimated<Color>(colors.label);
-    {
-        Color const labelTarget = isDisabled ? theme.colorTextDisabled : pressed ? colors.labelPress :
-                                                                     hovered     ? colors.labelHover :
-                                                                                   colors.label;
-        if (*labelAnim != labelTarget) {
-            labelAnim.set(labelTarget, tr);
-        }
+    if (*labelAnim != labelTarget) {
+        labelAnim.set(labelTarget, tr);
     }
 
     auto scaleAnim = useAnimated<float>(1.f);
-    {
-        float const scaleTarget = (pressed && !isDisabled) ? 0.97f : 1.f;
-        if (std::abs(*scaleAnim - scaleTarget) > 0.001f) {
-            scaleAnim.set(scaleTarget, trFast);
-        }
+    float const scaleTarget = (pressed && !isDisabled) ? 0.97f : 1.f;
+    if (std::abs(*scaleAnim - scaleTarget) > 0.001f) {
+        scaleAnim.set(scaleTarget, trFast);
     }
 
     ShadowStyle shadow = ShadowStyle::none();
@@ -183,14 +167,9 @@ Element Button::body() const {
     bool const showFocusRing = !isDisabled && focused;
     CornerRadius const cr {radiusResolved};
 
-    StrokeStyle stroke {};
-    if (showFocusRing) {
-        stroke = StrokeStyle::solid(colors.focusRing, 2.f);
-    } else if (!isDisabled && colors.border.a > 0.01f) {
-        stroke = StrokeStyle::solid(colors.border, 1.f);
-    } else {
-        stroke = StrokeStyle::none();
-    }
+    StrokeStyle const stroke = showFocusRing                            ? StrokeStyle::solid(colors.focusRing, 2.f) :
+                               (!isDisabled && colors.border.a > 0.01f) ? StrokeStyle::solid(colors.border, 1.f) :
+                                                                          StrokeStyle::none();
 
     return ScaleAroundCenter {
         .scale = *scaleAnim,

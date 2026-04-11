@@ -1,7 +1,6 @@
 #include <Flux/UI/Views/Slider.hpp>
 
 #include <Flux/Core/KeyCodes.hpp>
-#include <Flux/Detail/Runtime.hpp>
 #include <Flux/Reactive/Interpolatable.hpp>
 #include <Flux/Reactive/Transition.hpp>
 #include <Flux/UI/Hooks.hpp>
@@ -17,6 +16,8 @@ namespace flux {
 
 namespace {
 
+constexpr float kDefaultSliderWidth = 160.f;
+
 float snapToStep(float raw, float step, float lo, float hi) {
     if (step <= 0.f) {
         return std::clamp(raw, lo, hi);
@@ -30,6 +31,17 @@ float fractionForValue(float val, float lo, float hi) {
         return 0.f;
     }
     return std::clamp((val - lo) / (hi - lo), 0.f, 1.f);
+}
+
+float resolvedSliderWidth(LayoutConstraints const *lc, std::optional<Rect> const &layoutRect,
+                          float minWidth) {
+    if (lc && std::isfinite(lc->maxWidth) && lc->maxWidth > 0.f) {
+        return std::max(lc->maxWidth, minWidth);
+    }
+    if (layoutRect && layoutRect->width > 0.f) {
+        return std::max(layoutRect->width, minWidth);
+    }
+    return std::max(kDefaultSliderWidth, minWidth);
 }
 
 } // namespace
@@ -72,22 +84,8 @@ Element Slider::body() const {
     }
 
     LayoutConstraints const *const lc = useLayoutConstraints();
-    float capW = std::numeric_limits<float>::infinity();
-    if (lc && std::isfinite(lc->maxWidth) && lc->maxWidth > 0.f) {
-        capW = lc->maxWidth;
-    }
     std::optional<Rect> const layoutRect = useLayoutRect();
-    Rect const slot = Runtime::current() ? Runtime::current()->buildSlotRect() : Rect {};
-    float componentWidth = thumbSize;
-    if (slot.width > 0.f) {
-        componentWidth = std::min(slot.width, capW);
-    } else if (layoutRect) {
-        componentWidth = std::min(layoutRect->width, capW);
-    } else if (std::isfinite(capW) && capW > 0.f) {
-        componentWidth = capW;
-    } else {
-        componentWidth = std::min(componentWidth, capW);
-    }
+    float const componentWidth = resolvedSliderWidth(lc, layoutRect, thumbSize);
     float const usableWidth = std::max(componentWidth - thumbSize, 1.f);
 
     float const fraction = fractionForValue(*value, min, max);
