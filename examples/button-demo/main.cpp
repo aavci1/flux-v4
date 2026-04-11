@@ -248,73 +248,63 @@ Element makeVariantGallery(Theme const &theme, State<std::string> lastEvent) {
     return makeSectionCard(
         theme, "Variants In Context",
         "Each button style gets a believable job: primary commits, secondary supports, ghost stays quiet, and destructive asks for intent.",
-        VStack {
-            .spacing = theme.space3,
+        Grid {
+            .columns = 2,
+            .horizontalSpacing = theme.space3,
+            .verticalSpacing = theme.space3,
             .children = children(
-                HStack {
-                    .spacing = theme.space3,
-                    .alignment = Alignment::Stretch,
-                    .children = children(
-                        makeVariantTile(
-                            theme, "Primary",
-                            "Use one per cluster when the screen has a clear next step.",
-                            Button {
-                                .label = "Create Invoice",
-                                .variant = ButtonVariant::Primary,
-                                .onTap =
-                                    [lastEvent] {
-                                        lastEvent = "Primary pressed: a single obvious action works best when it carries the most visual weight.";
-                                        std::fprintf(stderr, "[button-demo] Create invoice\n");
-                                    },
-                            }
-                        ),
-                        makeVariantTile(
-                            theme, "Secondary",
-                            "Supportive tasks can stay prominent without overpowering the primary action.",
-                            Button {
-                                .label = "Compare Plans",
-                                .variant = ButtonVariant::Secondary,
-                                .onTap =
-                                    [lastEvent] {
-                                        lastEvent = "Secondary pressed: supportive actions should remain easy to find but visually lighter.";
-                                        std::fprintf(stderr, "[button-demo] Compare plans\n");
-                                    },
-                            }
-                        )
-                    )
-                },
-                HStack {
-                    .spacing = theme.space3,
-                    .alignment = Alignment::Stretch,
-                    .children = children(
-                        makeVariantTile(
-                            theme, "Destructive",
-                            "Reserve this for irreversible or expensive actions so it keeps its signal.",
-                            Button {
-                                .label = "Delete Workspace",
-                                .variant = ButtonVariant::Destructive,
-                                .onTap =
-                                    [lastEvent] {
-                                        lastEvent = "Destructive pressed: this variant should feel deliberate, not routine.";
-                                        std::fprintf(stderr, "[button-demo] Delete workspace\n");
-                                    },
-                            }
-                        ),
-                        makeVariantTile(
-                            theme, "Ghost",
-                            "Low-chrome buttons fit quiet utility rows, filters, and lightweight dismissal actions.",
-                            Button {
-                                .label = "Skip For Now",
-                                .variant = ButtonVariant::Ghost,
-                                .onTap =
-                                    [lastEvent] {
-                                        lastEvent = "Ghost pressed: subtle actions still need a clear hover and focus state.";
-                                        std::fprintf(stderr, "[button-demo] Skip for now\n");
-                                    },
-                            }
-                        )
-                    )
-                }
+                makeVariantTile(
+                    theme, "Primary",
+                    "Use one per cluster when the screen has a clear next step.",
+                    Button {
+                        .label = "Create Invoice",
+                        .variant = ButtonVariant::Primary,
+                        .onTap =
+                            [lastEvent] {
+                                lastEvent = "Primary pressed: a single obvious action works best when it carries the most visual weight.";
+                                std::fprintf(stderr, "[button-demo] Create invoice\n");
+                            },
+                    }
+                ),
+                makeVariantTile(
+                    theme, "Secondary",
+                    "Supportive tasks can stay prominent without overpowering the primary action.",
+                    Button {
+                        .label = "Compare Plans",
+                        .variant = ButtonVariant::Secondary,
+                        .onTap =
+                            [lastEvent] {
+                                lastEvent = "Secondary pressed: supportive actions should remain easy to find but visually lighter.";
+                                std::fprintf(stderr, "[button-demo] Compare plans\n");
+                            },
+                    }
+                ),
+                makeVariantTile(
+                    theme, "Destructive",
+                    "Reserve this for irreversible or expensive actions so it keeps its signal.",
+                    Button {
+                        .label = "Delete Workspace",
+                        .variant = ButtonVariant::Destructive,
+                        .onTap =
+                            [lastEvent] {
+                                lastEvent = "Destructive pressed: this variant should feel deliberate, not routine.";
+                                std::fprintf(stderr, "[button-demo] Delete workspace\n");
+                            },
+                    }
+                ),
+                makeVariantTile(
+                    theme, "Ghost",
+                    "Low-chrome buttons fit quiet utility rows, filters, and lightweight dismissal actions.",
+                    Button {
+                        .label = "Skip For Now",
+                        .variant = ButtonVariant::Ghost,
+                        .onTap =
+                            [lastEvent] {
+                                lastEvent = "Ghost pressed: subtle actions still need a clear hover and focus state.";
+                                std::fprintf(stderr, "[button-demo] Skip for now\n");
+                            },
+                    }
+                )
             )
         }
     );
