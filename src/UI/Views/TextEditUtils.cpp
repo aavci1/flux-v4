@@ -1030,6 +1030,18 @@ int caretByteAtPoint(TextEditLayoutResult const &result, Point layoutPoint, std:
     return caretByteAtX(*result.layout, line, layoutPoint.x, buf);
 }
 
+int caretByteAtViewportPoint(TextEditLayoutResult const &result, Point viewportPoint, Point contentOrigin,
+                             Point scrollOffset, std::string const &buf) noexcept {
+    return caretByteAtPoint(
+        result,
+        Point {
+            viewportPoint.x - contentOrigin.x + scrollOffset.x,
+            viewportPoint.y - contentOrigin.y + scrollOffset.y,
+        },
+        buf
+    );
+}
+
 int moveCaretVertically(TextEditLayoutResult const &result, std::string const &buf, int currentByte,
                         int direction) noexcept {
     if (!result.layout || result.lines.empty()) {

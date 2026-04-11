@@ -112,6 +112,8 @@ int lineIndexForByte(std::vector<LineMetrics> const &lines, int byteOffset) noex
 int lineIndexForByte(TextEditLayoutResult const &result, int byteOffset) noexcept;
 TextEditLineHit lineHitAtY(TextEditLayoutResult const &result, float layoutY) noexcept;
 int caretByteAtPoint(TextEditLayoutResult const &result, Point layoutPoint, std::string const &buf) noexcept;
+int caretByteAtViewportPoint(TextEditLayoutResult const &result, Point viewportPoint, Point contentOrigin,
+                             Point scrollOffset, std::string const &buf) noexcept;
 int moveCaretVertically(TextEditLayoutResult const &result, std::string const &buf, int currentByte,
                         int direction) noexcept;
 float scrollOffsetXForByte(TextEditLayoutResult const &result, int byteOffset) noexcept;

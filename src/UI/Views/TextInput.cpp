@@ -280,47 +280,68 @@ std::vector<Element> makeSelectionAndCaretElements(detail::TextEditLayoutResult 
     return out;
 }
 
-int hitTestByte(TextInputLayoutSnap &snap, std::string const &placeholderText,
-                std::function<std::vector<AttributedRun>(std::string_view)> const &styler,
-                std::function<Color(std::string_view)> const &validationColor, TextEditBehavior &beh,
-                ResolvedTextInputStyle const &rs, Font const &defaultFont, float frameWidth, Point local,
-                int scrollByte, bool showPh) {
-    std::string const &buf = beh.value();
-    float const shellInset = inputShellInset(rs);
-    float const contentW = std::max(1.f, frameWidth - 2.f * (shellInset + rs.paddingH));
-    if (!ensureLayout(snap, placeholderText, styler, validationColor, rs, defaultFont, buf, contentW, showPh,
-                      TextWrapping::NoWrap)) {
-        return 0;
-    }
-    if (snap.layoutResult.lines.empty()) {
-        return 0;
-    }
-    float const scrollX = detail::scrollOffsetXForByte(snap.layoutResult, detail::utf8Clamp(buf, scrollByte));
-    float const lx = local.x - shellInset - rs.paddingH + scrollX;
-    std::string const &sliceBuf = showPh ? placeholderText : buf;
-    return detail::caretByteAtPoint(snap.layoutResult, Point {lx, 0.f}, sliceBuf);
+detail::TextEditSelection behaviorSelection(TextEditBehavior const &behavior, std::string const &text) {
+    return detail::TextEditSelection {
+        .caretByte = detail::utf8Clamp(text, behavior.caretByte()),
+        .anchorByte = detail::utf8Clamp(text, behavior.selectionAnchorByte()),
+    };
 }
 
-int hitTestLineWrapByte(TextEditBehavior &behavior, ResolvedTextInputStyle const &rs,
-                        std::string const &placeholder,
-                        std::function<std::vector<AttributedRun>(std::string_view)> const &styler,
-                        TextInputStylerMemo &stylerMemo, Font const &defaultFont, bool focused,
-                        TextInputLayoutSnap &snap, float frameWidth, Point local, float scrollY) {
-    std::string const &buf = behavior.value();
-    if (buf.empty()) {
-        return 0;
+Element buildTextInputContent(detail::TextEditLayoutResult const &layoutResult, detail::TextEditSelection const *selection,
+                              int caretByte, bool showCaret, std::string const *text, Point origin, float contentWidth,
+                              float containerWidth, float contentHeight, ResolvedTextInputStyle const &rs,
+                              float blinkPhase) {
+    std::vector<Element> layers;
+    if (layoutResult.layout) {
+        auto overlayChildren =
+            makeSelectionAndCaretElements(layoutResult, selection, caretByte, showCaret, text, origin, rs, blinkPhase);
+        layers.insert(layers.end(), std::make_move_iterator(overlayChildren.begin()),
+                      std::make_move_iterator(overlayChildren.end()));
+        layers.push_back(Element {TextLayoutDisplay {.textLayout = layoutResult.layout}}
+                             .size(contentWidth, layoutResult.layout->measuredSize.height)
+                             .position(origin.x, origin.y));
     }
 
-    bool const showPlaceholder = buf.empty() && !focused;
-    float const contentW = std::max(1.f, frameWidth - 2.f * (rs.borderWidth + rs.paddingH));
-    if (!ensureLayout(snap, placeholder, styler, nullptr, rs, defaultFont, buf, contentW, showPlaceholder,
-                      TextWrapping::Wrap, &stylerMemo)) {
+    return Element {ZStack {
+                        .horizontalAlignment = Alignment::Start,
+                        .verticalAlignment = Alignment::Start,
+                        .children = std::move(layers),
+                    }}
+        .size(containerWidth, contentHeight)
+        .clipContent(true);
+}
+
+template <typename HitTest>
+Element attachTextInputHandlers(Element editor, TextEditBehavior &behavior, bool disabled, HitTest hitTest) {
+    return std::move(editor)
+        .focusable(!disabled)
+        .cursor(Cursor::IBeam)
+        .onKeyDown([&behavior](KeyCode key, Modifiers mods) { behavior.handleKey(KeyEvent {key, mods}); })
+        .onTextInput([&behavior](std::string const &text) { behavior.handleTextInput(text); })
+        .onPointerDown([&behavior, hitTest = std::move(hitTest)](Point local) mutable {
+            behavior.handlePointerDown(hitTest(local), false);
+        })
+        .onPointerMove([&behavior, hitTest = std::move(hitTest)](Point local) mutable {
+            behavior.handlePointerDrag(hitTest(local));
+        })
+        .onPointerUp([&behavior](Point) { behavior.handlePointerUp(); });
+}
+
+int hitTestSingleLineByte(detail::TextEditLayoutResult const &layoutResult, Point local, Point contentOrigin,
+                          int scrollByte, std::string const &text) {
+    if (layoutResult.lines.empty()) {
         return 0;
     }
+    float const scrollX = detail::scrollOffsetXForByte(layoutResult, detail::utf8Clamp(text, scrollByte));
+    return detail::caretByteAtViewportPoint(layoutResult, local, contentOrigin, Point {scrollX, 0.f}, text);
+}
 
-    float const layoutY = local.y - rs.paddingV + scrollY;
-    float const layoutX = local.x - rs.paddingH;
-    return detail::caretByteAtPoint(snap.layoutResult, Point {layoutX, layoutY}, buf);
+int hitTestMultilineByte(detail::TextEditLayoutResult const &layoutResult, Point local, Point contentOrigin,
+                         float scrollY, std::string const &text) {
+    if (layoutResult.lines.empty()) {
+        return 0;
+    }
+    return detail::caretByteAtViewportPoint(layoutResult, local, contentOrigin, Point {0.f, scrollY}, text);
 }
 
 Element buildMultilineTextInput(TextInput const &input) {
@@ -367,61 +388,32 @@ Element buildMultilineTextInput(TextInput const &input) {
         scrollOffset = scroll;
     }
 
-    std::vector<Element> contentChildren;
-    if (snap.layoutResult.layout) {
-        auto selection = detail::TextEditSelection {
-            .caretByte = detail::utf8Clamp(buf, behavior.caretByte()),
-            .anchorByte = detail::utf8Clamp(buf, behavior.selectionAnchorByte()),
-        };
-        auto overlayChildren = makeSelectionAndCaretElements(snap.layoutResult,
-                                                             (!showPlaceholder && behavior.hasSelection()) ? &selection : nullptr,
-                                                             behavior.caretByte(),
-                                                             focused && !input.disabled && !showPlaceholder && !snap.layoutResult.lines.empty(),
-                                                             &buf,
-                                                             Point {resolved.paddingH, resolved.paddingV}, resolved,
-                                                             behavior.caretBlinkPhase());
-        contentChildren.insert(contentChildren.end(),
-                               std::make_move_iterator(overlayChildren.begin()),
-                               std::make_move_iterator(overlayChildren.end()));
-        contentChildren.push_back(Element {TextLayoutDisplay {.textLayout = snap.layoutResult.layout}}
-                                      .size(contentW, snap.layoutResult.layout->measuredSize.height)
-                                      .position(resolved.paddingH, resolved.paddingV));
-    }
-
     float const contentHeight =
         (snap.layoutResult.layout ? snap.layoutResult.layout->measuredSize.height : 0.f) + 2.f * resolved.paddingV;
-    Element content = Element {ZStack {
-                                   .horizontalAlignment = Alignment::Start,
-                                   .verticalAlignment = Alignment::Start,
-                                   .children = std::move(contentChildren),
-                               }}
-                          .size(contentW + 2.f * resolved.paddingH, contentHeight)
-                          .clipContent(true);
+    auto selection = behaviorSelection(behavior, buf);
+    Point const contentOrigin {resolved.paddingH, resolved.paddingV};
+    Element content = buildTextInputContent(
+        snap.layoutResult,
+        (!showPlaceholder && behavior.hasSelection()) ? &selection : nullptr,
+        behavior.caretByte(),
+        focused && !input.disabled && !showPlaceholder && !snap.layoutResult.lines.empty(),
+        &buf,
+        contentOrigin,
+        contentW,
+        contentW + 2.f * resolved.paddingH,
+        contentHeight,
+        resolved,
+        behavior.caretBlinkPhase()
+    );
 
-    Element editor = std::move(content)
-                         .focusable(!input.disabled)
-                         .cursor(Cursor::IBeam)
-                         .onKeyDown([&behavior](KeyCode key, Modifiers mods) { behavior.handleKey(KeyEvent {key, mods}); })
-                         .onTextInput([&behavior](std::string const &text) { behavior.handleTextInput(text); })
-                         .onPointerDown([placeholder = input.placeholder, styler = input.styler, &behavior, &snap, resolved,
-                                         &stylerMemo, defaultFont, focused, scrollOffset, layoutRect](Point local) {
-                             float const frameWidth = layoutRect ? layoutRect->width : 400.f;
-                             float const scroll = (*scrollOffset).y;
-                             int const byte =
-                                 hitTestLineWrapByte(behavior, resolved, placeholder, styler, stylerMemo, defaultFont,
-                                                     focused, snap, frameWidth, local, scroll);
-                             behavior.handlePointerDown(byte, false);
-                         })
-                         .onPointerMove([placeholder = input.placeholder, styler = input.styler, &behavior, &snap, resolved,
-                                         &stylerMemo, defaultFont, focused, scrollOffset, layoutRect](Point local) {
-                             float const frameWidth = layoutRect ? layoutRect->width : 400.f;
-                             float const scroll = (*scrollOffset).y;
-                             int const byte =
-                                 hitTestLineWrapByte(behavior, resolved, placeholder, styler, stylerMemo, defaultFont,
-                                                     focused, snap, frameWidth, local, scroll);
-                             behavior.handlePointerDrag(byte);
-                         })
-                         .onPointerUp([&behavior](Point) { behavior.handlePointerUp(); });
+    Element editor = attachTextInputHandlers(
+        std::move(content),
+        behavior,
+        input.disabled,
+        [&snap, &buf, scrollOffset, contentOrigin](Point local) {
+            return hitTestMultilineByte(snap.layoutResult, local, contentOrigin, (*scrollOffset).y, buf);
+        }
+    );
 
     Element scroller = Element {ScrollView {
         .axis = ScrollAxis::Vertical,
@@ -436,47 +428,41 @@ Element buildMultilineTextInput(TextInput const &input) {
         .height(input.multilineHeight.fixed > 0.f ? input.multilineHeight.fixed : input.multilineHeight.minIntrinsic);
 }
 
-} // namespace
-
-Element TextInput::body() const {
-    if (multiline) {
-        return buildMultilineTextInput(*this);
-    }
-
+Element buildSingleLineTextInput(TextInput const &input) {
     Theme const &theme = useEnvironment<Theme>();
-    ResolvedTextInputStyle const resolved = resolveTextInputStyle(style, theme);
-    Font const defaultFont = text_detail::resolveBodyTextStyle(style.font, kColorFromTheme).first;
+    ResolvedTextInputStyle const resolved = resolveTextInputStyle(input.style, theme);
+    Font const defaultFont = text_detail::resolveBodyTextStyle(input.style.font, kColorFromTheme).first;
 
-    auto &beh = useTextEditBehavior(value, {.multiline = false,
-                                            .maxLength = maxLength,
-                                            .acceptsTab = false,
-                                            .submitsOnEnter = true,
-                                            .onChange = onChange,
-                                            .onSubmit = onSubmit,
-                                            .onEscape = onEscape,
-                                            .verticalResolver = nullptr});
-    beh.setDisabled(disabled);
+    auto &behavior = useTextEditBehavior(input.value, {.multiline = false,
+                                                       .maxLength = input.maxLength,
+                                                       .acceptsTab = false,
+                                                       .submitsOnEnter = true,
+                                                       .onChange = input.onChange,
+                                                       .onSubmit = input.onSubmit,
+                                                       .onEscape = input.onEscape,
+                                                       .verticalResolver = nullptr});
+    behavior.setDisabled(input.disabled);
 
     bool const focused = useFocus();
-    beh.setFocused(focused);
+    behavior.setFocused(focused);
 
     TextInputLayoutSnap &snap = StateStore::current()->claimSlot<TextInputLayoutSnap>();
     State<int> scrollByte = useState(0);
     std::optional<Rect> layoutRect = useLayoutRect();
     float const shellInset = inputShellInset(resolved);
     float const fieldHeight =
-        resolvedInputFieldHeight(defaultFont, resolved.textColor, resolved.paddingV + shellInset, style.height);
+        resolvedInputFieldHeight(defaultFont, resolved.textColor, resolved.paddingV + shellInset, input.style.height);
     float const frameWidth =
         layoutRect ? layoutRect->width : (snap.layoutContentW > 0.f ? snap.layoutContentW + 2.f * (shellInset + resolved.paddingH) : 400.f);
     float const contentW = std::max(1.f, frameWidth - 2.f * (shellInset + resolved.paddingH));
-    std::string const &buf = beh.value();
-    bool const showPh = buf.empty() && !focused;
-    ensureLayout(snap, placeholder, styler, validationColor, resolved, defaultFont, buf, contentW, showPh,
+    std::string const &buf = behavior.value();
+    bool const showPlaceholder = buf.empty() && !focused;
+    ensureLayout(snap, input.placeholder, input.styler, input.validationColor, resolved, defaultFont, buf, contentW, showPlaceholder,
                  TextWrapping::NoWrap);
 
-    int sb = !showPh ? detail::utf8Clamp(buf, *scrollByte) : 0;
-    if (beh.consumeEnsureCaretVisibleRequest() && !showPh) {
-        sb = detail::scrollByteToKeepCaretVisible(snap.layoutResult, buf, sb, beh.caretByte(),
+    int sb = !showPlaceholder ? detail::utf8Clamp(buf, *scrollByte) : 0;
+    if (behavior.consumeEnsureCaretVisibleRequest() && !showPlaceholder) {
+        sb = detail::scrollByteToKeepCaretVisible(snap.layoutResult, buf, sb, behavior.caretByte(),
                                                   contentW, kCaretScrollMarginPx);
     }
     if (sb != *scrollByte) {
@@ -484,57 +470,41 @@ Element TextInput::body() const {
     }
     float const scrollX = detail::scrollOffsetXForByte(snap.layoutResult, sb);
     Point const textOrigin {shellInset + resolved.paddingH - scrollX, shellInset + resolved.paddingV};
+    auto selection = behaviorSelection(behavior, buf);
+    Element content = buildTextInputContent(
+        snap.layoutResult,
+        (!showPlaceholder && behavior.hasSelection()) ? &selection : nullptr,
+        behavior.caretByte(),
+        focused && !input.disabled && !showPlaceholder,
+        &buf,
+        textOrigin,
+        contentW,
+        0.f,
+        fieldHeight,
+        resolved,
+        behavior.caretBlinkPhase()
+    );
 
-    std::vector<Element> layers;
-    if (snap.layoutResult.layout) {
-        auto selection = detail::TextEditSelection {
-            .caretByte = detail::utf8Clamp(buf, beh.caretByte()),
-            .anchorByte = detail::utf8Clamp(buf, beh.selectionAnchorByte()),
-        };
-        auto overlayChildren = makeSelectionAndCaretElements(snap.layoutResult,
-                                                             (!showPh && beh.hasSelection()) ? &selection : nullptr,
-                                                             beh.caretByte(),
-                                                             focused && !disabled && !showPh,
-                                                             &buf,
-                                                             textOrigin, resolved, beh.caretBlinkPhase());
-        layers.insert(layers.end(), std::make_move_iterator(overlayChildren.begin()),
-                      std::make_move_iterator(overlayChildren.end()));
-        layers.push_back(Element {TextLayoutDisplay {.textLayout = snap.layoutResult.layout}}
-                             .size(contentW, snap.layoutResult.layout->measuredSize.height)
-                             .position(textOrigin.x, textOrigin.y));
+    Element editor = attachTextInputHandlers(
+        std::move(content),
+        behavior,
+        input.disabled,
+        [&snap, &buf, scrollByte, textOrigin](Point local) {
+            return hitTestSingleLineByte(snap.layoutResult, local, textOrigin, *scrollByte, buf);
+        }
+    );
+
+    return decorateInputField(std::move(editor), resolved, focused, input.disabled)
+        .height(fieldHeight);
+}
+
+} // namespace
+
+Element TextInput::body() const {
+    if (multiline) {
+        return buildMultilineTextInput(*this);
     }
-
-    Element content = Element {ZStack {
-                                   .horizontalAlignment = Alignment::Start,
-                                   .verticalAlignment = Alignment::Start,
-                                   .children = std::move(layers),
-                               }}
-                          .size(0.f, fieldHeight)
-                          .clipContent(true);
-
-    return decorateInputField(std::move(content), resolved, focused, disabled)
-        .height(fieldHeight)
-        .focusable(!disabled)
-        .cursor(Cursor::IBeam)
-        .onKeyDown([&beh](KeyCode key, Modifiers mods) { beh.handleKey(KeyEvent {key, mods}); })
-        .onTextInput([&beh](std::string const &t) { beh.handleTextInput(t); })
-        .onPointerDown([ph = placeholder, stylerFn = styler, validationFn = validationColor, &beh, &snap, scrollByte,
-                        resolved, defaultFont, layoutRect, focused](Point local) {
-            float const fw = layoutRect ? layoutRect->width : 400.f;
-            bool const showPh = beh.value().empty() && !focused;
-            int const byte =
-                hitTestByte(snap, ph, stylerFn, validationFn, beh, resolved, defaultFont, fw, local, *scrollByte, showPh);
-            beh.handlePointerDown(byte, false);
-        })
-        .onPointerMove([ph = placeholder, stylerFn = styler, validationFn = validationColor, &beh, &snap, scrollByte,
-                        resolved, defaultFont, layoutRect, focused](Point local) {
-            float const fw = layoutRect ? layoutRect->width : 400.f;
-            bool const showPh = beh.value().empty() && !focused;
-            int const byte =
-                hitTestByte(snap, ph, stylerFn, validationFn, beh, resolved, defaultFont, fw, local, *scrollByte, showPh);
-            beh.handlePointerDrag(byte);
-        })
-        .onPointerUp([&beh](Point) { beh.handlePointerUp(); });
+    return buildSingleLineTextInput(*this);
 }
 
 } // namespace flux
