@@ -70,6 +70,11 @@ struct TextEditLayoutResult {
     [[nodiscard]] bool empty() const noexcept { return !layout; }
 };
 
+struct TextEditLineHit {
+    int lineIndex = 0;
+    bool clamped = false;
+};
+
 struct TextEditMutation {
     std::string text;
     TextEditSelection selection {};
@@ -101,8 +106,19 @@ TextEditMutation eraseWord(std::string const &text, TextEditSelection const &sel
 
 /// Binary search over sorted `byteStart`. Returns index of the line containing `byteOffset`, clamped.
 int lineIndexForByte(std::vector<LineMetrics> const &lines, int byteOffset) noexcept;
+int lineIndexForByte(TextEditLayoutResult const &result, int byteOffset) noexcept;
+TextEditLineHit lineHitAtY(TextEditLayoutResult const &result, float layoutY) noexcept;
+int caretByteAtPoint(TextEditLayoutResult const &result, Point layoutPoint, std::string const &buf) noexcept;
+int moveCaretVertically(TextEditLayoutResult const &result, std::string const &buf, int currentByte,
+                        int direction) noexcept;
+float scrollOffsetXForByte(TextEditLayoutResult const &result, int byteOffset) noexcept;
+int scrollByteToKeepCaretVisible(TextEditLayoutResult const &result, std::string const &buf, int scrollByte,
+                                 int caretByte, float viewportWidth, float marginPx) noexcept;
+float scrollOffsetYToKeepCaretVisible(TextEditLayoutResult const &result, float scrollY, float viewportHeight,
+                                      int caretByte, float marginPx) noexcept;
 
 float caretXForByte(TextLayout const &layout, LineMetrics const &line, int byteOffset) noexcept;
+float caretXForByte(TextEditLayoutResult const &result, int byteOffset) noexcept;
 
 /// Vertical extent for drawing a caret on \p line (layout Y, same as `LineMetrics::top/bottom`).
 /// Computed from runs on that CT line (`min(origin.y - ascent)`, `max(origin.y + descent)`), matching
@@ -110,6 +126,9 @@ float caretXForByte(TextLayout const &layout, LineMetrics const &line, int byteO
 /// `LineMetrics` (extending the box to the layout’s max typographic line height when needed) or
 /// baseline ± max ascent/descent from any run in the layout.
 std::pair<float, float> lineCaretYRangeInLayout(TextLayout const &layout, LineMetrics const &line) noexcept;
+std::pair<float, float> lineCaretYRangeInLayout(TextEditLayoutResult const &result, int byteOffset) noexcept;
+Rect caretRect(TextEditLayoutResult const &result, int byteOffset, float originX = 0.f, float originY = 0.f,
+               float strokeWidth = kTextCaretStrokeWidthPx) noexcept;
 
 int caretByteAtX(TextLayout const &layout, LineMetrics const &line, float layoutX, std::string const &buf) noexcept;
 

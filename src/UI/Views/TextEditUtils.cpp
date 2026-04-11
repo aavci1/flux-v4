@@ -681,6 +681,42 @@ int lineIndexForByte(std::vector<LineMetrics> const &lines, int byteOffset) noex
     return 0;
 }
 
+int lineIndexForByte(TextEditLayoutResult const &result, int byteOffset) noexcept {
+    return lineIndexForByte(result.lines, byteOffset);
+}
+
+TextEditLineHit lineHitAtY(TextEditLayoutResult const &result, float layoutY) noexcept {
+    if (result.lines.empty()) {
+        return {};
+    }
+    auto const &first = result.lines.front();
+    auto const &last = result.lines.back();
+    if (layoutY < first.top) {
+        return {.lineIndex = 0, .clamped = true};
+    }
+    if (layoutY >= last.bottom) {
+        return {.lineIndex = static_cast<int>(result.lines.size()) - 1, .clamped = true};
+    }
+    for (int i = 0; i < static_cast<int>(result.lines.size()); ++i) {
+        auto const &line = result.lines[static_cast<std::size_t>(i)];
+        if (layoutY >= line.top && layoutY < line.bottom) {
+            return {.lineIndex = i, .clamped = false};
+        }
+    }
+    float bestDistance = std::numeric_limits<float>::infinity();
+    int bestIndex = 0;
+    for (int i = 0; i < static_cast<int>(result.lines.size()); ++i) {
+        auto const &line = result.lines[static_cast<std::size_t>(i)];
+        float const mid = (line.top + line.bottom) * 0.5f;
+        float const distance = std::abs(layoutY - mid);
+        if (distance < bestDistance) {
+            bestDistance = distance;
+            bestIndex = i;
+        }
+    }
+    return {.lineIndex = bestIndex, .clamped = true};
+}
+
 float caretXForByte(TextLayout const &layout, LineMetrics const &line, int byteOffset) noexcept {
     auto sorted = runsForLineSorted(layout, line.ctLineIndex);
     if (sorted.empty()) {
@@ -717,6 +753,15 @@ float caretXForByte(TextLayout const &layout, LineMetrics const &line, int byteO
 
     auto const *last = sorted.back();
     return last->origin.x + last->run.width;
+}
+
+float caretXForByte(TextEditLayoutResult const &result, int byteOffset) noexcept {
+    if (!result.layout || result.lines.empty()) {
+        return 0.f;
+    }
+    int const lineIndex = lineIndexForByte(result, byteOffset);
+    auto const &line = result.lines[static_cast<std::size_t>(lineIndex)];
+    return caretXForByte(*result.layout, line, byteOffset);
 }
 
 std::pair<float, float> lineCaretYRangeInLayout(TextLayout const &layout, LineMetrics const &line) noexcept {
@@ -776,6 +821,15 @@ std::pair<float, float> lineCaretYRangeInLayout(TextLayout const &layout, LineMe
     return {y0, y0 + fallbackH};
 }
 
+std::pair<float, float> lineCaretYRangeInLayout(TextEditLayoutResult const &result, int byteOffset) noexcept {
+    if (!result.layout || result.lines.empty()) {
+        return {0.f, 0.f};
+    }
+    int const lineIndex = lineIndexForByte(result, byteOffset);
+    auto const &line = result.lines[static_cast<std::size_t>(lineIndex)];
+    return lineCaretYRangeInLayout(*result.layout, line);
+}
+
 int caretByteAtX(TextLayout const &layout, LineMetrics const &line, float layoutX, std::string const &buf) noexcept {
     auto sorted = runsForLineSorted(layout, line.ctLineIndex);
     if (sorted.empty()) {
@@ -811,6 +865,89 @@ int caretByteAtX(TextLayout const &layout, LineMetrics const &line, float layout
     int const b0 = static_cast<int>(sorted.front()->utf8Begin);
     int const b1 = static_cast<int>(sorted.back()->utf8End);
     return utf8Clamp(buf, std::clamp(line.byteStart, b0, b1));
+}
+
+int caretByteAtPoint(TextEditLayoutResult const &result, Point layoutPoint, std::string const &buf) noexcept {
+    if (!result.layout || result.lines.empty()) {
+        return 0;
+    }
+    TextEditLineHit const hit = lineHitAtY(result, layoutPoint.y);
+    auto const &line = result.lines[static_cast<std::size_t>(hit.lineIndex)];
+    return caretByteAtX(*result.layout, line, layoutPoint.x, buf);
+}
+
+int moveCaretVertically(TextEditLayoutResult const &result, std::string const &buf, int currentByte,
+                        int direction) noexcept {
+    if (!result.layout || result.lines.empty()) {
+        return currentByte;
+    }
+    int const srcIndex = lineIndexForByte(result, currentByte);
+    int const dstIndex = std::clamp(srcIndex + direction, 0, static_cast<int>(result.lines.size()) - 1);
+    if (srcIndex == dstIndex) {
+        return currentByte;
+    }
+    auto const &srcLine = result.lines[static_cast<std::size_t>(srcIndex)];
+    auto const &dstLine = result.lines[static_cast<std::size_t>(dstIndex)];
+    float const x = caretXForByte(*result.layout, srcLine, currentByte);
+    return caretByteAtX(*result.layout, dstLine, x, buf);
+}
+
+float scrollOffsetXForByte(TextEditLayoutResult const &result, int byteOffset) noexcept {
+    return caretXForByte(result, byteOffset);
+}
+
+int scrollByteToKeepCaretVisible(TextEditLayoutResult const &result, std::string const &buf, int scrollByte,
+                                 int caretByte, float viewportWidth, float marginPx) noexcept {
+    if (!result.layout || result.lines.empty()) {
+        return scrollByte;
+    }
+    int cur = utf8Clamp(buf, scrollByte);
+    int const caret = utf8Clamp(buf, caretByte);
+    for (int iter = 0; iter < 128; ++iter) {
+        float const caretX = caretXForByte(result, caret);
+        float const relativeX = caretX - scrollOffsetXForByte(result, cur);
+        if (relativeX >= marginPx && relativeX <= viewportWidth - marginPx) {
+            break;
+        }
+        if (relativeX < marginPx) {
+            if (cur <= 0) {
+                break;
+            }
+            cur = utf8PrevChar(buf, cur);
+        } else {
+            if (cur >= static_cast<int>(buf.size())) {
+                break;
+            }
+            cur = utf8NextChar(buf, cur);
+        }
+    }
+    return cur;
+}
+
+float scrollOffsetYToKeepCaretVisible(TextEditLayoutResult const &result, float scrollY, float viewportHeight,
+                                      int caretByte, float marginPx) noexcept {
+    if (!result.layout || result.lines.empty()) {
+        return scrollY;
+    }
+    int const lineIndex = lineIndexForByte(result, caretByte);
+    auto const &line = result.lines[static_cast<std::size_t>(lineIndex)];
+    if (line.top < scrollY + marginPx) {
+        return line.top - marginPx;
+    }
+    if (line.bottom > scrollY + viewportHeight - marginPx) {
+        return line.bottom - viewportHeight + marginPx;
+    }
+    return scrollY;
+}
+
+Rect caretRect(TextEditLayoutResult const &result, int byteOffset, float originX, float originY,
+               float strokeWidth) noexcept {
+    if (!result.layout || result.lines.empty()) {
+        return {originX, originY, strokeWidth, 0.f};
+    }
+    float const x = originX + caretXForByte(result, byteOffset);
+    auto const [y0, y1] = lineCaretYRangeInLayout(result, byteOffset);
+    return {x - strokeWidth * 0.5f, originY + y0, strokeWidth, std::max(0.f, y1 - y0)};
 }
 
 std::vector<Rect> selectionRects(TextEditLayoutResult const &result, TextEditSelection const &selection,

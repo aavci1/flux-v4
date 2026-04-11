@@ -160,11 +160,10 @@ int hitTestByte(TextInputSnap &snap, std::string const &placeholderText,
     if (snap.layoutResult.lines.empty()) {
         return 0;
     }
-    detail::LineMetrics const &line0 = snap.layoutResult.lines[0];
-    float const scrollX = detail::caretXForByte(*snap.layoutResult.layout, line0, detail::utf8Clamp(buf, scrollByte));
+    float const scrollX = detail::scrollOffsetXForByte(snap.layoutResult, detail::utf8Clamp(buf, scrollByte));
     float const lx = local.x - rs.borderWidth - rs.paddingH + scrollX;
     std::string const &sliceBuf = showPh ? placeholderText : buf;
-    return detail::caretByteAtX(*snap.layoutResult.layout, line0, lx, sliceBuf);
+    return detail::caretByteAtPoint(snap.layoutResult, Point {lx, 0.f}, sliceBuf);
 }
 
 struct TextInputView {
@@ -216,8 +215,6 @@ struct TextInputView {
             }
             return;
         }
-        detail::LineMetrics const &line0 = snap->layoutResult.lines[0];
-
         Point textOrigin {innerLeft, innerTop};
         int sb = *scroll;
         if (!showPh) {
@@ -228,29 +225,11 @@ struct TextInputView {
         scroll = sb;
 
         if (behavior->consumeEnsureCaretVisibleRequest() && !showPh) {
-            int cur = sb;
-            for (int iter = 0; iter < 128; ++iter) {
-                float const cx = detail::caretXForByte(*snap->layoutResult.layout, line0, behavior->caretByte());
-                float const rel = cx - detail::caretXForByte(*snap->layoutResult.layout, line0, cur);
-                if (rel >= kCaretScrollMarginPx && rel <= contentW - kCaretScrollMarginPx) {
-                    break;
-                }
-                if (rel < kCaretScrollMarginPx) {
-                    if (cur <= 0) {
-                        break;
-                    }
-                    cur = detail::utf8PrevChar(buf, cur);
-                } else {
-                    if (cur >= static_cast<int>(buf.size())) {
-                        break;
-                    }
-                    cur = detail::utf8NextChar(buf, cur);
-                }
-            }
-            scroll = cur;
+            scroll = detail::scrollByteToKeepCaretVisible(snap->layoutResult, buf, sb, behavior->caretByte(),
+                                                          contentW, kCaretScrollMarginPx);
         }
 
-        float const scrollX2 = detail::caretXForByte(*snap->layoutResult.layout, line0, *scroll);
+        float const scrollX2 = detail::scrollOffsetXForByte(snap->layoutResult, *scroll);
         textOrigin.x -= scrollX2;
 
         if (!showPh && behavior->hasSelection()) {
@@ -267,15 +246,16 @@ struct TextInputView {
         canvas.drawTextLayout(*snap->layoutResult.layout, textOrigin);
 
         if (focused && !disabled && !showPh) {
-            float const cx =
-                detail::caretXForByte(*snap->layoutResult.layout, line0, behavior->caretByte()) + textOrigin.x;
-            auto const [caretY0, caretY1] = detail::lineCaretYRangeInLayout(*snap->layoutResult.layout, line0);
+            Rect const caretRect =
+                detail::caretRect(snap->layoutResult, behavior->caretByte(), textOrigin.x, innerTop,
+                                  detail::kTextCaretStrokeWidthPx);
             float const phase = behavior->caretBlinkPhase();
             float const alpha = phase <= 0.5f ? 1.f : 0.f;
             Color cc = rs.caretColor;
             cc.a *= alpha;
-            canvas.drawLine(Point {cx, innerTop + caretY0}, Point {cx, innerTop + caretY1},
-                            StrokeStyle::solid(cc, detail::kTextCaretStrokeWidthPx));
+            float const centerX = caretRect.x + caretRect.width * 0.5f;
+            canvas.drawLine(Point {centerX, caretRect.y}, Point {centerX, caretRect.y + caretRect.height},
+                            StrokeStyle::solid(cc, caretRect.width));
         }
 
         if (disabled) {
@@ -353,7 +333,8 @@ AttributedString buildLineWrapAttributedString(std::string const &placeholderTex
         AttributedString ph;
         ph.utf8 = placeholderText;
         ph.runs.push_back(
-            AttributedRun {0, static_cast<std::uint32_t>(placeholderText.size()), defaultFont, rs.placeholderColor});
+            AttributedRun {0, static_cast<std::uint32_t>(placeholderText.size()), defaultFont, rs.placeholderColor}
+        );
         return ph;
     }
 
@@ -375,59 +356,10 @@ AttributedString buildLineWrapAttributedString(std::string const &placeholderTex
         }
     } else {
         as.runs.push_back(
-            AttributedRun {0, static_cast<std::uint32_t>(value.size()), defaultFont, rs.textColor});
+            AttributedRun {0, static_cast<std::uint32_t>(value.size()), defaultFont, rs.textColor}
+        );
     }
     return as;
-}
-
-int verticalMove(TextInputLineWrapSnap const &snap, std::string const &buf, int currentByte, int direction) {
-    if (snap.layoutResult.empty() || snap.layoutResult.lines.empty()) {
-        return currentByte;
-    }
-    TextLayout const &layout = *snap.layoutResult.layout;
-    int const srcIndex = detail::lineIndexForByte(snap.layoutResult.lines, currentByte);
-    int const targetIndex =
-        std::clamp(srcIndex + direction, 0, static_cast<int>(snap.layoutResult.lines.size()) - 1);
-    if (srcIndex == targetIndex) {
-        return currentByte;
-    }
-
-    auto const &srcLine = snap.layoutResult.lines[static_cast<std::size_t>(srcIndex)];
-    auto const &dstLine = snap.layoutResult.lines[static_cast<std::size_t>(targetIndex)];
-    float const x = detail::caretXForByte(layout, srcLine, currentByte);
-    return detail::caretByteAtX(layout, dstLine, x, buf);
-}
-
-std::pair<int, bool> lineIndexAtYWithFallback(std::vector<detail::LineMetrics> const &lines, float layoutY) {
-    if (lines.empty()) {
-        return {0, false};
-    }
-    auto const &first = lines.front();
-    auto const &last = lines.back();
-    if (layoutY < first.top) {
-        return {0, true};
-    }
-    if (layoutY >= last.bottom) {
-        return {static_cast<int>(lines.size()) - 1, true};
-    }
-    for (int i = 0; i < static_cast<int>(lines.size()); ++i) {
-        auto const &line = lines[static_cast<std::size_t>(i)];
-        if (layoutY >= line.top && layoutY < line.bottom) {
-            return {i, false};
-        }
-    }
-    float bestDistance = 1e9f;
-    int bestIndex = 0;
-    for (int i = 0; i < static_cast<int>(lines.size()); ++i) {
-        auto const &line = lines[static_cast<std::size_t>(i)];
-        float const mid = (line.top + line.bottom) * 0.5f;
-        float const distance = std::abs(layoutY - mid);
-        if (distance < bestDistance) {
-            bestDistance = distance;
-            bestIndex = i;
-        }
-    }
-    return {bestIndex, true};
 }
 
 int hitTestLineWrapByte(TextEditBehavior &behavior, ResolvedLineWrapTextInputStyle const &rs,
@@ -460,10 +392,8 @@ int hitTestLineWrapByte(TextEditBehavior &behavior, ResolvedLineWrapTextInputSty
     }
 
     float const layoutY = local.y - rs.borderWidth - rs.paddingV + scrollY;
-    auto const [lineIndex, _fallback] = lineIndexAtYWithFallback(snap.layoutResult.lines, layoutY);
-    detail::LineMetrics const &line = snap.layoutResult.lines[static_cast<std::size_t>(lineIndex)];
     float const layoutX = local.x - rs.borderWidth - rs.paddingH;
-    return detail::caretByteAtX(*snap.layoutResult.layout, line, layoutX, buf);
+    return detail::caretByteAtPoint(snap.layoutResult, Point {layoutX, layoutY}, buf);
 }
 
 struct MultilineTextInputView {
@@ -507,13 +437,8 @@ struct MultilineTextInputView {
             scrollOffset = scroll;
         }
         if (behavior->consumeEnsureCaretVisibleRequest() && !snap->layoutResult.lines.empty()) {
-            int const lineIndex = detail::lineIndexForByte(snap->layoutResult.lines, behavior->caretByte());
-            auto const &line = snap->layoutResult.lines[static_cast<std::size_t>(lineIndex)];
-            if (line.top < scroll.y + kCaretScrollMarginPx) {
-                scroll.y = line.top - kCaretScrollMarginPx;
-            } else if (line.bottom > scroll.y + (*viewportSize).height - kCaretScrollMarginPx) {
-                scroll.y = line.bottom - (*viewportSize).height + kCaretScrollMarginPx;
-            }
+            scroll.y = detail::scrollOffsetYToKeepCaretVisible(snap->layoutResult, scroll.y, (*viewportSize).height,
+                                                               behavior->caretByte(), kCaretScrollMarginPx);
             scroll = clampScrollOffset(ScrollAxis::Vertical, scroll, *viewportSize, *contentSize);
             scrollOffset = scroll;
         }
@@ -534,15 +459,13 @@ struct MultilineTextInputView {
         canvas.drawTextLayout(*snap->layoutResult.layout, textOrigin);
 
         if (focused && !disabled && !showPlaceholder && !snap->layoutResult.lines.empty()) {
-            int const lineIndex = detail::lineIndexForByte(snap->layoutResult.lines, behavior->caretByte());
-            auto const &line = snap->layoutResult.lines[static_cast<std::size_t>(lineIndex)];
-            float const caretX =
-                innerLeft + detail::caretXForByte(*snap->layoutResult.layout, line, behavior->caretByte());
-            auto const [caretY0, caretY1] = detail::lineCaretYRangeInLayout(*snap->layoutResult.layout, line);
+            Rect const caretRect = detail::caretRect(snap->layoutResult, behavior->caretByte(), innerLeft, innerTop,
+                                                     detail::kTextCaretStrokeWidthPx);
             Color caretColor = rs.caretColor;
             caretColor.a *= behavior->caretBlinkPhase() <= 0.5f ? 1.f : 0.f;
-            canvas.drawLine(Point {caretX, innerTop + caretY0}, Point {caretX, innerTop + caretY1},
-                            StrokeStyle::solid(caretColor, detail::kTextCaretStrokeWidthPx));
+            float const centerX = caretRect.x + caretRect.width * 0.5f;
+            canvas.drawLine(Point {centerX, caretRect.y}, Point {centerX, caretRect.y + caretRect.height},
+                            StrokeStyle::solid(caretColor, caretRect.width));
         }
     }
 
@@ -583,7 +506,7 @@ Element buildMultilineTextInput(TextInput const &input) {
                                                        .onSubmit = nullptr,
                                                        .onEscape = input.onEscape,
                                                        .verticalResolver = [&snap, st = input.value](int cur, int dir) {
-                                                           return verticalMove(snap, *st, cur, dir);
+                                                           return detail::moveCaretVertically(snap.layoutResult, *st, cur, dir);
                                                        }});
     behavior.setDisabled(input.disabled);
 
@@ -638,8 +561,7 @@ Element buildMultilineTextInput(TextInput const &input) {
         .children = children(std::move(editor)),
     }};
 
-    StrokeStyle const stroke = focused ? StrokeStyle::solid(resolved.borderFocusColor, resolved.borderFocusWidth)
-                                       : StrokeStyle::solid(resolved.borderColor, resolved.borderWidth);
+    StrokeStyle const stroke = focused ? StrokeStyle::solid(resolved.borderFocusColor, resolved.borderFocusWidth) : StrokeStyle::solid(resolved.borderColor, resolved.borderWidth);
 
     Element field = std::move(scroller)
                         .fill(FillStyle::solid(resolved.backgroundColor))
