@@ -94,9 +94,6 @@ target_link_libraries(popover_demo PRIVATE flux)
 add_executable(tooltip_demo tooltip-demo/main.cpp)
 target_link_libraries(tooltip_demo PRIVATE flux)
 
-add_executable(picker_demo picker-demo/main.cpp)
-target_link_libraries(picker_demo PRIVATE flux)
-
 add_executable(icon_demo icon-demo/main.cpp)
 target_link_libraries(icon_demo PRIVATE flux)
 
@@ -149,7 +146,6 @@ set(FLUX_EXAMPLE_TARGETS
     slider_demo
     popover_demo
     tooltip_demo
-    picker_demo
     icon_demo
     theme_demo
     layout_demo

@@ -147,7 +147,6 @@ add_library(flux STATIC
   src/UI/Views/Slider.cpp
   src/UI/Views/Checkbox.cpp
   src/UI/Views/ScrollView.cpp
-  src/UI/Views/Picker.cpp
   src/UI/Views/Icon.cpp
   src/UI/Views/Alert.cpp
   src/UI/Views/Popover.cpp
