@@ -98,6 +98,7 @@ struct CheckboxDemoRoot {
 
         auto termsAccepted = useState(false);
         auto newsletter = useState(true);
+        auto disabledState = useState(true);
         auto itemA = useState(true);
         auto itemB = useState(false);
         auto itemC = useState(true);
@@ -156,7 +157,7 @@ struct CheckboxDemoRoot {
                                                                                                                                                                },
                                                                                                                                                            }),
                                     checkboxRow(theme, "Disabled example", "Useful for unavailable or inherited defaults that still need to remain visible.", Checkbox {
-                                                                                                                                                                  .value = newsletter,
+                                                                                                                                                                  .value = disabledState,
                                                                                                                                                                   .disabled = true,
                                                                                                                                                               })
                                 )
