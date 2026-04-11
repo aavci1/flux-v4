@@ -45,12 +45,12 @@ struct ScrollIndicatorStyle {
     };
 }
 
-[[nodiscard]] Size resolveViewportSize(Size viewport, std::optional<Rect> const &layoutRect) {
-    if (viewport.width <= 0.f && layoutRect && layoutRect->width > 0.f) {
-        viewport.width = layoutRect->width;
+[[nodiscard]] Size resolveViewportSize(Size viewport, Rect const &bounds) {
+    if (viewport.width <= 0.f && bounds.width > 0.f) {
+        viewport.width = bounds.width;
     }
-    if (viewport.height <= 0.f && layoutRect && layoutRect->height > 0.f) {
-        viewport.height = layoutRect->height;
+    if (viewport.height <= 0.f && bounds.height > 0.f) {
+        viewport.height = bounds.height;
     }
     return viewport;
 }
@@ -173,8 +173,8 @@ Element ScrollView::body() const {
     State<Size> const viewport = viewportSize.signal ? viewportSize : useState<Size>({0.f, 0.f});
     State<Size> const content = contentSize.signal ? contentSize : useState<Size>({0.f, 0.f});
     auto indicatorOpacity = useAnimated<float>(0.f);
-    std::optional<Rect> const layoutRect = useLayoutRect();
-    Size const effectiveViewport = resolveViewportSize(*viewport, layoutRect);
+    Rect const bounds = useBounds();
+    Size const effectiveViewport = resolveViewportSize(*viewport, bounds);
     ScrollAxis const ax = axis;
     bool const dragScroll = dragScrollEnabled;
     Size const contentSize = *content;

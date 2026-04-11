@@ -33,18 +33,6 @@ float fractionForValue(float val, float lo, float hi) {
     return std::clamp((val - lo) / (hi - lo), 0.f, 1.f);
 }
 
-float useWidth(float minWidth) {
-    LayoutConstraints const *const lc = useLayoutConstraints();
-    std::optional<Rect> const layoutRect = useLayoutRect();
-    if (lc && std::isfinite(lc->maxWidth) && lc->maxWidth > 0.f) {
-        return std::max(lc->maxWidth, minWidth);
-    }
-    if (layoutRect && layoutRect->width > 0.f) {
-        return std::max(layoutRect->width, minWidth);
-    }
-    return std::max(kDefaultSliderWidth, minWidth);
-}
-
 } // namespace
 
 Slider::Style resolveStyle(Slider::Style const &style, Theme const &theme) {
@@ -84,7 +72,8 @@ Element Slider::body() const {
         }
     }
 
-    float const componentWidth = useWidth(thumbSize);
+    Rect const bounds = useBounds();
+    float const componentWidth = bounds.width > 0.f ? std::max(bounds.width, thumbSize) : std::max(kDefaultSliderWidth, thumbSize);
     float const usableWidth = std::max(componentWidth - thumbSize, 1.f);
 
     float const fraction = fractionForValue(*value, min, max);

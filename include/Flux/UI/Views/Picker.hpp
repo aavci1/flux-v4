@@ -364,8 +364,8 @@ struct Picker : ViewModifiers<Picker<T>> {
     Color const rowText = textR;
     Color const checkCol = brdFocusR;
 
-    std::optional<Rect> const layoutRect = useLayoutRect();
-    float const triggerWidth = layoutRect ? layoutRect->width : 200.f;
+    Rect const bounds = useBounds();
+    float const triggerWidth = bounds.width > 0.f ? bounds.width : 200.f;
     float const chevronIconSz = resolveFloat(kFloatFromTheme, theme.fontBody.size);
 
     auto fillAnim = useAnimated<Color>(bgR);

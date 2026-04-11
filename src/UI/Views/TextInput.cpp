@@ -357,7 +357,7 @@ Element buildMultilineTextInput(TextInput const &input) {
     State<Point> scrollOffset = useState(Point {0.f, 0.f});
     State<Size> viewportSize = useState(Size {0.f, 0.f});
     State<Size> contentSize = useState(Size {0.f, 0.f});
-    std::optional<Rect> layoutRect = useLayoutRect();
+    Rect const bounds = useBounds();
 
     auto &behavior = useTextEditBehavior(input.value, {.multiline = true,
                                                        .maxLength = input.maxLength,
@@ -373,7 +373,9 @@ Element buildMultilineTextInput(TextInput const &input) {
 
     bool const focused = useFocus();
     behavior.setFocused(focused);
-    float const frameWidth = layoutRect ? layoutRect->width : (snap.layoutContentW > 0.f ? snap.layoutContentW + 2.f * resolved.paddingH : 400.f);
+    float const frameWidth =
+        bounds.width > 0.f ? bounds.width :
+        (snap.layoutContentW > 0.f ? snap.layoutContentW + 2.f * resolved.paddingH : 400.f);
     float const contentW = std::max(1.f, frameWidth - 2.f * resolved.paddingH);
     std::string const &buf = behavior.value();
     bool const showPlaceholder = buf.empty() && !focused;
@@ -450,12 +452,13 @@ Element buildSingleLineTextInput(TextInput const &input) {
 
     TextInputLayoutSnap &snap = StateStore::current()->claimSlot<TextInputLayoutSnap>();
     State<int> scrollByte = useState(0);
-    std::optional<Rect> layoutRect = useLayoutRect();
+    Rect const bounds = useBounds();
     float const shellInset = inputShellInset(resolved);
     float const fieldHeight =
         resolvedInputFieldHeight(defaultFont, resolved.textColor, resolved.paddingV + shellInset, input.style.height);
     float const frameWidth =
-        layoutRect ? layoutRect->width : (snap.layoutContentW > 0.f ? snap.layoutContentW + 2.f * (shellInset + resolved.paddingH) : 400.f);
+        bounds.width > 0.f ? bounds.width :
+        (snap.layoutContentW > 0.f ? snap.layoutContentW + 2.f * (shellInset + resolved.paddingH) : 400.f);
     float const contentW = std::max(1.f, frameWidth - 2.f * (shellInset + resolved.paddingH));
     std::string const &buf = behavior.value();
     bool const showPlaceholder = buf.empty() && !focused;

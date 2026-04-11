@@ -168,6 +168,13 @@ std::decay_t<std::invoke_result_t<Fn&&>> const& useMemo(Fn&& fn, Deps const&... 
 /// Window-space rect for the calling composite from the last completed layout pass (see `Runtime`).
 std::optional<Rect> useLayoutRect();
 
+/// Best-effort window-space bounds for the calling composite.
+///
+/// Uses the last completed layout rect when available; otherwise synthesizes a provisional box from
+/// the current composite layout constraints. Returns an empty rect when neither source can provide
+/// useful geometry yet.
+Rect useBounds();
+
 /// Layout constraints for the current composite `body()` call (see `Runtime::pushCompositeConstraints`).
 LayoutConstraints const* useLayoutConstraints();
 

@@ -73,6 +73,26 @@ std::optional<Rect> useLayoutRect() {
   return rt->layoutRectForCurrentComponent();
 }
 
+Rect useBounds() {
+  if (std::optional<Rect> const rect = useLayoutRect()) {
+    return *rect;
+  }
+
+  LayoutConstraints const* cs = useLayoutConstraints();
+  if (!cs) {
+    return {};
+  }
+
+  Rect bounds {};
+  if (std::isfinite(cs->maxWidth) && cs->maxWidth > 0.f) {
+    bounds.width = cs->maxWidth;
+  }
+  if (std::isfinite(cs->maxHeight) && cs->maxHeight > 0.f) {
+    bounds.height = cs->maxHeight;
+  }
+  return bounds;
+}
+
 LayoutConstraints const* useLayoutConstraints() {
   StateStore* store = StateStore::current();
   if (!store) {
