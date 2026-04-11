@@ -74,12 +74,29 @@ void TextEditBehavior::resetBlinkEpoch() {
     blinkEpoch_ = std::chrono::duration_cast<std::chrono::nanoseconds>(
         std::chrono::steady_clock::now().time_since_epoch()
     );
+    blinkVisible_ = true;
+}
+
+bool TextEditBehavior::blinkVisibleAt(std::chrono::nanoseconds now) const {
+    if (!state_.focused || state_.disabled) {
+        return true;
+    }
+    double const elapsed = std::chrono::duration<double>(now - blinkEpoch_).count();
+    double const period = kCaretBlinkPeriodSec;
+    double const phase = std::fmod(elapsed, period) / period;
+    return phase <= 0.5;
 }
 
 void TextEditBehavior::syncBlinkSubscription() {
     bool const want = state_.focused && !state_.disabled;
     if (want && !blinkSubscribed_) {
-        blinkHandle_ = AnimationClock::instance().subscribe([](AnimationTick const &) {
+        blinkVisible_ = true;
+        blinkHandle_ = AnimationClock::instance().subscribe([this](AnimationTick const &tick) {
+            bool const visible = blinkVisibleAt(std::chrono::nanoseconds {tick.deadlineNanos});
+            if (visible == blinkVisible_) {
+                return;
+            }
+            blinkVisible_ = visible;
             if (Application::hasInstance()) {
                 Application::instance().requestRedraw();
             }
@@ -105,13 +122,23 @@ float TextEditBehavior::caretBlinkPhase() const {
 }
 
 void TextEditBehavior::setFocused(bool f) {
+    if (state_.focused == f) {
+        return;
+    }
     state_.focused = f;
+    resetBlinkEpoch();
     syncBlinkSubscription();
+    markTextUiDirty();
 }
 
 void TextEditBehavior::setDisabled(bool d) {
+    if (state_.disabled == d) {
+        return;
+    }
     state_.disabled = d;
+    resetBlinkEpoch();
     syncBlinkSubscription();
+    markTextUiDirty();
 }
 
 void TextEditBehavior::moveCaretTo(int byte, bool extendSelection) {

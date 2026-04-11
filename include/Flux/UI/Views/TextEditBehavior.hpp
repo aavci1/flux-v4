@@ -97,6 +97,7 @@ class TextEditBehavior {
     void moveWord(int dir, bool extend);
     void moveChar(int dir, bool extend);
     void resetBlinkEpoch();
+    bool blinkVisibleAt(std::chrono::nanoseconds now) const;
     void syncBlinkSubscription();
     void pushUndo(UndoEntry entry, bool coalesceTyping);
 
@@ -111,6 +112,7 @@ class TextEditBehavior {
     std::deque<UndoEntry> redo_;
 
     std::chrono::nanoseconds blinkEpoch_ {};
+    bool blinkVisible_ = true;
     bool blinkSubscribed_ = false;
     ObserverHandle blinkHandle_ {};
 
