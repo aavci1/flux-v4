@@ -169,6 +169,36 @@ TEST_CASE("TextEditBehavior: cmd-backspace deletes to line start") {
     CHECK(behavior.caretByte() == 4);
 }
 
+TEST_CASE("TextEditBehavior: disabled ignores key, text input, and pointer down") {
+    Signal<std::string> value {std::string {"hello"}};
+    TextEditBehavior behavior {value, {.multiline = true}};
+    behavior.setDisabled(true);
+
+    CHECK_FALSE(behavior.handleKey(KeyEvent {.key = keys::RightArrow, .modifiers = Modifiers::None}));
+    CHECK_FALSE(behavior.handleTextInput("x"));
+    CHECK_FALSE(behavior.handlePointerDown(2, false));
+    CHECK(value.get() == "hello");
+    CHECK(behavior.caretByte() == static_cast<int>(value.get().size()));
+}
+
+TEST_CASE("TextEditBehavior: typing and navigation request caret visibility") {
+    Signal<std::string> value {std::string {"hello"}};
+    TextEditBehavior behavior {value, {.multiline = false}};
+
+    behavior.moveCaretTo(2, false);
+    CHECK(behavior.consumeEnsureCaretVisibleRequest());
+    CHECK_FALSE(behavior.consumeEnsureCaretVisibleRequest());
+
+    CHECK(behavior.handleTextInput("X"));
+    CHECK(value.get() == "heXllo");
+    CHECK(behavior.consumeEnsureCaretVisibleRequest());
+    CHECK_FALSE(behavior.consumeEnsureCaretVisibleRequest());
+
+    CHECK(behavior.handleKey(KeyEvent {.key = keys::RightArrow, .modifiers = Modifiers::None}));
+    CHECK(behavior.consumeEnsureCaretVisibleRequest());
+    CHECK_FALSE(behavior.consumeEnsureCaretVisibleRequest());
+}
+
 TEST_CASE("TextEditUtils: lineIndexForByte") {
     std::vector<LineMetrics> lines;
     LineMetrics a {};
@@ -250,6 +280,32 @@ TEST_CASE("TextEditUtils: normalizeLineMetricsForEditing repairs zero-length emp
     CHECK(lines[2].byteEnd == 46);
     CHECK(lineIndexForByte(lines, 21) == 1);
     CHECK(lineIndexForByte(lines, 22) == 2);
+}
+
+TEST_CASE("TextEditUtils: moveCaretVertically preserves empty visual lines") {
+    auto layout = std::make_shared<TextLayout>();
+    layout->lines = {
+        TextLayout::LineRange {.ctLineIndex = 0, .byteStart = 0, .byteEnd = 2, .lineMinX = 0.f, .top = 0.f, .bottom = 10.f, .baseline = 8.f},
+        TextLayout::LineRange {.ctLineIndex = 1, .byteStart = 2, .byteEnd = 2, .lineMinX = 0.f, .top = 10.f, .bottom = 20.f, .baseline = 18.f},
+        TextLayout::LineRange {.ctLineIndex = 2, .byteStart = 3, .byteEnd = 5, .lineMinX = 0.f, .top = 20.f, .bottom = 30.f, .baseline = 28.f},
+    };
+    TextEditLayoutResult const result = makeTextEditLayoutResult(layout, 5, 120.f);
+
+    CHECK(moveCaretVertically(result, "ab\ncd", 1, 1) == 2);
+    CHECK(moveCaretVertically(result, "ab\ncd", 3, -1) == 2);
+}
+
+TEST_CASE("TextEditUtils: scrollOffsetYToKeepCaretVisible handles empty visual lines") {
+    auto layout = std::make_shared<TextLayout>();
+    layout->lines = {
+        TextLayout::LineRange {.ctLineIndex = 0, .byteStart = 0, .byteEnd = 2, .lineMinX = 0.f, .top = 0.f, .bottom = 10.f, .baseline = 8.f},
+        TextLayout::LineRange {.ctLineIndex = 1, .byteStart = 2, .byteEnd = 2, .lineMinX = 0.f, .top = 10.f, .bottom = 20.f, .baseline = 18.f},
+        TextLayout::LineRange {.ctLineIndex = 2, .byteStart = 3, .byteEnd = 5, .lineMinX = 0.f, .top = 20.f, .bottom = 30.f, .baseline = 28.f},
+    };
+    TextEditLayoutResult const result = makeTextEditLayoutResult(layout, 5, 120.f);
+
+    CHECK(scrollOffsetYToKeepCaretVisible(result, 0.f, 8.f, 2, 2.f) == doctest::Approx(14.f));
+    CHECK(scrollOffsetYToKeepCaretVisible(result, 12.f, 8.f, 2, 2.f) == doctest::Approx(8.f));
 }
 
 TEST_CASE("TextEditUtils: selectionRects spans wrapped lines") {
