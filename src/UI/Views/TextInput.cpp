@@ -69,6 +69,7 @@ struct ResolvedTextInputStyle {
     float cornerRadius;
     float paddingH;
     float paddingV;
+    float lineHeight = 0.f;
 };
 
 ResolvedTextInputStyle resolveTextInputStyle(TextInput::Style const &style, Theme const &theme) {
@@ -86,21 +87,28 @@ ResolvedTextInputStyle resolveTextInputStyle(TextInput::Style const &style, Them
         .cornerRadius = resolveFloat(style.cornerRadius, theme.radiusMedium),
         .paddingH = resolveFloat(style.paddingH, theme.paddingFieldH),
         .paddingV = resolveFloat(style.paddingV, theme.paddingFieldV),
+        .lineHeight = resolveFloat(style.lineHeight, 0.f),
     };
 }
 
-struct TextInputSnap {
+struct TextInputLayoutSnap {
     detail::TextEditLayoutResult layoutResult;
     std::string layoutSource;
     float layoutContentW = 0.f;
     bool showingPlaceholder = false;
 };
 
+struct TextInputStylerMemo {
+    std::string value;
+    std::vector<AttributedRun> runs;
+};
+
 AttributedString buildAttributedString(std::string const &placeholderText,
                                        std::function<std::vector<AttributedRun>(std::string_view)> const &styler,
                                        std::function<Color(std::string_view)> const &validationColor,
                                        ResolvedTextInputStyle const &rs, Font const &defaultFont,
-                                       std::string const &val, bool showPlaceholder) {
+                                       std::string const &val, bool showPlaceholder,
+                                       TextInputStylerMemo *memo = nullptr) {
     if (showPlaceholder) {
         AttributedString ph;
         ph.utf8 = placeholderText;
@@ -111,10 +119,21 @@ AttributedString buildAttributedString(std::string const &placeholderText,
     as.utf8 = val;
     std::uint32_t const n = static_cast<std::uint32_t>(val.size());
     if (styler) {
-        as.runs = styler(val);
+        if (memo && memo->value == val && !memo->runs.empty() && attributedRunsFullyCoverBuffer(memo->runs, n)) {
+            as.runs = memo->runs;
+        } else {
+            as.runs = styler(val);
+            if (memo) {
+                memo->value = val;
+                memo->runs = as.runs;
+            }
+        }
         if (as.runs.empty() || !attributedRunsFullyCoverBuffer(as.runs, n)) {
             as.runs.clear();
             as.runs.push_back(AttributedRun {0, n, defaultFont, rs.textColor});
+            if (memo) {
+                memo->runs = as.runs;
+            }
         }
     } else {
         Color const c = validationColor ? validationColor(val) : rs.textColor;
@@ -123,10 +142,11 @@ AttributedString buildAttributedString(std::string const &placeholderText,
     return as;
 }
 
-bool ensureLayout(TextInputSnap &snap, std::string const &placeholderText,
+bool ensureLayout(TextInputLayoutSnap &snap, std::string const &placeholderText,
                   std::function<std::vector<AttributedRun>(std::string_view)> const &styler,
                   std::function<Color(std::string_view)> const &validationColor, ResolvedTextInputStyle const &rs,
-                  Font const &defaultFont, std::string const &value, float contentW, bool showPlaceholder) {
+                  Font const &defaultFont, std::string const &value, float contentW, bool showPlaceholder,
+                  TextWrapping wrapping, TextInputStylerMemo *memo = nullptr) {
     TextSystem &ts = Application::instance().textSystem();
     std::string const &layoutSource = showPlaceholder ? placeholderText : value;
     bool const widthChanged = std::abs(snap.layoutContentW - contentW) > 0.5f;
@@ -137,8 +157,8 @@ bool ensureLayout(TextInputSnap &snap, std::string const &placeholderText,
     }
 
     AttributedString text =
-        buildAttributedString(placeholderText, styler, validationColor, rs, defaultFont, value, showPlaceholder);
-    TextLayoutOptions const opts = text_detail::makeTextLayoutOptions(TextWrapping::NoWrap);
+        buildAttributedString(placeholderText, styler, validationColor, rs, defaultFont, value, showPlaceholder, memo);
+    TextLayoutOptions const opts = text_detail::makeTextLayoutOptions(wrapping, rs.lineHeight);
     auto layout = ts.layout(text, contentW, opts);
     snap.layoutResult = detail::makeTextEditLayoutResult(layout, static_cast<int>(text.utf8.size()), contentW);
     snap.layoutSource = text.utf8;
@@ -147,14 +167,15 @@ bool ensureLayout(TextInputSnap &snap, std::string const &placeholderText,
     return !snap.layoutResult.empty();
 }
 
-int hitTestByte(TextInputSnap &snap, std::string const &placeholderText,
+int hitTestByte(TextInputLayoutSnap &snap, std::string const &placeholderText,
                 std::function<std::vector<AttributedRun>(std::string_view)> const &styler,
                 std::function<Color(std::string_view)> const &validationColor, TextEditBehavior &beh,
                 ResolvedTextInputStyle const &rs, Font const &defaultFont, float frameWidth, Point local,
                 int scrollByte, bool showPh) {
     std::string const &buf = beh.value();
     float const contentW = std::max(1.f, frameWidth - 2.f * (rs.borderWidth + rs.paddingH));
-    if (!ensureLayout(snap, placeholderText, styler, validationColor, rs, defaultFont, buf, contentW, showPh)) {
+    if (!ensureLayout(snap, placeholderText, styler, validationColor, rs, defaultFont, buf, contentW, showPh,
+                      TextWrapping::NoWrap)) {
         return 0;
     }
     if (snap.layoutResult.lines.empty()) {
@@ -172,7 +193,7 @@ struct TextInputView {
     std::function<std::vector<AttributedRun>(std::string_view)> styler;
     std::function<Color(std::string_view)> validationColor;
     TextEditBehavior *behavior = nullptr;
-    TextInputSnap *snap = nullptr;
+    TextInputLayoutSnap *snap = nullptr;
     /// Copy of \c State handle (same \c Signal* as \c useState in \c body) — must not be a pointer to a
     /// stack \c State local, which would dangle after \c body() returns.
     State<int> scroll {};
@@ -195,7 +216,8 @@ struct TextInputView {
         float const contentW =
             std::max(1.f, frame.width - 2.f * (rs.borderWidth + rs.paddingH));
 
-        if (!ensureLayout(*snap, placeholder, styler, validationColor, rs, defaultFont, buf, contentW, showPh)) {
+        if (!ensureLayout(*snap, placeholder, styler, validationColor, rs, defaultFont, buf, contentW, showPh,
+                          TextWrapping::NoWrap)) {
             return;
         }
         if (snap->layoutResult.lines.empty()) {
@@ -276,97 +298,11 @@ struct TextInputView {
     }
 };
 
-struct TextInputLineWrapSnap {
-    detail::TextEditLayoutResult layoutResult;
-    std::string layoutSource;
-    float layoutFrameW = 0.f;
-    float layoutContentW = 0.f;
-};
-
-struct TextInputStylerMemo {
-    std::string value;
-    std::vector<AttributedRun> runs;
-};
-
-struct ResolvedLineWrapTextInputStyle {
-    Color textColor;
-    Color placeholderColor;
-    Color backgroundColor;
-    Color borderColor;
-    Color borderFocusColor;
-    Color caretColor;
-    Color selectionColor;
-    Color disabledColor;
-    float borderWidth;
-    float borderFocusWidth;
-    float cornerRadius;
-    float paddingH;
-    float paddingV;
-    float lineHeight = 0.f;
-};
-
-ResolvedLineWrapTextInputStyle resolveLineWrapTextInputStyle(TextInput::Style const &style, Theme const &theme) {
-    return ResolvedLineWrapTextInputStyle {
-        .textColor = resolveColor(style.textColor, theme.colorTextPrimary),
-        .placeholderColor = resolveColor(style.placeholderColor, theme.colorTextPlaceholder),
-        .backgroundColor = resolveColor(style.backgroundColor, theme.colorSurfaceField),
-        .borderColor = resolveColor(style.borderColor, theme.colorBorder),
-        .borderFocusColor = resolveColor(style.borderFocusColor, theme.colorBorderFocus),
-        .caretColor = resolveColor(style.caretColor, theme.colorAccent),
-        .selectionColor = resolveColor(style.selectionColor, theme.colorAccentSubtle),
-        .disabledColor = resolveColor(style.disabledColor, theme.colorSurfaceDisabled),
-        .borderWidth = resolveFloat(style.borderWidth, 1.f),
-        .borderFocusWidth = resolveFloat(style.borderFocusWidth, 2.f),
-        .cornerRadius = resolveFloat(style.cornerRadius, theme.radiusMedium),
-        .paddingH = resolveFloat(style.paddingH, theme.paddingFieldH),
-        .paddingV = resolveFloat(style.paddingV, theme.paddingFieldV),
-        .lineHeight = resolveFloat(style.lineHeight, 0.f),
-    };
-}
-
-AttributedString buildLineWrapAttributedString(std::string const &placeholderText,
-                                               std::function<std::vector<AttributedRun>(std::string_view)> const &styler,
-                                               ResolvedLineWrapTextInputStyle const &rs, Font const &defaultFont,
-                                               std::string const &value, bool showPlaceholder,
-                                               TextInputStylerMemo &memo) {
-    if (showPlaceholder) {
-        AttributedString ph;
-        ph.utf8 = placeholderText;
-        ph.runs.push_back(
-            AttributedRun {0, static_cast<std::uint32_t>(placeholderText.size()), defaultFont, rs.placeholderColor}
-        );
-        return ph;
-    }
-
-    AttributedString as;
-    as.utf8 = value;
-    if (styler) {
-        std::uint32_t const n = static_cast<std::uint32_t>(value.size());
-        if (memo.value == value && !memo.runs.empty() && attributedRunsFullyCoverBuffer(memo.runs, n)) {
-            as.runs = memo.runs;
-        } else {
-            memo.runs = styler(value);
-            memo.value = value;
-            as.runs = memo.runs;
-            if (as.runs.empty() || !attributedRunsFullyCoverBuffer(as.runs, n)) {
-                as.runs.clear();
-                as.runs.push_back(AttributedRun {0, n, defaultFont, rs.textColor});
-                memo.runs = as.runs;
-            }
-        }
-    } else {
-        as.runs.push_back(
-            AttributedRun {0, static_cast<std::uint32_t>(value.size()), defaultFont, rs.textColor}
-        );
-    }
-    return as;
-}
-
-int hitTestLineWrapByte(TextEditBehavior &behavior, ResolvedLineWrapTextInputStyle const &rs,
+int hitTestLineWrapByte(TextEditBehavior &behavior, ResolvedTextInputStyle const &rs,
                         std::string const &placeholder,
                         std::function<std::vector<AttributedRun>(std::string_view)> const &styler,
                         TextInputStylerMemo &stylerMemo, Font const &defaultFont, bool focused,
-                        TextInputLineWrapSnap &snap, float frameWidth, Point local, float scrollY) {
+                        TextInputLayoutSnap &snap, float frameWidth, Point local, float scrollY) {
     std::string const &buf = behavior.value();
     if (buf.empty()) {
         return 0;
@@ -374,21 +310,9 @@ int hitTestLineWrapByte(TextEditBehavior &behavior, ResolvedLineWrapTextInputSty
 
     bool const showPlaceholder = buf.empty() && !focused;
     float const contentW = std::max(1.f, frameWidth - 2.f * (rs.borderWidth + rs.paddingH));
-    bool const needRelayout =
-        snap.layoutResult.empty() || snap.layoutResult.lines.empty() || buf != snap.layoutSource;
-    if (needRelayout) {
-        TextSystem &ts = Application::instance().textSystem();
-        AttributedString text =
-            buildLineWrapAttributedString(placeholder, styler, rs, defaultFont, buf, showPlaceholder, stylerMemo);
-        TextLayoutOptions const opts = text_detail::makeTextLayoutOptions(TextWrapping::Wrap, rs.lineHeight);
-        auto layout = ts.layout(text, contentW, opts);
-        if (!layout) {
-            return 0;
-        }
-        snap.layoutResult = detail::makeTextEditLayoutResult(layout, static_cast<int>(text.utf8.size()), contentW);
-        snap.layoutSource = buf;
-        snap.layoutFrameW = frameWidth;
-        snap.layoutContentW = contentW;
+    if (!ensureLayout(snap, placeholder, styler, nullptr, rs, defaultFont, buf, contentW, showPlaceholder,
+                      TextWrapping::Wrap, &stylerMemo)) {
+        return 0;
     }
 
     float const layoutY = local.y - rs.borderWidth - rs.paddingV + scrollY;
@@ -400,37 +324,27 @@ struct MultilineTextInputView {
     std::string placeholder;
     std::function<std::vector<AttributedRun>(std::string_view)> styler;
     TextEditBehavior *behavior = nullptr;
-    TextInputLineWrapSnap *snap = nullptr;
+    TextInputLayoutSnap *snap = nullptr;
     TextInputStylerMemo *stylerMemo = nullptr;
     State<Point> scrollOffset {};
     State<Size> viewportSize {};
     State<Size> contentSize {};
-    ResolvedLineWrapTextInputStyle rs {};
+    ResolvedTextInputStyle rs {};
     Font defaultFont {};
     bool disabled = false;
     bool focused = false;
 
     void render(Canvas &canvas, Rect frame) const {
-        TextSystem &ts = Application::instance().textSystem();
         std::string const &buf = behavior->value();
         bool const showPlaceholder = buf.empty() && !focused;
-        AttributedString text =
-            buildLineWrapAttributedString(placeholder, styler, rs, defaultFont, buf, showPlaceholder, *stylerMemo);
-
         float const innerLeft = frame.x + rs.paddingH;
         float const innerTop = frame.y + rs.paddingV;
         float const contentW = std::max(1.f, frame.width - 2.f * rs.paddingH);
 
-        TextLayoutOptions const opts = text_detail::makeTextLayoutOptions(TextWrapping::Wrap, rs.lineHeight);
-        auto layout = ts.layout(text, contentW, opts);
-        if (!layout) {
+        if (!ensureLayout(*snap, placeholder, styler, nullptr, rs, defaultFont, buf, contentW, showPlaceholder,
+                          TextWrapping::Wrap, stylerMemo)) {
             return;
         }
-
-        snap->layoutResult = detail::makeTextEditLayoutResult(layout, static_cast<int>(text.utf8.size()), contentW);
-        snap->layoutSource = buf;
-        snap->layoutFrameW = frame.width;
-        snap->layoutContentW = contentW;
 
         Point scroll = clampScrollOffset(ScrollAxis::Vertical, *scrollOffset, *viewportSize, *contentSize);
         if (scroll.x != (*scrollOffset).x || scroll.y != (*scrollOffset).y) {
@@ -474,7 +388,7 @@ struct MultilineTextInputView {
         std::string const &buf = behavior->value();
         bool const showPlaceholder = buf.empty() && !focused;
         AttributedString text =
-            buildLineWrapAttributedString(placeholder, styler, rs, defaultFont, buf, showPlaceholder, *stylerMemo);
+            buildAttributedString(placeholder, styler, nullptr, rs, defaultFont, buf, showPlaceholder, stylerMemo);
         float const width = std::isfinite(cs.maxWidth) && cs.maxWidth > 0.f ? cs.maxWidth : 200.f;
         TextLayoutOptions const opts = text_detail::makeTextLayoutOptions(TextWrapping::Wrap, rs.lineHeight);
         auto layout = ts.layout(text, std::max(1.f, width - 2.f * rs.paddingH), opts);
@@ -487,10 +401,10 @@ struct MultilineTextInputView {
 
 Element buildMultilineTextInput(TextInput const &input) {
     Theme const &theme = useEnvironment<Theme>();
-    ResolvedLineWrapTextInputStyle const resolved = resolveLineWrapTextInputStyle(input.style, theme);
+    ResolvedTextInputStyle const resolved = resolveTextInputStyle(input.style, theme);
     Font const defaultFont = text_detail::resolveBodyTextStyle(input.style.font, kColorFromTheme).first;
 
-    TextInputLineWrapSnap &snap = StateStore::current()->claimSlot<TextInputLineWrapSnap>();
+    TextInputLayoutSnap &snap = StateStore::current()->claimSlot<TextInputLayoutSnap>();
     TextInputStylerMemo &stylerMemo = StateStore::current()->claimSlot<TextInputStylerMemo>();
 
     State<Point> scrollOffset = useState(Point {0.f, 0.f});
@@ -602,7 +516,7 @@ Element TextInput::body() const {
     bool const focused = useFocus();
     beh.setFocused(focused);
 
-    TextInputSnap &snap = StateStore::current()->claimSlot<TextInputSnap>();
+    TextInputLayoutSnap &snap = StateStore::current()->claimSlot<TextInputLayoutSnap>();
     State<int> scrollByte = useState(0);
     std::optional<Rect> layoutRect = useLayoutRect();
 
