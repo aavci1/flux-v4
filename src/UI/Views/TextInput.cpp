@@ -126,18 +126,16 @@ int hitTestByte(std::string const &placeholderText,
         buildAttributedString(placeholderText, styler, validationColor, rs, defaultFont, buf, showPh);
     TextLayoutOptions const opts = text_detail::makeTextLayoutOptions(TextWrapping::NoWrap);
     auto layout = ts.layout(text, contentW, opts);
-    if (!layout || layout->runs.empty()) {
+    detail::TextEditLayoutResult const layoutResult =
+        detail::makeTextEditLayoutResult(layout, static_cast<int>(text.utf8.size()), contentW);
+    if (layoutResult.empty() || layoutResult.lines.empty()) {
         return 0;
     }
-    auto lines = detail::buildLineMetrics(*layout);
-    if (lines.empty()) {
-        return 0;
-    }
-    detail::LineMetrics const &line0 = lines[0];
-    float const scrollX = detail::caretXForByte(*layout, line0, detail::utf8Clamp(buf, scrollByte));
+    detail::LineMetrics const &line0 = layoutResult.lines[0];
+    float const scrollX = detail::caretXForByte(*layoutResult.layout, line0, detail::utf8Clamp(buf, scrollByte));
     float const lx = local.x - rs.borderWidth - rs.paddingH + scrollX;
     std::string const &sliceBuf = showPh ? placeholderText : buf;
-    return detail::caretByteAtX(*layout, line0, lx, sliceBuf);
+    return detail::caretByteAtX(*layoutResult.layout, line0, lx, sliceBuf);
 }
 
 struct TextInputView {
@@ -173,11 +171,12 @@ struct TextInputView {
 
         TextLayoutOptions const opts = text_detail::makeTextLayoutOptions(TextWrapping::NoWrap);
         auto layout = ts.layout(text, contentW, opts);
-        if (!layout) {
+        detail::TextEditLayoutResult const layoutResult =
+            detail::makeTextEditLayoutResult(layout, static_cast<int>(text.utf8.size()), contentW);
+        if (layoutResult.empty()) {
             return;
         }
-        auto lines = detail::buildLineMetrics(*layout);
-        if (lines.empty()) {
+        if (layoutResult.lines.empty()) {
             Point textOrigin {innerLeft, innerTop};
             int sb = *scroll;
             if (!showPh) {
@@ -186,7 +185,7 @@ struct TextInputView {
                 sb = 0;
             }
             scroll = sb;
-            canvas.drawTextLayout(*layout, textOrigin);
+            canvas.drawTextLayout(*layoutResult.layout, textOrigin);
             if (disabled) {
                 Color dc = rs.disabledColor;
                 dc.a *= 0.35f;
@@ -194,7 +193,7 @@ struct TextInputView {
             }
             return;
         }
-        detail::LineMetrics const line0 = lines[0];
+        detail::LineMetrics const &line0 = layoutResult.lines[0];
 
         Point textOrigin {innerLeft, innerTop};
         int sb = *scroll;
@@ -208,8 +207,8 @@ struct TextInputView {
         if (behavior->consumeEnsureCaretVisibleRequest() && !showPh) {
             int cur = sb;
             for (int iter = 0; iter < 128; ++iter) {
-                float const cx = detail::caretXForByte(*layout, line0, behavior->caretByte());
-                float const rel = cx - detail::caretXForByte(*layout, line0, cur);
+                float const cx = detail::caretXForByte(*layoutResult.layout, line0, behavior->caretByte());
+                float const rel = cx - detail::caretXForByte(*layoutResult.layout, line0, cur);
                 if (rel >= kCaretScrollMarginPx && rel <= contentW - kCaretScrollMarginPx) {
                     break;
                 }
@@ -228,30 +227,26 @@ struct TextInputView {
             scroll = cur;
         }
 
-        float const scrollX2 = detail::caretXForByte(*layout, line0, *scroll);
+        float const scrollX2 = detail::caretXForByte(*layoutResult.layout, line0, *scroll);
         textOrigin.x -= scrollX2;
 
         if (!showPh && behavior->hasSelection()) {
-            auto [s0, s1] = behavior->orderedSelection();
-            s0 = detail::utf8Clamp(buf, s0);
-            s1 = detail::utf8Clamp(buf, s1);
-            float x0 = detail::caretXForByte(*layout, line0, s0) + textOrigin.x;
-            float x1 = detail::caretXForByte(*layout, line0, s1) + textOrigin.x;
-            if (x0 > x1) {
-                std::swap(x0, x1);
+            detail::TextEditSelection const selection {
+                .caretByte = detail::utf8Clamp(buf, behavior->caretByte()),
+                .anchorByte = detail::utf8Clamp(buf, behavior->selectionAnchorByte()),
+            };
+            for (Rect const &r : detail::selectionRects(layoutResult, selection, textOrigin.x, innerTop,
+                                                        kSelectionExtraBottomPx)) {
+                canvas.drawRect(r, CornerRadius {}, FillStyle::solid(rs.selectionColor), StrokeStyle::none());
             }
-            float const lineTop = innerTop + line0.top;
-            float const lineH = line0.bottom - line0.top;
-            canvas.drawRect(Rect {x0, lineTop, x1 - x0, lineH + kSelectionExtraBottomPx}, CornerRadius {},
-                            FillStyle::solid(rs.selectionColor), StrokeStyle::none());
         }
 
-        canvas.drawTextLayout(*layout, textOrigin);
+        canvas.drawTextLayout(*layoutResult.layout, textOrigin);
 
         if (focused && !disabled && !showPh) {
             float const cx =
-                detail::caretXForByte(*layout, line0, behavior->caretByte()) + textOrigin.x;
-            auto const [caretY0, caretY1] = detail::lineCaretYRangeInLayout(*layout, line0);
+                detail::caretXForByte(*layoutResult.layout, line0, behavior->caretByte()) + textOrigin.x;
+            auto const [caretY0, caretY1] = detail::lineCaretYRangeInLayout(*layoutResult.layout, line0);
             float const phase = behavior->caretBlinkPhase();
             float const alpha = phase <= 0.5f ? 1.f : 0.f;
             Color cc = rs.caretColor;

@@ -52,8 +52,7 @@ bool attributedRunsFullyCoverBuffer(std::vector<AttributedRun> const &runs, std:
 }
 
 struct TextAreaSnap {
-    std::shared_ptr<TextLayout const> layout;
-    std::vector<detail::LineMetrics> lines;
+    detail::TextEditLayoutResult layoutResult;
     /// Last buffer string used to build `layout` (hit-test invalidates when this differs from `beh.value()`).
     std::string layoutSource;
     /// Last layout pass frame/content width (from `render` or hit-test relayout when cache was cold).
@@ -135,18 +134,18 @@ AttributedString buildAttributedString(std::string const &placeholderText,
 }
 
 int verticalMove(TextAreaSnap const &snap, std::string const &buf, int currentByte, int direction) {
-    if (!snap.layout || snap.lines.empty()) {
+    if (snap.layoutResult.empty() || snap.layoutResult.lines.empty()) {
         return currentByte;
     }
-    TextLayout const &tl = *snap.layout;
-    int const li = detail::lineIndexForByte(snap.lines, currentByte);
-    int const n = static_cast<int>(snap.lines.size());
+    TextLayout const &tl = *snap.layoutResult.layout;
+    int const li = detail::lineIndexForByte(snap.layoutResult.lines, currentByte);
+    int const n = static_cast<int>(snap.layoutResult.lines.size());
     int const targetIdx = std::clamp(li + direction, 0, n - 1);
     if (targetIdx == li) {
         return currentByte;
     }
-    auto const &srcLine = snap.lines[static_cast<std::size_t>(li)];
-    auto const &dstLine = snap.lines[static_cast<std::size_t>(targetIdx)];
+    auto const &srcLine = snap.layoutResult.lines[static_cast<std::size_t>(li)];
+    auto const &dstLine = snap.layoutResult.lines[static_cast<std::size_t>(targetIdx)];
     float const x = detail::caretXForByte(tl, srcLine, currentByte);
     int const out = detail::caretByteAtX(tl, dstLine, x, buf);
     return out;
@@ -197,7 +196,8 @@ int hitTestByte(TextEditBehavior &beh, ResolvedTextAreaStyle const &rs, std::str
     // paint and updates `snap` for the current frame width. Comparing `useLayoutRect().width` to the last
     // paint's `frame.width` caused relayout thrash on pointer moves (OOM/crash on large paste). Invalidate
     // only when the text buffer changed vs the cached layout or the cache is empty.
-    bool const needRelayout = !snap.layout || snap.lines.empty() || buf != snap.layoutSource;
+    bool const needRelayout =
+        snap.layoutResult.empty() || snap.layoutResult.lines.empty() || buf != snap.layoutSource;
     if (needRelayout) {
         TextSystem &ts = Application::instance().textSystem();
         AttributedString text =
@@ -207,18 +207,17 @@ int hitTestByte(TextEditBehavior &beh, ResolvedTextAreaStyle const &rs, std::str
         if (!layout) {
             return 0;
         }
-        snap.layout = layout;
-        snap.lines = detail::buildLineMetrics(*layout);
+        snap.layoutResult = detail::makeTextEditLayoutResult(layout, static_cast<int>(text.utf8.size()), contentW);
         snap.layoutSource = buf;
         snap.layoutFrameW = frameW;
         snap.layoutContentW = contentW;
     }
     float const innerPad = rs.borderWidth + rs.paddingH;
     float const layoutY = local.y - rs.borderWidth - rs.paddingV + scrollY;
-    auto const [li, yFallback] = lineIndexAtYWithFallback(snap.lines, layoutY);
-    detail::LineMetrics const &line = snap.lines[static_cast<std::size_t>(li)];
+    auto const [li, yFallback] = lineIndexAtYWithFallback(snap.layoutResult.lines, layoutY);
+    detail::LineMetrics const &line = snap.layoutResult.lines[static_cast<std::size_t>(li)];
     float const lx = local.x - innerPad;
-    int const ret = detail::caretByteAtX(*snap.layout, line, lx, buf);
+    int const ret = detail::caretByteAtX(*snap.layoutResult.layout, line, lx, buf);
     return ret;
 }
 
@@ -263,20 +262,19 @@ struct TextAreaView {
         if (!layout) {
             return;
         }
-        snap->layout = layout;
-        snap->lines = detail::buildLineMetrics(*layout);
+        snap->layoutResult = detail::makeTextEditLayoutResult(layout, static_cast<int>(text.utf8.size()), contentW);
         snap->layoutSource = buf;
         snap->layoutFrameW = frame.width;
         snap->layoutContentW = contentW;
 
-        float const maxScroll = std::max(0.f, layout->measuredSize.height - contentH);
+        float const maxScroll = std::max(0.f, snap->layoutResult.layout->measuredSize.height - contentH);
         float sy = std::clamp(*scrollY, 0.f, maxScroll);
         if (sy != *scrollY) {
             scrollY = sy;
         }
-        if (behavior->consumeEnsureCaretVisibleRequest() && !snap->lines.empty()) {
-            int const li = detail::lineIndexForByte(snap->lines, behavior->caretByte());
-            auto const &L = snap->lines[static_cast<std::size_t>(li)];
+        if (behavior->consumeEnsureCaretVisibleRequest() && !snap->layoutResult.lines.empty()) {
+            int const li = detail::lineIndexForByte(snap->layoutResult.lines, behavior->caretByte());
+            auto const &L = snap->layoutResult.lines[static_cast<std::size_t>(li)];
             float const carety = L.top;
             float const caretb = L.bottom;
             if (carety < sy + kCaretScrollMarginPx) {
@@ -297,34 +295,23 @@ struct TextAreaView {
         Point textOrigin {innerLeft, scrollOffsetY};
 
         if (!showPh && behavior->hasSelection()) {
-            auto [s0, s1] = behavior->orderedSelection();
-            s0 = detail::utf8Clamp(buf, s0);
-            s1 = detail::utf8Clamp(buf, s1);
-            for (auto const &line : snap->lines) {
-                int const a = std::max(s0, line.byteStart);
-                int const b = std::min(s1, line.byteEnd);
-                if (a >= b) {
-                    continue;
-                }
-                float x0 = detail::caretXForByte(*layout, line, a) + innerLeft;
-                float x1 = detail::caretXForByte(*layout, line, b) + innerLeft;
-                if (x0 > x1) {
-                    std::swap(x0, x1);
-                }
-                float const yTop = scrollOffsetY + line.top;
-                float const yBot = scrollOffsetY + line.bottom;
-                canvas.drawRect(Rect {x0, yTop, x1 - x0, yBot - yTop + kSelectionExtraBottomPx}, CornerRadius {},
-                                FillStyle::solid(rs.selectionColor), StrokeStyle::none());
+            detail::TextEditSelection const selection {
+                .caretByte = detail::utf8Clamp(buf, behavior->caretByte()),
+                .anchorByte = detail::utf8Clamp(buf, behavior->selectionAnchorByte()),
+            };
+            for (Rect const &r : detail::selectionRects(snap->layoutResult, selection, innerLeft, scrollOffsetY,
+                                                        kSelectionExtraBottomPx)) {
+                canvas.drawRect(r, CornerRadius {}, FillStyle::solid(rs.selectionColor), StrokeStyle::none());
             }
         }
 
-        canvas.drawTextLayout(*layout, textOrigin);
+        canvas.drawTextLayout(*snap->layoutResult.layout, textOrigin);
 
-        if (focused && !disabled && !showPh && !snap->lines.empty()) {
-            int const li = detail::lineIndexForByte(snap->lines, behavior->caretByte());
-            auto const &line = snap->lines[static_cast<std::size_t>(li)];
-            float const cx = innerLeft + detail::caretXForByte(*layout, line, behavior->caretByte());
-            auto const [caretY0, caretY1] = detail::lineCaretYRangeInLayout(*layout, line);
+        if (focused && !disabled && !showPh && !snap->layoutResult.lines.empty()) {
+            int const li = detail::lineIndexForByte(snap->layoutResult.lines, behavior->caretByte());
+            auto const &line = snap->layoutResult.lines[static_cast<std::size_t>(li)];
+            float const cx = innerLeft + detail::caretXForByte(*snap->layoutResult.layout, line, behavior->caretByte());
+            auto const [caretY0, caretY1] = detail::lineCaretYRangeInLayout(*snap->layoutResult.layout, line);
             float const phase = behavior->caretBlinkPhase();
             float const alpha = phase <= 0.5f ? 1.f : 0.f;
             Color cc = rs.caretColor;
@@ -413,8 +400,8 @@ Element TextArea::body() const {
             float const fh = layoutRect ? layoutRect->height : 200.f;
             float const contentH = std::max(1.f, fh - 2.f * (rs.borderWidth + rs.paddingV));
             float sy = *scrollY;
-            if (snap.layout) {
-                float const maxScroll = std::max(0.f, snap.layout->measuredSize.height - contentH);
+            if (!snap.layoutResult.empty()) {
+                float const maxScroll = std::max(0.f, snap.layoutResult.layout->measuredSize.height - contentH);
                 sy = std::clamp(sy, 0.f, maxScroll);
                 if (sy != *scrollY) {
                     scrollY = sy;
@@ -431,8 +418,8 @@ Element TextArea::body() const {
             float const fh = layoutRect ? layoutRect->height : 200.f;
             float const contentH = std::max(1.f, fh - 2.f * (rs.borderWidth + rs.paddingV));
             float sy = *scrollY;
-            if (snap.layout) {
-                float const maxScroll = std::max(0.f, snap.layout->measuredSize.height - contentH);
+            if (!snap.layoutResult.empty()) {
+                float const maxScroll = std::max(0.f, snap.layoutResult.layout->measuredSize.height - contentH);
                 sy = std::clamp(sy, 0.f, maxScroll);
                 if (sy != *scrollY) {
                     scrollY = sy;
@@ -444,12 +431,12 @@ Element TextArea::body() const {
         })
         .onPointerUp([&beh](Point) { beh.handlePointerUp(); })
         .onScroll([scrollY, &snap, layoutRect, rs](Vec2 delta) {
-            if (!snap.layout) {
+            if (snap.layoutResult.empty()) {
                 return;
             }
             float const h = layoutRect ? layoutRect->height : 200.f;
             float const contentH = std::max(1.f, h - 2.f * (rs.borderWidth + rs.paddingV));
-            float const maxScroll = std::max(0.f, snap.layout->measuredSize.height - contentH);
+            float const maxScroll = std::max(0.f, snap.layoutResult.layout->measuredSize.height - contentH);
             float sy = *scrollY;
             sy -= delta.y;
             sy = std::clamp(sy, 0.f, maxScroll);

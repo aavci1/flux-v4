@@ -8,6 +8,7 @@
 #include <Flux/Graphics/TextLayout.hpp>
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -21,45 +22,76 @@ namespace detail {
 inline constexpr float kTextCaretStrokeWidthPx = 2.f;
 
 // UTF-8 navigation
-int utf8NextChar(std::string const& s, int pos) noexcept;
-int utf8PrevChar(std::string const& s, int pos) noexcept;
-int utf8Clamp(std::string const& s, int pos) noexcept;
-int utf8PrevWord(std::string const& s, int pos) noexcept;
-int utf8NextWord(std::string const& s, int pos) noexcept;
-int utf8CountChars(std::string const& s) noexcept;
-std::string utf8TruncateToChars(std::string const& s, int maxChars);
+int utf8NextChar(std::string const &s, int pos) noexcept;
+int utf8PrevChar(std::string const &s, int pos) noexcept;
+int utf8Clamp(std::string const &s, int pos) noexcept;
+int utf8PrevWord(std::string const &s, int pos) noexcept;
+int utf8NextWord(std::string const &s, int pos) noexcept;
+int utf8CountChars(std::string const &s) noexcept;
+std::string utf8TruncateToChars(std::string const &s, int maxChars);
 
 /// Returns true if inserting `inserted` at `pos` into `prev` should coalesce with the previous typing
 /// group for undo purposes.
-bool shouldCoalesceInsert(std::string const& prev, int pos, std::string_view inserted) noexcept;
+bool shouldCoalesceInsert(std::string const &prev, int pos, std::string_view inserted) noexcept;
 
 struct LineMetrics {
-  float top{};
-  float bottom{};
-  float baseline{};
-  float lineMinX{};
-  int byteStart = 0;
-  int byteEnd = 0;
-  std::uint32_t ctLineIndex = 0;
+    float top {};
+    float bottom {};
+    float baseline {};
+    float lineMinX {};
+    int byteStart = 0;
+    int byteEnd = 0;
+    std::uint32_t ctLineIndex = 0;
 };
 
-std::vector<LineMetrics> buildLineMetrics(TextLayout const& layout);
+struct TextEditSelection {
+    int caretByte = 0;
+    int anchorByte = 0;
+
+    [[nodiscard]] bool hasSelection() const noexcept { return caretByte != anchorByte; }
+    [[nodiscard]] std::pair<int, int> ordered() const noexcept;
+};
+
+struct TextEditState {
+    TextEditSelection selection {};
+    float preferredColumnX = 0.f;
+    bool draggingSelection = false;
+    bool focused = false;
+    bool disabled = false;
+    bool multiline = false;
+};
+
+struct TextEditLayoutResult {
+    std::shared_ptr<TextLayout const> layout;
+    std::vector<LineMetrics> lines;
+    int textByteCount = 0;
+    float contentWidth = 0.f;
+
+    [[nodiscard]] bool empty() const noexcept { return !layout; }
+};
+
+std::vector<LineMetrics> buildLineMetrics(TextLayout const &layout);
+TextEditLayoutResult makeTextEditLayoutResult(std::shared_ptr<TextLayout const> layout, int textByteCount,
+                                              float contentWidth);
 
 /// Binary search over sorted `byteStart`. Returns index of the line containing `byteOffset`, clamped.
-int lineIndexForByte(std::vector<LineMetrics> const& lines, int byteOffset) noexcept;
+int lineIndexForByte(std::vector<LineMetrics> const &lines, int byteOffset) noexcept;
 
-float caretXForByte(TextLayout const& layout, LineMetrics const& line, int byteOffset) noexcept;
+float caretXForByte(TextLayout const &layout, LineMetrics const &line, int byteOffset) noexcept;
 
 /// Vertical extent for drawing a caret on \p line (layout Y, same as `LineMetrics::top/bottom`).
 /// Computed from runs on that CT line (`min(origin.y - ascent)`, `max(origin.y + descent)`), matching
 /// `drawTextLayout` / Core Text line boxes. When the line has no runs (empty line), falls back to
 /// `LineMetrics` (extending the box to the layout’s max typographic line height when needed) or
 /// baseline ± max ascent/descent from any run in the layout.
-std::pair<float, float> lineCaretYRangeInLayout(TextLayout const& layout, LineMetrics const& line) noexcept;
+std::pair<float, float> lineCaretYRangeInLayout(TextLayout const &layout, LineMetrics const &line) noexcept;
 
-int caretByteAtX(TextLayout const& layout, LineMetrics const& line, float layoutX, std::string const& buf) noexcept;
+int caretByteAtX(TextLayout const &layout, LineMetrics const &line, float layoutX, std::string const &buf) noexcept;
 
 std::pair<int, int> orderedSelection(int caret, int anchor) noexcept;
+std::vector<Rect> selectionRects(TextEditLayoutResult const &result, TextEditSelection const &selection,
+                                 float originX = 0.f, float originY = 0.f,
+                                 float extraBottomPx = 0.f) noexcept;
 
 } // namespace detail
 
