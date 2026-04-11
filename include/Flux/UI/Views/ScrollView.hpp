@@ -28,6 +28,10 @@ struct ScrollView : ViewModifiers<ScrollView> {
     // ── Layout / axis ─────────────────────────────────────────────────────────
 
     ScrollAxis axis = ScrollAxis::Vertical;
+    State<Point> scrollOffset {};
+    State<Size> viewportSize {};
+    State<Size> contentSize {};
+    bool dragScrollEnabled = true;
     std::vector<Element> children;
 
     /// Custom subtree hook (not the generic \ref CompositeComponent path in \ref Element::Model).

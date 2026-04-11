@@ -5,6 +5,6 @@
 
 namespace flux::text_input_detail {
 
-Element buildMultilineTextInput(TextInput const& input);
+Element buildMultilineTextInput(TextInput const &input);
 
 } // namespace flux::text_input_detail

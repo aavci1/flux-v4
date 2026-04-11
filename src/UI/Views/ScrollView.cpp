@@ -167,15 +167,16 @@ Point clampScrollOffset(ScrollAxis axis, Point o, Size const &viewport, Size con
 
 Element ScrollView::body() const {
     Theme const &theme = useEnvironment<Theme>();
-    auto offset = useState<Point>({0.f, 0.f});
+    State<Point> const offset = scrollOffset.signal ? scrollOffset : useState<Point>({0.f, 0.f});
     auto downPoint = useState<Point>({0.f, 0.f});
     auto dragging = useState(false);
-    auto viewport = useState<Size>({0.f, 0.f});
-    auto content = useState<Size>({0.f, 0.f});
+    State<Size> const viewport = viewportSize.signal ? viewportSize : useState<Size>({0.f, 0.f});
+    State<Size> const content = contentSize.signal ? contentSize : useState<Size>({0.f, 0.f});
     auto indicatorOpacity = useAnimated<float>(0.f);
     std::optional<Rect> const layoutRect = useLayoutRect();
     Size const effectiveViewport = resolveViewportSize(*viewport, layoutRect);
     ScrollAxis const ax = axis;
+    bool const dragScroll = dragScrollEnabled;
     Size const contentSize = *content;
     Point const scrollRange = maxScrollOffset(ax, effectiveViewport, contentSize);
     Point const clampedOffset = clampScrollOffset(ax, *offset, effectiveViewport, contentSize);
@@ -208,18 +209,27 @@ Element ScrollView::body() const {
     return std::move(scrollContent)
         .clipContent(true)
         .onPointerDown(
-            [dragging, downPoint, clampedOffset](Point p) {
+            [dragging, downPoint, clampedOffset, dragScroll](Point p) {
+                if (!dragScroll) {
+                    return;
+                }
                 dragging = true;
                 downPoint = Point {p.x + clampedOffset.x, p.y + clampedOffset.y};
             }
         )
         .onPointerUp(
-            [dragging](Point) {
+            [dragging, dragScroll](Point) {
+                if (!dragScroll) {
+                    return;
+                }
                 dragging = false;
             }
         )
         .onPointerMove(
-            [offset, downPoint, ax, content, dragging, effectiveViewport, revealIndicators](Point p) {
+            [offset, downPoint, ax, content, dragging, effectiveViewport, revealIndicators, dragScroll](Point p) {
+                if (!dragScroll) {
+                    return;
+                }
                 if (!*dragging) {
                     return;
                 }
