@@ -40,7 +40,6 @@ struct ButtonColors {
 
 Button::Style resolveStyle(Button::Style const &style, Theme const &theme) {
     return Button::Style {
-        .height = resolveFloat(style.height, theme.controlHeightMedium),
         .font = resolveFont(style.font, theme.fontLabel),
         .paddingH = resolveFloat(style.paddingH, theme.space4),
         .cornerRadius = resolveFloat(style.cornerRadius, theme.radiusMedium * 0.5f),
@@ -115,29 +114,24 @@ ButtonColors deriveColors(ButtonVariant variant, Color accent, Color destructive
 
 Element Button::body() const {
     Theme const &theme = useEnvironment<Theme>();
-    auto [heightResolved, fontResolved, paddingResolved, radiusResolved, accent, destructive] =
-        resolveStyle(style, theme);
+    auto [fontResolved, paddingResolved, radiusResolved, accent, destructive] = resolveStyle(style, theme);
     bool const isDisabled = disabled;
 
     Transition const trInstant = Transition::instant();
-    Transition const trFast =
-        theme.reducedMotion ? trInstant : Transition::ease(theme.durationFast);
-    Transition const trMed =
-        theme.reducedMotion ? trInstant : Transition::ease(theme.durationMedium);
+    Transition const trFast = theme.reducedMotion ? trInstant : Transition::ease(theme.durationFast);
+    Transition const trMed = theme.reducedMotion ? trInstant : Transition::ease(theme.durationMedium);
     Transition const tr = isDisabled ? trInstant : trMed;
 
     bool const hovered = useHover();
     bool const pressed = usePress();
     bool const focused = useFocus();
-    ButtonColors const colors =
-        deriveColors(variant, accent, destructive, theme.colorOnAccent, theme.colorOnDanger, theme);
+    ButtonColors const colors = deriveColors(variant, accent, destructive, theme.colorOnAccent, theme.colorOnDanger, theme);
 
     auto fillAnim = useAnimated<Color>(colors.fill);
     {
-        Color const fillTarget =
-            isDisabled ? theme.colorSurfaceDisabled : pressed ? colors.fillPress :
-                                                  hovered     ? colors.fillHover :
-                                                                colors.fill;
+        Color const fillTarget = isDisabled ? theme.colorSurfaceDisabled : pressed ? colors.fillPress :
+                                                                       hovered     ? colors.fillHover :
+                                                                                     colors.fill;
         if (*fillAnim != fillTarget) {
             fillAnim.set(fillTarget, tr);
         }
@@ -145,10 +139,9 @@ Element Button::body() const {
 
     auto labelAnim = useAnimated<Color>(colors.label);
     {
-        Color const labelTarget =
-            isDisabled ? theme.colorTextDisabled : pressed ? colors.labelPress :
-                                               hovered     ? colors.labelHover :
-                                                             colors.label;
+        Color const labelTarget = isDisabled ? theme.colorTextDisabled : pressed ? colors.labelPress :
+                                                                     hovered     ? colors.labelHover :
+                                                                                   colors.label;
         if (*labelAnim != labelTarget) {
             labelAnim.set(labelTarget, tr);
         }
@@ -199,33 +192,25 @@ Element Button::body() const {
         stroke = StrokeStyle::none();
     }
 
-    Element content = Element {ZStack {
-                                   .horizontalAlignment = Alignment::Center,
-                                   .verticalAlignment = Alignment::Center,
-                                   .children = flux::children(
-                                       Rectangle {}
-                                           .fill(FillStyle::solid(*fillAnim))
-                                           .stroke(stroke)
-                                           .shadow(shadow)
-                                           .height(heightResolved)
-                                           .cornerRadius(cr)
-                                           .flex(1.f, 1.f, 0.f),
-                                       Text {
-                                           .text = label,
-                                           .font = fontResolved,
-                                           .color = *labelAnim,
-                                           .horizontalAlignment = HorizontalAlignment::Center,
-                                           .verticalAlignment = VerticalAlignment::Center,
-                                       }
-                                           .padding(paddingResolved)
-                                   )
-                               }}
-                          .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
-                          .focusable(!isDisabled)
-                          .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})
-                          .onTap(isDisabled ? std::function<void()> {} : std::function<void()> {handleTap});
-
-    return Element {ScaleAroundCenter {.scale = *scaleAnim, .child = std::move(content)}};
+    return ScaleAroundCenter {
+        .scale = *scaleAnim,
+        .child = Text {
+            .text = label,
+            .font = fontResolved,
+            .color = *labelAnim,
+            .horizontalAlignment = HorizontalAlignment::Center,
+            .verticalAlignment = VerticalAlignment::Center,
+        }
+                     .fill(FillStyle::solid(*fillAnim))
+                     .stroke(stroke)
+                     .cornerRadius(cr)
+                     .shadow(shadow)
+                     .padding(paddingResolved)
+                     .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
+                     .focusable(!isDisabled)
+                     .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})
+                     .onTap(isDisabled ? std::function<void()> {} : std::function<void()> {handleTap})
+    };
 }
 
 Element LinkButton::body() const {
@@ -237,8 +222,7 @@ Element LinkButton::body() const {
     bool const focused = useFocus();
     bool const keyboardFocused = useKeyboardFocus();
 
-    Transition const trMed =
-        theme.reducedMotion ? Transition::instant() : Transition::ease(theme.durationMedium);
+    Transition const trMed = theme.reducedMotion ? Transition::instant() : Transition::ease(theme.durationMedium);
 
     auto labelAnim = useAnimated<Color>(accentResolved);
     {
@@ -270,24 +254,17 @@ Element LinkButton::body() const {
         focusStroke = StrokeStyle::solid(theme.colorBorderFocus, 2.f);
     }
 
-    return Element {ZStack {
-                        .horizontalAlignment = Alignment::Center,
-                        .verticalAlignment = Alignment::Center,
-                        .children = flux::children(
-                            Rectangle {}
-                                .fill(FillStyle::none())
-                                .stroke(focusStroke)
-                                .cornerRadius(CornerRadius {theme.radiusXSmall}),
-                            Text {
-                                .text = label,
-                                .font = fontResolved,
-                                .color = *labelAnim,
-                                .horizontalAlignment = HorizontalAlignment::Leading,
-                                .verticalAlignment = VerticalAlignment::Center,
-                            }
-                                .padding(0.f, 3.f, 0.f, 3.f)
-                        )
-                    }}
+    return Text {
+        .text = label,
+        .font = fontResolved,
+        .color = *labelAnim,
+        .horizontalAlignment = HorizontalAlignment::Leading,
+        .verticalAlignment = VerticalAlignment::Center,
+    }
+        .fill(FillStyle::none())
+        .stroke(focusStroke)
+        .cornerRadius(CornerRadius {theme.radiusXSmall})
+        .padding(0.f, 3.f, 0.f, 3.f)
         .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
         .focusable(!isDisabled)
         .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})

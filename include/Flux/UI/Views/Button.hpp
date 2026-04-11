@@ -25,7 +25,6 @@ enum class ButtonVariant : std::uint8_t {
 
 struct Button : ViewModifiers<Button> {
     struct Style {
-        float height = kHeightFromTheme;
         Font font = kFontFromTheme;
         float paddingH = kFloatFromTheme;
         float cornerRadius = kFloatFromTheme;
