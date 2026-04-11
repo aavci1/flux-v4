@@ -18,7 +18,7 @@ namespace flux {
 namespace {
 
 /// Full blink cycle duration (seconds). Lower = faster caret blink.
-constexpr double kCaretBlinkPeriodSec = 0.55f;
+constexpr double kCaretBlinkPeriodSec = 1.f;
 
 /// Caret/selection live in TextEditBehavior, not in the bound `Signal<std::string>`, so moving the caret does
 /// not mark reactive state dirty. Pointer paths call `markReactiveDirty()` in InputDispatcher; keyboard
