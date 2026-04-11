@@ -88,6 +88,9 @@ target_link_libraries(checkbox_demo PRIVATE flux)
 add_executable(slider_demo slider-demo/main.cpp)
 target_link_libraries(slider_demo PRIVATE flux)
 
+add_executable(select_demo select-demo/main.cpp)
+target_link_libraries(select_demo PRIVATE flux)
+
 add_executable(popover_demo popover-demo/main.cpp)
 target_link_libraries(popover_demo PRIVATE flux)
 
@@ -144,6 +147,7 @@ set(FLUX_EXAMPLE_TARGETS
     toggle_demo
     checkbox_demo
     slider_demo
+    select_demo
     popover_demo
     tooltip_demo
     icon_demo

@@ -60,6 +60,10 @@ struct Popover : ViewModifiers<Popover> {
   /// When set, the overlay anchor height is clamped to this value (use the trigger row height).
   std::optional<float> anchorMaxHeight;
 
+  /// Expands the resolved anchor rect before placement (useful when the visible trigger chrome is
+  /// larger than the composite layout rect, such as fields that add outer padding modifiers).
+  EdgeInsets anchorOutsets{};
+
   // ── Behaviour ────────────────────────────────────────────────────────────
 
   bool dismissOnEscape = true;

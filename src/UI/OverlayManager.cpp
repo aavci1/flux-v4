@@ -19,6 +19,23 @@
 
 namespace flux {
 
+namespace {
+
+Rect applyAnchorOutsets(Rect rect, EdgeInsets const &outsets) {
+  float const left = std::max(0.f, outsets.left);
+  float const right = std::max(0.f, outsets.right);
+  float const top = std::max(0.f, outsets.top);
+  float const bottom = std::max(0.f, outsets.bottom);
+  return Rect{
+      rect.x - left,
+      rect.y - top,
+      rect.width + left + right,
+      rect.height + top + bottom,
+  };
+}
+
+} // namespace
+
 bool OverlayId::isValid() const noexcept {
   return value != 0;
 }
@@ -165,10 +182,18 @@ void OverlayManager::rebuild(Size windowSize, Runtime& runtime) {
       if (auto r = runtime.layoutRectForLeafKeyPrefix(*entry.config.anchorTrackLeafKey)) {
         entry.config.anchor = *r;
       }
+    } else if (entry.config.anchorTrackComponentKey.has_value() &&
+               !entry.config.anchorTrackComponentKey->empty()) {
+      if (auto r = runtime.layoutRectForKey(*entry.config.anchorTrackComponentKey)) {
+        entry.config.anchor = *r;
+      }
     }
     if (entry.config.anchor.has_value() && entry.config.anchorMaxHeight.has_value()) {
       entry.config.anchor->height =
           std::min(entry.config.anchor->height, *entry.config.anchorMaxHeight);
+    }
+    if (entry.config.anchor.has_value() && !entry.config.anchorOutsets.isZero()) {
+      entry.config.anchor = applyAnchorOutsets(*entry.config.anchor, entry.config.anchorOutsets);
     }
     if (entry.config.popoverPreferredPlacement.has_value() && entry.content.has_value() &&
         entry.config.anchor.has_value()) {

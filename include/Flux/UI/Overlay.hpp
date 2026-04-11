@@ -42,8 +42,15 @@ struct OverlayConfig {
   /// so the popover follows the control (e.g. scroll) instead of staying at the initial tap rect.
   std::optional<ComponentKey> anchorTrackLeafKey;
 
+  /// When set, each overlay rebuild refreshes `anchor` from `Runtime::layoutRectForKey`.
+  /// Useful for overlays anchored to a composite trigger rather than the tapped leaf inside it.
+  std::optional<ComponentKey> anchorTrackComponentKey;
+
   /// When set, clamps `anchor.height` after layout union (e.g. row height vs inflated text bounds).
   std::optional<float> anchorMaxHeight;
+
+  /// Expands the resolved anchor rect before overlay placement.
+  EdgeInsets anchorOutsets{};
 
   enum class Placement { Below, Above, End, Start };
   Placement placement = Placement::Below;

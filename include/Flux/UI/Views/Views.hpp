@@ -21,6 +21,7 @@
 #include <Flux/UI/Views/Icon.hpp>
 #include <Flux/UI/Views/Popover.hpp>
 #include <Flux/UI/Views/ScrollView.hpp>
+#include <Flux/UI/Views/Select.hpp>
 #include <Flux/UI/Views/Slider.hpp>
 #include <Flux/UI/Views/Spacer.hpp>
 #include <Flux/UI/Views/TextInput.hpp>

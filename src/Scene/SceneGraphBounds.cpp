@@ -27,9 +27,20 @@ void unionWorldRect(Rect& acc, bool& has, Rect const& worldRect) {
   acc = Rect{minx, miny, maxx - minx, maxy - miny};
 }
 
-void quadToWorldAabb(Rect const& local, Mat3 const& worldFromLocal, Rect& acc, bool& has) {
+std::optional<Rect> intersectRects(Rect const& a, Rect const& b) {
+  float const x0 = std::max(a.x, b.x);
+  float const y0 = std::max(a.y, b.y);
+  float const x1 = std::min(a.x + a.width, b.x + b.width);
+  float const y1 = std::min(a.y + a.height, b.y + b.height);
+  if (x1 <= x0 || y1 <= y0) {
+    return std::nullopt;
+  }
+  return Rect{x0, y0, x1 - x0, y1 - y0};
+}
+
+std::optional<Rect> quadWorldAabb(Rect const& local, Mat3 const& worldFromLocal) {
   if (std::abs(worldFromLocal.affineDeterminant()) < kDetEps) {
-    return;
+    return std::nullopt;
   }
   Point const p0 = worldFromLocal.apply({local.x, local.y});
   Point const p1 = worldFromLocal.apply({local.x + local.width, local.y});
@@ -39,23 +50,44 @@ void quadToWorldAabb(Rect const& local, Mat3 const& worldFromLocal, Rect& acc, b
   float const miny = std::min({p0.y, p1.y, p2.y, p3.y});
   float const maxx = std::max({p0.x, p1.x, p2.x, p3.x});
   float const maxy = std::max({p0.y, p1.y, p2.y, p3.y});
-  unionWorldRect(acc, has, Rect{minx, miny, maxx - minx, maxy - miny});
+  return Rect{minx, miny, maxx - minx, maxy - miny};
 }
 
-void accumulate(NodeId id, SceneGraph const& graph, Mat3 const& parentWorld, Rect& acc, bool& has) {
+void unionClippedWorldRect(Rect const& worldRect, std::optional<Rect> const& clipWorld, Rect& acc, bool& has) {
+  if (clipWorld.has_value()) {
+    if (std::optional<Rect> const clipped = intersectRects(worldRect, *clipWorld)) {
+      unionWorldRect(acc, has, *clipped);
+    }
+    return;
+  }
+  unionWorldRect(acc, has, worldRect);
+}
+
+void accumulate(NodeId id, SceneGraph const& graph, Mat3 const& parentWorld,
+                std::optional<Rect> const& clipWorld, Rect& acc, bool& has) {
   SceneNode const* sn = graph.get(id);
   if (!sn) {
     return;
   }
   if (auto const* layer = std::get_if<LayerNode>(sn)) {
     Mat3 const localWorld = parentWorld * layer->transform;
+    std::optional<Rect> nextClip = clipWorld;
+    if (layer->clip.has_value()) {
+      if (std::optional<Rect> const layerClipWorld = quadWorldAabb(*layer->clip, localWorld)) {
+        nextClip = nextClip.has_value() ? intersectRects(*nextClip, *layerClipWorld) : layerClipWorld;
+      } else {
+        nextClip = std::nullopt;
+      }
+    }
     for (NodeId c : layer->children) {
-      accumulate(c, graph, localWorld, acc, has);
+      accumulate(c, graph, localWorld, nextClip, acc, has);
     }
     return;
   }
   if (auto const* rect = std::get_if<RectNode>(sn)) {
-    quadToWorldAabb(rect->bounds, parentWorld, acc, has);
+    if (std::optional<Rect> const worldRect = quadWorldAabb(rect->bounds, parentWorld)) {
+      unionClippedWorldRect(*worldRect, clipWorld, acc, has);
+    }
     return;
   }
   if (auto const* text = std::get_if<TextNode>(sn)) {
@@ -69,20 +101,28 @@ void accumulate(NodeId id, SceneGraph const& graph, Mat3 const& parentWorld, Rec
       Size const ms = text->layout->measuredSize;
       tb = Rect::sharp(text->origin.x, text->origin.y, ms.width, ms.height);
     }
-    quadToWorldAabb(tb, parentWorld, acc, has);
+    if (std::optional<Rect> const worldRect = quadWorldAabb(tb, parentWorld)) {
+      unionClippedWorldRect(*worldRect, clipWorld, acc, has);
+    }
     return;
   }
   if (auto const* img = std::get_if<ImageNode>(sn)) {
-    quadToWorldAabb(img->bounds, parentWorld, acc, has);
+    if (std::optional<Rect> const worldRect = quadWorldAabb(img->bounds, parentWorld)) {
+      unionClippedWorldRect(*worldRect, clipWorld, acc, has);
+    }
     return;
   }
   if (auto const* cr = std::get_if<CustomRenderNode>(sn)) {
-    quadToWorldAabb(cr->frame, parentWorld, acc, has);
+    if (std::optional<Rect> const worldRect = quadWorldAabb(cr->frame, parentWorld)) {
+      unionClippedWorldRect(*worldRect, clipWorld, acc, has);
+    }
     return;
   }
   if (auto const* path = std::get_if<PathNode>(sn)) {
     Rect const b = path->path.getBounds();
-    quadToWorldAabb(b, parentWorld, acc, has);
+    if (std::optional<Rect> const worldRect = quadWorldAabb(b, parentWorld)) {
+      unionClippedWorldRect(*worldRect, clipWorld, acc, has);
+    }
     return;
   }
   if (auto const* line = std::get_if<LineNode>(sn)) {
@@ -92,7 +132,9 @@ void accumulate(NodeId id, SceneGraph const& graph, Mat3 const& parentWorld, Rec
     float const maxy = std::max(line->from.y, line->to.y);
     float const w = std::max(0.f, maxx - minx);
     float const h = std::max(0.f, maxy - miny);
-    quadToWorldAabb(Rect{minx, miny, w, h}, parentWorld, acc, has);
+    if (std::optional<Rect> const worldRect = quadWorldAabb(Rect{minx, miny, w, h}, parentWorld)) {
+      unionClippedWorldRect(*worldRect, clipWorld, acc, has);
+    }
     return;
   }
 }
@@ -126,7 +168,7 @@ Mat3 subtreeAncestorWorldTransform(SceneGraph const& graph, NodeId subtreeRoot) 
 Rect unionSubtreeBounds(SceneGraph const& graph, NodeId subtreeRoot, Mat3 parentWorld) {
   Rect acc{};
   bool has = false;
-  accumulate(subtreeRoot, graph, parentWorld, acc, has);
+  accumulate(subtreeRoot, graph, parentWorld, std::nullopt, acc, has);
   if (!has) {
     return Rect{};
   }
@@ -142,7 +184,7 @@ Rect measureRootContentBounds(SceneGraph const& graph) {
   }
   Mat3 const id = Mat3::identity();
   for (NodeId c : root->children) {
-    accumulate(c, graph, id, acc, has);
+    accumulate(c, graph, id, std::nullopt, acc, has);
   }
   if (!has) {
     return {};

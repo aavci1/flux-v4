@@ -31,6 +31,19 @@ Size estimateContentSize(std::optional<Size> const& maxSize) {
   return {w, h};
 }
 
+Rect applyAnchorOutsets(Rect rect, EdgeInsets const &outsets) {
+  float const left = std::max(0.f, outsets.left);
+  float const right = std::max(0.f, outsets.right);
+  float const top = std::max(0.f, outsets.top);
+  float const bottom = std::max(0.f, outsets.bottom);
+  return Rect{
+      rect.x - left,
+      rect.y - top,
+      rect.width + left + right,
+      rect.height + top + bottom,
+  };
+}
+
 } // namespace
 
 PopoverPlacement resolvePopoverPlacement(PopoverPlacement preferred, std::optional<Rect> const& anchor,
@@ -137,6 +150,7 @@ std::tuple<std::function<void(Popover)>, std::function<void()>, bool> usePopover
   auto show = [showOverlay, hideOverlay, anchorKey, rt, wPtr, store](Popover popover) {
     std::optional<Rect> anchorRect;
     std::optional<ComponentKey> anchorTrackLeafKey;
+    std::optional<ComponentKey> anchorTrackComponentKey;
     if (popover.anchorRectOverride.has_value()) {
       anchorRect = popover.anchorRectOverride;
       anchorTrackLeafKey = std::nullopt;
@@ -151,19 +165,27 @@ std::tuple<std::function<void(Popover)>, std::function<void()>, bool> usePopover
     } else if (popover.useTapAnchor) {
       anchorRect = rt->layoutRectForTapAnchor();
       anchorTrackLeafKey = rt->tapAnchorLeafKeySnapshot();
+    } else {
+      anchorRect = rt->layoutRectForKey(anchorKey);
+      anchorTrackComponentKey = anchorKey;
     }
     if (!anchorRect.has_value()) {
       anchorRect = rt->layoutRectForKey(anchorKey);
       anchorTrackLeafKey = std::nullopt;
+      anchorTrackComponentKey = anchorKey;
     }
     // Exact composite key is sometimes absent from the cache during the same pass; walk prefixes so we
     // still anchor to an ancestor composite rect (same idea as tap tracking).
     if (!anchorRect.has_value()) {
       anchorRect = rt->layoutRectForLeafKeyPrefix(anchorKey);
       anchorTrackLeafKey = std::nullopt;
+      anchorTrackComponentKey = anchorKey;
     }
     if (anchorRect.has_value() && popover.anchorMaxHeight.has_value()) {
       anchorRect->height = std::min(anchorRect->height, *popover.anchorMaxHeight);
+    }
+    if (anchorRect.has_value() && !popover.anchorOutsets.isZero()) {
+      anchorRect = applyAnchorOutsets(*anchorRect, popover.anchorOutsets);
     }
     Size const win = wPtr->getSize();
     Theme const* tp = wPtr->environmentValue<Theme>();
@@ -189,7 +211,9 @@ std::tuple<std::function<void(Popover)>, std::function<void()>, bool> usePopover
         OverlayConfig{
             .anchor = anchorRect,
             .anchorTrackLeafKey = std::move(anchorTrackLeafKey),
+            .anchorTrackComponentKey = std::move(anchorTrackComponentKey),
             .anchorMaxHeight = popover.anchorMaxHeight,
+            .anchorOutsets = popover.anchorOutsets,
             .placement = overlayPlacementFromPopover(resolved),
             .offset = offset,
             .maxSize = maxSz,
