@@ -22,6 +22,7 @@
 #include <Flux/UI/Views/ListView.hpp>
 #include <Flux/UI/Views/Popover.hpp>
 #include <Flux/UI/Views/ScrollView.hpp>
+#include <Flux/UI/Views/SegmentedControl.hpp>
 #include <Flux/UI/Views/Select.hpp>
 #include <Flux/UI/Views/Slider.hpp>
 #include <Flux/UI/Views/Spacer.hpp>

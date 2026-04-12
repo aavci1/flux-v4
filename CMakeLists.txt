@@ -148,6 +148,7 @@ add_library(flux STATIC
   src/UI/Views/Checkbox.cpp
   src/UI/Views/Select.cpp
   src/UI/Views/ScrollView.cpp
+  src/UI/Views/SegmentedControl.cpp
   src/UI/Views/Icon.cpp
   src/UI/Views/ListView.cpp
   src/UI/Views/Alert.cpp
