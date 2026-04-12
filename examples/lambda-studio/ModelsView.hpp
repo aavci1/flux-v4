@@ -45,10 +45,9 @@ struct ModelRow : ViewModifiers<ModelRow> {
                     )
                 }
                     .flex(1.f, 1.f),
-                Button {
+                LinkButton {
                     .label = active ? "Loaded" : loading ? "Loading..." :
                                                            "Load",
-                    .variant = active ? ButtonVariant::Ghost : ButtonVariant::Secondary,
                     .disabled = active || loading,
                     .onTap = onLoad,
                 }
@@ -142,9 +141,8 @@ struct ModelsView : ViewModifiers<ModelsView> {
                             )
                         }
                             .flex(1.f, 1.f),
-                        Button {
+                        LinkButton {
                             .label = state.refreshingModels ? "Refreshing..." : "Refresh",
-                            .variant = ButtonVariant::Secondary,
                             .disabled = state.refreshingModels,
                             .onTap = onRefresh,
                         }
