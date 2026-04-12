@@ -466,122 +466,124 @@ struct HubView : ViewModifiers<HubView> {
             }
         }
 
-        return HStack {
+        return VStack {
             .spacing = 0.f,
             .alignment = Alignment::Stretch,
             .children = children(
-                VStack {
+                HStack {
+                    .spacing = theme.space3,
+                    .alignment = Alignment::Center,
+                    .children = children(
+                        TextInput {
+                            .value = searchQuery,
+                            .placeholder = "Search model repos",
+                            .style = TextInput::Style {.height = 40.f},
+                            .onChange = [onSearchQueryChange = onSearchQueryChange](std::string const &value) {
+                                if (onSearchQueryChange) {
+                                    onSearchQueryChange(value);
+                                }
+                            },
+                            .onSubmit = [triggerSearch](std::string const &) {
+                                triggerSearch();
+                            },
+                        }
+                            .flex(1.4f, 1.f),
+                        TextInput {
+                            .value = searchAuthor,
+                            .placeholder = "Author or org",
+                            .style = TextInput::Style {.height = 40.f},
+                            .onChange = [onSearchAuthorChange = onSearchAuthorChange](std::string const &value) {
+                                if (onSearchAuthorChange) {
+                                    onSearchAuthorChange(value);
+                                }
+                            },
+                            .onSubmit = [triggerSearch](std::string const &) {
+                                triggerSearch();
+                            },
+                        }
+                            .flex(1.f, 1.f),
+                        Select {
+                            .selectedIndex = sortIndex,
+                            .options = {
+                                SelectOption {.label = "Downloads"},
+                                SelectOption {.label = "Likes"},
+                                SelectOption {.label = "Updated"},
+                            },
+                            .placeholder = "Sort",
+                            .onChange = [onSortChange = onSortChange](int index) {
+                                if (onSortChange) {
+                                    onSortChange(
+                                        index == 1 ? RemoteModelSort::Likes :
+                                        index == 2 ? RemoteModelSort::Updated :
+                                                     RemoteModelSort::Downloads
+                                    );
+                                }
+                            },
+                        }
+                            .size(160.f, 40.f),
+                        Select {
+                            .selectedIndex = visibilityIndex,
+                            .options = {
+                                SelectOption {.label = "All"},
+                                SelectOption {.label = "Public"},
+                                SelectOption {.label = "Gated"},
+                            },
+                            .placeholder = "Visibility",
+                            .onChange = [onVisibilityChange = onVisibilityChange](int index) {
+                                if (onVisibilityChange) {
+                                    onVisibilityChange(
+                                        index == 1 ? RemoteModelVisibilityFilter::PublicOnly :
+                                        index == 2 ? RemoteModelVisibilityFilter::GatedOnly :
+                                                     RemoteModelVisibilityFilter::All
+                                    );
+                                }
+                            },
+                        }
+                            .size(150.f, 40.f),
+                        Button {
+                            .label = state.searchingRemoteModels ? "Searching..." : "Search",
+                            .disabled = state.searchingRemoteModels,
+                            .onTap = triggerSearch,
+                        }
+                            .size(132.f, 40.f)
+                    )
+                }
+                    .padding(theme.space4),
+                Rectangle {}
+                    .size(0.f, 1.f)
+                    .fill(FillStyle::solid(theme.colorBorderSubtle)),
+                HStack {
                     .spacing = 0.f,
                     .alignment = Alignment::Stretch,
                     .children = children(
                         VStack {
-                            .spacing = theme.space3,
+                            .spacing = 0.f,
+                            .alignment = Alignment::Stretch,
+                            .children = children(std::move(remoteResults))
+                        }
+                            .fill(FillStyle::solid(theme.colorSurfaceOverlay))
+                            .size(420.f, 0.f),
+                        Rectangle {}
+                            .size(1.f, 0.f)
+                            .fill(FillStyle::solid(theme.colorBorderSubtle)),
+                        VStack {
+                            .spacing = theme.space2,
                             .alignment = Alignment::Stretch,
                             .children = children(
-                                TextInput {
-                                    .value = searchQuery,
-                                    .placeholder = "Search model repos",
-                                    .style = TextInput::Style {.height = 40.f},
-                                    .onChange = [onSearchQueryChange = onSearchQueryChange](std::string const &value) {
-                                        if (onSearchQueryChange) {
-                                            onSearchQueryChange(value);
-                                        }
-                                    },
-                                    .onSubmit = [triggerSearch](std::string const &) {
-                                        triggerSearch();
-                                    },
-                                },
-                                HStack {
-                                    .spacing = theme.space3,
-                                    .alignment = Alignment::Center,
-                                    .children = children(
-                                        TextInput {
-                                            .value = searchAuthor,
-                                            .placeholder = "Author or org",
-                                            .style = TextInput::Style {.height = 40.f},
-                                            .onChange = [onSearchAuthorChange = onSearchAuthorChange](std::string const &value) {
-                                                if (onSearchAuthorChange) {
-                                                    onSearchAuthorChange(value);
-                                                }
-                                            },
-                                            .onSubmit = [triggerSearch](std::string const &) {
-                                                triggerSearch();
-                                            },
-                                        }
-                                            .flex(1.f, 1.f),
-                                        Select {
-                                            .selectedIndex = sortIndex,
-                                            .options = {
-                                                SelectOption {.label = "Downloads"},
-                                                SelectOption {.label = "Likes"},
-                                                SelectOption {.label = "Updated"},
-                                            },
-                                            .placeholder = "Sort",
-                                            .onChange = [onSortChange = onSortChange](int index) {
-                                                if (onSortChange) {
-                                                    onSortChange(
-                                                        index == 1 ? RemoteModelSort::Likes :
-                                                        index == 2 ? RemoteModelSort::Updated :
-                                                                     RemoteModelSort::Downloads
-                                                    );
-                                                }
-                                            },
-                                        }
-                                            .size(180.f, 40.f),
-                                        Select {
-                                            .selectedIndex = visibilityIndex,
-                                            .options = {
-                                                SelectOption {.label = "All"},
-                                                SelectOption {.label = "Public"},
-                                                SelectOption {.label = "Gated"},
-                                            },
-                                            .placeholder = "Visibility",
-                                            .onChange = [onVisibilityChange = onVisibilityChange](int index) {
-                                                if (onVisibilityChange) {
-                                                    onVisibilityChange(
-                                                        index == 1 ? RemoteModelVisibilityFilter::PublicOnly :
-                                                        index == 2 ? RemoteModelVisibilityFilter::GatedOnly :
-                                                                     RemoteModelVisibilityFilter::All
-                                                    );
-                                                }
-                                            },
-                                        }
-                                            .size(160.f, 40.f)
-                                    )
-                                },
-                                Button {
-                                    .label = state.searchingRemoteModels ? "Searching..." : "Search",
-                                    .disabled = state.searchingRemoteModels,
-                                    .onTap = triggerSearch,
-                                }
-                                    .size(0.f, 40.f)
+                                selectedRemoteModel == nullptr ? hub_view_detail::placeholderPanel(theme, "No repository selected", "Pick a search result to inspect its GGUF files.")
+                                                               : Element {VStack {
+                                                                     .spacing = theme.space1,
+                                                                     .alignment = Alignment::Start,
+                                                                     .children = std::move(selectedRepoChildren),
+                                                                 }},
+                                std::move(remoteFiles)
                             )
                         }
-                            .padding(theme.space4),
-                        Rectangle {}
-                            .size(0.f, 1.f)
-                            .fill(FillStyle::solid(theme.colorBorderSubtle)),
-                        std::move(remoteResults)
+                            .padding(theme.space4)
+                            .fill(FillStyle::solid(theme.colorSurfaceOverlay))
+                            .flex(1.f, 1.f)
                     )
                 }
-                    .size(420.f, 0.f),
-                Rectangle {}
-                    .size(1.f, 0.f)
-                    .fill(FillStyle::solid(theme.colorBorderSubtle)),
-                VStack {
-                    .spacing = theme.space2,
-                    .alignment = Alignment::Stretch,
-                    .children = children(
-                        selectedRemoteModel == nullptr ? hub_view_detail::placeholderPanel(theme, "No repository selected", "Pick a search result to inspect its GGUF files.")
-                                                       : Element {VStack {
-                                                             .spacing = theme.space1,
-                                                             .alignment = Alignment::Start,
-                                                             .children = std::move(selectedRepoChildren),
-                                                         }},
-                        std::move(remoteFiles)
-                    )
-                }
-                    .padding(theme.space4)
                     .flex(1.f, 1.f)
             )
         };

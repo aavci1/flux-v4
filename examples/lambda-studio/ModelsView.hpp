@@ -301,7 +301,8 @@ struct ModelsView : ViewModifiers<ModelsView> {
                     .fill(FillStyle::solid(theme.colorBorderSubtle)),
                 std::move(content)
             )
-        };
+        }
+            .fill(FillStyle::solid(theme.colorSurfaceOverlay));
     }
 };
 
