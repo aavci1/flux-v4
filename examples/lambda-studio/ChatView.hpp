@@ -21,43 +21,57 @@ namespace lambda {
 struct IconActionButton : ViewModifiers<IconActionButton> {
     IconName icon = IconName::Add;
     bool disabled = false;
-    bool accent = false;
     std::function<void()> onTap;
 
     auto body() const {
         Theme const &theme = useEnvironment<Theme>();
-        bool const hovered = useHover();
-        bool const pressed = usePress();
-        bool const isDisabled = disabled;
+        auto const hovered = useHover();
+        auto const pressed = usePress();
 
-        Color const fill = isDisabled ? theme.colorSurfaceDisabled :
-                           accent     ? theme.colorAccent :
-                                        (pressed ? theme.colorSurfaceRowHover :
-                                         hovered ? theme.colorSurfaceHover :
-                                                   theme.colorSurface);
-        Color const iconColor = isDisabled ? theme.colorTextMuted :
-                                accent   ? theme.colorTextOnAccent :
-                                           theme.colorTextSecondary;
+        auto const getFillColor = [theme, disabled = disabled, hovered, pressed]() {
+            if (disabled) {
+                return theme.colorSurfaceDisabled;
+            }
 
-        return ZStack {
-            .horizontalAlignment = Alignment::Center,
-            .verticalAlignment = Alignment::Center,
-            .children = children(
-                Rectangle {}
-                    .size(32.f, 32.f)
-                    .fill(FillStyle::solid(fill))
-                    .stroke(accent || isDisabled ? StrokeStyle::none() : StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
-                    .cornerRadius(theme.radiusFull),
-                Icon {
-                    .name = icon,
-                    .size = 18.f,
-                    .weight = 700.f,
-                    .color = iconColor,
-                })
+            if (hovered) {
+                return theme.colorSurfaceHover;
+            }
+
+            if (pressed) {
+                return theme.colorSurfaceRowHover;
+            }
+
+            return theme.colorSurface;
+        };
+
+        auto const getIconColor = [theme, disabled = disabled, hovered, pressed]() {
+            if (disabled) {
+                return theme.colorTextDisabled;
+            }
+
+            if (hovered || pressed) {
+                return theme.colorAccentSubtle;
+            }
+
+            return theme.colorAccent;
+        };
+
+        auto const fillColor = getFillColor();
+        auto const iconColor = getIconColor();
+
+        return Icon {
+            .name = icon,
+            .size = 18.f,
+            .weight = 700.f,
+            .color = iconColor,
         }
-            .cursor(isDisabled ? Cursor::Arrow : Cursor::Hand)
-            .onTap([isDisabled, onTap = onTap] {
-                if (!isDisabled && onTap) {
+            .fill(FillStyle::solid(fillColor))
+            .stroke(StrokeStyle::solid(iconColor, 1.f))
+            .size(32.f, 32.f)
+            .cornerRadius(theme.radiusFull)
+            .cursor(disabled ? Cursor::Arrow : Cursor::Hand)
+            .onTap([disabled = disabled, onTap = onTap] {
+                if (!disabled && onTap) {
                     onTap();
                 }
             });
@@ -130,7 +144,7 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
 
 struct ChatComposer : ViewModifiers<ChatComposer> {
     State<std::string> value;
-    bool enabled = true;
+    bool disabled = true;
     std::string hintText;
     std::function<void(std::string const &)> onSend;
     std::function<void()> onStop;
@@ -140,7 +154,7 @@ struct ChatComposer : ViewModifiers<ChatComposer> {
         Theme const &theme = useEnvironment<Theme>();
 
         auto draftState = value;
-        bool const canSend = enabled && !(*draftState).empty();
+        bool const canSend = !disabled && !(*draftState).empty();
         auto submit = [draftState, onSend = onSend, canSend]() {
             std::string message = *draftState;
             if (!canSend || message.empty() || !onSend) {
@@ -159,7 +173,7 @@ struct ChatComposer : ViewModifiers<ChatComposer> {
                     .placeholder = "Message Lambda Studio...",
                     .style = TextInput::Style::plain(),
                     .multiline = true,
-                    .disabled = !enabled,
+                    .disabled = disabled,
                     .multilineHeight = {.minIntrinsic = 88.f, .maxIntrinsic = 160.f},
                     .onSubmit = [submit](std::string const &) {
                         submit();
@@ -178,24 +192,19 @@ struct ChatComposer : ViewModifiers<ChatComposer> {
                                          Text {
                                              .text = hintText.empty() ? "Local draft" : hintText,
                                              .font = theme.fontBodySmall,
-                                             .color = enabled ? theme.colorTextSecondary : theme.colorTextMuted,
+                                             .color = disabled ? theme.colorTextMuted : theme.colorTextSecondary,
                                              .verticalAlignment = VerticalAlignment::Center,
                                          },
-                                         Spacer {}, streaming ? Element {IconActionButton {
-                                                                    .icon = IconName::Stop,
-                                                                    .onTap = onStop,
-                                                                }} :
-                                                                Element {IconActionButton {
-                                                                    .icon = IconName::Send,
-                                                                    .disabled = !canSend,
-                                                                    .accent = true,
-                                                                    .onTap = submit,
-                                                                }}),
+                                         Spacer {}, streaming ? IconActionButton {.icon = IconName::Stop, .onTap = onStop} : IconActionButton {
+                                                                                                                                 .icon = IconName::Send,
+                                                                                                                                 .disabled = !canSend,
+                                                                                                                                 .onTap = submit,
+                                                                                                                             }),
                 }
             ),
         }
             .padding(theme.space4)
-            .fill(FillStyle::solid(theme.colorSurfaceOverlay))
+            .fill(FillStyle::solid(disabled ? theme.colorSurfaceDisabled : theme.colorSurfaceOverlay))
             .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
             .cornerRadius(theme.radiusXLarge);
     }
@@ -316,7 +325,7 @@ struct ChatView : ViewModifiers<ChatView> {
                     .flex(1.f, 1.f, 0.f),
                 ChatComposer {
                     .value = draft,
-                    .enabled = canCompose,
+                    .disabled = !canCompose,
                     .hintText = composerHint,
                     .onSend = onSend,
                     .onStop = onStop,
