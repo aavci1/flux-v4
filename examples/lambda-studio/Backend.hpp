@@ -7,6 +7,7 @@
 
 #include "AppState.hpp"
 #include "LlamaEngine.hpp"
+#include "ModelCatalogStore.hpp"
 #include "ModelManager.hpp"
 
 namespace lambda {
@@ -14,6 +15,7 @@ namespace lambda {
 struct BackendServices {
     std::shared_ptr<lambda_backend::LlamaEngine> engine;
     std::shared_ptr<lambda_backend::ModelManager> manager;
+    std::shared_ptr<ModelCatalogStore> catalog;
 };
 
 inline std::shared_ptr<BackendServices> &backendSlot() {
@@ -25,6 +27,7 @@ inline BackendServices &backend() {
     auto &slot = backendSlot();
     if (!slot) {
         slot = std::make_shared<BackendServices>();
+        slot->catalog = std::make_shared<ModelCatalogStore>();
         slot->engine = std::make_shared<lambda_backend::LlamaEngine>();
         slot->manager = std::make_shared<lambda_backend::ModelManager>(
             slot->engine,
@@ -43,6 +46,7 @@ inline void shutdownBackend() {
     }
     slot->manager.reset();
     slot->engine.reset();
+    slot->catalog.reset();
     llama_backend_free();
     slot.reset();
 }

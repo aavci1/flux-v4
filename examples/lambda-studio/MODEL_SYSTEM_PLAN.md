@@ -9,7 +9,7 @@ It is intended to be a working implementation roadmap, not just a wishlist.
 - Milestone A: implemented
 - Milestone B: implemented
 - Milestone C: partially implemented
-- Milestone D: not started
+- Milestone D: partially implemented
 - Milestone E: not started
 - Milestone F: not started
 
@@ -518,6 +518,19 @@ Deliverables:
 - `ModelCatalogStore`
 - schema versioning
 - migration path
+
+Status:
+
+- Partially implemented in the current codebase.
+- Current state:
+  - Lambda Studio now persists remote search results and repo-file metadata into a local SQLite catalog.
+  - Search requests can preload cached results before the network refresh completes.
+  - Repo-file requests can preload cached GGUF file metadata before the network refresh completes.
+- Still missing:
+  - schema versioning and migrations
+  - persisted raw Hugging Face payloads
+  - offline/local search over the full catalog
+  - local model instance persistence in the catalog
 
 ### Milestone E: Add Rich Filters and Sorting
 
