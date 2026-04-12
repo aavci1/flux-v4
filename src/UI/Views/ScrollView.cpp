@@ -180,9 +180,6 @@ Element ScrollView::body() const {
     Size const contentSize = *content;
     Point const scrollRange = maxScrollOffset(ax, effectiveViewport, contentSize);
     Point const clampedOffset = clampScrollOffset(ax, *offset, effectiveViewport, contentSize);
-    if (clampedOffset != *offset) {
-        offset = clampedOffset;
-    }
     bool const showsVerticalIndicator = scrollRange.y > 0.f;
     bool const showsHorizontalIndicator = scrollRange.x > 0.f;
     ScrollIndicatorMetrics const verticalIndicator =
