@@ -142,25 +142,55 @@ class ModelCatalogStore {
 
         std::vector<RemoteModel> models;
         while (sqlite3_step(stmt.stmt) == SQLITE_ROW) {
-            RemoteModel model;
-            model.id = columnText(stmt.stmt, 0);
-            model.author = columnText(stmt.stmt, 1);
-            model.libraryName = columnText(stmt.stmt, 2);
-            model.pipelineTag = columnText(stmt.stmt, 3);
-            model.createdAt = columnText(stmt.stmt, 4);
-            model.lastModified = columnText(stmt.stmt, 5);
-            model.tags = splitTags(columnText(stmt.stmt, 6));
-            model.downloads = sqlite3_column_int64(stmt.stmt, 7);
-            model.downloadsAllTime = sqlite3_column_int64(stmt.stmt, 8);
-            model.likes = sqlite3_column_int64(stmt.stmt, 9);
-            model.usedStorage = sqlite3_column_int64(stmt.stmt, 10);
-            model.gated = sqlite3_column_int(stmt.stmt, 11) != 0;
-            model.isPrivate = sqlite3_column_int(stmt.stmt, 12) != 0;
-            model.disabled = sqlite3_column_int(stmt.stmt, 13) != 0;
-            models.push_back(std::move(model));
+            models.push_back(readRemoteModelRow(stmt.stmt));
         }
         if (models.empty()) {
             models = loadSearchResultsFromPayload(query);
+        }
+        return models;
+    }
+
+    std::vector<RemoteModel> searchCatalogModels(
+        std::string const &query,
+        std::string const &author,
+        RemoteModelSort sort,
+        std::size_t limit = 20
+    ) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        std::string orderBy = "r.downloads DESC, r.likes DESC, r.repo_id ASC";
+        if (sort == RemoteModelSort::Likes) {
+            orderBy = "r.likes DESC, r.downloads DESC, r.repo_id ASC";
+        } else if (sort == RemoteModelSort::Updated) {
+            orderBy = "r.last_modified DESC, r.downloads DESC, r.repo_id ASC";
+        }
+
+        std::string sql =
+            "SELECT "
+            "  r.repo_id, r.author, r.library_name, r.pipeline_tag, r.created_at, r.last_modified, r.tags,"
+            "  r.downloads, r.downloads_all_time, r.likes, r.used_storage, r.gated, r.is_private, r.disabled "
+            "FROM model_repos r "
+            "LEFT JOIN repo_details d ON d.repo_id = r.repo_id "
+            "WHERE (?1 = '' OR "
+            "       r.repo_id LIKE ?2 OR "
+            "       r.author LIKE ?2 OR "
+            "       r.tags LIKE ?2 OR "
+            "       COALESCE(d.summary, '') LIKE ?2) "
+            "  AND (?3 = '' OR r.author LIKE ?4) "
+            "ORDER BY " + orderBy + " "
+            "LIMIT ?5;";
+
+        Statement stmt(db_, sql.c_str());
+        std::string const queryPattern = "%" + query + "%";
+        std::string const authorPattern = "%" + author + "%";
+        bindText(stmt.stmt, 1, query);
+        bindText(stmt.stmt, 2, queryPattern);
+        bindText(stmt.stmt, 3, author);
+        bindText(stmt.stmt, 4, authorPattern);
+        bindInt64(stmt.stmt, 5, static_cast<std::int64_t>(limit));
+
+        std::vector<RemoteModel> models;
+        while (sqlite3_step(stmt.stmt) == SQLITE_ROW) {
+            models.push_back(readRemoteModelRow(stmt.stmt));
         }
         return models;
     }
@@ -440,6 +470,25 @@ class ModelCatalogStore {
     static std::string columnText(sqlite3_stmt *stmt, int index) {
         unsigned char const *value = sqlite3_column_text(stmt, index);
         return value == nullptr ? std::string {} : std::string(reinterpret_cast<char const *>(value));
+    }
+
+    static RemoteModel readRemoteModelRow(sqlite3_stmt *stmt) {
+        RemoteModel model;
+        model.id = columnText(stmt, 0);
+        model.author = columnText(stmt, 1);
+        model.libraryName = columnText(stmt, 2);
+        model.pipelineTag = columnText(stmt, 3);
+        model.createdAt = columnText(stmt, 4);
+        model.lastModified = columnText(stmt, 5);
+        model.tags = splitTags(columnText(stmt, 6));
+        model.downloads = sqlite3_column_int64(stmt, 7);
+        model.downloadsAllTime = sqlite3_column_int64(stmt, 8);
+        model.likes = sqlite3_column_int64(stmt, 9);
+        model.usedStorage = sqlite3_column_int64(stmt, 10);
+        model.gated = sqlite3_column_int(stmt, 11) != 0;
+        model.isPrivate = sqlite3_column_int(stmt, 12) != 0;
+        model.disabled = sqlite3_column_int(stmt, 13) != 0;
+        return model;
     }
 
     static std::string joinTags(std::vector<std::string> const &tags) {

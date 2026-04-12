@@ -430,6 +430,9 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
             std::string const cacheKey = currentRemoteSearchKey(nextState);
             try {
                 nextState.remoteModels = services.catalog->loadSearchResults(cacheKey);
+                if (nextState.remoteModels.empty()) {
+                    nextState.remoteModels = services.catalog->searchCatalogModels(query, author, sort);
+                }
                 nextState.selectedRemoteRepoId.clear();
                 nextState.selectedRemoteRepoFiles.clear();
                 nextState.selectedRemoteRepoDetail.reset();

@@ -540,9 +540,9 @@ Status:
   - Search requests can preload cached results before the network refresh completes.
   - Repo-file requests can preload cached GGUF file metadata before the network refresh completes.
   - Repo-detail requests can preload cached metadata before the network refresh completes.
+  - when there is no exact cached search hit, the app can now query the local catalog by repo id, author, tags, and summary
 - Still missing:
   - schema versioning and migrations
-  - offline/local search over the full catalog
   - local model instance persistence in the catalog
 
 ### Milestone E: Add Rich Filters and Sorting
