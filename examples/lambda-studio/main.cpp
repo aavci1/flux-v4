@@ -527,6 +527,10 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
             services.manager->downloadModel(std::move(repoId), std::move(path));
         };
 
+        auto retryDownloadJob = [requestRemoteDownload](std::string repoId, std::string filePath) {
+            requestRemoteDownload(std::move(repoId), std::move(filePath));
+        };
+
         auto requestModelLoad = [appState, &services](std::string const &path, std::string const &name) {
             if (path.empty()) {
                 return;
@@ -655,6 +659,7 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                 .onSearch = requestRemoteSearch,
                 .onSelectRemoteRepo = requestRemoteRepoFiles,
                 .onDownload = requestRemoteDownload,
+                .onRetryDownload = retryDownloadJob,
             }
                               .flex(1.f, 1.f);
         } else if (state.currentModule == StudioModule::Settings) {

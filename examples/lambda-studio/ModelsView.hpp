@@ -251,6 +251,8 @@ struct RemoteFileRow : ViewModifiers<RemoteFileRow> {
 
 struct DownloadJobRow : ViewModifiers<DownloadJobRow> {
     DownloadJob job;
+    bool retryEnabled = false;
+    std::function<void()> onRetry;
 
     auto body() const {
         Theme const &theme = useEnvironment<Theme>();
@@ -267,24 +269,38 @@ struct DownloadJobRow : ViewModifiers<DownloadJobRow> {
         }
 
         return ListRow {
-            .content = VStack {
-                .spacing = theme.space1,
-                .alignment = Alignment::Start,
+            .content = HStack {
+                .spacing = theme.space3,
+                .alignment = Alignment::Center,
                 .children = children(
-                    Text {
-                        .text = title,
-                        .font = theme.fontLabelSmall,
-                        .color = job.status == DownloadJobStatus::Failed ? theme.colorDanger : theme.colorTextPrimary,
-                        .wrapping = TextWrapping::Wrap,
-                        .maxLines = 2,
-                    },
-                    Text {
-                        .text = meta,
-                        .font = theme.fontBodySmall,
-                        .color = theme.colorTextSecondary,
-                        .wrapping = TextWrapping::Wrap,
-                        .maxLines = 2,
+                    VStack {
+                        .spacing = theme.space1,
+                        .alignment = Alignment::Start,
+                        .children = children(
+                            Text {
+                                .text = title,
+                                .font = theme.fontLabelSmall,
+                                .color = job.status == DownloadJobStatus::Failed ? theme.colorDanger : theme.colorTextPrimary,
+                                .wrapping = TextWrapping::Wrap,
+                                .maxLines = 2,
+                            },
+                            Text {
+                                .text = meta,
+                                .font = theme.fontBodySmall,
+                                .color = theme.colorTextSecondary,
+                                .wrapping = TextWrapping::Wrap,
+                                .maxLines = 2,
+                            }
+                        )
                     }
+                        .flex(1.f, 1.f),
+                    job.status == DownloadJobStatus::Failed
+                        ? Element {LinkButton {
+                              .label = "Retry",
+                              .disabled = !retryEnabled,
+                              .onTap = onRetry,
+                          }}
+                        : Element {Spacer {}.size(0.f, 0.f)}
                 )
             },
         };
@@ -301,6 +317,7 @@ struct ModelsView : ViewModifiers<ModelsView> {
     std::function<void(std::string, std::string, RemoteModelSort)> onSearch;
     std::function<void(std::string)> onSelectRemoteRepo;
     std::function<void(std::string, std::string)> onDownload;
+    std::function<void(std::string, std::string)> onRetryDownload;
 
     auto body() const {
         Theme const &theme = useEnvironment<Theme>();
@@ -386,7 +403,15 @@ struct ModelsView : ViewModifiers<ModelsView> {
         std::vector<Element> downloadRows;
         downloadRows.reserve(state.recentDownloadJobs.size());
         for (DownloadJob const &job : state.recentDownloadJobs) {
-            downloadRows.push_back(DownloadJobRow {.job = job});
+            downloadRows.push_back(DownloadJobRow {
+                .job = job,
+                .retryEnabled = !state.downloadingModel && !job.repoId.empty() && !job.filePath.empty(),
+                .onRetry = [onRetryDownload = onRetryDownload, repoId = job.repoId, filePath = job.filePath] {
+                    if (onRetryDownload) {
+                        onRetryDownload(repoId, filePath);
+                    }
+                },
+            });
         }
 
         Element localContent = localRows.empty()

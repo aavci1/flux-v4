@@ -512,8 +512,9 @@ Status:
   - download completion/error state is wired into app state
   - download attempts are now persisted into a local job history with running/completed/failed states
   - recent download history is shown in the Models view and restored on launch
+  - failed download jobs can now be retried directly from the recent history list
 - Still missing:
-  - resumable/retryable download jobs
+  - resumable downloads
   - explicit progress reporting in the UI
 
 ### Milestone D: Add Local Catalog Database
