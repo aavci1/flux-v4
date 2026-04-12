@@ -310,6 +310,59 @@ class ModelCatalogStore {
         return detail;
     }
 
+    void replaceLocalModelInstances(std::vector<LocalModel> const &models) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        try {
+            beginTransaction();
+            execute("DELETE FROM local_model_instances;");
+
+            Statement insert(
+                db_,
+                "INSERT INTO local_model_instances (path, name, repo_id, tag, size_bytes, discovered_at_unix_ms) "
+                "VALUES (?1, ?2, ?3, ?4, ?5, ?6);"
+            );
+            std::int64_t const now = currentUnixMillis();
+            for (LocalModel const &model : models) {
+                sqlite3_reset(insert.stmt);
+                sqlite3_clear_bindings(insert.stmt);
+                bindText(insert.stmt, 1, model.path);
+                bindText(insert.stmt, 2, model.name);
+                bindText(insert.stmt, 3, model.repo);
+                bindText(insert.stmt, 4, model.tag);
+                bindInt64(insert.stmt, 5, static_cast<std::int64_t>(model.sizeBytes));
+                bindInt64(insert.stmt, 6, now);
+                stepDone(insert.stmt);
+            }
+
+            commitTransaction();
+        } catch (...) {
+            rollbackTransaction();
+            throw;
+        }
+    }
+
+    std::vector<LocalModel> loadLocalModelInstances() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        Statement stmt(
+            db_,
+            "SELECT path, name, repo_id, tag, size_bytes "
+            "FROM local_model_instances "
+            "ORDER BY name ASC, path ASC;"
+        );
+
+        std::vector<LocalModel> models;
+        while (sqlite3_step(stmt.stmt) == SQLITE_ROW) {
+            LocalModel model;
+            model.path = columnText(stmt.stmt, 0);
+            model.name = columnText(stmt.stmt, 1);
+            model.repo = columnText(stmt.stmt, 2);
+            model.tag = columnText(stmt.stmt, 3);
+            model.sizeBytes = static_cast<std::size_t>(sqlite3_column_int64(stmt.stmt, 4));
+            models.push_back(std::move(model));
+        }
+        return models;
+    }
+
     void startDownloadJob(DownloadJob const &job) {
         std::lock_guard<std::mutex> lock(mutex_);
         Statement upsert(
@@ -413,7 +466,7 @@ class ModelCatalogStore {
     }
 
   private:
-    static constexpr int kCurrentSchemaVersion = 3;
+    static constexpr int kCurrentSchemaVersion = 4;
 
     struct Statement {
         sqlite3_stmt *stmt = nullptr;
@@ -835,6 +888,11 @@ class ModelCatalogStore {
         if (version < 3) {
             applyMigration3();
             setUserVersion(3);
+            version = 3;
+        }
+        if (version < 4) {
+            applyMigration4();
+            setUserVersion(4);
         }
     }
 
@@ -911,6 +969,20 @@ class ModelCatalogStore {
             "  finished_at_unix_ms INTEGER NOT NULL DEFAULT 0"
             ");"
             "CREATE INDEX IF NOT EXISTS idx_download_jobs_started ON download_jobs(started_at_unix_ms DESC);"
+        );
+    }
+
+    void applyMigration4() {
+        execute(
+            "CREATE TABLE IF NOT EXISTS local_model_instances ("
+            "  path TEXT PRIMARY KEY,"
+            "  name TEXT NOT NULL,"
+            "  repo_id TEXT NOT NULL DEFAULT '',"
+            "  tag TEXT NOT NULL DEFAULT '',"
+            "  size_bytes INTEGER NOT NULL DEFAULT 0,"
+            "  discovered_at_unix_ms INTEGER NOT NULL"
+            ");"
+            "CREATE INDEX IF NOT EXISTS idx_local_model_instances_name ON local_model_instances(name ASC);"
         );
     }
 

@@ -155,6 +155,11 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                                 nextState.localModels.push_back(toLocalModel(model));
                             }
                         }
+                        try {
+                            services.catalog->replaceLocalModelInstances(nextState.localModels);
+                        } catch (std::exception const &e) {
+                            nextState.errorText = e.what();
+                        }
                         nextState.statusText = nextState.localModels.empty()
                                                    ? "No local models found"
                                                    : "Found " + std::to_string(nextState.localModels.size()) + " local model" +
@@ -367,6 +372,7 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
             try {
                 services.catalog->markRunningDownloadJobsInterrupted(systemNowMillis());
                 nextState.recentDownloadJobs = services.catalog->loadRecentDownloadJobs();
+                nextState.localModels = services.catalog->loadLocalModelInstances();
             } catch (std::exception const &e) {
                 nextState.errorText = e.what();
             }

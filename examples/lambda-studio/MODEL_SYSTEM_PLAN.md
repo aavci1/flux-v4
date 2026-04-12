@@ -542,8 +542,7 @@ Status:
   - Repo-detail requests can preload cached metadata before the network refresh completes.
   - when there is no exact cached search hit, the app can now query the local catalog by repo id, author, tags, and summary
   - the catalog now has an explicit schema version and in-place migration path for existing databases
-- Still missing:
-  - local model instance persistence in the catalog
+  - local model instances are now persisted in the catalog and preloaded on launch before the filesystem refresh completes
 
 ### Milestone E: Add Rich Filters and Sorting
 
