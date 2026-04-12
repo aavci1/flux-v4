@@ -90,6 +90,31 @@ inline RemoteModelFile toRemoteModelFile(lambda_backend::HfFileInfo const &file)
     return remoteFile;
 }
 
+inline RemoteRepoDetail toRemoteRepoDetail(lambda_backend::HfRepoDetailInfo const &detail) {
+    RemoteRepoDetail remote;
+    remote.id = detail.id;
+    remote.author = detail.author;
+    remote.sha = detail.sha;
+    remote.libraryName = detail.libraryName;
+    remote.pipelineTag = detail.pipelineTag;
+    remote.license = detail.license;
+    remote.summary = detail.summary;
+    remote.readme = detail.readme;
+    remote.createdAt = detail.createdAt;
+    remote.lastModified = detail.lastModified;
+    remote.tags = detail.tags;
+    remote.languages = detail.languages;
+    remote.baseModels = detail.baseModels;
+    remote.downloads = detail.downloads;
+    remote.downloadsAllTime = detail.downloadsAllTime;
+    remote.likes = detail.likes;
+    remote.usedStorage = detail.usedStorage;
+    remote.gated = detail.gated;
+    remote.isPrivate = detail.isPrivate;
+    remote.disabled = detail.disabled;
+    return remote;
+}
+
 inline lambda_backend::ChatMessage::Role toBackendRole(ChatRole role) {
     switch (role) {
     case ChatRole::User:

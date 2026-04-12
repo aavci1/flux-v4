@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -56,6 +57,31 @@ struct RemoteModelFile {
     bool operator==(RemoteModelFile const &) const = default;
 };
 
+struct RemoteRepoDetail {
+    std::string id;
+    std::string author;
+    std::string sha;
+    std::string libraryName;
+    std::string pipelineTag;
+    std::string license;
+    std::string summary;
+    std::string readme;
+    std::string createdAt;
+    std::string lastModified;
+    std::vector<std::string> tags;
+    std::vector<std::string> languages;
+    std::vector<std::string> baseModels;
+    std::int64_t downloads = 0;
+    std::int64_t downloadsAllTime = 0;
+    std::int64_t likes = 0;
+    std::int64_t usedStorage = 0;
+    bool gated = false;
+    bool isPrivate = false;
+    bool disabled = false;
+
+    bool operator==(RemoteRepoDetail const &) const = default;
+};
+
 struct AppState {
     StudioModule currentModule = StudioModule::Chats;
     std::vector<ChatThread> chats = sampleChatThreads();
@@ -66,6 +92,7 @@ struct AppState {
     std::vector<RemoteModel> remoteModels;
     std::string selectedRemoteRepoId;
     std::vector<RemoteModelFile> selectedRemoteRepoFiles;
+    std::optional<RemoteRepoDetail> selectedRemoteRepoDetail;
 
     std::string loadedModelPath;
     std::string loadedModelName;
@@ -78,6 +105,7 @@ struct AppState {
     bool refreshingModels = false;
     bool searchingRemoteModels = false;
     bool loadingRemoteModelFiles = false;
+    bool loadingRemoteRepoDetail = false;
     bool downloadingModel = false;
     bool modelLoading = false;
 

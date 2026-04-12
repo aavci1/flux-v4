@@ -57,6 +57,34 @@ inline Element placeholderPanel(
         .flex(1.f, 1.f);
 }
 
+inline Element detailLine(
+    Theme const &theme,
+    std::string label,
+    std::string value,
+    int maxLines = 2
+) {
+    return HStack {
+        .spacing = theme.space2,
+        .alignment = Alignment::Start,
+        .children = children(
+            Text {
+                .text = std::move(label),
+                .font = theme.fontLabelSmall,
+                .color = theme.colorTextMuted,
+            }
+                .size(96.f, 0.f),
+            Text {
+                .text = std::move(value),
+                .font = theme.fontBodySmall,
+                .color = theme.colorTextSecondary,
+                .wrapping = TextWrapping::Wrap,
+                .maxLines = maxLines,
+            }
+                .flex(1.f, 1.f)
+        )
+    };
+}
+
 } // namespace
 
 struct ModelRow : ViewModifiers<ModelRow> {
@@ -265,6 +293,11 @@ struct ModelsView : ViewModifiers<ModelsView> {
                 break;
             }
         }
+        RemoteRepoDetail const *selectedRemoteDetail =
+            state.selectedRemoteRepoDetail.has_value() &&
+                    state.selectedRemoteRepoDetail->id == state.selectedRemoteRepoId
+                ? &*state.selectedRemoteRepoDetail
+                : nullptr;
 
         std::vector<Element> remoteRows;
         remoteRows.reserve(state.remoteModels.size());
@@ -375,6 +408,45 @@ struct ModelsView : ViewModifiers<ModelsView> {
                         .maxLines = 2,
                     }
                 );
+            }
+            if (state.loadingRemoteRepoDetail && selectedRemoteDetail == nullptr) {
+                selectedRepoChildren.push_back(
+                    Text {
+                        .text = "Loading repository details...",
+                        .font = theme.fontBodySmall,
+                        .color = theme.colorTextSecondary,
+                    }
+                );
+            } else if (selectedRemoteDetail != nullptr) {
+                if (!selectedRemoteDetail->license.empty()) {
+                    selectedRepoChildren.push_back(detailLine(theme, "License", selectedRemoteDetail->license));
+                }
+                if (!selectedRemoteDetail->lastModified.empty()) {
+                    selectedRepoChildren.push_back(detailLine(theme, "Updated", selectedRemoteDetail->lastModified, 1));
+                }
+                if (!selectedRemoteDetail->createdAt.empty()) {
+                    selectedRepoChildren.push_back(detailLine(theme, "Created", selectedRemoteDetail->createdAt, 1));
+                }
+                if (!selectedRemoteDetail->sha.empty()) {
+                    std::string sha = selectedRemoteDetail->sha.substr(0, std::min<std::size_t>(12, selectedRemoteDetail->sha.size()));
+                    selectedRepoChildren.push_back(detailLine(theme, "Revision", sha, 1));
+                }
+                if (!selectedRemoteDetail->languages.empty()) {
+                    selectedRepoChildren.push_back(
+                        detailLine(theme, "Languages", joinedTags(selectedRemoteDetail->languages, 4), 2)
+                    );
+                }
+                if (!selectedRemoteDetail->baseModels.empty()) {
+                    selectedRepoChildren.push_back(
+                        detailLine(theme, "Base", joinedTags(selectedRemoteDetail->baseModels, 4), 2)
+                    );
+                }
+                if (!selectedRemoteDetail->summary.empty()) {
+                    selectedRepoChildren.push_back(detailLine(theme, "Summary", selectedRemoteDetail->summary, 4));
+                }
+                if (!selectedRemoteDetail->readme.empty()) {
+                    selectedRepoChildren.push_back(detailLine(theme, "README", selectedRemoteDetail->readme, 6));
+                }
             }
         }
 

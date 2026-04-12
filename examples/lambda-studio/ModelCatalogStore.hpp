@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <mutex>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -237,6 +238,48 @@ class ModelCatalogStore {
         return files;
     }
 
+    void replaceRepoDetailSnapshot(RemoteRepoDetail const &detail, std::string const &rawJson) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        Statement upsert(
+            db_,
+            "INSERT INTO repo_details ("
+            "  repo_id, sha, license, summary, readme_text, raw_json, fetched_at_unix_ms"
+            ") VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)"
+            " ON CONFLICT(repo_id) DO UPDATE SET "
+            "  sha=excluded.sha,"
+            "  license=excluded.license,"
+            "  summary=excluded.summary,"
+            "  readme_text=excluded.readme_text,"
+            "  raw_json=excluded.raw_json,"
+            "  fetched_at_unix_ms=excluded.fetched_at_unix_ms;"
+        );
+        bindText(upsert.stmt, 1, detail.id);
+        bindText(upsert.stmt, 2, detail.sha);
+        bindText(upsert.stmt, 3, detail.license);
+        bindText(upsert.stmt, 4, detail.summary);
+        bindText(upsert.stmt, 5, detail.readme);
+        bindText(upsert.stmt, 6, rawJson);
+        bindInt64(upsert.stmt, 7, currentUnixMillis());
+        stepDone(upsert.stmt);
+    }
+
+    std::optional<RemoteRepoDetail> loadRepoDetail(std::string const &repoId) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        Statement stmt(
+            db_,
+            "SELECT raw_json FROM repo_details WHERE repo_id = ?1;"
+        );
+        bindText(stmt.stmt, 1, repoId);
+        if (sqlite3_step(stmt.stmt) != SQLITE_ROW) {
+            return std::nullopt;
+        }
+        auto detail = parseRepoDetailPayload(columnText(stmt.stmt, 0));
+        if (!detail.has_value()) {
+            return std::nullopt;
+        }
+        return detail;
+    }
+
   private:
     struct Statement {
         sqlite3_stmt *stmt = nullptr;
@@ -440,6 +483,134 @@ class ModelCatalogStore {
         return files;
     }
 
+    static std::string arrayOrStringToJoinedText(nlohmann::json const &jsonValue) {
+        if (jsonValue.is_string()) {
+            return jsonValue.get<std::string>();
+        }
+        if (!jsonValue.is_array()) {
+            return {};
+        }
+
+        std::string result;
+        for (auto const &item : jsonValue) {
+            if (!item.is_string()) {
+                continue;
+            }
+            if (!result.empty()) {
+                result += ", ";
+            }
+            result += item.get<std::string>();
+        }
+        return result;
+    }
+
+    static std::vector<std::string> arrayOrStringToVector(nlohmann::json const &jsonValue) {
+        if (jsonValue.is_string()) {
+            return {jsonValue.get<std::string>()};
+        }
+        if (!jsonValue.is_array()) {
+            return {};
+        }
+
+        std::vector<std::string> values;
+        for (auto const &item : jsonValue) {
+            if (item.is_string()) {
+                values.push_back(item.get<std::string>());
+            }
+        }
+        return values;
+    }
+
+    static std::optional<RemoteRepoDetail> parseRepoDetailPayload(std::string const &rawJson) {
+        auto json = nlohmann::json::parse(rawJson, nullptr, false);
+        if (!json.is_object() || !json.contains("detail") || !json["detail"].is_object()) {
+            return std::nullopt;
+        }
+
+        auto const &detailJson = json["detail"];
+        RemoteRepoDetail detail;
+        if (detailJson.contains("id") && detailJson["id"].is_string()) {
+            detail.id = detailJson["id"].get<std::string>();
+        }
+        if (detailJson.contains("author") && detailJson["author"].is_string()) {
+            detail.author = detailJson["author"].get<std::string>();
+        }
+        if (detailJson.contains("sha") && detailJson["sha"].is_string()) {
+            detail.sha = detailJson["sha"].get<std::string>();
+        }
+        if (detailJson.contains("library_name") && detailJson["library_name"].is_string()) {
+            detail.libraryName = detailJson["library_name"].get<std::string>();
+        }
+        if (detailJson.contains("pipeline_tag") && detailJson["pipeline_tag"].is_string()) {
+            detail.pipelineTag = detailJson["pipeline_tag"].get<std::string>();
+        }
+        if (detailJson.contains("createdAt") && detailJson["createdAt"].is_string()) {
+            detail.createdAt = detailJson["createdAt"].get<std::string>();
+        }
+        if (detailJson.contains("lastModified") && detailJson["lastModified"].is_string()) {
+            detail.lastModified = detailJson["lastModified"].get<std::string>();
+        }
+        if (detailJson.contains("downloads") && detailJson["downloads"].is_number_integer()) {
+            detail.downloads = detailJson["downloads"].get<std::int64_t>();
+        }
+        if (detailJson.contains("downloadsAllTime") && detailJson["downloadsAllTime"].is_number_integer()) {
+            detail.downloadsAllTime = detailJson["downloadsAllTime"].get<std::int64_t>();
+        }
+        if (detailJson.contains("likes") && detailJson["likes"].is_number_integer()) {
+            detail.likes = detailJson["likes"].get<std::int64_t>();
+        }
+        if (detailJson.contains("usedStorage") && detailJson["usedStorage"].is_number_integer()) {
+            detail.usedStorage = detailJson["usedStorage"].get<std::int64_t>();
+        }
+        if (detailJson.contains("gated") && detailJson["gated"].is_boolean()) {
+            detail.gated = detailJson["gated"].get<bool>();
+        }
+        if (detailJson.contains("private") && detailJson["private"].is_boolean()) {
+            detail.isPrivate = detailJson["private"].get<bool>();
+        }
+        if (detailJson.contains("disabled") && detailJson["disabled"].is_boolean()) {
+            detail.disabled = detailJson["disabled"].get<bool>();
+        }
+        if (detailJson.contains("tags") && detailJson["tags"].is_array()) {
+            for (auto const &tag : detailJson["tags"]) {
+                if (tag.is_string()) {
+                    detail.tags.push_back(tag.get<std::string>());
+                }
+            }
+        }
+
+        if (detailJson.contains("cardData") && detailJson["cardData"].is_object()) {
+            auto const &cardData = detailJson["cardData"];
+            if (cardData.contains("license")) {
+                detail.license = arrayOrStringToJoinedText(cardData["license"]);
+            }
+            if (cardData.contains("summary")) {
+                detail.summary = arrayOrStringToJoinedText(cardData["summary"]);
+            }
+            if (detail.summary.empty() && cardData.contains("description")) {
+                detail.summary = arrayOrStringToJoinedText(cardData["description"]);
+            }
+            if (cardData.contains("language")) {
+                detail.languages = arrayOrStringToVector(cardData["language"]);
+            }
+            if (cardData.contains("base_model")) {
+                detail.baseModels = arrayOrStringToVector(cardData["base_model"]);
+            }
+            if (detail.baseModels.empty() && cardData.contains("base_models")) {
+                detail.baseModels = arrayOrStringToVector(cardData["base_models"]);
+            }
+        }
+
+        if (json.contains("readme") && json["readme"].is_string()) {
+            detail.readme = json["readme"].get<std::string>();
+        }
+
+        if (detail.id.empty()) {
+            return std::nullopt;
+        }
+        return detail;
+    }
+
     void execute(char const *sql) {
         char *error = nullptr;
         if (sqlite3_exec(db_, sql, nullptr, nullptr, &error) != SQLITE_OK) {
@@ -515,6 +686,15 @@ class ModelCatalogStore {
             ");"
             "CREATE TABLE IF NOT EXISTS repo_file_payloads ("
             "  repo_id TEXT PRIMARY KEY,"
+            "  raw_json TEXT NOT NULL,"
+            "  fetched_at_unix_ms INTEGER NOT NULL"
+            ");"
+            "CREATE TABLE IF NOT EXISTS repo_details ("
+            "  repo_id TEXT PRIMARY KEY,"
+            "  sha TEXT,"
+            "  license TEXT,"
+            "  summary TEXT,"
+            "  readme_text TEXT,"
             "  raw_json TEXT NOT NULL,"
             "  fetched_at_unix_ms INTEGER NOT NULL"
             ");"

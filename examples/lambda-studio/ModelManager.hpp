@@ -33,6 +33,11 @@ struct HfRepoFilesResponse {
     std::string rawJson;
 };
 
+struct HfRepoDetailResponse {
+    HfRepoDetailInfo detail;
+    std::string rawJson;
+};
+
 class ModelManager {
   public:
     using PostFn = std::function<void(ModelManagerEvent)>;
@@ -72,12 +77,70 @@ class ModelManager {
                 post_(ModelManagerEvent {
                     .kind = ModelManagerEvent::Kind::HfFilesReady,
                     .hfFiles = std::move(response.files),
+                    .repoId = repo,
                     .rawJson = std::move(response.rawJson),
                 });
             } catch (std::exception const &e) {
                 post_(ModelManagerEvent {
                     .kind = ModelManagerEvent::Kind::HfFilesReady,
                     .error = e.what(),
+                    .repoId = repo,
+                });
+            }
+        });
+    }
+
+    void fetchRepoDetail(std::string repoId) {
+        runAsync([this, repo = std::move(repoId)] {
+            try {
+                auto response = fetchRepoDetailSync(repo);
+                post_(ModelManagerEvent {
+                    .kind = ModelManagerEvent::Kind::HfRepoDetailReady,
+                    .hfRepoDetail = std::move(response.detail),
+                    .repoId = repo,
+                    .rawJson = std::move(response.rawJson),
+                });
+            } catch (std::exception const &e) {
+                post_(ModelManagerEvent {
+                    .kind = ModelManagerEvent::Kind::HfRepoDetailReady,
+                    .error = e.what(),
+                    .repoId = repo,
+                });
+            }
+        });
+    }
+
+    void inspectRepo(std::string repoId) {
+        runAsync([this, repo = std::move(repoId)] {
+            try {
+                auto detailResponse = fetchRepoDetailSync(repo);
+                post_(ModelManagerEvent {
+                    .kind = ModelManagerEvent::Kind::HfRepoDetailReady,
+                    .hfRepoDetail = std::move(detailResponse.detail),
+                    .repoId = repo,
+                    .rawJson = std::move(detailResponse.rawJson),
+                });
+            } catch (std::exception const &e) {
+                post_(ModelManagerEvent {
+                    .kind = ModelManagerEvent::Kind::HfRepoDetailReady,
+                    .error = e.what(),
+                    .repoId = repo,
+                });
+            }
+
+            try {
+                auto filesResponse = listRepoFilesSync(repo);
+                post_(ModelManagerEvent {
+                    .kind = ModelManagerEvent::Kind::HfFilesReady,
+                    .hfFiles = std::move(filesResponse.files),
+                    .repoId = repo,
+                    .rawJson = std::move(filesResponse.rawJson),
+                });
+            } catch (std::exception const &e) {
+                post_(ModelManagerEvent {
+                    .kind = ModelManagerEvent::Kind::HfFilesReady,
+                    .error = e.what(),
+                    .repoId = repo,
                 });
             }
         });
@@ -371,6 +434,116 @@ class ModelManager {
         };
     }
 
+    HfRepoDetailResponse fetchRepoDetailSync(std::string const &repoId) const {
+        std::string const token = hfToken();
+        std::string url = get_model_endpoint() + "api/models/" + repoId;
+        common_remote_params params;
+        params.timeout = 15;
+        if (!token.empty()) {
+            params.headers.emplace_back("Authorization", "Bearer " + token);
+        }
+
+        auto [status, body] = common_remote_get_content(url, params);
+        if (status != 200) {
+            throw std::runtime_error("HF repo detail API returned " + std::to_string(status));
+        }
+
+        auto json = nlohmann::json::parse(body.begin(), body.end());
+        if (!json.is_object()) {
+            throw std::runtime_error("HF repo detail payload was not an object");
+        }
+
+        HfRepoDetailInfo detail;
+        if (json.contains("id") && json["id"].is_string()) {
+            detail.id = json["id"].get<std::string>();
+        }
+        if (json.contains("author") && json["author"].is_string()) {
+            detail.author = json["author"].get<std::string>();
+        }
+        if (json.contains("sha") && json["sha"].is_string()) {
+            detail.sha = json["sha"].get<std::string>();
+        }
+        if (json.contains("library_name") && json["library_name"].is_string()) {
+            detail.libraryName = json["library_name"].get<std::string>();
+        }
+        if (json.contains("pipeline_tag") && json["pipeline_tag"].is_string()) {
+            detail.pipelineTag = json["pipeline_tag"].get<std::string>();
+        }
+        if (json.contains("createdAt") && json["createdAt"].is_string()) {
+            detail.createdAt = json["createdAt"].get<std::string>();
+        }
+        if (json.contains("lastModified") && json["lastModified"].is_string()) {
+            detail.lastModified = json["lastModified"].get<std::string>();
+        }
+        if (json.contains("downloads") && json["downloads"].is_number_integer()) {
+            detail.downloads = json["downloads"].get<std::int64_t>();
+        }
+        if (json.contains("downloadsAllTime") && json["downloadsAllTime"].is_number_integer()) {
+            detail.downloadsAllTime = json["downloadsAllTime"].get<std::int64_t>();
+        }
+        if (json.contains("likes") && json["likes"].is_number_integer()) {
+            detail.likes = json["likes"].get<std::int64_t>();
+        }
+        if (json.contains("usedStorage") && json["usedStorage"].is_number_integer()) {
+            detail.usedStorage = json["usedStorage"].get<std::int64_t>();
+        }
+        if (json.contains("gated") && json["gated"].is_boolean()) {
+            detail.gated = json["gated"].get<bool>();
+        }
+        if (json.contains("private") && json["private"].is_boolean()) {
+            detail.isPrivate = json["private"].get<bool>();
+        }
+        if (json.contains("disabled") && json["disabled"].is_boolean()) {
+            detail.disabled = json["disabled"].get<bool>();
+        }
+        if (json.contains("tags") && json["tags"].is_array()) {
+            for (auto const &tag : json["tags"]) {
+                if (tag.is_string()) {
+                    detail.tags.push_back(tag.get<std::string>());
+                }
+            }
+        }
+        if (json.contains("cardData") && json["cardData"].is_object()) {
+            auto const &cardData = json["cardData"];
+            if (cardData.contains("license")) {
+                detail.license = joinJsonStrings(cardData["license"]);
+            }
+            if (cardData.contains("summary")) {
+                detail.summary = joinJsonStrings(cardData["summary"]);
+            }
+            if (detail.summary.empty() && cardData.contains("description")) {
+                detail.summary = joinJsonStrings(cardData["description"]);
+            }
+            if (cardData.contains("language")) {
+                detail.languages = collectJsonStrings(cardData["language"]);
+            }
+            if (cardData.contains("base_model")) {
+                detail.baseModels = collectJsonStrings(cardData["base_model"]);
+            }
+            if (detail.baseModels.empty() && cardData.contains("base_models")) {
+                detail.baseModels = collectJsonStrings(cardData["base_models"]);
+            }
+        }
+
+        std::string readme;
+        std::string const readmeUrl = get_model_endpoint() + repoId + "/resolve/main/README.md";
+        auto [readmeStatus, readmeBody] = common_remote_get_content(readmeUrl, params);
+        if (readmeStatus == 200) {
+            readme = std::string(readmeBody.begin(), readmeBody.end());
+            detail.readme = readme;
+        }
+
+        nlohmann::json payload = {
+            {"detail", json},
+            {"readme", readme},
+        };
+
+        return {
+            .detail = std::move(detail),
+            .rawJson = payload.dump(),
+        };
+    }
+
     static std::string resolveRepoCommitSync(std::string const &repoId, std::string const &token) {
         std::string url = get_model_endpoint() + "api/models/" + repoId + "/refs";
         common_remote_params params;
@@ -424,6 +597,38 @@ class ModelManager {
             throw std::runtime_error("HF tree API returned " + std::to_string(status));
         }
         return std::string(body.begin(), body.end());
+    }
+
+    static std::vector<std::string> collectJsonStrings(nlohmann::json const &jsonValue) {
+        if (jsonValue.is_string()) {
+            return {jsonValue.get<std::string>()};
+        }
+        if (!jsonValue.is_array()) {
+            return {};
+        }
+
+        std::vector<std::string> values;
+        for (auto const &item : jsonValue) {
+            if (item.is_string()) {
+                values.push_back(item.get<std::string>());
+            }
+        }
+        return values;
+    }
+
+    static std::string joinJsonStrings(nlohmann::json const &jsonValue) {
+        auto values = collectJsonStrings(jsonValue);
+        std::string result;
+        for (std::string const &value : values) {
+            if (value.empty()) {
+                continue;
+            }
+            if (!result.empty()) {
+                result += ", ";
+            }
+            result += value;
+        }
+        return result;
     }
 
     static void appendCachedModels(std::vector<LocalModelInfo> &out, std::unordered_set<std::string> &seenPaths) {

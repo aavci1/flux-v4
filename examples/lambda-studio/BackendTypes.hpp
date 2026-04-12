@@ -77,11 +77,37 @@ struct HfFileInfo {
     constexpr bool operator==(HfFileInfo const &) const = default;
 };
 
+struct HfRepoDetailInfo {
+    std::string id;
+    std::string author;
+    std::string sha;
+    std::string libraryName;
+    std::string pipelineTag;
+    std::string license;
+    std::string summary;
+    std::string readme;
+    std::string createdAt;
+    std::string lastModified;
+    std::vector<std::string> tags;
+    std::vector<std::string> languages;
+    std::vector<std::string> baseModels;
+    std::int64_t downloads = 0;
+    std::int64_t downloadsAllTime = 0;
+    std::int64_t likes = 0;
+    std::int64_t usedStorage = 0;
+    bool gated = false;
+    bool isPrivate = false;
+    bool disabled = false;
+
+    constexpr bool operator==(HfRepoDetailInfo const &) const = default;
+};
+
 struct ModelManagerEvent {
     enum class Kind {
         LocalModelsReady,
         HfSearchReady,
         HfFilesReady,
+        HfRepoDetailReady,
         DownloadDone,
         DownloadError,
         ModelLoaded,
@@ -92,7 +118,9 @@ struct ModelManagerEvent {
     std::vector<LocalModelInfo> localModels;
     std::vector<HfModelInfo> hfModels;
     std::vector<HfFileInfo> hfFiles;
+    HfRepoDetailInfo hfRepoDetail;
     std::string error;
+    std::string repoId;
     std::string modelPath;
     std::string modelName;
     std::string rawJson;

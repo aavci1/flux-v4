@@ -19,6 +19,7 @@ Current state:
 - Hugging Face search, repo browsing, and downloads are implemented
 - normalized search results and repo GGUF file metadata are persisted in SQLite
 - raw Hugging Face search payloads and repo tree payloads are now persisted too
+- selected repository detail payloads and README snapshots are now persisted too
 - cached/offline reads can fall back to the raw payload snapshots if normalized rows are missing
 
 ## Goals
@@ -482,6 +483,7 @@ Status:
 - The Models module can now:
   - search Hugging Face model repos by query
   - browse matching repositories
+  - hydrate richer metadata for the selected repository
   - inspect GGUF files for the selected repo
   - show richer search metadata such as author, pipeline tag, downloads, likes, tags, and cache state
 
@@ -532,11 +534,12 @@ Status:
 - Partially implemented in the current codebase.
 - Current state:
   - Lambda Studio now persists remote search results and repo-file metadata into a local SQLite catalog.
+  - Selected repository detail snapshots and README content are also persisted in the catalog.
   - Search requests can preload cached results before the network refresh completes.
   - Repo-file requests can preload cached GGUF file metadata before the network refresh completes.
+  - Repo-detail requests can preload cached metadata before the network refresh completes.
 - Still missing:
   - schema versioning and migrations
-  - persisted raw Hugging Face payloads
   - offline/local search over the full catalog
   - local model instance persistence in the catalog
 
