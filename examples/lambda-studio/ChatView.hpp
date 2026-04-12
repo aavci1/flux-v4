@@ -229,13 +229,6 @@ struct ChatView : ViewModifiers<ChatView> {
                                     .font = theme.fontHeading,
                                     .color = theme.colorTextPrimary,
                                     .verticalAlignment = VerticalAlignment::Center
-                                },
-                                Text {
-                                    .text = chat.modelName.empty() ? "No model selected" :
-                                                                     "Model: " + chat.modelName + "  •  Updated " + chat.updatedAt,
-                                    .font = theme.fontLabelSmall,
-                                    .color = theme.colorTextSecondary,
-                                    .verticalAlignment = VerticalAlignment::Center
                                 }
                             )
                         }

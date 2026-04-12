@@ -54,6 +54,7 @@ struct ChatListRow : ViewModifiers<ChatListRow> {
                             .color = detailColor,
                             .horizontalAlignment = HorizontalAlignment::Leading,
                             .wrapping = TextWrapping::Wrap,
+                            .maxLines = 2,
                         }
                     ),
                 }
@@ -67,9 +68,8 @@ struct ChatListRow : ViewModifiers<ChatListRow> {
                 }
             ),
         }
-            .padding(theme.space4)
+            .padding(theme.space3, theme.space4, theme.space3, theme.space4)
             .fill(FillStyle::solid(fill))
-            // .cornerRadius(theme.radiusLarge)
             .cursor(Cursor::Hand)
             .focusable(true)
             .onTap([onTap = onTap] {
@@ -98,6 +98,14 @@ struct ChatsView : ViewModifiers<ChatsView> {
         rows.reserve(chatThreads.size());
 
         for (std::size_t i = 0; i < chatThreads.size(); ++i) {
+            if (i > 0) {
+                rows.push_back(
+                    Divider {
+                        .orientation = Divider::Orientation::Horizontal
+                    }
+                        .padding(0.f, theme.space4, 0.f, theme.space4)
+                );
+            }
             rows.push_back(ChatListRow {
                 .chat = chatThreads[i],
                 .selected = static_cast<int>(i) == selectedIndex,
@@ -153,15 +161,15 @@ struct ChatsView : ViewModifiers<ChatsView> {
         return HStack {
             .spacing = 0.f,
             .alignment = Alignment::Stretch,
-            .children = children(
+            .children = {
                 VStack {
                     .spacing = 0.f,
                     .alignment = Alignment::Start,
-                    .children = children(
+                    .children = {
                         HStack {
                             .spacing = theme.space2,
                             .alignment = Alignment::Center,
-                            .children = children(
+                            .children = {
                                 Text {
                                     .text = "Chats",
                                     .font = theme.fontHeading,
@@ -169,36 +177,34 @@ struct ChatsView : ViewModifiers<ChatsView> {
                                     .horizontalAlignment = HorizontalAlignment::Leading,
                                 }
                                     .flex(1.f, 1.f),
-                                Button {
-                                    .label = "New chat",
-                                    .variant = ButtonVariant::Secondary,
-                                    .onTap = onNewChat,
+                                IconButton {
+                                    .icon = IconName::Add,
+                                    .style = {
+                                        .size = theme.fontHeading.size,
+                                        .weight = theme.fontLabel.weight,
+                                    },
+                                    .onTap = onNewChat
                                 }
-                            )
-                        }
-                            .padding(theme.space4),
+                            }
+                        }.padding(theme.space4),
                         Divider {},
                         ScrollView {
                             .axis = ScrollAxis::Vertical,
-                            .children = children(
-                                VStack {
-                                    .spacing = 0.f,
-                                    .children = std::move(rows),
-                                }
-                            ),
+                            .children = {VStack {
+                                .spacing = 0.f,
+                                .children = std::move(rows),
+                            }},
                         }
-                            .flex(1.f, 1.f, 0.f)
-                    ),
+                            .flex(1.f, 1.f, 0.f),
+                    },
                 }
-                    // .padding(theme.space4)
                     .fill(FillStyle::solid(theme.colorSurfaceOverlay))
-                    // .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
                     .size(320.f, 0.f),
                 Divider {
                     .orientation = Divider::Orientation::Vertical,
                 },
-                std::move(detail)
-            ),
+                std::move(detail),
+            },
         };
     }
 };
