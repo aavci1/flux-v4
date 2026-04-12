@@ -29,6 +29,49 @@ inline std::string formatCompactCount(std::int64_t value) {
     return std::to_string(value);
 }
 
+inline int progressPercent(std::size_t downloadedBytes, std::size_t totalBytes) {
+    if (totalBytes == 0) {
+        return 0;
+    }
+    return static_cast<int>(
+        std::clamp(
+            (100.0 * static_cast<double>(downloadedBytes)) / static_cast<double>(totalBytes),
+            0.0,
+            100.0));
+}
+
+inline std::string formatTransferProgress(std::size_t downloadedBytes, std::size_t totalBytes) {
+    if (totalBytes == 0) {
+        return "Starting download...";
+    }
+    return formatModelSize(downloadedBytes) + " / " + formatModelSize(totalBytes) +
+           "  •  " + std::to_string(progressPercent(downloadedBytes, totalBytes)) + "%";
+}
+
+inline Element progressBar(
+    Theme const &theme,
+    float progress
+) {
+    float const clamped = std::clamp(progress, 0.f, 1.f);
+    constexpr float trackWidth = 112.f;
+    constexpr float trackHeight = 6.f;
+    return Element {ZStack {
+        .horizontalAlignment = Alignment::Start,
+        .verticalAlignment = Alignment::Start,
+        .children = children(
+            Rectangle {}
+                .fill(FillStyle::solid(theme.colorSurfaceHover))
+                .size(trackWidth, trackHeight)
+                .cornerRadius(CornerRadius {trackHeight * 0.5f}),
+            Rectangle {}
+                .fill(FillStyle::solid(theme.colorAccent))
+                .size(trackWidth * clamped, trackHeight)
+                .cornerRadius(CornerRadius {trackHeight * 0.5f})
+        )
+    }}
+        .size(trackWidth, trackHeight);
+}
+
 inline Element placeholderPanel(
     Theme const &theme,
     std::string title,
@@ -207,10 +250,40 @@ struct RemoteModelRow : ViewModifiers<RemoteModelRow> {
 struct RemoteFileRow : ViewModifiers<RemoteFileRow> {
     RemoteModelFile file;
     bool downloading = false;
+    std::size_t downloadedBytes = 0;
+    std::size_t totalBytes = 0;
     std::function<void()> onDownload;
 
     auto body() const {
         Theme const &theme = useEnvironment<Theme>();
+        bool const showProgress = downloading && totalBytes > 0;
+        std::string meta = formatModelSize(file.sizeBytes) + (file.cached ? "  •  Cached locally" : "");
+        if (downloading) {
+            meta = formatTransferProgress(downloadedBytes, totalBytes);
+        }
+
+        std::vector<Element> fileInfo;
+        fileInfo.reserve(showProgress ? 3 : 2);
+        fileInfo.push_back(
+            Text {
+                .text = file.path,
+                .font = theme.fontLabel,
+                .color = theme.colorTextPrimary,
+                .horizontalAlignment = HorizontalAlignment::Leading,
+                .wrapping = TextWrapping::Wrap,
+            }
+        );
+        fileInfo.push_back(
+            Text {
+                .text = std::move(meta),
+                .font = theme.fontBodySmall,
+                .color = theme.colorTextSecondary,
+                .horizontalAlignment = HorizontalAlignment::Leading,
+            }
+        );
+        if (showProgress) {
+            fileInfo.push_back(progressBar(theme, static_cast<float>(downloadedBytes) / static_cast<float>(totalBytes)));
+        }
 
         return ListRow {
             .content = HStack {
@@ -220,26 +293,14 @@ struct RemoteFileRow : ViewModifiers<RemoteFileRow> {
                     VStack {
                         .spacing = theme.space1,
                         .alignment = Alignment::Start,
-                        .children = children(
-                            Text {
-                                .text = file.path,
-                                .font = theme.fontLabel,
-                                .color = theme.colorTextPrimary,
-                                .horizontalAlignment = HorizontalAlignment::Leading,
-                                .wrapping = TextWrapping::Wrap,
-                            },
-                            Text {
-                                .text = formatModelSize(file.sizeBytes) +
-                                        (file.cached ? "  •  Cached locally" : ""),
-                                .font = theme.fontBodySmall,
-                                .color = theme.colorTextSecondary,
-                                .horizontalAlignment = HorizontalAlignment::Leading,
-                            }
-                        )
+                        .children = std::move(fileInfo)
                     }
                         .flex(1.f, 1.f),
                     LinkButton {
-                        .label = file.cached ? "Cached" : downloading ? "Downloading..." : "Download",
+                        .label = file.cached ? "Cached" :
+                                 downloading ? (totalBytes == 0 ? "..." :
+                                                std::to_string(progressPercent(downloadedBytes, totalBytes)) + "%") :
+                                               "Download",
                         .disabled = file.cached || downloading,
                         .onTap = onDownload,
                     }
@@ -262,10 +323,36 @@ struct DownloadJobRow : ViewModifiers<DownloadJobRow> {
         }
 
         std::string meta = downloadJobStatusLabel(job.status);
-        if (!job.localPath.empty()) {
+        if (job.status == DownloadJobStatus::Running) {
+            meta += "  •  " + formatTransferProgress(job.downloadedBytes, job.totalBytes);
+        } else if (!job.localPath.empty()) {
             meta += "  •  " + job.localPath;
         } else if (!job.error.empty()) {
             meta += "  •  " + job.error;
+        }
+
+        std::vector<Element> infoChildren;
+        infoChildren.reserve(job.status == DownloadJobStatus::Running && job.totalBytes > 0 ? 3 : 2);
+        infoChildren.push_back(
+            Text {
+                .text = title,
+                .font = theme.fontLabelSmall,
+                .color = job.status == DownloadJobStatus::Failed ? theme.colorDanger : theme.colorTextPrimary,
+                .wrapping = TextWrapping::Wrap,
+                .maxLines = 2,
+            }
+        );
+        infoChildren.push_back(
+            Text {
+                .text = meta,
+                .font = theme.fontBodySmall,
+                .color = theme.colorTextSecondary,
+                .wrapping = TextWrapping::Wrap,
+                .maxLines = 2,
+            }
+        );
+        if (job.status == DownloadJobStatus::Running && job.totalBytes > 0) {
+            infoChildren.push_back(progressBar(theme, downloadJobProgress(job)));
         }
 
         return ListRow {
@@ -276,22 +363,7 @@ struct DownloadJobRow : ViewModifiers<DownloadJobRow> {
                     VStack {
                         .spacing = theme.space1,
                         .alignment = Alignment::Start,
-                        .children = children(
-                            Text {
-                                .text = title,
-                                .font = theme.fontLabelSmall,
-                                .color = job.status == DownloadJobStatus::Failed ? theme.colorDanger : theme.colorTextPrimary,
-                                .wrapping = TextWrapping::Wrap,
-                                .maxLines = 2,
-                            },
-                            Text {
-                                .text = meta,
-                                .font = theme.fontBodySmall,
-                                .color = theme.colorTextSecondary,
-                                .wrapping = TextWrapping::Wrap,
-                                .maxLines = 2,
-                            }
-                        )
+                        .children = std::move(infoChildren)
                     }
                         .flex(1.f, 1.f),
                     job.status == DownloadJobStatus::Failed
@@ -400,9 +472,23 @@ struct ModelsView : ViewModifiers<ModelsView> {
         for (RemoteModelFile const &file : state.selectedRemoteRepoFiles) {
             bool const isDownloading = state.downloadingModel && file.repoId == state.pendingDownloadRepoId &&
                                        file.path == state.pendingDownloadFilePath;
+            std::size_t downloadedBytes = 0;
+            std::size_t totalBytes = 0;
+            if (isDownloading) {
+                for (DownloadJob const &job : state.recentDownloadJobs) {
+                    if (job.id != state.pendingDownloadJobId) {
+                        continue;
+                    }
+                    downloadedBytes = job.downloadedBytes;
+                    totalBytes = job.totalBytes;
+                    break;
+                }
+            }
             fileRows.push_back(RemoteFileRow {
                 .file = file,
                 .downloading = isDownloading,
+                .downloadedBytes = downloadedBytes,
+                .totalBytes = totalBytes,
                 .onDownload = [onDownload = onDownload, repoId = file.repoId, path = file.path] {
                     if (onDownload) {
                         onDownload(repoId, path);

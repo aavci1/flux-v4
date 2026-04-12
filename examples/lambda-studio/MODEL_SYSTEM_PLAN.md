@@ -22,6 +22,7 @@ Current state:
 - selected repository detail payloads and README snapshots are now persisted too
 - cached/offline reads can fall back to the raw payload snapshots if normalized rows are missing
 - the Models view now supports text search, author filtering, and server-backed sorting by downloads, likes, or recency
+- download progress is now surfaced in the Models UI for active jobs and the currently downloading file
 
 ## Goals
 
@@ -513,9 +514,9 @@ Status:
   - download attempts are now persisted into a local job history with running/completed/failed states
   - recent download history is shown in the Models view and restored on launch
   - failed download jobs can now be retried directly from the recent history list
+  - byte/percent progress is now reported through backend events and rendered in the Models UI
 - Still missing:
   - resumable downloads
-  - explicit progress reporting in the UI
 
 ### Milestone D: Add Local Catalog Database
 

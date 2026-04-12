@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cctype>
+#include <chrono>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -156,19 +157,87 @@ class ModelManager {
                 model.hf_file = file;
 
                 std::string const token = hfToken();
-                auto result = common_download_model(model, token);
+                struct DownloadProgressContext {
+                    ModelManager * manager = nullptr;
+                    std::string repoId;
+                    std::string filePath;
+                    std::mutex mutex;
+                    std::size_t lastDownloadedBytes = 0;
+                    std::size_t lastTotalBytes = 0;
+                    int lastPercent = -1;
+                    std::chrono::steady_clock::time_point lastPostedAt {};
+                };
+
+                DownloadProgressContext progressContext {
+                    .manager = this,
+                    .repoId = repo,
+                    .filePath = file,
+                };
+
+                common_download_model_opts opts;
+                opts.progress_callback = +[](std::size_t downloadedBytes,
+                                             std::size_t totalBytes,
+                                             const char * /*itemPath*/,
+                                             void * userData) {
+                    auto * ctx = static_cast<DownloadProgressContext *>(userData);
+                    if (ctx == nullptr || ctx->manager == nullptr || totalBytes == 0) {
+                        return;
+                    }
+
+                    using clock = std::chrono::steady_clock;
+                    auto const now = clock::now();
+                    int const percent = totalBytes == 0 ? 0 :
+                        static_cast<int>((100.0 * static_cast<double>(downloadedBytes)) / static_cast<double>(totalBytes));
+
+                    bool shouldPost = false;
+                    {
+                        std::lock_guard<std::mutex> lock(ctx->mutex);
+                        shouldPost =
+                            downloadedBytes >= totalBytes ||
+                            ctx->lastPercent < 0 ||
+                            percent >= ctx->lastPercent + 1 ||
+                            now - ctx->lastPostedAt >= std::chrono::milliseconds(120);
+                        if (!shouldPost && downloadedBytes <= ctx->lastDownloadedBytes) {
+                            return;
+                        }
+                        ctx->lastDownloadedBytes = downloadedBytes;
+                        ctx->lastTotalBytes = totalBytes;
+                        if (!shouldPost) {
+                            return;
+                        }
+                        ctx->lastPercent = percent;
+                        ctx->lastPostedAt = now;
+                    }
+
+                    ctx->manager->post_(ModelManagerEvent {
+                        .kind = ModelManagerEvent::Kind::DownloadProgress,
+                        .repoId = ctx->repoId,
+                        .filePath = ctx->filePath,
+                        .downloadedBytes = downloadedBytes,
+                        .totalBytes = totalBytes,
+                    });
+                };
+                opts.progress_callback_user_data = &progressContext;
+
+                auto result = common_download_model(model, token, opts);
                 if (result.model_path.empty()) {
                     post_(ModelManagerEvent {
                         .kind = ModelManagerEvent::Kind::DownloadError,
                         .error = "Download returned empty path",
+                        .repoId = repo,
+                        .filePath = file,
                     });
                     return;
                 }
 
                 post_(ModelManagerEvent {
                     .kind = ModelManagerEvent::Kind::DownloadDone,
+                    .repoId = repo,
+                    .filePath = file,
                     .modelPath = result.model_path,
                     .modelName = repo + "/" + file,
+                    .downloadedBytes = progressContext.lastDownloadedBytes,
+                    .totalBytes = progressContext.lastTotalBytes,
                 });
 
                 postLocalModelsReady_();
@@ -176,6 +245,8 @@ class ModelManager {
                 post_(ModelManagerEvent {
                     .kind = ModelManagerEvent::Kind::DownloadError,
                     .error = e.what(),
+                    .repoId = repo,
+                    .filePath = file,
                 });
             }
         });

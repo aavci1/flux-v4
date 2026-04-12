@@ -109,6 +109,8 @@ struct DownloadJob {
     std::int64_t startedAtUnixMs = 0;
     std::int64_t finishedAtUnixMs = 0;
     DownloadJobStatus status = DownloadJobStatus::Running;
+    std::size_t downloadedBytes = 0;
+    std::size_t totalBytes = 0;
 
     bool operator==(DownloadJob const &) const = default;
 };
@@ -255,6 +257,14 @@ inline char const *downloadJobStatusLabel(DownloadJobStatus status) {
         return "Failed";
     }
     return "Downloading";
+}
+
+inline float downloadJobProgress(DownloadJob const &job) {
+    if (job.totalBytes == 0) {
+        return 0.f;
+    }
+    float const progress = static_cast<float>(job.downloadedBytes) / static_cast<float>(job.totalBytes);
+    return std::clamp(progress, 0.f, 1.f);
 }
 
 inline std::string remoteModelSearchCacheKey(

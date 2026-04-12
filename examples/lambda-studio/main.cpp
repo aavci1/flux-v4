@@ -185,6 +185,18 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                         nextState.pendingModelName.clear();
                         nextState.errorText = event.error;
                         break;
+                    case lambda_backend::ModelManagerEvent::Kind::DownloadProgress:
+                        if (!nextState.pendingDownloadJobId.empty()) {
+                            for (DownloadJob &job : nextState.recentDownloadJobs) {
+                                if (job.id != nextState.pendingDownloadJobId) {
+                                    continue;
+                                }
+                                job.downloadedBytes = event.downloadedBytes;
+                                job.totalBytes = event.totalBytes;
+                                break;
+                            }
+                        }
+                        break;
                     case lambda_backend::ModelManagerEvent::Kind::DownloadDone:
                         nextState.downloadingModel = false;
                         if (!nextState.pendingDownloadJobId.empty()) {
@@ -196,6 +208,8 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                                 job.localPath = event.modelPath;
                                 job.error.clear();
                                 job.finishedAtUnixMs = systemNowMillis();
+                                job.downloadedBytes = event.totalBytes;
+                                job.totalBytes = event.totalBytes;
                                 try {
                                     services.catalog->finishDownloadJob(job.id, job.localPath, job.finishedAtUnixMs);
                                 } catch (std::exception const &e) {
@@ -220,6 +234,12 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                                 job.status = DownloadJobStatus::Failed;
                                 job.error = event.error;
                                 job.finishedAtUnixMs = systemNowMillis();
+                                if (event.downloadedBytes > 0) {
+                                    job.downloadedBytes = event.downloadedBytes;
+                                }
+                                if (event.totalBytes > 0) {
+                                    job.totalBytes = event.totalBytes;
+                                }
                                 try {
                                     services.catalog->failDownloadJob(job.id, job.error, job.finishedAtUnixMs);
                                 } catch (std::exception const &e) {
@@ -524,6 +544,8 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
             job.filePath = path;
             job.startedAtUnixMs = systemNowMillis();
             job.status = DownloadJobStatus::Running;
+            job.downloadedBytes = 0;
+            job.totalBytes = 0;
             nextState.recentDownloadJobs.insert(nextState.recentDownloadJobs.begin(), job);
             if (nextState.recentDownloadJobs.size() > 12) {
                 nextState.recentDownloadJobs.resize(12);

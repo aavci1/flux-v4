@@ -118,6 +118,7 @@ struct ModelManagerEvent {
         HfSearchReady,
         HfFilesReady,
         HfRepoDetailReady,
+        DownloadProgress,
         DownloadDone,
         DownloadError,
         ModelLoaded,
@@ -132,9 +133,12 @@ struct ModelManagerEvent {
     std::string error;
     std::string searchKey;
     std::string repoId;
+    std::string filePath;
     std::string modelPath;
     std::string modelName;
     std::string rawJson;
+    std::size_t downloadedBytes = 0;
+    std::size_t totalBytes = 0;
 };
 
 struct SamplingParams {
