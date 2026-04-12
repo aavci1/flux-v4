@@ -482,6 +482,80 @@ Element makeInlineDemo(Theme const &theme, State<bool> reviewPassed, State<std::
     );
 }
 
+Element makeIconButtonTile(Theme const &theme, std::string title, std::string caption, Element action) {
+    return VStack {
+        .spacing = theme.space2,
+        .alignment = Alignment::Start,
+        .children = children(
+            HStack {
+                .alignment = Alignment::Center,
+                .children = children(
+                    std::move(action),
+                    Spacer {}
+                )
+            },
+            Text {
+                .text = std::move(title),
+                .font = theme.fontSubtitle,
+                .color = theme.colorTextPrimary,
+                .horizontalAlignment = HorizontalAlignment::Leading,
+            },
+            Text {
+                .text = std::move(caption),
+                .font = theme.fontBodySmall,
+                .color = theme.colorTextSecondary,
+                .horizontalAlignment = HorizontalAlignment::Leading,
+                .wrapping = TextWrapping::Wrap,
+            }
+        )
+    }
+        .padding(theme.space3)
+        .fill(FillStyle::solid(theme.colorBackground))
+        .cornerRadius(CornerRadius {theme.radiusMedium})
+        .flex(1.f, 1.f, 0.f);
+}
+
+Element makeIconButtonDemo(Theme const &theme, State<std::string> lastEvent) {
+    return makeSectionCard(
+        theme, "Icon Buttons",
+        "Compact icon-only actions fit dense toolbars and utility clusters where a text label would add noise. They should still keep the same hover, focus, and disabled behavior as their text counterparts.",
+        Grid {
+            .columns = 3,
+            .horizontalSpacing = theme.space3,
+            .verticalSpacing = theme.space3,
+            .children = children(
+                makeIconButtonTile(
+                    theme, "Play",
+                    "A compact start action that works well in media and job-control rows.",
+                    IconButton {
+                        .icon = IconName::PlayArrow,
+                        .onTap =
+                            [lastEvent] {
+                                lastEvent = "Play pressed from the icon-button section.";
+                                std::fprintf(stderr, "[button-demo] Play icon button\n");
+                            },
+                    }),
+                makeIconButtonTile(
+                    theme, "Settings",
+                    "Utility actions often read more cleanly as icons once the surrounding context is clear.",
+                    IconButton {
+                        .icon = IconName::Settings,
+                        .onTap =
+                            [lastEvent] {
+                                lastEvent = "Settings pressed from the icon-button section.";
+                                std::fprintf(stderr, "[button-demo] Settings icon button\n");
+                            },
+                    }),
+                makeIconButtonTile(
+                    theme, "Disabled",
+                    "Disabled icon buttons should remain visible and legible without acting interactive.",
+                    IconButton {
+                        .icon = IconName::Delete,
+                        .disabled = true,
+                    }))
+        });
+}
+
 } // namespace
 
 struct ButtonDemoRoot {
@@ -531,6 +605,7 @@ struct ButtonDemoRoot {
                         },
                         makeHeroDemo(theme, dirty, reviewPassed, saveCount, lastEvent),
                         makeVariantGallery(theme, lastEvent),
+                        makeIconButtonDemo(theme, lastEvent),
                         makeToolbarDemo(theme, dirty, reviewPassed, saveCount, publishCount, lastEvent),
                         makeInlineDemo(theme, reviewPassed, lastEvent)
                     )

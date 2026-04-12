@@ -9,6 +9,7 @@
 #include <Flux/Graphics/Styles.hpp>
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/Hooks.hpp>
+#include <Flux/UI/IconName.hpp>
 #include <Flux/UI/Theme.hpp>
 
 #include <functional>
@@ -47,6 +48,21 @@ struct LinkButton : ViewModifiers<LinkButton> {
     };
 
     std::string label;
+    bool disabled = false;
+    Style style {};
+    std::function<void()> onTap;
+
+    Element body() const;
+};
+
+struct IconButton : ViewModifiers<IconButton> {
+    struct Style {
+        float size = kFloatFromTheme;
+        float weight = kFloatFromTheme;
+        Color color = kColorFromTheme;
+    };
+
+    IconName icon {};
     bool disabled = false;
     Style style {};
     std::function<void()> onTap;

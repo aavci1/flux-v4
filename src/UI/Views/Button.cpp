@@ -2,6 +2,7 @@
 #include <Flux/Reactive/Transition.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Views/Button.hpp>
+#include <Flux/UI/Views/Icon.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/ScaleAroundCenter.hpp>
 #include <Flux/UI/Views/Text.hpp>
@@ -49,6 +50,14 @@ Button::Style resolveStyle(Button::Style const &style, Theme const &theme) {
 LinkButton::Style resolveStyle(LinkButton::Style const &style, Theme const &theme) {
     return LinkButton::Style {
         .font = resolveFont(style.font, theme.fontLabel),
+        .color = resolveColor(style.color, theme.colorAccent),
+    };
+}
+
+IconButton::Style resolveStyle(IconButton::Style const &style, Theme const &theme) {
+    return IconButton::Style {
+        .size = resolveFloat(style.size, theme.fontBody.size),
+        .weight = resolveFloat(style.weight, theme.fontBody.weight),
         .color = resolveColor(style.color, theme.colorAccent),
     };
 }
@@ -244,6 +253,63 @@ Element LinkButton::body() const {
         .stroke(focusStroke)
         .cornerRadius(CornerRadius {theme.radiusXSmall})
         .padding(0.f, 3.f, 0.f, 3.f)
+        .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
+        .focusable(!isDisabled)
+        .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})
+        .onTap(isDisabled ? std::function<void()> {} : std::function<void()> {handleTap});
+}
+
+Element IconButton::body() const {
+    Theme const &theme = useEnvironment<Theme>();
+    auto [sizeResolved, weightResolved, accentResolved] = resolveStyle(style, theme);
+    bool const isDisabled = disabled;
+    bool const hovered = useHover();
+    bool const pressed = usePress();
+    bool const focused = useFocus();
+    bool const keyboardFocused = useKeyboardFocus();
+
+    Transition const trMed = theme.reducedMotion ? Transition::instant() : Transition::ease(theme.durationMedium);
+
+    auto iconAnim = useAnimated<Color>(accentResolved);
+    {
+        Color const target =
+            isDisabled ? theme.colorTextDisabled : pressed ? darken(accentResolved, 0.12f) :
+                                               hovered     ? lighten(accentResolved, 0.12f) :
+                                                             accentResolved;
+        if (*iconAnim != target) {
+            iconAnim.set(target, trMed);
+        }
+    }
+
+    auto handleTap = [onTap = onTap, isDisabled]() {
+        if (isDisabled) {
+            return;
+        }
+        if (onTap) {
+            onTap();
+        }
+    };
+    auto handleKey = [handleTap](KeyCode k, Modifiers) {
+        if (k == keys::Return || k == keys::Space) {
+            handleTap();
+        }
+    };
+
+    StrokeStyle focusStroke = StrokeStyle::none();
+    if (!isDisabled && focused && keyboardFocused) {
+        focusStroke = StrokeStyle::solid(theme.colorBorderFocus, 2.f);
+    }
+
+    return Icon {
+        .name = icon,
+        .size = sizeResolved,
+        .weight = weightResolved,
+        .color = *iconAnim,
+    }
+        .fill(FillStyle::none())
+        .stroke(focusStroke)
+        .cornerRadius(CornerRadius {theme.radiusXSmall})
+        .padding(3.f)
         .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
         .focusable(!isDisabled)
         .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})
