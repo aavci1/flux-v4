@@ -48,7 +48,7 @@ Button::Style resolveStyle(Button::Style const &style, Theme const &theme) {
 
 LinkButton::Style resolveStyle(LinkButton::Style const &style, Theme const &theme) {
     return LinkButton::Style {
-        .font = resolveFont(style.font, theme.fontBody),
+        .font = resolveFont(style.font, theme.fontLabel),
         .color = resolveColor(style.color, theme.colorAccent),
     };
 }

@@ -169,8 +169,9 @@ struct ChatsView : ViewModifiers<ChatsView> {
                                     .horizontalAlignment = HorizontalAlignment::Leading,
                                 }
                                     .flex(1.f, 1.f),
-                                IconActionButton {
-                                    .icon = IconName::Add,
+                                Button {
+                                    .label = "New chat",
+                                    .variant = ButtonVariant::Secondary,
                                     .onTap = onNewChat,
                                 }
                             )

@@ -18,66 +18,6 @@ using namespace flux;
 
 namespace lambda {
 
-struct IconActionButton : ViewModifiers<IconActionButton> {
-    IconName icon = IconName::Add;
-    bool disabled = false;
-    std::function<void()> onTap;
-
-    auto body() const {
-        Theme const &theme = useEnvironment<Theme>();
-        auto const hovered = useHover();
-        auto const pressed = usePress();
-
-        auto const getFillColor = [theme, disabled = disabled, hovered, pressed]() {
-            if (disabled) {
-                return theme.colorSurfaceDisabled;
-            }
-
-            if (hovered) {
-                return theme.colorSurfaceHover;
-            }
-
-            if (pressed) {
-                return theme.colorSurfaceRowHover;
-            }
-
-            return theme.colorSurface;
-        };
-
-        auto const getIconColor = [theme, disabled = disabled, hovered, pressed]() {
-            if (disabled) {
-                return theme.colorTextDisabled;
-            }
-
-            if (hovered || pressed) {
-                return theme.colorAccentSubtle;
-            }
-
-            return theme.colorAccent;
-        };
-
-        auto const fillColor = getFillColor();
-        auto const iconColor = getIconColor();
-
-        return Icon {
-            .name = icon,
-            .size = 18.f,
-            .weight = 700.f,
-            .color = iconColor,
-        }
-            .fill(FillStyle::solid(fillColor))
-            .stroke(StrokeStyle::solid(iconColor, 1.f))
-            .size(32.f, 32.f)
-            .cornerRadius(theme.radiusFull)
-            .cursor(disabled ? Cursor::Arrow : Cursor::Hand)
-            .onTap([disabled = disabled, onTap = onTap] {
-                if (!disabled && onTap) {
-                    onTap();
-                }
-            });
-    }
-};
-
 struct ChatBubble : ViewModifiers<ChatBubble> {
     ChatMessage message;
 
@@ -195,11 +135,15 @@ struct ChatComposer : ViewModifiers<ChatComposer> {
                                              .color = disabled ? theme.colorTextMuted : theme.colorTextSecondary,
                                              .verticalAlignment = VerticalAlignment::Center,
                                          },
-                                         Spacer {}, streaming ? IconActionButton {.icon = IconName::Stop, .onTap = onStop} : IconActionButton {
-                                                                                                                                 .icon = IconName::Send,
-                                                                                                                                 .disabled = !canSend,
-                                                                                                                                 .onTap = submit,
-                                                                                                                             }),
+                                         Spacer {}, streaming ? LinkButton {
+                                                                    .label = "Stop",
+                                                                    .onTap = onStop,
+                                                                } :
+                                                                LinkButton {
+                                                                    .label = "Send",
+                                                                    .disabled = !canSend,
+                                                                    .onTap = submit,
+                                                                }),
                 }
             ),
         }
