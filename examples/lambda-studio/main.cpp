@@ -84,8 +84,11 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
     auto body() const {
         auto appState = useState<AppState>(makeInitialAppState());
         BackendServices &services = backend();
+        auto currentRemoteSearchKey = [](AppState const &state) {
+            return remoteModelSearchCacheKey(state.modelSearchQuery, state.modelSearchAuthor, state.remoteModelSort);
+        };
 
-        std::call_once(gLambdaEventHandlers, [appState, &services]() {
+        std::call_once(gLambdaEventHandlers, [appState, &services, currentRemoteSearchKey]() {
             Application::instance().eventQueue().on<lambda_backend::LlmUiEvent>(
                 [appState](lambda_backend::LlmUiEvent const &event) {
                     AppState nextState = *appState;
@@ -135,7 +138,7 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
             );
 
             Application::instance().eventQueue().on<lambda_backend::ModelManagerEvent>(
-                [appState, &services](lambda_backend::ModelManagerEvent const &event) {
+                [appState, &services, currentRemoteSearchKey](lambda_backend::ModelManagerEvent const &event) {
                     AppState nextState = *appState;
                     switch (event.kind) {
                     case lambda_backend::ModelManagerEvent::Kind::LocalModelsReady:
@@ -182,6 +185,24 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                         break;
                     case lambda_backend::ModelManagerEvent::Kind::HfSearchReady:
                         nextState.searchingRemoteModels = false;
+                        if (event.searchKey != currentRemoteSearchKey(nextState)) {
+                            if (event.error.empty()) {
+                                std::vector<RemoteModel> cachedModels;
+                                cachedModels.reserve(event.hfModels.size());
+                                for (lambda_backend::HfModelInfo const &model : event.hfModels) {
+                                    cachedModels.push_back(toRemoteModel(model));
+                                }
+                                try {
+                                    services.catalog->replaceSearchSnapshot(
+                                        event.searchKey,
+                                        cachedModels,
+                                        event.rawJson
+                                    );
+                                } catch (...) {
+                                }
+                            }
+                            break;
+                        }
                         if (!event.error.empty()) {
                             nextState.errorText = event.error;
                             if (nextState.remoteModels.empty()) {
@@ -202,7 +223,7 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                             }
                             try {
                                 services.catalog->replaceSearchSnapshot(
-                                    nextState.modelSearchQuery,
+                                    event.searchKey,
                                     nextState.remoteModels,
                                     event.rawJson
                                 );
@@ -338,12 +359,31 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
             appState = std::move(nextState);
         };
 
-        auto requestRemoteSearch = [appState, &services](std::string query) {
+        auto updateModelSearchAuthor = [appState](std::string const &author) {
+            AppState nextState = *appState;
+            nextState.modelSearchAuthor = author;
+            appState = std::move(nextState);
+        };
+
+        auto updateRemoteModelSort = [appState](RemoteModelSort sort) {
+            AppState nextState = *appState;
+            nextState.remoteModelSort = sort;
+            appState = std::move(nextState);
+        };
+
+        auto requestRemoteSearch = [appState, &services, currentRemoteSearchKey](
+                                       std::string query,
+                                       std::string author,
+                                       RemoteModelSort sort
+                                   ) {
             AppState nextState = *appState;
             nextState.modelSearchQuery = query;
+            nextState.modelSearchAuthor = author;
+            nextState.remoteModelSort = sort;
             nextState.searchingRemoteModels = true;
+            std::string const cacheKey = currentRemoteSearchKey(nextState);
             try {
-                nextState.remoteModels = services.catalog->loadSearchResults(query);
+                nextState.remoteModels = services.catalog->loadSearchResults(cacheKey);
                 nextState.selectedRemoteRepoId.clear();
                 nextState.selectedRemoteRepoFiles.clear();
                 nextState.selectedRemoteRepoDetail.reset();
@@ -365,9 +405,17 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                 nextState.loadingRemoteRepoDetail = false;
                 nextState.errorText = e.what();
             }
-            nextState.statusText = query.empty() ? "Searching top GGUF models..." : "Searching Hugging Face...";
+            nextState.statusText = query.empty() && author.empty() ? "Searching top GGUF models..." :
+                                                                  "Searching Hugging Face...";
             appState = std::move(nextState);
-            services.manager->searchHuggingFace(std::move(query));
+            services.manager->searchHuggingFace(lambda_backend::HfSearchRequest {
+                .query = std::move(query),
+                .author = std::move(author),
+                .sortKey = sort == RemoteModelSort::Likes ? "likes" :
+                           sort == RemoteModelSort::Updated ? "lastModified" :
+                                                              "downloads",
+                .cacheKey = cacheKey,
+            });
         };
 
         auto requestRemoteRepoFiles = [appState, &services](std::string repoId) {
@@ -531,6 +579,8 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                 .onRefresh = requestInventoryRefresh,
                 .onLoad = requestModelLoad,
                 .onSearchQueryChange = updateModelSearchQuery,
+                .onSearchAuthorChange = updateModelSearchAuthor,
+                .onSortChange = updateRemoteModelSort,
                 .onSearch = requestRemoteSearch,
                 .onSelectRemoteRepo = requestRemoteRepoFiles,
                 .onDownload = requestRemoteDownload,

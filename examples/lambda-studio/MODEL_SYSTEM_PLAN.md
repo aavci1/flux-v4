@@ -10,7 +10,7 @@ It is intended to be a working implementation roadmap, not just a wishlist.
 - Milestone B: implemented
 - Milestone C: partially implemented
 - Milestone D: partially implemented
-- Milestone E: not started
+- Milestone E: partially implemented
 - Milestone F: not started
 
 Current state:
@@ -21,6 +21,7 @@ Current state:
 - raw Hugging Face search payloads and repo tree payloads are now persisted too
 - selected repository detail payloads and README snapshots are now persisted too
 - cached/offline reads can fall back to the raw payload snapshots if normalized rows are missing
+- the Models view now supports text search, author filtering, and server-backed sorting by downloads, likes, or recency
 
 ## Goals
 
@@ -551,6 +552,18 @@ Scope:
 - remote filter UI
 - reusable filter state
 - richer repo/file metadata views
+
+Status:
+
+- Partially implemented in the current codebase.
+- Current state:
+  - the remote Hugging Face browser supports text query, author/org filtering, and sort order selection
+  - search caching now keys off the full search request instead of only the query text
+  - stale search responses no longer overwrite the active filtered result set
+- Still missing:
+  - local catalog filtering/search over the full stored metadata
+  - richer remote filters such as license, size range, gated/public state, and language
+  - reusable filter chips / saved searches in the UI
 
 ### Milestone F: Polish and Hardening
 

@@ -254,17 +254,29 @@ struct ModelsView : ViewModifiers<ModelsView> {
     std::function<void()> onRefresh;
     std::function<void(std::string const &, std::string const &)> onLoad;
     std::function<void(std::string const &)> onSearchQueryChange;
-    std::function<void(std::string)> onSearch;
+    std::function<void(std::string const &)> onSearchAuthorChange;
+    std::function<void(RemoteModelSort)> onSortChange;
+    std::function<void(std::string, std::string, RemoteModelSort)> onSearch;
     std::function<void(std::string)> onSelectRemoteRepo;
     std::function<void(std::string, std::string)> onDownload;
 
     auto body() const {
         Theme const &theme = useEnvironment<Theme>();
         auto searchQuery = useState<std::string>(state.modelSearchQuery);
+        auto searchAuthor = useState<std::string>(state.modelSearchAuthor);
+        auto sortIndex = useState<int>(state.remoteModelSort == RemoteModelSort::Likes ? 1 :
+                                       state.remoteModelSort == RemoteModelSort::Updated ? 2 :
+                                                                                         0);
 
-        auto triggerSearch = [query = searchQuery, onSearch = onSearch]() {
+        auto triggerSearch = [query = searchQuery, author = searchAuthor, sortIndex = sortIndex, onSearch = onSearch]() {
             if (onSearch) {
-                onSearch(*query);
+                onSearch(
+                    *query,
+                    *author,
+                    *sortIndex == 1 ? RemoteModelSort::Likes :
+                    *sortIndex == 2 ? RemoteModelSort::Updated :
+                                      RemoteModelSort::Downloads
+                );
             }
         };
 
@@ -524,6 +536,45 @@ struct ModelsView : ViewModifiers<ModelsView> {
                                     .onSubmit = [triggerSearch](std::string const &) {
                                         triggerSearch();
                                     },
+                                },
+                                HStack {
+                                    .spacing = theme.space3,
+                                    .alignment = Alignment::Center,
+                                    .children = children(
+                                        TextInput {
+                                            .value = searchAuthor,
+                                            .placeholder = "Author or org",
+                                            .style = TextInput::Style {.height = 40.f},
+                                            .onChange = [onSearchAuthorChange = onSearchAuthorChange](std::string const &value) {
+                                                if (onSearchAuthorChange) {
+                                                    onSearchAuthorChange(value);
+                                                }
+                                            },
+                                            .onSubmit = [triggerSearch](std::string const &) {
+                                                triggerSearch();
+                                            },
+                                        }
+                                            .flex(1.f, 1.f),
+                                        Select {
+                                            .selectedIndex = sortIndex,
+                                            .options = {
+                                                SelectOption {.label = "Downloads"},
+                                                SelectOption {.label = "Likes"},
+                                                SelectOption {.label = "Updated"},
+                                            },
+                                            .placeholder = "Sort",
+                                            .onChange = [onSortChange = onSortChange](int index) {
+                                                if (onSortChange) {
+                                                    onSortChange(
+                                                        index == 1 ? RemoteModelSort::Likes :
+                                                        index == 2 ? RemoteModelSort::Updated :
+                                                                     RemoteModelSort::Downloads
+                                                    );
+                                                }
+                                            },
+                                        }
+                                            .size(180.f, 40.f)
+                                    )
                                 },
                                 std::move(remoteResults)
                             )

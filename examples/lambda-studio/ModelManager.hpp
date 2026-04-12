@@ -52,19 +52,21 @@ class ModelManager {
 
     void refreshLocalModels() { runAsync([this] { postLocalModelsReady_(); }); }
 
-    void searchHuggingFace(std::string query) {
-        runAsync([this, q = std::move(query)] {
+    void searchHuggingFace(HfSearchRequest request) {
+        runAsync([this, req = std::move(request)] {
             try {
-                auto [results, rawJson] = searchHfSync(q);
+                auto [results, rawJson] = searchHfSync(req);
                 post_(ModelManagerEvent {
                     .kind = ModelManagerEvent::Kind::HfSearchReady,
                     .hfModels = std::move(results),
+                    .searchKey = req.cacheKey,
                     .rawJson = std::move(rawJson),
                 });
             } catch (std::exception const &e) {
                 post_(ModelManagerEvent {
                     .kind = ModelManagerEvent::Kind::HfSearchReady,
                     .error = e.what(),
+                    .searchKey = req.cacheKey,
                 });
             }
         });
@@ -270,11 +272,17 @@ class ModelManager {
         return models;
     }
 
-    std::pair<std::vector<HfModelInfo>, std::string> searchHfSync(std::string const &query) const {
+    std::pair<std::vector<HfModelInfo>, std::string> searchHfSync(HfSearchRequest const &request) const {
         std::string url = get_model_endpoint();
-        url += "api/models?library=gguf&sort=downloads&direction=-1&limit=20&full=true&cardData=true";
-        if (!query.empty()) {
-            url += "&search=" + urlEncode(query);
+        url += "api/models?library=gguf&direction=-1&limit=20&full=true&cardData=true";
+        if (!request.sortKey.empty()) {
+            url += "&sort=" + urlEncode(request.sortKey);
+        }
+        if (!request.query.empty()) {
+            url += "&search=" + urlEncode(request.query);
+        }
+        if (!request.author.empty()) {
+            url += "&author=" + urlEncode(request.author);
         }
 
         common_remote_params params;

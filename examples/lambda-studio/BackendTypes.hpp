@@ -67,6 +67,15 @@ struct HfModelInfo {
     constexpr bool operator==(HfModelInfo const &) const = default;
 };
 
+struct HfSearchRequest {
+    std::string query;
+    std::string author;
+    std::string sortKey = "downloads";
+    std::string cacheKey;
+
+    constexpr bool operator==(HfSearchRequest const &) const = default;
+};
+
 struct HfFileInfo {
     std::string repoId;
     std::string path;
@@ -120,6 +129,7 @@ struct ModelManagerEvent {
     std::vector<HfFileInfo> hfFiles;
     HfRepoDetailInfo hfRepoDetail;
     std::string error;
+    std::string searchKey;
     std::string repoId;
     std::string modelPath;
     std::string modelName;

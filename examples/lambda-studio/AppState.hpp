@@ -18,6 +18,12 @@ enum class StudioModule {
     Settings,
 };
 
+enum class RemoteModelSort {
+    Downloads,
+    Likes,
+    Updated,
+};
+
 struct LocalModel {
     std::string path;
     std::string name;
@@ -89,6 +95,8 @@ struct AppState {
 
     std::vector<LocalModel> localModels;
     std::string modelSearchQuery;
+    std::string modelSearchAuthor;
+    RemoteModelSort remoteModelSort = RemoteModelSort::Downloads;
     std::vector<RemoteModel> remoteModels;
     std::string selectedRemoteRepoId;
     std::vector<RemoteModelFile> selectedRemoteRepoFiles;
@@ -183,6 +191,26 @@ inline std::string joinedTags(std::vector<std::string> const &tags, std::size_t 
         ++count;
     }
     return result;
+}
+
+inline char const *remoteModelSortLabel(RemoteModelSort sort) {
+    switch (sort) {
+    case RemoteModelSort::Downloads:
+        return "Downloads";
+    case RemoteModelSort::Likes:
+        return "Likes";
+    case RemoteModelSort::Updated:
+        return "Updated";
+    }
+    return "Downloads";
+}
+
+inline std::string remoteModelSearchCacheKey(
+    std::string const &query,
+    std::string const &author,
+    RemoteModelSort sort
+) {
+    return "q=" + query + "\nauthor=" + author + "\nsort=" + remoteModelSortLabel(sort);
 }
 
 inline AppState makeInitialAppState() {
