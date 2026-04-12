@@ -17,6 +17,7 @@
 #include "Backend.hpp"
 #include "ChatsView.hpp"
 #include "Divider.hpp"
+#include "HubView.hpp"
 #include "ModelsView.hpp"
 #include "SettingsView.hpp"
 #include "Sidebar.hpp"
@@ -85,8 +86,69 @@ std::string titleFromPrompt(std::string const &prompt) {
 
 } // namespace
 
+struct NoticeBanner : ViewModifiers<NoticeBanner> {
+    AppNotice notice;
+    std::function<void()> onOpen;
+    std::function<void()> onDismiss;
+
+    auto body() const {
+        Theme const &theme = useEnvironment<Theme>();
+
+        return HStack {
+            .spacing = theme.space3,
+            .alignment = Alignment::Center,
+            .children = children(
+                Icon {
+                    .name = IconName::CloudDownload,
+                    .size = 20.f,
+                    .weight = 600.f,
+                    .color = theme.colorAccent,
+                },
+                VStack {
+                    .spacing = 2.f,
+                    .alignment = Alignment::Start,
+                    .children = children(
+                        Text {
+                            .text = notice.title,
+                            .font = theme.fontLabel,
+                            .color = theme.colorTextPrimary,
+                            .horizontalAlignment = HorizontalAlignment::Leading,
+                        },
+                        Text {
+                            .text = notice.detail,
+                            .font = theme.fontBodySmall,
+                            .color = theme.colorTextSecondary,
+                            .horizontalAlignment = HorizontalAlignment::Leading,
+                            .wrapping = TextWrapping::Wrap,
+                        }
+                    )
+                }
+                    .flex(1.f, 1.f),
+                LinkButton {
+                    .label = "Open Models",
+                    .onTap = onOpen,
+                },
+                IconButton {
+                    .icon = IconName::Close,
+                    .style = {
+                        .size = 18.f,
+                        .weight = 500.f,
+                        .color = theme.colorTextSecondary,
+                    },
+                    .onTap = onDismiss,
+                }
+            )
+        }
+            .padding(theme.space3)
+            .fill(FillStyle::solid(theme.colorSurfaceOverlay))
+            .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
+            .cornerRadius(theme.radiusLarge);
+    }
+};
+
 struct LambdaStudio : ViewModifiers<LambdaStudio> {
     auto body() const {
+        Theme const &theme = useEnvironment<Theme>();
         auto appState = useState<AppState>(makeInitialAppState());
         BackendServices &services = backend();
         auto currentRemoteSearchKey = [](AppState const &state) {
@@ -176,6 +238,7 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                         nextState.loadedModelName = event.modelName;
                         nextState.pendingModelPath.clear();
                         nextState.pendingModelName.clear();
+                        nextState.notice.reset();
                         nextState.statusText = "Loaded " + event.modelName;
                         nextState.errorText.clear();
                         break;
@@ -183,6 +246,7 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                         nextState.modelLoading = false;
                         nextState.pendingModelPath.clear();
                         nextState.pendingModelName.clear();
+                        nextState.notice.reset();
                         nextState.errorText = event.error;
                         break;
                     case lambda_backend::ModelManagerEvent::Kind::DownloadProgress:
@@ -221,6 +285,7 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                         nextState.pendingDownloadJobId.clear();
                         nextState.pendingDownloadRepoId.clear();
                         nextState.pendingDownloadFilePath.clear();
+                        nextState.notice.reset();
                         nextState.statusText = "Downloaded " + event.modelName;
                         nextState.errorText.clear();
                         break;
@@ -251,6 +316,7 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                         nextState.pendingDownloadJobId.clear();
                         nextState.pendingDownloadRepoId.clear();
                         nextState.pendingDownloadFilePath.clear();
+                        nextState.notice.reset();
                         nextState.errorText = event.error;
                         break;
                     case lambda_backend::ModelManagerEvent::Kind::HfSearchReady:
@@ -554,6 +620,11 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
             nextState.pendingDownloadJobId = job.id;
             nextState.pendingDownloadRepoId = repoId;
             nextState.pendingDownloadFilePath = path;
+            nextState.notice = AppNotice {
+                .title = "Download started",
+                .detail = path + " is downloading. Follow progress in the Models view.",
+                .targetModule = StudioModule::Models,
+            };
             nextState.statusText = "Downloading " + path;
             nextState.errorText.clear();
             try {
@@ -567,6 +638,21 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
 
         auto retryDownloadJob = [requestRemoteDownload](std::string repoId, std::string filePath) {
             requestRemoteDownload(std::move(repoId), std::move(filePath));
+        };
+
+        auto dismissNotice = [appState]() {
+            AppState nextState = *appState;
+            nextState.notice.reset();
+            appState = std::move(nextState);
+        };
+
+        auto openNoticeTarget = [appState]() {
+            AppState nextState = *appState;
+            if (nextState.notice.has_value()) {
+                nextState.currentModule = nextState.notice->targetModule;
+            }
+            nextState.notice.reset();
+            appState = std::move(nextState);
         };
 
         auto requestModelLoad = [appState, &services](std::string const &path, std::string const &name) {
@@ -691,6 +777,12 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                 .state = state,
                 .onRefresh = requestInventoryRefresh,
                 .onLoad = requestModelLoad,
+                .onRetryDownload = retryDownloadJob,
+            }
+                              .flex(1.f, 1.f);
+        } else if (state.currentModule == StudioModule::Hub) {
+            currentView = HubView {
+                .state = state,
                 .onSearchQueryChange = updateModelSearchQuery,
                 .onSearchAuthorChange = updateModelSearchAuthor,
                 .onSortChange = updateRemoteModelSort,
@@ -698,7 +790,6 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                 .onSearch = requestRemoteSearch,
                 .onSelectRemoteRepo = requestRemoteRepoFiles,
                 .onDownload = requestRemoteDownload,
-                .onRetryDownload = retryDownloadJob,
             }
                               .flex(1.f, 1.f);
         } else if (state.currentModule == StudioModule::Settings) {
@@ -716,6 +807,7 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                     .modules = {
                         {IconName::ChatBubble, "Chats"},
                         {IconName::ModelTraining, "Models"},
+                        {IconName::Cloud, "Hub"},
                         {IconName::Settings, "Settings"}
                     },
                     .selectedTitle = moduleTitle(state.currentModule),
@@ -726,7 +818,23 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                     },
                 }
                     .flex(0.f, 0.f),
-                Divider {.orientation = Divider::Orientation::Vertical}, std::move(currentView)
+                Divider {.orientation = Divider::Orientation::Vertical},
+                VStack {
+                    .spacing = theme.space3,
+                    .alignment = Alignment::Stretch,
+                    .children = state.notice.has_value()
+                                    ? children(
+                                          NoticeBanner {
+                                              .notice = *state.notice,
+                                              .onOpen = openNoticeTarget,
+                                              .onDismiss = dismissNotice,
+                                          }
+                                              .padding(theme.space3, theme.space3, 0.f, theme.space3),
+                                          std::move(currentView)
+                                      )
+                                    : children(std::move(currentView))
+                }
+                    .flex(1.f, 1.f)
             ),
         };
     }

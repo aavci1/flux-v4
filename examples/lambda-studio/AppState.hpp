@@ -15,6 +15,7 @@ namespace lambda {
 enum class StudioModule {
     Chats,
     Models,
+    Hub,
     Settings,
 };
 
@@ -34,6 +35,14 @@ enum class DownloadJobStatus {
     Running,
     Completed,
     Failed,
+};
+
+struct AppNotice {
+    std::string title;
+    std::string detail;
+    StudioModule targetModule = StudioModule::Models;
+
+    bool operator==(AppNotice const &) const = default;
 };
 
 struct LocalModel {
@@ -136,6 +145,7 @@ struct AppState {
     std::string pendingModelPath;
     std::string pendingModelName;
 
+    std::optional<AppNotice> notice;
     std::string statusText;
     std::string errorText;
 
@@ -159,6 +169,8 @@ inline char const *moduleTitle(StudioModule module) {
         return "Chats";
     case StudioModule::Models:
         return "Models";
+    case StudioModule::Hub:
+        return "Hub";
     case StudioModule::Settings:
         return "Settings";
     }
@@ -168,6 +180,9 @@ inline char const *moduleTitle(StudioModule module) {
 inline StudioModule moduleFromTitle(std::string const &title) {
     if (title == "Models") {
         return StudioModule::Models;
+    }
+    if (title == "Hub") {
+        return StudioModule::Hub;
     }
     if (title == "Settings") {
         return StudioModule::Settings;

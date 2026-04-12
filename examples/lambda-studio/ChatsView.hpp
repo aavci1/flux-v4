@@ -27,7 +27,7 @@ struct ChatListRow : ViewModifiers<ChatListRow> {
 
         return ListRow {
             .content = HStack {
-                .spacing = theme.space3,
+                .spacing = theme.space1,
                 .alignment = Alignment::Start,
                 .children = children(
                     VStack {
@@ -128,18 +128,15 @@ struct ChatsView : ViewModifiers<ChatsView> {
                 .onStop = [onStop = onStop, selectedIndex] {
                     if (onStop) {
                         onStop(selectedIndex);
-                    }
-                },
+                    } },
                 .onToggleReasoning = [onToggleReasoning = onToggleReasoning, selectedIndex](int messageIndex) {
                     if (onToggleReasoning) {
                         onToggleReasoning(selectedIndex, messageIndex);
-                    }
-                },
+                    } },
                 .onSelectModel = [onSelectModel = onSelectModel, selectedIndex](std::string const &path, std::string const &name) {
                     if (onSelectModel) {
                         onSelectModel(selectedIndex, path, name);
-                    }
-                },
+                    } },
             }
                          .flex(1.f, 1.f);
         }
@@ -173,9 +170,7 @@ struct ChatsView : ViewModifiers<ChatsView> {
                                 }
                             }
                         }.padding(theme.space4),
-                        Rectangle {}
-                            .size(0.f, 1.f)
-                            .fill(FillStyle::solid(theme.colorBorderSubtle)),
+                        Rectangle {}.size(0.f, 1.f).fill(FillStyle::solid(theme.colorBorderSubtle)),
                         ListView {
                             .rows = std::move(rows),
                         }
@@ -184,9 +179,7 @@ struct ChatsView : ViewModifiers<ChatsView> {
                 }
                     .fill(FillStyle::solid(theme.colorSurfaceOverlay))
                     .size(320.f, 0.f),
-                Rectangle {}
-                    .size(1.f, 0.f)
-                    .fill(FillStyle::solid(theme.colorBorderSubtle)),
+                Rectangle {}.size(1.f, 0.f).fill(FillStyle::solid(theme.colorBorderSubtle)),
                 std::move(detail),
             },
         };

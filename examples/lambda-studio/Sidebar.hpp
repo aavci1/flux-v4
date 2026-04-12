@@ -5,6 +5,7 @@
 #include <Flux/UI/Views/Views.hpp>
 
 #include <functional>
+#include <optional>
 #include <string>
 
 using namespace flux;
@@ -89,15 +90,24 @@ struct Sidebar : ViewModifiers<Sidebar> {
             };
         };
 
+        std::vector<Element> topChildren;
+        std::optional<Module> bottomModule;
+        for (Module const &module : modules) {
+            if (module.title == "Settings") {
+                bottomModule = module;
+                continue;
+            }
+            topChildren.push_back(makeButton(module.icon, module.title));
+        }
+        topChildren.push_back(Spacer {});
+        if (bottomModule.has_value()) {
+            topChildren.push_back(makeButton(bottomModule->icon, bottomModule->title));
+        }
+
         return VStack {
             .spacing = theme.space6,
             .alignment = Alignment::Center,
-            .children = children(
-                makeButton(IconName::ChatBubble, "Chats"),
-                makeButton(IconName::ModelTraining, "Models"),
-                Spacer {},
-                makeButton(IconName::Settings, "Settings")
-            ),
+            .children = std::move(topChildren),
         }
             .padding(theme.space4, theme.space2, theme.space4, theme.space2);
     }
