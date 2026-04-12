@@ -5,15 +5,64 @@
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Views/Views.hpp>
 
+#include <algorithm>
+#include <cstddef>
 #include <functional>
 #include <string>
 #include <vector>
 
+#include "AppState.hpp"
 #include "ChatModels.hpp"
 
 using namespace flux;
 
 namespace lambda {
+
+struct IconActionButton : ViewModifiers<IconActionButton> {
+    IconName icon = IconName::Add;
+    bool disabled = false;
+    bool accent = false;
+    std::function<void()> onTap;
+
+    auto body() const {
+        Theme const &theme = useEnvironment<Theme>();
+        bool const hovered = useHover();
+        bool const pressed = usePress();
+        bool const isDisabled = disabled;
+
+        Color const fill = isDisabled ? theme.colorSurfaceDisabled :
+                           accent     ? theme.colorAccent :
+                                        (pressed ? theme.colorSurfaceRowHover :
+                                         hovered ? theme.colorSurfaceHover :
+                                                   theme.colorSurface);
+        Color const iconColor = isDisabled ? theme.colorTextMuted :
+                                accent   ? theme.colorTextOnAccent :
+                                           theme.colorTextSecondary;
+
+        return ZStack {
+            .horizontalAlignment = Alignment::Center,
+            .verticalAlignment = Alignment::Center,
+            .children = children(
+                Rectangle {}
+                    .size(32.f, 32.f)
+                    .fill(FillStyle::solid(fill))
+                    .stroke(accent || isDisabled ? StrokeStyle::none() : StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
+                    .cornerRadius(theme.radiusFull),
+                Icon {
+                    .name = icon,
+                    .size = 18.f,
+                    .weight = 700.f,
+                    .color = iconColor,
+                })
+        }
+            .cursor(isDisabled ? Cursor::Arrow : Cursor::Hand)
+            .onTap([isDisabled, onTap = onTap] {
+                if (!isDisabled && onTap) {
+                    onTap();
+                }
+            });
+    }
+};
 
 struct ChatBubble : ViewModifiers<ChatBubble> {
     ChatMessage message;
@@ -22,9 +71,13 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
         Theme const &theme = useEnvironment<Theme>();
 
         bool const isUser = message.role == ChatRole::User;
-        Color const fill = isUser ? theme.colorAccent : theme.colorSurfaceOverlay;
+        bool const isReasoning = message.role == ChatRole::Reasoning;
+        Color const fill = isUser      ? theme.colorAccent :
+                           isReasoning ? theme.colorBackground :
+                                         theme.colorSurfaceOverlay;
         Color const textColor = isUser ? theme.colorTextOnAccent : theme.colorTextPrimary;
-        std::string const label = isUser ? "You" : "Lambda";
+        std::string const label = isUser ? "You" : isReasoning ? "Reasoning" :
+                                                                 "Lambda";
 
         Element bubble = VStack {
             .spacing = theme.space1,
@@ -33,12 +86,14 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
                 Text {
                     .text = label,
                     .font = theme.fontLabelSmall,
-                    .color = isUser ? theme.colorTextOnAccent : theme.colorTextSecondary,
+                    .color = isUser      ? theme.colorTextOnAccent :
+                             isReasoning ? theme.colorTextMuted :
+                                           theme.colorTextSecondary,
                     .horizontalAlignment = HorizontalAlignment::Leading,
                 },
                 Text {
                     .text = message.text,
-                    .font = theme.fontBody,
+                    .font = isReasoning ? theme.fontBodySmall : theme.fontBody,
                     .color = textColor,
                     .horizontalAlignment = HorizontalAlignment::Leading,
                     .verticalAlignment = VerticalAlignment::Top,
@@ -75,16 +130,20 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
 
 struct ChatComposer : ViewModifiers<ChatComposer> {
     State<std::string> value;
+    bool enabled = true;
+    std::string hintText;
     std::function<void(std::string const &)> onSend;
+    std::function<void()> onStop;
+    bool streaming = false;
 
     auto body() const {
         Theme const &theme = useEnvironment<Theme>();
 
         auto draftState = value;
-        bool const canSend = !(*draftState).empty();
-        auto submit = [draftState, onSend = onSend]() {
+        bool const canSend = enabled && !(*draftState).empty();
+        auto submit = [draftState, onSend = onSend, canSend]() {
             std::string message = *draftState;
-            if (message.empty() || !onSend) {
+            if (!canSend || message.empty() || !onSend) {
                 return;
             }
             onSend(message);
@@ -100,6 +159,7 @@ struct ChatComposer : ViewModifiers<ChatComposer> {
                     .placeholder = "Message Lambda Studio...",
                     .style = TextInput::Style::plain(),
                     .multiline = true,
+                    .disabled = !enabled,
                     .multilineHeight = {.minIntrinsic = 88.f, .maxIntrinsic = 160.f},
                     .onSubmit = [submit](std::string const &) {
                         submit();
@@ -114,30 +174,23 @@ struct ChatComposer : ViewModifiers<ChatComposer> {
                                              .weight = 500.f,
                                              .color = theme.colorTextSecondary,
                                          }
-                                             .padding(theme.space2)
-                                             .fill(FillStyle::solid(theme.colorSurface))
-                                             .cornerRadius(theme.radiusFull)
                                              .cursor(Cursor::Hand),
                                          Text {
-                                             .text = "Local draft",
+                                             .text = hintText.empty() ? "Local draft" : hintText,
                                              .font = theme.fontBodySmall,
-                                             .color = theme.colorTextSecondary,
+                                             .color = enabled ? theme.colorTextSecondary : theme.colorTextMuted,
+                                             .verticalAlignment = VerticalAlignment::Center,
                                          },
-                                         Spacer {}, Icon {
-                                                        .name = IconName::ArrowUpward,
-                                                        .size = 16.f,
-                                                        .weight = 700.f,
-                                                        .color = canSend ? theme.colorTextOnAccent : theme.colorTextMuted,
-                                                    }
-                                                        .padding(theme.space2)
-                                                        .fill(FillStyle::solid(canSend ? theme.colorAccent : theme.colorSurfaceDisabled))
-                                                        .cornerRadius(theme.radiusFull)
-                                                        .cursor(canSend ? Cursor::Hand : Cursor::Arrow)
-                                                        .onTap([submit, canSend] {
-                                                            if (canSend) {
-                                                                submit();
-                                                            }
-                                                        })),
+                                         Spacer {}, streaming ? Element {IconActionButton {
+                                                                    .icon = IconName::Stop,
+                                                                    .onTap = onStop,
+                                                                }} :
+                                                                Element {IconActionButton {
+                                                                    .icon = IconName::Send,
+                                                                    .disabled = !canSend,
+                                                                    .accent = true,
+                                                                    .onTap = submit,
+                                                                }}),
                 }
             ),
         }
@@ -150,11 +203,55 @@ struct ChatComposer : ViewModifiers<ChatComposer> {
 
 struct ChatView : ViewModifiers<ChatView> {
     ChatThread chat;
+    std::vector<LocalModel> localModels;
+    std::string loadedModelPath;
+    bool modelLoading = false;
     std::function<void(std::string const &)> onSend;
+    std::function<void()> onStop;
+    std::function<void(std::string const &, std::string const &)> onSelectModel;
 
     auto body() const {
         Theme const &theme = useEnvironment<Theme>();
         auto draft = useState<std::string>("");
+        std::vector<SelectOption> modelOptions;
+        modelOptions.reserve(localModels.size());
+
+        int currentModelIndex = -1;
+        for (std::size_t i = 0; i < localModels.size(); ++i) {
+            LocalModel const &model = localModels[i];
+            std::string detail = formatModelSize(model.sizeBytes);
+            if (!model.path.empty()) {
+                detail = detail.empty() ? model.path : detail + "  " + model.path;
+            }
+            modelOptions.push_back(SelectOption {
+                .label = model.name,
+                .detail = detail,
+            });
+            if (!chat.modelPath.empty() && model.path == chat.modelPath) {
+                currentModelIndex = static_cast<int>(i);
+            }
+        }
+
+        auto selectedModelIndex = useState<int>(currentModelIndex);
+        if (*selectedModelIndex != currentModelIndex) {
+            selectedModelIndex = currentModelIndex;
+        }
+
+        bool const hasModel = !chat.modelPath.empty();
+        bool const selectedModelReady = hasModel && chat.modelPath == loadedModelPath;
+        bool const canCompose = hasModel && selectedModelReady && !modelLoading && !chat.streaming;
+        std::string composerHint = "Select a model to start chatting.";
+        if (modelLoading && chat.modelPath == loadedModelPath) {
+            composerHint = "Model is loading...";
+        } else if (modelLoading && !chat.modelPath.empty() && chat.modelPath != loadedModelPath) {
+            composerHint = "Loading the selected model...";
+        } else if (chat.streaming) {
+            composerHint = "Streaming response...";
+        } else if (selectedModelReady) {
+            composerHint = "Ready";
+        } else if (hasModel) {
+            composerHint = "Load the selected model to send.";
+        }
 
         std::vector<Element> bubbles;
         bubbles.reserve(chat.messages.size());
@@ -170,34 +267,60 @@ struct ChatView : ViewModifiers<ChatView> {
                     .spacing = theme.space2,
                     .alignment = Alignment::Center,
                     .children = children(
-                        Text {
-                            .text = chat.title,
-                            .font = theme.fontHeading,
-                            .color = theme.colorTextPrimary,
-                            .verticalAlignment = VerticalAlignment::Center
+                        VStack {
+                            .spacing = theme.space1,
+                            .alignment = Alignment::Start,
+                            .children = children(
+                                Text {
+                                    .text = chat.title,
+                                    .font = theme.fontHeading,
+                                    .color = theme.colorTextPrimary,
+                                    .verticalAlignment = VerticalAlignment::Center
+                                },
+                                Text {
+                                    .text = chat.modelName.empty() ? "No model selected" :
+                                                                     "Model: " + chat.modelName + "  •  Updated " + chat.updatedAt,
+                                    .font = theme.fontLabelSmall,
+                                    .color = theme.colorTextSecondary,
+                                    .verticalAlignment = VerticalAlignment::Center
+                                }
+                            )
                         }
                             .flex(1.f, 1.f),
-                        Text {
-                            .text = "Updated " + chat.updatedAt + " ago",
-                            .font = theme.fontLabelSmall,
-                            .color = theme.colorTextSecondary,
-                            .verticalAlignment = VerticalAlignment::Center
+                        Select {
+                            .selectedIndex = selectedModelIndex,
+                            .options = std::move(modelOptions),
+                            .placeholder = "Select model",
+                            .disabled = localModels.empty() || chat.streaming,
+                            .style = Select::Style {
+                                .minMenuWidth = 320.f,
+                            },
+                            .onChange = [onSelectModel = onSelectModel, localModels = localModels](int index) {
+                                if (index < 0 || static_cast<std::size_t>(index) >= localModels.size() || !onSelectModel) {
+                                    return;
+                                }
+                                LocalModel const &model = localModels[static_cast<std::size_t>(index)];
+                                onSelectModel(model.path, model.name);
+                            },
                         }
+                            .size(300.f, 0.f)
                     ),
                 },
                 ScrollView {
                     .axis = ScrollAxis::Vertical,
-                    .children = children(
-                        VStack {
-                            .spacing = theme.space3,
-                            .children = std::move(bubbles),
-                        }
-                    ),
+                    .children = children(VStack {
+                        .spacing = theme.space3,
+                        .children = std::move(bubbles),
+                    }),
                 }
                     .flex(1.f, 1.f, 0.f),
                 ChatComposer {
                     .value = draft,
+                    .enabled = canCompose,
+                    .hintText = composerHint,
                     .onSend = onSend,
+                    .onStop = onStop,
+                    .streaming = chat.streaming,
                 }
             ),
         }

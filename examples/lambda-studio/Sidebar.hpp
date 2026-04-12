@@ -32,7 +32,7 @@ struct SidebarButton : ViewModifiers<SidebarButton> {
         Color color = theme.colorTextSecondary;
 
         if (hovered) {
-            color = theme.colorTextPrimary;
+            color = theme.colorAccentSubtle;
         }
 
         if (pressed || selected) {

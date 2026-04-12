@@ -5,8 +5,10 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <functional>
 #include <vector>
 
+#include "AppState.hpp"
 #include "ChatModels.hpp"
 #include "ChatView.hpp"
 #include "Divider.hpp"
@@ -47,7 +49,7 @@ struct ChatListRow : ViewModifiers<ChatListRow> {
                             .wrapping = TextWrapping::NoWrap,
                         },
                         Text {
-                            .text = shortenForPreview(chatPreview(chat)),
+                            .text = (chat.modelName.empty() ? "" : chat.modelName + "  •  ") + shortenForPreview(chatPreview(chat)),
                             .font = theme.fontBodySmall,
                             .color = detailColor,
                             .horizontalAlignment = HorizontalAlignment::Leading,
@@ -79,15 +81,18 @@ struct ChatListRow : ViewModifiers<ChatListRow> {
 };
 
 struct ChatsView : ViewModifiers<ChatsView> {
+    AppState state;
+    std::function<void()> onNewChat;
+    std::function<void(int)> onSelectChat;
+    std::function<void(int, std::string const &, std::string const &)> onSelectModel;
+    std::function<void(int, std::string const &)> onSend;
+    std::function<void(int)> onStop;
+
     auto body() const {
         Theme const &theme = useEnvironment<Theme>();
-        auto selectedChatIndex = useState<int>(0);
-        auto chats = useState<std::vector<ChatThread>>(sampleChatThreads());
-        std::vector<ChatThread> const chatThreads = *chats;
+        std::vector<ChatThread> const &chatThreads = state.chats;
 
-        std::size_t const selectedIndex =
-            static_cast<std::size_t>(std::max(0, std::min(*selectedChatIndex, static_cast<int>(chatThreads.size() - 1))));
-        ChatThread const &selectedChat = chatThreads[selectedIndex];
+        int const selectedIndex = clampedChatIndex(state);
 
         std::vector<Element> rows;
         rows.reserve(chatThreads.size());
@@ -95,11 +100,54 @@ struct ChatsView : ViewModifiers<ChatsView> {
         for (std::size_t i = 0; i < chatThreads.size(); ++i) {
             rows.push_back(ChatListRow {
                 .chat = chatThreads[i],
-                .selected = i == selectedIndex,
-                .onTap = [selectedChatIndex, i] {
-                    selectedChatIndex = static_cast<int>(i);
+                .selected = static_cast<int>(i) == selectedIndex,
+                .onTap = [onSelectChat = onSelectChat, i] {
+                    if (onSelectChat) {
+                        onSelectChat(static_cast<int>(i));
+                    }
                 },
             });
+        }
+
+        Element detail = VStack {
+            .alignment = Alignment::Center,
+            .children = children(
+                Text {
+                    .text = "No chats yet",
+                    .font = theme.fontHeading,
+                    .color = theme.colorTextPrimary,
+                },
+                Text {
+                    .text = "Create a new chat or select one from the list.",
+                    .font = theme.fontBodySmall,
+                    .color = theme.colorTextSecondary,
+                    .horizontalAlignment = HorizontalAlignment::Center,
+                }
+            ),
+        }
+                             .flex(1.f, 1.f);
+
+        if (selectedIndex >= 0) {
+            ChatThread const &selectedChat = chatThreads[static_cast<std::size_t>(selectedIndex)];
+            detail = ChatView {
+                .chat = selectedChat,
+                .localModels = state.localModels,
+                .loadedModelPath = state.loadedModelPath,
+                .modelLoading = state.modelLoading,
+                .onSend = [onSend = onSend, selectedIndex](std::string const &message) {
+                    if (onSend) {
+                        onSend(selectedIndex, message);
+                    } },
+                .onStop = [onStop = onStop, selectedIndex] {
+                    if (onStop) {
+                        onStop(selectedIndex);
+                    } },
+                .onSelectModel = [onSelectModel = onSelectModel, selectedIndex](std::string const &path, std::string const &name) {
+                    if (onSelectModel) {
+                        onSelectModel(selectedIndex, path, name);
+                    } },
+            }
+                         .flex(1.f, 1.f);
         }
 
         return HStack {
@@ -110,11 +158,22 @@ struct ChatsView : ViewModifiers<ChatsView> {
                     .spacing = 0.f,
                     .alignment = Alignment::Start,
                     .children = children(
-                        Text {
-                            .text = "Chats",
-                            .font = theme.fontHeading,
-                            .color = theme.colorTextPrimary,
-                            .horizontalAlignment = HorizontalAlignment::Leading,
+                        HStack {
+                            .spacing = theme.space2,
+                            .alignment = Alignment::Center,
+                            .children = children(
+                                Text {
+                                    .text = "Chats",
+                                    .font = theme.fontHeading,
+                                    .color = theme.colorTextPrimary,
+                                    .horizontalAlignment = HorizontalAlignment::Leading,
+                                }
+                                    .flex(1.f, 1.f),
+                                IconActionButton {
+                                    .icon = IconName::Add,
+                                    .onTap = onNewChat,
+                                }
+                            )
                         }
                             .padding(theme.space4),
                         Divider {},
@@ -137,29 +196,7 @@ struct ChatsView : ViewModifiers<ChatsView> {
                 Divider {
                     .orientation = Divider::Orientation::Vertical,
                 },
-                ChatView {
-                    .chat = selectedChat,
-                    .onSend = [chats, selectedIndex](std::string const &message) {
-                        if (message.empty()) {
-                            return;
-                        }
-
-                        auto nextChats = *chats;
-                        ChatThread &thread = nextChats[selectedIndex];
-                        thread.messages.push_back(ChatMessage {
-                            .role = ChatRole::User,
-                            .text = message,
-                        });
-                        thread.messages.push_back(ChatMessage {
-                            .role = ChatRole::Assistant,
-                            .text = mockAssistantReply(thread.title, message),
-                        });
-                        thread.updatedAt = "now";
-
-                        chats = std::move(nextChats);
-                    },
-                }
-                    .flex(1.f, 1.f)
+                std::move(detail)
             ),
         };
     }
