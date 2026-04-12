@@ -48,13 +48,10 @@ Size resolveMeasuredScrollViewSize(ScrollAxis axis, Size contentSize, LayoutCons
 } // namespace
 
 void ScrollView::layout(LayoutContext &ctx) const {
-    if (!ctx.consumeCompositeBodySubtreeRootSkip()) {
-        ctx.advanceChildSlot();
-    }
     ComponentKey const key = ctx.nextCompositeKey();
     StateStore *store = StateStore::current();
     if (store) {
-        store->pushComponent(key);
+        store->pushComponent(key, std::type_index(typeid(ScrollView)));
     }
     Element &childEl = ctx.pinElement(body());
     if (store) {
@@ -70,9 +67,6 @@ void ScrollView::renderFromLayout(RenderContext &, LayoutNode const &) const {}
 
 Size ScrollView::measure(LayoutContext &ctx, LayoutConstraints const &constraints, LayoutHints const &hints,
                          TextSystem &ts) const {
-    if (!ctx.consumeCompositeBodySubtreeRootSkip()) {
-        ctx.advanceChildSlot();
-    }
     ComponentKey const key = ctx.nextCompositeKey();
     ctx.beginCompositeBodySubtree(key);
     ctx.pushCompositeKeyTail(key);

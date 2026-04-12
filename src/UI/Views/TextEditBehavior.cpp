@@ -364,6 +364,10 @@ bool TextEditBehavior::handleKey(KeyEvent const &e) {
 
     if (e.key == keys::Return) {
         if (opts_.submitsOnEnter) {
+            if (opts_.multiline && shift) {
+                insertAtCaret("\n", false);
+                return true;
+            }
             if (opts_.onChange) {
                 opts_.onChange(value_->get());
             }

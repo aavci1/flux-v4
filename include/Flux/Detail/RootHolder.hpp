@@ -36,7 +36,7 @@ struct TypedRootHolder final : RootHolder {
       ComponentKey const key = ctx.nextCompositeKey();
       StateStore* store = StateStore::current();
       if (store) {
-        store->pushComponent(key);
+        store->pushComponent(key, std::type_index(typeid(C)));
       }
       Element& child = ctx.pinElement(Element{value.body()});
       if (store) {

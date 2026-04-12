@@ -5,7 +5,6 @@
 
 #include <algorithm>
 #include <cstddef>
-
 namespace flux {
 
 bool FocusController::hasKeyboardOrigin() const noexcept {

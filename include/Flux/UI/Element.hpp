@@ -360,7 +360,7 @@ void Element::Model<C>::layout(LayoutContext& ctx) const {
     ComponentKey const key = ctx.nextCompositeKey();
     StateStore* store = StateStore::current();
     if (store) {
-      store->pushComponent(key);
+      store->pushComponent(key, std::type_index(typeid(C)));
       store->pushCompositeConstraints(ctx.constraints());
     }
     Element& child = ctx.pinElement(Element{value.body()});
@@ -467,7 +467,7 @@ Size Element::Model<C>::measure(LayoutContext& ctx, LayoutConstraints const& con
     ComponentKey const key = ctx.nextCompositeKey();
     StateStore* store = StateStore::current();
     if (store) {
-      store->pushComponent(key);
+      store->pushComponent(key, std::type_index(typeid(C)));
       store->pushCompositeConstraints(constraints);
     }
     Element child{value.body()};

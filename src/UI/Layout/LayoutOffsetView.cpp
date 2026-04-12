@@ -90,6 +90,10 @@ Size scrollContentSize(ScrollAxis axis, std::vector<Size> const &sizes) {
     return {totalW, totalH};
 }
 
+bool sizeApproximatelyEqual(Size const &a, Size const &b, float tolerance = 0.5f) {
+    return std::abs(a.width - b.width) <= tolerance && std::abs(a.height - b.height) <= tolerance;
+}
+
 } // namespace
 
 void OffsetView::layout(LayoutContext &ctx) const {
@@ -99,7 +103,10 @@ void OffsetView::layout(LayoutContext &ctx) const {
     OffsetViewport const viewport = resolveViewport(assignedW, assignedH, scope.outer);
 
     if (viewportSize.signal) {
-        viewportSize = Size {viewport.viewportW, viewport.viewportH};
+        Size const nextViewport {viewport.viewportW, viewport.viewportH};
+        if (!sizeApproximatelyEqual(*viewportSize, nextViewport)) {
+            viewportSize = nextViewport;
+        }
     }
 
     LayoutConstraints const childCs = scrollChildConstraints(axis, scope.outer, viewport.viewportW, viewport.viewportH);
@@ -111,7 +118,9 @@ void OffsetView::layout(LayoutContext &ctx) const {
     Size const contentExtent = scrollContentSize(axis, sizes);
 
     if (contentSize.signal) {
-        contentSize = contentExtent;
+        if (!sizeApproximatelyEqual(*contentSize, contentExtent)) {
+            contentSize = contentExtent;
+        }
     }
 
     scope.pushOffsetScrollLayer(offset);

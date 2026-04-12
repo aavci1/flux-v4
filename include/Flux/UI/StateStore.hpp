@@ -10,6 +10,7 @@
 
 #include <cassert>
 #include <cstdint>
+#include <deque>
 #include <memory>
 #include <optional>
 #include <utility>
@@ -30,8 +31,9 @@ struct StateSlot {
 
 /// State bucket for one component instance.
 struct ComponentState {
-  std::vector<StateSlot> slots;
+  std::deque<StateSlot> slots;
   std::size_t cursor = 0; // reset to 0 at the start of each build pass
+  std::type_index componentType{typeid(void)};
 };
 
 /// Owns all component state for the lifetime of the window.
@@ -60,7 +62,7 @@ public:
 
   /// Called by Element::Model<C>::build just before invoking body().
   /// Sets the active component key and resets that component's slot cursor.
-  void pushComponent(ComponentKey const& key);
+  void pushComponent(ComponentKey const& key, std::type_index componentType);
 
   /// Called by Element::Model<C>::build just after body() returns.
   void popComponent();

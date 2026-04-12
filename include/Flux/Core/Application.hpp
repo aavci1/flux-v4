@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <thread>
 #include <type_traits>
 #include <utility>
 
@@ -78,8 +79,12 @@ public:
   void markReactiveDirty();
 
   friend class Window;
+  friend class EventQueue;
 
 private:
+  bool isMainThread() const noexcept;
+  /// Wakes any blocking platform event wait without forcing a rebuild/redraw.
+  void wakeEventLoop();
   void adoptOwnedWindow(std::unique_ptr<Window> window);
   /// Invoked when `WindowLifecycleEvent::Registered` is dispatched (first `exec()` `dispatch()` drains the ctor post).
   void onWindowRegistered(Window* window);

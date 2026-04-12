@@ -52,6 +52,7 @@ struct Application::Impl {
 
   std::unique_ptr<CoreTextSystem> textSystem_;
   std::unique_ptr<Clipboard> clipboard_;
+  std::thread::id mainThreadId_;
 
   /// `CTFontRef` retained; released in `Application` destructor.
   void* iconFont_ = nullptr;
@@ -102,6 +103,7 @@ Application::Application(int /*argc*/, char** /*argv*/) {
   }
   gCurrent = this;
   d = std::make_unique<Impl>();
+  d->mainThreadId_ = std::this_thread::get_id();
   d->textSystem_ = std::make_unique<CoreTextSystem>();
   d->clipboard_ = std::make_unique<MacClipboard>();
 
@@ -206,6 +208,16 @@ void Application::unobserveNextFrame(ObserverHandle handle) {
 
 void Application::markReactiveDirty() {
   d->reactiveDirty_ = true;
+  if (!isMainThread()) {
+    wakeEventLoop();
+  }
+}
+
+bool Application::isMainThread() const noexcept {
+  return d && d->mainThreadId_ == std::this_thread::get_id();
+}
+
+void Application::wakeEventLoop() {
   for (auto& w : d->windows_) {
     if (w) {
       w->platformWindow()->wakeEventLoop();
@@ -215,10 +227,8 @@ void Application::markReactiveDirty() {
 
 void Application::requestRedraw() {
   d->redraw_ = true;
-  for (auto& w : d->windows_) {
-    if (w) {
-      w->platformWindow()->wakeEventLoop();
-    }
+  if (!isMainThread()) {
+    wakeEventLoop();
   }
 }
 

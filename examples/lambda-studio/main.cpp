@@ -5,6 +5,7 @@
 #include <Flux/UI/Views/Views.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
 #include <memory>
 #include <mutex>
@@ -26,6 +27,21 @@ using namespace lambda;
 namespace {
 std::once_flag gLambdaEventHandlers;
 
+std::int64_t steadyNowNanos() {
+    using namespace std::chrono;
+    return duration_cast<nanoseconds>(steady_clock::now().time_since_epoch()).count();
+}
+
+void finishTrailingReasoningMessage(ChatThread &chat, std::int64_t finishedAtNanos) {
+    if (chat.messages.empty()) {
+        return;
+    }
+    lambda::ChatMessage &last = chat.messages.back();
+    if (last.role == ChatRole::Reasoning && last.finishedAtNanos == 0) {
+        last.finishedAtNanos = finishedAtNanos;
+    }
+}
+
 void setChatModel(AppState &state, int chatIndex, std::string path, std::string name) {
     if (chatIndex < 0 || static_cast<std::size_t>(chatIndex) >= state.chats.size()) {
         return;
@@ -35,11 +51,11 @@ void setChatModel(AppState &state, int chatIndex, std::string path, std::string 
     chat.modelName = std::move(name);
 }
 
-std::vector<::ChatMessage> toBackendMessages(ChatThread const &chat) {
-    std::vector<::ChatMessage> result;
+std::vector<lambda_backend::ChatMessage> toBackendMessages(ChatThread const &chat) {
+    std::vector<lambda_backend::ChatMessage> result;
     result.reserve(chat.messages.size());
     for (lambda::ChatMessage const &message : chat.messages) {
-        result.push_back(::ChatMessage {
+        result.push_back(lambda_backend::ChatMessage {
             .role = toBackendRole(message.role),
             .text = message.text,
         });
@@ -70,8 +86,8 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
         BackendServices &services = backend();
 
         std::call_once(gLambdaEventHandlers, [appState, &services]() {
-            Application::instance().eventQueue().on<llm_studio::LlmUiEvent>(
-                [appState](llm_studio::LlmUiEvent const &event) {
+            Application::instance().eventQueue().on<lambda_backend::LlmUiEvent>(
+                [appState](lambda_backend::LlmUiEvent const &event) {
                     AppState nextState = *appState;
                     auto it = std::find_if(nextState.chats.begin(), nextState.chats.end(), [&](ChatThread const &chat) {
                         return chat.id == event.chatId;
@@ -80,18 +96,31 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                         return;
                     }
 
-                    if (event.kind == llm_studio::LlmUiEvent::Kind::Chunk) {
-                        ChatRole const role = event.part == llm_studio::LlmUiEvent::Part::Thinking ? ChatRole::Reasoning :
-                                                                                                     ChatRole::Assistant;
+                    std::int64_t const nowNanos = steadyNowNanos();
+
+                    if (event.kind == lambda_backend::LlmUiEvent::Kind::Chunk) {
+                        ChatRole const role = event.part == lambda_backend::LlmUiEvent::Part::Thinking
+                                                  ? ChatRole::Reasoning
+                                                  : ChatRole::Assistant;
+                        if (role != ChatRole::Reasoning) {
+                            finishTrailingReasoningMessage(*it, nowNanos);
+                        }
                         if (it->messages.empty() || it->messages.back().role != role) {
-                            it->messages.push_back(lambda::ChatMessage {.role = role, .text = ""});
+                            it->messages.push_back(lambda::ChatMessage {
+                                .role = role,
+                                .text = "",
+                                .startedAtNanos = role == ChatRole::Reasoning ? nowNanos : 0,
+                                .collapsed = role == ChatRole::Reasoning,
+                            });
                         }
                         it->messages.back().text += event.text;
-                    } else if (event.kind == llm_studio::LlmUiEvent::Kind::Done) {
+                    } else if (event.kind == lambda_backend::LlmUiEvent::Kind::Done) {
+                        finishTrailingReasoningMessage(*it, nowNanos);
                         it->streaming = false;
                         it->updatedAt = "now";
                         nextState.statusText = "Response complete";
-                    } else if (event.kind == llm_studio::LlmUiEvent::Kind::Error) {
+                    } else if (event.kind == lambda_backend::LlmUiEvent::Kind::Error) {
+                        finishTrailingReasoningMessage(*it, nowNanos);
                         it->streaming = false;
                         it->messages.push_back(lambda::ChatMessage {
                             .role = ChatRole::Assistant,
@@ -105,22 +134,22 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                 }
             );
 
-            Application::instance().eventQueue().on<ModelManagerEvent>(
-                [appState](ModelManagerEvent const &event) {
+            Application::instance().eventQueue().on<lambda_backend::ModelManagerEvent>(
+                [appState](lambda_backend::ModelManagerEvent const &event) {
                     AppState nextState = *appState;
                     switch (event.kind) {
-                    case ModelManagerEvent::Kind::LocalModelsReady:
+                    case lambda_backend::ModelManagerEvent::Kind::LocalModelsReady:
                         nextState.refreshingModels = false;
                         nextState.localModels.clear();
                         nextState.localModels.reserve(event.localModels.size());
-                        for (LocalModelInfo const &model : event.localModels) {
+                        for (lambda_backend::LocalModelInfo const &model : event.localModels) {
                             if (!model.path.empty()) {
                                 nextState.localModels.push_back(toLocalModel(model));
                             }
                         }
                         nextState.statusText = nextState.localModels.empty() ? "No local models found" : "Model inventory refreshed";
                         break;
-                    case ModelManagerEvent::Kind::ModelLoaded:
+                    case lambda_backend::ModelManagerEvent::Kind::ModelLoaded:
                         nextState.modelLoading = false;
                         nextState.loadedModelPath = event.modelPath;
                         nextState.loadedModelName = event.modelName;
@@ -129,16 +158,16 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                         nextState.statusText = "Loaded " + event.modelName;
                         nextState.errorText.clear();
                         break;
-                    case ModelManagerEvent::Kind::ModelLoadError:
+                    case lambda_backend::ModelManagerEvent::Kind::ModelLoadError:
                         nextState.modelLoading = false;
                         nextState.pendingModelPath.clear();
                         nextState.pendingModelName.clear();
                         nextState.errorText = event.error;
                         break;
-                    case ModelManagerEvent::Kind::DownloadDone:
-                    case ModelManagerEvent::Kind::DownloadError:
-                    case ModelManagerEvent::Kind::HfSearchReady:
-                    case ModelManagerEvent::Kind::HfFilesReady:
+                    case lambda_backend::ModelManagerEvent::Kind::DownloadDone:
+                    case lambda_backend::ModelManagerEvent::Kind::DownloadError:
+                    case lambda_backend::ModelManagerEvent::Kind::HfSearchReady:
+                    case lambda_backend::ModelManagerEvent::Kind::HfFilesReady:
                         break;
                     }
                     appState = std::move(nextState);
@@ -147,8 +176,8 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
 
             AppState nextState = *appState;
             nextState.refreshingModels = true;
-            nextState.loadedModelPath = llm_studio::defaultModelPath();
-            nextState.loadedModelName = llm_studio::defaultModelName();
+            nextState.loadedModelPath = lambda_backend::defaultModelPath();
+            nextState.loadedModelName = lambda_backend::defaultModelName();
             if (!nextState.loadedModelPath.empty() && !services.engine->isLoaded()) {
                 nextState.modelLoading = true;
                 nextState.pendingModelPath = nextState.loadedModelPath;
@@ -157,8 +186,11 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
             appState = std::move(nextState);
 
             services.manager->refreshLocalModels();
-            if (!llm_studio::defaultModelPath().empty() && !services.engine->isLoaded()) {
-                services.manager->loadModel(llm_studio::defaultModelPath(), llm_studio::defaultNGpuLayers());
+            if (!lambda_backend::defaultModelPath().empty() && !services.engine->isLoaded()) {
+                services.manager->loadModel(
+                    lambda_backend::defaultModelPath(),
+                    lambda_backend::defaultNGpuLayers()
+                );
             }
         });
 
@@ -184,7 +216,7 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
             nextState.statusText = "Loading " + name;
             nextState.errorText.clear();
             appState = std::move(nextState);
-            services.manager->loadModel(path, llm_studio::defaultNGpuLayers());
+            services.manager->loadModel(path, lambda_backend::defaultNGpuLayers());
         };
 
         auto selectChatModel = [appState, requestModelLoad](int chatIndex, std::string const &path, std::string const &name) {
@@ -221,7 +253,7 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
             nextState.errorText.clear();
             nextState.statusText = "Generating response...";
 
-            std::vector<::ChatMessage> history = toBackendMessages(chat);
+            std::vector<lambda_backend::ChatMessage> history = toBackendMessages(chat);
             std::string streamChatId = chat.id;
 
             appState = std::move(nextState);
@@ -229,7 +261,7 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
             services.engine->startChat(
                 std::move(history),
                 std::move(streamChatId),
-                [](llm_studio::LlmUiEvent event) {
+                [](lambda_backend::LlmUiEvent event) {
                     Application::instance().eventQueue().post(std::move(event));
                 }
             );
@@ -242,6 +274,23 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                 nextState.chats[static_cast<std::size_t>(chatIndex)].streaming = false;
             }
             nextState.statusText = "Generation stopped";
+            appState = std::move(nextState);
+        };
+
+        auto toggleReasoningMessage = [appState](int chatIndex, int messageIndex) {
+            AppState nextState = *appState;
+            if (chatIndex < 0 || static_cast<std::size_t>(chatIndex) >= nextState.chats.size()) {
+                return;
+            }
+            ChatThread &chat = nextState.chats[static_cast<std::size_t>(chatIndex)];
+            if (messageIndex < 0 || static_cast<std::size_t>(messageIndex) >= chat.messages.size()) {
+                return;
+            }
+            lambda::ChatMessage &message = chat.messages[static_cast<std::size_t>(messageIndex)];
+            if (message.role != ChatRole::Reasoning) {
+                return;
+            }
+            message.collapsed = !message.collapsed;
             appState = std::move(nextState);
         };
 
@@ -269,6 +318,7 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
             .onSelectModel = selectChatModel,
             .onSend = sendMessage,
             .onStop = stopMessage,
+            .onToggleReasoning = toggleReasoningMessage,
         }
                                   .flex(1.f, 1.f);
 

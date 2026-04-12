@@ -19,6 +19,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <string>
 #include <tuple>
 #include <vector>
 
@@ -74,6 +75,9 @@ struct OverlayConfig {
   bool dismissOnEscape = true;
 
   std::function<void()> onDismiss;
+
+  /// Optional debug label for overlay placement instrumentation.
+  std::string debugName;
 };
 
 std::tuple<std::function<void(Element, OverlayConfig)>, std::function<void()>, bool> useOverlay();

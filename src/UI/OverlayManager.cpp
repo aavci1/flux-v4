@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <limits>
 #include <utility>
 
@@ -32,6 +33,20 @@ Rect applyAnchorOutsets(Rect rect, EdgeInsets const &outsets) {
       rect.width + left + right,
       rect.height + top + bottom,
   };
+}
+
+char const *overlayPlacementName(OverlayConfig::Placement placement) {
+  switch (placement) {
+  case OverlayConfig::Placement::Below:
+    return "below";
+  case OverlayConfig::Placement::Above:
+    return "above";
+  case OverlayConfig::Placement::End:
+    return "end";
+  case OverlayConfig::Placement::Start:
+    return "start";
+  }
+  return "unknown";
 }
 
 } // namespace
@@ -247,6 +262,28 @@ void OverlayManager::rebuild(Size windowSize, Runtime& runtime) {
     }
 
     entry.resolvedFrame = resolveFrame(windowSize, entry.config, contentBounds);
+
+    if (!entry.config.debugName.empty()) {
+      if (entry.config.anchor.has_value()) {
+        Rect const &anchor = *entry.config.anchor;
+        std::fprintf(stderr,
+                     "[overlay:%s] rebuild anchor=(%.1f, %.1f, %.1f, %.1f) content=(%.1f, %.1f, %.1f, %.1f) frame=(%.1f, %.1f, %.1f, %.1f) placement=%s offset=(%.1f, %.1f)\n",
+                     entry.config.debugName.c_str(), anchor.x, anchor.y, anchor.width,
+                     anchor.height, contentBounds.x, contentBounds.y, contentBounds.width,
+                     contentBounds.height, entry.resolvedFrame.x, entry.resolvedFrame.y,
+                     entry.resolvedFrame.width, entry.resolvedFrame.height,
+                     overlayPlacementName(entry.config.placement), entry.config.offset.x,
+                     entry.config.offset.y);
+      } else {
+        std::fprintf(stderr,
+                     "[overlay:%s] rebuild anchor=(none) content=(%.1f, %.1f, %.1f, %.1f) frame=(%.1f, %.1f, %.1f, %.1f) placement=%s offset=(%.1f, %.1f)\n",
+                     entry.config.debugName.c_str(), contentBounds.x, contentBounds.y,
+                     contentBounds.width, contentBounds.height, entry.resolvedFrame.x,
+                     entry.resolvedFrame.y, entry.resolvedFrame.width,
+                     entry.resolvedFrame.height, overlayPlacementName(entry.config.placement),
+                     entry.config.offset.x, entry.config.offset.y);
+      }
+    }
 
     if (entry.config.modal) {
       insertOverlayBackdropChrome(entry, windowSize, runtime, false);

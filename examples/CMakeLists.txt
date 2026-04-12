@@ -120,10 +120,6 @@ set(LLAMA_BUILD_SERVER OFF CACHE BOOL "" FORCE)
 add_subdirectory(${CMAKE_SOURCE_DIR}/vendor/llama.cpp
                  ${CMAKE_BINARY_DIR}/vendor/llama.cpp)
 
-add_executable(llm_studio llm-studio/main.cpp)
-# common transitively provides llama + ggml + Threads and all include dirs.
-target_link_libraries(llm_studio PRIVATE flux common)
-
 set(FLUX_EXAMPLE_TARGETS
     hello_world
     lambda-studio
@@ -158,7 +154,6 @@ set(FLUX_EXAMPLE_TARGETS
     theme_demo
     layout_demo
     notes_demo
-    llm_studio
 )
 foreach(t ${FLUX_EXAMPLE_TARGETS})
   flux_copy_example_resources(${t})

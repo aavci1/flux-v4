@@ -21,10 +21,11 @@ void HStack::layout(LayoutContext& ctx) const {
   float const assignedW = stackMainAxisSpan(scope.parentFrame.width, scope.outer.maxWidth);
   float const assignedH = stackMainAxisSpan(scope.parentFrame.height, scope.outer.maxHeight);
   scope.pushStandardLayer(false, assignedW, assignedH);
+  bool const heightConstrained = std::isfinite(assignedH) && assignedH > 0.f;
 
   LayoutConstraints childCs = scope.outer;
   childCs.maxWidth = std::numeric_limits<float>::infinity();
-  childCs.maxHeight = std::numeric_limits<float>::infinity();
+  childCs.maxHeight = heightConstrained ? assignedH : std::numeric_limits<float>::infinity();
 
   std::size_t const n = children.size();
   if (n == 1 && std::isfinite(scope.outer.maxWidth) && scope.outer.maxWidth > 0.f) {
@@ -62,13 +63,13 @@ void HStack::layout(LayoutContext& ctx) const {
   for (std::size_t i = 0; i < n; ++i) {
     LayoutConstraints cs2 = scope.outer;
     cs2.maxWidth = allocW[i];
-    cs2.maxHeight = std::numeric_limits<float>::infinity();
+    cs2.maxHeight = heightConstrained ? assignedH : std::numeric_limits<float>::infinity();
     LayoutHints rh{};
     rh.hStackCrossAlign = alignment;
     Size const sz2 = children[i].measure(ctx, cs2, rh, ctx.textSystem());
     rowInnerH = std::max(rowInnerH, sz2.height);
   }
-  if (alignment == Alignment::Stretch && std::isfinite(assignedH) && assignedH > 0.f) {
+  if (alignment == Alignment::Stretch && heightConstrained) {
     rowInnerH = std::max(rowInnerH, assignedH);
   }
   if (StateStore* store = StateStore::current()) {
@@ -78,7 +79,7 @@ void HStack::layout(LayoutContext& ctx) const {
 
   LayoutConstraints innerForBuild = scope.outer;
   innerForBuild.maxWidth = std::numeric_limits<float>::infinity();
-  innerForBuild.maxHeight = rowInnerH;
+  innerForBuild.maxHeight = heightConstrained ? assignedH : rowInnerH;
   clampLayoutMinToMax(innerForBuild);
 
   float x = 0.f;
@@ -99,9 +100,11 @@ void HStack::renderFromLayout(RenderContext&, LayoutNode const&) const {}
 Size HStack::measure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const&,
                      TextSystem& ts) const {
   ContainerMeasureScope scope(ctx);
+  float const assignedHCross = stackMainAxisSpan(0.f, constraints.maxHeight);
+  bool const heightConstrained = std::isfinite(assignedHCross) && assignedHCross > 0.f;
   LayoutConstraints childCs = constraints;
   childCs.maxWidth = std::numeric_limits<float>::infinity();
-  childCs.maxHeight = std::numeric_limits<float>::infinity();
+  childCs.maxHeight = heightConstrained ? assignedHCross : std::numeric_limits<float>::infinity();
 
   std::size_t const n = children.size();
   if (n == 1 && std::isfinite(constraints.maxWidth) && constraints.maxWidth > 0.f) {
@@ -154,7 +157,7 @@ Size HStack::measure(LayoutContext& ctx, LayoutConstraints const& constraints, L
   for (std::size_t i = 0; i < n; ++i) {
     LayoutConstraints cs2 = constraints;
     cs2.maxWidth = allocW[i];
-    cs2.maxHeight = std::numeric_limits<float>::infinity();
+    cs2.maxHeight = heightConstrained ? assignedHCross : std::numeric_limits<float>::infinity();
     LayoutHints rh{};
     rh.hStackCrossAlign = alignment;
     Size const s2 = children[i].measure(ctx, cs2, rh, ts);
@@ -165,9 +168,8 @@ Size HStack::measure(LayoutContext& ctx, LayoutConstraints const& constraints, L
   }
   ctx.rewindChildKeyIndex();
 
-  float const assignedHCross = stackMainAxisSpan(0.f, constraints.maxHeight);
   float outH = maxH;
-  if (alignment == Alignment::Stretch && std::isfinite(assignedHCross) && assignedHCross > 0.f) {
+  if (alignment == Alignment::Stretch && heightConstrained) {
     outH = std::max(outH, assignedHCross);
   }
   float outW = 0.f;

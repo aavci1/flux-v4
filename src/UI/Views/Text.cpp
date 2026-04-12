@@ -7,6 +7,7 @@
 #include <Flux/UI/LayoutContext.hpp>
 #include <Flux/UI/RenderContext.hpp>
 #include <Flux/UI/Theme.hpp>
+#include <Flux/UI/Views/TextEditUtils.hpp>
 
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Scene/Nodes.hpp>
@@ -35,6 +36,112 @@ bool hasRenderableTextGeometry(TextLayout const &layout) {
            layout.measuredSize.height > 0.f;
 }
 
+float textMeasureWidth(TextWrapping wrapping, Rect const &bounds) {
+    return wrapping == TextWrapping::NoWrap ? 0.f : std::max(0.f, bounds.width);
+}
+
+float multiLineFitTolerance(TextLayoutOptions const &options) {
+    return options.maxLines > 0 && options.wrapping != TextWrapping::NoWrap ? 1.5f : 0.5f;
+}
+
+bool plainTextWouldOverflow(std::string const &text, Font const &font, Color const &color, Rect const &bounds,
+                            TextLayoutOptions const &options, TextSystem &ts) {
+    float const tolerance = multiLineFitTolerance(options);
+    if (text.empty()) {
+        return false;
+    }
+
+    if (options.wrapping == TextWrapping::NoWrap && bounds.width > 0.f) {
+        Size const fullSize = ts.measure(text, font, color, 0.f, options);
+        if (fullSize.width > bounds.width + tolerance) {
+            return true;
+        }
+    }
+
+    if (options.maxLines > 0 && bounds.height > 0.f) {
+        TextLayoutOptions unlimited = options;
+        unlimited.maxLines = 0;
+        Size const fullSize = ts.measure(text, font, color, textMeasureWidth(options.wrapping, bounds), unlimited);
+        if (fullSize.height > bounds.height + tolerance) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool candidateFitsWithEllipsis(std::string const &candidate, Font const &font, Color const &color, Rect const &bounds,
+                               TextLayoutOptions const &options, TextSystem &ts) {
+    float const tolerance = multiLineFitTolerance(options);
+    if (options.wrapping == TextWrapping::NoWrap) {
+        if (bounds.width <= 0.f) {
+            return true;
+        }
+        Size const size = ts.measure(candidate, font, color, 0.f, options);
+        return size.width <= bounds.width + tolerance;
+    }
+
+    if (options.maxLines > 0 && bounds.height > 0.f) {
+        TextLayoutOptions unlimited = options;
+        unlimited.maxLines = 0;
+        Size const size = ts.measure(candidate, font, color, textMeasureWidth(options.wrapping, bounds), unlimited);
+        return size.height <= bounds.height + tolerance;
+    }
+
+    return true;
+}
+
+std::string trimTrailingWhitespace(std::string s) {
+    while (!s.empty()) {
+        unsigned char const ch = static_cast<unsigned char>(s.back());
+        if (ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r') {
+            s.pop_back();
+            continue;
+        }
+        break;
+    }
+    return s;
+}
+
+std::string ellipsizedPlainText(std::string const &text, Font const &font, Color const &color, Rect const &bounds,
+                                TextLayoutOptions const &options, TextSystem &ts) {
+    if (!plainTextWouldOverflow(text, font, color, bounds, options, ts)) {
+        return text;
+    }
+
+    std::string const ellipsis = "...";
+    if (!candidateFitsWithEllipsis(ellipsis, font, color, bounds, options, ts)) {
+        return ellipsis;
+    }
+
+    std::vector<int> boundaries;
+    boundaries.reserve(text.size() + 1);
+    boundaries.push_back(0);
+    for (int pos = 0; pos < static_cast<int>(text.size());) {
+        pos = detail::utf8NextChar(text, pos);
+        boundaries.push_back(pos);
+    }
+
+    int low = 0;
+    int high = static_cast<int>(boundaries.size()) - 1;
+    int best = 0;
+    while (low <= high) {
+        int const mid = low + (high - low) / 2;
+        std::string candidate = trimTrailingWhitespace(text.substr(0, static_cast<std::size_t>(boundaries[static_cast<std::size_t>(mid)])));
+        candidate += ellipsis;
+        if (candidateFitsWithEllipsis(candidate, font, color, bounds, options, ts)) {
+            best = mid;
+            low = mid + 1;
+        } else {
+            high = mid - 1;
+        }
+    }
+
+    std::string fitted = trimTrailingWhitespace(text.substr(0, static_cast<std::size_t>(boundaries[static_cast<std::size_t>(best)])));
+    fitted += ellipsis;
+    return fitted;
+}
+
 } // namespace
 
 using flux::detail::eventHandlersFromModifiers;
@@ -54,6 +161,10 @@ void Text::layout(LayoutContext &ctx) const {
     bool const heightExplained = bounds.height > 0.f || assigned.height <= 0.f ||
                                  (std::isfinite(cs.maxHeight) && cs.maxHeight <= 0.f);
     assert(text.empty() || (widthExplained && heightExplained));
+#ifdef NDEBUG
+    (void)widthExplained;
+    (void)heightExplained;
+#endif
     LayoutNode n {};
     n.kind = LayoutNode::Kind::Leaf;
     n.frame = bounds;
@@ -73,7 +184,8 @@ void Text::renderFromLayout(RenderContext &ctx, LayoutNode const &node) const {
     if (!text.empty()) {
         auto [font, color] = text_detail::resolveBodyTextStyle(this->font, this->color);
         TextLayoutOptions const opts = text_detail::makeTextLayoutOptions(*this);
-        textLayout = ctx.textSystem().layout(text, font, color, bounds, opts);
+        std::string const displayText = ellipsizedPlainText(text, font, color, bounds, opts, ctx.textSystem());
+        textLayout = ctx.textSystem().layout(displayText, font, color, bounds, opts);
     }
 
     if (textLayout && hasRenderableTextGeometry(*textLayout)) {

@@ -5,16 +5,15 @@
 #include <memory>
 #include <utility>
 
-#include "../llm-studio/LlamaEngine.hpp"
-#include "../llm-studio/ModelManager.hpp"
-
 #include "AppState.hpp"
+#include "LlamaEngine.hpp"
+#include "ModelManager.hpp"
 
 namespace lambda {
 
 struct BackendServices {
-    std::shared_ptr<llm_studio::LlamaEngine> engine;
-    std::shared_ptr<llm_studio::ModelManager> manager;
+    std::shared_ptr<lambda_backend::LlamaEngine> engine;
+    std::shared_ptr<lambda_backend::ModelManager> manager;
 };
 
 inline std::shared_ptr<BackendServices> &backendSlot() {
@@ -26,10 +25,10 @@ inline BackendServices &backend() {
     auto &slot = backendSlot();
     if (!slot) {
         slot = std::make_shared<BackendServices>();
-        slot->engine = std::make_shared<llm_studio::LlamaEngine>();
-        slot->manager = std::make_shared<llm_studio::ModelManager>(
+        slot->engine = std::make_shared<lambda_backend::LlamaEngine>();
+        slot->manager = std::make_shared<lambda_backend::ModelManager>(
             slot->engine,
-            [](ModelManagerEvent ev) {
+            [](lambda_backend::ModelManagerEvent ev) {
                 flux::Application::instance().eventQueue().post(std::move(ev));
             }
         );
@@ -48,7 +47,7 @@ inline void shutdownBackend() {
     slot.reset();
 }
 
-inline LocalModel toLocalModel(LocalModelInfo const &model) {
+inline LocalModel toLocalModel(lambda_backend::LocalModelInfo const &model) {
     LocalModel local;
     local.path = model.path;
     local.repo = model.repo;
@@ -58,16 +57,16 @@ inline LocalModel toLocalModel(LocalModelInfo const &model) {
     return local;
 }
 
-inline ::ChatMessage::Role toBackendRole(ChatRole role) {
+inline lambda_backend::ChatMessage::Role toBackendRole(ChatRole role) {
     switch (role) {
     case ChatRole::User:
-        return ::ChatMessage::Role::User;
+        return lambda_backend::ChatMessage::Role::User;
     case ChatRole::Reasoning:
-        return ::ChatMessage::Role::Reasoning;
+        return lambda_backend::ChatMessage::Role::Reasoning;
     case ChatRole::Assistant:
-        return ::ChatMessage::Role::Assistant;
+        return lambda_backend::ChatMessage::Role::Assistant;
     }
-    return ::ChatMessage::Role::Assistant;
+    return lambda_backend::ChatMessage::Role::Assistant;
 }
 
 } // namespace lambda

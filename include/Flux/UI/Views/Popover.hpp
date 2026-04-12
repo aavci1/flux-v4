@@ -16,6 +16,7 @@
 
 #include <functional>
 #include <optional>
+#include <string>
 #include <tuple>
 
 namespace flux {
@@ -85,6 +86,9 @@ struct Popover : ViewModifiers<Popover> {
   /// Set when presenting via \ref usePopover (initial resolve) and on each overlay rebuild when
   /// \ref OverlayConfig::popoverPreferredPlacement is set.
   PopoverPlacement resolvedPlacement = placement;
+
+  /// Optional debug label for anchor/placement instrumentation.
+  std::string debugName;
 
   // ── Component protocol ─────────────────────────────────────────────────────
 

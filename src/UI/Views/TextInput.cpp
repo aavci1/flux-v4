@@ -22,6 +22,7 @@
 #include "UI/Views/TextSupport.hpp"
 
 #include <algorithm>
+#include <cstdio>
 #include <cmath>
 #include <cstdint>
 #include <functional>
@@ -315,8 +316,14 @@ Element buildTextInputContent(detail::TextEditLayoutResult const &layoutResult, 
 
 template <typename HitTest>
 Element attachTextInputHandlers(Element editor, TextEditBehavior &behavior, bool disabled, HitTest hitTest) {
+    if (disabled) {
+        return std::move(editor)
+            .focusable(false)
+            .cursor(Cursor::Arrow);
+    }
+
     return std::move(editor)
-        .focusable(!disabled)
+        .focusable(true)
         .cursor(Cursor::IBeam)
         .onKeyDown([&behavior](KeyCode key, Modifiers mods) { behavior.handleKey(KeyEvent {key, mods}); })
         .onTextInput([&behavior](std::string const &text) { behavior.handleTextInput(text); })
@@ -362,9 +369,9 @@ Element buildMultilineTextInput(TextInput const &input) {
     auto &behavior = useTextEditBehavior(input.value, {.multiline = true,
                                                        .maxLength = input.maxLength,
                                                        .acceptsTab = true,
-                                                       .submitsOnEnter = false,
+                                                       .submitsOnEnter = static_cast<bool>(input.onSubmit),
                                                        .onChange = input.onChange,
-                                                       .onSubmit = nullptr,
+                                                       .onSubmit = input.onSubmit,
                                                        .onEscape = input.onEscape,
                                                        .verticalResolver = [&snap, st = input.value](int cur, int dir) {
                                                            return detail::moveCaretVertically(snap.layoutResult, *st, cur, dir);
@@ -392,8 +399,11 @@ Element buildMultilineTextInput(TextInput const &input) {
         scrollOffset = scroll;
     }
 
+    float const fieldHeight = input.multilineHeight.fixed > 0.f ? input.multilineHeight.fixed :
+                              input.multilineHeight.minIntrinsic;
     float const contentHeight =
         (snap.layoutResult.layout ? snap.layoutResult.layout->measuredSize.height : 0.f) + 2.f * resolved.paddingV;
+    float const editorHeight = std::max(contentHeight, fieldHeight);
     auto selection = behaviorSelection(behavior, buf);
     Point const contentOrigin {resolved.paddingH, resolved.paddingV};
     Element content = buildTextInputContent(
@@ -405,7 +415,7 @@ Element buildMultilineTextInput(TextInput const &input) {
         contentOrigin,
         contentW,
         contentW + 2.f * resolved.paddingH,
-        contentHeight,
+        editorHeight,
         resolved,
         behavior.caretBlinkPhase()
     );
@@ -426,10 +436,11 @@ Element buildMultilineTextInput(TextInput const &input) {
         .contentSize = contentSize,
         .dragScrollEnabled = false,
         .children = children(std::move(editor)),
-    }};
+    }}
+                         .height(fieldHeight);
 
     return decorateInputField(std::move(scroller), resolved, focused, input.disabled)
-        .height(input.multilineHeight.fixed > 0.f ? input.multilineHeight.fixed : input.multilineHeight.minIntrinsic);
+        .height(fieldHeight);
 }
 
 Element buildSingleLineTextInput(TextInput const &input) {

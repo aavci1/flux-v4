@@ -750,16 +750,25 @@ void MacMetalPlatformWindow::wakeEventLoop() {
   if (!NSApp) {
     return;
   }
-  NSEvent* ev = [NSEvent otherEventWithType:NSEventTypeApplicationDefined
-                                   location:NSZeroPoint
-                              modifierFlags:0
-                                  timestamp:0
-                               windowNumber:0
-                                    context:nil
-                                    subtype:0
-                                      data1:0
-                                      data2:0];
-  [NSApp postEvent:ev atStart:NO];
+  auto postWakeEvent = ^{
+    NSEvent* ev = [NSEvent otherEventWithType:NSEventTypeApplicationDefined
+                                     location:NSZeroPoint
+                                modifierFlags:0
+                                    timestamp:0
+                                 windowNumber:0
+                                      context:nil
+                                      subtype:0
+                                        data1:0
+                                        data2:0];
+    [NSApp postEvent:ev atStart:NO];
+  };
+  if ([NSThread isMainThread]) {
+    postWakeEvent();
+  } else {
+    CFRunLoopPerformBlock(CFRunLoopGetMain(), kCFRunLoopDefaultMode, postWakeEvent);
+    CFRunLoopPerformBlock(CFRunLoopGetMain(), kCFRunLoopCommonModes, postWakeEvent);
+  }
+  CFRunLoopWakeUp(CFRunLoopGetMain());
 }
 
 void MacMetalPlatformWindow::setCursor(Cursor kind) {

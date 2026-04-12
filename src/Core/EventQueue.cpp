@@ -1,5 +1,7 @@
 #include <Flux/Core/EventQueue.hpp>
 
+#include <Flux/Core/Application.hpp>
+
 #include <algorithm>
 #include <any>
 #include <array>
@@ -88,6 +90,9 @@ void EventQueue::dispatch() {
 
 void EventQueue::post(Event event) {
   detail::EventQueueImplAccess::postInner(*this, std::move(event));
+  if (Application::hasInstance() && !Application::instance().isMainThread()) {
+    Application::instance().wakeEventLoop();
+  }
 }
 
 void detail::EventQueueImplAccess::addFrameworkHandler(EventQueue& q, std::type_index idx,

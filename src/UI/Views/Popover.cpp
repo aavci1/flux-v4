@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <utility>
 
 namespace flux {
@@ -42,6 +43,20 @@ Rect applyAnchorOutsets(Rect rect, EdgeInsets const &outsets) {
       rect.width + left + right,
       rect.height + top + bottom,
   };
+}
+
+char const *placementName(PopoverPlacement placement) {
+  switch (placement) {
+  case PopoverPlacement::Below:
+    return "below";
+  case PopoverPlacement::Above:
+    return "above";
+  case PopoverPlacement::End:
+    return "end";
+  case PopoverPlacement::Start:
+    return "start";
+  }
+  return "unknown";
 }
 
 } // namespace
@@ -151,9 +166,11 @@ std::tuple<std::function<void(Popover)>, std::function<void()>, bool> usePopover
     std::optional<Rect> anchorRect;
     std::optional<ComponentKey> anchorTrackLeafKey;
     std::optional<ComponentKey> anchorTrackComponentKey;
+    char const *anchorSource = "none";
     if (popover.anchorRectOverride.has_value()) {
       anchorRect = popover.anchorRectOverride;
       anchorTrackLeafKey = std::nullopt;
+      anchorSource = "override";
     } else if (popover.useHoverLeafAnchor) {
       // Same anchor resolution as tap-driven popovers (see popover-demo onTap): forLeafKeyPrefix on a
       // leaf key, plus tracking key for scroll. Uses hover leaf while the tooltip trigger is hovered.
@@ -161,18 +178,22 @@ std::tuple<std::function<void(Popover)>, std::function<void()>, bool> usePopover
       if (!hk.empty() && rt->hover().isInSubtree(anchorKey, *store)) {
         anchorRect = rt->layoutRectForLeafKeyPrefix(hk);
         anchorTrackLeafKey = hk;
+        anchorSource = "hover-leaf";
       }
     } else if (popover.useTapAnchor) {
       anchorRect = rt->layoutRectForTapAnchor();
       anchorTrackLeafKey = rt->tapAnchorLeafKeySnapshot();
+      anchorSource = "tap-leaf";
     } else {
       anchorRect = rt->layoutRectForKey(anchorKey);
       anchorTrackComponentKey = anchorKey;
+      anchorSource = "component";
     }
     if (!anchorRect.has_value()) {
       anchorRect = rt->layoutRectForKey(anchorKey);
       anchorTrackLeafKey = std::nullopt;
       anchorTrackComponentKey = anchorKey;
+      anchorSource = "component-fallback";
     }
     // Exact composite key is sometimes absent from the cache during the same pass; walk prefixes so we
     // still anchor to an ancestor composite rect (same idea as tap tracking).
@@ -180,6 +201,7 @@ std::tuple<std::function<void(Popover)>, std::function<void()>, bool> usePopover
       anchorRect = rt->layoutRectForLeafKeyPrefix(anchorKey);
       anchorTrackLeafKey = std::nullopt;
       anchorTrackComponentKey = anchorKey;
+      anchorSource = "prefix-fallback";
     }
     if (anchorRect.has_value() && popover.anchorMaxHeight.has_value()) {
       anchorRect->height = std::min(anchorRect->height, *popover.anchorMaxHeight);
@@ -201,10 +223,26 @@ std::tuple<std::function<void(Popover)>, std::function<void()>, bool> usePopover
     PopoverPlacement const resolved =
         resolvePopoverPlacement(preferred, anchorRect, maxSz, gapTotal, win);
     popover.resolvedPlacement = resolved;
+    std::string const debugName = popover.debugName;
 
     Vec2 const offset = popoverOverlayGapOffset(resolved, gap);
 
     Color const backdropResolved = resolvePopoverBackdropColor(popover.backdropColor, theme);
+
+    if (!debugName.empty()) {
+      if (anchorRect.has_value()) {
+        std::fprintf(stderr,
+                     "[popover:%s] show source=%s anchor=(%.1f, %.1f, %.1f, %.1f) preferred=%s resolved=%s gap=%.1f keyDepth=%zu\n",
+                     debugName.c_str(), anchorSource, anchorRect->x, anchorRect->y,
+                     anchorRect->width, anchorRect->height, placementName(preferred),
+                     placementName(resolved), gap, anchorKey.size());
+      } else {
+        std::fprintf(stderr,
+                     "[popover:%s] show source=%s anchor=(none) preferred=%s resolved=%s gap=%.1f keyDepth=%zu\n",
+                     debugName.c_str(), anchorSource, placementName(preferred),
+                     placementName(resolved), gap, anchorKey.size());
+      }
+    }
 
     showOverlay(
         Element{std::move(popover)},
@@ -225,6 +263,7 @@ std::tuple<std::function<void(Popover)>, std::function<void()>, bool> usePopover
             .dismissOnOutsideTap = dismissOutside,
             .dismissOnEscape = dismissEsc,
             .onDismiss = hideOverlay,
+            .debugName = debugName,
         });
   };
 

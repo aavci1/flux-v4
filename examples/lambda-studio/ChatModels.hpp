@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <iomanip>
 #include <random>
 #include <sstream>
@@ -20,6 +21,9 @@ enum class ChatRole {
 struct ChatMessage {
     ChatRole role = ChatRole::Assistant;
     std::string text;
+    std::int64_t startedAtNanos = 0;
+    std::int64_t finishedAtNanos = 0;
+    bool collapsed = false;
 
     bool operator==(ChatMessage const &) const = default;
 };

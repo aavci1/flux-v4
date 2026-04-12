@@ -1,0 +1,87 @@
+#pragma once
+
+#include <cstddef>
+#include <cstdint>
+#include <string>
+#include <vector>
+
+namespace lambda_backend {
+
+struct ChatMessage {
+    enum class Role {
+        User,
+        Reasoning,
+        Assistant,
+    };
+
+    Role role = Role::User;
+    std::string text;
+
+    constexpr bool operator==(ChatMessage const &) const = default;
+};
+
+struct LocalModelInfo {
+    std::string repo;
+    std::string tag;
+    std::string path;
+    std::size_t sizeBytes = 0;
+
+    std::string displayName() const {
+        if (!repo.empty()) {
+            return tag.empty() ? repo : repo + ":" + tag;
+        }
+        auto const pos = path.rfind('/');
+        return pos != std::string::npos ? path.substr(pos + 1) : path;
+    }
+
+    constexpr bool operator==(LocalModelInfo const &) const = default;
+};
+
+struct HfModelInfo {
+    std::string id;
+    std::int64_t downloads = 0;
+    std::int64_t likes = 0;
+    std::string pipelineTag;
+
+    constexpr bool operator==(HfModelInfo const &) const = default;
+};
+
+struct HfFileInfo {
+    std::string repoId;
+    std::string path;
+    std::size_t sizeBytes = 0;
+
+    constexpr bool operator==(HfFileInfo const &) const = default;
+};
+
+struct ModelManagerEvent {
+    enum class Kind {
+        LocalModelsReady,
+        HfSearchReady,
+        HfFilesReady,
+        DownloadDone,
+        DownloadError,
+        ModelLoaded,
+        ModelLoadError,
+    };
+
+    Kind kind = Kind::LocalModelsReady;
+    std::vector<LocalModelInfo> localModels;
+    std::vector<HfModelInfo> hfModels;
+    std::vector<HfFileInfo> hfFiles;
+    std::string error;
+    std::string modelPath;
+    std::string modelName;
+};
+
+struct SamplingParams {
+    float temp = 0.80f;
+    float topP = 0.95f;
+    int32_t topK = 40;
+    int32_t maxTokens = 4096;
+    int32_t nGpuLayers = -1;
+
+    constexpr bool operator==(SamplingParams const &) const = default;
+};
+
+} // namespace lambda_backend

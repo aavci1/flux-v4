@@ -117,11 +117,6 @@ Element Button::body() const {
     bool const isDisabled = disabled;
     ButtonColors const colors = deriveColors(variant, accent, destructive, theme.colorOnAccent, theme.colorOnDanger, theme);
 
-    Transition const trInstant = Transition::instant();
-    Transition const trFast = theme.reducedMotion ? trInstant : Transition::ease(theme.durationFast);
-    Transition const trMed = theme.reducedMotion ? trInstant : Transition::ease(theme.durationMedium);
-    Transition const tr = isDisabled ? trInstant : trMed;
-
     bool const hovered = useHover();
     bool const pressed = usePress();
     bool const focused = useFocus();
@@ -131,22 +126,7 @@ Element Button::body() const {
                              hovered    ? colors.fillHover :
                                           colors.fill;
     Color const labelTarget = isDisabled ? theme.colorTextDisabled : colors.label;
-
-    auto fillAnim = useAnimated<Color>(colors.fill);
-    if (*fillAnim != fillTarget) {
-        fillAnim.set(fillTarget, tr);
-    }
-
-    auto labelAnim = useAnimated<Color>(colors.label);
-    if (*labelAnim != labelTarget) {
-        labelAnim.set(labelTarget, tr);
-    }
-
-    auto scaleAnim = useAnimated<float>(1.f);
     float const scaleTarget = (pressed && !isDisabled) ? 0.97f : 1.f;
-    if (std::abs(*scaleAnim - scaleTarget) > 0.001f) {
-        scaleAnim.set(scaleTarget, trFast);
-    }
 
     ShadowStyle shadow = ShadowStyle::none();
     if (!isDisabled) {
@@ -181,15 +161,15 @@ Element Button::body() const {
                                                                           StrokeStyle::none();
 
     return ScaleAroundCenter {
-        .scale = *scaleAnim,
+        .scale = scaleTarget,
         .child = Text {
             .text = label,
             .font = fontResolved,
-            .color = *labelAnim,
+            .color = labelTarget,
             .horizontalAlignment = HorizontalAlignment::Center,
             .verticalAlignment = VerticalAlignment::Center,
         }
-                     .fill(FillStyle::solid(*fillAnim))
+                     .fill(FillStyle::solid(fillTarget))
                      .stroke(stroke)
                      .cornerRadius(cr)
                      .shadow(shadow)
@@ -197,7 +177,7 @@ Element Button::body() const {
                      .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
                      .focusable(!isDisabled)
                      .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})
-                     .onTap(isDisabled ? std::function<void()> {} : std::function<void()> {handleTap})
+        .onTap(isDisabled ? std::function<void()> {} : std::function<void()> {handleTap})
     };
 }
 
@@ -210,18 +190,10 @@ Element LinkButton::body() const {
     bool const focused = useFocus();
     bool const keyboardFocused = useKeyboardFocus();
 
-    Transition const trMed = theme.reducedMotion ? Transition::instant() : Transition::ease(theme.durationMedium);
-
-    auto labelAnim = useAnimated<Color>(accentResolved);
-    {
-        Color const target =
-            isDisabled ? theme.colorTextDisabled : pressed ? darken(accentResolved, 0.12f) :
-                                               hovered     ? lighten(accentResolved, 0.12f) :
-                                                             accentResolved;
-        if (*labelAnim != target) {
-            labelAnim.set(target, trMed);
-        }
-    }
+    Color const labelColor =
+        isDisabled ? theme.colorTextDisabled : pressed ? darken(accentResolved, 0.12f) :
+                                           hovered     ? lighten(accentResolved, 0.12f) :
+                                                         accentResolved;
 
     auto handleTap = [onTap = onTap, isDisabled]() {
         if (isDisabled) {
@@ -245,7 +217,7 @@ Element LinkButton::body() const {
     return Text {
         .text = label,
         .font = fontResolved,
-        .color = *labelAnim,
+        .color = labelColor,
         .horizontalAlignment = HorizontalAlignment::Leading,
         .verticalAlignment = VerticalAlignment::Center,
     }
@@ -268,18 +240,10 @@ Element IconButton::body() const {
     bool const focused = useFocus();
     bool const keyboardFocused = useKeyboardFocus();
 
-    Transition const trMed = theme.reducedMotion ? Transition::instant() : Transition::ease(theme.durationMedium);
-
-    auto iconAnim = useAnimated<Color>(accentResolved);
-    {
-        Color const target =
-            isDisabled ? theme.colorTextDisabled : pressed ? darken(accentResolved, 0.12f) :
-                                               hovered     ? lighten(accentResolved, 0.12f) :
-                                                             accentResolved;
-        if (*iconAnim != target) {
-            iconAnim.set(target, trMed);
-        }
-    }
+    Color const iconColor =
+        isDisabled ? theme.colorTextDisabled : pressed ? darken(accentResolved, 0.12f) :
+                                           hovered     ? lighten(accentResolved, 0.12f) :
+                                                         accentResolved;
 
     auto handleTap = [onTap = onTap, isDisabled]() {
         if (isDisabled) {
@@ -304,7 +268,7 @@ Element IconButton::body() const {
         .name = icon,
         .size = sizeResolved,
         .weight = weightResolved,
-        .color = *iconAnim,
+        .color = iconColor,
     }
         .fill(FillStyle::none())
         .stroke(focusStroke)

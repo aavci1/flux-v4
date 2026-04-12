@@ -11,8 +11,6 @@
 #include "AppState.hpp"
 #include "ChatModels.hpp"
 #include "ChatView.hpp"
-#include "Divider.hpp"
-
 using namespace flux;
 
 namespace lambda {
@@ -24,59 +22,47 @@ struct ChatListRow : ViewModifiers<ChatListRow> {
 
     auto body() const {
         Theme const &theme = useEnvironment<Theme>();
-
-        bool const hovered = useHover();
-        bool const pressed = usePress();
-
-        Color const fill = selected ? theme.colorAccentSubtle : pressed ? theme.colorSurfaceRowHover :
-                                                            hovered     ? theme.colorSurfaceHover :
-                                                                          Colors::transparent;
         Color const titleColor = theme.colorTextPrimary;
         Color const detailColor = selected ? theme.colorTextPrimary : theme.colorTextSecondary;
 
-        return HStack {
-            .spacing = theme.space3,
-            .alignment = Alignment::Center,
-            .children = children(
-                VStack {
-                    .alignment = Alignment::Stretch,
-                    .children = children(
-                        Text {
-                            .text = chat.title,
-                            .font = theme.fontLabel,
-                            .color = titleColor,
-                            .horizontalAlignment = HorizontalAlignment::Leading,
-                            .wrapping = TextWrapping::NoWrap,
-                        },
-                        Text {
-                            .text = (chat.modelName.empty() ? "" : chat.modelName + "  •  ") + shortenForPreview(chatPreview(chat)),
-                            .font = theme.fontBodySmall,
-                            .color = detailColor,
-                            .horizontalAlignment = HorizontalAlignment::Leading,
-                            .wrapping = TextWrapping::Wrap,
-                            .maxLines = 2,
-                        }
-                    ),
-                }
-                    .flex(1.f, 1.f),
-                Text {
-                    .text = chat.updatedAt,
-                    .font = theme.fontLabelSmall,
-                    .color = detailColor,
-                    .horizontalAlignment = HorizontalAlignment::Trailing,
-                    .verticalAlignment = VerticalAlignment::Center,
-                }
-            ),
-        }
-            .padding(theme.space3, theme.space4, theme.space3, theme.space4)
-            .fill(FillStyle::solid(fill))
-            .cursor(Cursor::Hand)
-            .focusable(true)
-            .onTap([onTap = onTap] {
-                if (onTap) {
-                    onTap();
-                }
-            });
+        return ListRow {
+            .content = HStack {
+                .spacing = theme.space3,
+                .alignment = Alignment::Start,
+                .children = children(
+                    VStack {
+                        .alignment = Alignment::Stretch,
+                        .children = children(
+                            Text {
+                                .text = chat.title,
+                                .font = theme.fontLabel,
+                                .color = titleColor,
+                                .horizontalAlignment = HorizontalAlignment::Leading,
+                                .wrapping = TextWrapping::NoWrap,
+                            },
+                            Text {
+                                .text = chatPreview(chat),
+                                .font = theme.fontBodySmall,
+                                .color = detailColor,
+                                .horizontalAlignment = HorizontalAlignment::Leading,
+                                .wrapping = TextWrapping::Wrap,
+                                .maxLines = 2,
+                            }
+                        ),
+                    }
+                        .flex(1.f, 1.f),
+                    Text {
+                        .text = chat.updatedAt,
+                        .font = theme.fontLabelSmall,
+                        .color = detailColor,
+                        .horizontalAlignment = HorizontalAlignment::Trailing,
+                        .verticalAlignment = VerticalAlignment::Center,
+                    }
+                ),
+            },
+            .selected = selected,
+            .onTap = onTap,
+        };
     }
 };
 
@@ -87,6 +73,7 @@ struct ChatsView : ViewModifiers<ChatsView> {
     std::function<void(int, std::string const &, std::string const &)> onSelectModel;
     std::function<void(int, std::string const &)> onSend;
     std::function<void(int)> onStop;
+    std::function<void(int, int)> onToggleReasoning;
 
     auto body() const {
         Theme const &theme = useEnvironment<Theme>();
@@ -98,14 +85,6 @@ struct ChatsView : ViewModifiers<ChatsView> {
         rows.reserve(chatThreads.size());
 
         for (std::size_t i = 0; i < chatThreads.size(); ++i) {
-            if (i > 0) {
-                rows.push_back(
-                    Divider {
-                        .orientation = Divider::Orientation::Horizontal
-                    }
-                        .padding(0.f, theme.space4, 0.f, theme.space4)
-                );
-            }
             rows.push_back(ChatListRow {
                 .chat = chatThreads[i],
                 .selected = static_cast<int>(i) == selectedIndex,
@@ -149,11 +128,18 @@ struct ChatsView : ViewModifiers<ChatsView> {
                 .onStop = [onStop = onStop, selectedIndex] {
                     if (onStop) {
                         onStop(selectedIndex);
-                    } },
+                    }
+                },
+                .onToggleReasoning = [onToggleReasoning = onToggleReasoning, selectedIndex](int messageIndex) {
+                    if (onToggleReasoning) {
+                        onToggleReasoning(selectedIndex, messageIndex);
+                    }
+                },
                 .onSelectModel = [onSelectModel = onSelectModel, selectedIndex](std::string const &path, std::string const &name) {
                     if (onSelectModel) {
                         onSelectModel(selectedIndex, path, name);
-                    } },
+                    }
+                },
             }
                          .flex(1.f, 1.f);
         }
@@ -187,22 +173,20 @@ struct ChatsView : ViewModifiers<ChatsView> {
                                 }
                             }
                         }.padding(theme.space4),
-                        Divider {},
-                        ScrollView {
-                            .axis = ScrollAxis::Vertical,
-                            .children = {VStack {
-                                .spacing = 0.f,
-                                .children = std::move(rows),
-                            }},
+                        Rectangle {}
+                            .size(0.f, 1.f)
+                            .fill(FillStyle::solid(theme.colorBorderSubtle)),
+                        ListView {
+                            .rows = std::move(rows),
                         }
                             .flex(1.f, 1.f, 0.f),
                     },
                 }
                     .fill(FillStyle::solid(theme.colorSurfaceOverlay))
                     .size(320.f, 0.f),
-                Divider {
-                    .orientation = Divider::Orientation::Vertical,
-                },
+                Rectangle {}
+                    .size(1.f, 0.f)
+                    .fill(FillStyle::solid(theme.colorBorderSubtle)),
                 std::move(detail),
             },
         };

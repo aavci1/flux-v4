@@ -19,44 +19,42 @@ struct ModelRow : ViewModifiers<ModelRow> {
 
     auto body() const {
         Theme const &theme = useEnvironment<Theme>();
-        bool const hovered = useHover();
 
-        return HStack {
-            .spacing = theme.space3,
-            .alignment = Alignment::Center,
-            .children = children(
-                VStack {
-                    .spacing = theme.space1,
-                    .alignment = Alignment::Start,
-                    .children = children(
-                        Text {
-                            .text = model.name,
-                            .font = theme.fontLabel,
-                            .color = active ? theme.colorAccent : theme.colorTextPrimary,
-                            .horizontalAlignment = HorizontalAlignment::Leading,
-                        },
-                        Text {
-                            .text = formatModelSize(model.sizeBytes) + (model.path.empty() ? "" : "  •  " + model.path),
-                            .font = theme.fontBodySmall,
-                            .color = theme.colorTextSecondary,
-                            .horizontalAlignment = HorizontalAlignment::Leading,
-                            .wrapping = TextWrapping::Wrap,
-                        }
-                    )
-                }
-                    .flex(1.f, 1.f),
-                LinkButton {
-                    .label = active ? "Loaded" : loading ? "Loading..." :
-                                                           "Load",
-                    .disabled = active || loading,
-                    .onTap = onLoad,
-                }
-            )
-        }
-            .padding(theme.space4)
-            .fill(FillStyle::solid(hovered ? theme.colorSurfaceHover : theme.colorSurfaceOverlay))
-            .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
-            .cornerRadius(theme.radiusLarge);
+        return ListRow {
+            .content = HStack {
+                .spacing = theme.space3,
+                .alignment = Alignment::Center,
+                .children = children(
+                    VStack {
+                        .spacing = theme.space1,
+                        .alignment = Alignment::Start,
+                        .children = children(
+                            Text {
+                                .text = model.name,
+                                .font = theme.fontLabel,
+                                .color = active ? theme.colorAccent : theme.colorTextPrimary,
+                                .horizontalAlignment = HorizontalAlignment::Leading,
+                            },
+                            Text {
+                                .text = formatModelSize(model.sizeBytes) + (model.path.empty() ? "" : "  •  " + model.path),
+                                .font = theme.fontBodySmall,
+                                .color = theme.colorTextSecondary,
+                                .horizontalAlignment = HorizontalAlignment::Leading,
+                                .wrapping = TextWrapping::Wrap,
+                            }
+                        )
+                    }
+                        .flex(1.f, 1.f),
+                    LinkButton {
+                        .label = active ? "Loaded" : loading ? "Loading..." :
+                                                               "Load",
+                        .disabled = active || loading,
+                        .onTap = onLoad,
+                    }
+                )
+            },
+            .selected = active,
+        };
     }
 };
 
@@ -85,36 +83,37 @@ struct ModelsView : ViewModifiers<ModelsView> {
             });
         }
 
-        if (rows.empty()) {
-            rows.push_back(
-                VStack {
-                    .spacing = theme.space2,
-                    .alignment = Alignment::Center,
-                    .children = children(
-                        Text {
-                            .text = "No local models found",
-                            .font = theme.fontHeading,
-                            .color = theme.colorTextPrimary,
-                            .horizontalAlignment = HorizontalAlignment::Center,
-                        },
-                        Text {
-                            .text = "Drop `.gguf` files into your configured model directories, then refresh.",
-                            .font = theme.fontBodySmall,
-                            .color = theme.colorTextSecondary,
-                            .horizontalAlignment = HorizontalAlignment::Center,
-                            .wrapping = TextWrapping::Wrap,
-                        }
-                    )
+        Element content = VStack {
+            .spacing = theme.space2,
+            .alignment = Alignment::Center,
+            .children = children(
+                Text {
+                    .text = "No local models found",
+                    .font = theme.fontHeading,
+                    .color = theme.colorTextPrimary,
+                    .horizontalAlignment = HorizontalAlignment::Center,
+                },
+                Text {
+                    .text = "Drop `.gguf` files into your configured model directories, then refresh.",
+                    .font = theme.fontBodySmall,
+                    .color = theme.colorTextSecondary,
+                    .horizontalAlignment = HorizontalAlignment::Center,
+                    .wrapping = TextWrapping::Wrap,
                 }
-                    .padding(theme.space6)
-                    .fill(FillStyle::solid(theme.colorSurfaceOverlay))
-                    .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
-                    .cornerRadius(theme.radiusLarge)
-            );
+            )
+        }
+                              .padding(theme.space6)
+                              .flex(1.f, 1.f);
+
+        if (!rows.empty()) {
+            content = ListView {
+                .rows = std::move(rows),
+            }
+                          .flex(1.f, 1.f, 0.f);
         }
 
         return VStack {
-            .spacing = theme.space4,
+            .spacing = 0.f,
             .alignment = Alignment::Stretch,
             .children = children(
                 HStack {
@@ -122,21 +121,13 @@ struct ModelsView : ViewModifiers<ModelsView> {
                     .alignment = Alignment::Center,
                     .children = children(
                         VStack {
-                            .spacing = theme.space1,
+                            .spacing = 0.f,
                             .alignment = Alignment::Start,
                             .children = children(
                                 Text {
                                     .text = "Models",
                                     .font = theme.fontHeading,
                                     .color = theme.colorTextPrimary,
-                                },
-                                Text {
-                                    .text = state.modelLoading && !state.pendingModelName.empty() ?
-                                                "Loading " + state.pendingModelName :
-                                            state.loadedModelName.empty() ? "No model loaded" :
-                                                                            "Loaded: " + state.loadedModelName,
-                                    .font = theme.fontBodySmall,
-                                    .color = theme.colorTextSecondary,
                                 }
                             )
                         }
@@ -147,21 +138,15 @@ struct ModelsView : ViewModifiers<ModelsView> {
                             .onTap = onRefresh,
                         }
                     )
-                },
-                ScrollView {
-                    .axis = ScrollAxis::Vertical,
-                    .children = children(
-                        VStack {
-                            .spacing = theme.space3,
-                            .children = std::move(rows),
-                        }
-                    )
                 }
-                    .flex(1.f, 1.f)
+                    .padding(theme.space4),
+                Rectangle {}
+                    .size(0.f, 1.f)
+                    .fill(FillStyle::solid(theme.colorBorderSubtle)),
+                std::move(content)
             )
         }
-            .padding(theme.space4)
-            .fill(FillStyle::solid(theme.colorBackground));
+            .fill(FillStyle::solid(theme.colorSurfaceOverlay));
     }
 };
 

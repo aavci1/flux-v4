@@ -42,9 +42,14 @@ void StateStore::resetSlotCursors() {
   }
 }
 
-void StateStore::pushComponent(ComponentKey const& key) {
+void StateStore::pushComponent(ComponentKey const& key, std::type_index componentType) {
   visited_.insert(key);
-  states_[key].cursor = 0;
+  ComponentState& state = states_[key];
+  if (state.componentType != componentType) {
+    state.slots.clear();
+    state.componentType = componentType;
+  }
+  state.cursor = 0;
   activeStack_.push_back(key);
 }
 
