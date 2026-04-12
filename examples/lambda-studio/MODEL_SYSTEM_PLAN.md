@@ -13,6 +13,14 @@ It is intended to be a working implementation roadmap, not just a wishlist.
 - Milestone E: not started
 - Milestone F: not started
 
+Current state:
+
+- local inventory is sourced from the Hugging Face cache and manual local folders
+- Hugging Face search, repo browsing, and downloads are implemented
+- normalized search results and repo GGUF file metadata are persisted in SQLite
+- raw Hugging Face search payloads and repo tree payloads are now persisted too
+- cached/offline reads can fall back to the raw payload snapshots if normalized rows are missing
+
 ## Goals
 
 - Detect local models reliably.

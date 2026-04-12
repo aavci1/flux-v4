@@ -199,7 +199,11 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                                 nextState.remoteModels.push_back(toRemoteModel(model));
                             }
                             try {
-                                services.catalog->replaceSearchResults(nextState.modelSearchQuery, nextState.remoteModels);
+                                services.catalog->replaceSearchSnapshot(
+                                    nextState.modelSearchQuery,
+                                    nextState.remoteModels,
+                                    event.rawJson
+                                );
                             } catch (std::exception const &e) {
                                 nextState.errorText = e.what();
                             }
@@ -244,9 +248,10 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                                 nextState.selectedRemoteRepoFiles.push_back(toRemoteModelFile(file));
                             }
                             try {
-                                services.catalog->replaceRepoFiles(
+                                services.catalog->replaceRepoFilesSnapshot(
                                     nextState.selectedRemoteRepoId,
-                                    nextState.selectedRemoteRepoFiles
+                                    nextState.selectedRemoteRepoFiles,
+                                    event.rawJson
                                 );
                             } catch (std::exception const &e) {
                                 nextState.errorText = e.what();

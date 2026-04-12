@@ -95,6 +95,7 @@ struct ModelManagerEvent {
     std::string error;
     std::string modelPath;
     std::string modelName;
+    std::string rawJson;
 };
 
 struct SamplingParams {

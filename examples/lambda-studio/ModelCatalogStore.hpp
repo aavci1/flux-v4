@@ -2,8 +2,11 @@
 
 #include "AppState.hpp"
 
+#define JSON_ASSERT(x) ((x) ? static_cast<void>(0) : std::abort())
+#include <nlohmann/json.hpp>
 #include <sqlite3.h>
 
+#include <chrono>
 #include <cstdlib>
 #include <filesystem>
 #include <mutex>
@@ -38,7 +41,11 @@ class ModelCatalogStore {
         return dataDirectory_ / "model_catalog.sqlite3";
     }
 
-    void replaceSearchResults(std::string const &query, std::vector<RemoteModel> const &models) {
+    void replaceSearchSnapshot(
+        std::string const &query,
+        std::vector<RemoteModel> const &models,
+        std::string const &rawJson
+    ) {
         std::lock_guard<std::mutex> lock(mutex_);
         try {
             beginTransaction();
@@ -46,6 +53,16 @@ class ModelCatalogStore {
             Statement deleteSearch(db_, "DELETE FROM search_results WHERE query = ?1;");
             bindText(deleteSearch.stmt, 1, query);
             stepDone(deleteSearch.stmt);
+
+            Statement upsertPayload(
+                db_,
+                "INSERT INTO search_payloads (query, raw_json, fetched_at_unix_ms) VALUES (?1, ?2, ?3)"
+                " ON CONFLICT(query) DO UPDATE SET raw_json=excluded.raw_json, fetched_at_unix_ms=excluded.fetched_at_unix_ms;"
+            );
+            bindText(upsertPayload.stmt, 1, query);
+            bindText(upsertPayload.stmt, 2, rawJson);
+            bindInt64(upsertPayload.stmt, 3, currentUnixMillis());
+            stepDone(upsertPayload.stmt);
 
             Statement upsertRepo(
                 db_,
@@ -141,10 +158,17 @@ class ModelCatalogStore {
             model.disabled = sqlite3_column_int(stmt.stmt, 13) != 0;
             models.push_back(std::move(model));
         }
+        if (models.empty()) {
+            models = loadSearchResultsFromPayload(query);
+        }
         return models;
     }
 
-    void replaceRepoFiles(std::string const &repoId, std::vector<RemoteModelFile> const &files) {
+    void replaceRepoFilesSnapshot(
+        std::string const &repoId,
+        std::vector<RemoteModelFile> const &files,
+        std::string const &rawJson
+    ) {
         std::lock_guard<std::mutex> lock(mutex_);
         try {
             beginTransaction();
@@ -152,6 +176,16 @@ class ModelCatalogStore {
             Statement deleteFiles(db_, "DELETE FROM repo_files WHERE repo_id = ?1;");
             bindText(deleteFiles.stmt, 1, repoId);
             stepDone(deleteFiles.stmt);
+
+            Statement upsertPayload(
+                db_,
+                "INSERT INTO repo_file_payloads (repo_id, raw_json, fetched_at_unix_ms) VALUES (?1, ?2, ?3)"
+                " ON CONFLICT(repo_id) DO UPDATE SET raw_json=excluded.raw_json, fetched_at_unix_ms=excluded.fetched_at_unix_ms;"
+            );
+            bindText(upsertPayload.stmt, 1, repoId);
+            bindText(upsertPayload.stmt, 2, rawJson);
+            bindInt64(upsertPayload.stmt, 3, currentUnixMillis());
+            stepDone(upsertPayload.stmt);
 
             Statement insertFile(
                 db_,
@@ -196,6 +230,9 @@ class ModelCatalogStore {
             file.sizeBytes = static_cast<std::size_t>(sqlite3_column_int64(stmt.stmt, 3));
             file.cached = sqlite3_column_int(stmt.stmt, 4) != 0;
             files.push_back(std::move(file));
+        }
+        if (files.empty()) {
+            files = loadRepoFilesFromPayload(repoId);
         }
         return files;
     }
@@ -244,6 +281,11 @@ class ModelCatalogStore {
         sqlite3_bind_int(stmt, index, value ? 1 : 0);
     }
 
+    static std::int64_t currentUnixMillis() {
+        using namespace std::chrono;
+        return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+    }
+
     static void stepDone(sqlite3_stmt *stmt) {
         if (sqlite3_step(stmt) != SQLITE_DONE) {
             throw std::runtime_error("SQLite statement failed");
@@ -283,6 +325,119 @@ class ModelCatalogStore {
             start = end + 1;
         }
         return tags;
+    }
+
+    static bool hasGgufExtension(std::string const &path) {
+        return path.size() >= 5 && path.substr(path.size() - 5) == ".gguf";
+    }
+
+    std::vector<RemoteModel> loadSearchResultsFromPayload(std::string const &query) {
+        Statement stmt(db_, "SELECT raw_json FROM search_payloads WHERE query = ?1;");
+        bindText(stmt.stmt, 1, query);
+        if (sqlite3_step(stmt.stmt) != SQLITE_ROW) {
+            return {};
+        }
+
+        auto json = nlohmann::json::parse(columnText(stmt.stmt, 0), nullptr, false);
+        if (!json.is_array()) {
+            return {};
+        }
+
+        std::vector<RemoteModel> models;
+        for (auto const &item : json) {
+            if (!item.is_object()) {
+                continue;
+            }
+            RemoteModel model;
+            if (item.contains("id") && item["id"].is_string()) {
+                model.id = item["id"].get<std::string>();
+            }
+            if (item.contains("author") && item["author"].is_string()) {
+                model.author = item["author"].get<std::string>();
+            }
+            if (item.contains("library_name") && item["library_name"].is_string()) {
+                model.libraryName = item["library_name"].get<std::string>();
+            }
+            if (item.contains("pipeline_tag") && item["pipeline_tag"].is_string()) {
+                model.pipelineTag = item["pipeline_tag"].get<std::string>();
+            }
+            if (item.contains("createdAt") && item["createdAt"].is_string()) {
+                model.createdAt = item["createdAt"].get<std::string>();
+            }
+            if (item.contains("lastModified") && item["lastModified"].is_string()) {
+                model.lastModified = item["lastModified"].get<std::string>();
+            }
+            if (item.contains("downloads") && item["downloads"].is_number_integer()) {
+                model.downloads = item["downloads"].get<std::int64_t>();
+            }
+            if (item.contains("downloadsAllTime") && item["downloadsAllTime"].is_number_integer()) {
+                model.downloadsAllTime = item["downloadsAllTime"].get<std::int64_t>();
+            }
+            if (item.contains("likes") && item["likes"].is_number_integer()) {
+                model.likes = item["likes"].get<std::int64_t>();
+            }
+            if (item.contains("usedStorage") && item["usedStorage"].is_number_integer()) {
+                model.usedStorage = item["usedStorage"].get<std::int64_t>();
+            }
+            if (item.contains("gated") && item["gated"].is_boolean()) {
+                model.gated = item["gated"].get<bool>();
+            }
+            if (item.contains("private") && item["private"].is_boolean()) {
+                model.isPrivate = item["private"].get<bool>();
+            }
+            if (item.contains("disabled") && item["disabled"].is_boolean()) {
+                model.disabled = item["disabled"].get<bool>();
+            }
+            if (item.contains("tags") && item["tags"].is_array()) {
+                for (auto const &tag : item["tags"]) {
+                    if (tag.is_string()) {
+                        model.tags.push_back(tag.get<std::string>());
+                    }
+                }
+            }
+            if (!model.id.empty()) {
+                models.push_back(std::move(model));
+            }
+        }
+        return models;
+    }
+
+    std::vector<RemoteModelFile> loadRepoFilesFromPayload(std::string const &repoId) {
+        Statement stmt(db_, "SELECT raw_json FROM repo_file_payloads WHERE repo_id = ?1;");
+        bindText(stmt.stmt, 1, repoId);
+        if (sqlite3_step(stmt.stmt) != SQLITE_ROW) {
+            return {};
+        }
+
+        auto json = nlohmann::json::parse(columnText(stmt.stmt, 0), nullptr, false);
+        if (!json.is_object() || !json.contains("tree") || !json["tree"].is_array()) {
+            return {};
+        }
+
+        std::vector<RemoteModelFile> files;
+        for (auto const &item : json["tree"]) {
+            if (!item.is_object() || !item.contains("type") || !item["type"].is_string() ||
+                item["type"].get<std::string>() != "file" || !item.contains("path") || !item["path"].is_string()) {
+                continue;
+            }
+
+            std::string const path = item["path"].get<std::string>();
+            if (!hasGgufExtension(path)) {
+                continue;
+            }
+
+            RemoteModelFile file;
+            file.repoId = repoId;
+            file.path = path;
+            if (item.contains("lfs") && item["lfs"].is_object() && item["lfs"].contains("size") &&
+                item["lfs"]["size"].is_number_integer()) {
+                file.sizeBytes = item["lfs"]["size"].get<std::size_t>();
+            } else if (item.contains("size") && item["size"].is_number_integer()) {
+                file.sizeBytes = item["size"].get<std::size_t>();
+            }
+            files.push_back(std::move(file));
+        }
+        return files;
     }
 
     void execute(char const *sql) {
@@ -352,6 +507,16 @@ class ModelCatalogStore {
             "  size_bytes INTEGER NOT NULL DEFAULT 0,"
             "  cached INTEGER NOT NULL DEFAULT 0,"
             "  PRIMARY KEY (repo_id, path)"
+            ");"
+            "CREATE TABLE IF NOT EXISTS search_payloads ("
+            "  query TEXT PRIMARY KEY,"
+            "  raw_json TEXT NOT NULL,"
+            "  fetched_at_unix_ms INTEGER NOT NULL"
+            ");"
+            "CREATE TABLE IF NOT EXISTS repo_file_payloads ("
+            "  repo_id TEXT PRIMARY KEY,"
+            "  raw_json TEXT NOT NULL,"
+            "  fetched_at_unix_ms INTEGER NOT NULL"
             ");"
         );
     }

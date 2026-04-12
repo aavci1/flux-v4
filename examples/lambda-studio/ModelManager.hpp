@@ -28,6 +28,11 @@ namespace lambda_backend {
 
 namespace fs = std::filesystem;
 
+struct HfRepoFilesResponse {
+    std::vector<HfFileInfo> files;
+    std::string rawJson;
+};
+
 class ModelManager {
   public:
     using PostFn = std::function<void(ModelManagerEvent)>;
@@ -45,10 +50,11 @@ class ModelManager {
     void searchHuggingFace(std::string query) {
         runAsync([this, q = std::move(query)] {
             try {
-                auto results = searchHfSync(q);
+                auto [results, rawJson] = searchHfSync(q);
                 post_(ModelManagerEvent {
                     .kind = ModelManagerEvent::Kind::HfSearchReady,
                     .hfModels = std::move(results),
+                    .rawJson = std::move(rawJson),
                 });
             } catch (std::exception const &e) {
                 post_(ModelManagerEvent {
@@ -62,10 +68,11 @@ class ModelManager {
     void listRepoFiles(std::string repoId) {
         runAsync([this, repo = std::move(repoId)] {
             try {
-                auto files = listRepoFilesSync(repo);
+                auto response = listRepoFilesSync(repo);
                 post_(ModelManagerEvent {
                     .kind = ModelManagerEvent::Kind::HfFilesReady,
-                    .hfFiles = std::move(files),
+                    .hfFiles = std::move(response.files),
+                    .rawJson = std::move(response.rawJson),
                 });
             } catch (std::exception const &e) {
                 post_(ModelManagerEvent {
@@ -200,15 +207,19 @@ class ModelManager {
         return models;
     }
 
-    std::vector<HfModelInfo> searchHfSync(std::string const &query) const {
+    std::pair<std::vector<HfModelInfo>, std::string> searchHfSync(std::string const &query) const {
         std::string url = get_model_endpoint();
-        url += "api/models?library=gguf&sort=downloads&direction=-1&limit=20";
+        url += "api/models?library=gguf&sort=downloads&direction=-1&limit=20&full=true&cardData=true";
         if (!query.empty()) {
             url += "&search=" + urlEncode(query);
         }
 
         common_remote_params params;
         params.timeout = 15;
+        std::string const token = hfToken();
+        if (!token.empty()) {
+            params.headers.emplace_back("Authorization", "Bearer " + token);
+        }
         auto [status, body] = common_remote_get_content(url, params);
         if (status != 200) {
             throw std::runtime_error("HF API returned " + std::to_string(status));
@@ -217,7 +228,7 @@ class ModelManager {
         auto json = nlohmann::json::parse(body.begin(), body.end());
         std::vector<HfModelInfo> results;
         if (!json.is_array()) {
-            return results;
+            return {results, std::string(body.begin(), body.end())};
         }
 
         for (auto const &item : json) {
@@ -272,26 +283,147 @@ class ModelManager {
                 results.push_back(std::move(info));
             }
         }
-        return results;
+        return {std::move(results), std::string(body.begin(), body.end())};
     }
 
-    std::vector<HfFileInfo> listRepoFilesSync(std::string const &repoId) const {
+    HfRepoFilesResponse listRepoFilesSync(std::string const &repoId) const {
         std::string const token = hfToken();
-        auto const files = hf_cache::get_repo_files(repoId, token);
+        std::string const commit = resolveRepoCommitSync(repoId, token);
+        if (commit.empty()) {
+            throw std::runtime_error("Failed to resolve repository revision");
+        }
+
+        std::string const body = fetchRepoTreeSync(repoId, commit, token);
+        auto json = nlohmann::json::parse(body);
+        auto const cachedFiles = hf_cache::get_cached_files(repoId);
 
         std::vector<HfFileInfo> ggufFiles;
-        for (auto const &file : files) {
-            if (file.path.size() >= 5 && file.path.substr(file.path.size() - 5) == ".gguf") {
+        if (json.is_array()) {
+            for (auto const &file : json) {
+                if (!file.is_object() || !file.contains("type") || !file["type"].is_string() ||
+                    file["type"].get<std::string>() != "file" || !file.contains("path") || !file["path"].is_string()) {
+                    continue;
+                }
+
+                std::string const path = file["path"].get<std::string>();
+                if (!hasGgufExtension(path)) {
+                    continue;
+                }
+
+                std::size_t sizeBytes = 0;
+                if (file.contains("lfs") && file["lfs"].is_object() && file["lfs"].contains("size") &&
+                    file["lfs"]["size"].is_number()) {
+                    sizeBytes = file["lfs"]["size"].get<std::size_t>();
+                } else if (file.contains("size") && file["size"].is_number()) {
+                    sizeBytes = file["size"].get<std::size_t>();
+                }
+
+                std::string localPath;
+                bool cached = false;
+                auto cachedIt = std::find_if(cachedFiles.begin(), cachedFiles.end(), [&](hf_cache::hf_file const &entry) {
+                    return entry.path == path;
+                });
+                if (cachedIt != cachedFiles.end()) {
+                    localPath = cachedIt->final_path;
+                    cached = !localPath.empty() && fs::exists(localPath);
+                }
+
                 ggufFiles.push_back(HfFileInfo {
                     .repoId = repoId,
-                    .path = file.path,
-                    .sizeBytes = file.size,
-                    .localPath = file.final_path,
-                    .cached = !file.final_path.empty() && fs::exists(file.final_path),
+                    .path = path,
+                    .sizeBytes = sizeBytes,
+                    .localPath = std::move(localPath),
+                    .cached = cached,
                 });
             }
         }
-        return ggufFiles;
+
+        for (auto const &cached : cachedFiles) {
+            if (!hasGgufExtension(cached.path)) {
+                continue;
+            }
+            auto it = std::find_if(ggufFiles.begin(), ggufFiles.end(), [&](HfFileInfo const &file) {
+                return file.path == cached.path;
+            });
+            if (it == ggufFiles.end()) {
+                ggufFiles.push_back(HfFileInfo {
+                    .repoId = repoId,
+                    .path = cached.path,
+                    .sizeBytes = cached.size,
+                    .localPath = cached.final_path,
+                    .cached = !cached.final_path.empty() && fs::exists(cached.final_path),
+                });
+            } else {
+                it->localPath = cached.final_path;
+                it->cached = !cached.final_path.empty() && fs::exists(cached.final_path);
+            }
+        }
+
+        nlohmann::json payload = {
+            {"repoId", repoId},
+            {"commit", commit},
+            {"tree", json},
+        };
+
+        return {
+            .files = std::move(ggufFiles),
+            .rawJson = payload.dump(),
+        };
+    }
+
+    static std::string resolveRepoCommitSync(std::string const &repoId, std::string const &token) {
+        std::string url = get_model_endpoint() + "api/models/" + repoId + "/refs";
+        common_remote_params params;
+        params.timeout = 15;
+        if (!token.empty()) {
+            params.headers.emplace_back("Authorization", "Bearer " + token);
+        }
+
+        auto [status, body] = common_remote_get_content(url, params);
+        if (status != 200) {
+            throw std::runtime_error("HF refs API returned " + std::to_string(status));
+        }
+
+        auto json = nlohmann::json::parse(body.begin(), body.end());
+        if (!json.contains("branches") || !json["branches"].is_array()) {
+            return {};
+        }
+
+        std::string fallback;
+        for (auto const &branch : json["branches"]) {
+            if (!branch.is_object() || !branch.contains("name") || !branch["name"].is_string() ||
+                !branch.contains("targetCommit") || !branch["targetCommit"].is_string()) {
+                continue;
+            }
+            std::string const name = branch["name"].get<std::string>();
+            std::string const commit = branch["targetCommit"].get<std::string>();
+            if (name == "main") {
+                return commit;
+            }
+            if (fallback.empty()) {
+                fallback = commit;
+            }
+        }
+        return fallback;
+    }
+
+    static std::string fetchRepoTreeSync(
+        std::string const &repoId,
+        std::string const &commit,
+        std::string const &token
+    ) {
+        std::string url = get_model_endpoint() + "api/models/" + repoId + "/tree/" + commit + "?recursive=true";
+        common_remote_params params;
+        params.timeout = 15;
+        if (!token.empty()) {
+            params.headers.emplace_back("Authorization", "Bearer " + token);
+        }
+
+        auto [status, body] = common_remote_get_content(url, params);
+        if (status != 200) {
+            throw std::runtime_error("HF tree API returned " + std::to_string(status));
+        }
+        return std::string(body.begin(), body.end());
     }
 
     static void appendCachedModels(std::vector<LocalModelInfo> &out, std::unordered_set<std::string> &seenPaths) {
