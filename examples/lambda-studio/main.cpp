@@ -90,7 +90,12 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
         auto appState = useState<AppState>(makeInitialAppState());
         BackendServices &services = backend();
         auto currentRemoteSearchKey = [](AppState const &state) {
-            return remoteModelSearchCacheKey(state.modelSearchQuery, state.modelSearchAuthor, state.remoteModelSort);
+            return remoteModelSearchCacheKey(
+                state.modelSearchQuery,
+                state.modelSearchAuthor,
+                state.remoteModelSort,
+                state.remoteModelVisibility
+            );
         };
 
         std::call_once(gLambdaEventHandlers, [appState, &services, currentRemoteSearchKey]() {
@@ -423,21 +428,29 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
             appState = std::move(nextState);
         };
 
+        auto updateRemoteModelVisibility = [appState](RemoteModelVisibilityFilter visibility) {
+            AppState nextState = *appState;
+            nextState.remoteModelVisibility = visibility;
+            appState = std::move(nextState);
+        };
+
         auto requestRemoteSearch = [appState, &services, currentRemoteSearchKey](
                                        std::string query,
                                        std::string author,
-                                       RemoteModelSort sort
+                                       RemoteModelSort sort,
+                                       RemoteModelVisibilityFilter visibility
                                    ) {
             AppState nextState = *appState;
             nextState.modelSearchQuery = query;
             nextState.modelSearchAuthor = author;
             nextState.remoteModelSort = sort;
+            nextState.remoteModelVisibility = visibility;
             nextState.searchingRemoteModels = true;
             std::string const cacheKey = currentRemoteSearchKey(nextState);
             try {
                 nextState.remoteModels = services.catalog->loadSearchResults(cacheKey);
                 if (nextState.remoteModels.empty()) {
-                    nextState.remoteModels = services.catalog->searchCatalogModels(query, author, sort);
+                    nextState.remoteModels = services.catalog->searchCatalogModels(query, author, sort, visibility);
                 }
                 nextState.selectedRemoteRepoId.clear();
                 nextState.selectedRemoteRepoFiles.clear();
@@ -469,6 +482,9 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                 .sortKey = sort == RemoteModelSort::Likes ? "likes" :
                            sort == RemoteModelSort::Updated ? "lastModified" :
                                                               "downloads",
+                .visibilityFilter = visibility == RemoteModelVisibilityFilter::PublicOnly ? "public" :
+                                    visibility == RemoteModelVisibilityFilter::GatedOnly ? "gated" :
+                                                                                           "all",
                 .cacheKey = cacheKey,
             });
         };
@@ -656,6 +672,7 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                 .onSearchQueryChange = updateModelSearchQuery,
                 .onSearchAuthorChange = updateModelSearchAuthor,
                 .onSortChange = updateRemoteModelSort,
+                .onVisibilityChange = updateRemoteModelVisibility,
                 .onSearch = requestRemoteSearch,
                 .onSelectRemoteRepo = requestRemoteRepoFiles,
                 .onDownload = requestRemoteDownload,

@@ -24,6 +24,12 @@ enum class RemoteModelSort {
     Updated,
 };
 
+enum class RemoteModelVisibilityFilter {
+    All,
+    PublicOnly,
+    GatedOnly,
+};
+
 enum class DownloadJobStatus {
     Running,
     Completed,
@@ -116,6 +122,7 @@ struct AppState {
     std::string modelSearchQuery;
     std::string modelSearchAuthor;
     RemoteModelSort remoteModelSort = RemoteModelSort::Downloads;
+    RemoteModelVisibilityFilter remoteModelVisibility = RemoteModelVisibilityFilter::All;
     std::vector<RemoteModel> remoteModels;
     std::string selectedRemoteRepoId;
     std::vector<RemoteModelFile> selectedRemoteRepoFiles;
@@ -226,6 +233,18 @@ inline char const *remoteModelSortLabel(RemoteModelSort sort) {
     return "Downloads";
 }
 
+inline char const *remoteModelVisibilityLabel(RemoteModelVisibilityFilter filter) {
+    switch (filter) {
+    case RemoteModelVisibilityFilter::All:
+        return "All";
+    case RemoteModelVisibilityFilter::PublicOnly:
+        return "Public";
+    case RemoteModelVisibilityFilter::GatedOnly:
+        return "Gated";
+    }
+    return "All";
+}
+
 inline char const *downloadJobStatusLabel(DownloadJobStatus status) {
     switch (status) {
     case DownloadJobStatus::Running:
@@ -241,9 +260,11 @@ inline char const *downloadJobStatusLabel(DownloadJobStatus status) {
 inline std::string remoteModelSearchCacheKey(
     std::string const &query,
     std::string const &author,
-    RemoteModelSort sort
+    RemoteModelSort sort,
+    RemoteModelVisibilityFilter visibility
 ) {
-    return "q=" + query + "\nauthor=" + author + "\nsort=" + remoteModelSortLabel(sort);
+    return "q=" + query + "\nauthor=" + author + "\nsort=" + remoteModelSortLabel(sort) +
+           "\nvisibility=" + remoteModelVisibilityLabel(visibility);
 }
 
 inline AppState makeInitialAppState() {

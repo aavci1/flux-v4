@@ -71,6 +71,7 @@ struct HfSearchRequest {
     std::string query;
     std::string author;
     std::string sortKey = "downloads";
+    std::string visibilityFilter = "all";
     std::string cacheKey;
 
     constexpr bool operator==(HfSearchRequest const &) const = default;

@@ -561,9 +561,10 @@ Status:
   - the remote Hugging Face browser supports text query, author/org filtering, and sort order selection
   - search caching now keys off the full search request instead of only the query text
   - stale search responses no longer overwrite the active filtered result set
+  - the model browser now supports gated/public visibility filtering across both cached catalog results and fresh remote results
 - Still missing:
   - local catalog filtering/search over the full stored metadata
-  - richer remote filters such as license, size range, gated/public state, and language
+  - richer remote filters such as license, size range, and language
   - reusable filter chips / saved searches in the UI
 
 ### Milestone F: Polish and Hardening

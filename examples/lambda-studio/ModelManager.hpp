@@ -351,7 +351,15 @@ class ModelManager {
                 }
             }
             if (!info.id.empty()) {
-                results.push_back(std::move(info));
+                bool include = true;
+                if (request.visibilityFilter == "public") {
+                    include = !info.gated && !info.isPrivate && !info.disabled;
+                } else if (request.visibilityFilter == "gated") {
+                    include = info.gated;
+                }
+                if (include) {
+                    results.push_back(std::move(info));
+                }
             }
         }
         return {std::move(results), std::string(body.begin(), body.end())};

@@ -314,7 +314,8 @@ struct ModelsView : ViewModifiers<ModelsView> {
     std::function<void(std::string const &)> onSearchQueryChange;
     std::function<void(std::string const &)> onSearchAuthorChange;
     std::function<void(RemoteModelSort)> onSortChange;
-    std::function<void(std::string, std::string, RemoteModelSort)> onSearch;
+    std::function<void(RemoteModelVisibilityFilter)> onVisibilityChange;
+    std::function<void(std::string, std::string, RemoteModelSort, RemoteModelVisibilityFilter)> onSearch;
     std::function<void(std::string)> onSelectRemoteRepo;
     std::function<void(std::string, std::string)> onDownload;
     std::function<void(std::string, std::string)> onRetryDownload;
@@ -326,15 +327,25 @@ struct ModelsView : ViewModifiers<ModelsView> {
         auto sortIndex = useState<int>(state.remoteModelSort == RemoteModelSort::Likes ? 1 :
                                        state.remoteModelSort == RemoteModelSort::Updated ? 2 :
                                                                                          0);
+        auto visibilityIndex = useState<int>(state.remoteModelVisibility == RemoteModelVisibilityFilter::PublicOnly ? 1 :
+                                             state.remoteModelVisibility == RemoteModelVisibilityFilter::GatedOnly ? 2 :
+                                                                                                                     0);
 
-        auto triggerSearch = [query = searchQuery, author = searchAuthor, sortIndex = sortIndex, onSearch = onSearch]() {
+        auto triggerSearch = [query = searchQuery,
+                              author = searchAuthor,
+                              sortIndex = sortIndex,
+                              visibilityIndex = visibilityIndex,
+                              onSearch = onSearch]() {
             if (onSearch) {
                 onSearch(
                     *query,
                     *author,
                     *sortIndex == 1 ? RemoteModelSort::Likes :
                     *sortIndex == 2 ? RemoteModelSort::Updated :
-                                      RemoteModelSort::Downloads
+                                      RemoteModelSort::Downloads,
+                    *visibilityIndex == 1 ? RemoteModelVisibilityFilter::PublicOnly :
+                    *visibilityIndex == 2 ? RemoteModelVisibilityFilter::GatedOnly :
+                                            RemoteModelVisibilityFilter::All
                 );
             }
         };
@@ -647,6 +658,26 @@ struct ModelsView : ViewModifiers<ModelsView> {
                                             },
                                         }
                                             .size(180.f, 40.f)
+                                        ,
+                                        Select {
+                                            .selectedIndex = visibilityIndex,
+                                            .options = {
+                                                SelectOption {.label = "All"},
+                                                SelectOption {.label = "Public"},
+                                                SelectOption {.label = "Gated"},
+                                            },
+                                            .placeholder = "Visibility",
+                                            .onChange = [onVisibilityChange = onVisibilityChange](int index) {
+                                                if (onVisibilityChange) {
+                                                    onVisibilityChange(
+                                                        index == 1 ? RemoteModelVisibilityFilter::PublicOnly :
+                                                        index == 2 ? RemoteModelVisibilityFilter::GatedOnly :
+                                                                     RemoteModelVisibilityFilter::All
+                                                    );
+                                                }
+                                            },
+                                        }
+                                            .size(160.f, 40.f)
                                     )
                                 },
                                 std::move(remoteResults)
