@@ -24,6 +24,12 @@ enum class RemoteModelSort {
     Updated,
 };
 
+enum class DownloadJobStatus {
+    Running,
+    Completed,
+    Failed,
+};
+
 struct LocalModel {
     std::string path;
     std::string name;
@@ -88,6 +94,19 @@ struct RemoteRepoDetail {
     bool operator==(RemoteRepoDetail const &) const = default;
 };
 
+struct DownloadJob {
+    std::string id;
+    std::string repoId;
+    std::string filePath;
+    std::string localPath;
+    std::string error;
+    std::int64_t startedAtUnixMs = 0;
+    std::int64_t finishedAtUnixMs = 0;
+    DownloadJobStatus status = DownloadJobStatus::Running;
+
+    bool operator==(DownloadJob const &) const = default;
+};
+
 struct AppState {
     StudioModule currentModule = StudioModule::Chats;
     std::vector<ChatThread> chats = sampleChatThreads();
@@ -101,6 +120,7 @@ struct AppState {
     std::string selectedRemoteRepoId;
     std::vector<RemoteModelFile> selectedRemoteRepoFiles;
     std::optional<RemoteRepoDetail> selectedRemoteRepoDetail;
+    std::vector<DownloadJob> recentDownloadJobs;
 
     std::string loadedModelPath;
     std::string loadedModelName;
@@ -117,6 +137,7 @@ struct AppState {
     bool downloadingModel = false;
     bool modelLoading = false;
 
+    std::string pendingDownloadJobId;
     std::string pendingDownloadRepoId;
     std::string pendingDownloadFilePath;
 
@@ -203,6 +224,18 @@ inline char const *remoteModelSortLabel(RemoteModelSort sort) {
         return "Updated";
     }
     return "Downloads";
+}
+
+inline char const *downloadJobStatusLabel(DownloadJobStatus status) {
+    switch (status) {
+    case DownloadJobStatus::Running:
+        return "Downloading";
+    case DownloadJobStatus::Completed:
+        return "Completed";
+    case DownloadJobStatus::Failed:
+        return "Failed";
+    }
+    return "Downloading";
 }
 
 inline std::string remoteModelSearchCacheKey(

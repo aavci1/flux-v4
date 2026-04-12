@@ -32,6 +32,11 @@ std::int64_t steadyNowNanos() {
     return duration_cast<nanoseconds>(steady_clock::now().time_since_epoch()).count();
 }
 
+std::int64_t systemNowMillis() {
+    using namespace std::chrono;
+    return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+}
+
 void finishTrailingReasoningMessage(ChatThread &chat, std::int64_t finishedAtNanos) {
     if (chat.messages.empty()) {
         return;
@@ -172,6 +177,24 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                         break;
                     case lambda_backend::ModelManagerEvent::Kind::DownloadDone:
                         nextState.downloadingModel = false;
+                        if (!nextState.pendingDownloadJobId.empty()) {
+                            for (DownloadJob &job : nextState.recentDownloadJobs) {
+                                if (job.id != nextState.pendingDownloadJobId) {
+                                    continue;
+                                }
+                                job.status = DownloadJobStatus::Completed;
+                                job.localPath = event.modelPath;
+                                job.error.clear();
+                                job.finishedAtUnixMs = systemNowMillis();
+                                try {
+                                    services.catalog->finishDownloadJob(job.id, job.localPath, job.finishedAtUnixMs);
+                                } catch (std::exception const &e) {
+                                    nextState.errorText = e.what();
+                                }
+                                break;
+                            }
+                        }
+                        nextState.pendingDownloadJobId.clear();
                         nextState.pendingDownloadRepoId.clear();
                         nextState.pendingDownloadFilePath.clear();
                         nextState.statusText = "Downloaded " + event.modelName;
@@ -179,6 +202,23 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                         break;
                     case lambda_backend::ModelManagerEvent::Kind::DownloadError:
                         nextState.downloadingModel = false;
+                        if (!nextState.pendingDownloadJobId.empty()) {
+                            for (DownloadJob &job : nextState.recentDownloadJobs) {
+                                if (job.id != nextState.pendingDownloadJobId) {
+                                    continue;
+                                }
+                                job.status = DownloadJobStatus::Failed;
+                                job.error = event.error;
+                                job.finishedAtUnixMs = systemNowMillis();
+                                try {
+                                    services.catalog->failDownloadJob(job.id, job.error, job.finishedAtUnixMs);
+                                } catch (std::exception const &e) {
+                                    nextState.errorText = e.what();
+                                }
+                                break;
+                            }
+                        }
+                        nextState.pendingDownloadJobId.clear();
                         nextState.pendingDownloadRepoId.clear();
                         nextState.pendingDownloadFilePath.clear();
                         nextState.errorText = event.error;
@@ -324,6 +364,12 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
 
             AppState nextState = *appState;
             nextState.refreshingModels = true;
+            try {
+                services.catalog->markRunningDownloadJobsInterrupted(systemNowMillis());
+                nextState.recentDownloadJobs = services.catalog->loadRecentDownloadJobs();
+            } catch (std::exception const &e) {
+                nextState.errorText = e.what();
+            }
             nextState.loadedModelPath = lambda_backend::defaultModelPath();
             nextState.loadedModelName = lambda_backend::defaultModelName();
             if (!nextState.loadedModelPath.empty() && !services.engine->isLoaded()) {
@@ -447,11 +493,27 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                 return;
             }
             AppState nextState = *appState;
+            DownloadJob job;
+            job.id = repoId + "|" + path + "|" + std::to_string(systemNowMillis());
+            job.repoId = repoId;
+            job.filePath = path;
+            job.startedAtUnixMs = systemNowMillis();
+            job.status = DownloadJobStatus::Running;
+            nextState.recentDownloadJobs.insert(nextState.recentDownloadJobs.begin(), job);
+            if (nextState.recentDownloadJobs.size() > 12) {
+                nextState.recentDownloadJobs.resize(12);
+            }
             nextState.downloadingModel = true;
+            nextState.pendingDownloadJobId = job.id;
             nextState.pendingDownloadRepoId = repoId;
             nextState.pendingDownloadFilePath = path;
             nextState.statusText = "Downloading " + path;
             nextState.errorText.clear();
+            try {
+                services.catalog->startDownloadJob(job);
+            } catch (std::exception const &e) {
+                nextState.errorText = e.what();
+            }
             appState = std::move(nextState);
             services.manager->downloadModel(std::move(repoId), std::move(path));
         };

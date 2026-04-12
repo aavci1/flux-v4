@@ -249,6 +249,48 @@ struct RemoteFileRow : ViewModifiers<RemoteFileRow> {
     }
 };
 
+struct DownloadJobRow : ViewModifiers<DownloadJobRow> {
+    DownloadJob job;
+
+    auto body() const {
+        Theme const &theme = useEnvironment<Theme>();
+        std::string title = job.filePath;
+        if (!job.repoId.empty()) {
+            title += "  •  " + job.repoId;
+        }
+
+        std::string meta = downloadJobStatusLabel(job.status);
+        if (!job.localPath.empty()) {
+            meta += "  •  " + job.localPath;
+        } else if (!job.error.empty()) {
+            meta += "  •  " + job.error;
+        }
+
+        return ListRow {
+            .content = VStack {
+                .spacing = theme.space1,
+                .alignment = Alignment::Start,
+                .children = children(
+                    Text {
+                        .text = title,
+                        .font = theme.fontLabelSmall,
+                        .color = job.status == DownloadJobStatus::Failed ? theme.colorDanger : theme.colorTextPrimary,
+                        .wrapping = TextWrapping::Wrap,
+                        .maxLines = 2,
+                    },
+                    Text {
+                        .text = meta,
+                        .font = theme.fontBodySmall,
+                        .color = theme.colorTextSecondary,
+                        .wrapping = TextWrapping::Wrap,
+                        .maxLines = 2,
+                    }
+                )
+            },
+        };
+    }
+};
+
 struct ModelsView : ViewModifiers<ModelsView> {
     AppState state;
     std::function<void()> onRefresh;
@@ -339,6 +381,12 @@ struct ModelsView : ViewModifiers<ModelsView> {
                     }
                 },
             });
+        }
+
+        std::vector<Element> downloadRows;
+        downloadRows.reserve(state.recentDownloadJobs.size());
+        for (DownloadJob const &job : state.recentDownloadJobs) {
+            downloadRows.push_back(DownloadJobRow {.job = job});
         }
 
         Element localContent = localRows.empty()
@@ -593,7 +641,22 @@ struct ModelsView : ViewModifiers<ModelsView> {
                                                                      .alignment = Alignment::Start,
                                                                      .children = std::move(selectedRepoChildren),
                                                                  }},
-                                std::move(remoteFiles)
+                                std::move(remoteFiles),
+                                Rectangle {}
+                                    .size(0.f, 1.f)
+                                    .fill(FillStyle::solid(theme.colorBorderSubtle)),
+                                Text {
+                                    .text = "Recent downloads",
+                                    .font = theme.fontLabel,
+                                    .color = theme.colorTextPrimary,
+                                },
+                                downloadRows.empty()
+                                    ? Element {Text {
+                                          .text = "No download history yet",
+                                          .font = theme.fontBodySmall,
+                                          .color = theme.colorTextSecondary,
+                                      }}
+                                    : Element {ListView {.rows = std::move(downloadRows)}.size(0.f, 180.f)}
                             )
                         }
                             .padding(theme.space4)

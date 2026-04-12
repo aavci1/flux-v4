@@ -510,9 +510,10 @@ Status:
   - users can trigger downloads for GGUF files from the Models module
   - cached files are detected and surfaced
   - download completion/error state is wired into app state
+  - download attempts are now persisted into a local job history with running/completed/failed states
+  - recent download history is shown in the Models view and restored on launch
 - Still missing:
-  - persisted job model
-  - resumable job history in app storage
+  - resumable/retryable download jobs
   - explicit progress reporting in the UI
 
 ### Milestone D: Add Local Catalog Database

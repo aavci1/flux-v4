@@ -280,6 +280,108 @@ class ModelCatalogStore {
         return detail;
     }
 
+    void startDownloadJob(DownloadJob const &job) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        Statement upsert(
+            db_,
+            "INSERT INTO download_jobs ("
+            "  job_id, repo_id, file_path, local_path, error_text, status, started_at_unix_ms, finished_at_unix_ms"
+            ") VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)"
+            " ON CONFLICT(job_id) DO UPDATE SET "
+            "  repo_id=excluded.repo_id,"
+            "  file_path=excluded.file_path,"
+            "  local_path=excluded.local_path,"
+            "  error_text=excluded.error_text,"
+            "  status=excluded.status,"
+            "  started_at_unix_ms=excluded.started_at_unix_ms,"
+            "  finished_at_unix_ms=excluded.finished_at_unix_ms;"
+        );
+        bindText(upsert.stmt, 1, job.id);
+        bindText(upsert.stmt, 2, job.repoId);
+        bindText(upsert.stmt, 3, job.filePath);
+        bindText(upsert.stmt, 4, job.localPath);
+        bindText(upsert.stmt, 5, job.error);
+        bindText(upsert.stmt, 6, downloadJobStatusStorage(job.status));
+        bindInt64(upsert.stmt, 7, job.startedAtUnixMs);
+        bindInt64(upsert.stmt, 8, job.finishedAtUnixMs);
+        stepDone(upsert.stmt);
+    }
+
+    void finishDownloadJob(
+        std::string const &jobId,
+        std::string const &localPath,
+        std::int64_t finishedAtUnixMs
+    ) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        Statement update(
+            db_,
+            "UPDATE download_jobs "
+            "SET local_path = ?2, error_text = '', status = 'completed', finished_at_unix_ms = ?3 "
+            "WHERE job_id = ?1;"
+        );
+        bindText(update.stmt, 1, jobId);
+        bindText(update.stmt, 2, localPath);
+        bindInt64(update.stmt, 3, finishedAtUnixMs);
+        stepDone(update.stmt);
+    }
+
+    void failDownloadJob(
+        std::string const &jobId,
+        std::string const &errorText,
+        std::int64_t finishedAtUnixMs
+    ) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        Statement update(
+            db_,
+            "UPDATE download_jobs "
+            "SET error_text = ?2, status = 'failed', finished_at_unix_ms = ?3 "
+            "WHERE job_id = ?1;"
+        );
+        bindText(update.stmt, 1, jobId);
+        bindText(update.stmt, 2, errorText);
+        bindInt64(update.stmt, 3, finishedAtUnixMs);
+        stepDone(update.stmt);
+    }
+
+    std::vector<DownloadJob> loadRecentDownloadJobs(std::size_t limit = 12) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        Statement stmt(
+            db_,
+            "SELECT job_id, repo_id, file_path, local_path, error_text, status, started_at_unix_ms, finished_at_unix_ms "
+            "FROM download_jobs "
+            "ORDER BY started_at_unix_ms DESC "
+            "LIMIT ?1;"
+        );
+        bindInt64(stmt.stmt, 1, static_cast<std::int64_t>(limit));
+
+        std::vector<DownloadJob> jobs;
+        while (sqlite3_step(stmt.stmt) == SQLITE_ROW) {
+            DownloadJob job;
+            job.id = columnText(stmt.stmt, 0);
+            job.repoId = columnText(stmt.stmt, 1);
+            job.filePath = columnText(stmt.stmt, 2);
+            job.localPath = columnText(stmt.stmt, 3);
+            job.error = columnText(stmt.stmt, 4);
+            job.status = downloadJobStatusFromStorage(columnText(stmt.stmt, 5));
+            job.startedAtUnixMs = sqlite3_column_int64(stmt.stmt, 6);
+            job.finishedAtUnixMs = sqlite3_column_int64(stmt.stmt, 7);
+            jobs.push_back(std::move(job));
+        }
+        return jobs;
+    }
+
+    void markRunningDownloadJobsInterrupted(std::int64_t finishedAtUnixMs) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        Statement update(
+            db_,
+            "UPDATE download_jobs "
+            "SET status = 'failed', error_text = 'Interrupted', finished_at_unix_ms = ?1 "
+            "WHERE status = 'running';"
+        );
+        bindInt64(update.stmt, 1, finishedAtUnixMs);
+        stepDone(update.stmt);
+    }
+
   private:
     struct Statement {
         sqlite3_stmt *stmt = nullptr;
@@ -372,6 +474,28 @@ class ModelCatalogStore {
 
     static bool hasGgufExtension(std::string const &path) {
         return path.size() >= 5 && path.substr(path.size() - 5) == ".gguf";
+    }
+
+    static char const *downloadJobStatusStorage(DownloadJobStatus status) {
+        switch (status) {
+        case DownloadJobStatus::Running:
+            return "running";
+        case DownloadJobStatus::Completed:
+            return "completed";
+        case DownloadJobStatus::Failed:
+            return "failed";
+        }
+        return "running";
+    }
+
+    static DownloadJobStatus downloadJobStatusFromStorage(std::string const &status) {
+        if (status == "completed") {
+            return DownloadJobStatus::Completed;
+        }
+        if (status == "failed") {
+            return DownloadJobStatus::Failed;
+        }
+        return DownloadJobStatus::Running;
     }
 
     std::vector<RemoteModel> loadSearchResultsFromPayload(std::string const &query) {
@@ -698,6 +822,17 @@ class ModelCatalogStore {
             "  raw_json TEXT NOT NULL,"
             "  fetched_at_unix_ms INTEGER NOT NULL"
             ");"
+            "CREATE TABLE IF NOT EXISTS download_jobs ("
+            "  job_id TEXT PRIMARY KEY,"
+            "  repo_id TEXT NOT NULL,"
+            "  file_path TEXT NOT NULL,"
+            "  local_path TEXT NOT NULL DEFAULT '',"
+            "  error_text TEXT NOT NULL DEFAULT '',"
+            "  status TEXT NOT NULL,"
+            "  started_at_unix_ms INTEGER NOT NULL,"
+            "  finished_at_unix_ms INTEGER NOT NULL DEFAULT 0"
+            ");"
+            "CREATE INDEX IF NOT EXISTS idx_download_jobs_started ON download_jobs(started_at_unix_ms DESC);"
         );
     }
 
