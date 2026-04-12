@@ -413,6 +413,8 @@ class ModelCatalogStore {
     }
 
   private:
+    static constexpr int kCurrentSchemaVersion = 3;
+
     struct Statement {
         sqlite3_stmt *stmt = nullptr;
 
@@ -801,26 +803,43 @@ class ModelCatalogStore {
         sqlite3_free(error);
     }
 
-    void tryOpen(std::filesystem::path path) {
-        std::error_code ec;
-        std::filesystem::create_directories(path, ec);
-        if (ec) {
-            path = std::filesystem::temp_directory_path() / "lambda-studio";
-            std::filesystem::create_directories(path);
+    int userVersion() const {
+        sqlite3_stmt *stmt = nullptr;
+        if (sqlite3_prepare_v2(db_, "PRAGMA user_version;", -1, &stmt, nullptr) != SQLITE_OK) {
+            throw std::runtime_error("Failed to read schema version");
         }
-
-        dataDirectory_ = std::move(path);
-        if (sqlite3_open_v2(databasePath().c_str(), &db_, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nullptr) != SQLITE_OK) {
-            std::string message = db_ != nullptr ? sqlite3_errmsg(db_) : "sqlite open failed";
-            if (db_ != nullptr) {
-                sqlite3_close(db_);
-                db_ = nullptr;
-            }
-            throw std::runtime_error("Failed to open model catalog: " + message);
+        int version = 0;
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            version = sqlite3_column_int(stmt, 0);
         }
+        sqlite3_finalize(stmt);
+        return version;
+    }
 
+    void setUserVersion(int version) {
+        execute(("PRAGMA user_version=" + std::to_string(version) + ";").c_str());
+    }
+
+    void migrateSchema() {
+        int version = userVersion();
+        if (version < 1) {
+            applyMigration1();
+            setUserVersion(1);
+            version = 1;
+        }
+        if (version < 2) {
+            applyMigration2();
+            setUserVersion(2);
+            version = 2;
+        }
+        if (version < 3) {
+            applyMigration3();
+            setUserVersion(3);
+        }
+    }
+
+    void applyMigration1() {
         execute(
-            "PRAGMA journal_mode=WAL;"
             "CREATE TABLE IF NOT EXISTS model_repos ("
             "  repo_id TEXT PRIMARY KEY,"
             "  author TEXT,"
@@ -862,6 +881,11 @@ class ModelCatalogStore {
             "  raw_json TEXT NOT NULL,"
             "  fetched_at_unix_ms INTEGER NOT NULL"
             ");"
+        );
+    }
+
+    void applyMigration2() {
+        execute(
             "CREATE TABLE IF NOT EXISTS repo_details ("
             "  repo_id TEXT PRIMARY KEY,"
             "  sha TEXT,"
@@ -871,6 +895,11 @@ class ModelCatalogStore {
             "  raw_json TEXT NOT NULL,"
             "  fetched_at_unix_ms INTEGER NOT NULL"
             ");"
+        );
+    }
+
+    void applyMigration3() {
+        execute(
             "CREATE TABLE IF NOT EXISTS download_jobs ("
             "  job_id TEXT PRIMARY KEY,"
             "  repo_id TEXT NOT NULL,"
@@ -883,6 +912,28 @@ class ModelCatalogStore {
             ");"
             "CREATE INDEX IF NOT EXISTS idx_download_jobs_started ON download_jobs(started_at_unix_ms DESC);"
         );
+    }
+
+    void tryOpen(std::filesystem::path path) {
+        std::error_code ec;
+        std::filesystem::create_directories(path, ec);
+        if (ec) {
+            path = std::filesystem::temp_directory_path() / "lambda-studio";
+            std::filesystem::create_directories(path);
+        }
+
+        dataDirectory_ = std::move(path);
+        if (sqlite3_open_v2(databasePath().c_str(), &db_, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nullptr) != SQLITE_OK) {
+            std::string message = db_ != nullptr ? sqlite3_errmsg(db_) : "sqlite open failed";
+            if (db_ != nullptr) {
+                sqlite3_close(db_);
+                db_ = nullptr;
+            }
+            throw std::runtime_error("Failed to open model catalog: " + message);
+        }
+
+        execute("PRAGMA journal_mode=WAL;");
+        migrateSchema();
     }
 
     std::filesystem::path dataDirectory_;
