@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -27,6 +28,16 @@ struct LocalModelInfo {
     std::size_t sizeBytes = 0;
 
     std::string displayName() const {
+        if (!path.empty()) {
+            std::filesystem::path filePath(path);
+            std::string name = filePath.filename().string();
+            if (name.size() > 5 && name.substr(name.size() - 5) == ".gguf") {
+                name.resize(name.size() - 5);
+            }
+            if (!name.empty()) {
+                return name;
+            }
+        }
         if (!repo.empty()) {
             return tag.empty() ? repo : repo + ":" + tag;
         }

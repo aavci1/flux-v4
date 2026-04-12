@@ -21,6 +21,7 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <unordered_set>
 #include <vector>
 
 namespace lambda_backend {
@@ -177,16 +178,25 @@ class ModelManager {
 
     std::vector<LocalModelInfo> listLocalModelsSync() const {
         std::vector<LocalModelInfo> models;
+        std::unordered_set<std::string> seenPaths;
 
-        auto const cached = common_list_cached_models();
-        for (auto const &model : cached) {
-            models.push_back(LocalModelInfo {
-                .repo = model.repo,
-                .tag = model.tag,
-            });
-        }
+        appendCachedModels(models, seenPaths);
+        appendExplicitModel(defaultModelPath(), models, seenPaths);
+        scanDirectory(modelsDir(), models, seenPaths);
 
-        scanDirectory(modelsDir(), models);
+        std::sort(
+            models.begin(),
+            models.end(),
+            [](LocalModelInfo const &lhs, LocalModelInfo const &rhs) {
+                if (lhs.repo != rhs.repo) {
+                    return lhs.repo < rhs.repo;
+                }
+                if (lhs.displayName() != rhs.displayName()) {
+                    return lhs.displayName() < rhs.displayName();
+                }
+                return lhs.path < rhs.path;
+            }
+        );
         return models;
     }
 
@@ -248,7 +258,31 @@ class ModelManager {
         return ggufFiles;
     }
 
-    static void scanDirectory(std::string const &dir, std::vector<LocalModelInfo> &out) {
+    static void appendCachedModels(std::vector<LocalModelInfo> &out, std::unordered_set<std::string> &seenPaths) {
+        for (auto const &file : hf_cache::get_cached_files()) {
+            if (!hasGgufExtension(file.path)) {
+                continue;
+            }
+            appendModel(out, seenPaths, file.local_path, file.repo_id, {});
+        }
+    }
+
+    static void appendExplicitModel(
+        std::string const &path,
+        std::vector<LocalModelInfo> &out,
+        std::unordered_set<std::string> &seenPaths
+    ) {
+        if (!hasGgufExtension(path)) {
+            return;
+        }
+        appendModel(out, seenPaths, path, {}, {});
+    }
+
+    static void scanDirectory(
+        std::string const &dir,
+        std::vector<LocalModelInfo> &out,
+        std::unordered_set<std::string> &seenPaths
+    ) {
         if (dir.empty() || !fs::is_directory(dir)) {
             return;
         }
@@ -257,16 +291,17 @@ class ModelManager {
                 if (!entry.is_regular_file()) {
                     continue;
                 }
-                auto const path = entry.path().string();
-                if (path.size() >= 5 && path.substr(path.size() - 5) == ".gguf") {
-                    out.push_back(LocalModelInfo {
-                        .path = path,
-                        .sizeBytes = static_cast<std::size_t>(entry.file_size()),
-                    });
+                auto const path = entry.path().lexically_normal().string();
+                if (hasGgufExtension(path)) {
+                    appendModel(out, seenPaths, path, {}, {});
                 }
             }
         } catch (...) {
         }
+    }
+
+    static bool hasGgufExtension(std::string const &path) {
+        return path.size() >= 5 && path.substr(path.size() - 5) == ".gguf";
     }
 
     static std::string modelsDir() {
@@ -297,6 +332,39 @@ class ModelManager {
             }
         }
         return encoded;
+    }
+
+    static void appendModel(
+        std::vector<LocalModelInfo> &out,
+        std::unordered_set<std::string> &seenPaths,
+        std::string const &path,
+        std::string repo,
+        std::string tag
+    ) {
+        if (path.empty()) {
+            return;
+        }
+
+        std::error_code ec;
+        fs::path const normalized = fs::path(path).lexically_normal();
+        if (!fs::is_regular_file(normalized, ec)) {
+            return;
+        }
+        ec.clear();
+        fs::path const resolved = fs::weakly_canonical(normalized, ec);
+        std::string const key = ec ? normalized.string() : resolved.string();
+
+        if (!seenPaths.insert(key).second) {
+            return;
+        }
+
+        std::uintmax_t const size = fs::file_size(normalized, ec);
+        out.push_back(LocalModelInfo {
+            .repo = std::move(repo),
+            .tag = std::move(tag),
+            .path = normalized.string(),
+            .sizeBytes = ec ? 0 : static_cast<std::size_t>(size),
+        });
     }
 
     std::shared_ptr<LlamaEngine> engine_;
