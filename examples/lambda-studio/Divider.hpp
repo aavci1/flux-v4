@@ -18,6 +18,6 @@ struct Divider : ViewModifiers<Divider> {
         return Rectangle {}
             .size(orientation == Orientation::Horizontal ? 0.f : 1.f, orientation == Orientation::Vertical ? 0.f : 1.f)
             .cornerRadius(1.f)
-            .fill(FillStyle::solid(theme.colorBorder));
+            .fill(FillStyle::solid(theme.colorBorderSubtle));
     }
 };

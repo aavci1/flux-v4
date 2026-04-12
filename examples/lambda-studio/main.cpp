@@ -4,6 +4,7 @@
 #include <Flux/UI/Views/Views.hpp>
 
 #include "ChatsView.hpp"
+#include "Divider.hpp"
 #include "ModelsView.hpp"
 #include "SettingsView.hpp"
 #include "Sidebar.hpp"
@@ -37,8 +38,9 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                     .onSelect = [selectedModule](std::string title) {
                         selectedModule = std::move(title);
                     },
-                }.flex(0.f, 0.f),
-                std::move(currentView)
+                }
+                    .flex(0.f, 0.f),
+                Divider {.orientation = Divider::Orientation::Vertical}, std::move(currentView)
             ),
         };
     }

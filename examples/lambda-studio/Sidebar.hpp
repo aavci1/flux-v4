@@ -99,8 +99,7 @@ struct Sidebar : ViewModifiers<Sidebar> {
                 makeButton(IconName::Settings, "Settings")
             ),
         }
-            .padding(theme.space4)
-            .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f));
+            .padding(theme.space4, theme.space2, theme.space4, theme.space2);
     }
 };
 
