@@ -225,14 +225,48 @@ class ModelManager {
             if (item.contains("id") && item["id"].is_string()) {
                 info.id = item["id"].get<std::string>();
             }
+            if (item.contains("author") && item["author"].is_string()) {
+                info.author = item["author"].get<std::string>();
+            }
+            if (item.contains("library_name") && item["library_name"].is_string()) {
+                info.libraryName = item["library_name"].get<std::string>();
+            }
+            if (item.contains("lastModified") && item["lastModified"].is_string()) {
+                info.lastModified = item["lastModified"].get<std::string>();
+            }
+            if (item.contains("createdAt") && item["createdAt"].is_string()) {
+                info.createdAt = item["createdAt"].get<std::string>();
+            }
             if (item.contains("downloads") && item["downloads"].is_number()) {
                 info.downloads = item["downloads"].get<std::int64_t>();
+            }
+            if (item.contains("downloadsAllTime") && item["downloadsAllTime"].is_number()) {
+                info.downloadsAllTime = item["downloadsAllTime"].get<std::int64_t>();
             }
             if (item.contains("likes") && item["likes"].is_number()) {
                 info.likes = item["likes"].get<std::int64_t>();
             }
+            if (item.contains("usedStorage") && item["usedStorage"].is_number()) {
+                info.usedStorage = item["usedStorage"].get<std::int64_t>();
+            }
             if (item.contains("pipeline_tag") && item["pipeline_tag"].is_string()) {
                 info.pipelineTag = item["pipeline_tag"].get<std::string>();
+            }
+            if (item.contains("gated") && item["gated"].is_boolean()) {
+                info.gated = item["gated"].get<bool>();
+            }
+            if (item.contains("private") && item["private"].is_boolean()) {
+                info.isPrivate = item["private"].get<bool>();
+            }
+            if (item.contains("disabled") && item["disabled"].is_boolean()) {
+                info.disabled = item["disabled"].get<bool>();
+            }
+            if (item.contains("tags") && item["tags"].is_array()) {
+                for (auto const &tag : item["tags"]) {
+                    if (tag.is_string()) {
+                        info.tags.push_back(tag.get<std::string>());
+                    }
+                }
             }
             if (!info.id.empty()) {
                 results.push_back(std::move(info));
@@ -252,6 +286,8 @@ class ModelManager {
                     .repoId = repoId,
                     .path = file.path,
                     .sizeBytes = file.size,
+                    .localPath = file.final_path,
+                    .cached = !file.final_path.empty() && fs::exists(file.final_path),
                 });
             }
         }

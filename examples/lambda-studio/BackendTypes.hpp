@@ -50,9 +50,19 @@ struct LocalModelInfo {
 
 struct HfModelInfo {
     std::string id;
+    std::string author;
+    std::string libraryName;
+    std::string lastModified;
+    std::string createdAt;
     std::int64_t downloads = 0;
+    std::int64_t downloadsAllTime = 0;
     std::int64_t likes = 0;
+    std::int64_t usedStorage = 0;
     std::string pipelineTag;
+    std::vector<std::string> tags;
+    bool gated = false;
+    bool isPrivate = false;
+    bool disabled = false;
 
     constexpr bool operator==(HfModelInfo const &) const = default;
 };
@@ -61,6 +71,8 @@ struct HfFileInfo {
     std::string repoId;
     std::string path;
     std::size_t sizeBytes = 0;
+    std::string localPath;
+    bool cached = false;
 
     constexpr bool operator==(HfFileInfo const &) const = default;
 };

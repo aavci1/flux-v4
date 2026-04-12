@@ -135,7 +135,7 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
             );
 
             Application::instance().eventQueue().on<lambda_backend::ModelManagerEvent>(
-                [appState](lambda_backend::ModelManagerEvent const &event) {
+                [appState, &services](lambda_backend::ModelManagerEvent const &event) {
                     AppState nextState = *appState;
                     switch (event.kind) {
                     case lambda_backend::ModelManagerEvent::Kind::LocalModelsReady:
@@ -147,7 +147,10 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                                 nextState.localModels.push_back(toLocalModel(model));
                             }
                         }
-                        nextState.statusText = nextState.localModels.empty() ? "No local models found" : "Model inventory refreshed";
+                        nextState.statusText = nextState.localModels.empty()
+                                                   ? "No local models found"
+                                                   : "Found " + std::to_string(nextState.localModels.size()) + " local model" +
+                                                         (nextState.localModels.size() == 1 ? "" : "s");
                         break;
                     case lambda_backend::ModelManagerEvent::Kind::ModelLoaded:
                         nextState.modelLoading = false;
@@ -165,9 +168,60 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                         nextState.errorText = event.error;
                         break;
                     case lambda_backend::ModelManagerEvent::Kind::DownloadDone:
+                        nextState.downloadingModel = false;
+                        nextState.pendingDownloadRepoId.clear();
+                        nextState.pendingDownloadFilePath.clear();
+                        nextState.statusText = "Downloaded " + event.modelName;
+                        nextState.errorText.clear();
+                        break;
                     case lambda_backend::ModelManagerEvent::Kind::DownloadError:
+                        nextState.downloadingModel = false;
+                        nextState.pendingDownloadRepoId.clear();
+                        nextState.pendingDownloadFilePath.clear();
+                        nextState.errorText = event.error;
+                        break;
                     case lambda_backend::ModelManagerEvent::Kind::HfSearchReady:
+                        nextState.searchingRemoteModels = false;
+                        nextState.remoteModels.clear();
+                        nextState.remoteModels.reserve(event.hfModels.size());
+                        for (lambda_backend::HfModelInfo const &model : event.hfModels) {
+                            nextState.remoteModels.push_back(toRemoteModel(model));
+                        }
+                        if (nextState.remoteModels.empty()) {
+                            nextState.selectedRemoteRepoId.clear();
+                            nextState.selectedRemoteRepoFiles.clear();
+                            nextState.loadingRemoteModelFiles = false;
+                            nextState.statusText = "No matching Hugging Face models";
+                        } else {
+                            bool foundSelection = false;
+                            for (RemoteModel const &model : nextState.remoteModels) {
+                                if (model.id == nextState.selectedRemoteRepoId) {
+                                    foundSelection = true;
+                                    break;
+                                }
+                            }
+                            if (!foundSelection) {
+                                nextState.selectedRemoteRepoId = nextState.remoteModels.front().id;
+                                nextState.selectedRemoteRepoFiles.clear();
+                                nextState.loadingRemoteModelFiles = true;
+                                services.manager->listRepoFiles(nextState.selectedRemoteRepoId);
+                            }
+                            nextState.statusText =
+                                "Found " + std::to_string(nextState.remoteModels.size()) + " matching model" +
+                                (nextState.remoteModels.size() == 1 ? "" : "s");
+                        }
+                        break;
                     case lambda_backend::ModelManagerEvent::Kind::HfFilesReady:
+                        nextState.loadingRemoteModelFiles = false;
+                        nextState.selectedRemoteRepoFiles.clear();
+                        nextState.selectedRemoteRepoFiles.reserve(event.hfFiles.size());
+                        for (lambda_backend::HfFileInfo const &file : event.hfFiles) {
+                            nextState.selectedRemoteRepoFiles.push_back(toRemoteModelFile(file));
+                        }
+                        nextState.statusText = event.hfFiles.empty()
+                                                   ? "No GGUF files in selected repo"
+                                                   : "Found " + std::to_string(event.hfFiles.size()) + " GGUF file" +
+                                                         (event.hfFiles.size() == 1 ? "" : "s");
                         break;
                     }
                     appState = std::move(nextState);
@@ -203,6 +257,54 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
             nextState.errorText.clear();
             appState = std::move(nextState);
             services.manager->refreshLocalModels();
+        };
+
+        auto updateModelSearchQuery = [appState](std::string const &query) {
+            AppState nextState = *appState;
+            nextState.modelSearchQuery = query;
+            appState = std::move(nextState);
+        };
+
+        auto requestRemoteSearch = [appState, &services](std::string query) {
+            AppState nextState = *appState;
+            nextState.modelSearchQuery = query;
+            nextState.searchingRemoteModels = true;
+            nextState.remoteModels.clear();
+            nextState.selectedRemoteRepoId.clear();
+            nextState.selectedRemoteRepoFiles.clear();
+            nextState.loadingRemoteModelFiles = false;
+            nextState.statusText = query.empty() ? "Searching top GGUF models..." : "Searching Hugging Face...";
+            nextState.errorText.clear();
+            appState = std::move(nextState);
+            services.manager->searchHuggingFace(std::move(query));
+        };
+
+        auto requestRemoteRepoFiles = [appState, &services](std::string repoId) {
+            if (repoId.empty()) {
+                return;
+            }
+            AppState nextState = *appState;
+            nextState.selectedRemoteRepoId = repoId;
+            nextState.selectedRemoteRepoFiles.clear();
+            nextState.loadingRemoteModelFiles = true;
+            nextState.statusText = "Loading GGUF files...";
+            nextState.errorText.clear();
+            appState = std::move(nextState);
+            services.manager->listRepoFiles(std::move(repoId));
+        };
+
+        auto requestRemoteDownload = [appState, &services](std::string repoId, std::string path) {
+            if (repoId.empty() || path.empty()) {
+                return;
+            }
+            AppState nextState = *appState;
+            nextState.downloadingModel = true;
+            nextState.pendingDownloadRepoId = repoId;
+            nextState.pendingDownloadFilePath = path;
+            nextState.statusText = "Downloading " + path;
+            nextState.errorText.clear();
+            appState = std::move(nextState);
+            services.manager->downloadModel(std::move(repoId), std::move(path));
         };
 
         auto requestModelLoad = [appState, &services](std::string const &path, std::string const &name) {
@@ -327,6 +429,10 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                 .state = state,
                 .onRefresh = requestInventoryRefresh,
                 .onLoad = requestModelLoad,
+                .onSearchQueryChange = updateModelSearchQuery,
+                .onSearch = requestRemoteSearch,
+                .onSelectRemoteRepo = requestRemoteRepoFiles,
+                .onDownload = requestRemoteDownload,
             }
                               .flex(1.f, 1.f);
         } else if (state.currentModule == StudioModule::Settings) {

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <utility>
 #include <vector>
@@ -26,12 +27,45 @@ struct LocalModel {
     bool operator==(LocalModel const &) const = default;
 };
 
+struct RemoteModel {
+    std::string id;
+    std::string author;
+    std::string libraryName;
+    std::string pipelineTag;
+    std::string createdAt;
+    std::string lastModified;
+    std::vector<std::string> tags;
+    std::int64_t downloads = 0;
+    std::int64_t downloadsAllTime = 0;
+    std::int64_t likes = 0;
+    std::int64_t usedStorage = 0;
+    bool gated = false;
+    bool isPrivate = false;
+    bool disabled = false;
+
+    bool operator==(RemoteModel const &) const = default;
+};
+
+struct RemoteModelFile {
+    std::string repoId;
+    std::string path;
+    std::string localPath;
+    std::size_t sizeBytes = 0;
+    bool cached = false;
+
+    bool operator==(RemoteModelFile const &) const = default;
+};
+
 struct AppState {
     StudioModule currentModule = StudioModule::Chats;
     std::vector<ChatThread> chats = sampleChatThreads();
     int selectedChatIndex = 0;
 
     std::vector<LocalModel> localModels;
+    std::string modelSearchQuery;
+    std::vector<RemoteModel> remoteModels;
+    std::string selectedRemoteRepoId;
+    std::vector<RemoteModelFile> selectedRemoteRepoFiles;
 
     std::string loadedModelPath;
     std::string loadedModelName;
@@ -42,7 +76,13 @@ struct AppState {
     std::string errorText;
 
     bool refreshingModels = false;
+    bool searchingRemoteModels = false;
+    bool loadingRemoteModelFiles = false;
+    bool downloadingModel = false;
     bool modelLoading = false;
+
+    std::string pendingDownloadRepoId;
+    std::string pendingDownloadFilePath;
 
     bool operator==(AppState const &) const = default;
 };
@@ -96,6 +136,25 @@ inline std::string modelDisplayName(std::string const &path) {
         name.resize(name.size() - 5);
     }
     return name;
+}
+
+inline std::string joinedTags(std::vector<std::string> const &tags, std::size_t maxCount = 3) {
+    std::string result;
+    std::size_t count = 0;
+    for (std::string const &tag : tags) {
+        if (tag.empty()) {
+            continue;
+        }
+        if (count == maxCount) {
+            break;
+        }
+        if (!result.empty()) {
+            result += ", ";
+        }
+        result += tag;
+        ++count;
+    }
+    return result;
 }
 
 inline AppState makeInitialAppState() {

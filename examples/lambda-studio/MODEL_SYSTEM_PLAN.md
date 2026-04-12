@@ -7,8 +7,8 @@ It is intended to be a working implementation roadmap, not just a wishlist.
 ## Status
 
 - Milestone A: implemented
-- Milestone B: not started
-- Milestone C: not started
+- Milestone B: implemented
+- Milestone C: partially implemented
 - Milestone D: not started
 - Milestone E: not started
 - Milestone F: not started
@@ -468,6 +468,15 @@ Deliverables:
 - search UI state
 - repo detail state
 
+Status:
+
+- Implemented in the current codebase.
+- The Models module can now:
+  - search Hugging Face model repos by query
+  - browse matching repositories
+  - inspect GGUF files for the selected repo
+  - show richer search metadata such as author, pipeline tag, downloads, likes, tags, and cache state
+
 ### Milestone C: Add Download Jobs
 
 Scope:
@@ -482,6 +491,18 @@ Deliverables:
 - `DownloadService`
 - persisted job model
 - proper progress events
+
+Status:
+
+- Partially implemented in the current codebase.
+- Current state:
+  - users can trigger downloads for GGUF files from the Models module
+  - cached files are detected and surfaced
+  - download completion/error state is wired into app state
+- Still missing:
+  - persisted job model
+  - resumable job history in app storage
+  - explicit progress reporting in the UI
 
 ### Milestone D: Add Local Catalog Database
 

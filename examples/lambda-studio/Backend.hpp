@@ -57,6 +57,35 @@ inline LocalModel toLocalModel(lambda_backend::LocalModelInfo const &model) {
     return local;
 }
 
+inline RemoteModel toRemoteModel(lambda_backend::HfModelInfo const &model) {
+    RemoteModel remote;
+    remote.id = model.id;
+    remote.author = model.author;
+    remote.libraryName = model.libraryName;
+    remote.pipelineTag = model.pipelineTag;
+    remote.createdAt = model.createdAt;
+    remote.lastModified = model.lastModified;
+    remote.tags = model.tags;
+    remote.downloads = model.downloads;
+    remote.downloadsAllTime = model.downloadsAllTime;
+    remote.likes = model.likes;
+    remote.usedStorage = model.usedStorage;
+    remote.gated = model.gated;
+    remote.isPrivate = model.isPrivate;
+    remote.disabled = model.disabled;
+    return remote;
+}
+
+inline RemoteModelFile toRemoteModelFile(lambda_backend::HfFileInfo const &file) {
+    RemoteModelFile remoteFile;
+    remoteFile.repoId = file.repoId;
+    remoteFile.path = file.path;
+    remoteFile.localPath = file.localPath;
+    remoteFile.sizeBytes = file.sizeBytes;
+    remoteFile.cached = file.cached;
+    return remoteFile;
+}
+
 inline lambda_backend::ChatMessage::Role toBackendRole(ChatRole role) {
     switch (role) {
     case ChatRole::User:
