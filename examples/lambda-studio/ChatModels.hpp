@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <iomanip>
+#include <optional>
 #include <random>
 #include <sstream>
 #include <string>
@@ -25,6 +26,25 @@ enum class ChatRole {
     Assistant,
 };
 
+struct MessageGenerationStats {
+    std::string modelPath;
+    std::string modelName;
+    std::int64_t promptTokens = 0;
+    std::int64_t completionTokens = 0;
+    std::int64_t startedAtUnixMs = 0;
+    std::int64_t firstTokenAtUnixMs = 0;
+    std::int64_t finishedAtUnixMs = 0;
+    double tokensPerSecond = 0.0;
+    std::string status;
+    std::string errorText;
+    float temp = 0.f;
+    float topP = 0.f;
+    std::int32_t topK = 0;
+    std::int32_t maxTokens = 0;
+
+    bool operator==(MessageGenerationStats const &) const = default;
+};
+
 struct ChatMessage {
     struct Paragraph {
         std::string text;
@@ -40,6 +60,7 @@ struct ChatMessage {
     std::int64_t startedAtNanos = 0;
     std::int64_t finishedAtNanos = 0;
     bool collapsed = false;
+    std::optional<MessageGenerationStats> generationStats;
     std::uint64_t renderKey = generateMessageRenderKey();
     std::uint64_t textRevision = 1;
 

@@ -15,6 +15,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -280,6 +281,92 @@ std::string formatThoughtDuration(std::int64_t startedAtNanos, std::int64_t fini
     return "Thought for " + std::to_string(totalSeconds) + "s";
 }
 
+std::string formatMsLabel(std::int64_t millis) {
+    if (millis <= 0) {
+        return {};
+    }
+    if (millis < 1000) {
+        return std::to_string(millis) + " ms";
+    }
+
+    std::ostringstream stream;
+    stream.setf(std::ios::fixed);
+    stream.precision(1);
+    stream << static_cast<double>(millis) / 1000.0 << " s";
+    return stream.str();
+}
+
+std::string formatRateLabel(double value, std::string const &suffix) {
+    if (value <= 0.0) {
+        return {};
+    }
+    std::ostringstream stream;
+    stream.setf(std::ios::fixed);
+    stream.precision(value >= 100.0 ? 0 : 1);
+    stream << value << ' ' << suffix;
+    return stream.str();
+}
+
+std::string compactModelLabel(MessageGenerationStats const &stats) {
+    if (!stats.modelName.empty()) {
+        return stats.modelName;
+    }
+    if (!stats.modelPath.empty()) {
+        return trimKnownModelSuffixes(lastPathComponent(stats.modelPath));
+    }
+    return {};
+}
+
+std::string generationStatusLabel(std::string const &status) {
+    if (status == "completed") {
+        return "Complete";
+    }
+    if (status == "cancelled") {
+        return "Stopped";
+    }
+    if (status == "max_tokens") {
+        return "Max tokens";
+    }
+    if (status == "error") {
+        return "Error";
+    }
+    return status;
+}
+
+std::vector<std::string> generationStatsPrimaryParts(MessageGenerationStats const &stats) {
+    std::vector<std::string> parts;
+    if (std::string model = compactModelLabel(stats); !model.empty()) {
+        parts.push_back(model);
+    }
+    if (stats.completionTokens > 0) {
+        parts.push_back(std::to_string(stats.completionTokens) + " tok");
+    }
+    if (std::string tps = formatRateLabel(stats.tokensPerSecond, "tok/s"); !tps.empty()) {
+        parts.push_back(tps);
+    }
+    if (stats.firstTokenAtUnixMs > stats.startedAtUnixMs) {
+        parts.push_back("TTFT " + formatMsLabel(stats.firstTokenAtUnixMs - stats.startedAtUnixMs));
+    }
+    return parts;
+}
+
+std::vector<std::string> generationStatsSecondaryParts(MessageGenerationStats const &stats) {
+    std::vector<std::string> parts;
+    if (stats.promptTokens > 0) {
+        parts.push_back("Prompt " + std::to_string(stats.promptTokens));
+    }
+    if (stats.maxTokens > 0) {
+        parts.push_back("Max " + std::to_string(stats.maxTokens));
+    }
+    if (!stats.status.empty() && stats.status != "completed") {
+        parts.push_back(generationStatusLabel(stats.status));
+    }
+    if (!stats.errorText.empty()) {
+        parts.push_back(stats.errorText);
+    }
+    return parts;
+}
+
 } // namespace
 
 struct ThinkingDots : ViewModifiers<ThinkingDots> {
@@ -340,6 +427,7 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
         bool const collapsed = isReasoning && message.collapsed;
         bool const reasoningFinished = message.finishedAtNanos > message.startedAtNanos;
         std::string const thoughtSummary = formatThoughtDuration(message.startedAtNanos, message.finishedAtNanos);
+        bool const showStatsFooter = message.generationStats.has_value() && !isUser && !collapsed;
 
         Color const fill = isUser      ? theme.colorAccent :
                            isReasoning ? theme.colorSurface :
@@ -417,6 +505,47 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
                 }
             }
 
+            if (showStatsFooter) {
+                MessageGenerationStats const &stats = *message.generationStats;
+                std::string const primaryLine = joinNonEmpty(generationStatsPrimaryParts(stats), "  •  ");
+                std::string const secondaryLine = joinNonEmpty(generationStatsSecondaryParts(stats), "  •  ");
+                std::vector<Element> footerChildren;
+                footerChildren.push_back(
+                    Rectangle {}
+                        .size(0.f, 1.f)
+                        .fill(FillStyle::solid(theme.colorBorderSubtle))
+                );
+                footerChildren.push_back(
+                    Text {
+                        .text = primaryLine,
+                        .font = theme.fontLabelSmall,
+                        .color = theme.colorTextMuted,
+                        .horizontalAlignment = HorizontalAlignment::Leading,
+                        .wrapping = TextWrapping::Wrap,
+                    }
+                );
+                if (!secondaryLine.empty()) {
+                    footerChildren.push_back(
+                        Text {
+                            .text = secondaryLine,
+                            .font = theme.fontBodySmall,
+                            .color = theme.colorTextSecondary,
+                            .horizontalAlignment = HorizontalAlignment::Leading,
+                            .wrapping = TextWrapping::Wrap,
+                        }
+                    );
+                }
+
+                paragraphs.push_back(
+                    VStack {
+                        .spacing = theme.space1,
+                        .alignment = Alignment::Start,
+                        .children = std::move(footerChildren),
+                    }
+                        .padding(theme.space1, 0.f, 0.f, 0.f)
+                );
+            }
+
             Element bubble = VStack {
                 .spacing = theme.space4,
                 .alignment = Alignment::Stretch,
@@ -461,21 +590,61 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
                     .onTap(onToggleReasoning ? onToggleReasoning : std::function<void()> {});
             }
 
+            std::vector<Element> contentChildren;
+            contentChildren.push_back(
+                Text {
+                    .text = message.text,
+                    .font = markdownStyle.baseFont,
+                    .color = textColor,
+                    .horizontalAlignment = HorizontalAlignment::Leading,
+                    .verticalAlignment = VerticalAlignment::Top,
+                    .wrapping = TextWrapping::Wrap,
+                }
+            );
+            if (showStatsFooter) {
+                std::string const primaryLine = joinNonEmpty(generationStatsPrimaryParts(*message.generationStats), "  •  ");
+                std::string const secondaryLine =
+                    joinNonEmpty(generationStatsSecondaryParts(*message.generationStats), "  •  ");
+                std::vector<Element> footerChildren;
+                footerChildren.push_back(
+                    Rectangle {}
+                        .size(0.f, 1.f)
+                        .fill(FillStyle::solid(theme.colorBorderSubtle))
+                );
+                footerChildren.push_back(
+                    Text {
+                        .text = primaryLine,
+                        .font = theme.fontLabelSmall,
+                        .color = theme.colorTextMuted,
+                        .horizontalAlignment = HorizontalAlignment::Leading,
+                        .wrapping = TextWrapping::Wrap,
+                    }
+                );
+                if (!secondaryLine.empty()) {
+                    footerChildren.push_back(
+                        Text {
+                            .text = secondaryLine,
+                            .font = theme.fontBodySmall,
+                            .color = theme.colorTextSecondary,
+                            .horizontalAlignment = HorizontalAlignment::Leading,
+                            .wrapping = TextWrapping::Wrap,
+                        }
+                    );
+                }
+                contentChildren.push_back(
+                    VStack {
+                        .spacing = theme.space1,
+                        .alignment = Alignment::Start,
+                        .children = std::move(footerChildren),
+                    }
+                        .padding(theme.space1, 0.f, 0.f, 0.f)
+                );
+            }
+
             return VStack {
                 .spacing = theme.space1,
                 .alignment = Alignment::Start,
-                .children = children(
-                    Element {
-                        Text {
-                            .text = message.text,
-                            .font = markdownStyle.baseFont,
-                            .color = textColor,
-                            .horizontalAlignment = HorizontalAlignment::Leading,
-                            .verticalAlignment = VerticalAlignment::Top,
-                            .wrapping = TextWrapping::Wrap,
-                        }
-                    }
-                ),
+                .children = std::move(contentChildren)
             }
                 .padding(theme.space4)
                 .fill(FillStyle::solid(fill))

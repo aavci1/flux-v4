@@ -65,6 +65,49 @@ void persistChats(AppState &state, BackendServices &services) {
     }
 }
 
+MessageGenerationStats toMessageGenerationStats(
+    lambda_backend::GenerationStats const &stats,
+    ChatThread const &chat
+) {
+    return MessageGenerationStats {
+        .modelPath = chat.modelPath,
+        .modelName = chat.modelName,
+        .promptTokens = stats.promptTokens,
+        .completionTokens = stats.completionTokens,
+        .startedAtUnixMs = stats.startedAtUnixMs,
+        .firstTokenAtUnixMs = stats.firstTokenAtUnixMs,
+        .finishedAtUnixMs = stats.finishedAtUnixMs,
+        .tokensPerSecond = stats.tokensPerSecond,
+        .status = stats.status,
+        .errorText = stats.errorText,
+        .temp = stats.temp,
+        .topP = stats.topP,
+        .topK = stats.topK,
+        .maxTokens = stats.maxTokens,
+    };
+}
+
+void attachGenerationStatsToLatestResponse(
+    ChatThread &chat,
+    lambda_backend::GenerationStats const &stats
+) {
+    MessageGenerationStats const messageStats = toMessageGenerationStats(stats, chat);
+
+    for (auto it = chat.messages.rbegin(); it != chat.messages.rend(); ++it) {
+        if (it->role == ChatRole::Assistant) {
+            it->generationStats = messageStats;
+            return;
+        }
+    }
+
+    for (auto it = chat.messages.rbegin(); it != chat.messages.rend(); ++it) {
+        if (it->role == ChatRole::Reasoning) {
+            it->generationStats = messageStats;
+            return;
+        }
+    }
+}
+
 void finishTrailingReasoningMessage(std::vector<ChatMessage> &messages, std::int64_t finishedAtNanos) {
     if (messages.empty()) {
         return;
@@ -236,6 +279,9 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                         commitStreamDraft(*it, nowNanos);
                         it->streaming = false;
                         it->updatedAtUnixMs = currentUnixMillis();
+                        if (event.generationStats.has_value()) {
+                            attachGenerationStatsToLatestResponse(*it, *event.generationStats);
+                        }
                         nextState.statusText = "Response complete";
                     } else if (event.kind == lambda_backend::LlmUiEvent::Kind::Error) {
                         commitStreamDraft(*it, nowNanos);
@@ -244,6 +290,9 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                             .role = ChatRole::Assistant,
                             .text = std::string("[Error] ") + event.text,
                         });
+                        if (event.generationStats.has_value()) {
+                            it->messages.back().generationStats = toMessageGenerationStats(*event.generationStats, *it);
+                        }
                         syncAssistantParagraphs(it->messages.back());
                         it->updatedAtUnixMs = currentUnixMillis();
                         nextState.errorText = event.text;

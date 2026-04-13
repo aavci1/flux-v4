@@ -484,6 +484,7 @@ class ModelCatalogStore {
         std::lock_guard<std::mutex> lock(mutex_);
         try {
             beginTransaction();
+            execute("DELETE FROM chat_message_stats;");
             execute("DELETE FROM chat_messages;");
             execute("DELETE FROM chat_threads;");
 
@@ -497,6 +498,14 @@ class ModelCatalogStore {
                 "INSERT INTO chat_messages ("
                 "  chat_id, message_order, role, text, started_at_nanos, finished_at_nanos, collapsed"
                 ") VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7);"
+            );
+            Statement insertMessageStats(
+                db_,
+                "INSERT INTO chat_message_stats ("
+                "  chat_id, message_order, model_path, model_name, prompt_tokens, completion_tokens,"
+                "  started_at_unix_ms, first_token_at_unix_ms, finished_at_unix_ms, tokens_per_second,"
+                "  status, error_text, temp, top_p, top_k, max_tokens"
+                ") VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16);"
             );
             Statement upsertPreference(
                 db_,
@@ -529,6 +538,31 @@ class ModelCatalogStore {
                     bindInt64(insertMessage.stmt, 6, message.finishedAtNanos);
                     bindBool(insertMessage.stmt, 7, message.collapsed);
                     stepDone(insertMessage.stmt);
+
+                    if (!message.generationStats.has_value()) {
+                        continue;
+                    }
+
+                    MessageGenerationStats const &stats = *message.generationStats;
+                    sqlite3_reset(insertMessageStats.stmt);
+                    sqlite3_clear_bindings(insertMessageStats.stmt);
+                    bindText(insertMessageStats.stmt, 1, chat.id);
+                    bindInt64(insertMessageStats.stmt, 2, static_cast<std::int64_t>(messageIndex));
+                    bindText(insertMessageStats.stmt, 3, stats.modelPath);
+                    bindText(insertMessageStats.stmt, 4, stats.modelName);
+                    bindInt64(insertMessageStats.stmt, 5, stats.promptTokens);
+                    bindInt64(insertMessageStats.stmt, 6, stats.completionTokens);
+                    bindInt64(insertMessageStats.stmt, 7, stats.startedAtUnixMs);
+                    bindInt64(insertMessageStats.stmt, 8, stats.firstTokenAtUnixMs);
+                    bindInt64(insertMessageStats.stmt, 9, stats.finishedAtUnixMs);
+                    bindDouble(insertMessageStats.stmt, 10, stats.tokensPerSecond);
+                    bindText(insertMessageStats.stmt, 11, stats.status);
+                    bindText(insertMessageStats.stmt, 12, stats.errorText);
+                    bindDouble(insertMessageStats.stmt, 13, static_cast<double>(stats.temp));
+                    bindDouble(insertMessageStats.stmt, 14, static_cast<double>(stats.topP));
+                    bindInt64(insertMessageStats.stmt, 15, stats.topK);
+                    bindInt64(insertMessageStats.stmt, 16, stats.maxTokens);
+                    stepDone(insertMessageStats.stmt);
                 }
             }
 
@@ -565,10 +599,16 @@ class ModelCatalogStore {
 
             Statement messageStmt(
                 db_,
-                "SELECT role, text, started_at_nanos, finished_at_nanos, collapsed "
-                "FROM chat_messages "
-                "WHERE chat_id = ?1 "
-                "ORDER BY message_order ASC;"
+                "SELECT "
+                "  m.role, m.text, m.started_at_nanos, m.finished_at_nanos, m.collapsed,"
+                "  s.model_path, s.model_name, s.prompt_tokens, s.completion_tokens, s.started_at_unix_ms,"
+                "  s.first_token_at_unix_ms, s.finished_at_unix_ms, s.tokens_per_second, s.status, s.error_text,"
+                "  s.temp, s.top_p, s.top_k, s.max_tokens "
+                "FROM chat_messages m "
+                "LEFT JOIN chat_message_stats s "
+                "  ON s.chat_id = m.chat_id AND s.message_order = m.message_order "
+                "WHERE m.chat_id = ?1 "
+                "ORDER BY m.message_order ASC;"
             );
             bindText(messageStmt.stmt, 1, thread.id);
             while (sqlite3_step(messageStmt.stmt) == SQLITE_ROW) {
@@ -578,6 +618,24 @@ class ModelCatalogStore {
                 message.startedAtNanos = sqlite3_column_int64(messageStmt.stmt, 2);
                 message.finishedAtNanos = sqlite3_column_int64(messageStmt.stmt, 3);
                 message.collapsed = sqlite3_column_int(messageStmt.stmt, 4) != 0;
+                if (!columnIsNull(messageStmt.stmt, 5)) {
+                    message.generationStats = MessageGenerationStats {
+                        .modelPath = columnText(messageStmt.stmt, 5),
+                        .modelName = columnText(messageStmt.stmt, 6),
+                        .promptTokens = sqlite3_column_int64(messageStmt.stmt, 7),
+                        .completionTokens = sqlite3_column_int64(messageStmt.stmt, 8),
+                        .startedAtUnixMs = sqlite3_column_int64(messageStmt.stmt, 9),
+                        .firstTokenAtUnixMs = sqlite3_column_int64(messageStmt.stmt, 10),
+                        .finishedAtUnixMs = sqlite3_column_int64(messageStmt.stmt, 11),
+                        .tokensPerSecond = columnDouble(messageStmt.stmt, 12),
+                        .status = columnText(messageStmt.stmt, 13),
+                        .errorText = columnText(messageStmt.stmt, 14),
+                        .temp = static_cast<float>(columnDouble(messageStmt.stmt, 15)),
+                        .topP = static_cast<float>(columnDouble(messageStmt.stmt, 16)),
+                        .topK = static_cast<std::int32_t>(sqlite3_column_int64(messageStmt.stmt, 17)),
+                        .maxTokens = static_cast<std::int32_t>(sqlite3_column_int64(messageStmt.stmt, 18)),
+                    };
+                }
                 syncAssistantParagraphs(message);
                 thread.messages.push_back(std::move(message));
             }
@@ -590,7 +648,7 @@ class ModelCatalogStore {
     }
 
   private:
-    static constexpr int kCurrentSchemaVersion = 5;
+    static constexpr int kCurrentSchemaVersion = 6;
 
     struct Statement {
         sqlite3_stmt *stmt = nullptr;
@@ -631,6 +689,10 @@ class ModelCatalogStore {
         sqlite3_bind_int64(stmt, index, value);
     }
 
+    static void bindDouble(sqlite3_stmt *stmt, int index, double value) {
+        sqlite3_bind_double(stmt, index, value);
+    }
+
     static void bindBool(sqlite3_stmt *stmt, int index, bool value) {
         sqlite3_bind_int(stmt, index, value ? 1 : 0);
     }
@@ -649,6 +711,14 @@ class ModelCatalogStore {
     static std::string columnText(sqlite3_stmt *stmt, int index) {
         unsigned char const *value = sqlite3_column_text(stmt, index);
         return value == nullptr ? std::string {} : std::string(reinterpret_cast<char const *>(value));
+    }
+
+    static double columnDouble(sqlite3_stmt *stmt, int index) {
+        return sqlite3_column_double(stmt, index);
+    }
+
+    static bool columnIsNull(sqlite3_stmt *stmt, int index) {
+        return sqlite3_column_type(stmt, index) == SQLITE_NULL;
     }
 
     static RemoteModel readRemoteModelRow(sqlite3_stmt *stmt) {
@@ -1058,6 +1128,11 @@ class ModelCatalogStore {
         if (version < 5) {
             applyMigration5();
             setUserVersion(5);
+            version = 5;
+        }
+        if (version < 6) {
+            applyMigration6();
+            setUserVersion(6);
         }
     }
 
@@ -1178,6 +1253,32 @@ class ModelCatalogStore {
             ");"
             "CREATE INDEX IF NOT EXISTS idx_chat_messages_chat_order "
             "ON chat_messages(chat_id, message_order ASC);"
+        );
+    }
+
+    void applyMigration6() {
+        execute(
+            "CREATE TABLE IF NOT EXISTS chat_message_stats ("
+            "  chat_id TEXT NOT NULL,"
+            "  message_order INTEGER NOT NULL,"
+            "  model_path TEXT NOT NULL DEFAULT '',"
+            "  model_name TEXT NOT NULL DEFAULT '',"
+            "  prompt_tokens INTEGER NOT NULL DEFAULT 0,"
+            "  completion_tokens INTEGER NOT NULL DEFAULT 0,"
+            "  started_at_unix_ms INTEGER NOT NULL DEFAULT 0,"
+            "  first_token_at_unix_ms INTEGER NOT NULL DEFAULT 0,"
+            "  finished_at_unix_ms INTEGER NOT NULL DEFAULT 0,"
+            "  tokens_per_second REAL NOT NULL DEFAULT 0,"
+            "  status TEXT NOT NULL DEFAULT '',"
+            "  error_text TEXT NOT NULL DEFAULT '',"
+            "  temp REAL NOT NULL DEFAULT 0,"
+            "  top_p REAL NOT NULL DEFAULT 0,"
+            "  top_k INTEGER NOT NULL DEFAULT 0,"
+            "  max_tokens INTEGER NOT NULL DEFAULT 0,"
+            "  PRIMARY KEY (chat_id, message_order)"
+            ");"
+            "CREATE INDEX IF NOT EXISTS idx_chat_message_stats_chat_order "
+            "ON chat_message_stats(chat_id, message_order ASC);"
         );
     }
 

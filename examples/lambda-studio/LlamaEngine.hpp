@@ -37,6 +37,7 @@ struct LlmUiEvent {
     Part part = Part::Content;
     std::string chatId;
     std::string text;
+    std::optional<GenerationStats> generationStats;
 };
 
 namespace detail {
@@ -178,6 +179,20 @@ inline std::string tokenToPiece(llama_vocab const *vocab, llama_token token) {
     return std::string(buf, static_cast<std::size_t>(n));
 }
 
+inline std::int64_t currentUnixMillis() {
+    using namespace std::chrono;
+    return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+}
+
+inline double computeTokensPerSecond(GenerationStats const &stats) {
+    if (stats.completionTokens <= 0) {
+        return 0.0;
+    }
+    std::int64_t const startMs = stats.firstTokenAtUnixMs > 0 ? stats.firstTokenAtUnixMs : stats.startedAtUnixMs;
+    std::int64_t const durationMs = std::max<std::int64_t>(1, stats.finishedAtUnixMs - startMs);
+    return static_cast<double>(stats.completionTokens) / (static_cast<double>(durationMs) / 1000.0);
+}
+
 class LlamaEngine {
   public:
     LlamaEngine() = default;
@@ -317,6 +332,8 @@ class LlamaEngine {
             detail::postEventToMain(userPost, std::move(ev));
         };
         detail::UiChunkBatcher batcher(postOnMain);
+        GenerationStats stats;
+        stats.startedAtUnixMs = currentUnixMillis();
 
         std::vector<common_chat_msg> chatMessages;
         chatMessages.reserve(messages.size());
@@ -367,16 +384,28 @@ class LlamaEngine {
             std::lock_guard<std::mutex> lock(mutex_);
             params = samplingParams_;
         }
+        stats.temp = params.temp;
+        stats.topP = params.topP;
+        stats.topK = params.topK;
+        stats.maxTokens = params.maxTokens;
 
         int const promptCount = static_cast<int>(promptTokens.size());
         int const predictCount = params.maxTokens;
+        stats.promptTokens = promptCount;
 
         std::fprintf(stderr, "[LlamaEngine] prompt: %d tokens, max predict: %d\n", promptCount, predictCount);
 
         auto contextParams = common_context_params_to_llama(params_);
         llama_context_ptr ctx(llama_init_from_model(model_.get(), contextParams));
         if (!ctx) {
-            postOnMain(LlmUiEvent {.kind = LlmUiEvent::Kind::Error, .text = "Failed to create llama context"});
+            stats.finishedAtUnixMs = currentUnixMillis();
+            stats.status = "error";
+            stats.errorText = "Failed to create llama context";
+            postOnMain(LlmUiEvent {
+                .kind = LlmUiEvent::Kind::Error,
+                .text = stats.errorText,
+                .generationStats = stats,
+            });
             return;
         }
 
@@ -393,14 +422,27 @@ class LlamaEngine {
                 auto *batchTokens = const_cast<llama_token *>(promptTokens.data() + i);
                 llama_batch const batch = llama_batch_get_one(batchTokens, tokenCount);
                 if (llama_decode(ctx.get(), batch) != 0) {
+                    stats.finishedAtUnixMs = currentUnixMillis();
+                    stats.status = "error";
+                    stats.errorText = decodeError("prompt evaluation");
                     postOnMain(
-                        LlmUiEvent {.kind = LlmUiEvent::Kind::Error, .text = decodeError("prompt evaluation")}
+                        LlmUiEvent {
+                            .kind = LlmUiEvent::Kind::Error,
+                            .text = stats.errorText,
+                            .generationStats = stats,
+                        }
                     );
                     return;
                 }
                 if (cancelled_.load(std::memory_order_relaxed)) {
                     batcher.flush();
-                    postOnMain(LlmUiEvent {.kind = LlmUiEvent::Kind::Done});
+                    stats.finishedAtUnixMs = currentUnixMillis();
+                    stats.status = "cancelled";
+                    stats.tokensPerSecond = computeTokensPerSecond(stats);
+                    postOnMain(LlmUiEvent {
+                        .kind = LlmUiEvent::Kind::Done,
+                        .generationStats = stats,
+                    });
                     return;
                 }
             }
@@ -419,17 +461,28 @@ class LlamaEngine {
         for (int i = 0; i < predictCount; ++i) {
             if (cancelled_.load(std::memory_order_relaxed)) {
                 batcher.flush();
-                postOnMain(LlmUiEvent {.kind = LlmUiEvent::Kind::Done});
+                stats.finishedAtUnixMs = currentUnixMillis();
+                stats.status = "cancelled";
+                stats.tokensPerSecond = computeTokensPerSecond(stats);
+                postOnMain(LlmUiEvent {
+                    .kind = LlmUiEvent::Kind::Done,
+                    .generationStats = stats,
+                });
                 return;
             }
 
             llama_token token = common_sampler_sample(sampler.get(), ctx.get(), -1);
             if (llama_vocab_is_eog(vocab_, token)) {
                 std::fprintf(stderr, "[LlamaEngine] EOG token=%d at position %d\n", static_cast<int>(token), i);
+                stats.status = "completed";
                 break;
             }
 
             common_sampler_accept(sampler.get(), token, true);
+            if (stats.firstTokenAtUnixMs == 0) {
+                stats.firstTokenAtUnixMs = currentUnixMillis();
+            }
+            ++stats.completionTokens;
 
             rawOutput += tokenToPiece(vocab_, token);
 
@@ -448,9 +501,21 @@ class LlamaEngine {
             llama_batch const generationBatch = llama_batch_get_one(&token, 1);
             if (llama_decode(ctx.get(), generationBatch) != 0) {
                 batcher.flush();
-                postOnMain(LlmUiEvent {.kind = LlmUiEvent::Kind::Error, .text = decodeError("generation")});
+                stats.finishedAtUnixMs = currentUnixMillis();
+                stats.status = "error";
+                stats.errorText = decodeError("generation");
+                stats.tokensPerSecond = computeTokensPerSecond(stats);
+                postOnMain(LlmUiEvent {
+                    .kind = LlmUiEvent::Kind::Error,
+                    .text = stats.errorText,
+                    .generationStats = stats,
+                });
                 return;
             }
+        }
+
+        if (stats.status.empty()) {
+            stats.status = "max_tokens";
         }
 
         std::fprintf(
@@ -460,7 +525,12 @@ class LlamaEngine {
         );
 
         batcher.flush();
-        postOnMain(LlmUiEvent {.kind = LlmUiEvent::Kind::Done});
+        stats.finishedAtUnixMs = currentUnixMillis();
+        stats.tokensPerSecond = computeTokensPerSecond(stats);
+        postOnMain(LlmUiEvent {
+            .kind = LlmUiEvent::Kind::Done,
+            .generationStats = stats,
+        });
     }
 
     void runFakeGeneration(
@@ -474,6 +544,13 @@ class LlamaEngine {
             detail::postEventToMain(userPost, std::move(ev));
         };
         detail::UiChunkBatcher batcher(postOnMain);
+        GenerationStats stats;
+        stats.startedAtUnixMs = currentUnixMillis();
+        stats.status = "completed";
+        stats.temp = 0.8f;
+        stats.topP = 0.95f;
+        stats.topK = 40;
+        stats.maxTokens = 4096;
 
         std::vector<std::pair<LlmUiEvent::Part, std::string>> tokens;
         auto tokenize = [&tokens](LlmUiEvent::Part part, std::string const &text) {
@@ -507,16 +584,31 @@ class LlamaEngine {
         for (auto const &[part, text] : tokens) {
             if (cancelled_.load(std::memory_order_relaxed)) {
                 batcher.flush();
-                postOnMain(LlmUiEvent {.kind = LlmUiEvent::Kind::Done});
+                stats.finishedAtUnixMs = currentUnixMillis();
+                stats.status = "cancelled";
+                stats.tokensPerSecond = computeTokensPerSecond(stats);
+                postOnMain(LlmUiEvent {
+                    .kind = LlmUiEvent::Kind::Done,
+                    .generationStats = stats,
+                });
                 return;
             }
 
+            if (stats.firstTokenAtUnixMs == 0) {
+                stats.firstTokenAtUnixMs = currentUnixMillis();
+            }
+            ++stats.completionTokens;
             batcher.push(part, text);
             std::this_thread::sleep_for(delay);
         }
 
         batcher.flush();
-        postOnMain(LlmUiEvent {.kind = LlmUiEvent::Kind::Done});
+        stats.finishedAtUnixMs = currentUnixMillis();
+        stats.tokensPerSecond = computeTokensPerSecond(stats);
+        postOnMain(LlmUiEvent {
+            .kind = LlmUiEvent::Kind::Done,
+            .generationStats = stats,
+        });
     }
 
     std::string decodeError(char const *phase) const {

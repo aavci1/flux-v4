@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -19,6 +20,23 @@ struct ChatMessage {
     std::string text;
 
     constexpr bool operator==(ChatMessage const &) const = default;
+};
+
+struct GenerationStats {
+    std::int64_t promptTokens = 0;
+    std::int64_t completionTokens = 0;
+    std::int64_t startedAtUnixMs = 0;
+    std::int64_t firstTokenAtUnixMs = 0;
+    std::int64_t finishedAtUnixMs = 0;
+    double tokensPerSecond = 0.0;
+    std::string status;
+    std::string errorText;
+    float temp = 0.f;
+    float topP = 0.f;
+    std::int32_t topK = 0;
+    std::int32_t maxTokens = 0;
+
+    constexpr bool operator==(GenerationStats const &) const = default;
 };
 
 struct LocalModelInfo {
