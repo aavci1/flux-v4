@@ -14,6 +14,8 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
+#include <cstring>
 #include <functional>
 #include <string>
 #include <vector>
@@ -209,9 +211,7 @@ PresentedLocalModel presentLocalModel(LocalModel const &model) {
     std::string const repoStem = trimKnownModelSuffixes(lastPathComponent(model.repo));
     std::vector<std::string> const fileTokens = splitModelTokens(fileStem);
     std::vector<std::string> const titleSourceTokens =
-        !repoStem.empty() ? splitModelTokens(repoStem)
-                          : (!model.name.empty() ? splitModelTokens(trimKnownModelSuffixes(model.name))
-                                                 : fileTokens);
+        !repoStem.empty() ? splitModelTokens(repoStem) : (!model.name.empty() ? splitModelTokens(trimKnownModelSuffixes(model.name)) : fileTokens);
 
     std::vector<std::string> titleParts;
     titleParts.reserve(titleSourceTokens.size());
@@ -252,7 +252,7 @@ PresentedLocalModel presentLocalModel(LocalModel const &model) {
         detailParts.push_back(formatModelSize(model.sizeBytes));
     }
 
-    return PresentedLocalModel{
+    return PresentedLocalModel {
         .title = joinNonEmpty(titleParts, " "),
         .detail = joinNonEmpty(detailParts, "  •  "),
     };
@@ -362,23 +362,21 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
                                                  .wrapping = TextWrapping::Wrap,
                                              }
                                          } :
-                                         Element {
-                                             MarkdownText {
-                                                 .text = &message.text,
-                                                 .cacheKey = message.renderKey,
-                                                 .textRevision = message.textRevision,
-                                                 .baseFont = markdownStyle.baseFont,
-                                                 .codeFont = markdownStyle.codeFont,
-                                                 .h1Font = markdownStyle.h1Font,
-                                                 .h2Font = markdownStyle.h2Font,
-                                                 .h3Font = markdownStyle.h3Font,
-                                                 .baseColor = markdownStyle.baseColor,
-                                                 .codeBackground = markdownStyle.codeBackground,
-                                                 .horizontalAlignment = HorizontalAlignment::Leading,
-                                                 .verticalAlignment = VerticalAlignment::Top,
-                                                 .wrapping = TextWrapping::Wrap,
-                                             }
-                                         })
+                                         Element {MarkdownText {
+                                             .text = &message.text,
+                                             .cacheKey = message.renderKey,
+                                             .textRevision = message.textRevision,
+                                             .baseFont = markdownStyle.baseFont,
+                                             .codeFont = markdownStyle.codeFont,
+                                             .h1Font = markdownStyle.h1Font,
+                                             .h2Font = markdownStyle.h2Font,
+                                             .h3Font = markdownStyle.h3Font,
+                                             .baseColor = markdownStyle.baseColor,
+                                             .codeBackground = markdownStyle.codeBackground,
+                                             .horizontalAlignment = HorizontalAlignment::Leading,
+                                             .verticalAlignment = VerticalAlignment::Top,
+                                             .wrapping = TextWrapping::Wrap,
+                                         }})
                 );
             } else {
                 paragraphs.reserve(message.paragraphs.size());
@@ -396,23 +394,21 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
                                                     .wrapping = TextWrapping::Wrap,
                                                 }
                                             } :
-                                            Element {
-                                                MarkdownText {
-                                                    .text = &paragraph.text,
-                                                    .cacheKey = paragraph.renderKey,
-                                                    .textRevision = paragraph.textRevision,
-                                                    .baseFont = markdownStyle.baseFont,
-                                                    .codeFont = markdownStyle.codeFont,
-                                                    .h1Font = markdownStyle.h1Font,
-                                                    .h2Font = markdownStyle.h2Font,
-                                                    .h3Font = markdownStyle.h3Font,
-                                                    .baseColor = markdownStyle.baseColor,
-                                                    .codeBackground = markdownStyle.codeBackground,
-                                                    .horizontalAlignment = HorizontalAlignment::Leading,
-                                                    .verticalAlignment = VerticalAlignment::Top,
-                                                    .wrapping = TextWrapping::Wrap,
-                                                }
-                                            }
+                                            Element {MarkdownText {
+                                                .text = &paragraph.text,
+                                                .cacheKey = paragraph.renderKey,
+                                                .textRevision = paragraph.textRevision,
+                                                .baseFont = markdownStyle.baseFont,
+                                                .codeFont = markdownStyle.codeFont,
+                                                .h1Font = markdownStyle.h1Font,
+                                                .h2Font = markdownStyle.h2Font,
+                                                .h3Font = markdownStyle.h3Font,
+                                                .baseColor = markdownStyle.baseColor,
+                                                .codeBackground = markdownStyle.codeBackground,
+                                                .horizontalAlignment = HorizontalAlignment::Leading,
+                                                .verticalAlignment = VerticalAlignment::Top,
+                                                .wrapping = TextWrapping::Wrap,
+                                            }}
                     );
                 }
             }
@@ -712,10 +708,9 @@ struct ChatView : ViewModifiers<ChatView> {
             }
         }
 
-        bool const fakeStreaming = lambda_backend::debugFakeStreamEnabled();
-        bool const hasModel = fakeStreaming || !chat.modelPath.empty();
-        bool const selectedModelReady = fakeStreaming || (hasModel && chat.modelPath == loadedModelPath);
-        bool const canCompose = hasModel && selectedModelReady && (fakeStreaming || !modelLoading) && !chat.streaming;
+        bool const hasModel = !chat.modelPath.empty();
+        bool const selectedModelReady = hasModel && chat.modelPath == loadedModelPath;
+        bool const canCompose = hasModel && selectedModelReady && !modelLoading && !chat.streaming;
 
         std::vector<Element> bubbles;
         bubbles.reserve(chat.messages.size() + chat.streamDraftMessages.size());

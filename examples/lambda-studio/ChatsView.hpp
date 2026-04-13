@@ -11,6 +11,8 @@
 #include "AppState.hpp"
 #include "ChatModels.hpp"
 #include "ChatView.hpp"
+#include "Divider.hpp"
+
 using namespace flux;
 
 namespace lambda {
@@ -170,7 +172,7 @@ struct ChatsView : ViewModifiers<ChatsView> {
                                 }
                             }
                         }.padding(theme.space4),
-                        Rectangle {}.size(0.f, 1.f).fill(FillStyle::solid(theme.colorBorderSubtle)),
+                        Divider {.orientation = Divider::Orientation::Horizontal},
                         ListView {
                             .rows = std::move(rows),
                         }
@@ -179,7 +181,7 @@ struct ChatsView : ViewModifiers<ChatsView> {
                 }
                     .fill(FillStyle::solid(theme.colorSurfaceOverlay))
                     .size(320.f, 0.f),
-                Rectangle {}.size(1.f, 0.f).fill(FillStyle::solid(theme.colorBorderSubtle)),
+                Divider {.orientation = Divider::Orientation::Horizontal},
                 std::move(detail),
             },
         };

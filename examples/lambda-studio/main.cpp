@@ -7,6 +7,8 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -26,7 +28,51 @@ using namespace flux;
 using namespace lambda;
 
 namespace {
-std::once_flag gLambdaEventHandlers;
+std::once_flag gLambdaChatEventHandlers;
+std::once_flag gLambdaModelEventHandlers;
+
+struct ChatWorkspaceState {
+    std::vector<ChatThread> chats = sampleChatThreads();
+    int selectedChatIndex = 0;
+};
+
+struct LibraryWorkspaceState {
+    std::vector<LocalModel> localModels;
+    std::vector<DownloadJob> recentDownloadJobs;
+
+    std::string loadedModelPath;
+    std::string loadedModelName;
+    std::string pendingModelPath;
+    std::string pendingModelName;
+
+    bool refreshingModels = false;
+    bool downloadingModel = false;
+    bool modelLoading = false;
+
+    std::string pendingDownloadJobId;
+    std::string pendingDownloadRepoId;
+    std::string pendingDownloadFilePath;
+};
+
+struct HubWorkspaceState {
+    std::string modelSearchQuery;
+    std::string modelSearchAuthor;
+    RemoteModelSort remoteModelSort = RemoteModelSort::Downloads;
+    RemoteModelVisibilityFilter remoteModelVisibility = RemoteModelVisibilityFilter::All;
+    std::vector<RemoteModel> remoteModels;
+    std::string selectedRemoteRepoId;
+    std::vector<RemoteModelFile> selectedRemoteRepoFiles;
+    std::optional<RemoteRepoDetail> selectedRemoteRepoDetail;
+    bool searchingRemoteModels = false;
+    bool loadingRemoteModelFiles = false;
+    bool loadingRemoteRepoDetail = false;
+};
+
+struct FeedbackWorkspaceState {
+    std::optional<AppNotice> notice;
+    std::string statusText;
+    std::string errorText;
+};
 
 std::int64_t steadyNowNanos() {
     using namespace std::chrono;
@@ -64,13 +110,22 @@ void commitStreamDraft(ChatThread &chat, std::int64_t finishedAtNanos) {
     chat.streamDraftMessages.clear();
 }
 
-void setChatModel(AppState &state, int chatIndex, std::string path, std::string name) {
+void setChatModel(ChatWorkspaceState &state, int chatIndex, std::string path, std::string name) {
     if (chatIndex < 0 || static_cast<std::size_t>(chatIndex) >= state.chats.size()) {
         return;
     }
     ChatThread &chat = state.chats[static_cast<std::size_t>(chatIndex)];
     chat.modelPath = std::move(path);
     chat.modelName = std::move(name);
+}
+
+std::string currentRemoteSearchKey(HubWorkspaceState const &state) {
+    return remoteModelSearchCacheKey(
+        state.modelSearchQuery,
+        state.modelSearchAuthor,
+        state.remoteModelSort,
+        state.remoteModelVisibility
+    );
 }
 
 std::vector<lambda_backend::ChatMessage> toBackendMessages(ChatThread const &chat) {
@@ -98,6 +153,64 @@ std::string titleFromPrompt(std::string const &prompt) {
         title += "...";
     }
     return title;
+}
+
+AppState composeAppState(
+    StudioModule currentModule,
+    ChatWorkspaceState const &chats,
+    LibraryWorkspaceState const &library,
+    HubWorkspaceState const &hub,
+    FeedbackWorkspaceState const &feedback
+) {
+    AppState state;
+    state.currentModule = currentModule;
+    state.chats = chats.chats;
+    state.selectedChatIndex = chats.selectedChatIndex;
+    state.localModels = library.localModels;
+    state.modelSearchQuery = hub.modelSearchQuery;
+    state.modelSearchAuthor = hub.modelSearchAuthor;
+    state.remoteModelSort = hub.remoteModelSort;
+    state.remoteModelVisibility = hub.remoteModelVisibility;
+    state.remoteModels = hub.remoteModels;
+    state.selectedRemoteRepoId = hub.selectedRemoteRepoId;
+    state.selectedRemoteRepoFiles = hub.selectedRemoteRepoFiles;
+    state.selectedRemoteRepoDetail = hub.selectedRemoteRepoDetail;
+    state.recentDownloadJobs = library.recentDownloadJobs;
+    state.loadedModelPath = library.loadedModelPath;
+    state.loadedModelName = library.loadedModelName;
+    state.pendingModelPath = library.pendingModelPath;
+    state.pendingModelName = library.pendingModelName;
+    state.notice = feedback.notice;
+    state.statusText = feedback.statusText;
+    state.errorText = feedback.errorText;
+    state.refreshingModels = library.refreshingModels;
+    state.searchingRemoteModels = hub.searchingRemoteModels;
+    state.loadingRemoteModelFiles = hub.loadingRemoteModelFiles;
+    state.loadingRemoteRepoDetail = hub.loadingRemoteRepoDetail;
+    state.downloadingModel = library.downloadingModel;
+    state.modelLoading = library.modelLoading;
+    state.pendingDownloadJobId = library.pendingDownloadJobId;
+    state.pendingDownloadRepoId = library.pendingDownloadRepoId;
+    state.pendingDownloadFilePath = library.pendingDownloadFilePath;
+    return state;
+}
+
+AppState composeWorkspaceAppState(
+    StudioModule currentModule,
+    LibraryWorkspaceState const &library,
+    HubWorkspaceState const &hub,
+    FeedbackWorkspaceState const &feedback
+) {
+    return composeAppState(
+        currentModule,
+        ChatWorkspaceState {
+            .chats = {},
+            .selectedChatIndex = -1,
+        },
+        library,
+        hub,
+        feedback
+    );
 }
 
 } // namespace
@@ -162,37 +275,35 @@ struct NoticeBanner : ViewModifiers<NoticeBanner> {
     }
 };
 
-struct LambdaStudio : ViewModifiers<LambdaStudio> {
-    auto body() const {
-        Theme const &theme = useEnvironment<Theme>();
-        auto appState = useState<AppState>(makeInitialAppState());
-        BackendServices &services = backend();
-        auto currentRemoteSearchKey = [](AppState const &state) {
-            return remoteModelSearchCacheKey(
-                state.modelSearchQuery,
-                state.modelSearchAuthor,
-                state.remoteModelSort,
-                state.remoteModelVisibility
-            );
-        };
+struct ChatsWorkspaceOwner : ViewModifiers<ChatsWorkspaceOwner> {
+    bool active = false;
+    LibraryWorkspaceState library;
+    State<FeedbackWorkspaceState> feedbackState;
+    std::function<void(std::string const &, std::string const &)> onRequestModelLoad;
 
-        std::call_once(gLambdaEventHandlers, [appState, &services, currentRemoteSearchKey]() {
+    auto body() const {
+        BackendServices &services = backend();
+        auto chatsState = useState(ChatWorkspaceState {});
+        auto feedbackStateHandle = feedbackState;
+
+        std::call_once(gLambdaChatEventHandlers, [chatsState, feedbackStateHandle]() {
             Application::instance().eventQueue().on<lambda_backend::LlmUiEvent>(
-                [appState](lambda_backend::LlmUiEvent const &event) {
-                    AppState nextState = *appState;
-                    auto it = std::find_if(nextState.chats.begin(), nextState.chats.end(), [&](ChatThread const &chat) {
+                [chatsState, feedbackStateHandle](lambda_backend::LlmUiEvent const &event) {
+                    ChatWorkspaceState nextChats = *chatsState;
+                    auto it = std::find_if(nextChats.chats.begin(), nextChats.chats.end(), [&](ChatThread const &chat) {
                         return chat.id == event.chatId;
                     });
-                    if (it == nextState.chats.end()) {
+                    if (it == nextChats.chats.end()) {
                         return;
                     }
 
+                    FeedbackWorkspaceState nextFeedback = *feedbackStateHandle;
+                    bool feedbackChanged = false;
                     std::int64_t const nowNanos = steadyNowNanos();
 
                     if (event.kind == lambda_backend::LlmUiEvent::Kind::Chunk) {
-                        ChatRole const role = event.part == lambda_backend::LlmUiEvent::Part::Thinking
-                                                  ? ChatRole::Reasoning
-                                                  : ChatRole::Assistant;
+                        ChatRole const role =
+                            event.part == lambda_backend::LlmUiEvent::Part::Thinking ? ChatRole::Reasoning : ChatRole::Assistant;
                         if (role != ChatRole::Reasoning) {
                             finishTrailingReasoningMessage(it->streamDraftMessages, nowNanos);
                         }
@@ -209,7 +320,8 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                         commitStreamDraft(*it, nowNanos);
                         it->streaming = false;
                         it->updatedAt = "now";
-                        nextState.statusText = "Response complete";
+                        nextFeedback.statusText = "Response complete";
+                        feedbackChanged = true;
                     } else if (event.kind == lambda_backend::LlmUiEvent::Kind::Error) {
                         commitStreamDraft(*it, nowNanos);
                         it->streaming = false;
@@ -219,57 +331,214 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                         });
                         syncAssistantParagraphs(it->messages.back());
                         it->updatedAt = "now";
-                        nextState.errorText = event.text;
+                        nextFeedback.errorText = event.text;
+                        feedbackChanged = true;
                     }
 
-                    appState = std::move(nextState);
+                    chatsState = std::move(nextChats);
+                    if (feedbackChanged) {
+                        feedbackStateHandle = std::move(nextFeedback);
+                    }
                 }
             );
+        });
 
+        if (!active) {
+            return Element {Spacer {}}
+                .size(0.f, 0.f)
+                .flex(1.f, 1.f);
+        }
+
+        FeedbackWorkspaceState const feedback = *feedbackStateHandle;
+        AppState state = composeAppState(StudioModule::Chats, *chatsState, library, HubWorkspaceState {}, feedback);
+
+        auto selectChatModel = [chatsState, onRequestModelLoad = onRequestModelLoad](
+                                   int chatIndex,
+                                   std::string const &path,
+                                   std::string const &name
+                               ) {
+            ChatWorkspaceState nextChats = *chatsState;
+            setChatModel(nextChats, chatIndex, path, name);
+            chatsState = std::move(nextChats);
+            if (onRequestModelLoad) {
+                onRequestModelLoad(path, name);
+            }
+        };
+
+        auto sendMessage = [chatsState, feedbackStateHandle, library = library, &services](int chatIndex, std::string const &message) {
+            if (message.empty()) {
+                return;
+            }
+
+            ChatWorkspaceState nextChats = *chatsState;
+            if (chatIndex < 0 || static_cast<std::size_t>(chatIndex) >= nextChats.chats.size()) {
+                return;
+            }
+
+            ChatThread &chat = nextChats.chats[static_cast<std::size_t>(chatIndex)];
+            if (chat.streaming || chat.modelPath.empty() || chat.modelPath != library.loadedModelPath || library.modelLoading) {
+                return;
+            }
+
+            if (chat.messages.empty() || chat.title == "New chat") {
+                chat.title = titleFromPrompt(message);
+            }
+
+            chat.streamDraftMessages.clear();
+            chat.messages.push_back(lambda::ChatMessage {
+                .role = ChatRole::User,
+                .text = message,
+            });
+            chat.streaming = true;
+            chat.updatedAt = "now";
+
+            FeedbackWorkspaceState nextFeedback = *feedbackStateHandle;
+            nextFeedback.errorText.clear();
+            nextFeedback.statusText = "Generating response...";
+
+            std::vector<lambda_backend::ChatMessage> history = toBackendMessages(chat);
+            std::string streamChatId = chat.id;
+
+            chatsState = std::move(nextChats);
+            feedbackStateHandle = std::move(nextFeedback);
+
+            services.engine->startChat(
+                std::move(history),
+                std::move(streamChatId),
+                [](lambda_backend::LlmUiEvent event) {
+                    Application::instance().eventQueue().post(std::move(event));
+                }
+            );
+        };
+
+        auto stopMessage = [chatsState, feedbackStateHandle, &services](int chatIndex) {
+            services.engine->cancelGeneration();
+            ChatWorkspaceState nextChats = *chatsState;
+            if (chatIndex >= 0 && static_cast<std::size_t>(chatIndex) < nextChats.chats.size()) {
+                nextChats.chats[static_cast<std::size_t>(chatIndex)].streaming = false;
+            }
+            FeedbackWorkspaceState nextFeedback = *feedbackStateHandle;
+            nextFeedback.statusText = "Generation stopped";
+            chatsState = std::move(nextChats);
+            feedbackStateHandle = std::move(nextFeedback);
+        };
+
+        auto toggleReasoningMessage = [chatsState](int chatIndex, int messageIndex) {
+            ChatWorkspaceState nextChats = *chatsState;
+            if (chatIndex < 0 || static_cast<std::size_t>(chatIndex) >= nextChats.chats.size()) {
+                return;
+            }
+            ChatThread &chat = nextChats.chats[static_cast<std::size_t>(chatIndex)];
+            if (messageIndex < 0) {
+                return;
+            }
+            std::size_t const index = static_cast<std::size_t>(messageIndex);
+            lambda::ChatMessage *message = nullptr;
+            if (index < chat.messages.size()) {
+                message = &chat.messages[index];
+            } else {
+                std::size_t const draftIndex = index - chat.messages.size();
+                if (draftIndex < chat.streamDraftMessages.size()) {
+                    message = &chat.streamDraftMessages[draftIndex];
+                }
+            }
+            if (message == nullptr || message->role != ChatRole::Reasoning) {
+                return;
+            }
+            message->collapsed = !message->collapsed;
+            chatsState = std::move(nextChats);
+        };
+
+        auto createChat = [chatsState, library = library]() {
+            ChatWorkspaceState nextChats = *chatsState;
+            ChatThread thread;
+            thread.id = lambda::generateChatId();
+            thread.title = "New chat";
+            thread.updatedAt = "now";
+            thread.modelPath = library.loadedModelPath;
+            thread.modelName = library.loadedModelName;
+            nextChats.chats.push_back(std::move(thread));
+            nextChats.selectedChatIndex = static_cast<int>(nextChats.chats.size() - 1);
+            chatsState = std::move(nextChats);
+        };
+
+        return ChatsView {
+            .state = state,
+            .onNewChat = createChat,
+            .onSelectChat = [chatsState](int index) {
+                ChatWorkspaceState nextChats = *chatsState;
+                nextChats.selectedChatIndex = index;
+                chatsState = std::move(nextChats);
+            },
+            .onSelectModel = selectChatModel,
+            .onSend = sendMessage,
+            .onStop = stopMessage,
+            .onToggleReasoning = toggleReasoningMessage,
+        }
+            .flex(1.f, 1.f);
+    }
+};
+
+struct StudioWorkspaceOwner : ViewModifiers<StudioWorkspaceOwner> {
+    State<StudioModule> currentModuleState;
+
+    auto body() const {
+        Theme const &theme = useEnvironment<Theme>();
+        BackendServices &services = backend();
+        auto libraryState = useState(LibraryWorkspaceState {});
+        auto hubState = useState(HubWorkspaceState {});
+        auto feedbackState = useState(FeedbackWorkspaceState {});
+        auto currentModuleHandle = currentModuleState;
+
+        std::call_once(gLambdaModelEventHandlers, [libraryState, hubState, feedbackState, &services]() {
             Application::instance().eventQueue().on<lambda_backend::ModelManagerEvent>(
-                [appState, &services, currentRemoteSearchKey](lambda_backend::ModelManagerEvent const &event) {
-                    AppState nextState = *appState;
+                [libraryState, hubState, feedbackState, &services](lambda_backend::ModelManagerEvent const &event) {
+                    LibraryWorkspaceState nextLibrary = *libraryState;
+                    HubWorkspaceState nextHub = *hubState;
+                    FeedbackWorkspaceState nextFeedback = *feedbackState;
+
                     switch (event.kind) {
                     case lambda_backend::ModelManagerEvent::Kind::LocalModelsReady:
-                        nextState.refreshingModels = false;
-                        nextState.localModels.clear();
-                        nextState.localModels.reserve(event.localModels.size());
+                        nextLibrary.refreshingModels = false;
+                        nextLibrary.localModels.clear();
+                        nextLibrary.localModels.reserve(event.localModels.size());
                         for (lambda_backend::LocalModelInfo const &model : event.localModels) {
                             if (!model.path.empty()) {
-                                nextState.localModels.push_back(toLocalModel(model));
+                                nextLibrary.localModels.push_back(toLocalModel(model));
                             }
                         }
                         try {
-                            services.catalog->replaceLocalModelInstances(nextState.localModels);
+                            services.catalog->replaceLocalModelInstances(nextLibrary.localModels);
                         } catch (std::exception const &e) {
-                            nextState.errorText = e.what();
+                            nextFeedback.errorText = e.what();
                         }
-                        nextState.statusText = nextState.localModels.empty()
-                                                   ? "No local models found"
-                                                   : "Found " + std::to_string(nextState.localModels.size()) + " local model" +
-                                                         (nextState.localModels.size() == 1 ? "" : "s");
+                        nextFeedback.statusText = nextLibrary.localModels.empty()
+                                                      ? "No local models found"
+                                                      : "Found " + std::to_string(nextLibrary.localModels.size()) +
+                                                            " local model" +
+                                                            (nextLibrary.localModels.size() == 1 ? "" : "s");
                         break;
                     case lambda_backend::ModelManagerEvent::Kind::ModelLoaded:
-                        nextState.modelLoading = false;
-                        nextState.loadedModelPath = event.modelPath;
-                        nextState.loadedModelName = event.modelName;
-                        nextState.pendingModelPath.clear();
-                        nextState.pendingModelName.clear();
-                        nextState.notice.reset();
-                        nextState.statusText = "Loaded " + event.modelName;
-                        nextState.errorText.clear();
+                        nextLibrary.modelLoading = false;
+                        nextLibrary.loadedModelPath = event.modelPath;
+                        nextLibrary.loadedModelName = event.modelName;
+                        nextLibrary.pendingModelPath.clear();
+                        nextLibrary.pendingModelName.clear();
+                        nextFeedback.notice.reset();
+                        nextFeedback.statusText = "Loaded " + event.modelName;
+                        nextFeedback.errorText.clear();
                         break;
                     case lambda_backend::ModelManagerEvent::Kind::ModelLoadError:
-                        nextState.modelLoading = false;
-                        nextState.pendingModelPath.clear();
-                        nextState.pendingModelName.clear();
-                        nextState.notice.reset();
-                        nextState.errorText = event.error;
+                        nextLibrary.modelLoading = false;
+                        nextLibrary.pendingModelPath.clear();
+                        nextLibrary.pendingModelName.clear();
+                        nextFeedback.notice.reset();
+                        nextFeedback.errorText = event.error;
                         break;
                     case lambda_backend::ModelManagerEvent::Kind::DownloadProgress:
-                        if (!nextState.pendingDownloadJobId.empty()) {
-                            for (DownloadJob &job : nextState.recentDownloadJobs) {
-                                if (job.id != nextState.pendingDownloadJobId) {
+                        if (!nextLibrary.pendingDownloadJobId.empty()) {
+                            for (DownloadJob &job : nextLibrary.recentDownloadJobs) {
+                                if (job.id != nextLibrary.pendingDownloadJobId) {
                                     continue;
                                 }
                                 job.downloadedBytes = event.downloadedBytes;
@@ -279,10 +548,10 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                         }
                         break;
                     case lambda_backend::ModelManagerEvent::Kind::DownloadDone:
-                        nextState.downloadingModel = false;
-                        if (!nextState.pendingDownloadJobId.empty()) {
-                            for (DownloadJob &job : nextState.recentDownloadJobs) {
-                                if (job.id != nextState.pendingDownloadJobId) {
+                        nextLibrary.downloadingModel = false;
+                        if (!nextLibrary.pendingDownloadJobId.empty()) {
+                            for (DownloadJob &job : nextLibrary.recentDownloadJobs) {
+                                if (job.id != nextLibrary.pendingDownloadJobId) {
                                     continue;
                                 }
                                 job.status = DownloadJobStatus::Completed;
@@ -294,23 +563,23 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                                 try {
                                     services.catalog->finishDownloadJob(job.id, job.localPath, job.finishedAtUnixMs);
                                 } catch (std::exception const &e) {
-                                    nextState.errorText = e.what();
+                                    nextFeedback.errorText = e.what();
                                 }
                                 break;
                             }
                         }
-                        nextState.pendingDownloadJobId.clear();
-                        nextState.pendingDownloadRepoId.clear();
-                        nextState.pendingDownloadFilePath.clear();
-                        nextState.notice.reset();
-                        nextState.statusText = "Downloaded " + event.modelName;
-                        nextState.errorText.clear();
+                        nextLibrary.pendingDownloadJobId.clear();
+                        nextLibrary.pendingDownloadRepoId.clear();
+                        nextLibrary.pendingDownloadFilePath.clear();
+                        nextFeedback.notice.reset();
+                        nextFeedback.statusText = "Downloaded " + event.modelName;
+                        nextFeedback.errorText.clear();
                         break;
                     case lambda_backend::ModelManagerEvent::Kind::DownloadError:
-                        nextState.downloadingModel = false;
-                        if (!nextState.pendingDownloadJobId.empty()) {
-                            for (DownloadJob &job : nextState.recentDownloadJobs) {
-                                if (job.id != nextState.pendingDownloadJobId) {
+                        nextLibrary.downloadingModel = false;
+                        if (!nextLibrary.pendingDownloadJobId.empty()) {
+                            for (DownloadJob &job : nextLibrary.recentDownloadJobs) {
+                                if (job.id != nextLibrary.pendingDownloadJobId) {
                                     continue;
                                 }
                                 job.status = DownloadJobStatus::Failed;
@@ -325,20 +594,20 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                                 try {
                                     services.catalog->failDownloadJob(job.id, job.error, job.finishedAtUnixMs);
                                 } catch (std::exception const &e) {
-                                    nextState.errorText = e.what();
+                                    nextFeedback.errorText = e.what();
                                 }
                                 break;
                             }
                         }
-                        nextState.pendingDownloadJobId.clear();
-                        nextState.pendingDownloadRepoId.clear();
-                        nextState.pendingDownloadFilePath.clear();
-                        nextState.notice.reset();
-                        nextState.errorText = event.error;
+                        nextLibrary.pendingDownloadJobId.clear();
+                        nextLibrary.pendingDownloadRepoId.clear();
+                        nextLibrary.pendingDownloadFilePath.clear();
+                        nextFeedback.notice.reset();
+                        nextFeedback.errorText = event.error;
                         break;
                     case lambda_backend::ModelManagerEvent::Kind::HfSearchReady:
-                        nextState.searchingRemoteModels = false;
-                        if (event.searchKey != currentRemoteSearchKey(nextState)) {
+                        nextHub.searchingRemoteModels = false;
+                        if (event.searchKey != currentRemoteSearchKey(nextHub)) {
                             if (event.error.empty()) {
                                 std::vector<RemoteModel> cachedModels;
                                 cachedModels.reserve(event.hfModels.size());
@@ -346,81 +615,73 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                                     cachedModels.push_back(toRemoteModel(model));
                                 }
                                 try {
-                                    services.catalog->replaceSearchSnapshot(
-                                        event.searchKey,
-                                        cachedModels,
-                                        event.rawJson
-                                    );
+                                    services.catalog->replaceSearchSnapshot(event.searchKey, cachedModels, event.rawJson);
                                 } catch (...) {
                                 }
                             }
                             break;
                         }
                         if (!event.error.empty()) {
-                            nextState.errorText = event.error;
-                            if (nextState.remoteModels.empty()) {
-                                nextState.selectedRemoteRepoId.clear();
-                                nextState.selectedRemoteRepoFiles.clear();
-                                nextState.selectedRemoteRepoDetail.reset();
-                                nextState.loadingRemoteModelFiles = false;
-                                nextState.loadingRemoteRepoDetail = false;
+                            nextFeedback.errorText = event.error;
+                            if (nextHub.remoteModels.empty()) {
+                                nextHub.selectedRemoteRepoId.clear();
+                                nextHub.selectedRemoteRepoFiles.clear();
+                                nextHub.selectedRemoteRepoDetail.reset();
+                                nextHub.loadingRemoteModelFiles = false;
+                                nextHub.loadingRemoteRepoDetail = false;
                             } else {
-                                nextState.statusText = "Search refresh failed, showing cached results";
+                                nextFeedback.statusText = "Search refresh failed, showing cached results";
                             }
                         } else {
-                            nextState.errorText.clear();
-                            nextState.remoteModels.clear();
-                            nextState.remoteModels.reserve(event.hfModels.size());
+                            nextFeedback.errorText.clear();
+                            nextHub.remoteModels.clear();
+                            nextHub.remoteModels.reserve(event.hfModels.size());
                             for (lambda_backend::HfModelInfo const &model : event.hfModels) {
-                                nextState.remoteModels.push_back(toRemoteModel(model));
+                                nextHub.remoteModels.push_back(toRemoteModel(model));
                             }
                             try {
-                                services.catalog->replaceSearchSnapshot(
-                                    event.searchKey,
-                                    nextState.remoteModels,
-                                    event.rawJson
-                                );
+                                services.catalog->replaceSearchSnapshot(event.searchKey, nextHub.remoteModels, event.rawJson);
                             } catch (std::exception const &e) {
-                                nextState.errorText = e.what();
+                                nextFeedback.errorText = e.what();
                             }
 
-                            if (nextState.remoteModels.empty()) {
-                                nextState.selectedRemoteRepoId.clear();
-                                nextState.selectedRemoteRepoFiles.clear();
-                                nextState.selectedRemoteRepoDetail.reset();
-                                nextState.loadingRemoteModelFiles = false;
-                                nextState.loadingRemoteRepoDetail = false;
-                                nextState.statusText = "No matching Hugging Face models";
+                            if (nextHub.remoteModels.empty()) {
+                                nextHub.selectedRemoteRepoId.clear();
+                                nextHub.selectedRemoteRepoFiles.clear();
+                                nextHub.selectedRemoteRepoDetail.reset();
+                                nextHub.loadingRemoteModelFiles = false;
+                                nextHub.loadingRemoteRepoDetail = false;
+                                nextFeedback.statusText = "No matching Hugging Face models";
                             } else {
                                 bool foundSelection = false;
-                                for (RemoteModel const &model : nextState.remoteModels) {
-                                    if (model.id == nextState.selectedRemoteRepoId) {
+                                for (RemoteModel const &model : nextHub.remoteModels) {
+                                    if (model.id == nextHub.selectedRemoteRepoId) {
                                         foundSelection = true;
                                         break;
                                     }
                                 }
                                 if (!foundSelection) {
-                                    nextState.selectedRemoteRepoId = nextState.remoteModels.front().id;
-                                    nextState.selectedRemoteRepoFiles.clear();
-                                    nextState.selectedRemoteRepoDetail.reset();
-                                    nextState.loadingRemoteModelFiles = true;
-                                    nextState.loadingRemoteRepoDetail = true;
-                                    services.manager->inspectRepo(nextState.selectedRemoteRepoId);
+                                    nextHub.selectedRemoteRepoId = nextHub.remoteModels.front().id;
+                                    nextHub.selectedRemoteRepoFiles.clear();
+                                    nextHub.selectedRemoteRepoDetail.reset();
+                                    nextHub.loadingRemoteModelFiles = true;
+                                    nextHub.loadingRemoteRepoDetail = true;
+                                    services.manager->inspectRepo(nextHub.selectedRemoteRepoId);
                                 }
-                                nextState.statusText =
-                                    "Found " + std::to_string(nextState.remoteModels.size()) + " matching model" +
-                                    (nextState.remoteModels.size() == 1 ? "" : "s");
+                                nextFeedback.statusText =
+                                    "Found " + std::to_string(nextHub.remoteModels.size()) + " matching model" +
+                                    (nextHub.remoteModels.size() == 1 ? "" : "s");
                             }
                         }
                         break;
                     case lambda_backend::ModelManagerEvent::Kind::HfFilesReady:
-                        if (event.repoId == nextState.selectedRemoteRepoId) {
-                            nextState.loadingRemoteModelFiles = false;
+                        if (event.repoId == nextHub.selectedRemoteRepoId) {
+                            nextHub.loadingRemoteModelFiles = false;
                         }
                         if (!event.error.empty()) {
-                            nextState.errorText = event.error;
-                            if (event.repoId == nextState.selectedRemoteRepoId && !nextState.selectedRemoteRepoFiles.empty()) {
-                                nextState.statusText = "File refresh failed, showing cached repo files";
+                            nextFeedback.errorText = event.error;
+                            if (event.repoId == nextHub.selectedRemoteRepoId && !nextHub.selectedRemoteRepoFiles.empty()) {
+                                nextFeedback.statusText = "File refresh failed, showing cached repo files";
                             }
                         } else {
                             std::vector<RemoteModelFile> files;
@@ -429,69 +690,71 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                                 files.push_back(toRemoteModelFile(file));
                             }
                             try {
-                                services.catalog->replaceRepoFilesSnapshot(
-                                    event.repoId,
-                                    files,
-                                    event.rawJson
-                                );
+                                services.catalog->replaceRepoFilesSnapshot(event.repoId, files, event.rawJson);
                             } catch (std::exception const &e) {
-                                nextState.errorText = e.what();
+                                nextFeedback.errorText = e.what();
                             }
-                            if (event.repoId == nextState.selectedRemoteRepoId) {
-                                nextState.errorText.clear();
-                                nextState.selectedRemoteRepoFiles = std::move(files);
-                                nextState.statusText = event.hfFiles.empty()
-                                                           ? "No GGUF files in selected repo"
-                                                           : "Found " + std::to_string(event.hfFiles.size()) + " GGUF file" +
-                                                                 (event.hfFiles.size() == 1 ? "" : "s");
+                            if (event.repoId == nextHub.selectedRemoteRepoId) {
+                                nextFeedback.errorText.clear();
+                                nextHub.selectedRemoteRepoFiles = std::move(files);
+                                nextFeedback.statusText =
+                                    event.hfFiles.empty()
+                                        ? "No GGUF files in selected repo"
+                                        : "Found " + std::to_string(event.hfFiles.size()) + " GGUF file" +
+                                              (event.hfFiles.size() == 1 ? "" : "s");
                             }
                         }
                         break;
                     case lambda_backend::ModelManagerEvent::Kind::HfRepoDetailReady:
-                        if (event.repoId == nextState.selectedRemoteRepoId) {
-                            nextState.loadingRemoteRepoDetail = false;
+                        if (event.repoId == nextHub.selectedRemoteRepoId) {
+                            nextHub.loadingRemoteRepoDetail = false;
                         }
                         if (!event.error.empty()) {
-                            nextState.errorText = event.error;
-                            if (event.repoId == nextState.selectedRemoteRepoId &&
-                                nextState.selectedRemoteRepoDetail.has_value()) {
-                                nextState.statusText = "Repo detail refresh failed, showing cached metadata";
+                            nextFeedback.errorText = event.error;
+                            if (event.repoId == nextHub.selectedRemoteRepoId &&
+                                nextHub.selectedRemoteRepoDetail.has_value()) {
+                                nextFeedback.statusText = "Repo detail refresh failed, showing cached metadata";
                             }
                         } else {
                             RemoteRepoDetail detail = toRemoteRepoDetail(event.hfRepoDetail);
                             try {
                                 services.catalog->replaceRepoDetailSnapshot(detail, event.rawJson);
                             } catch (std::exception const &e) {
-                                nextState.errorText = e.what();
+                                nextFeedback.errorText = e.what();
                             }
-                            if (event.repoId == nextState.selectedRemoteRepoId) {
-                                nextState.errorText.clear();
-                                nextState.selectedRemoteRepoDetail = std::move(detail);
+                            if (event.repoId == nextHub.selectedRemoteRepoId) {
+                                nextFeedback.errorText.clear();
+                                nextHub.selectedRemoteRepoDetail = std::move(detail);
                             }
                         }
                         break;
                     }
-                    appState = std::move(nextState);
+
+                    libraryState = std::move(nextLibrary);
+                    hubState = std::move(nextHub);
+                    feedbackState = std::move(nextFeedback);
                 }
             );
 
-            AppState nextState = *appState;
-            nextState.refreshingModels = true;
+            LibraryWorkspaceState nextLibrary = *libraryState;
+            FeedbackWorkspaceState nextFeedback = *feedbackState;
+            nextLibrary.refreshingModels = true;
             try {
                 services.catalog->markRunningDownloadJobsInterrupted(systemNowMillis());
-                nextState.recentDownloadJobs = services.catalog->loadRecentDownloadJobs();
-                nextState.localModels = services.catalog->loadLocalModelInstances();
+                nextLibrary.recentDownloadJobs = services.catalog->loadRecentDownloadJobs();
+                nextLibrary.localModels = services.catalog->loadLocalModelInstances();
             } catch (std::exception const &e) {
-                nextState.errorText = e.what();
+                nextFeedback.errorText = e.what();
             }
-            nextState.loadedModelPath = lambda_backend::defaultModelPath();
-            nextState.loadedModelName = lambda_backend::defaultModelName();
-            if (!nextState.loadedModelPath.empty() && !services.engine->isLoaded()) {
-                nextState.modelLoading = true;
-                nextState.pendingModelPath = nextState.loadedModelPath;
-                nextState.pendingModelName = nextState.loadedModelName;
+            nextLibrary.loadedModelPath = lambda_backend::defaultModelPath();
+            nextLibrary.loadedModelName = lambda_backend::defaultModelName();
+            if (!nextLibrary.loadedModelPath.empty() && !services.engine->isLoaded()) {
+                nextLibrary.modelLoading = true;
+                nextLibrary.pendingModelPath = nextLibrary.loadedModelPath;
+                nextLibrary.pendingModelName = nextLibrary.loadedModelName;
             }
-            appState = std::move(nextState);
+            libraryState = std::move(nextLibrary);
+            feedbackState = std::move(nextFeedback);
 
             services.manager->refreshLocalModels();
             if (!lambda_backend::defaultModelPath().empty() && !services.engine->isLoaded()) {
@@ -502,352 +765,260 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
             }
         });
 
-        AppState const &state = *appState;
+        StudioModule const currentModule = *currentModuleHandle;
+        LibraryWorkspaceState const library = *libraryState;
+        HubWorkspaceState const hub = *hubState;
+        FeedbackWorkspaceState const feedback = *feedbackState;
+        AppState workspaceState = composeWorkspaceAppState(currentModule, library, hub, feedback);
 
-        auto requestInventoryRefresh = [appState, &services]() {
-            AppState nextState = *appState;
-            nextState.refreshingModels = true;
-            nextState.statusText = "Refreshing model inventory...";
-            nextState.errorText.clear();
-            appState = std::move(nextState);
+        auto requestInventoryRefresh = [libraryState, feedbackState, &services]() {
+            LibraryWorkspaceState nextLibrary = *libraryState;
+            FeedbackWorkspaceState nextFeedback = *feedbackState;
+            nextLibrary.refreshingModels = true;
+            nextFeedback.statusText = "Refreshing model inventory...";
+            nextFeedback.errorText.clear();
+            libraryState = std::move(nextLibrary);
+            feedbackState = std::move(nextFeedback);
             services.manager->refreshLocalModels();
         };
 
-        auto updateModelSearchQuery = [appState](std::string const &query) {
-            AppState nextState = *appState;
-            nextState.modelSearchQuery = query;
-            appState = std::move(nextState);
-        };
-
-        auto updateModelSearchAuthor = [appState](std::string const &author) {
-            AppState nextState = *appState;
-            nextState.modelSearchAuthor = author;
-            appState = std::move(nextState);
-        };
-
-        auto updateRemoteModelSort = [appState](RemoteModelSort sort) {
-            AppState nextState = *appState;
-            nextState.remoteModelSort = sort;
-            appState = std::move(nextState);
-        };
-
-        auto updateRemoteModelVisibility = [appState](RemoteModelVisibilityFilter visibility) {
-            AppState nextState = *appState;
-            nextState.remoteModelVisibility = visibility;
-            appState = std::move(nextState);
-        };
-
-        auto requestRemoteSearch = [appState, &services, currentRemoteSearchKey](
+        auto requestRemoteSearch = [hubState, feedbackState, &services](
                                        std::string query,
                                        std::string author,
                                        RemoteModelSort sort,
                                        RemoteModelVisibilityFilter visibility
                                    ) {
-            AppState nextState = *appState;
-            nextState.modelSearchQuery = query;
-            nextState.modelSearchAuthor = author;
-            nextState.remoteModelSort = sort;
-            nextState.remoteModelVisibility = visibility;
-            nextState.searchingRemoteModels = true;
-            std::string const cacheKey = currentRemoteSearchKey(nextState);
+            HubWorkspaceState nextHub = *hubState;
+            FeedbackWorkspaceState nextFeedback = *feedbackState;
+            nextHub.modelSearchQuery = query;
+            nextHub.modelSearchAuthor = author;
+            nextHub.remoteModelSort = sort;
+            nextHub.remoteModelVisibility = visibility;
+            nextHub.searchingRemoteModels = true;
+            std::string const cacheKey = currentRemoteSearchKey(nextHub);
             try {
-                nextState.remoteModels = services.catalog->loadSearchResults(cacheKey);
-                if (nextState.remoteModels.empty()) {
-                    nextState.remoteModels = services.catalog->searchCatalogModels(query, author, sort, visibility);
+                nextHub.remoteModels = services.catalog->loadSearchResults(cacheKey);
+                if (nextHub.remoteModels.empty()) {
+                    nextHub.remoteModels = services.catalog->searchCatalogModels(query, author, sort, visibility);
                 }
-                nextState.selectedRemoteRepoId.clear();
-                nextState.selectedRemoteRepoFiles.clear();
-                nextState.selectedRemoteRepoDetail.reset();
-                nextState.loadingRemoteModelFiles = false;
-                nextState.loadingRemoteRepoDetail = false;
-                if (!nextState.remoteModels.empty()) {
-                    nextState.selectedRemoteRepoId = nextState.remoteModels.front().id;
-                    nextState.selectedRemoteRepoFiles = services.catalog->loadRepoFiles(nextState.selectedRemoteRepoId);
-                    nextState.selectedRemoteRepoDetail = services.catalog->loadRepoDetail(nextState.selectedRemoteRepoId);
-                    nextState.loadingRemoteModelFiles = nextState.selectedRemoteRepoFiles.empty();
-                    nextState.loadingRemoteRepoDetail = !nextState.selectedRemoteRepoDetail.has_value();
+                nextHub.selectedRemoteRepoId.clear();
+                nextHub.selectedRemoteRepoFiles.clear();
+                nextHub.selectedRemoteRepoDetail.reset();
+                nextHub.loadingRemoteModelFiles = false;
+                nextHub.loadingRemoteRepoDetail = false;
+                if (!nextHub.remoteModels.empty()) {
+                    nextHub.selectedRemoteRepoId = nextHub.remoteModels.front().id;
+                    nextHub.selectedRemoteRepoFiles = services.catalog->loadRepoFiles(nextHub.selectedRemoteRepoId);
+                    nextHub.selectedRemoteRepoDetail = services.catalog->loadRepoDetail(nextHub.selectedRemoteRepoId);
+                    nextHub.loadingRemoteModelFiles = nextHub.selectedRemoteRepoFiles.empty();
+                    nextHub.loadingRemoteRepoDetail = !nextHub.selectedRemoteRepoDetail.has_value();
                 }
             } catch (std::exception const &e) {
-                nextState.remoteModels.clear();
-                nextState.selectedRemoteRepoId.clear();
-                nextState.selectedRemoteRepoFiles.clear();
-                nextState.selectedRemoteRepoDetail.reset();
-                nextState.loadingRemoteModelFiles = false;
-                nextState.loadingRemoteRepoDetail = false;
-                nextState.errorText = e.what();
+                nextHub.remoteModels.clear();
+                nextHub.selectedRemoteRepoId.clear();
+                nextHub.selectedRemoteRepoFiles.clear();
+                nextHub.selectedRemoteRepoDetail.reset();
+                nextHub.loadingRemoteModelFiles = false;
+                nextHub.loadingRemoteRepoDetail = false;
+                nextFeedback.errorText = e.what();
             }
-            nextState.statusText = query.empty() && author.empty() ? "Searching top GGUF models..." :
-                                                                  "Searching Hugging Face...";
-            appState = std::move(nextState);
+            nextFeedback.statusText = query.empty() && author.empty() ? "Searching top GGUF models..." :
+                                                                      "Searching Hugging Face...";
+            hubState = std::move(nextHub);
+            feedbackState = std::move(nextFeedback);
             services.manager->searchHuggingFace(lambda_backend::HfSearchRequest {
                 .query = std::move(query),
                 .author = std::move(author),
-                .sortKey = sort == RemoteModelSort::Likes ? "likes" :
+                .sortKey = sort == RemoteModelSort::Likes   ? "likes" :
                            sort == RemoteModelSort::Updated ? "lastModified" :
                                                               "downloads",
                 .visibilityFilter = visibility == RemoteModelVisibilityFilter::PublicOnly ? "public" :
-                                    visibility == RemoteModelVisibilityFilter::GatedOnly ? "gated" :
-                                                                                           "all",
+                                    visibility == RemoteModelVisibilityFilter::GatedOnly  ? "gated" :
+                                                                                            "all",
                 .cacheKey = cacheKey,
             });
         };
 
-        auto requestRemoteRepoFiles = [appState, &services](std::string repoId) {
+        auto requestRemoteRepoFiles = [hubState, feedbackState, &services](std::string repoId) {
             if (repoId.empty()) {
                 return;
             }
-            AppState nextState = *appState;
-            nextState.selectedRemoteRepoId = repoId;
+            HubWorkspaceState nextHub = *hubState;
+            FeedbackWorkspaceState nextFeedback = *feedbackState;
+            nextHub.selectedRemoteRepoId = repoId;
             try {
-                nextState.selectedRemoteRepoFiles = services.catalog->loadRepoFiles(repoId);
-                nextState.selectedRemoteRepoDetail = services.catalog->loadRepoDetail(repoId);
-                nextState.loadingRemoteModelFiles = nextState.selectedRemoteRepoFiles.empty();
-                nextState.loadingRemoteRepoDetail = !nextState.selectedRemoteRepoDetail.has_value();
-                nextState.errorText.clear();
+                nextHub.selectedRemoteRepoFiles = services.catalog->loadRepoFiles(repoId);
+                nextHub.selectedRemoteRepoDetail = services.catalog->loadRepoDetail(repoId);
+                nextHub.loadingRemoteModelFiles = nextHub.selectedRemoteRepoFiles.empty();
+                nextHub.loadingRemoteRepoDetail = !nextHub.selectedRemoteRepoDetail.has_value();
+                nextFeedback.errorText.clear();
             } catch (std::exception const &e) {
-                nextState.selectedRemoteRepoFiles.clear();
-                nextState.selectedRemoteRepoDetail.reset();
-                nextState.loadingRemoteModelFiles = true;
-                nextState.loadingRemoteRepoDetail = true;
-                nextState.errorText = e.what();
+                nextHub.selectedRemoteRepoFiles.clear();
+                nextHub.selectedRemoteRepoDetail.reset();
+                nextHub.loadingRemoteModelFiles = true;
+                nextHub.loadingRemoteRepoDetail = true;
+                nextFeedback.errorText = e.what();
             }
-            nextState.statusText = "Loading GGUF files...";
-            appState = std::move(nextState);
+            nextFeedback.statusText = "Loading GGUF files...";
+            hubState = std::move(nextHub);
+            feedbackState = std::move(nextFeedback);
             services.manager->inspectRepo(std::move(repoId));
         };
 
-        auto requestRemoteDownload = [appState, &services](std::string repoId, std::string path) {
+        auto requestRemoteDownload = [libraryState, feedbackState, &services](std::string repoId, std::string path) {
             if (repoId.empty() || path.empty()) {
                 return;
             }
-            AppState nextState = *appState;
+            LibraryWorkspaceState nextLibrary = *libraryState;
+            FeedbackWorkspaceState nextFeedback = *feedbackState;
             DownloadJob job;
             job.id = repoId + "|" + path + "|" + std::to_string(systemNowMillis());
             job.repoId = repoId;
             job.filePath = path;
             job.startedAtUnixMs = systemNowMillis();
             job.status = DownloadJobStatus::Running;
-            job.downloadedBytes = 0;
-            job.totalBytes = 0;
-            nextState.recentDownloadJobs.insert(nextState.recentDownloadJobs.begin(), job);
-            if (nextState.recentDownloadJobs.size() > 12) {
-                nextState.recentDownloadJobs.resize(12);
+            nextLibrary.recentDownloadJobs.insert(nextLibrary.recentDownloadJobs.begin(), job);
+            if (nextLibrary.recentDownloadJobs.size() > 12) {
+                nextLibrary.recentDownloadJobs.resize(12);
             }
-            nextState.downloadingModel = true;
-            nextState.pendingDownloadJobId = job.id;
-            nextState.pendingDownloadRepoId = repoId;
-            nextState.pendingDownloadFilePath = path;
-            nextState.notice = AppNotice {
+            nextLibrary.downloadingModel = true;
+            nextLibrary.pendingDownloadJobId = job.id;
+            nextLibrary.pendingDownloadRepoId = repoId;
+            nextLibrary.pendingDownloadFilePath = path;
+            nextFeedback.notice = AppNotice {
                 .title = "Download started",
                 .detail = path + " is downloading. Follow progress in the Models view.",
                 .targetModule = StudioModule::Models,
             };
-            nextState.statusText = "Downloading " + path;
-            nextState.errorText.clear();
+            nextFeedback.statusText = "Downloading " + path;
+            nextFeedback.errorText.clear();
             try {
                 services.catalog->startDownloadJob(job);
             } catch (std::exception const &e) {
-                nextState.errorText = e.what();
+                nextFeedback.errorText = e.what();
             }
-            appState = std::move(nextState);
+            libraryState = std::move(nextLibrary);
+            feedbackState = std::move(nextFeedback);
             services.manager->downloadModel(std::move(repoId), std::move(path));
         };
 
-        auto retryDownloadJob = [requestRemoteDownload](std::string repoId, std::string filePath) {
-            requestRemoteDownload(std::move(repoId), std::move(filePath));
-        };
-
-        auto dismissNotice = [appState]() {
-            AppState nextState = *appState;
-            nextState.notice.reset();
-            appState = std::move(nextState);
-        };
-
-        auto openNoticeTarget = [appState]() {
-            AppState nextState = *appState;
-            if (nextState.notice.has_value()) {
-                nextState.currentModule = nextState.notice->targetModule;
-            }
-            nextState.notice.reset();
-            appState = std::move(nextState);
-        };
-
-        auto requestModelLoad = [appState, &services](std::string const &path, std::string const &name) {
+        auto requestModelLoad = [libraryState, feedbackState, &services](std::string const &path, std::string const &name) {
             if (path.empty()) {
                 return;
             }
-            AppState nextState = *appState;
-            nextState.modelLoading = true;
-            nextState.pendingModelPath = path;
-            nextState.pendingModelName = name;
-            nextState.statusText = "Loading " + name;
-            nextState.errorText.clear();
-            appState = std::move(nextState);
+            LibraryWorkspaceState nextLibrary = *libraryState;
+            FeedbackWorkspaceState nextFeedback = *feedbackState;
+            nextLibrary.modelLoading = true;
+            nextLibrary.pendingModelPath = path;
+            nextLibrary.pendingModelName = name;
+            nextFeedback.statusText = "Loading " + name;
+            nextFeedback.errorText.clear();
+            libraryState = std::move(nextLibrary);
+            feedbackState = std::move(nextFeedback);
             services.manager->loadModel(path, lambda_backend::defaultNGpuLayers());
         };
 
-        auto selectChatModel = [appState, requestModelLoad](int chatIndex, std::string const &path, std::string const &name) {
-            AppState nextState = *appState;
-            setChatModel(nextState, chatIndex, path, name);
-            appState = nextState;
-            requestModelLoad(path, name);
-        };
-
-        auto sendMessage = [appState, &services](int chatIndex, std::string const &message) {
-            if (message.empty()) {
-                return;
+        std::vector<Element> contentLayers;
+        contentLayers.reserve(2);
+        contentLayers.push_back(
+            ChatsWorkspaceOwner {
+                .active = currentModule == StudioModule::Chats,
+                .library = library,
+                .feedbackState = feedbackState,
+                .onRequestModelLoad = requestModelLoad,
             }
-            bool const fakeStreaming = lambda_backend::debugFakeStreamEnabled();
-            AppState nextState = *appState;
-            if (chatIndex < 0 || static_cast<std::size_t>(chatIndex) >= nextState.chats.size()) {
-                return;
-            }
+                .flex(1.f, 1.f)
+        );
 
-            ChatThread &chat = nextState.chats[static_cast<std::size_t>(chatIndex)];
-            if (
-                chat.streaming ||
-                (!fakeStreaming &&
-                 (chat.modelPath.empty() || chat.modelPath != nextState.loadedModelPath || nextState.modelLoading))
-            ) {
-                return;
-            }
-
-            if (fakeStreaming && chat.modelPath.empty()) {
-                chat.modelPath = "__debug_fake_stream__";
-                chat.modelName = "Debug Stream";
-                nextState.loadedModelPath = chat.modelPath;
-                nextState.loadedModelName = chat.modelName;
-            }
-
-            if (chat.messages.empty() || chat.title == "New chat") {
-                chat.title = titleFromPrompt(message);
-            }
-
-            chat.streamDraftMessages.clear();
-            chat.messages.push_back(lambda::ChatMessage {
-                .role = ChatRole::User,
-                .text = message,
-            });
-            chat.streaming = true;
-            chat.updatedAt = "now";
-            nextState.errorText.clear();
-            nextState.statusText = "Generating response...";
-
-            std::vector<lambda_backend::ChatMessage> history = toBackendMessages(chat);
-            std::string streamChatId = chat.id;
-
-            appState = std::move(nextState);
-
-            services.engine->startChat(
-                std::move(history),
-                std::move(streamChatId),
-                [](lambda_backend::LlmUiEvent event) {
-                    Application::instance().eventQueue().post(std::move(event));
+        if (currentModule == StudioModule::Models) {
+            contentLayers.push_back(
+                ModelsView {
+                    .state = workspaceState,
+                    .onRefresh = requestInventoryRefresh,
+                    .onLoad = requestModelLoad,
+                    .onRetryDownload = requestRemoteDownload,
                 }
+                    .flex(1.f, 1.f)
             );
-        };
-
-        auto didAutoStream = useState(false);
-        if (lambda_backend::debugAutoStreamEnabled() && !(*didAutoStream) && !state.chats.empty()) {
-            didAutoStream = true;
-            Application::instance().onNextFrameNeeded([sendMessage] {
-                sendMessage(0, "Run the markdown stress stream.");
-            });
-        }
-
-        auto stopMessage = [appState, &services](int chatIndex) {
-            services.engine->cancelGeneration();
-            AppState nextState = *appState;
-            if (chatIndex >= 0 && static_cast<std::size_t>(chatIndex) < nextState.chats.size()) {
-                nextState.chats[static_cast<std::size_t>(chatIndex)].streaming = false;
-            }
-            nextState.statusText = "Generation stopped";
-            appState = std::move(nextState);
-        };
-
-        auto toggleReasoningMessage = [appState](int chatIndex, int messageIndex) {
-            AppState nextState = *appState;
-            if (chatIndex < 0 || static_cast<std::size_t>(chatIndex) >= nextState.chats.size()) {
-                return;
-            }
-            ChatThread &chat = nextState.chats[static_cast<std::size_t>(chatIndex)];
-            if (messageIndex < 0) {
-                return;
-            }
-            std::size_t const index = static_cast<std::size_t>(messageIndex);
-            lambda::ChatMessage *message = nullptr;
-            if (index < chat.messages.size()) {
-                message = &chat.messages[index];
-            } else {
-                std::size_t const draftIndex = index - chat.messages.size();
-                if (draftIndex < chat.streamDraftMessages.size()) {
-                    message = &chat.streamDraftMessages[draftIndex];
+        } else if (currentModule == StudioModule::Hub) {
+            contentLayers.push_back(
+                HubView {
+                    .state = workspaceState,
+                    .onSearchQueryChange = [hubState](std::string const &query) {
+                        HubWorkspaceState nextHub = *hubState;
+                        nextHub.modelSearchQuery = query;
+                        hubState = std::move(nextHub);
+                    },
+                    .onSearchAuthorChange = [hubState](std::string const &author) {
+                        HubWorkspaceState nextHub = *hubState;
+                        nextHub.modelSearchAuthor = author;
+                        hubState = std::move(nextHub);
+                    },
+                    .onSortChange = [hubState](RemoteModelSort sort) {
+                        HubWorkspaceState nextHub = *hubState;
+                        nextHub.remoteModelSort = sort;
+                        hubState = std::move(nextHub);
+                    },
+                    .onVisibilityChange = [hubState](RemoteModelVisibilityFilter visibility) {
+                        HubWorkspaceState nextHub = *hubState;
+                        nextHub.remoteModelVisibility = visibility;
+                        hubState = std::move(nextHub);
+                    },
+                    .onSearch = requestRemoteSearch,
+                    .onSelectRemoteRepo = requestRemoteRepoFiles,
+                    .onDownload = requestRemoteDownload,
                 }
-            }
-            if (message == nullptr) {
-                return;
-            }
-            if (message->role != ChatRole::Reasoning) {
-                return;
-            }
-            message->collapsed = !message->collapsed;
-            appState = std::move(nextState);
-        };
-
-        auto createChat = [appState]() {
-            AppState nextState = *appState;
-            ChatThread thread;
-            thread.id = lambda::generateChatId();
-            thread.title = "New chat";
-            thread.updatedAt = "now";
-            thread.modelPath = nextState.loadedModelPath;
-            thread.modelName = nextState.loadedModelName;
-            nextState.chats.push_back(std::move(thread));
-            nextState.selectedChatIndex = static_cast<int>(nextState.chats.size() - 1);
-            appState = std::move(nextState);
-        };
-
-        Element currentView = ChatsView {
-            .state = state,
-            .onNewChat = createChat,
-            .onSelectChat = [appState](int index) {
-                AppState nextState = *appState;
-                nextState.selectedChatIndex = index;
-                appState = std::move(nextState);
-            },
-            .onSelectModel = selectChatModel,
-            .onSend = sendMessage,
-            .onStop = stopMessage,
-            .onToggleReasoning = toggleReasoningMessage,
+                    .flex(1.f, 1.f)
+            );
+        } else if (currentModule == StudioModule::Settings) {
+            contentLayers.push_back(
+                SettingsView {
+                    .state = workspaceState,
+                }
+                    .flex(1.f, 1.f)
+            );
         }
-                                  .flex(1.f, 1.f);
 
-        if (state.currentModule == StudioModule::Models) {
-            currentView = ModelsView {
-                .state = state,
-                .onRefresh = requestInventoryRefresh,
-                .onLoad = requestModelLoad,
-                .onRetryDownload = retryDownloadJob,
-            }
+        Element content = Element {ZStack {
+            .horizontalAlignment = Alignment::Start,
+            .verticalAlignment = Alignment::Start,
+            .children = std::move(contentLayers),
+        }}
                               .flex(1.f, 1.f);
-        } else if (state.currentModule == StudioModule::Hub) {
-            currentView = HubView {
-                .state = state,
-                .onSearchQueryChange = updateModelSearchQuery,
-                .onSearchAuthorChange = updateModelSearchAuthor,
-                .onSortChange = updateRemoteModelSort,
-                .onVisibilityChange = updateRemoteModelVisibility,
-                .onSearch = requestRemoteSearch,
-                .onSelectRemoteRepo = requestRemoteRepoFiles,
-                .onDownload = requestRemoteDownload,
-            }
-                              .flex(1.f, 1.f);
-        } else if (state.currentModule == StudioModule::Settings) {
-            currentView = SettingsView {
-                .state = state,
-            }
-                              .flex(1.f, 1.f);
+
+        return VStack {
+            .spacing = theme.space3,
+            .alignment = Alignment::Stretch,
+            .children = feedback.notice.has_value()
+                            ? children(
+                                  NoticeBanner {
+                                      .notice = *feedback.notice,
+                                      .onOpen = [feedbackState, currentModuleHandle] {
+                                          FeedbackWorkspaceState nextFeedback = *feedbackState;
+                                          if (nextFeedback.notice.has_value()) {
+                                              currentModuleHandle = nextFeedback.notice->targetModule;
+                                          }
+                                          nextFeedback.notice.reset();
+                                          feedbackState = std::move(nextFeedback);
+                                      },
+                                      .onDismiss = [feedbackState] {
+                                          FeedbackWorkspaceState nextFeedback = *feedbackState;
+                                          nextFeedback.notice.reset();
+                                          feedbackState = std::move(nextFeedback);
+                                      },
+                                  }
+                                      .padding(theme.space3, theme.space3, 0.f, theme.space3),
+                                  std::move(content)
+                              )
+                            : children(std::move(content))
         }
+            .flex(1.f, 1.f);
+    }
+};
+
+struct LambdaStudio : ViewModifiers<LambdaStudio> {
+    auto body() const {
+        auto currentModule = useState(StudioModule::Chats);
 
         return HStack {
             .spacing = 0.f,
@@ -860,29 +1031,15 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                         {IconName::Cloud, "Hub"},
                         {IconName::Settings, "Settings"}
                     },
-                    .selectedTitle = moduleTitle(state.currentModule),
-                    .onSelect = [appState](std::string title) {
-                        AppState nextState = *appState;
-                        nextState.currentModule = moduleFromTitle(title);
-                        appState = std::move(nextState);
+                    .selectedTitle = moduleTitle(*currentModule),
+                    .onSelect = [currentModule](std::string title) {
+                        currentModule = moduleFromTitle(title);
                     },
                 }
                     .flex(0.f, 0.f),
                 Divider {.orientation = Divider::Orientation::Vertical},
-                VStack {
-                    .spacing = theme.space3,
-                    .alignment = Alignment::Stretch,
-                    .children = state.notice.has_value()
-                                    ? children(
-                                          NoticeBanner {
-                                              .notice = *state.notice,
-                                              .onOpen = openNoticeTarget,
-                                              .onDismiss = dismissNotice,
-                                          }
-                                              .padding(theme.space3, theme.space3, 0.f, theme.space3),
-                                          std::move(currentView)
-                                      )
-                                    : children(std::move(currentView))
+                StudioWorkspaceOwner {
+                    .currentModuleState = currentModule,
                 }
                     .flex(1.f, 1.f)
             ),
