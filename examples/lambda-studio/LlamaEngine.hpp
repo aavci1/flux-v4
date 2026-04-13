@@ -60,6 +60,60 @@ inline int envIntOr(char const *name, int fallback) {
     return std::max(1, std::atoi(value));
 }
 
+class UiChunkBatcher {
+  public:
+    explicit UiChunkBatcher(std::function<void(LlmUiEvent)> post) : post_(std::move(post)) {}
+
+    void push(LlmUiEvent::Part part, std::string text) {
+        if (text.empty()) {
+            return;
+        }
+
+        auto const now = std::chrono::steady_clock::now();
+        if (hasPending_ && pendingPart_ != part) {
+            flush();
+        }
+        if (!hasPending_) {
+            pendingPart_ = part;
+            hasPending_ = true;
+            pendingSince_ = now;
+        }
+
+        pendingText_ += std::move(text);
+
+        auto const elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - pendingSince_);
+        bool const largeEnough = pendingText_.size() >= 192;
+        bool const staleEnough = elapsed.count() >= 250;
+        bool const paragraphBoundary = pendingText_.find("\n\n") != std::string::npos;
+        if (largeEnough || staleEnough || paragraphBoundary) {
+            flush();
+        }
+    }
+
+    void flush() {
+        if (!hasPending_ || pendingText_.empty()) {
+            pendingText_.clear();
+            hasPending_ = false;
+            return;
+        }
+
+        post_(LlmUiEvent {
+            .kind = LlmUiEvent::Kind::Chunk,
+            .part = pendingPart_,
+            .text = std::move(pendingText_),
+        });
+        pendingText_.clear();
+        hasPending_ = false;
+    }
+
+  private:
+    std::function<void(LlmUiEvent)> post_;
+    LlmUiEvent::Part pendingPart_ = LlmUiEvent::Part::Content;
+    std::string pendingText_;
+    std::chrono::steady_clock::time_point pendingSince_ {};
+    bool hasPending_ = false;
+};
+
 } // namespace detail
 
 inline bool debugFakeStreamEnabled() {
@@ -262,6 +316,7 @@ class LlamaEngine {
             ev.chatId = chatId;
             detail::postEventToMain(userPost, std::move(ev));
         };
+        detail::UiChunkBatcher batcher(postOnMain);
 
         std::vector<common_chat_msg> chatMessages;
         chatMessages.reserve(messages.size());
@@ -344,6 +399,7 @@ class LlamaEngine {
                     return;
                 }
                 if (cancelled_.load(std::memory_order_relaxed)) {
+                    batcher.flush();
                     postOnMain(LlmUiEvent {.kind = LlmUiEvent::Kind::Done});
                     return;
                 }
@@ -362,6 +418,7 @@ class LlamaEngine {
 
         for (int i = 0; i < predictCount; ++i) {
             if (cancelled_.load(std::memory_order_relaxed)) {
+                batcher.flush();
                 postOnMain(LlmUiEvent {.kind = LlmUiEvent::Kind::Done});
                 return;
             }
@@ -380,28 +437,17 @@ class LlamaEngine {
             auto diffs = common_chat_msg_diff::compute_diffs(previousMessage, parsedMessage);
             for (auto &diff : diffs) {
                 if (!diff.reasoning_content_delta.empty()) {
-                    postOnMain(
-                        LlmUiEvent {
-                            .kind = LlmUiEvent::Kind::Chunk,
-                            .part = LlmUiEvent::Part::Thinking,
-                            .text = std::move(diff.reasoning_content_delta),
-                        }
-                    );
+                    batcher.push(LlmUiEvent::Part::Thinking, std::move(diff.reasoning_content_delta));
                 }
                 if (!diff.content_delta.empty()) {
-                    postOnMain(
-                        LlmUiEvent {
-                            .kind = LlmUiEvent::Kind::Chunk,
-                            .part = LlmUiEvent::Part::Content,
-                            .text = std::move(diff.content_delta),
-                        }
-                    );
+                    batcher.push(LlmUiEvent::Part::Content, std::move(diff.content_delta));
                 }
             }
             previousMessage = std::move(parsedMessage);
 
             llama_batch const generationBatch = llama_batch_get_one(&token, 1);
             if (llama_decode(ctx.get(), generationBatch) != 0) {
+                batcher.flush();
                 postOnMain(LlmUiEvent {.kind = LlmUiEvent::Kind::Error, .text = decodeError("generation")});
                 return;
             }
@@ -413,6 +459,7 @@ class LlamaEngine {
             rawOutput.c_str()
         );
 
+        batcher.flush();
         postOnMain(LlmUiEvent {.kind = LlmUiEvent::Kind::Done});
     }
 
@@ -426,6 +473,7 @@ class LlamaEngine {
             ev.chatId = chatId;
             detail::postEventToMain(userPost, std::move(ev));
         };
+        detail::UiChunkBatcher batcher(postOnMain);
 
         std::vector<std::pair<LlmUiEvent::Part, std::string>> tokens;
         auto tokenize = [&tokens](LlmUiEvent::Part part, std::string const &text) {
@@ -458,18 +506,16 @@ class LlamaEngine {
         auto const delay = std::chrono::milliseconds(std::max(1, 1000 / debugFakeTokensPerSecond()));
         for (auto const &[part, text] : tokens) {
             if (cancelled_.load(std::memory_order_relaxed)) {
+                batcher.flush();
                 postOnMain(LlmUiEvent {.kind = LlmUiEvent::Kind::Done});
                 return;
             }
 
-            postOnMain(LlmUiEvent {
-                .kind = LlmUiEvent::Kind::Chunk,
-                .part = part,
-                .text = text,
-            });
+            batcher.push(part, text);
             std::this_thread::sleep_for(delay);
         }
 
+        batcher.flush();
         postOnMain(LlmUiEvent {.kind = LlmUiEvent::Kind::Done});
     }
 

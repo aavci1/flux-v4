@@ -327,7 +327,7 @@ struct ThinkingDots : ViewModifiers<ThinkingDots> {
 
 struct ChatBubble : ViewModifiers<ChatBubble> {
     ChatMessage message;
-    bool renderMarkdown = true;
+    bool deferTailMarkdown = false;
     std::function<void()> onToggleReasoning;
 
     auto body() const {
@@ -347,6 +347,135 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
         Color const textColor = isUser ? theme.colorTextOnAccent : theme.colorTextPrimary;
         MarkdownResolvedStyle const markdownStyle =
             resolveMarkdownStyle(theme, isReasoning ? theme.fontBodySmall : theme.fontBody, textColor);
+
+        if (!isUser && !isReasoning) {
+            std::vector<Element> paragraphs;
+            if (message.paragraphs.empty()) {
+                paragraphs.push_back(
+                    (deferTailMarkdown ? Element {
+                                             Text {
+                                                 .text = message.text,
+                                                 .font = markdownStyle.baseFont,
+                                                 .color = textColor,
+                                                 .horizontalAlignment = HorizontalAlignment::Leading,
+                                                 .verticalAlignment = VerticalAlignment::Top,
+                                                 .wrapping = TextWrapping::Wrap,
+                                             }
+                                         } :
+                                         Element {
+                                             MarkdownText {
+                                                 .text = &message.text,
+                                                 .cacheKey = message.renderKey,
+                                                 .textRevision = message.textRevision,
+                                                 .baseFont = markdownStyle.baseFont,
+                                                 .codeFont = markdownStyle.codeFont,
+                                                 .h1Font = markdownStyle.h1Font,
+                                                 .h2Font = markdownStyle.h2Font,
+                                                 .h3Font = markdownStyle.h3Font,
+                                                 .baseColor = markdownStyle.baseColor,
+                                                 .codeBackground = markdownStyle.codeBackground,
+                                                 .horizontalAlignment = HorizontalAlignment::Leading,
+                                                 .verticalAlignment = VerticalAlignment::Top,
+                                                 .wrapping = TextWrapping::Wrap,
+                                             }
+                                         })
+                );
+            } else {
+                paragraphs.reserve(message.paragraphs.size());
+                for (std::size_t i = 0; i < message.paragraphs.size(); ++i) {
+                    ChatMessage::Paragraph const &paragraph = message.paragraphs[i];
+                    bool const renderAsPlainText = deferTailMarkdown && i + 1 == message.paragraphs.size();
+                    paragraphs.push_back(
+                        renderAsPlainText ? Element {
+                                                Text {
+                                                    .text = paragraph.text,
+                                                    .font = markdownStyle.baseFont,
+                                                    .color = textColor,
+                                                    .horizontalAlignment = HorizontalAlignment::Leading,
+                                                    .verticalAlignment = VerticalAlignment::Top,
+                                                    .wrapping = TextWrapping::Wrap,
+                                                }
+                                            } :
+                                            Element {
+                                                MarkdownText {
+                                                    .text = &paragraph.text,
+                                                    .cacheKey = paragraph.renderKey,
+                                                    .textRevision = paragraph.textRevision,
+                                                    .baseFont = markdownStyle.baseFont,
+                                                    .codeFont = markdownStyle.codeFont,
+                                                    .h1Font = markdownStyle.h1Font,
+                                                    .h2Font = markdownStyle.h2Font,
+                                                    .h3Font = markdownStyle.h3Font,
+                                                    .baseColor = markdownStyle.baseColor,
+                                                    .codeBackground = markdownStyle.codeBackground,
+                                                    .horizontalAlignment = HorizontalAlignment::Leading,
+                                                    .verticalAlignment = VerticalAlignment::Top,
+                                                    .wrapping = TextWrapping::Wrap,
+                                                }
+                                            }
+                    );
+                }
+            }
+
+            Element bubble = VStack {
+                .spacing = theme.space4,
+                .alignment = Alignment::Stretch,
+                .children = std::move(paragraphs),
+            }
+                                 .padding(theme.space4)
+                                 .fill(FillStyle::solid(fill))
+                                 .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
+                                 .cornerRadius(theme.radiusXLarge);
+
+            return HStack {
+                .spacing = theme.space3,
+                .alignment = Alignment::Start,
+                .children = children(
+                    std::move(bubble).flex(0.f, 1.f, 0.f),
+                    Spacer {}
+                ),
+            };
+        }
+
+        if (isReasoning && !collapsed) {
+            return HStack {
+                .spacing = theme.space3,
+                .alignment = Alignment::Start,
+                .children = children(
+                    VStack {
+                        .spacing = theme.space1,
+                        .alignment = Alignment::Start,
+                        .children = children(
+                            Element {
+                                Text {
+                                    .text = message.text,
+                                    .font = markdownStyle.baseFont,
+                                    .color = textColor,
+                                    .horizontalAlignment = HorizontalAlignment::Leading,
+                                    .verticalAlignment = VerticalAlignment::Top,
+                                    .wrapping = TextWrapping::Wrap,
+                                }
+                            },
+                            reasoningFinished ? Element {
+                                                    Text {
+                                                        .text = thoughtSummary,
+                                                        .font = theme.fontBodySmall,
+                                                        .color = theme.colorTextMuted,
+                                                        .horizontalAlignment = HorizontalAlignment::Leading,
+                                                        .wrapping = TextWrapping::Wrap,
+                                                    }
+                                                } :
+                                                Element {Spacer {}.size(0.f, 0.f)}
+                        ),
+                    }
+                        .flex(1.f, 1.f, 0.f)
+                        .cursor(Cursor::Hand)
+                        .focusable(true)
+                        .onTap(onToggleReasoning ? onToggleReasoning : std::function<void()> {}),
+                    Spacer {}
+                ),
+            };
+        }
 
         Element bubble = [&]() -> Element {
             if (isReasoning && collapsed) {
@@ -376,43 +505,16 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
                 .spacing = theme.space1,
                 .alignment = Alignment::Start,
                 .children = children(
-                    renderMarkdown ? Element {
-                                         MarkdownText {
-                                             .text = &message.text,
-                                             .cacheKey = message.renderKey,
-                                             .textRevision = message.textRevision,
-                                             .baseFont = markdownStyle.baseFont,
-                                             .codeFont = markdownStyle.codeFont,
-                                             .h1Font = markdownStyle.h1Font,
-                                             .h2Font = markdownStyle.h2Font,
-                                             .h3Font = markdownStyle.h3Font,
-                                             .baseColor = markdownStyle.baseColor,
-                                             .codeBackground = markdownStyle.codeBackground,
-                                             .horizontalAlignment = HorizontalAlignment::Leading,
-                                             .verticalAlignment = VerticalAlignment::Top,
-                                             .wrapping = TextWrapping::Wrap,
-                                         }
-                                     } :
-                                     Element {
-                                         Text {
-                                             .text = message.text,
-                                             .font = markdownStyle.baseFont,
-                                             .color = textColor,
-                                             .horizontalAlignment = HorizontalAlignment::Leading,
-                                             .verticalAlignment = VerticalAlignment::Top,
-                                             .wrapping = TextWrapping::Wrap,
-                                         }
-                                     },
-                    (isReasoning && reasoningFinished) ? Element {
-                                                             Text {
-                                                                 .text = thoughtSummary,
-                                                                 .font = theme.fontBodySmall,
-                                                                 .color = theme.colorTextMuted,
-                                                                 .horizontalAlignment = HorizontalAlignment::Leading,
-                                                                 .wrapping = TextWrapping::Wrap,
-                                                             }
-                                                         } :
-                                                         Element {Spacer {}.size(0.f, 0.f)}
+                    Element {
+                        Text {
+                            .text = message.text,
+                            .font = markdownStyle.baseFont,
+                            .color = textColor,
+                            .horizontalAlignment = HorizontalAlignment::Leading,
+                            .verticalAlignment = VerticalAlignment::Top,
+                            .wrapping = TextWrapping::Wrap,
+                        }
+                    }
                 ),
             }
                 .padding(theme.space4)
@@ -616,17 +718,30 @@ struct ChatView : ViewModifiers<ChatView> {
         bool const canCompose = hasModel && selectedModelReady && (fakeStreaming || !modelLoading) && !chat.streaming;
 
         std::vector<Element> bubbles;
-        bubbles.reserve(chat.messages.size());
+        bubbles.reserve(chat.messages.size() + chat.streamDraftMessages.size());
         for (std::size_t i = 0; i < chat.messages.size(); ++i) {
             ChatMessage const &message = chat.messages[i];
-            bool const isStreamingTail =
-                chat.streaming && i + 1 == chat.messages.size() && message.role != ChatRole::User;
             bubbles.push_back(ChatBubble {
                 .message = message,
-                .renderMarkdown = !isStreamingTail,
+                .deferTailMarkdown = false,
                 .onToggleReasoning = [onToggleReasoning = onToggleReasoning, i] {
                     if (onToggleReasoning) {
                         onToggleReasoning(static_cast<int>(i));
+                    }
+                },
+            });
+        }
+        std::size_t const committedCount = chat.messages.size();
+        for (std::size_t i = 0; i < chat.streamDraftMessages.size(); ++i) {
+            ChatMessage const &message = chat.streamDraftMessages[i];
+            bool const isStreamingTail =
+                chat.streaming && message.role == ChatRole::Assistant && i + 1 == chat.streamDraftMessages.size();
+            bubbles.push_back(ChatBubble {
+                .message = message,
+                .deferTailMarkdown = isStreamingTail,
+                .onToggleReasoning = [onToggleReasoning = onToggleReasoning, committedCount, i] {
+                    if (onToggleReasoning) {
+                        onToggleReasoning(static_cast<int>(committedCount + i));
                     }
                 },
             });

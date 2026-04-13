@@ -25,8 +25,17 @@ enum class ChatRole {
 };
 
 struct ChatMessage {
+    struct Paragraph {
+        std::string text;
+        std::uint64_t renderKey = generateMessageRenderKey();
+        std::uint64_t textRevision = 1;
+
+        bool operator==(Paragraph const &) const = default;
+    };
+
     ChatRole role = ChatRole::Assistant;
     std::string text;
+    std::vector<Paragraph> paragraphs;
     std::int64_t startedAtNanos = 0;
     std::int64_t finishedAtNanos = 0;
     bool collapsed = false;
@@ -43,6 +52,7 @@ struct ChatThread {
     std::string modelPath;
     std::string modelName;
     std::vector<ChatMessage> messages;
+    std::vector<ChatMessage> streamDraftMessages;
     bool streaming = false;
 
     bool operator==(ChatThread const &) const = default;
@@ -92,8 +102,117 @@ inline std::string shortenForPreview(std::string text, std::size_t maxLength = 8
     return text;
 }
 
+inline bool markdownLineIsBlank(std::string_view line) {
+    return std::all_of(line.begin(), line.end(), [](char ch) {
+        return ch == ' ' || ch == '\t' || ch == '\r';
+    });
+}
+
+inline bool markdownLineTogglesFence(std::string_view line) {
+    std::size_t index = 0;
+    while (index < line.size() && line[index] == ' ') {
+        ++index;
+    }
+    return index + 3 <= line.size() && line.substr(index, 3) == "```";
+}
+
+inline std::vector<std::string> splitMarkdownParagraphs(std::string_view text) {
+    std::vector<std::string> paragraphs;
+    if (text.empty()) {
+        return paragraphs;
+    }
+
+    std::string current;
+    bool inFence = false;
+    std::size_t lineStart = 0;
+
+    auto flushCurrent = [&]() {
+        if (!current.empty()) {
+            paragraphs.push_back(current);
+            current.clear();
+        }
+    };
+
+    while (lineStart < text.size()) {
+        std::size_t lineEnd = lineStart;
+        while (lineEnd < text.size() && text[lineEnd] != '\n') {
+            ++lineEnd;
+        }
+
+        bool const endsNewline = lineEnd < text.size() && text[lineEnd] == '\n';
+        std::string_view const line = text.substr(lineStart, lineEnd - lineStart);
+        bool const blankLine = markdownLineIsBlank(line);
+
+        if (!inFence && blankLine) {
+            flushCurrent();
+            lineStart = endsNewline ? lineEnd + 1 : lineEnd;
+            continue;
+        }
+
+        if (!current.empty()) {
+            current.push_back('\n');
+        }
+        current.append(line.data(), line.size());
+
+        if (markdownLineTogglesFence(line)) {
+            inFence = !inFence;
+        }
+
+        lineStart = endsNewline ? lineEnd + 1 : lineEnd;
+    }
+
+    flushCurrent();
+    return paragraphs;
+}
+
+inline void syncAssistantParagraphs(ChatMessage &message) {
+    if (message.role != ChatRole::Assistant) {
+        message.paragraphs.clear();
+        return;
+    }
+
+    std::vector<std::string> const nextParagraphs = splitMarkdownParagraphs(message.text);
+    std::size_t const sharedCount = std::min(message.paragraphs.size(), nextParagraphs.size());
+    for (std::size_t i = 0; i < sharedCount; ++i) {
+        if (message.paragraphs[i].text == nextParagraphs[i]) {
+            continue;
+        }
+        message.paragraphs[i].text = nextParagraphs[i];
+        ++message.paragraphs[i].textRevision;
+    }
+
+    if (message.paragraphs.size() > nextParagraphs.size()) {
+        message.paragraphs.resize(nextParagraphs.size());
+    } else {
+        message.paragraphs.reserve(nextParagraphs.size());
+        for (std::size_t i = message.paragraphs.size(); i < nextParagraphs.size(); ++i) {
+            message.paragraphs.push_back(ChatMessage::Paragraph {
+                .text = nextParagraphs[i],
+            });
+        }
+    }
+}
+
+inline void appendChatMessageText(ChatMessage &message, std::string_view delta) {
+    if (delta.empty()) {
+        return;
+    }
+    message.text.append(delta.data(), delta.size());
+    ++message.textRevision;
+    syncAssistantParagraphs(message);
+}
+
+inline void syncChatThreadParagraphs(ChatThread &thread) {
+    for (ChatMessage &message : thread.messages) {
+        syncAssistantParagraphs(message);
+    }
+    for (ChatMessage &message : thread.streamDraftMessages) {
+        syncAssistantParagraphs(message);
+    }
+}
+
 inline std::vector<ChatThread> sampleChatThreads() {
-    return {
+    std::vector<ChatThread> threads = {
         {
             .id = generateChatId(),
             .title = "Launch planning",
@@ -147,6 +266,10 @@ inline std::vector<ChatThread> sampleChatThreads() {
             .streaming = false,
         },
     };
+    for (ChatThread &thread : threads) {
+        syncChatThreadParagraphs(thread);
+    }
+    return threads;
 }
 
 } // namespace lambda

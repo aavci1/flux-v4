@@ -38,14 +38,30 @@ std::int64_t systemNowMillis() {
     return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
 }
 
-void finishTrailingReasoningMessage(ChatThread &chat, std::int64_t finishedAtNanos) {
-    if (chat.messages.empty()) {
+void finishTrailingReasoningMessage(std::vector<ChatMessage> &messages, std::int64_t finishedAtNanos) {
+    if (messages.empty()) {
         return;
     }
-    lambda::ChatMessage &last = chat.messages.back();
+    lambda::ChatMessage &last = messages.back();
     if (last.role == ChatRole::Reasoning && last.finishedAtNanos == 0) {
         last.finishedAtNanos = finishedAtNanos;
     }
+}
+
+void finishTrailingReasoningMessage(ChatThread &chat, std::int64_t finishedAtNanos) {
+    finishTrailingReasoningMessage(chat.messages, finishedAtNanos);
+}
+
+void commitStreamDraft(ChatThread &chat, std::int64_t finishedAtNanos) {
+    finishTrailingReasoningMessage(chat.streamDraftMessages, finishedAtNanos);
+    for (ChatMessage &message : chat.streamDraftMessages) {
+        if (message.text.empty()) {
+            continue;
+        }
+        syncAssistantParagraphs(message);
+        chat.messages.push_back(std::move(message));
+    }
+    chat.streamDraftMessages.clear();
 }
 
 void setChatModel(AppState &state, int chatIndex, std::string path, std::string name) {
@@ -178,30 +194,30 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                                                   ? ChatRole::Reasoning
                                                   : ChatRole::Assistant;
                         if (role != ChatRole::Reasoning) {
-                            finishTrailingReasoningMessage(*it, nowNanos);
+                            finishTrailingReasoningMessage(it->streamDraftMessages, nowNanos);
                         }
-                        if (it->messages.empty() || it->messages.back().role != role) {
-                            it->messages.push_back(lambda::ChatMessage {
+                        if (it->streamDraftMessages.empty() || it->streamDraftMessages.back().role != role) {
+                            it->streamDraftMessages.push_back(lambda::ChatMessage {
                                 .role = role,
                                 .text = "",
                                 .startedAtNanos = role == ChatRole::Reasoning ? nowNanos : 0,
                                 .collapsed = role == ChatRole::Reasoning,
                             });
                         }
-                        it->messages.back().text += event.text;
-                        ++it->messages.back().textRevision;
+                        appendChatMessageText(it->streamDraftMessages.back(), event.text);
                     } else if (event.kind == lambda_backend::LlmUiEvent::Kind::Done) {
-                        finishTrailingReasoningMessage(*it, nowNanos);
+                        commitStreamDraft(*it, nowNanos);
                         it->streaming = false;
                         it->updatedAt = "now";
                         nextState.statusText = "Response complete";
                     } else if (event.kind == lambda_backend::LlmUiEvent::Kind::Error) {
-                        finishTrailingReasoningMessage(*it, nowNanos);
+                        commitStreamDraft(*it, nowNanos);
                         it->streaming = false;
                         it->messages.push_back(lambda::ChatMessage {
                             .role = ChatRole::Assistant,
                             .text = std::string("[Error] ") + event.text,
                         });
+                        syncAssistantParagraphs(it->messages.back());
                         it->updatedAt = "now";
                         nextState.errorText = event.text;
                     }
@@ -707,6 +723,7 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                 chat.title = titleFromPrompt(message);
             }
 
+            chat.streamDraftMessages.clear();
             chat.messages.push_back(lambda::ChatMessage {
                 .role = ChatRole::User,
                 .text = message,
@@ -754,14 +771,26 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                 return;
             }
             ChatThread &chat = nextState.chats[static_cast<std::size_t>(chatIndex)];
-            if (messageIndex < 0 || static_cast<std::size_t>(messageIndex) >= chat.messages.size()) {
+            if (messageIndex < 0) {
                 return;
             }
-            lambda::ChatMessage &message = chat.messages[static_cast<std::size_t>(messageIndex)];
-            if (message.role != ChatRole::Reasoning) {
+            std::size_t const index = static_cast<std::size_t>(messageIndex);
+            lambda::ChatMessage *message = nullptr;
+            if (index < chat.messages.size()) {
+                message = &chat.messages[index];
+            } else {
+                std::size_t const draftIndex = index - chat.messages.size();
+                if (draftIndex < chat.streamDraftMessages.size()) {
+                    message = &chat.streamDraftMessages[draftIndex];
+                }
+            }
+            if (message == nullptr) {
                 return;
             }
-            message.collapsed = !message.collapsed;
+            if (message->role != ChatRole::Reasoning) {
+                return;
+            }
+            message->collapsed = !message->collapsed;
             appState = std::move(nextState);
         };
 
