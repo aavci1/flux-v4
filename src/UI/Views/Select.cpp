@@ -1,6 +1,8 @@
 #include <Flux/UI/Views/Select.hpp>
 
+#include <Flux/Core/Application.hpp>
 #include <Flux/Core/KeyCodes.hpp>
+#include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Reactive/Interpolatable.hpp>
 #include <Flux/Reactive/Transition.hpp>
 #include <Flux/UI/Theme.hpp>
@@ -46,6 +48,16 @@ bool isValidIndex(int index, std::size_t count) {
   return index >= 0 && static_cast<std::size_t>(index) < count;
 }
 
+float intrinsicTextWidth(std::string const &text, Font const &font, Color color) {
+  if (text.empty()) {
+    return 0.f;
+  }
+  TextLayoutOptions opts{};
+  opts.wrapping = TextWrapping::NoWrap;
+  Size const measured = Application::instance().textSystem().measure(text, font, color, 0.f, opts);
+  return measured.width;
+}
+
 int firstEnabledIndex(std::vector<SelectOption> const &options) {
   for (std::size_t i = 0; i < options.size(); ++i) {
     if (!options[i].disabled) {
@@ -87,6 +99,7 @@ struct SelectResolvedStyle {
   float cornerRadius = 0.f;
   float menuCornerRadius = 0.f;
   float menuMaxHeight = 0.f;
+  float menuMaxWidth = 0.f;
   float minMenuWidth = 0.f;
   Color accentColor {};
   Color fieldColor {};
@@ -102,6 +115,7 @@ SelectResolvedStyle resolveStyle(Select::Style const &style, Theme const &theme)
       .cornerRadius = resolveFloat(style.cornerRadius, theme.radiusMedium),
       .menuCornerRadius = resolveFloat(style.menuCornerRadius, theme.radiusLarge),
       .menuMaxHeight = resolveFloat(style.menuMaxHeight, 260.f),
+      .menuMaxWidth = resolveFloat(style.menuMaxWidth, 0.f),
       .minMenuWidth = resolveFloat(style.minMenuWidth, 180.f),
       .accentColor = resolveColor(style.accentColor, theme.colorAccent),
       .fieldColor = resolveColor(style.fieldColor, theme.colorSurfaceField),
@@ -109,6 +123,38 @@ SelectResolvedStyle resolveStyle(Select::Style const &style, Theme const &theme)
       .borderColor = resolveColor(style.borderColor, theme.colorBorder),
       .rowHoverColor = resolveColor(style.rowHoverColor, theme.colorSurfaceRowHover),
   };
+}
+
+float intrinsicMenuWidth(std::vector<SelectOption> const &options, SelectResolvedStyle const &style,
+                         Theme const &theme, bool showCheckmark, std::string const &emptyText) {
+  auto rowContentWidth = [&](SelectOption const &option) {
+    float const labelWidth = intrinsicTextWidth(option.label, style.labelFont, theme.colorTextPrimary);
+    float contentWidth = labelWidth;
+    if (!option.detail.empty()) {
+      float const detailWidth = intrinsicTextWidth(option.detail, style.detailFont, theme.colorTextSecondary);
+      contentWidth = std::max(contentWidth, detailWidth);
+    }
+    return contentWidth;
+  };
+
+  float maxContentWidth = 0.f;
+  if (options.empty()) {
+    maxContentWidth = intrinsicTextWidth(emptyText, style.detailFont, theme.colorTextSecondary);
+  } else {
+    for (SelectOption const &option : options) {
+      maxContentWidth = std::max(maxContentWidth, rowContentWidth(option));
+    }
+  }
+
+  float const reservedCheckmarkWidth = showCheckmark ? (18.f + theme.space3) : 0.f;
+  float const rowHorizontalPadding = theme.space3 * 2.f;
+  float const menuHorizontalPadding = theme.space1 * 2.f;
+  float width = maxContentWidth + reservedCheckmarkWidth + rowHorizontalPadding + menuHorizontalPadding;
+  width = std::max(width, style.minMenuWidth);
+  if (style.menuMaxWidth > 0.f) {
+    width = std::min(width, style.menuMaxWidth);
+  }
+  return width;
 }
 
 struct SelectMenuRow : ViewModifiers<SelectMenuRow> {
@@ -221,7 +267,7 @@ struct SelectMenuContent {
   std::vector<SelectOption> options;
   std::string emptyText;
   bool showCheckmark = true;
-  float menuWidth = 0.f;
+  std::optional<float> menuWidth;
   SelectResolvedStyle style {};
   Theme theme {};
   std::function<void(int)> onSelect;
@@ -235,8 +281,7 @@ struct SelectMenuContent {
           .horizontalAlignment = HorizontalAlignment::Leading,
           .wrapping = TextWrapping::Wrap,
       }
-          .padding(theme.space3)
-          .width(menuWidth);
+          .padding(theme.space3);
     }
 
     std::vector<Element> rows;
@@ -258,7 +303,7 @@ struct SelectMenuContent {
       });
     }
 
-    return ScrollView{
+    Element menu = ScrollView{
         .axis = ScrollAxis::Vertical,
         .children = children(
             VStack{
@@ -269,8 +314,11 @@ struct SelectMenuContent {
                 .padding(theme.space1)
         ),
     }
-        .width(menuWidth)
         .clipContent(true);
+    if (menuWidth.has_value() && *menuWidth > 0.f) {
+      menu = std::move(menu).width(*menuWidth);
+    }
+    return menu;
   }
 };
 
@@ -282,6 +330,9 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
   bool disabled = false;
   bool showCheckmark = true;
   bool dismissOnSelect = true;
+  bool showDetailInTrigger = true;
+  bool matchTriggerWidth = true;
+  SelectTriggerMode triggerMode = SelectTriggerMode::Field;
   PopoverPlacement placement = PopoverPlacement::Below;
   SelectResolvedStyle style {};
   std::function<void(int)> onChange;
@@ -313,11 +364,21 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
     Color const fillTarget = pressed ? pressFill : open ? openFill : hovered ? hoverFill : idleFill;
 
     Color const labelTarget =
-        isDisabled ? theme.colorTextDisabled
-                   : currentOption ? theme.colorTextPrimary : theme.colorTextPlaceholder;
-    Color const detailTarget = isDisabled ? theme.colorTextDisabled : theme.colorTextSecondary;
+        triggerMode == SelectTriggerMode::Link
+            ? (isDisabled ? theme.colorTextDisabled
+                          : pressed ? darken(style.accentColor, 0.12f)
+                                    : (hovered || open) ? lighten(style.accentColor, 0.12f)
+                                                        : style.accentColor)
+            : (isDisabled ? theme.colorTextDisabled
+                          : currentOption ? theme.colorTextPrimary : theme.colorTextPlaceholder);
+    Color const detailTarget =
+        triggerMode == SelectTriggerMode::Link
+            ? labelTarget
+            : (isDisabled ? theme.colorTextDisabled : theme.colorTextSecondary);
     Color const chevronTarget =
-        isDisabled ? theme.colorTextDisabled : open ? style.accentColor : theme.colorTextSecondary;
+        triggerMode == SelectTriggerMode::Link
+            ? labelTarget
+            : (isDisabled ? theme.colorTextDisabled : open ? style.accentColor : theme.colorTextSecondary);
 
     auto fillAnim = useAnimated<Color>(fillTarget);
     if (*fillAnim != fillTarget) {
@@ -340,16 +401,23 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
     }
 
     float const triggerWidth = bounds.width > 0.f ? bounds.width : style.minMenuWidth;
-    EdgeInsets const anchorOutsets{
-        theme.paddingFieldV,
-        theme.paddingFieldH,
-        theme.paddingFieldV,
-        theme.paddingFieldH,
-    };
-    float const menuWidth =
-        std::max(triggerWidth + anchorOutsets.left + anchorOutsets.right, style.minMenuWidth);
+    EdgeInsets const anchorOutsets =
+        triggerMode == SelectTriggerMode::Link
+            ? EdgeInsets{}
+            : EdgeInsets{
+                  theme.paddingFieldV,
+                  theme.paddingFieldH,
+                  theme.paddingFieldV,
+                  theme.paddingFieldH,
+              };
+    std::optional<float> const menuWidth = matchTriggerWidth
+                                               ? std::optional<float>{std::max(triggerWidth + anchorOutsets.left + anchorOutsets.right,
+                                                                               style.minMenuWidth)}
+                                               : std::optional<float>{intrinsicMenuWidth(options, style, theme, showCheckmark, emptyText)};
     std::optional<float> const anchorMaxHeight =
-        bounds.height > 0.f ? std::optional<float>{bounds.height} : std::nullopt;
+        triggerMode == SelectTriggerMode::Link
+            ? std::nullopt
+            : (bounds.height > 0.f ? std::optional<float>{bounds.height} : std::nullopt);
 
     auto applySelection = [selectedIndex = selectedIndex, options = options, onChange = onChange](int nextIndex) {
       if (!isValidIndex(nextIndex, options.size()) || options[static_cast<std::size_t>(nextIndex)].disabled) {
@@ -373,6 +441,8 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
                      style = style,
                      theme,
                      menuWidth,
+                     matchTriggerWidth = matchTriggerWidth,
+                     triggerMode = triggerMode,
                      placement = placement,
                      anchorMaxHeight,
                      anchorOutsets,
@@ -404,13 +474,28 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
               .onSelect = handleSelect,
           }},
           .placement = placement,
+          .crossAlignment = triggerMode == SelectTriggerMode::Link
+                                ? OverlayConfig::CrossAlignment::PreferStart
+                                : OverlayConfig::CrossAlignment::Center,
           .arrow = false,
           .backgroundColor = theme.colorSurfaceOverlay,
           .borderColor = theme.colorBorderSubtle,
           .borderWidth = 1.f,
           .cornerRadius = style.menuCornerRadius,
           .contentPadding = 0.f,
-          .maxSize = Size{menuWidth, style.menuMaxHeight},
+          .maxSize = [style, menuWidth, matchTriggerWidth]() -> std::optional<Size> {
+            float maxWidth = 0.f;
+            if (matchTriggerWidth || menuWidth.has_value()) {
+              maxWidth = menuWidth.has_value() ? *menuWidth : 0.f;
+            } else {
+              maxWidth = style.menuMaxWidth;
+            }
+            float const maxHeight = style.menuMaxHeight;
+            if (maxWidth > 0.f || maxHeight > 0.f) {
+              return Size{maxWidth, maxHeight};
+            }
+            return std::nullopt;
+          }(),
           .backdropColor = Colors::transparent,
           .anchorMaxHeight = anchorMaxHeight,
           .anchorOutsets = anchorOutsets,
@@ -474,7 +559,7 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
       }
     };
 
-    bool const hasDetail = currentOption && !currentOption->detail.empty();
+    bool const hasDetail = showDetailInTrigger && currentOption && !currentOption->detail.empty();
     Element triggerLabel = Text{
         .text = currentOption ? currentOption->label : placeholder,
         .font = style.labelFont,
@@ -517,17 +602,37 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
       };
     }
 
-    return HStack{
+    Element trigger = HStack{
         .spacing = theme.space3,
         .alignment = Alignment::Center,
         .children = children(
-            std::move(triggerTextBlock).flex(1.f, 1.f, 0.f),
+            std::move(triggerTextBlock).flex(triggerMode == SelectTriggerMode::Field ? 1.f : 0.f, 1.f, 0.f),
             Icon{
                 .name = open ? IconName::KeyboardArrowUp : IconName::KeyboardArrowDown,
                 .size = 18.f,
                 .color = *chevronAnim,
             })
+    };
+
+    if (triggerMode == SelectTriggerMode::Link) {
+      bool const keyboardFocused = useKeyboardFocus();
+      StrokeStyle const focusStroke =
+          !isDisabled && focused && keyboardFocused
+              ? StrokeStyle::solid(theme.colorBorderFocus, 2.f)
+              : StrokeStyle::none();
+      return std::move(trigger)
+          .padding(0.f, 3.f, 0.f, 3.f)
+          .fill(FillStyle::none())
+          .stroke(focusStroke)
+          .cornerRadius(CornerRadius{theme.radiusXSmall})
+          .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
+          .focusable(!isDisabled)
+          .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)>{}
+                                : std::function<void(KeyCode, Modifiers)>{handleKey})
+          .onTap(isDisabled ? std::function<void()>{} : std::function<void()>{toggleMenu});
     }
+
+    return std::move(trigger)
         .padding(theme.paddingFieldV, theme.paddingFieldH, theme.paddingFieldV, theme.paddingFieldH)
         .fill(FillStyle::solid(*fillAnim))
         .stroke(focused && !isDisabled
@@ -557,6 +662,9 @@ Element Select::body() const {
       .disabled = disabled,
       .showCheckmark = showCheckmark,
       .dismissOnSelect = dismissOnSelect,
+      .showDetailInTrigger = showDetailInTrigger,
+      .matchTriggerWidth = matchTriggerWidth,
+      .triggerMode = triggerMode,
       .placement = placement,
       .style = resolved,
       .onChange = onChange,
