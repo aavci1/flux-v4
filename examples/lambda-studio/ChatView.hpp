@@ -437,46 +437,6 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
             };
         }
 
-        if (isReasoning && !collapsed) {
-            return HStack {
-                .spacing = theme.space3,
-                .alignment = Alignment::Start,
-                .children = children(
-                    VStack {
-                        .spacing = theme.space1,
-                        .alignment = Alignment::Start,
-                        .children = children(
-                            Element {
-                                Text {
-                                    .text = message.text,
-                                    .font = markdownStyle.baseFont,
-                                    .color = textColor,
-                                    .horizontalAlignment = HorizontalAlignment::Leading,
-                                    .verticalAlignment = VerticalAlignment::Top,
-                                    .wrapping = TextWrapping::Wrap,
-                                }
-                            },
-                            reasoningFinished ? Element {
-                                                    Text {
-                                                        .text = thoughtSummary,
-                                                        .font = theme.fontBodySmall,
-                                                        .color = theme.colorTextMuted,
-                                                        .horizontalAlignment = HorizontalAlignment::Leading,
-                                                        .wrapping = TextWrapping::Wrap,
-                                                    }
-                                                } :
-                                                Element {Spacer {}.size(0.f, 0.f)}
-                        ),
-                    }
-                        .flex(1.f, 1.f, 0.f)
-                        .cursor(Cursor::Hand)
-                        .focusable(true)
-                        .onTap(onToggleReasoning ? onToggleReasoning : std::function<void()> {}),
-                    Spacer {}
-                ),
-            };
-        }
-
         Element bubble = [&]() -> Element {
             if (isReasoning && collapsed) {
                 Color const collapsedFill = pressed ? theme.colorSurfaceRowHover :
