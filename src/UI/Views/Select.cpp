@@ -596,7 +596,7 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
         }
 
         Element trigger = HStack {
-            .spacing = theme.space3,
+            .spacing = theme.space1,
             .alignment = Alignment::Center,
             .children = children(
                 std::move(triggerTextBlock).flex(triggerMode == SelectTriggerMode::Field ? 1.f : 0.f, 1.f, 0.f),
