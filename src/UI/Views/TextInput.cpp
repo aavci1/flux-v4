@@ -196,6 +196,38 @@ bool ensureLayout(TextInputLayoutSnap &snap, std::string const &placeholderText,
     return !snap.layoutResult.empty();
 }
 
+float intrinsicSingleLineContentWidth(std::string const &placeholderText,
+                                      std::function<std::vector<AttributedRun>(std::string_view)> const &styler,
+                                      std::function<Color(std::string_view)> const &validationColor,
+                                      ResolvedTextInputStyle const &rs, Font const &defaultFont,
+                                      std::string const &value, bool showPlaceholder,
+                                      TextInputStylerMemo *memo = nullptr) {
+    TextSystem &ts = Application::instance().textSystem();
+    TextLayoutOptions const opts = text_detail::makeTextLayoutOptions(TextWrapping::NoWrap, rs.lineHeight);
+    auto measureWidth = [&](bool placeholderVisible) {
+        AttributedString text =
+            buildAttributedString(placeholderText, styler, validationColor, rs, defaultFont, value, placeholderVisible, memo);
+        if (text.utf8.empty()) {
+            text.utf8 = " ";
+            text.runs.clear();
+            text.runs.push_back(AttributedRun {
+                .start = 0,
+                .end = 1,
+                .font = defaultFont,
+                .color = placeholderVisible ? rs.placeholderColor : rs.textColor,
+            });
+        }
+        Size const measured = ts.measure(text, 0.f, opts);
+        return std::max(1.f, measured.width);
+    };
+
+    float width = measureWidth(showPlaceholder);
+    if (!placeholderText.empty()) {
+        width = std::max(width, measureWidth(true));
+    }
+    return width;
+}
+
 StrokeStyle inputBorderStroke(ResolvedTextInputStyle const &rs, bool focused) {
     return focused ? StrokeStyle::solid(rs.borderFocusColor, rs.borderFocusWidth) : StrokeStyle::solid(rs.borderColor, rs.borderWidth);
 }
@@ -463,16 +495,23 @@ Element buildSingleLineTextInput(TextInput const &input) {
 
     TextInputLayoutSnap &snap = StateStore::current()->claimSlot<TextInputLayoutSnap>();
     State<int> scrollByte = useState(0);
-    Rect const bounds = useBounds();
+    LayoutConstraints const *layoutConstraints = useLayoutConstraints();
+    float const constrainedWidth =
+        layoutConstraints && std::isfinite(layoutConstraints->maxWidth) && layoutConstraints->maxWidth > 0.f
+            ? layoutConstraints->maxWidth
+            : 0.f;
     float const shellInset = inputShellInset(resolved);
     float const fieldHeight =
         resolvedInputFieldHeight(defaultFont, resolved.textColor, resolved.paddingV + shellInset, input.style.height);
-    float const frameWidth =
-        bounds.width > 0.f ? bounds.width :
-        (snap.layoutContentW > 0.f ? snap.layoutContentW + 2.f * (shellInset + resolved.paddingH) : 400.f);
-    float const contentW = std::max(1.f, frameWidth - 2.f * (shellInset + resolved.paddingH));
     std::string const &buf = behavior.value();
     bool const showPlaceholder = buf.empty() && !focused;
+    float const intrinsicContentW =
+        intrinsicSingleLineContentWidth(input.placeholder, input.styler, input.validationColor, resolved,
+                                        defaultFont, buf, showPlaceholder);
+    float const frameWidth =
+        constrainedWidth > 0.f ? constrainedWidth :
+        intrinsicContentW + 2.f * (shellInset + resolved.paddingH);
+    float const contentW = std::max(1.f, frameWidth - 2.f * (shellInset + resolved.paddingH));
     ensureLayout(snap, input.placeholder, input.styler, input.validationColor, resolved, defaultFont, buf, contentW, showPlaceholder,
                  TextWrapping::NoWrap);
 
