@@ -174,52 +174,74 @@ class ModelManager {
                     .filePath = file,
                 };
 
-                common_download_model_opts opts;
-                opts.progress_callback = +[](std::size_t downloadedBytes,
-                                             std::size_t totalBytes,
-                                             const char * /*itemPath*/,
-                                             void * userData) {
-                    auto * ctx = static_cast<DownloadProgressContext *>(userData);
-                    if (ctx == nullptr || ctx->manager == nullptr || totalBytes == 0) {
-                        return;
-                    }
+                struct DownloadProgressCallback : common_download_callback {
+                    explicit DownloadProgressCallback(DownloadProgressContext &context) : ctx(context) {}
 
-                    using clock = std::chrono::steady_clock;
-                    auto const now = clock::now();
-                    int const percent = totalBytes == 0 ? 0 :
-                        static_cast<int>((100.0 * static_cast<double>(downloadedBytes)) / static_cast<double>(totalBytes));
+                    void on_start(common_download_progress const &progress) override { update(progress); }
 
-                    bool shouldPost = false;
-                    {
-                        std::lock_guard<std::mutex> lock(ctx->mutex);
-                        shouldPost =
-                            downloadedBytes >= totalBytes ||
-                            ctx->lastPercent < 0 ||
-                            percent >= ctx->lastPercent + 1 ||
-                            now - ctx->lastPostedAt >= std::chrono::milliseconds(120);
-                        if (!shouldPost && downloadedBytes <= ctx->lastDownloadedBytes) {
+                    void on_update(common_download_progress const &progress) override { update(progress); }
+
+                    void on_done(common_download_progress const &progress, bool ok) override {
+                        update(progress, true);
+                        if (!ok || ctx.manager == nullptr) {
                             return;
                         }
-                        ctx->lastDownloadedBytes = downloadedBytes;
-                        ctx->lastTotalBytes = totalBytes;
-                        if (!shouldPost) {
-                            return;
-                        }
-                        ctx->lastPercent = percent;
-                        ctx->lastPostedAt = now;
+
+                        std::lock_guard<std::mutex> lock(ctx.mutex);
+                        ctx.lastDownloadedBytes = std::max(ctx.lastDownloadedBytes, progress.downloaded);
+                        ctx.lastTotalBytes = std::max(ctx.lastTotalBytes, progress.total);
                     }
 
-                    ctx->manager->post_(ModelManagerEvent {
-                        .kind = ModelManagerEvent::Kind::DownloadProgress,
-                        .repoId = ctx->repoId,
-                        .filePath = ctx->filePath,
-                        .downloadedBytes = downloadedBytes,
-                        .totalBytes = totalBytes,
-                    });
+                    void update(common_download_progress const &progress, bool force = false) {
+                        if (ctx.manager == nullptr || progress.total == 0) {
+                            return;
+                        }
+
+                        using clock = std::chrono::steady_clock;
+                        auto const now = clock::now();
+                        int const percent = static_cast<int>(
+                            (100.0 * static_cast<double>(progress.downloaded)) / static_cast<double>(progress.total)
+                        );
+
+                        bool shouldPost = false;
+                        {
+                            std::lock_guard<std::mutex> lock(ctx.mutex);
+                            shouldPost =
+                                force ||
+                                progress.downloaded >= progress.total ||
+                                ctx.lastPercent < 0 ||
+                                percent >= ctx.lastPercent + 1 ||
+                                now - ctx.lastPostedAt >= std::chrono::milliseconds(120);
+                            if (!shouldPost && progress.downloaded <= ctx.lastDownloadedBytes) {
+                                return;
+                            }
+                            ctx.lastDownloadedBytes = std::max(ctx.lastDownloadedBytes, progress.downloaded);
+                            ctx.lastTotalBytes = std::max(ctx.lastTotalBytes, progress.total);
+                            if (!shouldPost) {
+                                return;
+                            }
+                            ctx.lastPercent = percent;
+                            ctx.lastPostedAt = now;
+                        }
+
+                        ctx.manager->post_(ModelManagerEvent {
+                            .kind = ModelManagerEvent::Kind::DownloadProgress,
+                            .repoId = ctx.repoId,
+                            .filePath = ctx.filePath,
+                            .downloadedBytes = progress.downloaded,
+                            .totalBytes = progress.total,
+                        });
+                    }
+
+                    DownloadProgressContext &ctx;
                 };
-                opts.progress_callback_user_data = &progressContext;
 
-                auto result = common_download_model(model, token, opts);
+                common_download_opts opts;
+                opts.bearer_token = token;
+                DownloadProgressCallback callback(progressContext);
+                opts.callback = &callback;
+
+                auto result = common_download_model(model, opts);
                 if (result.model_path.empty()) {
                     post_(ModelManagerEvent {
                         .kind = ModelManagerEvent::Kind::DownloadError,
