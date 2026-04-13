@@ -134,7 +134,6 @@ Rect OverlayManager::resolveFrame(Size win, OverlayConfig const &cfg, Rect conte
         return {0.f, 0.f, win.width, win.height};
     }
     Rect const &a = *cfg.anchor;
-    float const cx = a.x + a.width * 0.5f;
     float const cy = a.y + a.height * 0.5f;
     // Geometric center of drawn content in root-local coords (may be != (W/2, H/2) if min x/y != 0).
     float const centerLocalX = contentBounds.x + contentBounds.width * 0.5f;
