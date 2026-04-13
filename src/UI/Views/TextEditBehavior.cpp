@@ -3,6 +3,7 @@
 #include <Flux/Core/Application.hpp>
 #include <Flux/Core/Clipboard.hpp>
 #include <Flux/Core/KeyCodes.hpp>
+#include <Flux/Detail/Runtime.hpp>
 #include <Flux/Reactive/AnimationClock.hpp>
 #include <Flux/UI/StateStore.hpp>
 #include <Flux/UI/Views/TextEditUtils.hpp>
@@ -23,12 +24,6 @@ constexpr double kCaretBlinkPeriodSec = 1.f;
 /// Caret/selection live in TextEditBehavior, not in the bound `Signal<std::string>`, so moving the caret does
 /// not mark reactive state dirty. Pointer paths call `markReactiveDirty()` in InputDispatcher; keyboard
 /// navigation must request a redraw the same way.
-void markTextUiDirty() {
-    if (Application::hasInstance()) {
-        Application::instance().markReactiveDirty();
-    }
-}
-
 bool hasMod(Modifiers m, Modifiers bit) noexcept {
     return (static_cast<std::uint32_t>(m) & static_cast<std::uint32_t>(bit)) != 0;
 }
@@ -55,6 +50,20 @@ TextEditBehavior::~TextEditBehavior() {
     if (blinkSubscribed_) {
         AnimationClock::instance().unsubscribe(blinkHandle_);
     }
+}
+
+void TextEditBehavior::bindValueSignal(Signal<std::string> &value) {
+    if (value_ == &value) {
+        return;
+    }
+    value_ = &value;
+    std::string const &s = value_->get();
+    state_.selection.caretByte = detail::utf8Clamp(s, state_.selection.caretByte);
+    state_.selection.anchorByte = detail::utf8Clamp(s, state_.selection.anchorByte);
+    undo_.clear();
+    redo_.clear();
+    ensureCaretVisible_ = true;
+    resetBlinkEpoch();
 }
 
 void TextEditBehavior::syncOptions(TextEditBehaviorOptions const &opts) {
@@ -97,7 +106,12 @@ void TextEditBehavior::syncBlinkSubscription() {
                 return;
             }
             blinkVisible_ = visible;
-            if (Application::hasInstance()) {
+            if (caretBlinkCallback_) {
+                caretBlinkCallback_(visible);
+            }
+            if (runtime_ && !ownerKey_.empty()) {
+                runtime_->invalidateSubtree(ownerKey_, InvalidationKind::Paint);
+            } else if (Application::hasInstance()) {
                 Application::instance().requestRedraw();
             }
         });
@@ -119,6 +133,25 @@ float TextEditBehavior::caretBlinkPhase() const {
     double const elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
     double const period = kCaretBlinkPeriodSec;
     return static_cast<float>(std::fmod(elapsed, period) / period);
+}
+
+void TextEditBehavior::setInvalidationTarget(Runtime *runtime, ComponentKey key) {
+    runtime_ = runtime;
+    ownerKey_ = std::move(key);
+}
+
+void TextEditBehavior::setCaretBlinkCallback(std::function<void(bool)> callback) {
+    caretBlinkCallback_ = std::move(callback);
+}
+
+void TextEditBehavior::markTextUiDirty() {
+    if (runtime_ && !ownerKey_.empty()) {
+        runtime_->invalidateSubtree(ownerKey_, InvalidationKind::Build);
+        return;
+    }
+    if (Application::hasInstance()) {
+        Application::instance().markReactiveDirty();
+    }
 }
 
 void TextEditBehavior::setFocused(bool f) {
@@ -560,7 +593,9 @@ TextEditBehavior &useTextEditBehavior(State<std::string> value, TextEditBehavior
     StateStore *store = StateStore::current();
     assert(store && value.signal);
     TextEditBehavior &b = store->claimSlot<TextEditBehavior>(*value.signal, opts);
+    b.bindValueSignal(*value.signal);
     b.syncOptions(opts);
+    b.setInvalidationTarget(Runtime::current(), store->currentComponentKey());
     return b;
 }
 

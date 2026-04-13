@@ -8,6 +8,7 @@
 #include <Flux/UI/ComponentKey.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 
+#include <unordered_map>
 #include <vector>
 
 namespace flux {
@@ -43,6 +44,9 @@ public:
   void popSuppressLeafModifierEvents();
   bool suppressLeafModifierEvents() const noexcept;
 
+  void bindContainerLayerRegistry(std::unordered_map<ComponentKey, NodeId, ComponentKeyHash>* registry);
+  void registerContainerLayer(ComponentKey const& key, NodeId id);
+
 private:
   SceneGraph& graph_;
   EventMap& eventMap_;
@@ -57,6 +61,7 @@ private:
 
   std::vector<ElementModifiers const*> activeElementModifiers_{};
   std::vector<bool> suppressLeafModifierEvents_{};
+  std::unordered_map<ComponentKey, NodeId, ComponentKeyHash>* containerLayerRegistry_ = nullptr;
 };
 
 } // namespace flux

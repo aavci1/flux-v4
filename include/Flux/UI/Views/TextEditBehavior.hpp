@@ -20,6 +20,8 @@
 
 namespace flux {
 
+class Runtime;
+
 struct KeyEvent {
     KeyCode key = 0;
     Modifiers modifiers = Modifiers::None;
@@ -42,6 +44,7 @@ class TextEditBehavior {
     TextEditBehavior(Signal<std::string> &value, TextEditBehaviorOptions const &opts);
     ~TextEditBehavior();
 
+    void bindValueSignal(Signal<std::string> &value);
     void syncOptions(TextEditBehaviorOptions const &opts);
 
     std::string const &value() const;
@@ -56,6 +59,8 @@ class TextEditBehavior {
 
     void setFocused(bool f);
     void setDisabled(bool d);
+    void setInvalidationTarget(Runtime *runtime, ComponentKey key);
+    void setCaretBlinkCallback(std::function<void(bool)> callback);
 
     void moveCaretTo(int byte, bool extendSelection);
     void selectAll();
@@ -97,6 +102,7 @@ class TextEditBehavior {
     void moveDocumentBoundary(bool end, bool extend);
     void moveWord(int dir, bool extend);
     void moveChar(int dir, bool extend);
+    void markTextUiDirty();
     void resetBlinkEpoch();
     bool blinkVisibleAt(std::chrono::nanoseconds now) const;
     void syncBlinkSubscription();
@@ -116,6 +122,9 @@ class TextEditBehavior {
     bool blinkVisible_ = true;
     bool blinkSubscribed_ = false;
     ObserverHandle blinkHandle_ {};
+    Runtime *runtime_ = nullptr;
+    ComponentKey ownerKey_ {};
+    std::function<void(bool)> caretBlinkCallback_ {};
 
     bool multilineLocked_ = false;
 

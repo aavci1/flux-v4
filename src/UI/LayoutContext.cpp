@@ -91,6 +91,10 @@ ComponentKey LayoutContext::leafComponentKey() const {
   return key;
 }
 
+ComponentKey LayoutContext::currentCompositeKey() const {
+  return keyStack_;
+}
+
 void LayoutContext::rewindChildKeyIndex() { nextChildIndex_ = 0; }
 
 void LayoutContext::beginCompositeBodySubtree(ComponentKey compositeKey) {

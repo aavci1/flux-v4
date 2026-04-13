@@ -41,6 +41,24 @@ bool inputDebugEnabled() {
   return cached != 0;
 }
 
+bool hasBuildInvalidation(std::vector<InvalidationRequest> const& invalidations) {
+  for (InvalidationRequest const& request : invalidations) {
+    if (request.kind == InvalidationKind::Build) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool hasLayoutInvalidation(std::vector<InvalidationRequest> const& invalidations) {
+  for (InvalidationRequest const& request : invalidations) {
+    if (request.kind == InvalidationKind::Layout) {
+      return true;
+    }
+  }
+  return false;
+}
+
 } // namespace
 
 BuildOrchestrator::BuildOrchestrator(Window& window, FocusController& focus, HoverController& hover,
@@ -76,6 +94,7 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
 
   SceneGraph& graph = window_.sceneGraph();
   graph.clear();
+  containerLayersByKey_.clear();
 
   layoutEngine_.resetForBuild();
   ++textFrameIndex_;
@@ -112,6 +131,7 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
   lctx.popConstraints();
 
   RenderContext rctx{graph, newMap, Application::instance().textSystem()};
+  rctx.bindContainerLayerRegistry(&containerLayersByKey_);
   rctx.pushConstraints(rootCs);
   renderLayoutTree(layoutTree, rctx);
   rctx.popConstraints();
@@ -136,6 +156,35 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
   }
   Application::instance().textSystem().onFrameEnd();
   window_.requestRedraw();
+}
+
+bool BuildOrchestrator::processInvalidations(std::optional<Size> sizeOverride, Runtime& runtime,
+                                             std::vector<InvalidationRequest> const& invalidations) {
+  if (sizeOverride.has_value()) {
+    rebuild(sizeOverride, runtime);
+    return true;
+  }
+
+  if (!window_.hasSceneGraph()) {
+    rebuild(sizeOverride, runtime);
+    return true;
+  }
+
+  if (hasBuildInvalidation(invalidations)) {
+    rebuild(sizeOverride, runtime);
+    return true;
+  }
+
+  if (hasLayoutInvalidation(invalidations)) {
+    rebuild(sizeOverride, runtime);
+    return true;
+  }
+
+  if (!invalidations.empty()) {
+    window_.requestRedraw();
+    return true;
+  }
+  return false;
 }
 
 StateStore& BuildOrchestrator::stateStore() noexcept {
@@ -164,6 +213,21 @@ ActionRegistry& BuildOrchestrator::actionRegistryForBuild() noexcept {
 
 ActionRegistry const& BuildOrchestrator::actionRegistryCommitted() const noexcept {
   return actionRegistryCommitted_;
+}
+
+std::optional<NodeId> BuildOrchestrator::sceneLayerForComponentKey(ComponentKey const& key) const {
+  auto it = containerLayersByKey_.find(key);
+  if (it == containerLayersByKey_.end()) {
+    return std::nullopt;
+  }
+  return it->second;
+}
+
+void BuildOrchestrator::registerContainerLayer(ComponentKey const& key, NodeId id) {
+  if (key.empty() || !id.isValid()) {
+    return;
+  }
+  containerLayersByKey_.try_emplace(key, id);
 }
 
 Rect BuildOrchestrator::buildSlotRect() const {

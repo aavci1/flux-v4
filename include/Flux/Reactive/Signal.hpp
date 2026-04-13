@@ -35,6 +35,7 @@ public:
   void set(T value);
 
   void notifyChanged();
+  void setInvalidationCallback(std::function<void()> callback);
 
   ObserverHandle observe(std::function<void()> callback) override;
   void unobserve(ObserverHandle handle) override;
@@ -45,6 +46,7 @@ private:
   T value_;
   std::uint64_t nextId_ = 1;
   std::vector<std::pair<std::uint64_t, std::function<void()>>> observers_;
+  std::function<void()> invalidationCallback_{};
 };
 
 } // namespace flux
@@ -74,6 +76,11 @@ void Signal<T>::notifyChanged() {
 }
 
 template<typename T>
+void Signal<T>::setInvalidationCallback(std::function<void()> callback) {
+  invalidationCallback_ = std::move(callback);
+}
+
+template<typename T>
 ObserverHandle Signal<T>::observe(std::function<void()> callback) {
   const std::uint64_t id = nextId_++;
   observers_.emplace_back(id, std::move(callback));
@@ -90,10 +97,13 @@ void Signal<T>::unobserve(ObserverHandle handle) {
 
 template<typename T>
 void Signal<T>::notifyObservers() {
+  if (invalidationCallback_) {
+    invalidationCallback_();
+  }
   // `useState` / internal `Signal`s often have no `observe()` callbacks; `notifyObserverList` would
   // otherwise skip `markReactiveDirty`, so `Runtime`'s next-frame rebuild never runs (resize still
   // rebuilt via `WindowEvent::Resize`).
-  if (observers_.empty() && detail::signalBridgeApplicationHasInstance()) {
+  if (!invalidationCallback_ && observers_.empty() && detail::signalBridgeApplicationHasInstance()) {
     detail::signalBridgeMarkReactiveDirty();
   }
   detail::notifyObserverList(observers_);

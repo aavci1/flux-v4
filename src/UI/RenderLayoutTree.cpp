@@ -114,6 +114,7 @@ void renderContainer(LayoutNode const& node, LayoutTree const& tree, RenderConte
     break;
   }
   NodeId const lid = ctx.graph().addLayer(ctx.parentLayer(), std::move(layer));
+  ctx.registerContainerLayer(node.componentKey, lid);
   ctx.pushLayer(lid);
 
   if (node.containerTag == LayoutNode::ContainerTag::PopoverCalloutShape) {

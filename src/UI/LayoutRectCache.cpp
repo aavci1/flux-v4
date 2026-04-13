@@ -59,4 +59,24 @@ std::optional<Rect> LayoutRectCache::forTapAnchor(ComponentKey const& tapLeafKey
   return forLeafKeyPrefix(tapLeafKey);
 }
 
+void LayoutRectCache::translateSubtree(ComponentKey const& key, Vec2 delta) {
+  if (key.empty() || (delta.x == 0.f && delta.y == 0.f)) {
+    return;
+  }
+
+  auto translateMatching = [&](auto& entries) {
+    for (auto& [entryKey, rect] : entries) {
+      if (entryKey.size() < key.size() ||
+          !std::equal(key.begin(), key.end(), entryKey.begin())) {
+        continue;
+      }
+      rect.x += delta.x;
+      rect.y += delta.y;
+    }
+  };
+
+  translateMatching(current_);
+  translateMatching(prev_);
+}
+
 } // namespace flux

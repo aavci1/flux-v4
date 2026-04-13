@@ -52,6 +52,7 @@ public:
   void advanceChildSlot();
 
   ComponentKey leafComponentKey() const;
+  ComponentKey currentCompositeKey() const;
 
   void rewindChildKeyIndex();
 

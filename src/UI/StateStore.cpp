@@ -1,6 +1,29 @@
 #include <Flux/UI/StateStore.hpp>
 
+#include <Flux/Core/Application.hpp>
+#include <Flux/Detail/Runtime.hpp>
+
 namespace flux {
+
+namespace detail {
+
+Runtime* currentRuntimeForInvalidation() noexcept {
+  return Runtime::current();
+}
+
+std::function<void()> makeInvalidationCallback(Runtime* runtime, ComponentKey key, InvalidationKind kind) {
+  return [runtime, key = std::move(key), kind]() {
+    if (runtime) {
+      runtime->invalidateSubtree(key, kind);
+      return;
+    }
+    if (Application::hasInstance()) {
+      Application::instance().markReactiveDirty();
+    }
+  };
+}
+
+} // namespace detail
 
 thread_local StateStore* StateStore::sCurrent = nullptr;
 

@@ -15,15 +15,18 @@
 #include <Flux/Core/Types.hpp>
 #include <Flux/Detail/RootHolder.hpp>
 #include <Flux/UI/ComponentKey.hpp>
+#include <Flux/UI/Invalidation.hpp>
 #include <Flux/UI/Overlay.hpp>
 
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace flux {
 
 class Window;
+struct NodeId;
 
 class Runtime {
 public:
@@ -48,6 +51,12 @@ public:
   bool isActionCurrentlyEnabled(std::string const& name) const;
 
   void requestFocusInSubtree(ComponentKey const& subtreeKey);
+  void invalidateSubtree(ComponentKey key, InvalidationKind kind);
+  void invalidateWindow(InvalidationKind kind);
+  bool incrementalUpdatesEnabled() const noexcept;
+  bool processInvalidations(std::optional<Size> sizeOverride = std::nullopt);
+  std::optional<NodeId> sceneLayerForComponentKey(ComponentKey const& key) const;
+  void rebuildOverlays();
 
   std::optional<Rect> layoutRectForCurrentComponent() const;
   std::optional<Rect> layoutRectForKey(ComponentKey const& key) const;
@@ -78,6 +87,8 @@ private:
   void rebuild(std::optional<Size> sizeOverride = std::nullopt);
   void subscribeInput();
   void subscribeWindowEvents();
+  void enqueueInvalidation(InvalidationRequest request);
+  void coalesceInvalidations();
 
   static thread_local Runtime* sCurrent;
 
@@ -93,6 +104,7 @@ private:
   bool inputRegistered_ = false;
   bool layoutOverlayEnabled_ = false;
   bool textCacheOverlayEnabled_ = false;
+  std::vector<InvalidationRequest> pendingInvalidations_{};
 };
 
 } // namespace flux

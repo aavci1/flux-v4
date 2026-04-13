@@ -59,6 +59,7 @@ public:
 
   void set(T target);
   void set(T target, Transition transition);
+  void setInvalidationCallback(std::function<void()> callback);
 
   bool isAnimating() const { return animating_; }
 
@@ -82,6 +83,7 @@ private:
 
   std::uint64_t nextId_ = 1;
   std::vector<std::pair<std::uint64_t, std::function<void()>>> observers_;
+  std::function<void()> invalidationCallback_{};
 };
 
 } // namespace flux
@@ -107,6 +109,11 @@ T const& Animated<T>::get() const {
 template<Interpolatable T>
 void Animated<T>::set(T target) {
   set(std::move(target), WithTransition::current());
+}
+
+template<Interpolatable T>
+void Animated<T>::setInvalidationCallback(std::function<void()> callback) {
+  invalidationCallback_ = std::move(callback);
 }
 
 template<Interpolatable T>
@@ -157,7 +164,11 @@ void Animated<T>::notifyObservers() {
   // `detail::notifyObserverList` only calls `markReactiveDirty` when explicit `observe()` callbacks
   // exist. Views that read `Animated` in `body()` (without a Computed dependency tracker) have no
   // callbacks, so animation ticks must still schedule a rebuild to refresh scene nodes.
-  detail::scheduleReactiveRebuildAfterAnimatedChange();
+  if (invalidationCallback_) {
+    invalidationCallback_();
+  } else {
+    detail::scheduleReactiveRebuildAfterAnimatedChange();
+  }
   detail::notifyObserverList(observers_);
 }
 

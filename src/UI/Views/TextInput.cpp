@@ -1,6 +1,8 @@
 #include <Flux/UI/Views/TextInput.hpp>
 
 #include <Flux/Core/Application.hpp>
+#include <Flux/Core/Window.hpp>
+#include <Flux/Detail/Runtime.hpp>
 #include <Flux/Graphics/TextLayoutOptions.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/UI/InputFieldLayout.hpp>
@@ -287,11 +289,74 @@ struct TextLayoutDisplay {
     }
 };
 
+struct CaretSceneBinding {
+    Runtime *runtime = nullptr;
+    NodeId nodeId {};
+    Color color {};
+
+    void bind(NodeId id, Rect rect, Color nextColor) {
+        nodeId = id;
+        color = nextColor;
+        updateVisible(nextColor.a > 0.f, rect);
+    }
+
+    void updateVisible(bool visible, Rect rect = {}) const {
+        if (!runtime || !nodeId.isValid()) {
+            return;
+        }
+        if (RectNode *node = runtime->window().sceneGraph().node<RectNode>(nodeId)) {
+            if (rect.width > 0.f || rect.height > 0.f) {
+                node->bounds = rect;
+            }
+            Color fill = color;
+            fill.a *= visible ? 1.f : 0.f;
+            node->fill = FillStyle::solid(fill);
+        }
+    }
+};
+
+struct BoundCaretVisual {
+    std::shared_ptr<CaretSceneBinding> binding;
+    Rect rect {};
+    Color color {};
+
+    void layout(LayoutContext &ctx) const {
+        ComponentKey const stableKey = ctx.leafComponentKey();
+        ctx.advanceChildSlot();
+        LayoutNode n {};
+        n.kind = LayoutNode::Kind::Leaf;
+        n.frame = rect;
+        n.componentKey = stableKey;
+        n.element = ctx.currentElement();
+        n.constraints = ctx.constraints();
+        n.hints = ctx.hints();
+        ctx.pushLayoutNode(std::move(n));
+    }
+
+    void renderFromLayout(RenderContext &ctx, LayoutNode const &node) const {
+        NodeId const id = ctx.graph().addRect(ctx.parentLayer(), RectNode {
+                                                     .bounds = node.frame,
+                                                     .cornerRadius = CornerRadius {},
+                                                     .fill = FillStyle::solid(color),
+                                                     .stroke = StrokeStyle::none(),
+                                                 });
+        if (binding) {
+            binding->bind(id, node.frame, color);
+        }
+    }
+
+    Size measure(LayoutContext &ctx, LayoutConstraints const &, LayoutHints const &, TextSystem &) const {
+        ctx.advanceChildSlot();
+        return {rect.width, rect.height};
+    }
+};
+
 std::vector<Element> makeSelectionAndCaretElements(detail::TextEditLayoutResult const &layoutResult,
                                                    detail::TextEditSelection const *selection, int caretByte,
                                                    bool showCaret, std::string const *text, Point origin,
                                                    ResolvedTextInputStyle const &rs,
-                                                   float blinkPhase) {
+                                                   float blinkPhase,
+                                                   std::shared_ptr<CaretSceneBinding> const &caretBinding = {}) {
     std::vector<Element> out;
     if (selection && selection->hasSelection()) {
         for (Rect const &rect :
@@ -307,10 +372,18 @@ std::vector<Element> makeSelectionAndCaretElements(detail::TextEditLayoutResult 
         Rect const caret = detail::caretRect(layoutResult, caretByte, origin.x, origin.y, detail::kTextCaretStrokeWidthPx);
         Color caretColor = rs.caretColor;
         caretColor.a *= blinkPhase <= 0.5f ? 1.f : 0.f;
-        out.push_back(Element {Rectangle {}}
-                          .fill(FillStyle::solid(caretColor))
-                          .size(caret.width, caret.height)
-                          .position(caret.x, caret.y));
+        if (caretBinding) {
+            out.push_back(BoundCaretVisual {
+                .binding = caretBinding,
+                .rect = caret,
+                .color = caretColor,
+            });
+        } else {
+            out.push_back(Element {Rectangle {}}
+                              .fill(FillStyle::solid(caretColor))
+                              .size(caret.width, caret.height)
+                              .position(caret.x, caret.y));
+        }
     }
     return out;
 }
@@ -325,11 +398,12 @@ detail::TextEditSelection behaviorSelection(TextEditBehavior const &behavior, st
 Element buildTextInputContent(detail::TextEditLayoutResult const &layoutResult, detail::TextEditSelection const *selection,
                               int caretByte, bool showCaret, std::string const *text, Point origin, float contentWidth,
                               float containerWidth, float contentHeight, ResolvedTextInputStyle const &rs,
-                              float blinkPhase) {
+                              float blinkPhase,
+                              std::shared_ptr<CaretSceneBinding> const &caretBinding = {}) {
     std::vector<Element> layers;
     if (layoutResult.layout) {
         auto overlayChildren =
-            makeSelectionAndCaretElements(layoutResult, selection, caretByte, showCaret, text, origin, rs, blinkPhase);
+            makeSelectionAndCaretElements(layoutResult, selection, caretByte, showCaret, text, origin, rs, blinkPhase, caretBinding);
         layers.insert(layers.end(), std::make_move_iterator(overlayChildren.begin()),
                       std::make_move_iterator(overlayChildren.end()));
         layers.push_back(Element {TextLayoutDisplay {.textLayout = layoutResult.layout}}
@@ -392,6 +466,8 @@ Element buildMultilineTextInput(TextInput const &input) {
 
     TextInputLayoutSnap &snap = StateStore::current()->claimSlot<TextInputLayoutSnap>();
     TextInputStylerMemo &stylerMemo = StateStore::current()->claimSlot<TextInputStylerMemo>();
+    auto &caretBinding = StateStore::current()->claimSlot<std::shared_ptr<CaretSceneBinding>>(std::make_shared<CaretSceneBinding>());
+    caretBinding->runtime = Runtime::current();
 
     State<Point> scrollOffset = useState(Point {0.f, 0.f});
     State<Size> viewportSize = useState(Size {0.f, 0.f});
@@ -409,6 +485,11 @@ Element buildMultilineTextInput(TextInput const &input) {
                                                            return detail::moveCaretVertically(snap.layoutResult, *st, cur, dir);
                                                        }});
     behavior.setDisabled(input.disabled);
+    behavior.setCaretBlinkCallback([caretBinding](bool visible) {
+        if (caretBinding) {
+            caretBinding->updateVisible(visible);
+        }
+    });
 
     bool const focused = useFocus();
     behavior.setFocused(focused);
@@ -431,10 +512,13 @@ Element buildMultilineTextInput(TextInput const &input) {
         scrollOffset = scroll;
     }
 
-    float const fieldHeight = input.multilineHeight.fixed > 0.f ? input.multilineHeight.fixed :
-                              input.multilineHeight.minIntrinsic;
     float const contentHeight =
         (snap.layoutResult.layout ? snap.layoutResult.layout->measuredSize.height : 0.f) + 2.f * resolved.paddingV;
+    float fieldHeight = input.multilineHeight.fixed > 0.f ? input.multilineHeight.fixed :
+                        std::max(contentHeight, input.multilineHeight.minIntrinsic);
+    if (input.multilineHeight.maxIntrinsic > 0.f) {
+        fieldHeight = std::min(fieldHeight, input.multilineHeight.maxIntrinsic);
+    }
     float const editorHeight = std::max(contentHeight, fieldHeight);
     auto selection = behaviorSelection(behavior, buf);
     Point const contentOrigin {resolved.paddingH, resolved.paddingV};
@@ -449,7 +533,8 @@ Element buildMultilineTextInput(TextInput const &input) {
         contentW + 2.f * resolved.paddingH,
         editorHeight,
         resolved,
-        behavior.caretBlinkPhase()
+        behavior.caretBlinkPhase(),
+        caretBinding
     );
 
     Element editor = attachTextInputHandlers(
@@ -494,6 +579,8 @@ Element buildSingleLineTextInput(TextInput const &input) {
     behavior.setFocused(focused);
 
     TextInputLayoutSnap &snap = StateStore::current()->claimSlot<TextInputLayoutSnap>();
+    auto &caretBinding = StateStore::current()->claimSlot<std::shared_ptr<CaretSceneBinding>>(std::make_shared<CaretSceneBinding>());
+    caretBinding->runtime = Runtime::current();
     State<int> scrollByte = useState(0);
     LayoutConstraints const *layoutConstraints = useLayoutConstraints();
     float const constrainedWidth =
@@ -526,6 +613,11 @@ Element buildSingleLineTextInput(TextInput const &input) {
     float const scrollX = detail::scrollOffsetXForByte(snap.layoutResult, sb);
     Point const textOrigin {shellInset + resolved.paddingH - scrollX, shellInset + resolved.paddingV};
     auto selection = behaviorSelection(behavior, buf);
+    behavior.setCaretBlinkCallback([caretBinding](bool visible) {
+        if (caretBinding) {
+            caretBinding->updateVisible(visible);
+        }
+    });
     Element content = buildTextInputContent(
         snap.layoutResult,
         (!showPlaceholder && behavior.hasSelection()) ? &selection : nullptr,
@@ -537,7 +629,8 @@ Element buildSingleLineTextInput(TextInput const &input) {
         0.f,
         fieldHeight,
         resolved,
-        behavior.caretBlinkPhase()
+        behavior.caretBlinkPhase(),
+        caretBinding
     );
 
     Element editor = attachTextInputHandlers(

@@ -82,4 +82,16 @@ bool RenderContext::suppressLeafModifierEvents() const noexcept {
   return !suppressLeafModifierEvents_.empty() && suppressLeafModifierEvents_.back();
 }
 
+void RenderContext::bindContainerLayerRegistry(
+    std::unordered_map<ComponentKey, NodeId, ComponentKeyHash>* registry) {
+  containerLayerRegistry_ = registry;
+}
+
+void RenderContext::registerContainerLayer(ComponentKey const& key, NodeId id) {
+  if (!containerLayerRegistry_ || key.empty() || !id.isValid()) {
+    return;
+  }
+  (*containerLayerRegistry_)[key] = id;
+}
+
 } // namespace flux

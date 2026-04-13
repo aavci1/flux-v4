@@ -9,14 +9,18 @@
 #include <Flux/Reactive/Observer.hpp>
 #include <Flux/UI/ActionRegistry.hpp>
 #include <Flux/UI/EventMap.hpp>
+#include <Flux/UI/Invalidation.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 #include <Flux/UI/LayoutRectCache.hpp>
 #include <Flux/UI/MeasureCache.hpp>
+#include <Flux/Scene/NodeId.hpp>
 #include <Flux/UI/StateStore.hpp>
 
 #include <functional>
 #include <memory>
 #include <optional>
+#include <unordered_map>
+#include <vector>
 
 namespace flux {
 
@@ -40,6 +44,8 @@ public:
 
   /// `runtime` is passed in for `OverlayManager::rebuild` only (not stored — avoids a header cycle).
   void rebuild(std::optional<Size> sizeOverride, Runtime& runtime);
+  bool processInvalidations(std::optional<Size> sizeOverride, Runtime& runtime,
+                            std::vector<InvalidationRequest> const& invalidations);
 
   StateStore& stateStore() noexcept;
   LayoutEngine& layoutEngine() noexcept;
@@ -48,6 +54,8 @@ public:
   EventMap const& mainEventMap() const noexcept;
   ActionRegistry& actionRegistryForBuild() noexcept;
   ActionRegistry const& actionRegistryCommitted() const noexcept;
+  std::optional<NodeId> sceneLayerForComponentKey(ComponentKey const& key) const;
+  void registerContainerLayer(ComponentKey const& key, NodeId id);
 
   Rect buildSlotRect() const;
 
@@ -67,6 +75,7 @@ private:
   ActionRegistry actionRegistryCommitted_{};
   MeasureCache measureCache_{};
   std::uint64_t textFrameIndex_{0};
+  std::unordered_map<ComponentKey, NodeId, ComponentKeyHash> containerLayersByKey_{};
 };
 
 } // namespace flux

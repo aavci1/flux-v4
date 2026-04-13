@@ -48,6 +48,7 @@ public:
     n.frame = parentFrame;
     n.constraints = outer;
     n.hints = ctx.hints();
+    n.componentKey = ctx.currentCompositeKey();
     n.containerSpec.kind = ContainerLayerSpec::Kind::Standard;
     n.containerSpec.clip = clip;
     n.containerSpec.clipW = assignedW;
@@ -71,6 +72,7 @@ public:
     n.frame = parentFrame;
     n.constraints = outer;
     n.hints = ctx.hints();
+    n.componentKey = ctx.currentCompositeKey();
     n.containerSpec.kind = ContainerLayerSpec::Kind::OffsetScroll;
     n.containerSpec.scrollOffset = scrollOffset;
     n.element = ctx.currentElement();
@@ -88,6 +90,7 @@ public:
     n.frame = parentFrame;
     n.constraints = outer;
     n.hints = ctx.hints();
+    n.componentKey = ctx.currentCompositeKey();
     n.containerSpec.kind = ContainerLayerSpec::Kind::ScaleAroundCenter;
     n.containerSpec.customTransform = fullLayerTransform;
     n.element = ctx.currentElement();

@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <algorithm>
 #include <vector>
 
 namespace flux {
@@ -94,6 +95,25 @@ void Runtime::requestFocusInSubtree(ComponentKey const& subtreeKey) {
   focus_.requestInSubtree(subtreeKey, mainEventMap());
 }
 
+void Runtime::invalidateSubtree(ComponentKey key, InvalidationKind kind) {
+  enqueueInvalidation(InvalidationRequest{.key = std::move(key), .kind = kind});
+  if (Application::hasInstance()) {
+    Application::instance().markReactiveDirty();
+  }
+}
+
+void Runtime::invalidateWindow(InvalidationKind kind) {
+  invalidateSubtree({}, kind);
+}
+
+bool Runtime::incrementalUpdatesEnabled() const noexcept {
+  static int cached = -1;
+  if (cached < 0) {
+    cached = envTruthy(std::getenv("FLUX_ENABLE_INCREMENTAL_UPDATES")) ? 1 : 0;
+  }
+  return cached != 0;
+}
+
 Rect Runtime::buildSlotRect() const {
   return buildOrchestrator_.buildSlotRect();
 }
@@ -111,7 +131,13 @@ Runtime::Runtime(Window& window)
     , cursor_(window)
     , buildOrchestrator_(window, focus_, hover_, gesture_)
     , dispatcher_(window, *this, focus_, hover_, gesture_, cursor_, buildOrchestrator_, windowHasFocus_) {
-  buildOrchestrator_.subscribeToRebuild([this]() { rebuild(std::nullopt); });
+  buildOrchestrator_.subscribeToRebuild([this]() {
+    if (!incrementalUpdatesEnabled() || pendingInvalidations_.empty()) {
+      rebuild(std::nullopt);
+      return;
+    }
+    processInvalidations(std::nullopt);
+  });
   subscribeInput();
   subscribeWindowEvents();
 }
@@ -161,6 +187,26 @@ std::optional<ComponentKey> Runtime::tapAnchorLeafKeySnapshot() const {
   return gesture_.pendingTapLeafKey();
 }
 
+bool Runtime::processInvalidations(std::optional<Size> sizeOverride) {
+  sCurrent = this;
+  std::vector<InvalidationRequest> invalidations = std::move(pendingInvalidations_);
+  pendingInvalidations_.clear();
+  bool const handled = buildOrchestrator_.processInvalidations(sizeOverride, *this, invalidations);
+  sCurrent = nullptr;
+  return handled;
+}
+
+std::optional<NodeId> Runtime::sceneLayerForComponentKey(ComponentKey const& key) const {
+  return buildOrchestrator_.sceneLayerForComponentKey(key);
+}
+
+void Runtime::rebuildOverlays() {
+  if (!window_.overlayManager().hasOverlays()) {
+    return;
+  }
+  window_.overlayManager().rebuild(window_.getSize(), *this);
+}
+
 void Runtime::rebuild(std::optional<Size> sizeOverride) {
   sCurrent = this;
   buildOrchestrator_.rebuild(sizeOverride, *this);
@@ -205,7 +251,11 @@ void Runtime::subscribeWindowEvents() {
       return;
     }
     if (ev.kind == WindowEvent::Kind::Resize) {
-      rebuild(ev.size);
+      if (incrementalUpdatesEnabled()) {
+        processInvalidations(ev.size);
+      } else {
+        rebuild(ev.size);
+      }
     } else if (ev.kind == WindowEvent::Kind::FocusLost) {
       windowHasFocus_ = false;
       auto const& entries = window_.overlayManager().entries();
@@ -221,6 +271,54 @@ void Runtime::subscribeWindowEvents() {
       windowHasFocus_ = true;
     }
   });
+}
+
+void Runtime::enqueueInvalidation(InvalidationRequest request) {
+  if (!incrementalUpdatesEnabled()) {
+    pendingInvalidations_.clear();
+    pendingInvalidations_.push_back(std::move(request));
+    return;
+  }
+
+  pendingInvalidations_.push_back(std::move(request));
+  coalesceInvalidations();
+}
+
+void Runtime::coalesceInvalidations() {
+  if (pendingInvalidations_.size() < 2) {
+    return;
+  }
+
+  std::vector<InvalidationRequest> merged;
+  merged.reserve(pendingInvalidations_.size());
+
+  for (InvalidationRequest const& request : pendingInvalidations_) {
+    bool absorbed = false;
+    for (InvalidationRequest& existing : merged) {
+      bool const existingIsAncestor =
+          existing.key.size() <= request.key.size() &&
+          std::equal(existing.key.begin(), existing.key.end(), request.key.begin());
+      bool const requestIsAncestor =
+          request.key.size() <= existing.key.size() &&
+          std::equal(request.key.begin(), request.key.end(), existing.key.begin());
+      if (!existingIsAncestor && !requestIsAncestor) {
+        continue;
+      }
+      if (requestIsAncestor) {
+        existing.key = request.key;
+      }
+      if (invalidationKindAtLeast(request.kind, existing.kind)) {
+        existing.kind = request.kind;
+      }
+      absorbed = true;
+      break;
+    }
+    if (!absorbed) {
+      merged.push_back(request);
+    }
+  }
+
+  pendingInvalidations_ = std::move(merged);
 }
 
 } // namespace flux

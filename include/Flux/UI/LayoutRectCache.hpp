@@ -49,6 +49,11 @@ public:
   /// fires; empty otherwise.
   std::optional<Rect> forTapAnchor(ComponentKey const& tapLeafKey) const;
 
+  /// Applies a retained transform-only shift to cached composite rects whose
+  /// keys are rooted at \p key. Used by incremental scroll fast paths so
+  /// overlay anchor tracking can stay aligned without a full rebuild.
+  void translateSubtree(ComponentKey const& key, Vec2 delta);
+
 private:
   std::unordered_map<ComponentKey, Rect, ComponentKeyHash> current_{};
   std::unordered_map<ComponentKey, Rect, ComponentKeyHash> prev_{};

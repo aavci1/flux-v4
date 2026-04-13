@@ -6,6 +6,8 @@
 
 
 #include <Flux/UI/ComponentKey.hpp>
+#include <Flux/UI/Detail/InvalidationBridge.hpp>
+#include <Flux/UI/Invalidation.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 
 #include <cassert>
@@ -134,7 +136,12 @@ S& StateStore::claimSlot(Args&&... args) {
     assert(cs.slots[idx].type == std::type_index(typeid(S)) &&
            "useState<T> call order changed between builds — "
            "hooks must always be called in the same order");
-    return *static_cast<S*>(cs.slots[idx].value.get());
+    S& slot = *static_cast<S*>(cs.slots[idx].value.get());
+    if constexpr (requires(S& s, std::function<void()> cb) { s.setInvalidationCallback(std::move(cb)); }) {
+      slot.setInvalidationCallback(
+          detail::makeInvalidationCallback(detail::currentRuntimeForInvalidation(), key, InvalidationKind::Build));
+    }
+    return slot;
   }
 
   // New slot — construct in place (Signal/Animated are non-movable).
@@ -144,6 +151,10 @@ S& StateStore::claimSlot(Args&&... args) {
         delete static_cast<S*>(p);
       }),
       std::type_index(typeid(S))});
+  if constexpr (requires(S& s, std::function<void()> cb) { s.setInvalidationCallback(std::move(cb)); }) {
+    raw->setInvalidationCallback(
+        detail::makeInvalidationCallback(detail::currentRuntimeForInvalidation(), key, InvalidationKind::Build));
+  }
   return *raw;
 }
 
