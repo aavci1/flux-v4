@@ -136,7 +136,6 @@ Rect OverlayManager::resolveFrame(Size win, OverlayConfig const &cfg, Rect conte
     Rect const &a = *cfg.anchor;
     float const cy = a.y + a.height * 0.5f;
     // Geometric center of drawn content in root-local coords (may be != (W/2, H/2) if min x/y != 0).
-    float const centerLocalX = contentBounds.x + contentBounds.width * 0.5f;
     float const centerLocalY = contentBounds.y + contentBounds.height * 0.5f;
     // Tip Y for Below: top of drawable union (arrow tip points up at anchor bottom).
     float const tipTopLocalY = contentBounds.y;
