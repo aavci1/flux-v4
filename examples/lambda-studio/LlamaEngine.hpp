@@ -19,10 +19,6 @@
 #include <utility>
 #include <vector>
 
-#if defined(__APPLE__)
-#include <dispatch/dispatch.h>
-#endif
-
 namespace lambda_backend {
 
 struct LlmUiEvent {
@@ -44,26 +40,10 @@ struct LlmUiEvent {
 
 namespace detail {
 
-struct MainPostThunk {
-    std::function<void(LlmUiEvent)> post;
-    LlmUiEvent ev;
-};
-
-#if defined(__APPLE__)
-inline void invokePostOnMain(void *ctx) {
-    auto *thunk = static_cast<MainPostThunk *>(ctx);
-    thunk->post(std::move(thunk->ev));
-    delete thunk;
-}
-#endif
-
+// Post directly to the app callback so the event queue can wake the UI loop from the worker thread.
+// Dispatching onto the Cocoa main queue here can stall until the next OS event.
 inline void postEventToMain(std::function<void(LlmUiEvent)> const &post, LlmUiEvent ev) {
-#if defined(__APPLE__)
-    auto *ctx = new MainPostThunk {post, std::move(ev)};
-    dispatch_async_f(dispatch_get_main_queue(), ctx, invokePostOnMain);
-#else
     post(std::move(ev));
-#endif
 }
 
 } // namespace detail
