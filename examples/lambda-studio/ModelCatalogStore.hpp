@@ -19,6 +19,11 @@
 
 namespace lambda {
 
+struct PersistedChatState {
+    std::vector<ChatThread> chats;
+    std::string selectedChatId;
+};
+
 class ModelCatalogStore {
   public:
     ModelCatalogStore() : ModelCatalogStore(defaultDataDirectory()) {}
@@ -475,8 +480,117 @@ class ModelCatalogStore {
         stepDone(update.stmt);
     }
 
+    void replaceChats(std::vector<ChatThread> const &chats, std::string const &selectedChatId) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        try {
+            beginTransaction();
+            execute("DELETE FROM chat_messages;");
+            execute("DELETE FROM chat_threads;");
+
+            Statement insertThread(
+                db_,
+                "INSERT INTO chat_threads (chat_id, title, updated_at_unix_ms, model_path, model_name, sort_order) "
+                "VALUES (?1, ?2, ?3, ?4, ?5, ?6);"
+            );
+            Statement insertMessage(
+                db_,
+                "INSERT INTO chat_messages ("
+                "  chat_id, message_order, role, text, started_at_nanos, finished_at_nanos, collapsed"
+                ") VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7);"
+            );
+            Statement upsertPreference(
+                db_,
+                "INSERT INTO app_preferences (pref_key, value_text) VALUES (?1, ?2) "
+                "ON CONFLICT(pref_key) DO UPDATE SET value_text=excluded.value_text;"
+            );
+
+            for (std::size_t i = 0; i < chats.size(); ++i) {
+                ChatThread const &chat = chats[i];
+                sqlite3_reset(insertThread.stmt);
+                sqlite3_clear_bindings(insertThread.stmt);
+                bindText(insertThread.stmt, 1, chat.id);
+                bindText(insertThread.stmt, 2, chat.title);
+                bindInt64(insertThread.stmt, 3, chat.updatedAtUnixMs);
+                bindText(insertThread.stmt, 4, chat.modelPath);
+                bindText(insertThread.stmt, 5, chat.modelName);
+                bindInt64(insertThread.stmt, 6, static_cast<std::int64_t>(i));
+                stepDone(insertThread.stmt);
+
+                std::vector<ChatMessage> const messages = storedChatMessages(chat);
+                for (std::size_t messageIndex = 0; messageIndex < messages.size(); ++messageIndex) {
+                    ChatMessage const &message = messages[messageIndex];
+                    sqlite3_reset(insertMessage.stmt);
+                    sqlite3_clear_bindings(insertMessage.stmt);
+                    bindText(insertMessage.stmt, 1, chat.id);
+                    bindInt64(insertMessage.stmt, 2, static_cast<std::int64_t>(messageIndex));
+                    bindText(insertMessage.stmt, 3, chatRoleStorage(message.role));
+                    bindText(insertMessage.stmt, 4, message.text);
+                    bindInt64(insertMessage.stmt, 5, message.startedAtNanos);
+                    bindInt64(insertMessage.stmt, 6, message.finishedAtNanos);
+                    bindBool(insertMessage.stmt, 7, message.collapsed);
+                    stepDone(insertMessage.stmt);
+                }
+            }
+
+            bindText(upsertPreference.stmt, 1, "selected_chat_id");
+            bindText(upsertPreference.stmt, 2, selectedChatId);
+            stepDone(upsertPreference.stmt);
+
+            commitTransaction();
+        } catch (...) {
+            rollbackTransaction();
+            throw;
+        }
+    }
+
+    PersistedChatState loadPersistedChatState() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        PersistedChatState state;
+
+        Statement threadStmt(
+            db_,
+            "SELECT chat_id, title, updated_at_unix_ms, model_path, model_name "
+            "FROM chat_threads "
+            "ORDER BY sort_order ASC;"
+        );
+
+        while (sqlite3_step(threadStmt.stmt) == SQLITE_ROW) {
+            ChatThread thread;
+            thread.id = columnText(threadStmt.stmt, 0);
+            thread.title = columnText(threadStmt.stmt, 1);
+            thread.updatedAtUnixMs = sqlite3_column_int64(threadStmt.stmt, 2);
+            thread.modelPath = columnText(threadStmt.stmt, 3);
+            thread.modelName = columnText(threadStmt.stmt, 4);
+            thread.streaming = false;
+
+            Statement messageStmt(
+                db_,
+                "SELECT role, text, started_at_nanos, finished_at_nanos, collapsed "
+                "FROM chat_messages "
+                "WHERE chat_id = ?1 "
+                "ORDER BY message_order ASC;"
+            );
+            bindText(messageStmt.stmt, 1, thread.id);
+            while (sqlite3_step(messageStmt.stmt) == SQLITE_ROW) {
+                ChatMessage message;
+                message.role = chatRoleFromStorage(columnText(messageStmt.stmt, 0));
+                message.text = columnText(messageStmt.stmt, 1);
+                message.startedAtNanos = sqlite3_column_int64(messageStmt.stmt, 2);
+                message.finishedAtNanos = sqlite3_column_int64(messageStmt.stmt, 3);
+                message.collapsed = sqlite3_column_int(messageStmt.stmt, 4) != 0;
+                syncAssistantParagraphs(message);
+                thread.messages.push_back(std::move(message));
+            }
+
+            state.chats.push_back(std::move(thread));
+        }
+
+        state.selectedChatId = loadPreference("selected_chat_id");
+        return state;
+    }
+
   private:
-    static constexpr int kCurrentSchemaVersion = 4;
+    static constexpr int kCurrentSchemaVersion = 5;
 
     struct Statement {
         sqlite3_stmt *stmt = nullptr;
@@ -610,6 +724,42 @@ class ModelCatalogStore {
             return DownloadJobStatus::Failed;
         }
         return DownloadJobStatus::Running;
+    }
+
+    static char const *chatRoleStorage(ChatRole role) {
+        switch (role) {
+        case ChatRole::User:
+            return "user";
+        case ChatRole::Reasoning:
+            return "reasoning";
+        case ChatRole::Assistant:
+            return "assistant";
+        }
+        return "assistant";
+    }
+
+    static ChatRole chatRoleFromStorage(std::string const &role) {
+        if (role == "user") {
+            return ChatRole::User;
+        }
+        if (role == "reasoning") {
+            return ChatRole::Reasoning;
+        }
+        return ChatRole::Assistant;
+    }
+
+    static std::vector<ChatMessage> storedChatMessages(ChatThread const &thread) {
+        std::vector<ChatMessage> messages = thread.messages;
+        messages.reserve(thread.messages.size() + thread.streamDraftMessages.size());
+        for (ChatMessage const &draft : thread.streamDraftMessages) {
+            if (draft.text.empty()) {
+                continue;
+            }
+            ChatMessage stored = draft;
+            syncAssistantParagraphs(stored);
+            messages.push_back(std::move(stored));
+        }
+        return messages;
     }
 
     std::vector<RemoteModel> loadSearchResultsFromPayload(std::string const &query) {
@@ -903,6 +1053,11 @@ class ModelCatalogStore {
         if (version < 4) {
             applyMigration4();
             setUserVersion(4);
+            version = 4;
+        }
+        if (version < 5) {
+            applyMigration5();
+            setUserVersion(5);
         }
     }
 
@@ -994,6 +1149,48 @@ class ModelCatalogStore {
             ");"
             "CREATE INDEX IF NOT EXISTS idx_local_model_instances_name ON local_model_instances(name ASC);"
         );
+    }
+
+    void applyMigration5() {
+        execute(
+            "CREATE TABLE IF NOT EXISTS app_preferences ("
+            "  pref_key TEXT PRIMARY KEY,"
+            "  value_text TEXT NOT NULL DEFAULT ''"
+            ");"
+            "CREATE TABLE IF NOT EXISTS chat_threads ("
+            "  chat_id TEXT PRIMARY KEY,"
+            "  title TEXT NOT NULL,"
+            "  updated_at_unix_ms INTEGER NOT NULL DEFAULT 0,"
+            "  model_path TEXT NOT NULL DEFAULT '',"
+            "  model_name TEXT NOT NULL DEFAULT '',"
+            "  sort_order INTEGER NOT NULL"
+            ");"
+            "CREATE INDEX IF NOT EXISTS idx_chat_threads_order ON chat_threads(sort_order ASC);"
+            "CREATE TABLE IF NOT EXISTS chat_messages ("
+            "  chat_id TEXT NOT NULL,"
+            "  message_order INTEGER NOT NULL,"
+            "  role TEXT NOT NULL,"
+            "  text TEXT NOT NULL DEFAULT '',"
+            "  started_at_nanos INTEGER NOT NULL DEFAULT 0,"
+            "  finished_at_nanos INTEGER NOT NULL DEFAULT 0,"
+            "  collapsed INTEGER NOT NULL DEFAULT 0,"
+            "  PRIMARY KEY (chat_id, message_order)"
+            ");"
+            "CREATE INDEX IF NOT EXISTS idx_chat_messages_chat_order "
+            "ON chat_messages(chat_id, message_order ASC);"
+        );
+    }
+
+    std::string loadPreference(std::string const &key) {
+        Statement stmt(
+            db_,
+            "SELECT value_text FROM app_preferences WHERE pref_key = ?1;"
+        );
+        bindText(stmt.stmt, 1, key);
+        if (sqlite3_step(stmt.stmt) != SQLITE_ROW) {
+            return {};
+        }
+        return columnText(stmt.stmt, 0);
     }
 
     void tryOpen(std::filesystem::path path) {

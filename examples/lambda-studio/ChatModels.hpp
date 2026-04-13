@@ -2,6 +2,7 @@
 
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <iomanip>
@@ -48,7 +49,7 @@ struct ChatMessage {
 struct ChatThread {
     std::string id;
     std::string title;
-    std::string updatedAt;
+    std::int64_t updatedAtUnixMs = 0;
     std::string modelPath;
     std::string modelName;
     std::vector<ChatMessage> messages;
@@ -78,6 +79,37 @@ inline std::string generateChatId() {
         }
     }
     return oss.str();
+}
+
+inline std::int64_t currentUnixMillis() {
+    using namespace std::chrono;
+    return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+}
+
+inline std::string chatUpdatedAtLabel(ChatThread const &thread, std::int64_t nowUnixMs = currentUnixMillis()) {
+    if (thread.updatedAtUnixMs <= 0) {
+        return {};
+    }
+
+    std::int64_t const deltaMs = std::max<std::int64_t>(0, nowUnixMs - thread.updatedAtUnixMs);
+    constexpr std::int64_t kMinuteMs = 60 * 1000;
+    constexpr std::int64_t kHourMs = 60 * kMinuteMs;
+    constexpr std::int64_t kDayMs = 24 * kHourMs;
+    constexpr std::int64_t kWeekMs = 7 * kDayMs;
+
+    if (deltaMs < kMinuteMs) {
+        return "now";
+    }
+    if (deltaMs < kHourMs) {
+        return std::to_string(deltaMs / kMinuteMs) + "m";
+    }
+    if (deltaMs < kDayMs) {
+        return std::to_string(deltaMs / kHourMs) + "h";
+    }
+    if (deltaMs < kWeekMs) {
+        return std::to_string(deltaMs / kDayMs) + "d";
+    }
+    return std::to_string(deltaMs / kWeekMs) + "w";
 }
 
 inline std::string chatPreview(ChatThread const &thread) {
@@ -212,11 +244,12 @@ inline void syncChatThreadParagraphs(ChatThread &thread) {
 }
 
 inline std::vector<ChatThread> sampleChatThreads() {
+    std::int64_t const now = currentUnixMillis();
     std::vector<ChatThread> threads = {
         {
             .id = generateChatId(),
             .title = "Launch planning",
-            .updatedAt = "4h",
+            .updatedAtUnixMs = now - 4LL * 60 * 60 * 1000,
             .messages = {
                 {ChatRole::Assistant, "We have the release window locked in. Do you want to focus on the rollout checklist or the announcement copy first?"},
                 {ChatRole::User, "Let's start with the rollout checklist."},
@@ -227,7 +260,7 @@ inline std::vector<ChatThread> sampleChatThreads() {
         {
             .id = generateChatId(),
             .title = "Research notes",
-            .updatedAt = "9h",
+            .updatedAtUnixMs = now - 9LL * 60 * 60 * 1000,
             .messages = {
                 {ChatRole::Assistant, "I compared a few local models and wrote down the tradeoffs around latency, RAM, and instruction following."},
                 {ChatRole::User, "What should we test next?"},
@@ -238,7 +271,7 @@ inline std::vector<ChatThread> sampleChatThreads() {
         {
             .id = generateChatId(),
             .title = "Prompt experiments",
-            .updatedAt = "1d",
+            .updatedAtUnixMs = now - 24LL * 60 * 60 * 1000,
             .messages = {
                 {ChatRole::User, "The current system prompt still feels too verbose."},
                 {ChatRole::Assistant, "Agreed. We can tighten it by keeping only behavior-critical instructions and moving style examples into tests."},
@@ -248,7 +281,7 @@ inline std::vector<ChatThread> sampleChatThreads() {
         {
             .id = generateChatId(),
             .title = "Design review",
-            .updatedAt = "2d",
+            .updatedAtUnixMs = now - 2LL * 24 * 60 * 60 * 1000,
             .messages = {
                 {ChatRole::Assistant, "The shell feels promising. The biggest gap now is that the conversation area still reads like a placeholder."},
                 {ChatRole::User, "Let's make the chat experience feel more intentional."},
@@ -258,7 +291,7 @@ inline std::vector<ChatThread> sampleChatThreads() {
         {
             .id = generateChatId(),
             .title = "Bug triage",
-            .updatedAt = "4d",
+            .updatedAtUnixMs = now - 4LL * 24 * 60 * 60 * 1000,
             .messages = {
                 {ChatRole::User, "Sidebar selection now works, but the chat module needs a real conversation view."},
                 {ChatRole::Assistant, "That sounds like the right next step. We can add a dedicated ChatView with bubbles, a composer, and parent-owned thread state."},

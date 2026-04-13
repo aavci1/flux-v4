@@ -33,9 +33,36 @@ std::int64_t steadyNowNanos() {
     return duration_cast<nanoseconds>(steady_clock::now().time_since_epoch()).count();
 }
 
-std::int64_t systemNowMillis() {
-    using namespace std::chrono;
-    return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+std::string selectedChatIdForState(AppState const &state) {
+    int const selectedIndex = clampedChatIndex(state);
+    if (selectedIndex < 0) {
+        return {};
+    }
+    return state.chats[static_cast<std::size_t>(selectedIndex)].id;
+}
+
+void restoreSelectedChat(AppState &state, std::string const &selectedChatId) {
+    if (state.chats.empty()) {
+        state.selectedChatIndex = 0;
+        return;
+    }
+
+    auto const it = std::find_if(state.chats.begin(), state.chats.end(), [&](ChatThread const &chat) {
+        return chat.id == selectedChatId;
+    });
+    if (it != state.chats.end()) {
+        state.selectedChatIndex = static_cast<int>(std::distance(state.chats.begin(), it));
+        return;
+    }
+    state.selectedChatIndex = 0;
+}
+
+void persistChats(AppState &state, BackendServices &services) {
+    try {
+        services.catalog->replaceChats(state.chats, selectedChatIdForState(state));
+    } catch (std::exception const &e) {
+        state.errorText = e.what();
+    }
 }
 
 void finishTrailingReasoningMessage(std::vector<ChatMessage> &messages, std::int64_t finishedAtNanos) {
@@ -178,7 +205,7 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
 
         std::call_once(gLambdaEventHandlers, [appState, &services, currentRemoteSearchKey]() {
             Application::instance().eventQueue().on<lambda_backend::LlmUiEvent>(
-                [appState](lambda_backend::LlmUiEvent const &event) {
+                [appState, &services](lambda_backend::LlmUiEvent const &event) {
                     AppState nextState = *appState;
                     auto it = std::find_if(nextState.chats.begin(), nextState.chats.end(), [&](ChatThread const &chat) {
                         return chat.id == event.chatId;
@@ -208,7 +235,7 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                     } else if (event.kind == lambda_backend::LlmUiEvent::Kind::Done) {
                         commitStreamDraft(*it, nowNanos);
                         it->streaming = false;
-                        it->updatedAt = "now";
+                        it->updatedAtUnixMs = currentUnixMillis();
                         nextState.statusText = "Response complete";
                     } else if (event.kind == lambda_backend::LlmUiEvent::Kind::Error) {
                         commitStreamDraft(*it, nowNanos);
@@ -218,10 +245,11 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                             .text = std::string("[Error] ") + event.text,
                         });
                         syncAssistantParagraphs(it->messages.back());
-                        it->updatedAt = "now";
+                        it->updatedAtUnixMs = currentUnixMillis();
                         nextState.errorText = event.text;
                     }
 
+                    persistChats(nextState, services);
                     appState = std::move(nextState);
                 }
             );
@@ -288,7 +316,7 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                                 job.status = DownloadJobStatus::Completed;
                                 job.localPath = event.modelPath;
                                 job.error.clear();
-                                job.finishedAtUnixMs = systemNowMillis();
+                                job.finishedAtUnixMs = currentUnixMillis();
                                 job.downloadedBytes = event.totalBytes;
                                 job.totalBytes = event.totalBytes;
                                 try {
@@ -315,7 +343,7 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                                 }
                                 job.status = DownloadJobStatus::Failed;
                                 job.error = event.error;
-                                job.finishedAtUnixMs = systemNowMillis();
+                                job.finishedAtUnixMs = currentUnixMillis();
                                 if (event.downloadedBytes > 0) {
                                     job.downloadedBytes = event.downloadedBytes;
                                 }
@@ -478,7 +506,10 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
             AppState nextState = *appState;
             nextState.refreshingModels = true;
             try {
-                services.catalog->markRunningDownloadJobsInterrupted(systemNowMillis());
+                PersistedChatState persistedChatState = services.catalog->loadPersistedChatState();
+                nextState.chats = std::move(persistedChatState.chats);
+                restoreSelectedChat(nextState, persistedChatState.selectedChatId);
+                services.catalog->markRunningDownloadJobsInterrupted(currentUnixMillis());
                 nextState.recentDownloadJobs = services.catalog->loadRecentDownloadJobs();
                 nextState.localModels = services.catalog->loadLocalModelInstances();
             } catch (std::exception const &e) {
@@ -622,10 +653,10 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
             }
             AppState nextState = *appState;
             DownloadJob job;
-            job.id = repoId + "|" + path + "|" + std::to_string(systemNowMillis());
+            job.id = repoId + "|" + path + "|" + std::to_string(currentUnixMillis());
             job.repoId = repoId;
             job.filePath = path;
-            job.startedAtUnixMs = systemNowMillis();
+            job.startedAtUnixMs = currentUnixMillis();
             job.status = DownloadJobStatus::Running;
             job.downloadedBytes = 0;
             job.totalBytes = 0;
@@ -686,9 +717,10 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
             services.manager->loadModel(path, lambda_backend::defaultNGpuLayers());
         };
 
-        auto selectChatModel = [appState, requestModelLoad](int chatIndex, std::string const &path, std::string const &name) {
+        auto selectChatModel = [appState, &services, requestModelLoad](int chatIndex, std::string const &path, std::string const &name) {
             AppState nextState = *appState;
             setChatModel(nextState, chatIndex, path, name);
+            persistChats(nextState, services);
             appState = nextState;
             requestModelLoad(path, name);
         };
@@ -724,18 +756,19 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
             }
 
             chat.streamDraftMessages.clear();
+            chat.updatedAtUnixMs = currentUnixMillis();
             chat.messages.push_back(lambda::ChatMessage {
                 .role = ChatRole::User,
                 .text = message,
             });
             chat.streaming = true;
-            chat.updatedAt = "now";
             nextState.errorText.clear();
             nextState.statusText = "Generating response...";
 
             std::vector<lambda_backend::ChatMessage> history = toBackendMessages(chat);
             std::string streamChatId = chat.id;
 
+            persistChats(nextState, services);
             appState = std::move(nextState);
 
             services.engine->startChat(
@@ -762,10 +795,11 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                 nextState.chats[static_cast<std::size_t>(chatIndex)].streaming = false;
             }
             nextState.statusText = "Generation stopped";
+            persistChats(nextState, services);
             appState = std::move(nextState);
         };
 
-        auto toggleReasoningMessage = [appState](int chatIndex, int messageIndex) {
+        auto toggleReasoningMessage = [appState, &services](int chatIndex, int messageIndex) {
             AppState nextState = *appState;
             if (chatIndex < 0 || static_cast<std::size_t>(chatIndex) >= nextState.chats.size()) {
                 return;
@@ -791,28 +825,31 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                 return;
             }
             message->collapsed = !message->collapsed;
+            persistChats(nextState, services);
             appState = std::move(nextState);
         };
 
-        auto createChat = [appState]() {
+        auto createChat = [appState, &services]() {
             AppState nextState = *appState;
             ChatThread thread;
             thread.id = lambda::generateChatId();
             thread.title = "New chat";
-            thread.updatedAt = "now";
+            thread.updatedAtUnixMs = currentUnixMillis();
             thread.modelPath = nextState.loadedModelPath;
             thread.modelName = nextState.loadedModelName;
             nextState.chats.push_back(std::move(thread));
             nextState.selectedChatIndex = static_cast<int>(nextState.chats.size() - 1);
+            persistChats(nextState, services);
             appState = std::move(nextState);
         };
 
         Element currentView = ChatsView {
             .state = state,
             .onNewChat = createChat,
-            .onSelectChat = [appState](int index) {
+            .onSelectChat = [appState, &services](int index) {
                 AppState nextState = *appState;
                 nextState.selectedChatIndex = index;
+                persistChats(nextState, services);
                 appState = std::move(nextState);
             },
             .onSelectModel = selectChatModel,

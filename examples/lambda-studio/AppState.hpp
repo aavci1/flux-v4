@@ -126,7 +126,7 @@ struct DownloadJob {
 
 struct AppState {
     StudioModule currentModule = StudioModule::Chats;
-    std::vector<ChatThread> chats = sampleChatThreads();
+    std::vector<ChatThread> chats;
     int selectedChatIndex = 0;
 
     std::vector<LocalModel> localModels;
@@ -293,11 +293,7 @@ inline std::string remoteModelSearchCacheKey(
 }
 
 inline AppState makeInitialAppState() {
-    AppState state;
-    if (!state.chats.empty()) {
-        state.selectedChatIndex = 0;
-    }
-    return state;
+    return AppState {};
 }
 
 } // namespace lambda

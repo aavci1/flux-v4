@@ -52,7 +52,7 @@ struct ChatListRow : ViewModifiers<ChatListRow> {
                     }
                         .flex(1.f, 1.f),
                     Text {
-                        .text = chat.updatedAt,
+                        .text = chatUpdatedAtLabel(chat),
                         .font = theme.fontLabelSmall,
                         .color = detailColor,
                         .horizontalAlignment = HorizontalAlignment::Trailing,
