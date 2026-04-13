@@ -21,6 +21,12 @@ namespace flux {
 
 namespace {
 
+float singleLineTriggerContentHeight(Theme const &theme, Font const &labelFont) {
+  float const themedInnerHeight = std::max(0.f, theme.controlHeightLarge - (theme.paddingFieldV * 2.f));
+  float const fontDrivenHeight = std::max(labelFont.size, 18.f);
+  return std::max(themedInnerHeight, fontDrivenHeight);
+}
+
 Color lighten(Color c, float t) {
   Color const w = Colors::white;
   return Color{lerp(c.r, w.r, t), lerp(c.g, w.g, t), lerp(c.b, w.b, t), c.a};
@@ -136,16 +142,24 @@ struct SelectMenuRow : ViewModifiers<SelectMenuRow> {
         disabled ? theme.colorTextDisabled : selected ? lighten(style.accentColor, 0.08f) : theme.colorTextSecondary;
     Color const iconTarget = disabled ? theme.colorTextDisabled : style.accentColor;
 
-    std::vector<Element> textChildren;
-    textChildren.reserve(option.detail.empty() ? 1 : 2);
-    textChildren.emplace_back(Text{
+    bool const hasDetail = !option.detail.empty();
+    Element textBlock = Text{
         .text = option.label,
         .font = style.labelFont,
         .color = labelTarget,
         .horizontalAlignment = HorizontalAlignment::Leading,
         .verticalAlignment = VerticalAlignment::Center,
-    });
-    if (!option.detail.empty()) {
+    };
+    if (hasDetail) {
+      std::vector<Element> textChildren;
+      textChildren.reserve(2);
+      textChildren.emplace_back(Text{
+          .text = option.label,
+          .font = style.labelFont,
+          .color = labelTarget,
+          .horizontalAlignment = HorizontalAlignment::Leading,
+          .verticalAlignment = VerticalAlignment::Center,
+      });
       textChildren.emplace_back(Text{
           .text = option.detail,
           .font = style.detailFont,
@@ -154,17 +168,16 @@ struct SelectMenuRow : ViewModifiers<SelectMenuRow> {
           .verticalAlignment = VerticalAlignment::Center,
           .wrapping = TextWrapping::Wrap,
       });
+      textBlock = VStack{
+          .spacing = theme.space1 * 0.5f,
+          .alignment = Alignment::Start,
+          .children = std::move(textChildren),
+      };
     }
 
     std::vector<Element> rowChildren;
     rowChildren.reserve(showCheckmark ? 2 : 1);
-    rowChildren.emplace_back(
-        VStack{
-            .spacing = theme.space1 * 0.5f,
-            .alignment = Alignment::Start,
-            .children = std::move(textChildren),
-        }
-            .flex(1.f, 1.f, 0.f));
+    rowChildren.emplace_back(std::move(textBlock).flex(1.f, 1.f, 0.f));
     if (showCheckmark && selected) {
       rowChildren.emplace_back(Icon{
           .name = IconName::Check,
@@ -461,17 +474,33 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
       }
     };
 
-    std::vector<Element> triggerTextChildren;
-    triggerTextChildren.reserve(currentOption && !currentOption->detail.empty() ? 2 : 1);
-    triggerTextChildren.emplace_back(Text{
+    bool const hasDetail = currentOption && !currentOption->detail.empty();
+    Element triggerLabel = Text{
         .text = currentOption ? currentOption->label : placeholder,
         .font = style.labelFont,
         .color = *labelAnim,
         .horizontalAlignment = HorizontalAlignment::Leading,
         .verticalAlignment = VerticalAlignment::Center,
         .wrapping = TextWrapping::Wrap,
-    });
-    if (currentOption && !currentOption->detail.empty()) {
+    };
+
+    Element triggerTextBlock = ZStack{
+        .horizontalAlignment = Alignment::Start,
+        .verticalAlignment = Alignment::Center,
+        .children = children(std::move(triggerLabel)),
+    }
+        .height(singleLineTriggerContentHeight(theme, style.labelFont));
+    if (hasDetail) {
+      std::vector<Element> triggerTextChildren;
+      triggerTextChildren.reserve(2);
+      triggerTextChildren.emplace_back(Text{
+          .text = currentOption ? currentOption->label : placeholder,
+          .font = style.labelFont,
+          .color = *labelAnim,
+          .horizontalAlignment = HorizontalAlignment::Leading,
+          .verticalAlignment = VerticalAlignment::Center,
+          .wrapping = TextWrapping::Wrap,
+      });
       triggerTextChildren.emplace_back(Text{
           .text = currentOption->detail,
           .font = style.detailFont,
@@ -481,18 +510,18 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
           .wrapping = TextWrapping::Wrap,
           .maxLines = 2,
       });
+      triggerTextBlock = VStack{
+          .spacing = theme.space1 * 0.5f,
+          .alignment = Alignment::Start,
+          .children = std::move(triggerTextChildren),
+      };
     }
 
     return HStack{
         .spacing = theme.space3,
         .alignment = Alignment::Center,
         .children = children(
-            VStack{
-                .spacing = theme.space1 * 0.5f,
-                .alignment = Alignment::Start,
-                .children = std::move(triggerTextChildren),
-            }
-                .flex(1.f, 1.f, 0.f),
+            std::move(triggerTextBlock).flex(1.f, 1.f, 0.f),
             Icon{
                 .name = open ? IconName::KeyboardArrowUp : IconName::KeyboardArrowDown,
                 .size = 18.f,

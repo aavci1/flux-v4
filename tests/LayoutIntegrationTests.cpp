@@ -380,6 +380,31 @@ TEST_CASE("HStack: stretch cross-axis expands explicit-height children to row he
     CHECK(rectsNear(leaves[1]->frame, Rect {40.f, 0.f, 40.f, 200.f}));
 }
 
+TEST_CASE("HStack: center cross-axis offsets shorter leaf children within the row") {
+    auto tree = runLayout(
+        Element {HStack {
+            .spacing = 0.f,
+            .alignment = Alignment::Center,
+            .children = children(
+                Element {Rectangle {}}.size(40.f, 20.f),
+                Element {Rectangle {}}.size(40.f, 40.f)
+            ),
+        }},
+        200.f, 100.f
+    );
+
+    auto leaves = leavesOf(tree);
+    REQUIRE(leaves.size() == 2);
+    CHECK(leaves[0]->frame.x == doctest::Approx(0.f));
+    CHECK(leaves[0]->frame.y == doctest::Approx(10.f));
+    CHECK(leaves[0]->frame.width == doctest::Approx(40.f));
+    CHECK(leaves[0]->frame.height == doctest::Approx(20.f));
+    CHECK(leaves[1]->frame.x == doctest::Approx(40.f));
+    CHECK(leaves[1]->frame.y == doctest::Approx(0.f));
+    CHECK(leaves[1]->frame.width == doctest::Approx(40.f));
+    CHECK(leaves[1]->frame.height == doctest::Approx(40.f));
+}
+
 TEST_CASE("HStack: measure reflects flexed widths under finite constraint") {
     NullTextSystem ts;
     LayoutEngine le;
