@@ -64,6 +64,16 @@ std::function<void()> useRequestFocus() {
   return [rt, key] { rt->requestFocusInSubtree(key); };
 }
 
+std::function<void()> useClearFocus() {
+  Runtime* rt = Runtime::current();
+  StateStore* store = StateStore::current();
+  assert(rt && "useClearFocus called outside of a build pass");
+  assert(store && "useClearFocus called outside of a build pass");
+  (void)store;
+
+  return [rt] { rt->focus().clear(); };
+}
+
 std::optional<Rect> useLayoutRect() {
   Runtime* rt = Runtime::current();
   StateStore* store = StateStore::current();

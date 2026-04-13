@@ -189,6 +189,7 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                             });
                         }
                         it->messages.back().text += event.text;
+                        ++it->messages.back().textRevision;
                     } else if (event.kind == lambda_backend::LlmUiEvent::Kind::Done) {
                         finishTrailingReasoningMessage(*it, nowNanos);
                         it->streaming = false;
@@ -485,7 +486,7 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
             }
         });
 
-        AppState state = *appState;
+        AppState const &state = *appState;
 
         auto requestInventoryRefresh = [appState, &services]() {
             AppState nextState = *appState;
@@ -680,14 +681,26 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
             if (message.empty()) {
                 return;
             }
+            bool const fakeStreaming = lambda_backend::debugFakeStreamEnabled();
             AppState nextState = *appState;
             if (chatIndex < 0 || static_cast<std::size_t>(chatIndex) >= nextState.chats.size()) {
                 return;
             }
 
             ChatThread &chat = nextState.chats[static_cast<std::size_t>(chatIndex)];
-            if (chat.streaming || chat.modelPath.empty() || chat.modelPath != nextState.loadedModelPath || nextState.modelLoading) {
+            if (
+                chat.streaming ||
+                (!fakeStreaming &&
+                 (chat.modelPath.empty() || chat.modelPath != nextState.loadedModelPath || nextState.modelLoading))
+            ) {
                 return;
+            }
+
+            if (fakeStreaming && chat.modelPath.empty()) {
+                chat.modelPath = "__debug_fake_stream__";
+                chat.modelName = "Debug Stream";
+                nextState.loadedModelPath = chat.modelPath;
+                nextState.loadedModelName = chat.modelName;
             }
 
             if (chat.messages.empty() || chat.title == "New chat") {
@@ -716,6 +729,14 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                 }
             );
         };
+
+        auto didAutoStream = useState(false);
+        if (lambda_backend::debugAutoStreamEnabled() && !(*didAutoStream) && !state.chats.empty()) {
+            didAutoStream = true;
+            Application::instance().onNextFrameNeeded([sendMessage] {
+                sendMessage(0, "Run the markdown stress stream.");
+            });
+        }
 
         auto stopMessage = [appState, &services](int chatIndex) {
             services.engine->cancelGeneration();

@@ -9,6 +9,7 @@
 #include <Flux/UI/Views/Views.hpp>
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <cstddef>
@@ -19,12 +20,243 @@
 
 #include "AppState.hpp"
 #include "ChatModels.hpp"
+#include "LlamaEngine.hpp"
+#include "MarkdownText.hpp"
 
 using namespace flux;
 
 namespace lambda {
 
 namespace {
+
+struct PresentedLocalModel {
+    std::string title;
+    std::string detail;
+};
+
+std::string lowercaseAscii(std::string text) {
+    for (char &ch : text) {
+        ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    }
+    return text;
+}
+
+std::string uppercaseAscii(std::string text) {
+    for (char &ch : text) {
+        ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+    }
+    return text;
+}
+
+std::string lastPathComponent(std::string const &text) {
+    std::size_t const slash = text.find_last_of('/');
+    return slash == std::string::npos ? text : text.substr(slash + 1);
+}
+
+std::string trimKnownModelSuffixes(std::string text) {
+    auto trimSuffix = [&text](std::string const &suffix) {
+        if (text.size() < suffix.size()) {
+            return false;
+        }
+        std::string const tail = lowercaseAscii(text.substr(text.size() - suffix.size()));
+        if (tail != lowercaseAscii(suffix)) {
+            return false;
+        }
+        text.resize(text.size() - suffix.size());
+        return true;
+    };
+
+    trimSuffix(".gguf");
+    trimSuffix("-gguf");
+    return text;
+}
+
+std::vector<std::string> splitModelTokens(std::string const &text) {
+    std::vector<std::string> tokens;
+    std::string current;
+    for (char ch : text) {
+        if (ch == '-' || ch == '/' || ch == ' ') {
+            if (!current.empty()) {
+                tokens.push_back(current);
+                current.clear();
+            }
+            continue;
+        }
+        current.push_back(ch);
+    }
+    if (!current.empty()) {
+        tokens.push_back(current);
+    }
+    return tokens;
+}
+
+bool tokenIsParameter(std::string const &token) {
+    std::string const lower = lowercaseAscii(token);
+    if (lower.size() < 2) {
+        return false;
+    }
+    std::size_t index = 0;
+    if ((lower[0] == 'e' || lower[0] == 'a') && lower.size() > 2) {
+        index = 1;
+    }
+    bool seenDigit = false;
+    bool seenDot = false;
+    for (; index < lower.size(); ++index) {
+        char const ch = lower[index];
+        if (std::isdigit(static_cast<unsigned char>(ch))) {
+            seenDigit = true;
+            continue;
+        }
+        if (ch == '.' && !seenDot) {
+            seenDot = true;
+            continue;
+        }
+        break;
+    }
+    return seenDigit && index == lower.size() - 1 && (lower[index] == 'b' || lower[index] == 'm');
+}
+
+bool tokenIsQuantization(std::string const &token) {
+    std::string const lower = lowercaseAscii(token);
+    if (lower == "f16" || lower == "bf16" || lower == "fp16" || lower == "f32" || lower == "fp32") {
+        return true;
+    }
+    if (lower.size() >= 2 && lower[0] == 'q' && std::isdigit(static_cast<unsigned char>(lower[1]))) {
+        return true;
+    }
+    if (lower.size() >= 3 && lower[0] == 'i' && lower[1] == 'q' &&
+        std::isdigit(static_cast<unsigned char>(lower[2]))) {
+        return true;
+    }
+    return false;
+}
+
+bool tokenIsIgnoredForTitle(std::string const &token) {
+    std::string const lower = lowercaseAscii(token);
+    return lower.empty() || lower == "gguf" || lower == "qat";
+}
+
+std::string humanizeModelWord(std::string word) {
+    std::string lower = lowercaseAscii(word);
+    if (lower == "it") {
+        return "Instruct";
+    }
+    if (lower == "gguf") {
+        return "GGUF";
+    }
+    bool const alphaOnly = std::all_of(word.begin(), word.end(), [](char ch) {
+        return std::isalpha(static_cast<unsigned char>(ch)) != 0;
+    });
+    if (alphaOnly && word.size() <= 3) {
+        return uppercaseAscii(lower);
+    }
+    if (!word.empty()) {
+        word = lowercaseAscii(word);
+        word[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(word[0])));
+    }
+    return word;
+}
+
+std::string humanizeModelTitleToken(std::string const &token) {
+    std::string expanded;
+    expanded.reserve(token.size() + 4);
+    for (std::size_t i = 0; i < token.size(); ++i) {
+        char const ch = token[i];
+        if (ch == '_') {
+            expanded.push_back(' ');
+            continue;
+        }
+        if (i > 0) {
+            char const prev = token[i - 1];
+            if (std::isalpha(static_cast<unsigned char>(prev)) &&
+                std::isdigit(static_cast<unsigned char>(ch))) {
+                expanded.push_back(' ');
+            }
+        }
+        expanded.push_back(ch);
+    }
+
+    std::vector<std::string> words = splitModelTokens(expanded);
+    std::string result;
+    for (std::string const &word : words) {
+        if (word.empty()) {
+            continue;
+        }
+        if (!result.empty()) {
+            result += ' ';
+        }
+        result += humanizeModelWord(word);
+    }
+    return result;
+}
+
+std::string joinNonEmpty(std::vector<std::string> const &parts, std::string const &separator) {
+    std::string joined;
+    for (std::string const &part : parts) {
+        if (part.empty()) {
+            continue;
+        }
+        if (!joined.empty()) {
+            joined += separator;
+        }
+        joined += part;
+    }
+    return joined;
+}
+
+PresentedLocalModel presentLocalModel(LocalModel const &model) {
+    std::string const fileStem = trimKnownModelSuffixes(lastPathComponent(model.path));
+    std::string const repoStem = trimKnownModelSuffixes(lastPathComponent(model.repo));
+    std::vector<std::string> const fileTokens = splitModelTokens(fileStem);
+    std::vector<std::string> const titleSourceTokens =
+        !repoStem.empty() ? splitModelTokens(repoStem)
+                          : (!model.name.empty() ? splitModelTokens(trimKnownModelSuffixes(model.name))
+                                                 : fileTokens);
+
+    std::vector<std::string> titleParts;
+    titleParts.reserve(titleSourceTokens.size());
+    for (std::string const &token : titleSourceTokens) {
+        if (tokenIsIgnoredForTitle(token) || tokenIsParameter(token) || tokenIsQuantization(token)) {
+            continue;
+        }
+        titleParts.push_back(humanizeModelTitleToken(token));
+    }
+
+    if (titleParts.empty()) {
+        for (std::string const &token : fileTokens) {
+            if (tokenIsIgnoredForTitle(token) || tokenIsParameter(token) || tokenIsQuantization(token)) {
+                continue;
+            }
+            titleParts.push_back(humanizeModelTitleToken(token));
+        }
+    }
+
+    std::vector<std::string> parameterParts;
+    std::vector<std::string> quantParts;
+    for (std::string const &token : fileTokens) {
+        if (tokenIsParameter(token)) {
+            parameterParts.push_back(uppercaseAscii(token));
+        } else if (tokenIsQuantization(token)) {
+            quantParts.push_back(uppercaseAscii(token));
+        }
+    }
+
+    std::vector<std::string> detailParts;
+    if (!parameterParts.empty()) {
+        detailParts.push_back(joinNonEmpty(parameterParts, " / "));
+    }
+    if (!quantParts.empty()) {
+        detailParts.push_back(joinNonEmpty(quantParts, " / "));
+    }
+    if (model.sizeBytes > 0) {
+        detailParts.push_back(formatModelSize(model.sizeBytes));
+    }
+
+    return PresentedLocalModel{
+        .title = joinNonEmpty(titleParts, " "),
+        .detail = joinNonEmpty(detailParts, "  •  "),
+    };
+}
 
 std::string formatThoughtDuration(std::int64_t startedAtNanos, std::int64_t finishedAtNanos) {
     if (startedAtNanos <= 0 || finishedAtNanos <= startedAtNanos) {
@@ -93,189 +325,9 @@ struct ThinkingDots : ViewModifiers<ThinkingDots> {
     }
 };
 
-struct ModelMenuRow : ViewModifiers<ModelMenuRow> {
-    LocalModel model;
-    bool selected = false;
-    bool disabled = false;
-    std::function<void()> onTap;
-
-    auto body() const {
-        Theme const &theme = useEnvironment<Theme>();
-        bool const hovered = useHover();
-        bool const pressed = usePress();
-        bool const isDisabled = disabled;
-
-        Color const fill = selected ? theme.colorAccentSubtle : pressed ? theme.colorSurfaceRowHover :
-                                                            hovered     ? theme.colorSurfaceHover :
-                                                                          Colors::transparent;
-
-        std::string const sizeLabel = formatModelSize(model.sizeBytes);
-
-        return HStack {
-            .spacing = theme.space3,
-            .alignment = Alignment::Center,
-            .children = children(
-                VStack {
-                    .spacing = theme.space1 * 0.5f,
-                    .alignment = Alignment::Stretch,
-                    .children = children(
-                        Text {
-                            .text = model.name,
-                            .font = theme.fontLabel,
-                            .color = disabled ? theme.colorTextDisabled : theme.colorTextPrimary,
-                            .horizontalAlignment = HorizontalAlignment::Leading,
-                            .wrapping = TextWrapping::Wrap,
-                        },
-                        HStack {
-                            .spacing = theme.space2,
-                            .alignment = Alignment::Center,
-                            .children = children(
-                                Text {
-                                    .text = model.path,
-                                    .font = theme.fontBodySmall,
-                                    .color = disabled ? theme.colorTextDisabled : theme.colorTextSecondary,
-                                    .horizontalAlignment = HorizontalAlignment::Leading,
-                                    .wrapping = TextWrapping::NoWrap,
-                                    .maxLines = 1,
-                                }
-                                    .flex(1.f, 1.f, 0.f),
-                                Text {
-                                    .text = sizeLabel,
-                                    .font = theme.fontBodySmall,
-                                    .color = disabled ? theme.colorTextDisabled : theme.colorTextSecondary,
-                                    .horizontalAlignment = HorizontalAlignment::Trailing,
-                                    .wrapping = TextWrapping::NoWrap,
-                                    .maxLines = 1,
-                                }
-                            )
-                        }
-                    ),
-                }
-                    .flex(1.f, 1.f),
-                selected ? Element {Icon {
-                               .name = IconName::Check,
-                               .size = 16.f,
-                               .color = theme.colorAccent,
-                           }} :
-                           Element {Spacer {}.size(16.f, 16.f)}
-            ),
-        }
-            .padding(theme.space3, theme.space4, theme.space3, theme.space4)
-            .fill(FillStyle::solid(fill))
-            .cursor(isDisabled ? Cursor::Arrow : Cursor::Hand)
-            .focusable(!isDisabled)
-            .onTap([onTap = onTap, isDisabled] {
-                if (!isDisabled && onTap) {
-                    onTap();
-                }
-            });
-    }
-};
-
-struct ModelPickerButton : ViewModifiers<ModelPickerButton> {
-    std::string label;
-    std::vector<LocalModel> models;
-    std::string selectedModelPath;
-    bool disabled = false;
-    std::function<void(std::string const &, std::string const &)> onSelect;
-
-    auto body() const {
-        Theme const &theme = useEnvironment<Theme>();
-        auto [showPopover, hidePopover, menuOpen] = usePopover();
-        (void)menuOpen;
-        bool const isDisabled = disabled;
-
-        std::vector<Element> rows;
-        rows.reserve(models.size());
-
-        for (std::size_t i = 0; i < models.size(); ++i) {
-            LocalModel const &model = models[i];
-            rows.push_back(ModelMenuRow {
-                .model = model,
-                .selected = !selectedModelPath.empty() && model.path == selectedModelPath,
-                .disabled = disabled,
-                .onTap = [onSelect = onSelect, hidePopover, path = model.path, name = model.name] {
-                    if (onSelect) {
-                        onSelect(path, name);
-                    }
-                    hidePopover();
-                },
-            });
-        }
-
-        Element emptyMenu = Text {
-            .text = "No local models available",
-            .font = theme.fontBodySmall,
-            .color = theme.colorTextSecondary,
-            .horizontalAlignment = HorizontalAlignment::Leading,
-            .wrapping = TextWrapping::Wrap,
-        }
-                                .padding(theme.space3, theme.space4, theme.space3, theme.space4)
-                                .width(280.f);
-
-        auto openMenu = [showPopover, theme, rows = std::move(rows), emptyMenu = std::move(emptyMenu)]() mutable {
-            Element menuContent = std::move(emptyMenu);
-            if (!rows.empty()) {
-                menuContent = ScrollView {
-                    .axis = ScrollAxis::Vertical,
-                    .children = children(
-                        VStack {
-                            .spacing = 0.f,
-                            .alignment = Alignment::Stretch,
-                            .children = std::move(rows),
-                        }
-                    )
-                }
-                                  .width(420.f)
-                                  .height(280.f)
-                                  .clipContent(true);
-            } else {
-                menuContent = Text {
-                    .text = "No local models available",
-                    .font = theme.fontBodySmall,
-                    .color = theme.colorTextSecondary,
-                    .horizontalAlignment = HorizontalAlignment::Leading,
-                    .wrapping = TextWrapping::Wrap,
-                }
-                                  .padding(theme.space3, theme.space4, theme.space3, theme.space4)
-                                  .width(280.f);
-            }
-
-            showPopover(Popover {
-                .content = std::move(menuContent),
-                .placement = PopoverPlacement::Below,
-                .gap = theme.space1,
-                .arrow = false,
-                .cornerRadius = theme.radiusLarge,
-                .contentPadding = 0.f,
-                .maxSize = Size {380.f, 280.f},
-                .backdropColor = Colors::transparent,
-                .dismissOnEscape = true,
-                .dismissOnOutsideTap = true,
-                .useTapAnchor = false,
-                .debugName = "lambda.model_picker",
-            });
-        };
-
-        return LinkButton {
-            .label = label,
-            .disabled = disabled,
-            .style = LinkButton::Style {
-                .font = theme.fontLabel,
-                .color = isDisabled ? theme.colorTextDisabled : theme.colorAccent,
-            },
-            .onTap = [openMenu, isDisabled]() mutable {
-                if (!isDisabled) {
-                    openMenu();
-                }
-            },
-        }
-            .cursor(isDisabled ? Cursor::Arrow : Cursor::Hand);
-    }
-};
-
 struct ChatBubble : ViewModifiers<ChatBubble> {
     ChatMessage message;
+    bool renderMarkdown = true;
     std::function<void()> onToggleReasoning;
 
     auto body() const {
@@ -293,6 +345,8 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
                            isReasoning ? theme.colorSurface :
                                          theme.colorSurfaceOverlay;
         Color const textColor = isUser ? theme.colorTextOnAccent : theme.colorTextPrimary;
+        MarkdownResolvedStyle const markdownStyle =
+            resolveMarkdownStyle(theme, isReasoning ? theme.fontBodySmall : theme.fontBody, textColor);
 
         Element bubble = [&]() -> Element {
             if (isReasoning && collapsed) {
@@ -322,14 +376,33 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
                 .spacing = theme.space1,
                 .alignment = Alignment::Start,
                 .children = children(
-                    Text {
-                        .text = message.text,
-                        .font = isReasoning ? theme.fontBodySmall : theme.fontBody,
-                        .color = textColor,
-                        .horizontalAlignment = HorizontalAlignment::Leading,
-                        .verticalAlignment = VerticalAlignment::Top,
-                        .wrapping = TextWrapping::Wrap,
-                    },
+                    renderMarkdown ? Element {
+                                         MarkdownText {
+                                             .text = &message.text,
+                                             .cacheKey = message.renderKey,
+                                             .textRevision = message.textRevision,
+                                             .baseFont = markdownStyle.baseFont,
+                                             .codeFont = markdownStyle.codeFont,
+                                             .h1Font = markdownStyle.h1Font,
+                                             .h2Font = markdownStyle.h2Font,
+                                             .h3Font = markdownStyle.h3Font,
+                                             .baseColor = markdownStyle.baseColor,
+                                             .codeBackground = markdownStyle.codeBackground,
+                                             .horizontalAlignment = HorizontalAlignment::Leading,
+                                             .verticalAlignment = VerticalAlignment::Top,
+                                             .wrapping = TextWrapping::Wrap,
+                                         }
+                                     } :
+                                     Element {
+                                         Text {
+                                             .text = message.text,
+                                             .font = markdownStyle.baseFont,
+                                             .color = textColor,
+                                             .horizontalAlignment = HorizontalAlignment::Leading,
+                                             .verticalAlignment = VerticalAlignment::Top,
+                                             .wrapping = TextWrapping::Wrap,
+                                         }
+                                     },
                     (isReasoning && reasoningFinished) ? Element {
                                                              Text {
                                                                  .text = thoughtSummary,
@@ -387,8 +460,24 @@ struct ChatComposer : ViewModifiers<ChatComposer> {
     auto body() const {
         Theme const &theme = useEnvironment<Theme>();
         auto requestComposerFocus = useRequestFocus();
+        auto clearComposerFocus = useClearFocus();
         bool const isDisabled = disabled;
         auto wasDisabled = useState(disabled);
+        int derivedSelectedIndex = -1;
+        std::vector<SelectOption> modelOptions;
+        modelOptions.reserve(localModels.size());
+        for (std::size_t i = 0; i < localModels.size(); ++i) {
+            LocalModel const &model = localModels[i];
+            PresentedLocalModel const presented = presentLocalModel(model);
+            if (!selectedModelPath.empty() && model.path == selectedModelPath) {
+                derivedSelectedIndex = static_cast<int>(i);
+            }
+            modelOptions.push_back(SelectOption {
+                .label = presented.title.empty() ? model.name : presented.title,
+                .detail = presented.detail,
+            });
+        }
+        auto modelSelection = useState<int>(derivedSelectedIndex);
 
         if (*wasDisabled && !isDisabled) {
             Application::instance().onNextFrameNeeded([requestComposerFocus] {
@@ -396,14 +485,18 @@ struct ChatComposer : ViewModifiers<ChatComposer> {
             });
         }
         wasDisabled = isDisabled;
+        if (*modelSelection != derivedSelectedIndex) {
+            modelSelection = derivedSelectedIndex;
+        }
 
         auto draftState = value;
         bool const canSend = !disabled && !(*draftState).empty();
-        auto submit = [draftState, onSend = onSend, canSend]() {
+        auto submit = [draftState, onSend = onSend, canSend, clearComposerFocus]() {
             std::string message = *draftState;
             if (!canSend || message.empty() || !onSend) {
                 return;
             }
+            clearComposerFocus();
             onSend(message);
             draftState = "";
         };
@@ -431,12 +524,33 @@ struct ChatComposer : ViewModifiers<ChatComposer> {
                 HStack {
                     .spacing = theme.space2,
                     .alignment = Alignment::Center,
-                    .children = children(ModelPickerButton {
-                                             .label = modelLabel.empty() ? "Select model" : modelLabel,
-                                             .models = localModels,
-                                             .selectedModelPath = selectedModelPath,
+                    .children = children(Select {
+                                             .selectedIndex = modelSelection,
+                                             .options = std::move(modelOptions),
+                                             .placeholder = modelLabel.empty() ? "Select model" : modelLabel,
+                                             .emptyText = "No local models available",
                                              .disabled = localModels.empty() || streaming,
-                                             .onSelect = onSelectModel,
+                                             .showDetailInTrigger = false,
+                                             .matchTriggerWidth = false,
+                                             .triggerMode = SelectTriggerMode::Link,
+                                             .style = Select::Style {
+                                                 .labelFont = theme.fontLabel,
+                                                 .detailFont = theme.fontBodySmall,
+                                                 .menuMaxHeight = 280.f,
+                                                 .menuMaxWidth = 420.f,
+                                                 .minMenuWidth = 0.f,
+                                                 .accentColor = localModels.empty() || streaming ? theme.colorTextDisabled : theme.colorAccent,
+                                             },
+                                             .onChange = [localModels = localModels, onSelectModel = onSelectModel](int index) {
+                                                 if (index < 0 || static_cast<std::size_t>(index) >= localModels.size()) {
+                                                     return;
+                                                 }
+                                                 if (onSelectModel) {
+                                                     LocalModel const &model = localModels[static_cast<std::size_t>(index)];
+                                                     PresentedLocalModel const presented = presentLocalModel(model);
+                                                     onSelectModel(model.path, presented.title.empty() ? model.name : presented.title);
+                                                 }
+                                             },
                                          },
                                          Spacer {}, streaming ? Element {IconButton {
                                                                     .icon = IconName::Cancel,
@@ -484,26 +598,32 @@ struct ChatView : ViewModifiers<ChatView> {
 
     auto body() const {
         Theme const &theme = useEnvironment<Theme>();
+        auto clearFocus = useClearFocus();
         auto draft = useState<std::string>("");
 
         std::string selectedModelLabel = "Select model";
         for (LocalModel const &model : localModels) {
             if (!chat.modelPath.empty() && model.path == chat.modelPath) {
-                selectedModelLabel = model.name;
+                PresentedLocalModel const presented = presentLocalModel(model);
+                selectedModelLabel = presented.title.empty() ? model.name : presented.title;
                 break;
             }
         }
 
-        bool const hasModel = !chat.modelPath.empty();
-        bool const selectedModelReady = hasModel && chat.modelPath == loadedModelPath;
-        bool const canCompose = hasModel && selectedModelReady && !modelLoading && !chat.streaming;
+        bool const fakeStreaming = lambda_backend::debugFakeStreamEnabled();
+        bool const hasModel = fakeStreaming || !chat.modelPath.empty();
+        bool const selectedModelReady = fakeStreaming || (hasModel && chat.modelPath == loadedModelPath);
+        bool const canCompose = hasModel && selectedModelReady && (fakeStreaming || !modelLoading) && !chat.streaming;
 
         std::vector<Element> bubbles;
         bubbles.reserve(chat.messages.size());
         for (std::size_t i = 0; i < chat.messages.size(); ++i) {
             ChatMessage const &message = chat.messages[i];
+            bool const isStreamingTail =
+                chat.streaming && i + 1 == chat.messages.size() && message.role != ChatRole::User;
             bubbles.push_back(ChatBubble {
                 .message = message,
+                .renderMarkdown = !isStreamingTail,
                 .onToggleReasoning = [onToggleReasoning = onToggleReasoning, i] {
                     if (onToggleReasoning) {
                         onToggleReasoning(static_cast<int>(i));
@@ -548,7 +668,13 @@ struct ChatView : ViewModifiers<ChatView> {
                 }
                     .flex(1.f, 1.f, 0.f)
                     .fill(FillStyle::solid(theme.colorBackground))
-                    .clipContent(true),
+                    .clipContent(true)
+                    .onPointerDown([clearFocus](Point) {
+                        clearFocus();
+                    })
+                    .onScroll([clearFocus](Vec2) {
+                        clearFocus();
+                    }),
                 ChatComposer {
                     .value = draft,
                     .disabled = !canCompose,

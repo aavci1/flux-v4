@@ -17,6 +17,11 @@
 
 namespace flux {
 
+enum class SelectTriggerMode : std::uint8_t {
+  Field,
+  Link,
+};
+
 /// One menu row in a \ref Select.
 struct SelectOption {
   std::string label;
@@ -34,6 +39,7 @@ struct Select : ViewModifiers<Select> {
     float cornerRadius = kFloatFromTheme;
     float menuCornerRadius = kFloatFromTheme;
     float menuMaxHeight = kFloatFromTheme;
+    float menuMaxWidth = 0.f;
     float minMenuWidth = kFloatFromTheme;
     Color accentColor = kColorFromTheme;
     Color fieldColor = kColorFromTheme;
@@ -54,6 +60,10 @@ struct Select : ViewModifiers<Select> {
   bool disabled = false;
   bool showCheckmark = true;
   bool dismissOnSelect = true;
+  bool showDetailInTrigger = true;
+  bool matchTriggerWidth = true;
+
+  SelectTriggerMode triggerMode = SelectTriggerMode::Field;
 
   PopoverPlacement placement = PopoverPlacement::Below;
   Style style {};

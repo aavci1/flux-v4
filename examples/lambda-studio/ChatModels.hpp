@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <iomanip>
@@ -11,6 +12,11 @@
 #include <vector>
 
 namespace lambda {
+
+inline std::uint64_t generateMessageRenderKey() {
+    static std::atomic<std::uint64_t> nextKey {1};
+    return nextKey.fetch_add(1, std::memory_order_relaxed);
+}
 
 enum class ChatRole {
     User,
@@ -24,6 +30,8 @@ struct ChatMessage {
     std::int64_t startedAtNanos = 0;
     std::int64_t finishedAtNanos = 0;
     bool collapsed = false;
+    std::uint64_t renderKey = generateMessageRenderKey();
+    std::uint64_t textRevision = 1;
 
     bool operator==(ChatMessage const &) const = default;
 };

@@ -49,6 +49,43 @@ char const *overlayPlacementName(OverlayConfig::Placement placement) {
   return "unknown";
 }
 
+float resolveCrossAlignedX(Size win, Rect const &anchor, Rect contentBounds,
+                           OverlayConfig::CrossAlignment alignment) {
+  float const centeredX = (anchor.x + anchor.width * 0.5f) - (contentBounds.x + contentBounds.width * 0.5f);
+  float const startAlignedX = anchor.x - contentBounds.x;
+  float const endAlignedX = (anchor.x + anchor.width) - (contentBounds.x + contentBounds.width);
+
+  auto fitsHorizontally = [win, width = contentBounds.width](float x) {
+    return x >= 0.f && (x + width) <= win.width;
+  };
+
+  switch (alignment) {
+  case OverlayConfig::CrossAlignment::Center:
+    return centeredX;
+  case OverlayConfig::CrossAlignment::Start:
+    return startAlignedX;
+  case OverlayConfig::CrossAlignment::End:
+    return endAlignedX;
+  case OverlayConfig::CrossAlignment::PreferStart:
+    if (fitsHorizontally(startAlignedX)) {
+      return startAlignedX;
+    }
+    if (fitsHorizontally(endAlignedX)) {
+      return endAlignedX;
+    }
+    return startAlignedX;
+  case OverlayConfig::CrossAlignment::PreferEnd:
+    if (fitsHorizontally(endAlignedX)) {
+      return endAlignedX;
+    }
+    if (fitsHorizontally(startAlignedX)) {
+      return startAlignedX;
+    }
+    return endAlignedX;
+  }
+  return centeredX;
+}
+
 } // namespace
 
 bool OverlayId::isValid() const noexcept {
@@ -111,11 +148,11 @@ Rect OverlayManager::resolveFrame(Size win, OverlayConfig const& cfg, Rect conte
   // Center the arrow horizontally on the anchor; vertically align the tip to the anchor edge.
   switch (cfg.placement) {
   case OverlayConfig::Placement::Below:
-    x = cx - centerLocalX;
+    x = resolveCrossAlignedX(win, a, contentBounds, cfg.crossAlignment);
     y = a.y + a.height - tipTopLocalY;
     break;
   case OverlayConfig::Placement::Above:
-    x = cx - centerLocalX;
+    x = resolveCrossAlignedX(win, a, contentBounds, cfg.crossAlignment);
     y = a.y - tipBottomLocalY;
     break;
   case OverlayConfig::Placement::End:

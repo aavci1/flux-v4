@@ -32,6 +32,7 @@ struct Popover : ViewModifiers<Popover> {
   // ── Placement ──────────────────────────────────────────────────────────────
 
   PopoverPlacement placement = PopoverPlacement::Below;
+  OverlayConfig::CrossAlignment crossAlignment = OverlayConfig::CrossAlignment::Center;
 
   /// Gap between the anchor edge and the popover card (`kFloatFromTheme` = `Theme::space2`).
   float gap = kFloatFromTheme;

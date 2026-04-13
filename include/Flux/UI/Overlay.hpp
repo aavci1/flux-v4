@@ -37,6 +37,14 @@ inline constexpr OverlayId kInvalidOverlayId{};
 
 struct OverlayConfig {
 
+  enum class CrossAlignment {
+    Center,
+    Start,
+    End,
+    PreferStart,
+    PreferEnd,
+  };
+
   std::optional<Rect> anchor;
 
   /// When set, each overlay rebuild refreshes `anchor` from `Runtime::layoutRectForLeafKeyPrefix`
@@ -55,6 +63,7 @@ struct OverlayConfig {
 
   enum class Placement { Below, Above, End, Start };
   Placement placement = Placement::Below;
+  CrossAlignment crossAlignment = CrossAlignment::Center;
 
   Vec2 offset{};
 

@@ -127,6 +127,14 @@ bool usePress();
 /// Must be called inside body() like other hooks.
 std::function<void()> useRequestFocus();
 
+/// Returns a callable that clears keyboard focus for the current window when invoked.
+///
+/// The returned `std::function<void()>` is safe to capture in lambdas and call from event
+/// handlers — it does not require an active build pass.
+///
+/// Must be called inside body() like other hooks.
+std::function<void()> useClearFocus();
+
 /// Returns a cached value of `fn()`, recomputing only when the combined hash of `deps...`
 /// changes from the previous call.
 ///

@@ -253,6 +253,7 @@ std::tuple<std::function<void(Popover)>, std::function<void()>, bool> usePopover
             .anchorMaxHeight = popover.anchorMaxHeight,
             .anchorOutsets = popover.anchorOutsets,
             .placement = overlayPlacementFromPopover(resolved),
+            .crossAlignment = popover.crossAlignment,
             .offset = offset,
             .maxSize = maxSz,
             .modal = false,

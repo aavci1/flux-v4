@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -46,7 +47,71 @@ inline void postEventToMain(std::function<void(LlmUiEvent)> const &post, LlmUiEv
     post(std::move(ev));
 }
 
+inline bool envFlagEnabled(char const *name) {
+    char const *value = std::getenv(name);
+    return value && value[0] != '\0' && std::strcmp(value, "0") != 0;
+}
+
+inline int envIntOr(char const *name, int fallback) {
+    char const *value = std::getenv(name);
+    if (!value || value[0] == '\0') {
+        return fallback;
+    }
+    return std::max(1, std::atoi(value));
+}
+
 } // namespace detail
+
+inline bool debugFakeStreamEnabled() {
+    return detail::envFlagEnabled("LAMBDA_STUDIO_FAKE_STREAM");
+}
+
+inline bool debugAutoStreamEnabled() {
+    return detail::envFlagEnabled("LAMBDA_STUDIO_AUTO_STREAM");
+}
+
+inline int debugFakeTokensPerSecond() {
+    return detail::envIntOr("LAMBDA_STUDIO_FAKE_TOKENS_PER_SECOND", 10);
+}
+
+inline std::string debugFakeMarkdownResponse() {
+    return R"(# Streaming Markdown Stress Test
+
+## Overview
+
+This response is intentionally long so we can observe **CPU usage** while the UI receives markdown over time.
+
+- The renderer should keep old content stable.
+- Only the newest chunk should be changing.
+- Inline `code` and headings are included on purpose.
+
+### Checklist
+
+- Rebuild the attributed markdown only when needed.
+- Avoid expensive work for messages that are only being scrolled.
+- Keep the chat responsive while the stream is active.
+
+```cpp
+for (int frame = 0; frame < 600; ++frame) {
+    render_chat_transcript();
+    sample_cpu_usage();
+}
+```
+
+## Notes
+
+The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog.
+
+The UI should render **bold emphasis**, keep `inline spans` readable, and avoid chewing CPU once the message is complete.
+
+- Item one explains the cost of parsing.
+- Item two explains the cost of text layout.
+- Item three explains the cost of rebuilding the whole transcript.
+
+### Closing
+
+If this fake stream still drives high CPU after the response settles, the hotspot is probably outside the markdown parser and closer to layout or transcript rebuilding.)";
+}
 
 inline std::string tokenToPiece(llama_vocab const *vocab, llama_token token) {
     char buf[256];
@@ -136,6 +201,19 @@ class LlamaEngine {
         std::string chatId,
         std::function<void(LlmUiEvent)> post
     ) {
+        if (debugFakeStreamEnabled()) {
+            cancelGeneration();
+            joinWorker();
+            cancelled_.store(false, std::memory_order_relaxed);
+
+            worker_ = std::thread(
+                [this, msgs = std::move(messages), chat = std::move(chatId), userPost = std::move(post)]() mutable {
+                    runFakeGeneration(std::move(msgs), std::move(chat), std::move(userPost));
+                }
+            );
+            return;
+        }
+
         if (!model_) {
             detail::postEventToMain(
                 post,
@@ -334,6 +412,63 @@ class LlamaEngine {
             "[LlamaEngine] generation done. raw output (first 500 chars):\n%.500s\n[END]\n",
             rawOutput.c_str()
         );
+
+        postOnMain(LlmUiEvent {.kind = LlmUiEvent::Kind::Done});
+    }
+
+    void runFakeGeneration(
+        std::vector<ChatMessage> messages,
+        std::string chatId,
+        std::function<void(LlmUiEvent)> userPost
+    ) {
+        (void)messages;
+        auto postOnMain = [&userPost, &chatId](LlmUiEvent ev) {
+            ev.chatId = chatId;
+            detail::postEventToMain(userPost, std::move(ev));
+        };
+
+        std::vector<std::pair<LlmUiEvent::Part, std::string>> tokens;
+        auto tokenize = [&tokens](LlmUiEvent::Part part, std::string const &text) {
+            std::size_t index = 0;
+            while (index < text.size()) {
+                if (text[index] == '\n') {
+                    tokens.push_back({part, "\n"});
+                    ++index;
+                    continue;
+                }
+
+                std::size_t end = index;
+                while (end < text.size() && text[end] != ' ' && text[end] != '\n') {
+                    ++end;
+                }
+                if (end < text.size() && text[end] == ' ') {
+                    ++end;
+                }
+                tokens.push_back({part, text.substr(index, end - index)});
+                index = end;
+            }
+        };
+
+        tokenize(
+            LlmUiEvent::Part::Thinking,
+            "Thinking through the markdown rendering path, checking headings, bold markers, and code fences.\n\n"
+        );
+        tokenize(LlmUiEvent::Part::Content, debugFakeMarkdownResponse());
+
+        auto const delay = std::chrono::milliseconds(std::max(1, 1000 / debugFakeTokensPerSecond()));
+        for (auto const &[part, text] : tokens) {
+            if (cancelled_.load(std::memory_order_relaxed)) {
+                postOnMain(LlmUiEvent {.kind = LlmUiEvent::Kind::Done});
+                return;
+            }
+
+            postOnMain(LlmUiEvent {
+                .kind = LlmUiEvent::Kind::Chunk,
+                .part = part,
+                .text = text,
+            });
+            std::this_thread::sleep_for(delay);
+        }
 
         postOnMain(LlmUiEvent {.kind = LlmUiEvent::Kind::Done});
     }
