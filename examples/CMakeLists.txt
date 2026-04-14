@@ -16,7 +16,10 @@ endfunction()
 add_executable(hello_world hello-world/main.cpp)
 target_link_libraries(hello_world PRIVATE flux)
 
-add_executable(lambda-studio lambda-studio/main.cpp)
+add_executable(lambda-studio
+  lambda-studio/main.cpp
+  lambda-studio/Backend.cpp
+)
 target_link_libraries(lambda-studio PRIVATE flux common sqlite3)
 
 add_executable(clock_demo clock-demo/main.cpp)

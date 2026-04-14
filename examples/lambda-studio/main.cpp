@@ -1205,11 +1205,12 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
 
 int main(int argc, char *argv[]) {
     Application app(argc, argv);
-    std::shared_ptr<LambdaStudioRuntime> runtime = makeLambdaStudioRuntime(LambdaStudioRuntimeFactory {
-        .postModelEvent = [](lambda_backend::ModelManagerEvent ev) {
-            Application::instance().eventQueue().post(std::move(ev));
-        },
-    });
+    std::shared_ptr<LambdaStudioRuntime> runtime =
+        makeLambdaStudioRuntime(makeDefaultLambdaStudioRuntimeFactory(
+            [](lambda_backend::ModelManagerEvent ev) {
+                Application::instance().eventQueue().post(std::move(ev));
+            }
+        ));
 
     auto &w = app.createWindow<Window>({
         .size = {1100, 720},

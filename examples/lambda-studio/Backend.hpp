@@ -1,38 +1,13 @@
 #pragma once
 
-#include <atomic>
 #include <functional>
 #include <memory>
 #include <stdexcept>
 #include <utility>
 
 #include "BackendInterfaces.hpp"
-#include "LlamaEngine.hpp"
-#include "ModelCatalogStore.hpp"
-#include "ModelManager.hpp"
 
 namespace lambda {
-
-namespace detail {
-
-class LlamaBackendLifecycle {
-  public:
-    LlamaBackendLifecycle() { refCount().fetch_add(1, std::memory_order_relaxed); }
-
-    ~LlamaBackendLifecycle() {
-        if (refCount().fetch_sub(1, std::memory_order_acq_rel) == 1) {
-            llama_backend_free();
-        }
-    }
-
-  private:
-    static std::atomic<int> &refCount() {
-        static std::atomic<int> count {0};
-        return count;
-    }
-};
-
-} // namespace detail
 
 struct LambdaStudioRuntime {
     std::shared_ptr<IChatEngine> engine;
@@ -69,17 +44,13 @@ struct LambdaStudioRuntimeFactory {
     using MakeManager =
         std::function<std::shared_ptr<IModelManager>(std::shared_ptr<IChatEngine>, PostModelEvent)>;
     using MakeCatalog = std::function<std::shared_ptr<IModelCatalogStore>()>;
+    using MakeLifecycle = std::function<std::shared_ptr<void>()>;
 
     PostModelEvent postModelEvent;
-    MakeEngine makeEngine = [] {
-        return std::make_shared<lambda_backend::LlamaEngine>();
-    };
-    MakeManager makeManager = [](std::shared_ptr<IChatEngine> engine, PostModelEvent post) {
-        return std::make_shared<lambda_backend::ModelManager>(std::move(engine), std::move(post));
-    };
-    MakeCatalog makeCatalog = [] {
-        return std::make_shared<ModelCatalogStore>();
-    };
+    MakeEngine makeEngine;
+    MakeManager makeManager;
+    MakeCatalog makeCatalog;
+    MakeLifecycle makeLifecycle;
 };
 
 inline std::shared_ptr<LambdaStudioRuntime> makeLambdaStudioRuntime(LambdaStudioRuntimeDeps deps) {
@@ -114,12 +85,21 @@ inline std::shared_ptr<LambdaStudioRuntime> makeLambdaStudioRuntime(LambdaStudio
         throw std::runtime_error("LambdaStudioRuntimeFactory.makeCatalog returned null");
     }
 
+    std::shared_ptr<void> lifecycle;
+    if (factory.makeLifecycle) {
+        lifecycle = factory.makeLifecycle();
+    }
+
     return makeLambdaStudioRuntime(LambdaStudioRuntimeDeps {
         .engine = std::move(engine),
         .manager = std::move(manager),
         .catalog = std::move(catalog),
-        .lifecycle = std::make_shared<detail::LlamaBackendLifecycle>(),
+        .lifecycle = std::move(lifecycle),
     });
 }
+
+LambdaStudioRuntimeFactory makeDefaultLambdaStudioRuntimeFactory(
+    LambdaStudioRuntimeFactory::PostModelEvent postModelEvent
+);
 
 } // namespace lambda
