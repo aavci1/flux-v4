@@ -2,9 +2,9 @@
 
 #include <atomic>
 
-#include "LlamaEngine.hpp"
+#include "LambdaStudioLlamaEngine.hpp"
 #include "LambdaStudioStore.hpp"
-#include "ModelManager.hpp"
+#include "LambdaStudioModelManager.hpp"
 
 namespace lambda {
 
@@ -35,10 +35,13 @@ LambdaStudioRuntimeFactory makeDefaultLambdaStudioRuntimeFactory(
     return LambdaStudioRuntimeFactory {
         .postModelEvent = std::move(postModelEvent),
         .makeEngine = [] {
-            return std::make_shared<lambda_studio_backend::LlamaEngine>();
+            return std::make_shared<lambda_studio_backend::LambdaStudioLlamaEngine>();
         },
         .makeManager = [](std::shared_ptr<IChatEngine> engine, LambdaStudioRuntimeFactory::PostModelEvent post) {
-            return std::make_shared<lambda_studio_backend::ModelManager>(std::move(engine), std::move(post));
+            return std::make_shared<lambda_studio_backend::LambdaStudioModelManager>(
+                std::move(engine),
+                std::move(post)
+            );
         },
         .makeCatalog = [] {
             return std::make_shared<LambdaStudioStore>();

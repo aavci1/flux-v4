@@ -195,18 +195,18 @@ inline double computeTokensPerSecond(GenerationStats const &stats) {
     return static_cast<double>(stats.completionTokens) / (static_cast<double>(durationMs) / 1000.0);
 }
 
-class LlamaEngine : public lambda::IChatEngine {
+class LambdaStudioLlamaEngine : public lambda::IChatEngine {
   public:
-    LlamaEngine() = default;
+    LambdaStudioLlamaEngine() = default;
 
-    ~LlamaEngine() {
+    ~LambdaStudioLlamaEngine() {
         cancelGeneration();
         joinWorker();
         unload();
     }
 
-    LlamaEngine(LlamaEngine const &) = delete;
-    LlamaEngine &operator=(LlamaEngine const &) = delete;
+    LambdaStudioLlamaEngine(LambdaStudioLlamaEngine const &) = delete;
+    LambdaStudioLlamaEngine &operator=(LambdaStudioLlamaEngine const &) = delete;
 
     bool load(std::string const &modelPath, int nGpuLayers = -1, uint32_t nCtx = 0) override {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -223,7 +223,7 @@ class LlamaEngine : public lambda::IChatEngine {
         auto const modelParams = common_model_params_to_llama(params_);
         model_.reset(llama_model_load_from_file(modelPath.c_str(), modelParams));
         if (!model_) {
-            std::fprintf(stderr, "[LlamaEngine] failed to load model: %s\n", modelPath.c_str());
+            std::fprintf(stderr, "[LambdaStudioLlamaEngine] failed to load model: %s\n", modelPath.c_str());
             return false;
         }
 
@@ -233,14 +233,14 @@ class LlamaEngine : public lambda::IChatEngine {
 
         std::fprintf(
             stderr,
-            "[LlamaEngine] loaded: %s (n_gpu_layers=%d, n_ctx=%u)\n",
+            "[LambdaStudioLlamaEngine] loaded: %s (n_gpu_layers=%d, n_ctx=%u)\n",
             modelPath.c_str(),
             params_.n_gpu_layers,
             nCtx
         );
         std::fprintf(
             stderr,
-            "[LlamaEngine] chat template source: %.120s\n",
+            "[LambdaStudioLlamaEngine] chat template source: %.120s\n",
             common_chat_templates_source(templates_.get()).c_str()
         );
         return true;
@@ -381,11 +381,11 @@ class LlamaEngine : public lambda::IChatEngine {
 
         std::fprintf(
             stderr,
-            "[LlamaEngine] template format=%s supports_thinking=%d\n",
+            "[LambdaStudioLlamaEngine] template format=%s supports_thinking=%d\n",
             common_chat_format_name(chatParams.format),
             static_cast<int>(chatParams.supports_thinking)
         );
-        std::fprintf(stderr, "[LlamaEngine] prompt (first 200 chars): %.200s\n", chatParams.prompt.c_str());
+        std::fprintf(stderr, "[LambdaStudioLlamaEngine] prompt (first 200 chars): %.200s\n", chatParams.prompt.c_str());
 
         auto const promptTokens = common_tokenize(vocab_, chatParams.prompt, true, true);
         if (promptTokens.empty()) {
@@ -407,7 +407,7 @@ class LlamaEngine : public lambda::IChatEngine {
         int const predictCount = params.maxTokens;
         stats.promptTokens = promptCount;
 
-        std::fprintf(stderr, "[LlamaEngine] prompt: %d tokens, max predict: %d\n", promptCount, predictCount);
+        std::fprintf(stderr, "[LambdaStudioLlamaEngine] prompt: %d tokens, max predict: %d\n", promptCount, predictCount);
 
         auto contextParams = common_context_params_to_llama(params_);
         llama_context_ptr ctx(llama_init_from_model(model_.get(), contextParams));
@@ -487,7 +487,7 @@ class LlamaEngine : public lambda::IChatEngine {
 
             llama_token token = common_sampler_sample(sampler.get(), ctx.get(), -1);
             if (llama_vocab_is_eog(vocab_, token)) {
-                std::fprintf(stderr, "[LlamaEngine] EOG token=%d at position %d\n", static_cast<int>(token), i);
+                std::fprintf(stderr, "[LambdaStudioLlamaEngine] EOG token=%d at position %d\n", static_cast<int>(token), i);
                 stats.status = "completed";
                 break;
             }
@@ -534,7 +534,7 @@ class LlamaEngine : public lambda::IChatEngine {
 
         std::fprintf(
             stderr,
-            "[LlamaEngine] generation done. raw output (first 500 chars):\n%.500s\n[END]\n",
+            "[LambdaStudioLlamaEngine] generation done. raw output (first 500 chars):\n%.500s\n[END]\n",
             rawOutput.c_str()
         );
 

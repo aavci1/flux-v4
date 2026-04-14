@@ -2,7 +2,7 @@
 
 #include "LambdaStudioInterfaces.hpp"
 #include "LambdaStudioTypes.hpp"
-#include "LlamaEngine.hpp"
+#include "LambdaStudioLlamaEngine.hpp"
 
 #include "common.h"
 #include "download.h"
@@ -43,11 +43,11 @@ struct HfRepoDetailResponse {
     std::string rawJson;
 };
 
-class ModelManager : public lambda::IModelManager {
+class LambdaStudioModelManager : public lambda::IModelManager {
   public:
     using PostFn = std::function<void(ModelManagerEvent)>;
 
-    explicit ModelManager(std::shared_ptr<lambda::IChatEngine> engine, PostFn post)
+    explicit LambdaStudioModelManager(std::shared_ptr<lambda::IChatEngine> engine, PostFn post)
         : engine_(std::move(engine)),
           post_(std::move(post)),
           inventoryLane_(true),
@@ -62,7 +62,7 @@ class ModelManager : public lambda::IModelManager {
         startLane(loadModelLane_);
     }
 
-    ~ModelManager() override {
+    ~LambdaStudioModelManager() override {
         stopLane(inventoryLane_);
         stopLane(searchLane_);
         stopLane(repoInspectLane_);
@@ -70,8 +70,8 @@ class ModelManager : public lambda::IModelManager {
         stopLane(loadModelLane_);
     }
 
-    ModelManager(ModelManager const &) = delete;
-    ModelManager &operator=(ModelManager const &) = delete;
+    LambdaStudioModelManager(LambdaStudioModelManager const &) = delete;
+    LambdaStudioModelManager &operator=(LambdaStudioModelManager const &) = delete;
 
     std::uint64_t refreshLocalModels() override {
         std::uint64_t const requestId = beginRequest(ModelManagerLane::Inventory);
@@ -213,7 +213,7 @@ class ModelManager : public lambda::IModelManager {
 
                 std::string const token = hfToken();
                 struct DownloadProgressContext {
-                    ModelManager * manager = nullptr;
+                    LambdaStudioModelManager * manager = nullptr;
                     std::string repoId;
                     std::string filePath;
                     std::mutex mutex;
