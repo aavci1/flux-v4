@@ -22,6 +22,17 @@ struct ChatMessage {
     constexpr bool operator==(ChatMessage const &) const = default;
 };
 
+struct ChatGenerationRequest {
+    std::string chatId;
+    std::uint64_t generationId = 0;
+    std::vector<ChatMessage> messages;
+    std::string summaryText;
+    std::size_t summaryMessageCount = 0;
+    std::int64_t summaryUpdatedAtUnixMs = 0;
+
+    constexpr bool operator==(ChatGenerationRequest const &) const = default;
+};
+
 struct GenerationStats {
     std::int64_t promptTokens = 0;
     std::int64_t completionTokens = 0;
@@ -55,6 +66,9 @@ struct LlmUiEvent {
     std::string chatId;
     std::uint64_t generationId = 0;
     std::string text;
+    std::string summaryText;
+    std::size_t summaryMessageCount = 0;
+    std::int64_t summaryUpdatedAtUnixMs = 0;
     std::optional<GenerationStats> generationStats;
 };
 

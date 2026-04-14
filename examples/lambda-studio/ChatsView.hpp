@@ -169,7 +169,7 @@ struct ChatsView : ViewModifiers<ChatsView> {
                                 }
                             }
                         }.padding(theme.space4),
-                        Rectangle {}.size(0.f, 1.f).fill(FillStyle::solid(theme.colorBorderSubtle)),
+                        Divider { .orientation = Divider::Orientation::Horizontal },
                         ListView {
                             .rows = std::move(rows),
                         }

@@ -398,7 +398,7 @@ class ModelManager : public lambda::IModelManager {
                 }
 
                 if (pathsEquivalent(engine_->modelPath(), modelPath)) {
-                    engine_->cancelGeneration();
+                    engine_->cancelAllGenerations();
                     engine_->unload();
                 }
 
@@ -464,7 +464,7 @@ class ModelManager : public lambda::IModelManager {
     }
 
     void unloadModel() override {
-        engine_->cancelGeneration();
+        engine_->cancelAllGenerations();
         engine_->unload();
     }
 

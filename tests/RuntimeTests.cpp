@@ -31,26 +31,27 @@ class FakeChatEngine : public lambda::IChatEngine {
         modelPath_.clear();
     }
 
-    void cancelGeneration() override { ++cancelCalls_; }
+    void cancelChat(std::string const &) override { ++cancelChatCalls_; }
+    void cancelAllGenerations() override { ++cancelAllCalls_; }
 
     void startChat(
-        std::vector<lambda_studio_backend::ChatMessage>,
-        std::string,
-        std::uint64_t,
+        lambda_studio_backend::ChatGenerationRequest,
         std::function<void(lambda_studio_backend::LlmUiEvent)>
     ) override {
         ++startChatCalls_;
     }
 
     int startChatCalls() const { return startChatCalls_; }
-    int cancelCalls() const { return cancelCalls_; }
+    int cancelChatCalls() const { return cancelChatCalls_; }
+    int cancelAllCalls() const { return cancelAllCalls_; }
 
   private:
     bool loaded_ = false;
     std::string modelPath_;
     lambda_studio_backend::SamplingParams sampling_ {};
     int startChatCalls_ = 0;
-    int cancelCalls_ = 0;
+    int cancelChatCalls_ = 0;
+    int cancelAllCalls_ = 0;
 };
 
 class FakeModelManager : public lambda::IModelManager {
@@ -108,6 +109,9 @@ class FakeStore : public lambda::IStore {
         std::int64_t,
         std::string const &,
         std::string const &,
+        std::string const &,
+        std::size_t,
+        std::int64_t,
         std::int64_t
     ) override {}
     void replaceChatMessagesForThread(std::string const &, std::vector<lambda::ChatMessage> const &) override {}

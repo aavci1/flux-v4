@@ -27,11 +27,10 @@ class IChatEngine {
     virtual lambda_studio_backend::SamplingParams samplingParams() const = 0;
     virtual void setSamplingParams(lambda_studio_backend::SamplingParams const &params) = 0;
     virtual void unload() = 0;
-    virtual void cancelGeneration() = 0;
+    virtual void cancelChat(std::string const &chatId) = 0;
+    virtual void cancelAllGenerations() = 0;
     virtual void startChat(
-        std::vector<lambda_studio_backend::ChatMessage> messages,
-        std::string chatId,
-        std::uint64_t generationId,
+        lambda_studio_backend::ChatGenerationRequest request,
         std::function<void(lambda_studio_backend::LlmUiEvent)> post
     ) = 0;
 };
@@ -101,6 +100,9 @@ class IStore {
         std::int64_t updatedAtUnixMs,
         std::string const &modelPath,
         std::string const &modelName,
+        std::string const &summaryText,
+        std::size_t summaryMessageCount,
+        std::int64_t summaryUpdatedAtUnixMs,
         std::int64_t sortOrder
     ) = 0;
     virtual void replaceChatMessagesForThread(

@@ -494,18 +494,26 @@ class Store : public IStore {
         std::int64_t updatedAtUnixMs,
         std::string const &modelPath,
         std::string const &modelName,
+        std::string const &summaryText,
+        std::size_t summaryMessageCount,
+        std::int64_t summaryUpdatedAtUnixMs,
         std::int64_t sortOrder
     ) override {
         std::lock_guard<std::mutex> lock(mutex_);
         Statement upsert(
             db_,
-            "INSERT INTO chat_threads (chat_id, title, updated_at_unix_ms, model_path, model_name, sort_order) "
-            "VALUES (?1, ?2, ?3, ?4, ?5, ?6) "
+            "INSERT INTO chat_threads ("
+            "  chat_id, title, updated_at_unix_ms, model_path, model_name,"
+            "  summary_text, summary_message_count, summary_updated_at_unix_ms, sort_order"
+            ") VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9) "
             "ON CONFLICT(chat_id) DO UPDATE SET "
             "  title=excluded.title,"
             "  updated_at_unix_ms=excluded.updated_at_unix_ms,"
             "  model_path=excluded.model_path,"
             "  model_name=excluded.model_name,"
+            "  summary_text=excluded.summary_text,"
+            "  summary_message_count=excluded.summary_message_count,"
+            "  summary_updated_at_unix_ms=excluded.summary_updated_at_unix_ms,"
             "  sort_order=excluded.sort_order;"
         );
         bindText(upsert.stmt, 1, chatId);
@@ -513,7 +521,10 @@ class Store : public IStore {
         bindInt64(upsert.stmt, 3, updatedAtUnixMs);
         bindText(upsert.stmt, 4, modelPath);
         bindText(upsert.stmt, 5, modelName);
-        bindInt64(upsert.stmt, 6, sortOrder);
+        bindText(upsert.stmt, 6, summaryText);
+        bindInt64(upsert.stmt, 7, static_cast<std::int64_t>(summaryMessageCount));
+        bindInt64(upsert.stmt, 8, summaryUpdatedAtUnixMs);
+        bindInt64(upsert.stmt, 9, sortOrder);
         stepDone(upsert.stmt);
     }
 
@@ -673,7 +684,9 @@ class Store : public IStore {
 
         Statement threadStmt(
             db_,
-            "SELECT chat_id, title, updated_at_unix_ms, model_path, model_name "
+            "SELECT "
+            "  chat_id, title, updated_at_unix_ms, model_path, model_name,"
+            "  summary_text, summary_message_count, summary_updated_at_unix_ms "
             "FROM chat_threads "
             "ORDER BY sort_order ASC;"
         );
@@ -685,6 +698,9 @@ class Store : public IStore {
             thread.updatedAtUnixMs = sqlite3_column_int64(threadStmt.stmt, 2);
             thread.modelPath = columnText(threadStmt.stmt, 3);
             thread.modelName = columnText(threadStmt.stmt, 4);
+            thread.summaryText = columnText(threadStmt.stmt, 5);
+            thread.summaryMessageCount = static_cast<std::size_t>(sqlite3_column_int64(threadStmt.stmt, 6));
+            thread.summaryUpdatedAtUnixMs = sqlite3_column_int64(threadStmt.stmt, 7);
             thread.streaming = false;
 
             Statement messageStmt(
@@ -738,7 +754,7 @@ class Store : public IStore {
     }
 
   private:
-    static constexpr int kCurrentSchemaVersion = 6;
+    static constexpr int kCurrentSchemaVersion = 7;
 
     struct Statement {
         sqlite3_stmt *stmt = nullptr;
@@ -1209,6 +1225,11 @@ class Store : public IStore {
         if (version < 6) {
             applyMigration6();
             setUserVersion(6);
+            version = 6;
+        }
+        if (version < 7) {
+            applyMigration7();
+            setUserVersion(7);
         }
     }
 
@@ -1355,6 +1376,14 @@ class Store : public IStore {
             ");"
             "CREATE INDEX IF NOT EXISTS idx_chat_message_stats_chat_order "
             "ON chat_message_stats(chat_id, message_order ASC);"
+        );
+    }
+
+    void applyMigration7() {
+        execute(
+            "ALTER TABLE chat_threads ADD COLUMN summary_text TEXT NOT NULL DEFAULT '';"
+            "ALTER TABLE chat_threads ADD COLUMN summary_message_count INTEGER NOT NULL DEFAULT 0;"
+            "ALTER TABLE chat_threads ADD COLUMN summary_updated_at_unix_ms INTEGER NOT NULL DEFAULT 0;"
         );
     }
 

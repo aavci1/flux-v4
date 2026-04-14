@@ -78,6 +78,9 @@ struct ChatThread {
     std::int64_t updatedAtUnixMs = 0;
     std::string modelPath;
     std::string modelName;
+    std::string summaryText;
+    std::size_t summaryMessageCount = 0;
+    std::int64_t summaryUpdatedAtUnixMs = 0;
     std::vector<ChatMessage> messages;
     std::vector<ChatMessage> streamDraftMessages;
     bool streaming = false;

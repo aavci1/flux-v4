@@ -267,6 +267,7 @@ if(FLUX_BUILD_TESTS)
     tests/EventMapTests.cpp
     tests/LayoutTreeTests.cpp
     tests/LayoutIntegrationTests.cpp
+    tests/LlamaEngineTests.cpp
     tests/ParagraphCacheTests.cpp
     tests/ParagraphCacheIncrementalTests.cpp
     tests/StoreTests.cpp
@@ -282,6 +283,7 @@ if(FLUX_BUILD_TESTS)
 
   target_link_libraries(flux_tests PRIVATE
     flux
+    common
     sqlite3
     doctest::doctest
   )

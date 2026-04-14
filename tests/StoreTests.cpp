@@ -3,8 +3,11 @@
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
+#include <stdexcept>
 #include <string>
 #include <vector>
+
+#include <sqlite3.h>
 
 #include "../examples/lambda-studio/Store.hpp"
 
@@ -42,6 +45,15 @@ lambda::MessageGenerationStats makeGenerationStats(std::string modelName, std::i
     };
 }
 
+void execSql(sqlite3 *db, char const *sql) {
+    char *error = nullptr;
+    if (sqlite3_exec(db, sql, nullptr, nullptr, &error) != SQLITE_OK) {
+        std::string message = error != nullptr ? error : "sqlite error";
+        sqlite3_free(error);
+        throw std::runtime_error(message);
+    }
+}
+
 } // namespace
 
 TEST_CASE("Store incremental chat persistence updates only targeted thread") {
@@ -49,8 +61,8 @@ TEST_CASE("Store incremental chat persistence updates only targeted thread") {
     std::filesystem::create_directories(tempDir);
 
     lambda::Store store(tempDir);
-    store.upsertChatThreadMeta("chat-a", "Chat A", 100, "/tmp/a.gguf", "A", 0);
-    store.upsertChatThreadMeta("chat-b", "Chat B", 100, "/tmp/b.gguf", "B", 1);
+    store.upsertChatThreadMeta("chat-a", "Chat A", 100, "/tmp/a.gguf", "A", "", 0, 0, 0);
+    store.upsertChatThreadMeta("chat-b", "Chat B", 100, "/tmp/b.gguf", "B", "", 0, 0, 1);
     store.replaceChatMessagesForThread("chat-a", {makeUserMessage("A1"), makeUserMessage("A2")});
     store.replaceChatMessagesForThread("chat-b", {makeUserMessage("B1"), makeUserMessage("B2")});
     store.updateSelectedChatId("chat-a");
@@ -75,8 +87,8 @@ TEST_CASE("Store can reorder chats and update selection without message churn") 
     std::filesystem::create_directories(tempDir);
 
     lambda::Store store(tempDir);
-    store.upsertChatThreadMeta("chat-a", "Chat A", 100, "/tmp/a.gguf", "A", 0);
-    store.upsertChatThreadMeta("chat-b", "Chat B", 100, "/tmp/b.gguf", "B", 1);
+    store.upsertChatThreadMeta("chat-a", "Chat A", 100, "/tmp/a.gguf", "A", "", 0, 0, 0);
+    store.upsertChatThreadMeta("chat-b", "Chat B", 100, "/tmp/b.gguf", "B", "", 0, 0, 1);
     store.replaceChatMessagesForThread("chat-a", {makeUserMessage("A1")});
     store.replaceChatMessagesForThread("chat-b", {makeUserMessage("B1")});
 
@@ -101,8 +113,8 @@ TEST_CASE("Store deletes one chat thread without affecting others") {
     std::filesystem::create_directories(tempDir);
 
     lambda::Store store(tempDir);
-    store.upsertChatThreadMeta("chat-a", "Chat A", 100, "/tmp/a.gguf", "A", 0);
-    store.upsertChatThreadMeta("chat-b", "Chat B", 100, "/tmp/b.gguf", "B", 1);
+    store.upsertChatThreadMeta("chat-a", "Chat A", 100, "/tmp/a.gguf", "A", "", 0, 0, 0);
+    store.upsertChatThreadMeta("chat-b", "Chat B", 100, "/tmp/b.gguf", "B", "", 0, 0, 1);
     store.replaceChatMessagesForThread("chat-a", {makeUserMessage("A1"), makeUserMessage("A2")});
     store.replaceChatMessagesForThread("chat-b", {makeUserMessage("B1")});
     store.updateSelectedChatId("chat-b");
@@ -125,7 +137,7 @@ TEST_CASE("Store persists generation stats for reasoning messages") {
     std::filesystem::create_directories(tempDir);
 
     lambda::Store store(tempDir);
-    store.upsertChatThreadMeta("chat-a", "Chat A", 100, "/tmp/a.gguf", "A", 0);
+    store.upsertChatThreadMeta("chat-a", "Chat A", 100, "/tmp/a.gguf", "A", "", 0, 0, 0);
 
     lambda::ChatMessage reasoning {
         .role = lambda::ChatRole::Reasoning,
@@ -150,6 +162,118 @@ TEST_CASE("Store persists generation stats for reasoning messages") {
     REQUIRE(state.chats[0].messages[2].role == lambda::ChatRole::Assistant);
     REQUIRE(state.chats[0].messages[2].generationStats.has_value());
     CHECK(state.chats[0].messages[2].generationStats->completionTokens == 33);
+
+    std::filesystem::remove_all(tempDir);
+}
+
+TEST_CASE("Store persists hidden chat summary metadata") {
+    std::filesystem::path const tempDir = uniqueTempDir("summary-meta");
+    std::filesystem::create_directories(tempDir);
+
+    lambda::Store store(tempDir);
+    store.upsertChatThreadMeta(
+        "chat-a",
+        "Chat A",
+        100,
+        "/tmp/a.gguf",
+        "A",
+        "Summarized earlier turns",
+        3,
+        456,
+        0
+    );
+    store.replaceChatMessagesForThread("chat-a", {makeUserMessage("Q"), makeUserMessage("A")});
+
+    lambda::PersistedChatState const state = store.loadPersistedChatState();
+    REQUIRE(state.chats.size() == 1);
+    CHECK(state.chats[0].summaryText == "Summarized earlier turns");
+    CHECK(state.chats[0].summaryMessageCount == 3);
+    CHECK(state.chats[0].summaryUpdatedAtUnixMs == 456);
+
+    std::filesystem::remove_all(tempDir);
+}
+
+TEST_CASE("Store migrates v6 chat threads to v7 summary metadata") {
+    std::filesystem::path const tempDir = uniqueTempDir("migration-v7");
+    std::filesystem::create_directories(tempDir);
+    std::filesystem::path const dbPath = tempDir / "model_catalog.sqlite3";
+
+    sqlite3 *db = nullptr;
+    REQUIRE(sqlite3_open_v2(dbPath.c_str(), &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nullptr) == SQLITE_OK);
+    execSql(
+        db,
+        "CREATE TABLE app_preferences (pref_key TEXT PRIMARY KEY, value_text TEXT NOT NULL DEFAULT '');"
+        "CREATE TABLE chat_threads ("
+        "  chat_id TEXT PRIMARY KEY,"
+        "  title TEXT NOT NULL,"
+        "  updated_at_unix_ms INTEGER NOT NULL DEFAULT 0,"
+        "  model_path TEXT NOT NULL DEFAULT '',"
+        "  model_name TEXT NOT NULL DEFAULT '',"
+        "  sort_order INTEGER NOT NULL"
+        ");"
+        "CREATE TABLE chat_messages ("
+        "  chat_id TEXT NOT NULL,"
+        "  message_order INTEGER NOT NULL,"
+        "  role TEXT NOT NULL,"
+        "  text TEXT NOT NULL DEFAULT '',"
+        "  started_at_nanos INTEGER NOT NULL DEFAULT 0,"
+        "  finished_at_nanos INTEGER NOT NULL DEFAULT 0,"
+        "  collapsed INTEGER NOT NULL DEFAULT 0,"
+        "  PRIMARY KEY (chat_id, message_order)"
+        ");"
+        "CREATE TABLE chat_message_stats ("
+        "  chat_id TEXT NOT NULL,"
+        "  message_order INTEGER NOT NULL,"
+        "  model_path TEXT NOT NULL DEFAULT '',"
+        "  model_name TEXT NOT NULL DEFAULT '',"
+        "  prompt_tokens INTEGER NOT NULL DEFAULT 0,"
+        "  completion_tokens INTEGER NOT NULL DEFAULT 0,"
+        "  started_at_unix_ms INTEGER NOT NULL DEFAULT 0,"
+        "  first_token_at_unix_ms INTEGER NOT NULL DEFAULT 0,"
+        "  finished_at_unix_ms INTEGER NOT NULL DEFAULT 0,"
+        "  tokens_per_second REAL NOT NULL DEFAULT 0,"
+        "  status TEXT NOT NULL DEFAULT '',"
+        "  error_text TEXT NOT NULL DEFAULT '',"
+        "  temp REAL NOT NULL DEFAULT 0,"
+        "  top_p REAL NOT NULL DEFAULT 0,"
+        "  top_k INTEGER NOT NULL DEFAULT 0,"
+        "  max_tokens INTEGER NOT NULL DEFAULT 0,"
+        "  PRIMARY KEY (chat_id, message_order)"
+        ");"
+        "INSERT INTO chat_threads (chat_id, title, updated_at_unix_ms, model_path, model_name, sort_order) "
+        "VALUES ('chat-a', 'Chat A', 100, '/tmp/a.gguf', 'A', 0);"
+        "INSERT INTO chat_messages (chat_id, message_order, role, text, started_at_nanos, finished_at_nanos, collapsed) "
+        "VALUES ('chat-a', 0, 'user', 'hello', 0, 0, 0);"
+        "PRAGMA user_version=6;"
+    );
+    sqlite3_close(db);
+
+    lambda::Store store(tempDir);
+    lambda::PersistedChatState state = store.loadPersistedChatState();
+    REQUIRE(state.chats.size() == 1);
+    CHECK(state.chats[0].messages.size() == 1);
+    CHECK(state.chats[0].summaryText.empty());
+    CHECK(state.chats[0].summaryMessageCount == 0);
+
+    store.upsertChatThreadMeta(
+        "chat-a",
+        "Chat A",
+        101,
+        "/tmp/a.gguf",
+        "A",
+        "Migrated summary",
+        2,
+        999,
+        0
+    );
+
+    state = store.loadPersistedChatState();
+    REQUIRE(state.chats.size() == 1);
+    CHECK(state.chats[0].summaryText == "Migrated summary");
+    CHECK(state.chats[0].summaryMessageCount == 2);
+    CHECK(state.chats[0].summaryUpdatedAtUnixMs == 999);
+    CHECK(state.chats[0].messages.size() == 1);
+    CHECK(state.chats[0].messages[0].text == "hello");
 
     std::filesystem::remove_all(tempDir);
 }

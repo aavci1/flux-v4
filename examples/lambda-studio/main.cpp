@@ -119,6 +119,9 @@ void persistChatThread(
             chat.updatedAtUnixMs,
             chat.modelPath,
             chat.modelName,
+            chat.summaryText,
+            chat.summaryMessageCount,
+            chat.summaryUpdatedAtUnixMs,
             chatIndex
         );
         catalog.replaceChatMessagesForThread(chat.id, storedChatMessages(chat));
@@ -276,6 +279,17 @@ std::vector<lambda_studio_backend::ChatMessage> toBackendMessages(ChatThread con
     return result;
 }
 
+lambda_studio_backend::ChatGenerationRequest toGenerationRequest(ChatThread const &chat) {
+    return lambda_studio_backend::ChatGenerationRequest {
+        .chatId = chat.id,
+        .generationId = chat.activeGenerationId,
+        .messages = toBackendMessages(chat),
+        .summaryText = chat.summaryText,
+        .summaryMessageCount = chat.summaryMessageCount,
+        .summaryUpdatedAtUnixMs = chat.summaryUpdatedAtUnixMs,
+    };
+}
+
 std::string titleFromPrompt(std::string const &prompt) {
     std::string title = prompt;
     while (!title.empty() && std::isspace(static_cast<unsigned char>(title.front()))) {
@@ -362,6 +376,13 @@ struct StudioApp : ViewModifiers<StudioApp> {
                         }
                         appendChatMessageText(it->streamDraftMessages.back(), event.text);
                     } else if (event.kind == lambda_studio_backend::LlmUiEvent::Kind::Done) {
+                        if (event.summaryText != it->summaryText ||
+                            event.summaryMessageCount != it->summaryMessageCount ||
+                            event.summaryUpdatedAtUnixMs != it->summaryUpdatedAtUnixMs) {
+                            it->summaryText = event.summaryText;
+                            it->summaryMessageCount = event.summaryMessageCount;
+                            it->summaryUpdatedAtUnixMs = event.summaryUpdatedAtUnixMs;
+                        }
                         commitStreamDraft(*it, nowNanos);
                         it->streaming = false;
                         it->activeGenerationId = 0;
@@ -371,6 +392,13 @@ struct StudioApp : ViewModifiers<StudioApp> {
                         }
                         nextState.statusText = "Response complete";
                     } else if (event.kind == lambda_studio_backend::LlmUiEvent::Kind::Error) {
+                        if (event.summaryText != it->summaryText ||
+                            event.summaryMessageCount != it->summaryMessageCount ||
+                            event.summaryUpdatedAtUnixMs != it->summaryUpdatedAtUnixMs) {
+                            it->summaryText = event.summaryText;
+                            it->summaryMessageCount = event.summaryMessageCount;
+                            it->summaryUpdatedAtUnixMs = event.summaryUpdatedAtUnixMs;
+                        }
                         commitStreamDraft(*it, nowNanos);
                         it->streaming = false;
                         it->activeGenerationId = 0;
@@ -997,8 +1025,6 @@ struct StudioApp : ViewModifiers<StudioApp> {
             nextState.errorText.clear();
             nextState.statusText = "Generating response...";
 
-            std::vector<lambda_studio_backend::ChatMessage> history = toBackendMessages(chat);
-            std::string streamChatId = chat.id;
             std::uint64_t const generationId = generateGenerationId();
             chat.activeGenerationId = generationId;
 
@@ -1006,9 +1032,7 @@ struct StudioApp : ViewModifiers<StudioApp> {
             appState = std::move(nextState);
 
             engine->startChat(
-                std::move(history),
-                std::move(streamChatId),
-                generationId,
+                toGenerationRequest(chat),
                 [](lambda_studio_backend::LlmUiEvent event) {
                     if (!Application::hasInstance()) {
                         return;
@@ -1027,10 +1051,10 @@ struct StudioApp : ViewModifiers<StudioApp> {
         }
 
         auto stopMessage = [appState, catalog, engine](int chatIndex) {
-            engine->cancelGeneration();
             AppState nextState = *appState;
             if (chatIndex >= 0 && static_cast<std::size_t>(chatIndex) < nextState.chats.size()) {
                 ChatThread &chat = nextState.chats[static_cast<std::size_t>(chatIndex)];
+                engine->cancelChat(chat.id);
                 chat.streaming = false;
                 chat.activeGenerationId = 0;
                 persistChatThread(nextState, *catalog, chatIndex);
@@ -1110,7 +1134,7 @@ struct StudioApp : ViewModifiers<StudioApp> {
 
             ChatThread const removedChat = nextState.chats[static_cast<std::size_t>(chatIndex)];
             if (removedChat.streaming || removedChat.activeGenerationId != 0) {
-                engine->cancelGeneration();
+                engine->cancelChat(removedChat.id);
             }
             nextState.chats.erase(nextState.chats.begin() + chatIndex);
             if (nextState.chats.empty()) {
