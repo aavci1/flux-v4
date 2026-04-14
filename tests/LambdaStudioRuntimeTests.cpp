@@ -74,7 +74,7 @@ class FakeModelManager : public lambda::IModelManager {
     std::uint64_t requestId_ = 0;
 };
 
-class FakeModelCatalogStore : public lambda::IModelCatalogStore {
+class FakeLambdaStudioStore : public lambda::ILambdaStudioStore {
   public:
     std::filesystem::path databasePath() const override { return {}; }
     void replaceSearchSnapshot(std::string const &, std::vector<lambda::RemoteModel> const &, std::string const &) override {}
@@ -119,7 +119,7 @@ class FakeModelCatalogStore : public lambda::IModelCatalogStore {
 TEST_CASE("LambdaStudioRuntime rejects missing dependencies") {
     auto engine = std::make_shared<FakeChatEngine>();
     auto manager = std::make_shared<FakeModelManager>(engine);
-    auto catalog = std::make_shared<FakeModelCatalogStore>();
+    auto catalog = std::make_shared<FakeLambdaStudioStore>();
 
     CHECK_NOTHROW(lambda::makeLambdaStudioRuntime(lambda::LambdaStudioRuntimeDeps {
         .engine = engine,
@@ -170,9 +170,9 @@ TEST_CASE("LambdaStudioRuntimeFactory builds isolated runtimes and tears down li
                 return std::make_shared<FakeModelManager>(std::move(engine));
             },
         .makeCatalog =
-            [&]() -> std::shared_ptr<lambda::IModelCatalogStore> {
+            [&]() -> std::shared_ptr<lambda::ILambdaStudioStore> {
                 ++catalogBuildCount;
-                return std::make_shared<FakeModelCatalogStore>();
+                return std::make_shared<FakeLambdaStudioStore>();
             },
         .makeLifecycle =
             [&]() -> std::shared_ptr<void> {

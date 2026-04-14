@@ -3,7 +3,7 @@
 #include <atomic>
 
 #include "LlamaEngine.hpp"
-#include "ModelCatalogStore.hpp"
+#include "LambdaStudioStore.hpp"
 #include "ModelManager.hpp"
 
 namespace lambda {
@@ -41,7 +41,7 @@ LambdaStudioRuntimeFactory makeDefaultLambdaStudioRuntimeFactory(
             return std::make_shared<lambda_backend::ModelManager>(std::move(engine), std::move(post));
         },
         .makeCatalog = [] {
-            return std::make_shared<ModelCatalogStore>();
+            return std::make_shared<LambdaStudioStore>();
         },
         .makeLifecycle = [] {
             return std::make_shared<detail::LlamaBackendLifecycle>();

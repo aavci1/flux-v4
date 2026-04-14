@@ -80,7 +80,7 @@ int chatIndexById(AppState const &state, std::string const &chatId) {
     return static_cast<int>(std::distance(state.chats.begin(), it));
 }
 
-void persistSelectedChat(AppState &state, IModelCatalogStore &catalog) {
+void persistSelectedChat(AppState &state, ILambdaStudioStore &catalog) {
     try {
         catalog.updateSelectedChatId(selectedChatIdForState(state));
     } catch (std::exception const &e) {
@@ -88,7 +88,7 @@ void persistSelectedChat(AppState &state, IModelCatalogStore &catalog) {
     }
 }
 
-void persistChatOrder(AppState &state, IModelCatalogStore &catalog) {
+void persistChatOrder(AppState &state, ILambdaStudioStore &catalog) {
     try {
         std::vector<std::string> chatIds;
         chatIds.reserve(state.chats.size());
@@ -103,7 +103,7 @@ void persistChatOrder(AppState &state, IModelCatalogStore &catalog) {
 
 void persistChatThread(
     AppState &state,
-    IModelCatalogStore &catalog,
+    ILambdaStudioStore &catalog,
     int chatIndex,
     bool persistSelection = false
 ) {
@@ -334,7 +334,7 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
         }
         std::shared_ptr<IChatEngine> engine = runtimeInstance->engine;
         std::shared_ptr<IModelManager> manager = runtimeInstance->manager;
-        std::shared_ptr<IModelCatalogStore> catalog = runtimeInstance->catalog;
+        std::shared_ptr<ILambdaStudioStore> catalog = runtimeInstance->catalog;
         auto currentRemoteSearchKey = [](AppState const &state) {
             return remoteModelSearchCacheKey(
                 state.modelSearchQuery,

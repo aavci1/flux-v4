@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-#include "../examples/lambda-studio/ModelCatalogStore.hpp"
+#include "../examples/lambda-studio/LambdaStudioStore.hpp"
 
 namespace {
 
@@ -24,11 +24,11 @@ lambda::ChatMessage makeUserMessage(std::string text) {
 
 } // namespace
 
-TEST_CASE("ModelCatalogStore incremental chat persistence updates only targeted thread") {
+TEST_CASE("LambdaStudioStore incremental chat persistence updates only targeted thread") {
     std::filesystem::path const tempDir = uniqueTempDir("thread");
     std::filesystem::create_directories(tempDir);
 
-    lambda::ModelCatalogStore store(tempDir);
+    lambda::LambdaStudioStore store(tempDir);
     store.upsertChatThreadMeta("chat-a", "Chat A", 100, "/tmp/a.gguf", "A", 0);
     store.upsertChatThreadMeta("chat-b", "Chat B", 100, "/tmp/b.gguf", "B", 1);
     store.replaceChatMessagesForThread("chat-a", {makeUserMessage("A1"), makeUserMessage("A2")});
@@ -50,11 +50,11 @@ TEST_CASE("ModelCatalogStore incremental chat persistence updates only targeted 
     std::filesystem::remove_all(tempDir);
 }
 
-TEST_CASE("ModelCatalogStore can reorder chats and update selection without message churn") {
+TEST_CASE("LambdaStudioStore can reorder chats and update selection without message churn") {
     std::filesystem::path const tempDir = uniqueTempDir("order");
     std::filesystem::create_directories(tempDir);
 
-    lambda::ModelCatalogStore store(tempDir);
+    lambda::LambdaStudioStore store(tempDir);
     store.upsertChatThreadMeta("chat-a", "Chat A", 100, "/tmp/a.gguf", "A", 0);
     store.upsertChatThreadMeta("chat-b", "Chat B", 100, "/tmp/b.gguf", "B", 1);
     store.replaceChatMessagesForThread("chat-a", {makeUserMessage("A1")});
@@ -76,11 +76,11 @@ TEST_CASE("ModelCatalogStore can reorder chats and update selection without mess
     std::filesystem::remove_all(tempDir);
 }
 
-TEST_CASE("ModelCatalogStore deletes one chat thread without affecting others") {
+TEST_CASE("LambdaStudioStore deletes one chat thread without affecting others") {
     std::filesystem::path const tempDir = uniqueTempDir("delete");
     std::filesystem::create_directories(tempDir);
 
-    lambda::ModelCatalogStore store(tempDir);
+    lambda::LambdaStudioStore store(tempDir);
     store.upsertChatThreadMeta("chat-a", "Chat A", 100, "/tmp/a.gguf", "A", 0);
     store.upsertChatThreadMeta("chat-b", "Chat B", 100, "/tmp/b.gguf", "B", 1);
     store.replaceChatMessagesForThread("chat-a", {makeUserMessage("A1"), makeUserMessage("A2")});

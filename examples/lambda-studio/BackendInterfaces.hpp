@@ -55,9 +55,9 @@ class IModelManager {
     virtual void unloadModel() = 0;
 };
 
-class IModelCatalogStore {
+class ILambdaStudioStore {
   public:
-    virtual ~IModelCatalogStore() = default;
+    virtual ~ILambdaStudioStore() = default;
 
     virtual std::filesystem::path databasePath() const = 0;
     virtual void replaceSearchSnapshot(

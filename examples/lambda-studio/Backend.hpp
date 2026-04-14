@@ -12,13 +12,13 @@ namespace lambda {
 struct LambdaStudioRuntime {
     std::shared_ptr<IChatEngine> engine;
     std::shared_ptr<IModelManager> manager;
-    std::shared_ptr<IModelCatalogStore> catalog;
+    std::shared_ptr<ILambdaStudioStore> catalog;
     std::shared_ptr<void> lifecycle;
 
     LambdaStudioRuntime(
         std::shared_ptr<IChatEngine> engineIn,
         std::shared_ptr<IModelManager> managerIn,
-        std::shared_ptr<IModelCatalogStore> catalogIn,
+        std::shared_ptr<ILambdaStudioStore> catalogIn,
         std::shared_ptr<void> lifecycleIn = nullptr
     )
         : engine(std::move(engineIn)),
@@ -34,7 +34,7 @@ struct LambdaStudioRuntime {
 struct LambdaStudioRuntimeDeps {
     std::shared_ptr<IChatEngine> engine;
     std::shared_ptr<IModelManager> manager;
-    std::shared_ptr<IModelCatalogStore> catalog;
+    std::shared_ptr<ILambdaStudioStore> catalog;
     std::shared_ptr<void> lifecycle;
 };
 
@@ -43,7 +43,7 @@ struct LambdaStudioRuntimeFactory {
     using MakeEngine = std::function<std::shared_ptr<IChatEngine>()>;
     using MakeManager =
         std::function<std::shared_ptr<IModelManager>(std::shared_ptr<IChatEngine>, PostModelEvent)>;
-    using MakeCatalog = std::function<std::shared_ptr<IModelCatalogStore>()>;
+    using MakeCatalog = std::function<std::shared_ptr<ILambdaStudioStore>()>;
     using MakeLifecycle = std::function<std::shared_ptr<void>()>;
 
     PostModelEvent postModelEvent;

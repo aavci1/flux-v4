@@ -152,7 +152,7 @@ Responsibilities:
 - report load success/failure
 - coordinate with chat runtime requirements
 
-### 5. ModelCatalogStore
+### 5. LambdaStudioStore
 
 Responsibilities:
 
@@ -529,7 +529,7 @@ Scope:
 
 Deliverables:
 
-- `ModelCatalogStore`
+- `LambdaStudioStore`
 - schema versioning
 - migration path
 

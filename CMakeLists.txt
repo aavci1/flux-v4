@@ -266,7 +266,7 @@ if(FLUX_BUILD_TESTS)
     tests/LayoutIntegrationTests.cpp
     tests/ParagraphCacheTests.cpp
     tests/ParagraphCacheIncrementalTests.cpp
-    tests/LambdaStudioCatalogStoreTests.cpp
+    tests/LambdaStudioStoreTests.cpp
     tests/LambdaStudioRuntimeTests.cpp
     tests/TextEditUtilsTests.cpp
   )

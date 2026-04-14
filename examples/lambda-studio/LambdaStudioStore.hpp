@@ -19,24 +19,24 @@
 
 namespace lambda {
 
-class ModelCatalogStore : public IModelCatalogStore {
+class LambdaStudioStore : public ILambdaStudioStore {
   public:
-    ModelCatalogStore() : ModelCatalogStore(defaultDataDirectory()) {}
+    LambdaStudioStore() : LambdaStudioStore(defaultDataDirectory()) {}
 
-    explicit ModelCatalogStore(std::filesystem::path dataDirectory)
+    explicit LambdaStudioStore(std::filesystem::path dataDirectory)
         : dataDirectory_(std::move(dataDirectory)) {
         tryOpen(dataDirectory_);
     }
 
-    ~ModelCatalogStore() {
+    ~LambdaStudioStore() {
         if (db_ != nullptr) {
             sqlite3_close(db_);
             db_ = nullptr;
         }
     }
 
-    ModelCatalogStore(ModelCatalogStore const &) = delete;
-    ModelCatalogStore &operator=(ModelCatalogStore const &) = delete;
+    LambdaStudioStore(LambdaStudioStore const &) = delete;
+    LambdaStudioStore &operator=(LambdaStudioStore const &) = delete;
 
     std::filesystem::path databasePath() const override {
         return dataDirectory_ / "model_catalog.sqlite3";
