@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-namespace lambda_backend {
+namespace lambda_studio_backend {
 
 struct ChatMessage {
     enum class Role {
@@ -181,4 +181,4 @@ struct SamplingParams {
     constexpr bool operator==(SamplingParams const &) const = default;
 };
 
-} // namespace lambda_backend
+} // namespace lambda_studio_backend

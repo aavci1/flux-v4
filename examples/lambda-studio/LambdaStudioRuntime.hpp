@@ -39,7 +39,7 @@ struct LambdaStudioRuntimeDeps {
 };
 
 struct LambdaStudioRuntimeFactory {
-    using PostModelEvent = std::function<void(lambda_backend::ModelManagerEvent)>;
+    using PostModelEvent = std::function<void(lambda_studio_backend::ModelManagerEvent)>;
     using MakeEngine = std::function<std::shared_ptr<IChatEngine>()>;
     using MakeManager =
         std::function<std::shared_ptr<IModelManager>(std::shared_ptr<IChatEngine>, PostModelEvent)>;

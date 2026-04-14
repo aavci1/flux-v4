@@ -21,7 +21,7 @@
 #include <utility>
 #include <vector>
 
-namespace lambda_backend {
+namespace lambda_studio_backend {
 
 struct LlmUiEvent {
     enum class Kind {
@@ -667,4 +667,4 @@ inline int defaultNGpuLayers() {
     return -1;
 }
 
-} // namespace lambda_backend
+} // namespace lambda_studio_backend

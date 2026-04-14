@@ -29,7 +29,7 @@
 #include <unordered_set>
 #include <vector>
 
-namespace lambda_backend {
+namespace lambda_studio_backend {
 
 namespace fs = std::filesystem;
 
@@ -1240,4 +1240,4 @@ class ModelManager : public lambda::IModelManager {
     LaneState loadModelLane_;
 };
 
-} // namespace lambda_backend
+} // namespace lambda_studio_backend

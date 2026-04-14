@@ -5,7 +5,7 @@
 
 namespace lambda {
 
-inline LocalModel toLocalModel(lambda_backend::LocalModelInfo const &model) {
+inline LocalModel toLocalModel(lambda_studio_backend::LocalModelInfo const &model) {
     LocalModel local;
     local.path = model.path;
     local.repo = model.repo;
@@ -15,7 +15,7 @@ inline LocalModel toLocalModel(lambda_backend::LocalModelInfo const &model) {
     return local;
 }
 
-inline RemoteModel toRemoteModel(lambda_backend::HfModelInfo const &model) {
+inline RemoteModel toRemoteModel(lambda_studio_backend::HfModelInfo const &model) {
     RemoteModel remote;
     remote.id = model.id;
     remote.author = model.author;
@@ -34,7 +34,7 @@ inline RemoteModel toRemoteModel(lambda_backend::HfModelInfo const &model) {
     return remote;
 }
 
-inline RemoteModelFile toRemoteModelFile(lambda_backend::HfFileInfo const &file) {
+inline RemoteModelFile toRemoteModelFile(lambda_studio_backend::HfFileInfo const &file) {
     RemoteModelFile remoteFile;
     remoteFile.repoId = file.repoId;
     remoteFile.path = file.path;
@@ -44,7 +44,7 @@ inline RemoteModelFile toRemoteModelFile(lambda_backend::HfFileInfo const &file)
     return remoteFile;
 }
 
-inline RemoteRepoDetail toRemoteRepoDetail(lambda_backend::HfRepoDetailInfo const &detail) {
+inline RemoteRepoDetail toRemoteRepoDetail(lambda_studio_backend::HfRepoDetailInfo const &detail) {
     RemoteRepoDetail remote;
     remote.id = detail.id;
     remote.author = detail.author;
@@ -69,16 +69,16 @@ inline RemoteRepoDetail toRemoteRepoDetail(lambda_backend::HfRepoDetailInfo cons
     return remote;
 }
 
-inline lambda_backend::ChatMessage::Role toBackendRole(ChatRole role) {
+inline lambda_studio_backend::ChatMessage::Role toBackendRole(ChatRole role) {
     switch (role) {
     case ChatRole::User:
-        return lambda_backend::ChatMessage::Role::User;
+        return lambda_studio_backend::ChatMessage::Role::User;
     case ChatRole::Reasoning:
-        return lambda_backend::ChatMessage::Role::Reasoning;
+        return lambda_studio_backend::ChatMessage::Role::Reasoning;
     case ChatRole::Assistant:
-        return lambda_backend::ChatMessage::Role::Assistant;
+        return lambda_studio_backend::ChatMessage::Role::Assistant;
     }
-    return lambda_backend::ChatMessage::Role::Assistant;
+    return lambda_studio_backend::ChatMessage::Role::Assistant;
 }
 
 } // namespace lambda

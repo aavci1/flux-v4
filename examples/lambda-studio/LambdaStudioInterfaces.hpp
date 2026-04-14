@@ -10,7 +10,7 @@
 #include "AppState.hpp"
 #include "LambdaStudioTypes.hpp"
 
-namespace lambda_backend {
+namespace lambda_studio_backend {
 struct LlmUiEvent;
 }
 
@@ -28,15 +28,15 @@ class IChatEngine {
     virtual bool load(std::string const &modelPath, int nGpuLayers = -1, uint32_t nCtx = 0) = 0;
     virtual bool isLoaded() const = 0;
     virtual std::string const &modelPath() const = 0;
-    virtual lambda_backend::SamplingParams samplingParams() const = 0;
-    virtual void setSamplingParams(lambda_backend::SamplingParams const &params) = 0;
+    virtual lambda_studio_backend::SamplingParams samplingParams() const = 0;
+    virtual void setSamplingParams(lambda_studio_backend::SamplingParams const &params) = 0;
     virtual void unload() = 0;
     virtual void cancelGeneration() = 0;
     virtual void startChat(
-        std::vector<lambda_backend::ChatMessage> messages,
+        std::vector<lambda_studio_backend::ChatMessage> messages,
         std::string chatId,
         std::uint64_t generationId,
-        std::function<void(lambda_backend::LlmUiEvent)> post
+        std::function<void(lambda_studio_backend::LlmUiEvent)> post
     ) = 0;
 };
 
@@ -45,7 +45,7 @@ class IModelManager {
     virtual ~IModelManager() = default;
 
     virtual std::uint64_t refreshLocalModels() = 0;
-    virtual std::uint64_t searchHuggingFace(lambda_backend::HfSearchRequest request) = 0;
+    virtual std::uint64_t searchHuggingFace(lambda_studio_backend::HfSearchRequest request) = 0;
     virtual std::uint64_t listRepoFiles(std::string repoId) = 0;
     virtual std::uint64_t fetchRepoDetail(std::string repoId) = 0;
     virtual std::uint64_t inspectRepo(std::string repoId) = 0;

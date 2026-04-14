@@ -798,7 +798,7 @@ struct ChatView : ViewModifiers<ChatView> {
             }
         }
 
-        bool const fakeStreaming = lambda_backend::debugFakeStreamEnabled();
+        bool const fakeStreaming = lambda_studio_backend::debugFakeStreamEnabled();
         bool const hasModel = fakeStreaming || !chat.modelPath.empty();
         bool const selectedModelReady = fakeStreaming || (hasModel && chat.modelPath == loadedModelPath);
         bool const canCompose = hasModel && selectedModelReady && (fakeStreaming || !modelLoading) && !chat.streaming;

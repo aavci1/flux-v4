@@ -23,8 +23,8 @@ class FakeChatEngine : public lambda::IChatEngine {
     bool isLoaded() const override { return loaded_; }
     std::string const &modelPath() const override { return modelPath_; }
 
-    lambda_backend::SamplingParams samplingParams() const override { return sampling_; }
-    void setSamplingParams(lambda_backend::SamplingParams const &params) override { sampling_ = params; }
+    lambda_studio_backend::SamplingParams samplingParams() const override { return sampling_; }
+    void setSamplingParams(lambda_studio_backend::SamplingParams const &params) override { sampling_ = params; }
 
     void unload() override {
         loaded_ = false;
@@ -34,10 +34,10 @@ class FakeChatEngine : public lambda::IChatEngine {
     void cancelGeneration() override { ++cancelCalls_; }
 
     void startChat(
-        std::vector<lambda_backend::ChatMessage>,
+        std::vector<lambda_studio_backend::ChatMessage>,
         std::string,
         std::uint64_t,
-        std::function<void(lambda_backend::LlmUiEvent)>
+        std::function<void(lambda_studio_backend::LlmUiEvent)>
     ) override {
         ++startChatCalls_;
     }
@@ -48,7 +48,7 @@ class FakeChatEngine : public lambda::IChatEngine {
   private:
     bool loaded_ = false;
     std::string modelPath_;
-    lambda_backend::SamplingParams sampling_ {};
+    lambda_studio_backend::SamplingParams sampling_ {};
     int startChatCalls_ = 0;
     int cancelCalls_ = 0;
 };
@@ -58,7 +58,7 @@ class FakeModelManager : public lambda::IModelManager {
     explicit FakeModelManager(std::shared_ptr<lambda::IChatEngine> engine) : boundEngine_(std::move(engine)) {}
 
     std::uint64_t refreshLocalModels() override { return ++requestId_; }
-    std::uint64_t searchHuggingFace(lambda_backend::HfSearchRequest) override { return ++requestId_; }
+    std::uint64_t searchHuggingFace(lambda_studio_backend::HfSearchRequest) override { return ++requestId_; }
     std::uint64_t listRepoFiles(std::string) override { return ++requestId_; }
     std::uint64_t fetchRepoDetail(std::string) override { return ++requestId_; }
     std::uint64_t inspectRepo(std::string) override { return ++requestId_; }
@@ -156,7 +156,7 @@ TEST_CASE("LambdaStudioRuntimeFactory builds isolated runtimes and tears down li
 
     lambda::LambdaStudioRuntimeFactory factory {
         .postModelEvent =
-            [&](lambda_backend::ModelManagerEvent) {
+            [&](lambda_studio_backend::ModelManagerEvent) {
                 ++postCount;
             },
         .makeEngine =
