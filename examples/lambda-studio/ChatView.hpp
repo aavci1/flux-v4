@@ -350,23 +350,6 @@ std::vector<std::string> generationStatsPrimaryParts(MessageGenerationStats cons
     return parts;
 }
 
-std::vector<std::string> generationStatsSecondaryParts(MessageGenerationStats const &stats) {
-    std::vector<std::string> parts;
-    if (stats.promptTokens > 0) {
-        parts.push_back("Prompt " + std::to_string(stats.promptTokens));
-    }
-    if (stats.maxTokens > 0) {
-        parts.push_back("Max " + std::to_string(stats.maxTokens));
-    }
-    if (!stats.status.empty() && stats.status != "completed") {
-        parts.push_back(generationStatusLabel(stats.status));
-    }
-    if (!stats.errorText.empty()) {
-        parts.push_back(stats.errorText);
-    }
-    return parts;
-}
-
 } // namespace
 
 struct ThinkingDots : ViewModifiers<ThinkingDots> {
@@ -508,7 +491,6 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
             if (showStatsFooter) {
                 MessageGenerationStats const &stats = *message.generationStats;
                 std::string const primaryLine = joinNonEmpty(generationStatsPrimaryParts(stats), "  •  ");
-                std::string const secondaryLine = joinNonEmpty(generationStatsSecondaryParts(stats), "  •  ");
                 std::vector<Element> footerChildren;
                 footerChildren.push_back(
                     Rectangle {}
@@ -524,25 +506,13 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
                         .wrapping = TextWrapping::Wrap,
                     }
                 );
-                if (!secondaryLine.empty()) {
-                    footerChildren.push_back(
-                        Text {
-                            .text = secondaryLine,
-                            .font = theme.fontBodySmall,
-                            .color = theme.colorTextSecondary,
-                            .horizontalAlignment = HorizontalAlignment::Leading,
-                            .wrapping = TextWrapping::Wrap,
-                        }
-                    );
-                }
-
                 paragraphs.push_back(
                     VStack {
-                        .spacing = theme.space1,
+                        .spacing = theme.space2,
                         .alignment = Alignment::Start,
                         .children = std::move(footerChildren),
                     }
-                        .padding(theme.space1, 0.f, 0.f, 0.f)
+                        .padding(theme.space2, 0.f, 0.f, 0.f)
                 );
             }
 
@@ -603,8 +573,6 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
             );
             if (showStatsFooter) {
                 std::string const primaryLine = joinNonEmpty(generationStatsPrimaryParts(*message.generationStats), "  •  ");
-                std::string const secondaryLine =
-                    joinNonEmpty(generationStatsSecondaryParts(*message.generationStats), "  •  ");
                 std::vector<Element> footerChildren;
                 footerChildren.push_back(
                     Rectangle {}
@@ -620,17 +588,6 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
                         .wrapping = TextWrapping::Wrap,
                     }
                 );
-                if (!secondaryLine.empty()) {
-                    footerChildren.push_back(
-                        Text {
-                            .text = secondaryLine,
-                            .font = theme.fontBodySmall,
-                            .color = theme.colorTextSecondary,
-                            .horizontalAlignment = HorizontalAlignment::Leading,
-                            .wrapping = TextWrapping::Wrap,
-                        }
-                    );
-                }
                 contentChildren.push_back(
                     VStack {
                         .spacing = theme.space1,
