@@ -38,3 +38,9 @@ DerivedData/
 
 # Debugging / profiling
 *.dSYM/
+
+# UI / Python test artifacts
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
