@@ -39,9 +39,6 @@ constexpr float kCaretScrollMarginPx = 8.f;
 
 /// Same rule as multiline TextInput: styler runs must cover every UTF-8 byte without gaps.
 bool attributedRunsFullyCoverBuffer(std::vector<AttributedRun> const &runs, std::uint32_t n) {
-    if (n == 0) {
-        return true;
-    }
     std::vector<std::pair<std::uint32_t, std::uint32_t>> se;
     se.reserve(runs.size());
     for (auto const &r : runs) {
@@ -49,6 +46,9 @@ bool attributedRunsFullyCoverBuffer(std::vector<AttributedRun> const &runs, std:
             return false;
         }
         se.push_back({r.start, r.end});
+    }
+    if (n == 0) {
+        return se.empty();
     }
     std::sort(se.begin(), se.end());
     std::uint32_t pos = 0;

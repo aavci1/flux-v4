@@ -170,6 +170,19 @@ TEST_CASE("CoreText layout preserves attributed run backgrounds") {
     CHECK(sawPlain);
 }
 
+TEST_CASE("CoreText rejects stale runs on empty attributed strings") {
+    Font f {};
+    f.family = ".AppleSystemUIFont";
+    f.size = 15.f;
+
+    AttributedString as;
+    as.utf8 = "";
+    as.runs.push_back({0, 5, f, Colors::black, std::nullopt});
+
+    CoreTextSystem sys;
+    CHECK_THROWS_AS((void)sys.layout(as, 400.f, TextLayoutOptions {}), std::invalid_argument);
+}
+
 #else
 
 TEST_CASE("Paragraph cache tests skipped on non-Apple builds") { CHECK(true); }
