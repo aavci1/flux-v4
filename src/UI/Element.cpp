@@ -258,6 +258,9 @@ Size Element::measureWithModifiersImpl(LayoutContext& ctx, LayoutConstraints con
     sz.width = std::max(szUnder.width, szOver.width) + padW;
     sz.height = std::max(szUnder.height, szOver.height) + padH;
   } else {
+    // Mirror layoutWithModifiers(): consume any pending composite subtree skip and
+    // scope child indexing for the modifier shell even without an overlay subtree.
+    ContainerMeasureScope scope(ctx);
     if (StateStore* const store = StateStore::current()) {
       store->pushCompositeElementModifiers(&m);
     }
