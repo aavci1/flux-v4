@@ -14,8 +14,10 @@
 #include <vector>
 
 #include "AppState.hpp"
-#include "LambdaStudioRuntime.hpp"
-#include "LambdaStudioMappers.hpp"
+#include "Debug.hpp"
+#include "Defaults.hpp"
+#include "Mappers.hpp"
+#include "AppRuntime.hpp"
 #include "ChatsView.hpp"
 #include "Divider.hpp"
 #include "HubView.hpp"
@@ -80,7 +82,7 @@ int chatIndexById(AppState const &state, std::string const &chatId) {
     return static_cast<int>(std::distance(state.chats.begin(), it));
 }
 
-void persistSelectedChat(AppState &state, ILambdaStudioStore &catalog) {
+void persistSelectedChat(AppState &state, IStore &catalog) {
     try {
         catalog.updateSelectedChatId(selectedChatIdForState(state));
     } catch (std::exception const &e) {
@@ -88,7 +90,7 @@ void persistSelectedChat(AppState &state, ILambdaStudioStore &catalog) {
     }
 }
 
-void persistChatOrder(AppState &state, ILambdaStudioStore &catalog) {
+void persistChatOrder(AppState &state, IStore &catalog) {
     try {
         std::vector<std::string> chatIds;
         chatIds.reserve(state.chats.size());
@@ -103,7 +105,7 @@ void persistChatOrder(AppState &state, ILambdaStudioStore &catalog) {
 
 void persistChatThread(
     AppState &state,
-    ILambdaStudioStore &catalog,
+    IStore &catalog,
     int chatIndex,
     bool persistSelection = false
 ) {
@@ -314,13 +316,13 @@ struct NoticeBanner : ViewModifiers<NoticeBanner> {
     }
 };
 
-struct LambdaStudio : ViewModifiers<LambdaStudio> {
-    std::shared_ptr<LambdaStudioRuntime> runtime;
+struct StudioApp : ViewModifiers<StudioApp> {
+    std::shared_ptr<AppRuntime> runtime;
 
     Element body() const {
         Theme const &theme = useEnvironment<Theme>();
         auto appState = useState<AppState>(makeInitialAppState());
-        std::shared_ptr<LambdaStudioRuntime> runtimeInstance = runtime;
+        std::shared_ptr<AppRuntime> runtimeInstance = runtime;
         if (!runtimeInstance) {
             return Element {
                 Text {
@@ -334,7 +336,7 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
         }
         std::shared_ptr<IChatEngine> engine = runtimeInstance->engine;
         std::shared_ptr<IModelManager> manager = runtimeInstance->manager;
-        std::shared_ptr<ILambdaStudioStore> catalog = runtimeInstance->catalog;
+        std::shared_ptr<IStore> catalog = runtimeInstance->catalog;
         auto currentRemoteSearchKey = [](AppState const &state) {
             return remoteModelSearchCacheKey(
                 state.modelSearchQuery,
@@ -1205,8 +1207,8 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
 
 int main(int argc, char *argv[]) {
     Application app(argc, argv);
-    std::shared_ptr<LambdaStudioRuntime> runtime =
-        makeLambdaStudioRuntime(makeDefaultLambdaStudioRuntimeFactory(
+    std::shared_ptr<AppRuntime> runtime =
+        makeAppRuntime(makeDefaultAppRuntimeFactory(
             [](lambda_studio_backend::ModelManagerEvent ev) {
                 Application::instance().eventQueue().post(std::move(ev));
             }
@@ -1218,7 +1220,7 @@ int main(int argc, char *argv[]) {
         .resizable = true,
     });
 
-    w.setView<LambdaStudio>({.runtime = std::move(runtime)});
+    w.setView<StudioApp>({.runtime = std::move(runtime)});
 
     return app.exec();
 }

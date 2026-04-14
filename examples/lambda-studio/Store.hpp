@@ -1,6 +1,6 @@
 #pragma once
 
-#include "LambdaStudioInterfaces.hpp"
+#include "Interfaces.hpp"
 
 #define JSON_ASSERT(x) ((x) ? static_cast<void>(0) : std::abort())
 #include <nlohmann/json.hpp>
@@ -19,24 +19,24 @@
 
 namespace lambda {
 
-class LambdaStudioStore : public ILambdaStudioStore {
+class Store : public IStore {
   public:
-    LambdaStudioStore() : LambdaStudioStore(defaultDataDirectory()) {}
+    Store() : Store(defaultDataDirectory()) {}
 
-    explicit LambdaStudioStore(std::filesystem::path dataDirectory)
+    explicit Store(std::filesystem::path dataDirectory)
         : dataDirectory_(std::move(dataDirectory)) {
         tryOpen(dataDirectory_);
     }
 
-    ~LambdaStudioStore() {
+    ~Store() {
         if (db_ != nullptr) {
             sqlite3_close(db_);
             db_ = nullptr;
         }
     }
 
-    LambdaStudioStore(LambdaStudioStore const &) = delete;
-    LambdaStudioStore &operator=(LambdaStudioStore const &) = delete;
+    Store(Store const &) = delete;
+    Store &operator=(Store const &) = delete;
 
     std::filesystem::path databasePath() const override {
         return dataDirectory_ / "model_catalog.sqlite3";

@@ -1,7 +1,9 @@
 #pragma once
 
-#include "LambdaStudioInterfaces.hpp"
-#include "LambdaStudioTypes.hpp"
+#include "Debug.hpp"
+#include "Defaults.hpp"
+#include "Interfaces.hpp"
+#include "Types.hpp"
 
 #include "chat.h"
 #include "common.h"
@@ -12,8 +14,6 @@
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
-#include <cstdlib>
-#include <cstring>
 #include <functional>
 #include <mutex>
 #include <string>
@@ -23,44 +23,12 @@
 
 namespace lambda_studio_backend {
 
-struct LlmUiEvent {
-    enum class Kind {
-        Chunk,
-        Done,
-        Error,
-    };
-    enum class Part {
-        Content,
-        Thinking,
-    };
-
-    Kind kind = Kind::Done;
-    Part part = Part::Content;
-    std::string chatId;
-    std::uint64_t generationId = 0;
-    std::string text;
-    std::optional<GenerationStats> generationStats;
-};
-
 namespace detail {
 
 // Post directly to the app callback so the event queue can wake the UI loop from the worker thread.
 // Dispatching onto the Cocoa main queue here can stall until the next OS event.
 inline void postEventToMain(std::function<void(LlmUiEvent)> const &post, LlmUiEvent ev) {
     post(std::move(ev));
-}
-
-inline bool envFlagEnabled(char const *name) {
-    char const *value = std::getenv(name);
-    return value && value[0] != '\0' && std::strcmp(value, "0") != 0;
-}
-
-inline int envIntOr(char const *name, int fallback) {
-    char const *value = std::getenv(name);
-    if (!value || value[0] == '\0') {
-        return fallback;
-    }
-    return std::max(1, std::atoi(value));
 }
 
 class UiChunkBatcher {
@@ -119,57 +87,6 @@ class UiChunkBatcher {
 
 } // namespace detail
 
-inline bool debugFakeStreamEnabled() {
-    return detail::envFlagEnabled("LAMBDA_STUDIO_FAKE_STREAM");
-}
-
-inline bool debugAutoStreamEnabled() {
-    return detail::envFlagEnabled("LAMBDA_STUDIO_AUTO_STREAM");
-}
-
-inline int debugFakeTokensPerSecond() {
-    return detail::envIntOr("LAMBDA_STUDIO_FAKE_TOKENS_PER_SECOND", 10);
-}
-
-inline std::string debugFakeMarkdownResponse() {
-    return R"(# Streaming Markdown Stress Test
-
-## Overview
-
-This response is intentionally long so we can observe **CPU usage** while the UI receives markdown over time.
-
-- The renderer should keep old content stable.
-- Only the newest chunk should be changing.
-- Inline `code` and headings are included on purpose.
-
-### Checklist
-
-- Rebuild the attributed markdown only when needed.
-- Avoid expensive work for messages that are only being scrolled.
-- Keep the chat responsive while the stream is active.
-
-```cpp
-for (int frame = 0; frame < 600; ++frame) {
-    render_chat_transcript();
-    sample_cpu_usage();
-}
-```
-
-## Notes
-
-The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog.
-
-The UI should render **bold emphasis**, keep `inline spans` readable, and avoid chewing CPU once the message is complete.
-
-- Item one explains the cost of parsing.
-- Item two explains the cost of text layout.
-- Item three explains the cost of rebuilding the whole transcript.
-
-### Closing
-
-If this fake stream still drives high CPU after the response settles, the hotspot is probably outside the markdown parser and closer to layout or transcript rebuilding.)";
-}
-
 inline std::string tokenToPiece(llama_vocab const *vocab, llama_token token) {
     char buf[256];
     int const n = llama_token_to_piece(vocab, token, buf, sizeof(buf), 0, true);
@@ -195,18 +112,18 @@ inline double computeTokensPerSecond(GenerationStats const &stats) {
     return static_cast<double>(stats.completionTokens) / (static_cast<double>(durationMs) / 1000.0);
 }
 
-class LambdaStudioLlamaEngine : public lambda::IChatEngine {
+class LlamaEngine : public lambda::IChatEngine {
   public:
-    LambdaStudioLlamaEngine() = default;
+    LlamaEngine() = default;
 
-    ~LambdaStudioLlamaEngine() {
+    ~LlamaEngine() {
         cancelGeneration();
         joinWorker();
         unload();
     }
 
-    LambdaStudioLlamaEngine(LambdaStudioLlamaEngine const &) = delete;
-    LambdaStudioLlamaEngine &operator=(LambdaStudioLlamaEngine const &) = delete;
+    LlamaEngine(LlamaEngine const &) = delete;
+    LlamaEngine &operator=(LlamaEngine const &) = delete;
 
     bool load(std::string const &modelPath, int nGpuLayers = -1, uint32_t nCtx = 0) override {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -223,7 +140,7 @@ class LambdaStudioLlamaEngine : public lambda::IChatEngine {
         auto const modelParams = common_model_params_to_llama(params_);
         model_.reset(llama_model_load_from_file(modelPath.c_str(), modelParams));
         if (!model_) {
-            std::fprintf(stderr, "[LambdaStudioLlamaEngine] failed to load model: %s\n", modelPath.c_str());
+            std::fprintf(stderr, "[LlamaEngine] failed to load model: %s\n", modelPath.c_str());
             return false;
         }
 
@@ -233,14 +150,14 @@ class LambdaStudioLlamaEngine : public lambda::IChatEngine {
 
         std::fprintf(
             stderr,
-            "[LambdaStudioLlamaEngine] loaded: %s (n_gpu_layers=%d, n_ctx=%u)\n",
+            "[LlamaEngine] loaded: %s (n_gpu_layers=%d, n_ctx=%u)\n",
             modelPath.c_str(),
             params_.n_gpu_layers,
             nCtx
         );
         std::fprintf(
             stderr,
-            "[LambdaStudioLlamaEngine] chat template source: %.120s\n",
+            "[LlamaEngine] chat template source: %.120s\n",
             common_chat_templates_source(templates_.get()).c_str()
         );
         return true;
@@ -381,11 +298,11 @@ class LambdaStudioLlamaEngine : public lambda::IChatEngine {
 
         std::fprintf(
             stderr,
-            "[LambdaStudioLlamaEngine] template format=%s supports_thinking=%d\n",
+            "[LlamaEngine] template format=%s supports_thinking=%d\n",
             common_chat_format_name(chatParams.format),
             static_cast<int>(chatParams.supports_thinking)
         );
-        std::fprintf(stderr, "[LambdaStudioLlamaEngine] prompt (first 200 chars): %.200s\n", chatParams.prompt.c_str());
+        std::fprintf(stderr, "[LlamaEngine] prompt (first 200 chars): %.200s\n", chatParams.prompt.c_str());
 
         auto const promptTokens = common_tokenize(vocab_, chatParams.prompt, true, true);
         if (promptTokens.empty()) {
@@ -407,7 +324,7 @@ class LambdaStudioLlamaEngine : public lambda::IChatEngine {
         int const predictCount = params.maxTokens;
         stats.promptTokens = promptCount;
 
-        std::fprintf(stderr, "[LambdaStudioLlamaEngine] prompt: %d tokens, max predict: %d\n", promptCount, predictCount);
+        std::fprintf(stderr, "[LlamaEngine] prompt: %d tokens, max predict: %d\n", promptCount, predictCount);
 
         auto contextParams = common_context_params_to_llama(params_);
         llama_context_ptr ctx(llama_init_from_model(model_.get(), contextParams));
@@ -487,7 +404,7 @@ class LambdaStudioLlamaEngine : public lambda::IChatEngine {
 
             llama_token token = common_sampler_sample(sampler.get(), ctx.get(), -1);
             if (llama_vocab_is_eog(vocab_, token)) {
-                std::fprintf(stderr, "[LambdaStudioLlamaEngine] EOG token=%d at position %d\n", static_cast<int>(token), i);
+                std::fprintf(stderr, "[LlamaEngine] EOG token=%d at position %d\n", static_cast<int>(token), i);
                 stats.status = "completed";
                 break;
             }
@@ -534,7 +451,7 @@ class LambdaStudioLlamaEngine : public lambda::IChatEngine {
 
         std::fprintf(
             stderr,
-            "[LambdaStudioLlamaEngine] generation done. raw output (first 500 chars):\n%.500s\n[END]\n",
+            "[LlamaEngine] generation done. raw output (first 500 chars):\n%.500s\n[END]\n",
             rawOutput.c_str()
         );
 
@@ -645,26 +562,5 @@ class LambdaStudioLlamaEngine : public lambda::IChatEngine {
     std::atomic<bool> cancelled_ {false};
     std::thread worker_;
 };
-
-inline std::string defaultModelPath() {
-    if (char const *path = std::getenv("LLAMA_MODEL_PATH")) {
-        return std::string(path);
-    }
-    return {};
-}
-
-inline std::string defaultModelName() {
-    if (char const *name = std::getenv("LLAMA_MODEL_NAME")) {
-        return std::string(name);
-    }
-    return "local";
-}
-
-inline int defaultNGpuLayers() {
-    if (char const *value = std::getenv("LLAMA_N_GPU_LAYERS")) {
-        return std::atoi(value);
-    }
-    return -1;
-}
 
 } // namespace lambda_studio_backend

@@ -1,8 +1,8 @@
 #pragma once
 
-#include "LambdaStudioInterfaces.hpp"
-#include "LambdaStudioTypes.hpp"
-#include "LambdaStudioLlamaEngine.hpp"
+#include "Interfaces.hpp"
+#include "Types.hpp"
+#include "Defaults.hpp"
 
 #include "common.h"
 #include "download.h"
@@ -43,11 +43,11 @@ struct HfRepoDetailResponse {
     std::string rawJson;
 };
 
-class LambdaStudioModelManager : public lambda::IModelManager {
+class ModelManager : public lambda::IModelManager {
   public:
     using PostFn = std::function<void(ModelManagerEvent)>;
 
-    explicit LambdaStudioModelManager(std::shared_ptr<lambda::IChatEngine> engine, PostFn post)
+    explicit ModelManager(std::shared_ptr<lambda::IChatEngine> engine, PostFn post)
         : engine_(std::move(engine)),
           post_(std::move(post)),
           inventoryLane_(true),
@@ -62,7 +62,7 @@ class LambdaStudioModelManager : public lambda::IModelManager {
         startLane(loadModelLane_);
     }
 
-    ~LambdaStudioModelManager() override {
+    ~ModelManager() override {
         stopLane(inventoryLane_);
         stopLane(searchLane_);
         stopLane(repoInspectLane_);
@@ -70,8 +70,8 @@ class LambdaStudioModelManager : public lambda::IModelManager {
         stopLane(loadModelLane_);
     }
 
-    LambdaStudioModelManager(LambdaStudioModelManager const &) = delete;
-    LambdaStudioModelManager &operator=(LambdaStudioModelManager const &) = delete;
+    ModelManager(ModelManager const &) = delete;
+    ModelManager &operator=(ModelManager const &) = delete;
 
     std::uint64_t refreshLocalModels() override {
         std::uint64_t const requestId = beginRequest(ModelManagerLane::Inventory);
@@ -213,7 +213,7 @@ class LambdaStudioModelManager : public lambda::IModelManager {
 
                 std::string const token = hfToken();
                 struct DownloadProgressContext {
-                    LambdaStudioModelManager * manager = nullptr;
+                    ModelManager * manager = nullptr;
                     std::string repoId;
                     std::string filePath;
                     std::mutex mutex;

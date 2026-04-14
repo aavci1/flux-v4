@@ -8,11 +8,7 @@
 #include <vector>
 
 #include "AppState.hpp"
-#include "LambdaStudioTypes.hpp"
-
-namespace lambda_studio_backend {
-struct LlmUiEvent;
-}
+#include "Types.hpp"
 
 namespace lambda {
 
@@ -55,9 +51,9 @@ class IModelManager {
     virtual void unloadModel() = 0;
 };
 
-class ILambdaStudioStore {
+class IStore {
   public:
-    virtual ~ILambdaStudioStore() = default;
+    virtual ~IStore() = default;
 
     virtual std::filesystem::path databasePath() const = 0;
     virtual void replaceSearchSnapshot(

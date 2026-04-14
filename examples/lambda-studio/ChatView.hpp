@@ -21,7 +21,7 @@
 
 #include "AppState.hpp"
 #include "ChatModels.hpp"
-#include "LambdaStudioLlamaEngine.hpp"
+#include "Debug.hpp"
 #include "MarkdownText.hpp"
 
 using namespace flux;

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "AppState.hpp"
-#include "LambdaStudioTypes.hpp"
+#include "Types.hpp"
 
 namespace lambda {
 

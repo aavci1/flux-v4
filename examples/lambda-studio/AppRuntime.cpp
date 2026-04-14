@@ -1,10 +1,10 @@
-#include "LambdaStudioRuntime.hpp"
+#include "AppRuntime.hpp"
 
 #include <atomic>
 
-#include "LambdaStudioLlamaEngine.hpp"
-#include "LambdaStudioStore.hpp"
-#include "LambdaStudioModelManager.hpp"
+#include "LlamaEngine.hpp"
+#include "Store.hpp"
+#include "ModelManager.hpp"
 
 namespace lambda {
 
@@ -29,22 +29,22 @@ class LlamaBackendLifecycle {
 
 } // namespace detail
 
-LambdaStudioRuntimeFactory makeDefaultLambdaStudioRuntimeFactory(
-    LambdaStudioRuntimeFactory::PostModelEvent postModelEvent
+AppRuntimeFactory makeDefaultAppRuntimeFactory(
+    AppRuntimeFactory::PostModelEvent postModelEvent
 ) {
-    return LambdaStudioRuntimeFactory {
+    return AppRuntimeFactory {
         .postModelEvent = std::move(postModelEvent),
         .makeEngine = [] {
-            return std::make_shared<lambda_studio_backend::LambdaStudioLlamaEngine>();
+            return std::make_shared<lambda_studio_backend::LlamaEngine>();
         },
-        .makeManager = [](std::shared_ptr<IChatEngine> engine, LambdaStudioRuntimeFactory::PostModelEvent post) {
-            return std::make_shared<lambda_studio_backend::LambdaStudioModelManager>(
+        .makeManager = [](std::shared_ptr<IChatEngine> engine, AppRuntimeFactory::PostModelEvent post) {
+            return std::make_shared<lambda_studio_backend::ModelManager>(
                 std::move(engine),
                 std::move(post)
             );
         },
         .makeCatalog = [] {
-            return std::make_shared<LambdaStudioStore>();
+            return std::make_shared<Store>();
         },
         .makeLifecycle = [] {
             return std::make_shared<detail::LlamaBackendLifecycle>();

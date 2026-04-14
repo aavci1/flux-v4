@@ -39,6 +39,25 @@ struct GenerationStats {
     constexpr bool operator==(GenerationStats const &) const = default;
 };
 
+struct LlmUiEvent {
+    enum class Kind {
+        Chunk,
+        Done,
+        Error,
+    };
+    enum class Part {
+        Content,
+        Thinking,
+    };
+
+    Kind kind = Kind::Done;
+    Part part = Part::Content;
+    std::string chatId;
+    std::uint64_t generationId = 0;
+    std::string text;
+    std::optional<GenerationStats> generationStats;
+};
+
 struct LocalModelInfo {
     std::string repo;
     std::string tag;

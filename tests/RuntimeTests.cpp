@@ -8,7 +8,7 @@
 #include <utility>
 #include <vector>
 
-#include "../examples/lambda-studio/LambdaStudioRuntime.hpp"
+#include "../examples/lambda-studio/AppRuntime.hpp"
 
 namespace {
 
@@ -74,7 +74,7 @@ class FakeModelManager : public lambda::IModelManager {
     std::uint64_t requestId_ = 0;
 };
 
-class FakeLambdaStudioStore : public lambda::ILambdaStudioStore {
+class FakeStore : public lambda::IStore {
   public:
     std::filesystem::path databasePath() const override { return {}; }
     void replaceSearchSnapshot(std::string const &, std::vector<lambda::RemoteModel> const &, std::string const &) override {}
@@ -116,30 +116,30 @@ class FakeLambdaStudioStore : public lambda::ILambdaStudioStore {
 
 } // namespace
 
-TEST_CASE("LambdaStudioRuntime rejects missing dependencies") {
+TEST_CASE("AppRuntime rejects missing dependencies") {
     auto engine = std::make_shared<FakeChatEngine>();
     auto manager = std::make_shared<FakeModelManager>(engine);
-    auto catalog = std::make_shared<FakeLambdaStudioStore>();
+    auto catalog = std::make_shared<FakeStore>();
 
-    CHECK_NOTHROW(lambda::makeLambdaStudioRuntime(lambda::LambdaStudioRuntimeDeps {
+    CHECK_NOTHROW(lambda::makeAppRuntime(lambda::AppRuntimeDeps {
         .engine = engine,
         .manager = manager,
         .catalog = catalog,
     }));
 
-    CHECK_THROWS_AS(lambda::makeLambdaStudioRuntime(lambda::LambdaStudioRuntimeDeps {
+    CHECK_THROWS_AS(lambda::makeAppRuntime(lambda::AppRuntimeDeps {
                         .engine = nullptr,
                         .manager = manager,
                         .catalog = catalog,
                     }),
                     std::invalid_argument);
-    CHECK_THROWS_AS(lambda::makeLambdaStudioRuntime(lambda::LambdaStudioRuntimeDeps {
+    CHECK_THROWS_AS(lambda::makeAppRuntime(lambda::AppRuntimeDeps {
                         .engine = engine,
                         .manager = nullptr,
                         .catalog = catalog,
                     }),
                     std::invalid_argument);
-    CHECK_THROWS_AS(lambda::makeLambdaStudioRuntime(lambda::LambdaStudioRuntimeDeps {
+    CHECK_THROWS_AS(lambda::makeAppRuntime(lambda::AppRuntimeDeps {
                         .engine = engine,
                         .manager = manager,
                         .catalog = nullptr,
@@ -147,14 +147,14 @@ TEST_CASE("LambdaStudioRuntime rejects missing dependencies") {
                     std::invalid_argument);
 }
 
-TEST_CASE("LambdaStudioRuntimeFactory builds isolated runtimes and tears down lifecycle independently") {
+TEST_CASE("AppRuntimeFactory builds isolated runtimes and tears down lifecycle independently") {
     std::atomic<int> lifecycleDestroyCount {0};
     std::atomic<int> postCount {0};
     std::atomic<int> engineBuildCount {0};
     std::atomic<int> managerBuildCount {0};
     std::atomic<int> catalogBuildCount {0};
 
-    lambda::LambdaStudioRuntimeFactory factory {
+    lambda::AppRuntimeFactory factory {
         .postModelEvent =
             [&](lambda_studio_backend::ModelManagerEvent) {
                 ++postCount;
@@ -165,14 +165,14 @@ TEST_CASE("LambdaStudioRuntimeFactory builds isolated runtimes and tears down li
                 return std::make_shared<FakeChatEngine>();
             },
         .makeManager =
-            [&](std::shared_ptr<lambda::IChatEngine> engine, lambda::LambdaStudioRuntimeFactory::PostModelEvent) -> std::shared_ptr<lambda::IModelManager> {
+            [&](std::shared_ptr<lambda::IChatEngine> engine, lambda::AppRuntimeFactory::PostModelEvent) -> std::shared_ptr<lambda::IModelManager> {
                 ++managerBuildCount;
                 return std::make_shared<FakeModelManager>(std::move(engine));
             },
         .makeCatalog =
-            [&]() -> std::shared_ptr<lambda::ILambdaStudioStore> {
+            [&]() -> std::shared_ptr<lambda::IStore> {
                 ++catalogBuildCount;
-                return std::make_shared<FakeLambdaStudioStore>();
+                return std::make_shared<FakeStore>();
             },
         .makeLifecycle =
             [&]() -> std::shared_ptr<void> {
@@ -186,8 +186,8 @@ TEST_CASE("LambdaStudioRuntimeFactory builds isolated runtimes and tears down li
             },
     };
 
-    auto runtimeA = lambda::makeLambdaStudioRuntime(factory);
-    auto runtimeB = lambda::makeLambdaStudioRuntime(factory);
+    auto runtimeA = lambda::makeAppRuntime(factory);
+    auto runtimeB = lambda::makeAppRuntime(factory);
 
     REQUIRE(runtimeA != nullptr);
     REQUIRE(runtimeB != nullptr);

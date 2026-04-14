@@ -41,21 +41,21 @@ The current implementation has a few structural issues:
   - `common_list_cached_models()` returns cached Hugging Face repo entries, but the app only surfaces entries with a concrete file path.
   - That means cached Hugging Face models can effectively disappear from the UI.
   - Relevant code:
-    - [examples/lambda-studio/LambdaStudioModelManager.hpp](/Users/abdurrahmanavci/Projects/flux-v4/examples/lambda-studio/LambdaStudioModelManager.hpp:178)
+    - [examples/lambda-studio/ModelManager.hpp](/Users/abdurrahmanavci/Projects/flux-v4/examples/lambda-studio/ModelManager.hpp:178)
     - [examples/lambda-studio/main.cpp](/Users/abdurrahmanavci/Projects/flux-v4/examples/lambda-studio/main.cpp:141)
 
 - Model storage is pointed at an app-local folder:
-  - [examples/lambda-studio/LambdaStudioModelManager.hpp](/Users/abdurrahmanavci/Projects/flux-v4/examples/lambda-studio/LambdaStudioModelManager.hpp:272)
+  - [examples/lambda-studio/ModelManager.hpp](/Users/abdurrahmanavci/Projects/flux-v4/examples/lambda-studio/ModelManager.hpp:272)
   - That is not aligned with the Hugging Face cache layout already used by llama.cpp downloads.
 
 - Search is too primitive.
   - Current Hugging Face search only fetches a small result set by text query and a few fields:
-    - [examples/lambda-studio/LambdaStudioModelManager.hpp](/Users/abdurrahmanavci/Projects/flux-v4/examples/lambda-studio/LambdaStudioModelManager.hpp:193)
+    - [examples/lambda-studio/ModelManager.hpp](/Users/abdurrahmanavci/Projects/flux-v4/examples/lambda-studio/ModelManager.hpp:193)
   - It does not support richer filtering, local persistence, or repo detail hydration.
 
 - Backend orchestration does not scale.
   - The current worker model joins before starting the next operation:
-    - [examples/lambda-studio/LambdaStudioModelManager.hpp](/Users/abdurrahmanavci/Projects/flux-v4/examples/lambda-studio/LambdaStudioModelManager.hpp:149)
+    - [examples/lambda-studio/ModelManager.hpp](/Users/abdurrahmanavci/Projects/flux-v4/examples/lambda-studio/ModelManager.hpp:149)
   - That is not suitable for search, indexing, downloads, load/unload, and metadata refresh all living at once.
 
 ## Storage Strategy
@@ -152,7 +152,7 @@ Responsibilities:
 - report load success/failure
 - coordinate with chat runtime requirements
 
-### 5. LambdaStudioStore
+### 5. Store
 
 Responsibilities:
 
@@ -529,7 +529,7 @@ Scope:
 
 Deliverables:
 
-- `LambdaStudioStore`
+- `Store`
 - schema versioning
 - migration path
 
