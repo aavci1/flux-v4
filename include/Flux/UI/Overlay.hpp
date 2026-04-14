@@ -11,6 +11,7 @@
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/EventMap.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
+#include <Flux/UI/LayoutTree.hpp>
 #include <Flux/UI/MeasureCache.hpp>
 #include <Flux/UI/StateStore.hpp>
 #include <Flux/UI/Views/PopoverPlacement.hpp>
@@ -97,6 +98,7 @@ struct OverlayEntry {
   OverlayConfig config;
 
   SceneGraph graph;
+  LayoutTree layoutTree;
   EventMap eventMap;
   std::unique_ptr<StateStore> stateStore = std::make_unique<StateStore>();
   Rect resolvedFrame{};

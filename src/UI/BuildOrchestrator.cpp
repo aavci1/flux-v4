@@ -89,9 +89,8 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
   StateStore::setCurrent(&stateStore_);
 
   EventMap newMap;
-  LayoutTree layoutTree;
-  layoutTree.clear();
-  LayoutContext lctx{Application::instance().textSystem(), layoutEngine_, layoutTree, &measureCache_};
+  layoutTree_.clear();
+  LayoutContext lctx{Application::instance().textSystem(), layoutEngine_, layoutTree_, &measureCache_};
   Size const raw = sizeOverride.value_or(window_.getSize());
   Size const sz = snapRootLayoutSize(raw);
   LayoutConstraints rootCs{};
@@ -113,10 +112,10 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
 
   RenderContext rctx{graph, newMap, Application::instance().textSystem()};
   rctx.pushConstraints(rootCs);
-  renderLayoutTree(layoutTree, rctx);
+  renderLayoutTree(layoutTree_, rctx);
   rctx.popConstraints();
 
-  layoutRects_.fill(layoutTree, lctx);
+  layoutRects_.fill(layoutTree_, lctx);
   layoutDebugEndPass();
 
   StateStore::setCurrent(nullptr);
@@ -152,6 +151,10 @@ LayoutRectCache& BuildOrchestrator::layoutRects() noexcept {
 
 LayoutRectCache const& BuildOrchestrator::layoutRects() const noexcept {
   return layoutRects_;
+}
+
+LayoutTree const& BuildOrchestrator::layoutTree() const noexcept {
+  return layoutTree_;
 }
 
 EventMap const& BuildOrchestrator::mainEventMap() const noexcept {

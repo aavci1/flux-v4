@@ -2,18 +2,17 @@
 
 /// \file Flux/Scene/LayoutOverlayRenderer.hpp
 ///
-/// Debug overlay: strokes layout bounds for each scene node (matches \ref SceneRenderer transform stack).
+/// Debug overlay: strokes bounds for each layout node, including non-drawing containers such as
+/// stacks and other structural nodes.
 
 #include <Flux/Core/Types.hpp>
-#include <Flux/Scene/NodeId.hpp>
+#include <Flux/UI/LayoutTree.hpp>
 
 namespace flux {
 
 class Canvas;
-class SceneGraph;
 
-/// Draws semi-transparent wireframes for \p RectNode, \p TextNode, \p ImageNode, \p CustomRenderNode,
-/// \p PathNode, and \p LineNode bounds in the same coordinate space as \ref SceneRenderer.
-void renderLayoutOverlay(SceneGraph const& graph, Canvas& canvas);
+/// Draws semi-transparent wireframes for every node in \p tree using \ref LayoutNode::worldBounds.
+void renderLayoutOverlay(LayoutTree const& tree, Canvas& canvas);
 
 } // namespace flux

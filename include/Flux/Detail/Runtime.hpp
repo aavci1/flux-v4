@@ -15,6 +15,7 @@
 #include <Flux/Core/Types.hpp>
 #include <Flux/Detail/RootHolder.hpp>
 #include <Flux/UI/ComponentKey.hpp>
+#include <Flux/UI/LayoutTree.hpp>
 #include <Flux/UI/Overlay.hpp>
 
 #include <memory>
@@ -42,6 +43,7 @@ public:
   LayoutRectCache& layoutRects() noexcept;
 
   ActionRegistry& actionRegistryForBuild() noexcept;
+  LayoutTree const& mainLayoutTree() const noexcept;
 
   EventMap const& mainEventMap() const noexcept;
 

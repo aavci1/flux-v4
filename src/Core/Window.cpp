@@ -211,13 +211,13 @@ void Window::render(Canvas& canvas) {
   }
   if (d->runtime_ && d->runtime_->layoutOverlayEnabled()) {
     if (d->sceneGraph_) {
-      renderLayoutOverlay(*d->sceneGraph_, canvas);
+      renderLayoutOverlay(d->runtime_->mainLayoutTree(), canvas);
     }
     for (std::unique_ptr<OverlayEntry> const& up : d->overlayMgr_.entries()) {
       OverlayEntry const& entry = *up;
       canvas.save();
       canvas.transform(Mat3::translate(Point{entry.resolvedFrame.x, entry.resolvedFrame.y}));
-      renderLayoutOverlay(entry.graph, canvas);
+      renderLayoutOverlay(entry.layoutTree, canvas);
       canvas.restore();
     }
   }

@@ -86,6 +86,10 @@ ActionRegistry& Runtime::actionRegistryForBuild() noexcept {
   return buildOrchestrator_.actionRegistryForBuild();
 }
 
+LayoutTree const& Runtime::mainLayoutTree() const noexcept {
+  return buildOrchestrator_.layoutTree();
+}
+
 EventMap const& Runtime::mainEventMap() const noexcept {
   return buildOrchestrator_.mainEventMap();
 }

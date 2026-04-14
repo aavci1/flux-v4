@@ -96,22 +96,31 @@ struct ChatsView : ViewModifiers<ChatsView> {
             });
         }
 
-        Element detail = VStack {
-            .alignment = Alignment::Center,
+        Element detail = Element {ZStack {
+            .horizontalAlignment = Alignment::Center,
+            .verticalAlignment = Alignment::Center,
             .children = children(
-                Text {
-                    .text = "No chats yet",
-                    .font = theme.fontHeading,
-                    .color = theme.colorTextPrimary,
-                },
-                Text {
-                    .text = "Create a new chat or select one from the list.",
-                    .font = theme.fontBodySmall,
-                    .color = theme.colorTextSecondary,
-                    .horizontalAlignment = HorizontalAlignment::Center,
+                VStack {
+                    .spacing = theme.space2,
+                    .alignment = Alignment::Center,
+                    .children = children(
+                        Text {
+                            .text = "No chats yet",
+                            .font = theme.fontHeading,
+                            .color = theme.colorTextPrimary,
+                            .horizontalAlignment = HorizontalAlignment::Center,
+                        },
+                        Text {
+                            .text = "Create a new chat or select one from the list.",
+                            .font = theme.fontBodySmall,
+                            .color = theme.colorTextSecondary,
+                            .horizontalAlignment = HorizontalAlignment::Center,
+                            .wrapping = TextWrapping::Wrap,
+                        }
+                    ),
                 }
             ),
-        }
+        }}
                              .flex(1.f, 1.f);
 
         if (selectedIndex >= 0) {

@@ -11,6 +11,7 @@
 #include <Flux/UI/EventMap.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 #include <Flux/UI/LayoutRectCache.hpp>
+#include <Flux/UI/LayoutTree.hpp>
 #include <Flux/UI/MeasureCache.hpp>
 #include <Flux/UI/StateStore.hpp>
 
@@ -45,6 +46,7 @@ public:
   LayoutEngine& layoutEngine() noexcept;
   LayoutRectCache& layoutRects() noexcept;
   LayoutRectCache const& layoutRects() const noexcept;
+  LayoutTree const& layoutTree() const noexcept;
   EventMap const& mainEventMap() const noexcept;
   ActionRegistry& actionRegistryForBuild() noexcept;
   ActionRegistry const& actionRegistryCommitted() const noexcept;
@@ -61,6 +63,7 @@ private:
   LayoutEngine layoutEngine_;
   StateStore stateStore_;
   LayoutRectCache layoutRects_;
+  LayoutTree layoutTree_{};
   EventMap eventMap_;
   ObserverHandle rebuildHandle_{};
   ActionRegistry actionRegistryBuild_{};

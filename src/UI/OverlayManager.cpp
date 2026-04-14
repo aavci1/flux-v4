@@ -258,6 +258,7 @@ void OverlayManager::rebuild(Size windowSize, Runtime &runtime) {
             }
         }
         entry.graph.clear();
+        entry.layoutTree.clear();
         entry.eventMap.clear();
 
         entry.stateStore->beginRebuild();
@@ -267,9 +268,7 @@ void OverlayManager::rebuild(Size windowSize, Runtime &runtime) {
         layoutEngine_.resetForBuild();
         overlayMeasureCache_.clear();
         LayoutConstraints const cs = resolveConstraints(windowSize, entry.config);
-        LayoutTree layoutTree;
-        layoutTree.clear();
-        LayoutContext lctx {Application::instance().textSystem(), layoutEngine_, layoutTree, &overlayMeasureCache_};
+        LayoutContext lctx {Application::instance().textSystem(), layoutEngine_, entry.layoutTree, &overlayMeasureCache_};
         lctx.pushConstraints(cs);
         EnvironmentLayer windowEnvBaseline = runtime.window().environmentLayer();
         EnvironmentStack::current().push(std::move(windowEnvBaseline));
@@ -282,7 +281,7 @@ void OverlayManager::rebuild(Size windowSize, Runtime &runtime) {
 
         RenderContext rctx {entry.graph, entry.eventMap, Application::instance().textSystem()};
         rctx.pushConstraints(cs);
-        renderLayoutTree(layoutTree, rctx);
+        renderLayoutTree(entry.layoutTree, rctx);
         rctx.popConstraints();
 
         StateStore::setCurrent(prevCurrent);

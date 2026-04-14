@@ -2,18 +2,40 @@
 
 #include <Flux/Graphics/Canvas.hpp>
 #include <Flux/Graphics/Styles.hpp>
-#include <Flux/Scene/Nodes.hpp>
-#include <Flux/Scene/SceneGraph.hpp>
 
-#include <algorithm>
 #include <cmath>
-#include <variant>
+#include <cstdint>
+#include <unordered_set>
 
 namespace flux {
 
 namespace {
 
 CornerRadius const kNoRadius{};
+
+struct OverlayRectKey {
+  std::int32_t x = 0;
+  std::int32_t y = 0;
+  std::int32_t width = 0;
+  std::int32_t height = 0;
+
+  bool operator==(OverlayRectKey const&) const = default;
+};
+
+struct OverlayRectKeyHash {
+  std::size_t operator()(OverlayRectKey const& key) const noexcept {
+    std::size_t h = 1469598103934665603ull;
+    auto mix = [&h](std::int32_t v) {
+      h ^= static_cast<std::uint32_t>(v);
+      h *= 1099511628211ull;
+    };
+    mix(key.x);
+    mix(key.y);
+    mix(key.width);
+    mix(key.height);
+    return h;
+  }
+};
 
 StrokeStyle overlayStroke() {
   // Magenta, semi-transparent — readable on light and dark backgrounds.
@@ -27,61 +49,44 @@ void strokeBounds(Canvas& canvas, Rect const& r) {
   canvas.drawRect(r, kNoRadius, FillStyle::none(), overlayStroke());
 }
 
-void overlayNode(NodeId id, SceneGraph const& graph, Canvas& canvas) {
-  SceneNode const* sn = graph.get(id);
-  if (!sn) {
-    return;
+Rect overlayBounds(LayoutNode const& node, LayoutTree const& tree) {
+  switch (node.kind) {
+  case LayoutNode::Kind::Container:
+  case LayoutNode::Kind::Modifier:
+    return node.worldBounds;
+  case LayoutNode::Kind::Leaf:
+  case LayoutNode::Kind::Composite:
+    break;
   }
-  std::visit(
-      [&](auto const& node) {
-        using T = std::decay_t<decltype(node)>;
-        if constexpr (std::is_same_v<T, LayerNode>) {
-          canvas.save();
-          canvas.transform(node.transform);
-          canvas.setOpacity(canvas.opacity() * node.opacity);
-          canvas.setBlendMode(node.blendMode);
-          for (NodeId childId : node.children) {
-            overlayNode(childId, graph, canvas);
-          }
-          canvas.restore();
-        } else if constexpr (std::is_same_v<T, RectNode>) {
-          strokeBounds(canvas, node.bounds);
-        } else if constexpr (std::is_same_v<T, TextNode>) {
-          if (node.layout) {
-            Rect r{};
-            if (node.allocation.width > 0.f && node.allocation.height > 0.f) {
-              r = node.allocation;
-            } else {
-              Size const ms = node.layout->measuredSize;
-              r = Rect{node.origin.x, node.origin.y, ms.width, ms.height};
-            }
-            strokeBounds(canvas, r);
-          }
-        } else if constexpr (std::is_same_v<T, ImageNode>) {
-          strokeBounds(canvas, node.bounds);
-        } else if constexpr (std::is_same_v<T, PathNode>) {
-          Rect const b = node.path.getBounds();
-          strokeBounds(canvas, b);
-        } else if constexpr (std::is_same_v<T, LineNode>) {
-          float const minX = std::min(node.from.x, node.to.x);
-          float const minY = std::min(node.from.y, node.to.y);
-          float const maxX = std::max(node.from.x, node.to.x);
-          float const maxY = std::max(node.from.y, node.to.y);
-          float const pad = 2.f;
-          strokeBounds(canvas,
-                       Rect{minX - pad, minY - pad, std::max(maxX - minX + 2.f * pad, 1.f),
-                            std::max(maxY - minY + 2.f * pad, 1.f)});
-        } else if constexpr (std::is_same_v<T, CustomRenderNode>) {
-          strokeBounds(canvas, node.frame);
-        }
-      },
-      *sn);
+  return tree.unionSubtreeWorldBounds(node.id);
 }
 
 } // namespace
 
-void renderLayoutOverlay(SceneGraph const& graph, Canvas& canvas) {
-  overlayNode(graph.root(), graph, canvas);
+void renderLayoutOverlay(LayoutTree const& tree, Canvas& canvas) {
+  std::unordered_set<OverlayRectKey, OverlayRectKeyHash> seen;
+  seen.reserve(tree.nodes().size());
+  for (LayoutNode const& node : tree.nodes()) {
+    Rect const bounds = overlayBounds(node, tree);
+    if (bounds.width <= 0.f || bounds.height <= 0.f) {
+      continue;
+    }
+
+    // Deduplicate equivalent boxes so leaf subtree unions do not redraw the same outline repeatedly.
+    auto quantize = [](float value) {
+      return static_cast<std::int32_t>(std::lround(value * 2.f));
+    };
+    OverlayRectKey const key{
+        .x = quantize(bounds.x),
+        .y = quantize(bounds.y),
+        .width = quantize(bounds.width),
+        .height = quantize(bounds.height),
+    };
+    if (!seen.insert(key).second) {
+      continue;
+    }
+    strokeBounds(canvas, bounds);
+  }
 }
 
 } // namespace flux
