@@ -27,19 +27,27 @@ Element ProgressBar::body() const {
     Rect const bounds = useBounds();
     float const componentWidth = bounds.width > 0.f ? bounds.width : kDefaultProgressBarWidth;
 
-    return Element {ZStack {
-        .horizontalAlignment = Alignment::Start,
-        .verticalAlignment = Alignment::Start,
-        .children = children(
-            Rectangle {}
-                .fill(FillStyle::solid(resolved.inactiveColor))
-                .size(componentWidth, resolved.trackHeight)
-                .cornerRadius(CornerRadius {resolved.trackHeight * 0.5f}),
+    std::vector<Element> childrenList;
+    childrenList.reserve(clamped > 0.f ? 2 : 1);
+    childrenList.push_back(
+        Rectangle {}
+            .fill(FillStyle::solid(resolved.inactiveColor))
+            .size(componentWidth, resolved.trackHeight)
+            .cornerRadius(CornerRadius {resolved.trackHeight * 0.5f})
+    );
+    if (clamped > 0.f) {
+        childrenList.push_back(
             Rectangle {}
                 .fill(FillStyle::solid(resolved.activeColor))
                 .size(componentWidth * clamped, resolved.trackHeight)
                 .cornerRadius(CornerRadius {resolved.trackHeight * 0.5f})
-        ),
+        );
+    }
+
+    return Element {ZStack {
+        .horizontalAlignment = Alignment::Start,
+        .verticalAlignment = Alignment::Start,
+        .children = std::move(childrenList),
     }}
         .size(componentWidth, resolved.trackHeight);
 }
