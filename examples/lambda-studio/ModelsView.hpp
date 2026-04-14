@@ -207,7 +207,7 @@ struct DownloadJobRow : ViewModifiers<DownloadJobRow> {
                 .alignment = Alignment::Center,
                 .children = children(
                     VStack {
-                        .spacing = theme.space1,
+                        .spacing = theme.space2,
                         .alignment = Alignment::Start,
                         .children = std::move(infoChildren)
                     }
