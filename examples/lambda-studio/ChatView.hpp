@@ -495,9 +495,7 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
                 std::string const primaryLine = joinNonEmpty(generationStatsPrimaryParts(stats), "  •  ");
                 std::vector<Element> footerChildren;
                 footerChildren.push_back(
-                    Rectangle {}
-                        .size(0.f, 1.f)
-                        .fill(FillStyle::solid(theme.colorBorderSubtle))
+                    Element { Divider { .orientation = Divider::Orientation::Horizontal } }
                 );
                 footerChildren.push_back(
                     Text {
@@ -615,9 +613,7 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
                 std::string const primaryLine = joinNonEmpty(generationStatsPrimaryParts(*message.generationStats), "  •  ");
                 std::vector<Element> footerChildren;
                 footerChildren.push_back(
-                    Rectangle {}
-                        .size(0.f, 1.f)
-                        .fill(FillStyle::solid(theme.colorBorderSubtle))
+                    Divider { .orientation = Divider::Orientation::Horizontal }
                 );
                 footerChildren.push_back(
                     Text {

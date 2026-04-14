@@ -284,7 +284,7 @@ struct HubView : ViewModifiers<HubView> {
                                   ? Element {EmptyStatePanel {
                                         .title = "No GGUF files found",
                                         .detail = "The selected repository does not expose GGUF files.",
-                                    }}
+                                    }.flex(1.f, 1.f, 0.f)}
                                   : Element {ListView {.rows = std::move(fileRows)}.flex(1.f, 1.f, 0.f)};
 
         std::string selectedMeta;
@@ -481,9 +481,7 @@ struct HubView : ViewModifiers<HubView> {
                     )
                 }
                     .padding(theme.space4),
-                Rectangle {}
-                    .size(0.f, 1.f)
-                    .fill(FillStyle::solid(theme.colorBorderSubtle)),
+                Divider { .orientation = Divider::Orientation:: Horizontal },
                 HStack {
                     .spacing = 0.f,
                     .alignment = Alignment::Stretch,
@@ -495,9 +493,7 @@ struct HubView : ViewModifiers<HubView> {
                         }
                             .fill(FillStyle::solid(theme.colorSurfaceOverlay))
                             .size(420.f, 0.f),
-                        Rectangle {}
-                            .size(1.f, 0.f)
-                            .fill(FillStyle::solid(theme.colorBorderSubtle)),
+                        Divider { .orientation = Divider::Orientation:: Vertical },
                         VStack {
                             .spacing = theme.space2,
                             .alignment = Alignment::Stretch,

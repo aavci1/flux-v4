@@ -178,7 +178,7 @@ struct ChatsView : ViewModifiers<ChatsView> {
                 }
                     .fill(FillStyle::solid(theme.colorSurfaceOverlay))
                     .size(320.f, 0.f),
-                Rectangle {}.size(1.f, 0.f).fill(FillStyle::solid(theme.colorBorderSubtle)),
+                Divider { .orientation = Divider::Orientation::Vertical },
                 std::move(detail),
             },
         };
