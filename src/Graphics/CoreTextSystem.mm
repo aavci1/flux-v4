@@ -197,6 +197,9 @@ Color colorFromCGColor(CGColorRef cg) {
 
 void validateRuns(AttributedString const& text) {
   if (text.utf8.empty()) {
+    if (!text.runs.empty()) {
+      throw std::invalid_argument("AttributedString: empty utf8 must not carry runs");
+    }
     return;
   }
   if (text.runs.empty()) {
