@@ -287,7 +287,9 @@ All three follow the same pattern with axis-specific differences. See `Container
 2. Measure all children with `maxHeight = ∞`, `maxWidth = innerW`
 3. Rewind key index
 4. If height-constrained: flex grow/shrink on the Y axis
-5. Place each child: `scope.layoutChild(children[i], Rect{0, y, innerW, allocH[i]}, ...)`, advance `y`
+5. If the parent provides extra finite height and children do not flex to consume it, center the
+   full child run on the Y axis
+6. Place each child: `scope.layoutChild(children[i], Rect{0, y, innerW, allocH[i]}, ...)`, advance `y`
 
 ### HStack
 
@@ -298,7 +300,9 @@ The horizontal dual of VStack:
 **Layout**:
 1. Measure all children with `maxWidth = ∞`
 2. If width-constrained: flex grow/shrink on the X axis
-3. Place each child: `scope.layoutChild(children[i], Rect{x, 0, allocW[i], rowInnerH}, ...)`, advance `x`
+3. If the parent provides extra finite width and children do not flex to consume it, center the
+   full child run on the X axis
+4. Place each child: `scope.layoutChild(children[i], Rect{x, 0, allocW[i], rowInnerH}, ...)`, advance `x`
 
 ### ZStack
 

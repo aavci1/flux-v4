@@ -70,7 +70,18 @@ void VStack::layout(LayoutContext& ctx) const {
     warnFlexGrowIfParentMainAxisUnconstrained(children, heightConstrained);
   }
 
+  float usedH = 0.f;
+  if (n > 1) {
+    usedH += static_cast<float>(n - 1) * spacing;
+  }
+  for (float h : allocH) {
+    usedH += h;
+  }
+
   float y = 0.f;
+  if (heightConstrained) {
+    y = std::max(0.f, (assignedH - usedH) * 0.5f);
+  }
   for (std::size_t i = 0; i < n; ++i) {
     Size sz = sizes[i];
     sz.height = allocH[i];

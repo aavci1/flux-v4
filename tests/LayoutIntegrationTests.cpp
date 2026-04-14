@@ -332,9 +332,9 @@ TEST_CASE("VStack: 3 fixed-height rectangles stacked with no spacing") {
 
     auto leaves = leavesOf(tree);
     REQUIRE(leaves.size() == 3);
-    CHECK(rectsNear(leaves[0]->frame, Rect {0.f, 0.f, 200.f, 50.f}));
-    CHECK(rectsNear(leaves[1]->frame, Rect {0.f, 50.f, 200.f, 50.f}));
-    CHECK(rectsNear(leaves[2]->frame, Rect {0.f, 100.f, 200.f, 50.f}));
+    CHECK(rectsNear(leaves[0]->frame, Rect {0.f, 75.f, 200.f, 50.f}));
+    CHECK(rectsNear(leaves[1]->frame, Rect {0.f, 125.f, 200.f, 50.f}));
+    CHECK(rectsNear(leaves[2]->frame, Rect {0.f, 175.f, 200.f, 50.f}));
 }
 
 TEST_CASE("VStack: spacing is applied between children") {
@@ -352,8 +352,8 @@ TEST_CASE("VStack: spacing is applied between children") {
 
     auto leaves = leavesOf(tree);
     REQUIRE(leaves.size() == 2);
-    CHECK(rectsNear(leaves[0]->frame, Rect {0.f, 0.f, 100.f, 30.f}));
-    CHECK(rectsNear(leaves[1]->frame, Rect {0.f, 38.f, 100.f, 30.f}));
+    CHECK(rectsNear(leaves[0]->frame, Rect {50.f, 116.f, 100.f, 30.f}));
+    CHECK(rectsNear(leaves[1]->frame, Rect {50.f, 154.f, 100.f, 30.f}));
 }
 
 TEST_CASE("VStack: flex grow fills remaining vertical space") {
@@ -394,9 +394,9 @@ TEST_CASE("HStack: 3 fixed-width rectangles side by side with no spacing") {
 
     auto leaves = leavesOf(tree);
     REQUIRE(leaves.size() == 3);
-    CHECK(rectsNear(leaves[0]->frame, Rect {0.f, 0.f, 60.f, 50.f}));
-    CHECK(rectsNear(leaves[1]->frame, Rect {60.f, 0.f, 60.f, 50.f}));
-    CHECK(rectsNear(leaves[2]->frame, Rect {120.f, 0.f, 60.f, 50.f}));
+    CHECK(rectsNear(leaves[0]->frame, Rect {60.f, 0.f, 60.f, 50.f}));
+    CHECK(rectsNear(leaves[1]->frame, Rect {120.f, 0.f, 60.f, 50.f}));
+    CHECK(rectsNear(leaves[2]->frame, Rect {180.f, 0.f, 60.f, 50.f}));
 }
 
 TEST_CASE("HStack: stretch cross-axis expands explicit-height children to row height") {
@@ -415,8 +415,8 @@ TEST_CASE("HStack: stretch cross-axis expands explicit-height children to row he
     auto leaves = leavesOf(tree);
     REQUIRE(leaves.size() == 2);
     // Row height is the max of intrinsic child heights; stretch gives each child that full height.
-    CHECK(rectsNear(leaves[0]->frame, Rect {0.f, 0.f, 40.f, 200.f}));
-    CHECK(rectsNear(leaves[1]->frame, Rect {40.f, 0.f, 40.f, 200.f}));
+    CHECK(rectsNear(leaves[0]->frame, Rect {60.f, 0.f, 40.f, 200.f}));
+    CHECK(rectsNear(leaves[1]->frame, Rect {100.f, 0.f, 40.f, 200.f}));
 }
 
 TEST_CASE("HStack: center cross-axis offsets shorter leaf children within the row") {
@@ -434,11 +434,11 @@ TEST_CASE("HStack: center cross-axis offsets shorter leaf children within the ro
 
     auto leaves = leavesOf(tree);
     REQUIRE(leaves.size() == 2);
-    CHECK(leaves[0]->frame.x == doctest::Approx(0.f));
+    CHECK(leaves[0]->frame.x == doctest::Approx(60.f));
     CHECK(leaves[0]->frame.y == doctest::Approx(10.f));
     CHECK(leaves[0]->frame.width == doctest::Approx(40.f));
     CHECK(leaves[0]->frame.height == doctest::Approx(20.f));
-    CHECK(leaves[1]->frame.x == doctest::Approx(40.f));
+    CHECK(leaves[1]->frame.x == doctest::Approx(100.f));
     CHECK(leaves[1]->frame.y == doctest::Approx(0.f));
     CHECK(leaves[1]->frame.width == doctest::Approx(40.f));
     CHECK(leaves[1]->frame.height == doctest::Approx(40.f));
@@ -683,8 +683,8 @@ TEST_CASE("VStack: stretch cross-axis expands explicit-width children to column 
 
     auto leaves = leavesOf(tree);
     REQUIRE(leaves.size() == 2);
-    CHECK(rectsNear(leaves[0]->frame, Rect {0.f, 0.f, 200.f, 30.f}));
-    CHECK(rectsNear(leaves[1]->frame, Rect {0.f, 30.f, 200.f, 30.f}));
+    CHECK(rectsNear(leaves[0]->frame, Rect {0.f, 120.f, 200.f, 30.f}));
+    CHECK(rectsNear(leaves[1]->frame, Rect {0.f, 150.f, 200.f, 30.f}));
 }
 
 TEST_CASE("VStack: measure reflects flexed heights under finite constraint") {
@@ -762,6 +762,8 @@ TEST_CASE("Grid: measure reports intrinsic width when width is unconstrained") {
 TEST_CASE("ZStack: children share the same layer and the smaller is centered") {
     auto tree = runLayout(
         Element {ZStack {
+            .horizontalAlignment = Alignment::Center,
+            .verticalAlignment = Alignment::Center,
             .children = children(
                 Element {Rectangle {}}.size(200.f, 200.f),
                 Element {Rectangle {}}.size(100.f, 100.f)
@@ -770,11 +772,73 @@ TEST_CASE("ZStack: children share the same layer and the smaller is centered") {
         200.f, 200.f
     );
 
+    std::vector<LayoutNode const *> modifiers;
+    for (auto const &n : tree.nodes()) {
+        if (n.kind == LayoutNode::Kind::Modifier) {
+            modifiers.push_back(&n);
+        }
+    }
+
+    REQUIRE(modifiers.size() == 2);
+    bool foundOuter = false;
+    bool foundCentered = false;
+    for (LayoutNode const *node : modifiers) {
+        foundOuter = foundOuter || rectsNear(node->frame, Rect {0.f, 0.f, 200.f, 200.f});
+        foundCentered = foundCentered || rectsNear(node->frame, Rect {50.f, 50.f, 100.f, 100.f});
+    }
+    CHECK(foundOuter);
+    // Centered: (200-100)/2 = 50 on both axes
+    CHECK(foundCentered);
+}
+
+TEST_CASE("ZStack containing VStack: nested stack centers within its assigned ZStack slot") {
+    auto tree = runLayout(
+        Element {ZStack {
+            .horizontalAlignment = Alignment::Center,
+            .verticalAlignment = Alignment::Center,
+            .children = children(
+                VStack {
+                    .spacing = 0.f,
+                    .alignment = Alignment::Center,
+                    .children = children(
+                        Element {Rectangle {}}.size(40.f, 20.f),
+                        Element {Rectangle {}}.size(40.f, 20.f)
+                    ),
+                }
+            ),
+        }},
+        200.f, 200.f
+    );
+
     auto leaves = leavesOf(tree);
     REQUIRE(leaves.size() == 2);
-    CHECK(rectsNear(leaves[0]->frame, Rect {0.f, 0.f, 200.f, 200.f}));
-    // Centered: (200-100)/2 = 50 on both axes
-    CHECK(rectsNear(leaves[1]->frame, Rect {50.f, 50.f, 100.f, 100.f}));
+    CHECK(rectsNear(leaves[0]->worldBounds, Rect {80.f, 80.f, 40.f, 20.f}));
+    CHECK(rectsNear(leaves[1]->worldBounds, Rect {80.f, 100.f, 40.f, 20.f}));
+}
+
+TEST_CASE("VStack containing ZStack: nested ZStack keeps centered overlay in its slot") {
+    auto tree = runLayout(
+        Element {VStack {
+            .spacing = 0.f,
+            .children = children(
+                Element {ZStack {
+                    .horizontalAlignment = Alignment::Center,
+                    .verticalAlignment = Alignment::Center,
+                    .children = children(
+                        Element {Rectangle {}}.size(200.f, 40.f),
+                        Element {Rectangle {}}.size(100.f, 20.f)
+                    ),
+                }}
+                    .size(200.f, 40.f)
+            ),
+        }},
+        200.f, 200.f
+    );
+
+    auto leaves = leavesOf(tree);
+    REQUIRE(leaves.size() == 2);
+    CHECK(rectsNear(leaves[0]->worldBounds, Rect {0.f, 80.f, 200.f, 40.f}));
+    CHECK(rectsNear(leaves[1]->worldBounds, Rect {50.f, 90.f, 100.f, 20.f}));
 }
 
 // ── Padding modifier ──────────────────────────────────────────────────────────
@@ -806,11 +870,12 @@ TEST_CASE("Padding modifier insets inner content frame") {
     REQUIRE(modifierNode != nullptr);
     REQUIRE(leafNode != nullptr);
 
-    // Modifier frame is assigned by VStack at (0,0); the sizeWidth/Height on the modifier
-    // is respected during measure (returns 100x100) so VStack assigns {0,0,200,100} (full width).
-    // The modifier's own bgBounds = absOuter = parentFrame = {0,0,200,100}
+    // Modifier frame is assigned by VStack at centered main-axis position; the sizeWidth/Height on
+    // the modifier is respected during measure (returns 100x100) so VStack assigns {0,50,200,100}
+    // (full width, vertically centered in the 200pt parent).
+    // The modifier's own bgBounds = absOuter = parentFrame = {0,50,200,100}.
     CHECK(modifierNode->frame.x == doctest::Approx(0.f).epsilon(0.5f));
-    CHECK(modifierNode->frame.y == doctest::Approx(0.f).epsilon(0.5f));
+    CHECK(modifierNode->frame.y == doctest::Approx(50.f).epsilon(0.5f));
 
     // Leaf is inset by pad from the modifier frame origin
     CHECK(leafNode->frame.x == doctest::Approx(modifierNode->frame.x + pad).epsilon(0.5f));
@@ -841,7 +906,7 @@ TEST_CASE("VStack containing HStack: leaf frames are in HStack layer space") {
 
     auto leaves = leavesOf(tree);
     REQUIRE(leaves.size() == 3);
-    CHECK(rectsNear(leaves[0]->frame, Rect {0.f, 0.f, 60.f, 40.f}));
-    CHECK(rectsNear(leaves[1]->frame, Rect {60.f, 0.f, 60.f, 40.f}));
-    CHECK(rectsNear(leaves[2]->frame, Rect {120.f, 0.f, 60.f, 40.f}));
+    CHECK(rectsNear(leaves[0]->frame, Rect {60.f, 0.f, 60.f, 40.f}));
+    CHECK(rectsNear(leaves[1]->frame, Rect {120.f, 0.f, 60.f, 40.f}));
+    CHECK(rectsNear(leaves[2]->frame, Rect {180.f, 0.f, 60.f, 40.f}));
 }

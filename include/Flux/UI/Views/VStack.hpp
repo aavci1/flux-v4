@@ -20,7 +20,7 @@ struct VStack : ViewModifiers<VStack> {
   Size measure(LayoutContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
 
   float spacing = 8.f;
-  Alignment alignment = Alignment::Start;
+  Alignment alignment = Alignment::Center;
   std::vector<Element> children;
 };
 

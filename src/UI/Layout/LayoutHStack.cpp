@@ -82,7 +82,18 @@ void HStack::layout(LayoutContext& ctx) const {
   innerForBuild.maxHeight = heightConstrained ? assignedH : rowInnerH;
   clampLayoutMinToMax(innerForBuild);
 
+  float usedW = 0.f;
+  if (n > 1) {
+    usedW += static_cast<float>(n - 1) * spacing;
+  }
+  for (float w : allocW) {
+    usedW += w;
+  }
+
   float x = 0.f;
+  if (widthConstrained) {
+    x = std::max(0.f, (assignedW - usedW) * 0.5f);
+  }
   for (std::size_t i = 0; i < n; ++i) {
     LayoutConstraints childBuild = innerForBuild;
     childBuild.maxWidth = allocW[i];
