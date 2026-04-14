@@ -258,8 +258,11 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                     }
 
                     std::int64_t const nowNanos = steadyNowNanos();
+                    std::int64_t const nowUnixMs = currentUnixMillis();
+                    bool persistAfterEvent = true;
 
                     if (event.kind == lambda_backend::LlmUiEvent::Kind::Chunk) {
+                        persistAfterEvent = false;
                         ChatRole const role = event.part == lambda_backend::LlmUiEvent::Part::Thinking
                                                   ? ChatRole::Reasoning
                                                   : ChatRole::Assistant;
@@ -298,7 +301,9 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                         nextState.errorText = event.text;
                     }
 
-                    persistChats(nextState, services);
+                    if (persistAfterEvent) {
+                        persistChats(nextState, services);
+                    }
                     appState = std::move(nextState);
                 }
             );
