@@ -87,27 +87,6 @@ inline Element placeholderPanel(
         .flex(1.f, 1.f);
 }
 
-inline Element deleteIconAction(
-    Theme const &theme,
-    bool disabled,
-    std::function<void()> const &onTap
-) {
-    Element icon = Icon {
-        .name = IconName::Delete,
-        .size = theme.fontHeading.size,
-        .weight = theme.fontLabel.weight,
-        .color = disabled ? theme.colorTextDisabled : theme.colorDanger,
-    }
-                       .padding(3.f);
-    if (disabled || !onTap) {
-        return icon;
-    }
-    return std::move(icon)
-        .cursor(Cursor::Hand)
-        .focusable(true)
-        .onTap(onTap);
-}
-
 } // namespace models_view_detail
 
 struct ModelRow : ViewModifiers<ModelRow> {
@@ -160,7 +139,16 @@ struct ModelRow : ViewModifiers<ModelRow> {
                         .disabled = active || loading || deleting,
                         .onTap = onLoad,
                     },
-                    models_view_detail::deleteIconAction(theme, deleting, onDelete)
+                    IconButton {
+                        .icon = IconName::Delete,
+                        .disabled = deleting,
+                        .style = {
+                            .size = theme.fontHeading.size,
+                            .weight = theme.fontLabel.weight,
+                            .color = deleting ? theme.colorTextDisabled : theme.colorDanger,
+                        },
+                        .onTap = onDelete,
+                    }
                 )
             },
             .selected = active,
