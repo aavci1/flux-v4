@@ -51,6 +51,7 @@ class IModelManager {
     virtual std::uint64_t inspectRepo(std::string repoId) = 0;
     virtual std::uint64_t downloadModel(std::string repoId, std::string fileName) = 0;
     virtual std::uint64_t loadModel(std::string path, int nGpuLayers = -1) = 0;
+    virtual std::uint64_t deleteModel(std::string path, std::string repoId) = 0;
     virtual void unloadModel() = 0;
 };
 
@@ -108,6 +109,7 @@ class IModelCatalogStore {
         std::string const &chatId,
         std::vector<ChatMessage> const &messages
     ) = 0;
+    virtual void deleteChatThread(std::string const &chatId) = 0;
     virtual void updateSelectedChatId(std::string const &selectedChatId) = 0;
     virtual void replaceChatOrder(std::vector<std::string> const &chatIds) = 0;
 };

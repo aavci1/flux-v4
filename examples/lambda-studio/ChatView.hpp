@@ -350,6 +350,23 @@ std::vector<std::string> generationStatsPrimaryParts(MessageGenerationStats cons
     return parts;
 }
 
+Element deleteChatTitleAction(Theme const &theme, std::function<void()> const &onTap) {
+    Element icon = Icon {
+        .name = IconName::Delete,
+        .size = theme.fontHeading.size,
+        .weight = theme.fontLabel.weight,
+        .color = theme.colorDanger,
+    }
+                       .padding(3.f);
+    if (!onTap) {
+        return icon;
+    }
+    return std::move(icon)
+        .cursor(Cursor::Hand)
+        .focusable(true)
+        .onTap(onTap);
+}
+
 } // namespace
 
 struct ThinkingDots : ViewModifiers<ThinkingDots> {
@@ -781,6 +798,7 @@ struct ChatView : ViewModifiers<ChatView> {
     bool modelLoading = false;
     std::function<void(std::string const &)> onSend;
     std::function<void()> onStop;
+    std::function<void()> onDeleteChat;
     std::function<void(int)> onToggleReasoning;
     std::function<void(std::string const &, std::string const &)> onSelectModel;
 
@@ -852,7 +870,8 @@ struct ChatView : ViewModifiers<ChatView> {
                                 }
                             )
                         }
-                            .flex(1.f, 1.f)
+                            .flex(1.f, 1.f),
+                        deleteChatTitleAction(theme, onDeleteChat)
                     ),
                 },
                 ScrollView {

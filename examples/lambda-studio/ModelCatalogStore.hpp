@@ -587,6 +587,39 @@ class ModelCatalogStore : public IModelCatalogStore {
         }
     }
 
+    void deleteChatThread(std::string const &chatId) override {
+        std::lock_guard<std::mutex> lock(mutex_);
+        try {
+            beginTransaction();
+
+            Statement deleteStats(
+                db_,
+                "DELETE FROM chat_message_stats WHERE chat_id = ?1;"
+            );
+            bindText(deleteStats.stmt, 1, chatId);
+            stepDone(deleteStats.stmt);
+
+            Statement deleteMessages(
+                db_,
+                "DELETE FROM chat_messages WHERE chat_id = ?1;"
+            );
+            bindText(deleteMessages.stmt, 1, chatId);
+            stepDone(deleteMessages.stmt);
+
+            Statement deleteThread(
+                db_,
+                "DELETE FROM chat_threads WHERE chat_id = ?1;"
+            );
+            bindText(deleteThread.stmt, 1, chatId);
+            stepDone(deleteThread.stmt);
+
+            commitTransaction();
+        } catch (...) {
+            rollbackTransaction();
+            throw;
+        }
+    }
+
     void updateSelectedChatId(std::string const &selectedChatId) override {
         std::lock_guard<std::mutex> lock(mutex_);
         Statement upsertPreference(

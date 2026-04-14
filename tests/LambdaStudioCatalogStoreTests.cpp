@@ -75,3 +75,27 @@ TEST_CASE("ModelCatalogStore can reorder chats and update selection without mess
 
     std::filesystem::remove_all(tempDir);
 }
+
+TEST_CASE("ModelCatalogStore deletes one chat thread without affecting others") {
+    std::filesystem::path const tempDir = uniqueTempDir("delete");
+    std::filesystem::create_directories(tempDir);
+
+    lambda::ModelCatalogStore store(tempDir);
+    store.upsertChatThreadMeta("chat-a", "Chat A", 100, "/tmp/a.gguf", "A", 0);
+    store.upsertChatThreadMeta("chat-b", "Chat B", 100, "/tmp/b.gguf", "B", 1);
+    store.replaceChatMessagesForThread("chat-a", {makeUserMessage("A1"), makeUserMessage("A2")});
+    store.replaceChatMessagesForThread("chat-b", {makeUserMessage("B1")});
+    store.updateSelectedChatId("chat-b");
+
+    store.deleteChatThread("chat-a");
+    store.replaceChatOrder({"chat-b"});
+
+    lambda::PersistedChatState const state = store.loadPersistedChatState();
+    REQUIRE(state.chats.size() == 1);
+    CHECK(state.chats[0].id == "chat-b");
+    CHECK(state.chats[0].messages.size() == 1);
+    CHECK(state.chats[0].messages[0].text == "B1");
+    CHECK(state.selectedChatId == "chat-b");
+
+    std::filesystem::remove_all(tempDir);
+}

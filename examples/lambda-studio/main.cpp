@@ -207,6 +207,24 @@ void setChatModel(AppState &state, int chatIndex, std::string path, std::string 
     chat.modelName = std::move(name);
 }
 
+std::vector<int> clearChatModelReferences(AppState &state, std::string const &modelPath) {
+    std::vector<int> changed;
+    if (modelPath.empty()) {
+        return changed;
+    }
+    for (std::size_t i = 0; i < state.chats.size(); ++i) {
+        ChatThread &chat = state.chats[i];
+        if (chat.modelPath != modelPath) {
+            continue;
+        }
+        chat.modelPath.clear();
+        chat.modelName.clear();
+        chat.updatedAtUnixMs = currentUnixMillis();
+        changed.push_back(static_cast<int>(i));
+    }
+    return changed;
+}
+
 std::vector<lambda_backend::ChatMessage> toBackendMessages(ChatThread const &chat) {
     std::vector<lambda_backend::ChatMessage> result;
     result.reserve(chat.messages.size());
@@ -436,6 +454,42 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                         nextState.pendingModelPath.clear();
                         nextState.pendingModelName.clear();
                         nextState.notice.reset();
+                        nextState.errorText = event.error;
+                        break;
+                    case lambda_backend::ModelManagerEvent::Kind::ModelDeleted:
+                    {
+                        if (isStaleLatest(event.requestId, nextState.latestDeleteModelRequestId)) {
+                            break;
+                        }
+                        nextState.modelDeleting = false;
+                        nextState.pendingDeleteModelPath.clear();
+                        if (event.modelPath == nextState.loadedModelPath) {
+                            nextState.loadedModelPath.clear();
+                            nextState.loadedModelName.clear();
+                            nextState.modelLoading = false;
+                            if (event.modelPath == nextState.pendingModelPath) {
+                                nextState.pendingModelPath.clear();
+                                nextState.pendingModelName.clear();
+                            }
+                        }
+                        {
+                            std::vector<int> const affectedChats = clearChatModelReferences(nextState, event.modelPath);
+                            for (int chatIndex : affectedChats) {
+                                persistChatThread(nextState, *catalog, chatIndex);
+                            }
+                        }
+                        std::string const deletedName =
+                            !event.modelName.empty() ? event.modelName : modelDisplayName(event.modelPath);
+                        nextState.statusText = deletedName.empty() ? "Deleted model" : "Deleted " + deletedName;
+                        nextState.errorText.clear();
+                        break;
+                    }
+                    case lambda_backend::ModelManagerEvent::Kind::ModelDeleteError:
+                        if (isStaleLatest(event.requestId, nextState.latestDeleteModelRequestId)) {
+                            break;
+                        }
+                        nextState.modelDeleting = false;
+                        nextState.pendingDeleteModelPath.clear();
                         nextState.errorText = event.error;
                         break;
                     case lambda_backend::ModelManagerEvent::Kind::DownloadProgress:
@@ -878,6 +932,20 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
             appState = std::move(nextState);
         };
 
+        auto requestModelDelete = [appState, manager](std::string const &path, std::string const &repo, std::string const &name) {
+            if (path.empty()) {
+                return;
+            }
+            AppState nextState = *appState;
+            std::string const displayName = !name.empty() ? name : modelDisplayName(path);
+            nextState.modelDeleting = true;
+            nextState.pendingDeleteModelPath = path;
+            nextState.statusText = displayName.empty() ? "Deleting model..." : "Deleting " + displayName;
+            nextState.errorText.clear();
+            nextState.latestDeleteModelRequestId = manager->deleteModel(path, repo);
+            appState = std::move(nextState);
+        };
+
         auto selectChatModel = [appState, catalog, requestModelLoad](int chatIndex, std::string const &path, std::string const &name) {
             AppState nextState = *appState;
             setChatModel(nextState, chatIndex, path, name);
@@ -1010,6 +1078,34 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
             appState = std::move(nextState);
         };
 
+        auto deleteChat = [appState, catalog, engine](int chatIndex) {
+            AppState nextState = *appState;
+            if (chatIndex < 0 || static_cast<std::size_t>(chatIndex) >= nextState.chats.size()) {
+                return;
+            }
+
+            ChatThread const removedChat = nextState.chats[static_cast<std::size_t>(chatIndex)];
+            if (removedChat.streaming || removedChat.activeGenerationId != 0) {
+                engine->cancelGeneration();
+            }
+            nextState.chats.erase(nextState.chats.begin() + chatIndex);
+            if (nextState.chats.empty()) {
+                nextState.selectedChatIndex = 0;
+            } else {
+                nextState.selectedChatIndex = std::min(chatIndex, static_cast<int>(nextState.chats.size() - 1));
+            }
+
+            try {
+                catalog->deleteChatThread(removedChat.id);
+            } catch (std::exception const &e) {
+                nextState.errorText = e.what();
+            }
+            persistChatOrder(nextState, *catalog);
+            persistSelectedChat(nextState, *catalog);
+            nextState.statusText = "Deleted chat";
+            appState = std::move(nextState);
+        };
+
         Element currentView = ChatsView {
             .state = state,
             .onNewChat = createChat,
@@ -1022,6 +1118,7 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
             .onSelectModel = selectChatModel,
             .onSend = sendMessage,
             .onStop = stopMessage,
+            .onDeleteChat = deleteChat,
             .onToggleReasoning = toggleReasoningMessage,
         }
                                   .flex(1.f, 1.f);
@@ -1031,6 +1128,7 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
                 .state = state,
                 .onRefresh = requestInventoryRefresh,
                 .onLoad = requestModelLoad,
+                .onDeleteModel = requestModelDelete,
                 .onRetryDownload = retryDownloadJob,
             }
                               .flex(1.f, 1.f);

@@ -23,6 +23,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <thread>
 #include <unordered_set>
@@ -358,6 +359,80 @@ class ModelManager : public lambda::IModelManager {
                     .error = std::string("Failed to load: ") + modelPath,
                 },
                           ModelManagerLane::LoadModel,
+                          requestId);
+            }
+        });
+        return requestId;
+    }
+
+    std::uint64_t deleteModel(std::string path, std::string repoId) override {
+        std::uint64_t const requestId = beginRequest(ModelManagerLane::Download);
+        enqueueTask(downloadLane_, [this, requestId, modelPath = std::move(path), repo = std::move(repoId)] {
+            try {
+                if (modelPath.empty()) {
+                    throw std::runtime_error("Model path is empty");
+                }
+
+                if (pathsEquivalent(engine_->modelPath(), modelPath)) {
+                    engine_->cancelGeneration();
+                    engine_->unload();
+                }
+
+                bool removedArtifacts = false;
+                std::string deletedTarget;
+                if (std::optional<fs::path> repoPath = resolveHfRepoPath(repo, modelPath); repoPath.has_value()) {
+                    std::error_code ec;
+                    if (fs::exists(*repoPath, ec) && !ec) {
+                        fs::remove_all(*repoPath, ec);
+                        if (ec) {
+                            throw std::runtime_error("Failed to remove Hugging Face cache repo: " + ec.message());
+                        }
+                        removedArtifacts = true;
+                        deletedTarget = repoPath->string();
+                    }
+                }
+
+                if (!removedArtifacts) {
+                    fs::path const filePath = fs::path(modelPath).lexically_normal();
+                    std::error_code ec;
+                    if (fs::exists(filePath, ec) && !ec) {
+                        if (fs::is_directory(filePath, ec)) {
+                            fs::remove_all(filePath, ec);
+                        } else {
+                            fs::remove(filePath, ec);
+                        }
+                        if (ec) {
+                            throw std::runtime_error("Failed to remove model file: " + ec.message());
+                        }
+                        removedArtifacts = true;
+                        deletedTarget = filePath.string();
+                    }
+                }
+
+                if (!removedArtifacts) {
+                    throw std::runtime_error("Model artifacts were not found");
+                }
+
+                postEvent(ModelManagerEvent {
+                    .kind = ModelManagerEvent::Kind::ModelDeleted,
+                    .repoId = repo,
+                    .filePath = deletedTarget,
+                    .modelPath = modelPath,
+                    .modelName = extractModelName(modelPath),
+                },
+                          ModelManagerLane::Download,
+                          requestId);
+
+                std::uint64_t const refreshRequestId = beginRequest(ModelManagerLane::Inventory);
+                enqueueTask(inventoryLane_, [this, refreshRequestId] { postLocalModelsReady_(refreshRequestId); });
+            } catch (std::exception const &e) {
+                postEvent(ModelManagerEvent {
+                    .kind = ModelManagerEvent::Kind::ModelDeleteError,
+                    .error = e.what(),
+                    .repoId = repo,
+                    .modelPath = modelPath,
+                },
+                          ModelManagerLane::Download,
                           requestId);
             }
         });
@@ -952,6 +1027,141 @@ class ModelManager : public lambda::IModelManager {
 
     static bool hasGgufExtension(std::string const &path) {
         return path.size() >= 5 && path.substr(path.size() - 5) == ".gguf";
+    }
+
+    static std::optional<fs::path> hfCacheDirectory() {
+        if (char const *cache = std::getenv("LLAMA_CACHE"); cache != nullptr && *cache) {
+            return fs::path(cache);
+        }
+        if (char const *cache = std::getenv("HF_HUB_CACHE"); cache != nullptr && *cache) {
+            return fs::path(cache);
+        }
+        if (char const *cache = std::getenv("HUGGINGFACE_HUB_CACHE"); cache != nullptr && *cache) {
+            return fs::path(cache);
+        }
+        if (char const *home = std::getenv("HF_HOME"); home != nullptr && *home) {
+            return fs::path(home) / "hub";
+        }
+        if (char const *xdg = std::getenv("XDG_CACHE_HOME"); xdg != nullptr && *xdg) {
+            return fs::path(xdg) / "huggingface" / "hub";
+        }
+        if (char const *home = std::getenv("HOME"); home != nullptr && *home) {
+            return fs::path(home) / ".cache" / "huggingface" / "hub";
+        }
+        return std::nullopt;
+    }
+
+    static bool isValidRepoId(std::string const &repoId) {
+        if (repoId.empty() || repoId.size() > 256) {
+            return false;
+        }
+
+        int slashCount = 0;
+        bool previousWasSpecial = true;
+        for (char const ch : repoId) {
+            bool const isBase = std::isalnum(static_cast<unsigned char>(ch)) || ch == '_';
+            bool const isSpecial = ch == '/' || ch == '.' || ch == '-';
+            if (isBase) {
+                previousWasSpecial = false;
+                continue;
+            }
+            if (!isSpecial || previousWasSpecial) {
+                return false;
+            }
+            if (ch == '/') {
+                ++slashCount;
+            }
+            previousWasSpecial = true;
+        }
+        return !previousWasSpecial && slashCount == 1;
+    }
+
+    static fs::path absoluteNormalized(fs::path const &path) {
+        std::error_code ec;
+        fs::path absolutePath = fs::absolute(path, ec);
+        if (ec) {
+            return path.lexically_normal();
+        }
+        return absolutePath.lexically_normal();
+    }
+
+    static bool isSubpath(fs::path const &root, fs::path const &path) {
+        fs::path const normalizedRoot = absoluteNormalized(root);
+        fs::path const normalizedPath = absoluteNormalized(path);
+        auto mismatch = std::mismatch(
+            normalizedRoot.begin(),
+            normalizedRoot.end(),
+            normalizedPath.begin(),
+            normalizedPath.end()
+        );
+        return mismatch.first == normalizedRoot.end();
+    }
+
+    static std::optional<fs::path> repoPathFromRepoId(std::string const &repoId) {
+        if (!isValidRepoId(repoId)) {
+            return std::nullopt;
+        }
+        std::optional<fs::path> const cacheDir = hfCacheDirectory();
+        if (!cacheDir.has_value()) {
+            return std::nullopt;
+        }
+
+        // Repo folder uses "--" to represent "/".
+        std::string encoded = "models--" + repoId;
+        std::string::size_type pos = 0;
+        while ((pos = encoded.find('/', pos)) != std::string::npos) {
+            encoded.replace(pos, 1, "--");
+            pos += 2;
+        }
+
+        fs::path repoPath = *cacheDir / encoded;
+        if (!isSubpath(*cacheDir, repoPath)) {
+            return std::nullopt;
+        }
+        return repoPath;
+    }
+
+    static std::optional<fs::path> repoPathFromModelPath(std::string const &modelPath) {
+        std::optional<fs::path> const cacheDir = hfCacheDirectory();
+        if (!cacheDir.has_value()) {
+            return std::nullopt;
+        }
+
+        fs::path current = fs::path(modelPath).lexically_normal().parent_path();
+        while (!current.empty()) {
+            std::string const name = current.filename().string();
+            if (name.rfind("models--", 0) == 0 && isSubpath(*cacheDir, current)) {
+                return current;
+            }
+
+            fs::path const parent = current.parent_path();
+            if (parent == current) {
+                break;
+            }
+            current = parent;
+        }
+        return std::nullopt;
+    }
+
+    static std::optional<fs::path> resolveHfRepoPath(std::string const &repoId, std::string const &modelPath) {
+        if (!repoId.empty()) {
+            if (std::optional<fs::path> fromRepo = repoPathFromRepoId(repoId); fromRepo.has_value()) {
+                return fromRepo;
+            }
+        }
+        return repoPathFromModelPath(modelPath);
+    }
+
+    static bool pathsEquivalent(std::string const &lhs, std::string const &rhs) {
+        if (lhs.empty() || rhs.empty()) {
+            return false;
+        }
+
+        std::error_code ec;
+        if (fs::equivalent(lhs, rhs, ec) && !ec) {
+            return true;
+        }
+        return fs::path(lhs).lexically_normal() == fs::path(rhs).lexically_normal();
     }
 
     static std::string modelsDir() {

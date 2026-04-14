@@ -155,16 +155,19 @@ struct AppState {
     bool loadingRemoteRepoDetail = false;
     bool downloadingModel = false;
     bool modelLoading = false;
+    bool modelDeleting = false;
 
     std::string pendingDownloadJobId;
     std::string pendingDownloadRepoId;
     std::string pendingDownloadFilePath;
+    std::string pendingDeleteModelPath;
 
     std::uint64_t latestInventoryRequestId = 0;
     std::uint64_t latestSearchRequestId = 0;
     std::uint64_t latestRepoInspectRequestId = 0;
     std::uint64_t latestDownloadRequestId = 0;
     std::uint64_t latestLoadModelRequestId = 0;
+    std::uint64_t latestDeleteModelRequestId = 0;
 
     bool operator==(AppState const &) const = default;
 };

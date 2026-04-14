@@ -149,6 +149,8 @@ struct ModelManagerEvent {
         DownloadError,
         ModelLoaded,
         ModelLoadError,
+        ModelDeleted,
+        ModelDeleteError,
     };
 
     Kind kind = Kind::LocalModelsReady;

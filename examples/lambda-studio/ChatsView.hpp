@@ -73,6 +73,7 @@ struct ChatsView : ViewModifiers<ChatsView> {
     std::function<void(int, std::string const &, std::string const &)> onSelectModel;
     std::function<void(int, std::string const &)> onSend;
     std::function<void(int)> onStop;
+    std::function<void(int)> onDeleteChat;
     std::function<void(int, int)> onToggleReasoning;
 
     auto body() const {
@@ -137,6 +138,10 @@ struct ChatsView : ViewModifiers<ChatsView> {
                 .onStop = [onStop = onStop, selectedIndex] {
                     if (onStop) {
                         onStop(selectedIndex);
+                    } },
+                .onDeleteChat = [onDeleteChat = onDeleteChat, selectedIndex] {
+                    if (onDeleteChat) {
+                        onDeleteChat(selectedIndex);
                     } },
                 .onToggleReasoning = [onToggleReasoning = onToggleReasoning, selectedIndex](int messageIndex) {
                     if (onToggleReasoning) {

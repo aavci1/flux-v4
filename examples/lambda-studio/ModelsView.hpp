@@ -87,13 +87,36 @@ inline Element placeholderPanel(
         .flex(1.f, 1.f);
 }
 
+inline Element deleteIconAction(
+    Theme const &theme,
+    bool disabled,
+    std::function<void()> const &onTap
+) {
+    Element icon = Icon {
+        .name = IconName::Delete,
+        .size = theme.fontHeading.size,
+        .weight = theme.fontLabel.weight,
+        .color = disabled ? theme.colorTextDisabled : theme.colorDanger,
+    }
+                       .padding(3.f);
+    if (disabled || !onTap) {
+        return icon;
+    }
+    return std::move(icon)
+        .cursor(Cursor::Hand)
+        .focusable(true)
+        .onTap(onTap);
+}
+
 } // namespace models_view_detail
 
 struct ModelRow : ViewModifiers<ModelRow> {
     LocalModel model;
     bool active = false;
     bool loading = false;
+    bool deleting = false;
     std::function<void()> onLoad;
+    std::function<void()> onDelete;
 
     auto body() const {
         Theme const &theme = useEnvironment<Theme>();
@@ -134,9 +157,10 @@ struct ModelRow : ViewModifiers<ModelRow> {
                         .flex(1.f, 1.f),
                     LinkButton {
                         .label = active ? "Loaded" : loading ? "Loading..." : "Load",
-                        .disabled = active || loading,
+                        .disabled = active || loading || deleting,
                         .onTap = onLoad,
-                    }
+                    },
+                    models_view_detail::deleteIconAction(theme, deleting, onDelete)
                 )
             },
             .selected = active,
@@ -217,6 +241,7 @@ struct ModelsView : ViewModifiers<ModelsView> {
     AppState state;
     std::function<void()> onRefresh;
     std::function<void(std::string const &, std::string const &)> onLoad;
+    std::function<void(std::string const &, std::string const &, std::string const &)> onDeleteModel;
     std::function<void(std::string, std::string)> onRetryDownload;
 
     auto body() const {
@@ -228,13 +253,21 @@ struct ModelsView : ViewModifiers<ModelsView> {
             bool const isActive = !state.loadedModelPath.empty() && model.path == state.loadedModelPath;
             bool const isLoading = state.modelLoading && !state.pendingModelPath.empty() &&
                                    model.path == state.pendingModelPath;
+            bool const isDeleting = state.modelDeleting && !state.pendingDeleteModelPath.empty() &&
+                                    model.path == state.pendingDeleteModelPath;
             localRows.push_back(ModelRow {
                 .model = model,
                 .active = isActive,
                 .loading = isLoading,
+                .deleting = isDeleting,
                 .onLoad = [onLoad = onLoad, path = model.path, name = model.name] {
                     if (onLoad) {
                         onLoad(path, name);
+                    }
+                },
+                .onDelete = [onDeleteModel = onDeleteModel, path = model.path, repo = model.repo, name = model.name] {
+                    if (onDeleteModel) {
+                        onDeleteModel(path, repo, name);
                     }
                 },
             });
