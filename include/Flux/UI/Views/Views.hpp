@@ -13,14 +13,17 @@
 
 /// Layout containers (`#include <Flux/UI/Element.hpp>`).
 #include <Flux/UI/Views/Alert.hpp>
+#include <Flux/UI/Views/Badge.hpp>
 #include <Flux/UI/Views/Button.hpp>
 #include <Flux/UI/Views/Checkbox.hpp>
+#include <Flux/UI/Views/Divider.hpp>
 #include <Flux/UI/Views/ForEach.hpp>
 #include <Flux/UI/Views/Grid.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Icon.hpp>
 #include <Flux/UI/Views/ListView.hpp>
 #include <Flux/UI/Views/Popover.hpp>
+#include <Flux/UI/Views/ProgressBar.hpp>
 #include <Flux/UI/Views/ScrollView.hpp>
 #include <Flux/UI/Views/SegmentedControl.hpp>
 #include <Flux/UI/Views/Select.hpp>

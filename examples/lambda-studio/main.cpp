@@ -19,7 +19,6 @@
 #include "Mappers.hpp"
 #include "AppRuntime.hpp"
 #include "ChatsView.hpp"
-#include "Divider.hpp"
 #include "HubView.hpp"
 #include "ModelsView.hpp"
 #include "SettingsView.hpp"

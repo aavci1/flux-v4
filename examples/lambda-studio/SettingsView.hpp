@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "AppState.hpp"
+#include "SharedViews.hpp"
 
 using namespace flux;
 
@@ -158,20 +159,6 @@ inline std::string formatCountLabel(int count, std::string singular, std::string
     return std::to_string(count) + " " + (count == 1 ? singular : plural);
 }
 
-inline Element statusBadge(Theme const &theme, std::string text, StatusTone tone) {
-    Color const foreground = toneForeground(theme, tone);
-    Color const background = toneBackground(theme, tone);
-    return Text {
-        .text = std::move(text),
-        .font = theme.fontLabelSmall,
-        .color = foreground,
-        .horizontalAlignment = HorizontalAlignment::Center,
-    }
-        .padding(theme.space1, theme.space2, theme.space1, theme.space2)
-        .fill(FillStyle::solid(background))
-        .cornerRadius(theme.radiusFull);
-}
-
 inline Element statCard(Theme const &theme, std::string label, std::string value, std::string detail,
                         Color accent) {
     return VStack {
@@ -206,32 +193,6 @@ inline Element statCard(Theme const &theme, std::string label, std::string value
         .flex(1.f, 1.f, 0.f);
 }
 
-inline Element infoRow(Theme const &theme, std::string label, std::string value, bool emphasize = false,
-                       int maxLines = 3) {
-    return HStack {
-        .spacing = theme.space3,
-        .alignment = Alignment::Start,
-        .children = children(
-            Text {
-                .text = std::move(label),
-                .font = theme.fontLabelSmall,
-                .color = theme.colorTextMuted,
-                .horizontalAlignment = HorizontalAlignment::Leading,
-            }
-                .size(126.f, 0.f),
-            Text {
-                .text = std::move(value),
-                .font = emphasize ? theme.fontLabel : theme.fontBodySmall,
-                .color = emphasize ? theme.colorTextPrimary : theme.colorTextSecondary,
-                .horizontalAlignment = HorizontalAlignment::Leading,
-                .wrapping = TextWrapping::Wrap,
-                .maxLines = maxLines,
-            }
-                .flex(1.f, 1.f)
-        )
-    };
-}
-
 inline Element sectionCard(Theme const &theme, std::string eyebrow, std::string title, std::string detail,
                            std::vector<Element> rows) {
     std::vector<Element> children;
@@ -264,9 +225,9 @@ inline Element sectionCard(Theme const &theme, std::string eyebrow, std::string 
 
     for (std::size_t i = 0; i < rows.size(); ++i) {
         children.push_back(
-            Rectangle {}
-                .size(0.f, 1.f)
-                .fill(FillStyle::solid(theme.colorBorderSubtle))
+            Divider {
+                .orientation = Divider::Orientation::Horizontal,
+            }
         );
         children.push_back(std::move(rows[i]));
     }
@@ -325,87 +286,98 @@ struct SettingsView : ViewModifiers<SettingsView> {
 
         std::vector<Element> runtimeRows;
         runtimeRows.reserve(4);
-        runtimeRows.push_back(infoRow(theme, "Active model", loadedModelSummary(state), true, 2));
-        runtimeRows.push_back(infoRow(theme, "Pending model", pendingModelSummary(state), false, 2));
-        runtimeRows.push_back(infoRow(
-            theme,
-            "Current module",
-            moduleTitle(state.currentModule),
-            false,
-            1
-        ));
-        runtimeRows.push_back(infoRow(
-            theme,
-            "Status message",
-            state.statusText.empty() ? "No background status message." : state.statusText,
-            false,
-            3
-        ));
+        runtimeRows.push_back(LabeledValueRow {
+            .label = "Active model",
+            .value = loadedModelSummary(state),
+            .labelWidth = 126.f,
+            .spacing = theme.space3,
+            .emphasize = true,
+        });
+        runtimeRows.push_back(LabeledValueRow {
+            .label = "Pending model",
+            .value = pendingModelSummary(state),
+            .labelWidth = 126.f,
+            .spacing = theme.space3,
+        });
+        runtimeRows.push_back(LabeledValueRow {
+            .label = "Current module",
+            .value = moduleTitle(state.currentModule),
+            .labelWidth = 126.f,
+            .spacing = theme.space3,
+            .maxLines = 1,
+        });
+        runtimeRows.push_back(LabeledValueRow {
+            .label = "Status message",
+            .value = state.statusText.empty() ? "No background status message." : state.statusText,
+            .labelWidth = 126.f,
+            .spacing = theme.space3,
+            .maxLines = 3,
+        });
 
         std::vector<Element> libraryRows;
         libraryRows.reserve(4);
-        libraryRows.push_back(infoRow(
-            theme,
-            "Model path",
-            loadedModelDetail(state),
-            false,
-            4
-        ));
-        libraryRows.push_back(infoRow(
-            theme,
-            "Downloads running",
-            downloadsRunning == 0 ? "None" : formatCountLabel(downloadsRunning, "download", "downloads"),
-            false,
-            2
-        ));
-        libraryRows.push_back(infoRow(
-            theme,
-            "Failed downloads",
-            downloadsFailed == 0 ? "No failed downloads" : formatCountLabel(downloadsFailed, "failed job", "failed jobs"),
-            downloadsFailed > 0,
-            2
-        ));
-        libraryRows.push_back(infoRow(
-            theme,
-            "Recent jobs tracked",
-            std::to_string(state.recentDownloadJobs.size()),
-            false,
-            1
-        ));
+        libraryRows.push_back(LabeledValueRow {
+            .label = "Model path",
+            .value = loadedModelDetail(state),
+            .labelWidth = 126.f,
+            .spacing = theme.space3,
+            .maxLines = 4,
+        });
+        libraryRows.push_back(LabeledValueRow {
+            .label = "Downloads running",
+            .value = downloadsRunning == 0 ? "None" : formatCountLabel(downloadsRunning, "download", "downloads"),
+            .labelWidth = 126.f,
+            .spacing = theme.space3,
+        });
+        libraryRows.push_back(LabeledValueRow {
+            .label = "Failed downloads",
+            .value = downloadsFailed == 0 ? "No failed downloads" : formatCountLabel(downloadsFailed, "failed job", "failed jobs"),
+            .labelWidth = 126.f,
+            .spacing = theme.space3,
+            .emphasize = downloadsFailed > 0,
+        });
+        libraryRows.push_back(LabeledValueRow {
+            .label = "Recent jobs tracked",
+            .value = std::to_string(state.recentDownloadJobs.size()),
+            .labelWidth = 126.f,
+            .spacing = theme.space3,
+            .maxLines = 1,
+        });
 
         std::vector<Element> diagnosticsRows;
         diagnosticsRows.reserve(4);
-        diagnosticsRows.push_back(infoRow(
-            theme,
-            "Last error",
-            state.errorText.empty() ? "No recent errors." : state.errorText,
-            !state.errorText.empty(),
-            4
-        ));
-        diagnosticsRows.push_back(infoRow(
-            theme,
-            "Notice",
-            state.notice.has_value() ? (state.notice->title + "  •  " + state.notice->detail) : "No pending notices.",
-            state.notice.has_value(),
-            4
-        ));
-        diagnosticsRows.push_back(infoRow(
-            theme,
-            "Hub search",
-            state.modelSearchQuery.empty() && state.modelSearchAuthor.empty()
+        diagnosticsRows.push_back(LabeledValueRow {
+            .label = "Last error",
+            .value = state.errorText.empty() ? "No recent errors." : state.errorText,
+            .labelWidth = 126.f,
+            .spacing = theme.space3,
+            .emphasize = !state.errorText.empty(),
+            .maxLines = 4,
+        });
+        diagnosticsRows.push_back(LabeledValueRow {
+            .label = "Notice",
+            .value = state.notice.has_value() ? (state.notice->title + "  •  " + state.notice->detail) : "No pending notices.",
+            .labelWidth = 126.f,
+            .spacing = theme.space3,
+            .emphasize = state.notice.has_value(),
+            .maxLines = 4,
+        });
+        diagnosticsRows.push_back(LabeledValueRow {
+            .label = "Hub search",
+            .value = state.modelSearchQuery.empty() && state.modelSearchAuthor.empty()
                 ? "No active search filters"
                 : "Query: " + (state.modelSearchQuery.empty() ? "Any" : state.modelSearchQuery) +
                       "  •  Author: " + (state.modelSearchAuthor.empty() ? "Any" : state.modelSearchAuthor),
-            false,
-            3
-        ));
-        diagnosticsRows.push_back(infoRow(
-            theme,
-            "Selected remote repo",
-            state.selectedRemoteRepoId.empty() ? "Nothing selected" : state.selectedRemoteRepoId,
-            false,
-            2
-        ));
+            .labelWidth = 126.f,
+            .spacing = theme.space3,
+            .maxLines = 3,
+        });
+        diagnosticsRows.push_back(LabeledValueRow {
+            .label = "Selected remote repo",
+            .value = state.selectedRemoteRepoId.empty() ? "Nothing selected" : state.selectedRemoteRepoId,
+            .labelWidth = 126.f,
+            .spacing = theme.space3,
+        });
 
         return ScrollView {
             .axis = ScrollAxis::Vertical,
@@ -474,7 +446,14 @@ struct SettingsView : ViewModifiers<SettingsView> {
                                             )
                                         }
                                             .flex(1.f, 1.f, 0.f),
-                                        statusBadge(theme, statusText, statusTone)
+                                        Badge {
+                                            .label = statusText,
+                                            .style = {
+                                                .font = theme.fontLabelSmall,
+                                                .foregroundColor = toneForeground(theme, statusTone),
+                                                .backgroundColor = toneBackground(theme, statusTone),
+                                            },
+                                        }
                                     )
                                 },
                                 HStack {

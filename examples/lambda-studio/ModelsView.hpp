@@ -9,85 +9,11 @@
 #include <vector>
 
 #include "AppState.hpp"
+#include "SharedViews.hpp"
 
 using namespace flux;
 
 namespace lambda {
-
-namespace models_view_detail {
-
-inline int progressPercent(std::size_t downloadedBytes, std::size_t totalBytes) {
-    if (totalBytes == 0) {
-        return 0;
-    }
-    return static_cast<int>(
-        std::clamp(
-            (100.0 * static_cast<double>(downloadedBytes)) / static_cast<double>(totalBytes),
-            0.0,
-            100.0));
-}
-
-inline std::string formatTransferProgress(std::size_t downloadedBytes, std::size_t totalBytes) {
-    if (totalBytes == 0) {
-        return "Starting download...";
-    }
-    return formatModelSize(downloadedBytes) + " / " + formatModelSize(totalBytes) +
-           "  •  " + std::to_string(progressPercent(downloadedBytes, totalBytes)) + "%";
-}
-
-inline Element progressBar(
-    Theme const &theme,
-    float progress
-) {
-    float const clamped = std::clamp(progress, 0.f, 1.f);
-    constexpr float trackWidth = 112.f;
-    constexpr float trackHeight = 6.f;
-    return Element {ZStack {
-        .horizontalAlignment = Alignment::Start,
-        .verticalAlignment = Alignment::Start,
-        .children = children(
-            Rectangle {}
-                .fill(FillStyle::solid(theme.colorSurfaceHover))
-                .size(trackWidth, trackHeight)
-                .cornerRadius(CornerRadius {trackHeight * 0.5f}),
-            Rectangle {}
-                .fill(FillStyle::solid(theme.colorAccent))
-                .size(trackWidth * clamped, trackHeight)
-                .cornerRadius(CornerRadius {trackHeight * 0.5f})
-        )
-    }}
-        .size(trackWidth, trackHeight);
-}
-
-inline Element placeholderPanel(
-    Theme const &theme,
-    std::string title,
-    std::string detail
-) {
-    return VStack {
-        .spacing = theme.space2,
-        .alignment = Alignment::Center,
-        .children = children(
-            Text {
-                .text = std::move(title),
-                .font = theme.fontHeading,
-                .color = theme.colorTextPrimary,
-                .horizontalAlignment = HorizontalAlignment::Center,
-            },
-            Text {
-                .text = std::move(detail),
-                .font = theme.fontBodySmall,
-                .color = theme.colorTextSecondary,
-                .horizontalAlignment = HorizontalAlignment::Center,
-                .wrapping = TextWrapping::Wrap,
-            }
-        )
-    }
-        .padding(theme.space6)
-        .flex(1.f, 1.f);
-}
-
-} // namespace models_view_detail
 
 struct ModelRow : ViewModifiers<ModelRow> {
     LocalModel model;
@@ -170,7 +96,7 @@ struct DownloadJobRow : ViewModifiers<DownloadJobRow> {
 
         std::string meta = downloadJobStatusLabel(job.status);
         if (job.status == DownloadJobStatus::Running) {
-            meta += "  •  " + models_view_detail::formatTransferProgress(job.downloadedBytes, job.totalBytes);
+            meta += "  •  " + shared_ui::formatTransferProgress(job.downloadedBytes, job.totalBytes);
         } else if (!job.localPath.empty()) {
             meta += "  •  " + job.localPath;
         } else if (!job.error.empty()) {
@@ -198,7 +124,17 @@ struct DownloadJobRow : ViewModifiers<DownloadJobRow> {
             }
         );
         if (job.status == DownloadJobStatus::Running && job.totalBytes > 0) {
-            infoChildren.push_back(models_view_detail::progressBar(theme, downloadJobProgress(job)));
+            infoChildren.push_back(
+                ProgressBar {
+                    .progress = downloadJobProgress(job),
+                    .style = {
+                        .width = 112.f,
+                        .height = 6.f,
+                        .trackColor = theme.colorSurfaceHover,
+                        .fillColor = theme.colorAccent,
+                    },
+                }
+            );
         }
 
         return ListRow {
@@ -288,11 +224,10 @@ struct ModelsView : ViewModifiers<ModelsView> {
         }
 
         Element content = localLibraryRows.empty()
-                              ? models_view_detail::placeholderPanel(
-                                    theme,
-                                    "No Models",
-                                    "Download models from Hugging Face using the Hub module."
-                                )
+                              ? Element {EmptyStatePanel {
+                                    .title = "No Models",
+                                    .detail = "Download models from Hugging Face using the Hub module.",
+                                }}
                               : Element {ListView {.rows = std::move(localLibraryRows)}.flex(1.f, 1.f, 0.f)};
 
         return VStack {

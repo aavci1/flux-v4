@@ -11,6 +11,7 @@
 #include "AppState.hpp"
 #include "ChatModels.hpp"
 #include "ChatView.hpp"
+#include "SharedViews.hpp"
 using namespace flux;
 
 namespace lambda {
@@ -98,30 +99,9 @@ struct ChatsView : ViewModifiers<ChatsView> {
             });
         }
 
-        Element detail = Element {ZStack {
-            .horizontalAlignment = Alignment::Center,
-            .verticalAlignment = Alignment::Center,
-            .children = children(
-                VStack {
-                    .spacing = theme.space2,
-                    .alignment = Alignment::Center,
-                    .children = children(
-                        Text {
-                            .text = "No Chats",
-                            .font = theme.fontHeading,
-                            .color = theme.colorTextPrimary,
-                            .horizontalAlignment = HorizontalAlignment::Center,
-                        },
-                        Text {
-                            .text = "Create a new chat or select one from the list.",
-                            .font = theme.fontBodySmall,
-                            .color = theme.colorTextSecondary,
-                            .horizontalAlignment = HorizontalAlignment::Center,
-                            .wrapping = TextWrapping::Wrap,
-                        }
-                    ),
-                }
-            ),
+        Element detail = Element {EmptyStatePanel {
+            .title = "No Chats",
+            .detail = "Create a new chat or select one from the list.",
         }}
                              .flex(1.f, 1.f);
 

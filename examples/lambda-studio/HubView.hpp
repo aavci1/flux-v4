@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "AppState.hpp"
+#include "SharedViews.hpp"
 
 using namespace flux;
 
@@ -28,105 +29,6 @@ inline std::string formatCompactCount(std::int64_t value) {
         return std::to_string(value / 1'000) + "K";
     }
     return std::to_string(value);
-}
-
-inline int progressPercent(std::size_t downloadedBytes, std::size_t totalBytes) {
-    if (totalBytes == 0) {
-        return 0;
-    }
-    return static_cast<int>(
-        std::clamp(
-            (100.0 * static_cast<double>(downloadedBytes)) / static_cast<double>(totalBytes),
-            0.0,
-            100.0));
-}
-
-inline std::string formatTransferProgress(std::size_t downloadedBytes, std::size_t totalBytes) {
-    if (totalBytes == 0) {
-        return "Starting download...";
-    }
-    return formatModelSize(downloadedBytes) + " / " + formatModelSize(totalBytes) +
-           "  •  " + std::to_string(progressPercent(downloadedBytes, totalBytes)) + "%";
-}
-
-inline Element progressBar(
-    Theme const &theme,
-    float progress
-) {
-    float const clamped = std::clamp(progress, 0.f, 1.f);
-    constexpr float trackWidth = 112.f;
-    constexpr float trackHeight = 6.f;
-    return Element {ZStack {
-        .horizontalAlignment = Alignment::Start,
-        .verticalAlignment = Alignment::Start,
-        .children = children(
-            Rectangle {}
-                .fill(FillStyle::solid(theme.colorSurfaceHover))
-                .size(trackWidth, trackHeight)
-                .cornerRadius(CornerRadius {trackHeight * 0.5f}),
-            Rectangle {}
-                .fill(FillStyle::solid(theme.colorAccent))
-                .size(trackWidth * clamped, trackHeight)
-                .cornerRadius(CornerRadius {trackHeight * 0.5f})
-        )
-    }}
-        .size(trackWidth, trackHeight);
-}
-
-inline Element placeholderPanel(
-    Theme const &theme,
-    std::string title,
-    std::string detail
-) {
-    return VStack {
-        .spacing = theme.space2,
-        .alignment = Alignment::Center,
-        .children = children(
-            Text {
-                .text = std::move(title),
-                .font = theme.fontHeading,
-                .color = theme.colorTextPrimary,
-                .horizontalAlignment = HorizontalAlignment::Center,
-            },
-            Text {
-                .text = std::move(detail),
-                .font = theme.fontBodySmall,
-                .color = theme.colorTextSecondary,
-                .horizontalAlignment = HorizontalAlignment::Center,
-                .wrapping = TextWrapping::Wrap,
-            }
-        )
-    }
-        .padding(theme.space6)
-        .flex(1.f, 1.f);
-}
-
-inline Element detailLine(
-    Theme const &theme,
-    std::string label,
-    std::string value,
-    int maxLines = 2
-) {
-    return HStack {
-        .spacing = theme.space2,
-        .alignment = Alignment::Start,
-        .children = children(
-            Text {
-                .text = std::move(label),
-                .font = theme.fontLabelSmall,
-                .color = theme.colorTextMuted,
-            }
-                .size(96.f, 0.f),
-            Text {
-                .text = std::move(value),
-                .font = theme.fontBodySmall,
-                .color = theme.colorTextSecondary,
-                .wrapping = TextWrapping::Wrap,
-                .maxLines = maxLines,
-            }
-                .flex(1.f, 1.f)
-        )
-    };
 }
 
 } // namespace hub_view_detail
@@ -205,7 +107,7 @@ struct RemoteFileRow : ViewModifiers<RemoteFileRow> {
         bool const showProgress = downloading && totalBytes > 0;
         std::string meta = formatModelSize(file.sizeBytes) + (file.cached ? "  •  Cached locally" : "");
         if (downloading) {
-            meta = hub_view_detail::formatTransferProgress(downloadedBytes, totalBytes);
+            meta = shared_ui::formatTransferProgress(downloadedBytes, totalBytes);
         }
 
         std::vector<Element> fileInfo;
@@ -228,7 +130,17 @@ struct RemoteFileRow : ViewModifiers<RemoteFileRow> {
             }
         );
         if (showProgress) {
-            fileInfo.push_back(hub_view_detail::progressBar(theme, static_cast<float>(downloadedBytes) / static_cast<float>(totalBytes)));
+            fileInfo.push_back(
+                ProgressBar {
+                    .progress = static_cast<float>(downloadedBytes) / static_cast<float>(totalBytes),
+                    .style = {
+                        .width = 112.f,
+                        .height = 6.f,
+                        .trackColor = theme.colorSurfaceHover,
+                        .fillColor = theme.colorAccent,
+                    },
+                }
+            );
         }
 
         return ListRow {
@@ -245,7 +157,7 @@ struct RemoteFileRow : ViewModifiers<RemoteFileRow> {
                     LinkButton {
                         .label = file.cached ? "Cached" :
                                  downloading ? (totalBytes == 0 ? "..." :
-                                                std::to_string(hub_view_detail::progressPercent(downloadedBytes, totalBytes)) + "%") :
+                                                std::to_string(shared_ui::progressPercent(downloadedBytes, totalBytes)) + "%") :
                                                "Download",
                         .disabled = file.cached || downloading,
                         .onTap = onDownload,
@@ -354,20 +266,24 @@ struct HubView : ViewModifiers<HubView> {
         }
 
         Element remoteResults = remoteRows.empty()
-                                    ? hub_view_detail::placeholderPanel(
-                                          theme,
-                                          state.searchingRemoteModels ? "Searching Hugging Face..." :
-                                                                        "No models found",
-                                          "Adjust the filters above and run a search to browse GGUF repositories."
-                                      )
+                                    ? Element {EmptyStatePanel {
+                                          .title = state.searchingRemoteModels ? "Searching Hugging Face..." : "No models found",
+                                          .detail = "Adjust the filters above and run a search to browse GGUF repositories.",
+                                      }}
                                     : Element {ListView {.rows = std::move(remoteRows)}.flex(1.f, 1.f, 0.f)};
 
         Element remoteFiles = state.loadingRemoteModelFiles
-                                  ? hub_view_detail::placeholderPanel(theme, "Loading GGUF files...", "Resolving repository contents.")
+                                  ? Element {EmptyStatePanel {
+                                        .title = "Loading GGUF files...",
+                                        .detail = "Resolving repository contents.",
+                                    }}
                               : selectedRemoteModel == nullptr
                                   ? Element {Spacer {}.flex(1.f, 1.f)}
                               : fileRows.empty()
-                                  ? hub_view_detail::placeholderPanel(theme, "No GGUF files found", "The selected repository does not expose GGUF files.")
+                                  ? Element {EmptyStatePanel {
+                                        .title = "No GGUF files found",
+                                        .detail = "The selected repository does not expose GGUF files.",
+                                    }}
                                   : Element {ListView {.rows = std::move(fileRows)}.flex(1.f, 1.f, 0.f)};
 
         std::string selectedMeta;
@@ -435,33 +351,62 @@ struct HubView : ViewModifiers<HubView> {
                 );
             } else if (selectedRemoteDetail != nullptr) {
                 if (!selectedRemoteDetail->license.empty()) {
-                    selectedRepoChildren.push_back(hub_view_detail::detailLine(theme, "License", selectedRemoteDetail->license));
+                    selectedRepoChildren.push_back(LabeledValueRow {
+                        .label = "License",
+                        .value = selectedRemoteDetail->license,
+                    });
                 }
                 if (!selectedRemoteDetail->lastModified.empty()) {
-                    selectedRepoChildren.push_back(hub_view_detail::detailLine(theme, "Updated", selectedRemoteDetail->lastModified, 1));
+                    selectedRepoChildren.push_back(LabeledValueRow {
+                        .label = "Updated",
+                        .value = selectedRemoteDetail->lastModified,
+                        .maxLines = 1,
+                    });
                 }
                 if (!selectedRemoteDetail->createdAt.empty()) {
-                    selectedRepoChildren.push_back(hub_view_detail::detailLine(theme, "Created", selectedRemoteDetail->createdAt, 1));
+                    selectedRepoChildren.push_back(LabeledValueRow {
+                        .label = "Created",
+                        .value = selectedRemoteDetail->createdAt,
+                        .maxLines = 1,
+                    });
                 }
                 if (!selectedRemoteDetail->sha.empty()) {
                     std::string sha = selectedRemoteDetail->sha.substr(0, std::min<std::size_t>(12, selectedRemoteDetail->sha.size()));
-                    selectedRepoChildren.push_back(hub_view_detail::detailLine(theme, "Revision", sha, 1));
+                    selectedRepoChildren.push_back(LabeledValueRow {
+                        .label = "Revision",
+                        .value = std::move(sha),
+                        .maxLines = 1,
+                    });
                 }
                 if (!selectedRemoteDetail->languages.empty()) {
                     selectedRepoChildren.push_back(
-                        hub_view_detail::detailLine(theme, "Languages", joinedTags(selectedRemoteDetail->languages, 4), 2)
+                        LabeledValueRow {
+                            .label = "Languages",
+                            .value = joinedTags(selectedRemoteDetail->languages, 4),
+                        }
                     );
                 }
                 if (!selectedRemoteDetail->baseModels.empty()) {
                     selectedRepoChildren.push_back(
-                        hub_view_detail::detailLine(theme, "Base", joinedTags(selectedRemoteDetail->baseModels, 4), 2)
+                        LabeledValueRow {
+                            .label = "Base",
+                            .value = joinedTags(selectedRemoteDetail->baseModels, 4),
+                        }
                     );
                 }
                 if (!selectedRemoteDetail->summary.empty()) {
-                    selectedRepoChildren.push_back(hub_view_detail::detailLine(theme, "Summary", selectedRemoteDetail->summary, 4));
+                    selectedRepoChildren.push_back(LabeledValueRow {
+                        .label = "Summary",
+                        .value = selectedRemoteDetail->summary,
+                        .maxLines = 4,
+                    });
                 }
                 if (!selectedRemoteDetail->readme.empty()) {
-                    selectedRepoChildren.push_back(hub_view_detail::detailLine(theme, "README", selectedRemoteDetail->readme, 6));
+                    selectedRepoChildren.push_back(LabeledValueRow {
+                        .label = "README",
+                        .value = selectedRemoteDetail->readme,
+                        .maxLines = 6,
+                    });
                 }
             }
         }
@@ -570,7 +515,10 @@ struct HubView : ViewModifiers<HubView> {
                             .spacing = theme.space2,
                             .alignment = Alignment::Stretch,
                             .children = children(
-                                selectedRemoteModel == nullptr ? hub_view_detail::placeholderPanel(theme, "No repository selected", "Pick a search result to inspect its GGUF files.")
+                                selectedRemoteModel == nullptr ? Element {EmptyStatePanel {
+                                                                     .title = "No repository selected",
+                                                                     .detail = "Pick a search result to inspect its GGUF files.",
+                                                                 }}
                                                                : Element {VStack {
                                                                      .spacing = theme.space1,
                                                                      .alignment = Alignment::Start,
