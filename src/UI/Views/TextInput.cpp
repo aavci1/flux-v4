@@ -124,12 +124,26 @@ AttributedString buildAttributedString(std::string const &placeholderText,
     if (showPlaceholder) {
         AttributedString ph;
         ph.utf8 = placeholderText;
-        ph.runs.push_back(AttributedRun {.start = 0, .end = static_cast<std::uint32_t>(placeholderText.size()), .font = defaultFont, .color = rs.placeholderColor});
+        if (!placeholderText.empty()) {
+            ph.runs.push_back(AttributedRun {
+                .start = 0,
+                .end = static_cast<std::uint32_t>(placeholderText.size()),
+                .font = defaultFont,
+                .color = rs.placeholderColor
+            });
+        }
         return ph;
     }
     AttributedString as;
     as.utf8 = val;
     std::uint32_t const n = static_cast<std::uint32_t>(val.size());
+    if (n == 0) {
+        if (memo) {
+            memo->value = val;
+            memo->runs.clear();
+        }
+        return as;
+    }
     if (styler) {
         if (memo && memo->value == val && !memo->runs.empty() && attributedRunsFullyCoverBuffer(memo->runs, n)) {
             as.runs = memo->runs;

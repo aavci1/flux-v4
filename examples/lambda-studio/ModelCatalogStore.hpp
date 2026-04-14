@@ -1,6 +1,6 @@
 #pragma once
 
-#include "AppState.hpp"
+#include "BackendInterfaces.hpp"
 
 #define JSON_ASSERT(x) ((x) ? static_cast<void>(0) : std::abort())
 #include <nlohmann/json.hpp>
@@ -19,12 +19,7 @@
 
 namespace lambda {
 
-struct PersistedChatState {
-    std::vector<ChatThread> chats;
-    std::string selectedChatId;
-};
-
-class ModelCatalogStore {
+class ModelCatalogStore : public IModelCatalogStore {
   public:
     ModelCatalogStore() : ModelCatalogStore(defaultDataDirectory()) {}
 
@@ -43,7 +38,7 @@ class ModelCatalogStore {
     ModelCatalogStore(ModelCatalogStore const &) = delete;
     ModelCatalogStore &operator=(ModelCatalogStore const &) = delete;
 
-    std::filesystem::path databasePath() const {
+    std::filesystem::path databasePath() const override {
         return dataDirectory_ / "model_catalog.sqlite3";
     }
 
@@ -51,7 +46,7 @@ class ModelCatalogStore {
         std::string const &query,
         std::vector<RemoteModel> const &models,
         std::string const &rawJson
-    ) {
+    ) override {
         std::lock_guard<std::mutex> lock(mutex_);
         try {
             beginTransaction();
@@ -131,7 +126,7 @@ class ModelCatalogStore {
         }
     }
 
-    std::vector<RemoteModel> loadSearchResults(std::string const &query) {
+    std::vector<RemoteModel> loadSearchResults(std::string const &query) override {
         std::lock_guard<std::mutex> lock(mutex_);
         Statement stmt(
             db_,
@@ -161,7 +156,7 @@ class ModelCatalogStore {
         RemoteModelSort sort,
         RemoteModelVisibilityFilter visibility,
         std::size_t limit = 20
-    ) {
+    ) override {
         std::lock_guard<std::mutex> lock(mutex_);
         std::string orderBy = "r.downloads DESC, r.likes DESC, r.repo_id ASC";
         if (sort == RemoteModelSort::Likes) {
@@ -214,7 +209,7 @@ class ModelCatalogStore {
         std::string const &repoId,
         std::vector<RemoteModelFile> const &files,
         std::string const &rawJson
-    ) {
+    ) override {
         std::lock_guard<std::mutex> lock(mutex_);
         try {
             beginTransaction();
@@ -256,7 +251,7 @@ class ModelCatalogStore {
         }
     }
 
-    std::vector<RemoteModelFile> loadRepoFiles(std::string const &repoId) {
+    std::vector<RemoteModelFile> loadRepoFiles(std::string const &repoId) override {
         std::lock_guard<std::mutex> lock(mutex_);
         Statement stmt(
             db_,
@@ -283,7 +278,7 @@ class ModelCatalogStore {
         return files;
     }
 
-    void replaceRepoDetailSnapshot(RemoteRepoDetail const &detail, std::string const &rawJson) {
+    void replaceRepoDetailSnapshot(RemoteRepoDetail const &detail, std::string const &rawJson) override {
         std::lock_guard<std::mutex> lock(mutex_);
         Statement upsert(
             db_,
@@ -308,7 +303,7 @@ class ModelCatalogStore {
         stepDone(upsert.stmt);
     }
 
-    std::optional<RemoteRepoDetail> loadRepoDetail(std::string const &repoId) {
+    std::optional<RemoteRepoDetail> loadRepoDetail(std::string const &repoId) override {
         std::lock_guard<std::mutex> lock(mutex_);
         Statement stmt(
             db_,
@@ -325,7 +320,7 @@ class ModelCatalogStore {
         return detail;
     }
 
-    void replaceLocalModelInstances(std::vector<LocalModel> const &models) {
+    void replaceLocalModelInstances(std::vector<LocalModel> const &models) override {
         std::lock_guard<std::mutex> lock(mutex_);
         try {
             beginTransaction();
@@ -356,7 +351,7 @@ class ModelCatalogStore {
         }
     }
 
-    std::vector<LocalModel> loadLocalModelInstances() {
+    std::vector<LocalModel> loadLocalModelInstances() override {
         std::lock_guard<std::mutex> lock(mutex_);
         Statement stmt(
             db_,
@@ -378,7 +373,7 @@ class ModelCatalogStore {
         return models;
     }
 
-    void startDownloadJob(DownloadJob const &job) {
+    void startDownloadJob(DownloadJob const &job) override {
         std::lock_guard<std::mutex> lock(mutex_);
         Statement upsert(
             db_,
@@ -409,7 +404,7 @@ class ModelCatalogStore {
         std::string const &jobId,
         std::string const &localPath,
         std::int64_t finishedAtUnixMs
-    ) {
+    ) override {
         std::lock_guard<std::mutex> lock(mutex_);
         Statement update(
             db_,
@@ -427,7 +422,7 @@ class ModelCatalogStore {
         std::string const &jobId,
         std::string const &errorText,
         std::int64_t finishedAtUnixMs
-    ) {
+    ) override {
         std::lock_guard<std::mutex> lock(mutex_);
         Statement update(
             db_,
@@ -441,7 +436,7 @@ class ModelCatalogStore {
         stepDone(update.stmt);
     }
 
-    std::vector<DownloadJob> loadRecentDownloadJobs(std::size_t limit = 12) {
+    std::vector<DownloadJob> loadRecentDownloadJobs(std::size_t limit = 12) override {
         std::lock_guard<std::mutex> lock(mutex_);
         Statement stmt(
             db_,
@@ -468,7 +463,7 @@ class ModelCatalogStore {
         return jobs;
     }
 
-    void markRunningDownloadJobsInterrupted(std::int64_t finishedAtUnixMs) {
+    void markRunningDownloadJobsInterrupted(std::int64_t finishedAtUnixMs) override {
         std::lock_guard<std::mutex> lock(mutex_);
         Statement update(
             db_,
@@ -478,6 +473,152 @@ class ModelCatalogStore {
         );
         bindInt64(update.stmt, 1, finishedAtUnixMs);
         stepDone(update.stmt);
+    }
+
+    void upsertChatThreadMeta(
+        std::string const &chatId,
+        std::string const &title,
+        std::int64_t updatedAtUnixMs,
+        std::string const &modelPath,
+        std::string const &modelName,
+        std::int64_t sortOrder
+    ) override {
+        std::lock_guard<std::mutex> lock(mutex_);
+        Statement upsert(
+            db_,
+            "INSERT INTO chat_threads (chat_id, title, updated_at_unix_ms, model_path, model_name, sort_order) "
+            "VALUES (?1, ?2, ?3, ?4, ?5, ?6) "
+            "ON CONFLICT(chat_id) DO UPDATE SET "
+            "  title=excluded.title,"
+            "  updated_at_unix_ms=excluded.updated_at_unix_ms,"
+            "  model_path=excluded.model_path,"
+            "  model_name=excluded.model_name,"
+            "  sort_order=excluded.sort_order;"
+        );
+        bindText(upsert.stmt, 1, chatId);
+        bindText(upsert.stmt, 2, title);
+        bindInt64(upsert.stmt, 3, updatedAtUnixMs);
+        bindText(upsert.stmt, 4, modelPath);
+        bindText(upsert.stmt, 5, modelName);
+        bindInt64(upsert.stmt, 6, sortOrder);
+        stepDone(upsert.stmt);
+    }
+
+    void replaceChatMessagesForThread(
+        std::string const &chatId,
+        std::vector<ChatMessage> const &messages
+    ) override {
+        std::lock_guard<std::mutex> lock(mutex_);
+        try {
+            beginTransaction();
+
+            Statement deleteStats(
+                db_,
+                "DELETE FROM chat_message_stats WHERE chat_id = ?1;"
+            );
+            bindText(deleteStats.stmt, 1, chatId);
+            stepDone(deleteStats.stmt);
+
+            Statement deleteMessages(
+                db_,
+                "DELETE FROM chat_messages WHERE chat_id = ?1;"
+            );
+            bindText(deleteMessages.stmt, 1, chatId);
+            stepDone(deleteMessages.stmt);
+
+            Statement insertMessage(
+                db_,
+                "INSERT INTO chat_messages ("
+                "  chat_id, message_order, role, text, started_at_nanos, finished_at_nanos, collapsed"
+                ") VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7);"
+            );
+            Statement insertMessageStats(
+                db_,
+                "INSERT INTO chat_message_stats ("
+                "  chat_id, message_order, model_path, model_name, prompt_tokens, completion_tokens,"
+                "  started_at_unix_ms, first_token_at_unix_ms, finished_at_unix_ms, tokens_per_second,"
+                "  status, error_text, temp, top_p, top_k, max_tokens"
+                ") VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16);"
+            );
+
+            for (std::size_t messageIndex = 0; messageIndex < messages.size(); ++messageIndex) {
+                ChatMessage const &message = messages[messageIndex];
+                sqlite3_reset(insertMessage.stmt);
+                sqlite3_clear_bindings(insertMessage.stmt);
+                bindText(insertMessage.stmt, 1, chatId);
+                bindInt64(insertMessage.stmt, 2, static_cast<std::int64_t>(messageIndex));
+                bindText(insertMessage.stmt, 3, chatRoleStorage(message.role));
+                bindText(insertMessage.stmt, 4, message.text);
+                bindInt64(insertMessage.stmt, 5, message.startedAtNanos);
+                bindInt64(insertMessage.stmt, 6, message.finishedAtNanos);
+                bindBool(insertMessage.stmt, 7, message.collapsed);
+                stepDone(insertMessage.stmt);
+
+                if (!message.generationStats.has_value()) {
+                    continue;
+                }
+
+                MessageGenerationStats const &stats = *message.generationStats;
+                sqlite3_reset(insertMessageStats.stmt);
+                sqlite3_clear_bindings(insertMessageStats.stmt);
+                bindText(insertMessageStats.stmt, 1, chatId);
+                bindInt64(insertMessageStats.stmt, 2, static_cast<std::int64_t>(messageIndex));
+                bindText(insertMessageStats.stmt, 3, stats.modelPath);
+                bindText(insertMessageStats.stmt, 4, stats.modelName);
+                bindInt64(insertMessageStats.stmt, 5, stats.promptTokens);
+                bindInt64(insertMessageStats.stmt, 6, stats.completionTokens);
+                bindInt64(insertMessageStats.stmt, 7, stats.startedAtUnixMs);
+                bindInt64(insertMessageStats.stmt, 8, stats.firstTokenAtUnixMs);
+                bindInt64(insertMessageStats.stmt, 9, stats.finishedAtUnixMs);
+                bindDouble(insertMessageStats.stmt, 10, stats.tokensPerSecond);
+                bindText(insertMessageStats.stmt, 11, stats.status);
+                bindText(insertMessageStats.stmt, 12, stats.errorText);
+                bindDouble(insertMessageStats.stmt, 13, static_cast<double>(stats.temp));
+                bindDouble(insertMessageStats.stmt, 14, static_cast<double>(stats.topP));
+                bindInt64(insertMessageStats.stmt, 15, stats.topK);
+                bindInt64(insertMessageStats.stmt, 16, stats.maxTokens);
+                stepDone(insertMessageStats.stmt);
+            }
+
+            commitTransaction();
+        } catch (...) {
+            rollbackTransaction();
+            throw;
+        }
+    }
+
+    void updateSelectedChatId(std::string const &selectedChatId) override {
+        std::lock_guard<std::mutex> lock(mutex_);
+        Statement upsertPreference(
+            db_,
+            "INSERT INTO app_preferences (pref_key, value_text) VALUES (?1, ?2) "
+            "ON CONFLICT(pref_key) DO UPDATE SET value_text=excluded.value_text;"
+        );
+        bindText(upsertPreference.stmt, 1, "selected_chat_id");
+        bindText(upsertPreference.stmt, 2, selectedChatId);
+        stepDone(upsertPreference.stmt);
+    }
+
+    void replaceChatOrder(std::vector<std::string> const &chatIds) override {
+        std::lock_guard<std::mutex> lock(mutex_);
+        try {
+            beginTransaction();
+            Statement update(
+                db_,
+                "UPDATE chat_threads SET sort_order = ?2 WHERE chat_id = ?1;"
+            );
+            for (std::size_t index = 0; index < chatIds.size(); ++index) {
+                sqlite3_reset(update.stmt);
+                sqlite3_clear_bindings(update.stmt);
+                bindText(update.stmt, 1, chatIds[index]);
+                bindInt64(update.stmt, 2, static_cast<std::int64_t>(index));
+                stepDone(update.stmt);
+            }
+            commitTransaction();
+        } catch (...) {
+            rollbackTransaction();
+            throw;
+        }
     }
 
     void replaceChats(std::vector<ChatThread> const &chats, std::string const &selectedChatId) {
@@ -577,7 +718,7 @@ class ModelCatalogStore {
         }
     }
 
-    PersistedChatState loadPersistedChatState() {
+    PersistedChatState loadPersistedChatState() override {
         std::lock_guard<std::mutex> lock(mutex_);
         PersistedChatState state;
 

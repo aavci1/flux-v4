@@ -266,16 +266,19 @@ if(FLUX_BUILD_TESTS)
     tests/LayoutIntegrationTests.cpp
     tests/ParagraphCacheTests.cpp
     tests/ParagraphCacheIncrementalTests.cpp
+    tests/LambdaStudioCatalogStoreTests.cpp
     tests/TextEditUtilsTests.cpp
   )
 
   target_include_directories(flux_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/vendor/llama.cpp/vendor
   )
 
   target_link_libraries(flux_tests PRIVATE
     flux
+    sqlite3
     doctest::doctest
   )
 

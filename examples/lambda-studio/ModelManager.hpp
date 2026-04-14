@@ -1,5 +1,6 @@
 #pragma once
 
+#include "BackendInterfaces.hpp"
 #include "BackendTypes.hpp"
 #include "LlamaEngine.hpp"
 
@@ -14,7 +15,9 @@
 #include <atomic>
 #include <cctype>
 #include <chrono>
+#include <condition_variable>
 #include <cstdio>
+#include <deque>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -39,118 +42,169 @@ struct HfRepoDetailResponse {
     std::string rawJson;
 };
 
-class ModelManager {
+class ModelManager : public lambda::IModelManager {
   public:
     using PostFn = std::function<void(ModelManagerEvent)>;
 
-    explicit ModelManager(std::shared_ptr<LlamaEngine> engine, PostFn post)
-        : engine_(std::move(engine)), post_(std::move(post)) {}
+    explicit ModelManager(std::shared_ptr<lambda::IChatEngine> engine, PostFn post)
+        : engine_(std::move(engine)),
+          post_(std::move(post)),
+          inventoryLane_(true),
+          searchLane_(true),
+          repoInspectLane_(true),
+          downloadLane_(false),
+          loadModelLane_(false) {
+        startLane(inventoryLane_);
+        startLane(searchLane_);
+        startLane(repoInspectLane_);
+        startLane(downloadLane_);
+        startLane(loadModelLane_);
+    }
 
-    ~ModelManager() { joinWorker(); }
+    ~ModelManager() override {
+        stopLane(inventoryLane_);
+        stopLane(searchLane_);
+        stopLane(repoInspectLane_);
+        stopLane(downloadLane_);
+        stopLane(loadModelLane_);
+    }
 
     ModelManager(ModelManager const &) = delete;
     ModelManager &operator=(ModelManager const &) = delete;
 
-    void refreshLocalModels() { runAsync([this] { postLocalModelsReady_(); }); }
+    std::uint64_t refreshLocalModels() override {
+        std::uint64_t const requestId = beginRequest(ModelManagerLane::Inventory);
+        enqueueTask(inventoryLane_, [this, requestId] { postLocalModelsReady_(requestId); });
+        return requestId;
+    }
 
-    void searchHuggingFace(HfSearchRequest request) {
-        runAsync([this, req = std::move(request)] {
+    std::uint64_t searchHuggingFace(HfSearchRequest request) override {
+        std::uint64_t const requestId = beginRequest(ModelManagerLane::Search);
+        enqueueTask(searchLane_, [this, requestId, req = std::move(request)] {
             try {
                 auto [results, rawJson] = searchHfSync(req);
-                post_(ModelManagerEvent {
+                postEvent(ModelManagerEvent {
                     .kind = ModelManagerEvent::Kind::HfSearchReady,
                     .hfModels = std::move(results),
                     .searchKey = req.cacheKey,
                     .rawJson = std::move(rawJson),
-                });
+                },
+                          ModelManagerLane::Search,
+                          requestId);
             } catch (std::exception const &e) {
-                post_(ModelManagerEvent {
+                postEvent(ModelManagerEvent {
                     .kind = ModelManagerEvent::Kind::HfSearchReady,
                     .error = e.what(),
                     .searchKey = req.cacheKey,
-                });
+                },
+                          ModelManagerLane::Search,
+                          requestId);
             }
         });
+        return requestId;
     }
 
-    void listRepoFiles(std::string repoId) {
-        runAsync([this, repo = std::move(repoId)] {
+    std::uint64_t listRepoFiles(std::string repoId) override {
+        std::uint64_t const requestId = beginRequest(ModelManagerLane::RepoInspect);
+        enqueueTask(repoInspectLane_, [this, requestId, repo = std::move(repoId)] {
             try {
                 auto response = listRepoFilesSync(repo);
-                post_(ModelManagerEvent {
+                postEvent(ModelManagerEvent {
                     .kind = ModelManagerEvent::Kind::HfFilesReady,
                     .hfFiles = std::move(response.files),
                     .repoId = repo,
                     .rawJson = std::move(response.rawJson),
-                });
+                },
+                          ModelManagerLane::RepoInspect,
+                          requestId);
             } catch (std::exception const &e) {
-                post_(ModelManagerEvent {
+                postEvent(ModelManagerEvent {
                     .kind = ModelManagerEvent::Kind::HfFilesReady,
                     .error = e.what(),
                     .repoId = repo,
-                });
+                },
+                          ModelManagerLane::RepoInspect,
+                          requestId);
             }
         });
+        return requestId;
     }
 
-    void fetchRepoDetail(std::string repoId) {
-        runAsync([this, repo = std::move(repoId)] {
+    std::uint64_t fetchRepoDetail(std::string repoId) override {
+        std::uint64_t const requestId = beginRequest(ModelManagerLane::RepoInspect);
+        enqueueTask(repoInspectLane_, [this, requestId, repo = std::move(repoId)] {
             try {
                 auto response = fetchRepoDetailSync(repo);
-                post_(ModelManagerEvent {
+                postEvent(ModelManagerEvent {
                     .kind = ModelManagerEvent::Kind::HfRepoDetailReady,
                     .hfRepoDetail = std::move(response.detail),
                     .repoId = repo,
                     .rawJson = std::move(response.rawJson),
-                });
+                },
+                          ModelManagerLane::RepoInspect,
+                          requestId);
             } catch (std::exception const &e) {
-                post_(ModelManagerEvent {
+                postEvent(ModelManagerEvent {
                     .kind = ModelManagerEvent::Kind::HfRepoDetailReady,
                     .error = e.what(),
                     .repoId = repo,
-                });
+                },
+                          ModelManagerLane::RepoInspect,
+                          requestId);
             }
         });
+        return requestId;
     }
 
-    void inspectRepo(std::string repoId) {
-        runAsync([this, repo = std::move(repoId)] {
+    std::uint64_t inspectRepo(std::string repoId) override {
+        std::uint64_t const requestId = beginRequest(ModelManagerLane::RepoInspect);
+        enqueueTask(repoInspectLane_, [this, requestId, repo = std::move(repoId)] {
             try {
                 auto detailResponse = fetchRepoDetailSync(repo);
-                post_(ModelManagerEvent {
+                postEvent(ModelManagerEvent {
                     .kind = ModelManagerEvent::Kind::HfRepoDetailReady,
                     .hfRepoDetail = std::move(detailResponse.detail),
                     .repoId = repo,
                     .rawJson = std::move(detailResponse.rawJson),
-                });
+                },
+                          ModelManagerLane::RepoInspect,
+                          requestId);
             } catch (std::exception const &e) {
-                post_(ModelManagerEvent {
+                postEvent(ModelManagerEvent {
                     .kind = ModelManagerEvent::Kind::HfRepoDetailReady,
                     .error = e.what(),
                     .repoId = repo,
-                });
+                },
+                          ModelManagerLane::RepoInspect,
+                          requestId);
             }
 
             try {
                 auto filesResponse = listRepoFilesSync(repo);
-                post_(ModelManagerEvent {
+                postEvent(ModelManagerEvent {
                     .kind = ModelManagerEvent::Kind::HfFilesReady,
                     .hfFiles = std::move(filesResponse.files),
                     .repoId = repo,
                     .rawJson = std::move(filesResponse.rawJson),
-                });
+                },
+                          ModelManagerLane::RepoInspect,
+                          requestId);
             } catch (std::exception const &e) {
-                post_(ModelManagerEvent {
+                postEvent(ModelManagerEvent {
                     .kind = ModelManagerEvent::Kind::HfFilesReady,
                     .error = e.what(),
                     .repoId = repo,
-                });
+                },
+                          ModelManagerLane::RepoInspect,
+                          requestId);
             }
         });
+        return requestId;
     }
 
-    void downloadModel(std::string repoId, std::string fileName) {
-        runAsync([this, repo = std::move(repoId), file = std::move(fileName)] {
+    std::uint64_t downloadModel(std::string repoId, std::string fileName) override {
+        std::uint64_t const requestId = beginRequest(ModelManagerLane::Download);
+        enqueueTask(downloadLane_, [this, requestId, repo = std::move(repoId), file = std::move(fileName)] {
             try {
                 common_params_model model;
                 model.hf_repo = repo;
@@ -165,6 +219,7 @@ class ModelManager {
                     std::size_t lastDownloadedBytes = 0;
                     std::size_t lastTotalBytes = 0;
                     int lastPercent = -1;
+                    std::uint64_t requestId = 0;
                     std::chrono::steady_clock::time_point lastPostedAt {};
                 };
 
@@ -172,6 +227,7 @@ class ModelManager {
                     .manager = this,
                     .repoId = repo,
                     .filePath = file,
+                    .requestId = requestId,
                 };
 
                 struct DownloadProgressCallback : common_download_callback {
@@ -224,13 +280,15 @@ class ModelManager {
                             ctx.lastPostedAt = now;
                         }
 
-                        ctx.manager->post_(ModelManagerEvent {
+                        ctx.manager->postEvent(ModelManagerEvent {
                             .kind = ModelManagerEvent::Kind::DownloadProgress,
                             .repoId = ctx.repoId,
                             .filePath = ctx.filePath,
                             .downloadedBytes = progress.downloaded,
                             .totalBytes = progress.total,
-                        });
+                        },
+                                             ModelManagerLane::Download,
+                                             ctx.requestId);
                     }
 
                     DownloadProgressContext &ctx;
@@ -243,16 +301,18 @@ class ModelManager {
 
                 auto result = common_download_model(model, opts);
                 if (result.model_path.empty()) {
-                    post_(ModelManagerEvent {
+                    postEvent(ModelManagerEvent {
                         .kind = ModelManagerEvent::Kind::DownloadError,
                         .error = "Download returned empty path",
                         .repoId = repo,
                         .filePath = file,
-                    });
+                    },
+                              ModelManagerLane::Download,
+                              requestId);
                     return;
                 }
 
-                post_(ModelManagerEvent {
+                postEvent(ModelManagerEvent {
                     .kind = ModelManagerEvent::Kind::DownloadDone,
                     .repoId = repo,
                     .filePath = file,
@@ -260,61 +320,169 @@ class ModelManager {
                     .modelName = repo + "/" + file,
                     .downloadedBytes = progressContext.lastDownloadedBytes,
                     .totalBytes = progressContext.lastTotalBytes,
-                });
+                },
+                          ModelManagerLane::Download,
+                          requestId);
 
-                postLocalModelsReady_();
+                std::uint64_t const refreshRequestId = beginRequest(ModelManagerLane::Inventory);
+                enqueueTask(inventoryLane_, [this, refreshRequestId] { postLocalModelsReady_(refreshRequestId); });
             } catch (std::exception const &e) {
-                post_(ModelManagerEvent {
+                postEvent(ModelManagerEvent {
                     .kind = ModelManagerEvent::Kind::DownloadError,
                     .error = e.what(),
                     .repoId = repo,
                     .filePath = file,
-                });
+                },
+                          ModelManagerLane::Download,
+                          requestId);
             }
         });
+        return requestId;
     }
 
-    void loadModel(std::string path, int nGpuLayers = -1) {
-        runAsync([this, modelPath = std::move(path), gpu = nGpuLayers] {
+    std::uint64_t loadModel(std::string path, int nGpuLayers = -1) override {
+        std::uint64_t const requestId = beginRequest(ModelManagerLane::LoadModel);
+        enqueueTask(loadModelLane_, [this, requestId, modelPath = std::move(path), gpu = nGpuLayers] {
             bool const ok = engine_->load(modelPath, gpu);
             if (ok) {
-                post_(ModelManagerEvent {
+                postEvent(ModelManagerEvent {
                     .kind = ModelManagerEvent::Kind::ModelLoaded,
                     .modelPath = modelPath,
                     .modelName = extractModelName(modelPath),
-                });
+                },
+                          ModelManagerLane::LoadModel,
+                          requestId);
             } else {
-                post_(ModelManagerEvent {
+                postEvent(ModelManagerEvent {
                     .kind = ModelManagerEvent::Kind::ModelLoadError,
                     .error = std::string("Failed to load: ") + modelPath,
-                });
+                },
+                          ModelManagerLane::LoadModel,
+                          requestId);
             }
         });
+        return requestId;
     }
 
-    void unloadModel() {
+    void unloadModel() override {
         engine_->cancelGeneration();
         engine_->unload();
     }
 
   private:
-    void postLocalModelsReady_() {
-        auto models = listLocalModelsSync();
-        post_(ModelManagerEvent {
-            .kind = ModelManagerEvent::Kind::LocalModelsReady,
-            .localModels = std::move(models),
+    using LaneTask = std::function<void()>;
+
+    struct LaneState {
+        explicit LaneState(bool latestWins) : latestWins(latestWins) {}
+
+        bool latestWins = false;
+        std::mutex mutex;
+        std::condition_variable cv;
+        std::deque<LaneTask> tasks;
+        bool stopping = false;
+        std::thread worker;
+    };
+
+    static bool isLatestWinsLane(ModelManagerLane lane) {
+        return lane == ModelManagerLane::Inventory || lane == ModelManagerLane::Search ||
+               lane == ModelManagerLane::RepoInspect;
+    }
+
+    std::uint64_t beginRequest(ModelManagerLane lane) {
+        std::uint64_t const requestId = nextRequestId_.fetch_add(1, std::memory_order_relaxed);
+        if (!isLatestWinsLane(lane)) {
+            return requestId;
+        }
+        switch (lane) {
+        case ModelManagerLane::Inventory:
+            latestInventoryRequestId_.store(requestId, std::memory_order_relaxed);
+            break;
+        case ModelManagerLane::Search:
+            latestSearchRequestId_.store(requestId, std::memory_order_relaxed);
+            break;
+        case ModelManagerLane::RepoInspect:
+            latestRepoInspectRequestId_.store(requestId, std::memory_order_relaxed);
+            break;
+        case ModelManagerLane::Download:
+        case ModelManagerLane::LoadModel:
+            break;
+        }
+        return requestId;
+    }
+
+    bool isCurrentRequest(ModelManagerLane lane, std::uint64_t requestId) const {
+        if (!isLatestWinsLane(lane)) {
+            return true;
+        }
+        switch (lane) {
+        case ModelManagerLane::Inventory:
+            return latestInventoryRequestId_.load(std::memory_order_relaxed) == requestId;
+        case ModelManagerLane::Search:
+            return latestSearchRequestId_.load(std::memory_order_relaxed) == requestId;
+        case ModelManagerLane::RepoInspect:
+            return latestRepoInspectRequestId_.load(std::memory_order_relaxed) == requestId;
+        case ModelManagerLane::Download:
+        case ModelManagerLane::LoadModel:
+            return true;
+        }
+        return true;
+    }
+
+    void startLane(LaneState &lane) {
+        lane.worker = std::thread([&lane]() {
+            while (true) {
+                LaneTask task;
+                {
+                    std::unique_lock<std::mutex> lock(lane.mutex);
+                    lane.cv.wait(lock, [&lane]() { return lane.stopping || !lane.tasks.empty(); });
+                    if (lane.stopping && lane.tasks.empty()) {
+                        return;
+                    }
+                    task = std::move(lane.tasks.front());
+                    lane.tasks.pop_front();
+                }
+                task();
+            }
         });
     }
 
-    void joinWorker() {
-        if (worker_.joinable()) {
-            worker_.join();
+    void stopLane(LaneState &lane) {
+        {
+            std::lock_guard<std::mutex> lock(lane.mutex);
+            lane.stopping = true;
+            lane.cv.notify_all();
+        }
+        if (lane.worker.joinable()) {
+            lane.worker.join();
         }
     }
 
-    void runAsync(std::function<void()> fn) {
-        joinWorker();
-        worker_ = std::thread(std::move(fn));
+    void enqueueTask(LaneState &lane, LaneTask task) {
+        std::lock_guard<std::mutex> lock(lane.mutex);
+        if (lane.latestWins) {
+            lane.tasks.clear();
+        }
+        lane.tasks.push_back(std::move(task));
+        lane.cv.notify_one();
+    }
+
+    void postEvent(ModelManagerEvent event, ModelManagerLane lane, std::uint64_t requestId) {
+        if (!isCurrentRequest(lane, requestId)) {
+            return;
+        }
+        event.requestId = requestId;
+        event.lane = lane;
+        post_(std::move(event));
+    }
+
+    void postLocalModelsReady_(std::uint64_t requestId) {
+        auto models = listLocalModelsSync();
+        postEvent(ModelManagerEvent {
+            .kind = ModelManagerEvent::Kind::LocalModelsReady,
+            .localModels = std::move(models),
+        },
+                  ModelManagerLane::Inventory,
+                  requestId);
     }
 
     static std::string hfToken() {
@@ -849,9 +1017,17 @@ class ModelManager {
         });
     }
 
-    std::shared_ptr<LlamaEngine> engine_;
+    std::shared_ptr<lambda::IChatEngine> engine_;
     PostFn post_;
-    std::thread worker_;
+    std::atomic<std::uint64_t> nextRequestId_ {1};
+    std::atomic<std::uint64_t> latestInventoryRequestId_ {0};
+    std::atomic<std::uint64_t> latestSearchRequestId_ {0};
+    std::atomic<std::uint64_t> latestRepoInspectRequestId_ {0};
+    LaneState inventoryLane_;
+    LaneState searchLane_;
+    LaneState repoInspectLane_;
+    LaneState downloadLane_;
+    LaneState loadModelLane_;
 };
 
 } // namespace lambda_backend

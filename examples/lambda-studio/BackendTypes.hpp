@@ -130,6 +130,14 @@ struct HfRepoDetailInfo {
     constexpr bool operator==(HfRepoDetailInfo const &) const = default;
 };
 
+enum class ModelManagerLane {
+    Inventory,
+    Search,
+    RepoInspect,
+    Download,
+    LoadModel,
+};
+
 struct ModelManagerEvent {
     enum class Kind {
         LocalModelsReady,
@@ -157,6 +165,8 @@ struct ModelManagerEvent {
     std::string rawJson;
     std::size_t downloadedBytes = 0;
     std::size_t totalBytes = 0;
+    std::uint64_t requestId = 0;
+    ModelManagerLane lane = ModelManagerLane::Inventory;
 };
 
 struct SamplingParams {

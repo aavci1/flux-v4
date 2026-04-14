@@ -160,6 +160,12 @@ struct AppState {
     std::string pendingDownloadRepoId;
     std::string pendingDownloadFilePath;
 
+    std::uint64_t latestInventoryRequestId = 0;
+    std::uint64_t latestSearchRequestId = 0;
+    std::uint64_t latestRepoInspectRequestId = 0;
+    std::uint64_t latestDownloadRequestId = 0;
+    std::uint64_t latestLoadModelRequestId = 0;
+
     bool operator==(AppState const &) const = default;
 };
 

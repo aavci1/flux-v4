@@ -20,6 +20,11 @@ inline std::uint64_t generateMessageRenderKey() {
     return nextKey.fetch_add(1, std::memory_order_relaxed);
 }
 
+inline std::uint64_t generateGenerationId() {
+    static std::atomic<std::uint64_t> nextId {1};
+    return nextId.fetch_add(1, std::memory_order_relaxed);
+}
+
 enum class ChatRole {
     User,
     Reasoning,
@@ -76,6 +81,7 @@ struct ChatThread {
     std::vector<ChatMessage> messages;
     std::vector<ChatMessage> streamDraftMessages;
     bool streaming = false;
+    std::uint64_t activeGenerationId = 0;
 
     bool operator==(ChatThread const &) const = default;
 };

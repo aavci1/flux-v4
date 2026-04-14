@@ -28,6 +28,7 @@
 #include <cmath>
 #include <cstdint>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -152,6 +153,44 @@ class LineOnlyLayoutTextSystem final : public TextSystem {
     std::vector<std::uint8_t> rasterizeGlyph(std::uint32_t, std::uint16_t, float, std::uint32_t &,
                                              std::uint32_t &, Point &) override {
         return {};
+    }
+};
+
+class EmptyRunsGuardTextSystem final : public TextSystem {
+  public:
+    std::shared_ptr<TextLayout const> layout(AttributedString const &text, float,
+                                             TextLayoutOptions const &) override {
+        ensureEmptyUtf8HasNoRuns(text);
+        return nullptr;
+    }
+
+    std::shared_ptr<TextLayout const> layout(std::string_view, Font const &, Color const &, float,
+                                             TextLayoutOptions const &) override {
+        return nullptr;
+    }
+
+    Size measure(AttributedString const &text, float, TextLayoutOptions const &) override {
+        ensureEmptyUtf8HasNoRuns(text);
+        return {10.f, 10.f};
+    }
+
+    Size measure(std::string_view, Font const &, Color const &, float,
+                 TextLayoutOptions const &) override {
+        return {10.f, 10.f};
+    }
+
+    std::uint32_t resolveFontId(std::string_view, float, bool) override { return 0; }
+
+    std::vector<std::uint8_t> rasterizeGlyph(std::uint32_t, std::uint16_t, float, std::uint32_t &,
+                                             std::uint32_t &, Point &) override {
+        return {};
+    }
+
+  private:
+    static void ensureEmptyUtf8HasNoRuns(AttributedString const &text) {
+        if (text.utf8.empty() && !text.runs.empty()) {
+            throw std::invalid_argument("empty utf8 must not carry runs");
+        }
     }
 };
 
@@ -607,6 +646,25 @@ TEST_CASE("TextInput multiline registers focus, pointer, and text handlers" * do
     CHECK(static_cast<bool>(handlers->onPointerUp));
     CHECK(static_cast<bool>(handlers->onKeyDown));
     CHECK(static_cast<bool>(handlers->onTextInput));
+}
+
+TEST_CASE("TextInput does not produce runs for empty text with empty placeholder") {
+    Application app;
+    Signal<std::string> value {std::string {}};
+    EmptyRunsGuardTextSystem ts;
+    LayoutEngine le;
+    LayoutTree tree;
+    StateStoreGuard stateGuard;
+
+    LayoutContextPtr ctx = makeLayoutContext(ts, le, tree, 320.f, 48.f);
+    CHECK_NOTHROW(
+        Element {TextInput {
+            .value = State<std::string> {&value},
+            .placeholder = "",
+        }}
+            .layout(*ctx)
+    );
+    ctx->popConstraints();
 }
 
 

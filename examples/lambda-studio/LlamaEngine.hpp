@@ -1,5 +1,6 @@
 #pragma once
 
+#include "BackendInterfaces.hpp"
 #include "BackendTypes.hpp"
 
 #include "chat.h"
@@ -36,6 +37,7 @@ struct LlmUiEvent {
     Kind kind = Kind::Done;
     Part part = Part::Content;
     std::string chatId;
+    std::uint64_t generationId = 0;
     std::string text;
     std::optional<GenerationStats> generationStats;
 };
@@ -193,7 +195,7 @@ inline double computeTokensPerSecond(GenerationStats const &stats) {
     return static_cast<double>(stats.completionTokens) / (static_cast<double>(durationMs) / 1000.0);
 }
 
-class LlamaEngine {
+class LlamaEngine : public lambda::IChatEngine {
   public:
     LlamaEngine() = default;
 
@@ -206,7 +208,7 @@ class LlamaEngine {
     LlamaEngine(LlamaEngine const &) = delete;
     LlamaEngine &operator=(LlamaEngine const &) = delete;
 
-    bool load(std::string const &modelPath, int nGpuLayers = -1, uint32_t nCtx = 0) {
+    bool load(std::string const &modelPath, int nGpuLayers = -1, uint32_t nCtx = 0) override {
         std::lock_guard<std::mutex> lock(mutex_);
         unloadLocked();
 
@@ -244,40 +246,45 @@ class LlamaEngine {
         return true;
     }
 
-    bool isLoaded() const { return model_ != nullptr; }
+    bool isLoaded() const override { return model_ != nullptr; }
 
-    std::string const &modelPath() const { return modelPath_; }
+    std::string const &modelPath() const override { return modelPath_; }
 
-    SamplingParams samplingParams() const {
+    SamplingParams samplingParams() const override {
         std::lock_guard<std::mutex> lock(mutex_);
         return samplingParams_;
     }
 
-    void setSamplingParams(SamplingParams const &params) {
+    void setSamplingParams(SamplingParams const &params) override {
         std::lock_guard<std::mutex> lock(mutex_);
         samplingParams_ = params;
     }
 
-    void unload() {
+    void unload() override {
         std::lock_guard<std::mutex> lock(mutex_);
         unloadLocked();
     }
 
-    void cancelGeneration() { cancelled_.store(true, std::memory_order_relaxed); }
+    void cancelGeneration() override { cancelled_.store(true, std::memory_order_relaxed); }
 
     void startChat(
         std::vector<ChatMessage> messages,
         std::string chatId,
+        std::uint64_t generationId,
         std::function<void(LlmUiEvent)> post
-    ) {
+    ) override {
         if (debugFakeStreamEnabled()) {
             cancelGeneration();
             joinWorker();
             cancelled_.store(false, std::memory_order_relaxed);
 
             worker_ = std::thread(
-                [this, msgs = std::move(messages), chat = std::move(chatId), userPost = std::move(post)]() mutable {
-                    runFakeGeneration(std::move(msgs), std::move(chat), std::move(userPost));
+                [this,
+                 msgs = std::move(messages),
+                 chat = std::move(chatId),
+                 id = generationId,
+                 userPost = std::move(post)]() mutable {
+                    runFakeGeneration(std::move(msgs), std::move(chat), id, std::move(userPost));
                 }
             );
             return;
@@ -289,6 +296,7 @@ class LlamaEngine {
                 LlmUiEvent {
                     .kind = LlmUiEvent::Kind::Error,
                     .chatId = chatId,
+                    .generationId = generationId,
                     .text = "No model loaded",
                 }
             );
@@ -300,8 +308,12 @@ class LlamaEngine {
         cancelled_.store(false, std::memory_order_relaxed);
 
         worker_ = std::thread(
-            [this, msgs = std::move(messages), chat = std::move(chatId), userPost = std::move(post)]() mutable {
-                runGeneration(std::move(msgs), std::move(chat), std::move(userPost));
+            [this,
+             msgs = std::move(messages),
+             chat = std::move(chatId),
+             id = generationId,
+             userPost = std::move(post)]() mutable {
+                runGeneration(std::move(msgs), std::move(chat), id, std::move(userPost));
             }
         );
     }
@@ -325,10 +337,12 @@ class LlamaEngine {
     void runGeneration(
         std::vector<ChatMessage> messages,
         std::string chatId,
+        std::uint64_t generationId,
         std::function<void(LlmUiEvent)> userPost
     ) {
-        auto postOnMain = [&userPost, &chatId](LlmUiEvent ev) {
+        auto postOnMain = [&userPost, &chatId, generationId](LlmUiEvent ev) {
             ev.chatId = chatId;
+            ev.generationId = generationId;
             detail::postEventToMain(userPost, std::move(ev));
         };
         detail::UiChunkBatcher batcher(postOnMain);
@@ -536,11 +550,13 @@ class LlamaEngine {
     void runFakeGeneration(
         std::vector<ChatMessage> messages,
         std::string chatId,
+        std::uint64_t generationId,
         std::function<void(LlmUiEvent)> userPost
     ) {
         (void)messages;
-        auto postOnMain = [&userPost, &chatId](LlmUiEvent ev) {
+        auto postOnMain = [&userPost, &chatId, generationId](LlmUiEvent ev) {
             ev.chatId = chatId;
+            ev.generationId = generationId;
             detail::postEventToMain(userPost, std::move(ev));
         };
         detail::UiChunkBatcher batcher(postOnMain);
