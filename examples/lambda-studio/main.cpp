@@ -317,10 +317,21 @@ struct NoticeBanner : ViewModifiers<NoticeBanner> {
 struct LambdaStudio : ViewModifiers<LambdaStudio> {
     std::shared_ptr<LambdaStudioRuntime> runtime;
 
-    auto body() const {
+    Element body() const {
         Theme const &theme = useEnvironment<Theme>();
         auto appState = useState<AppState>(makeInitialAppState());
-        std::shared_ptr<LambdaStudioRuntime> runtimeInstance = runtime != nullptr ? runtime : makeLambdaStudioRuntime();
+        std::shared_ptr<LambdaStudioRuntime> runtimeInstance = runtime;
+        if (!runtimeInstance) {
+            return Element {
+                Text {
+                    .text = "Runtime configuration missing",
+                    .font = theme.fontBody,
+                    .color = theme.colorDanger,
+                    .horizontalAlignment = HorizontalAlignment::Center,
+                    .verticalAlignment = VerticalAlignment::Center,
+                }
+            };
+        }
         std::shared_ptr<IChatEngine> engine = runtimeInstance->engine;
         std::shared_ptr<IModelManager> manager = runtimeInstance->manager;
         std::shared_ptr<IModelCatalogStore> catalog = runtimeInstance->catalog;
@@ -1194,7 +1205,11 @@ struct LambdaStudio : ViewModifiers<LambdaStudio> {
 
 int main(int argc, char *argv[]) {
     Application app(argc, argv);
-    std::shared_ptr<LambdaStudioRuntime> runtime = makeLambdaStudioRuntime();
+    std::shared_ptr<LambdaStudioRuntime> runtime = makeLambdaStudioRuntime(LambdaStudioRuntimeFactory {
+        .postModelEvent = [](lambda_backend::ModelManagerEvent ev) {
+            Application::instance().eventQueue().post(std::move(ev));
+        },
+    });
 
     auto &w = app.createWindow<Window>({
         .size = {1100, 720},
