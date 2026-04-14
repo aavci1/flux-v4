@@ -49,12 +49,12 @@ struct EmptyStatePanel : ViewModifiers<EmptyStatePanel> {
                 Text {
                     .text = title,
                     .font = theme.fontHeading,
-                    .color = theme.colorTextPrimary,
+                    .color = theme.colorTextSecondary,
                     .horizontalAlignment = HorizontalAlignment::Center,
                 },
                 Text {
                     .text = detail,
-                    .font = theme.fontBodySmall,
+                    .font = theme.fontBody,
                     .color = theme.colorTextSecondary,
                     .horizontalAlignment = HorizontalAlignment::Center,
                     .wrapping = TextWrapping::Wrap,
