@@ -170,10 +170,9 @@ struct RemoteFileRow : ViewModifiers<RemoteFileRow> {
 struct HubView : ViewModifiers<HubView> {
     AppState state;
     std::function<void(std::string const &)> onSearchQueryChange;
-    std::function<void(std::string const &)> onSearchAuthorChange;
     std::function<void(RemoteModelSort)> onSortChange;
     std::function<void(RemoteModelVisibilityFilter)> onVisibilityChange;
-    std::function<void(std::string, std::string, RemoteModelSort, RemoteModelVisibilityFilter)> onSearch;
+    std::function<void(std::string, RemoteModelSort, RemoteModelVisibilityFilter)> onSearch;
     std::function<void(std::string)> onSelectRemoteRepo;
     std::function<void(std::string, std::string)> onDownload;
     std::function<void(std::string const &)> onCancelDownload;
@@ -181,7 +180,6 @@ struct HubView : ViewModifiers<HubView> {
     auto body() const {
         Theme const &theme = useEnvironment<Theme>();
         auto searchQuery = useState<std::string>(state.modelSearchQuery);
-        auto searchAuthor = useState<std::string>(state.modelSearchAuthor);
         auto sortIndex = useState<int>(state.remoteModelSort == RemoteModelSort::Likes ? 1 :
                                        state.remoteModelSort == RemoteModelSort::Updated ? 2 :
                                                                                          0);
@@ -190,14 +188,12 @@ struct HubView : ViewModifiers<HubView> {
                                                                                                                      0);
 
         auto triggerSearch = [query = searchQuery,
-                              author = searchAuthor,
                               sortIndex = sortIndex,
                               visibilityIndex = visibilityIndex,
                               onSearch = onSearch]() {
             if (onSearch) {
                 onSearch(
                     *query,
-                    *author,
                     *sortIndex == 1 ? RemoteModelSort::Likes :
                     *sortIndex == 2 ? RemoteModelSort::Updated :
                                       RemoteModelSort::Downloads,
@@ -273,7 +269,7 @@ struct HubView : ViewModifiers<HubView> {
         Element remoteResults = remoteRows.empty()
                                     ? Element {EmptyStatePanel {
                                           .title = state.searchingRemoteModels ? "Searching Hugging Face..." : "No models found",
-                                          .detail = "Adjust the filters above and run a search to browse GGUF repositories.",
+                                          .detail = "Adjust the filters above and run a search to browse repositories with GGUF files.",
                                       }}
                                     : Element {ListView {.rows = std::move(remoteRows)}.flex(1.f, 1.f, 0.f)};
 
@@ -426,7 +422,7 @@ struct HubView : ViewModifiers<HubView> {
                     .children = children(
                         TextInput {
                             .value = searchQuery,
-                            .placeholder = "Search model repos",
+                            .placeholder = "Search GGUF repositories",
                             .style = TextInput::Style {.height = 40.f},
                             .onChange = [onSearchQueryChange = onSearchQueryChange](std::string const &value) {
                                 if (onSearchQueryChange) {
@@ -437,21 +433,7 @@ struct HubView : ViewModifiers<HubView> {
                                 triggerSearch();
                             },
                         }
-                            .flex(1.4f, 1.f),
-                        TextInput {
-                            .value = searchAuthor,
-                            .placeholder = "Author or org",
-                            .style = TextInput::Style {.height = 40.f},
-                            .onChange = [onSearchAuthorChange = onSearchAuthorChange](std::string const &value) {
-                                if (onSearchAuthorChange) {
-                                    onSearchAuthorChange(value);
-                                }
-                            },
-                            .onSubmit = [triggerSearch](std::string const &) {
-                                triggerSearch();
-                            },
-                        }
-                            .flex(1.f, 1.f),
+                            .flex(1.8f, 1.f),
                         Select {
                             .selectedIndex = sortIndex,
                             .options = {

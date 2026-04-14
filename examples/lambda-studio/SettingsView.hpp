@@ -358,10 +358,9 @@ struct SettingsView : ViewModifiers<SettingsView> {
         });
         diagnosticsRows.push_back(LabeledValueRow {
             .label = "Hub search",
-            .value = state.modelSearchQuery.empty() && state.modelSearchAuthor.empty()
-                ? "No active search filters"
-                : "Query: " + (state.modelSearchQuery.empty() ? "Any" : state.modelSearchQuery) +
-                      "  •  Author: " + (state.modelSearchAuthor.empty() ? "Any" : state.modelSearchAuthor),
+            .value = state.modelSearchQuery.empty()
+                ? "No active GGUF repository search"
+                : "Query: " + state.modelSearchQuery,
             .labelWidth = 126.f,
             .spacing = theme.space3,
             .maxLines = 3,

@@ -82,7 +82,6 @@ class FakeStore : public lambda::IStore {
     std::vector<lambda::RemoteModel> loadSearchResults(std::string const &) override { return {}; }
     std::vector<lambda::RemoteModel> searchCatalogModels(
         std::string const &,
-        std::string const &,
         lambda::RemoteModelSort,
         lambda::RemoteModelVisibilityFilter,
         std::size_t

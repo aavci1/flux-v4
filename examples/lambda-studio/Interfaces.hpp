@@ -65,7 +65,6 @@ class IStore {
     virtual std::vector<RemoteModel> loadSearchResults(std::string const &query) = 0;
     virtual std::vector<RemoteModel> searchCatalogModels(
         std::string const &query,
-        std::string const &author,
         RemoteModelSort sort,
         RemoteModelVisibilityFilter visibility,
         std::size_t limit = 20

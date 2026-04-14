@@ -123,7 +123,6 @@ struct AppState {
 
     std::vector<LocalModel> localModels;
     std::string modelSearchQuery;
-    std::string modelSearchAuthor;
     RemoteModelSort remoteModelSort = RemoteModelSort::Downloads;
     RemoteModelVisibilityFilter remoteModelVisibility = RemoteModelVisibilityFilter::All;
     std::vector<RemoteModel> remoteModels;
@@ -284,11 +283,10 @@ inline float downloadJobProgress(DownloadJob const &job) {
 
 inline std::string remoteModelSearchCacheKey(
     std::string const &query,
-    std::string const &author,
     RemoteModelSort sort,
     RemoteModelVisibilityFilter visibility
 ) {
-    return "q=" + query + "\nauthor=" + author + "\nsort=" + remoteModelSortLabel(sort) +
+    return "q=" + query + "\nsort=" + remoteModelSortLabel(sort) +
            "\nvisibility=" + remoteModelVisibilityLabel(visibility);
 }
 

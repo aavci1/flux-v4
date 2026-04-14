@@ -317,7 +317,6 @@ struct StudioApp : ViewModifiers<StudioApp> {
         auto currentRemoteSearchKey = [](AppState const &state) {
             return remoteModelSearchCacheKey(
                 state.modelSearchQuery,
-                state.modelSearchAuthor,
                 state.remoteModelSort,
                 state.remoteModelVisibility
             );
@@ -751,12 +750,6 @@ struct StudioApp : ViewModifiers<StudioApp> {
             appState = std::move(nextState);
         };
 
-        auto updateModelSearchAuthor = [appState](std::string const &author) {
-            AppState nextState = *appState;
-            nextState.modelSearchAuthor = author;
-            appState = std::move(nextState);
-        };
-
         auto updateRemoteModelSort = [appState](RemoteModelSort sort) {
             AppState nextState = *appState;
             nextState.remoteModelSort = sort;
@@ -771,13 +764,11 @@ struct StudioApp : ViewModifiers<StudioApp> {
 
         auto requestRemoteSearch = [appState, catalog, manager, currentRemoteSearchKey](
                                        std::string query,
-                                       std::string author,
                                        RemoteModelSort sort,
                                        RemoteModelVisibilityFilter visibility
                                    ) {
             AppState nextState = *appState;
             nextState.modelSearchQuery = query;
-            nextState.modelSearchAuthor = author;
             nextState.remoteModelSort = sort;
             nextState.remoteModelVisibility = visibility;
             nextState.searchingRemoteModels = true;
@@ -785,7 +776,7 @@ struct StudioApp : ViewModifiers<StudioApp> {
             try {
                 nextState.remoteModels = catalog->loadSearchResults(cacheKey);
                 if (nextState.remoteModels.empty()) {
-                    nextState.remoteModels = catalog->searchCatalogModels(query, author, sort, visibility);
+                    nextState.remoteModels = catalog->searchCatalogModels(query, sort, visibility);
                 }
                 nextState.selectedRemoteRepoId.clear();
                 nextState.selectedRemoteRepoFiles.clear();
@@ -808,11 +799,10 @@ struct StudioApp : ViewModifiers<StudioApp> {
                 nextState.loadingRemoteRepoDetail = false;
                 nextState.errorText = e.what();
             }
-            nextState.statusText = query.empty() && author.empty() ? "Searching top GGUF models..." :
+            nextState.statusText = query.empty() ? "Searching top GGUF repositories..." :
                                                                   "Searching Hugging Face...";
             nextState.latestSearchRequestId = manager->searchHuggingFace(lambda_studio_backend::HfSearchRequest {
                 .query = std::move(query),
-                .author = std::move(author),
                 .sortKey = sort == RemoteModelSort::Likes ? "likes" :
                            sort == RemoteModelSort::Updated ? "lastModified" :
                                                               "downloads",
@@ -1173,7 +1163,6 @@ struct StudioApp : ViewModifiers<StudioApp> {
             currentView = HubView {
                 .state = state,
                 .onSearchQueryChange = updateModelSearchQuery,
-                .onSearchAuthorChange = updateModelSearchAuthor,
                 .onSortChange = updateRemoteModelSort,
                 .onVisibilityChange = updateRemoteModelVisibility,
                 .onSearch = requestRemoteSearch,

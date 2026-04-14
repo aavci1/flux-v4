@@ -647,9 +647,6 @@ class ModelManager : public lambda::IModelManager {
         if (!request.query.empty()) {
             url += "&search=" + urlEncode(request.query);
         }
-        if (!request.author.empty()) {
-            url += "&author=" + urlEncode(request.author);
-        }
 
         common_remote_params params;
         params.timeout = 15;

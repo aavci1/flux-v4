@@ -152,7 +152,6 @@ class Store : public IStore {
 
     std::vector<RemoteModel> searchCatalogModels(
         std::string const &query,
-        std::string const &author,
         RemoteModelSort sort,
         RemoteModelVisibilityFilter visibility,
         std::size_t limit = 20
@@ -176,27 +175,23 @@ class Store : public IStore {
             "       r.author LIKE ?2 OR "
             "       r.tags LIKE ?2 OR "
             "       COALESCE(d.summary, '') LIKE ?2) "
-            "  AND (?3 = '' OR r.author LIKE ?4) "
-            "  AND (?5 = 'all' OR (?5 = 'public' AND r.gated = 0 AND r.is_private = 0 AND r.disabled = 0) "
-            "       OR (?5 = 'gated' AND r.gated = 1)) "
+            "  AND (?3 = 'all' OR (?3 = 'public' AND r.gated = 0 AND r.is_private = 0 AND r.disabled = 0) "
+            "       OR (?3 = 'gated' AND r.gated = 1)) "
             "ORDER BY " + orderBy + " "
-            "LIMIT ?6;";
+            "LIMIT ?4;";
 
         Statement stmt(db_, sql.c_str());
         std::string const queryPattern = "%" + query + "%";
-        std::string const authorPattern = "%" + author + "%";
         bindText(stmt.stmt, 1, query);
         bindText(stmt.stmt, 2, queryPattern);
-        bindText(stmt.stmt, 3, author);
-        bindText(stmt.stmt, 4, authorPattern);
         bindText(
             stmt.stmt,
-            5,
+            3,
             visibility == RemoteModelVisibilityFilter::PublicOnly ? "public" :
             visibility == RemoteModelVisibilityFilter::GatedOnly ? "gated" :
                                                                    "all"
         );
-        bindInt64(stmt.stmt, 6, static_cast<std::int64_t>(limit));
+        bindInt64(stmt.stmt, 4, static_cast<std::int64_t>(limit));
 
         std::vector<RemoteModel> models;
         while (sqlite3_step(stmt.stmt) == SQLITE_ROW) {

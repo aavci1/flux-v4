@@ -106,7 +106,6 @@ struct HfModelInfo {
 
 struct HfSearchRequest {
     std::string query;
-    std::string author;
     std::string sortKey = "downloads";
     std::string visibilityFilter = "all";
     std::string cacheKey;
