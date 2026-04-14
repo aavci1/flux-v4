@@ -303,7 +303,7 @@ struct SettingsView : ViewModifiers<SettingsView> {
             theme,
             "Conversations",
             std::to_string(state.chats.size()),
-            state.chats.empty() ? "No chats yet" : formatCountLabel(static_cast<int>(state.chats.size()), "thread", "threads"),
+            state.chats.empty() ? "No chats" : formatCountLabel(static_cast<int>(state.chats.size()), "thread", "threads"),
             theme.colorAccentSubtle
         ));
         overviewStats.push_back(statCard(

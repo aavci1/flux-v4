@@ -153,24 +153,35 @@ MessageGenerationStats toMessageGenerationStats(
     };
 }
 
-void attachGenerationStatsToLatestResponse(
+void attachGenerationStatsToLatestResponseMessages(
     ChatThread &chat,
     lambda_studio_backend::GenerationStats const &stats
 ) {
     MessageGenerationStats const messageStats = toMessageGenerationStats(stats, chat);
+    std::size_t responseStart = chat.messages.size();
+    while (responseStart > 0) {
+        if (chat.messages[responseStart - 1].role == ChatRole::User) {
+            break;
+        }
+        --responseStart;
+    }
 
-    for (auto it = chat.messages.rbegin(); it != chat.messages.rend(); ++it) {
-        if (it->role == ChatRole::Assistant) {
-            it->generationStats = messageStats;
-            return;
+    ChatMessage *latestAssistant = nullptr;
+    ChatMessage *latestReasoning = nullptr;
+    for (std::size_t i = responseStart; i < chat.messages.size(); ++i) {
+        ChatMessage &message = chat.messages[i];
+        if (message.role == ChatRole::Assistant) {
+            latestAssistant = &message;
+        } else if (message.role == ChatRole::Reasoning) {
+            latestReasoning = &message;
         }
     }
 
-    for (auto it = chat.messages.rbegin(); it != chat.messages.rend(); ++it) {
-        if (it->role == ChatRole::Reasoning) {
-            it->generationStats = messageStats;
-            return;
-        }
+    if (latestReasoning != nullptr) {
+        latestReasoning->generationStats = messageStats;
+    }
+    if (latestAssistant != nullptr) {
+        latestAssistant->generationStats = messageStats;
     }
 }
 
@@ -198,6 +209,21 @@ void commitStreamDraft(ChatThread &chat, std::int64_t finishedAtNanos) {
         chat.messages.push_back(std::move(message));
     }
     chat.streamDraftMessages.clear();
+}
+
+bool eraseChatMessageByIndex(ChatThread &chat, std::size_t index) {
+    if (index < chat.messages.size()) {
+        chat.messages.erase(chat.messages.begin() + static_cast<std::ptrdiff_t>(index));
+        return true;
+    }
+    std::size_t const draftIndex = index - chat.messages.size();
+    if (draftIndex < chat.streamDraftMessages.size()) {
+        chat.streamDraftMessages.erase(
+            chat.streamDraftMessages.begin() + static_cast<std::ptrdiff_t>(draftIndex)
+        );
+        return true;
+    }
+    return false;
 }
 
 void setChatModel(AppState &state, int chatIndex, std::string path, std::string name) {
@@ -391,7 +417,7 @@ struct StudioApp : ViewModifiers<StudioApp> {
                         it->activeGenerationId = 0;
                         it->updatedAtUnixMs = currentUnixMillis();
                         if (event.generationStats.has_value()) {
-                            attachGenerationStatsToLatestResponse(*it, *event.generationStats);
+                            attachGenerationStatsToLatestResponseMessages(*it, *event.generationStats);
                         }
                         nextState.statusText = "Response complete";
                     } else if (event.kind == lambda_studio_backend::LlmUiEvent::Kind::Error) {
@@ -403,7 +429,7 @@ struct StudioApp : ViewModifiers<StudioApp> {
                             .text = std::string("[Error] ") + event.text,
                         });
                         if (event.generationStats.has_value()) {
-                            it->messages.back().generationStats = toMessageGenerationStats(*event.generationStats, *it);
+                            attachGenerationStatsToLatestResponseMessages(*it, *event.generationStats);
                         }
                         syncAssistantParagraphs(it->messages.back());
                         it->updatedAtUnixMs = currentUnixMillis();
@@ -1076,6 +1102,24 @@ struct StudioApp : ViewModifiers<StudioApp> {
             appState = std::move(nextState);
         };
 
+        auto deleteChatMessage = [appState, catalog](int chatIndex, int messageIndex) {
+            AppState nextState = *appState;
+            if (chatIndex < 0 || static_cast<std::size_t>(chatIndex) >= nextState.chats.size()) {
+                return;
+            }
+            if (messageIndex < 0) {
+                return;
+            }
+            ChatThread &chat = nextState.chats[static_cast<std::size_t>(chatIndex)];
+            if (!eraseChatMessageByIndex(chat, static_cast<std::size_t>(messageIndex))) {
+                return;
+            }
+            chat.updatedAtUnixMs = currentUnixMillis();
+            persistChatThread(nextState, *catalog, chatIndex);
+            nextState.statusText = "Deleted message";
+            appState = std::move(nextState);
+        };
+
         auto createChat = [appState, catalog]() {
             AppState nextState = *appState;
             ChatThread thread;
@@ -1133,6 +1177,7 @@ struct StudioApp : ViewModifiers<StudioApp> {
             .onStop = stopMessage,
             .onDeleteChat = deleteChat,
             .onToggleReasoning = toggleReasoningMessage,
+            .onDeleteMessage = deleteChatMessage,
         }
                                   .flex(1.f, 1.f);
 

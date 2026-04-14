@@ -290,8 +290,8 @@ struct ModelsView : ViewModifiers<ModelsView> {
         Element content = localLibraryRows.empty()
                               ? models_view_detail::placeholderPanel(
                                     theme,
-                                    "No local models found",
-                                    "Lambda Studio indexes the Hugging Face cache first. Downloads and active transfers appear here."
+                                    "No Models",
+                                    "Download models from Hugging Face using the Hub module."
                                 )
                               : Element {ListView {.rows = std::move(localLibraryRows)}.flex(1.f, 1.f, 0.f)};
 
@@ -317,9 +317,9 @@ struct ModelsView : ViewModifiers<ModelsView> {
                     )
                 }
                     .padding(theme.space4),
-                Rectangle {}
-                    .size(0.f, 1.f)
-                    .fill(FillStyle::solid(theme.colorBorderSubtle)),
+                Divider {
+                    .orientation = Divider::Orientation::Horizontal
+                },
                 std::move(content)
             )
         }

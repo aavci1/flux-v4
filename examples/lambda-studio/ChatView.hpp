@@ -399,6 +399,7 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
     ChatMessage message;
     bool deferTailMarkdown = false;
     std::function<void()> onToggleReasoning;
+    std::function<void()> onDeleteMessage;
 
     auto body() const {
         Theme const &theme = useEnvironment<Theme>();
@@ -411,6 +412,7 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
         bool const reasoningFinished = message.finishedAtNanos > message.startedAtNanos;
         std::string const thoughtSummary = formatThoughtDuration(message.startedAtNanos, message.finishedAtNanos);
         bool const showStatsFooter = message.generationStats.has_value() && !isUser && !collapsed;
+        bool const showDeleteButton = static_cast<bool>(onDeleteMessage) && hovered;
 
         Color const fill = isUser      ? theme.colorAccent :
                            isReasoning ? theme.colorSurface :
@@ -526,13 +528,27 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
                                  .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
                                  .cornerRadius(theme.radiusXLarge);
 
+            std::vector<Element> rowChildren;
+            rowChildren.push_back(std::move(bubble).flex(0.f, 1.f, 0.f));
+            if (showDeleteButton) {
+                rowChildren.push_back(
+                    IconButton {
+                        .icon = IconName::Delete,
+                        .style = {
+                            .size = 16.f,
+                            .weight = 500.f,
+                            .color = theme.colorTextSecondary,
+                        },
+                        .onTap = onDeleteMessage,
+                    }
+                );
+            }
+            rowChildren.push_back(Spacer {});
+
             return HStack {
                 .spacing = theme.space3,
                 .alignment = Alignment::Start,
-                .children = children(
-                    std::move(bubble).flex(0.f, 1.f, 0.f),
-                    Spacer {}
-                ),
+                .children = std::move(rowChildren),
             };
         }
 
@@ -541,16 +557,40 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
                 Color const collapsedFill = pressed ? theme.colorSurfaceRowHover :
                                             hovered ? theme.colorSurfaceHover :
                                                       theme.colorSurface;
-                return (reasoningFinished ? Element {
-                                                Text {
-                                                    .text = thoughtSummary,
-                                                    .font = theme.fontBodySmall,
-                                                    .color = theme.colorTextMuted,
-                                                    .horizontalAlignment = HorizontalAlignment::Leading,
-                                                    .wrapping = TextWrapping::Wrap,
-                                                }
-                                            } :
-                                            Element {ThinkingDots {}})
+                std::vector<Element> collapsedChildren;
+                collapsedChildren.push_back(
+                    reasoningFinished ? Element {
+                                           Text {
+                                               .text = thoughtSummary,
+                                               .font = theme.fontBodySmall,
+                                               .color = theme.colorTextMuted,
+                                               .horizontalAlignment = HorizontalAlignment::Leading,
+                                               .wrapping = TextWrapping::Wrap,
+                                           }
+                                       } :
+                                       Element {ThinkingDots {}}
+                );
+                if (message.generationStats.has_value()) {
+                    std::string const primaryLine =
+                        joinNonEmpty(generationStatsPrimaryParts(*message.generationStats), "  •  ");
+                    if (!primaryLine.empty()) {
+                        collapsedChildren.push_back(
+                            Text {
+                                .text = primaryLine,
+                                .font = theme.fontLabelSmall,
+                                .color = theme.colorTextMuted,
+                                .horizontalAlignment = HorizontalAlignment::Leading,
+                                .wrapping = TextWrapping::Wrap,
+                            }
+                        );
+                    }
+                }
+
+                return VStack {
+                    .spacing = theme.space1,
+                    .alignment = Alignment::Start,
+                    .children = std::move(collapsedChildren),
+                }
                     .padding(theme.space4)
                     .fill(FillStyle::solid(collapsedFill))
                     .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
@@ -613,23 +653,50 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
         }();
 
         if (isUser) {
+            std::vector<Element> rowChildren;
+            rowChildren.push_back(Spacer {});
+            if (showDeleteButton) {
+                rowChildren.push_back(
+                    IconButton {
+                        .icon = IconName::Delete,
+                        .style = {
+                            .size = 16.f,
+                            .weight = 500.f,
+                            .color = theme.colorTextSecondary,
+                        },
+                        .onTap = onDeleteMessage,
+                    }
+                );
+            }
+            rowChildren.push_back(std::move(bubble).flex(0.f, 1.f, 0.f));
             return HStack {
                 .spacing = theme.space3,
                 .alignment = Alignment::Start,
-                .children = children(
-                    Spacer {},
-                    std::move(bubble).flex(0.f, 1.f, 0.f)
-                ),
+                .children = std::move(rowChildren),
             };
         }
+
+        std::vector<Element> rowChildren;
+        rowChildren.push_back(std::move(bubble).flex(0.f, 1.f, 0.f));
+        if (showDeleteButton) {
+            rowChildren.push_back(
+                IconButton {
+                    .icon = IconName::Delete,
+                    .style = {
+                        .size = 16.f,
+                        .weight = 500.f,
+                        .color = theme.colorTextSecondary,
+                    },
+                    .onTap = onDeleteMessage,
+                }
+            );
+        }
+        rowChildren.push_back(Spacer {});
 
         return HStack {
             .spacing = theme.space3,
             .alignment = Alignment::Start,
-            .children = children(
-                std::move(bubble).flex(0.f, 1.f, 0.f),
-                Spacer {}
-            ),
+            .children = std::move(rowChildren),
         };
     }
 };
@@ -783,6 +850,7 @@ struct ChatView : ViewModifiers<ChatView> {
     std::function<void()> onStop;
     std::function<void()> onDeleteChat;
     std::function<void(int)> onToggleReasoning;
+    std::function<void(int)> onDeleteMessage;
     std::function<void(std::string const &, std::string const &)> onSelectModel;
 
     auto body() const {
@@ -815,6 +883,11 @@ struct ChatView : ViewModifiers<ChatView> {
                         onToggleReasoning(static_cast<int>(i));
                     }
                 },
+                .onDeleteMessage = [onDeleteMessage = onDeleteMessage, i] {
+                    if (onDeleteMessage) {
+                        onDeleteMessage(static_cast<int>(i));
+                    }
+                },
             });
         }
         std::size_t const committedCount = chat.messages.size();
@@ -828,6 +901,11 @@ struct ChatView : ViewModifiers<ChatView> {
                 .onToggleReasoning = [onToggleReasoning = onToggleReasoning, committedCount, i] {
                     if (onToggleReasoning) {
                         onToggleReasoning(static_cast<int>(committedCount + i));
+                    }
+                },
+                .onDeleteMessage = [onDeleteMessage = onDeleteMessage, committedCount, i] {
+                    if (onDeleteMessage) {
+                        onDeleteMessage(static_cast<int>(committedCount + i));
                     }
                 },
             });

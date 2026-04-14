@@ -75,6 +75,7 @@ struct ChatsView : ViewModifiers<ChatsView> {
     std::function<void(int)> onStop;
     std::function<void(int)> onDeleteChat;
     std::function<void(int, int)> onToggleReasoning;
+    std::function<void(int, int)> onDeleteMessage;
 
     auto body() const {
         Theme const &theme = useEnvironment<Theme>();
@@ -106,7 +107,7 @@ struct ChatsView : ViewModifiers<ChatsView> {
                     .alignment = Alignment::Center,
                     .children = children(
                         Text {
-                            .text = "No chats yet",
+                            .text = "No Chats",
                             .font = theme.fontHeading,
                             .color = theme.colorTextPrimary,
                             .horizontalAlignment = HorizontalAlignment::Center,
@@ -146,6 +147,10 @@ struct ChatsView : ViewModifiers<ChatsView> {
                 .onToggleReasoning = [onToggleReasoning = onToggleReasoning, selectedIndex](int messageIndex) {
                     if (onToggleReasoning) {
                         onToggleReasoning(selectedIndex, messageIndex);
+                    } },
+                .onDeleteMessage = [onDeleteMessage = onDeleteMessage, selectedIndex](int messageIndex) {
+                    if (onDeleteMessage) {
+                        onDeleteMessage(selectedIndex, messageIndex);
                     } },
                 .onSelectModel = [onSelectModel = onSelectModel, selectedIndex](std::string const &path, std::string const &name) {
                     if (onSelectModel) {
