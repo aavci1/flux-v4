@@ -829,7 +829,6 @@ struct ChatView : ViewModifiers<ChatView> {
 
     auto body() const {
         Theme const &theme = useEnvironment<Theme>();
-        auto clearFocus = useClearFocus();
         auto draft = useState<std::string>("");
 
         std::string selectedModelLabel = "Select model";
@@ -912,13 +911,7 @@ struct ChatView : ViewModifiers<ChatView> {
                 }
                     .flex(1.f, 1.f, 0.f)
                     .fill(FillStyle::solid(theme.colorBackground))
-                    .clipContent(true)
-                    .onPointerDown([clearFocus](Point) {
-                        clearFocus();
-                    })
-                    .onScroll([clearFocus](Vec2) {
-                        clearFocus();
-                    }),
+                    .clipContent(true),
                 ChatComposer {
                     .value = draft,
                     .disabled = !canCompose,
