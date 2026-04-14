@@ -134,12 +134,11 @@ struct RemoteFileRow : ViewModifiers<RemoteFileRow> {
                 ProgressBar {
                     .progress = static_cast<float>(downloadedBytes) / static_cast<float>(totalBytes),
                     .style = {
-                        .width = 112.f,
-                        .height = 6.f,
-                        .trackColor = theme.colorSurfaceHover,
-                        .fillColor = theme.colorAccent,
+                        .activeColor = theme.colorAccent,
+                        .inactiveColor = theme.colorSurfaceHover,
+                        .trackHeight = 6.f,
                     },
-                }
+                }.size(112.f, 0.f)
             );
         }
 

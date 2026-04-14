@@ -11,11 +11,9 @@ namespace flux {
 
 struct ProgressBar : ViewModifiers<ProgressBar> {
     struct Style {
-        float width = kFloatFromTheme;
-        float height = kFloatFromTheme;
-        float cornerRadius = kFloatFromTheme;
-        Color trackColor = kColorFromTheme;
-        Color fillColor = kColorFromTheme;
+        Color activeColor = kColorFromTheme;
+        Color inactiveColor = kColorFromTheme;
+        float trackHeight = kFloatFromTheme;
     };
 
     float progress = 0.f;

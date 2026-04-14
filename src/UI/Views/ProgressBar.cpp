@@ -9,14 +9,13 @@ namespace flux {
 
 namespace {
 
+constexpr float kDefaultProgressBarWidth = 160.f;
+
 ProgressBar::Style resolveStyle(ProgressBar::Style const &style, Theme const &theme) {
-    float const height = std::max(1.f, resolveFloat(style.height, 6.f));
     return ProgressBar::Style {
-        .width = std::max(1.f, resolveFloat(style.width, 112.f)),
-        .height = height,
-        .cornerRadius = resolveFloat(style.cornerRadius, height * 0.5f),
-        .trackColor = resolveColor(style.trackColor, theme.colorSurfaceHover),
-        .fillColor = resolveColor(style.fillColor, theme.colorAccent),
+        .activeColor = resolveColor(style.activeColor, theme.colorAccent),
+        .inactiveColor = resolveColor(style.inactiveColor, theme.colorSurfaceDisabled),
+        .trackHeight = std::max(1.f, resolveFloat(style.trackHeight, theme.sliderTrackHeight)),
     };
 }
 
@@ -25,22 +24,24 @@ ProgressBar::Style resolveStyle(ProgressBar::Style const &style, Theme const &th
 Element ProgressBar::body() const {
     ProgressBar::Style const resolved = resolveStyle(style, flux::useEnvironment<Theme>());
     float const clamped = std::clamp(progress, 0.f, 1.f);
+    Rect const bounds = useBounds();
+    float const componentWidth = bounds.width > 0.f ? bounds.width : kDefaultProgressBarWidth;
 
     return Element {ZStack {
         .horizontalAlignment = Alignment::Start,
         .verticalAlignment = Alignment::Start,
         .children = children(
             Rectangle {}
-                .fill(FillStyle::solid(resolved.trackColor))
-                .size(resolved.width, resolved.height)
-                .cornerRadius(resolved.cornerRadius),
+                .fill(FillStyle::solid(resolved.inactiveColor))
+                .size(componentWidth, resolved.trackHeight)
+                .cornerRadius(CornerRadius {resolved.trackHeight * 0.5f}),
             Rectangle {}
-                .fill(FillStyle::solid(resolved.fillColor))
-                .size(resolved.width * clamped, resolved.height)
-                .cornerRadius(resolved.cornerRadius)
+                .fill(FillStyle::solid(resolved.activeColor))
+                .size(componentWidth * clamped, resolved.trackHeight)
+                .cornerRadius(CornerRadius {resolved.trackHeight * 0.5f})
         ),
     }}
-        .size(resolved.width, resolved.height);
+        .size(componentWidth, resolved.trackHeight);
 }
 
 } // namespace flux

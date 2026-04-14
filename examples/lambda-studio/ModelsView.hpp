@@ -128,12 +128,11 @@ struct DownloadJobRow : ViewModifiers<DownloadJobRow> {
                 ProgressBar {
                     .progress = downloadJobProgress(job),
                     .style = {
-                        .width = 112.f,
-                        .height = 6.f,
-                        .trackColor = theme.colorSurfaceHover,
-                        .fillColor = theme.colorAccent,
+                        .activeColor = theme.colorAccent,
+                        .inactiveColor = theme.colorSurfaceHover,
+                        .trackHeight = 6.f,
                     },
-                }
+                }.size(112.f, 0.f)
             );
         }
 
