@@ -8,7 +8,7 @@
 #include <utility>
 #include <vector>
 
-#include "../examples/lambda-studio/Backend.hpp"
+#include "../examples/lambda-studio/LambdaStudioRuntime.hpp"
 
 namespace {
 

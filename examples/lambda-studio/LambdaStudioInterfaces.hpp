@@ -8,7 +8,7 @@
 #include <vector>
 
 #include "AppState.hpp"
-#include "BackendTypes.hpp"
+#include "LambdaStudioTypes.hpp"
 
 namespace lambda_backend {
 struct LlmUiEvent;

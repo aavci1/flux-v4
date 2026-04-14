@@ -1,7 +1,7 @@
 #pragma once
 
-#include "BackendInterfaces.hpp"
-#include "BackendTypes.hpp"
+#include "LambdaStudioInterfaces.hpp"
+#include "LambdaStudioTypes.hpp"
 
 #include "chat.h"
 #include "common.h"

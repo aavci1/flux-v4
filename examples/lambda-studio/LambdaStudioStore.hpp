@@ -1,6 +1,6 @@
 #pragma once
 
-#include "BackendInterfaces.hpp"
+#include "LambdaStudioInterfaces.hpp"
 
 #define JSON_ASSERT(x) ((x) ? static_cast<void>(0) : std::abort())
 #include <nlohmann/json.hpp>

@@ -14,8 +14,8 @@
 #include <vector>
 
 #include "AppState.hpp"
-#include "Backend.hpp"
-#include "BackendMappers.hpp"
+#include "LambdaStudioRuntime.hpp"
+#include "LambdaStudioMappers.hpp"
 #include "ChatsView.hpp"
 #include "Divider.hpp"
 #include "HubView.hpp"

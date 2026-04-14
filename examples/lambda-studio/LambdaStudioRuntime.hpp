@@ -5,7 +5,7 @@
 #include <stdexcept>
 #include <utility>
 
-#include "BackendInterfaces.hpp"
+#include "LambdaStudioInterfaces.hpp"
 
 namespace lambda {
 

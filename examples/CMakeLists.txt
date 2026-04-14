@@ -18,7 +18,7 @@ target_link_libraries(hello_world PRIVATE flux)
 
 add_executable(lambda-studio
   lambda-studio/main.cpp
-  lambda-studio/Backend.cpp
+  lambda-studio/LambdaStudioRuntime.cpp
 )
 target_link_libraries(lambda-studio PRIVATE flux common sqlite3)
 
