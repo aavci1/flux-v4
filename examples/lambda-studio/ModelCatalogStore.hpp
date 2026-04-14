@@ -654,103 +654,6 @@ class ModelCatalogStore : public IModelCatalogStore {
         }
     }
 
-    void replaceChats(std::vector<ChatThread> const &chats, std::string const &selectedChatId) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        try {
-            beginTransaction();
-            execute("DELETE FROM chat_message_stats;");
-            execute("DELETE FROM chat_messages;");
-            execute("DELETE FROM chat_threads;");
-
-            Statement insertThread(
-                db_,
-                "INSERT INTO chat_threads (chat_id, title, updated_at_unix_ms, model_path, model_name, sort_order) "
-                "VALUES (?1, ?2, ?3, ?4, ?5, ?6);"
-            );
-            Statement insertMessage(
-                db_,
-                "INSERT INTO chat_messages ("
-                "  chat_id, message_order, role, text, started_at_nanos, finished_at_nanos, collapsed"
-                ") VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7);"
-            );
-            Statement insertMessageStats(
-                db_,
-                "INSERT INTO chat_message_stats ("
-                "  chat_id, message_order, model_path, model_name, prompt_tokens, completion_tokens,"
-                "  started_at_unix_ms, first_token_at_unix_ms, finished_at_unix_ms, tokens_per_second,"
-                "  status, error_text, temp, top_p, top_k, max_tokens"
-                ") VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16);"
-            );
-            Statement upsertPreference(
-                db_,
-                "INSERT INTO app_preferences (pref_key, value_text) VALUES (?1, ?2) "
-                "ON CONFLICT(pref_key) DO UPDATE SET value_text=excluded.value_text;"
-            );
-
-            for (std::size_t i = 0; i < chats.size(); ++i) {
-                ChatThread const &chat = chats[i];
-                sqlite3_reset(insertThread.stmt);
-                sqlite3_clear_bindings(insertThread.stmt);
-                bindText(insertThread.stmt, 1, chat.id);
-                bindText(insertThread.stmt, 2, chat.title);
-                bindInt64(insertThread.stmt, 3, chat.updatedAtUnixMs);
-                bindText(insertThread.stmt, 4, chat.modelPath);
-                bindText(insertThread.stmt, 5, chat.modelName);
-                bindInt64(insertThread.stmt, 6, static_cast<std::int64_t>(i));
-                stepDone(insertThread.stmt);
-
-                std::vector<ChatMessage> const messages = storedChatMessages(chat);
-                for (std::size_t messageIndex = 0; messageIndex < messages.size(); ++messageIndex) {
-                    ChatMessage const &message = messages[messageIndex];
-                    sqlite3_reset(insertMessage.stmt);
-                    sqlite3_clear_bindings(insertMessage.stmt);
-                    bindText(insertMessage.stmt, 1, chat.id);
-                    bindInt64(insertMessage.stmt, 2, static_cast<std::int64_t>(messageIndex));
-                    bindText(insertMessage.stmt, 3, chatRoleStorage(message.role));
-                    bindText(insertMessage.stmt, 4, message.text);
-                    bindInt64(insertMessage.stmt, 5, message.startedAtNanos);
-                    bindInt64(insertMessage.stmt, 6, message.finishedAtNanos);
-                    bindBool(insertMessage.stmt, 7, message.collapsed);
-                    stepDone(insertMessage.stmt);
-
-                    if (!message.generationStats.has_value()) {
-                        continue;
-                    }
-
-                    MessageGenerationStats const &stats = *message.generationStats;
-                    sqlite3_reset(insertMessageStats.stmt);
-                    sqlite3_clear_bindings(insertMessageStats.stmt);
-                    bindText(insertMessageStats.stmt, 1, chat.id);
-                    bindInt64(insertMessageStats.stmt, 2, static_cast<std::int64_t>(messageIndex));
-                    bindText(insertMessageStats.stmt, 3, stats.modelPath);
-                    bindText(insertMessageStats.stmt, 4, stats.modelName);
-                    bindInt64(insertMessageStats.stmt, 5, stats.promptTokens);
-                    bindInt64(insertMessageStats.stmt, 6, stats.completionTokens);
-                    bindInt64(insertMessageStats.stmt, 7, stats.startedAtUnixMs);
-                    bindInt64(insertMessageStats.stmt, 8, stats.firstTokenAtUnixMs);
-                    bindInt64(insertMessageStats.stmt, 9, stats.finishedAtUnixMs);
-                    bindDouble(insertMessageStats.stmt, 10, stats.tokensPerSecond);
-                    bindText(insertMessageStats.stmt, 11, stats.status);
-                    bindText(insertMessageStats.stmt, 12, stats.errorText);
-                    bindDouble(insertMessageStats.stmt, 13, static_cast<double>(stats.temp));
-                    bindDouble(insertMessageStats.stmt, 14, static_cast<double>(stats.topP));
-                    bindInt64(insertMessageStats.stmt, 15, stats.topK);
-                    bindInt64(insertMessageStats.stmt, 16, stats.maxTokens);
-                    stepDone(insertMessageStats.stmt);
-                }
-            }
-
-            bindText(upsertPreference.stmt, 1, "selected_chat_id");
-            bindText(upsertPreference.stmt, 2, selectedChatId);
-            stepDone(upsertPreference.stmt);
-
-            commitTransaction();
-        } catch (...) {
-            rollbackTransaction();
-            throw;
-        }
-    }
-
     PersistedChatState loadPersistedChatState() override {
         std::lock_guard<std::mutex> lock(mutex_);
         PersistedChatState state;
@@ -990,20 +893,6 @@ class ModelCatalogStore : public IModelCatalogStore {
             return ChatRole::Reasoning;
         }
         return ChatRole::Assistant;
-    }
-
-    static std::vector<ChatMessage> storedChatMessages(ChatThread const &thread) {
-        std::vector<ChatMessage> messages = thread.messages;
-        messages.reserve(thread.messages.size() + thread.streamDraftMessages.size());
-        for (ChatMessage const &draft : thread.streamDraftMessages) {
-            if (draft.text.empty()) {
-                continue;
-            }
-            ChatMessage stored = draft;
-            syncAssistantParagraphs(stored);
-            messages.push_back(std::move(stored));
-        }
-        return messages;
     }
 
     std::vector<RemoteModel> loadSearchResultsFromPayload(std::string const &query) {
