@@ -46,6 +46,7 @@ class IModelManager {
     virtual std::uint64_t fetchRepoDetail(std::string repoId) = 0;
     virtual std::uint64_t inspectRepo(std::string repoId) = 0;
     virtual std::uint64_t downloadModel(std::string repoId, std::string fileName) = 0;
+    virtual std::uint64_t cancelDownload() = 0;
     virtual std::uint64_t loadModel(std::string path, int nGpuLayers = -1) = 0;
     virtual std::uint64_t deleteModel(std::string path, std::string repoId) = 0;
     virtual void unloadModel() = 0;
@@ -90,6 +91,8 @@ class IStore {
         std::string const &errorText,
         std::int64_t finishedAtUnixMs
     ) = 0;
+    virtual void deleteDownloadJob(std::string const &jobId) = 0;
+    virtual void deleteDownloadJobsForArtifact(std::string const &repoId, std::string const &filePath) = 0;
     virtual std::vector<DownloadJob> loadRecentDownloadJobs(std::size_t limit = 12) = 0;
     virtual void markRunningDownloadJobsInterrupted(std::int64_t finishedAtUnixMs) = 0;
     virtual PersistedChatState loadPersistedChatState() = 0;

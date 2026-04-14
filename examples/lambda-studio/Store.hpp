@@ -436,6 +436,24 @@ class Store : public IStore {
         stepDone(update.stmt);
     }
 
+    void deleteDownloadJob(std::string const &jobId) override {
+        std::lock_guard<std::mutex> lock(mutex_);
+        Statement deleteStmt(db_, "DELETE FROM download_jobs WHERE job_id = ?1;");
+        bindText(deleteStmt.stmt, 1, jobId);
+        stepDone(deleteStmt.stmt);
+    }
+
+    void deleteDownloadJobsForArtifact(std::string const &repoId, std::string const &filePath) override {
+        std::lock_guard<std::mutex> lock(mutex_);
+        Statement deleteStmt(
+            db_,
+            "DELETE FROM download_jobs WHERE repo_id = ?1 AND file_path = ?2;"
+        );
+        bindText(deleteStmt.stmt, 1, repoId);
+        bindText(deleteStmt.stmt, 2, filePath);
+        stepDone(deleteStmt.stmt);
+    }
+
     std::vector<DownloadJob> loadRecentDownloadJobs(std::size_t limit = 12) override {
         std::lock_guard<std::mutex> lock(mutex_);
         Statement stmt(

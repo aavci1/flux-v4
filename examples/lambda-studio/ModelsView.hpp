@@ -85,7 +85,10 @@ struct ModelRow : ViewModifiers<ModelRow> {
 struct DownloadJobRow : ViewModifiers<DownloadJobRow> {
     DownloadJob job;
     bool retryEnabled = false;
+    bool cancelEnabled = false;
     std::function<void()> onRetry;
+    std::function<void()> onCancel;
+    std::function<void()> onRemove;
 
     auto body() const {
         Theme const &theme = useEnvironment<Theme>();
@@ -147,13 +150,34 @@ struct DownloadJobRow : ViewModifiers<DownloadJobRow> {
                         .children = std::move(infoChildren)
                     }
                         .flex(1.f, 1.f),
-                    job.status == DownloadJobStatus::Failed
+                    job.status == DownloadJobStatus::Running
                         ? Element {LinkButton {
-                              .label = "Retry",
-                              .disabled = !retryEnabled,
-                              .onTap = onRetry,
+                              .label = "Stop",
+                              .disabled = !cancelEnabled,
+                              .onTap = onCancel,
                           }}
-                        : Element {Spacer {}.size(0.f, 0.f)}
+                        : job.status == DownloadJobStatus::Failed
+                              ? Element {HStack {
+                                    .spacing = theme.space2,
+                                    .alignment = Alignment::Center,
+                                    .children = children(
+                                        LinkButton {
+                                            .label = "Retry",
+                                            .disabled = !retryEnabled,
+                                            .onTap = onRetry,
+                                        },
+                                        IconButton {
+                                            .icon = IconName::Delete,
+                                            .style = {
+                                                .size = theme.fontBody.size,
+                                                .weight = theme.fontLabel.weight,
+                                                .color = theme.colorTextSecondary,
+                                            },
+                                            .onTap = onRemove,
+                                        }
+                                    )
+                                }}
+                              : Element {Spacer {}.size(0.f, 0.f)}
                 )
             },
         };
@@ -166,6 +190,8 @@ struct ModelsView : ViewModifiers<ModelsView> {
     std::function<void(std::string const &, std::string const &)> onLoad;
     std::function<void(std::string const &, std::string const &, std::string const &)> onDeleteModel;
     std::function<void(std::string, std::string)> onRetryDownload;
+    std::function<void(std::string const &)> onCancelDownload;
+    std::function<void(std::string const &)> onRemoveDownload;
 
     auto body() const {
         Theme const &theme = useEnvironment<Theme>();
@@ -205,9 +231,20 @@ struct ModelsView : ViewModifiers<ModelsView> {
             downloadRows.push_back(DownloadJobRow {
                 .job = job,
                 .retryEnabled = !state.downloadingModel && !job.repoId.empty() && !job.filePath.empty(),
+                .cancelEnabled = state.downloadingModel && job.id == state.pendingDownloadJobId,
                 .onRetry = [onRetryDownload = onRetryDownload, repoId = job.repoId, filePath = job.filePath] {
                     if (onRetryDownload) {
                         onRetryDownload(repoId, filePath);
+                    }
+                },
+                .onCancel = [onCancelDownload = onCancelDownload, jobId = job.id] {
+                    if (onCancelDownload) {
+                        onCancelDownload(jobId);
+                    }
+                },
+                .onRemove = [onRemoveDownload = onRemoveDownload, jobId = job.id] {
+                    if (onRemoveDownload) {
+                        onRemoveDownload(jobId);
                     }
                 },
             });
@@ -226,7 +263,7 @@ struct ModelsView : ViewModifiers<ModelsView> {
                               ? Element {EmptyStatePanel {
                                     .title = "No Models",
                                     .detail = "Download models from Hugging Face using the Hub module.",
-                                }}
+                                }.flex(1.f, 1.f, 0.f)}
                               : Element {ListView {.rows = std::move(localLibraryRows)}.flex(1.f, 1.f, 0.f)};
 
         return VStack {

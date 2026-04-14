@@ -130,6 +130,18 @@ void persistChatThread(
     }
 }
 
+void removeDownloadJobFromState(AppState &state, std::string const &jobId) {
+    std::erase_if(state.recentDownloadJobs, [&](DownloadJob const &job) {
+        return job.id == jobId;
+    });
+}
+
+void removeDownloadJobsForArtifact(AppState &state, std::string const &repoId, std::string const &filePath) {
+    std::erase_if(state.recentDownloadJobs, [&](DownloadJob const &job) {
+        return job.repoId == repoId && job.filePath == filePath;
+    });
+}
+
 MessageGenerationStats toMessageGenerationStats(
     lambda_studio_backend::GenerationStats const &stats,
     ChatThread const &chat
@@ -841,6 +853,7 @@ struct StudioApp : ViewModifiers<StudioApp> {
                 return;
             }
             AppState nextState = *appState;
+            removeDownloadJobsForArtifact(nextState, repoId, path);
             DownloadJob job;
             job.id = repoId + "|" + path + "|" + std::to_string(currentUnixMillis());
             job.repoId = repoId;
@@ -860,6 +873,7 @@ struct StudioApp : ViewModifiers<StudioApp> {
             nextState.statusText = "Downloading " + path;
             nextState.errorText.clear();
             try {
+                catalog->deleteDownloadJobsForArtifact(repoId, path);
                 catalog->startDownloadJob(job);
             } catch (std::exception const &e) {
                 nextState.errorText = e.what();
@@ -870,6 +884,51 @@ struct StudioApp : ViewModifiers<StudioApp> {
 
         auto retryDownloadJob = [requestRemoteDownload](std::string repoId, std::string filePath) {
             requestRemoteDownload(std::move(repoId), std::move(filePath));
+        };
+
+        auto cancelDownloadJob = [appState, catalog, manager](std::string const &jobId) {
+            if (jobId.empty()) {
+                return;
+            }
+            AppState nextState = *appState;
+            auto const it = std::find_if(nextState.recentDownloadJobs.begin(), nextState.recentDownloadJobs.end(), [&](DownloadJob const &job) {
+                return job.id == jobId;
+            });
+            if (it == nextState.recentDownloadJobs.end()) {
+                return;
+            }
+
+            bool const isActive = nextState.pendingDownloadJobId == jobId;
+            std::string const filePath = it->filePath;
+            removeDownloadJobFromState(nextState, jobId);
+            if (isActive) {
+                nextState.downloadingModel = false;
+                nextState.pendingDownloadJobId.clear();
+                nextState.pendingDownloadRepoId.clear();
+                nextState.pendingDownloadFilePath.clear();
+                nextState.latestDownloadRequestId = manager->cancelDownload();
+                nextState.statusText = filePath.empty() ? "Download stopped" : "Stopped " + filePath;
+            }
+            try {
+                catalog->deleteDownloadJob(jobId);
+            } catch (std::exception const &e) {
+                nextState.errorText = e.what();
+            }
+            appState = std::move(nextState);
+        };
+
+        auto removeDownloadJob = [appState, catalog](std::string const &jobId) {
+            if (jobId.empty()) {
+                return;
+            }
+            AppState nextState = *appState;
+            removeDownloadJobFromState(nextState, jobId);
+            try {
+                catalog->deleteDownloadJob(jobId);
+            } catch (std::exception const &e) {
+                nextState.errorText = e.what();
+            }
+            appState = std::move(nextState);
         };
 
         auto requestModelLoad = [appState, manager](std::string const &path, std::string const &name) {
@@ -961,6 +1020,9 @@ struct StudioApp : ViewModifiers<StudioApp> {
                 std::move(streamChatId),
                 generationId,
                 [](lambda_studio_backend::LlmUiEvent event) {
+                    if (!Application::hasInstance()) {
+                        return;
+                    }
                     Application::instance().eventQueue().post(std::move(event));
                 }
             );
@@ -1103,6 +1165,8 @@ struct StudioApp : ViewModifiers<StudioApp> {
                 .onLoad = requestModelLoad,
                 .onDeleteModel = requestModelDelete,
                 .onRetryDownload = retryDownloadJob,
+                .onCancelDownload = cancelDownloadJob,
+                .onRemoveDownload = removeDownloadJob,
             }
                               .flex(1.f, 1.f);
         } else if (state.currentModule == StudioModule::Hub) {
@@ -1115,6 +1179,7 @@ struct StudioApp : ViewModifiers<StudioApp> {
                 .onSearch = requestRemoteSearch,
                 .onSelectRemoteRepo = requestRemoteRepoFiles,
                 .onDownload = requestRemoteDownload,
+                .onCancelDownload = cancelDownloadJob,
             }
                               .flex(1.f, 1.f);
         } else if (state.currentModule == StudioModule::Settings) {
@@ -1160,6 +1225,9 @@ int main(int argc, char *argv[]) {
     std::shared_ptr<AppRuntime> runtime =
         makeAppRuntime(makeDefaultAppRuntimeFactory(
             [](lambda_studio_backend::ModelManagerEvent ev) {
+                if (!Application::hasInstance()) {
+                    return;
+                }
                 Application::instance().eventQueue().post(std::move(ev));
             }
         ));

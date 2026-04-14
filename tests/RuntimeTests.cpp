@@ -63,6 +63,7 @@ class FakeModelManager : public lambda::IModelManager {
     std::uint64_t fetchRepoDetail(std::string) override { return ++requestId_; }
     std::uint64_t inspectRepo(std::string) override { return ++requestId_; }
     std::uint64_t downloadModel(std::string, std::string) override { return ++requestId_; }
+    std::uint64_t cancelDownload() override { return ++requestId_; }
     std::uint64_t loadModel(std::string, int) override { return ++requestId_; }
     std::uint64_t deleteModel(std::string, std::string) override { return ++requestId_; }
     void unloadModel() override {}
@@ -97,6 +98,8 @@ class FakeStore : public lambda::IStore {
     void startDownloadJob(lambda::DownloadJob const &) override {}
     void finishDownloadJob(std::string const &, std::string const &, std::int64_t) override {}
     void failDownloadJob(std::string const &, std::string const &, std::int64_t) override {}
+    void deleteDownloadJob(std::string const &) override {}
+    void deleteDownloadJobsForArtifact(std::string const &, std::string const &) override {}
     std::vector<lambda::DownloadJob> loadRecentDownloadJobs(std::size_t) override { return {}; }
     void markRunningDownloadJobsInterrupted(std::int64_t) override {}
     lambda::PersistedChatState loadPersistedChatState() override { return {}; }

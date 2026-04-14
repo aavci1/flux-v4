@@ -101,6 +101,7 @@ struct RemoteFileRow : ViewModifiers<RemoteFileRow> {
     std::size_t downloadedBytes = 0;
     std::size_t totalBytes = 0;
     std::function<void()> onDownload;
+    std::function<void()> onCancel;
 
     auto body() const {
         Theme const &theme = useEnvironment<Theme>();
@@ -155,11 +156,10 @@ struct RemoteFileRow : ViewModifiers<RemoteFileRow> {
                         .flex(1.f, 1.f),
                     LinkButton {
                         .label = file.cached ? "Cached" :
-                                 downloading ? (totalBytes == 0 ? "..." :
-                                                std::to_string(shared_ui::progressPercent(downloadedBytes, totalBytes)) + "%") :
+                                 downloading ? "Stop" :
                                                "Download",
-                        .disabled = file.cached || downloading,
-                        .onTap = onDownload,
+                        .disabled = file.cached,
+                        .onTap = downloading ? onCancel : onDownload,
                     }
                 )
             },
@@ -176,6 +176,7 @@ struct HubView : ViewModifiers<HubView> {
     std::function<void(std::string, std::string, RemoteModelSort, RemoteModelVisibilityFilter)> onSearch;
     std::function<void(std::string)> onSelectRemoteRepo;
     std::function<void(std::string, std::string)> onDownload;
+    std::function<void(std::string const &)> onCancelDownload;
 
     auto body() const {
         Theme const &theme = useEnvironment<Theme>();
@@ -259,6 +260,11 @@ struct HubView : ViewModifiers<HubView> {
                 .onDownload = [onDownload = onDownload, repoId = file.repoId, path = file.path] {
                     if (onDownload) {
                         onDownload(repoId, path);
+                    }
+                },
+                .onCancel = [onCancelDownload = onCancelDownload, jobId = state.pendingDownloadJobId] {
+                    if (onCancelDownload) {
+                        onCancelDownload(jobId);
                     }
                 },
             });

@@ -63,6 +63,8 @@ class ModelManager : public lambda::IModelManager {
     }
 
     ~ModelManager() override {
+        shuttingDown_.store(true, std::memory_order_relaxed);
+        downloadCancelRequested_.store(true, std::memory_order_relaxed);
         stopLane(inventoryLane_);
         stopLane(searchLane_);
         stopLane(repoInspectLane_);
@@ -205,8 +207,13 @@ class ModelManager : public lambda::IModelManager {
 
     std::uint64_t downloadModel(std::string repoId, std::string fileName) override {
         std::uint64_t const requestId = beginRequest(ModelManagerLane::Download);
+        latestDownloadRequestId_.store(requestId, std::memory_order_relaxed);
+        downloadCancelRequested_.store(false, std::memory_order_relaxed);
         enqueueTask(downloadLane_, [this, requestId, repo = std::move(repoId), file = std::move(fileName)] {
             try {
+                if (isDownloadCancelled(requestId)) {
+                    return;
+                }
                 common_params_model model;
                 model.hf_repo = repo;
                 model.hf_file = file;
@@ -250,7 +257,7 @@ class ModelManager : public lambda::IModelManager {
                     }
 
                     void update(common_download_progress const &progress, bool force = false) {
-                        if (ctx.manager == nullptr || progress.total == 0) {
+                        if (ctx.manager == nullptr || progress.total == 0 || ctx.manager->isDownloadCancelled(ctx.requestId)) {
                             return;
                         }
 
@@ -292,6 +299,10 @@ class ModelManager : public lambda::IModelManager {
                                              ctx.requestId);
                     }
 
+                    bool is_cancelled() const override {
+                        return ctx.manager == nullptr || ctx.manager->isDownloadCancelled(ctx.requestId);
+                    }
+
                     DownloadProgressContext &ctx;
                 };
 
@@ -301,6 +312,9 @@ class ModelManager : public lambda::IModelManager {
                 opts.callback = &callback;
 
                 auto result = common_download_model(model, opts);
+                if (isDownloadCancelled(requestId)) {
+                    return;
+                }
                 if (result.model_path.empty()) {
                     postEvent(ModelManagerEvent {
                         .kind = ModelManagerEvent::Kind::DownloadError,
@@ -328,6 +342,9 @@ class ModelManager : public lambda::IModelManager {
                 std::uint64_t const refreshRequestId = beginRequest(ModelManagerLane::Inventory);
                 enqueueTask(inventoryLane_, [this, refreshRequestId] { postLocalModelsReady_(refreshRequestId); });
             } catch (std::exception const &e) {
+                if (isDownloadCancelled(requestId)) {
+                    return;
+                }
                 postEvent(ModelManagerEvent {
                     .kind = ModelManagerEvent::Kind::DownloadError,
                     .error = e.what(),
@@ -338,6 +355,13 @@ class ModelManager : public lambda::IModelManager {
                           requestId);
             }
         });
+        return requestId;
+    }
+
+    std::uint64_t cancelDownload() override {
+        downloadCancelRequested_.store(true, std::memory_order_relaxed);
+        std::uint64_t const requestId = nextRequestId_.fetch_add(1, std::memory_order_relaxed);
+        latestDownloadRequestId_.store(requestId, std::memory_order_relaxed);
         return requestId;
     }
 
@@ -501,6 +525,12 @@ class ModelManager : public lambda::IModelManager {
             return true;
         }
         return true;
+    }
+
+    bool isDownloadCancelled(std::uint64_t requestId) const {
+        return shuttingDown_.load(std::memory_order_relaxed) ||
+               downloadCancelRequested_.load(std::memory_order_relaxed) ||
+               latestDownloadRequestId_.load(std::memory_order_relaxed) != requestId;
     }
 
     void startLane(LaneState &lane) {
@@ -1233,6 +1263,9 @@ class ModelManager : public lambda::IModelManager {
     std::atomic<std::uint64_t> latestInventoryRequestId_ {0};
     std::atomic<std::uint64_t> latestSearchRequestId_ {0};
     std::atomic<std::uint64_t> latestRepoInspectRequestId_ {0};
+    std::atomic<std::uint64_t> latestDownloadRequestId_ {0};
+    std::atomic<bool> downloadCancelRequested_ {false};
+    std::atomic<bool> shuttingDown_ {false};
     LaneState inventoryLane_;
     LaneState searchLane_;
     LaneState repoInspectLane_;

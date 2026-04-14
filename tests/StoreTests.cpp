@@ -153,3 +153,54 @@ TEST_CASE("Store persists generation stats for reasoning messages") {
 
     std::filesystem::remove_all(tempDir);
 }
+
+TEST_CASE("Store can delete download jobs individually and by artifact") {
+    std::filesystem::path const tempDir = uniqueTempDir("downloads");
+    std::filesystem::create_directories(tempDir);
+
+    lambda::Store store(tempDir);
+    lambda::DownloadJob failedA {
+        .id = "job-a",
+        .repoId = "repo",
+        .filePath = "model.gguf",
+        .error = "network",
+        .startedAtUnixMs = 100,
+        .finishedAtUnixMs = 110,
+        .status = lambda::DownloadJobStatus::Failed,
+    };
+    lambda::DownloadJob failedB {
+        .id = "job-b",
+        .repoId = "repo",
+        .filePath = "model.gguf",
+        .error = "network",
+        .startedAtUnixMs = 200,
+        .finishedAtUnixMs = 210,
+        .status = lambda::DownloadJobStatus::Failed,
+    };
+    lambda::DownloadJob failedC {
+        .id = "job-c",
+        .repoId = "repo",
+        .filePath = "other.gguf",
+        .error = "network",
+        .startedAtUnixMs = 300,
+        .finishedAtUnixMs = 310,
+        .status = lambda::DownloadJobStatus::Failed,
+    };
+
+    store.startDownloadJob(failedA);
+    store.startDownloadJob(failedB);
+    store.startDownloadJob(failedC);
+
+    store.deleteDownloadJob("job-a");
+    auto jobs = store.loadRecentDownloadJobs();
+    REQUIRE(jobs.size() == 2);
+    CHECK(jobs[0].id == "job-c");
+    CHECK(jobs[1].id == "job-b");
+
+    store.deleteDownloadJobsForArtifact("repo", "model.gguf");
+    jobs = store.loadRecentDownloadJobs();
+    REQUIRE(jobs.size() == 1);
+    CHECK(jobs[0].id == "job-c");
+
+    std::filesystem::remove_all(tempDir);
+}
