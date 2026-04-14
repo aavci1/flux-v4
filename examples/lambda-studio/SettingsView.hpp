@@ -74,9 +74,6 @@ inline std::string primaryStatusText(AppState const &state) {
     if (state.loadingRemoteRepoDetail || state.loadingRemoteModelFiles) {
         return "Fetching details";
     }
-    if (state.notice.has_value()) {
-        return "Notice available";
-    }
     if (!state.loadedModelName.empty()) {
         return "Ready";
     }
@@ -86,9 +83,6 @@ inline std::string primaryStatusText(AppState const &state) {
 inline StatusTone primaryStatusTone(AppState const &state) {
     if (!state.errorText.empty()) {
         return StatusTone::Danger;
-    }
-    if (state.notice.has_value()) {
-        return StatusTone::Warning;
     }
     if (state.modelLoading || state.downloadingModel || state.searchingRemoteModels || state.refreshingModels ||
         state.loadingRemoteRepoDetail || state.loadingRemoteModelFiles) {
@@ -355,11 +349,11 @@ struct SettingsView : ViewModifiers<SettingsView> {
             .maxLines = 4,
         });
         diagnosticsRows.push_back(LabeledValueRow {
-            .label = "Notice",
-            .value = state.notice.has_value() ? (state.notice->title + "  •  " + state.notice->detail) : "No pending notices.",
+            .label = "Status text",
+            .value = state.statusText.empty() ? "No active status text." : state.statusText,
             .labelWidth = 126.f,
             .spacing = theme.space3,
-            .emphasize = state.notice.has_value(),
+            .emphasize = !state.statusText.empty(),
             .maxLines = 4,
         });
         diagnosticsRows.push_back(LabeledValueRow {

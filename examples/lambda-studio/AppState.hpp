@@ -37,14 +37,6 @@ enum class DownloadJobStatus {
     Failed,
 };
 
-struct AppNotice {
-    std::string title;
-    std::string detail;
-    StudioModule targetModule = StudioModule::Models;
-
-    bool operator==(AppNotice const &) const = default;
-};
-
 struct LocalModel {
     std::string path;
     std::string name;
@@ -145,7 +137,6 @@ struct AppState {
     std::string pendingModelPath;
     std::string pendingModelName;
 
-    std::optional<AppNotice> notice;
     std::string statusText;
     std::string errorText;
 
