@@ -102,7 +102,7 @@ struct Theme {
     Color colorSurfaceDisabled = Color::hex(0xE5E5EA);
 
     Color colorBorder = Color::hex(0xDADCDE);
-    Color colorBorderSubtle = Color::hex(0xE5E5EA);
+    Color colorBorderSubtle = Color::hex(0xEFEFEF);
     Color colorBorderFocus = Color::hex(0x7ABBF5);
 
     Color colorTextPrimary = Color::hex(0x111118);
