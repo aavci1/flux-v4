@@ -4,6 +4,7 @@
 #include <Flux/UI/Views/Views.hpp>
 
 #include <algorithm>
+#include <cctype>
 #include <functional>
 #include <string>
 #include <vector>
@@ -15,6 +16,238 @@ using namespace flux;
 
 namespace lambda {
 
+namespace model_row_presentation {
+
+struct PresentedLocalModelRow {
+    std::string title;
+    std::string detail;
+};
+
+std::string lowercaseAscii(std::string text) {
+    for (char &ch : text) {
+        ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    }
+    return text;
+}
+
+std::string uppercaseAscii(std::string text) {
+    for (char &ch : text) {
+        ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+    }
+    return text;
+}
+
+std::string lastPathComponent(std::string const &text) {
+    std::size_t const slash = text.find_last_of('/');
+    return slash == std::string::npos ? text : text.substr(slash + 1);
+}
+
+std::string trimKnownModelSuffixes(std::string text) {
+    auto trimSuffix = [&text](std::string const &suffix) {
+        if (text.size() < suffix.size()) {
+            return false;
+        }
+        std::string const tail = lowercaseAscii(text.substr(text.size() - suffix.size()));
+        if (tail != lowercaseAscii(suffix)) {
+            return false;
+        }
+        text.resize(text.size() - suffix.size());
+        return true;
+    };
+    trimSuffix(".gguf");
+    trimSuffix("-gguf");
+    return text;
+}
+
+std::vector<std::string> splitModelTokens(std::string const &text) {
+    std::vector<std::string> tokens;
+    std::string current;
+    for (char ch : text) {
+        if (ch == '-' || ch == '/' || ch == ' ') {
+            if (!current.empty()) {
+                tokens.push_back(current);
+                current.clear();
+            }
+            continue;
+        }
+        current.push_back(ch);
+    }
+    if (!current.empty()) {
+        tokens.push_back(current);
+    }
+    return tokens;
+}
+
+bool tokenIsParameter(std::string const &token) {
+    std::string const lower = lowercaseAscii(token);
+    if (lower.size() < 2) {
+        return false;
+    }
+    std::size_t index = 0;
+    if ((lower[0] == 'e' || lower[0] == 'a') && lower.size() > 2) {
+        index = 1;
+    }
+    bool seenDigit = false;
+    bool seenDot = false;
+    for (; index < lower.size(); ++index) {
+        char const ch = lower[index];
+        if (std::isdigit(static_cast<unsigned char>(ch))) {
+            seenDigit = true;
+            continue;
+        }
+        if (ch == '.' && !seenDot) {
+            seenDot = true;
+            continue;
+        }
+        break;
+    }
+    return seenDigit && index == lower.size() - 1 && (lower[index] == 'b' || lower[index] == 'm');
+}
+
+bool tokenIsQuantization(std::string const &token) {
+    std::string const lower = lowercaseAscii(token);
+    if (lower == "f16" || lower == "bf16" || lower == "fp16" || lower == "f32" || lower == "fp32") {
+        return true;
+    }
+    if (lower.size() >= 2 && lower[0] == 'q' && std::isdigit(static_cast<unsigned char>(lower[1]))) {
+        return true;
+    }
+    if (lower.size() >= 3 && lower[0] == 'i' && lower[1] == 'q' &&
+        std::isdigit(static_cast<unsigned char>(lower[2]))) {
+        return true;
+    }
+    return false;
+}
+
+bool tokenIsIgnoredForTitle(std::string const &token) {
+    std::string const lower = lowercaseAscii(token);
+    return lower.empty() || lower == "gguf" || lower == "qat";
+}
+
+std::string joinNonEmpty(std::vector<std::string> const &parts, std::string const &separator) {
+    std::string joined;
+    for (std::string const &part : parts) {
+        if (part.empty()) {
+            continue;
+        }
+        if (!joined.empty()) {
+            joined += separator;
+        }
+        joined += part;
+    }
+    return joined;
+}
+
+std::string humanizeModelWord(std::string word) {
+    std::string lower = lowercaseAscii(word);
+    if (lower == "it") {
+        return "Instruct";
+    }
+    if (lower == "gguf") {
+        return "GGUF";
+    }
+    bool const alphaOnly = std::all_of(word.begin(), word.end(), [](char ch) {
+        return std::isalpha(static_cast<unsigned char>(ch)) != 0;
+    });
+    if (alphaOnly && word.size() <= 3) {
+        return uppercaseAscii(lower);
+    }
+    if (!word.empty()) {
+        word = lowercaseAscii(word);
+        word[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(word[0])));
+    }
+    return word;
+}
+
+std::string humanizeModelTitleToken(std::string const &token) {
+    std::string expanded;
+    expanded.reserve(token.size() + 4);
+    for (std::size_t i = 0; i < token.size(); ++i) {
+        char const ch = token[i];
+        if (ch == '_') {
+            expanded.push_back(' ');
+            continue;
+        }
+        if (i > 0) {
+            char const prev = token[i - 1];
+            if (std::isalpha(static_cast<unsigned char>(prev)) &&
+                std::isdigit(static_cast<unsigned char>(ch))) {
+                expanded.push_back(' ');
+            }
+        }
+        expanded.push_back(ch);
+    }
+
+    std::vector<std::string> words = splitModelTokens(expanded);
+    std::string result;
+    for (std::string const &word : words) {
+        if (word.empty()) {
+            continue;
+        }
+        if (!result.empty()) {
+            result += ' ';
+        }
+        result += humanizeModelWord(word);
+    }
+    return result;
+}
+
+PresentedLocalModelRow presentLocalModel(LocalModel const &model) {
+    std::string const fileStem = trimKnownModelSuffixes(lastPathComponent(model.path));
+    std::string const repoStem = trimKnownModelSuffixes(lastPathComponent(model.repo));
+    std::vector<std::string> const fileTokens = splitModelTokens(fileStem);
+    std::vector<std::string> const titleSourceTokens =
+        !repoStem.empty() ? splitModelTokens(repoStem)
+                          : (!model.name.empty() ? splitModelTokens(trimKnownModelSuffixes(model.name))
+                                                 : fileTokens);
+
+    std::vector<std::string> titleParts;
+    titleParts.reserve(titleSourceTokens.size());
+    for (std::string const &token : titleSourceTokens) {
+        if (tokenIsIgnoredForTitle(token) || tokenIsParameter(token) || tokenIsQuantization(token)) {
+            continue;
+        }
+        titleParts.push_back(humanizeModelTitleToken(token));
+    }
+
+    if (titleParts.empty()) {
+        for (std::string const &token : fileTokens) {
+            if (tokenIsIgnoredForTitle(token) || tokenIsParameter(token) || tokenIsQuantization(token)) {
+                continue;
+            }
+            titleParts.push_back(humanizeModelTitleToken(token));
+        }
+    }
+
+    std::vector<std::string> parameterParts;
+    std::vector<std::string> quantParts;
+    for (std::string const &token : fileTokens) {
+        if (tokenIsParameter(token)) {
+            parameterParts.push_back(uppercaseAscii(token));
+        } else if (tokenIsQuantization(token)) {
+            quantParts.push_back(uppercaseAscii(token));
+        }
+    }
+
+    std::vector<std::string> detailParts;
+    if (!parameterParts.empty()) {
+        detailParts.push_back(joinNonEmpty(parameterParts, " / "));
+    }
+    if (!quantParts.empty()) {
+        detailParts.push_back(joinNonEmpty(quantParts, " / "));
+    }
+    if (model.sizeBytes > 0) {
+        detailParts.push_back(formatModelSize(model.sizeBytes));
+    }
+
+    return PresentedLocalModelRow {
+        .title = joinNonEmpty(titleParts, " "),
+        .detail = joinNonEmpty(detailParts, "  •  "),
+    };
+}
+
+} // namespace model_row_presentation
+
 struct ModelRow : ViewModifiers<ModelRow> {
     LocalModel model;
     bool active = false;
@@ -25,14 +258,8 @@ struct ModelRow : ViewModifiers<ModelRow> {
 
     auto body() const {
         Theme const &theme = useEnvironment<Theme>();
-
-        std::string detail = formatModelSize(model.sizeBytes);
-        if (!model.repo.empty()) {
-            detail += "  •  " + model.repo;
-        }
-        if (!model.path.empty()) {
-            detail += "  •  " + model.path;
-        }
+        model_row_presentation::PresentedLocalModelRow const presented =
+            model_row_presentation::presentLocalModel(model);
 
         return ListRow {
             .content = HStack {
@@ -44,13 +271,13 @@ struct ModelRow : ViewModifiers<ModelRow> {
                         .alignment = Alignment::Start,
                         .children = children(
                             Text {
-                                .text = model.name,
+                                .text = presented.title,
                                 .font = theme.fontLabel,
                                 .color = active ? theme.colorAccent : theme.colorTextPrimary,
                                 .horizontalAlignment = HorizontalAlignment::Leading,
                             },
                             Text {
-                                .text = std::move(detail),
+                                .text = presented.detail,
                                 .font = theme.fontBodySmall,
                                 .color = theme.colorTextSecondary,
                                 .horizontalAlignment = HorizontalAlignment::Leading,

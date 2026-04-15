@@ -1064,8 +1064,8 @@ struct ChatComposer : ViewModifiers<ChatComposer> {
             .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
             .cornerRadius(theme.radiusXLarge)
             .shadow(ShadowStyle {
-                .radius = std::max(10.f, theme.shadowRadiusPopover),
-                .offset = Point {0.f, std::max(4.f, theme.shadowOffsetYPopover)},
+                .radius = 2.f,
+                .offset = Point {0.f, 0.f},
                 .color = Color {theme.shadowColor.r, theme.shadowColor.g, theme.shadowColor.b, std::max(0.2f, theme.shadowColor.a)},
             })
             .onTap([requestComposerFocus, isDisabled] {
