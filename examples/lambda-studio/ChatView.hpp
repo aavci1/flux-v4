@@ -1063,6 +1063,11 @@ struct ChatComposer : ViewModifiers<ChatComposer> {
             .fill(FillStyle::solid(isDisabled ? theme.colorSurfaceDisabled : theme.colorSurfaceOverlay))
             .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
             .cornerRadius(theme.radiusXLarge)
+            .shadow(ShadowStyle {
+                .radius = std::max(10.f, theme.shadowRadiusPopover),
+                .offset = Point {0.f, std::max(4.f, theme.shadowOffsetYPopover)},
+                .color = Color {theme.shadowColor.r, theme.shadowColor.g, theme.shadowColor.b, std::max(0.2f, theme.shadowColor.a)},
+            })
             .onTap([requestComposerFocus, isDisabled] {
                 if (!isDisabled) {
                     requestComposerFocus();
@@ -1105,6 +1110,9 @@ struct ChatView : ViewModifiers<ChatView> {
 
         std::vector<Element> bubbles;
         bubbles.reserve(chat.messages.size() + chat.streamDraftMessages.size());
+        float const composerHorizontalInset = theme.space4;
+        float const composerBottomInset = theme.space4;
+        float const composerFloatingReserve = 220.f;
         for (std::size_t i = 0; i < chat.messages.size(); ++i) {
             ChatMessage const &message = chat.messages[i];
             bubbles.push_back(ChatBubble {
@@ -1171,33 +1179,46 @@ struct ChatView : ViewModifiers<ChatView> {
                 }.padding(theme.space4)
                 .fill(FillStyle::solid(theme.colorSurfaceOverlay)),
                 Divider { .orientation = Divider::Orientation::Horizontal },
-                ScrollView {
-                    .axis = ScrollAxis::Vertical,
+                ZStack {
+                    .horizontalAlignment = Alignment::Stretch,
+                    .verticalAlignment = Alignment::End,
                     .children = children(
-                        VStack {
-                            .spacing = theme.space3,
-                            .alignment = Alignment::Stretch,
-                            .children = std::move(bubbles),
+                        ScrollView {
+                            .axis = ScrollAxis::Vertical,
+                            .children = children(
+                                VStack {
+                                    .spacing = theme.space3,
+                                    .alignment = Alignment::Stretch,
+                                    .children = std::move(bubbles),
+                                }
+                                    .padding(theme.space4, theme.space4, theme.space4 + composerFloatingReserve, theme.space4)
+                            )
                         }
-                            .padding(theme.space4)
-                    )
+                            .fill(FillStyle::solid(theme.colorBackground))
+                            .clipContent(true),
+                        HStack {
+                            .spacing = 0.f,
+                            .alignment = Alignment::Center,
+                            .children = children(
+                                ChatComposer {
+                                    .value = draft,
+                                    .disabled = !canCompose,
+                                    .modelLabel = selectedModelLabel,
+                                    .localModels = localModels,
+                                    .selectedModelPath = chat.modelPath,
+                                    .onSend = onSend,
+                                    .onStop = onStop,
+                                    .onSelectModel = onSelectModel,
+                                    .generationParams = generationParams,
+                                    .onAdjustGeneration = onAdjustGeneration,
+                                    .streaming = chat.streaming,
+                                }.flex(1.f, 1.f, 0.f)
+                            ),
+                        }.padding(0.f, composerHorizontalInset, composerBottomInset, composerHorizontalInset)
+                    ),
                 }
                     .flex(1.f, 1.f, 0.f)
                     .fill(FillStyle::solid(theme.colorBackground))
-                    .clipContent(true),
-                ChatComposer {
-                    .value = draft,
-                    .disabled = !canCompose,
-                    .modelLabel = selectedModelLabel,
-                    .localModels = localModels,
-                    .selectedModelPath = chat.modelPath,
-                    .onSend = onSend,
-                    .onStop = onStop,
-                    .onSelectModel = onSelectModel,
-                    .generationParams = generationParams,
-                    .onAdjustGeneration = onAdjustGeneration,
-                    .streaming = chat.streaming,
-                }.padding(0.f, theme.space4, theme.space4, theme.space4)
             ),
         }
             .fill(FillStyle::solid(theme.colorBackground))
