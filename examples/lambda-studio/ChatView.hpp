@@ -690,7 +690,7 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
                                          } :
                                          Element {
                                              MarkdownText {
-                                                 .text = &message.text,
+                                                 .text = message.text,
                                                  .cacheKey = message.renderKey,
                                                  .textRevision = message.textRevision,
                                                  .baseFont = markdownStyle.baseFont,
@@ -724,7 +724,7 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
                                             } :
                                             Element {
                                                 MarkdownText {
-                                                    .text = &paragraph.text,
+                                                    .text = paragraph.text,
                                                     .cacheKey = paragraph.renderKey,
                                                     .textRevision = paragraph.textRevision,
                                                     .baseFont = markdownStyle.baseFont,
