@@ -1,5 +1,5 @@
 #include <Flux/Reactive/AnimationClock.hpp>
-#include <Flux/Reactive/Animated.hpp>
+#include <Flux/Reactive/Animation.hpp>
 
 #include <Flux/Core/Application.hpp>
 #include <Flux/Core/EventQueue.hpp>
@@ -36,6 +36,9 @@ void AnimationClock::install(EventQueue& q) {
     }
     onTick(e.deadlineNanos);
   });
+  if (needsTimer() && !running_) {
+    startTimer();
+  }
 }
 
 void AnimationClock::shutdown() {
@@ -49,24 +52,24 @@ bool AnimationClock::needsTimer() const {
   return !active_.empty() || !subscribers_.empty();
 }
 
-void AnimationClock::registerAnimated(AnimatedBase* animated) {
-  if (!animated) {
+void AnimationClock::registerAnimation(AnimationBase* animation) {
+  if (!animation) {
     return;
   }
-  if (std::find(active_.begin(), active_.end(), animated) != active_.end()) {
+  if (std::find(active_.begin(), active_.end(), animation) != active_.end()) {
     return;
   }
-  active_.push_back(animated);
+  active_.push_back(animation);
   if (!running_) {
     startTimer();
   }
 }
 
-void AnimationClock::unregisterAnimated(AnimatedBase* animated) {
-  if (!animated) {
+void AnimationClock::unregisterAnimation(AnimationBase* animation) {
+  if (!animation) {
     return;
   }
-  std::erase(active_, animated);
+  std::erase(active_, animation);
   if (!needsTimer()) {
     stopTimer();
   }
@@ -98,13 +101,13 @@ void AnimationClock::onTick(std::int64_t deadlineNanos) {
   const double now = static_cast<double>(deadlineNanos) * 1e-9;
   AnimationTick const tick{deadlineNanos, now};
 
-  std::vector<AnimatedBase*> snapshot = active_;
-  for (AnimatedBase* p : snapshot) {
+  std::vector<AnimationBase*> snapshot = active_;
+  for (AnimationBase* p : snapshot) {
     if (!p) {
       continue;
     }
     if (!p->tick(now)) {
-      unregisterAnimated(p);
+      unregisterAnimation(p);
     }
   }
 
@@ -122,6 +125,9 @@ void AnimationClock::onTick(std::int64_t deadlineNanos) {
 
 void AnimationClock::startTimer() {
   if (running_) {
+    return;
+  }
+  if (!Application::hasInstance()) {
     return;
   }
   timerId_ = Application::instance().scheduleRepeatingTimer(kAnimationInterval, 0);

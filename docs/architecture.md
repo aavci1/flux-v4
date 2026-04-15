@@ -28,7 +28,7 @@ flowchart TB
   end
   subgraph react [Reactive]
     Sig[Signal / Computed]
-    Anim[Animated / Transition]
+    Anim["Animation / Transition"]
     Obs[Observer]
   end
   subgraph gfx [Graphics — abstract + portable pieces]
@@ -70,9 +70,9 @@ flowchart TB
 ```
 
 - **Core** (`src/Core/`, `include/Flux/Core/`): `Application`, `Window`, `EventQueue`, shared types and events. Portable except where it calls into `PlatformWindow` and graphics backends through virtual interfaces. `Application` also owns the process `TextSystem`, repeating timers, and **reactive scheduling**: `markReactiveDirty()`, `onNextFrameNeeded()`, and `flushRedraw()` for cases where the AppKit run loop does not pump the default mode (e.g. live resize).
-- **UI** (`src/UI/`, `include/Flux/UI/`): Declarative **components** built from `Element` trees, **layout** (`LayoutEngine`, flex/grid stacks, `ScrollView`), optional **flat modifiers** on `Element` (`padding`, `background`, `frame`, `flex`, … — see `docs/layout-system.md`), **hooks** (`useState`, `useAnimated`, …) backed by **`StateStore`**, and **`Runtime`** — created when you call **`Window::setView`** (see `WindowUI.hpp`). Each rebuild measures and lays out, then mutates the window’s **`SceneGraph`**. Input is routed via **`EventMap`** and **`HitTester`** on that graph.
+- **UI** (`src/UI/`, `include/Flux/UI/`): Declarative **components** built from `Element` trees, **layout** (`LayoutEngine`, flex/grid stacks, `ScrollView`), optional **flat modifiers** on `Element` (`padding`, `background`, `frame`, `flex`, … — see `docs/layout-system.md`), **hooks** (`useState`, `useAnimation`, …) backed by **`StateStore`**, and **`Runtime`** — created when you call **`Window::setView`** (see `WindowUI.hpp`). Each rebuild measures and lays out, then mutates the window’s **`SceneGraph`**. Input is routed via **`EventMap`** and **`HitTester`** on that graph.
 - **Scene** (`src/Scene/`, `include/Flux/Scene/`): Retained **`SceneGraph`** (`LayerNode`, `RectNode`, `TextNode`, `ImageNode`, `PathNode`, etc.), **`SceneRenderer`** (walks the tree and issues `Canvas` draws), **`HitTester`** for picking, optional **`SceneGraphDump`** for debugging. Apps can use the graph **imperatively** (see `scene_demo`) or get it populated **by the UI runtime** when using `setView`.
-- **Reactive** (`src/Reactive/`, `include/Flux/Reactive/`): **`Signal`**, **`Computed`**, **`Animated`**, **`Transition`**, **`AnimationClock`**, **`Observer`** — fine-grained updates; integration with `Application` batches work and can request redraws when reactive state changes.
+- **Reactive** (`src/Reactive/`, `include/Flux/Reactive/`): **`Signal`**, **`Computed`**, **`Animation`**, **`Transition`**, **`AnimationClock`**, **`Observer`** — fine-grained updates; integration with `Application` batches work and can request redraws when reactive state changes.
 - **Platform** (`src/Platform/Mac/`): Cocoa / Metal window and surface wiring. `detail::createPlatformWindow` is implemented in one translation unit per platform build (no `#ifdef` branches inside portable `Window.cpp`).
 - **Graphics** (`src/Graphics/`, `include/Flux/Graphics/`): Abstract `Canvas` API, CPU-side `Path` and flattening, `TextSystem` with box and unconstrained layout helpers in `TextSystem.cpp`. Metal-specific code lives under `src/Graphics/Metal/` (rasterizer, device resources, shader library, glyph atlas, image textures, frame recording).
 

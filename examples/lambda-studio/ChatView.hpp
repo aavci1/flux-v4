@@ -569,18 +569,19 @@ struct ThinkingDots : ViewModifiers<ThinkingDots> {
     auto body() const {
         Theme const &theme = useEnvironment<Theme>();
 
-        Transition const trInstant = Transition::instant();
-        Transition const trLoop = theme.reducedMotion ? trInstant : Transition::linear(0.66f);
-
-        auto phase = useAnimated<float>(0.f);
-        if (!theme.reducedMotion && !phase.animated->isAnimating()) {
-            if (*phase >= 2.999f) {
-                phase.set(0.f, trInstant);
+        auto phase = useAnimation<float>(
+            0.f,
+            AnimationOptions {
+                .transition = Transition::linear(0.66f),
+                .repeat = AnimationOptions::kRepeatForever,
+                .autoreverse = false,
             }
-            phase.set(3.f, trLoop);
+        );
+        if (!phase.isRunning() && std::abs(*phase - 3.f) > 0.001f) {
+            phase.play(3.f);
         }
 
-        float const wrapped = theme.reducedMotion ? 0.f : std::fmod(std::max(0.f, *phase), 3.f);
+        float const wrapped = std::fmod(std::max(0.f, *phase), 3.f);
 
         std::vector<Element> dots;
         dots.reserve(3);
@@ -588,7 +589,7 @@ struct ThinkingDots : ViewModifiers<ThinkingDots> {
             float const center = static_cast<float>(i);
             float const delta = std::abs(wrapped - center);
             float const distance = std::min(delta, 3.f - delta);
-            float const emphasis = theme.reducedMotion ? (i == 0 ? 1.f : 0.f) : std::clamp(1.f - distance, 0.f, 1.f);
+            float const emphasis = std::clamp(1.f - distance, 0.f, 1.f);
             dots.push_back(
                 Rectangle {}
                     .size(8.f, 8.f)

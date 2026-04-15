@@ -61,10 +61,9 @@ Element Slider::body() const {
     auto focused = useFocus();
     auto dragging = useState(false);
 
-    Transition const trInstant = Transition::instant();
-    Transition const trPress = theme.reducedMotion ? trInstant : Transition::ease(theme.durationFast);
+    Transition const trPress = Transition::ease(theme.durationFast);
 
-    auto thumbScaleAnim = useAnimated<float>(1.f);
+    auto thumbScaleAnim = useAnimation<float>(1.f);
     {
         float const target = (*dragging && !isDisabled) ? 1.2f : 1.f;
         if (std::abs(*thumbScaleAnim - target) > 0.001f) {

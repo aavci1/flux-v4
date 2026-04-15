@@ -50,7 +50,7 @@ struct TypedRootHolder final : RootHolder {
     } else {
       static_assert(std::is_copy_constructible_v<C>,
           "Leaf root component must be copy-constructible. "
-          "If C has Signal/Animated members, give it a body() method.");
+          "If C has Signal/Animation members, give it a body() method.");
       Element& leaf = ctx.pinElement(Element{value});
       leaf.layout(ctx);
     }

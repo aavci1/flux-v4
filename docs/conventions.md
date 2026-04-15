@@ -129,8 +129,9 @@ Shared vocabulary lives in `Types.hpp` (`Size`, `Vec2`, time aliases, `MouseButt
 | `examples/text-demo` | `TextSystem`, `AttributedString`, `TextLayout`, `Canvas::drawTextLayout` |
 | `examples/image-demo` | `loadImageFromFile`, `Image`, `Canvas::drawImage` |
 | `examples/scene-demo` | Imperative `SceneGraph`, `SceneRenderer`, `HitTester`, hit labels |
-| `examples/reactive-demo` | `Signal`, `Computed`, `Animated`, `Observer` with canvas |
-| `examples/card-demo` | `setView`, `VStack` / `HStack`, hooks, `useAnimated`, interactions |
+| `examples/reactive-demo` | `Signal`, `Computed`, `Animation`, `Observer` with canvas |
+| `examples/animation-demo` | `useAnimation`, `WithTransition`, repeat/autoreverse, reduced motion |
+| `examples/card-demo` | `setView`, `VStack` / `HStack`, hooks, `useAnimation`, interactions |
 | `examples/scroll-demo` | `ScrollView` with many `Text` rows |
 
 Each target links the `flux` static library; see [`examples/CMakeLists.txt`](../examples/CMakeLists.txt) for CMake target names (`hello_world`, `clock_demo`, …).

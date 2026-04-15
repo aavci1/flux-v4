@@ -16,7 +16,7 @@ struct ObserverHandle {
   bool isValid() const;
 };
 
-/// Interface implemented by Signal<T>, Computed<T>, and Animated<T>.
+/// Interface implemented by Signal<T>, Computed<T>, and Animation<T>.
 class Observable {
 public:
   virtual ~Observable() = default;

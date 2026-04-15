@@ -43,6 +43,9 @@ target_link_libraries(scene_demo PRIVATE flux)
 add_executable(reactive_demo reactive-demo/main.cpp)
 target_link_libraries(reactive_demo PRIVATE flux)
 
+add_executable(animation_demo animation-demo/main.cpp)
+target_link_libraries(animation_demo PRIVATE flux)
+
 add_executable(card_demo card-demo/main.cpp)
 target_link_libraries(card_demo PRIVATE flux)
 
@@ -136,6 +139,7 @@ set(FLUX_EXAMPLE_TARGETS
     image_demo
     scene_demo
     reactive_demo
+    animation_demo
     card_demo
     scroll_demo
     focus_demo

@@ -1,9 +1,9 @@
 #include <Flux/Core/Application.hpp>
-#include <Flux/Reactive/Detail/AnimatedRebuild.hpp>
+#include <Flux/Reactive/Detail/AnimationRebuild.hpp>
 
 namespace flux::detail {
 
-void scheduleReactiveRebuildAfterAnimatedChange() {
+void scheduleReactiveRebuildAfterAnimationChange() {
   if (Application::hasInstance()) {
     Application::instance().markReactiveDirty();
   }

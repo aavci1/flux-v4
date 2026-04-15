@@ -5,10 +5,11 @@
 /// Part of the Flux public API.
 
 
-#include <Flux/Reactive/Animated.hpp>
+#include <Flux/Reactive/Animation.hpp>
 #include <Flux/Reactive/Interpolatable.hpp>
 #include <Flux/Reactive/Signal.hpp>
 #include <Flux/UI/StateStore.hpp>
+#include <Flux/UI/Theme.hpp>
 
 #include <cassert>
 #include <cstddef>
@@ -23,6 +24,9 @@
 #include <Flux/UI/LayoutEngine.hpp>
 
 namespace flux {
+
+template<typename T>
+T const& useEnvironment();
 
 namespace detail {
 
@@ -65,18 +69,30 @@ struct State {
   void operator=(T value) const { signal->set(std::move(value)); }
 };
 
-/// Copyable handle to the persistent `Animated<T>` for this hook slot.
+/// Copyable handle to the persistent `Animation<T>` for this hook slot.
 template<Interpolatable T>
-struct Anim {
-  Animated<T>* animated = nullptr;
+struct AnimationHandle {
+  flux::Animation<T>* animation = nullptr;
 
-  explicit Anim(Animated<T>* a) : animated(a) {}
+  explicit AnimationHandle(flux::Animation<T>* a) : animation(a) {}
 
-  T const& operator*() const { return animated->get(); }
-  operator T const&() const { return animated->get(); }
-  /// Uses `WithTransition::current()` when set inside a `WithTransition` scope.
-  void operator=(T value) const { animated->set(std::move(value)); }
-  void set(T value, Transition transition) const { animated->set(std::move(value), std::move(transition)); }
+  T const& operator*() const { return animation->get(); }
+  operator T const&() const { return animation->get(); }
+  /// Uses the hook's stored `AnimationOptions` and respects `WithTransition` scope overrides.
+  void operator=(T value) const { animation->set(std::move(value)); }
+  void set(T value) const { animation->set(std::move(value)); }
+  void set(T value, Transition transition) const { animation->set(std::move(value), std::move(transition)); }
+  void set(T value, AnimationOptions options) const { animation->set(std::move(value), std::move(options)); }
+  void play(T value) const { animation->play(std::move(value)); }
+  void play(T value, Transition transition) const { animation->play(std::move(value), std::move(transition)); }
+  void play(T value, AnimationOptions options) const { animation->play(std::move(value), std::move(options)); }
+  void setOptions(AnimationOptions options) const { animation->setOptions(std::move(options)); }
+  void pause() const { animation->pause(); }
+  void resume() const { animation->resume(); }
+  void stop() const { animation->stop(); }
+  bool isAnimating() const { return animation->isAnimating(); }
+  bool isPaused() const { return animation->isPaused(); }
+  bool isRunning() const { return animation->isRunning(); }
 };
 
 /// Returns a persistent `Signal<T>` for the current component instance.
@@ -89,12 +105,37 @@ State<T> useState(T initial = T{}) {
   return State<T>{&store->claimSlot<Signal<T>>(std::move(initial))};
 }
 
-/// Returns a persistent `Animated<T>` for the current component instance.
+/// Returns a persistent `Animation<T>` for the current component instance.
 template<Interpolatable T>
-Anim<T> useAnimated(T initial = T{}) {
+AnimationHandle<T> useAnimation(T initial = T{}) {
   StateStore* store = StateStore::current();
-  assert(store && "useAnimated called outside of a build pass");
-  return Anim<T>{&store->claimSlot<Animated<T>>(std::move(initial))};
+  assert(store && "useAnimation called outside of a build pass");
+  auto& animation = store->claimSlot<flux::Animation<T>>(std::move(initial));
+  animation.setOptions(AnimationOptions{});
+  animation.setReducedMotion(useEnvironment<Theme>().reducedMotion);
+  return AnimationHandle<T>{&animation};
+}
+
+template<Interpolatable T>
+AnimationHandle<T> useAnimation(T initial, Transition transition) {
+  AnimationOptions options{};
+  options.transition = std::move(transition);
+  StateStore* store = StateStore::current();
+  assert(store && "useAnimation called outside of a build pass");
+  auto& animation = store->claimSlot<flux::Animation<T>>(std::move(initial));
+  animation.setOptions(std::move(options));
+  animation.setReducedMotion(useEnvironment<Theme>().reducedMotion);
+  return AnimationHandle<T>{&animation};
+}
+
+template<Interpolatable T>
+AnimationHandle<T> useAnimation(T initial, AnimationOptions options) {
+  StateStore* store = StateStore::current();
+  assert(store && "useAnimation called outside of a build pass");
+  auto& animation = store->claimSlot<flux::Animation<T>>(std::move(initial));
+  animation.setOptions(std::move(options));
+  animation.setReducedMotion(useEnvironment<Theme>().reducedMotion);
+  return AnimationHandle<T>{&animation};
 }
 
 /// Returns true if the calling component's subtree contains the window's focused node.

@@ -43,7 +43,7 @@ struct Card {
   auto body() const {
     Theme const& theme = useEnvironment<Theme>();
     auto expanded = useState<bool>(false);
-    auto bodyOpacity = useAnimated<float>(0.f);
+    auto bodyOpacity = useAnimation<float>(0.f);
 
     float const innerTextWidth = std::max(1.f, availableWidth - 36.f);
 
@@ -144,7 +144,7 @@ struct CardListView {
                          .availableWidth = listContentWidth},
                     Card{.accent = pal::accent1,
                          .title = "Reactive State",
-                         .detail = "Signal<T>, Computed<T>, Animated<T>.",
+                         .detail = "Signal<T>, Computed<T>, Animation<T>.",
                          .availableWidth = listContentWidth},
                     Card{.accent = pal::accent2,
                          .title = "Scene Graph",

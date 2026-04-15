@@ -31,6 +31,12 @@ Transition Transition::spring(float k, float d, float dur) {
   return t;
 }
 
+Transition Transition::delayed(float seconds) const {
+  Transition t = *this;
+  t.delay = seconds;
+  return t;
+}
+
 namespace {
 
 thread_local std::vector<Transition> gTransitionStack;
@@ -45,6 +51,10 @@ WithTransition::~WithTransition() {
   if (!gTransitionStack.empty()) {
     gTransitionStack.pop_back();
   }
+}
+
+bool WithTransition::hasCurrent() {
+  return !gTransitionStack.empty();
 }
 
 Transition WithTransition::current() {

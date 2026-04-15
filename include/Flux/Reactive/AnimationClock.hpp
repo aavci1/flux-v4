@@ -13,14 +13,14 @@
 
 namespace flux {
 
-class AnimatedBase;
+class AnimationBase;
 class EventQueue;
 
 /// One tick from the shared ~60 Hz animation timer (`steady_clock` domain, same as `TimerEvent::deadlineNanos`).
 struct AnimationTick {
   /// `steady_clock` time since epoch in nanoseconds (matches `TimerEvent::deadlineNanos`).
   std::int64_t deadlineNanos = 0;
-  /// Monotonic time in seconds (same domain as `AnimatedBase::tick`).
+  /// Monotonic time in seconds (same domain as `AnimationBase::tick`).
   double nowSeconds = 0.;
 };
 
@@ -31,8 +31,8 @@ public:
   void install(EventQueue& q);
   void shutdown();
 
-  void registerAnimated(AnimatedBase* animated);
-  void unregisterAnimated(AnimatedBase* animated);
+  void registerAnimation(AnimationBase* animation);
+  void unregisterAnimation(AnimationBase* animation);
 
   /// Subscribe to the shared animation tick. The callback must not assume a full frame will be presented — only call
   /// `Window::requestRedraw()` or `Application::markReactiveDirty()` when output actually changes.
@@ -52,7 +52,7 @@ private:
     std::function<void(AnimationTick const&)> callback;
   };
 
-  std::vector<AnimatedBase*> active_;
+  std::vector<AnimationBase*> active_;
   std::vector<Subscriber> subscribers_;
   std::uint64_t nextSubscriberId_ = 1;
 

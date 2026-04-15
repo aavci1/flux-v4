@@ -23,6 +23,8 @@ struct Transition {
   static Transition linear(float dur);
   static Transition ease(float dur = 0.25f);
   static Transition spring(float k = 300.f, float d = 20.f, float dur = 0.6f);
+
+  [[nodiscard]] Transition delayed(float seconds) const;
 };
 
 class WithTransition {
@@ -33,6 +35,7 @@ public:
   WithTransition(WithTransition const&) = delete;
   WithTransition& operator=(WithTransition const&) = delete;
 
+  static bool hasCurrent();
   static Transition current();
 };
 

@@ -48,11 +48,11 @@ Element Checkbox::body() const {
     bool const isDisabled = disabled;
 
     Transition const trInstant = Transition::instant();
-    Transition const trMotion = theme.reducedMotion ? trInstant : Transition::ease(theme.durationMedium);
+    Transition const trMotion = Transition::ease(theme.durationMedium);
     Transition const tr = isDisabled ? trInstant : trMotion;
-    Transition const trPress = theme.reducedMotion ? trInstant : Transition::ease(theme.durationFast);
+    Transition const trPress = Transition::ease(theme.durationFast);
 
-    auto boxFillAnim = useAnimated<Color>(showFilled ? checkedColor : uncheckedColor);
+    auto boxFillAnim = useAnimation<Color>(showFilled ? checkedColor : uncheckedColor);
     {
         Color const target = isDisabled ? theme.colorSurfaceDisabled : showFilled ? checkedColor :
                                                                                     uncheckedColor;
@@ -62,7 +62,7 @@ Element Checkbox::body() const {
     }
 
     Color const iconTransparent = Color {checkColor.r, checkColor.g, checkColor.b, 0.f};
-    auto iconColorAnim = useAnimated<Color>(showFilled ? checkColor : iconTransparent);
+    auto iconColorAnim = useAnimation<Color>(showFilled ? checkColor : iconTransparent);
     {
         Color const target = !showFilled ? iconTransparent : isDisabled ? disabledColor :
                                                                           checkColor;
@@ -71,7 +71,7 @@ Element Checkbox::body() const {
         }
     }
 
-    auto scaleAnim = useAnimated<float>(1.f);
+    auto scaleAnim = useAnimation<float>(1.f);
     {
         float const target = (pressed && !isDisabled) ? 0.90f : 1.f;
         if (std::abs(*scaleAnim - target) > 0.001f) {

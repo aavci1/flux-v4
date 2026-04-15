@@ -356,9 +356,8 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
         bool const open = isPresented;
         Rect const bounds = useBounds();
 
-        Transition const trInstant = Transition::instant();
-        Transition const trMotion = theme.reducedMotion ? trInstant : Transition::ease(theme.durationMedium);
-        Transition const trFast = theme.reducedMotion ? trInstant : Transition::ease(theme.durationFast);
+        Transition const trMotion = Transition::ease(theme.durationMedium);
+        Transition const trFast = Transition::ease(theme.durationFast);
 
         Color const idleFill = isDisabled ? theme.colorSurfaceDisabled : style.fieldColor;
         Color const hoverFill = isDisabled ? theme.colorSurfaceDisabled : style.fieldHoverColor;
@@ -380,22 +379,22 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
             triggerMode == SelectTriggerMode::Link ? labelTarget : (isDisabled ? theme.colorTextDisabled : open ? style.accentColor :
                                                                                                                   theme.colorTextSecondary);
 
-        auto fillAnim = useAnimated<Color>(fillTarget);
+        auto fillAnim = useAnimation<Color>(fillTarget);
         if (*fillAnim != fillTarget) {
             fillAnim.set(fillTarget, trFast);
         }
 
-        auto labelAnim = useAnimated<Color>(labelTarget);
+        auto labelAnim = useAnimation<Color>(labelTarget);
         if (*labelAnim != labelTarget) {
             labelAnim.set(labelTarget, trMotion);
         }
 
-        auto detailAnim = useAnimated<Color>(detailTarget);
+        auto detailAnim = useAnimation<Color>(detailTarget);
         if (*detailAnim != detailTarget) {
             detailAnim.set(detailTarget, trMotion);
         }
 
-        auto chevronAnim = useAnimated<Color>(chevronTarget);
+        auto chevronAnim = useAnimation<Color>(chevronTarget);
         if (*chevronAnim != chevronTarget) {
             chevronAnim.set(chevronTarget, trMotion);
         }

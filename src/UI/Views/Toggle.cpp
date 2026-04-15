@@ -59,11 +59,11 @@ Element Toggle::body() const {
     // ── Animations ────────────────────────────────────────────────────────────
 
     Transition const trInstant = Transition::instant();
-    Transition const trMotion = theme.reducedMotion ? trInstant : Transition::ease(theme.durationMedium);
+    Transition const trMotion = Transition::ease(theme.durationMedium);
     Transition const tr = isDisabled ? trInstant : trMotion;
-    Transition const trPress = theme.reducedMotion ? trInstant : Transition::ease(theme.durationFast);
+    Transition const trPress = Transition::ease(theme.durationFast);
 
-    auto thumbXAnim = useAnimated<float>(isOn ? xOn : xOff);
+    auto thumbXAnim = useAnimation<float>(isOn ? xOn : xOff);
     {
         float const targetX = isOn ? xOn : xOff;
         if (std::abs(*thumbXAnim - targetX) > 0.01f) {
@@ -71,7 +71,7 @@ Element Toggle::body() const {
         }
     }
 
-    auto trackFillAnim = useAnimated<Color>(isOn ? onColor : offColor);
+    auto trackFillAnim = useAnimation<Color>(isOn ? onColor : offColor);
     {
         Color const targetFill = isDisabled ? theme.colorSurfaceDisabled : isOn ? onColor :
                                                                                   offColor;
@@ -80,7 +80,7 @@ Element Toggle::body() const {
         }
     }
 
-    auto scaleAnim = useAnimated<float>(1.f);
+    auto scaleAnim = useAnimation<float>(1.f);
     {
         float const target = (pressed && !isDisabled) ? 0.90f : 1.f;
         if (std::abs(*scaleAnim - target) > 0.001f) {

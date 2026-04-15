@@ -18,11 +18,11 @@ namespace {
 Color const kColdFill = Color::rgb(64, 110, 200);
 Color const kWarmFill = Color::rgb(220, 96, 140);
 
-/// Holds reactive fields (stable addresses; non-movable Signal / Computed / Animated).
+/// Holds reactive fields (stable addresses; non-movable Signal / Computed / Animation).
 struct DemoState {
   Signal<int> clicks{0};
-  Animated<Color> fillColor{kColdFill};
-  Animated<Point> circleCenter{Point{360.f, 260.f}};
+  Animation<Color> fillColor{kColdFill};
+  Animation<Point> circleCenter{Point{360.f, 260.f}};
   Signal<Point> pointerPos{Point{0.f, 0.f}};
 
   Computed<float> distanceToPointer{[&]() {
@@ -138,7 +138,7 @@ public:
     std::string const line = std::string("Signal<int> clicks: ") + std::to_string(s_.clicks.get()) +
                              "  |  Computed<float> dist: " +
                              std::to_string(static_cast<int>(s_.distanceToPointer.get())) +
-                             " px  |  Animated<Color> (spring) + Animated<Point> (ease)";
+                             " px  |  Animation<Color> (spring) + Animation<Point> (ease)";
     auto bodyLayout = ts.layout(line, bodyFont, theme.colorTextPrimary, panel.width - 32.f);
     c.drawTextLayout(*bodyLayout, Point{panel.x + 16.f, panel.y + 16.f});
 

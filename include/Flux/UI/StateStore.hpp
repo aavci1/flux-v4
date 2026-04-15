@@ -23,7 +23,7 @@ namespace flux {
 
 struct ElementModifiers;
 
-/// One heap-allocated state value (a Signal<T>, Animated<T>, or any type).
+/// One heap-allocated state value (a Signal<T>, Animation<T>, or any type).
 struct StateSlot {
   std::unique_ptr<void, void (*)(void*)> value{nullptr, nullptr};
   std::type_index type{typeid(void)};
@@ -77,7 +77,7 @@ public:
   void popCompositeElementModifiers();
   ElementModifiers const* currentCompositeElementModifiers() const noexcept;
 
-  /// Called by useState<T> / useAnimated<T> inside body().
+  /// Called by useState<T> / useAnimation<T> inside body().
   /// Returns a reference to the next slot for the active component, creating
   /// it with `initial` if this is the first call.
   ///
@@ -94,7 +94,7 @@ public:
   std::optional<std::uint64_t> overlayScope() const;
 
   /// Thread-local pointer to the active StateStore during a build pass.
-  /// Set by Runtime::rebuild; accessed by useState/useAnimated free functions.
+  /// Set by Runtime::rebuild; accessed by useState/useAnimation free functions.
   static StateStore* current() noexcept;
   static void setCurrent(StateStore* s) noexcept;
 
@@ -137,7 +137,7 @@ S& StateStore::claimSlot(Args&&... args) {
     return *static_cast<S*>(cs.slots[idx].value.get());
   }
 
-  // New slot — construct in place (Signal/Animated are non-movable).
+  // New slot — construct in place (Signal/Animation are non-movable).
   S* raw = new S(std::forward<Args>(args)...);
   cs.slots.push_back(StateSlot{
       std::unique_ptr<void, void (*)(void*)>(raw, [](void* p) {

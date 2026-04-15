@@ -172,7 +172,7 @@ Element ScrollView::body() const {
     auto dragging = useState(false);
     State<Size> const viewport = viewportSize.signal ? viewportSize : useState<Size>({0.f, 0.f});
     State<Size> const content = contentSize.signal ? contentSize : useState<Size>({0.f, 0.f});
-    auto indicatorOpacity = useAnimated<float>(0.f);
+    auto indicatorOpacity = useAnimation<float>(0.f);
     Rect const bounds = useBounds();
     Size const effectiveViewport = resolveViewportSize(*viewport, bounds);
     ScrollAxis const ax = axis;
@@ -187,8 +187,7 @@ Element ScrollView::body() const {
     ScrollIndicatorMetrics const horizontalIndicator =
         makeHorizontalIndicator(clampedOffset, effectiveViewport, contentSize, showsVerticalIndicator);
     Transition const indicatorShow = Transition::instant();
-    Transition indicatorHide = Transition::linear(theme.reducedMotion ? 0.01f : theme.durationMedium);
-    indicatorHide.delay = 0.85f;
+    Transition const indicatorHide = Transition::linear(theme.durationMedium).delayed(0.85f);
     Color const indicatorColor = indicatorColorForTheme(theme);
     Element scrollContent = OffsetView {
         .offset = clampedOffset,

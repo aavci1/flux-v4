@@ -94,7 +94,7 @@ add_library(flux STATIC
   src/Reactive/Computed.cpp
   src/Reactive/Easing.cpp
   src/Reactive/Transition.cpp
-  src/Reactive/AnimatedRebuild.cpp
+  src/Reactive/AnimationRebuild.cpp
   src/Reactive/AnimationClock.cpp
   src/Core/Window.cpp
   src/UI/LayoutTree.cpp
@@ -263,6 +263,7 @@ if(FLUX_BUILD_TESTS)
   enable_testing()
 
   add_executable(flux_tests
+    tests/AnimationTests.cpp
     tests/main.cpp
     tests/EventMapTests.cpp
     tests/LayoutTreeTests.cpp
