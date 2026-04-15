@@ -372,14 +372,38 @@ static NSRange utf8ByteRangeToNSRange(char const* utf8, std::size_t utf8Len, std
   return NSMakeRange(u16Start, u16End - u16Start);
 }
 
-/// Maps a UTF-16 `NSRange` in `ns` to half-open UTF-8 byte offsets `[outBegin, outEnd)` in the UTF-8 encoding of `ns`.
-static void utf16RangeToUtf8ByteRange(NSString* ns, NSRange r16, std::uint32_t& outBegin, std::uint32_t& outEnd) {
-  if (!ns || [ns length] == 0) {
+/// Builds a lookup table where entry `i` is the UTF-8 byte length of the UTF-16 prefix `[0, i)`.
+static std::vector<std::uint32_t> buildUtf16ToUtf8PrefixMap(std::string_view utf8) {
+  std::vector<std::uint32_t> prefixMap;
+  prefixMap.reserve(utf8.size() + 1);
+  prefixMap.push_back(0);
+
+  std::size_t byteIndex = 0;
+  while (byteIndex < utf8.size()) {
+    std::uint32_t cp = 0;
+    std::size_t const adv = utf8Advance(utf8.data(), utf8.size(), byteIndex, &cp);
+    if (adv == 0) {
+      break;
+    }
+    byteIndex += adv;
+    std::size_t const u16Units = utf16UnitsForCodepoint(cp);
+    for (std::size_t i = 0; i < u16Units; ++i) {
+      prefixMap.push_back(static_cast<std::uint32_t>(byteIndex));
+    }
+  }
+
+  return prefixMap;
+}
+
+/// Maps a UTF-16 `NSRange` to half-open UTF-8 byte offsets `[outBegin, outEnd)`.
+static void utf16RangeToUtf8ByteRange(std::span<std::uint32_t const> utf16ToUtf8PrefixMap, NSRange r16,
+                                      std::uint32_t& outBegin, std::uint32_t& outEnd) {
+  if (utf16ToUtf8PrefixMap.empty()) {
     outBegin = 0;
     outEnd = 0;
     return;
   }
-  NSUInteger const len = [ns length];
+  NSUInteger const len = utf16ToUtf8PrefixMap.size() - 1;
   NSUInteger u16Start = r16.location;
   NSUInteger u16End = NSMaxRange(r16);
   if (u16Start > len) {
@@ -388,14 +412,8 @@ static void utf16RangeToUtf8ByteRange(NSString* ns, NSRange r16, std::uint32_t& 
   if (u16End > len) {
     u16End = len;
   }
-  NSString* const prefixStart = u16Start > 0 ? [ns substringToIndex:u16Start] : @"";
-  NSString* const prefixEnd = u16End > 0 ? [ns substringToIndex:u16End] : @"";
-  NSData* const d0 = [prefixStart dataUsingEncoding:NSUTF8StringEncoding];
-  NSData* const d1 = [prefixEnd dataUsingEncoding:NSUTF8StringEncoding];
-  NSUInteger const b0 = d0 ? [d0 length] : 0u;
-  NSUInteger const b1 = d1 ? [d1 length] : 0u;
-  outBegin = static_cast<std::uint32_t>(b0);
-  outEnd = static_cast<std::uint32_t>(b1);
+  outBegin = utf16ToUtf8PrefixMap[u16Start];
+  outEnd = utf16ToUtf8PrefixMap[u16End];
 }
 
 // --- ContentHash (XXH3 128-bit) -------------------------------------------------
@@ -530,7 +548,8 @@ static std::size_t countDrawableGlyphsInRun(CTRunRef run) {
 /// baseline-left; `origin` is baseline-left in layout space (top-left origin, Y down).
 /// `frameHeight` is the CT frame path height (Quartz, Y up).
 static void appendPlacedRunToStorage(CTRunRef run, CGPoint lineOrigin, CGFloat frameHeight, CoreTextSystem& sys,
-                                     TextLayout& layout, TextLayoutStorage& storage, NSString* fullString,
+                                     TextLayout& layout, TextLayoutStorage& storage,
+                                     std::span<std::uint32_t const> utf16ToUtf8PrefixMap,
                                      CFIndex ctLineIndex, std::size_t& arenaWrite) {
   CFIndex const glyphCount = CTRunGetGlyphCount(run);
   if (glyphCount <= 0) {
@@ -597,7 +616,7 @@ static void appendPlacedRunToStorage(CTRunRef run, CGPoint lineOrigin, CGFloat f
 
   CFRange const strRange = CTRunGetStringRange(run);
   NSRange const nsr = NSMakeRange(static_cast<NSUInteger>(strRange.location), static_cast<NSUInteger>(strRange.length));
-  utf16RangeToUtf8ByteRange(fullString, nsr, placed.utf8Begin, placed.utf8End);
+  utf16RangeToUtf8ByteRange(utf16ToUtf8PrefixMap, nsr, placed.utf8Begin, placed.utf8End);
   placed.ctLineIndex = static_cast<std::uint32_t>(ctLineIndex);
 
   layout.runs.push_back(std::move(placed));
@@ -1627,7 +1646,7 @@ static void fillTextLayoutFromFramesetter(CoreTextSystem& sys, CTFramesetterRef 
     CTFrameGetLineOrigins(frame, CFRangeMake(0, lineCount), origins.data());
   }
 
-  NSString* const nsFull = [NSString stringWithUTF8String:text.utf8.c_str()];
+  std::vector<std::uint32_t> const utf16ToUtf8PrefixMap = buildUtf16ToUtf8PrefixMap(text.utf8);
 
   // Single allocation: count glyphs, resize arenas once, then fill with a write cursor so we never call
   // `vector::resize` during append (which could reallocate and invalidate earlier `std::span`s).
@@ -1652,7 +1671,7 @@ static void fillTextLayoutFromFramesetter(CoreTextSystem& sys, CTFramesetterRef 
     CFIndex const runCount = CFArrayGetCount(glyphRuns);
     for (CFIndex ri = 0; ri < runCount; ++ri) {
       CTRunRef run = (CTRunRef)CFArrayGetValueAtIndex(glyphRuns, ri);
-      appendPlacedRunToStorage(run, lineOrigin, fh, sys, out, storage, nsFull, li, arenaWrite);
+      appendPlacedRunToStorage(run, lineOrigin, fh, sys, out, storage, utf16ToUtf8PrefixMap, li, arenaWrite);
     }
   }
   assert(arenaWrite == totalGlyphs);
@@ -1668,7 +1687,7 @@ static void fillTextLayoutFromFramesetter(CoreTextSystem& sys, CTFramesetterRef 
     lr.ctLineIndex = static_cast<std::uint32_t>(li);
     std::uint32_t b0 = 0;
     std::uint32_t b1 = 0;
-    utf16RangeToUtf8ByteRange(nsFull, nsr, b0, b1);
+    utf16RangeToUtf8ByteRange(utf16ToUtf8PrefixMap, nsr, b0, b1);
     lr.byteStart = static_cast<int>(b0);
     lr.byteEnd = static_cast<int>(b1);
 
