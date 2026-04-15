@@ -220,6 +220,81 @@ void validateRuns(AttributedString const& text) {
   }
 }
 
+static bool sameRunStyle(AttributedRun const& lhs, AttributedRun const& rhs) {
+  return lhs.font.family == rhs.font.family && lhs.font.size == rhs.font.size &&
+         lhs.font.weight == rhs.font.weight && lhs.font.italic == rhs.font.italic &&
+         lhs.color == rhs.color && lhs.backgroundColor == rhs.backgroundColor;
+}
+
+static size_t utf8Advance(char const* s, std::size_t len, std::size_t i, std::uint32_t* outCp);
+
+static std::optional<AttributedString> sanitizeAttributedStringLossy(AttributedString const& text) {
+  if (text.utf8.empty()) {
+    return std::nullopt;
+  }
+
+  AttributedString sanitized;
+  sanitized.runs.reserve(text.runs.size());
+  std::vector<std::uint32_t> byteMap(text.utf8.size() + 1, 0);
+
+  bool changed = false;
+  std::size_t src = 0;
+  while (src < text.utf8.size()) {
+    byteMap[src] = static_cast<std::uint32_t>(sanitized.utf8.size());
+
+    std::uint32_t cp = 0;
+    std::size_t const adv = utf8Advance(text.utf8.data(), text.utf8.size(), src, &cp);
+    if (adv == 0) {
+      sanitized.utf8.append("\xEF\xBF\xBD");
+      ++src;
+      byteMap[src] = static_cast<std::uint32_t>(sanitized.utf8.size());
+      changed = true;
+      continue;
+    }
+
+    for (std::size_t i = 1; i < adv; ++i) {
+      byteMap[src + i] = static_cast<std::uint32_t>(sanitized.utf8.size());
+    }
+    sanitized.utf8.append(text.utf8.data() + src, adv);
+    src += adv;
+    byteMap[src] = static_cast<std::uint32_t>(sanitized.utf8.size());
+  }
+
+  if (!changed) {
+    return std::nullopt;
+  }
+
+  std::size_t const oldSize = text.utf8.size();
+  for (auto const& run : text.runs) {
+    AttributedRun remapped = run;
+    remapped.start = byteMap[std::min<std::size_t>(run.start, oldSize)];
+    remapped.end = byteMap[std::min<std::size_t>(run.end, oldSize)];
+    if (remapped.start >= remapped.end) {
+      continue;
+    }
+    if (!sanitized.runs.empty() && sanitized.runs.back().end == remapped.start &&
+        sameRunStyle(sanitized.runs.back(), remapped)) {
+      sanitized.runs.back().end = remapped.end;
+      continue;
+    }
+    sanitized.runs.push_back(std::move(remapped));
+  }
+
+  if (!sanitized.utf8.empty() && sanitized.runs.empty() && !text.runs.empty()) {
+    AttributedRun fallback = text.runs.front();
+    fallback.start = 0;
+    fallback.end = static_cast<std::uint32_t>(sanitized.utf8.size());
+    sanitized.runs.push_back(std::move(fallback));
+  }
+
+  if (!sanitized.runs.empty()) {
+    sanitized.runs.front().start = 0;
+    sanitized.runs.back().end = static_cast<std::uint32_t>(sanitized.utf8.size());
+  }
+
+  return sanitized;
+}
+
 struct ResolvedStyle {
   Font font;
   Color color;
@@ -393,6 +468,26 @@ static std::vector<std::uint32_t> buildUtf16ToUtf8PrefixMap(std::string_view utf
   }
 
   return prefixMap;
+}
+
+static std::string sanitizeUtf8Lossy(std::string_view utf8) {
+  std::string sanitized;
+  sanitized.reserve(utf8.size());
+
+  std::size_t byteIndex = 0;
+  while (byteIndex < utf8.size()) {
+    std::uint32_t cp = 0;
+    std::size_t const adv = utf8Advance(utf8.data(), utf8.size(), byteIndex, &cp);
+    if (adv == 0) {
+      sanitized.append("\xEF\xBF\xBD");
+      ++byteIndex;
+      continue;
+    }
+    sanitized.append(utf8.data() + byteIndex, adv);
+    byteIndex += adv;
+  }
+
+  return sanitized;
 }
 
 /// Maps a UTF-16 `NSRange` to half-open UTF-8 byte offsets `[outBegin, outEnd)`.
@@ -1254,7 +1349,16 @@ struct CoreTextSystem::Impl {
   CFAttributedStringRef createCFAttributed(CoreTextSystem& sys, AttributedString const& text,
                                            std::vector<ResolvedStyle> const& resolved,
                                            TextLayoutOptions const& options) {
-    NSString* ns = [NSString stringWithUTF8String:text.utf8.c_str()];
+    NSString* ns = [[NSString alloc] initWithBytes:text.utf8.data()
+                                            length:text.utf8.size()
+                                          encoding:NSUTF8StringEncoding];
+    std::string sanitizedUtf8;
+    if (!ns) {
+      sanitizedUtf8 = sanitizeUtf8Lossy(text.utf8);
+      ns = [[NSString alloc] initWithBytes:sanitizedUtf8.data()
+                                    length:sanitizedUtf8.size()
+                                  encoding:NSUTF8StringEncoding];
+    }
     if (!ns) {
       ns = @"";
     }
@@ -1268,6 +1372,16 @@ struct CoreTextSystem::Impl {
       auto const& run = text.runs[ri];
       ResolvedStyle const& a = resolved[ri];
       NSRange range = utf8ByteRangeToNSRange(bytes, byteLen, run.start, run.end);
+      NSUInteger const masLength = [mas length];
+      if (range.location > masLength) {
+        continue;
+      }
+      if (NSMaxRange(range) > masLength) {
+        range.length = masLength - range.location;
+      }
+      if (range.length == 0) {
+        continue;
+      }
       std::string_view const fam =
           a.font.family.empty() ? std::string_view(kDefaultFontFamily) : std::string_view(a.font.family);
       std::uint32_t fid = 0;
@@ -2516,21 +2630,24 @@ std::vector<std::uint8_t> CoreTextSystem::rasterizeGlyph(std::uint32_t fontId, s
 }
 
 Size CoreTextSystem::measure(AttributedString const& text, float maxWidth, TextLayoutOptions const& options) {
-  if (text.utf8.empty()) {
+  std::optional<AttributedString> const sanitized = sanitizeAttributedStringLossy(text);
+  AttributedString const& prepared = sanitized ? *sanitized : text;
+
+  if (prepared.utf8.empty()) {
     return {};
   }
   if (options.maxLines > 0) {
-    std::shared_ptr<TextLayout const> const L = layout(text, maxWidth, options);
+    std::shared_ptr<TextLayout const> const L = layout(prepared, maxWidth, options);
     return L ? L->measuredSize : Size{};
   }
-  validateRuns(text);
+  validateRuns(prepared);
   std::vector<ResolvedStyle> resolved;
-  accumulateInheritance(resolved, text);
-  ContentHash const h = d->computeContentHash(*this, text, resolved, options);
+  accumulateInheritance(resolved, prepared);
+  ContentHash const h = d->computeContentHash(*this, prepared, resolved, options);
   std::uint32_t const wq = quantizeWidth(maxWidth);
   std::int32_t const ml = options.maxLines;
 
-  FramesetterEntry& e = d->findOrInsertFramesetterEntry(h, text, resolved, options, *this);
+  FramesetterEntry& e = d->findOrInsertFramesetterEntry(h, prepared, resolved, options, *this);
 
   for (std::size_t i = 0; i < e.measures.size(); ++i) {
     MeasureSlot& ms = e.measures[i];
@@ -2547,6 +2664,16 @@ Size CoreTextSystem::measure(std::string_view utf8, Font const& font, Color cons
                              TextLayoutOptions const& options) {
   if (utf8.empty()) {
     return {};
+  }
+  AttributedString as;
+  as.utf8 = std::string(utf8);
+  as.runs.push_back({.start = 0,
+                     .end = static_cast<std::uint32_t>(utf8.size()),
+                     .font = font,
+                     .color = color});
+  std::optional<AttributedString> const sanitized = sanitizeAttributedStringLossy(as);
+  if (sanitized) {
+    return measure(*sanitized, maxWidth, options);
   }
   if (options.maxLines > 0) {
     std::shared_ptr<TextLayout const> const L = layout(utf8, font, color, maxWidth, options);
@@ -2565,12 +2692,6 @@ Size CoreTextSystem::measure(std::string_view utf8, Font const& font, Color cons
       it->second->lastTouchFrame = d->currentFrame_;
       return *it->second;
     }
-    AttributedString as;
-    as.utf8 = std::string(utf8);
-    as.runs.push_back({.start = 0,
-                       .end = static_cast<std::uint32_t>(utf8.size()),
-                       .font = font,
-                       .color = color});
     std::vector<ResolvedStyle> resolved;
     accumulateInheritance(resolved, as);
     return d->insertFramesetterMiss(h, as, resolved, options, *this);
@@ -2591,13 +2712,16 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layoutUnboxed(AttributedString
                                                                 TextLayoutOptions const& options,
                                                                 float maxWidth, bool hasPrecomputedHash,
                                                                 std::uint64_t preHi, std::uint64_t preLo) {
-  if (text.utf8.empty()) {
-    validateRuns(text);
+  std::optional<AttributedString> const sanitized = sanitizeAttributedStringLossy(text);
+  AttributedString const& prepared = sanitized ? *sanitized : text;
+
+  if (prepared.utf8.empty()) {
+    validateRuns(prepared);
     std::vector<ResolvedStyle> resolved;
-    accumulateInheritance(resolved, text);
+    accumulateInheritance(resolved, prepared);
     ContentHash const h =
-        hasPrecomputedHash ? ContentHash{preHi, preLo} : d->computeContentHash(*this, text, resolved, options);
-    FramesetterEntry& e = d->findOrInsertFramesetterEntry(h, text, resolved, options, *this);
+        hasPrecomputedHash ? ContentHash{preHi, preLo} : d->computeContentHash(*this, prepared, resolved, options);
+    FramesetterEntry& e = d->findOrInsertFramesetterEntry(h, prepared, resolved, options, *this);
     std::uint32_t const wq = quantizeWidth(maxWidth);
     std::int32_t const ml = options.maxLines;
 
@@ -2649,15 +2773,15 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layoutUnboxed(AttributedString
     slot.maxLines = ml;
     slot.unboxed = result;
     e.layouts.push_back(std::move(slot));
-    d->bumpEntryApproxBytes(e, text);
+    d->bumpEntryApproxBytes(e, prepared);
     return result;
   }
-  validateRuns(text);
+  validateRuns(prepared);
   std::vector<ResolvedStyle> resolved;
-  accumulateInheritance(resolved, text);
+  accumulateInheritance(resolved, prepared);
   ContentHash const h =
-      hasPrecomputedHash ? ContentHash{preHi, preLo} : d->computeContentHash(*this, text, resolved, options);
-  FramesetterEntry& e = d->findOrInsertFramesetterEntry(h, text, resolved, options, *this);
+      hasPrecomputedHash ? ContentHash{preHi, preLo} : d->computeContentHash(*this, prepared, resolved, options);
+  FramesetterEntry& e = d->findOrInsertFramesetterEntry(h, prepared, resolved, options, *this);
   std::uint32_t const wq = quantizeWidth(maxWidth);
   std::int32_t const ml = options.maxLines;
 
@@ -2680,7 +2804,7 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layoutUnboxed(AttributedString
 
   auto built = std::make_shared<TextLayout>();
   auto stor = std::make_unique<TextLayoutStorage>();
-  fillTextLayoutFromFramesetter(*this, e.framesetter, text, maxWidth, options, *built, *stor);
+  fillTextLayoutFromFramesetter(*this, e.framesetter, prepared, maxWidth, options, *built, *stor);
   built->ownedStorage = std::move(stor);
   std::shared_ptr<TextLayout const> result = cloneTextLayout(*built);
   LayoutSlot slot;
@@ -2689,7 +2813,7 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layoutUnboxed(AttributedString
   slot.maxLines = ml;
   slot.unboxed = result;
   e.layouts.push_back(std::move(slot));
-  d->bumpEntryApproxBytes(e, text);
+  d->bumpEntryApproxBytes(e, prepared);
   return result;
 }
 
@@ -2701,6 +2825,16 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layout(std::string_view utf8, 
     as.utf8 = "";
     as.runs.push_back({.start = 0, .end = 0, .font = font, .color = color});
     return layoutUnboxed(as, options, maxWidth, false, 0, 0);
+  }
+  AttributedString as;
+  as.utf8 = std::string(utf8);
+  as.runs.push_back({.start = 0,
+                     .end = static_cast<std::uint32_t>(utf8.size()),
+                     .font = font,
+                     .color = color});
+  std::optional<AttributedString> const sanitized = sanitizeAttributedStringLossy(as);
+  if (sanitized) {
+    return layout(*sanitized, maxWidth, options);
   }
   ContentHash const h = d->computeContentHashPlain(*this, utf8, font, color, options);
   std::uint32_t const wq = quantizeWidth(maxWidth);
@@ -2715,12 +2849,6 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layout(std::string_view utf8, 
       it->second->lastTouchFrame = d->currentFrame_;
       return *it->second;
     }
-    AttributedString as;
-    as.utf8 = std::string(utf8);
-    as.runs.push_back({.start = 0,
-                       .end = static_cast<std::uint32_t>(utf8.size()),
-                       .font = font,
-                       .color = color});
     std::vector<ResolvedStyle> resolved;
     accumulateInheritance(resolved, as);
     return d->insertFramesetterMiss(h, as, resolved, options, *this);
@@ -2743,12 +2871,6 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layout(std::string_view utf8, 
     ++d->stats_.l3_layout.misses;
   }
 
-  AttributedString as;
-  as.utf8 = std::string(utf8);
-  as.runs.push_back({.start = 0,
-                     .end = static_cast<std::uint32_t>(utf8.size()),
-                     .font = font,
-                     .color = color});
   auto built = std::make_shared<TextLayout>();
   auto stor2 = std::make_unique<TextLayoutStorage>();
   fillTextLayoutFromFramesetter(*this, e.framesetter, as, maxWidth, options, *built, *stor2);
@@ -2766,15 +2888,18 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layout(std::string_view utf8, 
 
 std::shared_ptr<TextLayout const> CoreTextSystem::layout(AttributedString const& text, float maxWidth,
                                                          TextLayoutOptions const& options) {
-  validateRuns(text);
+  std::optional<AttributedString> const sanitized = sanitizeAttributedStringLossy(text);
+  AttributedString const& prepared = sanitized ? *sanitized : text;
+
+  validateRuns(prepared);
   std::vector<ResolvedStyle> resolved;
-  accumulateInheritance(resolved, text);
+  accumulateInheritance(resolved, prepared);
   std::uint32_t const wq = quantizeWidth(maxWidth);
 
   // --- Tier 0: pointer-identity exact-repeat (same string object, same width) ---
   if (d->lastLayout_.layout && wq == d->lastLayout_.contentWidthQ1) {
-    bool const samePtr = (text.utf8.data() == d->lastLayout_.utf8Ptr &&
-                          text.utf8.size() == d->lastLayout_.utf8Size);
+    bool const samePtr = (prepared.utf8.data() == d->lastLayout_.utf8Ptr &&
+                          prepared.utf8.size() == d->lastLayout_.utf8Size);
     if (samePtr) {
       if (!options.suppressCacheStats) ++d->memoStats_.hits;
       return d->lastLayout_.layout;
@@ -2792,10 +2917,10 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layout(AttributedString const&
     if (chComputed) {
       d->lastLayout_.contentHash = ch;
     }
-    d->lastLayout_.utf8Ptr  = text.utf8.data();
-    d->lastLayout_.utf8Size = text.utf8.size();
-    d->lastLayout_.prevUtf8 = text.utf8;
-    d->lastLayout_.prevRuns.assign(text.runs.begin(), text.runs.end());
+    d->lastLayout_.utf8Ptr  = prepared.utf8.data();
+    d->lastLayout_.utf8Size = prepared.utf8.size();
+    d->lastLayout_.prevUtf8 = prepared.utf8;
+    d->lastLayout_.prevRuns.assign(prepared.runs.begin(), prepared.runs.end());
     if (result) {
       d->lastLayout_.prevMaxDocWidth  = result->measuredSize.width;
       d->lastLayout_.prevFirstBaseline = result->firstBaseline;
@@ -2808,12 +2933,12 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layout(AttributedString const&
       !d->lastLayout_.prevParagraphs.empty() &&
       !d->lastLayout_.prevUtf8.empty() &&
       !paragraphCacheDisabledByEnv() &&
-      text.utf8.size() >= kMinFastPathBytes &&
+      prepared.utf8.size() >= kMinFastPathBytes &&
       options.wrapping != TextWrapping::WrapAnywhere &&
       options.maxLines == 0) {
-    if (auto incr = d->tryIncrementalSplit(*this, text, resolved, options)) {
+    if (auto incr = d->tryIncrementalSplit(*this, prepared, resolved, options)) {
       auto parasCopy = incr->paragraphs; // SmallVector copy; incr still valid for the pointer
-      auto result = d->layoutViaParagraphCache(*this, text, maxWidth, options, resolved,
+      auto result = d->layoutViaParagraphCache(*this, prepared, maxWidth, options, resolved,
           std::move(parasCopy), &*incr);
       updateMemoIds(result, ContentHash{}, false);
       return result;
@@ -2822,45 +2947,48 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layout(AttributedString const&
 
   // --- Tier 2: content-hash exact-repeat check ---
   if (d->lastLayout_.layout && wq == d->lastLayout_.contentWidthQ1) {
-    ContentHash const ch = d->computeContentHash(*this, text, resolved, options);
+    ContentHash const ch = d->computeContentHash(*this, prepared, resolved, options);
     if (ch == d->lastLayout_.contentHash) {
       if (!options.suppressCacheStats) ++d->memoStats_.hits;
       // Update pointer identity for future Tier-0 hits.
-      d->lastLayout_.utf8Ptr  = text.utf8.data();
-      d->lastLayout_.utf8Size = text.utf8.size();
+      d->lastLayout_.utf8Ptr  = prepared.utf8.data();
+      d->lastLayout_.utf8Size = prepared.utf8.size();
       return d->lastLayout_.layout;
     }
     // Cache miss at same width.
-    if (paragraphCachePredicate(text, options)) {
-      auto paras = d->splitIntoParagraphs(*this, text, resolved, options);
-      auto result = d->layoutViaParagraphCache(*this, text, maxWidth, options, resolved,
+    if (paragraphCachePredicate(prepared, options)) {
+      auto paras = d->splitIntoParagraphs(*this, prepared, resolved, options);
+      auto result = d->layoutViaParagraphCache(*this, prepared, maxWidth, options, resolved,
                                                std::move(paras));
       updateMemoIds(result, ch, true);
       return result;
     }
-    return layoutUnboxed(text, options, maxWidth, false, 0, 0);
+    return layoutUnboxed(prepared, options, maxWidth, false, 0, 0);
   }
 
   // --- Tier 3: cold path (different width or no memo) ---
-  if (paragraphCachePredicate(text, options)) {
-    ContentHash const ch = d->computeContentHash(*this, text, resolved, options);
-    auto paras = d->splitIntoParagraphs(*this, text, resolved, options);
-    auto result = d->layoutViaParagraphCache(*this, text, maxWidth, options, resolved,
+  if (paragraphCachePredicate(prepared, options)) {
+    ContentHash const ch = d->computeContentHash(*this, prepared, resolved, options);
+    auto paras = d->splitIntoParagraphs(*this, prepared, resolved, options);
+    auto result = d->layoutViaParagraphCache(*this, prepared, maxWidth, options, resolved,
                                              std::move(paras));
     updateMemoIds(result, ch, true);
     return result;
   }
-  return layoutUnboxed(text, options, maxWidth, false, 0, 0);
+  return layoutUnboxed(prepared, options, maxWidth, false, 0, 0);
 }
 
 std::shared_ptr<TextLayout const> CoreTextSystem::layoutBoxedImpl(AttributedString const& text, Rect const& box,
                                                                   TextLayoutOptions const& options) {
   float const maxWidth = options.wrapping == TextWrapping::NoWrap ? 0.f : box.width;
-  validateRuns(text);
+  std::optional<AttributedString> const sanitized = sanitizeAttributedStringLossy(text);
+  AttributedString const& prepared = sanitized ? *sanitized : text;
+
+  validateRuns(prepared);
   std::vector<ResolvedStyle> resolved;
-  accumulateInheritance(resolved, text);
-  ContentHash const h = d->computeContentHash(*this, text, resolved, options);
-  std::shared_ptr<TextLayout const> base = layoutUnboxed(text, options, maxWidth, true, h.hi, h.lo);
+  accumulateInheritance(resolved, prepared);
+  ContentHash const h = d->computeContentHash(*this, prepared, resolved, options);
+  std::shared_ptr<TextLayout const> base = layoutUnboxed(prepared, options, maxWidth, true, h.hi, h.lo);
   if (!base) {
     return nullptr;
   }
@@ -2913,7 +3041,7 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layoutBoxedImpl(AttributedStri
       .firstBaselineQ8 = fbq,
       .layout = boxed,
   });
-  d->bumpEntryApproxBytes(e, text);
+  d->bumpEntryApproxBytes(e, prepared);
   return boxed;
 }
 
@@ -3021,14 +3149,17 @@ namespace detail {
 
 std::shared_ptr<TextLayout const> paragraphCacheFullAssemblyForTest(
     CoreTextSystem& sys, AttributedString const& text, float maxWidth, TextLayoutOptions const& options) {
-  validateRuns(text);
-  if (!paragraphCachePredicate(text, options)) {
+  std::optional<AttributedString> const sanitized = sanitizeAttributedStringLossy(text);
+  AttributedString const& prepared = sanitized ? *sanitized : text;
+
+  validateRuns(prepared);
+  if (!paragraphCachePredicate(prepared, options)) {
     return nullptr;
   }
   std::vector<ResolvedStyle> resolved;
-  accumulateInheritance(resolved, text);
-  auto paras = sys.d->splitIntoParagraphs(sys, text, resolved, options);
-  return sys.d->layoutViaParagraphCache(sys, text, maxWidth, options, resolved, std::move(paras), nullptr,
+  accumulateInheritance(resolved, prepared);
+  auto paras = sys.d->splitIntoParagraphs(sys, prepared, resolved, options);
+  return sys.d->layoutViaParagraphCache(sys, prepared, maxWidth, options, resolved, std::move(paras), nullptr,
                                         true);
 }
 

@@ -47,6 +47,14 @@ std::uint64_t nextElementMeasureId();
 
 Popover* popoverOverlayStateIf(Element& el);
 
+template<typename Build>
+Element& resolveCompositeBody(LayoutContext& ctx, ComponentKey const& key, Build&& build) {
+  if (Element* const existing = ctx.findPinnedCompositeBody(key)) {
+    return *existing;
+  }
+  return ctx.pinCompositeBody(key, build());
+}
+
 template<typename C>
 float flexGrowOf(C const& v) {
   if constexpr (requires { v.flexGrow; }) {
@@ -358,16 +366,19 @@ template<typename C>
 void Element::Model<C>::layout(LayoutContext& ctx) const {
   if constexpr (CompositeComponent<C>) {
     ComponentKey const key = ctx.nextCompositeKey();
-    StateStore* store = StateStore::current();
-    if (store) {
-      store->pushComponent(key, std::type_index(typeid(C)));
-      store->pushCompositeConstraints(ctx.constraints());
-    }
-    Element& child = ctx.pinElement(Element{value.body()});
-    if (store) {
-      store->popCompositeConstraints();
-      store->popComponent();
-    }
+    Element& child = detail::resolveCompositeBody(ctx, key, [&]() {
+      StateStore* store = StateStore::current();
+      if (store) {
+        store->pushComponent(key, std::type_index(typeid(C)));
+        store->pushCompositeConstraints(ctx.constraints());
+      }
+      Element built{value.body()};
+      if (store) {
+        store->popCompositeConstraints();
+        store->popComponent();
+      }
+      return built;
+    });
     ctx.beginCompositeBodySubtree(key);
     ctx.pushCompositeKeyTail(key);
     child.layout(ctx);
@@ -465,16 +476,19 @@ Size Element::Model<C>::measure(LayoutContext& ctx, LayoutConstraints const& con
                                 LayoutHints const& hints, TextSystem& textSystem) const {
   if constexpr (CompositeComponent<C>) {
     ComponentKey const key = ctx.nextCompositeKey();
-    StateStore* store = StateStore::current();
-    if (store) {
-      store->pushComponent(key, std::type_index(typeid(C)));
-      store->pushCompositeConstraints(constraints);
-    }
-    Element child{value.body()};
-    if (store) {
-      store->popCompositeConstraints();
-      store->popComponent();
-    }
+    Element& child = detail::resolveCompositeBody(ctx, key, [&]() {
+      StateStore* store = StateStore::current();
+      if (store) {
+        store->pushComponent(key, std::type_index(typeid(C)));
+        store->pushCompositeConstraints(constraints);
+      }
+      Element built{value.body()};
+      if (store) {
+        store->popCompositeConstraints();
+        store->popComponent();
+      }
+      return built;
+    });
     ctx.beginCompositeBodySubtree(key);
     ctx.pushCompositeKeyTail(key);
     Size const sz = child.measure(ctx, constraints, hints, textSystem);
