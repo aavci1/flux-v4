@@ -626,7 +626,8 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
         bool const reasoningFinished = message.finishedAtNanos > message.startedAtNanos;
         std::string const thoughtSummary = formatThoughtDuration(message.startedAtNanos, message.finishedAtNanos);
         bool const hasDeleteAction = static_cast<bool>(onDeleteMessage);
-        bool const showSummaryFooter = !collapsed && (message.generationStats.has_value() || hasDeleteAction);
+        bool const hasCopyAction = !message.text.empty();
+        bool const showSummaryFooter = !collapsed && (message.generationStats.has_value() || hasDeleteAction || hasCopyAction);
 
         Color const fill = isUser      ? theme.colorAccent :
                            isReasoning ? theme.colorSurface :
@@ -634,6 +635,7 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
         Color const textColor = isUser ? theme.colorTextOnAccent : theme.colorTextPrimary;
         Color const summaryColor = isUser ? theme.colorTextOnAccent : theme.colorTextMuted;
         Color const deleteIconColor = isUser ? theme.colorTextOnAccent : theme.colorTextSecondary;
+        Color selectionColor = isUser ? Color {1.f, 1.f, 1.f, 0.22f} : theme.colorAccentSubtle;
         MarkdownResolvedStyle const markdownStyle =
             resolveMarkdownStyle(theme, isReasoning ? theme.fontBodySmall : theme.fontBody, textColor);
         auto buildSummaryRow = [&](std::string primaryLine) -> Element {
@@ -651,6 +653,37 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
                 );
             } else {
                 summaryChildren.push_back(Spacer {});
+            }
+            if (isReasoning && onToggleReasoning) {
+                summaryChildren.push_back(
+                    IconButton {
+                        .icon = collapsed ? IconName::ExpandMore : IconName::ExpandLess,
+                        .style = {
+                            .size = 14.f,
+                            .weight = 500.f,
+                            .color = deleteIconColor,
+                        },
+                        .onTap = onToggleReasoning,
+                    }
+                );
+            }
+            if (hasCopyAction) {
+                summaryChildren.push_back(
+                    IconButton {
+                        .icon = IconName::ContentCopy,
+                        .style = {
+                            .size = 14.f,
+                            .weight = 500.f,
+                            .color = deleteIconColor,
+                        },
+                        .onTap = [rawText = message.text] {
+                            if (!Application::hasInstance()) {
+                                return;
+                            }
+                            Application::instance().clipboard().writeText(rawText);
+                        },
+                    }
+                );
             }
             if (hasDeleteAction) {
                 summaryChildren.push_back(
@@ -676,72 +709,39 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
 
         if (!isUser && !isReasoning) {
             std::vector<Element> paragraphs;
-            if (message.paragraphs.empty()) {
-                paragraphs.push_back(
-                    (deferTailMarkdown ? Element {
-                                             Text {
-                                                 .text = message.text,
-                                                 .font = markdownStyle.baseFont,
-                                                 .color = textColor,
-                                                 .horizontalAlignment = HorizontalAlignment::Leading,
-                                                 .verticalAlignment = VerticalAlignment::Top,
-                                                 .wrapping = TextWrapping::Wrap,
-                                             }
-                                         } :
-                                         Element {
-                                             MarkdownText {
-                                                 .text = message.text,
-                                                 .cacheKey = message.renderKey,
-                                                 .textRevision = message.textRevision,
-                                                 .baseFont = markdownStyle.baseFont,
-                                                 .codeFont = markdownStyle.codeFont,
-                                                 .h1Font = markdownStyle.h1Font,
-                                                 .h2Font = markdownStyle.h2Font,
-                                                 .h3Font = markdownStyle.h3Font,
-                                                 .baseColor = markdownStyle.baseColor,
-                                                 .codeBackground = markdownStyle.codeBackground,
-                                                 .horizontalAlignment = HorizontalAlignment::Leading,
-                                                 .verticalAlignment = VerticalAlignment::Top,
-                                                 .wrapping = TextWrapping::Wrap,
-                                             }
-                                         })
-                );
-            } else {
-                paragraphs.reserve(message.paragraphs.size());
-                for (std::size_t i = 0; i < message.paragraphs.size(); ++i) {
-                    ChatMessage::Paragraph const &paragraph = message.paragraphs[i];
-                    bool const renderAsPlainText = deferTailMarkdown && i + 1 == message.paragraphs.size();
-                    paragraphs.push_back(
-                        renderAsPlainText ? Element {
-                                                Text {
-                                                    .text = paragraph.text,
-                                                    .font = markdownStyle.baseFont,
-                                                    .color = textColor,
-                                                    .horizontalAlignment = HorizontalAlignment::Leading,
-                                                    .verticalAlignment = VerticalAlignment::Top,
-                                                    .wrapping = TextWrapping::Wrap,
-                                                }
-                                            } :
-                                            Element {
-                                                MarkdownText {
-                                                    .text = paragraph.text,
-                                                    .cacheKey = paragraph.renderKey,
-                                                    .textRevision = paragraph.textRevision,
-                                                    .baseFont = markdownStyle.baseFont,
-                                                    .codeFont = markdownStyle.codeFont,
-                                                    .h1Font = markdownStyle.h1Font,
-                                                    .h2Font = markdownStyle.h2Font,
-                                                    .h3Font = markdownStyle.h3Font,
-                                                    .baseColor = markdownStyle.baseColor,
-                                                    .codeBackground = markdownStyle.codeBackground,
-                                                    .horizontalAlignment = HorizontalAlignment::Leading,
-                                                    .verticalAlignment = VerticalAlignment::Top,
-                                                    .wrapping = TextWrapping::Wrap,
-                                                }
-                                            }
-                    );
-                }
-            }
+            paragraphs.push_back(
+                deferTailMarkdown ? Element {
+                                      Text {
+                                          .text = message.text,
+                                          .font = markdownStyle.baseFont,
+                                          .color = textColor,
+                                          .selectionColor = selectionColor,
+                                          .selectable = true,
+                                          .horizontalAlignment = HorizontalAlignment::Leading,
+                                          .verticalAlignment = VerticalAlignment::Top,
+                                          .wrapping = TextWrapping::Wrap,
+                                      }
+                                  } :
+                                  Element {
+                                      MarkdownText {
+                                          .text = message.text,
+                                          .cacheKey = message.renderKey,
+                                          .textRevision = message.textRevision,
+                                          .baseFont = markdownStyle.baseFont,
+                                          .codeFont = markdownStyle.codeFont,
+                                          .h1Font = markdownStyle.h1Font,
+                                          .h2Font = markdownStyle.h2Font,
+                                          .h3Font = markdownStyle.h3Font,
+                                          .baseColor = markdownStyle.baseColor,
+                                          .codeBackground = markdownStyle.codeBackground,
+                                          .selectionColor = selectionColor,
+                                          .horizontalAlignment = HorizontalAlignment::Leading,
+                                          .verticalAlignment = VerticalAlignment::Top,
+                                          .wrapping = TextWrapping::Wrap,
+                                          .selectable = true,
+                                      }
+                                  }
+            );
 
             if (showSummaryFooter) {
                 std::string primaryLine;
@@ -801,7 +801,7 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
                                        } :
                                        Element {ThinkingDots {}}
                 );
-                if (message.generationStats.has_value() || hasDeleteAction) {
+                if (message.generationStats.has_value() || hasDeleteAction || hasCopyAction) {
                     std::string primaryLine;
                     if (message.generationStats.has_value()) {
                         primaryLine =
@@ -833,6 +833,8 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
                     .text = message.text,
                     .font = markdownStyle.baseFont,
                     .color = textColor,
+                    .selectionColor = selectionColor,
+                    .selectable = true,
                     .horizontalAlignment = HorizontalAlignment::Leading,
                     .verticalAlignment = VerticalAlignment::Top,
                     .wrapping = TextWrapping::Wrap,
@@ -868,9 +870,7 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
                 .fill(FillStyle::solid(fill))
                 .stroke(isUser ? StrokeStyle::none() : StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
                 .cornerRadius(theme.radiusXLarge)
-                .cursor(isReasoning ? Cursor::Hand : Cursor::Arrow)
-                .focusable(isReasoning)
-                .onTap(isReasoning ? (onToggleReasoning ? onToggleReasoning : std::function<void()> {}) : std::function<void()> {});
+                .cursor(Cursor::Arrow);
         }();
 
         if (isUser) {

@@ -37,6 +37,26 @@ namespace {
 constexpr float kSelectionExtraBottomPx = 4.f;
 constexpr float kCaretScrollMarginPx = 8.f;
 
+struct PointerClickTracker {
+    Point lastPoint {};
+    std::chrono::steady_clock::time_point lastClickAt {};
+    int clickCount = 0;
+};
+
+int registerPointerClick(PointerClickTracker &tracker, Point local) {
+    auto const now = std::chrono::steady_clock::now();
+    float const dx = local.x - tracker.lastPoint.x;
+    float const dy = local.y - tracker.lastPoint.y;
+    float const dist2 = dx * dx + dy * dy;
+    bool const chained = tracker.clickCount > 0 &&
+                         now - tracker.lastClickAt <= std::chrono::milliseconds(500) &&
+                         dist2 <= 36.f;
+    tracker.clickCount = chained ? tracker.clickCount + 1 : 1;
+    tracker.lastClickAt = now;
+    tracker.lastPoint = local;
+    return tracker.clickCount;
+}
+
 /// Same rule as multiline TextInput: styler runs must cover every UTF-8 byte without gaps.
 bool attributedRunsFullyCoverBuffer(std::vector<AttributedRun> const &runs, std::uint32_t n) {
     std::vector<std::pair<std::uint32_t, std::uint32_t>> se;
@@ -361,7 +381,13 @@ Element buildTextInputContent(detail::TextEditLayoutResult const &layoutResult, 
 }
 
 template <typename HitTest>
-Element attachTextInputHandlers(Element editor, TextEditBehavior &behavior, bool disabled, HitTest hitTest) {
+Element attachTextInputHandlers(
+    Element editor,
+    TextEditBehavior &behavior,
+    PointerClickTracker &clickTracker,
+    bool disabled,
+    HitTest hitTest
+) {
     if (disabled) {
         return std::move(editor)
             .focusable(false)
@@ -373,8 +399,18 @@ Element attachTextInputHandlers(Element editor, TextEditBehavior &behavior, bool
         .cursor(Cursor::IBeam)
         .onKeyDown([&behavior](KeyCode key, Modifiers mods) { behavior.handleKey(KeyEvent {key, mods}); })
         .onTextInput([&behavior](std::string const &text) { behavior.handleTextInput(text); })
-        .onPointerDown([&behavior, hitTest = std::move(hitTest)](Point local) mutable {
-            behavior.handlePointerDown(hitTest(local), false);
+        .onPointerDown([&behavior, &clickTracker, hitTest = std::move(hitTest)](Point local) mutable {
+            int const hitByte = hitTest(local);
+            int const clickCount = registerPointerClick(clickTracker, local);
+            if (clickCount >= 3) {
+                behavior.selectAll();
+                return;
+            }
+            if (clickCount == 2) {
+                behavior.selectWordAt(hitByte);
+                return;
+            }
+            behavior.handlePointerDown(hitByte, false);
         })
         .onPointerMove([&behavior, hitTest = std::move(hitTest)](Point local) mutable {
             behavior.handlePointerDrag(hitTest(local));
@@ -410,6 +446,7 @@ Element buildMultilineTextInput(TextInput const &input) {
     State<Point> scrollOffset = useState(Point {0.f, 0.f});
     State<Size> viewportSize = useState(Size {0.f, 0.f});
     State<Size> contentSize = useState(Size {0.f, 0.f});
+    PointerClickTracker &clickTracker = StateStore::current()->claimSlot<PointerClickTracker>();
     Rect const bounds = useBounds();
 
     auto &behavior = useTextEditBehavior(input.value, {.multiline = true,
@@ -469,6 +506,7 @@ Element buildMultilineTextInput(TextInput const &input) {
     Element editor = attachTextInputHandlers(
         std::move(content),
         behavior,
+        clickTracker,
         input.disabled,
         [&snap, &buf, scrollOffset, contentOrigin](Point local) {
             return hitTestMultilineByte(snap.layoutResult, local, contentOrigin, (*scrollOffset).y, buf);
@@ -508,6 +546,7 @@ Element buildSingleLineTextInput(TextInput const &input) {
     behavior.setFocused(focused);
 
     TextInputLayoutSnap &snap = StateStore::current()->claimSlot<TextInputLayoutSnap>();
+    PointerClickTracker &clickTracker = StateStore::current()->claimSlot<PointerClickTracker>();
     State<int> scrollByte = useState(0);
     LayoutConstraints const *layoutConstraints = useLayoutConstraints();
     float const constrainedWidth =
@@ -557,6 +596,7 @@ Element buildSingleLineTextInput(TextInput const &input) {
     Element editor = attachTextInputHandlers(
         std::move(content),
         behavior,
+        clickTracker,
         input.disabled,
         [&snap, &buf, scrollByte, textOrigin](Point local) {
             return hitTestSingleLineByte(snap.layoutResult, local, textOrigin, *scrollByte, buf);

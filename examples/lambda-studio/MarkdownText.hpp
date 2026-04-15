@@ -7,10 +7,12 @@
 #include <Flux/Graphics/TextLayoutOptions.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Scene/Nodes.hpp>
+#include <Flux/UI/EventMap.hpp>
 #include <Flux/UI/LayoutContext.hpp>
 #include <Flux/UI/RenderContext.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/ViewModifiers.hpp>
+#include <Flux/UI/Views/SelectableTextSupport.hpp>
 
 #include <algorithm>
 #include <bit>
@@ -389,11 +391,13 @@ struct MarkdownText : flux::ViewModifiers<MarkdownText> {
     flux::Font h3Font {};
     flux::Color baseColor {};
     flux::Color codeBackground {};
+    flux::Color selectionColor = flux::kColorFromTheme;
     flux::HorizontalAlignment horizontalAlignment = flux::HorizontalAlignment::Leading;
     flux::VerticalAlignment verticalAlignment = flux::VerticalAlignment::Top;
     flux::TextWrapping wrapping = flux::TextWrapping::Wrap;
     int maxLines = 0;
     float firstBaselineOffset = 0.f;
+    bool selectable = false;
 
     detail::MarkdownLayoutCacheKey makeCacheKey(float maxWidth) const {
         return detail::MarkdownLayoutCacheKey {
@@ -445,11 +449,63 @@ struct MarkdownText : flux::ViewModifiers<MarkdownText> {
         if (!textLayout) {
             return;
         }
-        ctx.graph().addText(ctx.parentLayer(), flux::TextNode {
-                                                   .layout = textLayout,
-                                                   .origin = {node.frame.x, node.frame.y},
-                                                   .allocation = node.frame,
-                                               });
+        flux::Theme const &theme = flux::useEnvironment<flux::Theme>();
+        flux::Color const resolvedSelectionColor = flux::resolveColor(selectionColor, theme.colorAccentSubtle);
+        std::shared_ptr<flux::detail::SelectableTextState> selectableState;
+        if (selectable) {
+            MarkdownResolvedStyle const selectionStyle {
+                .baseFont = baseFont,
+                .boldFont = detail::markdownBoldFont(baseFont),
+                .h1Font = h1Font,
+                .h2Font = h2Font,
+                .h3Font = h3Font,
+                .codeFont = codeFont,
+                .baseColor = baseColor,
+                .codeBackground = codeBackground,
+            };
+            flux::AttributedString renderedText = detail::makeMarkdownAttributedString(text, selectionStyle);
+            selectableState = flux::detail::selectableTextState(node.componentKey);
+            flux::detail::updateSelectableTextLayout(
+                *selectableState,
+                textLayout,
+                std::move(renderedText.utf8),
+                node.frame.width
+            );
+            if (selectableState->selection.hasSelection()) {
+                for (flux::Rect const &rect :
+                     flux::detail::selectionRects(selectableState->layoutResult, selectableState->selection,
+                                                  &selectableState->text, node.frame.x, node.frame.y)) {
+                    ctx.graph().addRect(ctx.parentLayer(), flux::RectNode {
+                                                           .bounds = rect,
+                                                           .fill = flux::FillStyle::solid(resolvedSelectionColor),
+                                                       });
+                }
+            }
+        }
+        flux::NodeId const textId = ctx.graph().addText(ctx.parentLayer(), flux::TextNode {
+                                                                            .layout = textLayout,
+                                                                            .origin = {node.frame.x, node.frame.y},
+                                                                            .allocation = node.frame,
+                                                                        });
+        if (selectable && selectableState) {
+            flux::EventHandlers handlers {};
+            handlers.stableTargetKey = node.componentKey;
+            handlers.focusable = true;
+            handlers.cursor = flux::Cursor::IBeam;
+            handlers.onPointerDown = [state = selectableState](flux::Point local) {
+                flux::detail::handleSelectableTextPointerDown(*state, local);
+            };
+            handlers.onPointerMove = [state = selectableState](flux::Point local) {
+                flux::detail::handleSelectableTextPointerDrag(*state, local);
+            };
+            handlers.onPointerUp = [state = selectableState](flux::Point) {
+                flux::detail::handleSelectableTextPointerUp(*state);
+            };
+            handlers.onKeyDown = [state = selectableState](flux::KeyCode key, flux::Modifiers modifiers) {
+                flux::detail::handleSelectableTextKey(*state, key, modifiers);
+            };
+            ctx.eventMap().insert(textId, std::move(handlers));
+        }
     }
 
     flux::Size measure(flux::LayoutContext &ctx, flux::LayoutConstraints const &constraints,

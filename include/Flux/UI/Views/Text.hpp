@@ -29,6 +29,8 @@ struct Text : ViewModifiers<Text> {
   std::string text;
   Font font = kFontFromTheme;
   Color color = kColorFromTheme;
+  Color selectionColor = kColorFromTheme;
+  bool selectable = false;
 
   HorizontalAlignment horizontalAlignment = HorizontalAlignment::Leading;
   VerticalAlignment verticalAlignment = VerticalAlignment::Top;

@@ -639,6 +639,57 @@ TextEditSelection moveSelectionToDocumentBoundary(std::string const &text, TextE
     return moveSelectionToByte(text, selection, end ? static_cast<int>(text.size()) : 0, extendSelection);
 }
 
+TextEditSelection wordSelectionAtByte(std::string const &text, int byteOffset) noexcept {
+    int const n = static_cast<int>(text.size());
+    if (n <= 0) {
+        return {};
+    }
+
+    int byte = utf8Clamp(text, byteOffset);
+    if (byte >= n) {
+        byte = utf8PrevChar(text, n);
+    }
+
+    char32_t cp = 0;
+    int len = 1;
+    if (!utf8DecodeAt(text, byte, cp, len)) {
+        return {.caretByte = byte, .anchorByte = byte};
+    }
+
+    auto sameClass = [&](char32_t other) {
+        if (isSpaceChar(cp)) {
+            return isSpaceChar(other);
+        }
+        if (isWordChar(cp)) {
+            return isWordChar(other);
+        }
+        return isPunctuationChar(other);
+    };
+
+    int start = byte;
+    while (start > 0) {
+        int const prev = utf8PrevChar(text, start);
+        char32_t prevCp = 0;
+        int prevLen = 1;
+        if (!utf8DecodeAt(text, prev, prevCp, prevLen) || !sameClass(prevCp)) {
+            break;
+        }
+        start = prev;
+    }
+
+    int end = utf8NextChar(text, byte);
+    while (end < n) {
+        char32_t nextCp = 0;
+        int nextLen = 1;
+        if (!utf8DecodeAt(text, end, nextCp, nextLen) || !sameClass(nextCp)) {
+            break;
+        }
+        end = utf8NextChar(text, end);
+    }
+
+    return {.caretByte = end, .anchorByte = start};
+}
+
 TextEditMutation insertText(std::string const &text, TextEditSelection const &selection, std::string_view insert,
                             int maxLength) {
     TextEditMutation mutation {};

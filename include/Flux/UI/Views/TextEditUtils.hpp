@@ -99,6 +99,7 @@ TextEditSelection moveSelectionToLineBoundary(std::string const &text, TextEditS
                                               bool extendSelection) noexcept;
 TextEditSelection moveSelectionToDocumentBoundary(std::string const &text, TextEditSelection selection, bool end,
                                                   bool extendSelection) noexcept;
+TextEditSelection wordSelectionAtByte(std::string const &text, int byteOffset) noexcept;
 TextEditMutation insertText(std::string const &text, TextEditSelection const &selection, std::string_view insert,
                             int maxLength = 0);
 TextEditMutation eraseSelectionOrChar(std::string const &text, TextEditSelection const &selection,

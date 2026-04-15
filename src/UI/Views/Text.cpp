@@ -7,8 +7,10 @@
 #include <Flux/UI/LayoutContext.hpp>
 #include <Flux/UI/RenderContext.hpp>
 #include <Flux/UI/Theme.hpp>
+#include <Flux/UI/Views/SelectableTextSupport.hpp>
 #include <Flux/UI/Views/TextEditUtils.hpp>
 
+#include <Flux/Core/Cursor.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Scene/Nodes.hpp>
 #include <Flux/Scene/SceneGraph.hpp>
@@ -181,25 +183,62 @@ void Text::renderFromLayout(RenderContext &ctx, LayoutNode const &node) const {
     ComponentKey const stableKey = node.componentKey;
     Rect const bounds = node.frame;
     std::shared_ptr<TextLayout const> textLayout;
+    Theme const &theme = useEnvironment<Theme>();
+    Color const resolvedSelectionColor = resolveColor(selectionColor, theme.colorAccentSubtle);
     if (!text.empty()) {
         auto [font, color] = text_detail::resolveBodyTextStyle(this->font, this->color);
         TextLayoutOptions const opts = text_detail::makeTextLayoutOptions(*this);
-        std::string const displayText = ellipsizedPlainText(text, font, color, bounds, opts, ctx.textSystem());
+        std::string const displayText =
+            selectable ? text : ellipsizedPlainText(text, font, color, bounds, opts, ctx.textSystem());
         textLayout = ctx.textSystem().layout(displayText, font, color, bounds, opts);
     }
 
     if (textLayout && hasRenderableTextGeometry(*textLayout)) {
+        std::shared_ptr<detail::SelectableTextState> selectableState;
+        if (selectable) {
+            selectableState = detail::selectableTextState(stableKey);
+            detail::updateSelectableTextLayout(*selectableState, textLayout, text, bounds.width);
+            if (selectableState->selection.hasSelection()) {
+                for (Rect const &rect :
+                     detail::selectionRects(selectableState->layoutResult, selectableState->selection,
+                                            &selectableState->text, bounds.x, bounds.y)) {
+                    ctx.graph().addRect(ctx.parentLayer(), RectNode {
+                                                               .bounds = rect,
+                                                               .fill = FillStyle::solid(resolvedSelectionColor),
+                                                           });
+                }
+            }
+        }
+
         NodeId const textId = ctx.graph().addText(ctx.parentLayer(), TextNode {
                                                                          .layout = textLayout,
                                                                          .origin = {bounds.x, bounds.y},
                                                                          .allocation = bounds,
                                                                      });
-        if (ElementModifiers const *mods = ctx.activeElementModifiers()) {
-            if (!ctx.suppressLeafModifierEvents()) {
-                EventHandlers h = eventHandlersFromModifiers(*mods, stableKey, bounds);
-                if (shouldInsertHandlers(h)) {
-                    ctx.eventMap().insert(textId, std::move(h));
-                }
+        if (!ctx.suppressLeafModifierEvents()) {
+            EventHandlers handlers {};
+            if (ElementModifiers const *mods = ctx.activeElementModifiers()) {
+                handlers = eventHandlersFromModifiers(*mods, stableKey, bounds);
+            }
+            if (selectable && selectableState) {
+                handlers.stableTargetKey = stableKey;
+                handlers.focusable = true;
+                handlers.cursor = Cursor::IBeam;
+                handlers.onPointerDown = [state = selectableState](Point local) {
+                    detail::handleSelectableTextPointerDown(*state, local);
+                };
+                handlers.onPointerMove = [state = selectableState](Point local) {
+                    detail::handleSelectableTextPointerDrag(*state, local);
+                };
+                handlers.onPointerUp = [state = selectableState](Point) {
+                    detail::handleSelectableTextPointerUp(*state);
+                };
+                handlers.onKeyDown = [state = selectableState](KeyCode key, Modifiers modifiers) {
+                    detail::handleSelectableTextKey(*state, key, modifiers);
+                };
+            }
+            if (shouldInsertHandlers(handlers)) {
+                ctx.eventMap().insert(textId, std::move(handlers));
             }
         }
     }

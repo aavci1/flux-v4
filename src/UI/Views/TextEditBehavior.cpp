@@ -157,6 +157,14 @@ void TextEditBehavior::selectAll() {
     markTextUiDirty();
 }
 
+void TextEditBehavior::selectWordAt(int byte) {
+    std::string const &s = value_->get();
+    state_.selection = detail::wordSelectionAtByte(s, byte);
+    ensureCaretVisible_ = true;
+    resetBlinkEpoch();
+    markTextUiDirty();
+}
+
 void TextEditBehavior::clearSelection() {
     if (!state_.selection.hasSelection()) {
         return;

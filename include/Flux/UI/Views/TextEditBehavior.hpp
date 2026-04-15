@@ -59,6 +59,7 @@ class TextEditBehavior {
 
     void moveCaretTo(int byte, bool extendSelection);
     void selectAll();
+    void selectWordAt(int byte);
     void clearSelection();
 
     bool handleKey(KeyEvent const &e);
