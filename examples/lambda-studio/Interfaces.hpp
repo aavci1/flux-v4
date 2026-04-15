@@ -21,11 +21,20 @@ class IChatEngine {
   public:
     virtual ~IChatEngine() = default;
 
-    virtual bool load(std::string const &modelPath, int nGpuLayers = -1, uint32_t nCtx = 0) = 0;
+    virtual bool load(lambda_studio_backend::LoadParams const &params) = 0;
+    virtual lambda_studio_backend::LoadParams loadParams() const = 0;
+    virtual lambda_studio_backend::SessionParams sessionDefaults() const = 0;
+    virtual lambda_studio_backend::GenerationParams generationDefaults() const = 0;
     virtual bool isLoaded() const = 0;
     virtual std::string const &modelPath() const = 0;
-    virtual lambda_studio_backend::SamplingParams samplingParams() const = 0;
-    virtual void setSamplingParams(lambda_studio_backend::SamplingParams const &params) = 0;
+    virtual std::optional<lambda_studio_backend::GenerationParams> chatGenerationDefaults(std::string const &chatId) const = 0;
+    virtual lambda_studio_backend::ApplyResult updateLoadParams(lambda_studio_backend::LoadParamsPatch const &patch) = 0;
+    virtual lambda_studio_backend::ApplyResult updateSessionDefaults(lambda_studio_backend::SessionParamsPatch const &patch) = 0;
+    virtual lambda_studio_backend::ApplyResult updateGenerationDefaults(lambda_studio_backend::GenerationParamsPatch const &patch) = 0;
+    virtual lambda_studio_backend::ApplyResult updateChatGenerationParams(
+        std::string const &chatId,
+        lambda_studio_backend::GenerationParamsPatch const &patch
+    ) = 0;
     virtual void unload() = 0;
     virtual void cancelChat(std::string const &chatId) = 0;
     virtual void cancelAllGenerations() = 0;
@@ -46,7 +55,7 @@ class IModelManager {
     virtual std::uint64_t inspectRepo(std::string repoId) = 0;
     virtual std::uint64_t downloadModel(std::string repoId, std::string fileName) = 0;
     virtual std::uint64_t cancelDownload() = 0;
-    virtual std::uint64_t loadModel(std::string path, int nGpuLayers = -1) = 0;
+    virtual std::uint64_t loadModel(lambda_studio_backend::LoadParams params) = 0;
     virtual std::uint64_t deleteModel(std::string path, std::string repoId) = 0;
     virtual void unloadModel() = 0;
 };
@@ -112,6 +121,12 @@ class IStore {
     virtual void deleteChatThread(std::string const &chatId) = 0;
     virtual void updateSelectedChatId(std::string const &selectedChatId) = 0;
     virtual void replaceChatOrder(std::vector<std::string> const &chatIds) = 0;
+    virtual void updateChatThreadGenerationDefaults(
+        std::string const &chatId,
+        std::optional<lambda_studio_backend::GenerationParams> const &defaults
+    ) = 0;
+    virtual std::optional<lambda_studio_backend::EngineConfigDefaults> loadEngineConfigDefaults() = 0;
+    virtual void saveEngineConfigDefaults(lambda_studio_backend::EngineConfigDefaults const &defaults) = 0;
 };
 
 } // namespace lambda

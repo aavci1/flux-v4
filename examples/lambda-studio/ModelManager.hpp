@@ -365,22 +365,24 @@ class ModelManager : public lambda::IModelManager {
         return requestId;
     }
 
-    std::uint64_t loadModel(std::string path, int nGpuLayers = -1) override {
+    std::uint64_t loadModel(LoadParams params) override {
         std::uint64_t const requestId = beginRequest(ModelManagerLane::LoadModel);
-        enqueueTask(loadModelLane_, [this, requestId, modelPath = std::move(path), gpu = nGpuLayers] {
-            bool const ok = engine_->load(modelPath, gpu);
+        enqueueTask(loadModelLane_, [this, requestId, params = std::move(params)] {
+            bool const ok = engine_->load(params);
             if (ok) {
                 postEvent(ModelManagerEvent {
                     .kind = ModelManagerEvent::Kind::ModelLoaded,
-                    .modelPath = modelPath,
-                    .modelName = extractModelName(modelPath),
+                    .modelPath = params.modelPath,
+                    .modelName = extractModelName(params.modelPath),
+                    .appliedLoadParams = params,
                 },
                           ModelManagerLane::LoadModel,
                           requestId);
             } else {
                 postEvent(ModelManagerEvent {
                     .kind = ModelManagerEvent::Kind::ModelLoadError,
-                    .error = std::string("Failed to load: ") + modelPath,
+                    .error = std::string("Failed to load: ") + params.modelPath,
+                    .appliedLoadParams = params,
                 },
                           ModelManagerLane::LoadModel,
                           requestId);

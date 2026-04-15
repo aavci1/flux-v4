@@ -45,6 +45,13 @@ lambda::MessageGenerationStats makeGenerationStats(std::string modelName, std::i
     };
 }
 
+lambda_studio_backend::GenerationParams makeGenerationDefaults(float temp, std::int32_t topK) {
+    return lambda_studio_backend::GenerationParams {
+        .topK = topK,
+        .temp = temp,
+    };
+}
+
 void execSql(sqlite3 *db, char const *sql) {
     char *error = nullptr;
     if (sqlite3_exec(db, sql, nullptr, nullptr, &error) != SQLITE_OK) {
@@ -189,6 +196,58 @@ TEST_CASE("Store persists hidden chat summary metadata") {
     CHECK(state.chats[0].summaryText == "Summarized earlier turns");
     CHECK(state.chats[0].summaryMessageCount == 3);
     CHECK(state.chats[0].summaryUpdatedAtUnixMs == 456);
+
+    std::filesystem::remove_all(tempDir);
+}
+
+TEST_CASE("Store persists per-chat generation defaults without rewriting other chats") {
+    std::filesystem::path const tempDir = uniqueTempDir("chat-generation-defaults");
+    std::filesystem::create_directories(tempDir);
+
+    lambda::Store store(tempDir);
+    store.upsertChatThreadMeta("chat-a", "Chat A", 100, "/tmp/a.gguf", "A", "", 0, 0, 0);
+    store.upsertChatThreadMeta("chat-b", "Chat B", 100, "/tmp/b.gguf", "B", "", 0, 0, 1);
+    store.replaceChatMessagesForThread("chat-a", {makeUserMessage("A1")});
+    store.replaceChatMessagesForThread("chat-b", {makeUserMessage("B1")});
+
+    store.updateChatThreadGenerationDefaults("chat-a", makeGenerationDefaults(0.55f, 77));
+
+    lambda::PersistedChatState const state = store.loadPersistedChatState();
+    REQUIRE(state.chats.size() == 2);
+    REQUIRE(state.chats[0].id == "chat-a");
+    REQUIRE(state.chats[0].generationDefaults.has_value());
+    CHECK(doctest::Approx(state.chats[0].generationDefaults->temp).epsilon(0.001f) == 0.55f);
+    CHECK(state.chats[0].generationDefaults->topK == 77);
+    CHECK(state.chats[0].messages.size() == 1);
+    CHECK(state.chats[0].messages[0].text == "A1");
+    REQUIRE(state.chats[1].id == "chat-b");
+    CHECK(!state.chats[1].generationDefaults.has_value());
+    CHECK(state.chats[1].messages.size() == 1);
+    CHECK(state.chats[1].messages[0].text == "B1");
+
+    std::filesystem::remove_all(tempDir);
+}
+
+TEST_CASE("Store persists engine configuration defaults") {
+    std::filesystem::path const tempDir = uniqueTempDir("engine-defaults");
+    std::filesystem::create_directories(tempDir);
+
+    lambda::Store store(tempDir);
+    lambda_studio_backend::EngineConfigDefaults defaults;
+    defaults.loadDefaults.modelPath = "/tmp/model.gguf";
+    defaults.loadDefaults.nGpuLayers = 21;
+    defaults.sessionDefaults.nCtx = 8192;
+    defaults.generationDefaults.temp = 0.42f;
+    defaults.generationDefaults.topK = 17;
+
+    store.saveEngineConfigDefaults(defaults);
+    auto loaded = store.loadEngineConfigDefaults();
+    REQUIRE(loaded.has_value());
+    CHECK(loaded->loadDefaults.modelPath == "/tmp/model.gguf");
+    CHECK(loaded->loadDefaults.nGpuLayers == 21);
+    CHECK(loaded->sessionDefaults.nCtx == 8192);
+    CHECK(doctest::Approx(loaded->generationDefaults.temp).epsilon(0.001f) == 0.42f);
+    CHECK(loaded->generationDefaults.topK == 17);
 
     std::filesystem::remove_all(tempDir);
 }

@@ -4,6 +4,7 @@
 #include <Flux/Core/Cursor.hpp>
 #include <Flux/Core/WindowUI.hpp>
 #include <Flux/Reactive/Transition.hpp>
+#include <Flux/UI/Overlay.hpp>
 #include <Flux/UI/StateStore.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Views/Views.hpp>
@@ -350,6 +351,218 @@ std::vector<std::string> generationStatsPrimaryParts(MessageGenerationStats cons
     return parts;
 }
 
+std::string formatFloatValue(float value, int precision = 2) {
+    std::ostringstream oss;
+    oss.setf(std::ios::fixed, std::ios::floatfield);
+    oss.precision(precision);
+    oss << value;
+    return oss.str();
+}
+
+Element quickSettingControl(
+    Theme const &theme,
+    std::string label,
+    std::string value,
+    bool disabled,
+    std::function<void()> onDecrement,
+    std::function<void()> onIncrement
+) {
+    return HStack {
+        .spacing = theme.space1,
+        .alignment = Alignment::Center,
+        .children = children(
+            LinkButton {
+                .label = "-",
+                .disabled = disabled,
+                .onTap = std::move(onDecrement),
+            },
+            Text {
+                .text = std::move(label) + ": " + std::move(value),
+                .font = theme.fontBodySmall,
+                .color = disabled ? theme.colorTextDisabled : theme.colorTextSecondary,
+                .horizontalAlignment = HorizontalAlignment::Leading,
+            },
+            LinkButton {
+                .label = "+",
+                .disabled = disabled,
+                .onTap = std::move(onIncrement),
+            }
+        )
+    };
+}
+
+void applyGenerationPatchLocal(
+    lambda_studio_backend::GenerationParams &target,
+    lambda_studio_backend::GenerationParamsPatch const &patch
+) {
+    if (patch.seed.has_value()) {
+        target.seed = *patch.seed;
+    }
+    if (patch.maxTokens.has_value()) {
+        target.maxTokens = *patch.maxTokens;
+    }
+    if (patch.topK.has_value()) {
+        target.topK = *patch.topK;
+    }
+    if (patch.topP.has_value()) {
+        target.topP = *patch.topP;
+    }
+    if (patch.minP.has_value()) {
+        target.minP = *patch.minP;
+    }
+    if (patch.temp.has_value()) {
+        target.temp = *patch.temp;
+    }
+    if (patch.penaltyLastN.has_value()) {
+        target.penaltyLastN = *patch.penaltyLastN;
+    }
+    if (patch.repeatPenalty.has_value()) {
+        target.repeatPenalty = *patch.repeatPenalty;
+    }
+    if (patch.frequencyPenalty.has_value()) {
+        target.frequencyPenalty = *patch.frequencyPenalty;
+    }
+    if (patch.presencePenalty.has_value()) {
+        target.presencePenalty = *patch.presencePenalty;
+    }
+    if (patch.mirostat.has_value()) {
+        target.mirostat = *patch.mirostat;
+    }
+    if (patch.mirostatTau.has_value()) {
+        target.mirostatTau = *patch.mirostatTau;
+    }
+    if (patch.mirostatEta.has_value()) {
+        target.mirostatEta = *patch.mirostatEta;
+    }
+    if (patch.ignoreEos.has_value()) {
+        target.ignoreEos = *patch.ignoreEos;
+    }
+}
+
+struct ModelParametersDialog : ViewModifiers<ModelParametersDialog> {
+    lambda_studio_backend::GenerationParams params;
+    bool disabled = false;
+    std::function<void(lambda_studio_backend::GenerationParamsPatch const &)> onAdjustGeneration;
+    std::function<void()> onClose;
+
+    auto body() const {
+        Theme const &theme = useEnvironment<Theme>();
+        auto localParams = useState<lambda_studio_backend::GenerationParams>(params);
+
+        auto apply = [localParams, onAdjustGeneration = onAdjustGeneration](lambda_studio_backend::GenerationParamsPatch const &patch) {
+            lambda_studio_backend::GenerationParams next = *localParams;
+            applyGenerationPatchLocal(next, patch);
+            localParams = next;
+            if (onAdjustGeneration) {
+                onAdjustGeneration(patch);
+            }
+        };
+
+        return ZStack {
+            .horizontalAlignment = Alignment::Center,
+            .verticalAlignment = Alignment::Center,
+            .children = children(
+                VStack {
+                    .spacing = theme.space3,
+                    .alignment = Alignment::Stretch,
+                    .children = children(
+                        HStack {
+                            .spacing = theme.space2,
+                            .alignment = Alignment::Center,
+                            .children = children(
+                                Text {
+                                    .text = "Model Parameters",
+                                    .font = theme.fontHeading,
+                                    .color = theme.colorTextPrimary,
+                                }
+                                    .flex(1.f, 1.f),
+                                IconButton {
+                                    .icon = IconName::Close,
+                                    .style = {
+                                        .size = theme.fontHeading.size,
+                                        .weight = theme.fontLabel.weight,
+                                        .color = theme.colorTextSecondary,
+                                    },
+                                    .onTap = onClose,
+                                }
+                            )
+                        },
+                        quickSettingControl(
+                            theme,
+                            "Temp",
+                            formatFloatValue((*localParams).temp, 2),
+                            disabled,
+                            [apply, localParams] {
+                                apply(lambda_studio_backend::GenerationParamsPatch {
+                                    .temp = std::max(0.0f, (*localParams).temp - 0.05f),
+                                });
+                            },
+                            [apply, localParams] {
+                                apply(lambda_studio_backend::GenerationParamsPatch {
+                                    .temp = (*localParams).temp + 0.05f,
+                                });
+                            }
+                        ),
+                        quickSettingControl(
+                            theme,
+                            "Top-P",
+                            formatFloatValue((*localParams).topP, 2),
+                            disabled,
+                            [apply, localParams] {
+                                apply(lambda_studio_backend::GenerationParamsPatch {
+                                    .topP = std::max(0.05f, (*localParams).topP - 0.05f),
+                                });
+                            },
+                            [apply, localParams] {
+                                apply(lambda_studio_backend::GenerationParamsPatch {
+                                    .topP = std::min(1.0f, (*localParams).topP + 0.05f),
+                                });
+                            }
+                        ),
+                        quickSettingControl(
+                            theme,
+                            "Top-K",
+                            std::to_string((*localParams).topK),
+                            disabled,
+                            [apply, localParams] {
+                                apply(lambda_studio_backend::GenerationParamsPatch {
+                                    .topK = std::max(1, (*localParams).topK - 10),
+                                });
+                            },
+                            [apply, localParams] {
+                                apply(lambda_studio_backend::GenerationParamsPatch {
+                                    .topK = (*localParams).topK + 10,
+                                });
+                            }
+                        ),
+                        quickSettingControl(
+                            theme,
+                            "Max Tokens",
+                            std::to_string((*localParams).maxTokens),
+                            disabled,
+                            [apply, localParams] {
+                                apply(lambda_studio_backend::GenerationParamsPatch {
+                                    .maxTokens = std::max(64, (*localParams).maxTokens - 128),
+                                });
+                            },
+                            [apply, localParams] {
+                                apply(lambda_studio_backend::GenerationParamsPatch {
+                                    .maxTokens = (*localParams).maxTokens + 128,
+                                });
+                            }
+                        )
+                    )
+                }
+                    .padding(theme.space4)
+                    .size(420.f, 0.f)
+                    .fill(FillStyle::solid(theme.colorSurfaceOverlay))
+                    .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
+                    .cornerRadius(theme.radiusXLarge)
+            ),
+        };
+    }
+};
+
 } // namespace
 
 struct ThinkingDots : ViewModifiers<ThinkingDots> {
@@ -690,10 +903,14 @@ struct ChatComposer : ViewModifiers<ChatComposer> {
     std::function<void(std::string const &)> onSend;
     std::function<void()> onStop;
     std::function<void(std::string const &, std::string const &)> onSelectModel;
+    lambda_studio_backend::GenerationParams generationParams;
+    std::function<void(lambda_studio_backend::GenerationParamsPatch const &)> onAdjustGeneration;
     bool streaming = false;
 
     auto body() const {
         Theme const &theme = useEnvironment<Theme>();
+        auto [showDialog, hideDialog, isDialogPresented] = useOverlay();
+        (void)isDialogPresented;
         auto requestComposerFocus = useRequestFocus();
         auto clearComposerFocus = useClearFocus();
         bool const isDisabled = disabled;
@@ -759,53 +976,86 @@ struct ChatComposer : ViewModifiers<ChatComposer> {
                 HStack {
                     .spacing = theme.space2,
                     .alignment = Alignment::Center,
-                    .children = children(Select {
-                                             .selectedIndex = modelSelection,
-                                             .options = std::move(modelOptions),
-                                             .placeholder = modelLabel.empty() ? "Select model" : modelLabel,
-                                             .emptyText = "No local models available",
-                                             .disabled = localModels.empty() || streaming,
-                                             .showDetailInTrigger = false,
-                                             .matchTriggerWidth = false,
-                                             .triggerMode = SelectTriggerMode::Link,
-                                             .style = Select::Style {
-                                                 .labelFont = theme.fontLabel,
-                                                 .detailFont = theme.fontBodySmall,
-                                                 .menuMaxHeight = 280.f,
-                                                 .menuMaxWidth = 420.f,
-                                                 .minMenuWidth = 0.f,
-                                                 .accentColor = localModels.empty() || streaming ? theme.colorTextDisabled : theme.colorAccent,
-                                             },
-                                             .onChange = [localModels = localModels, onSelectModel = onSelectModel](int index) {
-                                                 if (index < 0 || static_cast<std::size_t>(index) >= localModels.size()) {
-                                                     return;
-                                                 }
-                                                 if (onSelectModel) {
-                                                     LocalModel const &model = localModels[static_cast<std::size_t>(index)];
-                                                     PresentedLocalModel const presented = presentLocalModel(model);
-                                                     onSelectModel(model.path, presented.title.empty() ? model.name : presented.title);
-                                                 }
-                                             },
-                                         },
-                                         Spacer {}, streaming ? Element {IconButton {
-                                                                    .icon = IconName::Cancel,
-                                                                    .style = {
-                                                                        .size = theme.fontHeading.size,
-                                                                        .weight = theme.fontLabel.weight,
-                                                                        .color = theme.colorTextSecondary,
-                                                                    },
-                                                                    .onTap = onStop,
-                                                                }} :
-                                                                Element {IconButton {
-                                                                    .icon = IconName::ArrowUpward,
-                                                                    .disabled = !canSend,
-                                                                    .style = {
-                                                                        .size = theme.fontHeading.size,
-                                                                        .weight = theme.fontLabel.weight,
-                                                                        .color = theme.colorAccent,
-                                                                    },
-                                                                    .onTap = submit,
-                                                                }}),
+                    .children = children(
+                        IconButton {
+                            .icon = IconName::Settings,
+                            .disabled = !onAdjustGeneration,
+                            .style = {
+                                .size = theme.fontLabel.size,
+                                .weight = theme.fontLabel.weight,
+                                .color = theme.colorTextSecondary,
+                            },
+                            .onTap = [showDialog,
+                                      hideDialog,
+                                      params = generationParams,
+                                      dialogDisabled = disabled || streaming,
+                                      onAdjustGeneration = onAdjustGeneration] {
+                                showDialog(
+                                    ModelParametersDialog {
+                                        .params = params,
+                                        .disabled = dialogDisabled,
+                                        .onAdjustGeneration = onAdjustGeneration,
+                                        .onClose = hideDialog,
+                                    },
+                                    OverlayConfig {
+                                        .modal = true,
+                                        .backdropColor = Color {0.f, 0.f, 0.f, 0.4f},
+                                        .dismissOnOutsideTap = true,
+                                        .dismissOnEscape = true,
+                                        .onDismiss = hideDialog,
+                                    }
+                                );
+                            },
+                        },
+                        Select {
+                            .selectedIndex = modelSelection,
+                            .options = std::move(modelOptions),
+                            .placeholder = modelLabel.empty() ? "Select model" : modelLabel,
+                            .emptyText = "No local models available",
+                            .disabled = localModels.empty() || streaming,
+                            .showDetailInTrigger = false,
+                            .matchTriggerWidth = false,
+                            .triggerMode = SelectTriggerMode::Link,
+                            .style = Select::Style {
+                                .labelFont = theme.fontLabel,
+                                .detailFont = theme.fontBodySmall,
+                                .menuMaxHeight = 280.f,
+                                .menuMaxWidth = 420.f,
+                                .minMenuWidth = 0.f,
+                                .accentColor = localModels.empty() || streaming ? theme.colorTextDisabled : theme.colorAccent,
+                            },
+                            .onChange = [localModels = localModels, onSelectModel = onSelectModel](int index) {
+                                if (index < 0 || static_cast<std::size_t>(index) >= localModels.size()) {
+                                    return;
+                                }
+                                if (onSelectModel) {
+                                    LocalModel const &model = localModels[static_cast<std::size_t>(index)];
+                                    PresentedLocalModel const presented = presentLocalModel(model);
+                                    onSelectModel(model.path, presented.title.empty() ? model.name : presented.title);
+                                }
+                            },
+                        },
+                        Spacer {},
+                        streaming ? Element {IconButton {
+                                    .icon = IconName::Cancel,
+                                    .style = {
+                                        .size = theme.fontHeading.size,
+                                        .weight = theme.fontLabel.weight,
+                                        .color = theme.colorTextSecondary,
+                                    },
+                                    .onTap = onStop,
+                                }} :
+                                Element {IconButton {
+                                    .icon = IconName::ArrowUpward,
+                                    .disabled = !canSend,
+                                    .style = {
+                                        .size = theme.fontHeading.size,
+                                        .weight = theme.fontLabel.weight,
+                                        .color = theme.colorAccent,
+                                    },
+                                    .onTap = submit,
+                                }}
+                    ),
                 }
             ),
         }
@@ -826,12 +1076,14 @@ struct ChatView : ViewModifiers<ChatView> {
     std::vector<LocalModel> localModels;
     std::string loadedModelPath;
     bool modelLoading = false;
+    lambda_studio_backend::GenerationParams generationParams;
     std::function<void(std::string const &)> onSend;
     std::function<void()> onStop;
     std::function<void()> onDeleteChat;
     std::function<void(int)> onToggleReasoning;
     std::function<void(int)> onDeleteMessage;
     std::function<void(std::string const &, std::string const &)> onSelectModel;
+    std::function<void(lambda_studio_backend::GenerationParamsPatch const &)> onAdjustGeneration;
 
     auto body() const {
         Theme const &theme = useEnvironment<Theme>();
@@ -942,6 +1194,8 @@ struct ChatView : ViewModifiers<ChatView> {
                     .onSend = onSend,
                     .onStop = onStop,
                     .onSelectModel = onSelectModel,
+                    .generationParams = generationParams,
+                    .onAdjustGeneration = onAdjustGeneration,
                     .streaming = chat.streaming,
                 }.padding(0.f, theme.space4, theme.space4, theme.space4)
             ),

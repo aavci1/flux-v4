@@ -9,6 +9,117 @@
 
 namespace lambda_studio_backend {
 
+struct LoadParams {
+    std::string modelPath;
+    std::int32_t nGpuLayers = -1;
+    std::uint32_t nCtx = 0;
+    std::uint32_t nBatch = 2048;
+    std::uint32_t nUBatch = 512;
+    bool useMmap = true;
+    bool useMlock = false;
+    bool embeddings = false;
+    bool offloadKqv = true;
+    bool flashAttn = true;
+
+    constexpr bool operator==(LoadParams const &) const = default;
+};
+
+struct SessionParams {
+    std::uint32_t nCtx = 0;
+    std::uint32_t nBatch = 0;
+    std::uint32_t nUBatch = 0;
+    bool enableThinking = true;
+    std::string systemPrompt;
+    std::string chatTemplate;
+    bool flashAttn = true;
+
+    constexpr bool operator==(SessionParams const &) const = default;
+};
+
+struct GenerationParams {
+    std::uint32_t seed = UINT32_MAX;
+    std::int32_t maxTokens = 4096;
+
+    std::int32_t topK = 40;
+    float topP = 0.95f;
+    float minP = 0.05f;
+    float temp = 0.80f;
+
+    std::int32_t penaltyLastN = 64;
+    float repeatPenalty = 1.00f;
+    float frequencyPenalty = 0.00f;
+    float presencePenalty = 0.00f;
+
+    std::int32_t mirostat = 0;
+    float mirostatTau = 5.00f;
+    float mirostatEta = 0.10f;
+
+    bool ignoreEos = false;
+
+    constexpr bool operator==(GenerationParams const &) const = default;
+};
+
+struct LoadParamsPatch {
+    std::optional<std::string> modelPath;
+    std::optional<std::int32_t> nGpuLayers;
+    std::optional<std::uint32_t> nCtx;
+    std::optional<std::uint32_t> nBatch;
+    std::optional<std::uint32_t> nUBatch;
+    std::optional<bool> useMmap;
+    std::optional<bool> useMlock;
+    std::optional<bool> embeddings;
+    std::optional<bool> offloadKqv;
+    std::optional<bool> flashAttn;
+};
+
+struct SessionParamsPatch {
+    std::optional<std::uint32_t> nCtx;
+    std::optional<std::uint32_t> nBatch;
+    std::optional<std::uint32_t> nUBatch;
+    std::optional<bool> enableThinking;
+    std::optional<std::string> systemPrompt;
+    std::optional<std::string> chatTemplate;
+    std::optional<bool> flashAttn;
+};
+
+struct GenerationParamsPatch {
+    std::optional<std::uint32_t> seed;
+    std::optional<std::int32_t> maxTokens;
+    std::optional<std::int32_t> topK;
+    std::optional<float> topP;
+    std::optional<float> minP;
+    std::optional<float> temp;
+    std::optional<std::int32_t> penaltyLastN;
+    std::optional<float> repeatPenalty;
+    std::optional<float> frequencyPenalty;
+    std::optional<float> presencePenalty;
+    std::optional<std::int32_t> mirostat;
+    std::optional<float> mirostatTau;
+    std::optional<float> mirostatEta;
+    std::optional<bool> ignoreEos;
+};
+
+enum class ApplyScope {
+    AppliedImmediately,
+    Deferred,
+    RequiresSessionReset,
+    RequiresModelReload,
+    Rejected,
+};
+
+struct ApplyResult {
+    ApplyScope scope = ApplyScope::AppliedImmediately;
+    std::string message;
+};
+
+struct EngineConfigDefaults {
+    LoadParams loadDefaults;
+    SessionParams sessionDefaults;
+    GenerationParams generationDefaults;
+
+    constexpr bool operator==(EngineConfigDefaults const &) const = default;
+};
+
 struct ChatMessage {
     enum class Role {
         User,
@@ -26,6 +137,7 @@ struct ChatGenerationRequest {
     std::string chatId;
     std::uint64_t generationId = 0;
     std::vector<ChatMessage> messages;
+    std::optional<GenerationParams> requestGenerationParams;
     std::string summaryText;
     std::size_t summaryMessageCount = 0;
     std::int64_t summaryUpdatedAtUnixMs = 0;
@@ -42,10 +154,20 @@ struct GenerationStats {
     double tokensPerSecond = 0.0;
     std::string status;
     std::string errorText;
+    std::uint32_t seed = UINT32_MAX;
     float temp = 0.f;
-    float topP = 0.f;
     std::int32_t topK = 0;
+    float topP = 0.f;
+    float minP = 0.f;
     std::int32_t maxTokens = 0;
+    std::int32_t penaltyLastN = 0;
+    float repeatPenalty = 0.f;
+    float frequencyPenalty = 0.f;
+    float presencePenalty = 0.f;
+    std::int32_t mirostat = 0;
+    float mirostatTau = 0.f;
+    float mirostatEta = 0.f;
+    bool ignoreEos = false;
 
     constexpr bool operator==(GenerationStats const &) const = default;
 };
@@ -199,18 +321,9 @@ struct ModelManagerEvent {
     std::string rawJson;
     std::size_t downloadedBytes = 0;
     std::size_t totalBytes = 0;
+    LoadParams appliedLoadParams;
     std::uint64_t requestId = 0;
     ModelManagerLane lane = ModelManagerLane::Inventory;
-};
-
-struct SamplingParams {
-    float temp = 0.80f;
-    float topP = 0.95f;
-    int32_t topK = 40;
-    int32_t maxTokens = 4096;
-    int32_t nGpuLayers = -1;
-
-    constexpr bool operator==(SamplingParams const &) const = default;
 };
 
 } // namespace lambda_studio_backend

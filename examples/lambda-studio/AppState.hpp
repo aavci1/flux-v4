@@ -135,6 +135,10 @@ struct AppState {
     std::string loadedModelName;
     std::string pendingModelPath;
     std::string pendingModelName;
+    lambda_studio_backend::LoadParams loadDefaults;
+    lambda_studio_backend::SessionParams sessionDefaults;
+    lambda_studio_backend::GenerationParams generationDefaults;
+    bool showAdvancedGenerationControls = false;
 
     std::string statusText;
     std::string errorText;

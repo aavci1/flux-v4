@@ -5,6 +5,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -14,17 +15,42 @@ namespace {
 
 class FakeChatEngine : public lambda::IChatEngine {
   public:
-    bool load(std::string const &modelPath, int, uint32_t) override {
+    bool load(lambda_studio_backend::LoadParams const &params) override {
         loaded_ = true;
-        modelPath_ = modelPath;
+        loadParams_ = params;
+        modelPath_ = params.modelPath;
         return true;
     }
+
+    lambda_studio_backend::LoadParams loadParams() const override { return loadParams_; }
+    lambda_studio_backend::SessionParams sessionDefaults() const override { return sessionDefaults_; }
+    lambda_studio_backend::GenerationParams generationDefaults() const override { return generationDefaults_; }
 
     bool isLoaded() const override { return loaded_; }
     std::string const &modelPath() const override { return modelPath_; }
 
-    lambda_studio_backend::SamplingParams samplingParams() const override { return sampling_; }
-    void setSamplingParams(lambda_studio_backend::SamplingParams const &params) override { sampling_ = params; }
+    std::optional<lambda_studio_backend::GenerationParams> chatGenerationDefaults(std::string const &chatId) const override {
+        auto it = chatGenerationDefaults_.find(chatId);
+        return it == chatGenerationDefaults_.end() ? std::nullopt :
+                                                     std::optional<lambda_studio_backend::GenerationParams>(it->second);
+    }
+
+    lambda_studio_backend::ApplyResult updateLoadParams(lambda_studio_backend::LoadParamsPatch const &) override {
+        return {.scope = lambda_studio_backend::ApplyScope::AppliedImmediately, .message = ""};
+    }
+    lambda_studio_backend::ApplyResult updateSessionDefaults(lambda_studio_backend::SessionParamsPatch const &) override {
+        return {.scope = lambda_studio_backend::ApplyScope::AppliedImmediately, .message = ""};
+    }
+    lambda_studio_backend::ApplyResult updateGenerationDefaults(lambda_studio_backend::GenerationParamsPatch const &) override {
+        return {.scope = lambda_studio_backend::ApplyScope::AppliedImmediately, .message = ""};
+    }
+    lambda_studio_backend::ApplyResult updateChatGenerationParams(
+        std::string const &chatId,
+        lambda_studio_backend::GenerationParamsPatch const &
+    ) override {
+        chatGenerationDefaults_[chatId] = generationDefaults_;
+        return {.scope = lambda_studio_backend::ApplyScope::AppliedImmediately, .message = ""};
+    }
 
     void unload() override {
         loaded_ = false;
@@ -48,7 +74,10 @@ class FakeChatEngine : public lambda::IChatEngine {
   private:
     bool loaded_ = false;
     std::string modelPath_;
-    lambda_studio_backend::SamplingParams sampling_ {};
+    lambda_studio_backend::LoadParams loadParams_ {};
+    lambda_studio_backend::SessionParams sessionDefaults_ {};
+    lambda_studio_backend::GenerationParams generationDefaults_ {};
+    std::unordered_map<std::string, lambda_studio_backend::GenerationParams> chatGenerationDefaults_;
     int startChatCalls_ = 0;
     int cancelChatCalls_ = 0;
     int cancelAllCalls_ = 0;
@@ -65,7 +94,7 @@ class FakeModelManager : public lambda::IModelManager {
     std::uint64_t inspectRepo(std::string) override { return ++requestId_; }
     std::uint64_t downloadModel(std::string, std::string) override { return ++requestId_; }
     std::uint64_t cancelDownload() override { return ++requestId_; }
-    std::uint64_t loadModel(std::string, int) override { return ++requestId_; }
+    std::uint64_t loadModel(lambda_studio_backend::LoadParams) override { return ++requestId_; }
     std::uint64_t deleteModel(std::string, std::string) override { return ++requestId_; }
     void unloadModel() override {}
 
@@ -118,6 +147,14 @@ class FakeStore : public lambda::IStore {
     void deleteChatThread(std::string const &) override {}
     void updateSelectedChatId(std::string const &) override {}
     void replaceChatOrder(std::vector<std::string> const &) override {}
+    void updateChatThreadGenerationDefaults(
+        std::string const &,
+        std::optional<lambda_studio_backend::GenerationParams> const &
+    ) override {}
+    std::optional<lambda_studio_backend::EngineConfigDefaults> loadEngineConfigDefaults() override {
+        return std::nullopt;
+    }
+    void saveEngineConfigDefaults(lambda_studio_backend::EngineConfigDefaults const &) override {}
 };
 
 } // namespace

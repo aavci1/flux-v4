@@ -13,6 +13,8 @@
 #include <string_view>
 #include <vector>
 
+#include "Types.hpp"
+
 namespace lambda {
 
 inline std::uint64_t generateMessageRenderKey() {
@@ -42,10 +44,20 @@ struct MessageGenerationStats {
     double tokensPerSecond = 0.0;
     std::string status;
     std::string errorText;
+    std::uint32_t seed = UINT32_MAX;
     float temp = 0.f;
     float topP = 0.f;
     std::int32_t topK = 0;
+    float minP = 0.f;
     std::int32_t maxTokens = 0;
+    std::int32_t penaltyLastN = 0;
+    float repeatPenalty = 0.f;
+    float frequencyPenalty = 0.f;
+    float presencePenalty = 0.f;
+    std::int32_t mirostat = 0;
+    float mirostatTau = 0.f;
+    float mirostatEta = 0.f;
+    bool ignoreEos = false;
 
     bool operator==(MessageGenerationStats const &) const = default;
 };
@@ -85,6 +97,7 @@ struct ChatThread {
     std::vector<ChatMessage> streamDraftMessages;
     bool streaming = false;
     std::uint64_t activeGenerationId = 0;
+    std::optional<lambda_studio_backend::GenerationParams> generationDefaults;
 
     bool operator==(ChatThread const &) const = default;
 };

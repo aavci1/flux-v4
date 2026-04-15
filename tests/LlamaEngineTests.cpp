@@ -109,6 +109,21 @@ std::optional<std::string> doneStatusForChat(
     return std::nullopt;
 }
 
+std::optional<lambda_studio_backend::LlmUiEvent> doneEventForChat(
+    std::vector<lambda_studio_backend::LlmUiEvent> const &events,
+    std::string const &chatId,
+    std::uint64_t generationId
+) {
+    for (auto it = events.rbegin(); it != events.rend(); ++it) {
+        if (it->chatId != chatId || it->generationId != generationId ||
+            it->kind != lambda_studio_backend::LlmUiEvent::Kind::Done) {
+            continue;
+        }
+        return *it;
+    }
+    return std::nullopt;
+}
+
 } // namespace
 
 TEST_CASE("LlamaEngine fake stream allows concurrent chats") {
@@ -183,4 +198,53 @@ TEST_CASE("LlamaEngine fake stream cancelAllGenerations stops every chat") {
     auto events = collector.snapshot();
     CHECK(doneStatusForChat(events, "chat-a", 1) == std::optional<std::string>("cancelled"));
     CHECK(doneStatusForChat(events, "chat-b", 2) == std::optional<std::string>("cancelled"));
+}
+
+TEST_CASE("LlamaEngine applies request over chat over engine generation defaults") {
+    ScopedEnv fakeStream("LAMBDA_STUDIO_FAKE_STREAM", "1");
+    ScopedEnv fakeTps("LAMBDA_STUDIO_FAKE_TOKENS_PER_SECOND", "300");
+
+    lambda_studio_backend::LlamaEngine engine;
+    EventCollector collector;
+
+    auto engineResult = engine.updateGenerationDefaults(lambda_studio_backend::GenerationParamsPatch {.temp = 0.6f});
+    CHECK(engineResult.scope == lambda_studio_backend::ApplyScope::AppliedImmediately);
+    auto chatResult =
+        engine.updateChatGenerationParams("chat-a", lambda_studio_backend::GenerationParamsPatch {.temp = 0.9f});
+    CHECK(chatResult.scope == lambda_studio_backend::ApplyScope::AppliedImmediately);
+
+    auto request = makeRequest("chat-a", 42);
+    request.requestGenerationParams = lambda_studio_backend::GenerationParams {.temp = 0.2f};
+    engine.startChat(std::move(request), [&](lambda_studio_backend::LlmUiEvent event) { collector.post(std::move(event)); });
+
+    REQUIRE(collector.waitFor([](auto const &events) {
+        return doneStatusForChat(events, "chat-a", 42).has_value();
+    }));
+
+    auto doneEvent = doneEventForChat(collector.snapshot(), "chat-a", 42);
+    REQUIRE(doneEvent.has_value());
+    REQUIRE(doneEvent->generationStats.has_value());
+    CHECK(doctest::Approx(doneEvent->generationStats->temp).epsilon(0.001f) == 0.2f);
+}
+
+TEST_CASE("LlamaEngine defers load/session updates while generation is active") {
+    ScopedEnv fakeStream("LAMBDA_STUDIO_FAKE_STREAM", "1");
+    ScopedEnv fakeTps("LAMBDA_STUDIO_FAKE_TOKENS_PER_SECOND", "40");
+
+    lambda_studio_backend::LlamaEngine engine;
+    EventCollector collector;
+
+    engine.startChat(makeRequest("chat-a", 1), [&](lambda_studio_backend::LlmUiEvent event) { collector.post(std::move(event)); });
+    REQUIRE(collector.waitFor([](auto const &events) { return hasChunkForChat(events, "chat-a", 1); }));
+
+    auto loadResult = engine.updateLoadParams(lambda_studio_backend::LoadParamsPatch {
+        .modelPath = std::string("/tmp/placeholder.gguf"),
+        .nGpuLayers = 3,
+    });
+    auto sessionResult = engine.updateSessionDefaults(lambda_studio_backend::SessionParamsPatch {.nCtx = 4096});
+
+    CHECK(loadResult.scope == lambda_studio_backend::ApplyScope::Deferred);
+    CHECK(sessionResult.scope == lambda_studio_backend::ApplyScope::Deferred);
+
+    engine.cancelAllGenerations();
 }

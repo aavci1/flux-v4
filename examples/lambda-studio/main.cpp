@@ -124,6 +124,7 @@ void persistChatThread(
             chat.summaryUpdatedAtUnixMs,
             chatIndex
         );
+        catalog.updateChatThreadGenerationDefaults(chat.id, chat.generationDefaults);
         catalog.replaceChatMessagesForThread(chat.id, storedChatMessages(chat));
         if (persistSelection) {
             catalog.updateSelectedChatId(selectedChatIdForState(state));
@@ -160,10 +161,20 @@ MessageGenerationStats toMessageGenerationStats(
         .tokensPerSecond = stats.tokensPerSecond,
         .status = stats.status,
         .errorText = stats.errorText,
+        .seed = stats.seed,
         .temp = stats.temp,
         .topP = stats.topP,
         .topK = stats.topK,
+        .minP = stats.minP,
         .maxTokens = stats.maxTokens,
+        .penaltyLastN = stats.penaltyLastN,
+        .repeatPenalty = stats.repeatPenalty,
+        .frequencyPenalty = stats.frequencyPenalty,
+        .presencePenalty = stats.presencePenalty,
+        .mirostat = stats.mirostat,
+        .mirostatTau = stats.mirostatTau,
+        .mirostatEta = stats.mirostatEta,
+        .ignoreEos = stats.ignoreEos,
     };
 }
 
@@ -284,10 +295,186 @@ lambda_studio_backend::ChatGenerationRequest toGenerationRequest(ChatThread cons
         .chatId = chat.id,
         .generationId = chat.activeGenerationId,
         .messages = toBackendMessages(chat),
+        .requestGenerationParams = chat.generationDefaults,
         .summaryText = chat.summaryText,
         .summaryMessageCount = chat.summaryMessageCount,
         .summaryUpdatedAtUnixMs = chat.summaryUpdatedAtUnixMs,
     };
+}
+
+void applyGenerationPatch(
+    lambda_studio_backend::GenerationParams &target,
+    lambda_studio_backend::GenerationParamsPatch const &patch
+) {
+    if (patch.seed.has_value()) {
+        target.seed = *patch.seed;
+    }
+    if (patch.maxTokens.has_value()) {
+        target.maxTokens = *patch.maxTokens;
+    }
+    if (patch.topK.has_value()) {
+        target.topK = *patch.topK;
+    }
+    if (patch.topP.has_value()) {
+        target.topP = *patch.topP;
+    }
+    if (patch.minP.has_value()) {
+        target.minP = *patch.minP;
+    }
+    if (patch.temp.has_value()) {
+        target.temp = *patch.temp;
+    }
+    if (patch.penaltyLastN.has_value()) {
+        target.penaltyLastN = *patch.penaltyLastN;
+    }
+    if (patch.repeatPenalty.has_value()) {
+        target.repeatPenalty = *patch.repeatPenalty;
+    }
+    if (patch.frequencyPenalty.has_value()) {
+        target.frequencyPenalty = *patch.frequencyPenalty;
+    }
+    if (patch.presencePenalty.has_value()) {
+        target.presencePenalty = *patch.presencePenalty;
+    }
+    if (patch.mirostat.has_value()) {
+        target.mirostat = *patch.mirostat;
+    }
+    if (patch.mirostatTau.has_value()) {
+        target.mirostatTau = *patch.mirostatTau;
+    }
+    if (patch.mirostatEta.has_value()) {
+        target.mirostatEta = *patch.mirostatEta;
+    }
+    if (patch.ignoreEos.has_value()) {
+        target.ignoreEos = *patch.ignoreEos;
+    }
+}
+
+void applySessionPatch(
+    lambda_studio_backend::SessionParams &target,
+    lambda_studio_backend::SessionParamsPatch const &patch
+) {
+    if (patch.nCtx.has_value()) {
+        target.nCtx = *patch.nCtx;
+    }
+    if (patch.nBatch.has_value()) {
+        target.nBatch = *patch.nBatch;
+    }
+    if (patch.nUBatch.has_value()) {
+        target.nUBatch = *patch.nUBatch;
+    }
+    if (patch.enableThinking.has_value()) {
+        target.enableThinking = *patch.enableThinking;
+    }
+    if (patch.systemPrompt.has_value()) {
+        target.systemPrompt = *patch.systemPrompt;
+    }
+    if (patch.chatTemplate.has_value()) {
+        target.chatTemplate = *patch.chatTemplate;
+    }
+    if (patch.flashAttn.has_value()) {
+        target.flashAttn = *patch.flashAttn;
+    }
+}
+
+void applyLoadPatch(
+    lambda_studio_backend::LoadParams &target,
+    lambda_studio_backend::LoadParamsPatch const &patch
+) {
+    if (patch.modelPath.has_value()) {
+        target.modelPath = *patch.modelPath;
+    }
+    if (patch.nGpuLayers.has_value()) {
+        target.nGpuLayers = *patch.nGpuLayers;
+    }
+    if (patch.nCtx.has_value()) {
+        target.nCtx = *patch.nCtx;
+    }
+    if (patch.nBatch.has_value()) {
+        target.nBatch = *patch.nBatch;
+    }
+    if (patch.nUBatch.has_value()) {
+        target.nUBatch = *patch.nUBatch;
+    }
+    if (patch.useMmap.has_value()) {
+        target.useMmap = *patch.useMmap;
+    }
+    if (patch.useMlock.has_value()) {
+        target.useMlock = *patch.useMlock;
+    }
+    if (patch.embeddings.has_value()) {
+        target.embeddings = *patch.embeddings;
+    }
+    if (patch.offloadKqv.has_value()) {
+        target.offloadKqv = *patch.offloadKqv;
+    }
+    if (patch.flashAttn.has_value()) {
+        target.flashAttn = *patch.flashAttn;
+    }
+}
+
+lambda_studio_backend::GenerationParamsPatch patchFromGenerationParams(
+    lambda_studio_backend::GenerationParams const &params
+) {
+    return lambda_studio_backend::GenerationParamsPatch {
+        .seed = params.seed,
+        .maxTokens = params.maxTokens,
+        .topK = params.topK,
+        .topP = params.topP,
+        .minP = params.minP,
+        .temp = params.temp,
+        .penaltyLastN = params.penaltyLastN,
+        .repeatPenalty = params.repeatPenalty,
+        .frequencyPenalty = params.frequencyPenalty,
+        .presencePenalty = params.presencePenalty,
+        .mirostat = params.mirostat,
+        .mirostatTau = params.mirostatTau,
+        .mirostatEta = params.mirostatEta,
+        .ignoreEos = params.ignoreEos,
+    };
+}
+
+lambda_studio_backend::LoadParamsPatch patchFromLoadParams(lambda_studio_backend::LoadParams const &params) {
+    return lambda_studio_backend::LoadParamsPatch {
+        .modelPath = params.modelPath,
+        .nGpuLayers = params.nGpuLayers,
+        .nCtx = params.nCtx,
+        .nBatch = params.nBatch,
+        .nUBatch = params.nUBatch,
+        .useMmap = params.useMmap,
+        .useMlock = params.useMlock,
+        .embeddings = params.embeddings,
+        .offloadKqv = params.offloadKqv,
+        .flashAttn = params.flashAttn,
+    };
+}
+
+lambda_studio_backend::SessionParamsPatch patchFromSessionParams(lambda_studio_backend::SessionParams const &params) {
+    return lambda_studio_backend::SessionParamsPatch {
+        .nCtx = params.nCtx,
+        .nBatch = params.nBatch,
+        .nUBatch = params.nUBatch,
+        .enableThinking = params.enableThinking,
+        .systemPrompt = params.systemPrompt,
+        .chatTemplate = params.chatTemplate,
+        .flashAttn = params.flashAttn,
+    };
+}
+
+std::string applyScopeLabel(lambda_studio_backend::ApplyScope scope) {
+    switch (scope) {
+    case lambda_studio_backend::ApplyScope::AppliedImmediately:
+        return "Applies now";
+    case lambda_studio_backend::ApplyScope::Deferred:
+        return "Deferred";
+    case lambda_studio_backend::ApplyScope::RequiresSessionReset:
+        return "Requires session reset";
+    case lambda_studio_backend::ApplyScope::RequiresModelReload:
+        return "Requires reload";
+    case lambda_studio_backend::ApplyScope::Rejected:
+        return "Rejected";
+    }
+    return "Applies now";
 }
 
 std::string titleFromPrompt(std::string const &prompt) {
@@ -455,6 +642,7 @@ struct StudioApp : ViewModifiers<StudioApp> {
                             break;
                         }
                         nextState.modelLoading = false;
+                        nextState.loadDefaults = event.appliedLoadParams;
                         nextState.loadedModelPath = event.modelPath;
                         nextState.loadedModelName = event.modelName;
                         nextState.pendingModelPath.clear();
@@ -741,11 +929,33 @@ struct StudioApp : ViewModifiers<StudioApp> {
                 catalog->markRunningDownloadJobsInterrupted(currentUnixMillis());
                 nextState.recentDownloadJobs = catalog->loadRecentDownloadJobs();
                 nextState.localModels = catalog->loadLocalModelInstances();
+                if (auto persistedDefaults = catalog->loadEngineConfigDefaults(); persistedDefaults.has_value()) {
+                    nextState.loadDefaults = persistedDefaults->loadDefaults;
+                    nextState.sessionDefaults = persistedDefaults->sessionDefaults;
+                    nextState.generationDefaults = persistedDefaults->generationDefaults;
+                    if (!nextState.loadDefaults.modelPath.empty()) {
+                        engine->updateLoadParams(patchFromLoadParams(nextState.loadDefaults));
+                    }
+                    engine->updateSessionDefaults(patchFromSessionParams(nextState.sessionDefaults));
+                    engine->updateGenerationDefaults(patchFromGenerationParams(nextState.generationDefaults));
+                }
             } catch (std::exception const &e) {
                 nextState.errorText = e.what();
             }
-            nextState.loadedModelPath = lambda_studio_backend::defaultModelPath();
+            nextState.loadDefaults = engine->loadParams();
+            if (nextState.loadDefaults.modelPath.empty()) {
+                nextState.loadDefaults = lambda_studio_backend::defaultLoadParams();
+            }
+            nextState.generationDefaults = engine->generationDefaults();
+            nextState.sessionDefaults = engine->sessionDefaults();
+            nextState.loadedModelPath = nextState.loadDefaults.modelPath;
             nextState.loadedModelName = lambda_studio_backend::defaultModelName();
+            for (ChatThread const &chat : nextState.chats) {
+                if (!chat.generationDefaults.has_value()) {
+                    continue;
+                }
+                engine->updateChatGenerationParams(chat.id, patchFromGenerationParams(*chat.generationDefaults));
+            }
             if (!nextState.loadedModelPath.empty() && !engine->isLoaded()) {
                 nextState.modelLoading = true;
                 nextState.pendingModelPath = nextState.loadedModelPath;
@@ -753,10 +963,9 @@ struct StudioApp : ViewModifiers<StudioApp> {
             }
             nextState.latestInventoryRequestId = manager->refreshLocalModels();
             if (!lambda_studio_backend::defaultModelPath().empty() && !engine->isLoaded()) {
-                nextState.latestLoadModelRequestId = manager->loadModel(
-                    lambda_studio_backend::defaultModelPath(),
-                    lambda_studio_backend::defaultNGpuLayers()
-                );
+                lambda_studio_backend::LoadParams initialLoad = nextState.loadDefaults;
+                initialLoad.modelPath = lambda_studio_backend::defaultModelPath();
+                nextState.latestLoadModelRequestId = manager->loadModel(std::move(initialLoad));
             }
             appState = std::move(nextState);
         }
@@ -957,9 +1166,10 @@ struct StudioApp : ViewModifiers<StudioApp> {
             nextState.modelLoading = true;
             nextState.pendingModelPath = path;
             nextState.pendingModelName = name;
+            nextState.loadDefaults.modelPath = path;
             nextState.statusText = "Loading " + name;
             nextState.errorText.clear();
-            nextState.latestLoadModelRequestId = manager->loadModel(path, lambda_studio_backend::defaultNGpuLayers());
+            nextState.latestLoadModelRequestId = manager->loadModel(nextState.loadDefaults);
             appState = std::move(nextState);
         };
 
@@ -1111,6 +1321,95 @@ struct StudioApp : ViewModifiers<StudioApp> {
             appState = std::move(nextState);
         };
 
+        auto updateChatGenerationDefaults = [appState, catalog, engine](
+                                                int chatIndex,
+                                                lambda_studio_backend::GenerationParamsPatch const &patch
+                                            ) {
+            AppState nextState = *appState;
+            if (chatIndex < 0 || static_cast<std::size_t>(chatIndex) >= nextState.chats.size()) {
+                return;
+            }
+            ChatThread &chat = nextState.chats[static_cast<std::size_t>(chatIndex)];
+            lambda_studio_backend::GenerationParams params =
+                chat.generationDefaults.value_or(nextState.generationDefaults);
+            applyGenerationPatch(params, patch);
+            chat.generationDefaults = params;
+
+            lambda_studio_backend::ApplyResult const result =
+                engine->updateChatGenerationParams(chat.id, patchFromGenerationParams(params));
+            if (result.scope == lambda_studio_backend::ApplyScope::Rejected) {
+                nextState.errorText = result.message.empty() ? "Invalid generation setting" : result.message;
+            } else {
+                try {
+                    catalog->updateChatThreadGenerationDefaults(chat.id, chat.generationDefaults);
+                } catch (std::exception const &e) {
+                    nextState.errorText = e.what();
+                }
+                nextState.statusText = applyScopeLabel(result.scope) +
+                                       (result.message.empty() ? std::string() : (": " + result.message));
+                nextState.errorText.clear();
+            }
+            appState = std::move(nextState);
+        };
+
+        auto saveEngineDefaults = [catalog](AppState &state) {
+            try {
+                catalog->saveEngineConfigDefaults(lambda_studio_backend::EngineConfigDefaults {
+                    .loadDefaults = state.loadDefaults,
+                    .sessionDefaults = state.sessionDefaults,
+                    .generationDefaults = state.generationDefaults,
+                });
+            } catch (std::exception const &e) {
+                state.errorText = e.what();
+            }
+        };
+
+        auto updateEngineGenerationDefaults = [appState, engine, saveEngineDefaults](lambda_studio_backend::GenerationParamsPatch const &patch) {
+            AppState nextState = *appState;
+            lambda_studio_backend::ApplyResult const result = engine->updateGenerationDefaults(patch);
+            if (result.scope == lambda_studio_backend::ApplyScope::Rejected) {
+                nextState.errorText = result.message.empty() ? "Invalid generation defaults" : result.message;
+            } else {
+                applyGenerationPatch(nextState.generationDefaults, patch);
+                saveEngineDefaults(nextState);
+                nextState.statusText = applyScopeLabel(result.scope) +
+                                       (result.message.empty() ? std::string() : (": " + result.message));
+                nextState.errorText.clear();
+            }
+            appState = std::move(nextState);
+        };
+
+        auto updateEngineSessionDefaults = [appState, engine, saveEngineDefaults](lambda_studio_backend::SessionParamsPatch const &patch) {
+            AppState nextState = *appState;
+            lambda_studio_backend::ApplyResult const result = engine->updateSessionDefaults(patch);
+            if (result.scope == lambda_studio_backend::ApplyScope::Rejected) {
+                nextState.errorText = result.message.empty() ? "Invalid session defaults" : result.message;
+            } else {
+                applySessionPatch(nextState.sessionDefaults, patch);
+                saveEngineDefaults(nextState);
+                nextState.statusText = applyScopeLabel(result.scope) +
+                                       (result.message.empty() ? std::string() : (": " + result.message));
+                nextState.errorText.clear();
+            }
+            appState = std::move(nextState);
+        };
+
+        auto updateEngineLoadDefaults = [appState, engine, saveEngineDefaults](lambda_studio_backend::LoadParamsPatch const &patch) {
+            AppState nextState = *appState;
+            lambda_studio_backend::ApplyResult const result = engine->updateLoadParams(patch);
+            if (result.scope == lambda_studio_backend::ApplyScope::Rejected) {
+                nextState.errorText = result.message.empty() ? "Invalid load defaults" : result.message;
+            } else {
+                applyLoadPatch(nextState.loadDefaults, patch);
+                nextState.loadedModelPath = engine->modelPath();
+                saveEngineDefaults(nextState);
+                nextState.statusText = applyScopeLabel(result.scope) +
+                                       (result.message.empty() ? std::string() : (": " + result.message));
+                nextState.errorText.clear();
+            }
+            appState = std::move(nextState);
+        };
+
         auto createChat = [appState, catalog]() {
             AppState nextState = *appState;
             ChatThread thread;
@@ -1169,6 +1468,7 @@ struct StudioApp : ViewModifiers<StudioApp> {
             .onDeleteChat = deleteChat,
             .onToggleReasoning = toggleReasoningMessage,
             .onDeleteMessage = deleteChatMessage,
+            .onAdjustGeneration = updateChatGenerationDefaults,
         }
                                   .flex(1.f, 1.f);
 
@@ -1198,6 +1498,9 @@ struct StudioApp : ViewModifiers<StudioApp> {
         } else if (state.currentModule == StudioModule::Settings) {
             currentView = SettingsView {
                 .state = state,
+                .onAdjustGenerationDefaults = updateEngineGenerationDefaults,
+                .onAdjustSessionDefaults = updateEngineSessionDefaults,
+                .onAdjustLoadDefaults = updateEngineLoadDefaults,
             }
                               .flex(1.f, 1.f);
         }

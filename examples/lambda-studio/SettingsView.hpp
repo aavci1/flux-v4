@@ -237,10 +237,61 @@ inline Element sectionCard(Theme const &theme, std::string eyebrow, std::string 
         .cornerRadius(theme.radiusXLarge);
 }
 
+inline Element adjustmentRow(
+    Theme const &theme,
+    std::string label,
+    std::string value,
+    std::string scopeHint,
+    bool disabled,
+    std::function<void()> onDecrement,
+    std::function<void()> onIncrement
+) {
+    return HStack {
+        .spacing = theme.space2,
+        .alignment = Alignment::Center,
+        .children = children(
+            Text {
+                .text = std::move(label),
+                .font = theme.fontLabelSmall,
+                .color = theme.colorTextMuted,
+            }
+                .size(126.f, 0.f),
+            Text {
+                .text = std::move(value),
+                .font = theme.fontBodySmall,
+                .color = theme.colorTextPrimary,
+                .horizontalAlignment = HorizontalAlignment::Leading,
+            }
+                .flex(1.f, 1.f),
+            Badge {
+                .label = std::move(scopeHint),
+                .style = {
+                    .font = theme.fontLabelSmall,
+                    .foregroundColor = theme.colorTextSecondary,
+                    .backgroundColor = theme.colorSurfaceHover,
+                },
+            },
+            LinkButton {
+                .label = "-",
+                .disabled = disabled,
+                .onTap = std::move(onDecrement),
+            },
+            LinkButton {
+                .label = "+",
+                .disabled = disabled,
+                .onTap = std::move(onIncrement),
+            }
+        )
+    };
+}
+
 } // namespace settings_view_detail
 
 struct SettingsView : ViewModifiers<SettingsView> {
     AppState state;
+    std::function<void(lambda_studio_backend::GenerationParamsPatch const &)> onAdjustGenerationDefaults;
+    std::function<void(lambda_studio_backend::SessionParamsPatch const &)> onAdjustSessionDefaults;
+    std::function<void(lambda_studio_backend::LoadParamsPatch const &)> onAdjustLoadDefaults;
 
     auto body() const {
         Theme const &theme = useEnvironment<Theme>();
@@ -372,6 +423,400 @@ struct SettingsView : ViewModifiers<SettingsView> {
             .spacing = theme.space3,
         });
 
+        std::vector<Element> configRows;
+        configRows.reserve(8);
+        configRows.push_back(adjustmentRow(
+            theme,
+            "Temp",
+            std::to_string(state.generationDefaults.temp),
+            "Applies now",
+            !onAdjustGenerationDefaults,
+            [cb = onAdjustGenerationDefaults, current = state.generationDefaults.temp] {
+                if (cb) {
+                    cb(lambda_studio_backend::GenerationParamsPatch {.temp = std::max(0.0f, current - 0.05f)});
+                }
+            },
+            [cb = onAdjustGenerationDefaults, current = state.generationDefaults.temp] {
+                if (cb) {
+                    cb(lambda_studio_backend::GenerationParamsPatch {.temp = current + 0.05f});
+                }
+            }
+        ));
+        configRows.push_back(adjustmentRow(
+            theme,
+            "Top-P",
+            std::to_string(state.generationDefaults.topP),
+            "Applies now",
+            !onAdjustGenerationDefaults,
+            [cb = onAdjustGenerationDefaults, current = state.generationDefaults.topP] {
+                if (cb) {
+                    cb(lambda_studio_backend::GenerationParamsPatch {.topP = std::max(0.05f, current - 0.05f)});
+                }
+            },
+            [cb = onAdjustGenerationDefaults, current = state.generationDefaults.topP] {
+                if (cb) {
+                    cb(lambda_studio_backend::GenerationParamsPatch {.topP = std::min(1.0f, current + 0.05f)});
+                }
+            }
+        ));
+        configRows.push_back(adjustmentRow(
+            theme,
+            "Top-K",
+            std::to_string(state.generationDefaults.topK),
+            "Applies now",
+            !onAdjustGenerationDefaults,
+            [cb = onAdjustGenerationDefaults, current = state.generationDefaults.topK] {
+                if (cb) {
+                    cb(lambda_studio_backend::GenerationParamsPatch {.topK = std::max(1, current - 10)});
+                }
+            },
+            [cb = onAdjustGenerationDefaults, current = state.generationDefaults.topK] {
+                if (cb) {
+                    cb(lambda_studio_backend::GenerationParamsPatch {.topK = current + 10});
+                }
+            }
+        ));
+        configRows.push_back(adjustmentRow(
+            theme,
+            "Max tokens",
+            std::to_string(state.generationDefaults.maxTokens),
+            "Applies now",
+            !onAdjustGenerationDefaults,
+            [cb = onAdjustGenerationDefaults, current = state.generationDefaults.maxTokens] {
+                if (cb) {
+                    cb(lambda_studio_backend::GenerationParamsPatch {.maxTokens = std::max(64, current - 128)});
+                }
+            },
+            [cb = onAdjustGenerationDefaults, current = state.generationDefaults.maxTokens] {
+                if (cb) {
+                    cb(lambda_studio_backend::GenerationParamsPatch {.maxTokens = current + 128});
+                }
+            }
+        ));
+        configRows.push_back(adjustmentRow(
+            theme,
+            "Min-P",
+            std::to_string(state.generationDefaults.minP),
+            "Applies now",
+            !onAdjustGenerationDefaults,
+            [cb = onAdjustGenerationDefaults, current = state.generationDefaults.minP] {
+                if (cb) {
+                    cb(lambda_studio_backend::GenerationParamsPatch {.minP = std::max(0.0f, current - 0.05f)});
+                }
+            },
+            [cb = onAdjustGenerationDefaults, current = state.generationDefaults.minP] {
+                if (cb) {
+                    cb(lambda_studio_backend::GenerationParamsPatch {.minP = std::min(1.0f, current + 0.05f)});
+                }
+            }
+        ));
+        configRows.push_back(adjustmentRow(
+            theme,
+            "Repeat penalty",
+            std::to_string(state.generationDefaults.repeatPenalty),
+            "Applies now",
+            !onAdjustGenerationDefaults,
+            [cb = onAdjustGenerationDefaults, current = state.generationDefaults.repeatPenalty] {
+                if (cb) {
+                    cb(lambda_studio_backend::GenerationParamsPatch {.repeatPenalty = std::max(0.0f, current - 0.05f)});
+                }
+            },
+            [cb = onAdjustGenerationDefaults, current = state.generationDefaults.repeatPenalty] {
+                if (cb) {
+                    cb(lambda_studio_backend::GenerationParamsPatch {.repeatPenalty = current + 0.05f});
+                }
+            }
+        ));
+        configRows.push_back(adjustmentRow(
+            theme,
+            "Freq penalty",
+            std::to_string(state.generationDefaults.frequencyPenalty),
+            "Applies now",
+            !onAdjustGenerationDefaults,
+            [cb = onAdjustGenerationDefaults, current = state.generationDefaults.frequencyPenalty] {
+                if (cb) {
+                    cb(lambda_studio_backend::GenerationParamsPatch {.frequencyPenalty = current - 0.05f});
+                }
+            },
+            [cb = onAdjustGenerationDefaults, current = state.generationDefaults.frequencyPenalty] {
+                if (cb) {
+                    cb(lambda_studio_backend::GenerationParamsPatch {.frequencyPenalty = current + 0.05f});
+                }
+            }
+        ));
+        configRows.push_back(adjustmentRow(
+            theme,
+            "Presence penalty",
+            std::to_string(state.generationDefaults.presencePenalty),
+            "Applies now",
+            !onAdjustGenerationDefaults,
+            [cb = onAdjustGenerationDefaults, current = state.generationDefaults.presencePenalty] {
+                if (cb) {
+                    cb(lambda_studio_backend::GenerationParamsPatch {.presencePenalty = current - 0.05f});
+                }
+            },
+            [cb = onAdjustGenerationDefaults, current = state.generationDefaults.presencePenalty] {
+                if (cb) {
+                    cb(lambda_studio_backend::GenerationParamsPatch {.presencePenalty = current + 0.05f});
+                }
+            }
+        ));
+        configRows.push_back(adjustmentRow(
+            theme,
+            "Penalty last N",
+            std::to_string(state.generationDefaults.penaltyLastN),
+            "Applies now",
+            !onAdjustGenerationDefaults,
+            [cb = onAdjustGenerationDefaults, current = state.generationDefaults.penaltyLastN] {
+                if (cb) {
+                    cb(lambda_studio_backend::GenerationParamsPatch {.penaltyLastN = std::max(0, current - 8)});
+                }
+            },
+            [cb = onAdjustGenerationDefaults, current = state.generationDefaults.penaltyLastN] {
+                if (cb) {
+                    cb(lambda_studio_backend::GenerationParamsPatch {.penaltyLastN = current + 8});
+                }
+            }
+        ));
+        configRows.push_back(adjustmentRow(
+            theme,
+            "Mirostat",
+            std::to_string(state.generationDefaults.mirostat),
+            "Applies now",
+            !onAdjustGenerationDefaults,
+            [cb = onAdjustGenerationDefaults, current = state.generationDefaults.mirostat] {
+                if (cb) {
+                    cb(lambda_studio_backend::GenerationParamsPatch {.mirostat = std::max(0, current - 1)});
+                }
+            },
+            [cb = onAdjustGenerationDefaults, current = state.generationDefaults.mirostat] {
+                if (cb) {
+                    cb(lambda_studio_backend::GenerationParamsPatch {.mirostat = std::min(2, current + 1)});
+                }
+            }
+        ));
+        configRows.push_back(adjustmentRow(
+            theme,
+            "Mirostat tau",
+            std::to_string(state.generationDefaults.mirostatTau),
+            "Applies now",
+            !onAdjustGenerationDefaults,
+            [cb = onAdjustGenerationDefaults, current = state.generationDefaults.mirostatTau] {
+                if (cb) {
+                    cb(lambda_studio_backend::GenerationParamsPatch {.mirostatTau = std::max(0.0f, current - 0.5f)});
+                }
+            },
+            [cb = onAdjustGenerationDefaults, current = state.generationDefaults.mirostatTau] {
+                if (cb) {
+                    cb(lambda_studio_backend::GenerationParamsPatch {.mirostatTau = current + 0.5f});
+                }
+            }
+        ));
+        configRows.push_back(adjustmentRow(
+            theme,
+            "Mirostat eta",
+            std::to_string(state.generationDefaults.mirostatEta),
+            "Applies now",
+            !onAdjustGenerationDefaults,
+            [cb = onAdjustGenerationDefaults, current = state.generationDefaults.mirostatEta] {
+                if (cb) {
+                    cb(lambda_studio_backend::GenerationParamsPatch {.mirostatEta = std::max(0.0f, current - 0.02f)});
+                }
+            },
+            [cb = onAdjustGenerationDefaults, current = state.generationDefaults.mirostatEta] {
+                if (cb) {
+                    cb(lambda_studio_backend::GenerationParamsPatch {.mirostatEta = current + 0.02f});
+                }
+            }
+        ));
+        configRows.push_back(adjustmentRow(
+            theme,
+            "Ignore EOS",
+            state.generationDefaults.ignoreEos ? "Enabled" : "Disabled",
+            "Applies now",
+            !onAdjustGenerationDefaults,
+            [cb = onAdjustGenerationDefaults] {
+                if (cb) {
+                    cb(lambda_studio_backend::GenerationParamsPatch {.ignoreEos = false});
+                }
+            },
+            [cb = onAdjustGenerationDefaults] {
+                if (cb) {
+                    cb(lambda_studio_backend::GenerationParamsPatch {.ignoreEos = true});
+                }
+            }
+        ));
+        configRows.push_back(adjustmentRow(
+            theme,
+            "Session n_ctx",
+            std::to_string(state.sessionDefaults.nCtx),
+            "Requires session reset",
+            !onAdjustSessionDefaults,
+            [cb = onAdjustSessionDefaults, current = state.sessionDefaults.nCtx] {
+                if (cb) {
+                    cb(lambda_studio_backend::SessionParamsPatch {.nCtx = current > 256 ? current - 256 : 0});
+                }
+            },
+            [cb = onAdjustSessionDefaults, current = state.sessionDefaults.nCtx] {
+                if (cb) {
+                    cb(lambda_studio_backend::SessionParamsPatch {.nCtx = current + 256});
+                }
+            }
+        ));
+        configRows.push_back(adjustmentRow(
+            theme,
+            "Session n_batch",
+            std::to_string(state.sessionDefaults.nBatch),
+            "Requires session reset",
+            !onAdjustSessionDefaults,
+            [cb = onAdjustSessionDefaults, current = state.sessionDefaults.nBatch] {
+                if (cb) {
+                    cb(lambda_studio_backend::SessionParamsPatch {.nBatch = current > 64 ? current - 64 : 0});
+                }
+            },
+            [cb = onAdjustSessionDefaults, current = state.sessionDefaults.nBatch] {
+                if (cb) {
+                    cb(lambda_studio_backend::SessionParamsPatch {.nBatch = current + 64});
+                }
+            }
+        ));
+        configRows.push_back(adjustmentRow(
+            theme,
+            "Session n_ubatch",
+            std::to_string(state.sessionDefaults.nUBatch),
+            "Requires session reset",
+            !onAdjustSessionDefaults,
+            [cb = onAdjustSessionDefaults, current = state.sessionDefaults.nUBatch] {
+                if (cb) {
+                    cb(lambda_studio_backend::SessionParamsPatch {.nUBatch = current > 64 ? current - 64 : 0});
+                }
+            },
+            [cb = onAdjustSessionDefaults, current = state.sessionDefaults.nUBatch] {
+                if (cb) {
+                    cb(lambda_studio_backend::SessionParamsPatch {.nUBatch = current + 64});
+                }
+            }
+        ));
+        configRows.push_back(adjustmentRow(
+            theme,
+            "Session flash attn",
+            state.sessionDefaults.flashAttn ? "Enabled" : "Disabled",
+            "Requires session reset",
+            !onAdjustSessionDefaults,
+            [cb = onAdjustSessionDefaults] {
+                if (cb) {
+                    cb(lambda_studio_backend::SessionParamsPatch {.flashAttn = false});
+                }
+            },
+            [cb = onAdjustSessionDefaults] {
+                if (cb) {
+                    cb(lambda_studio_backend::SessionParamsPatch {.flashAttn = true});
+                }
+            }
+        ));
+        configRows.push_back(adjustmentRow(
+            theme,
+            "Thinking",
+            state.sessionDefaults.enableThinking ? "Enabled" : "Disabled",
+            "Requires session reset",
+            !onAdjustSessionDefaults,
+            [cb = onAdjustSessionDefaults] {
+                if (cb) {
+                    cb(lambda_studio_backend::SessionParamsPatch {.enableThinking = false});
+                }
+            },
+            [cb = onAdjustSessionDefaults] {
+                if (cb) {
+                    cb(lambda_studio_backend::SessionParamsPatch {.enableThinking = true});
+                }
+            }
+        ));
+        configRows.push_back(adjustmentRow(
+            theme,
+            "Load n_gpu_layers",
+            std::to_string(state.loadDefaults.nGpuLayers),
+            "Requires reload",
+            !onAdjustLoadDefaults,
+            [cb = onAdjustLoadDefaults, current = state.loadDefaults.nGpuLayers] {
+                if (cb) {
+                    cb(lambda_studio_backend::LoadParamsPatch {.nGpuLayers = current - 1});
+                }
+            },
+            [cb = onAdjustLoadDefaults, current = state.loadDefaults.nGpuLayers] {
+                if (cb) {
+                    cb(lambda_studio_backend::LoadParamsPatch {.nGpuLayers = current + 1});
+                }
+            }
+        ));
+        configRows.push_back(adjustmentRow(
+            theme,
+            "Load n_ctx",
+            std::to_string(state.loadDefaults.nCtx),
+            "Requires reload",
+            !onAdjustLoadDefaults,
+            [cb = onAdjustLoadDefaults, current = state.loadDefaults.nCtx] {
+                if (cb) {
+                    cb(lambda_studio_backend::LoadParamsPatch {.nCtx = current > 256 ? current - 256 : 0});
+                }
+            },
+            [cb = onAdjustLoadDefaults, current = state.loadDefaults.nCtx] {
+                if (cb) {
+                    cb(lambda_studio_backend::LoadParamsPatch {.nCtx = current + 256});
+                }
+            }
+        ));
+        configRows.push_back(adjustmentRow(
+            theme,
+            "Load n_batch",
+            std::to_string(state.loadDefaults.nBatch),
+            "Requires reload",
+            !onAdjustLoadDefaults,
+            [cb = onAdjustLoadDefaults, current = state.loadDefaults.nBatch] {
+                if (cb) {
+                    cb(lambda_studio_backend::LoadParamsPatch {.nBatch = current > 64 ? current - 64 : 1});
+                }
+            },
+            [cb = onAdjustLoadDefaults, current = state.loadDefaults.nBatch] {
+                if (cb) {
+                    cb(lambda_studio_backend::LoadParamsPatch {.nBatch = current + 64});
+                }
+            }
+        ));
+        configRows.push_back(adjustmentRow(
+            theme,
+            "Load n_ubatch",
+            std::to_string(state.loadDefaults.nUBatch),
+            "Requires reload",
+            !onAdjustLoadDefaults,
+            [cb = onAdjustLoadDefaults, current = state.loadDefaults.nUBatch] {
+                if (cb) {
+                    cb(lambda_studio_backend::LoadParamsPatch {.nUBatch = current > 64 ? current - 64 : 1});
+                }
+            },
+            [cb = onAdjustLoadDefaults, current = state.loadDefaults.nUBatch] {
+                if (cb) {
+                    cb(lambda_studio_backend::LoadParamsPatch {.nUBatch = current + 64});
+                }
+            }
+        ));
+        configRows.push_back(adjustmentRow(
+            theme,
+            "Load flash attn",
+            state.loadDefaults.flashAttn ? "Enabled" : "Disabled",
+            "Requires reload",
+            !onAdjustLoadDefaults,
+            [cb = onAdjustLoadDefaults] {
+                if (cb) {
+                    cb(lambda_studio_backend::LoadParamsPatch {.flashAttn = false});
+                }
+            },
+            [cb = onAdjustLoadDefaults] {
+                if (cb) {
+                    cb(lambda_studio_backend::LoadParamsPatch {.flashAttn = true});
+                }
+            }
+        ));
+
         return ScrollView {
             .axis = ScrollAxis::Vertical,
             .children = children(
@@ -480,6 +925,13 @@ struct SettingsView : ViewModifiers<SettingsView> {
                             "Operational context",
                             "Useful context for debugging the current session without digging through raw app state.",
                             std::move(diagnosticsRows)
+                        ),
+                        sectionCard(
+                            theme,
+                            "Advanced",
+                            "Generation, session, and load parameters",
+                            "Use these controls to update defaults. Apply scope is shown per control.",
+                            std::move(configRows)
                         )
                     )
                 }

@@ -77,6 +77,7 @@ struct ChatsView : ViewModifiers<ChatsView> {
     std::function<void(int)> onDeleteChat;
     std::function<void(int, int)> onToggleReasoning;
     std::function<void(int, int)> onDeleteMessage;
+    std::function<void(int, lambda_studio_backend::GenerationParamsPatch const &)> onAdjustGeneration;
 
     auto body() const {
         Theme const &theme = useEnvironment<Theme>();
@@ -107,11 +108,14 @@ struct ChatsView : ViewModifiers<ChatsView> {
 
         if (selectedIndex >= 0) {
             ChatThread const &selectedChat = chatThreads[static_cast<std::size_t>(selectedIndex)];
+            lambda_studio_backend::GenerationParams effectiveGenerationParams =
+                selectedChat.generationDefaults.value_or(state.generationDefaults);
             detail = ChatView {
                 .chat = selectedChat,
                 .localModels = state.localModels,
                 .loadedModelPath = state.loadedModelPath,
                 .modelLoading = state.modelLoading,
+                .generationParams = effectiveGenerationParams,
                 .onSend = [onSend = onSend, selectedIndex](std::string const &message) {
                     if (onSend) {
                         onSend(selectedIndex, message);
@@ -136,6 +140,11 @@ struct ChatsView : ViewModifiers<ChatsView> {
                     if (onSelectModel) {
                         onSelectModel(selectedIndex, path, name);
                     } },
+                .onAdjustGeneration = [onAdjustGeneration = onAdjustGeneration, selectedIndex](lambda_studio_backend::GenerationParamsPatch const &patch) {
+                    if (onAdjustGeneration) {
+                        onAdjustGeneration(selectedIndex, patch);
+                    }
+                },
             }
                          .flex(1.f, 1.f);
         }

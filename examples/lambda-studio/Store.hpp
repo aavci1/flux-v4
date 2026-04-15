@@ -561,8 +561,10 @@ class Store : public IStore {
                 "INSERT INTO chat_message_stats ("
                 "  chat_id, message_order, model_path, model_name, prompt_tokens, completion_tokens,"
                 "  started_at_unix_ms, first_token_at_unix_ms, finished_at_unix_ms, tokens_per_second,"
-                "  status, error_text, temp, top_p, top_k, max_tokens"
-                ") VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16);"
+                "  status, error_text, seed, temp, top_p, top_k, min_p, max_tokens,"
+                "  penalty_last_n, repeat_penalty, frequency_penalty, presence_penalty,"
+                "  mirostat, mirostat_tau, mirostat_eta, ignore_eos"
+                ") VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26);"
             );
 
             for (std::size_t messageIndex = 0; messageIndex < messages.size(); ++messageIndex) {
@@ -597,10 +599,20 @@ class Store : public IStore {
                 bindDouble(insertMessageStats.stmt, 10, stats.tokensPerSecond);
                 bindText(insertMessageStats.stmt, 11, stats.status);
                 bindText(insertMessageStats.stmt, 12, stats.errorText);
-                bindDouble(insertMessageStats.stmt, 13, static_cast<double>(stats.temp));
-                bindDouble(insertMessageStats.stmt, 14, static_cast<double>(stats.topP));
-                bindInt64(insertMessageStats.stmt, 15, stats.topK);
-                bindInt64(insertMessageStats.stmt, 16, stats.maxTokens);
+                bindInt64(insertMessageStats.stmt, 13, static_cast<std::int64_t>(stats.seed));
+                bindDouble(insertMessageStats.stmt, 14, static_cast<double>(stats.temp));
+                bindDouble(insertMessageStats.stmt, 15, static_cast<double>(stats.topP));
+                bindInt64(insertMessageStats.stmt, 16, stats.topK);
+                bindDouble(insertMessageStats.stmt, 17, static_cast<double>(stats.minP));
+                bindInt64(insertMessageStats.stmt, 18, stats.maxTokens);
+                bindInt64(insertMessageStats.stmt, 19, stats.penaltyLastN);
+                bindDouble(insertMessageStats.stmt, 20, static_cast<double>(stats.repeatPenalty));
+                bindDouble(insertMessageStats.stmt, 21, static_cast<double>(stats.frequencyPenalty));
+                bindDouble(insertMessageStats.stmt, 22, static_cast<double>(stats.presencePenalty));
+                bindInt64(insertMessageStats.stmt, 23, stats.mirostat);
+                bindDouble(insertMessageStats.stmt, 24, static_cast<double>(stats.mirostatTau));
+                bindDouble(insertMessageStats.stmt, 25, static_cast<double>(stats.mirostatEta));
+                bindBool(insertMessageStats.stmt, 26, stats.ignoreEos);
                 stepDone(insertMessageStats.stmt);
             }
 
@@ -678,6 +690,41 @@ class Store : public IStore {
         }
     }
 
+    void updateChatThreadGenerationDefaults(
+        std::string const &chatId,
+        std::optional<lambda_studio_backend::GenerationParams> const &defaults
+    ) override {
+        std::lock_guard<std::mutex> lock(mutex_);
+        Statement update(
+            db_,
+            "UPDATE chat_threads SET generation_defaults_json = ?2 WHERE chat_id = ?1;"
+        );
+        bindText(update.stmt, 1, chatId);
+        bindText(update.stmt, 2, defaults.has_value() ? encodeGenerationParams(*defaults) : std::string());
+        stepDone(update.stmt);
+    }
+
+    std::optional<lambda_studio_backend::EngineConfigDefaults> loadEngineConfigDefaults() override {
+        std::lock_guard<std::mutex> lock(mutex_);
+        std::string const raw = loadPreference("engine_config_defaults");
+        if (raw.empty()) {
+            return std::nullopt;
+        }
+        return decodeEngineConfigDefaults(raw);
+    }
+
+    void saveEngineConfigDefaults(lambda_studio_backend::EngineConfigDefaults const &defaults) override {
+        std::lock_guard<std::mutex> lock(mutex_);
+        Statement upsertPreference(
+            db_,
+            "INSERT INTO app_preferences (pref_key, value_text) VALUES (?1, ?2) "
+            "ON CONFLICT(pref_key) DO UPDATE SET value_text=excluded.value_text;"
+        );
+        bindText(upsertPreference.stmt, 1, "engine_config_defaults");
+        bindText(upsertPreference.stmt, 2, encodeEngineConfigDefaults(defaults));
+        stepDone(upsertPreference.stmt);
+    }
+
     PersistedChatState loadPersistedChatState() override {
         std::lock_guard<std::mutex> lock(mutex_);
         PersistedChatState state;
@@ -686,7 +733,7 @@ class Store : public IStore {
             db_,
             "SELECT "
             "  chat_id, title, updated_at_unix_ms, model_path, model_name,"
-            "  summary_text, summary_message_count, summary_updated_at_unix_ms "
+            "  summary_text, summary_message_count, summary_updated_at_unix_ms, generation_defaults_json "
             "FROM chat_threads "
             "ORDER BY sort_order ASC;"
         );
@@ -701,6 +748,7 @@ class Store : public IStore {
             thread.summaryText = columnText(threadStmt.stmt, 5);
             thread.summaryMessageCount = static_cast<std::size_t>(sqlite3_column_int64(threadStmt.stmt, 6));
             thread.summaryUpdatedAtUnixMs = sqlite3_column_int64(threadStmt.stmt, 7);
+            thread.generationDefaults = decodeGenerationParams(columnText(threadStmt.stmt, 8));
             thread.streaming = false;
 
             Statement messageStmt(
@@ -709,7 +757,9 @@ class Store : public IStore {
                 "  m.role, m.text, m.started_at_nanos, m.finished_at_nanos, m.collapsed,"
                 "  s.model_path, s.model_name, s.prompt_tokens, s.completion_tokens, s.started_at_unix_ms,"
                 "  s.first_token_at_unix_ms, s.finished_at_unix_ms, s.tokens_per_second, s.status, s.error_text,"
-                "  s.temp, s.top_p, s.top_k, s.max_tokens "
+                "  s.seed, s.temp, s.top_p, s.top_k, s.min_p, s.max_tokens,"
+                "  s.penalty_last_n, s.repeat_penalty, s.frequency_penalty, s.presence_penalty,"
+                "  s.mirostat, s.mirostat_tau, s.mirostat_eta, s.ignore_eos "
                 "FROM chat_messages m "
                 "LEFT JOIN chat_message_stats s "
                 "  ON s.chat_id = m.chat_id AND s.message_order = m.message_order "
@@ -736,10 +786,20 @@ class Store : public IStore {
                         .tokensPerSecond = columnDouble(messageStmt.stmt, 12),
                         .status = columnText(messageStmt.stmt, 13),
                         .errorText = columnText(messageStmt.stmt, 14),
-                        .temp = static_cast<float>(columnDouble(messageStmt.stmt, 15)),
-                        .topP = static_cast<float>(columnDouble(messageStmt.stmt, 16)),
-                        .topK = static_cast<std::int32_t>(sqlite3_column_int64(messageStmt.stmt, 17)),
-                        .maxTokens = static_cast<std::int32_t>(sqlite3_column_int64(messageStmt.stmt, 18)),
+                        .seed = static_cast<std::uint32_t>(sqlite3_column_int64(messageStmt.stmt, 15)),
+                        .temp = static_cast<float>(columnDouble(messageStmt.stmt, 16)),
+                        .topP = static_cast<float>(columnDouble(messageStmt.stmt, 17)),
+                        .topK = static_cast<std::int32_t>(sqlite3_column_int64(messageStmt.stmt, 18)),
+                        .minP = static_cast<float>(columnDouble(messageStmt.stmt, 19)),
+                        .maxTokens = static_cast<std::int32_t>(sqlite3_column_int64(messageStmt.stmt, 20)),
+                        .penaltyLastN = static_cast<std::int32_t>(sqlite3_column_int64(messageStmt.stmt, 21)),
+                        .repeatPenalty = static_cast<float>(columnDouble(messageStmt.stmt, 22)),
+                        .frequencyPenalty = static_cast<float>(columnDouble(messageStmt.stmt, 23)),
+                        .presencePenalty = static_cast<float>(columnDouble(messageStmt.stmt, 24)),
+                        .mirostat = static_cast<std::int32_t>(sqlite3_column_int64(messageStmt.stmt, 25)),
+                        .mirostatTau = static_cast<float>(columnDouble(messageStmt.stmt, 26)),
+                        .mirostatEta = static_cast<float>(columnDouble(messageStmt.stmt, 27)),
+                        .ignoreEos = sqlite3_column_int(messageStmt.stmt, 28) != 0,
                     };
                 }
                 syncAssistantParagraphs(message);
@@ -754,7 +814,7 @@ class Store : public IStore {
     }
 
   private:
-    static constexpr int kCurrentSchemaVersion = 7;
+    static constexpr int kCurrentSchemaVersion = 9;
 
     struct Statement {
         sqlite3_stmt *stmt = nullptr;
@@ -1230,6 +1290,16 @@ class Store : public IStore {
         if (version < 7) {
             applyMigration7();
             setUserVersion(7);
+            version = 7;
+        }
+        if (version < 8) {
+            applyMigration8();
+            setUserVersion(8);
+            version = 8;
+        }
+        if (version < 9) {
+            applyMigration9();
+            setUserVersion(9);
         }
     }
 
@@ -1387,6 +1457,27 @@ class Store : public IStore {
         );
     }
 
+    void applyMigration8() {
+        execute(
+            "ALTER TABLE chat_threads ADD COLUMN generation_defaults_json TEXT NOT NULL DEFAULT '';"
+        );
+    }
+
+    void applyMigration9() {
+        execute(
+            "ALTER TABLE chat_message_stats ADD COLUMN seed INTEGER NOT NULL DEFAULT 4294967295;"
+            "ALTER TABLE chat_message_stats ADD COLUMN min_p REAL NOT NULL DEFAULT 0;"
+            "ALTER TABLE chat_message_stats ADD COLUMN penalty_last_n INTEGER NOT NULL DEFAULT 0;"
+            "ALTER TABLE chat_message_stats ADD COLUMN repeat_penalty REAL NOT NULL DEFAULT 0;"
+            "ALTER TABLE chat_message_stats ADD COLUMN frequency_penalty REAL NOT NULL DEFAULT 0;"
+            "ALTER TABLE chat_message_stats ADD COLUMN presence_penalty REAL NOT NULL DEFAULT 0;"
+            "ALTER TABLE chat_message_stats ADD COLUMN mirostat INTEGER NOT NULL DEFAULT 0;"
+            "ALTER TABLE chat_message_stats ADD COLUMN mirostat_tau REAL NOT NULL DEFAULT 0;"
+            "ALTER TABLE chat_message_stats ADD COLUMN mirostat_eta REAL NOT NULL DEFAULT 0;"
+            "ALTER TABLE chat_message_stats ADD COLUMN ignore_eos INTEGER NOT NULL DEFAULT 0;"
+        );
+    }
+
     std::string loadPreference(std::string const &key) {
         Statement stmt(
             db_,
@@ -1397,6 +1488,118 @@ class Store : public IStore {
             return {};
         }
         return columnText(stmt.stmt, 0);
+    }
+
+    static std::string encodeGenerationParams(lambda_studio_backend::GenerationParams const &params) {
+        nlohmann::json json {
+            {"seed", params.seed},
+            {"max_tokens", params.maxTokens},
+            {"top_k", params.topK},
+            {"top_p", params.topP},
+            {"min_p", params.minP},
+            {"temp", params.temp},
+            {"penalty_last_n", params.penaltyLastN},
+            {"repeat_penalty", params.repeatPenalty},
+            {"frequency_penalty", params.frequencyPenalty},
+            {"presence_penalty", params.presencePenalty},
+            {"mirostat", params.mirostat},
+            {"mirostat_tau", params.mirostatTau},
+            {"mirostat_eta", params.mirostatEta},
+            {"ignore_eos", params.ignoreEos},
+        };
+        return json.dump();
+    }
+
+    static std::optional<lambda_studio_backend::GenerationParams> decodeGenerationParams(std::string const &rawJson) {
+        if (rawJson.empty()) {
+            return std::nullopt;
+        }
+        nlohmann::json const json = nlohmann::json::parse(rawJson, nullptr, false);
+        if (json.is_discarded() || !json.is_object()) {
+            return std::nullopt;
+        }
+        lambda_studio_backend::GenerationParams params;
+        params.seed = json.value("seed", params.seed);
+        params.maxTokens = json.value("max_tokens", params.maxTokens);
+        params.topK = json.value("top_k", params.topK);
+        params.topP = json.value("top_p", params.topP);
+        params.minP = json.value("min_p", params.minP);
+        params.temp = json.value("temp", params.temp);
+        params.penaltyLastN = json.value("penalty_last_n", params.penaltyLastN);
+        params.repeatPenalty = json.value("repeat_penalty", params.repeatPenalty);
+        params.frequencyPenalty = json.value("frequency_penalty", params.frequencyPenalty);
+        params.presencePenalty = json.value("presence_penalty", params.presencePenalty);
+        params.mirostat = json.value("mirostat", params.mirostat);
+        params.mirostatTau = json.value("mirostat_tau", params.mirostatTau);
+        params.mirostatEta = json.value("mirostat_eta", params.mirostatEta);
+        params.ignoreEos = json.value("ignore_eos", params.ignoreEos);
+        return params;
+    }
+
+    static std::string encodeEngineConfigDefaults(lambda_studio_backend::EngineConfigDefaults const &defaults) {
+        nlohmann::json json {
+            {"load", {
+                {"model_path", defaults.loadDefaults.modelPath},
+                {"n_gpu_layers", defaults.loadDefaults.nGpuLayers},
+                {"n_ctx", defaults.loadDefaults.nCtx},
+                {"n_batch", defaults.loadDefaults.nBatch},
+                {"n_ubatch", defaults.loadDefaults.nUBatch},
+                {"use_mmap", defaults.loadDefaults.useMmap},
+                {"use_mlock", defaults.loadDefaults.useMlock},
+                {"embeddings", defaults.loadDefaults.embeddings},
+                {"offload_kqv", defaults.loadDefaults.offloadKqv},
+                {"flash_attn", defaults.loadDefaults.flashAttn},
+            }},
+            {"session", {
+                {"n_ctx", defaults.sessionDefaults.nCtx},
+                {"n_batch", defaults.sessionDefaults.nBatch},
+                {"n_ubatch", defaults.sessionDefaults.nUBatch},
+                {"enable_thinking", defaults.sessionDefaults.enableThinking},
+                {"system_prompt", defaults.sessionDefaults.systemPrompt},
+                {"chat_template", defaults.sessionDefaults.chatTemplate},
+                {"flash_attn", defaults.sessionDefaults.flashAttn},
+            }},
+            {"generation", nlohmann::json::parse(encodeGenerationParams(defaults.generationDefaults))},
+        };
+        return json.dump();
+    }
+
+    static std::optional<lambda_studio_backend::EngineConfigDefaults> decodeEngineConfigDefaults(std::string const &rawJson) {
+        nlohmann::json const json = nlohmann::json::parse(rawJson, nullptr, false);
+        if (json.is_discarded() || !json.is_object()) {
+            return std::nullopt;
+        }
+        lambda_studio_backend::EngineConfigDefaults defaults;
+        if (json.contains("load") && json["load"].is_object()) {
+            nlohmann::json const &load = json["load"];
+            defaults.loadDefaults.modelPath = load.value("model_path", defaults.loadDefaults.modelPath);
+            defaults.loadDefaults.nGpuLayers = load.value("n_gpu_layers", defaults.loadDefaults.nGpuLayers);
+            defaults.loadDefaults.nCtx = load.value("n_ctx", defaults.loadDefaults.nCtx);
+            defaults.loadDefaults.nBatch = load.value("n_batch", defaults.loadDefaults.nBatch);
+            defaults.loadDefaults.nUBatch = load.value("n_ubatch", defaults.loadDefaults.nUBatch);
+            defaults.loadDefaults.useMmap = load.value("use_mmap", defaults.loadDefaults.useMmap);
+            defaults.loadDefaults.useMlock = load.value("use_mlock", defaults.loadDefaults.useMlock);
+            defaults.loadDefaults.embeddings = load.value("embeddings", defaults.loadDefaults.embeddings);
+            defaults.loadDefaults.offloadKqv = load.value("offload_kqv", defaults.loadDefaults.offloadKqv);
+            defaults.loadDefaults.flashAttn = load.value("flash_attn", defaults.loadDefaults.flashAttn);
+        }
+        if (json.contains("session") && json["session"].is_object()) {
+            nlohmann::json const &session = json["session"];
+            defaults.sessionDefaults.nCtx = session.value("n_ctx", defaults.sessionDefaults.nCtx);
+            defaults.sessionDefaults.nBatch = session.value("n_batch", defaults.sessionDefaults.nBatch);
+            defaults.sessionDefaults.nUBatch = session.value("n_ubatch", defaults.sessionDefaults.nUBatch);
+            defaults.sessionDefaults.enableThinking = session.value("enable_thinking", defaults.sessionDefaults.enableThinking);
+            defaults.sessionDefaults.systemPrompt = session.value("system_prompt", defaults.sessionDefaults.systemPrompt);
+            defaults.sessionDefaults.chatTemplate = session.value("chat_template", defaults.sessionDefaults.chatTemplate);
+            defaults.sessionDefaults.flashAttn = session.value("flash_attn", defaults.sessionDefaults.flashAttn);
+        }
+        if (json.contains("generation") && json["generation"].is_object()) {
+            auto generation = decodeGenerationParams(json["generation"].dump());
+            if (generation.has_value()) {
+                defaults.generationDefaults = *generation;
+            }
+        }
+        return defaults;
     }
 
     void tryOpen(std::filesystem::path path) {
