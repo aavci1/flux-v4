@@ -379,7 +379,7 @@ inline std::shared_ptr<flux::TextLayout const> resolveMarkdownLayout(MarkdownLay
 struct MarkdownText : flux::ViewModifiers<MarkdownText> {
     static constexpr bool memoizable = true;
 
-    std::string const *text = nullptr;
+    std::string text;
     std::uint64_t cacheKey = 0;
     std::uint64_t textRevision = 0;
     flux::Font baseFont {};
@@ -423,9 +423,7 @@ struct MarkdownText : flux::ViewModifiers<MarkdownText> {
     }
 
     std::shared_ptr<flux::TextLayout const> layoutForWidth(float width, flux::TextSystem &textSystem) const {
-        std::string const emptyText;
-        std::string const &source = text ? *text : emptyText;
-        return detail::resolveMarkdownLayout(makeCacheKey(effectiveMaxWidth(width)), source, textSystem);
+        return detail::resolveMarkdownLayout(makeCacheKey(effectiveMaxWidth(width)), text, textSystem);
     }
 
     void layout(flux::LayoutContext &ctx) const {
