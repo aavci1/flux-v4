@@ -897,7 +897,8 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
 
 struct ChatComposer : ViewModifiers<ChatComposer> {
     State<std::string> value;
-    bool disabled = true;
+    bool editingDisabled = true;
+    bool sendDisabled = true;
     std::string modelLabel;
     std::vector<LocalModel> localModels;
     std::string selectedModelPath;
@@ -914,8 +915,8 @@ struct ChatComposer : ViewModifiers<ChatComposer> {
         (void)isDialogPresented;
         auto requestComposerFocus = useRequestFocus();
         auto clearComposerFocus = useClearFocus();
-        bool const isDisabled = disabled;
-        auto wasDisabled = useState(disabled);
+        bool const isEditingDisabled = editingDisabled;
+        auto wasDisabled = useState(editingDisabled);
         int derivedSelectedIndex = -1;
         std::vector<SelectOption> modelOptions;
         modelOptions.reserve(localModels.size());
@@ -932,18 +933,18 @@ struct ChatComposer : ViewModifiers<ChatComposer> {
         }
         auto modelSelection = useState<int>(derivedSelectedIndex);
 
-        if (*wasDisabled && !isDisabled) {
+        if (*wasDisabled && !isEditingDisabled) {
             Application::instance().onNextFrameNeeded([requestComposerFocus] {
                 requestComposerFocus();
             });
         }
-        wasDisabled = isDisabled;
+        wasDisabled = isEditingDisabled;
         if (*modelSelection != derivedSelectedIndex) {
             modelSelection = derivedSelectedIndex;
         }
 
         auto draftState = value;
-        bool const canSend = !disabled && !(*draftState).empty();
+        bool const canSend = !sendDisabled && !(*draftState).empty();
         auto submit = [draftState, onSend = onSend, canSend, clearComposerFocus]() {
             std::string message = *draftState;
             if (!canSend || message.empty() || !onSend) {
@@ -963,14 +964,14 @@ struct ChatComposer : ViewModifiers<ChatComposer> {
                     .placeholder = "Message Lambda Studio...",
                     .style = TextInput::Style::plain(),
                     .multiline = true,
-                    .disabled = disabled,
+                    .disabled = editingDisabled,
                     .multilineHeight = {.minIntrinsic = 88.f, .maxIntrinsic = 160.f},
                     .onSubmit = [submit](std::string const &) {
                         submit();
                     },
                 }
-                    .onTap([requestComposerFocus, isDisabled] {
-                        if (!isDisabled) {
+                    .onTap([requestComposerFocus, isEditingDisabled] {
+                        if (!isEditingDisabled) {
                             requestComposerFocus();
                         }
                     }),
@@ -989,7 +990,7 @@ struct ChatComposer : ViewModifiers<ChatComposer> {
                             .onTap = [showDialog,
                                       hideDialog,
                                       params = generationParams,
-                                      dialogDisabled = disabled || streaming,
+                                      dialogDisabled = editingDisabled || streaming,
                                       onAdjustGeneration = onAdjustGeneration] {
                                 showDialog(
                                     ModelParametersDialog {
@@ -1061,7 +1062,7 @@ struct ChatComposer : ViewModifiers<ChatComposer> {
             ),
         }
             .padding(theme.space4)
-            .fill(FillStyle::solid(isDisabled ? theme.colorSurfaceDisabled : theme.colorSurfaceOverlay))
+            .fill(FillStyle::solid(isEditingDisabled ? theme.colorSurfaceDisabled : theme.colorSurfaceOverlay))
             .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
             .cornerRadius(theme.radiusXLarge)
             .shadow(ShadowStyle {
@@ -1069,8 +1070,8 @@ struct ChatComposer : ViewModifiers<ChatComposer> {
                 .offset = Point {0.f, 0.f},
                 .color = Color {theme.shadowColor.r, theme.shadowColor.g, theme.shadowColor.b, std::max(0.2f, theme.shadowColor.a)},
             })
-            .onTap([requestComposerFocus, isDisabled] {
-                if (!isDisabled) {
+            .onTap([requestComposerFocus, isEditingDisabled] {
+                if (!isEditingDisabled) {
                     requestComposerFocus();
                 }
             });
@@ -1106,8 +1107,8 @@ struct ChatView : ViewModifiers<ChatView> {
 
         bool const fakeStreaming = lambda_studio_backend::debugFakeStreamEnabled();
         bool const hasModel = fakeStreaming || !chat.modelPath.empty();
-        bool const selectedModelReady = fakeStreaming || (hasModel && chat.modelPath == loadedModelPath);
-        bool const canCompose = hasModel && selectedModelReady && (fakeStreaming || !modelLoading) && !chat.streaming;
+        bool const canEdit = hasModel && !chat.streaming;
+        bool const canSend = hasModel && !chat.streaming;
 
         std::vector<Element> bubbles;
         bubbles.reserve(chat.messages.size() + chat.streamDraftMessages.size());
@@ -1203,7 +1204,8 @@ struct ChatView : ViewModifiers<ChatView> {
                             .children = children(
                                 ChatComposer {
                                     .value = draft,
-                                    .disabled = !canCompose,
+                                    .editingDisabled = !canEdit,
+                                    .sendDisabled = !canSend,
                                     .modelLabel = selectedModelLabel,
                                     .localModels = localModels,
                                     .selectedModelPath = chat.modelPath,

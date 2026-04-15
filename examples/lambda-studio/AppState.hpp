@@ -116,6 +116,15 @@ struct DownloadJob {
     bool operator==(DownloadJob const &) const = default;
 };
 
+struct PendingChatSend {
+    std::string chatId;
+    std::string message;
+    std::string modelPath;
+    std::string modelName;
+
+    bool operator==(PendingChatSend const &) const = default;
+};
+
 struct AppState {
     StudioModule currentModule = StudioModule::Chats;
     std::vector<ChatThread> chats;
@@ -135,6 +144,8 @@ struct AppState {
     std::string loadedModelName;
     std::string pendingModelPath;
     std::string pendingModelName;
+    std::string deferredModelPath;
+    std::string deferredModelName;
     lambda_studio_backend::LoadParams loadDefaults;
     lambda_studio_backend::SessionParams sessionDefaults;
     lambda_studio_backend::GenerationParams generationDefaults;
@@ -155,6 +166,7 @@ struct AppState {
     std::string pendingDownloadRepoId;
     std::string pendingDownloadFilePath;
     std::string pendingDeleteModelPath;
+    std::vector<PendingChatSend> pendingChatSends;
 
     std::uint64_t latestInventoryRequestId = 0;
     std::uint64_t latestSearchRequestId = 0;

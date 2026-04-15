@@ -33,6 +33,9 @@ std::int64_t steadyNowNanos() {
     return duration_cast<nanoseconds>(steady_clock::now().time_since_epoch()).count();
 }
 
+std::string titleFromPrompt(std::string const &prompt);
+lambda_studio_backend::ChatGenerationRequest toGenerationRequest(ChatThread const &chat);
+
 std::string selectedChatIdForState(AppState const &state) {
     int const selectedIndex = clampedChatIndex(state);
     if (selectedIndex < 0) {
@@ -276,6 +279,193 @@ std::vector<int> clearChatModelReferences(AppState &state, std::string const &mo
         changed.push_back(static_cast<int>(i));
     }
     return changed;
+}
+
+bool chatHasActiveGeneration(ChatThread const &chat) {
+    return chat.streaming || chat.activeGenerationId != 0;
+}
+
+bool hasActiveGenerations(AppState const &state) {
+    return std::any_of(state.chats.begin(), state.chats.end(), [](ChatThread const &chat) {
+        return chatHasActiveGeneration(chat);
+    });
+}
+
+void queuePendingChatSend(AppState &state, ChatThread const &chat, std::string message) {
+    if (chat.id.empty() || message.empty()) {
+        return;
+    }
+    state.pendingChatSends.push_back(PendingChatSend {
+        .chatId = chat.id,
+        .message = std::move(message),
+        .modelPath = chat.modelPath,
+        .modelName = chat.modelName,
+    });
+}
+
+void clearPendingChatSendsForChat(AppState &state, std::string const &chatId) {
+    if (chatId.empty()) {
+        return;
+    }
+    std::erase_if(state.pendingChatSends, [&](PendingChatSend const &pending) {
+        return pending.chatId == chatId;
+    });
+}
+
+void clearPendingChatSendsForModel(AppState &state, std::string const &modelPath) {
+    if (modelPath.empty()) {
+        return;
+    }
+    std::erase_if(state.pendingChatSends, [&](PendingChatSend const &pending) {
+        return pending.modelPath == modelPath;
+    });
+}
+
+void requestModelLoadNow(AppState &state, IModelManager &manager, std::string const &path, std::string const &name) {
+    if (path.empty()) {
+        return;
+    }
+    std::string const displayName = !name.empty() ? name : modelDisplayName(path);
+    state.modelLoading = true;
+    state.pendingModelPath = path;
+    state.pendingModelName = displayName;
+    state.loadDefaults.modelPath = path;
+    state.statusText = displayName.empty() ? "Loading model..." : "Loading " + displayName;
+    state.errorText.clear();
+    if (state.deferredModelPath == path) {
+        state.deferredModelPath.clear();
+        state.deferredModelName.clear();
+    }
+    state.latestLoadModelRequestId = manager.loadModel(state.loadDefaults);
+}
+
+bool startChatGeneration(
+    AppState &state,
+    IStore &catalog,
+    IChatEngine &engine,
+    int chatIndex,
+    std::string const &message
+) {
+    if (message.empty() || chatIndex < 0 || static_cast<std::size_t>(chatIndex) >= state.chats.size()) {
+        return false;
+    }
+
+    bool const fakeStreaming = lambda_studio_backend::debugFakeStreamEnabled();
+    ChatThread &chat = state.chats[static_cast<std::size_t>(chatIndex)];
+    if (chat.streaming) {
+        return false;
+    }
+    if (!fakeStreaming && (chat.modelPath.empty() || chat.modelPath != state.loadedModelPath || state.modelLoading)) {
+        return false;
+    }
+
+    if (fakeStreaming && chat.modelPath.empty()) {
+        chat.modelPath = "__debug_fake_stream__";
+        chat.modelName = "Debug Stream";
+        state.loadedModelPath = chat.modelPath;
+        state.loadedModelName = chat.modelName;
+    }
+
+    if (chat.messages.empty() || chat.title == "New chat") {
+        chat.title = titleFromPrompt(message);
+    }
+
+    chat.streamDraftMessages.clear();
+    chat.updatedAtUnixMs = currentUnixMillis();
+    chat.messages.push_back(lambda::ChatMessage {
+        .role = ChatRole::User,
+        .text = message,
+    });
+    chat.streaming = true;
+    state.errorText.clear();
+    state.statusText = "Generating response...";
+
+    std::uint64_t const generationId = generateGenerationId();
+    chat.activeGenerationId = generationId;
+
+    persistChatThread(state, catalog, chatIndex);
+
+    engine.startChat(
+        toGenerationRequest(chat),
+        [](lambda_studio_backend::LlmUiEvent event) {
+            if (!Application::hasInstance()) {
+                return;
+            }
+            Application::instance().eventQueue().post(std::move(event));
+        }
+    );
+    return true;
+}
+
+bool maybeDispatchDeferredWork(
+    AppState &state,
+    IStore &catalog,
+    IChatEngine &engine,
+    IModelManager &manager
+) {
+    for (std::size_t i = 0; i < state.pendingChatSends.size();) {
+        PendingChatSend const pending = state.pendingChatSends[i];
+        int const chatIndex = chatIndexById(state, pending.chatId);
+        if (chatIndex < 0 || pending.message.empty()) {
+            state.pendingChatSends.erase(state.pendingChatSends.begin() + static_cast<std::ptrdiff_t>(i));
+            continue;
+        }
+
+        ChatThread const &chat = state.chats[static_cast<std::size_t>(chatIndex)];
+        if (chat.modelPath.empty() || chat.modelPath != pending.modelPath) {
+            state.pendingChatSends.erase(state.pendingChatSends.begin() + static_cast<std::ptrdiff_t>(i));
+            continue;
+        }
+
+        if (!state.modelLoading && chat.modelPath == state.loadedModelPath && !chat.streaming) {
+            state.pendingChatSends.erase(state.pendingChatSends.begin() + static_cast<std::ptrdiff_t>(i));
+            return startChatGeneration(state, catalog, engine, chatIndex, pending.message);
+        }
+        ++i;
+    }
+
+    if (state.modelLoading || hasActiveGenerations(state)) {
+        return false;
+    }
+
+    for (std::size_t i = 0; i < state.pendingChatSends.size();) {
+        PendingChatSend const pending = state.pendingChatSends[i];
+        int const chatIndex = chatIndexById(state, pending.chatId);
+        if (chatIndex < 0 || pending.message.empty()) {
+            state.pendingChatSends.erase(state.pendingChatSends.begin() + static_cast<std::ptrdiff_t>(i));
+            continue;
+        }
+
+        ChatThread const &chat = state.chats[static_cast<std::size_t>(chatIndex)];
+        if (chat.modelPath.empty() || chat.modelPath != pending.modelPath) {
+            state.pendingChatSends.erase(state.pendingChatSends.begin() + static_cast<std::ptrdiff_t>(i));
+            continue;
+        }
+
+        if (chat.modelPath == state.loadedModelPath) {
+            state.pendingChatSends.erase(state.pendingChatSends.begin() + static_cast<std::ptrdiff_t>(i));
+            return startChatGeneration(state, catalog, engine, chatIndex, pending.message);
+        }
+
+        requestModelLoadNow(
+            state,
+            manager,
+            chat.modelPath,
+            !chat.modelName.empty() ? chat.modelName : pending.modelName
+        );
+        return true;
+    }
+
+    if (!state.deferredModelPath.empty() && state.deferredModelPath != state.loadedModelPath) {
+        std::string const deferredPath = state.deferredModelPath;
+        std::string const deferredName = state.deferredModelName;
+        state.deferredModelPath.clear();
+        state.deferredModelName.clear();
+        requestModelLoadNow(state, manager, deferredPath, deferredName);
+        return true;
+    }
+
+    return false;
 }
 
 std::vector<lambda_studio_backend::ChatMessage> toBackendMessages(ChatThread const &chat) {
@@ -527,7 +717,7 @@ struct StudioApp : ViewModifiers<StudioApp> {
         if (!(*handlersRegistered)) {
             handlersRegistered = true;
             Application::instance().eventQueue().on<lambda_studio_backend::LlmUiEvent>(
-                [appState, catalog](lambda_studio_backend::LlmUiEvent const &event) {
+                [appState, catalog, engine, manager](lambda_studio_backend::LlmUiEvent const &event) {
                     AppState nextState = *appState;
                     auto it = std::find_if(nextState.chats.begin(), nextState.chats.end(), [&](ChatThread const &chat) {
                         return chat.id == event.chatId;
@@ -604,12 +794,15 @@ struct StudioApp : ViewModifiers<StudioApp> {
                     if (persistAfterEvent) {
                         persistChatThread(nextState, *catalog, chatIndex);
                     }
+                    if (event.kind != lambda_studio_backend::LlmUiEvent::Kind::Chunk) {
+                        maybeDispatchDeferredWork(nextState, *catalog, *engine, *manager);
+                    }
                     appState = std::move(nextState);
                 }
             );
 
             Application::instance().eventQueue().on<lambda_studio_backend::ModelManagerEvent>(
-                [appState, manager, catalog, currentRemoteSearchKey](lambda_studio_backend::ModelManagerEvent const &event) {
+                [appState, manager, catalog, engine, currentRemoteSearchKey](lambda_studio_backend::ModelManagerEvent const &event) {
                     AppState nextState = *appState;
                     auto isStaleLatest = [](std::uint64_t eventId, std::uint64_t latestId) {
                         return latestId > 0 && eventId > 0 && eventId < latestId;
@@ -657,6 +850,7 @@ struct StudioApp : ViewModifiers<StudioApp> {
                         nextState.modelLoading = false;
                         nextState.pendingModelPath.clear();
                         nextState.pendingModelName.clear();
+                        clearPendingChatSendsForModel(nextState, event.appliedLoadParams.modelPath);
                         nextState.errorText = event.error;
                         break;
                     case lambda_studio_backend::ModelManagerEvent::Kind::ModelDeleted:
@@ -680,6 +874,11 @@ struct StudioApp : ViewModifiers<StudioApp> {
                             for (int chatIndex : affectedChats) {
                                 persistChatThread(nextState, *catalog, chatIndex);
                             }
+                        }
+                        clearPendingChatSendsForModel(nextState, event.modelPath);
+                        if (nextState.deferredModelPath == event.modelPath) {
+                            nextState.deferredModelPath.clear();
+                            nextState.deferredModelName.clear();
                         }
                         std::string const deletedName =
                             !event.modelName.empty() ? event.modelName : modelDisplayName(event.modelPath);
@@ -917,6 +1116,14 @@ struct StudioApp : ViewModifiers<StudioApp> {
                         break;
                     }
                     appState = std::move(nextState);
+                    if (event.kind == lambda_studio_backend::ModelManagerEvent::Kind::ModelLoaded ||
+                        event.kind == lambda_studio_backend::ModelManagerEvent::Kind::ModelLoadError ||
+                        event.kind == lambda_studio_backend::ModelManagerEvent::Kind::ModelDeleted) {
+                        AppState postState = *appState;
+                        if (maybeDispatchDeferredWork(postState, *catalog, *engine, *manager)) {
+                            appState = std::move(postState);
+                        }
+                    }
                 }
             );
 
@@ -1158,18 +1365,28 @@ struct StudioApp : ViewModifiers<StudioApp> {
             appState = std::move(nextState);
         };
 
-        auto requestModelLoad = [appState, manager](std::string const &path, std::string const &name) {
+        auto requestModelLoad = [appState, manager, engine](std::string const &path, std::string const &name) {
             if (path.empty()) {
                 return;
             }
             AppState nextState = *appState;
-            nextState.modelLoading = true;
-            nextState.pendingModelPath = path;
-            nextState.pendingModelName = name;
-            nextState.loadDefaults.modelPath = path;
-            nextState.statusText = "Loading " + name;
-            nextState.errorText.clear();
-            nextState.latestLoadModelRequestId = manager->loadModel(nextState.loadDefaults);
+            std::string const displayName = !name.empty() ? name : modelDisplayName(path);
+            if (nextState.modelLoading && nextState.pendingModelPath == path) {
+                nextState.statusText = displayName.empty() ? "Loading selected model..." : "Loading " + displayName;
+                nextState.errorText.clear();
+            } else if (nextState.loadedModelPath == path && engine->isLoaded()) {
+                nextState.statusText = displayName.empty() ? "Model already loaded" : "Loaded " + displayName;
+                nextState.errorText.clear();
+            } else if (hasActiveGenerations(nextState) && nextState.loadedModelPath != path) {
+                nextState.deferredModelPath = path;
+                nextState.deferredModelName = displayName;
+                nextState.statusText = displayName.empty()
+                                           ? "Will load the selected model after active responses finish"
+                                           : "Will load " + displayName + " after active responses finish";
+                nextState.errorText.clear();
+            } else {
+                requestModelLoadNow(nextState, *manager, path, name);
+            }
             appState = std::move(nextState);
         };
 
@@ -1187,69 +1404,56 @@ struct StudioApp : ViewModifiers<StudioApp> {
             appState = std::move(nextState);
         };
 
-        auto selectChatModel = [appState, catalog, requestModelLoad](int chatIndex, std::string const &path, std::string const &name) {
+        auto selectChatModel = [appState, catalog](int chatIndex, std::string const &path, std::string const &name) {
             AppState nextState = *appState;
             setChatModel(nextState, chatIndex, path, name);
             persistChatThread(nextState, *catalog, chatIndex);
-            appState = nextState;
-            requestModelLoad(path, name);
+            std::string const displayName = !name.empty() ? name : modelDisplayName(path);
+            nextState.statusText = displayName.empty() ? "Selected model" : "Selected " + displayName;
+            nextState.errorText.clear();
+            appState = std::move(nextState);
         };
 
-        auto sendMessage = [appState, catalog, engine](int chatIndex, std::string const &message) {
+        auto sendMessage = [appState, catalog, engine, manager](int chatIndex, std::string const &message) {
             if (message.empty()) {
                 return;
             }
-            bool const fakeStreaming = lambda_studio_backend::debugFakeStreamEnabled();
             AppState nextState = *appState;
             if (chatIndex < 0 || static_cast<std::size_t>(chatIndex) >= nextState.chats.size()) {
                 return;
             }
 
             ChatThread &chat = nextState.chats[static_cast<std::size_t>(chatIndex)];
-            if (
-                chat.streaming ||
-                (!fakeStreaming &&
-                 (chat.modelPath.empty() || chat.modelPath != nextState.loadedModelPath || nextState.modelLoading))
-            ) {
+            bool const fakeStreaming = lambda_studio_backend::debugFakeStreamEnabled();
+            if (chat.streaming || (!fakeStreaming && chat.modelPath.empty())) {
                 return;
             }
 
-            if (fakeStreaming && chat.modelPath.empty()) {
-                chat.modelPath = "__debug_fake_stream__";
-                chat.modelName = "Debug Stream";
-                nextState.loadedModelPath = chat.modelPath;
-                nextState.loadedModelName = chat.modelName;
+            if (startChatGeneration(nextState, *catalog, *engine, chatIndex, message)) {
+                appState = std::move(nextState);
+                return;
             }
 
-            if (chat.messages.empty() || chat.title == "New chat") {
-                chat.title = titleFromPrompt(message);
+            queuePendingChatSend(nextState, chat, message);
+            if (!nextState.modelLoading && !hasActiveGenerations(nextState)) {
+                requestModelLoadNow(nextState, *manager, chat.modelPath, chat.modelName);
+            } else if (!nextState.modelLoading && nextState.loadedModelPath != chat.modelPath) {
+                std::string const displayName = !chat.modelName.empty() ? chat.modelName : modelDisplayName(chat.modelPath);
+                nextState.deferredModelPath = chat.modelPath;
+                nextState.deferredModelName = displayName;
+                nextState.statusText = displayName.empty()
+                                           ? "Waiting for the active response to finish before loading the selected model"
+                                           : "Waiting to load " + displayName + " after the active response finishes";
+                nextState.errorText.clear();
+            } else if (nextState.modelLoading && nextState.pendingModelPath == chat.modelPath) {
+                std::string const displayName = !chat.modelName.empty() ? chat.modelName : modelDisplayName(chat.modelPath);
+                nextState.statusText = displayName.empty() ? "Loading selected model..." : "Loading " + displayName;
+                nextState.errorText.clear();
+            } else {
+                nextState.statusText = "Queued message until the selected model is ready";
+                nextState.errorText.clear();
             }
-
-            chat.streamDraftMessages.clear();
-            chat.updatedAtUnixMs = currentUnixMillis();
-            chat.messages.push_back(lambda::ChatMessage {
-                .role = ChatRole::User,
-                .text = message,
-            });
-            chat.streaming = true;
-            nextState.errorText.clear();
-            nextState.statusText = "Generating response...";
-
-            std::uint64_t const generationId = generateGenerationId();
-            chat.activeGenerationId = generationId;
-
-            persistChatThread(nextState, *catalog, chatIndex);
             appState = std::move(nextState);
-
-            engine->startChat(
-                toGenerationRequest(chat),
-                [](lambda_studio_backend::LlmUiEvent event) {
-                    if (!Application::hasInstance()) {
-                        return;
-                    }
-                    Application::instance().eventQueue().post(std::move(event));
-                }
-            );
         };
 
         auto didAutoStream = useState(false);
@@ -1435,6 +1639,7 @@ struct StudioApp : ViewModifiers<StudioApp> {
             if (removedChat.streaming || removedChat.activeGenerationId != 0) {
                 engine->cancelChat(removedChat.id);
             }
+            clearPendingChatSendsForChat(nextState, removedChat.id);
             nextState.chats.erase(nextState.chats.begin() + chatIndex);
             if (nextState.chats.empty()) {
                 nextState.selectedChatIndex = 0;
