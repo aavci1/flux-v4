@@ -294,7 +294,7 @@ if(FLUX_BUILD_TESTS)
   add_test(NAME flux_tests COMMAND flux_tests)
 endif()
 
-option(FLUX_BUILD_BENCHMARKS "Build paragraph cache micro-benchmark (bench/paragraph_cache)." OFF)
+option(FLUX_BUILD_BENCHMARKS "Build micro-benchmarks in bench/." OFF)
 
 if(FLUX_BUILD_BENCHMARKS)
   add_executable(paragraph_cache_bench
@@ -309,4 +309,14 @@ if(FLUX_BUILD_BENCHMARKS)
   if(APPLE)
     target_compile_options(paragraph_cache_bench PRIVATE $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>)
   endif()
+
+  add_executable(rebuild_bench
+    bench/rebuild/bench.cpp
+  )
+  target_include_directories(rebuild_bench PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+  )
+  target_link_libraries(rebuild_bench PRIVATE flux)
+  set_target_properties(rebuild_bench PROPERTIES CXX_STANDARD 23)
 endif()
