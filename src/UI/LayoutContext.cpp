@@ -173,12 +173,18 @@ bool LayoutContext::canReuseRetainedCompositeSubtree(ComponentKey const& composi
   if (!root) {
     return false;
   }
-  return constraintsEqual(root->constraints, constraints) &&
-         hintsEqual(root->hints, hints) &&
-         rectEqual(root->assignedFrame, assignedFrame);
+  if (!constraintsEqual(root->constraints, constraints) || !hintsEqual(root->hints, hints)) {
+    return false;
+  }
+  if (rectEqual(root->assignedFrame, assignedFrame)) {
+    return true;
+  }
+  return root->assignedFrame.width == assignedFrame.width &&
+         root->assignedFrame.height == assignedFrame.height &&
+         tree_.canTranslateSubtree(it->second);
 }
 
-bool LayoutContext::reuseRetainedCompositeSubtree(ComponentKey const& compositeKey) {
+bool LayoutContext::reuseRetainedCompositeSubtree(ComponentKey const& compositeKey, Rect const& assignedFrame) {
   if (!retainedRoots_) {
     return false;
   }
@@ -189,6 +195,12 @@ bool LayoutContext::reuseRetainedCompositeSubtree(ComponentKey const& compositeK
   LayoutNodeId const rootId = it->second;
   if (!tree_.reuseSubtree(rootId, currentLayoutParent())) {
     return false;
+  }
+  if (LayoutNode* root = tree_.get(rootId)) {
+    Vec2 const delta{assignedFrame.x - root->assignedFrame.x, assignedFrame.y - root->assignedFrame.y};
+    if (delta.x != 0.f || delta.y != 0.f) {
+      tree_.translateSubtree(rootId, delta);
+    }
   }
   subtreeRootLayouts_[compositeKey] = rootId;
   pendingCompositeSubtreeRoot_ = false;

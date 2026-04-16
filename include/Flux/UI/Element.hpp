@@ -480,8 +480,8 @@ void Element::Model<C>::layout(LayoutContext& ctx) const {
     if (store && resolution.descendantsStable && !store->hasDirtyDescendant(key) &&
         ctx.canReuseRetainedCompositeSubtree(key, ctx.layoutEngine().lastAssignedFrame(), ctx.constraints(),
                                              ctx.hints())) {
-      (void)ctx.layoutEngine().consumeAssignedFrame();
-      reusedLayoutSubtree = ctx.reuseRetainedCompositeSubtree(key);
+      Rect const assignedFrame = ctx.layoutEngine().consumeAssignedFrame();
+      reusedLayoutSubtree = ctx.reuseRetainedCompositeSubtree(key, assignedFrame);
     }
     if (!reusedLayoutSubtree) {
       child.layout(ctx);

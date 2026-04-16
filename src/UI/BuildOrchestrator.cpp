@@ -119,7 +119,12 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
 
   actionRegistryBuild_.beginRebuild();
   StateStore::setCurrent(&stateStore_);
-  layoutTree_.beginBuild();
+  bool const useRetainedLayoutBuild = !layoutSubtreeRoots_.empty() && !stateStore_.shouldForceFullRebuild();
+  if (useRetainedLayoutBuild) {
+    layoutTree_.beginBuild();
+  } else {
+    layoutTree_.clear();
+  }
   LayoutContext lctx{Application::instance().textSystem(), layoutEngine_, layoutTree_, &measureCache_,
                      &layoutSubtreeRoots_};
   lctx.pushConstraints(rootCs);
@@ -131,7 +136,9 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
   }
   EnvironmentStack::current().pop();
   lctx.popConstraints();
-  layoutTree_.endBuild();
+  if (useRetainedLayoutBuild) {
+    layoutTree_.endBuild();
+  }
 
   RenderContext rctx{graph, newMap, Application::instance().textSystem()};
   rctx.pushConstraints(rootCs);

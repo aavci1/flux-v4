@@ -11,7 +11,7 @@ void LayoutTree::beginBuild() {
   rootId_ = {};
   firstNodeForKey_.clear();
   activeOrder_.clear();
-  activeNodes_.clear();
+  activeNodesDirty_ = true;
 }
 
 void LayoutTree::endBuild() {
@@ -22,23 +22,10 @@ void LayoutTree::endBuild() {
     if (slotEpoch_[i] == buildEpoch_) {
       continue;
     }
-    if (!slots_[i]->componentKey.empty()) {
-      auto const it = retainedNodeForKey_.find(slots_[i]->componentKey);
-      if (it != retainedNodeForKey_.end() && it->second.index() == i) {
-        retainedNodeForKey_.erase(it);
-      }
-    }
     slots_[i].reset();
     freeList_.push_back(i);
   }
-
-  activeNodes_.clear();
-  activeNodes_.reserve(activeOrder_.size());
-  for (LayoutNodeId id : activeOrder_) {
-    if (LayoutNode const* node = get(id)) {
-      activeNodes_.push_back(*node);
-    }
-  }
+  activeNodesDirty_ = true;
 }
 
 Rect transformWorldBounds(Mat3 const& t, Rect const& r) {
@@ -53,6 +40,24 @@ Rect transformWorldBounds(Mat3 const& t, Rect const& r) {
   return Rect{minX, minY, maxX - minX, maxY - minY};
 }
 
+void LayoutTree::rebuildActiveNodesCache() const {
+  activeNodes_.clear();
+  activeNodes_.reserve(activeOrder_.size());
+  for (LayoutNodeId id : activeOrder_) {
+    if (LayoutNode const* node = get(id)) {
+      activeNodes_.push_back(*node);
+    }
+  }
+  activeNodesDirty_ = false;
+}
+
+std::span<LayoutNode const> LayoutTree::nodes() const noexcept {
+  if (activeNodesDirty_) {
+    rebuildActiveNodesCache();
+  }
+  return activeNodes_;
+}
+
 LayoutNodeId LayoutTree::allocateNodeId() {
   if (!freeList_.empty()) {
     std::size_t const index = freeList_.back();
@@ -65,16 +70,7 @@ LayoutNodeId LayoutTree::allocateNodeId() {
 }
 
 LayoutNodeId LayoutTree::pushNode(LayoutNode&& node, LayoutNodeId parent) {
-  LayoutNodeId id{};
-  if (!node.componentKey.empty()) {
-    auto const existing = retainedNodeForKey_.find(node.componentKey);
-    if (existing != retainedNodeForKey_.end()) {
-      id = existing->second;
-    }
-  }
-  if (!id.isValid()) {
-    id = allocateNodeId();
-  }
+  LayoutNodeId const id = allocateNodeId();
 
   node.id = id;
   node.parent = parent;
@@ -88,12 +84,10 @@ LayoutNodeId LayoutTree::pushNode(LayoutNode&& node, LayoutNodeId parent) {
   }
   if (!node.componentKey.empty()) {
     firstNodeForKey_.emplace(node.componentKey, id);
-    retainedNodeForKey_[node.componentKey] = id;
   }
   slots_[id.index()] = std::move(node);
   slotEpoch_[id.index()] = buildEpoch_;
   activeOrder_.push_back(id);
-  activeNodes_.push_back(*slots_[id.index()]);
   return id;
 }
 
@@ -110,10 +104,8 @@ bool LayoutTree::reuseSubtree(LayoutNodeId rootId, LayoutNodeId parent) {
     }
     slotEpoch_[id.index()] = buildEpoch_;
     activeOrder_.push_back(id);
-    activeNodes_.push_back(*node);
     if (!node->componentKey.empty()) {
       firstNodeForKey_.emplace(node->componentKey, id);
-      retainedNodeForKey_[node->componentKey] = id;
     }
     for (LayoutNodeId childId : node->children) {
       self(self, childId);
@@ -131,6 +123,48 @@ bool LayoutTree::reuseSubtree(LayoutNodeId rootId, LayoutNodeId parent) {
 
   visit(visit, rootId);
   return true;
+}
+
+bool LayoutTree::canTranslateSubtree(LayoutNodeId rootId) const {
+  auto const visit = [&](auto&& self, LayoutNodeId id) -> bool {
+    LayoutNode const* node = get(id);
+    if (!node) {
+      return false;
+    }
+    if (node->kind == LayoutNode::Kind::Container) {
+      return false;
+    }
+    if (node->kind == LayoutNode::Kind::Modifier && node->modifierHasEffectLayer) {
+      return false;
+    }
+    for (LayoutNodeId childId : node->children) {
+      if (!self(self, childId)) {
+        return false;
+      }
+    }
+    return true;
+  };
+  return visit(visit, rootId);
+}
+
+void LayoutTree::translateSubtree(LayoutNodeId rootId, Vec2 delta) {
+  auto const visit = [&](auto&& self, LayoutNodeId id) -> void {
+    LayoutNode* node = get(id);
+    if (!node) {
+      return;
+    }
+    node->frame.x += delta.x;
+    node->frame.y += delta.y;
+    node->assignedFrame.x += delta.x;
+    node->assignedFrame.y += delta.y;
+    node->worldBounds.x += delta.x;
+    node->worldBounds.y += delta.y;
+    for (LayoutNodeId childId : node->children) {
+      self(self, childId);
+    }
+  };
+  visit(visit, rootId);
+  activeNodesDirty_ = true;
 }
 
 Rect LayoutTree::unionSubtreeWorldBounds(LayoutNodeId nodeId) const {

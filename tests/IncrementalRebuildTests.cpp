@@ -105,7 +105,12 @@ struct RebuildHarness {
   void rebuild(Element const& root, bool forceFull = false, float w = 800.f, float h = 1200.f) {
     store.beginRebuild(forceFull);
     mc.beginBuild(store.shouldForceFullRebuild());
-    tree.beginBuild();
+    bool const useRetainedLayoutBuild = !roots.empty() && !store.shouldForceFullRebuild();
+    if (useRetainedLayoutBuild) {
+      tree.beginBuild();
+    } else {
+      tree.clear();
+    }
     graph.clear();
     eventMap = EventMap{};
     le.resetForBuild();
@@ -122,7 +127,9 @@ struct RebuildHarness {
 
     root.layout(*ctx);
     ctx->popConstraints();
-    tree.endBuild();
+    if (useRetainedLayoutBuild) {
+      tree.endBuild();
+    }
 
     RenderContext rctx{graph, eventMap, ts};
     rctx.pushConstraints(rootCs, {});
@@ -468,6 +475,60 @@ TEST_CASE("layout containers publish stable component keys in the layout tree") 
   REQUIRE(rootRect.has_value());
   CHECK(rootRect->width == doctest::Approx(800.f));
   CHECK(rootRect->height == doctest::Approx(1200.f));
+}
+
+TEST_CASE("incremental rebuild retains clean child composite subtree ids") {
+  auto cleanCount = std::make_shared<int>(0);
+  auto dirtyCount = std::make_shared<int>(0);
+  auto dirtyHandle = std::make_shared<State<int>>();
+
+  StoreScope scope;
+  RebuildHarness harness{scope.store};
+  Element root = Element{PairRoot{
+      .cleanCount = cleanCount,
+      .dirtyCount = dirtyCount,
+      .dirtyHandle = dirtyHandle,
+  }};
+
+  harness.rebuild(root);
+  auto const firstIt = harness.roots.find(ComponentKey{0, 0, 0});
+  REQUIRE(firstIt != harness.roots.end());
+  LayoutNodeId const firstCleanRoot = firstIt->second;
+
+  *dirtyHandle = 1;
+  CHECK(scope.store.hasPendingDirtyComponents());
+  harness.rebuild(root);
+
+  auto const secondIt = harness.roots.find(ComponentKey{0, 0, 0});
+  REQUIRE(secondIt != harness.roots.end());
+  CHECK(secondIt->second == firstCleanRoot);
+}
+
+TEST_CASE("incremental rebuild retains clean child composite subtree ids") {
+  auto cleanCount = std::make_shared<int>(0);
+  auto dirtyCount = std::make_shared<int>(0);
+  auto dirtyHandle = std::make_shared<State<int>>();
+
+  StoreScope scope;
+  RebuildHarness harness{scope.store};
+  Element root = Element{PairRoot{
+      .cleanCount = cleanCount,
+      .dirtyCount = dirtyCount,
+      .dirtyHandle = dirtyHandle,
+  }};
+
+  harness.rebuild(root);
+  auto const firstIt = harness.roots.find(ComponentKey{0, 0, 0});
+  REQUIRE(firstIt != harness.roots.end());
+  LayoutNodeId const firstCleanRoot = firstIt->second;
+
+  *dirtyHandle = 1;
+  CHECK(scope.store.hasPendingDirtyComponents());
+  harness.rebuild(root);
+
+  auto const secondIt = harness.roots.find(ComponentKey{0, 0, 0});
+  REQUIRE(secondIt != harness.roots.end());
+  CHECK(secondIt->second == firstCleanRoot);
 }
 
 

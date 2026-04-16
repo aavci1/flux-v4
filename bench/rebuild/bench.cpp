@@ -139,7 +139,12 @@ struct FrameContext {
     if (store.shouldForceFullRebuild()) {
       mc.clear();
     }
-    tree.beginBuild();
+    bool const useRetainedLayoutBuild = !roots.empty() && !store.shouldForceFullRebuild();
+    if (useRetainedLayoutBuild) {
+      tree.beginBuild();
+    } else {
+      tree.clear();
+    }
 
     LayoutContextPtr ctx{
         flux::LayoutContextTestAccess::create(ts, le, tree, &mc, &roots)};
@@ -148,7 +153,9 @@ struct FrameContext {
 
     root.layout(*ctx);
     ctx->popConstraints();
-    tree.endBuild();
+    if (useRetainedLayoutBuild) {
+      tree.endBuild();
+    }
 
     roots = ctx->subtreeRootLayouts();
     pins = ctx->pinnedElements();

@@ -124,7 +124,6 @@ public:
     activeNodes_.clear();
     rootId_ = {};
     firstNodeForKey_.clear();
-    retainedNodeForKey_.clear();
     ++buildEpoch_;
   }
 
@@ -152,7 +151,7 @@ public:
     return &*slots_[i];
   }
 
-  [[nodiscard]] std::span<LayoutNode const> nodes() const noexcept { return activeNodes_; }
+  [[nodiscard]] std::span<LayoutNode const> nodes() const noexcept;
 
   /// Union of \p nodeId's subtree \ref LayoutNode::worldBounds (including the root node).
   [[nodiscard]] Rect unionSubtreeWorldBounds(LayoutNodeId nodeId) const;
@@ -162,19 +161,22 @@ public:
   /// Internal: append node; returns assigned id. If \p parent is invalid, this becomes the root.
   LayoutNodeId pushNode(LayoutNode&& node, LayoutNodeId parent);
   bool reuseSubtree(LayoutNodeId rootId, LayoutNodeId parent);
+  bool canTranslateSubtree(LayoutNodeId rootId) const;
+  void translateSubtree(LayoutNodeId rootId, Vec2 delta);
 
   void setRoot(LayoutNodeId id) noexcept { rootId_ = id; }
 
 private:
   LayoutNodeId allocateNodeId();
+  void rebuildActiveNodesCache() const;
 
   std::vector<std::optional<LayoutNode>> slots_{};
   std::vector<std::size_t> freeList_{};
   std::vector<LayoutNodeId> activeOrder_{};
-  std::vector<LayoutNode> activeNodes_{};
+  mutable std::vector<LayoutNode> activeNodes_{};
+  mutable bool activeNodesDirty_{true};
   LayoutNodeId rootId_{};
   std::unordered_map<ComponentKey, LayoutNodeId, ComponentKeyHash> firstNodeForKey_{};
-  std::unordered_map<ComponentKey, LayoutNodeId, ComponentKeyHash> retainedNodeForKey_{};
   std::uint64_t buildEpoch_{0};
   std::vector<std::uint64_t> slotEpoch_{};
 };
