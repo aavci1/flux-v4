@@ -29,6 +29,7 @@
 #include <cstdint>
 #include <iostream>
 #include <memory>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -281,11 +282,21 @@ static void requirePendingDirty(StateStore const& store, char const* label) {
 
 } // namespace
 
-int main() {
+int main(int argc, char** argv) {
+  std::string_view const filter = argc > 1 ? std::string_view(argv[1]) : std::string_view{};
+  auto const want = [&](std::string_view id) {
+    return filter.empty() || filter == id;
+  };
+  auto const iterationsFor = [&](std::string_view id, int normalCount) {
+    if (!filter.empty() && filter == id) {
+      return normalCount * 20;
+    }
+    return normalCount;
+  };
   constexpr float W = 1200.f;
   constexpr float H = 2000.f;
 
-  {
+  if (want("B1")) {
     StateStoreGuard guard;
     FrameContext fc{guard.store};
     Element root = flatVStack(5000, 16.f);
@@ -295,17 +306,17 @@ int main() {
     std::cout << "   layout_tree_nodes: " << fc.tree.nodes().size() << "\n";
   }
 
-  {
+  if (want("B2")) {
     StateStoreGuard guard;
     FrameContext fc{guard.store};
     Element root = flatVStack(5000, 16.f);
-    constexpr int N = 20;
+    int const N = iterationsFor("B3", 20);
     double const per = timeAveraged(N, [&] { fc.rebuild(root, W, H); });
     std::cout << "B2 flat 5000-row VStack steady-state (same root): ";
     printRow("", per);
   }
 
-  {
+  if (want("B2'")) {
     StateStoreGuard guard;
     FrameContext fc{guard.store};
     constexpr int N = 20;
@@ -317,7 +328,7 @@ int main() {
     printRow("", per);
   }
 
-  {
+  if (want("B3")) {
     StateStoreGuard guard;
     FrameContext fc{guard.store};
     auto handles = std::make_shared<std::vector<State<int>>>(5000);
@@ -334,7 +345,7 @@ int main() {
     printRow("", total / N);
   }
 
-  {
+  if (want("B4")) {
     StateStoreGuard guard;
     FrameContext fc{guard.store};
     Element root = card(4, 5, 12.f);
@@ -342,13 +353,13 @@ int main() {
     std::cout << "B4 card tree (depth=4, width=5) cold:   ";
     printRow("", cold);
     std::cout << "   layout_tree_nodes: " << fc.tree.nodes().size() << "\n";
-    constexpr int N = 50;
+    int const N = iterationsFor("B4", 50);
     double const steady = timeAveraged(N, [&] { fc.rebuild(root, W, H); });
     std::cout << "B4 card tree steady-state (same root):  ";
     printRow("", steady);
   }
 
-  {
+  if (want("B4'")) {
     StateStoreGuard guard;
     FrameContext fc{guard.store};
     constexpr int N = 50;
@@ -360,20 +371,20 @@ int main() {
     printRow("", steady);
   }
 
-  {
+  if (want("B5")) {
     StateStoreGuard guard;
     FrameContext fc{guard.store};
     Element root = foreachRows(5000, 24.f);
     double const cold = timeIt([&] { fc.rebuild(root, W, H); });
     std::cout << "B5 ForEach 5000 rows cold:              ";
     printRow("", cold);
-    constexpr int N = 10;
+    int const N = iterationsFor("B5", 10);
     double const steady = timeAveraged(N, [&] { fc.rebuild(root, W, H); });
     std::cout << "B5 ForEach 5000 rows steady-state (same root): ";
     printRow("", steady);
   }
 
-  {
+  if (want("B5'")) {
     StateStoreGuard guard;
     FrameContext fc{guard.store};
     constexpr int N = 10;
@@ -385,17 +396,17 @@ int main() {
     printRow("", steady);
   }
 
-  {
+  if (want("B6")) {
     StateStoreGuard guard;
     FrameContext fc{guard.store};
     Element root = foreachRows(100, 32.f);
-    constexpr int N = 500;
+    int const N = iterationsFor("B6", 500);
     double const per = timeAveraged(N, [&] { fc.rebuild(root, W, H); });
     std::cout << "B6 ForEach 100 rows steady-state (same root): ";
     printRow("", per);
   }
 
-  {
+  if (want("B6'")) {
     StateStoreGuard guard;
     FrameContext fc{guard.store};
     constexpr int N = 500;
@@ -407,12 +418,12 @@ int main() {
     printRow("", per);
   }
 
-  {
+  if (want("B7")) {
     StateStoreGuard guard;
     FrameContext fc{guard.store};
     Element root = flatVStack(1000, 16.f);
     fc.rebuild(root, W, H);
-    constexpr int N = 50;
+    int const N = iterationsFor("B9", 50);
     auto const t0 = std::chrono::steady_clock::now();
     for (int i = 0; i < N; ++i) {
       float const w = W + static_cast<float>(i % 4);
@@ -423,7 +434,7 @@ int main() {
     printRow("", per);
   }
 
-  {
+  if (want("B8")) {
     std::cout << "B8 scaling (flat VStack, cold rebuild):\n";
     for (int n : {100, 500, 2000, 10000}) {
       StateStoreGuard guard;
@@ -435,7 +446,7 @@ int main() {
     }
   }
 
-  {
+  if (want("B9")) {
     StateStoreGuard guard;
     FrameContext fc{guard.store};
     auto handles = std::make_shared<std::vector<State<int>>>(1000);
@@ -452,13 +463,13 @@ int main() {
     printRow("", total / N);
   }
 
-  {
+  if (want("B10")) {
     StateStoreGuard guard;
     FrameContext fc{guard.store};
     auto handles = std::make_shared<std::vector<State<int>>>(10000);
     Element root = Element{SignalRowsTree{.count = 10000, .handles = handles, .rowH = 16.f}};
     fc.rebuild(root, W, H * 8.f);
-    constexpr int N = 20;
+    int const N = iterationsFor("B10", 20);
     double total = 0.0;
     for (int i = 0; i < N; ++i) {
       (*handles)[5000] = (i & 1) != 0 ? 0 : 1;
