@@ -46,6 +46,7 @@ public:
   bool suppressLeafModifierEvents() const noexcept;
 
   bool incrementalSceneReuseEnabled() const noexcept;
+  void markSceneDirty(NodeId id);
 
   void beginCapture(std::vector<NodeId>* out);
   void beginCapture(detail::SmallVector<NodeId, 2>* out);

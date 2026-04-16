@@ -27,6 +27,7 @@ struct Window::Impl {
   std::unique_ptr<PlatformWindow> platform_;
   std::unique_ptr<Canvas> canvas_;
   std::optional<SceneGraph> sceneGraph_;
+  SceneRenderer renderer_{};
   Color clearColor_{Color::hex(0xF5F7F9)};
   /// Declared before `runtime_` so `~Runtime` (and `OverlayHookSlot` teardown calling `removeOverlay`)
   /// runs while `OverlayManager` is still alive. Reverse member destruction order would destroy
@@ -200,13 +201,13 @@ EnvironmentLayer const& Window::environmentLayer() const {
 
 void Window::render(Canvas& canvas) {
   if (d->sceneGraph_) {
-    SceneRenderer{}.render(*d->sceneGraph_, canvas, d->clearColor_);
+    d->renderer_.render(*d->sceneGraph_, canvas, d->clearColor_);
   }
   for (std::unique_ptr<OverlayEntry> const& up : d->overlayMgr_.entries()) {
     OverlayEntry const& entry = *up;
     canvas.save();
     canvas.transform(Mat3::translate(Point{entry.resolvedFrame.x, entry.resolvedFrame.y}));
-    SceneRenderer{}.render(entry.graph, canvas);
+    d->renderer_.render(entry.graph, canvas);
     canvas.restore();
   }
   if (d->runtime_ && d->runtime_->layoutOverlayEnabled()) {

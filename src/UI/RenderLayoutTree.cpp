@@ -42,6 +42,15 @@ LayerNode containerLayerForNode(LayoutNode const& node) {
   return layer;
 }
 
+bool mat3Equal(Mat3 const& a, Mat3 const& b) {
+  for (int i = 0; i < 9; ++i) {
+    if (a.m[i] != b.m[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
 void appendSceneRoots(LayoutNodeId id, LayoutTree const& tree, std::vector<NodeId>& out) {
   LayoutNode const* node = tree.get(id);
   if (!node) {
@@ -158,8 +167,10 @@ bool renderContainer(LayoutNode& node, LayoutTree& tree, RenderContext& ctx) {
   if (ctx.incrementalSceneReuseEnabled() && node.sceneNodes.size() == 1) {
     lid = node.sceneNodes[0];
     if (LayerNode* existing = ctx.graph().node<LayerNode>(lid)) {
-      existing->transform = layer.transform;
-      existing->clip = layer.clip;
+      if (!mat3Equal(existing->transform, layer.transform) || existing->clip != layer.clip) {
+        existing->transform = layer.transform;
+        existing->clip = layer.clip;
+      }
       layerStable = true;
     } else {
       lid = kInvalidNodeId;
@@ -215,8 +226,10 @@ bool renderNode(LayoutNodeId id, LayoutTree& tree, RenderContext& ctx) {
     if (node.kind == LayoutNode::Kind::Container && node.sceneNodes.size() == 1) {
       if (LayerNode* layer = ctx.graph().node<LayerNode>(node.sceneNodes[0])) {
         LayerNode const updated = containerLayerForNode(node);
-        layer->transform = updated.transform;
-        layer->clip = updated.clip;
+        if (!mat3Equal(layer->transform, updated.transform) || layer->clip != updated.clip) {
+          layer->transform = updated.transform;
+          layer->clip = updated.clip;
+        }
       }
     }
     return true;

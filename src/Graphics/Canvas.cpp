@@ -1,5 +1,6 @@
 #include <Flux/Graphics/Canvas.hpp>
 #include <Flux/Graphics/Image.hpp>
+#include <Flux/Scene/Nodes.hpp>
 
 #include <algorithm>
 #include <cassert>
@@ -70,6 +71,18 @@ void Canvas::drawImage(Image const& image, Rect const& dst, ImageFillMode fillMo
   }
   Rect const src = imageSourceRect(image.size(), dst, fillMode);
   drawImage(image, src, dst, corners, opacity);
+}
+
+void Canvas::drawTextNode(TextNode const& node) {
+  if (node.layout) {
+    drawTextLayout(*node.layout, node.origin);
+  }
+}
+
+void Canvas::drawImageNode(ImageNode const& node) {
+  if (node.image) {
+    drawImage(*node.image, node.bounds, node.fillMode, node.cornerRadius, node.opacity);
+  }
 }
 
 } // namespace flux

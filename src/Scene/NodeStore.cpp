@@ -21,6 +21,7 @@ NodeId NodeStore::insert(SceneNode node) {
   const NodeId id{static_cast<std::uint32_t>(idx), s.generation};
   std::visit([&](auto& n) { n.id = id; }, node);
   s.parent = kInvalidNodeId;
+  s.paintEpoch = 0;
   s.node = std::move(node);
   return id;
 }
@@ -31,6 +32,7 @@ void NodeStore::remove(NodeId id) {
   }
   Slot& s = slots_[id.index];
   s.parent = kInvalidNodeId;
+  s.paintEpoch = 0;
   s.node = std::nullopt;
   ++s.generation;
   free_.push_back(static_cast<std::size_t>(id.index));
@@ -72,6 +74,20 @@ void NodeStore::setParent(NodeId id, NodeId parent) {
     return;
   }
   slots_[id.index].parent = parent;
+}
+
+std::uint64_t NodeStore::paintEpochOf(NodeId id) const {
+  if (!contains(id)) {
+    return 0;
+  }
+  return slots_[id.index].paintEpoch;
+}
+
+void NodeStore::setPaintEpoch(NodeId id, std::uint64_t epoch) {
+  if (!contains(id)) {
+    return;
+  }
+  slots_[id.index].paintEpoch = epoch;
 }
 
 } // namespace flux

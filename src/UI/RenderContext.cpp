@@ -99,6 +99,10 @@ bool RenderContext::incrementalSceneReuseEnabled() const noexcept {
   return incrementalSceneReuse_;
 }
 
+void RenderContext::markSceneDirty(NodeId id) {
+  graph_.markPaintDirty(id);
+}
+
 void RenderContext::beginCapture(std::vector<NodeId>* out) {
   captureStack_.push_back(CaptureSink{.storage = out, .push = out ? &pushCapturedVector : nullptr});
   if (out) {

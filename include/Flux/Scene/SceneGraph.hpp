@@ -64,6 +64,8 @@ public:
   SceneNode const* get(NodeId id) const { return store_.get(id); }
 
   NodeId root() const { return root_; }
+  std::uint64_t subtreePaintEpoch(NodeId id) const;
+  void markPaintDirty(NodeId id);
 
   /// Parent of \p child in the tree (`nullopt` if \p child is the root or unknown).
   std::optional<NodeId> parentOf(NodeId child) const;
@@ -72,9 +74,11 @@ private:
   bool isDescendant(NodeId ancestor, NodeId possibleDescendant) const;
   void removeRecursive(NodeId id, std::optional<NodeId> parent, bool detachFromParent);
   void eraseFromParentChildren(NodeId parent, NodeId child);
+  void markPaintDirtyUpwards(NodeId id);
 
   NodeStore store_{};
   NodeId root_{};
+  std::uint64_t nextPaintEpoch_{1};
 };
 
 } // namespace flux

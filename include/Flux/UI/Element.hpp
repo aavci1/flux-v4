@@ -810,6 +810,7 @@ bool Element::Model<C>::reuseSceneFromLayout(RenderContext& ctx, LayoutNode& nod
     rect->fill = fillEff;
     rect->stroke = strokeEff;
     rect->shadow = shadowEff;
+    ctx.markSceneDirty(node.sceneNodes[0]);
     updateModifierEvents(node.sceneNodes[0], bounds);
     node.renderedModifiers = ctx.activeElementModifiers();
     return true;
@@ -846,6 +847,7 @@ bool Element::Model<C>::reuseSceneFromLayout(RenderContext& ctx, LayoutNode& nod
     text->layout = std::move(layout);
     text->origin = origin;
     text->allocation = bounds;
+    ctx.markSceneDirty(node.sceneNodes[0]);
     updateModifierEvents(node.sceneNodes[0], bounds);
     node.renderedModifiers = ctx.activeElementModifiers();
     return true;
@@ -874,6 +876,7 @@ bool Element::Model<C>::reuseSceneFromLayout(RenderContext& ctx, LayoutNode& nod
     image->fillMode = value.fillMode;
     image->cornerRadius = cornerR;
     image->opacity = opacity;
+    ctx.markSceneDirty(node.sceneNodes[0]);
     updateModifierEvents(node.sceneNodes[0], bounds);
     node.renderedModifiers = ctx.activeElementModifiers();
     return true;
@@ -891,6 +894,7 @@ bool Element::Model<C>::reuseSceneFromLayout(RenderContext& ctx, LayoutNode& nod
     line->from = value.from;
     line->to = value.to;
     line->stroke = value.stroke;
+    ctx.markSceneDirty(node.sceneNodes[0]);
     return true;
   } else if constexpr (std::is_same_v<C, PathShape>) {
     Rect const cf = node.frame;
@@ -927,11 +931,16 @@ bool Element::Model<C>::reuseSceneFromLayout(RenderContext& ctx, LayoutNode& nod
           pathNode->fill == fillEff && pathNode->stroke == strokeEff && pathNode->shadow == shadowEff) {
         return true;
       }
+      bool const pathChanged = pathNode->path.contentHash() != value.path.contentHash() || pathNode->fill != fillEff ||
+                               pathNode->stroke != strokeEff || pathNode->shadow != shadowEff;
       layer->transform = transform;
       pathNode->path = value.path;
       pathNode->fill = fillEff;
       pathNode->stroke = strokeEff;
       pathNode->shadow = shadowEff;
+      if (pathChanged) {
+        ctx.markSceneDirty(node.sceneNodes[0]);
+      }
       return true;
     }
     if (node.sceneNodes.size() != 1) {
@@ -949,6 +958,7 @@ bool Element::Model<C>::reuseSceneFromLayout(RenderContext& ctx, LayoutNode& nod
     pathNode->fill = fillEff;
     pathNode->stroke = strokeEff;
     pathNode->shadow = shadowEff;
+    ctx.markSceneDirty(node.sceneNodes[0]);
     return true;
   } else {
     (void)ctx;

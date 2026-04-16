@@ -23,11 +23,14 @@ public:
   bool contains(NodeId id) const;
   NodeId parentOf(NodeId id) const;
   void setParent(NodeId id, NodeId parent);
+  std::uint64_t paintEpochOf(NodeId id) const;
+  void setPaintEpoch(NodeId id, std::uint64_t epoch);
 
 private:
   struct Slot {
     std::uint32_t generation = 0;
     NodeId parent{};
+    std::uint64_t paintEpoch = 0;
     std::optional<SceneNode> node;
   };
 
