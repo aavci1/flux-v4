@@ -145,6 +145,20 @@ int main() {
     std::cout << "B5 T_memo_hit (exact repeat, should be <0.1ms): " << (tMemo * 1000.0) << " ms\n";
   }
 
+  // B6: Tier 0 pointer-identity hit on a stable buffer.
+  {
+    flux::CoreTextSystem sys;
+    (void)sys.layout(as, 800.f, opt);  // warm
+
+    constexpr int N = 1000;
+    auto const t0 = std::chrono::steady_clock::now();
+    for (int i = 0; i < N; ++i) {
+      (void)sys.layout(as, 800.f, opt);
+    }
+    double const tPer = secondsSince(t0) / N;
+    std::cout << "B6 T_tier0_hit (pointer-identity repeat): " << (tPer * 1e9) << " ns\n";
+  }
+
   return 0;
 #endif
 }

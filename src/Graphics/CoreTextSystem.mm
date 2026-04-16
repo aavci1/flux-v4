@@ -2696,6 +2696,18 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layoutUnboxed(AttributedString
 std::shared_ptr<TextLayout const> CoreTextSystem::layout(std::string_view utf8, Font const& font,
                                                          Color const& color, float maxWidth,
                                                          TextLayoutOptions const& options) {
+  std::uint32_t const wq = quantizeWidth(maxWidth);
+
+  // --- Tier 0: pointer-identity exact-repeat (same backing buffer, same width) ---
+  if (d->lastLayout_.layout && wq == d->lastLayout_.contentWidthQ1 &&
+      utf8.data() == d->lastLayout_.utf8Ptr &&
+      utf8.size() == d->lastLayout_.utf8Size) {
+    if (!options.suppressCacheStats) {
+      ++d->memoStats_.hits;
+    }
+    return d->lastLayout_.layout;
+  }
+
   if (utf8.empty()) {
     AttributedString as;
     as.utf8 = "";
@@ -2703,7 +2715,6 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layout(std::string_view utf8, 
     return layoutUnboxed(as, options, maxWidth, false, 0, 0);
   }
   ContentHash const h = d->computeContentHashPlain(*this, utf8, font, color, options);
-  std::uint32_t const wq = quantizeWidth(maxWidth);
   std::int32_t const ml = options.maxLines;
 
   FramesetterEntry& e = [&]() -> FramesetterEntry& {
@@ -2766,9 +2777,6 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layout(std::string_view utf8, 
 
 std::shared_ptr<TextLayout const> CoreTextSystem::layout(AttributedString const& text, float maxWidth,
                                                          TextLayoutOptions const& options) {
-  validateRuns(text);
-  std::vector<ResolvedStyle> resolved;
-  accumulateInheritance(resolved, text);
   std::uint32_t const wq = quantizeWidth(maxWidth);
 
   // --- Tier 0: pointer-identity exact-repeat (same string object, same width) ---
@@ -2780,6 +2788,10 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layout(AttributedString const&
       return d->lastLayout_.layout;
     }
   }
+
+  validateRuns(text);
+  std::vector<ResolvedStyle> resolved;
+  accumulateInheritance(resolved, text);
 
   // Helper: update the memo after a successful layout.
   // chComputed=true  → also update contentHash (caller already has it).
