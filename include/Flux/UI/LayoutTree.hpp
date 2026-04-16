@@ -11,6 +11,7 @@
 #include <cassert>
 #include <cstdint>
 #include <span>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 
@@ -68,6 +69,8 @@ struct LayoutNode {
 
   /// Bounds in the current layer's local coordinate system (same convention as \ref LayoutEngine frames).
   Rect frame{};
+  /// Parent-assigned frame that this node was laid out under before the node consumed/adjusted it.
+  Rect assignedFrame{};
 
   /// Axis-aligned bounds in window / root space (for \ref LayoutRectCache and debugging).
   Rect worldBounds{};
@@ -111,10 +114,18 @@ struct LayoutNode {
 /// Complete layout result for one tree (main or overlay).
 class LayoutTree {
 public:
+  void beginBuild();
+  void endBuild();
+
   void clear() {
-    nodes_.clear();
+    slots_.clear();
+    freeList_.clear();
+    activeOrder_.clear();
+    activeNodes_.clear();
     rootId_ = {};
     firstNodeForKey_.clear();
+    retainedNodeForKey_.clear();
+    ++buildEpoch_;
   }
 
   [[nodiscard]] LayoutNodeId root() const noexcept { return rootId_; }
@@ -124,7 +135,10 @@ public:
       return nullptr;
     }
     std::size_t const i = id.index();
-    return i < nodes_.size() ? &nodes_[i] : nullptr;
+    if (i >= slots_.size() || !slots_[i].has_value()) {
+      return nullptr;
+    }
+    return &*slots_[i];
   }
 
   [[nodiscard]] LayoutNode* get(LayoutNodeId id) noexcept {
@@ -132,10 +146,13 @@ public:
       return nullptr;
     }
     std::size_t const i = id.index();
-    return i < nodes_.size() ? &nodes_[i] : nullptr;
+    if (i >= slots_.size() || !slots_[i].has_value()) {
+      return nullptr;
+    }
+    return &*slots_[i];
   }
 
-  [[nodiscard]] std::span<LayoutNode const> nodes() const noexcept { return nodes_; }
+  [[nodiscard]] std::span<LayoutNode const> nodes() const noexcept { return activeNodes_; }
 
   /// Union of \p nodeId's subtree \ref LayoutNode::worldBounds (including the root node).
   [[nodiscard]] Rect unionSubtreeWorldBounds(LayoutNodeId nodeId) const;
@@ -144,13 +161,22 @@ public:
 
   /// Internal: append node; returns assigned id. If \p parent is invalid, this becomes the root.
   LayoutNodeId pushNode(LayoutNode&& node, LayoutNodeId parent);
+  bool reuseSubtree(LayoutNodeId rootId, LayoutNodeId parent);
 
   void setRoot(LayoutNodeId id) noexcept { rootId_ = id; }
 
 private:
-  std::vector<LayoutNode> nodes_{};
+  LayoutNodeId allocateNodeId();
+
+  std::vector<std::optional<LayoutNode>> slots_{};
+  std::vector<std::size_t> freeList_{};
+  std::vector<LayoutNodeId> activeOrder_{};
+  std::vector<LayoutNode> activeNodes_{};
   LayoutNodeId rootId_{};
   std::unordered_map<ComponentKey, LayoutNodeId, ComponentKeyHash> firstNodeForKey_{};
+  std::unordered_map<ComponentKey, LayoutNodeId, ComponentKeyHash> retainedNodeForKey_{};
+  std::uint64_t buildEpoch_{0};
+  std::vector<std::uint64_t> slotEpoch_{};
 };
 
 /// Axis-aligned bounding rect of \p r after transforming its four corners by \p t.

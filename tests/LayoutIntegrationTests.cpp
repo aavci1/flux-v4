@@ -202,9 +202,11 @@ struct LayoutContextTestAccess {
     static LayoutContext *create(
         TextSystem &ts,
         LayoutEngine &le,
-        LayoutTree &tree
+        LayoutTree &tree,
+        MeasureCache *mc = nullptr,
+        LayoutContext::SubtreeRootMap const *retainedRoots = nullptr
     ) {
-        return new LayoutContext(ts, le, tree, nullptr);
+        return new LayoutContext(ts, le, tree, mc, retainedRoots);
     }
     static void destroy(LayoutContext *ctx) { delete ctx; }
 };
@@ -256,6 +258,7 @@ static LayoutTree runLayout(Element el, float maxW, float maxH) {
     LayoutEngine le;
     LayoutTree tree;
     le.resetForBuild();
+    tree.beginBuild();
 
     LayoutContextPtr ctx {flux::LayoutContextTestAccess::create(ts, le, tree)};
 
@@ -269,6 +272,7 @@ static LayoutTree runLayout(Element el, float maxW, float maxH) {
     el.layout(*ctx);
 
     ctx->popConstraints();
+    tree.endBuild();
     return tree;
 }
 
@@ -277,6 +281,7 @@ static RenderResult runLayoutAndRenderWithStateStore(Element el, float maxW, flo
     LayoutEngine le;
     RenderResult result;
     StateStoreGuard stateGuard;
+    result.tree.beginBuild();
 
     LayoutContextPtr ctx {flux::LayoutContextTestAccess::create(ts, le, result.tree)};
 
@@ -288,6 +293,7 @@ static RenderResult runLayoutAndRenderWithStateStore(Element el, float maxW, flo
 
     el.layout(*ctx);
     ctx->popConstraints();
+    result.tree.endBuild();
 
     RenderContext rctx {result.graph, result.eventMap, ts};
     rctx.pushConstraints(rootCs, {});

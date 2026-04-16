@@ -258,7 +258,7 @@ void OverlayManager::rebuild(Size windowSize, Runtime &runtime) {
             }
         }
         entry.graph.clear();
-        entry.layoutTree.clear();
+        entry.layoutTree.beginBuild();
         entry.eventMap.clear();
 
         entry.stateStore->beginRebuild();
@@ -278,6 +278,7 @@ void OverlayManager::rebuild(Size windowSize, Runtime &runtime) {
         }
         EnvironmentStack::current().pop();
         lctx.popConstraints();
+        entry.layoutTree.endBuild();
 
         RenderContext rctx {entry.graph, entry.eventMap, Application::instance().textSystem()};
         rctx.pushConstraints(cs);

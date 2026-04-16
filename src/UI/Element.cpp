@@ -182,6 +182,7 @@ void Element::layoutWithModifiers(LayoutContext& ctx) const {
         Mat3::translate(scope.parentFrame.x + m.translation.x, scope.parentFrame.y + m.translation.y);
   }
   LayoutNodeId const modId = ctx.pushLayoutNode(std::move(mod));
+  ctx.registerCompositeSubtreeRootIfPending(modId);
   ctx.pushLayoutParent(modId);
 
   float const padL = std::max(0.f, m.padding.left);
@@ -436,7 +437,8 @@ void Rectangle::layout(LayoutContext& ctx) const {
   n.element = ctx.currentElement();
   n.constraints = ctx.constraints();
   n.hints = ctx.hints();
-  ctx.pushLayoutNode(std::move(n));
+  LayoutNodeId const id = ctx.pushLayoutNode(std::move(n));
+  ctx.registerCompositeSubtreeRootIfPending(id);
   layoutDebugLogLeaf("Rectangle", ctx.constraints(), bounds, detail::flexGrowOf(*this),
                      detail::flexShrinkOf(*this), detail::minMainSizeOf(*this));
 }
@@ -492,7 +494,8 @@ void views::Image::layout(LayoutContext& ctx) const {
   n.element = ctx.currentElement();
   n.constraints = ctx.constraints();
   n.hints = ctx.hints();
-  ctx.pushLayoutNode(std::move(n));
+  LayoutNodeId const id = ctx.pushLayoutNode(std::move(n));
+  ctx.registerCompositeSubtreeRootIfPending(id);
   layoutDebugLogLeaf("Image", ctx.constraints(), bounds, detail::flexGrowOf(*this),
                      detail::flexShrinkOf(*this), detail::minMainSizeOf(*this));
 }
@@ -526,15 +529,18 @@ Size views::Image::measure(LayoutContext& ctx, LayoutConstraints const& c, Layou
 }
 
 void PathShape::layout(LayoutContext& ctx) const {
+  ComponentKey const stableKey = ctx.leafComponentKey();
   ctx.advanceChildSlot();
   Rect const cf = ctx.layoutEngine().consumeAssignedFrame();
   LayoutNode n{};
   n.kind = LayoutNode::Kind::Leaf;
   n.frame = cf;
+  n.componentKey = stableKey;
   n.element = ctx.currentElement();
   n.constraints = ctx.constraints();
   n.hints = ctx.hints();
-  ctx.pushLayoutNode(std::move(n));
+  LayoutNodeId const id = ctx.pushLayoutNode(std::move(n));
+  ctx.registerCompositeSubtreeRootIfPending(id);
   layoutDebugLogLeaf("PathShape", ctx.constraints(), cf, detail::flexGrowOf(*this),
                      detail::flexShrinkOf(*this), detail::minMainSizeOf(*this));
 }
@@ -578,6 +584,7 @@ Size PathShape::measure(LayoutContext& ctx, LayoutConstraints const&, LayoutHint
 }
 
 void Line::layout(LayoutContext& ctx) const {
+  ComponentKey const stableKey = ctx.leafComponentKey();
   ctx.advanceChildSlot();
   float const minX = std::min(from.x, to.x);
   float const maxX = std::max(from.x, to.x);
@@ -587,10 +594,12 @@ void Line::layout(LayoutContext& ctx) const {
   LayoutNode n{};
   n.kind = LayoutNode::Kind::Leaf;
   n.frame = lineBounds;
+  n.componentKey = stableKey;
   n.element = ctx.currentElement();
   n.constraints = ctx.constraints();
   n.hints = ctx.hints();
-  ctx.pushLayoutNode(std::move(n));
+  LayoutNodeId const id = ctx.pushLayoutNode(std::move(n));
+  ctx.registerCompositeSubtreeRootIfPending(id);
   layoutDebugLogLeaf("Line", ctx.constraints(), lineBounds, detail::flexGrowOf(*this),
                      detail::flexShrinkOf(*this), detail::minMainSizeOf(*this));
 }

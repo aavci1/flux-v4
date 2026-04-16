@@ -476,7 +476,16 @@ void Element::Model<C>::layout(LayoutContext& ctx) const {
       store->recordBodyConstraints(key, ctx.constraints());
       store->pushCompositePathStable(resolution.descendantsStable);
     }
-    child.layout(ctx);
+    bool reusedLayoutSubtree = false;
+    if (store && resolution.descendantsStable && !store->hasDirtyDescendant(key) &&
+        ctx.canReuseRetainedCompositeSubtree(key, ctx.layoutEngine().lastAssignedFrame(), ctx.constraints(),
+                                             ctx.hints())) {
+      (void)ctx.layoutEngine().consumeAssignedFrame();
+      reusedLayoutSubtree = ctx.reuseRetainedCompositeSubtree(key);
+    }
+    if (!reusedLayoutSubtree) {
+      child.layout(ctx);
+    }
     if (store) {
       store->popCompositePathStable();
     }
@@ -494,7 +503,8 @@ void Element::Model<C>::layout(LayoutContext& ctx) const {
     n.isCustomRenderLeaf = true;
     n.constraints = ctx.constraints();
     n.hints = ctx.hints();
-    ctx.pushLayoutNode(std::move(n));
+    LayoutNodeId const id = ctx.pushLayoutNode(std::move(n));
+    ctx.registerCompositeSubtreeRootIfPending(id);
   } else if constexpr (PrimitiveComponent<C>) {
     value.layout(ctx);
   } else {

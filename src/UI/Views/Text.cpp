@@ -205,7 +205,8 @@ void Text::layout(LayoutContext &ctx) const {
     n.element = ctx.currentElement();
     n.constraints = ctx.constraints();
     n.hints = ctx.hints();
-    ctx.pushLayoutNode(std::move(n));
+    LayoutNodeId const id = ctx.pushLayoutNode(std::move(n));
+    ctx.registerCompositeSubtreeRootIfPending(id);
     layoutDebugLogLeaf("Text", ctx.constraints(), bounds, detail::flexGrowOf(*this),
                        detail::flexShrinkOf(*this), detail::minMainSizeOf(*this));
 }

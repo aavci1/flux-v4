@@ -60,8 +60,8 @@ namespace flux {
 
 struct LayoutContextTestAccess {
   static LayoutContext* create(TextSystem& ts, LayoutEngine& le, LayoutTree& tree,
-                               MeasureCache* mc) {
-    return new LayoutContext(ts, le, tree, mc);
+                               MeasureCache* mc, LayoutContext::SubtreeRootMap const* retainedRoots = nullptr) {
+    return new LayoutContext(ts, le, tree, mc, retainedRoots);
   }
 
   static void destroy(LayoutContext* ctx) { delete ctx; }
@@ -105,13 +105,13 @@ struct RebuildHarness {
   void rebuild(Element const& root, bool forceFull = false, float w = 800.f, float h = 1200.f) {
     store.beginRebuild(forceFull);
     mc.beginBuild(store.shouldForceFullRebuild());
-    tree.clear();
+    tree.beginBuild();
     graph.clear();
     eventMap = EventMap{};
     le.resetForBuild();
 
     LayoutContextPtr ctx{
-        flux::LayoutContextTestAccess::create(ts, le, tree, &mc)};
+        flux::LayoutContextTestAccess::create(ts, le, tree, &mc, &roots)};
     LayoutConstraints rootCs{};
     rootCs.minWidth = w;
     rootCs.minHeight = h;
@@ -122,6 +122,7 @@ struct RebuildHarness {
 
     root.layout(*ctx);
     ctx->popConstraints();
+    tree.endBuild();
 
     RenderContext rctx{graph, eventMap, ts};
     rctx.pushConstraints(rootCs, {});
@@ -468,6 +469,7 @@ TEST_CASE("layout containers publish stable component keys in the layout tree") 
   CHECK(rootRect->width == doctest::Approx(800.f));
   CHECK(rootRect->height == doctest::Approx(1200.f));
 }
+
 
 TEST_CASE("removing a composite unsubscribes its external signal and destroys its state") {
   auto items = std::make_shared<std::vector<int>>(std::vector<int>{0, 1});

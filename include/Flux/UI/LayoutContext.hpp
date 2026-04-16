@@ -66,6 +66,9 @@ public:
   void registerCompositeSubtreeRootIfPending(LayoutNodeId layoutNodeId);
 
   SubtreeRootMap const& subtreeRootLayouts() const;
+  bool canReuseRetainedCompositeSubtree(ComponentKey const& compositeKey, Rect const& assignedFrame,
+                                        LayoutConstraints const& constraints, LayoutHints const& hints) const;
+  bool reuseRetainedCompositeSubtree(ComponentKey const& compositeKey);
 
   void pushActiveElementModifiers(ElementModifiers const* m);
   void popActiveElementModifiers();
@@ -105,7 +108,8 @@ private:
   friend class OverlayManager;
   friend struct LayoutContextTestAccess;
 
-  LayoutContext(TextSystem& ts, LayoutEngine& layout, LayoutTree& tree, MeasureCache* measureCache = nullptr);
+  LayoutContext(TextSystem& ts, LayoutEngine& layout, LayoutTree& tree, MeasureCache* measureCache = nullptr,
+                SubtreeRootMap const* retainedRoots = nullptr);
   ~LayoutContext();
 
   TextSystem& textSystem_;
@@ -132,6 +136,7 @@ private:
   Element const* currentElement_{nullptr};
 
   std::shared_ptr<detail::ElementPinStorage> elementPins_{};
+  SubtreeRootMap const* retainedRoots_{nullptr};
 };
 
 } // namespace flux

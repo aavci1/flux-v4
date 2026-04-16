@@ -18,12 +18,31 @@ struct ElementPinStorage {
 
 } // namespace detail
 
-LayoutContext::LayoutContext(TextSystem& ts, LayoutEngine& layout, LayoutTree& tree, MeasureCache* measureCache)
+namespace {
+
+bool constraintsEqual(LayoutConstraints const& a, LayoutConstraints const& b) {
+  return a.minWidth == b.minWidth && a.minHeight == b.minHeight &&
+         a.maxWidth == b.maxWidth && a.maxHeight == b.maxHeight;
+}
+
+bool hintsEqual(LayoutHints const& a, LayoutHints const& b) {
+  return a.hStackCrossAlign == b.hStackCrossAlign && a.vStackCrossAlign == b.vStackCrossAlign;
+}
+
+bool rectEqual(Rect const& a, Rect const& b) {
+  return a.x == b.x && a.y == b.y && a.width == b.width && a.height == b.height;
+}
+
+} // namespace
+
+LayoutContext::LayoutContext(TextSystem& ts, LayoutEngine& layout, LayoutTree& tree, MeasureCache* measureCache,
+                             SubtreeRootMap const* retainedRoots)
     : textSystem_(ts)
     , layoutEngine_(layout)
     , tree_(tree)
     , measureCache_(measureCache)
-    , elementPins_(std::make_shared<detail::ElementPinStorage>()) {
+    , elementPins_(std::make_shared<detail::ElementPinStorage>())
+    , retainedRoots_(retainedRoots) {
   layoutStack_.push_back(LayoutFrame{});
   layerWorldStack_.push_back(Mat3::identity());
 }
@@ -140,6 +159,42 @@ LayoutContext::SubtreeRootMap const& LayoutContext::subtreeRootLayouts() const {
   return subtreeRootLayouts_;
 }
 
+bool LayoutContext::canReuseRetainedCompositeSubtree(ComponentKey const& compositeKey, Rect const& assignedFrame,
+                                                     LayoutConstraints const& constraints,
+                                                     LayoutHints const& hints) const {
+  if (!retainedRoots_) {
+    return false;
+  }
+  auto const it = retainedRoots_->find(compositeKey);
+  if (it == retainedRoots_->end()) {
+    return false;
+  }
+  LayoutNode const* root = tree_.get(it->second);
+  if (!root) {
+    return false;
+  }
+  return constraintsEqual(root->constraints, constraints) &&
+         hintsEqual(root->hints, hints) &&
+         rectEqual(root->assignedFrame, assignedFrame);
+}
+
+bool LayoutContext::reuseRetainedCompositeSubtree(ComponentKey const& compositeKey) {
+  if (!retainedRoots_) {
+    return false;
+  }
+  auto const it = retainedRoots_->find(compositeKey);
+  if (it == retainedRoots_->end()) {
+    return false;
+  }
+  LayoutNodeId const rootId = it->second;
+  if (!tree_.reuseSubtree(rootId, currentLayoutParent())) {
+    return false;
+  }
+  subtreeRootLayouts_[compositeKey] = rootId;
+  pendingCompositeSubtreeRoot_ = false;
+  return true;
+}
+
 void LayoutContext::pushActiveElementModifiers(ElementModifiers const* m) { activeElementModifiers_.push_back(m); }
 
 void LayoutContext::popActiveElementModifiers() {
@@ -181,6 +236,7 @@ LayoutNodeId LayoutContext::currentLayoutParent() const {
 }
 
 LayoutNodeId LayoutContext::pushLayoutNode(LayoutNode&& node) {
+  node.assignedFrame = layoutEngine_.lastAssignedFrame();
   node.worldBounds = transformWorldBounds(currentLayerWorldTransform(), node.frame);
   return tree_.pushNode(std::move(node), currentLayoutParent());
 }

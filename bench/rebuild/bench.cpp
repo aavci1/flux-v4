@@ -70,8 +70,8 @@ namespace flux {
 
 struct LayoutContextTestAccess {
   static LayoutContext* create(TextSystem& ts, LayoutEngine& le, LayoutTree& tree,
-                               MeasureCache* mc) {
-    return new LayoutContext(ts, le, tree, mc);
+                               MeasureCache* mc, LayoutContext::SubtreeRootMap const* retainedRoots = nullptr) {
+    return new LayoutContext(ts, le, tree, mc, retainedRoots);
   }
 
   static void destroy(LayoutContext* ctx) { delete ctx; }
@@ -139,15 +139,16 @@ struct FrameContext {
     if (store.shouldForceFullRebuild()) {
       mc.clear();
     }
-    tree.clear();
+    tree.beginBuild();
 
     LayoutContextPtr ctx{
-        flux::LayoutContextTestAccess::create(ts, le, tree, &mc)};
+        flux::LayoutContextTestAccess::create(ts, le, tree, &mc, &roots)};
     ctx->pushConstraints(rootCs);
     le.setChildFrame(Rect{0.f, 0.f, w, h});
 
     root.layout(*ctx);
     ctx->popConstraints();
+    tree.endBuild();
 
     roots = ctx->subtreeRootLayouts();
     pins = ctx->pinnedElements();

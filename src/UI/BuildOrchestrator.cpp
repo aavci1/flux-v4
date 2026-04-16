@@ -119,8 +119,9 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
 
   actionRegistryBuild_.beginRebuild();
   StateStore::setCurrent(&stateStore_);
-  layoutTree_.clear();
-  LayoutContext lctx{Application::instance().textSystem(), layoutEngine_, layoutTree_, &measureCache_};
+  layoutTree_.beginBuild();
+  LayoutContext lctx{Application::instance().textSystem(), layoutEngine_, layoutTree_, &measureCache_,
+                     &layoutSubtreeRoots_};
   lctx.pushConstraints(rootCs);
   EnvironmentLayer windowEnvBaseline = window_.environmentLayer();
   EnvironmentStack::current().push(std::move(windowEnvBaseline));
@@ -130,6 +131,7 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
   }
   EnvironmentStack::current().pop();
   lctx.popConstraints();
+  layoutTree_.endBuild();
 
   RenderContext rctx{graph, newMap, Application::instance().textSystem()};
   rctx.pushConstraints(rootCs);

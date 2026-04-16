@@ -301,7 +301,8 @@ struct TextLayoutDisplay {
         n.element = ctx.currentElement();
         n.constraints = ctx.constraints();
         n.hints = ctx.hints();
-        ctx.pushLayoutNode(std::move(n));
+        LayoutNodeId const id = ctx.pushLayoutNode(std::move(n));
+        ctx.registerCompositeSubtreeRootIfPending(id);
     }
 
     void renderFromLayout(RenderContext &ctx, LayoutNode const &node) const {
