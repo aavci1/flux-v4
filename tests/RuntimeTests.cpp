@@ -59,6 +59,7 @@ class FakeChatEngine : public lambda::IChatEngine {
 
     void cancelChat(std::string const &) override { ++cancelChatCalls_; }
     void cancelAllGenerations() override { ++cancelAllCalls_; }
+    void respondToToolApproval(std::string const &, std::uint64_t, std::string const &, bool) override {}
 
     void startChat(
         lambda_studio_backend::ChatGenerationRequest,

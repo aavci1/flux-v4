@@ -24,6 +24,8 @@
 #include "SettingsView.hpp"
 #include "Sidebar.hpp"
 
+#include "common.h"
+
 using namespace flux;
 using namespace lambda;
 
@@ -64,7 +66,7 @@ std::vector<ChatMessage> storedChatMessages(ChatThread const &thread) {
     std::vector<ChatMessage> messages = thread.messages;
     messages.reserve(thread.messages.size() + thread.streamDraftMessages.size());
     for (ChatMessage const &draft : thread.streamDraftMessages) {
-        if (draft.text.empty()) {
+        if (draft.text.empty() && draft.toolCalls.empty() && draft.role != ChatRole::Tool) {
             continue;
         }
         ChatMessage stored = draft;
@@ -227,16 +229,91 @@ void finishTrailingReasoningMessage(ChatThread &chat, std::int64_t finishedAtNan
     finishTrailingReasoningMessage(chat.messages, finishedAtNanos);
 }
 
+ChatMessage *chatMessageByIndex(ChatThread &chat, std::size_t index) {
+    if (index < chat.messages.size()) {
+        return &chat.messages[index];
+    }
+    std::size_t const draftIndex = index - chat.messages.size();
+    if (draftIndex < chat.streamDraftMessages.size()) {
+        return &chat.streamDraftMessages[draftIndex];
+    }
+    return nullptr;
+}
+
 void commitStreamDraft(ChatThread &chat, std::int64_t finishedAtNanos) {
     finishTrailingReasoningMessage(chat.streamDraftMessages, finishedAtNanos);
     for (ChatMessage &message : chat.streamDraftMessages) {
-        if (message.text.empty()) {
+        if (message.text.empty() && message.toolCalls.empty() && message.role != ChatRole::Tool) {
             continue;
         }
         syncAssistantParagraphs(message);
         chat.messages.push_back(std::move(message));
     }
     chat.streamDraftMessages.clear();
+}
+
+void expirePendingToolApprovals(ChatThread &chat) {
+    auto expireMessage = [](ChatMessage &message) {
+        if (message.role != ChatRole::Tool || message.toolState != ToolMessageState::PendingApproval) {
+            return;
+        }
+        message.toolState = ToolMessageState::Failed;
+        if (message.text.empty()) {
+            message.text = "{\"ok\":false,\"error\":\"pending tool approval expired after restart\"}";
+            ++message.textRevision;
+        }
+    };
+
+    for (ChatMessage &message : chat.messages) {
+        expireMessage(message);
+    }
+    for (ChatMessage &message : chat.streamDraftMessages) {
+        expireMessage(message);
+    }
+}
+
+ChatMessage *latestAssistantDraft(std::vector<ChatMessage> &messages) {
+    for (auto it = messages.rbegin(); it != messages.rend(); ++it) {
+        if (it->role == ChatRole::Assistant) {
+            return &(*it);
+        }
+        if (it->role == ChatRole::User) {
+            break;
+        }
+    }
+    return nullptr;
+}
+
+ChatMessage &ensureAssistantDraftForToolCalls(ChatThread &chat) {
+    if (ChatMessage *existing = latestAssistantDraft(chat.streamDraftMessages)) {
+        return *existing;
+    }
+    chat.streamDraftMessages.push_back(ChatMessage {
+        .role = ChatRole::Assistant,
+        .text = "",
+    });
+    return chat.streamDraftMessages.back();
+}
+
+ChatMessage &ensureToolDraft(
+    ChatThread &chat,
+    std::string const &toolCallId,
+    std::string const &toolName
+) {
+    for (ChatMessage &message : chat.streamDraftMessages) {
+        if (message.role == ChatRole::Tool && message.toolCallId == toolCallId) {
+            if (!toolName.empty()) {
+                message.toolName = toolName;
+            }
+            return message;
+        }
+    }
+    chat.streamDraftMessages.push_back(ChatMessage {
+        .role = ChatRole::Tool,
+        .toolCallId = toolCallId,
+        .toolName = toolName,
+    });
+    return chat.streamDraftMessages.back();
 }
 
 bool eraseChatMessageByIndex(ChatThread &chat, std::size_t index) {
@@ -472,10 +549,18 @@ std::vector<lambda_studio_backend::ChatMessage> toBackendMessages(ChatThread con
     std::vector<lambda_studio_backend::ChatMessage> result;
     result.reserve(chat.messages.size());
     for (lambda::ChatMessage const &message : chat.messages) {
-        result.push_back(lambda_studio_backend::ChatMessage {
+        lambda_studio_backend::ChatMessage backendMessage {
             .role = toBackendRole(message.role),
             .text = message.text,
-        });
+            .toolCallId = message.toolCallId,
+            .toolName = message.toolName,
+            .toolState = toBackendToolExecutionState(message.toolState),
+        };
+        backendMessage.toolCalls.reserve(message.toolCalls.size());
+        for (ChatToolCall const &toolCall : message.toolCalls) {
+            backendMessage.toolCalls.push_back(toBackendToolCall(toolCall));
+        }
+        result.push_back(std::move(backendMessage));
     }
     return result;
 }
@@ -565,6 +650,18 @@ void applySessionPatch(
     if (patch.flashAttn.has_value()) {
         target.flashAttn = *patch.flashAttn;
     }
+    if (patch.toolsEnabled.has_value()) {
+        target.toolConfig.enabled = *patch.toolsEnabled;
+    }
+    if (patch.maxToolCalls.has_value()) {
+        target.toolConfig.maxToolCalls = *patch.maxToolCalls;
+    }
+    if (patch.toolWorkspaceRoot.has_value()) {
+        target.toolConfig.workspaceRoot = lambda_studio_backend::normalizeToolWorkspaceRoot(*patch.toolWorkspaceRoot);
+    }
+    if (patch.enabledToolNames.has_value()) {
+        target.toolConfig.enabledToolNames = *patch.enabledToolNames;
+    }
 }
 
 void applyLoadPatch(
@@ -648,6 +745,10 @@ lambda_studio_backend::SessionParamsPatch patchFromSessionParams(lambda_studio_b
         .systemPrompt = params.systemPrompt,
         .chatTemplate = params.chatTemplate,
         .flashAttn = params.flashAttn,
+        .toolsEnabled = params.toolConfig.enabled,
+        .maxToolCalls = params.toolConfig.maxToolCalls,
+        .toolWorkspaceRoot = params.toolConfig.workspaceRoot,
+        .enabledToolNames = params.toolConfig.enabledToolNames,
     };
 }
 
@@ -718,6 +819,18 @@ struct StudioApp : ViewModifiers<StudioApp> {
             handlersRegistered = true;
             Application::instance().eventQueue().on<lambda_studio_backend::LlmUiEvent>(
                 [appState, catalog, engine, manager](lambda_studio_backend::LlmUiEvent const &event) {
+                    lambda_studio_backend::debugToolTrace(
+                        string_format(
+                            "ui.LlmUiEvent kind=%d chat_id=%s generation_id=%llu tool_call_id=%s tool_name=%s tool_state=%d text=%s",
+                            static_cast<int>(event.kind),
+                            event.chatId.c_str(),
+                            static_cast<unsigned long long>(event.generationId),
+                            event.toolCallId.c_str(),
+                            event.toolName.c_str(),
+                            static_cast<int>(event.toolState),
+                            event.text.substr(0, 256).c_str()
+                        )
+                    );
                     AppState nextState = *appState;
                     auto it = std::find_if(nextState.chats.begin(), nextState.chats.end(), [&](ChatThread const &chat) {
                         return chat.id == event.chatId;
@@ -752,6 +865,69 @@ struct StudioApp : ViewModifiers<StudioApp> {
                             });
                         }
                         appendChatMessageText(it->streamDraftMessages.back(), event.text);
+                    } else if (event.kind == lambda_studio_backend::LlmUiEvent::Kind::ToolCallsParsed) {
+                        finishTrailingReasoningMessage(it->streamDraftMessages, nowNanos);
+                        ChatMessage &assistant = ensureAssistantDraftForToolCalls(*it);
+                        assistant.toolCalls.clear();
+                        assistant.toolCalls.reserve(event.toolCalls.size());
+                        for (lambda_studio_backend::ToolCall const &toolCall : event.toolCalls) {
+                            assistant.toolCalls.push_back(toChatToolCall(toolCall));
+                        }
+                        if (event.generationStats.has_value()) {
+                            assistant.generationStats = toMessageGenerationStats(*event.generationStats, *it);
+                        }
+                        it->updatedAtUnixMs = currentUnixMillis();
+                        nextState.statusText = event.text.empty() ? "Assistant requested tools" :
+                                                                    "Assistant requested tools (" + event.text + ")";
+                    } else if (event.kind == lambda_studio_backend::LlmUiEvent::Kind::ToolApprovalRequested) {
+                        finishTrailingReasoningMessage(it->streamDraftMessages, nowNanos);
+                        ChatMessage &tool = ensureToolDraft(*it, event.toolCallId, event.toolName);
+                        tool.toolState = toToolMessageState(event.toolState);
+                        tool.toolName = event.toolName;
+                        tool.toolCallId = event.toolCallId;
+                        tool.collapsed = false;
+                        if (tool.text.empty() && !event.toolCall.arguments.empty()) {
+                            tool.text = event.toolCall.arguments;
+                            ++tool.textRevision;
+                        }
+                        it->updatedAtUnixMs = currentUnixMillis();
+                        nextState.statusText = event.toolName.empty() ? "Tool approval required" :
+                                                                        "Approval required for " + event.toolName;
+                    } else if (event.kind == lambda_studio_backend::LlmUiEvent::Kind::ToolStarted) {
+                        finishTrailingReasoningMessage(it->streamDraftMessages, nowNanos);
+                        ChatMessage &tool = ensureToolDraft(*it, event.toolCallId, event.toolName);
+                        tool.toolState = toToolMessageState(event.toolState);
+                        tool.toolName = event.toolName;
+                        tool.toolCallId = event.toolCallId;
+                        tool.collapsed = false;
+                        if (tool.text.empty() && !event.toolCall.arguments.empty()) {
+                            tool.text = event.toolCall.arguments;
+                            ++tool.textRevision;
+                        }
+                        it->updatedAtUnixMs = currentUnixMillis();
+                        nextState.statusText = event.toolName.empty() ? "Running tool..." :
+                                                                        "Running " + event.toolName;
+                    } else if (event.kind == lambda_studio_backend::LlmUiEvent::Kind::ToolFinished ||
+                               event.kind == lambda_studio_backend::LlmUiEvent::Kind::ToolDenied ||
+                               event.kind == lambda_studio_backend::LlmUiEvent::Kind::ToolFailed) {
+                        ChatMessage &tool = ensureToolDraft(*it, event.toolCallId, event.toolName);
+                        tool.toolState = toToolMessageState(event.toolState);
+                        tool.toolName = event.toolName;
+                        tool.toolCallId = event.toolCallId;
+                        tool.text = event.text;
+                        ++tool.textRevision;
+                        tool.collapsed = true;
+                        it->updatedAtUnixMs = currentUnixMillis();
+                        if (event.kind == lambda_studio_backend::LlmUiEvent::Kind::ToolFinished) {
+                            nextState.statusText = event.toolName.empty() ? "Tool finished" :
+                                                                            event.toolName + " finished";
+                        } else if (event.kind == lambda_studio_backend::LlmUiEvent::Kind::ToolDenied) {
+                            nextState.statusText = event.toolName.empty() ? "Tool denied" :
+                                                                            event.toolName + " denied";
+                        } else {
+                            nextState.statusText = event.toolName.empty() ? "Tool failed" :
+                                                                            event.toolName + " failed";
+                        }
                     } else if (event.kind == lambda_studio_backend::LlmUiEvent::Kind::Done) {
                         if (event.summaryText != it->summaryText ||
                             event.summaryMessageCount != it->summaryMessageCount ||
@@ -1132,6 +1308,9 @@ struct StudioApp : ViewModifiers<StudioApp> {
             try {
                 PersistedChatState persistedChatState = catalog->loadPersistedChatState();
                 nextState.chats = std::move(persistedChatState.chats);
+                for (ChatThread &chat : nextState.chats) {
+                    expirePendingToolApprovals(chat);
+                }
                 restoreSelectedChat(nextState, persistedChatState.selectedChatId);
                 catalog->markRunningDownloadJobsInterrupted(currentUnixMillis());
                 nextState.recentDownloadJobs = catalog->loadRecentDownloadJobs();
@@ -1499,7 +1678,7 @@ struct StudioApp : ViewModifiers<StudioApp> {
             if (message == nullptr) {
                 return;
             }
-            if (message->role != ChatRole::Reasoning) {
+            if (message->role != ChatRole::Reasoning && message->role != ChatRole::Tool) {
                 return;
             }
             message->collapsed = !message->collapsed;
@@ -1522,6 +1701,79 @@ struct StudioApp : ViewModifiers<StudioApp> {
             chat.updatedAtUnixMs = currentUnixMillis();
             persistChatThread(nextState, *catalog, chatIndex);
             nextState.statusText = "Deleted message";
+            appState = std::move(nextState);
+        };
+
+        auto respondToToolApproval = [appState, catalog, engine](int chatIndex, int messageIndex, bool approved) {
+            AppState nextState = *appState;
+            lambda_studio_backend::debugToolTrace(
+                string_format(
+                    "ui.respondToToolApproval chat_index=%d message_index=%d approved=%d",
+                    chatIndex,
+                    messageIndex,
+                    approved ? 1 : 0
+                )
+            );
+            if (chatIndex < 0 || static_cast<std::size_t>(chatIndex) >= nextState.chats.size() || messageIndex < 0) {
+                lambda_studio_backend::debugToolTrace("ui.respondToToolApproval invalid_index");
+                return;
+            }
+
+            ChatThread &chat = nextState.chats[static_cast<std::size_t>(chatIndex)];
+            ChatMessage *message = chatMessageByIndex(chat, static_cast<std::size_t>(messageIndex));
+            if (message == nullptr || message->role != ChatRole::Tool || message->toolCallId.empty()) {
+                lambda_studio_backend::debugToolTrace("ui.respondToToolApproval no_pending_tool_message");
+                nextState.errorText = "No pending tool approval for that message";
+                appState = std::move(nextState);
+                return;
+            }
+
+            if (chat.activeGenerationId == 0) {
+                lambda_studio_backend::debugToolTrace(
+                    string_format(
+                        "ui.respondToToolApproval expired tool_call_id=%s",
+                        message->toolCallId.c_str()
+                    )
+                );
+                if (message->toolState == ToolMessageState::PendingApproval) {
+                    message->toolState = ToolMessageState::Failed;
+                    if (message->text.empty()) {
+                        message->text = "{\"ok\":false,\"error\":\"pending tool approval is no longer active\"}";
+                        ++message->textRevision;
+                    }
+                    chat.updatedAtUnixMs = currentUnixMillis();
+                    persistChatThread(nextState, *catalog, chatIndex);
+                }
+                nextState.statusText = "Tool approval expired";
+                nextState.errorText = "This tool approval is no longer active";
+                appState = std::move(nextState);
+                return;
+            }
+
+            lambda_studio_backend::debugToolTrace(
+                string_format(
+                    "ui.respondToToolApproval dispatch chat_id=%s generation_id=%llu tool_call_id=%s current_state=%d",
+                    chat.id.c_str(),
+                    static_cast<unsigned long long>(chat.activeGenerationId),
+                    message->toolCallId.c_str(),
+                    static_cast<int>(message->toolState)
+                )
+            );
+            message->toolState = approved ? ToolMessageState::Running : ToolMessageState::Denied;
+            if (approved) {
+                if (message->text.empty()) {
+                    message->text = "Waiting for tool execution...";
+                    ++message->textRevision;
+                }
+            } else if (message->text.empty()) {
+                message->text = "{\"ok\":false,\"error\":\"tool execution denied by user\"}";
+                ++message->textRevision;
+            }
+            engine->respondToToolApproval(chat.id, chat.activeGenerationId, message->toolCallId, approved);
+            chat.updatedAtUnixMs = currentUnixMillis();
+            persistChatThread(nextState, *catalog, chatIndex);
+            nextState.statusText = approved ? "Approved tool call" : "Denied tool call";
+            nextState.errorText.clear();
             appState = std::move(nextState);
         };
 
@@ -1673,6 +1925,13 @@ struct StudioApp : ViewModifiers<StudioApp> {
             .onDeleteChat = deleteChat,
             .onToggleReasoning = toggleReasoningMessage,
             .onDeleteMessage = deleteChatMessage,
+            .onApproveTool = [respondToToolApproval](int chatIndex, int messageIndex) {
+                printf("tool approved %d %d\n", chatIndex, messageIndex);
+                respondToToolApproval(chatIndex, messageIndex, true);
+            },
+            .onDenyTool = [respondToToolApproval](int chatIndex, int messageIndex) {
+                respondToToolApproval(chatIndex, messageIndex, false);
+            },
             .onAdjustGeneration = updateChatGenerationDefaults,
         }
                                   .flex(1.f, 1.f);

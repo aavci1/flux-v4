@@ -4,6 +4,7 @@
 
 #define JSON_ASSERT(x) ((x) ? static_cast<void>(0) : std::abort())
 #include <nlohmann/json.hpp>
+#undef JSON_ASSERT
 #include <sqlite3.h>
 
 #include <chrono>
@@ -553,8 +554,9 @@ class Store : public IStore {
             Statement insertMessage(
                 db_,
                 "INSERT INTO chat_messages ("
-                "  chat_id, message_order, role, text, started_at_nanos, finished_at_nanos, collapsed"
-                ") VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7);"
+                "  chat_id, message_order, role, text, started_at_nanos, finished_at_nanos, collapsed,"
+                "  tool_calls_json, tool_call_id, tool_name, tool_state"
+                ") VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11);"
             );
             Statement insertMessageStats(
                 db_,
@@ -578,6 +580,10 @@ class Store : public IStore {
                 bindInt64(insertMessage.stmt, 5, message.startedAtNanos);
                 bindInt64(insertMessage.stmt, 6, message.finishedAtNanos);
                 bindBool(insertMessage.stmt, 7, message.collapsed);
+                bindText(insertMessage.stmt, 8, encodeToolCalls(message.toolCalls));
+                bindText(insertMessage.stmt, 9, message.toolCallId);
+                bindText(insertMessage.stmt, 10, message.toolName);
+                bindText(insertMessage.stmt, 11, toolStateStorage(message.toolState));
                 stepDone(insertMessage.stmt);
 
                 if (!message.generationStats.has_value()) {
@@ -755,6 +761,7 @@ class Store : public IStore {
                 db_,
                 "SELECT "
                 "  m.role, m.text, m.started_at_nanos, m.finished_at_nanos, m.collapsed,"
+                "  m.tool_calls_json, m.tool_call_id, m.tool_name, m.tool_state,"
                 "  s.model_path, s.model_name, s.prompt_tokens, s.completion_tokens, s.started_at_unix_ms,"
                 "  s.first_token_at_unix_ms, s.finished_at_unix_ms, s.tokens_per_second, s.status, s.error_text,"
                 "  s.seed, s.temp, s.top_p, s.top_k, s.min_p, s.max_tokens,"
@@ -774,32 +781,36 @@ class Store : public IStore {
                 message.startedAtNanos = sqlite3_column_int64(messageStmt.stmt, 2);
                 message.finishedAtNanos = sqlite3_column_int64(messageStmt.stmt, 3);
                 message.collapsed = sqlite3_column_int(messageStmt.stmt, 4) != 0;
-                if (!columnIsNull(messageStmt.stmt, 5)) {
+                message.toolCalls = decodeToolCalls(columnText(messageStmt.stmt, 5));
+                message.toolCallId = columnText(messageStmt.stmt, 6);
+                message.toolName = columnText(messageStmt.stmt, 7);
+                message.toolState = toolStateFromStorage(columnText(messageStmt.stmt, 8));
+                if (!columnIsNull(messageStmt.stmt, 9)) {
                     message.generationStats = MessageGenerationStats {
-                        .modelPath = columnText(messageStmt.stmt, 5),
-                        .modelName = columnText(messageStmt.stmt, 6),
-                        .promptTokens = sqlite3_column_int64(messageStmt.stmt, 7),
-                        .completionTokens = sqlite3_column_int64(messageStmt.stmt, 8),
-                        .startedAtUnixMs = sqlite3_column_int64(messageStmt.stmt, 9),
-                        .firstTokenAtUnixMs = sqlite3_column_int64(messageStmt.stmt, 10),
-                        .finishedAtUnixMs = sqlite3_column_int64(messageStmt.stmt, 11),
-                        .tokensPerSecond = columnDouble(messageStmt.stmt, 12),
-                        .status = columnText(messageStmt.stmt, 13),
-                        .errorText = columnText(messageStmt.stmt, 14),
-                        .seed = static_cast<std::uint32_t>(sqlite3_column_int64(messageStmt.stmt, 15)),
-                        .temp = static_cast<float>(columnDouble(messageStmt.stmt, 16)),
-                        .topP = static_cast<float>(columnDouble(messageStmt.stmt, 17)),
-                        .topK = static_cast<std::int32_t>(sqlite3_column_int64(messageStmt.stmt, 18)),
-                        .minP = static_cast<float>(columnDouble(messageStmt.stmt, 19)),
-                        .maxTokens = static_cast<std::int32_t>(sqlite3_column_int64(messageStmt.stmt, 20)),
-                        .penaltyLastN = static_cast<std::int32_t>(sqlite3_column_int64(messageStmt.stmt, 21)),
-                        .repeatPenalty = static_cast<float>(columnDouble(messageStmt.stmt, 22)),
-                        .frequencyPenalty = static_cast<float>(columnDouble(messageStmt.stmt, 23)),
-                        .presencePenalty = static_cast<float>(columnDouble(messageStmt.stmt, 24)),
-                        .mirostat = static_cast<std::int32_t>(sqlite3_column_int64(messageStmt.stmt, 25)),
-                        .mirostatTau = static_cast<float>(columnDouble(messageStmt.stmt, 26)),
-                        .mirostatEta = static_cast<float>(columnDouble(messageStmt.stmt, 27)),
-                        .ignoreEos = sqlite3_column_int(messageStmt.stmt, 28) != 0,
+                        .modelPath = columnText(messageStmt.stmt, 9),
+                        .modelName = columnText(messageStmt.stmt, 10),
+                        .promptTokens = sqlite3_column_int64(messageStmt.stmt, 11),
+                        .completionTokens = sqlite3_column_int64(messageStmt.stmt, 12),
+                        .startedAtUnixMs = sqlite3_column_int64(messageStmt.stmt, 13),
+                        .firstTokenAtUnixMs = sqlite3_column_int64(messageStmt.stmt, 14),
+                        .finishedAtUnixMs = sqlite3_column_int64(messageStmt.stmt, 15),
+                        .tokensPerSecond = columnDouble(messageStmt.stmt, 16),
+                        .status = columnText(messageStmt.stmt, 17),
+                        .errorText = columnText(messageStmt.stmt, 18),
+                        .seed = static_cast<std::uint32_t>(sqlite3_column_int64(messageStmt.stmt, 19)),
+                        .temp = static_cast<float>(columnDouble(messageStmt.stmt, 20)),
+                        .topP = static_cast<float>(columnDouble(messageStmt.stmt, 21)),
+                        .topK = static_cast<std::int32_t>(sqlite3_column_int64(messageStmt.stmt, 22)),
+                        .minP = static_cast<float>(columnDouble(messageStmt.stmt, 23)),
+                        .maxTokens = static_cast<std::int32_t>(sqlite3_column_int64(messageStmt.stmt, 24)),
+                        .penaltyLastN = static_cast<std::int32_t>(sqlite3_column_int64(messageStmt.stmt, 25)),
+                        .repeatPenalty = static_cast<float>(columnDouble(messageStmt.stmt, 26)),
+                        .frequencyPenalty = static_cast<float>(columnDouble(messageStmt.stmt, 27)),
+                        .presencePenalty = static_cast<float>(columnDouble(messageStmt.stmt, 28)),
+                        .mirostat = static_cast<std::int32_t>(sqlite3_column_int64(messageStmt.stmt, 29)),
+                        .mirostatTau = static_cast<float>(columnDouble(messageStmt.stmt, 30)),
+                        .mirostatEta = static_cast<float>(columnDouble(messageStmt.stmt, 31)),
+                        .ignoreEos = sqlite3_column_int(messageStmt.stmt, 32) != 0,
                     };
                 }
                 syncAssistantParagraphs(message);
@@ -814,7 +825,7 @@ class Store : public IStore {
     }
 
   private:
-    static constexpr int kCurrentSchemaVersion = 9;
+    static constexpr int kCurrentSchemaVersion = 10;
 
     struct Statement {
         sqlite3_stmt *stmt = nullptr;
@@ -970,6 +981,8 @@ class Store : public IStore {
             return "reasoning";
         case ChatRole::Assistant:
             return "assistant";
+        case ChatRole::Tool:
+            return "tool";
         }
         return "assistant";
     }
@@ -981,7 +994,81 @@ class Store : public IStore {
         if (role == "reasoning") {
             return ChatRole::Reasoning;
         }
+        if (role == "tool") {
+            return ChatRole::Tool;
+        }
         return ChatRole::Assistant;
+    }
+
+    static std::string toolStateStorage(ToolMessageState state) {
+        switch (state) {
+        case ToolMessageState::PendingApproval:
+            return "pending_approval";
+        case ToolMessageState::Running:
+            return "running";
+        case ToolMessageState::Completed:
+            return "completed";
+        case ToolMessageState::Denied:
+            return "denied";
+        case ToolMessageState::Failed:
+            return "failed";
+        case ToolMessageState::None:
+            break;
+        }
+        return {};
+    }
+
+    static ToolMessageState toolStateFromStorage(std::string const &state) {
+        if (state == "pending_approval") {
+            return ToolMessageState::PendingApproval;
+        }
+        if (state == "running") {
+            return ToolMessageState::Running;
+        }
+        if (state == "completed") {
+            return ToolMessageState::Completed;
+        }
+        if (state == "denied") {
+            return ToolMessageState::Denied;
+        }
+        if (state == "failed") {
+            return ToolMessageState::Failed;
+        }
+        return ToolMessageState::None;
+    }
+
+    static std::string encodeToolCalls(std::vector<ChatToolCall> const &toolCalls) {
+        nlohmann::json json = nlohmann::json::array();
+        for (ChatToolCall const &toolCall : toolCalls) {
+            json.push_back({
+                {"id", toolCall.id},
+                {"name", toolCall.name},
+                {"arguments", toolCall.arguments},
+            });
+        }
+        return json.dump();
+    }
+
+    static std::vector<ChatToolCall> decodeToolCalls(std::string const &rawJson) {
+        if (rawJson.empty()) {
+            return {};
+        }
+        nlohmann::json const json = nlohmann::json::parse(rawJson, nullptr, false);
+        if (json.is_discarded() || !json.is_array()) {
+            return {};
+        }
+        std::vector<ChatToolCall> toolCalls;
+        for (auto const &item : json) {
+            if (!item.is_object()) {
+                continue;
+            }
+            toolCalls.push_back(ChatToolCall {
+                .id = item.value("id", std::string()),
+                .name = item.value("name", std::string()),
+                .arguments = item.value("arguments", std::string()),
+            });
+        }
+        return toolCalls;
     }
 
     std::vector<RemoteModel> loadSearchResultsFromPayload(std::string const &query) {
@@ -1300,6 +1387,11 @@ class Store : public IStore {
         if (version < 9) {
             applyMigration9();
             setUserVersion(9);
+            version = 9;
+        }
+        if (version < 10) {
+            applyMigration10();
+            setUserVersion(10);
         }
     }
 
@@ -1416,6 +1508,10 @@ class Store : public IStore {
             "  started_at_nanos INTEGER NOT NULL DEFAULT 0,"
             "  finished_at_nanos INTEGER NOT NULL DEFAULT 0,"
             "  collapsed INTEGER NOT NULL DEFAULT 0,"
+            "  tool_calls_json TEXT NOT NULL DEFAULT '',"
+            "  tool_call_id TEXT NOT NULL DEFAULT '',"
+            "  tool_name TEXT NOT NULL DEFAULT '',"
+            "  tool_state TEXT NOT NULL DEFAULT '',"
             "  PRIMARY KEY (chat_id, message_order)"
             ");"
             "CREATE INDEX IF NOT EXISTS idx_chat_messages_chat_order "
@@ -1476,6 +1572,32 @@ class Store : public IStore {
             "ALTER TABLE chat_message_stats ADD COLUMN mirostat_eta REAL NOT NULL DEFAULT 0;"
             "ALTER TABLE chat_message_stats ADD COLUMN ignore_eos INTEGER NOT NULL DEFAULT 0;"
         );
+    }
+
+    void applyMigration10() {
+        if (!tableColumnExists("chat_messages", "tool_calls_json")) {
+            execute("ALTER TABLE chat_messages ADD COLUMN tool_calls_json TEXT NOT NULL DEFAULT '';");
+        }
+        if (!tableColumnExists("chat_messages", "tool_call_id")) {
+            execute("ALTER TABLE chat_messages ADD COLUMN tool_call_id TEXT NOT NULL DEFAULT '';");
+        }
+        if (!tableColumnExists("chat_messages", "tool_name")) {
+            execute("ALTER TABLE chat_messages ADD COLUMN tool_name TEXT NOT NULL DEFAULT '';");
+        }
+        if (!tableColumnExists("chat_messages", "tool_state")) {
+            execute("ALTER TABLE chat_messages ADD COLUMN tool_state TEXT NOT NULL DEFAULT '';");
+        }
+    }
+
+    bool tableColumnExists(char const *tableName, char const *columnName) {
+        std::string const sql = "PRAGMA table_info(" + std::string(tableName) + ");";
+        Statement stmt(db_, sql.c_str());
+        while (sqlite3_step(stmt.stmt) == SQLITE_ROW) {
+            if (columnText(stmt.stmt, 1) == columnName) {
+                return true;
+            }
+        }
+        return false;
     }
 
     std::string loadPreference(std::string const &key) {
@@ -1558,6 +1680,13 @@ class Store : public IStore {
                 {"system_prompt", defaults.sessionDefaults.systemPrompt},
                 {"chat_template", defaults.sessionDefaults.chatTemplate},
                 {"flash_attn", defaults.sessionDefaults.flashAttn},
+                {"tool_config", {
+                    {"enabled", defaults.sessionDefaults.toolConfig.enabled},
+                    {"enabled_tool_names", defaults.sessionDefaults.toolConfig.enabledToolNames},
+                    {"workspace_root", defaults.sessionDefaults.toolConfig.workspaceRoot},
+                    {"max_tool_calls", defaults.sessionDefaults.toolConfig.maxToolCalls},
+                    {"shell_approval_mode", "require_approval"},
+                }},
             }},
             {"generation", nlohmann::json::parse(encodeGenerationParams(defaults.generationDefaults))},
         };
@@ -1592,6 +1721,31 @@ class Store : public IStore {
             defaults.sessionDefaults.systemPrompt = session.value("system_prompt", defaults.sessionDefaults.systemPrompt);
             defaults.sessionDefaults.chatTemplate = session.value("chat_template", defaults.sessionDefaults.chatTemplate);
             defaults.sessionDefaults.flashAttn = session.value("flash_attn", defaults.sessionDefaults.flashAttn);
+            if (session.contains("tool_config") && session["tool_config"].is_object()) {
+                nlohmann::json const &toolConfig = session["tool_config"];
+                defaults.sessionDefaults.toolConfig.enabled =
+                    toolConfig.value("enabled", defaults.sessionDefaults.toolConfig.enabled);
+                if (toolConfig.contains("enabled_tool_names") && toolConfig["enabled_tool_names"].is_array()) {
+                    defaults.sessionDefaults.toolConfig.enabledToolNames.clear();
+                    for (auto const &item : toolConfig["enabled_tool_names"]) {
+                        if (item.is_string()) {
+                            defaults.sessionDefaults.toolConfig.enabledToolNames.push_back(item.get<std::string>());
+                        }
+                    }
+                }
+                defaults.sessionDefaults.toolConfig.workspaceRoot =
+                    lambda_studio_backend::normalizeToolWorkspaceRoot(
+                        toolConfig.value("workspace_root", defaults.sessionDefaults.toolConfig.workspaceRoot)
+                    );
+                defaults.sessionDefaults.toolConfig.maxToolCalls =
+                    toolConfig.value("max_tool_calls", defaults.sessionDefaults.toolConfig.maxToolCalls);
+                std::string const shellApprovalMode =
+                    toolConfig.value("shell_approval_mode", std::string("require_approval"));
+                defaults.sessionDefaults.toolConfig.shellApprovalMode =
+                    shellApprovalMode == "require_approval"
+                        ? lambda_studio_backend::ShellApprovalMode::RequireApproval
+                        : defaults.sessionDefaults.toolConfig.shellApprovalMode;
+            }
         }
         if (json.contains("generation") && json["generation"].is_object()) {
             auto generation = decodeGenerationParams(json["generation"].dump());

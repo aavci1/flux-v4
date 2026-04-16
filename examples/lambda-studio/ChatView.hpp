@@ -359,6 +359,152 @@ std::string formatFloatValue(float value, int precision = 2) {
     return oss.str();
 }
 
+IconName toolIcon(std::string const &toolName) {
+    if (toolName == "read_file") {
+        return IconName::Description;
+    }
+    if (toolName == "file_glob_search" || toolName == "grep_search") {
+        return IconName::Search;
+    }
+    if (toolName == "exec_shell_command") {
+        return IconName::Terminal;
+    }
+    return IconName::Code;
+}
+
+std::string toolTitle(ChatMessage const &message) {
+    return message.toolName.empty() ? std::string("tool") : message.toolName;
+}
+
+std::string toolStateLabel(ToolMessageState state) {
+    switch (state) {
+    case ToolMessageState::PendingApproval:
+        return "Approval required";
+    case ToolMessageState::Running:
+        return "Running";
+    case ToolMessageState::Completed:
+        return "Completed";
+    case ToolMessageState::Denied:
+        return "Denied";
+    case ToolMessageState::Failed:
+        return "Failed";
+    case ToolMessageState::None:
+        break;
+    }
+    return "Ready";
+}
+
+bool shouldRenderToolMessage(ChatMessage const &message) {
+    (void) message;
+    return true;
+}
+
+std::string toolCollapsedPreview(ChatMessage const &message) {
+    if (message.text.empty()) {
+        return {};
+    }
+    return shortenForPreview(message.text, 120);
+}
+
+Color toolStateForeground(Theme const &theme, ToolMessageState state) {
+    switch (state) {
+    case ToolMessageState::Completed:
+        return theme.colorSuccess;
+    case ToolMessageState::Denied:
+    case ToolMessageState::Failed:
+        return theme.colorDanger;
+    case ToolMessageState::PendingApproval:
+        return theme.colorWarning;
+    case ToolMessageState::Running:
+        return theme.colorAccent;
+    case ToolMessageState::None:
+        break;
+    }
+    return theme.colorTextSecondary;
+}
+
+Color toolStateBackground(Theme const &theme, ToolMessageState state) {
+    switch (state) {
+    case ToolMessageState::Completed:
+        return theme.colorSuccessSubtle;
+    case ToolMessageState::Denied:
+    case ToolMessageState::Failed:
+        return theme.colorDangerSubtle;
+    case ToolMessageState::PendingApproval:
+        return theme.colorWarningSubtle;
+    case ToolMessageState::Running:
+        return theme.colorAccentSubtle;
+    case ToolMessageState::None:
+        break;
+    }
+    return theme.colorSurfaceHover;
+}
+
+std::string formatToolArguments(std::string arguments) {
+    if (arguments.empty()) {
+        return "{}";
+    }
+    if (arguments.size() > 280) {
+        arguments.resize(280);
+        arguments += "...";
+    }
+    return arguments;
+}
+
+Element toolCallCard(Theme const &theme, ChatToolCall const &toolCall) {
+    return VStack {
+        .spacing = theme.space2,
+        .alignment = Alignment::Stretch,
+        .children = children(
+            HStack {
+                .spacing = theme.space2,
+                .alignment = Alignment::Center,
+                .children = children(
+                    Icon {
+                        .name = toolIcon(toolCall.name),
+                        .size = 16.f,
+                        .color = theme.colorTextSecondary,
+                    },
+                    Text {
+                        .text = toolCall.name,
+                        .font = theme.fontLabel,
+                        .color = theme.colorTextPrimary,
+                        .horizontalAlignment = HorizontalAlignment::Leading,
+                    }
+                        .flex(1.f, 1.f),
+                    IconButton {
+                        .icon = IconName::ContentCopy,
+                        .style = {
+                            .size = 14.f,
+                            .weight = 500.f,
+                            .color = theme.colorTextSecondary,
+                        },
+                        .onTap = [rawText = toolCall.arguments] {
+                            if (!Application::hasInstance()) {
+                                return;
+                            }
+                            Application::instance().clipboard().writeText(rawText);
+                        },
+                    }
+                )
+            },
+            Text {
+                .text = formatToolArguments(toolCall.arguments),
+                .font = theme.fontCode,
+                .color = theme.colorTextSecondary,
+                .selectionColor = theme.colorAccentSubtle,
+                .selectable = true,
+                .horizontalAlignment = HorizontalAlignment::Leading,
+                .wrapping = TextWrapping::Wrap,
+            }
+        )
+    }
+        .padding(theme.space3)
+        .fill(FillStyle::solid(theme.colorSurface))
+        .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
+        .cornerRadius(theme.radiusLarge);
+}
+
 Element quickSettingControl(
     Theme const &theme,
     std::string label,
@@ -614,19 +760,25 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
     bool deferTailMarkdown = false;
     std::function<void()> onToggleReasoning;
     std::function<void()> onDeleteMessage;
+    std::function<void()> onApproveTool;
+    std::function<void()> onDenyTool;
 
-    auto body() const {
+    Element body() const {
         Theme const &theme = useEnvironment<Theme>();
 
         bool const isUser = message.role == ChatRole::User;
         bool const isReasoning = message.role == ChatRole::Reasoning;
+        bool const isTool = message.role == ChatRole::Tool;
         bool const hovered = useHover();
         bool const pressed = usePress();
-        bool const collapsed = isReasoning && message.collapsed;
+        bool const collapsed = (isReasoning || isTool) && message.collapsed;
         bool const reasoningFinished = message.finishedAtNanos > message.startedAtNanos;
         std::string const thoughtSummary = formatThoughtDuration(message.startedAtNanos, message.finishedAtNanos);
         bool const hasDeleteAction = static_cast<bool>(onDeleteMessage);
         bool const hasCopyAction = !message.text.empty();
+        bool const showToolApprovalActions =
+            isTool && message.toolState == ToolMessageState::PendingApproval &&
+            onApproveTool && onDenyTool;
         bool const showSummaryFooter = !collapsed && (message.generationStats.has_value() || hasDeleteAction || hasCopyAction);
 
         Color const fill = isUser      ? theme.colorAccent :
@@ -654,7 +806,7 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
             } else {
                 summaryChildren.push_back(Spacer {});
             }
-            if (isReasoning && onToggleReasoning) {
+            if ((isReasoning || isTool) && onToggleReasoning) {
                 summaryChildren.push_back(
                     IconButton {
                         .icon = collapsed ? IconName::ExpandMore : IconName::ExpandLess,
@@ -707,41 +859,223 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
             };
         };
 
+        if (isTool) {
+            auto buildToolHeader = [&]() -> Element {
+                std::vector<Element> headerChildren;
+                headerChildren.push_back(
+                    Icon {
+                        .name = toolIcon(message.toolName),
+                        .size = 18.f,
+                        .color = theme.colorTextSecondary,
+                    }
+                );
+                headerChildren.push_back(
+                    Text {
+                        .text = toolTitle(message),
+                        .font = theme.fontLabel,
+                        .color = theme.colorTextPrimary,
+                        .horizontalAlignment = HorizontalAlignment::Leading,
+                    }
+                        .flex(1.f, 1.f)
+                );
+                headerChildren.push_back(
+                    Badge {
+                        .label = toolStateLabel(message.toolState),
+                        .style = {
+                            .font = theme.fontLabelSmall,
+                            .foregroundColor = toolStateForeground(theme, message.toolState),
+                            .backgroundColor = toolStateBackground(theme, message.toolState),
+                        },
+                    }
+                );
+                return Element {
+                    HStack {
+                        .spacing = theme.space2,
+                        .alignment = Alignment::Center,
+                        .children = std::move(headerChildren),
+                    }
+                };
+            };
+
+            if (collapsed) {
+                std::vector<Element> collapsedChildren;
+                collapsedChildren.push_back(buildToolHeader());
+                if (std::string preview = toolCollapsedPreview(message); !preview.empty()) {
+                    collapsedChildren.push_back(
+                        Text {
+                            .text = preview,
+                            .font = theme.fontBodySmall,
+                            .color = theme.colorTextMuted,
+                            .horizontalAlignment = HorizontalAlignment::Leading,
+                            .wrapping = TextWrapping::Wrap,
+                            .maxLines = 3,
+                        }
+                    );
+                }
+                if (!message.toolCallId.empty() || hasDeleteAction || hasCopyAction || onToggleReasoning) {
+                    collapsedChildren.push_back(
+                        Element { Divider { .orientation = Divider::Orientation::Horizontal } }
+                    );
+                    collapsedChildren.push_back(
+                        buildSummaryRow(
+                            message.toolCallId.empty() ? std::string("Tool activity") :
+                                                         "Call ID: " + message.toolCallId
+                        )
+                    );
+                }
+
+                return VStack {
+                    .spacing = theme.space2,
+                    .alignment = Alignment::Start,
+                    .children = std::move(collapsedChildren),
+                }
+                    .padding(theme.space4)
+                    .fill(FillStyle::solid(theme.colorSurfaceOverlay))
+                    .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
+                    .cornerRadius(theme.radiusXLarge)
+                    .cursor(onToggleReasoning ? Cursor::Hand : Cursor::Arrow)
+                    .focusable(static_cast<bool>(onToggleReasoning))
+                    .onTap(onToggleReasoning ? onToggleReasoning : std::function<void()> {});
+            }
+
+            std::vector<Element> toolChildren;
+            toolChildren.push_back(buildToolHeader());
+            if (!message.toolCallId.empty()) {
+                toolChildren.push_back(
+                    Text {
+                        .text = "Call ID: " + message.toolCallId,
+                        .font = theme.fontLabelSmall,
+                        .color = theme.colorTextMuted,
+                        .horizontalAlignment = HorizontalAlignment::Leading,
+                        .wrapping = TextWrapping::Wrap,
+                    }
+                );
+            }
+            if (!message.text.empty()) {
+                toolChildren.push_back(
+                    Text {
+                        .text = message.text,
+                        .font = theme.fontCode,
+                        .color = theme.colorTextPrimary,
+                        .selectionColor = theme.colorAccentSubtle,
+                        .selectable = true,
+                        .horizontalAlignment = HorizontalAlignment::Leading,
+                        .verticalAlignment = VerticalAlignment::Top,
+                        .wrapping = TextWrapping::Wrap,
+                    }
+                );
+            }
+            if (showToolApprovalActions) {
+                toolChildren.push_back(
+                    HStack {
+                        .spacing = theme.space2,
+                        .alignment = Alignment::Center,
+                        .children = children(
+                            LinkButton {
+                                .label = "Approve",
+                                .disabled = false,
+                                .onTap = onApproveTool,
+                            },
+                            LinkButton {
+                                .label = "Deny",
+                                .disabled = false,
+                                .onTap = onDenyTool,
+                            }
+                        )
+                    }
+                );
+            }
+            if (!message.toolCallId.empty() || hasDeleteAction || hasCopyAction || onToggleReasoning) {
+                toolChildren.push_back(
+                    Divider { .orientation = Divider::Orientation::Horizontal }
+                );
+                toolChildren.push_back(
+                    buildSummaryRow(
+                        message.toolCallId.empty() ? std::string("Tool activity") :
+                                                     "Call ID: " + message.toolCallId
+                    )
+                );
+            }
+
+            Element bubble = VStack {
+                .spacing = theme.space3,
+                .alignment = Alignment::Stretch,
+                .children = std::move(toolChildren),
+            }
+                                 .padding(theme.space4)
+                                 .fill(FillStyle::solid(theme.colorSurfaceOverlay))
+                                 .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
+                                 .cornerRadius(theme.radiusXLarge);
+
+            return HStack {
+                .spacing = theme.space3,
+                .alignment = Alignment::Start,
+                .children = children(
+                    std::move(bubble).flex(0.f, 1.f, 0.f),
+                    Spacer {}
+                ),
+            };
+        }
+
         if (!isUser && !isReasoning) {
             std::vector<Element> paragraphs;
-            paragraphs.push_back(
-                deferTailMarkdown ? Element {
-                                      Text {
-                                          .text = message.text,
-                                          .font = markdownStyle.baseFont,
-                                          .color = textColor,
-                                          .selectionColor = selectionColor,
-                                          .selectable = true,
-                                          .horizontalAlignment = HorizontalAlignment::Leading,
-                                          .verticalAlignment = VerticalAlignment::Top,
-                                          .wrapping = TextWrapping::Wrap,
+            if (!message.toolCalls.empty()) {
+                std::vector<Element> toolCards;
+                toolCards.reserve(message.toolCalls.size() + 1);
+                toolCards.push_back(
+                    Text {
+                        .text = "Tool calls",
+                        .font = theme.fontLabelSmall,
+                        .color = summaryColor,
+                        .horizontalAlignment = HorizontalAlignment::Leading,
+                    }
+                );
+                for (ChatToolCall const &toolCall : message.toolCalls) {
+                    toolCards.push_back(toolCallCard(theme, toolCall));
+                }
+                paragraphs.push_back(
+                    VStack {
+                        .spacing = theme.space2,
+                        .alignment = Alignment::Stretch,
+                        .children = std::move(toolCards),
+                    }
+                );
+            }
+            if (!message.text.empty()) {
+                paragraphs.push_back(
+                    deferTailMarkdown ? Element {
+                                          Text {
+                                              .text = message.text,
+                                              .font = markdownStyle.baseFont,
+                                              .color = textColor,
+                                              .selectionColor = selectionColor,
+                                              .selectable = true,
+                                              .horizontalAlignment = HorizontalAlignment::Leading,
+                                              .verticalAlignment = VerticalAlignment::Top,
+                                              .wrapping = TextWrapping::Wrap,
+                                          }
+                                      } :
+                                      Element {
+                                          MarkdownText {
+                                              .text = message.text,
+                                              .cacheKey = message.renderKey,
+                                              .textRevision = message.textRevision,
+                                              .baseFont = markdownStyle.baseFont,
+                                              .codeFont = markdownStyle.codeFont,
+                                              .h1Font = markdownStyle.h1Font,
+                                              .h2Font = markdownStyle.h2Font,
+                                              .h3Font = markdownStyle.h3Font,
+                                              .baseColor = markdownStyle.baseColor,
+                                              .codeBackground = markdownStyle.codeBackground,
+                                              .selectionColor = selectionColor,
+                                              .horizontalAlignment = HorizontalAlignment::Leading,
+                                              .verticalAlignment = VerticalAlignment::Top,
+                                              .wrapping = TextWrapping::Wrap,
+                                              .selectable = true,
+                                          }
                                       }
-                                  } :
-                                  Element {
-                                      MarkdownText {
-                                          .text = message.text,
-                                          .cacheKey = message.renderKey,
-                                          .textRevision = message.textRevision,
-                                          .baseFont = markdownStyle.baseFont,
-                                          .codeFont = markdownStyle.codeFont,
-                                          .h1Font = markdownStyle.h1Font,
-                                          .h2Font = markdownStyle.h2Font,
-                                          .h3Font = markdownStyle.h3Font,
-                                          .baseColor = markdownStyle.baseColor,
-                                          .codeBackground = markdownStyle.codeBackground,
-                                          .selectionColor = selectionColor,
-                                          .horizontalAlignment = HorizontalAlignment::Leading,
-                                          .verticalAlignment = VerticalAlignment::Top,
-                                          .wrapping = TextWrapping::Wrap,
-                                          .selectable = true,
-                                      }
-                                  }
-            );
+                );
+            }
 
             if (showSummaryFooter) {
                 std::string primaryLine;
@@ -1089,6 +1423,8 @@ struct ChatView : ViewModifiers<ChatView> {
     std::function<void()> onDeleteChat;
     std::function<void(int)> onToggleReasoning;
     std::function<void(int)> onDeleteMessage;
+    std::function<void(int)> onApproveTool;
+    std::function<void(int)> onDenyTool;
     std::function<void(std::string const &, std::string const &)> onSelectModel;
     std::function<void(lambda_studio_backend::GenerationParamsPatch const &)> onAdjustGeneration;
 
@@ -1109,6 +1445,7 @@ struct ChatView : ViewModifiers<ChatView> {
         bool const hasModel = fakeStreaming || !chat.modelPath.empty();
         bool const canEdit = hasModel && !chat.streaming;
         bool const canSend = hasModel && !chat.streaming;
+        bool const canAnswerToolApproval = chat.activeGenerationId != 0;
 
         std::vector<Element> bubbles;
         bubbles.reserve(chat.messages.size() + chat.streamDraftMessages.size());
@@ -1117,6 +1454,23 @@ struct ChatView : ViewModifiers<ChatView> {
         float const composerFloatingReserve = 220.f;
         for (std::size_t i = 0; i < chat.messages.size(); ++i) {
             ChatMessage const &message = chat.messages[i];
+            if (!shouldRenderToolMessage(message)) {
+                continue;
+            }
+            std::function<void()> approveTool;
+            std::function<void()> denyTool;
+            if (canAnswerToolApproval) {
+                approveTool = [onApproveTool = onApproveTool, i] {
+                    if (onApproveTool) {
+                        onApproveTool(static_cast<int>(i));
+                    }
+                };
+                denyTool = [onDenyTool = onDenyTool, i] {
+                    if (onDenyTool) {
+                        onDenyTool(static_cast<int>(i));
+                    }
+                };
+            }
             bubbles.push_back(ChatBubble {
                 .message = message,
                 .deferTailMarkdown = false,
@@ -1130,13 +1484,32 @@ struct ChatView : ViewModifiers<ChatView> {
                         onDeleteMessage(static_cast<int>(i));
                     }
                 },
+                .onApproveTool = std::move(approveTool),
+                .onDenyTool = std::move(denyTool),
             });
         }
         std::size_t const committedCount = chat.messages.size();
         for (std::size_t i = 0; i < chat.streamDraftMessages.size(); ++i) {
             ChatMessage const &message = chat.streamDraftMessages[i];
+            if (!shouldRenderToolMessage(message)) {
+                continue;
+            }
             bool const isStreamingTail =
                 chat.streaming && message.role == ChatRole::Assistant && i + 1 == chat.streamDraftMessages.size();
+            std::function<void()> approveTool;
+            std::function<void()> denyTool;
+            if (canAnswerToolApproval) {
+                approveTool = [onApproveTool = onApproveTool, committedCount, i] {
+                    if (onApproveTool) {
+                        onApproveTool(static_cast<int>(committedCount + i));
+                    }
+                };
+                denyTool = [onDenyTool = onDenyTool, committedCount, i] {
+                    if (onDenyTool) {
+                        onDenyTool(static_cast<int>(committedCount + i));
+                    }
+                };
+            }
             bubbles.push_back(ChatBubble {
                 .message = message,
                 .deferTailMarkdown = isStreamingTail,
@@ -1150,6 +1523,8 @@ struct ChatView : ViewModifiers<ChatView> {
                         onDeleteMessage(static_cast<int>(committedCount + i));
                     }
                 },
+                .onApproveTool = std::move(approveTool),
+                .onDenyTool = std::move(denyTool),
             });
         }
 

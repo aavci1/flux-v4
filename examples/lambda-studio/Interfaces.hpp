@@ -38,6 +38,12 @@ class IChatEngine {
     virtual void unload() = 0;
     virtual void cancelChat(std::string const &chatId) = 0;
     virtual void cancelAllGenerations() = 0;
+    virtual void respondToToolApproval(
+        std::string const &chatId,
+        std::uint64_t generationId,
+        std::string const &toolCallId,
+        bool approved
+    ) = 0;
     virtual void startChat(
         lambda_studio_backend::ChatGenerationRequest request,
         std::function<void(lambda_studio_backend::LlmUiEvent)> post

@@ -26,6 +26,21 @@ lambda::ChatMessage makeUserMessage(std::string text) {
     };
 }
 
+lambda::ChatMessage makeToolMessage(
+    std::string toolCallId,
+    std::string toolName,
+    std::string text,
+    lambda::ToolMessageState toolState
+) {
+    return lambda::ChatMessage {
+        .role = lambda::ChatRole::Tool,
+        .text = std::move(text),
+        .toolCallId = std::move(toolCallId),
+        .toolName = std::move(toolName),
+        .toolState = toolState,
+    };
+}
+
 lambda::MessageGenerationStats makeGenerationStats(std::string modelName, std::int64_t completionTokens) {
     return lambda::MessageGenerationStats {
         .modelPath = "/tmp/model.gguf",
@@ -237,6 +252,10 @@ TEST_CASE("Store persists engine configuration defaults") {
     defaults.loadDefaults.modelPath = "/tmp/model.gguf";
     defaults.loadDefaults.nGpuLayers = 21;
     defaults.sessionDefaults.nCtx = 8192;
+    defaults.sessionDefaults.toolConfig.enabled = true;
+    defaults.sessionDefaults.toolConfig.workspaceRoot = "/tmp/workspace";
+    defaults.sessionDefaults.toolConfig.maxToolCalls = 5;
+    defaults.sessionDefaults.toolConfig.enabledToolNames = {"read_file", "grep_search"};
     defaults.generationDefaults.temp = 0.42f;
     defaults.generationDefaults.topK = 17;
 
@@ -246,8 +265,65 @@ TEST_CASE("Store persists engine configuration defaults") {
     CHECK(loaded->loadDefaults.modelPath == "/tmp/model.gguf");
     CHECK(loaded->loadDefaults.nGpuLayers == 21);
     CHECK(loaded->sessionDefaults.nCtx == 8192);
+    CHECK(loaded->sessionDefaults.toolConfig.enabled);
+    CHECK(
+        std::filesystem::weakly_canonical(loaded->sessionDefaults.toolConfig.workspaceRoot).string() ==
+        std::filesystem::weakly_canonical("/tmp/workspace").string()
+    );
+    CHECK(loaded->sessionDefaults.toolConfig.maxToolCalls == 5);
+    REQUIRE(loaded->sessionDefaults.toolConfig.enabledToolNames.size() == 2);
+    CHECK(loaded->sessionDefaults.toolConfig.enabledToolNames[0] == "read_file");
+    CHECK(loaded->sessionDefaults.toolConfig.enabledToolNames[1] == "grep_search");
     CHECK(doctest::Approx(loaded->generationDefaults.temp).epsilon(0.001f) == 0.42f);
     CHECK(loaded->generationDefaults.topK == 17);
+
+    std::filesystem::remove_all(tempDir);
+}
+
+TEST_CASE("Store round-trips assistant tool calls and tool messages") {
+    std::filesystem::path const tempDir = uniqueTempDir("tool-roundtrip");
+    std::filesystem::create_directories(tempDir);
+
+    lambda::Store store(tempDir);
+    store.upsertChatThreadMeta("chat-a", "Chat A", 100, "/tmp/a.gguf", "A", "", 0, 0, 0);
+
+    lambda::ChatMessage assistant {
+        .role = lambda::ChatRole::Assistant,
+        .toolCalls = {
+            lambda::ChatToolCall {
+                .id = "call_1",
+                .name = "read_file",
+                .arguments = "{\"path\":\"README.md\"}",
+            },
+            lambda::ChatToolCall {
+                .id = "call_2",
+                .name = "grep_search",
+                .arguments = "{\"path\":\".\",\"pattern\":\"TODO\"}",
+            },
+        },
+    };
+    lambda::ChatMessage tool = makeToolMessage(
+        "call_1",
+        "read_file",
+        "{\"ok\":true,\"tool\":\"read_file\"}",
+        lambda::ToolMessageState::Completed
+    );
+
+    store.replaceChatMessagesForThread("chat-a", {makeUserMessage("Q"), assistant, tool});
+
+    lambda::PersistedChatState const state = store.loadPersistedChatState();
+    REQUIRE(state.chats.size() == 1);
+    REQUIRE(state.chats[0].messages.size() == 3);
+    REQUIRE(state.chats[0].messages[1].role == lambda::ChatRole::Assistant);
+    REQUIRE(state.chats[0].messages[1].toolCalls.size() == 2);
+    CHECK(state.chats[0].messages[1].toolCalls[0].id == "call_1");
+    CHECK(state.chats[0].messages[1].toolCalls[0].name == "read_file");
+    CHECK(state.chats[0].messages[1].toolCalls[1].name == "grep_search");
+    REQUIRE(state.chats[0].messages[2].role == lambda::ChatRole::Tool);
+    CHECK(state.chats[0].messages[2].toolCallId == "call_1");
+    CHECK(state.chats[0].messages[2].toolName == "read_file");
+    CHECK(state.chats[0].messages[2].toolState == lambda::ToolMessageState::Completed);
+    CHECK(state.chats[0].messages[2].text == "{\"ok\":true,\"tool\":\"read_file\"}");
 
     std::filesystem::remove_all(tempDir);
 }

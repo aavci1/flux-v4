@@ -3,6 +3,7 @@
 #include "Debug.hpp"
 #include "Defaults.hpp"
 #include "Interfaces.hpp"
+#include "Tooling.hpp"
 #include "Types.hpp"
 
 #include "chat.h"
@@ -12,6 +13,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstdint>
 #include <cstdio>
 #include <functional>
@@ -33,6 +35,15 @@ namespace detail {
 // Dispatching onto the Cocoa main queue here can stall until the next OS event.
 inline void postEventToMain(std::function<void(LlmUiEvent)> const &post, LlmUiEvent ev) {
     post(std::move(ev));
+}
+
+inline bool requestNeedsStructuredToolReset(ChatGenerationRequest const &request) {
+    if (request.messages.empty()) {
+        return false;
+    }
+    ChatMessage const &last = request.messages.back();
+    return last.role == ChatMessage::Role::Tool ||
+           (last.role == ChatMessage::Role::Assistant && !last.toolCalls.empty());
 }
 
 class UiChunkBatcher {
@@ -359,16 +370,58 @@ class LlamaEngine : public lambda::IChatEngine {
             return;
         }
         session->cancelled.store(true, std::memory_order_relaxed);
+        session->approvalCv.notify_all();
     }
 
     void cancelAllGenerations() override {
         std::vector<std::shared_ptr<ChatSession>> sessions = snapshotSessions();
         for (auto const &session : sessions) {
             session->cancelled.store(true, std::memory_order_relaxed);
+            session->approvalCv.notify_all();
         }
         for (auto const &session : sessions) {
             joinSessionWorker(session);
         }
+    }
+
+    void respondToToolApproval(
+        std::string const &chatId,
+        std::uint64_t generationId,
+        std::string const &toolCallId,
+        bool approved
+    ) override {
+        debugToolTrace(
+            string_format(
+                "engine.respondToToolApproval chat_id=%s generation_id=%llu tool_call_id=%s approved=%d",
+                chatId.c_str(),
+                static_cast<unsigned long long>(generationId),
+                toolCallId.c_str(),
+                approved ? 1 : 0
+            )
+        );
+        std::shared_ptr<ChatSession> session = findSession(chatId);
+        if (!session) {
+            debugToolTrace("engine.respondToToolApproval no_session");
+            return;
+        }
+        {
+            std::lock_guard<std::mutex> lock(session->approvalMutex);
+            if (!session->awaitingToolApproval || session->pendingGenerationId != generationId ||
+                session->pendingToolCallId != toolCallId) {
+                debugToolTrace(
+                    string_format(
+                        "engine.respondToToolApproval ignored awaiting=%d pending_generation_id=%llu pending_tool_call_id=%s",
+                        session->awaitingToolApproval ? 1 : 0,
+                        static_cast<unsigned long long>(session->pendingGenerationId),
+                        session->pendingToolCallId.c_str()
+                    )
+                );
+                return;
+            }
+            session->pendingToolApprovalDecision = approved;
+        }
+        debugToolTrace("engine.respondToToolApproval accepted");
+        session->approvalCv.notify_all();
     }
 
     void startChat(
@@ -448,6 +501,12 @@ class LlamaEngine : public lambda::IChatEngine {
         std::thread worker;
         std::atomic<bool> cancelled {false};
         std::atomic<bool> running {false};
+        std::mutex approvalMutex;
+        std::condition_variable approvalCv;
+        bool awaitingToolApproval = false;
+        std::uint64_t pendingGenerationId = 0;
+        std::string pendingToolCallId;
+        std::optional<bool> pendingToolApprovalDecision;
         llama_context_ptr ctx;
         common_sampler_ptr sampler;
         std::shared_ptr<const LoadedModelState> modelState;
@@ -545,6 +604,18 @@ class LlamaEngine : public lambda::IChatEngine {
         if (patch.flashAttn.has_value()) {
             target.flashAttn = *patch.flashAttn;
         }
+        if (patch.toolsEnabled.has_value()) {
+            target.toolConfig.enabled = *patch.toolsEnabled;
+        }
+        if (patch.maxToolCalls.has_value()) {
+            target.toolConfig.maxToolCalls = *patch.maxToolCalls;
+        }
+        if (patch.toolWorkspaceRoot.has_value()) {
+            target.toolConfig.workspaceRoot = normalizeToolWorkspaceRoot(*patch.toolWorkspaceRoot);
+        }
+        if (patch.enabledToolNames.has_value()) {
+            target.toolConfig.enabledToolNames = *patch.enabledToolNames;
+        }
     }
 
     static void applyPatch(GenerationParams &target, GenerationParamsPatch const &patch) {
@@ -605,6 +676,9 @@ class LlamaEngine : public lambda::IChatEngine {
     static std::optional<std::string> validate(SessionParams const &params) {
         if (params.nCtx > 0 && params.nCtx < 128) {
             return "Context length is too small";
+        }
+        if (params.toolConfig.maxToolCalls < 0) {
+            return "maxToolCalls must be >= 0";
         }
         return std::nullopt;
     }
@@ -749,6 +823,44 @@ class LlamaEngine : public lambda::IChatEngine {
                " visible messages:\n" + summaryText;
     }
 
+    static std::vector<common_chat_tool_call> toCommonToolCalls(std::vector<ToolCall> const &toolCalls) {
+        std::vector<common_chat_tool_call> result;
+        result.reserve(toolCalls.size());
+        for (ToolCall const &toolCall : toolCalls) {
+            result.push_back(common_chat_tool_call {
+                .name = toolCall.name,
+                .arguments = toolCall.arguments,
+                .id = toolCall.id,
+            });
+        }
+        return result;
+    }
+
+    static std::vector<ToolCall> fromCommonToolCalls(std::vector<common_chat_tool_call> const &toolCalls) {
+        std::vector<ToolCall> result;
+        result.reserve(toolCalls.size());
+        for (std::size_t i = 0; i < toolCalls.size(); ++i) {
+            common_chat_tool_call const &toolCall = toolCalls[i];
+            std::string toolCallId = toolCall.id;
+            if (toolCallId.empty()) {
+                toolCallId = string_format("tool_call_%zu", i + 1);
+                debugToolTrace(
+                    string_format(
+                        "engine.fromCommonToolCalls synthesized_id name=%s generated_id=%s",
+                        toolCall.name.c_str(),
+                        toolCallId.c_str()
+                    )
+                );
+            }
+            result.push_back(ToolCall {
+                .id = std::move(toolCallId),
+                .name = toolCall.name,
+                .arguments = toolCall.arguments,
+            });
+        }
+        return result;
+    }
+
     static std::vector<common_chat_msg> buildCommonChatMessages(
         ChatGenerationRequest const &request,
         SessionParams const &sessionParams
@@ -776,15 +888,25 @@ class LlamaEngine : public lambda::IChatEngine {
             if (message.role == ChatMessage::Role::Reasoning) {
                 continue;
             }
-            if (message.role == ChatMessage::Role::Assistant && message.text.empty()) {
+            if (message.role == ChatMessage::Role::Assistant && message.text.empty() && message.toolCalls.empty()) {
                 continue;
             }
             common_chat_msg chatMessage;
-            chatMessage.role = message.role == ChatMessage::Role::User ? "user" : "assistant";
+            if (message.role == ChatMessage::Role::User) {
+                chatMessage.role = "user";
+            } else if (message.role == ChatMessage::Role::Tool) {
+                chatMessage.role = "tool";
+                chatMessage.tool_call_id = message.toolCallId;
+                chatMessage.tool_name = message.toolName;
+            } else {
+                chatMessage.role = "assistant";
+                chatMessage.tool_calls = toCommonToolCalls(message.toolCalls);
+            }
             chatMessage.content = message.text;
             chatMessages.push_back(std::move(chatMessage));
         }
-        while (!chatMessages.empty() && chatMessages.back().role == "assistant" && chatMessages.back().content.empty()) {
+        while (!chatMessages.empty() && chatMessages.back().role == "assistant" &&
+               chatMessages.back().content.empty() && chatMessages.back().tool_calls.empty()) {
             chatMessages.pop_back();
         }
         return chatMessages;
@@ -800,6 +922,8 @@ class LlamaEngine : public lambda::IChatEngine {
         inputs.messages = std::move(chatMessages);
         inputs.add_generation_prompt = addGenerationPrompt;
         inputs.use_jinja = true;
+        inputs.tools = tooling::buildChatTools(sessionParams.toolConfig);
+        inputs.parallel_tool_calls = false;
         inputs.reasoning_format = COMMON_REASONING_FORMAT_DEEPSEEK;
         inputs.enable_thinking = sessionParams.enableThinking && common_chat_templates_support_enable_thinking(templates);
         return inputs;
@@ -835,6 +959,8 @@ class LlamaEngine : public lambda::IChatEngine {
             return "Assistant";
         case ChatMessage::Role::Reasoning:
             return "Reasoning";
+        case ChatMessage::Role::Tool:
+            return "Tool";
         }
         return "Assistant";
     }
@@ -847,10 +973,39 @@ class LlamaEngine : public lambda::IChatEngine {
         std::ostringstream oss;
         for (std::size_t i = startIndex; i < endIndex; ++i) {
             ChatMessage const &message = messages[i];
-            if (message.role == ChatMessage::Role::Reasoning || message.text.empty()) {
+            if (message.role == ChatMessage::Role::Reasoning) {
                 continue;
             }
-            oss << roleLabel(message.role) << ": " << message.text << "\n\n";
+            if (message.role == ChatMessage::Role::Assistant) {
+                if (!message.text.empty()) {
+                    oss << "Assistant: " << message.text << "\n";
+                }
+                for (ToolCall const &toolCall : message.toolCalls) {
+                    oss << "Assistant tool call [" << toolCall.id << "]: "
+                        << toolCall.name << "(" << toolCall.arguments << ")\n";
+                }
+                if (!message.text.empty() || !message.toolCalls.empty()) {
+                    oss << "\n";
+                }
+                continue;
+            }
+            if (message.role == ChatMessage::Role::Tool) {
+                oss << "Tool";
+                if (!message.toolName.empty()) {
+                    oss << " " << message.toolName;
+                }
+                if (!message.toolCallId.empty()) {
+                    oss << " [" << message.toolCallId << "]";
+                }
+                if (!message.text.empty()) {
+                    oss << ": " << message.text;
+                }
+                oss << "\n\n";
+                continue;
+            }
+            if (!message.text.empty()) {
+                oss << roleLabel(message.role) << ": " << message.text << "\n\n";
+            }
         }
         return oss.str();
     }
@@ -1190,19 +1345,23 @@ class LlamaEngine : public lambda::IChatEngine {
         }
     }
 
+    struct AssistantTurnResult {
+        bool ok = false;
+        bool cancelled = false;
+        ChatGenerationRequest request;
+        common_chat_msg parsedMessage;
+        GenerationStats stats;
+        std::string errorText;
+        std::string toolFormatLabel;
+    };
+
     void commitSessionState(
         std::shared_ptr<ChatSession> const &session,
         ChatGenerationRequest const &request,
         SessionParams const &sessionParams,
-        std::shared_ptr<const LoadedModelState> const &modelState,
-        std::string const &assistantText
+        std::shared_ptr<const LoadedModelState> const &modelState
     ) const {
-        ChatGenerationRequest committedRequest = request;
-        committedRequest.messages.push_back(ChatMessage {
-            .role = ChatMessage::Role::Assistant,
-            .text = assistantText,
-        });
-        auto committedPrompt = renderPrompt(*modelState, committedRequest, sessionParams, false);
+        auto committedPrompt = renderPrompt(*modelState, request, sessionParams, false);
         session->committedTokens = std::move(committedPrompt.promptTokens);
         session->kvTokens = session->committedTokens.size();
         session->lastSummaryText = request.summaryText;
@@ -1210,89 +1369,177 @@ class LlamaEngine : public lambda::IChatEngine {
         session->lastSummaryUpdatedAtUnixMs = request.summaryUpdatedAtUnixMs;
     }
 
-    void runGeneration(
+    void invalidateStructuredToolReuse(
+        std::shared_ptr<ChatSession> const &session,
+        ChatGenerationRequest const &request
+    ) const {
+        debugToolTrace(
+            string_format(
+                "engine.invalidateStructuredToolReuse chat_id=%s generation_id=%llu message_count=%zu",
+                request.chatId.c_str(),
+                static_cast<unsigned long long>(request.generationId),
+                request.messages.size()
+            )
+        );
+        resetSessionState(session);
+        session->committedTokens.clear();
+        session->kvTokens = 0;
+        session->lastSummaryText = request.summaryText;
+        session->lastSummaryMessageCount = request.summaryMessageCount;
+        session->lastSummaryUpdatedAtUnixMs = request.summaryUpdatedAtUnixMs;
+    }
+
+    void postToolEvent(
+        std::function<void(LlmUiEvent)> const &postOnMain,
+        LlmUiEvent::Kind kind,
+        ToolCall const &toolCall,
+        ToolExecutionState state,
+        std::string text,
+        GenerationStats const *stats,
+        ChatGenerationRequest const &request
+    ) const {
+        debugToolTrace(
+            string_format(
+                "engine.postToolEvent kind=%d chat_id=%s generation_id=%llu tool_call_id=%s tool_name=%s state=%d text=%s",
+                static_cast<int>(kind),
+                request.chatId.c_str(),
+                static_cast<unsigned long long>(request.generationId),
+                toolCall.id.c_str(),
+                toolCall.name.c_str(),
+                static_cast<int>(state),
+                text.substr(0, 256).c_str()
+            )
+        );
+        LlmUiEvent event {
+            .kind = kind,
+            .text = std::move(text),
+            .toolCall = toolCall,
+            .toolCallId = toolCall.id,
+            .toolName = toolCall.name,
+            .toolState = state,
+        };
+        if (stats != nullptr) {
+            event.generationStats = *stats;
+        }
+        applySummaryToEvent(event, request);
+        postOnMain(std::move(event));
+    }
+
+    std::optional<bool> waitForToolApproval(
+        std::shared_ptr<ChatSession> const &session,
+        std::uint64_t generationId,
+        std::string const &toolCallId
+    ) const {
+        std::unique_lock<std::mutex> lock(session->approvalMutex);
+        session->awaitingToolApproval = true;
+        session->pendingGenerationId = generationId;
+        session->pendingToolCallId = toolCallId;
+        session->pendingToolApprovalDecision.reset();
+        debugToolTrace(
+            string_format(
+                "engine.waitForToolApproval begin generation_id=%llu tool_call_id=%s",
+                static_cast<unsigned long long>(generationId),
+                toolCallId.c_str()
+            )
+        );
+        session->approvalCv.wait(lock, [&] {
+            return session->cancelled.load(std::memory_order_relaxed) ||
+                   session->pendingToolApprovalDecision.has_value();
+        });
+        std::optional<bool> result = session->pendingToolApprovalDecision;
+        debugToolTrace(
+            string_format(
+                "engine.waitForToolApproval end generation_id=%llu tool_call_id=%s cancelled=%d result_has_value=%d result=%d",
+                static_cast<unsigned long long>(generationId),
+                toolCallId.c_str(),
+                session->cancelled.load(std::memory_order_relaxed) ? 1 : 0,
+                result.has_value() ? 1 : 0,
+                result.value_or(false) ? 1 : 0
+            )
+        );
+        session->awaitingToolApproval = false;
+        session->pendingGenerationId = 0;
+        session->pendingToolCallId.clear();
+        session->pendingToolApprovalDecision.reset();
+        return result;
+    }
+
+    AssistantTurnResult generateAssistantTurn(
         std::shared_ptr<ChatSession> const &session,
         ChatGenerationRequest request,
-        std::shared_ptr<const LoadedModelState> modelState,
+        std::shared_ptr<const LoadedModelState> const &modelState,
         GenerationParams const &generationParams,
         SessionParams const &sessionParams,
-        std::function<void(LlmUiEvent)> userPost
+        std::function<void(LlmUiEvent)> const &postOnMain
     ) {
-        auto postOnMain = [&userPost, chatId = request.chatId, generationId = request.generationId](LlmUiEvent ev) mutable {
-            ev.chatId = chatId;
-            ev.generationId = generationId;
-            detail::postEventToMain(userPost, std::move(ev));
-        };
         detail::UiChunkBatcher batcher(postOnMain);
-        GenerationStats stats;
-        stats.startedAtUnixMs = currentUnixMillis();
+        AssistantTurnResult result;
+        result.request = request;
+        result.stats.startedAtUnixMs = currentUnixMillis();
+        result.stats.seed = generationParams.seed;
+        result.stats.temp = generationParams.temp;
+        result.stats.topP = generationParams.topP;
+        result.stats.topK = generationParams.topK;
+        result.stats.minP = generationParams.minP;
+        result.stats.maxTokens = generationParams.maxTokens;
+        result.stats.penaltyLastN = generationParams.penaltyLastN;
+        result.stats.repeatPenalty = generationParams.repeatPenalty;
+        result.stats.frequencyPenalty = generationParams.frequencyPenalty;
+        result.stats.presencePenalty = generationParams.presencePenalty;
+        result.stats.mirostat = generationParams.mirostat;
+        result.stats.mirostatTau = generationParams.mirostatTau;
+        result.stats.mirostatEta = generationParams.mirostatEta;
+        result.stats.ignoreEos = generationParams.ignoreEos;
 
-        stats.seed = generationParams.seed;
-        stats.temp = generationParams.temp;
-        stats.topP = generationParams.topP;
-        stats.topK = generationParams.topK;
-        stats.minP = generationParams.minP;
-        stats.maxTokens = generationParams.maxTokens;
-        stats.penaltyLastN = generationParams.penaltyLastN;
-        stats.repeatPenalty = generationParams.repeatPenalty;
-        stats.frequencyPenalty = generationParams.frequencyPenalty;
-        stats.presencePenalty = generationParams.presencePenalty;
-        stats.mirostat = generationParams.mirostat;
-        stats.mirostatTau = generationParams.mirostatTau;
-        stats.mirostatEta = generationParams.mirostatEta;
-        stats.ignoreEos = generationParams.ignoreEos;
-
-        if (request.summaryMessageCount > request.messages.size()) {
-            request.summaryMessageCount = request.messages.size();
+        if (result.request.summaryMessageCount > result.request.messages.size()) {
+            result.request.summaryMessageCount = result.request.messages.size();
         }
 
         if (!ensureSessionContext(session, modelState, generationParams, sessionParams)) {
-            stats.finishedAtUnixMs = currentUnixMillis();
-            stats.status = "error";
-            stats.errorText = "Failed to create llama context";
-            postTerminalEvent(postOnMain, LlmUiEvent::Kind::Error, stats.errorText, stats, request);
-            return;
+            result.stats.finishedAtUnixMs = currentUnixMillis();
+            result.stats.status = "error";
+            result.stats.errorText = "Failed to create llama context";
+            result.errorText = result.stats.errorText;
+            return result;
         }
 
         RenderedPrompt renderedPrompt;
-        std::string compactionError;
         if (!compactRequestToFit(
                 session,
                 modelState,
                 generationParams,
                 sessionParams,
-                request,
+                result.request,
                 renderedPrompt,
-                compactionError
+                result.errorText
             )) {
-            stats.finishedAtUnixMs = currentUnixMillis();
-            stats.status = session->cancelled.load(std::memory_order_relaxed) ? "cancelled" : "error";
-            stats.errorText = session->cancelled.load(std::memory_order_relaxed) ? std::string() : compactionError;
-            stats.promptTokens = static_cast<std::int64_t>(renderedPrompt.promptTokens.size());
-            stats.tokensPerSecond = computeTokensPerSecond(stats);
-            postTerminalEvent(
-                postOnMain,
-                session->cancelled.load(std::memory_order_relaxed) ? LlmUiEvent::Kind::Done : LlmUiEvent::Kind::Error,
-                compactionError,
-                stats,
-                request
-            );
-            session->lastSummaryText = request.summaryText;
-            session->lastSummaryMessageCount = request.summaryMessageCount;
-            session->lastSummaryUpdatedAtUnixMs = request.summaryUpdatedAtUnixMs;
+            batcher.flush();
+            result.stats.finishedAtUnixMs = currentUnixMillis();
+            result.cancelled = session->cancelled.load(std::memory_order_relaxed);
+            result.stats.status = result.cancelled ? "cancelled" : "error";
+            result.stats.errorText = result.cancelled ? std::string() : result.errorText;
+            result.stats.promptTokens = static_cast<std::int64_t>(renderedPrompt.promptTokens.size());
+            result.stats.tokensPerSecond = computeTokensPerSecond(result.stats);
+            session->lastSummaryText = result.request.summaryText;
+            session->lastSummaryMessageCount = result.request.summaryMessageCount;
+            session->lastSummaryUpdatedAtUnixMs = result.request.summaryUpdatedAtUnixMs;
             session->committedTokens.clear();
             session->kvTokens = 0;
-            return;
+            return result;
         }
 
-        stats.promptTokens = static_cast<std::int64_t>(renderedPrompt.promptTokens.size());
-        std::fprintf(stderr, "[LlamaEngine] prompt: %lld tokens, max predict: %d\n",
-                     static_cast<long long>(stats.promptTokens),
-                     generationParams.maxTokens);
+        result.stats.promptTokens = static_cast<std::int64_t>(renderedPrompt.promptTokens.size());
+        result.toolFormatLabel = tooling::toolFormatLabel(renderedPrompt.chatParams.format);
+        std::fprintf(
+            stderr,
+            "[LlamaEngine] prompt: %lld tokens, max predict: %d\n",
+            static_cast<long long>(result.stats.promptTokens),
+            generationParams.maxTokens
+        );
 
-        bool const summaryChanged = request.summaryText != session->lastSummaryText ||
-                                    request.summaryMessageCount != session->lastSummaryMessageCount ||
-                                    request.summaryUpdatedAtUnixMs != session->lastSummaryUpdatedAtUnixMs;
+        bool const summaryChanged = result.request.summaryText != session->lastSummaryText ||
+                                    result.request.summaryMessageCount != session->lastSummaryMessageCount ||
+                                    result.request.summaryUpdatedAtUnixMs != session->lastSummaryUpdatedAtUnixMs;
         bool reusePrefix = !summaryChanged && session->modelState == modelState && session->ctx && session->sampler;
         std::size_t commonPrefix = 0;
         if (reusePrefix) {
@@ -1321,23 +1568,18 @@ class LlamaEngine : public lambda::IChatEngine {
                 commonPrefix,
                 [&session] { return session->cancelled.load(std::memory_order_relaxed); })) {
             batcher.flush();
-            stats.finishedAtUnixMs = currentUnixMillis();
-            stats.status = session->cancelled.load(std::memory_order_relaxed) ? "cancelled" : "error";
-            stats.errorText = session->cancelled.load(std::memory_order_relaxed) ? std::string() : decodeError("prompt evaluation");
-            stats.tokensPerSecond = computeTokensPerSecond(stats);
-            postTerminalEvent(
-                postOnMain,
-                session->cancelled.load(std::memory_order_relaxed) ? LlmUiEvent::Kind::Done : LlmUiEvent::Kind::Error,
-                stats.errorText,
-                stats,
-                request
-            );
-            session->lastSummaryText = request.summaryText;
-            session->lastSummaryMessageCount = request.summaryMessageCount;
-            session->lastSummaryUpdatedAtUnixMs = request.summaryUpdatedAtUnixMs;
+            result.stats.finishedAtUnixMs = currentUnixMillis();
+            result.cancelled = session->cancelled.load(std::memory_order_relaxed);
+            result.stats.status = result.cancelled ? "cancelled" : "error";
+            result.stats.errorText = result.cancelled ? std::string() : decodeError("prompt evaluation");
+            result.errorText = result.stats.errorText;
+            result.stats.tokensPerSecond = computeTokensPerSecond(result.stats);
+            session->lastSummaryText = result.request.summaryText;
+            session->lastSummaryMessageCount = result.request.summaryMessageCount;
+            session->lastSummaryUpdatedAtUnixMs = result.request.summaryUpdatedAtUnixMs;
             session->committedTokens.clear();
             session->kvTokens = 0;
-            return;
+            return result;
         }
 
         common_chat_parser_params parserParams(renderedPrompt.chatParams);
@@ -1351,59 +1593,235 @@ class LlamaEngine : public lambda::IChatEngine {
             if (session->cancelled.load(std::memory_order_relaxed)) {
                 accumulator.flush();
                 batcher.flush();
-                stats.finishedAtUnixMs = currentUnixMillis();
-                stats.status = "cancelled";
-                stats.tokensPerSecond = computeTokensPerSecond(stats);
-                postTerminalEvent(postOnMain, LlmUiEvent::Kind::Done, "", stats, request);
-                session->lastSummaryText = request.summaryText;
-                session->lastSummaryMessageCount = request.summaryMessageCount;
-                session->lastSummaryUpdatedAtUnixMs = request.summaryUpdatedAtUnixMs;
+                result.stats.finishedAtUnixMs = currentUnixMillis();
+                result.cancelled = true;
+                result.stats.status = "cancelled";
+                result.stats.tokensPerSecond = computeTokensPerSecond(result.stats);
+                session->lastSummaryText = result.request.summaryText;
+                session->lastSummaryMessageCount = result.request.summaryMessageCount;
+                session->lastSummaryUpdatedAtUnixMs = result.request.summaryUpdatedAtUnixMs;
                 session->committedTokens.clear();
                 session->kvTokens = 0;
-                return;
+                return result;
             }
 
             llama_token token = common_sampler_sample(session->sampler.get(), session->ctx.get(), -1);
             if (llama_vocab_is_eog(modelState->vocab, token)) {
-                stats.status = "completed";
+                result.stats.status = "completed";
                 break;
             }
 
             common_sampler_accept(session->sampler.get(), token, true);
-            if (stats.firstTokenAtUnixMs == 0) {
-                stats.firstTokenAtUnixMs = currentUnixMillis();
+            if (result.stats.firstTokenAtUnixMs == 0) {
+                result.stats.firstTokenAtUnixMs = currentUnixMillis();
             }
-            ++stats.completionTokens;
+            ++result.stats.completionTokens;
             accumulator.append(tokenToPiece(modelState->vocab, token));
 
             llama_batch const batch = llama_batch_get_one(&token, 1);
             if (llama_decode(session->ctx.get(), batch) != 0) {
                 accumulator.flush();
                 batcher.flush();
-                stats.finishedAtUnixMs = currentUnixMillis();
-                stats.status = "error";
-                stats.errorText = decodeError("generation");
-                stats.tokensPerSecond = computeTokensPerSecond(stats);
-                postTerminalEvent(postOnMain, LlmUiEvent::Kind::Error, stats.errorText, stats, request);
-                session->lastSummaryText = request.summaryText;
-                session->lastSummaryMessageCount = request.summaryMessageCount;
-                session->lastSummaryUpdatedAtUnixMs = request.summaryUpdatedAtUnixMs;
+                result.stats.finishedAtUnixMs = currentUnixMillis();
+                result.stats.status = "error";
+                result.stats.errorText = decodeError("generation");
+                result.errorText = result.stats.errorText;
+                result.stats.tokensPerSecond = computeTokensPerSecond(result.stats);
+                session->lastSummaryText = result.request.summaryText;
+                session->lastSummaryMessageCount = result.request.summaryMessageCount;
+                session->lastSummaryUpdatedAtUnixMs = result.request.summaryUpdatedAtUnixMs;
                 session->committedTokens.clear();
                 session->kvTokens = 0;
-                return;
+                return result;
             }
         }
 
-        if (stats.status.empty()) {
-            stats.status = "max_tokens";
+        if (result.stats.status.empty()) {
+            result.stats.status = "max_tokens";
         }
 
         accumulator.flush();
         batcher.flush();
-        stats.finishedAtUnixMs = currentUnixMillis();
-        stats.tokensPerSecond = computeTokensPerSecond(stats);
-        commitSessionState(session, request, sessionParams, modelState, accumulator.parsedMessage().content);
-        postTerminalEvent(postOnMain, LlmUiEvent::Kind::Done, "", stats, request);
+        result.stats.finishedAtUnixMs = currentUnixMillis();
+        result.stats.tokensPerSecond = computeTokensPerSecond(result.stats);
+        result.parsedMessage = accumulator.parsedMessage();
+        result.ok = true;
+        return result;
+    }
+
+    void runGeneration(
+        std::shared_ptr<ChatSession> const &session,
+        ChatGenerationRequest request,
+        std::shared_ptr<const LoadedModelState> modelState,
+        GenerationParams const &generationParams,
+        SessionParams const &sessionParams,
+        std::function<void(LlmUiEvent)> userPost
+    ) {
+        auto postOnMain = [&userPost, chatId = request.chatId, generationId = request.generationId](LlmUiEvent ev) mutable {
+            ev.chatId = chatId;
+            ev.generationId = generationId;
+            detail::postEventToMain(userPost, std::move(ev));
+        };
+        ChatGenerationRequest activeRequest = std::move(request);
+        std::int32_t toolsExecuted = 0;
+
+        while (true) {
+            AssistantTurnResult turn = generateAssistantTurn(
+                session,
+                activeRequest,
+                modelState,
+                generationParams,
+                sessionParams,
+                postOnMain
+            );
+
+            activeRequest = std::move(turn.request);
+            if (!turn.ok) {
+                postTerminalEvent(
+                    postOnMain,
+                    turn.cancelled ? LlmUiEvent::Kind::Done : LlmUiEvent::Kind::Error,
+                    turn.errorText,
+                    turn.stats,
+                    activeRequest
+                );
+                return;
+            }
+
+            ChatMessage assistantMessage {
+                .role = ChatMessage::Role::Assistant,
+                .text = turn.parsedMessage.content,
+                .toolCalls = fromCommonToolCalls(turn.parsedMessage.tool_calls),
+            };
+            activeRequest.messages.push_back(assistantMessage);
+            commitSessionState(session, activeRequest, sessionParams, modelState);
+            if (detail::requestNeedsStructuredToolReset(activeRequest)) {
+                invalidateStructuredToolReuse(session, activeRequest);
+            }
+
+            if (!assistantMessage.toolCalls.empty()) {
+                LlmUiEvent event {
+                    .kind = LlmUiEvent::Kind::ToolCallsParsed,
+                    .text = turn.toolFormatLabel,
+                    .toolCalls = assistantMessage.toolCalls,
+                    .generationStats = turn.stats,
+                };
+                applySummaryToEvent(event, activeRequest);
+                postOnMain(std::move(event));
+            }
+
+            if (assistantMessage.toolCalls.empty()) {
+                postTerminalEvent(postOnMain, LlmUiEvent::Kind::Done, "", turn.stats, activeRequest);
+                return;
+            }
+
+            for (ToolCall const &toolCall : assistantMessage.toolCalls) {
+                ++toolsExecuted;
+                if (toolsExecuted > sessionParams.toolConfig.maxToolCalls) {
+                    std::string const limitText = tooling::formatToolResult(nlohmann::ordered_json {
+                        {"ok", false},
+                        {"tool", toolCall.name},
+                        {"error", "tool call limit reached"},
+                    });
+                    activeRequest.messages.push_back(ChatMessage {
+                        .role = ChatMessage::Role::Tool,
+                        .text = limitText,
+                        .toolCallId = toolCall.id,
+                        .toolName = toolCall.name,
+                        .toolState = ToolExecutionState::Failed,
+                    });
+                    commitSessionState(session, activeRequest, sessionParams, modelState);
+                    invalidateStructuredToolReuse(session, activeRequest);
+                    postToolEvent(
+                        postOnMain,
+                        LlmUiEvent::Kind::ToolFailed,
+                        toolCall,
+                        ToolExecutionState::Failed,
+                        limitText,
+                        nullptr,
+                        activeRequest
+                    );
+                    continue;
+                }
+
+                if (tooling::requiresApproval(sessionParams.toolConfig, toolCall.name)) {
+                    postToolEvent(
+                        postOnMain,
+                        LlmUiEvent::Kind::ToolApprovalRequested,
+                        toolCall,
+                        ToolExecutionState::PendingApproval,
+                        "",
+                        nullptr,
+                        activeRequest
+                    );
+                    std::optional<bool> approval = waitForToolApproval(session, activeRequest.generationId, toolCall.id);
+                    if (session->cancelled.load(std::memory_order_relaxed)) {
+                        turn.stats.finishedAtUnixMs = currentUnixMillis();
+                        turn.stats.status = "cancelled";
+                        turn.stats.tokensPerSecond = computeTokensPerSecond(turn.stats);
+                        postTerminalEvent(postOnMain, LlmUiEvent::Kind::Done, "", turn.stats, activeRequest);
+                        return;
+                    }
+                    if (!approval.value_or(false)) {
+                        std::string const deniedText = tooling::formatToolResult(nlohmann::ordered_json {
+                            {"ok", false},
+                            {"tool", toolCall.name},
+                            {"error", "tool execution denied by user"},
+                        });
+                        activeRequest.messages.push_back(ChatMessage {
+                            .role = ChatMessage::Role::Tool,
+                            .text = deniedText,
+                            .toolCallId = toolCall.id,
+                            .toolName = toolCall.name,
+                            .toolState = ToolExecutionState::Denied,
+                        });
+                        commitSessionState(session, activeRequest, sessionParams, modelState);
+                        invalidateStructuredToolReuse(session, activeRequest);
+                        postToolEvent(
+                            postOnMain,
+                            LlmUiEvent::Kind::ToolDenied,
+                            toolCall,
+                            ToolExecutionState::Denied,
+                            deniedText,
+                            nullptr,
+                            activeRequest
+                        );
+                        continue;
+                    }
+                }
+
+                postToolEvent(
+                    postOnMain,
+                    LlmUiEvent::Kind::ToolStarted,
+                    toolCall,
+                    ToolExecutionState::Running,
+                    "",
+                    nullptr,
+                    activeRequest
+                );
+                auto toolResult = tooling::invokeTool(sessionParams.toolConfig, toolCall.name, toolCall.arguments);
+                std::string const toolText = tooling::formatToolResult(toolResult);
+                bool const ok = toolResult.value("ok", false);
+                ToolExecutionState const toolState = ok ? ToolExecutionState::Completed : ToolExecutionState::Failed;
+                activeRequest.messages.push_back(ChatMessage {
+                    .role = ChatMessage::Role::Tool,
+                    .text = toolText,
+                    .toolCallId = toolCall.id,
+                    .toolName = toolCall.name,
+                    .toolState = toolState,
+                });
+                commitSessionState(session, activeRequest, sessionParams, modelState);
+                invalidateStructuredToolReuse(session, activeRequest);
+                postToolEvent(
+                    postOnMain,
+                    ok ? LlmUiEvent::Kind::ToolFinished : LlmUiEvent::Kind::ToolFailed,
+                    toolCall,
+                    toolState,
+                    toolText,
+                    nullptr,
+                    activeRequest
+                );
+            }
+        }
     }
 
     void runFakeGeneration(
@@ -1483,6 +1901,82 @@ class LlamaEngine : public lambda::IChatEngine {
         }
 
         batcher.flush();
+
+        if (debugFakeToolApprovalEnabled()) {
+            ToolCall toolCall {
+                .id = "debug_fake_tool_call",
+                .name = "exec_shell_command",
+                .arguments = R"({"command":"pwd","timeout":5})",
+            };
+            debugToolTrace("engine.runFakeGeneration posting synthetic tool approval flow");
+            LlmUiEvent parsedEvent {
+                .kind = LlmUiEvent::Kind::ToolCallsParsed,
+                .text = "DebugFake",
+                .toolCalls = {toolCall},
+                .generationStats = stats,
+            };
+            applySummaryToEvent(parsedEvent, request);
+            postOnMain(std::move(parsedEvent));
+
+            postToolEvent(
+                postOnMain,
+                LlmUiEvent::Kind::ToolApprovalRequested,
+                toolCall,
+                ToolExecutionState::PendingApproval,
+                "",
+                &stats,
+                request
+            );
+
+            std::optional<bool> approval = waitForToolApproval(session, request.generationId, toolCall.id);
+            if (session->cancelled.load(std::memory_order_relaxed)) {
+                stats.finishedAtUnixMs = currentUnixMillis();
+                stats.status = "cancelled";
+                stats.tokensPerSecond = computeTokensPerSecond(stats);
+                postTerminalEvent(postOnMain, LlmUiEvent::Kind::Done, "", stats, request);
+                return;
+            }
+
+            if (!approval.value_or(false)) {
+                std::string const deniedText =
+                    R"({"ok":false,"tool":"exec_shell_command","error":"debug fake tool denied"})";
+                postToolEvent(
+                    postOnMain,
+                    LlmUiEvent::Kind::ToolDenied,
+                    toolCall,
+                    ToolExecutionState::Denied,
+                    deniedText,
+                    &stats,
+                    request
+                );
+            } else {
+                postToolEvent(
+                    postOnMain,
+                    LlmUiEvent::Kind::ToolStarted,
+                    toolCall,
+                    ToolExecutionState::Running,
+                    "",
+                    &stats,
+                    request
+                );
+                std::this_thread::sleep_for(std::chrono::milliseconds(250));
+                std::string const toolText = string_format(
+                    "{\"ok\":true,\"tool\":\"exec_shell_command\",\"workspace_root\":%s,\"output\":\"%s\"}",
+                    "\"debug\"",
+                    "pwd"
+                );
+                postToolEvent(
+                    postOnMain,
+                    LlmUiEvent::Kind::ToolFinished,
+                    toolCall,
+                    ToolExecutionState::Completed,
+                    toolText,
+                    &stats,
+                    request
+                );
+            }
+        }
+
         stats.finishedAtUnixMs = currentUnixMillis();
         stats.tokensPerSecond = computeTokensPerSecond(stats);
         postTerminalEvent(postOnMain, LlmUiEvent::Kind::Done, "", stats, request);

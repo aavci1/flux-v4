@@ -3,7 +3,11 @@
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <mutex>
 #include <string>
+#include <string_view>
 
 namespace lambda_studio_backend {
 
@@ -34,6 +38,45 @@ inline bool debugAutoStreamEnabled() {
 
 inline int debugFakeTokensPerSecond() {
     return detail::envIntOr("LAMBDA_STUDIO_FAKE_TOKENS_PER_SECOND", 10);
+}
+
+inline bool debugFakeToolApprovalEnabled() {
+    return detail::envFlagEnabled("LAMBDA_STUDIO_FAKE_TOOL_APPROVAL");
+}
+
+inline bool debugToolTraceEnabled() {
+    return detail::envFlagEnabled("LAMBDA_STUDIO_TOOL_TRACE");
+}
+
+inline std::string debugToolTraceLogPath() {
+    if (char const *path = std::getenv("LAMBDA_STUDIO_TOOL_TRACE_LOG"); path != nullptr && *path != '\0') {
+        return path;
+    }
+    return "/tmp/lambda_studio_tool_trace.log";
+}
+
+inline void debugToolTrace(std::string_view message) {
+    if (!debugToolTraceEnabled()) {
+        return;
+    }
+
+    static std::mutex mutex;
+    std::lock_guard<std::mutex> lock(mutex);
+
+    std::string line = std::string("[lambda-tool-trace] ") + std::string(message) + "\n";
+    std::fwrite(line.data(), 1, line.size(), stderr);
+    std::fflush(stderr);
+
+    std::filesystem::path const path(debugToolTraceLogPath());
+    std::error_code ec;
+    if (path.has_parent_path()) {
+        std::filesystem::create_directories(path.parent_path(), ec);
+    }
+    std::ofstream stream(path, std::ios::app);
+    if (stream) {
+        stream << line;
+        stream.flush();
+    }
 }
 
 inline std::string debugFakeMarkdownResponse() {

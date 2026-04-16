@@ -422,6 +422,21 @@ struct SettingsView : ViewModifiers<SettingsView> {
             .labelWidth = 126.f,
             .spacing = theme.space3,
         });
+        diagnosticsRows.push_back(LabeledValueRow {
+            .label = "Tool root",
+            .value = state.sessionDefaults.toolConfig.workspaceRoot.empty()
+                ? "."
+                : state.sessionDefaults.toolConfig.workspaceRoot,
+            .labelWidth = 126.f,
+            .spacing = theme.space3,
+            .maxLines = 4,
+        });
+        diagnosticsRows.push_back(LabeledValueRow {
+            .label = "Shell approval",
+            .value = "Per-call approval",
+            .labelWidth = 126.f,
+            .spacing = theme.space3,
+        });
 
         std::vector<Element> configRows;
         configRows.reserve(8);
@@ -728,6 +743,40 @@ struct SettingsView : ViewModifiers<SettingsView> {
             [cb = onAdjustSessionDefaults] {
                 if (cb) {
                     cb(lambda_studio_backend::SessionParamsPatch {.enableThinking = true});
+                }
+            }
+        ));
+        configRows.push_back(adjustmentRow(
+            theme,
+            "Tool calling",
+            state.sessionDefaults.toolConfig.enabled ? "Enabled" : "Disabled",
+            "Requires session reset",
+            !onAdjustSessionDefaults,
+            [cb = onAdjustSessionDefaults] {
+                if (cb) {
+                    cb(lambda_studio_backend::SessionParamsPatch {.toolsEnabled = false});
+                }
+            },
+            [cb = onAdjustSessionDefaults] {
+                if (cb) {
+                    cb(lambda_studio_backend::SessionParamsPatch {.toolsEnabled = true});
+                }
+            }
+        ));
+        configRows.push_back(adjustmentRow(
+            theme,
+            "Max tool calls",
+            std::to_string(state.sessionDefaults.toolConfig.maxToolCalls),
+            "Requires session reset",
+            !onAdjustSessionDefaults,
+            [cb = onAdjustSessionDefaults, current = state.sessionDefaults.toolConfig.maxToolCalls] {
+                if (cb) {
+                    cb(lambda_studio_backend::SessionParamsPatch {.maxToolCalls = std::max(0, current - 1)});
+                }
+            },
+            [cb = onAdjustSessionDefaults, current = state.sessionDefaults.toolConfig.maxToolCalls] {
+                if (cb) {
+                    cb(lambda_studio_backend::SessionParamsPatch {.maxToolCalls = current + 1});
                 }
             }
         ));

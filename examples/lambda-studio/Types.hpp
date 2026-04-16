@@ -2,12 +2,155 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <filesystem>
 #include <optional>
 #include <string>
 #include <vector>
 
 namespace lambda_studio_backend {
+
+inline std::optional<std::filesystem::path> canonicalPathIfExists(std::filesystem::path const &path) {
+    std::error_code ec;
+    std::filesystem::path const canonical = std::filesystem::weakly_canonical(path, ec);
+    if (ec) {
+        return std::nullopt;
+    }
+    return canonical;
+}
+
+inline bool hasWorkspaceMarker(std::filesystem::path const &path) {
+    std::error_code ec;
+    return std::filesystem::exists(path / ".git", ec) ||
+           std::filesystem::exists(path / ".jj", ec) ||
+           std::filesystem::exists(path / ".hg", ec) ||
+           std::filesystem::exists(path / "CMakeLists.txt", ec) ||
+           std::filesystem::exists(path / "package.json", ec) ||
+           std::filesystem::exists(path / "pyproject.toml", ec);
+}
+
+inline bool pathLooksLikeBuildOutput(std::filesystem::path const &path) {
+    for (std::filesystem::path const &part : path) {
+        std::string const component = part.string();
+        if (component == "build" || component == "out" ||
+            component.rfind("cmake-build-", 0) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+inline std::optional<std::filesystem::path> discoverWorkspaceRoot(std::filesystem::path start) {
+    auto canonicalStart = canonicalPathIfExists(start);
+    if (!canonicalStart.has_value()) {
+        return std::nullopt;
+    }
+
+    std::filesystem::path current = *canonicalStart;
+    while (true) {
+        if (hasWorkspaceMarker(current)) {
+            return current;
+        }
+        std::filesystem::path const parent = current.parent_path();
+        if (parent == current) {
+            break;
+        }
+        current = parent;
+    }
+    return canonicalStart;
+}
+
+inline std::string defaultToolWorkspaceRoot() {
+    if (char const *overrideRoot = std::getenv("LAMBDA_STUDIO_TOOL_WORKSPACE_ROOT");
+        overrideRoot != nullptr && *overrideRoot != '\0') {
+        if (auto canonical = canonicalPathIfExists(overrideRoot); canonical.has_value()) {
+            return canonical->string();
+        }
+        return overrideRoot;
+    }
+
+    if (char const *pwd = std::getenv("PWD"); pwd != nullptr && *pwd != '\0') {
+        if (auto discovered = discoverWorkspaceRoot(pwd); discovered.has_value()) {
+            return discovered->string();
+        }
+    }
+
+    std::error_code ec;
+    std::filesystem::path const cwd = std::filesystem::current_path(ec);
+    if (ec) {
+        return ".";
+    }
+    if (auto discovered = discoverWorkspaceRoot(cwd); discovered.has_value()) {
+        return discovered->string();
+    }
+    return cwd.string();
+}
+
+inline std::string normalizeToolWorkspaceRoot(std::string workspaceRoot) {
+    if (workspaceRoot.empty()) {
+        return defaultToolWorkspaceRoot();
+    }
+
+    auto normalized = canonicalPathIfExists(workspaceRoot);
+    if (!normalized.has_value()) {
+        return defaultToolWorkspaceRoot();
+    }
+
+    if (auto discovered = discoverWorkspaceRoot(*normalized);
+        discovered.has_value() && *discovered != *normalized && pathLooksLikeBuildOutput(*normalized)) {
+        return discovered->string();
+    }
+
+    std::error_code ec;
+    std::filesystem::path const cwd = std::filesystem::current_path(ec);
+    if (!ec) {
+        if (auto canonicalCwd = canonicalPathIfExists(cwd); canonicalCwd.has_value() &&
+            *normalized == *canonicalCwd) {
+            if (auto discovered = discoverWorkspaceRoot(*canonicalCwd);
+                discovered.has_value() && *discovered != *canonicalCwd) {
+                return discovered->string();
+            }
+        }
+    }
+
+    return normalized->string();
+}
+
+struct ToolCall {
+    std::string id;
+    std::string name;
+    std::string arguments;
+
+    constexpr bool operator==(ToolCall const &) const = default;
+};
+
+enum class ToolExecutionState {
+    None,
+    PendingApproval,
+    Running,
+    Completed,
+    Denied,
+    Failed,
+};
+
+enum class ShellApprovalMode {
+    RequireApproval,
+};
+
+struct ToolConfig {
+    bool enabled = true;
+    std::vector<std::string> enabledToolNames {
+        "read_file",
+        "file_glob_search",
+        "grep_search",
+        "exec_shell_command",
+    };
+    std::string workspaceRoot = defaultToolWorkspaceRoot();
+    std::int32_t maxToolCalls = 8;
+    ShellApprovalMode shellApprovalMode = ShellApprovalMode::RequireApproval;
+
+    bool operator==(ToolConfig const &) const = default;
+};
 
 struct LoadParams {
     std::string modelPath;
@@ -32,6 +175,7 @@ struct SessionParams {
     std::string systemPrompt;
     std::string chatTemplate;
     bool flashAttn = true;
+    ToolConfig toolConfig;
 
     constexpr bool operator==(SessionParams const &) const = default;
 };
@@ -80,6 +224,10 @@ struct SessionParamsPatch {
     std::optional<std::string> systemPrompt;
     std::optional<std::string> chatTemplate;
     std::optional<bool> flashAttn;
+    std::optional<bool> toolsEnabled;
+    std::optional<std::int32_t> maxToolCalls;
+    std::optional<std::string> toolWorkspaceRoot;
+    std::optional<std::vector<std::string>> enabledToolNames;
 };
 
 struct GenerationParamsPatch {
@@ -125,10 +273,15 @@ struct ChatMessage {
         User,
         Reasoning,
         Assistant,
+        Tool,
     };
 
     Role role = Role::User;
     std::string text;
+    std::vector<ToolCall> toolCalls;
+    std::string toolCallId;
+    std::string toolName;
+    ToolExecutionState toolState = ToolExecutionState::None;
 
     constexpr bool operator==(ChatMessage const &) const = default;
 };
@@ -175,6 +328,12 @@ struct GenerationStats {
 struct LlmUiEvent {
     enum class Kind {
         Chunk,
+        ToolCallsParsed,
+        ToolApprovalRequested,
+        ToolStarted,
+        ToolFinished,
+        ToolDenied,
+        ToolFailed,
         Done,
         Error,
     };
@@ -188,6 +347,11 @@ struct LlmUiEvent {
     std::string chatId;
     std::uint64_t generationId = 0;
     std::string text;
+    std::vector<ToolCall> toolCalls;
+    ToolCall toolCall;
+    std::string toolCallId;
+    std::string toolName;
+    ToolExecutionState toolState = ToolExecutionState::None;
     std::string summaryText;
     std::size_t summaryMessageCount = 0;
     std::int64_t summaryUpdatedAtUnixMs = 0;

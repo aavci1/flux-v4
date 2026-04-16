@@ -77,8 +77,62 @@ inline lambda_studio_backend::ChatMessage::Role toBackendRole(ChatRole role) {
         return lambda_studio_backend::ChatMessage::Role::Reasoning;
     case ChatRole::Assistant:
         return lambda_studio_backend::ChatMessage::Role::Assistant;
+    case ChatRole::Tool:
+        return lambda_studio_backend::ChatMessage::Role::Tool;
     }
     return lambda_studio_backend::ChatMessage::Role::Assistant;
+}
+
+inline ChatToolCall toChatToolCall(lambda_studio_backend::ToolCall const &toolCall) {
+    return ChatToolCall {
+        .id = toolCall.id,
+        .name = toolCall.name,
+        .arguments = toolCall.arguments,
+    };
+}
+
+inline lambda_studio_backend::ToolCall toBackendToolCall(ChatToolCall const &toolCall) {
+    return lambda_studio_backend::ToolCall {
+        .id = toolCall.id,
+        .name = toolCall.name,
+        .arguments = toolCall.arguments,
+    };
+}
+
+inline ToolMessageState toToolMessageState(lambda_studio_backend::ToolExecutionState state) {
+    switch (state) {
+    case lambda_studio_backend::ToolExecutionState::PendingApproval:
+        return ToolMessageState::PendingApproval;
+    case lambda_studio_backend::ToolExecutionState::Running:
+        return ToolMessageState::Running;
+    case lambda_studio_backend::ToolExecutionState::Completed:
+        return ToolMessageState::Completed;
+    case lambda_studio_backend::ToolExecutionState::Denied:
+        return ToolMessageState::Denied;
+    case lambda_studio_backend::ToolExecutionState::Failed:
+        return ToolMessageState::Failed;
+    case lambda_studio_backend::ToolExecutionState::None:
+        break;
+    }
+    return ToolMessageState::None;
+}
+
+inline lambda_studio_backend::ToolExecutionState toBackendToolExecutionState(ToolMessageState state) {
+    switch (state) {
+    case ToolMessageState::PendingApproval:
+        return lambda_studio_backend::ToolExecutionState::PendingApproval;
+    case ToolMessageState::Running:
+        return lambda_studio_backend::ToolExecutionState::Running;
+    case ToolMessageState::Completed:
+        return lambda_studio_backend::ToolExecutionState::Completed;
+    case ToolMessageState::Denied:
+        return lambda_studio_backend::ToolExecutionState::Denied;
+    case ToolMessageState::Failed:
+        return lambda_studio_backend::ToolExecutionState::Failed;
+    case ToolMessageState::None:
+        break;
+    }
+    return lambda_studio_backend::ToolExecutionState::None;
 }
 
 } // namespace lambda

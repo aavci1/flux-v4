@@ -77,6 +77,8 @@ struct ChatsView : ViewModifiers<ChatsView> {
     std::function<void(int)> onDeleteChat;
     std::function<void(int, int)> onToggleReasoning;
     std::function<void(int, int)> onDeleteMessage;
+    std::function<void(int, int)> onApproveTool;
+    std::function<void(int, int)> onDenyTool;
     std::function<void(int, lambda_studio_backend::GenerationParamsPatch const &)> onAdjustGeneration;
 
     auto body() const {
@@ -135,6 +137,14 @@ struct ChatsView : ViewModifiers<ChatsView> {
                 .onDeleteMessage = [onDeleteMessage = onDeleteMessage, selectedIndex](int messageIndex) {
                     if (onDeleteMessage) {
                         onDeleteMessage(selectedIndex, messageIndex);
+                    } },
+                .onApproveTool = [onApproveTool = onApproveTool, selectedIndex](int messageIndex) {
+                    if (onApproveTool) {
+                        onApproveTool(selectedIndex, messageIndex);
+                    } },
+                .onDenyTool = [onDenyTool = onDenyTool, selectedIndex](int messageIndex) {
+                    if (onDenyTool) {
+                        onDenyTool(selectedIndex, messageIndex);
                     } },
                 .onSelectModel = [onSelectModel = onSelectModel, selectedIndex](std::string const &path, std::string const &name) {
                     if (onSelectModel) {

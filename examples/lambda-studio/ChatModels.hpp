@@ -31,6 +31,24 @@ enum class ChatRole {
     User,
     Reasoning,
     Assistant,
+    Tool,
+};
+
+enum class ToolMessageState {
+    None,
+    PendingApproval,
+    Running,
+    Completed,
+    Denied,
+    Failed,
+};
+
+struct ChatToolCall {
+    std::string id;
+    std::string name;
+    std::string arguments;
+
+    bool operator==(ChatToolCall const &) const = default;
 };
 
 struct MessageGenerationStats {
@@ -77,6 +95,10 @@ struct ChatMessage {
     std::int64_t startedAtNanos = 0;
     std::int64_t finishedAtNanos = 0;
     bool collapsed = false;
+    std::vector<ChatToolCall> toolCalls;
+    std::string toolCallId;
+    std::string toolName;
+    ToolMessageState toolState = ToolMessageState::None;
     std::optional<MessageGenerationStats> generationStats;
     std::uint64_t renderKey = generateMessageRenderKey();
     std::uint64_t textRevision = 1;
@@ -157,7 +179,7 @@ inline std::string chatUpdatedAtLabel(ChatThread const &thread, std::int64_t now
 
 inline std::string chatPreview(ChatThread const &thread) {
     for (auto it = thread.messages.rbegin(); it != thread.messages.rend(); ++it) {
-        if (it->role == ChatRole::Reasoning || it->text.empty()) {
+        if (it->role == ChatRole::Reasoning || it->role == ChatRole::Tool || it->text.empty()) {
             continue;
         }
         return it->text;
