@@ -356,6 +356,7 @@ Element& StateStore::commitBody(ComponentKey const& key, C const& value,
   state.lastBodyEpoch = buildEpoch_;
   state.reusableConstraints.clear();
   state.reusableConstraints.push_back(constraints);
+  state.reusableLayoutBoundaries.clear();
   return *raw;
 }
 
@@ -461,10 +462,14 @@ void Element::Model<C>::layout(LayoutContext& ctx) const {
     ctx.pushCompositeKeyTail(key);
     bool clonedRetainedSubtree = false;
     if (store) {
+      Rect const assignedFrame = ctx.layoutEngine().lastAssignedFrame();
       store->recordBodyConstraints(key, ctx.constraints());
+      store->recordLayoutBoundary(key, ctx.constraints(), assignedFrame);
       store->pushCompositePathStable(resolution.descendantsStable);
       clonedRetainedSubtree =
-          resolution.descendantsStable && !store->hasDirtyDescendant(key) && ctx.cloneRetainedSubtree(key);
+          resolution.descendantsStable && !store->hasDirtyDescendant(key) &&
+          store->canReuseRetainedLayoutSubtree(key, ctx.constraints(), assignedFrame) &&
+          ctx.cloneRetainedSubtree(key);
     }
     if (!clonedRetainedSubtree) {
       child.layout(ctx);

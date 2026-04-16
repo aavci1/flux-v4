@@ -18,6 +18,7 @@
 #include <Flux/UI/Views/VStack.hpp>
 
 #include <cstdint>
+#include <algorithm>
 #include <memory>
 #include <vector>
 
@@ -95,19 +96,36 @@ struct RebuildHarness {
   NullTextSystem ts{};
   LayoutEngine le{};
   MeasureCache mc{};
+  LayoutContext::SubtreeRootMap roots{};
+  LayoutContext::SubtreeRootMap retainedRoots{};
+  std::shared_ptr<detail::ElementPinStorage> pins{};
+  std::shared_ptr<detail::ElementPinStorage> retainedPins{};
+  LayoutTree retainedTree{};
   LayoutTree tree{};
   SceneGraph graph{};
   EventMap eventMap{};
 
   void rebuild(Element const& root, bool forceFull = false, float w = 800.f, float h = 1200.f) {
     store.beginRebuild(forceFull);
+    if (!forceFull) {
+      retainedTree.clear();
+      std::swap(retainedTree, tree);
+      retainedRoots = std::move(roots);
+      retainedPins = std::move(pins);
+    } else {
+      retainedTree.clear();
+      retainedRoots.clear();
+      retainedPins.reset();
+      tree.clear();
+    }
     tree.clear();
     graph.clear();
     eventMap = EventMap{};
     mc.clear();
     le.resetForBuild();
 
-    LayoutContextPtr ctx{flux::LayoutContextTestAccess::create(ts, le, tree, &mc)};
+    LayoutContextPtr ctx{
+        flux::LayoutContextTestAccess::create(ts, le, tree, &mc, &retainedTree, &retainedRoots)};
     LayoutConstraints rootCs{};
     rootCs.minWidth = w;
     rootCs.minHeight = h;
@@ -124,6 +142,8 @@ struct RebuildHarness {
     renderLayoutTree(tree, rctx);
     rctx.popConstraints();
 
+    roots = ctx->subtreeRootLayouts();
+    pins = ctx->pinnedElements();
     store.endRebuild();
   }
 };
@@ -146,6 +166,10 @@ struct ComparableCounterLeaf {
     ++*count;
     return Element{Rectangle{}}.size(40.f + static_cast<float>(token), 12.f);
   }
+};
+
+struct FixedLeaf {
+  Element body() const { return Element{Rectangle{}}.size(40.f, 12.f); }
 };
 
 struct SignalLeaf {
@@ -194,6 +218,20 @@ struct ParentWithSignal {
     *parentHandle = state;
     (void)*state;
     return Element{ComparableCounterLeaf{.count = childCount, .token = 7}};
+  }
+};
+
+struct ShiftingPairRoot {
+  std::shared_ptr<State<int>> firstHandle;
+
+  Element body() const {
+    std::vector<Element> children;
+    children.push_back(Element{SignalLeaf{
+        .count = std::make_shared<int>(0),
+        .handle = firstHandle,
+    }});
+    children.push_back(Element{FixedLeaf{}});
+    return Element{VStack{.spacing = 0.f, .children = std::move(children)}};
   }
 };
 
@@ -332,4 +370,39 @@ TEST_CASE("removing a composite unsubscribes its external signal and destroys it
 
   (*signals)[1]->set(1);
   CHECK_FALSE(scope.store.hasPendingDirtyComponents());
+}
+
+TEST_CASE("clean retained child subtree is not reused when its assigned frame changes") {
+  auto firstHandle = std::make_shared<State<int>>();
+
+  StoreScope scope;
+  RebuildHarness harness{scope.store};
+  Element root = Element{ShiftingPairRoot{
+      .firstHandle = firstHandle,
+  }};
+
+  harness.rebuild(root);
+
+  std::vector<float> ys;
+  for (LayoutNode const& node : harness.tree.nodes()) {
+    if (node.kind == LayoutNode::Kind::Leaf) {
+      ys.push_back(node.worldBounds.y);
+    }
+  }
+  std::sort(ys.begin(), ys.end());
+  REQUIRE(ys.size() == 2);
+  CHECK((ys[1] - ys[0]) == doctest::Approx(12.f));
+
+  *firstHandle = 10;
+  harness.rebuild(root);
+
+  ys.clear();
+  for (LayoutNode const& node : harness.tree.nodes()) {
+    if (node.kind == LayoutNode::Kind::Leaf) {
+      ys.push_back(node.worldBounds.y);
+    }
+  }
+  std::sort(ys.begin(), ys.end());
+  REQUIRE(ys.size() == 2);
+  CHECK((ys[1] - ys[0]) == doctest::Approx(22.f));
 }

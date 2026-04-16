@@ -70,10 +70,14 @@ void ScrollView::layout(LayoutContext &ctx) const {
     ctx.pushCompositeKeyTail(key);
     bool clonedRetainedSubtree = false;
     if (store) {
+        Rect const assignedFrame = ctx.layoutEngine().lastAssignedFrame();
         store->recordBodyConstraints(key, ctx.constraints());
+        store->recordLayoutBoundary(key, ctx.constraints(), assignedFrame);
         store->pushCompositePathStable(resolution.descendantsStable);
         clonedRetainedSubtree =
-            resolution.descendantsStable && !store->hasDirtyDescendant(key) && ctx.cloneRetainedSubtree(key);
+            resolution.descendantsStable && !store->hasDirtyDescendant(key) &&
+            store->canReuseRetainedLayoutSubtree(key, ctx.constraints(), assignedFrame) &&
+            ctx.cloneRetainedSubtree(key);
     }
     if (!clonedRetainedSubtree) {
         childEl.layout(ctx);

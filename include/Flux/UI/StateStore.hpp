@@ -54,6 +54,7 @@ struct ComponentState {
   std::unique_ptr<void, void (*)(void*)> lastBody{nullptr, nullptr};
   std::uint64_t lastBodyEpoch = 0;
   std::vector<LayoutConstraints> reusableConstraints;
+  std::vector<std::pair<LayoutConstraints, Rect>> reusableLayoutBoundaries;
   std::vector<std::pair<LayoutConstraints, Size>> reusableMeasures;
   ComponentValueSnapshot valueSnapshot{};
   std::vector<ComponentSubscription> subscriptions;
@@ -131,6 +132,9 @@ public:
   Element* cachedBody(ComponentKey const& key);
   Element const* cachedBody(ComponentKey const& key) const;
   void recordBodyConstraints(ComponentKey const& key, LayoutConstraints const& constraints);
+  [[nodiscard]] bool canReuseRetainedLayoutSubtree(ComponentKey const& key, LayoutConstraints const& constraints,
+                                                   Rect const& assignedFrame) const;
+  void recordLayoutBoundary(ComponentKey const& key, LayoutConstraints const& constraints, Rect assignedFrame);
   std::optional<Size> cachedMeasure(ComponentKey const& key, LayoutConstraints const& constraints) const;
   void recordMeasure(ComponentKey const& key, LayoutConstraints const& constraints, Size size);
 
@@ -168,6 +172,7 @@ private:
   static thread_local StateStore* sCurrent;
 
   static bool constraintsEqual(LayoutConstraints const& a, LayoutConstraints const& b) noexcept;
+  static bool rectEqual(Rect const& a, Rect const& b) noexcept;
   static void clearComponentState(ComponentState& state);
 
   template<typename C>
