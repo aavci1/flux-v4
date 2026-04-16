@@ -279,6 +279,7 @@ public:
       updateClipScissor();
     }
     dispatch_semaphore_wait(frameSem_, DISPATCH_TIME_FOREVER);
+    refreshFrameDrawableMetrics();
     drawable_ = [metal_.layer() nextDrawable];
     cmdBuf_ = [metal_.queue() commandBuffer];
     if (!drawable_) {
@@ -289,7 +290,7 @@ public:
       }
     }
     inFrame_ = (drawable_ != nil && cmdBuf_ != nil);
-    const CGSize ds = metal_.layer().drawableSize;
+    const CGSize ds = frameDrawableSize_;
     CGFloat cs = metal_.layer().contentsScale;
     if (cs < 0.01) {
       cs = 1.0;
@@ -315,9 +316,8 @@ public:
       return;
     }
 
-    CGSize drawableSize = metal_.layer().drawableSize;
-    const float vw = static_cast<float>(drawableSize.width);
-    const float vh = static_cast<float>(drawableSize.height);
+    const float vw = frameDrawableW_;
+    const float vh = frameDrawableH_;
     if (vw < 1.f || vh < 1.f) {
       syncPresent_ = false;
       [cmdBuf_ commit];
@@ -341,11 +341,10 @@ public:
     pass.colorAttachments[0].storeAction = MTLStoreActionStore;
 
     id<MTLRenderCommandEncoder> enc = [cmdBuf_ renderCommandEncoderWithDescriptor:pass];
-    MTLViewport vp = {0, 0, drawableSize.width, drawableSize.height, 0.0, 1.0};
+    MTLViewport vp = {0, 0, frameDrawableSize_.width, frameDrawableSize_.height, 0.0, 1.0};
     [enc setViewport:vp];
 
-    MTLScissorRect const fullScissor = {0, 0, static_cast<NSUInteger>(drawableSize.width),
-                                        static_cast<NSUInteger>(drawableSize.height)};
+    MTLScissorRect const fullScissor = {0, 0, frameDrawablePixelsW_, frameDrawablePixelsH_};
     MTLScissorRect lastScissor = {0, 0, 0, 0};
     bool haveScissor = false;
 
@@ -387,6 +386,32 @@ public:
         i = j;
         continue;
       }
+      if (op.kind == MetalDrawOp::GlyphMesh) {
+        std::size_t j = i + 1;
+        std::uint32_t runStart = op.glyphStart;
+        std::uint32_t runVerts = op.glyphVertexCount;
+        while (j < opCount) {
+          MetalDrawOp const& o2 = frame_.ops[j];
+          if (o2.kind != MetalDrawOp::GlyphMesh || o2.blendMode != op.blendMode ||
+              !sameScissorForBatch(op, o2) || o2.glyphStart != runStart + runVerts) {
+            break;
+          }
+          runVerts += o2.glyphVertexCount;
+          ++j;
+        }
+        setEncoderScissorForOp(enc, op, fullScissor, &lastScissor, &haveScissor);
+        [enc setRenderPipelineState:metal_.glyphPSO(op.blendMode)];
+        id<MTLBuffer> gbuf = metal_.glyphVertexArenaBuffer();
+        const NSUInteger goff = static_cast<NSUInteger>(runStart) * sizeof(MetalGlyphVertex);
+        [enc setVertexBuffer:gbuf offset:goff atIndex:0];
+        float vp2[2] = {vw, vh};
+        [enc setVertexBytes:vp2 length:sizeof(vp2) atIndex:1];
+        [enc setFragmentTexture:glyphAtlas_->texture() atIndex:0];
+        [enc setFragmentSamplerState:metal_.linearSampler() atIndex:0];
+        [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:static_cast<NSUInteger>(runVerts)];
+        i = j;
+        continue;
+      }
 
       setEncoderScissorForOp(enc, op, fullScissor, &lastScissor, &haveScissor);
       switch (op.kind) {
@@ -416,18 +441,6 @@ public:
         break;
       }
       case MetalDrawOp::GlyphMesh: {
-        if (op.glyphVertexCount == 0) {
-          break;
-        }
-        [enc setRenderPipelineState:metal_.glyphPSO(op.blendMode)];
-        id<MTLBuffer> gbuf = metal_.glyphVertexArenaBuffer();
-        const NSUInteger goff = static_cast<NSUInteger>(op.glyphStart) * sizeof(MetalGlyphVertex);
-        [enc setVertexBuffer:gbuf offset:goff atIndex:0];
-        float vp[2] = {vw, vh};
-        [enc setVertexBytes:vp length:sizeof(vp) atIndex:1];
-        [enc setFragmentTexture:glyphAtlas_->texture() atIndex:0];
-        [enc setFragmentSamplerState:metal_.linearSampler() atIndex:0];
-        [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:static_cast<NSUInteger>(op.glyphVertexCount)];
         break;
       }
       case MetalDrawOp::Rect:
@@ -648,10 +661,6 @@ public:
     const float cy = (ta.y + tb.y) * 0.5f;
     Rect const lineBounds = Rect::sharp(cx - w * 0.5f, cy - h * 0.5f, w, h);
 
-    CGSize drawableSize = metal_.layer().drawableSize;
-    const float vw = static_cast<float>(drawableSize.width);
-    const float vh = static_cast<float>(drawableSize.height);
-
     MetalDrawOp op{};
     op.kind = MetalDrawOp::Line;
     op.rectInst.rect = simd_make_float4(lineBounds.x * dpiScaleX_, lineBounds.y * dpiScaleY_,
@@ -663,7 +672,7 @@ public:
     op.rectInst.strokeColor = toSimd4(stroke);
     op.rectInst.strokeWidthOpacity =
         simd_make_float2(ss.width * std::min(dpiScaleX_, dpiScaleY_), paintOpacity);
-    op.rectInst.viewport = simd_make_float2(vw, vh);
+    op.rectInst.viewport = simd_make_float2(frameDrawableW_, frameDrawableH_);
     op.rectInst.rotationPad = simd_make_float4(0.f, 0.f, 0.f, 0.f);
     op.rectInst.shadowColor = simd_make_float4(0.f, 0.f, 0.f, 0.f);
     op.rectInst.shadowGeom = simd_make_float4(0.f, 0.f, 0.f, 0.f);
@@ -727,10 +736,6 @@ public:
       }
     }
 
-    CGSize drawableSize = metal_.layer().drawableSize;
-    const float vw = static_cast<float>(drawableSize.width);
-    const float vh = static_cast<float>(drawableSize.height);
-
     // Mesh path: draw translated fill as drop shadow (no SDF blur; matches rect shadow intent via offset).
     if (!shadow.isNone()) {
       Color fillProbe{};
@@ -740,7 +745,7 @@ public:
         translate(shadow.offset.x, shadow.offset.y);
         std::size_t const nShadow = frame_.ops.size();
         metalPathRasterizeToMesh(path, FillStyle::solid(shadow.color), StrokeStyle::none(), currentState().transform,
-                                 dpiScaleX_, dpiScaleY_, effectiveOpacity(), vw, vh, frame_.pathVerts, frame_.ops,
+                                 dpiScaleX_, dpiScaleY_, effectiveOpacity(), frameDrawableW_, frameDrawableH_, frame_.pathVerts, frame_.ops,
                                  currentState().blendMode);
         if (frame_.ops.size() > nShadow) {
           tagOpWithClip(frame_.ops.back(), clipScissorValid_, clipScissor_);
@@ -750,8 +755,9 @@ public:
     }
 
     std::size_t const nOpsBefore = frame_.ops.size();
-    metalPathRasterizeToMesh(path, fs, ss, currentState().transform, dpiScaleX_, dpiScaleY_, effectiveOpacity(), vw,
-                             vh, frame_.pathVerts, frame_.ops, currentState().blendMode);
+    metalPathRasterizeToMesh(path, fs, ss, currentState().transform, dpiScaleX_, dpiScaleY_, effectiveOpacity(),
+                             frameDrawableW_, frameDrawableH_, frame_.pathVerts, frame_.ops,
+                             currentState().blendMode);
     if (frame_.ops.size() > nOpsBefore) {
       tagOpWithClip(frame_.ops.back(), clipScissorValid_, clipScissor_);
     }
@@ -902,6 +908,10 @@ public:
     if (aw < 1.f || ah < 1.f) {
       return;
     }
+    float const invAw = 1.f / aw;
+    float const invAh = 1.f / ah;
+    float const invDpiX = 1.f / dpiScaleX_;
+    float const invDpiY = 1.f / dpiScaleY_;
 
     std::uint32_t const glyphStart = static_cast<std::uint32_t>(frame_.glyphVerts.size());
     for (auto const& placed : layout.runs) {
@@ -938,15 +948,15 @@ public:
           continue;
         }
 
-        float const u0 = static_cast<float>(entry.u) / aw;
-        float const u1 = static_cast<float>(entry.u + entry.width) / aw;
-        float const vLo = static_cast<float>(entry.v) / ah;
-        float const vHi = static_cast<float>(entry.v + entry.height) / ah;
+        float const u0 = static_cast<float>(entry.u) * invAw;
+        float const u1 = static_cast<float>(entry.u + entry.width) * invAw;
+        float const vLo = static_cast<float>(entry.v) * invAh;
+        float const vHi = static_cast<float>(entry.v + entry.height) * invAh;
 
         Point const ink = {x + text.positions[i].x, baselineY + text.positions[i].y};
-        Point const tl = {ink.x - entry.bearing.x / dpiScaleX_, ink.y - entry.bearing.y / dpiScaleY_};
-        float const gw = static_cast<float>(entry.width) / dpiScaleX_;
-        float const gh = static_cast<float>(entry.height) / dpiScaleY_;
+        Point const tl = {ink.x - entry.bearing.x * invDpiX, ink.y - entry.bearing.y * invDpiY};
+        float const gw = static_cast<float>(entry.width) * invDpiX;
+        float const gh = static_cast<float>(entry.height) * invDpiY;
 
         appendGlyphQuad(frame_.glyphVerts, M, dpiScaleX_, dpiScaleY_, tl, gw, gh, u0, vLo, u1, vHi, premul);
       }
@@ -990,6 +1000,11 @@ private:
   int logicalH_{0};
   float dpiScaleX_{1.f};
   float dpiScaleY_{1.f};
+  CGSize frameDrawableSize_{};
+  float frameDrawableW_{0.f};
+  float frameDrawableH_{0.f};
+  NSUInteger frameDrawablePixelsW_{0};
+  NSUInteger frameDrawablePixelsH_{0};
 
   MetalFrameRecorder frame_;
   std::vector<GpuState> stateStack_;
@@ -1009,11 +1024,20 @@ private:
 
   float effectiveOpacity() const { return currentState().opacity; }
 
+  void refreshFrameDrawableMetrics() {
+    CGSize const ds = metal_.layer().drawableSize;
+    frameDrawableSize_ = ds;
+    frameDrawableW_ = static_cast<float>(ds.width);
+    frameDrawableH_ = static_cast<float>(ds.height);
+    frameDrawablePixelsW_ = static_cast<NSUInteger>(ds.width);
+    frameDrawablePixelsH_ = static_cast<NSUInteger>(ds.height);
+  }
+
   Rect viewportLogicalRect() const {
     if (logicalW_ > 0 && logicalH_ > 0) {
       return Rect::sharp(0, 0, static_cast<float>(logicalW_), static_cast<float>(logicalH_));
     }
-    CGSize ds = metal_.layer().drawableSize;
+    CGSize ds = inFrame_ ? frameDrawableSize_ : metal_.layer().drawableSize;
     return Rect::sharp(0, 0, static_cast<float>(ds.width) / dpiScaleX_, static_cast<float>(ds.height) / dpiScaleY_);
   }
 
@@ -1028,9 +1052,8 @@ private:
     float const minY = world.y * dpiScaleY_;
     float const maxX = (world.x + world.width) * dpiScaleX_;
     float const maxY = (world.y + world.height) * dpiScaleY_;
-    CGSize const drawableSize = metal_.layer().drawableSize;
-    NSUInteger const dw = static_cast<NSUInteger>(drawableSize.width);
-    NSUInteger const dh = static_cast<NSUInteger>(drawableSize.height);
+    NSUInteger const dw = inFrame_ ? frameDrawablePixelsW_ : static_cast<NSUInteger>(metal_.layer().drawableSize.width);
+    NSUInteger const dh = inFrame_ ? frameDrawablePixelsH_ : static_cast<NSUInteger>(metal_.layer().drawableSize.height);
     clipScissor_.x = static_cast<NSUInteger>(std::clamp(minX, 0.f, static_cast<float>(dw - 1)));
     clipScissor_.y = static_cast<NSUInteger>(std::clamp(minY, 0.f, static_cast<float>(dh - 1)));
     clipScissor_.width = static_cast<NSUInteger>(std::clamp(maxX - minX, 0.f, static_cast<float>(dw)));
@@ -1040,16 +1063,12 @@ private:
 
   void pushOp(MetalDrawOp op) {
     tagOpWithClip(op, clipScissorValid_, clipScissor_);
-    frame_.ops.push_back(std::move(op));
+    frame_.ops.push_back(op);
   }
 
   void emitRect(Rect const& deviceRect, CornerRadius const& corners, Color const& fillColor, Color const& strokeColor,
                 float strokeWidth, float opacity, float rotationRad, Color const& shadowColor, float shadowOffsetX,
                 float shadowOffsetY, float shadowRadius) {
-    CGSize drawableSize = metal_.layer().drawableSize;
-    const float vw = static_cast<float>(drawableSize.width);
-    const float vh = static_cast<float>(drawableSize.height);
-
     MetalDrawOp op{};
     op.kind = MetalDrawOp::Rect;
     op.rectInst.rect = simd_make_float4(deviceRect.x, deviceRect.y, deviceRect.width, deviceRect.height);
@@ -1057,7 +1076,7 @@ private:
     op.rectInst.fillColor = toSimd4(fillColor);
     op.rectInst.strokeColor = toSimd4(strokeColor);
     op.rectInst.strokeWidthOpacity = simd_make_float2(strokeWidth, opacity);
-    op.rectInst.viewport = simd_make_float2(vw, vh);
+    op.rectInst.viewport = simd_make_float2(frameDrawableW_, frameDrawableH_);
     op.rectInst.rotationPad = simd_make_float4(rotationRad, 0.f, 0.f, 0.f);
     op.rectInst.shadowColor = toSimd4(shadowColor);
     op.rectInst.shadowGeom = simd_make_float4(shadowOffsetX, shadowOffsetY, shadowRadius, 0.f);
@@ -1067,10 +1086,6 @@ private:
 
   void emitImage(id<MTLTexture> tex, Rect const& deviceRect, CornerRadius const& corners, vector_float4 const& uvBounds,
                  vector_float2 const& texSizeInv, float imageMode, float opacity, float rotationRad, bool repeat) {
-    CGSize drawableSize = metal_.layer().drawableSize;
-    const float vw = static_cast<float>(drawableSize.width);
-    const float vh = static_cast<float>(drawableSize.height);
-
     MetalDrawOp op{};
     op.kind = MetalDrawOp::Image;
     op.imageInst.sdf.rect = simd_make_float4(deviceRect.x, deviceRect.y, deviceRect.width, deviceRect.height);
@@ -1078,7 +1093,7 @@ private:
     op.imageInst.sdf.fillColor = simd_make_float4(1.f, 1.f, 1.f, 1.f);
     op.imageInst.sdf.strokeColor = simd_make_float4(0.f, 0.f, 0.f, 0.f);
     op.imageInst.sdf.strokeWidthOpacity = simd_make_float2(0.f, opacity);
-    op.imageInst.sdf.viewport = simd_make_float2(vw, vh);
+    op.imageInst.sdf.viewport = simd_make_float2(frameDrawableW_, frameDrawableH_);
     op.imageInst.sdf.rotationPad = simd_make_float4(rotationRad, 0.f, 0.f, 0.f);
     op.imageInst.sdf.shadowColor = simd_make_float4(0.f, 0.f, 0.f, 0.f);
     op.imageInst.sdf.shadowGeom = simd_make_float4(0.f, 0.f, 0.f, 0.f);
