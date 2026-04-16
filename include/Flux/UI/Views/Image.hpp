@@ -25,6 +25,7 @@ struct Image : ViewModifiers<Image> {
   void renderFromLayout(::flux::RenderContext&, ::flux::LayoutNode const&) const;
   ::flux::Size measure(::flux::LayoutContext&, ::flux::LayoutConstraints const&, ::flux::LayoutHints const&,
                        ::flux::TextSystem&) const;
+  [[nodiscard]] std::uint64_t measureCacheKey() const noexcept { return 0x54e12f98b3c476adull; }
 
   std::shared_ptr<flux::Image> source;
   ImageFillMode fillMode = ImageFillMode::Cover;

@@ -24,6 +24,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cmath>
+#include <cstring>
 #include <limits>
 
 namespace flux {
@@ -90,6 +91,29 @@ namespace {
 
 Rect explicitLeafBox(views::Image const&) {
   return {};
+}
+
+std::uint64_t hashCombine(std::uint64_t seed, std::uint64_t value) {
+  seed ^= value + 0x9e3779b97f4a7c15ull + (seed << 6) + (seed >> 2);
+  return seed;
+}
+
+std::uint64_t hashFloat(float value) {
+  std::uint32_t bits{};
+  static_assert(sizeof(bits) == sizeof(value));
+  std::memcpy(&bits, &value, sizeof(bits));
+  return bits;
+}
+
+std::uint64_t modifierMeasureHash(ElementModifiers const& mods) {
+  std::uint64_t h = 0x7e4f9a6b31d2c485ull;
+  h = hashCombine(h, hashFloat(mods.padding.top));
+  h = hashCombine(h, hashFloat(mods.padding.right));
+  h = hashCombine(h, hashFloat(mods.padding.bottom));
+  h = hashCombine(h, hashFloat(mods.padding.left));
+  h = hashCombine(h, hashFloat(mods.sizeWidth));
+  h = hashCombine(h, hashFloat(mods.sizeHeight));
+  return h;
 }
 
 } // namespace
@@ -289,10 +313,20 @@ Size Element::measure(LayoutContext& ctx, LayoutConstraints const& constraints,
   MeasureCache* const mc = envLayer_ ? nullptr : ctx.measureCache();
   bool const canMemo =
       mc && impl_->canMemoizeMeasure() && (!modifiers_ || !modifiers_->overlay);
+  std::uint64_t const measureIdentity = [&] {
+    std::uint64_t h = impl_->measureCacheToken().value_or(measureId_);
+    if (modifiers_) {
+      h = hashCombine(h, modifierMeasureHash(*modifiers_));
+    }
+    if (minMainSizeOverride_) {
+      h = hashCombine(h, hashFloat(*minMainSizeOverride_));
+    }
+    return h;
+  }();
 
   if (modifiers_ && modifiers_->needsModifierPass()) {
     if (canMemo) {
-      MeasureCacheKey const key = makeMeasureCacheKey(measureId_, constraints, hints);
+      MeasureCacheKey const key = makeMeasureCacheKey(measureIdentity, constraints, hints);
       if (std::optional<Size> const cached = mc->tryGet(key)) {
         ctx.advanceChildSlot();
         sz = *cached;
@@ -304,7 +338,7 @@ Size Element::measure(LayoutContext& ctx, LayoutConstraints const& constraints,
       sz = measureWithModifiersImpl(ctx, constraints, hints, textSystem);
     }
   } else if (canMemo) {
-    MeasureCacheKey const key = makeMeasureCacheKey(measureId_, constraints, hints);
+    MeasureCacheKey const key = makeMeasureCacheKey(measureIdentity, constraints, hints);
     if (std::optional<Size> const cached = mc->tryGet(key)) {
       ctx.advanceChildSlot();
       sz = *cached;
@@ -567,6 +601,15 @@ void Line::renderFromLayout(RenderContext& ctx, LayoutNode const&) const {
       .to = to,
       .stroke = stroke,
   });
+}
+
+std::uint64_t Line::measureCacheKey() const noexcept {
+  std::uint64_t h = 0x36a7bde918c24f05ull;
+  h = hashCombine(h, hashFloat(from.x));
+  h = hashCombine(h, hashFloat(from.y));
+  h = hashCombine(h, hashFloat(to.x));
+  h = hashCombine(h, hashFloat(to.y));
+  return h;
 }
 
 Size Line::measure(LayoutContext& ctx, LayoutConstraints const&, LayoutHints const&, TextSystem&) const {

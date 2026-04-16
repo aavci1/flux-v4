@@ -7,13 +7,13 @@
 namespace flux {
 
 bool operator==(MeasureCacheKey const& a, MeasureCacheKey const& b) noexcept {
-  return a.elementMeasureId == b.elementMeasureId && a.maxWidth == b.maxWidth &&
+  return a.elementIdentity == b.elementIdentity && a.maxWidth == b.maxWidth &&
          a.maxHeight == b.maxHeight && a.minWidth == b.minWidth && a.minHeight == b.minHeight &&
          a.hStackCross == b.hStackCross && a.vStackCross == b.vStackCross;
 }
 
 std::size_t MeasureCacheKeyHash::operator()(MeasureCacheKey const& k) const noexcept {
-  std::size_t h = std::hash<std::uint64_t>{}(k.elementMeasureId);
+  std::size_t h = std::hash<std::uint64_t>{}(k.elementIdentity);
   auto mixFloat = [&](float f) {
     std::uint32_t u{};
     static_assert(sizeof(f) == sizeof(u));
@@ -29,10 +29,10 @@ std::size_t MeasureCacheKeyHash::operator()(MeasureCacheKey const& k) const noex
   return h;
 }
 
-MeasureCacheKey makeMeasureCacheKey(std::uint64_t elementMeasureId, LayoutConstraints const& c,
+MeasureCacheKey makeMeasureCacheKey(std::uint64_t elementIdentity, LayoutConstraints const& c,
                                     LayoutHints const& h) {
   MeasureCacheKey k{};
-  k.elementMeasureId = elementMeasureId;
+  k.elementIdentity = elementIdentity;
   k.maxWidth = c.maxWidth;
   k.maxHeight = c.maxHeight;
   k.minWidth = c.minWidth;

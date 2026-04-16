@@ -22,6 +22,8 @@
 #include <algorithm>
 #include <cassert>
 #include <cmath>
+#include <cstring>
+#include <functional>
 #include <memory>
 #include <utility>
 
@@ -91,6 +93,35 @@ bool candidateFitsWithEllipsis(std::string const &candidate, Font const &font, C
     }
 
     return true;
+}
+
+std::uint64_t hashCombine(std::uint64_t seed, std::uint64_t value) {
+    seed ^= value + 0x9e3779b97f4a7c15ull + (seed << 6) + (seed >> 2);
+    return seed;
+}
+
+std::uint64_t hashFloat(float value) {
+    std::uint32_t bits{};
+    static_assert(sizeof(bits) == sizeof(value));
+    std::memcpy(&bits, &value, sizeof(bits));
+    return bits;
+}
+
+std::uint64_t hashBool(bool value) {
+    return value ? 0x9b8d6f43a2c17e5dull : 0x1f2e3d4c5b6a7988ull;
+}
+
+std::uint64_t hashString(std::string const &value) {
+    return std::hash<std::string>{}(value);
+}
+
+std::uint64_t hashColor(Color value) {
+    std::uint64_t h = 0x2db4f7a681c5930eull;
+    h = hashCombine(h, hashFloat(value.r));
+    h = hashCombine(h, hashFloat(value.g));
+    h = hashCombine(h, hashFloat(value.b));
+    h = hashCombine(h, hashFloat(value.a));
+    return h;
 }
 
 std::string trimTrailingWhitespace(std::string s) {
@@ -242,6 +273,24 @@ void Text::renderFromLayout(RenderContext &ctx, LayoutNode const &node) const {
             }
         }
     }
+}
+
+std::uint64_t Text::measureCacheKey() const noexcept {
+    std::uint64_t h = 0x4fb3d8c2a9716e05ull;
+    h = hashCombine(h, hashString(text));
+    h = hashCombine(h, hashString(font.family));
+    h = hashCombine(h, hashFloat(font.size));
+    h = hashCombine(h, hashFloat(font.weight));
+    h = hashCombine(h, hashBool(font.italic));
+    h = hashCombine(h, hashColor(color));
+    h = hashCombine(h, hashColor(selectionColor));
+    h = hashCombine(h, hashBool(selectable));
+    h = hashCombine(h, std::hash<int>{}(static_cast<int>(horizontalAlignment)));
+    h = hashCombine(h, std::hash<int>{}(static_cast<int>(verticalAlignment)));
+    h = hashCombine(h, std::hash<int>{}(static_cast<int>(wrapping)));
+    h = hashCombine(h, std::hash<int>{}(maxLines));
+    h = hashCombine(h, hashFloat(firstBaselineOffset));
+    return h;
 }
 
 Size Text::measure(LayoutContext &ctx, LayoutConstraints const &c, LayoutHints const &hints, TextSystem &ts) const {

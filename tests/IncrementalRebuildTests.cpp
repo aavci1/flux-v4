@@ -258,6 +258,8 @@ struct MeasuredRenderLeaf {
   }
 
   void render(Canvas&, Rect const&) const {}
+
+  std::uint64_t measureCacheKey() const noexcept { return 0x57a2d618cf4309beull; }
 };
 
 struct MemoizedMeasurePairRoot {
@@ -269,6 +271,21 @@ struct MemoizedMeasurePairRoot {
     std::vector<Element> children;
     children.push_back(Element{MeasuredRenderLeaf{.measureCount = measureCount}});
     children.push_back(Element{SignalLeaf{.count = dirtyCount, .handle = dirtyHandle}});
+    return Element{VStack{.spacing = 0.f, .children = std::move(children)}};
+  }
+};
+
+struct DirtyParentMemoizedMeasureRoot {
+  std::shared_ptr<int> measureCount;
+  std::shared_ptr<State<int>> parentHandle;
+
+  Element body() const {
+    State<int> state = useState(0);
+    *parentHandle = state;
+    (void)*state;
+    std::vector<Element> children;
+    children.push_back(Element{MeasuredRenderLeaf{.measureCount = measureCount}});
+    children.push_back(Element{Rectangle{}}.size(20.f, 10.f));
     return Element{VStack{.spacing = 0.f, .children = std::move(children)}};
   }
 };
@@ -410,6 +427,27 @@ TEST_CASE("incremental rebuild preserves memoized leaf measures for clean siblin
 
   CHECK(*measureCount == 1);
   CHECK(*dirtyCount == 2);
+}
+
+TEST_CASE("incremental rebuild preserves memoized leaf measures across parent body reruns") {
+  auto measureCount = std::make_shared<int>(0);
+  auto parentHandle = std::make_shared<State<int>>();
+
+  StoreScope scope;
+  RebuildHarness harness{scope.store};
+  Element root = Element{DirtyParentMemoizedMeasureRoot{
+      .measureCount = measureCount,
+      .parentHandle = parentHandle,
+  }};
+
+  harness.rebuild(root);
+  REQUIRE(*measureCount == 1);
+
+  *parentHandle = 1;
+  CHECK(scope.store.hasPendingDirtyComponents());
+  harness.rebuild(root);
+
+  CHECK(*measureCount == 1);
 }
 
 TEST_CASE("removing a composite unsubscribes its external signal and destroys its state") {

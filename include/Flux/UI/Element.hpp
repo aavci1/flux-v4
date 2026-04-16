@@ -23,6 +23,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cmath>
+#include <concepts>
 #include <cstdlib>
 #include <functional>
 #include <memory>
@@ -43,7 +44,8 @@ inline constexpr bool alwaysFalse = false;
 namespace detail {
 
 /// Monotonic id for \ref Element::measureId_; never reused (unlike heap addresses after temp
-/// \ref Element destruction — see measure memoization key).
+/// \ref Element destruction). Used as the fallback measure-cache identity when a leaf does not
+/// provide a structural key.
 std::uint64_t nextElementMeasureId();
 
 Popover* popoverOverlayStateIf(Element& el);
@@ -203,7 +205,8 @@ inline void mergeRenderLeafHandlersWithActiveModifiers(EventHandlers& h, Element
 } // namespace detail
 
 /// Erased handle to a component model (\ref CompositeComponent, \ref PrimitiveComponent, or \ref RenderComponent).
-/// Copying allocates a new \c measureId_ for memoization correctness.
+/// Copying allocates a new \c measureId_ so fallback measure-cache identity never aliases a
+/// short-lived prior wrapper instance.
 class Element {
 public:
   /// Wraps a concrete component type; \c C must satisfy \ref CompositeComponent, \ref PrimitiveComponent, or
@@ -296,13 +299,14 @@ private:
     virtual float flexShrink() const { return 0.f; }
     virtual float minMainSize() const { return 0.f; }
     /// When true, \ref Element::measure may return a cached \ref Size for the same
-    /// `(measureId, constraints)` within a single rebuild after replaying \ref LayoutContext::advanceChildSlot.
-    /// Composites and layouts must return false. Memoization is safe because each `Element` has a stable
-    /// \ref measureId_ and \ref MeasureCache is cleared every rebuild — the cache does not key on mutable
-    /// content (e.g. string value); different instances get different ids. Leaves whose \ref measure
-    /// depends on reactive state that is not part of the key should return false if that state can change
-    /// between the first measure and a later replay in the same pass (see \ref MeasureCache).
+    /// `(identity, constraints)` after replaying \ref LayoutContext::advanceChildSlot. Composites
+    /// and layouts must return false. Leaves whose \ref measure depends on reactive or mutable
+    /// state not represented by \ref measureCacheToken must return false.
     virtual bool canMemoizeMeasure() const { return false; }
+    /// Stable structural identity for cross-rebuild measure-cache reuse. Returning \c std::nullopt
+    /// falls back to the wrapper's per-instance \ref measureId_, which only enables same-instance
+    /// hits.
+    virtual std::optional<std::uint64_t> measureCacheToken() const { return std::nullopt; }
     /// When true, \ref RenderLayoutTree must not paint fill/stroke/shadow on the modifier chrome rect;
     /// the leaf primitive applies those from \ref ElementModifiers (e.g. \ref Rectangle, \ref PathShape).
     virtual bool leafDrawsFillStrokeShadowFromModifiers() const { return false; }
@@ -317,8 +321,8 @@ private:
   std::optional<float> minMainSizeOverride_;
   std::optional<EnvironmentLayer> envLayer_;
   std::optional<ElementModifiers> modifiers_;
-  /// Stable for this \ref Element instance; used by \ref MeasureCache (not `impl*` — addresses can
-  /// be recycled by the allocator across short-lived temporaries).
+  /// Stable for this \ref Element instance; used as the fallback \ref MeasureCache identity when
+  /// the wrapped leaf does not provide a structural token.
   std::uint64_t measureId_{};
 
   void layoutWithModifiers(LayoutContext& ctx) const;
@@ -427,6 +431,15 @@ struct Element::Model : Concept {
       return true;
     }
     return false;
+  }
+  std::optional<std::uint64_t> measureCacheToken() const override {
+    if constexpr ((PrimitiveComponent<C> || RenderComponent<C>) &&
+                  requires(C const& v) {
+                    { v.measureCacheKey() } -> std::convertible_to<std::uint64_t>;
+                  }) {
+      return value.measureCacheKey();
+    }
+    return std::nullopt;
   }
   bool leafDrawsFillStrokeShadowFromModifiers() const override {
     if constexpr (std::is_same_v<C, Rectangle> || std::is_same_v<C, PathShape>) {

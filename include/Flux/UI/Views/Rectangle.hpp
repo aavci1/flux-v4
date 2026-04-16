@@ -19,6 +19,7 @@ struct Rectangle : ViewModifiers<Rectangle> {
   void layout(LayoutContext&) const;
   void renderFromLayout(RenderContext&, LayoutNode const&) const;
   Size measure(LayoutContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
+  [[nodiscard]] std::uint64_t measureCacheKey() const noexcept { return 0x6f0a4d3f2c1b9e17ull; }
 };
 
 } // namespace flux

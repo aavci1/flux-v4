@@ -8,6 +8,7 @@
 #include <Flux/UI/Detail/PrimitiveForwards.hpp>
 #include <Flux/UI/ViewModifiers.hpp>
 
+#include <cstdint>
 #include <memory>
 
 namespace flux {
@@ -18,6 +19,7 @@ struct Spacer : ViewModifiers<Spacer> {
   void layout(LayoutContext&) const;
   void renderFromLayout(RenderContext&, LayoutNode const&) const;
   Size measure(LayoutContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
+  [[nodiscard]] std::uint64_t measureCacheKey() const noexcept { return 0x9145c2db37ae6f40ull; }
 };
 
 /// Default flex grow 1 (expand along stack main axis); override with chained `.flex(...)`.
