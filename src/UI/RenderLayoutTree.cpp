@@ -20,6 +20,28 @@ namespace {
 
 bool renderNode(LayoutNodeId id, LayoutTree& tree, RenderContext& ctx);
 
+LayerNode containerLayerForNode(LayoutNode const& node) {
+  LayerNode layer{};
+  switch (node.containerSpec.kind) {
+  case ContainerLayerSpec::Kind::Standard:
+    layer.transform = Mat3::translate(node.frame.x, node.frame.y);
+    if (node.containerSpec.clip && node.containerSpec.clipW > 0.f && node.containerSpec.clipH > 0.f) {
+      layer.clip = Rect{0.f, 0.f, node.containerSpec.clipW, node.containerSpec.clipH};
+    }
+    break;
+  case ContainerLayerSpec::Kind::OffsetScroll: {
+    float const ox = node.frame.x - node.containerSpec.scrollOffset.x;
+    float const oy = node.frame.y - node.containerSpec.scrollOffset.y;
+    layer.transform = Mat3::translate(ox, oy);
+    break;
+  }
+  case ContainerLayerSpec::Kind::ScaleAroundCenter:
+    layer.transform = node.containerSpec.customTransform;
+    break;
+  }
+  return layer;
+}
+
 void appendSceneRoots(LayoutNodeId id, LayoutTree const& tree, std::vector<NodeId>& out) {
   LayoutNode const* node = tree.get(id);
   if (!node) {
@@ -32,21 +54,6 @@ void appendSceneRoots(LayoutNodeId id, LayoutTree const& tree, std::vector<NodeI
   for (LayoutNodeId childId : node->children) {
     appendSceneRoots(childId, tree, out);
   }
-}
-
-bool canIncrementallyRenderNode(LayoutNode const& node) {
-  switch (node.kind) {
-  case LayoutNode::Kind::Container:
-    return node.containerTag == LayoutNode::ContainerTag::None &&
-           node.containerSpec.kind == ContainerLayerSpec::Kind::Standard;
-  case LayoutNode::Kind::Leaf:
-    return node.element && node.element->supportsIncrementalSceneReuse();
-  case LayoutNode::Kind::Composite:
-    return true;
-  case LayoutNode::Kind::Modifier:
-    return true;
-  }
-  return false;
 }
 
 bool renderModifier(LayoutNode& node, LayoutTree& tree, RenderContext& ctx) {
@@ -145,28 +152,11 @@ bool renderModifier(LayoutNode& node, LayoutTree& tree, RenderContext& ctx) {
 }
 
 bool renderContainer(LayoutNode& node, LayoutTree& tree, RenderContext& ctx) {
-  LayerNode layer{};
-  switch (node.containerSpec.kind) {
-  case ContainerLayerSpec::Kind::Standard:
-    layer.transform = Mat3::translate(node.frame.x, node.frame.y);
-    if (node.containerSpec.clip && node.containerSpec.clipW > 0.f && node.containerSpec.clipH > 0.f) {
-      layer.clip = Rect{0.f, 0.f, node.containerSpec.clipW, node.containerSpec.clipH};
-    }
-    break;
-  case ContainerLayerSpec::Kind::OffsetScroll: {
-    float const ox = node.frame.x - node.containerSpec.scrollOffset.x;
-    float const oy = node.frame.y - node.containerSpec.scrollOffset.y;
-    layer.transform = Mat3::translate(ox, oy);
-    break;
-  }
-  case ContainerLayerSpec::Kind::ScaleAroundCenter:
-    layer.transform = node.containerSpec.customTransform;
-    break;
-  }
+  LayerNode layer = containerLayerForNode(node);
   NodeId lid = kInvalidNodeId;
   bool layerStable = false;
   if (ctx.incrementalSceneReuseEnabled() && node.sceneNodes.size() == 1) {
-    lid = node.sceneNodes.front();
+    lid = node.sceneNodes[0];
     if (LayerNode* existing = ctx.graph().node<LayerNode>(lid)) {
       existing->transform = layer.transform;
       existing->clip = layer.clip;
@@ -182,6 +172,7 @@ bool renderContainer(LayoutNode& node, LayoutTree& tree, RenderContext& ctx) {
     lid = ctx.addLayer(ctx.parentLayer(), std::move(layer));
     ctx.endCapture();
   }
+
   ctx.pushLayer(lid);
 
   if (node.containerTag == LayoutNode::ContainerTag::PopoverCalloutShape) {
@@ -221,6 +212,13 @@ bool renderNode(LayoutNodeId id, LayoutTree& tree, RenderContext& ctx) {
   LayoutNode& node = *np;
 
   if (ctx.incrementalSceneReuseEnabled() && node.reusedSubtreeThisBuild) {
+    if (node.kind == LayoutNode::Kind::Container && node.sceneNodes.size() == 1) {
+      if (LayerNode* layer = ctx.graph().node<LayerNode>(node.sceneNodes[0])) {
+        LayerNode const updated = containerLayerForNode(node);
+        layer->transform = updated.transform;
+        layer->clip = updated.clip;
+      }
+    }
     return true;
   }
 
@@ -248,6 +246,7 @@ bool renderNode(LayoutNodeId id, LayoutTree& tree, RenderContext& ctx) {
         node.element->renderFromLayout(ctx, node);
         ctx.endCapture();
       }
+      node.renderedModifiers = ctx.activeElementModifiers();
       ctx.popConstraints();
       return reused && hadSceneNodes;
     }
@@ -257,15 +256,6 @@ bool renderNode(LayoutNodeId id, LayoutTree& tree, RenderContext& ctx) {
 }
 
 } // namespace
-
-bool canIncrementallyRenderLayoutTree(LayoutTree const& tree) {
-  for (LayoutNode const& node : tree.nodes()) {
-    if (!canIncrementallyRenderNode(node)) {
-      return false;
-    }
-  }
-  return true;
-}
 
 void renderLayoutTree(LayoutTree& tree, RenderContext& ctx) {
   LayoutNodeId const root = tree.root();

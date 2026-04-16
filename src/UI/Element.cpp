@@ -580,6 +580,8 @@ void views::Image::renderFromLayout(RenderContext& ctx, LayoutNode const& node) 
       .image = source,
       .bounds = bounds,
       .fillMode = fillMode,
+      .cornerRadius = ctx.activeElementModifiers() ? ctx.activeElementModifiers()->cornerRadius : CornerRadius{},
+      .opacity = ctx.activeElementModifiers() ? ctx.activeElementModifiers()->opacity : 1.f,
   });
   if (ElementModifiers const* mods = ctx.activeElementModifiers()) {
     if (!ctx.suppressLeafModifierEvents()) {

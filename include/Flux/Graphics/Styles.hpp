@@ -60,6 +60,8 @@ struct FillStyle {
   bool isNone() const;
 
   bool solidColor(Color* out) const;
+
+  bool operator==(FillStyle const& other) const = default;
 };
 
 /// Stroke for paths, lines, and stroked rects. Matches upstream `StrokeStyle` factory pattern.
@@ -78,6 +80,8 @@ struct StrokeStyle {
   bool isNone() const;
 
   bool solidColor(Color* out) const;
+
+  bool operator==(StrokeStyle const& other) const = default;
 };
 
 /// Optional drop shadow for rects (logical points). When \c radius <= 0 or \c color.a <= 0, treated as off.
@@ -89,6 +93,8 @@ struct ShadowStyle {
   static ShadowStyle none() { return {}; }
 
   bool isNone() const { return radius <= 0.f || color.a <= 0.f; }
+
+  bool operator==(ShadowStyle const& other) const = default;
 };
 
 } // namespace flux

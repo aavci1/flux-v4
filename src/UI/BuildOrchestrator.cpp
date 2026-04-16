@@ -70,7 +70,7 @@ void BuildOrchestrator::setRoot(std::unique_ptr<RootHolder> holder) {
   latestRootIdentityToken_ = 0;
   layoutTree_.clear();
   layoutSubtreeRoots_.clear();
-  layoutPins_.reset();
+  pinGenerations_.clear();
   // Do not call `rebuild()` here — `Runtime::setRoot` calls `Runtime::rebuild()` so `sCurrent`
   // is set for hooks (`Runtime::current()`) during the layout/render pass.
 }
@@ -116,13 +116,15 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
   actionRegistryBuild_.beginRebuild();
   StateStore::setCurrent(&stateStore_);
   bool const useRetainedLayoutBuild = !layoutSubtreeRoots_.empty() && !stateStore_.shouldForceFullRebuild();
+  ++layoutSubtreeRootEpoch_;
   if (useRetainedLayoutBuild) {
     layoutTree_.beginBuild();
   } else {
     layoutTree_.clear();
+    layoutSubtreeRoots_.clear();
   }
   LayoutContext lctx{Application::instance().textSystem(), layoutEngine_, layoutTree_, &measureCache_,
-                     &layoutSubtreeRoots_};
+                     &layoutSubtreeRoots_, layoutSubtreeRootEpoch_};
   lctx.pushConstraints(rootCs);
   EnvironmentLayer windowEnvBaseline = window_.environmentLayer();
   EnvironmentStack::current().push(std::move(windowEnvBaseline));
@@ -156,8 +158,20 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
   }
 
   layoutRects_.fill(layoutTree_, lctx);
-  layoutSubtreeRoots_ = lctx.subtreeRootLayouts();
-  layoutPins_ = lctx.pinnedElements();
+  for (auto it = layoutSubtreeRoots_.begin(); it != layoutSubtreeRoots_.end();) {
+    if (it->second.lastVisitedEpoch != layoutSubtreeRootEpoch_ || !layoutTree_.get(it->second.rootId)) {
+      it = layoutSubtreeRoots_.erase(it);
+    } else {
+      ++it;
+    }
+  }
+  if (stateStore_.shouldForceFullRebuild()) {
+    pinGenerations_.clear();
+  }
+  pinGenerations_.push_back(lctx.pinnedElements());
+  while (pinGenerations_.size() > 2) {
+    pinGenerations_.erase(pinGenerations_.begin());
+  }
   latestRootConstraints_ = rootCs;
   latestRootIdentityToken_ = rootHolder_ ? rootHolder_->layoutIdentityToken() : 0;
   latestLayoutIsCurrent_ = true;

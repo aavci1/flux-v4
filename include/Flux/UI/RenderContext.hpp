@@ -8,6 +8,7 @@
 #include <Flux/Scene/Nodes.hpp>
 #include <Flux/UI/ComponentKey.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
+#include <Flux/Detail/SmallVector.hpp>
 
 #include <vector>
 
@@ -47,6 +48,7 @@ public:
   bool incrementalSceneReuseEnabled() const noexcept;
 
   void beginCapture(std::vector<NodeId>* out);
+  void beginCapture(detail::SmallVector<NodeId, 2>* out);
   void endCapture();
   NodeId addLayer(NodeId parent, LayerNode node);
   NodeId addRect(NodeId parent, RectNode node);
@@ -73,7 +75,11 @@ private:
 
   std::vector<ElementModifiers const*> activeElementModifiers_{};
   std::vector<bool> suppressLeafModifierEvents_{};
-  std::vector<std::vector<NodeId>*> captureStack_{};
+  struct CaptureSink {
+    void* storage = nullptr;
+    void (*push)(void*, NodeId) = nullptr;
+  };
+  std::vector<CaptureSink> captureStack_{};
 };
 
 } // namespace flux

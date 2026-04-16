@@ -9,10 +9,10 @@ namespace flux {
 void LayoutTree::beginBuild() {
   ++buildEpoch_;
   rootId_ = {};
-  retainedNodeForKey_ = firstNodeForKey_;
+  retainedNodeForKey_.swap(firstNodeForKey_);
   firstNodeForKey_.clear();
   activeOrder_.clear();
-  activeNodesDirty_ = true;
+  activeOrder_.reserve(slots_.size());
   retiredSceneNodes_.clear();
 }
 
@@ -31,7 +31,6 @@ void LayoutTree::endBuild() {
     slots_[i].reset();
     freeList_.push_back(i);
   }
-  activeNodesDirty_ = true;
 }
 
 Rect transformWorldBounds(Mat3 const& t, Rect const& r) {
@@ -44,24 +43,6 @@ Rect transformWorldBounds(Mat3 const& t, Rect const& r) {
   float minY = std::min({p0.y, p1.y, p2.y, p3.y});
   float maxY = std::max({p0.y, p1.y, p2.y, p3.y});
   return Rect{minX, minY, maxX - minX, maxY - minY};
-}
-
-void LayoutTree::rebuildActiveNodesCache() const {
-  activeNodes_.clear();
-  activeNodes_.reserve(activeOrder_.size());
-  for (LayoutNodeId id : activeOrder_) {
-    if (LayoutNode const* node = get(id)) {
-      activeNodes_.push_back(*node);
-    }
-  }
-  activeNodesDirty_ = false;
-}
-
-std::span<LayoutNode const> LayoutTree::nodes() const noexcept {
-  if (activeNodesDirty_) {
-    rebuildActiveNodesCache();
-  }
-  return activeNodes_;
 }
 
 LayoutNodeId LayoutTree::allocateNodeId() {
@@ -112,9 +93,6 @@ bool LayoutTree::reuseSubtree(LayoutNodeId rootId, LayoutNodeId parent) {
     node->reusedSubtreeThisBuild = true;
     slotEpoch_[id.index()] = buildEpoch_;
     activeOrder_.push_back(id);
-    if (!node->componentKey.empty()) {
-      firstNodeForKey_.emplace(node->componentKey, id);
-    }
     for (LayoutNodeId childId : node->children) {
       self(self, childId);
     }
@@ -140,7 +118,9 @@ bool LayoutTree::canTranslateSubtree(LayoutNodeId rootId) const {
       return false;
     }
     if (node->kind == LayoutNode::Kind::Container) {
-      return false;
+      if (node->containerSpec.kind != ContainerLayerSpec::Kind::Standard) {
+        return false;
+      }
     }
     if (node->kind == LayoutNode::Kind::Modifier && node->modifierHasEffectLayer) {
       return false;
@@ -172,7 +152,6 @@ void LayoutTree::translateSubtree(LayoutNodeId rootId, Vec2 delta) {
     }
   };
   visit(visit, rootId);
-  activeNodesDirty_ = true;
 }
 
 std::vector<NodeId> LayoutTree::takeRetiredSceneNodes() {
@@ -217,11 +196,16 @@ Rect LayoutTree::unionSubtreeWorldBounds(LayoutNodeId nodeId) const {
 
 std::optional<Rect> LayoutTree::rectForKey(ComponentKey const& key) const {
   auto const it = firstNodeForKey_.find(key);
-  if (it == firstNodeForKey_.end()) {
-    return std::nullopt;
+  if (it != firstNodeForKey_.end()) {
+    if (LayoutNode const* n = get(it->second)) {
+      return n->worldBounds;
+    }
   }
-  if (LayoutNode const* n = get(it->second)) {
-    return n->worldBounds;
+  auto const retained = retainedNodeForKey_.find(key);
+  if (retained != retainedNodeForKey_.end()) {
+    if (LayoutNode const* n = get(retained->second)) {
+      return n->worldBounds;
+    }
   }
   return std::nullopt;
 }

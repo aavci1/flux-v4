@@ -22,6 +22,7 @@ bool appendChild(NodeStore& store, NodeId parent, NodeId child) {
     return false;
   }
   layer->children.push_back(child);
+  store.setParent(child, parent);
   return true;
 }
 
@@ -124,26 +125,11 @@ std::optional<NodeId> SceneGraph::parentOf(NodeId child) const {
   if (child == root_) {
     return std::nullopt;
   }
-  return findParent(root_, child);
-}
-
-std::optional<NodeId> SceneGraph::findParent(NodeId subtree, NodeId target) const {
-  SceneNode const* sn = get(subtree);
-  auto const* layer = std::get_if<LayerNode>(sn);
-  if (!layer) {
+  NodeId const parent = store_.parentOf(child);
+  if (!parent.isValid()) {
     return std::nullopt;
   }
-  for (NodeId c : layer->children) {
-    if (c == target) {
-      return subtree;
-    }
-  }
-  for (NodeId c : layer->children) {
-    if (std::optional<NodeId> p = findParent(c, target)) {
-      return p;
-    }
-  }
-  return std::nullopt;
+  return parent;
 }
 
 void SceneGraph::eraseFromParentChildren(NodeId parent, NodeId child) {
@@ -195,7 +181,7 @@ void SceneGraph::remove(NodeId id) {
   if (id == root_) {
     return;
   }
-  removeRecursive(id, findParent(root_, id), true);
+  removeRecursive(id, parentOf(id), true);
 }
 
 void SceneGraph::clear() {
@@ -225,7 +211,7 @@ void SceneGraph::reparent(NodeId id, NodeId newParent, std::size_t index) {
   if (newParent == id || isDescendant(id, newParent)) {
     return;
   }
-  std::optional<NodeId> oldParent = findParent(root_, id);
+  std::optional<NodeId> oldParent = parentOf(id);
   if (!oldParent) {
     return;
   }
@@ -238,6 +224,7 @@ void SceneGraph::reparent(NodeId id, NodeId newParent, std::size_t index) {
   } else {
     newLayer->children.insert(newLayer->children.begin() + static_cast<std::ptrdiff_t>(index), id);
   }
+  store_.setParent(id, newParent);
 }
 
 void SceneGraph::reorder(NodeId parent, std::vector<NodeId> const& orderedChildren) {

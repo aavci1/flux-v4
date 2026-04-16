@@ -15,12 +15,18 @@
 #include <Flux/UI/RenderLayoutTree.hpp>
 #include <Flux/UI/StateStore.hpp>
 #include <Flux/UI/Views/ForEach.hpp>
+#include <Flux/UI/Views/HStack.hpp>
+#include <Flux/UI/Views/Image.hpp>
+#include <Flux/UI/Views/Line.hpp>
+#include <Flux/UI/Views/PathShape.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
+#include <Flux/UI/Views/Text.hpp>
 #include <Flux/UI/Views/VStack.hpp>
 
 #include <cstdint>
 #include <algorithm>
 #include <memory>
+#include <string_view>
 #include <vector>
 
 namespace {
@@ -31,19 +37,25 @@ class NullTextSystem final : public TextSystem {
 public:
   std::shared_ptr<TextLayout const> layout(AttributedString const&, float,
                                            TextLayoutOptions const&) override {
-    return nullptr;
+    auto out = std::make_shared<TextLayout>();
+    out->measuredSize = Size{48.f, 14.f};
+    return out;
   }
 
   std::shared_ptr<TextLayout const> layout(std::string_view, Font const&, Color const&, float,
                                            TextLayoutOptions const&) override {
-    return nullptr;
+    auto out = std::make_shared<TextLayout>();
+    out->measuredSize = Size{48.f, 14.f};
+    return out;
   }
 
-  Size measure(AttributedString const&, float, TextLayoutOptions const&) override { return {}; }
+  Size measure(AttributedString const& text, float, TextLayoutOptions const&) override {
+    return Size{std::max(1.f, 8.f * static_cast<float>(text.utf8.size())), 14.f};
+  }
 
   Size measure(std::string_view, Font const&, Color const&, float,
                TextLayoutOptions const&) override {
-    return {};
+    return Size{48.f, 14.f};
   }
 
   std::uint32_t resolveFontId(std::string_view, float, bool) override { return 0; }
@@ -60,8 +72,9 @@ namespace flux {
 
 struct LayoutContextTestAccess {
   static LayoutContext* create(TextSystem& ts, LayoutEngine& le, LayoutTree& tree,
-                               MeasureCache* mc, LayoutContext::SubtreeRootMap const* retainedRoots = nullptr) {
-    return new LayoutContext(ts, le, tree, mc, retainedRoots);
+                               MeasureCache* mc, LayoutContext::SubtreeRootMap* retainedRoots = nullptr,
+                               std::uint64_t subtreeRootEpoch = 0) {
+    return new LayoutContext(ts, le, tree, mc, retainedRoots, subtreeRootEpoch);
   }
 
   static void destroy(LayoutContext* ctx) { delete ctx; }
@@ -97,7 +110,8 @@ struct RebuildHarness {
   LayoutEngine le{};
   MeasureCache mc{};
   LayoutContext::SubtreeRootMap roots{};
-  std::shared_ptr<detail::ElementPinStorage> pins{};
+  std::uint64_t rootEpoch = 0;
+  std::vector<std::shared_ptr<detail::ElementPinStorage>> pinGenerations{};
   LayoutTree tree{};
   SceneGraph graph{};
   EventMap eventMap{};
@@ -106,15 +120,17 @@ struct RebuildHarness {
     store.beginRebuild(forceFull);
     mc.beginBuild(store.shouldForceFullRebuild());
     bool const useRetainedLayoutBuild = !roots.empty() && !store.shouldForceFullRebuild();
+    ++rootEpoch;
     if (useRetainedLayoutBuild) {
       tree.beginBuild();
     } else {
       tree.clear();
+      roots.clear();
     }
     le.resetForBuild();
 
     LayoutContextPtr ctx{
-        flux::LayoutContextTestAccess::create(ts, le, tree, &mc, &roots)};
+        flux::LayoutContextTestAccess::create(ts, le, tree, &mc, &roots, rootEpoch)};
     LayoutConstraints rootCs{};
     rootCs.minWidth = w;
     rootCs.minHeight = h;
@@ -148,10 +164,26 @@ struct RebuildHarness {
       eventMap.prune(graph);
     }
 
-    roots = ctx->subtreeRootLayouts();
-    pins = ctx->pinnedElements();
+    for (auto it = roots.begin(); it != roots.end();) {
+      if (it->second.lastVisitedEpoch != rootEpoch || !tree.get(it->second.rootId)) {
+        it = roots.erase(it);
+      } else {
+        ++it;
+      }
+    }
+    if (store.shouldForceFullRebuild()) {
+      pinGenerations.clear();
+    }
+    pinGenerations.push_back(ctx->pinnedElements());
+    while (pinGenerations.size() > 2) {
+      pinGenerations.erase(pinGenerations.begin());
+    }
     store.endRebuild();
   }
+};
+
+struct DummyImage final : Image {
+  Size size() const override { return Size{16.f, 16.f}; }
 };
 
 struct CounterLeaf {
@@ -365,6 +397,71 @@ struct ForEachSignalRoot {
   }
 };
 
+template<typename T>
+struct ParentSignalPrimitiveRoot {
+  T primitive;
+  std::shared_ptr<State<int>> parentHandle;
+
+  Element body() const {
+    State<int> state = useState(0);
+    *parentHandle = state;
+    (void)*state;
+    return Element{primitive};
+  }
+};
+
+template<typename T>
+struct PrimitiveLeaf {
+  T primitive;
+
+  Element body() const { return Element{primitive}; }
+};
+
+template<typename T>
+struct PrimitivePairRoot {
+  T primitive;
+  std::shared_ptr<int> dirtyCount;
+  std::shared_ptr<State<int>> dirtyHandle;
+
+  Element body() const {
+    std::vector<Element> children;
+    children.push_back(Element{PrimitiveLeaf<T>{.primitive = primitive}});
+    children.push_back(Element{SignalLeaf{.count = dirtyCount, .handle = dirtyHandle}});
+    return Element{VStack{.spacing = 0.f, .children = std::move(children)}};
+  }
+};
+
+struct NestedRowLeaf {
+  int index = 0;
+  std::shared_ptr<State<int>> handle;
+
+  Element body() const {
+    State<int> state = useState(0);
+    if (index == 0) {
+      *handle = state;
+    }
+    float const h = 12.f + static_cast<float>(*state);
+    return Element{HStack{
+        .spacing = 0.f,
+        .children = std::vector<Element>{
+            Element{Text{.text = "left"}}.size(40.f, h),
+            Element{Text{.text = "right"}}.size(40.f, h),
+        },
+    }};
+  }
+};
+
+struct NestedShiftRoot {
+  std::shared_ptr<State<int>> firstHandle;
+
+  Element body() const {
+    std::vector<Element> children;
+    children.push_back(Element{NestedRowLeaf{.index = 0, .handle = firstHandle}});
+    children.push_back(Element{NestedRowLeaf{.index = 1, .handle = std::make_shared<State<int>>()}}); 
+    return Element{VStack{.spacing = 0.f, .children = std::move(children)}};
+  }
+};
+
 } // namespace
 
 TEST_CASE("incremental rebuild skips clean composite bodies on unrelated signal writes") {
@@ -541,7 +638,7 @@ TEST_CASE("incremental rebuild retains clean child composite subtree ids") {
   harness.rebuild(root);
   auto const firstIt = harness.roots.find(ComponentKey{0, 0, 0});
   REQUIRE(firstIt != harness.roots.end());
-  LayoutNodeId const firstCleanRoot = firstIt->second;
+  LayoutNodeId const firstCleanRoot = firstIt->second.rootId;
 
   *dirtyHandle = 1;
   CHECK(scope.store.hasPendingDirtyComponents());
@@ -549,7 +646,7 @@ TEST_CASE("incremental rebuild retains clean child composite subtree ids") {
 
   auto const secondIt = harness.roots.find(ComponentKey{0, 0, 0});
   REQUIRE(secondIt != harness.roots.end());
-  CHECK(secondIt->second == firstCleanRoot);
+  CHECK(secondIt->second.rootId == firstCleanRoot);
 }
 
 TEST_CASE("incremental rebuild retains clean child scene node ids") {
@@ -575,7 +672,7 @@ TEST_CASE("incremental rebuild retains clean child scene node ids") {
         return kInvalidNodeId;
       }
       if (!node->sceneNodes.empty()) {
-        return node->sceneNodes.front();
+        return node->sceneNodes[0];
       }
       for (LayoutNodeId childId : node->children) {
         if (NodeId found = self(self, childId); found.isValid()) {
@@ -586,7 +683,7 @@ TEST_CASE("incremental rebuild retains clean child scene node ids") {
     };
     return visit(visit, rootId);
   };
-  NodeId const firstSceneNode = firstSceneNodeInSubtree(firstIt->second);
+  NodeId const firstSceneNode = firstSceneNodeInSubtree(firstIt->second.rootId);
   REQUIRE(firstSceneNode.isValid());
 
   *dirtyHandle = 1;
@@ -595,7 +692,216 @@ TEST_CASE("incremental rebuild retains clean child scene node ids") {
 
   auto const secondIt = harness.roots.find(ComponentKey{0, 0, 0});
   REQUIRE(secondIt != harness.roots.end());
-  CHECK(firstSceneNodeInSubtree(secondIt->second) == firstSceneNode);
+  CHECK(firstSceneNodeInSubtree(secondIt->second.rootId) == firstSceneNode);
+}
+
+TEST_CASE("retained rebuild keeps node.element dereferenceable across generations") {
+  auto cleanCount = std::make_shared<int>(0);
+  auto dirtyCount = std::make_shared<int>(0);
+  auto dirtyHandle = std::make_shared<State<int>>();
+
+  StoreScope scope;
+  RebuildHarness harness{scope.store};
+  Element root = Element{PairRoot{
+      .cleanCount = cleanCount,
+      .dirtyCount = dirtyCount,
+      .dirtyHandle = dirtyHandle,
+  }};
+
+  harness.rebuild(root);
+  *dirtyHandle = 1;
+  REQUIRE(scope.store.hasPendingDirtyComponents());
+  harness.rebuild(root);
+
+  for (LayoutNodeId id : harness.tree.activeIds()) {
+    LayoutNode const* node = harness.tree.get(id);
+    REQUIRE(node != nullptr);
+    if (node->element) {
+      (void)node->element->supportsIncrementalSceneReuse();
+    }
+  }
+}
+
+TEST_CASE("incremental rebuild retains stable text scene node ids across dirty sibling rebuilds") {
+  auto dirtyCount = std::make_shared<int>(0);
+  auto dirtyHandle = std::make_shared<State<int>>();
+
+  StoreScope scope;
+  RebuildHarness harness{scope.store};
+  Element root = Element{PrimitivePairRoot<Text>{
+      .primitive = Text{.text = "hello"},
+      .dirtyCount = dirtyCount,
+      .dirtyHandle = dirtyHandle,
+  }};
+
+  harness.rebuild(root);
+  auto const firstIt = harness.roots.find(ComponentKey{0, 0, 0});
+  REQUIRE(firstIt != harness.roots.end());
+  auto firstSceneNodeInSubtree = [&](LayoutNodeId rootId) -> NodeId {
+    auto visit = [&](auto&& self, LayoutNodeId id) -> NodeId {
+      LayoutNode const* node = harness.tree.get(id);
+      if (!node) {
+        return kInvalidNodeId;
+      }
+      if (!node->sceneNodes.empty()) {
+        return node->sceneNodes[0];
+      }
+      for (LayoutNodeId childId : node->children) {
+        if (NodeId found = self(self, childId); found.isValid()) {
+          return found;
+        }
+      }
+      return kInvalidNodeId;
+    };
+    return visit(visit, rootId);
+  };
+  NodeId const firstSceneNode = firstSceneNodeInSubtree(firstIt->second.rootId);
+  REQUIRE(firstSceneNode.isValid());
+
+  *dirtyHandle = 1;
+  REQUIRE(scope.store.hasPendingDirtyComponents());
+  harness.rebuild(root);
+
+  auto const secondIt = harness.roots.find(ComponentKey{0, 0, 0});
+  REQUIRE(secondIt != harness.roots.end());
+  CHECK(firstSceneNodeInSubtree(secondIt->second.rootId) == firstSceneNode);
+}
+
+TEST_CASE("incremental rebuild retains stable image scene node ids across dirty sibling rebuilds") {
+  auto dirtyCount = std::make_shared<int>(0);
+  auto dirtyHandle = std::make_shared<State<int>>();
+  auto image = std::make_shared<DummyImage>();
+
+  StoreScope scope;
+  RebuildHarness harness{scope.store};
+  Element root = Element{PrimitivePairRoot<views::Image>{
+      .primitive = views::Image{.source = image},
+      .dirtyCount = dirtyCount,
+      .dirtyHandle = dirtyHandle,
+  }};
+
+  harness.rebuild(root);
+  auto const firstIt = harness.roots.find(ComponentKey{0, 0, 0});
+  REQUIRE(firstIt != harness.roots.end());
+  auto firstSceneNodeInSubtree = [&](LayoutNodeId rootId) -> NodeId {
+    auto visit = [&](auto&& self, LayoutNodeId id) -> NodeId {
+      LayoutNode const* node = harness.tree.get(id);
+      if (!node) {
+        return kInvalidNodeId;
+      }
+      if (!node->sceneNodes.empty()) {
+        return node->sceneNodes[0];
+      }
+      for (LayoutNodeId childId : node->children) {
+        if (NodeId found = self(self, childId); found.isValid()) {
+          return found;
+        }
+      }
+      return kInvalidNodeId;
+    };
+    return visit(visit, rootId);
+  };
+  NodeId const firstSceneNode = firstSceneNodeInSubtree(firstIt->second.rootId);
+  REQUIRE(firstSceneNode.isValid());
+
+  *dirtyHandle = 1;
+  REQUIRE(scope.store.hasPendingDirtyComponents());
+  harness.rebuild(root);
+
+  auto const secondIt = harness.roots.find(ComponentKey{0, 0, 0});
+  REQUIRE(secondIt != harness.roots.end());
+  CHECK(firstSceneNodeInSubtree(secondIt->second.rootId) == firstSceneNode);
+}
+
+TEST_CASE("incremental rebuild retains stable path scene node ids across dirty sibling rebuilds") {
+  auto dirtyCount = std::make_shared<int>(0);
+  auto dirtyHandle = std::make_shared<State<int>>();
+  Path path;
+  path.rect(Rect{0.f, 0.f, 20.f, 10.f});
+
+  StoreScope scope;
+  RebuildHarness harness{scope.store};
+  Element root = Element{PrimitivePairRoot<PathShape>{
+      .primitive = PathShape{.path = path},
+      .dirtyCount = dirtyCount,
+      .dirtyHandle = dirtyHandle,
+  }};
+
+  harness.rebuild(root);
+  auto const firstIt = harness.roots.find(ComponentKey{0, 0, 0});
+  REQUIRE(firstIt != harness.roots.end());
+  auto firstSceneNodeInSubtree = [&](LayoutNodeId rootId) -> NodeId {
+    auto visit = [&](auto&& self, LayoutNodeId id) -> NodeId {
+      LayoutNode const* node = harness.tree.get(id);
+      if (!node) {
+        return kInvalidNodeId;
+      }
+      if (!node->sceneNodes.empty()) {
+        return node->sceneNodes[0];
+      }
+      for (LayoutNodeId childId : node->children) {
+        if (NodeId found = self(self, childId); found.isValid()) {
+          return found;
+        }
+      }
+      return kInvalidNodeId;
+    };
+    return visit(visit, rootId);
+  };
+  NodeId const firstSceneNode = firstSceneNodeInSubtree(firstIt->second.rootId);
+  REQUIRE(firstSceneNode.isValid());
+
+  *dirtyHandle = 1;
+  REQUIRE(scope.store.hasPendingDirtyComponents());
+  harness.rebuild(root);
+
+  auto const secondIt = harness.roots.find(ComponentKey{0, 0, 0});
+  REQUIRE(secondIt != harness.roots.end());
+  CHECK(firstSceneNodeInSubtree(secondIt->second.rootId) == firstSceneNode);
+}
+
+TEST_CASE("incremental rebuild translates stable nested container subtrees") {
+  auto firstHandle = std::make_shared<State<int>>();
+
+  StoreScope scope;
+  RebuildHarness harness{scope.store};
+  Element root = Element{NestedShiftRoot{.firstHandle = firstHandle}};
+
+  harness.rebuild(root);
+  auto findSecondRowContainer = [&]() -> LayoutNode const* {
+    LayoutNode const* best = nullptr;
+    for (LayoutNodeId id : harness.tree.activeIds()) {
+      LayoutNode const* node = harness.tree.get(id);
+      if (!node || node->kind != LayoutNode::Kind::Container || node->frame.y <= 0.f) {
+        continue;
+      }
+      if (!best || node->frame.y > best->frame.y) {
+        best = node;
+      }
+    }
+    return best;
+  };
+
+  LayoutNode const* secondBefore = findSecondRowContainer();
+  REQUIRE(secondBefore != nullptr);
+  ComponentKey const secondKey = secondBefore->componentKey;
+  REQUIRE_FALSE(secondKey.empty());
+  float const beforeY = secondBefore->frame.y;
+
+  *firstHandle = 1;
+  REQUIRE(scope.store.hasPendingDirtyComponents());
+  harness.rebuild(root);
+
+  LayoutNode const* secondAfter = nullptr;
+  for (LayoutNodeId id : harness.tree.activeIds()) {
+    LayoutNode const* node = harness.tree.get(id);
+    if (node && node->componentKey == secondKey) {
+      secondAfter = node;
+      break;
+    }
+  }
+  REQUIRE(secondAfter != nullptr);
+  CHECK(secondAfter->frame.y == doctest::Approx(beforeY + 0.5f));
 }
 
 TEST_CASE("incremental rebuild retains clean ForEach item subtree ids") {
@@ -615,7 +921,7 @@ TEST_CASE("incremental rebuild retains clean ForEach item subtree ids") {
   harness.rebuild(root);
   auto const firstIt = harness.roots.find(ComponentKey{0, 0, 0});
   REQUIRE(firstIt != harness.roots.end());
-  LayoutNodeId const firstCleanRoot = firstIt->second;
+  LayoutNodeId const firstCleanRoot = firstIt->second.rootId;
 
   (*handles)[1] = 1;
   CHECK(scope.store.hasPendingDirtyComponents());
@@ -623,7 +929,7 @@ TEST_CASE("incremental rebuild retains clean ForEach item subtree ids") {
 
   auto const secondIt = harness.roots.find(ComponentKey{0, 0, 0});
   REQUIRE(secondIt != harness.roots.end());
-  CHECK(secondIt->second == firstCleanRoot);
+  CHECK(secondIt->second.rootId == firstCleanRoot);
   CHECK(*(*counts)[0] == 1);
   CHECK(*(*counts)[1] == 2);
 }
@@ -644,7 +950,7 @@ TEST_CASE("incremental rebuild retains clean child composite subtree ids") {
   harness.rebuild(root);
   auto const firstIt = harness.roots.find(ComponentKey{0, 0, 0});
   REQUIRE(firstIt != harness.roots.end());
-  LayoutNodeId const firstCleanRoot = firstIt->second;
+  LayoutNodeId const firstCleanRoot = firstIt->second.rootId;
 
   *dirtyHandle = 1;
   CHECK(scope.store.hasPendingDirtyComponents());
@@ -652,7 +958,7 @@ TEST_CASE("incremental rebuild retains clean child composite subtree ids") {
 
   auto const secondIt = harness.roots.find(ComponentKey{0, 0, 0});
   REQUIRE(secondIt != harness.roots.end());
-  CHECK(secondIt->second == firstCleanRoot);
+  CHECK(secondIt->second.rootId == firstCleanRoot);
 }
 
 

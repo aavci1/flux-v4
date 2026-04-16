@@ -20,6 +20,7 @@ NodeId NodeStore::insert(SceneNode node) {
   }
   const NodeId id{static_cast<std::uint32_t>(idx), s.generation};
   std::visit([&](auto& n) { n.id = id; }, node);
+  s.parent = kInvalidNodeId;
   s.node = std::move(node);
   return id;
 }
@@ -29,6 +30,7 @@ void NodeStore::remove(NodeId id) {
     return;
   }
   Slot& s = slots_[id.index];
+  s.parent = kInvalidNodeId;
   s.node = std::nullopt;
   ++s.generation;
   free_.push_back(static_cast<std::size_t>(id.index));
@@ -57,5 +59,19 @@ SceneNode const* NodeStore::get(NodeId id) const {
 }
 
 bool NodeStore::contains(NodeId id) const { return get(id) != nullptr; }
+
+NodeId NodeStore::parentOf(NodeId id) const {
+  if (!contains(id)) {
+    return kInvalidNodeId;
+  }
+  return slots_[id.index].parent;
+}
+
+void NodeStore::setParent(NodeId id, NodeId parent) {
+  if (!contains(id)) {
+    return;
+  }
+  slots_[id.index].parent = parent;
+}
 
 } // namespace flux

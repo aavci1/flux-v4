@@ -27,16 +27,21 @@ void VStack::layout(LayoutContext& ctx) const {
   childCs.maxHeight = std::numeric_limits<float>::infinity();
   childCs.maxWidth = innerW > 0.f ? innerW : std::numeric_limits<float>::infinity();
 
+  LayoutNode const* retainedContainer = ctx.tree().retainedNodeForKey(scope.stableKey());
+  bool const canDirectReuseChildren =
+      retainedContainer && retainedContainer->kind == LayoutNode::Kind::Container &&
+      retainedContainer->children.size() == children.size() &&
+      retainedContainer->containerSpec.kind == ContainerLayerSpec::Kind::Standard;
+  std::vector<LayoutNodeId> retainedChildRoots;
+  if (canDirectReuseChildren) {
+    retainedChildRoots.assign(retainedContainer->children.begin(), retainedContainer->children.end());
+  }
+
   LayoutHints measureHints{};
   measureHints.vStackCrossAlign = alignment;
   std::size_t const n = children.size();
   auto sizes = scope.measureChildren(children, childCs, measureHints);
   scope.logContainer("VStack");
-  LayoutNode const* retainedContainer = ctx.tree().retainedNodeForKey(scope.stableKey());
-  bool const canDirectReuseChildren =
-      retainedContainer && retainedContainer->kind == LayoutNode::Kind::Container &&
-      retainedContainer->children.size() == n &&
-      retainedContainer->containerSpec.kind == ContainerLayerSpec::Kind::Standard;
 
   float maxChildW = 0.f;
   for (Size s : sizes) {
@@ -102,7 +107,7 @@ void VStack::layout(LayoutContext& ctx) const {
     if (canDirectReuseChildren) {
       ComponentKey childKey = scope.stableKey();
       childKey.push_back(i);
-      LayoutNodeId const retainedChildRoot = retainedContainer->children[i];
+      LayoutNodeId const retainedChildRoot = retainedChildRoots[i];
       reusedChild = children[i].tryRetainedLayout(ctx, childKey, retainedChildRoot, rowFrame,
                                                   childBuild, rowHints);
     }

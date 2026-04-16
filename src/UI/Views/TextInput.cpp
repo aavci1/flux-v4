@@ -19,7 +19,7 @@
 #include <Flux/UI/Views/ScrollView.hpp>
 #include <Flux/UI/Views/ZStack.hpp>
 
-#include "UI/Views/TextSupport.hpp"
+#include <Flux/UI/Views/TextSupport.hpp>
 
 #include <algorithm>
 #include <cstdio>

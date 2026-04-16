@@ -51,6 +51,7 @@ struct ComponentState {
   std::deque<StateSlot> slots;
   std::size_t cursor = 0; // reset to 0 at the start of each build pass
   std::type_index componentType{typeid(void)};
+  std::uint64_t lastVisitedEpoch = 0;
   std::unique_ptr<void, void (*)(void*)> lastBody{nullptr, nullptr};
   std::uint64_t lastBodyEpoch = 0;
   std::vector<LayoutConstraints> reusableConstraints;
@@ -121,12 +122,19 @@ public:
   [[nodiscard]] bool isComponentDirty(ComponentKey const& key) const;
   [[nodiscard]] bool hasDirtyDescendant(ComponentKey const& key) const;
   void markRetainedSubtreeVisited(ComponentKey const& key);
+  void markRetainedSubtreeVisited(ComponentState& state);
   [[nodiscard]] bool currentCompositePathStable() const noexcept;
   void pushCompositePathStable(bool stable);
   void popCompositePathStable();
 
+  [[nodiscard]] ComponentState const* findComponentState(ComponentKey const& key) const;
+  [[nodiscard]] ComponentState* findComponentState(ComponentKey const& key);
+
   template<typename C>
   bool canReuseBody(ComponentKey const& key, C const& value, LayoutConstraints const& constraints) const;
+  template<typename C>
+  bool canReuseBody(ComponentKey const& key, ComponentState const* state, C const& value,
+                    LayoutConstraints const& constraints) const;
 
   [[nodiscard]] bool hasBodyForCurrentRebuild(ComponentKey const& key) const;
   Element* cachedBody(ComponentKey const& key);
@@ -150,7 +158,6 @@ public:
 
 private:
   std::unordered_map<ComponentKey, ComponentState, ComponentKeyHash> states_;
-  std::unordered_set<ComponentKey, ComponentKeyHash> visited_;
 
   // Stack of active component keys (depth > 1 when body() calls a helper
   // that returns an Element containing further composites — rare but valid).
@@ -234,19 +241,23 @@ S& StateStore::claimSlot(Args&&... args) {
 template<typename C>
 bool StateStore::canReuseBody(ComponentKey const& key, C const& value,
                               LayoutConstraints const& constraints) const {
+  return canReuseBody(key, findComponentState(key), value, constraints);
+}
+
+template<typename C>
+bool StateStore::canReuseBody(ComponentKey const& key, ComponentState const* state, C const& value,
+                              LayoutConstraints const& constraints) const {
   if (forceFullRebuild_ || activeDirtyComposites_.count(key) != 0) {
     return false;
   }
-  auto const it = states_.find(key);
-  if (it == states_.end()) {
+  if (!state) {
     return false;
   }
-  ComponentState const& state = it->second;
-  if (!state.lastBody || state.lastBodyEpoch == buildEpoch_ || state.reusableConstraints.empty()) {
+  if (!state->lastBody || state->lastBodyEpoch == buildEpoch_ || state->reusableConstraints.empty()) {
     return false;
   }
   bool constraintsMatched = false;
-  for (LayoutConstraints const& recorded : state.reusableConstraints) {
+  for (LayoutConstraints const& recorded : state->reusableConstraints) {
     if (constraintsEqual(recorded, constraints)) {
       constraintsMatched = true;
       break;
@@ -258,11 +269,11 @@ bool StateStore::canReuseBody(ComponentKey const& key, C const& value,
   if (currentCompositePathStable()) {
     return true;
   }
-  if (!state.valueSnapshot.value || state.valueSnapshot.type != std::type_index(typeid(C)) ||
-      !state.valueSnapshot.equals) {
+  if (!state->valueSnapshot.value || state->valueSnapshot.type != std::type_index(typeid(C)) ||
+      !state->valueSnapshot.equals) {
     return false;
   }
-  return state.valueSnapshot.equals(state.valueSnapshot.value.get(), &value);
+  return state->valueSnapshot.equals(state->valueSnapshot.value.get(), &value);
 }
 
 } // namespace flux

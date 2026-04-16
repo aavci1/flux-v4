@@ -64,6 +64,10 @@ option(FLUX_ENABLE_DEFAULT_EVENT_LOGGING
   "Print built-in Application event handlers to stdout (disable for quiet or embedded builds)."
   OFF)
 
+option(FLUX_ENABLE_ASAN
+  "Build flux and flux_tests with AddressSanitizer instrumentation."
+  OFF)
+
 option(FLUX_BUILD_EXAMPLES
   "Build example executables under examples/ (hello_world, *_demo, …)."
   OFF)
@@ -206,6 +210,11 @@ if(APPLE)
   target_compile_options(flux PRIVATE $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>)
 endif()
 
+if(FLUX_ENABLE_ASAN)
+  target_compile_options(flux PRIVATE -fsanitize=address -fno-omit-frame-pointer)
+  target_link_options(flux PRIVATE -fsanitize=address)
+endif()
+
 if(FLUX_ENABLE_DEFAULT_EVENT_LOGGING)
   target_compile_definitions(flux PRIVATE FLUX_ENABLE_DEFAULT_EVENT_LOGGING=1)
 else()
@@ -291,6 +300,11 @@ if(FLUX_BUILD_TESTS)
   )
 
   set_target_properties(flux_tests PROPERTIES CXX_STANDARD 23)
+
+  if(FLUX_ENABLE_ASAN)
+    target_compile_options(flux_tests PRIVATE -fsanitize=address -fno-omit-frame-pointer)
+    target_link_options(flux_tests PRIVATE -fsanitize=address)
+  endif()
 
   add_test(NAME flux_tests COMMAND flux_tests)
 endif()

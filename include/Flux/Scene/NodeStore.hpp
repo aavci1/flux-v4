@@ -21,10 +21,13 @@ public:
   SceneNode* get(NodeId id);
   SceneNode const* get(NodeId id) const;
   bool contains(NodeId id) const;
+  NodeId parentOf(NodeId id) const;
+  void setParent(NodeId id, NodeId parent);
 
 private:
   struct Slot {
     std::uint32_t generation = 0;
+    NodeId parent{};
     std::optional<SceneNode> node;
   };
 

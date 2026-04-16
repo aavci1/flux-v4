@@ -17,7 +17,7 @@
 
 #include "UI/Detail/EventHelpers.hpp"
 #include "UI/Layout/LayoutHelpers.hpp"
-#include "UI/Views/TextSupport.hpp"
+#include <Flux/UI/Views/TextSupport.hpp>
 
 #include <algorithm>
 #include <cassert>
@@ -46,6 +46,35 @@ float textMeasureWidth(TextWrapping wrapping, Rect const &bounds) {
 
 float multiLineFitTolerance(TextLayoutOptions const &options) {
     return options.maxLines > 0 && options.wrapping != TextWrapping::NoWrap ? 1.5f : 0.5f;
+}
+
+std::uint64_t hashCombine(std::uint64_t seed, std::uint64_t value) {
+    seed ^= value + 0x9e3779b97f4a7c15ull + (seed << 6) + (seed >> 2);
+    return seed;
+}
+
+std::uint64_t hashFloat(float value) {
+    std::uint32_t bits{};
+    static_assert(sizeof(bits) == sizeof(value));
+    std::memcpy(&bits, &value, sizeof(bits));
+    return bits;
+}
+
+std::uint64_t hashBool(bool value) {
+    return value ? 0x9b8d6f43a2c17e5dull : 0x1f2e3d4c5b6a7988ull;
+}
+
+std::uint64_t hashString(std::string const &value) {
+    return std::hash<std::string>{}(value);
+}
+
+std::uint64_t hashColor(Color value) {
+    std::uint64_t h = 0x2db4f7a681c5930eull;
+    h = hashCombine(h, hashFloat(value.r));
+    h = hashCombine(h, hashFloat(value.g));
+    h = hashCombine(h, hashFloat(value.b));
+    h = hashCombine(h, hashFloat(value.a));
+    return h;
 }
 
 bool plainTextWouldOverflow(std::string const &text, Font const &font, Color const &color, Rect const &bounds,
@@ -93,35 +122,6 @@ bool candidateFitsWithEllipsis(std::string const &candidate, Font const &font, C
     }
 
     return true;
-}
-
-std::uint64_t hashCombine(std::uint64_t seed, std::uint64_t value) {
-    seed ^= value + 0x9e3779b97f4a7c15ull + (seed << 6) + (seed >> 2);
-    return seed;
-}
-
-std::uint64_t hashFloat(float value) {
-    std::uint32_t bits{};
-    static_assert(sizeof(bits) == sizeof(value));
-    std::memcpy(&bits, &value, sizeof(bits));
-    return bits;
-}
-
-std::uint64_t hashBool(bool value) {
-    return value ? 0x9b8d6f43a2c17e5dull : 0x1f2e3d4c5b6a7988ull;
-}
-
-std::uint64_t hashString(std::string const &value) {
-    return std::hash<std::string>{}(value);
-}
-
-std::uint64_t hashColor(Color value) {
-    std::uint64_t h = 0x2db4f7a681c5930eull;
-    h = hashCombine(h, hashFloat(value.r));
-    h = hashCombine(h, hashFloat(value.g));
-    h = hashCombine(h, hashFloat(value.b));
-    h = hashCombine(h, hashFloat(value.a));
-    return h;
 }
 
 std::string trimTrailingWhitespace(std::string s) {

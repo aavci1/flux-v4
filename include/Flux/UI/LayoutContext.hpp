@@ -30,7 +30,11 @@ class Element;
 
 class LayoutContext {
 public:
-  using SubtreeRootMap = std::unordered_map<ComponentKey, LayoutNodeId, ComponentKeyHash>;
+  struct SubtreeRootRecord {
+    LayoutNodeId rootId{};
+    std::uint64_t lastVisitedEpoch = 0;
+  };
+  using SubtreeRootMap = std::unordered_map<ComponentKey, SubtreeRootRecord, ComponentKeyHash>;
 
   TextSystem& textSystem();
   LayoutEngine& layoutEngine();
@@ -114,7 +118,7 @@ private:
   friend struct LayoutContextTestAccess;
 
   LayoutContext(TextSystem& ts, LayoutEngine& layout, LayoutTree& tree, MeasureCache* measureCache = nullptr,
-                SubtreeRootMap const* retainedRoots = nullptr);
+                SubtreeRootMap* retainedRoots = nullptr, std::uint64_t subtreeRootEpoch = 0);
   ~LayoutContext();
 
   TextSystem& textSystem_;
@@ -132,7 +136,9 @@ private:
   bool skipNextLayoutChildAdvance_{false};
   bool pendingCompositeSubtreeRoot_{false};
   ComponentKey pendingCompositeSubtreeKey_{};
-  SubtreeRootMap subtreeRootLayouts_{};
+  SubtreeRootMap ownedSubtreeRoots_{};
+  SubtreeRootMap* subtreeRoots_{nullptr};
+  std::uint64_t subtreeRootEpoch_{0};
   MeasureCache* measureCache_{nullptr};
   std::vector<ElementModifiers const*> activeElementModifiers_{};
 
@@ -141,7 +147,6 @@ private:
   Element const* currentElement_{nullptr};
 
   std::shared_ptr<detail::ElementPinStorage> elementPins_{};
-  SubtreeRootMap const* retainedRoots_{nullptr};
 };
 
 } // namespace flux

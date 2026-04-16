@@ -31,6 +31,7 @@ void StateStore::clearComponentState(ComponentState& state) {
   state.slots.clear();
   state.cursor = 0;
   state.componentType = std::type_index(typeid(void));
+  state.lastVisitedEpoch = 0;
   state.lastBody = {nullptr, nullptr};
   state.lastBodyEpoch = 0;
   state.reusableConstraints.clear();
@@ -49,8 +50,6 @@ void StateStore::beginRebuild(bool forceFullRebuild) {
   compositePathStableStack_.clear();
   compositeConstraintStack_.clear();
   compositeElementModifierStack_.clear();
-  visited_.clear();
-  visited_.reserve(states_.size());
   for (auto& [key, cs] : states_) {
     (void)key;
     cs.cursor = 0;
@@ -59,7 +58,7 @@ void StateStore::beginRebuild(bool forceFullRebuild) {
 
 void StateStore::endRebuild() {
   for (auto it = states_.begin(); it != states_.end();) {
-    if (!visited_.count(it->first)) {
+    if (it->second.lastVisitedEpoch != buildEpoch_) {
       clearComponentState(it->second);
       it = states_.erase(it);
     } else {
@@ -76,7 +75,6 @@ void StateStore::shutdown() {
     clearComponentState(state);
   }
   states_.clear();
-  visited_.clear();
   activeStack_.clear();
   activeStateStack_.clear();
   compositePathStableStack_.clear();
@@ -94,13 +92,13 @@ void StateStore::resetSlotCursors() {
 }
 
 void StateStore::pushComponent(ComponentKey const& key, std::type_index componentType) {
-  visited_.insert(key);
   auto [it, inserted] = states_.try_emplace(key);
   ComponentState& state = it->second;
   if (state.componentType != componentType) {
     clearComponentState(state);
     state.componentType = componentType;
   }
+  state.lastVisitedEpoch = buildEpoch_;
   state.cursor = 0;
   activeStack_.push_back(&it->first);
   activeStateStack_.push_back(&state);
@@ -179,7 +177,14 @@ bool StateStore::hasDirtyDescendant(ComponentKey const& key) const {
 }
 
 void StateStore::markRetainedSubtreeVisited(ComponentKey const& key) {
-  visited_.insert(key);
+  auto const it = states_.find(key);
+  if (it != states_.end()) {
+    it->second.lastVisitedEpoch = buildEpoch_;
+  }
+}
+
+void StateStore::markRetainedSubtreeVisited(ComponentState& state) {
+  state.lastVisitedEpoch = buildEpoch_;
 }
 
 bool StateStore::currentCompositePathStable() const noexcept {
@@ -231,6 +236,16 @@ void StateStore::recordBodyConstraints(ComponentKey const& key, LayoutConstraint
     }
   }
   state.reusableConstraints.push_back(constraints);
+}
+
+ComponentState const* StateStore::findComponentState(ComponentKey const& key) const {
+  auto const it = states_.find(key);
+  return it == states_.end() ? nullptr : &it->second;
+}
+
+ComponentState* StateStore::findComponentState(ComponentKey const& key) {
+  auto const it = states_.find(key);
+  return it == states_.end() ? nullptr : &it->second;
 }
 
 std::optional<Size> StateStore::cachedMeasure(ComponentKey const& key,

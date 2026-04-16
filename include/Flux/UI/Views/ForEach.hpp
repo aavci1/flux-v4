@@ -79,6 +79,15 @@ void Element::Model<ForEach<T>>::layout(LayoutContext& ctx) const {
   float const assignedW = std::isfinite(outer.maxWidth) ? outer.maxWidth : 0.f;
   childCsMeasure.maxWidth =
       assignedW > 0.f ? assignedW : std::numeric_limits<float>::infinity();
+  LayoutNode const* retainedContainer = ctx.tree().retainedNodeForKey(forEachKey);
+  bool const canDirectReuseChildren =
+      retainedContainer && retainedContainer->kind == LayoutNode::Kind::Container &&
+      retainedContainer->children.size() == n &&
+      retainedContainer->containerSpec.kind == ContainerLayerSpec::Kind::Standard;
+  std::vector<LayoutNodeId> retainedChildRoots;
+  if (canDirectReuseChildren) {
+    retainedChildRoots.assign(retainedContainer->children.begin(), retainedContainer->children.end());
+  }
 
   std::vector<Size> sizes;
   sizes.reserve(n);
@@ -90,14 +99,14 @@ void Element::Model<ForEach<T>>::layout(LayoutContext& ctx) const {
   for (std::size_t i = 0; i < n; ++i) {
     Element& item = ctx.pinElement(value.factory(value.items[i]));
     items.push_back(&item);
+    Size sz{};
     ctx.pushCompositeKeyTail(forEachKey);
     ctx.setChildIndex(i);
-    Size sz{};
     if (!item.tryCachedMeasure(ctx, childCsMeasure, childHints, ctx.textSystem(), sz)) {
       sz = item.measure(ctx, childCsMeasure, childHints, ctx.textSystem());
     }
-    sizes.push_back(sz);
     ctx.popCompositeKeyTail();
+    sizes.push_back(sz);
   }
 
   layoutDebugLogContainer("ForEach", outer, box);
@@ -124,12 +133,6 @@ void Element::Model<ForEach<T>>::layout(LayoutContext& ctx) const {
   fx.element = ctx.currentElement();
   LayoutNodeId const feId = ctx.pushLayoutNode(std::move(fx));
   ctx.pushLayoutParent(feId);
-  LayoutNode const* retainedContainer = ctx.tree().retainedNodeForKey(forEachKey);
-  bool const canDirectReuseChildren =
-      retainedContainer && retainedContainer->kind == LayoutNode::Kind::Container &&
-      retainedContainer->children.size() == n &&
-      retainedContainer->containerSpec.kind == ContainerLayerSpec::Kind::Standard;
-
   float y = 0.f;
   for (std::size_t i = 0; i < n; ++i) {
     if (i > 0) {
@@ -154,7 +157,7 @@ void Element::Model<ForEach<T>>::layout(LayoutContext& ctx) const {
     if (canDirectReuseChildren) {
       ComponentKey itemKey = forEachKey;
       itemKey.push_back(i);
-      LayoutNodeId const retainedChildRoot = retainedContainer->children[i];
+      LayoutNodeId const retainedChildRoot = retainedChildRoots[i];
       reusedItem = item.tryRetainedLayout(ctx, itemKey, retainedChildRoot, rowFrame, childBuild, rowHints);
     }
     if (!reusedItem) {
@@ -188,12 +191,21 @@ Size Element::Model<ForEach<T>>::measure(LayoutContext& ctx, LayoutConstraints c
   float totalW = 0.f;
   float totalH = 0.f;
   std::size_t const n = value.items.size();
+  LayoutNode const* retainedContainer = ctx.tree().retainedNodeForKey(forEachKey);
+  bool const canDirectReuseChildren =
+      retainedContainer && retainedContainer->kind == LayoutNode::Kind::Container &&
+      retainedContainer->children.size() == n &&
+      retainedContainer->containerSpec.kind == ContainerLayerSpec::Kind::Standard;
+  std::vector<LayoutNodeId> retainedChildRoots;
+  if (canDirectReuseChildren) {
+    retainedChildRoots.assign(retainedContainer->children.begin(), retainedContainer->children.end());
+  }
 
   for (std::size_t i = 0; i < n; ++i) {
     Element item{value.factory(value.items[i])};
+    Size s{};
     ctx.pushCompositeKeyTail(forEachKey);
     ctx.setChildIndex(i);
-    Size s{};
     if (!item.tryCachedMeasure(ctx, childCs, childHints, ts, s)) {
       s = item.measure(ctx, childCs, childHints, ts);
     }

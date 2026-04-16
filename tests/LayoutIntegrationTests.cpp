@@ -204,9 +204,10 @@ struct LayoutContextTestAccess {
         LayoutEngine &le,
         LayoutTree &tree,
         MeasureCache *mc = nullptr,
-        LayoutContext::SubtreeRootMap const *retainedRoots = nullptr
+        LayoutContext::SubtreeRootMap *retainedRoots = nullptr,
+        std::uint64_t subtreeRootEpoch = 0
     ) {
-        return new LayoutContext(ts, le, tree, mc, retainedRoots);
+        return new LayoutContext(ts, le, tree, mc, retainedRoots, subtreeRootEpoch);
     }
     static void destroy(LayoutContext *ctx) { delete ctx; }
 };
@@ -305,9 +306,10 @@ static RenderResult runLayoutAndRenderWithStateStore(Element el, float maxW, flo
 
 static std::vector<LayoutNode const *> leavesOf(LayoutTree const &tree) {
     std::vector<LayoutNode const *> out;
-    for (auto const &n : tree.nodes()) {
-        if (n.kind == LayoutNode::Kind::Leaf) {
-            out.push_back(&n);
+    for (LayoutNodeId id : tree.activeIds()) {
+        LayoutNode const* n = tree.get(id);
+        if (n && n->kind == LayoutNode::Kind::Leaf) {
+            out.push_back(n);
         }
     }
     return out;
@@ -783,9 +785,10 @@ TEST_CASE("ZStack: children share the same layer and the smaller is centered") {
     );
 
     std::vector<LayoutNode const *> modifiers;
-    for (auto const &n : tree.nodes()) {
-        if (n.kind == LayoutNode::Kind::Modifier) {
-            modifiers.push_back(&n);
+    for (LayoutNodeId id : tree.activeIds()) {
+        LayoutNode const* n = tree.get(id);
+        if (n && n->kind == LayoutNode::Kind::Modifier) {
+            modifiers.push_back(n);
         }
     }
 
@@ -871,11 +874,15 @@ TEST_CASE("Padding modifier insets inner content frame") {
 
     LayoutNode const *modifierNode = nullptr;
     LayoutNode const *leafNode = nullptr;
-    for (auto const &n : tree.nodes()) {
-        if (n.kind == LayoutNode::Kind::Modifier)
-            modifierNode = &n;
-        else if (n.kind == LayoutNode::Kind::Leaf)
-            leafNode = &n;
+    for (LayoutNodeId id : tree.activeIds()) {
+        LayoutNode const* n = tree.get(id);
+        if (!n) {
+            continue;
+        }
+        if (n->kind == LayoutNode::Kind::Modifier)
+            modifierNode = n;
+        else if (n->kind == LayoutNode::Kind::Leaf)
+            leafNode = n;
     }
     REQUIRE(modifierNode != nullptr);
     REQUIRE(leafNode != nullptr);

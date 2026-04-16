@@ -48,7 +48,7 @@ TEST_CASE("LayoutNodeId: equality") {
 TEST_CASE("LayoutTree: empty tree has invalid root") {
   LayoutTree tree;
   CHECK_FALSE(tree.root().isValid());
-  CHECK(tree.nodes().empty());
+  CHECK(tree.activeIds().empty());
 }
 
 TEST_CASE("LayoutTree: push single root node") {
@@ -60,7 +60,7 @@ TEST_CASE("LayoutTree: push single root node") {
 
   CHECK(id.isValid());
   CHECK(tree.root() == id);
-  CHECK(tree.nodes().size() == 1);
+  CHECK(tree.activeIds().size() == 1);
 
   LayoutNode const* stored = tree.get(id);
   REQUIRE(stored != nullptr);
@@ -84,7 +84,7 @@ TEST_CASE("LayoutTree: push parent and two children") {
   child2.frame = Rect{0.f, 108.f, 200.f, 100.f};
   LayoutNodeId c2Id = tree.pushNode(std::move(child2), parentId);
 
-  CHECK(tree.nodes().size() == 3);
+  CHECK(tree.activeIds().size() == 3);
   CHECK(tree.root() == parentId);
 
   LayoutNode const* p = tree.get(parentId);
@@ -104,17 +104,17 @@ TEST_CASE("LayoutTree: push parent and two children") {
   CHECK(rectsNear(c2->frame, Rect{0.f, 108.f, 200.f, 100.f}));
 }
 
-TEST_CASE("LayoutTree: nodes() span matches insertion order") {
+TEST_CASE("LayoutTree: activeIds() span matches insertion order") {
   LayoutTree tree;
   LayoutNodeId rootId = tree.pushNode(makeNode(LayoutNode::Kind::Container), LayoutNodeId{});
   LayoutNodeId c1Id = tree.pushNode(makeNode(), rootId);
   LayoutNodeId c2Id = tree.pushNode(makeNode(), rootId);
 
-  auto span = tree.nodes();
+  auto span = tree.activeIds();
   REQUIRE(span.size() == 3);
-  CHECK(span[0].id == rootId);
-  CHECK(span[1].id == c1Id);
-  CHECK(span[2].id == c2Id);
+  CHECK(span[0] == rootId);
+  CHECK(span[1] == c1Id);
+  CHECK(span[2] == c2Id);
 }
 
 TEST_CASE("LayoutTree: get() returns nullptr for invalid id") {
@@ -137,7 +137,7 @@ TEST_CASE("LayoutTree: clear() resets tree") {
   tree.clear();
 
   CHECK_FALSE(tree.root().isValid());
-  CHECK(tree.nodes().empty());
+  CHECK(tree.activeIds().empty());
 }
 
 // ── LayoutTree: rectForKey ───────────────────────────────────────────────────

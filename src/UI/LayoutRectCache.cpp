@@ -10,13 +10,12 @@ void LayoutRectCache::fill(LayoutTree const& tree, LayoutContext const& ctx) {
   fill(tree, ctx.subtreeRootLayouts());
 }
 
-void LayoutRectCache::fill(LayoutTree const& tree,
-                           std::unordered_map<ComponentKey, LayoutNodeId, ComponentKeyHash> const& roots) {
+void LayoutRectCache::fill(LayoutTree const& tree, LayoutContext::SubtreeRootMap const& roots) {
   prev_.swap(current_);
   current_.clear();
-  for (auto const& [key, nodeId] : roots) {
-    if (nodeId.isValid()) {
-      if (LayoutNode const* n = tree.get(nodeId)) {
+  for (auto const& [key, record] : roots) {
+    if (record.rootId.isValid()) {
+      if (LayoutNode const* n = tree.get(record.rootId)) {
         current_[key] = n->worldBounds;
       }
     }

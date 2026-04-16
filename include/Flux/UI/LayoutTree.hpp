@@ -5,6 +5,7 @@
 /// Intermediate layout result: geometry and structure only (no SceneGraph).
 
 #include <Flux/Core/Types.hpp>
+#include <Flux/Detail/SmallVector.hpp>
 #include <Flux/Scene/NodeId.hpp>
 #include <Flux/UI/ComponentKey.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
@@ -19,7 +20,6 @@
 namespace flux {
 
 struct ElementModifiers;
-
 class Element;
 
 /// Unique identifier for a node in the LayoutTree (1-based index; 0 = invalid).
@@ -91,7 +91,6 @@ struct LayoutNode {
   LayoutHints hints{};
 
   ComponentKey componentKey{};
-
   /// For Modifier nodes: resolved modifier state (owned by the Element tree).
   ElementModifiers const* modifiers = nullptr;
 
@@ -112,7 +111,9 @@ struct LayoutNode {
   Mat3 modifierLayerTransform = Mat3::identity();
 
   /// Direct scene nodes emitted for this layout node in parent-child order.
-  std::vector<NodeId> sceneNodes;
+  detail::SmallVector<NodeId, 2> sceneNodes;
+  /// The pinned modifier state used for the last scene emission / update.
+  ElementModifiers const* renderedModifiers = nullptr;
   /// True when this exact layout slot was reused by subtree retention in the current build.
   bool reusedSubtreeThisBuild = false;
 };
@@ -127,7 +128,6 @@ public:
     slots_.clear();
     freeList_.clear();
     activeOrder_.clear();
-    activeNodes_.clear();
     rootId_ = {};
     firstNodeForKey_.clear();
     retainedNodeForKey_.clear();
@@ -159,7 +159,7 @@ public:
     return &*slots_[i];
   }
 
-  [[nodiscard]] std::span<LayoutNode const> nodes() const noexcept;
+  [[nodiscard]] std::span<LayoutNodeId const> activeIds() const noexcept { return activeOrder_; }
 
   /// Union of \p nodeId's subtree \ref LayoutNode::worldBounds (including the root node).
   [[nodiscard]] Rect unionSubtreeWorldBounds(LayoutNodeId nodeId) const;
@@ -178,13 +178,10 @@ public:
 
 private:
   LayoutNodeId allocateNodeId();
-  void rebuildActiveNodesCache() const;
 
   std::vector<std::optional<LayoutNode>> slots_{};
   std::vector<std::size_t> freeList_{};
   std::vector<LayoutNodeId> activeOrder_{};
-  mutable std::vector<LayoutNode> activeNodes_{};
-  mutable bool activeNodesDirty_{true};
   LayoutNodeId rootId_{};
   std::unordered_map<ComponentKey, LayoutNodeId, ComponentKeyHash> firstNodeForKey_{};
   std::unordered_map<ComponentKey, LayoutNodeId, ComponentKeyHash> retainedNodeForKey_{};

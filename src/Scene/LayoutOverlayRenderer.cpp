@@ -65,9 +65,13 @@ Rect overlayBounds(LayoutNode const& node, LayoutTree const& tree) {
 
 void renderLayoutOverlay(LayoutTree const& tree, Canvas& canvas) {
   std::unordered_set<OverlayRectKey, OverlayRectKeyHash> seen;
-  seen.reserve(tree.nodes().size());
-  for (LayoutNode const& node : tree.nodes()) {
-    Rect const bounds = overlayBounds(node, tree);
+  seen.reserve(tree.activeIds().size());
+  for (LayoutNodeId id : tree.activeIds()) {
+    LayoutNode const* node = tree.get(id);
+    if (!node) {
+      continue;
+    }
+    Rect const bounds = overlayBounds(*node, tree);
     if (bounds.width <= 0.f || bounds.height <= 0.f) {
       continue;
     }

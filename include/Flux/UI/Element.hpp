@@ -20,6 +20,7 @@
 
 #include <Flux/Graphics/Styles.hpp>
 #include <Flux/UI/Detail/RenderComponentEmit.hpp>
+#include <Flux/UI/Views/TextSupport.hpp>
 
 #include <algorithm>
 #include <cassert>
@@ -728,7 +729,9 @@ void Element::Model<C>::renderFromLayout(RenderContext& ctx, LayoutNode& node) c
 
 template<typename C>
 bool Element::Model<C>::supportsIncrementalSceneReuse() const {
-  if constexpr (std::is_same_v<C, Rectangle>) {
+  if constexpr (std::is_same_v<C, Rectangle> || std::is_same_v<C, Text> ||
+                std::is_same_v<C, views::Image> || std::is_same_v<C, Line> ||
+                std::is_same_v<C, PathShape>) {
     return true;
   }
   return false;
@@ -736,38 +739,22 @@ bool Element::Model<C>::supportsIncrementalSceneReuse() const {
 
 template<typename C>
 bool Element::Model<C>::reuseSceneFromLayout(RenderContext& ctx, LayoutNode& node) const {
-  if constexpr (std::is_same_v<C, Rectangle>) {
-    if (node.sceneNodes.size() != 1) {
-      return false;
+  auto mat3Equal = [](Mat3 const& a, Mat3 const& b) {
+    for (int i = 0; i < 9; ++i) {
+      if (a.m[i] != b.m[i]) {
+        return false;
+      }
     }
-    RectNode* rect = ctx.graph().template node<RectNode>(node.sceneNodes.front());
-    if (!rect) {
-      return false;
-    }
-    ComponentKey const stableKey = node.componentKey;
-    Rect const bounds = node.frame;
-    CornerRadius cornerR{};
-    FillStyle fillEff = FillStyle::none();
-    StrokeStyle strokeEff = StrokeStyle::none();
-    ShadowStyle shadowEff = ShadowStyle::none();
-    if (ElementModifiers const* mods = ctx.activeElementModifiers()) {
-      cornerR = mods->cornerRadius;
-      fillEff = mods->fill;
-      strokeEff = mods->stroke;
-      shadowEff = mods->shadow;
-    }
-    rect->bounds = bounds;
-    rect->cornerRadius = cornerR;
-    rect->fill = fillEff;
-    rect->stroke = strokeEff;
-    rect->shadow = shadowEff;
+    return true;
+  };
+  auto updateModifierEvents = [&](NodeId sceneNodeId, Rect const& bounds) {
     if (ElementModifiers const* mods = ctx.activeElementModifiers()) {
       if (!ctx.suppressLeafModifierEvents()) {
         bool const effFocusable =
             mods->focusable || static_cast<bool>(mods->onKeyDown) || static_cast<bool>(mods->onKeyUp) ||
             static_cast<bool>(mods->onTextInput);
         EventHandlers h{
-            .stableTargetKey = stableKey,
+            .stableTargetKey = node.componentKey,
             .onTap = mods->onTap,
             .onPointerDown = mods->onPointerDown ? detail::pointerCallbackInLocalSpace(mods->onPointerDown, bounds)
                                                  : nullptr,
@@ -784,14 +771,184 @@ bool Element::Model<C>::reuseSceneFromLayout(RenderContext& ctx, LayoutNode& nod
         };
         if (h.onTap || h.onPointerDown || h.onPointerUp || h.onPointerMove || h.onScroll || h.onKeyDown ||
             h.onKeyUp || h.onTextInput || h.focusable || h.cursor != Cursor::Inherit) {
-          ctx.eventMap().insert(node.sceneNodes.front(), std::move(h));
+          ctx.eventMap().insert(sceneNodeId, std::move(h));
         } else {
-          ctx.eventMap().remove(node.sceneNodes.front());
+          ctx.eventMap().remove(sceneNodeId);
         }
       }
     } else if (!node.reusedSubtreeThisBuild) {
-      ctx.eventMap().remove(node.sceneNodes.front());
+      ctx.eventMap().remove(sceneNodeId);
     }
+  };
+
+  if constexpr (std::is_same_v<C, Rectangle>) {
+    if (node.sceneNodes.size() != 1) {
+      return false;
+    }
+    RectNode* rect = ctx.graph().template node<RectNode>(node.sceneNodes[0]);
+    if (!rect) {
+      return false;
+    }
+    Rect const bounds = node.frame;
+    CornerRadius cornerR{};
+    FillStyle fillEff = FillStyle::none();
+    StrokeStyle strokeEff = StrokeStyle::none();
+    ShadowStyle shadowEff = ShadowStyle::none();
+    if (ElementModifiers const* mods = ctx.activeElementModifiers()) {
+      cornerR = mods->cornerRadius;
+      fillEff = mods->fill;
+      strokeEff = mods->stroke;
+      shadowEff = mods->shadow;
+    }
+    if (rect->bounds == bounds && rect->cornerRadius == cornerR &&
+        rect->fill == fillEff && rect->stroke == strokeEff && rect->shadow == shadowEff &&
+        node.renderedModifiers == ctx.activeElementModifiers()) {
+      return true;
+    }
+    rect->bounds = bounds;
+    rect->cornerRadius = cornerR;
+    rect->fill = fillEff;
+    rect->stroke = strokeEff;
+    rect->shadow = shadowEff;
+    updateModifierEvents(node.sceneNodes[0], bounds);
+    node.renderedModifiers = ctx.activeElementModifiers();
+    return true;
+  } else if constexpr (std::is_same_v<C, Text>) {
+    if (value.selectable || node.sceneNodes.size() != 1) {
+      return false;
+    }
+    TextNode* text = ctx.graph().template node<TextNode>(node.sceneNodes[0]);
+    if (!text) {
+      return false;
+    }
+    Theme const& theme = useEnvironment<Theme>();
+    Font const resolvedFont = resolveFont(value.font, theme.fontBody);
+    Color const resolvedColor = resolveColor(value.color, theme.colorTextPrimary);
+    TextLayoutOptions opts{};
+    opts.horizontalAlignment = value.horizontalAlignment;
+    opts.verticalAlignment = value.verticalAlignment;
+    opts.wrapping = value.wrapping;
+    opts.maxLines = value.maxLines;
+    opts.firstBaselineOffset = value.firstBaselineOffset;
+    Rect const bounds = node.frame;
+    std::string const displayText =
+        text_detail::ellipsizedPlainText(value.text, resolvedFont, resolvedColor, bounds, opts, ctx.textSystem());
+    std::shared_ptr<TextLayout const> layout =
+        ctx.textSystem().layout(displayText, resolvedFont, resolvedColor, bounds, opts);
+    if (!layout || !text_detail::hasRenderableTextGeometry(*layout)) {
+      return false;
+    }
+    Point const origin{bounds.x, bounds.y};
+    if (text->layout == layout && text->origin == origin && text->allocation == bounds &&
+        node.renderedModifiers == ctx.activeElementModifiers()) {
+      return true;
+    }
+    text->layout = std::move(layout);
+    text->origin = origin;
+    text->allocation = bounds;
+    updateModifierEvents(node.sceneNodes[0], bounds);
+    node.renderedModifiers = ctx.activeElementModifiers();
+    return true;
+  } else if constexpr (std::is_same_v<C, views::Image>) {
+    if (!value.source || node.sceneNodes.size() != 1) {
+      return false;
+    }
+    ImageNode* image = ctx.graph().template node<ImageNode>(node.sceneNodes[0]);
+    if (!image) {
+      return false;
+    }
+    Rect const bounds = node.frame;
+    CornerRadius cornerR{};
+    float opacity = 1.f;
+    if (ElementModifiers const* mods = ctx.activeElementModifiers()) {
+      cornerR = mods->cornerRadius;
+      opacity = mods->opacity;
+    }
+    if (image->image == value.source && image->bounds == bounds && image->fillMode == value.fillMode &&
+        image->cornerRadius == cornerR && image->opacity == opacity &&
+        node.renderedModifiers == ctx.activeElementModifiers()) {
+      return true;
+    }
+    image->image = value.source;
+    image->bounds = bounds;
+    image->fillMode = value.fillMode;
+    image->cornerRadius = cornerR;
+    image->opacity = opacity;
+    updateModifierEvents(node.sceneNodes[0], bounds);
+    node.renderedModifiers = ctx.activeElementModifiers();
+    return true;
+  } else if constexpr (std::is_same_v<C, Line>) {
+    if (node.sceneNodes.size() != 1) {
+      return false;
+    }
+    LineNode* line = ctx.graph().template node<LineNode>(node.sceneNodes[0]);
+    if (!line) {
+      return false;
+    }
+    if (line->from == value.from && line->to == value.to && line->stroke == value.stroke) {
+      return true;
+    }
+    line->from = value.from;
+    line->to = value.to;
+    line->stroke = value.stroke;
+    return true;
+  } else if constexpr (std::is_same_v<C, PathShape>) {
+    Rect const cf = node.frame;
+    Rect const pb = value.path.getBounds();
+    float dx = 0.f;
+    float dy = 0.f;
+    if (cf.width > pb.width + 1e-6f) {
+      dx = (cf.width - pb.width) * 0.5f - pb.x;
+    }
+    if (cf.height > pb.height + 1e-6f) {
+      dy = (cf.height - pb.height) * 0.5f - pb.y;
+    }
+    float const tx = cf.x + dx;
+    float const ty = cf.y + dy;
+    FillStyle fillEff = FillStyle::none();
+    StrokeStyle strokeEff = StrokeStyle::none();
+    ShadowStyle shadowEff = ShadowStyle::none();
+    if (ElementModifiers const* mods = ctx.activeElementModifiers()) {
+      fillEff = mods->fill;
+      strokeEff = mods->stroke;
+      shadowEff = mods->shadow;
+    }
+    if (tx != 0.f || ty != 0.f) {
+      if (node.sceneNodes.size() != 2) {
+        return false;
+      }
+      LayerNode* layer = ctx.graph().template node<LayerNode>(node.sceneNodes[0]);
+      PathNode* pathNode = ctx.graph().template node<PathNode>(node.sceneNodes[1]);
+      if (!layer || !pathNode) {
+        return false;
+      }
+      Mat3 const transform = Mat3::translate(tx, ty);
+      if (mat3Equal(layer->transform, transform) && pathNode->path.contentHash() == value.path.contentHash() &&
+          pathNode->fill == fillEff && pathNode->stroke == strokeEff && pathNode->shadow == shadowEff) {
+        return true;
+      }
+      layer->transform = transform;
+      pathNode->path = value.path;
+      pathNode->fill = fillEff;
+      pathNode->stroke = strokeEff;
+      pathNode->shadow = shadowEff;
+      return true;
+    }
+    if (node.sceneNodes.size() != 1) {
+      return false;
+    }
+    PathNode* pathNode = ctx.graph().template node<PathNode>(node.sceneNodes[0]);
+    if (!pathNode) {
+      return false;
+    }
+    if (pathNode->path.contentHash() == value.path.contentHash() && pathNode->fill == fillEff &&
+        pathNode->stroke == strokeEff && pathNode->shadow == shadowEff) {
+      return true;
+    }
+    pathNode->path = value.path;
+    pathNode->fill = fillEff;
+    pathNode->stroke = strokeEff;
+    pathNode->shadow = shadowEff;
     return true;
   } else {
     (void)ctx;

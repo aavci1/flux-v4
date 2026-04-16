@@ -21,6 +21,7 @@
 #include <Flux/UI/Views/ForEach.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
+#include <Flux/UI/Views/Text.hpp>
 #include <Flux/UI/Views/VStack.hpp>
 #include <Flux/UI/Hooks.hpp>
 
@@ -41,19 +42,25 @@ class NullTextSystem final : public TextSystem {
 public:
   std::shared_ptr<TextLayout const> layout(AttributedString const&, float,
                                            TextLayoutOptions const&) override {
-    return nullptr;
+    auto out = std::make_shared<TextLayout>();
+    out->measuredSize = Size{48.f, 14.f};
+    return out;
   }
 
   std::shared_ptr<TextLayout const> layout(std::string_view, Font const&, Color const&, float,
                                            TextLayoutOptions const&) override {
-    return nullptr;
+    auto out = std::make_shared<TextLayout>();
+    out->measuredSize = Size{48.f, 14.f};
+    return out;
   }
 
-  Size measure(AttributedString const&, float, TextLayoutOptions const&) override { return {}; }
+  Size measure(AttributedString const& text, float, TextLayoutOptions const&) override {
+    return Size{std::max(1.f, 8.f * static_cast<float>(text.utf8.size())), 14.f};
+  }
 
   Size measure(std::string_view, Font const&, Color const&, float,
                TextLayoutOptions const&) override {
-    return {};
+    return Size{48.f, 14.f};
   }
 
   std::uint32_t resolveFontId(std::string_view, float, bool) override { return 0; }
@@ -70,8 +77,9 @@ namespace flux {
 
 struct LayoutContextTestAccess {
   static LayoutContext* create(TextSystem& ts, LayoutEngine& le, LayoutTree& tree,
-                               MeasureCache* mc, LayoutContext::SubtreeRootMap const* retainedRoots = nullptr) {
-    return new LayoutContext(ts, le, tree, mc, retainedRoots);
+                               MeasureCache* mc, LayoutContext::SubtreeRootMap* retainedRoots = nullptr,
+                               std::uint64_t subtreeRootEpoch = 0) {
+    return new LayoutContext(ts, le, tree, mc, retainedRoots, subtreeRootEpoch);
   }
 
   static void destroy(LayoutContext* ctx) { delete ctx; }
@@ -107,7 +115,8 @@ struct FrameContext {
   LayoutEngine le{};
   MeasureCache mc{};
   LayoutContext::SubtreeRootMap roots{};
-  std::shared_ptr<detail::ElementPinStorage> pins{};
+  std::uint64_t rootEpoch = 0;
+  std::vector<std::shared_ptr<detail::ElementPinStorage>> pinGenerations{};
   LayoutTree tree{};
   SceneGraph graph{};
   EventMap eventMap{};
@@ -138,14 +147,16 @@ struct FrameContext {
       mc.clear();
     }
     bool const useRetainedLayoutBuild = !roots.empty() && !store.shouldForceFullRebuild();
+    ++rootEpoch;
     if (useRetainedLayoutBuild) {
       tree.beginBuild();
     } else {
       tree.clear();
+      roots.clear();
     }
 
     LayoutContextPtr ctx{
-        flux::LayoutContextTestAccess::create(ts, le, tree, &mc, &roots)};
+        flux::LayoutContextTestAccess::create(ts, le, tree, &mc, &roots, rootEpoch)};
     ctx->pushConstraints(rootCs);
     le.setChildFrame(Rect{0.f, 0.f, w, h});
 
@@ -155,7 +166,13 @@ struct FrameContext {
       tree.endBuild();
     }
 
-    roots = ctx->subtreeRootLayouts();
+    for (auto it = roots.begin(); it != roots.end();) {
+      if (it->second.lastVisitedEpoch != rootEpoch || !tree.get(it->second.rootId)) {
+        it = roots.erase(it);
+      } else {
+        ++it;
+      }
+    }
     lastRootConstraints = rootCs;
     lastRootMeasureId = root.measureId();
     hasCurrentLayout = true;
@@ -178,7 +195,13 @@ struct FrameContext {
     if (incrementalSceneReuse) {
       eventMap.prune(graph);
     }
-    pins = ctx->pinnedElements();
+    if (store.shouldForceFullRebuild()) {
+      pinGenerations.clear();
+    }
+    pinGenerations.push_back(ctx->pinnedElements());
+    while (pinGenerations.size() > 2) {
+      pinGenerations.erase(pinGenerations.begin());
+    }
     store.endRebuild();
   }
 };
@@ -221,6 +244,15 @@ Element foreachRows(int n, float rowH = 24.f) {
       0.f}};
 }
 
+Element flatTextVStack(int n) {
+  std::vector<Element> rows;
+  rows.reserve(static_cast<std::size_t>(n));
+  for (int i = 0; i < n; ++i) {
+    rows.push_back(Element{Text{.text = "row"}}.size(200.f, 16.f));
+  }
+  return Element{VStack{.spacing = 0.f, .children = std::move(rows)}};
+}
+
 struct SignalRow {
   int index = 0;
   std::shared_ptr<std::vector<State<int>>> handles;
@@ -248,6 +280,31 @@ struct SignalRowsTree {
   }
 };
 
+struct SignalTextRow {
+  int index = 0;
+  std::shared_ptr<std::vector<State<int>>> handles;
+
+  Element body() const {
+    State<int> state = useState(0);
+    (*handles)[static_cast<std::size_t>(index)] = state;
+    return Element{Text{.text = "row"}}.size(200.f, 16.f + 0.001f * static_cast<float>(*state));
+  }
+};
+
+struct SignalTextRowsTree {
+  int count = 0;
+  std::shared_ptr<std::vector<State<int>>> handles;
+
+  Element body() const {
+    std::vector<Element> rows;
+    rows.reserve(static_cast<std::size_t>(count));
+    for (int i = 0; i < count; ++i) {
+      rows.push_back(Element{SignalTextRow{.index = i, .handles = handles}});
+    }
+    return Element{VStack{.spacing = 0.f, .children = std::move(rows)}};
+  }
+};
+
 struct CompositeRow {
   float rowH = 16.f;
 
@@ -263,6 +320,38 @@ struct CompositeRowsTree {
     rows.reserve(static_cast<std::size_t>(count));
     for (int i = 0; i < count; ++i) {
       rows.push_back(Element{CompositeRow{.rowH = rowH}});
+    }
+    return Element{VStack{.spacing = 0.f, .children = std::move(rows)}};
+  }
+};
+
+struct NestedSignalHStackRow {
+  int index = 0;
+  std::shared_ptr<std::vector<State<int>>> handles;
+
+  Element body() const {
+    State<int> state = useState(0);
+    (*handles)[static_cast<std::size_t>(index)] = state;
+    float const h = 16.f + 0.001f * static_cast<float>(*state);
+    return Element{HStack{
+        .spacing = 0.f,
+        .children = std::vector<Element>{
+            Element{Text{.text = "a"}}.size(40.f, h),
+            Element{Text{.text = "b"}}.size(40.f, h),
+        },
+    }};
+  }
+};
+
+struct NestedSignalTree {
+  int count = 0;
+  std::shared_ptr<std::vector<State<int>>> handles;
+
+  Element body() const {
+    std::vector<Element> rows;
+    rows.reserve(static_cast<std::size_t>(count));
+    for (int i = 0; i < count; ++i) {
+      rows.push_back(Element{NestedSignalHStackRow{.index = i, .handles = handles}});
     }
     return Element{VStack{.spacing = 0.f, .children = std::move(rows)}};
   }
@@ -337,7 +426,7 @@ int main(int argc, char** argv) {
       StateStoreGuard guard;
       FrameContext fc{guard.store};
       fc.rebuild(root, W, H);
-      if (fc.tree.nodes().empty()) {
+      if (fc.tree.activeIds().empty()) {
         std::abort();
       }
     });
@@ -346,7 +435,7 @@ int main(int argc, char** argv) {
     StateStoreGuard guard;
     FrameContext fc{guard.store};
     fc.rebuild(root, W, H);
-    std::cout << "   layout_tree_nodes: " << fc.tree.nodes().size() << "\n";
+    std::cout << "   layout_tree_nodes: " << fc.tree.activeIds().size() << "\n";
   }
 
   if (want("B2")) {
@@ -395,7 +484,7 @@ int main(int argc, char** argv) {
     double const cold = timeIt([&] { fc.rebuild(root, W, H); });
     std::cout << "B4 card tree (depth=4, width=5) cold:   ";
     printRow("", cold);
-    std::cout << "   layout_tree_nodes: " << fc.tree.nodes().size() << "\n";
+    std::cout << "   layout_tree_nodes: " << fc.tree.activeIds().size() << "\n";
     int const N = iterationsFor("B4", 50);
     double const steady = timeAveraged(N, [&] { fc.rebuild(root, W, H); });
     std::cout << "B4 card tree steady-state (same root):  ";
@@ -523,6 +612,48 @@ int main(int argc, char** argv) {
     printRow("", total / N);
   }
 
+  if (want("B12")) {
+    StateStoreGuard guard;
+    FrameContext fc{guard.store};
+    int const steadyN = iterationsFor("B12", 20);
+    double const steady = timeAveraged(steadyN, [&] {
+      Element root = flatTextVStack(5000);
+      fc.rebuild(root, W, H);
+    });
+
+    auto handles = std::make_shared<std::vector<State<int>>>(5000);
+    Element deltaRoot = Element{SignalTextRowsTree{.count = 5000, .handles = handles}};
+    fc.rebuild(deltaRoot, W, H);
+    constexpr int deltaN = 20;
+    double total = 0.0;
+    for (int i = 0; i < deltaN; ++i) {
+      (*handles)[2500] = (i & 1) != 0 ? 0 : 1;
+      requirePendingDirty(guard.store, "B12");
+      total += timeIt([&] { fc.rebuild(deltaRoot, W, H); });
+    }
+    std::cout << "B12 flat 5000-row Text steady-state (new root): ";
+    printRow("", steady);
+    std::cout << "B12 flat 5000-row Text 1-leaf-delta:     ";
+    printRow("", total / deltaN);
+  }
+
+  if (want("B13")) {
+    StateStoreGuard guard;
+    FrameContext fc{guard.store};
+    auto handles = std::make_shared<std::vector<State<int>>>(1000);
+    Element root = Element{NestedSignalTree{.count = 1000, .handles = handles}};
+    fc.rebuild(root, W, H);
+    constexpr int N = 50;
+    double total = 0.0;
+    for (int i = 0; i < N; ++i) {
+      (*handles)[500] = (i & 1) != 0 ? 0 : 1;
+      requirePendingDirty(guard.store, "B13");
+      total += timeIt([&] { fc.rebuild(root, W, H); });
+    }
+    std::cout << "B13 nested-stack 1-leaf-delta:           ";
+    printRow("", total / N);
+  }
+
   if (want("B11")) {
     Element root = Element{CompositeRowsTree{.count = 5000, .rowH = 16.f}};
     int const N = repeatsForSingleShot("B11", 1);
@@ -530,7 +661,7 @@ int main(int argc, char** argv) {
       StateStoreGuard guard;
       FrameContext fc{guard.store};
       fc.rebuild(root, W, H);
-      if (fc.tree.nodes().empty()) {
+      if (fc.tree.activeIds().empty()) {
         std::abort();
       }
     });
@@ -539,7 +670,7 @@ int main(int argc, char** argv) {
     StateStoreGuard guard;
     FrameContext fc{guard.store};
     fc.rebuild(root, W, H);
-    std::cout << "   layout_tree_nodes: " << fc.tree.nodes().size() << "\n";
+    std::cout << "   layout_tree_nodes: " << fc.tree.activeIds().size() << "\n";
   }
 
   return 0;

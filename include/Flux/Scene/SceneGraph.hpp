@@ -69,7 +69,6 @@ public:
   std::optional<NodeId> parentOf(NodeId child) const;
 
 private:
-  std::optional<NodeId> findParent(NodeId subtree, NodeId target) const;
   bool isDescendant(NodeId ancestor, NodeId possibleDescendant) const;
   void removeRecursive(NodeId id, std::optional<NodeId> parent, bool detachFromParent);
   void eraseFromParentChildren(NodeId parent, NodeId child);

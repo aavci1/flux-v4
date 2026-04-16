@@ -9,6 +9,18 @@
 
 namespace flux {
 
+namespace {
+
+void pushCapturedVector(void* storage, NodeId id) {
+  static_cast<std::vector<NodeId>*>(storage)->push_back(id);
+}
+
+void pushCapturedSmallVector(void* storage, NodeId id) {
+  static_cast<detail::SmallVector<NodeId, 2>*>(storage)->push_back(id);
+}
+
+} // namespace
+
 RenderContext::RenderContext(SceneGraph& g, EventMap& em, TextSystem& ts, bool incrementalSceneReuse)
     : graph_(g)
     , eventMap_(em)
@@ -88,7 +100,14 @@ bool RenderContext::incrementalSceneReuseEnabled() const noexcept {
 }
 
 void RenderContext::beginCapture(std::vector<NodeId>* out) {
-  captureStack_.push_back(out);
+  captureStack_.push_back(CaptureSink{.storage = out, .push = out ? &pushCapturedVector : nullptr});
+  if (out) {
+    out->clear();
+  }
+}
+
+void RenderContext::beginCapture(detail::SmallVector<NodeId, 2>* out) {
+  captureStack_.push_back(CaptureSink{.storage = out, .push = out ? &pushCapturedSmallVector : nullptr});
   if (out) {
     out->clear();
   }
@@ -102,8 +121,11 @@ void RenderContext::endCapture() {
 }
 
 void RenderContext::recordCaptured(NodeId id) {
-  if (!captureStack_.empty() && captureStack_.back()) {
-    captureStack_.back()->push_back(id);
+  if (!captureStack_.empty()) {
+    CaptureSink const& sink = captureStack_.back();
+    if (sink.storage && sink.push) {
+      sink.push(sink.storage, id);
+    }
   }
 }
 
