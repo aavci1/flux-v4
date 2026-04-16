@@ -9,6 +9,7 @@ namespace flux {
 void LayoutTree::beginBuild() {
   ++buildEpoch_;
   rootId_ = {};
+  retainedNodeForKey_ = firstNodeForKey_;
   firstNodeForKey_.clear();
   activeOrder_.clear();
   activeNodesDirty_ = true;
@@ -223,6 +224,14 @@ std::optional<Rect> LayoutTree::rectForKey(ComponentKey const& key) const {
     return n->worldBounds;
   }
   return std::nullopt;
+}
+
+LayoutNode const* LayoutTree::retainedNodeForKey(ComponentKey const& key) const {
+  auto const it = retainedNodeForKey_.find(key);
+  if (it == retainedNodeForKey_.end()) {
+    return nullptr;
+  }
+  return get(it->second);
 }
 
 } // namespace flux

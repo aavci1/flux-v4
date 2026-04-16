@@ -129,7 +129,7 @@ struct RebuildHarness {
       tree.endBuild();
     }
 
-    bool const incrementalSceneReuse = useRetainedLayoutBuild && canIncrementallyRenderLayoutTree(tree);
+    bool const incrementalSceneReuse = false;
     if (!incrementalSceneReuse) {
       graph.clear();
       eventMap.clear();

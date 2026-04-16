@@ -151,6 +151,29 @@ bool Element::tryRetainedLayout(LayoutContext& ctx) const {
   return reused;
 }
 
+bool Element::canRetainedLayout(LayoutContext& ctx) const {
+  if (envLayer_ || modifiers_) {
+    return false;
+  }
+  Element const* const prevEl = ctx.currentElement();
+  ctx.setCurrentElement(this);
+  bool const reusable = impl_->canRetainedLayout(ctx);
+  ctx.setCurrentElement(prevEl);
+  return reusable;
+}
+
+bool Element::tryCachedMeasure(LayoutContext& ctx, LayoutConstraints const& constraints,
+                               LayoutHints const& hints, TextSystem& textSystem, Size& out) const {
+  if (envLayer_ || modifiers_) {
+    return false;
+  }
+  Element const* const prevEl = ctx.currentElement();
+  ctx.setCurrentElement(this);
+  bool const reused = impl_->tryCachedMeasure(ctx, constraints, hints, textSystem, out);
+  ctx.setCurrentElement(prevEl);
+  return reused;
+}
+
 void Element::renderFromLayout(RenderContext& ctx, LayoutNode& node) const {
   impl_->renderFromLayout(ctx, node);
 }

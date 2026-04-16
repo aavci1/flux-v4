@@ -156,13 +156,11 @@ struct FrameContext {
     }
 
     roots = ctx->subtreeRootLayouts();
-    pins = ctx->pinnedElements();
     lastRootConstraints = rootCs;
     lastRootMeasureId = root.measureId();
     hasCurrentLayout = true;
-    store.endRebuild();
 
-    bool const incrementalSceneReuse = useRetainedLayoutBuild && canIncrementallyRenderLayoutTree(tree);
+    bool const incrementalSceneReuse = false;
     if (!incrementalSceneReuse) {
       graph.clear();
       eventMap.clear();
@@ -177,6 +175,8 @@ struct FrameContext {
     rctx.pushConstraints(rootCs, {});
     renderLayoutTree(tree, rctx);
     rctx.popConstraints();
+    pins = ctx->pinnedElements();
+    store.endRebuild();
   }
 };
 

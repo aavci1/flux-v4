@@ -120,6 +120,7 @@ public:
   [[nodiscard]] bool shouldForceFullRebuild() const noexcept { return forceFullRebuild_; }
   [[nodiscard]] bool isComponentDirty(ComponentKey const& key) const;
   [[nodiscard]] bool hasDirtyDescendant(ComponentKey const& key) const;
+  void markRetainedSubtreeVisited(ComponentKey const& key);
   [[nodiscard]] bool currentCompositePathStable() const noexcept;
   void pushCompositePathStable(bool stable);
   void popCompositePathStable();

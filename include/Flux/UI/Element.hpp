@@ -223,7 +223,10 @@ public:
   Element& operator=(Element&&) noexcept = default;
 
   void layout(LayoutContext& ctx) const;
+  bool canRetainedLayout(LayoutContext& ctx) const;
   bool tryRetainedLayout(LayoutContext& ctx) const;
+  bool tryCachedMeasure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
+                        TextSystem& textSystem, Size& out) const;
   void renderFromLayout(RenderContext& ctx, LayoutNode& node) const;
   bool supportsIncrementalSceneReuse() const;
   bool reuseSceneFromLayout(RenderContext& ctx, LayoutNode& node) const;
@@ -296,7 +299,12 @@ private:
     virtual ~Concept() = default;
     virtual std::unique_ptr<Concept> clone() const = 0;
     virtual void layout(LayoutContext& ctx) const = 0;
+    virtual bool canRetainedLayout(LayoutContext&) const { return false; }
     virtual bool tryRetainedLayout(LayoutContext&) const { return false; }
+    virtual bool tryCachedMeasure(LayoutContext&, LayoutConstraints const&, LayoutHints const&,
+                                  TextSystem&, Size&) const {
+      return false;
+    }
     virtual void renderFromLayout(RenderContext& ctx, LayoutNode& node) const = 0;
     virtual bool supportsIncrementalSceneReuse() const { return false; }
     virtual bool reuseSceneFromLayout(RenderContext&, LayoutNode&) const { return false; }
@@ -420,7 +428,10 @@ struct Element::Model : Concept {
     }
   }
   void layout(LayoutContext& ctx) const override;
+  bool canRetainedLayout(LayoutContext& ctx) const override;
   bool tryRetainedLayout(LayoutContext& ctx) const override;
+  bool tryCachedMeasure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
+                        TextSystem& textSystem, Size& out) const override;
   void renderFromLayout(RenderContext& ctx, LayoutNode& node) const override;
   bool supportsIncrementalSceneReuse() const override;
   bool reuseSceneFromLayout(RenderContext& ctx, LayoutNode& node) const override;
@@ -491,6 +502,7 @@ void Element::Model<C>::layout(LayoutContext& ctx) const {
         ctx.canReuseRetainedCompositeSubtree(key, ctx.layoutEngine().lastAssignedFrame(), ctx.constraints(),
                                              ctx.hints())) {
       Rect const assignedFrame = ctx.layoutEngine().consumeAssignedFrame();
+      store->markRetainedSubtreeVisited(key);
       reusedLayoutSubtree = ctx.reuseRetainedCompositeSubtree(key, assignedFrame);
     }
     if (!reusedLayoutSubtree) {
@@ -540,9 +552,53 @@ bool Element::Model<C>::tryRetainedLayout(LayoutContext& ctx) const {
         !ctx.canReuseRetainedCompositeSubtree(key, assignedFrame, ctx.constraints(), ctx.hints())) {
       return false;
     }
+    store->markRetainedSubtreeVisited(key);
     ctx.advanceChildSlot();
     (void)ctx.layoutEngine().consumeAssignedFrame();
     return ctx.reuseRetainedCompositeSubtree(key, assignedFrame);
+  }
+}
+
+template<typename C>
+bool Element::Model<C>::canRetainedLayout(LayoutContext& ctx) const {
+  if constexpr (!CompositeComponent<C>) {
+    return false;
+  } else {
+    StateStore* store = StateStore::current();
+    if (!store) {
+      return false;
+    }
+    ComponentKey const key = ctx.peekNextCompositeKey();
+    Rect const assignedFrame = ctx.layoutEngine().lastAssignedFrame();
+    return store->canReuseBody(key, value, ctx.constraints()) &&
+           !store->hasDirtyDescendant(key) &&
+           ctx.canReuseRetainedCompositeSubtree(key, assignedFrame, ctx.constraints(), ctx.hints());
+  }
+}
+
+template<typename C>
+bool Element::Model<C>::tryCachedMeasure(LayoutContext& ctx, LayoutConstraints const& constraints,
+                                         LayoutHints const& hints, TextSystem& textSystem, Size& out) const {
+  (void)hints;
+  (void)textSystem;
+  if constexpr (!CompositeComponent<C>) {
+    return false;
+  } else {
+    StateStore* store = StateStore::current();
+    if (!store) {
+      return false;
+    }
+    ComponentKey const key = ctx.peekNextCompositeKey();
+    if (!store->canReuseBody(key, value, constraints) || store->hasDirtyDescendant(key)) {
+      return false;
+    }
+    std::optional<Size> const cached = store->cachedMeasure(key, constraints);
+    if (!cached.has_value()) {
+      return false;
+    }
+    ctx.advanceChildSlot();
+    out = *cached;
+    return true;
   }
 }
 

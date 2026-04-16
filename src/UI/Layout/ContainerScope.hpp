@@ -108,7 +108,11 @@ public:
     std::vector<Size> sizes;
     sizes.reserve(children.size());
     for (Element const& ch : children) {
-      sizes.push_back(ch.measure(ctx, childCs, childHints, ctx.textSystem()));
+      Size size{};
+      if (!ch.tryCachedMeasure(ctx, childCs, childHints, ctx.textSystem(), size)) {
+        size = ch.measure(ctx, childCs, childHints, ctx.textSystem());
+      }
+      sizes.push_back(size);
     }
     if (StateStore* store = StateStore::current()) {
       store->resetSlotCursors();
@@ -118,7 +122,10 @@ public:
   }
 
   Size measureChild(Element const& child, LayoutConstraints const& childCs, LayoutHints childHints = {}) {
-    Size const sz = child.measure(ctx, childCs, childHints, ctx.textSystem());
+    Size sz{};
+    if (!child.tryCachedMeasure(ctx, childCs, childHints, ctx.textSystem(), sz)) {
+      sz = child.measure(ctx, childCs, childHints, ctx.textSystem());
+    }
     if (StateStore* store = StateStore::current()) {
       store->resetSlotCursors();
     }
@@ -136,6 +143,8 @@ public:
   }
 
   void logContainer(char const* tag) const { layoutDebugLogContainer(tag, outer, parentFrame); }
+
+  ComponentKey const& stableKey() const noexcept { return stableKey_; }
 
   ~ContainerLayoutScope() {
     ctx.popChildIndex();

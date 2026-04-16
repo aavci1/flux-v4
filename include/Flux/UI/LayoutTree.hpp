@@ -165,6 +165,7 @@ public:
   [[nodiscard]] Rect unionSubtreeWorldBounds(LayoutNodeId nodeId) const;
 
   [[nodiscard]] std::optional<Rect> rectForKey(ComponentKey const& key) const;
+  [[nodiscard]] LayoutNode const* retainedNodeForKey(ComponentKey const& key) const;
 
   /// Internal: append node; returns assigned id. If \p parent is invalid, this becomes the root.
   LayoutNodeId pushNode(LayoutNode&& node, LayoutNodeId parent);

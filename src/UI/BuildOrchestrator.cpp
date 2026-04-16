@@ -136,7 +136,7 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
     layoutTree_.endBuild();
   }
 
-  bool const incrementalSceneReuse = useRetainedLayoutBuild && canIncrementallyRenderLayoutTree(layoutTree_);
+  bool const incrementalSceneReuse = false;
   if (!incrementalSceneReuse) {
     graph.clear();
     eventMap_.clear();

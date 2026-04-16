@@ -50,6 +50,7 @@ void StateStore::beginRebuild(bool forceFullRebuild) {
   compositeConstraintStack_.clear();
   compositeElementModifierStack_.clear();
   visited_.clear();
+  visited_.reserve(states_.size());
   for (auto& [key, cs] : states_) {
     (void)key;
     cs.cursor = 0;
@@ -175,6 +176,10 @@ bool StateStore::hasDirtyDescendant(ComponentKey const& key) const {
     }
   }
   return false;
+}
+
+void StateStore::markRetainedSubtreeVisited(ComponentKey const& key) {
+  visited_.insert(key);
 }
 
 bool StateStore::currentCompositePathStable() const noexcept {

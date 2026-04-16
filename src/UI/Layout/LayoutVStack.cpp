@@ -29,9 +29,9 @@ void VStack::layout(LayoutContext& ctx) const {
 
   LayoutHints measureHints{};
   measureHints.vStackCrossAlign = alignment;
+  std::size_t const n = children.size();
   auto sizes = scope.measureChildren(children, childCs, measureHints);
   scope.logContainer("VStack");
-  std::size_t const n = children.size();
 
   float maxChildW = 0.f;
   for (Size s : sizes) {
