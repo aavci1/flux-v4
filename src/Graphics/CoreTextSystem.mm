@@ -2941,7 +2941,7 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layout(AttributedString const&
       updateMemoIds(result, ch, true);
       return result;
     }
-    return layoutUnboxed(text, options, maxWidth, false, 0, 0);
+    return layoutUnboxed(text, options, maxWidth, true, ch.hi, ch.lo);
   }
 
   // --- Tier 3: cold path (different width or no memo) ---
