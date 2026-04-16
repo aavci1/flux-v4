@@ -103,6 +103,11 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
       constraintsEqual(latestRootConstraints_, rootCs);
 
   SceneGraph& graph = window_.sceneGraph();
+  if (canReuseWholeLayout) {
+    window_.overlayManager().rebuild(sz, runtime);
+    return;
+  }
+
   graph.clear();
 
   layoutEngine_.resetForBuild();
@@ -111,28 +116,6 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
   layoutDebugBeginPass();
 
   EventMap newMap;
-  if (canReuseWholeLayout) {
-    RenderContext rctx{graph, newMap, Application::instance().textSystem()};
-    rctx.pushConstraints(rootCs);
-    renderLayoutTree(layoutTree_, rctx);
-    rctx.popConstraints();
-
-    layoutRects_.fill(layoutTree_, layoutSubtreeRoots_);
-    layoutDebugEndPass();
-
-    eventMap_ = std::move(newMap);
-    focus_.validateAfterRebuild(eventMap_);
-    window_.overlayManager().rebuild(sz, runtime);
-
-    if (inputDebugEnabled()) {
-      std::fprintf(stderr,
-                   "[flux:input] rebuild layout=%.1fx%.1f scene root children (if any) updated\n",
-                   static_cast<double>(sz.width), static_cast<double>(sz.height));
-    }
-    Application::instance().textSystem().onFrameEnd();
-    window_.requestRedraw();
-    return;
-  }
 
   stateStore_.beginRebuild(sizeOverride.has_value() || !stateStore_.hasPendingDirtyComponents());
   if (stateStore_.shouldForceFullRebuild()) {

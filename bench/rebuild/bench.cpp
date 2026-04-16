@@ -130,39 +130,41 @@ struct FrameContext {
         rootCs.maxWidth == lastRootConstraints.maxWidth &&
         rootCs.maxHeight == lastRootConstraints.maxHeight;
 
+    if (canReuseWholeLayout) {
+      return;
+    }
+
     graph.clear();
     eventMap = EventMap{};
     le.resetForBuild();
-    if (!canReuseWholeLayout) {
-      store.beginRebuild(false);
-      if (store.shouldForceFullRebuild()) {
-        mc.clear();
-      }
-      if (hasCurrentLayout) {
-        retainedTree.clear();
-        std::swap(retainedTree, tree);
-        retainedRoots = std::move(roots);
-        retainedPins = std::move(pins);
-        hasCurrentLayout = false;
-      } else {
-        tree.clear();
-      }
-
-      LayoutContextPtr ctx{
-          flux::LayoutContextTestAccess::create(ts, le, tree, &mc, &retainedTree, &retainedRoots)};
-      ctx->pushConstraints(rootCs);
-      le.setChildFrame(Rect{0.f, 0.f, w, h});
-
-      root.layout(*ctx);
-      ctx->popConstraints();
-
-      roots = ctx->subtreeRootLayouts();
-      pins = ctx->pinnedElements();
-      lastRootConstraints = rootCs;
-      lastRootMeasureId = root.measureId();
-      hasCurrentLayout = true;
-      store.endRebuild();
+    store.beginRebuild(false);
+    if (store.shouldForceFullRebuild()) {
+      mc.clear();
     }
+    if (hasCurrentLayout) {
+      retainedTree.clear();
+      std::swap(retainedTree, tree);
+      retainedRoots = std::move(roots);
+      retainedPins = std::move(pins);
+      hasCurrentLayout = false;
+    } else {
+      tree.clear();
+    }
+
+    LayoutContextPtr ctx{
+        flux::LayoutContextTestAccess::create(ts, le, tree, &mc, &retainedTree, &retainedRoots)};
+    ctx->pushConstraints(rootCs);
+    le.setChildFrame(Rect{0.f, 0.f, w, h});
+
+    root.layout(*ctx);
+    ctx->popConstraints();
+
+    roots = ctx->subtreeRootLayouts();
+    pins = ctx->pinnedElements();
+    lastRootConstraints = rootCs;
+    lastRootMeasureId = root.measureId();
+    hasCurrentLayout = true;
+    store.endRebuild();
 
     RenderContext rctx{graph, eventMap, ts};
     rctx.pushConstraints(rootCs, {});
