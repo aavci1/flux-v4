@@ -55,14 +55,23 @@ MeasureCacheKey makeMeasureCacheKey(std::uint64_t elementMeasureId, LayoutConstr
 /// and build.
 class MeasureCache {
 public:
+  void beginBuild(bool forceFullRebuild);
+
   void clear();
 
-  std::optional<Size> tryGet(MeasureCacheKey const& key) const;
+  std::optional<Size> tryGet(MeasureCacheKey const& key);
 
   void put(MeasureCacheKey const& key, Size size);
 
 private:
-  std::unordered_map<MeasureCacheKey, Size, MeasureCacheKeyHash> map_{};
+  struct Entry {
+    Size size{};
+    std::uint64_t lastUsedEpoch = 0;
+  };
+
+  std::unordered_map<MeasureCacheKey, Entry, MeasureCacheKeyHash> map_{};
+  std::uint64_t buildEpoch_ = 0;
+  static constexpr std::uint64_t kRetainBuilds = 8;
 };
 
 } // namespace flux

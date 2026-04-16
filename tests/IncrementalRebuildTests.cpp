@@ -108,6 +108,7 @@ struct RebuildHarness {
 
   void rebuild(Element const& root, bool forceFull = false, float w = 800.f, float h = 1200.f) {
     store.beginRebuild(forceFull);
+    mc.beginBuild(store.shouldForceFullRebuild());
     if (!forceFull) {
       retainedTree.clear();
       std::swap(retainedTree, tree);
@@ -122,7 +123,6 @@ struct RebuildHarness {
     tree.clear();
     graph.clear();
     eventMap = EventMap{};
-    mc.clear();
     le.resetForBuild();
 
     LayoutContextPtr ctx{
@@ -264,6 +264,30 @@ struct ExternalSignalTrackedRow {
   }
 };
 
+struct MeasuredRenderLeaf {
+  std::shared_ptr<int> measureCount;
+
+  Size measure(LayoutConstraints const&, LayoutHints const&) const {
+    ++*measureCount;
+    return Size{40.f, 12.f};
+  }
+
+  void render(Canvas&, Rect const&) const {}
+};
+
+struct MemoizedMeasurePairRoot {
+  std::shared_ptr<int> measureCount;
+  std::shared_ptr<int> dirtyCount;
+  std::shared_ptr<State<int>> dirtyHandle;
+
+  Element body() const {
+    std::vector<Element> children;
+    children.push_back(Element{MeasuredRenderLeaf{.measureCount = measureCount}});
+    children.push_back(Element{SignalLeaf{.count = dirtyCount, .handle = dirtyHandle}});
+    return Element{VStack{.spacing = 0.f, .children = std::move(children)}};
+  }
+};
+
 struct ShrinkingListRoot {
   std::shared_ptr<std::vector<int>> items;
   std::shared_ptr<std::vector<std::shared_ptr<Signal<int>>>> signals;
@@ -376,6 +400,31 @@ TEST_CASE("dirty parent can reuse a clean child when the child props are unchang
 
   CHECK(*parentCount == 2);
   CHECK(*childCount == 1);
+}
+
+TEST_CASE("incremental rebuild preserves memoized leaf measures for clean siblings") {
+  auto measureCount = std::make_shared<int>(0);
+  auto dirtyCount = std::make_shared<int>(0);
+  auto dirtyHandle = std::make_shared<State<int>>();
+
+  StoreScope scope;
+  RebuildHarness harness{scope.store};
+  Element root = Element{MemoizedMeasurePairRoot{
+      .measureCount = measureCount,
+      .dirtyCount = dirtyCount,
+      .dirtyHandle = dirtyHandle,
+  }};
+
+  harness.rebuild(root);
+  REQUIRE(*measureCount == 1);
+  REQUIRE(*dirtyCount == 1);
+
+  *dirtyHandle = 1;
+  CHECK(scope.store.hasPendingDirtyComponents());
+  harness.rebuild(root);
+
+  CHECK(*measureCount == 1);
+  CHECK(*dirtyCount == 2);
 }
 
 TEST_CASE("removing a composite unsubscribes its external signal and destroys its state") {

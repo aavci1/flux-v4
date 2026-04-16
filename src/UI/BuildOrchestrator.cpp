@@ -118,9 +118,7 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
   EventMap newMap;
 
   stateStore_.beginRebuild(sizeOverride.has_value() || !stateStore_.hasPendingDirtyComponents());
-  if (stateStore_.shouldForceFullRebuild()) {
-    measureCache_.clear();
-  }
+  measureCache_.beginBuild(stateStore_.shouldForceFullRebuild());
 
   actionRegistryBuild_.beginRebuild();
   StateStore::setCurrent(&stateStore_);

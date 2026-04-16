@@ -46,20 +46,40 @@ MeasureCacheKey makeMeasureCacheKey(std::uint64_t elementMeasureId, LayoutConstr
   return k;
 }
 
+void MeasureCache::beginBuild(bool forceFullRebuild) {
+  ++buildEpoch_;
+  if (forceFullRebuild) {
+    map_.clear();
+    return;
+  }
+  if (buildEpoch_ <= kRetainBuilds) {
+    return;
+  }
+  std::uint64_t const cutoff = buildEpoch_ - kRetainBuilds;
+  for (auto it = map_.begin(); it != map_.end();) {
+    if (it->second.lastUsedEpoch < cutoff) {
+      it = map_.erase(it);
+    } else {
+      ++it;
+    }
+  }
+}
+
 void MeasureCache::clear() {
   map_.clear();
 }
 
-std::optional<Size> MeasureCache::tryGet(MeasureCacheKey const& key) const {
+std::optional<Size> MeasureCache::tryGet(MeasureCacheKey const& key) {
   auto const it = map_.find(key);
   if (it == map_.end()) {
     return std::nullopt;
   }
-  return it->second;
+  it->second.lastUsedEpoch = buildEpoch_;
+  return it->second.size;
 }
 
 void MeasureCache::put(MeasureCacheKey const& key, Size size) {
-  map_.insert_or_assign(key, size);
+  map_.insert_or_assign(key, Entry{.size = size, .lastUsedEpoch = buildEpoch_});
 }
 
 } // namespace flux
