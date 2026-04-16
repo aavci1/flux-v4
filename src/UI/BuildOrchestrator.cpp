@@ -136,7 +136,7 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
     layoutTree_.endBuild();
   }
 
-  bool const incrementalSceneReuse = false;
+  bool const incrementalSceneReuse = useRetainedLayoutBuild;
   if (!incrementalSceneReuse) {
     graph.clear();
     eventMap_.clear();
@@ -151,6 +151,9 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
   rctx.pushConstraints(rootCs);
   renderLayoutTree(layoutTree_, rctx);
   rctx.popConstraints();
+  if (incrementalSceneReuse) {
+    eventMap_.prune(graph);
+  }
 
   layoutRects_.fill(layoutTree_, lctx);
   layoutSubtreeRoots_ = lctx.subtreeRootLayouts();

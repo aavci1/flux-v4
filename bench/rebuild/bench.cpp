@@ -160,7 +160,7 @@ struct FrameContext {
     lastRootMeasureId = root.measureId();
     hasCurrentLayout = true;
 
-    bool const incrementalSceneReuse = false;
+    bool const incrementalSceneReuse = useRetainedLayoutBuild;
     if (!incrementalSceneReuse) {
       graph.clear();
       eventMap.clear();
@@ -175,6 +175,9 @@ struct FrameContext {
     rctx.pushConstraints(rootCs, {});
     renderLayoutTree(tree, rctx);
     rctx.popConstraints();
+    if (incrementalSceneReuse) {
+      eventMap.prune(graph);
+    }
     pins = ctx->pinnedElements();
     store.endRebuild();
   }

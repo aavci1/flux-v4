@@ -129,7 +129,7 @@ struct RebuildHarness {
       tree.endBuild();
     }
 
-    bool const incrementalSceneReuse = false;
+    bool const incrementalSceneReuse = useRetainedLayoutBuild;
     if (!incrementalSceneReuse) {
       graph.clear();
       eventMap.clear();
@@ -144,6 +144,9 @@ struct RebuildHarness {
     rctx.pushConstraints(rootCs, {});
     renderLayoutTree(tree, rctx);
     rctx.popConstraints();
+    if (incrementalSceneReuse) {
+      eventMap.prune(graph);
+    }
 
     roots = ctx->subtreeRootLayouts();
     pins = ctx->pinnedElements();
@@ -547,6 +550,52 @@ TEST_CASE("incremental rebuild retains clean child composite subtree ids") {
   auto const secondIt = harness.roots.find(ComponentKey{0, 0, 0});
   REQUIRE(secondIt != harness.roots.end());
   CHECK(secondIt->second == firstCleanRoot);
+}
+
+TEST_CASE("incremental rebuild retains clean child scene node ids") {
+  auto cleanCount = std::make_shared<int>(0);
+  auto dirtyCount = std::make_shared<int>(0);
+  auto dirtyHandle = std::make_shared<State<int>>();
+
+  StoreScope scope;
+  RebuildHarness harness{scope.store};
+  Element root = Element{PairRoot{
+      .cleanCount = cleanCount,
+      .dirtyCount = dirtyCount,
+      .dirtyHandle = dirtyHandle,
+  }};
+
+  harness.rebuild(root);
+  auto const firstIt = harness.roots.find(ComponentKey{0, 0, 0});
+  REQUIRE(firstIt != harness.roots.end());
+  auto firstSceneNodeInSubtree = [&](LayoutNodeId rootId) -> NodeId {
+    auto visit = [&](auto&& self, LayoutNodeId id) -> NodeId {
+      LayoutNode const* node = harness.tree.get(id);
+      if (!node) {
+        return kInvalidNodeId;
+      }
+      if (!node->sceneNodes.empty()) {
+        return node->sceneNodes.front();
+      }
+      for (LayoutNodeId childId : node->children) {
+        if (NodeId found = self(self, childId); found.isValid()) {
+          return found;
+        }
+      }
+      return kInvalidNodeId;
+    };
+    return visit(visit, rootId);
+  };
+  NodeId const firstSceneNode = firstSceneNodeInSubtree(firstIt->second);
+  REQUIRE(firstSceneNode.isValid());
+
+  *dirtyHandle = 1;
+  CHECK(scope.store.hasPendingDirtyComponents());
+  harness.rebuild(root);
+
+  auto const secondIt = harness.roots.find(ComponentKey{0, 0, 0});
+  REQUIRE(secondIt != harness.roots.end());
+  CHECK(firstSceneNodeInSubtree(secondIt->second) == firstSceneNode);
 }
 
 TEST_CASE("incremental rebuild retains clean ForEach item subtree ids") {
