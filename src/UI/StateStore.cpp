@@ -93,13 +93,14 @@ void StateStore::resetSlotCursors() {
 
 void StateStore::pushComponent(ComponentKey const& key, std::type_index componentType) {
   visited_.insert(key);
-  ComponentState& state = states_[key];
+  auto [it, inserted] = states_.try_emplace(key);
+  ComponentState& state = it->second;
   if (state.componentType != componentType) {
     clearComponentState(state);
     state.componentType = componentType;
   }
   state.cursor = 0;
-  activeStack_.push_back(key);
+  activeStack_.push_back(&it->first);
 }
 
 void StateStore::popComponent() {
@@ -142,7 +143,7 @@ ElementModifiers const* StateStore::currentCompositeElementModifiers() const noe
 
 ComponentKey const& StateStore::currentComponentKey() const {
   assert(!activeStack_.empty());
-  return activeStack_.back();
+  return *activeStack_.back();
 }
 
 void StateStore::markCompositeDirty(ComponentKey const& key) {

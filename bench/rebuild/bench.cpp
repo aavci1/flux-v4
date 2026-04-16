@@ -240,6 +240,26 @@ struct SignalRowsTree {
   }
 };
 
+struct CompositeRow {
+  float rowH = 16.f;
+
+  Element body() const { return Element{Rectangle{}}.size(200.f, rowH); }
+};
+
+struct CompositeRowsTree {
+  int count = 0;
+  float rowH = 16.f;
+
+  Element body() const {
+    std::vector<Element> rows;
+    rows.reserve(static_cast<std::size_t>(count));
+    for (int i = 0; i < count; ++i) {
+      rows.push_back(Element{CompositeRow{.rowH = rowH}});
+    }
+    return Element{VStack{.spacing = 0.f, .children = std::move(rows)}};
+  }
+};
+
 static double secondsSince(std::chrono::steady_clock::time_point t0) {
   auto const t1 = std::chrono::steady_clock::now();
   return std::chrono::duration<double>(t1 - t0).count();
@@ -293,16 +313,31 @@ int main(int argc, char** argv) {
     }
     return normalCount;
   };
+  auto const repeatsForSingleShot = [&](std::string_view id, int normalCount) {
+    if (!filter.empty() && filter == id) {
+      return normalCount * 200;
+    }
+    return normalCount;
+  };
   constexpr float W = 1200.f;
   constexpr float H = 2000.f;
 
   if (want("B1")) {
-    StateStoreGuard guard;
-    FrameContext fc{guard.store};
     Element root = flatVStack(5000, 16.f);
-    double const t = timeIt([&] { fc.rebuild(root, W, H); });
+    int const N = repeatsForSingleShot("B1", 1);
+    double const t = timeAveraged(N, [&] {
+      StateStoreGuard guard;
+      FrameContext fc{guard.store};
+      fc.rebuild(root, W, H);
+      if (fc.tree.nodes().empty()) {
+        std::abort();
+      }
+    });
     std::cout << "B1 flat 5000-row VStack cold:           ";
     printRow("", t);
+    StateStoreGuard guard;
+    FrameContext fc{guard.store};
+    fc.rebuild(root, W, H);
     std::cout << "   layout_tree_nodes: " << fc.tree.nodes().size() << "\n";
   }
 
@@ -478,6 +513,25 @@ int main(int argc, char** argv) {
     }
     std::cout << "B10 signal-write 10000 composite tree:  ";
     printRow("", total / N);
+  }
+
+  if (want("B11")) {
+    Element root = Element{CompositeRowsTree{.count = 5000, .rowH = 16.f}};
+    int const N = repeatsForSingleShot("B11", 1);
+    double const t = timeAveraged(N, [&] {
+      StateStoreGuard guard;
+      FrameContext fc{guard.store};
+      fc.rebuild(root, W, H);
+      if (fc.tree.nodes().empty()) {
+        std::abort();
+      }
+    });
+    std::cout << "B11 flat 5000 composite-row tree cold:  ";
+    printRow("", t);
+    StateStoreGuard guard;
+    FrameContext fc{guard.store};
+    fc.rebuild(root, W, H);
+    std::cout << "   layout_tree_nodes: " << fc.tree.nodes().size() << "\n";
   }
 
   return 0;
