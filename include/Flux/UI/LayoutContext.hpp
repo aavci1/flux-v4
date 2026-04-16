@@ -50,6 +50,7 @@ public:
   void setChildIndex(std::size_t index);
 
   ComponentKey nextCompositeKey();
+  ComponentKey peekNextCompositeKey() const;
 
   void advanceChildSlot();
 

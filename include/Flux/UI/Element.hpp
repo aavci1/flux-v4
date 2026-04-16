@@ -222,6 +222,7 @@ public:
   Element& operator=(Element&&) noexcept = default;
 
   void layout(LayoutContext& ctx) const;
+  bool tryRetainedLayout(LayoutContext& ctx) const;
   void renderFromLayout(RenderContext& ctx, LayoutNode const& node) const;
   Size measure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
                TextSystem& textSystem) const;
@@ -292,6 +293,7 @@ private:
     virtual ~Concept() = default;
     virtual std::unique_ptr<Concept> clone() const = 0;
     virtual void layout(LayoutContext& ctx) const = 0;
+    virtual bool tryRetainedLayout(LayoutContext&) const { return false; }
     virtual void renderFromLayout(RenderContext& ctx, LayoutNode const& node) const = 0;
     virtual Size measure(LayoutContext& ctx, LayoutConstraints const& constraints,
                          LayoutHints const& hints, TextSystem& textSystem) const = 0;
@@ -413,6 +415,7 @@ struct Element::Model : Concept {
     }
   }
   void layout(LayoutContext& ctx) const override;
+  bool tryRetainedLayout(LayoutContext& ctx) const override;
   void renderFromLayout(RenderContext& ctx, LayoutNode const& node) const override;
   Size measure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
                TextSystem& textSystem) const override;
@@ -511,6 +514,28 @@ void Element::Model<C>::layout(LayoutContext& ctx) const {
     static_assert(alwaysFalse<C>,
         "Component must satisfy CompositeComponent (body()), PrimitiveComponent (layout + measure with "
         "LayoutContext), or RenderComponent (render + measure).");
+  }
+}
+
+template<typename C>
+bool Element::Model<C>::tryRetainedLayout(LayoutContext& ctx) const {
+  if constexpr (!CompositeComponent<C>) {
+    return false;
+  } else {
+    StateStore* store = StateStore::current();
+    if (!store) {
+      return false;
+    }
+    ComponentKey const key = ctx.peekNextCompositeKey();
+    Rect const assignedFrame = ctx.layoutEngine().lastAssignedFrame();
+    if (!store->canReuseBody(key, value, ctx.constraints()) ||
+        store->hasDirtyDescendant(key) ||
+        !ctx.canReuseRetainedCompositeSubtree(key, assignedFrame, ctx.constraints(), ctx.hints())) {
+      return false;
+    }
+    ctx.advanceChildSlot();
+    (void)ctx.layoutEngine().consumeAssignedFrame();
+    return ctx.reuseRetainedCompositeSubtree(key, assignedFrame);
   }
 }
 

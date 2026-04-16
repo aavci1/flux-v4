@@ -129,7 +129,9 @@ public:
   void layoutChild(Element const& child, Rect frame, LayoutConstraints const& cs, LayoutHints hints = {}) {
     le.setChildFrame(frame);
     ctx.pushConstraints(cs, std::move(hints));
-    child.layout(ctx);
+    if (!child.tryRetainedLayout(ctx)) {
+      child.layout(ctx);
+    }
     ctx.popConstraints();
   }
 

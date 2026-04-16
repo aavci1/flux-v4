@@ -106,6 +106,12 @@ ComponentKey LayoutContext::nextCompositeKey() {
   return key;
 }
 
+ComponentKey LayoutContext::peekNextCompositeKey() const {
+  ComponentKey key = keyStack_;
+  key.push_back(nextChildIndex_);
+  return key;
+}
+
 void LayoutContext::advanceChildSlot() { ++nextChildIndex_; }
 
 ComponentKey LayoutContext::leafComponentKey() const {

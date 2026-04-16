@@ -140,6 +140,17 @@ void Element::layout(LayoutContext& ctx) const {
   layoutDebugPopElementBuild();
 }
 
+bool Element::tryRetainedLayout(LayoutContext& ctx) const {
+  if (envLayer_ || modifiers_) {
+    return false;
+  }
+  Element const* const prevEl = ctx.currentElement();
+  ctx.setCurrentElement(this);
+  bool const reused = impl_->tryRetainedLayout(ctx);
+  ctx.setCurrentElement(prevEl);
+  return reused;
+}
+
 void Element::renderFromLayout(RenderContext& ctx, LayoutNode const& node) const {
   impl_->renderFromLayout(ctx, node);
 }
