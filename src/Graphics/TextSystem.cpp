@@ -9,6 +9,7 @@
 #include <span>
 #include <string>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 namespace flux {
@@ -83,32 +84,33 @@ void applyHorizontalPerLine(TextLayout &layout, Rect const &box, HorizontalAlign
         return;
     }
 
-    // Group by ctLineIndex, not baseline Y epsilon. Runs on the same CTLine can differ in baseline Y by
-    // more than kLineEps (e.g. mixed fonts, attachment glyphs); splitting them yields different lineDx per
-    // run and garbles center/trailing alignment (narrow stacked ink on earlier lines, last line OK).
-    std::vector<std::uint32_t> lineOrder;
-    std::unordered_set<std::uint32_t> seenLine;
-    lineOrder.reserve(layout.runs.size());
-    seenLine.reserve(layout.runs.size());
-    for (auto const &pr : layout.runs) {
-        if (seenLine.insert(pr.ctLineIndex).second) {
-            lineOrder.push_back(pr.ctLineIndex);
+    // Runs are appended in ctLineIndex order, so group their contiguous ranges once and then operate on
+    // each line slice directly instead of rescanning all runs for every visual line.
+    std::vector<std::pair<std::uint32_t, std::uint32_t>> lineRunRanges;
+    lineRunRanges.reserve(layout.lines.empty() ? layout.runs.size() : layout.lines.size());
+    std::uint32_t begin = 0;
+    std::uint32_t prevLineId = layout.runs.front().ctLineIndex;
+    for (std::uint32_t i = 1; i < layout.runs.size(); ++i) {
+        std::uint32_t const lineId = layout.runs[i].ctLineIndex;
+        if (lineId != prevLineId) {
+            lineRunRanges.emplace_back(begin, i);
+            begin = i;
+            prevLineId = lineId;
         }
     }
+    lineRunRanges.emplace_back(begin, static_cast<std::uint32_t>(layout.runs.size()));
 
-    for (std::uint32_t const lineId : lineOrder) {
-        float minL = std::numeric_limits<float>::infinity();
-        float maxR = -std::numeric_limits<float>::infinity();
-        for (auto const &pr : layout.runs) {
-            if (pr.ctLineIndex != lineId) {
-                continue;
-            }
+    std::size_t lineCursor = 0;
+    for (auto const &[runBegin, runEnd] : lineRunRanges) {
+        std::uint32_t const lineId = layout.runs[runBegin].ctLineIndex;
+        float minL = layout.runs[runBegin].origin.x;
+        float maxR = layout.runs[runBegin].origin.x + layout.runs[runBegin].run.width;
+        for (std::uint32_t i = runBegin + 1; i < runEnd; ++i) {
+            auto const &pr = layout.runs[i];
             minL = std::min(minL, pr.origin.x);
             maxR = std::max(maxR, pr.origin.x + pr.run.width);
         }
-        if (!(minL < std::numeric_limits<float>::infinity())) {
-            continue;
-        }
+
         float const lineWidth = maxR - minL;
         float lineDx = 0.f;
         if (horizontalAlignment == HorizontalAlignment::Center) {
@@ -116,15 +118,16 @@ void applyHorizontalPerLine(TextLayout &layout, Rect const &box, HorizontalAlign
         } else if (horizontalAlignment == HorizontalAlignment::Trailing) {
             lineDx = box.width - lineWidth - minL;
         }
-        for (auto &pr : layout.runs) {
-            if (pr.ctLineIndex == lineId) {
-                pr.origin.x += lineDx;
-            }
+        for (std::uint32_t i = runBegin; i < runEnd; ++i) {
+            layout.runs[i].origin.x += lineDx;
         }
-        for (auto &lr : layout.lines) {
-            if (lr.ctLineIndex == lineId) {
-                lr.lineMinX += lineDx;
-            }
+
+        while (lineCursor < layout.lines.size() && layout.lines[lineCursor].ctLineIndex < lineId) {
+            ++lineCursor;
+        }
+        if (lineCursor < layout.lines.size() && layout.lines[lineCursor].ctLineIndex == lineId) {
+            layout.lines[lineCursor].lineMinX += lineDx;
+            ++lineCursor;
         }
     }
     recomputeTextLayoutMetrics(layout);

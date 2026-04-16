@@ -12,10 +12,24 @@
 
 #include <cmath>
 #include <cstdlib>
+#include <limits>
 #include <optional>
 #include <string>
 
 using namespace flux;
+
+namespace {
+
+TextLayout::LineRange const* findLine(TextLayout const& layout, std::uint32_t ctLineIndex) {
+    for (auto const& line : layout.lines) {
+        if (line.ctLineIndex == ctLineIndex) {
+            return &line;
+        }
+    }
+    return nullptr;
+}
+
+} // namespace
 
 TEST_CASE("Paragraph cache: fast path matches slow path (env toggle)") {
     std::string body;
@@ -168,6 +182,74 @@ TEST_CASE("CoreText layout preserves attributed run backgrounds") {
     }
     CHECK(sawBackground);
     CHECK(sawPlain);
+}
+
+TEST_CASE("CoreText boxed layout centers each line independently") {
+    Font f {};
+    f.family = ".AppleSystemUIFont";
+    f.size = 15.f;
+
+    AttributedString as;
+    as.utf8 = "tiny\nslightly longer line\nmid\nwidest line of all\n";
+    std::uint32_t const split = static_cast<std::uint32_t>(as.utf8.size() / 2);
+    as.runs.push_back({0, split, f, Colors::black, std::nullopt});
+    as.runs.push_back({split, static_cast<std::uint32_t>(as.utf8.size()), f, Color::hex(0x336699), std::nullopt});
+
+    TextLayoutOptions leadingOpt {};
+    leadingOpt.wrapping = TextWrapping::Wrap;
+
+    TextLayoutOptions centeredOpt = leadingOpt;
+    centeredOpt.horizontalAlignment = HorizontalAlignment::Center;
+
+    Rect const box {0.f, 0.f, 320.f, 240.f};
+
+    CoreTextSystem sys;
+    auto const leading = sys.layout(as, box.width, leadingOpt);
+    auto const centered = static_cast<TextSystem&>(sys).layout(as, box, centeredOpt);
+    REQUIRE(leading != nullptr);
+    REQUIRE(centered != nullptr);
+    REQUIRE(leading->lines.size() == centered->lines.size());
+    REQUIRE(leading->lines.size() >= 4);
+
+    for (auto const& baseLine : leading->lines) {
+        TextLayout::LineRange const* centeredLine = findLine(*centered, baseLine.ctLineIndex);
+        REQUIRE(centeredLine != nullptr);
+
+        bool sawRun = false;
+        float minL = std::numeric_limits<float>::infinity();
+        float maxR = -std::numeric_limits<float>::infinity();
+        for (auto const& pr : leading->runs) {
+            if (pr.ctLineIndex != baseLine.ctLineIndex) {
+                continue;
+            }
+            sawRun = true;
+            minL = std::min(minL, pr.origin.x);
+            maxR = std::max(maxR, pr.origin.x + pr.run.width);
+        }
+        REQUIRE(sawRun);
+
+        float const dx = (box.width - (maxR - minL)) * 0.5f - minL;
+        CHECK(centeredLine->lineMinX == doctest::Approx(baseLine.lineMinX + dx).epsilon(0.001f));
+
+        for (auto const& pr : leading->runs) {
+            if (pr.ctLineIndex != baseLine.ctLineIndex) {
+                continue;
+            }
+
+            bool foundMatch = false;
+            for (auto const& shifted : centered->runs) {
+                if (shifted.ctLineIndex != pr.ctLineIndex || shifted.utf8Begin != pr.utf8Begin ||
+                    shifted.utf8End != pr.utf8End) {
+                    continue;
+                }
+                CHECK(shifted.origin.x == doctest::Approx(pr.origin.x + dx).epsilon(0.001f));
+                CHECK(shifted.origin.y == doctest::Approx(pr.origin.y).epsilon(0.001f));
+                foundMatch = true;
+                break;
+            }
+            CHECK(foundMatch);
+        }
+    }
 }
 
 TEST_CASE("CoreText rejects stale runs on empty attributed strings") {
