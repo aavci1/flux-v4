@@ -1663,6 +1663,8 @@ static void fillTextLayoutFromFramesetter(CoreTextSystem& sys, CTFramesetterRef 
   storage.glyphArena.resize(totalGlyphs);
   storage.positionArena.resize(totalGlyphs);
   std::size_t arenaWrite = 0;
+  std::vector<std::uint32_t> lineRunEnd;
+  lineRunEnd.reserve(static_cast<std::size_t>(std::max(lineCount, CFIndex{0})));
 
   for (CFIndex li = 0; li < lineCount; ++li) {
     CTLineRef line = (CTLineRef)CFArrayGetValueAtIndex(lines, li);
@@ -1673,11 +1675,18 @@ static void fillTextLayoutFromFramesetter(CoreTextSystem& sys, CTFramesetterRef 
       CTRunRef run = (CTRunRef)CFArrayGetValueAtIndex(glyphRuns, ri);
       appendPlacedRunToStorage(run, lineOrigin, fh, sys, out, storage, utf16ToUtf8PrefixMap, li, arenaWrite);
     }
+    lineRunEnd.push_back(static_cast<std::uint32_t>(out.runs.size()));
   }
   assert(arenaWrite == totalGlyphs);
+#ifndef NDEBUG
+  for (std::size_t i = 1; i < out.runs.size(); ++i) {
+    assert(out.runs[i - 1].ctLineIndex <= out.runs[i].ctLineIndex);
+  }
+#endif
 
   out.lines.clear();
   out.lines.reserve(static_cast<std::size_t>(std::max(lineCount, CFIndex{0})));
+  std::uint32_t runBegin = 0;
   for (CFIndex li = 0; li < lineCount; ++li) {
     CTLineRef line = (CTLineRef)CFArrayGetValueAtIndex(lines, li);
     CGPoint const lineOrigin = origins[static_cast<std::size_t>(li)];
@@ -1695,15 +1704,15 @@ static void fillTextLayoutFromFramesetter(CoreTextSystem& sys, CTFramesetterRef 
     float minTop = std::numeric_limits<float>::infinity();
     float maxBot = -std::numeric_limits<float>::infinity();
     float minOx = std::numeric_limits<float>::infinity();
-    for (auto const& pr : out.runs) {
-      if (pr.ctLineIndex != lr.ctLineIndex) {
-        continue;
-      }
+    std::uint32_t const runEnd = lineRunEnd[static_cast<std::size_t>(li)];
+    for (std::uint32_t i = runBegin; i < runEnd; ++i) {
+      auto const& pr = out.runs[i];
       baselineY = std::max(baselineY, pr.origin.y);
       minTop = std::min(minTop, pr.origin.y - pr.run.ascent);
       maxBot = std::max(maxBot, pr.origin.y + pr.run.descent);
       minOx = std::min(minOx, pr.origin.x);
     }
+    runBegin = runEnd;
     // No drawable runs on this line (e.g. newline-only, filtered glyphs): still need typographic bounds
     // so `LineRange` matches `CTLineGetTypographicBounds` / caret height when text exists on other lines.
     if (!std::isfinite(minTop) || !std::isfinite(maxBot) || !(maxBot > minTop + 1e-4f)) {
