@@ -158,6 +158,7 @@ private:
   // Stack of active component keys (depth > 1 when body() calls a helper
   // that returns an Element containing further composites — rare but valid).
   std::vector<ComponentKey const*> activeStack_;
+  std::vector<ComponentState*> activeStateStack_;
   std::vector<bool> compositePathStableStack_{};
 
   std::optional<std::uint64_t> overlayScope_{};
@@ -212,10 +213,7 @@ ComponentValueSnapshot StateStore::makeValueSnapshot(C const& value) {
 template<typename S, typename... Args>
 S& StateStore::claimSlot(Args&&... args) {
   assert(!activeStack_.empty() && "useState called outside of body()");
-  ComponentKey const& key = *activeStack_.back();
-  visited_.insert(key);
-
-  ComponentState& cs = states_[key];
+  ComponentState& cs = *activeStateStack_.back();
   std::size_t idx = cs.cursor++;
 
   if (idx < cs.slots.size()) {

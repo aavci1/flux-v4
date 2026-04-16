@@ -46,6 +46,7 @@ void StateStore::beginRebuild(bool forceFullRebuild) {
   activeDirtyComposites_ = std::move(pendingDirtyComposites_);
   pendingDirtyComposites_.clear();
   activeStack_.clear();
+  activeStateStack_.clear();
   compositePathStableStack_.clear();
   compositeConstraintStack_.clear();
   compositeElementModifierStack_.clear();
@@ -77,6 +78,7 @@ void StateStore::shutdown() {
   states_.clear();
   visited_.clear();
   activeStack_.clear();
+  activeStateStack_.clear();
   compositePathStableStack_.clear();
   compositeElementModifierStack_.clear();
   compositeConstraintStack_.clear();
@@ -101,11 +103,14 @@ void StateStore::pushComponent(ComponentKey const& key, std::type_index componen
   }
   state.cursor = 0;
   activeStack_.push_back(&it->first);
+  activeStateStack_.push_back(&state);
 }
 
 void StateStore::popComponent() {
   assert(!activeStack_.empty());
   activeStack_.pop_back();
+  assert(!activeStateStack_.empty());
+  activeStateStack_.pop_back();
 }
 
 void StateStore::pushCompositeConstraints(LayoutConstraints const& c) {
