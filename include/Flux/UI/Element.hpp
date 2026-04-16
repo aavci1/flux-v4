@@ -16,6 +16,7 @@
 #include <Flux/UI/StateStore.hpp>
 #include <Flux/UI/Environment.hpp>
 #include <Flux/Reactive/Detail/DependencyTracker.hpp>
+#include <Flux/Scene/SceneGraph.hpp>
 
 #include <Flux/Graphics/Styles.hpp>
 #include <Flux/UI/Detail/RenderComponentEmit.hpp>
@@ -223,7 +224,9 @@ public:
 
   void layout(LayoutContext& ctx) const;
   bool tryRetainedLayout(LayoutContext& ctx) const;
-  void renderFromLayout(RenderContext& ctx, LayoutNode const& node) const;
+  void renderFromLayout(RenderContext& ctx, LayoutNode& node) const;
+  bool supportsIncrementalSceneReuse() const;
+  bool reuseSceneFromLayout(RenderContext& ctx, LayoutNode& node) const;
   Size measure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
                TextSystem& textSystem) const;
   [[nodiscard]] std::uint64_t measureId() const noexcept { return measureId_; }
@@ -294,7 +297,9 @@ private:
     virtual std::unique_ptr<Concept> clone() const = 0;
     virtual void layout(LayoutContext& ctx) const = 0;
     virtual bool tryRetainedLayout(LayoutContext&) const { return false; }
-    virtual void renderFromLayout(RenderContext& ctx, LayoutNode const& node) const = 0;
+    virtual void renderFromLayout(RenderContext& ctx, LayoutNode& node) const = 0;
+    virtual bool supportsIncrementalSceneReuse() const { return false; }
+    virtual bool reuseSceneFromLayout(RenderContext&, LayoutNode&) const { return false; }
     virtual Size measure(LayoutContext& ctx, LayoutConstraints const& constraints,
                          LayoutHints const& hints, TextSystem& textSystem) const = 0;
     virtual float flexGrow() const { return 0.f; }
@@ -416,7 +421,9 @@ struct Element::Model : Concept {
   }
   void layout(LayoutContext& ctx) const override;
   bool tryRetainedLayout(LayoutContext& ctx) const override;
-  void renderFromLayout(RenderContext& ctx, LayoutNode const& node) const override;
+  void renderFromLayout(RenderContext& ctx, LayoutNode& node) const override;
+  bool supportsIncrementalSceneReuse() const override;
+  bool reuseSceneFromLayout(RenderContext& ctx, LayoutNode& node) const override;
   Size measure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
                TextSystem& textSystem) const override;
   float flexGrow() const override { return detail::flexGrowOf(value); }
@@ -540,7 +547,7 @@ bool Element::Model<C>::tryRetainedLayout(LayoutContext& ctx) const {
 }
 
 template<typename C>
-void Element::Model<C>::renderFromLayout(RenderContext& ctx, LayoutNode const& node) const {
+void Element::Model<C>::renderFromLayout(RenderContext& ctx, LayoutNode& node) const {
   if constexpr (CompositeComponent<C>) {
     (void)ctx;
     (void)node;
@@ -601,6 +608,80 @@ void Element::Model<C>::renderFromLayout(RenderContext& ctx, LayoutNode const& n
     value.renderFromLayout(ctx, node);
   } else {
     static_assert(alwaysFalse<C>, "Invalid component type for renderFromLayout.");
+  }
+}
+
+template<typename C>
+bool Element::Model<C>::supportsIncrementalSceneReuse() const {
+  if constexpr (std::is_same_v<C, Rectangle>) {
+    return true;
+  }
+  return false;
+}
+
+template<typename C>
+bool Element::Model<C>::reuseSceneFromLayout(RenderContext& ctx, LayoutNode& node) const {
+  if constexpr (std::is_same_v<C, Rectangle>) {
+    if (node.sceneNodes.size() != 1) {
+      return false;
+    }
+    RectNode* rect = ctx.graph().template node<RectNode>(node.sceneNodes.front());
+    if (!rect) {
+      return false;
+    }
+    ComponentKey const stableKey = node.componentKey;
+    Rect const bounds = node.frame;
+    CornerRadius cornerR{};
+    FillStyle fillEff = FillStyle::none();
+    StrokeStyle strokeEff = StrokeStyle::none();
+    ShadowStyle shadowEff = ShadowStyle::none();
+    if (ElementModifiers const* mods = ctx.activeElementModifiers()) {
+      cornerR = mods->cornerRadius;
+      fillEff = mods->fill;
+      strokeEff = mods->stroke;
+      shadowEff = mods->shadow;
+    }
+    rect->bounds = bounds;
+    rect->cornerRadius = cornerR;
+    rect->fill = fillEff;
+    rect->stroke = strokeEff;
+    rect->shadow = shadowEff;
+    if (ElementModifiers const* mods = ctx.activeElementModifiers()) {
+      if (!ctx.suppressLeafModifierEvents()) {
+        bool const effFocusable =
+            mods->focusable || static_cast<bool>(mods->onKeyDown) || static_cast<bool>(mods->onKeyUp) ||
+            static_cast<bool>(mods->onTextInput);
+        EventHandlers h{
+            .stableTargetKey = stableKey,
+            .onTap = mods->onTap,
+            .onPointerDown = mods->onPointerDown ? detail::pointerCallbackInLocalSpace(mods->onPointerDown, bounds)
+                                                 : nullptr,
+            .onPointerUp = mods->onPointerUp ? detail::pointerCallbackInLocalSpace(mods->onPointerUp, bounds)
+                                             : nullptr,
+            .onPointerMove = mods->onPointerMove ? detail::pointerCallbackInLocalSpace(mods->onPointerMove, bounds)
+                                                 : nullptr,
+            .onScroll = mods->onScroll,
+            .onKeyDown = mods->onKeyDown,
+            .onKeyUp = mods->onKeyUp,
+            .onTextInput = mods->onTextInput,
+            .focusable = effFocusable,
+            .cursor = mods->cursor,
+        };
+        if (h.onTap || h.onPointerDown || h.onPointerUp || h.onPointerMove || h.onScroll || h.onKeyDown ||
+            h.onKeyUp || h.onTextInput || h.focusable || h.cursor != Cursor::Inherit) {
+          ctx.eventMap().insert(node.sceneNodes.front(), std::move(h));
+        } else {
+          ctx.eventMap().remove(node.sceneNodes.front());
+        }
+      }
+    } else if (!node.reusedSubtreeThisBuild) {
+      ctx.eventMap().remove(node.sceneNodes.front());
+    }
+    return true;
+  } else {
+    (void)ctx;
+    (void)node;
+    return false;
   }
 }
 

@@ -1,5 +1,7 @@
 #include <Flux/UI/EventMap.hpp>
 
+#include <Flux/Scene/SceneGraph.hpp>
+
 #include <algorithm>
 #include <cstddef>
 
@@ -22,6 +24,10 @@ void EventMap::insert(NodeId id, EventHandlers handlers) {
     focusOrder_.push_back(handlers.stableTargetKey);
   }
   map_.insert_or_assign(id, std::move(handlers));
+}
+
+void EventMap::remove(NodeId id) {
+  map_.erase(id);
 }
 
 EventHandlers const* EventMap::find(NodeId id) const {
@@ -85,6 +91,23 @@ std::pair<NodeId, EventHandlers const*> EventMap::findClosestWithIdByKey(Compone
 void EventMap::clear() {
   map_.clear();
   focusOrder_.clear();
+}
+
+void EventMap::prune(SceneGraph const& graph) {
+  for (auto it = map_.begin(); it != map_.end();) {
+    if (!graph.get(it->first)) {
+      it = map_.erase(it);
+    } else {
+      ++it;
+    }
+  }
+  focusOrder_.clear();
+  for (auto const& [id, handlers] : map_) {
+    (void)id;
+    if (handlers.focusable && !handlers.stableTargetKey.empty()) {
+      focusOrder_.push_back(handlers.stableTargetKey);
+    }
+  }
 }
 
 std::vector<ComponentKey> const& EventMap::focusOrder() const {

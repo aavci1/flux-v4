@@ -79,7 +79,7 @@ void ScrollView::layout(LayoutContext &ctx) const {
     ctx.popCompositeKeyTail();
 }
 
-void ScrollView::renderFromLayout(RenderContext &, LayoutNode const &) const {}
+void ScrollView::renderFromLayout(RenderContext &, LayoutNode &) const {}
 
 Size ScrollView::measure(LayoutContext &ctx, LayoutConstraints const &constraints, LayoutHints const &hints,
                          TextSystem &ts) const {

@@ -105,14 +105,10 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
     return;
   }
 
-  graph.clear();
-
   layoutEngine_.resetForBuild();
   ++textFrameIndex_;
   Application::instance().textSystem().onFrameBegin(textFrameIndex_);
   layoutDebugBeginPass();
-
-  EventMap newMap;
 
   stateStore_.beginRebuild(sizeOverride.has_value() || !stateStore_.hasPendingDirtyComponents());
   measureCache_.beginBuild(stateStore_.shouldForceFullRebuild());
@@ -140,7 +136,18 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
     layoutTree_.endBuild();
   }
 
-  RenderContext rctx{graph, newMap, Application::instance().textSystem()};
+  bool const incrementalSceneReuse = useRetainedLayoutBuild && canIncrementallyRenderLayoutTree(layoutTree_);
+  if (!incrementalSceneReuse) {
+    graph.clear();
+    eventMap_.clear();
+  } else {
+    for (NodeId retired : layoutTree_.takeRetiredSceneNodes()) {
+      graph.remove(retired);
+      eventMap_.remove(retired);
+    }
+  }
+
+  RenderContext rctx{graph, eventMap_, Application::instance().textSystem(), incrementalSceneReuse};
   rctx.pushConstraints(rootCs);
   renderLayoutTree(layoutTree_, rctx);
   rctx.popConstraints();
@@ -156,7 +163,6 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
   StateStore::setCurrent(nullptr);
   stateStore_.endRebuild();
 
-  eventMap_ = std::move(newMap);
   focus_.validateAfterRebuild(eventMap_);
 
   window_.overlayManager().rebuild(sz, runtime);

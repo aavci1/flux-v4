@@ -11,7 +11,7 @@
 namespace flux::detail {
 
 NodeId emitCustomRenderNode(RenderContext& ctx, Rect frame, std::function<void(Canvas&)> draw) {
-  return ctx.graph().addCustomRender(ctx.parentLayer(), CustomRenderNode{
+  return ctx.addCustomRender(ctx.parentLayer(), CustomRenderNode{
       .frame = frame,
       .draw = std::move(draw),
   });

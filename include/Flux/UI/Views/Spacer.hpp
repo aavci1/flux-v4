@@ -17,7 +17,7 @@ struct Spacer : ViewModifiers<Spacer> {
   static constexpr bool memoizable = true;
 
   void layout(LayoutContext&) const;
-  void renderFromLayout(RenderContext&, LayoutNode const&) const;
+  void renderFromLayout(RenderContext&, LayoutNode&) const;
   Size measure(LayoutContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
   [[nodiscard]] std::uint64_t measureCacheKey() const noexcept { return 0x9145c2db37ae6f40ull; }
 };
@@ -29,7 +29,7 @@ struct Element::Model<Spacer> final : Element::Concept {
   explicit Model(Spacer c) : value(std::move(c)) {}
   std::unique_ptr<Concept> clone() const override { return std::make_unique<Element::Model<Spacer>>(value); }
   void layout(LayoutContext& ctx) const override { value.layout(ctx); }
-  void renderFromLayout(RenderContext& ctx, LayoutNode const& node) const override {
+  void renderFromLayout(RenderContext& ctx, LayoutNode& node) const override {
     value.renderFromLayout(ctx, node);
   }
   Size measure(LayoutContext& ctx, LayoutConstraints const& c, LayoutHints const& h, TextSystem& ts) const override {

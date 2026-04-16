@@ -36,7 +36,7 @@ struct ScrollView : ViewModifiers<ScrollView> {
 
     /// Custom subtree hook (not the generic \ref CompositeComponent path in \ref Element::Model).
     void layout(LayoutContext &) const;
-    void renderFromLayout(RenderContext &, LayoutNode const &) const;
+    void renderFromLayout(RenderContext &, LayoutNode &) const;
     Size measure(LayoutContext &, LayoutConstraints const &, LayoutHints const &, TextSystem &) const;
 
     // ── Component protocol ─────────────────────────────────────────────────────
@@ -54,7 +54,7 @@ struct Element::Model<ScrollView> final : Element::Concept {
         return std::make_unique<Model<ScrollView>>(value);
     }
     void layout(LayoutContext &ctx) const override { value.layout(ctx); }
-    void renderFromLayout(RenderContext &ctx, LayoutNode const &node) const override {
+    void renderFromLayout(RenderContext &ctx, LayoutNode &node) const override {
         value.renderFromLayout(ctx, node);
     }
     Size measure(LayoutContext &ctx, LayoutConstraints const &c, LayoutHints const &h, TextSystem &ts) const override {

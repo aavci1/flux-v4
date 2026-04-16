@@ -18,9 +18,50 @@ using detail::shouldInsertHandlers;
 
 namespace {
 
-void renderNode(LayoutNodeId id, LayoutTree const& tree, RenderContext& ctx);
+bool renderNode(LayoutNodeId id, LayoutTree& tree, RenderContext& ctx);
 
-void renderModifier(LayoutNode const& node, LayoutTree const& tree, RenderContext& ctx) {
+void appendSceneRoots(LayoutNodeId id, LayoutTree const& tree, std::vector<NodeId>& out) {
+  LayoutNode const* node = tree.get(id);
+  if (!node) {
+    return;
+  }
+  if (!node->sceneNodes.empty()) {
+    out.insert(out.end(), node->sceneNodes.begin(), node->sceneNodes.end());
+    return;
+  }
+  for (LayoutNodeId childId : node->children) {
+    appendSceneRoots(childId, tree, out);
+  }
+}
+
+bool canIncrementallyRenderNode(LayoutNode const& node) {
+  switch (node.kind) {
+  case LayoutNode::Kind::Container:
+    return node.containerTag == LayoutNode::ContainerTag::None &&
+           node.containerSpec.kind == ContainerLayerSpec::Kind::Standard;
+  case LayoutNode::Kind::Leaf:
+    return node.element && node.element->supportsIncrementalSceneReuse();
+  case LayoutNode::Kind::Composite:
+    return true;
+  case LayoutNode::Kind::Modifier:
+    return true;
+  }
+  return false;
+}
+
+bool renderModifier(LayoutNode& node, LayoutTree& tree, RenderContext& ctx) {
+  if (ctx.incrementalSceneReuseEnabled() && node.reusedSubtreeThisBuild) {
+    return true;
+  }
+
+  if (ctx.incrementalSceneReuseEnabled()) {
+    for (NodeId sceneNodeId : node.sceneNodes) {
+      ctx.graph().remove(sceneNodeId);
+      ctx.eventMap().remove(sceneNodeId);
+    }
+    node.sceneNodes.clear();
+  }
+
   ElementModifiers const& m = *node.modifiers;
   ComponentKey const stableKey = node.componentKey;
   bool const skipPrimitiveChrome =
@@ -40,7 +81,9 @@ void renderModifier(LayoutNode const& node, LayoutTree const& tree, RenderContex
     if (m.clip && outerW > 0.f && outerH > 0.f) {
       layer.clip = Rect{0.f, 0.f, outerW, outerH};
     }
-    NodeId const lid = ctx.graph().addLayer(ctx.parentLayer(), std::move(layer));
+    ctx.beginCapture(&node.sceneNodes);
+    NodeId const lid = ctx.addLayer(ctx.parentLayer(), std::move(layer));
+    ctx.endCapture();
     ctx.pushLayer(lid);
   }
 
@@ -55,13 +98,19 @@ void renderModifier(LayoutNode const& node, LayoutTree const& tree, RenderContex
       stroke = m.stroke;
     }
     ShadowStyle const shadowForChrome = needShadowPaint ? m.shadow : ShadowStyle::none();
-    NodeId const rid = ctx.graph().addRect(ctx.parentLayer(), RectNode{
+    if (ctx.incrementalSceneReuseEnabled()) {
+      ctx.beginCapture(&node.sceneNodes);
+    }
+    NodeId const rid = ctx.addRect(ctx.parentLayer(), RectNode{
         .bounds = bgBounds,
         .cornerRadius = m.cornerRadius,
         .fill = std::move(fill),
         .stroke = std::move(stroke),
         .shadow = shadowForChrome,
     });
+    if (ctx.incrementalSceneReuseEnabled()) {
+      ctx.endCapture();
+    }
     EventHandlers h = eventHandlersFromModifiers(m, stableKey, bgBounds);
     if (needTransparentHit) {
       bool const insertedHandlers = shouldInsertHandlers(h);
@@ -81,7 +130,7 @@ void renderModifier(LayoutNode const& node, LayoutTree const& tree, RenderContex
 
   ctx.pushActiveElementModifiers(&m);
   for (LayoutNodeId c : node.children) {
-    renderNode(c, tree, ctx);
+    (void)renderNode(c, tree, ctx);
   }
   ctx.popActiveElementModifiers();
 
@@ -92,9 +141,10 @@ void renderModifier(LayoutNode const& node, LayoutTree const& tree, RenderContex
   if (node.modifierHasEffectLayer) {
     ctx.popLayer();
   }
+  return false;
 }
 
-void renderContainer(LayoutNode const& node, LayoutTree const& tree, RenderContext& ctx) {
+bool renderContainer(LayoutNode& node, LayoutTree& tree, RenderContext& ctx) {
   LayerNode layer{};
   switch (node.containerSpec.kind) {
   case ContainerLayerSpec::Kind::Standard:
@@ -113,12 +163,30 @@ void renderContainer(LayoutNode const& node, LayoutTree const& tree, RenderConte
     layer.transform = node.containerSpec.customTransform;
     break;
   }
-  NodeId const lid = ctx.graph().addLayer(ctx.parentLayer(), std::move(layer));
+  NodeId lid = kInvalidNodeId;
+  bool layerStable = false;
+  if (ctx.incrementalSceneReuseEnabled() && node.sceneNodes.size() == 1) {
+    lid = node.sceneNodes.front();
+    if (LayerNode* existing = ctx.graph().node<LayerNode>(lid)) {
+      existing->transform = layer.transform;
+      existing->clip = layer.clip;
+      layerStable = true;
+    } else {
+      lid = kInvalidNodeId;
+      node.sceneNodes.clear();
+    }
+  }
+  if (!lid.isValid()) {
+    node.sceneNodes.clear();
+    ctx.beginCapture(&node.sceneNodes);
+    lid = ctx.addLayer(ctx.parentLayer(), std::move(layer));
+    ctx.endCapture();
+  }
   ctx.pushLayer(lid);
 
   if (node.containerTag == LayoutNode::ContainerTag::PopoverCalloutShape) {
     Rect const full{0.f, 0.f, node.frame.width, node.frame.height};
-    NodeId const blockId = ctx.graph().addRect(ctx.parentLayer(), RectNode{
+    NodeId const blockId = ctx.addRect(ctx.parentLayer(), RectNode{
         .bounds = full,
         .fill = FillStyle::none(),
         .stroke = StrokeStyle::none(),
@@ -130,45 +198,81 @@ void renderContainer(LayoutNode const& node, LayoutTree const& tree, RenderConte
     });
   }
 
+  bool childRootsStable = true;
   for (LayoutNodeId c : node.children) {
-    renderNode(c, tree, ctx);
+    childRootsStable &= renderNode(c, tree, ctx);
+  }
+  if (ctx.incrementalSceneReuseEnabled() && (!layerStable || !childRootsStable)) {
+    std::vector<NodeId> ordered;
+    for (LayoutNodeId c : node.children) {
+      appendSceneRoots(c, tree, ordered);
+    }
+    ctx.graph().reorder(lid, ordered);
   }
   ctx.popLayer();
+  return layerStable;
 }
 
-void renderNode(LayoutNodeId id, LayoutTree const& tree, RenderContext& ctx) {
-  LayoutNode const* np = tree.get(id);
+bool renderNode(LayoutNodeId id, LayoutTree& tree, RenderContext& ctx) {
+  LayoutNode* np = tree.get(id);
   if (!np) {
-    return;
+    return false;
   }
-  LayoutNode const& node = *np;
+  LayoutNode& node = *np;
+
+  if (ctx.incrementalSceneReuseEnabled() && node.reusedSubtreeThisBuild) {
+    return true;
+  }
 
   switch (node.kind) {
   case LayoutNode::Kind::Container:
-    renderContainer(node, tree, ctx);
-    break;
+    return renderContainer(node, tree, ctx);
   case LayoutNode::Kind::Modifier:
-    renderModifier(node, tree, ctx);
-    break;
+    return renderModifier(node, tree, ctx);
   case LayoutNode::Kind::Leaf:
   case LayoutNode::Kind::Composite:
     if (node.element) {
       ctx.pushConstraints(node.constraints, node.hints);
-      node.element->renderFromLayout(ctx, node);
+      bool const hadSceneNodes = !node.sceneNodes.empty();
+      bool const reused = ctx.incrementalSceneReuseEnabled() && !node.sceneNodes.empty() &&
+                          node.element->reuseSceneFromLayout(ctx, node);
+      if (!reused) {
+        if (ctx.incrementalSceneReuseEnabled()) {
+          for (NodeId sceneNodeId : node.sceneNodes) {
+            ctx.graph().remove(sceneNodeId);
+            ctx.eventMap().remove(sceneNodeId);
+          }
+        }
+        node.sceneNodes.clear();
+        ctx.beginCapture(&node.sceneNodes);
+        node.element->renderFromLayout(ctx, node);
+        ctx.endCapture();
+      }
       ctx.popConstraints();
+      return reused && hadSceneNodes;
     }
-    break;
+    return !node.sceneNodes.empty();
   }
+  return false;
 }
 
 } // namespace
 
-void renderLayoutTree(LayoutTree const& tree, RenderContext& ctx) {
+bool canIncrementallyRenderLayoutTree(LayoutTree const& tree) {
+  for (LayoutNode const& node : tree.nodes()) {
+    if (!canIncrementallyRenderNode(node)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+void renderLayoutTree(LayoutTree& tree, RenderContext& ctx) {
   LayoutNodeId const root = tree.root();
   if (!root.isValid()) {
     return;
   }
-  renderNode(root, tree, ctx);
+  (void)renderNode(root, tree, ctx);
 }
 
 } // namespace flux

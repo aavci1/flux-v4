@@ -151,8 +151,16 @@ bool Element::tryRetainedLayout(LayoutContext& ctx) const {
   return reused;
 }
 
-void Element::renderFromLayout(RenderContext& ctx, LayoutNode const& node) const {
+void Element::renderFromLayout(RenderContext& ctx, LayoutNode& node) const {
   impl_->renderFromLayout(ctx, node);
+}
+
+bool Element::supportsIncrementalSceneReuse() const {
+  return impl_ && impl_->supportsIncrementalSceneReuse();
+}
+
+bool Element::reuseSceneFromLayout(RenderContext& ctx, LayoutNode& node) const {
+  return impl_ && impl_->reuseSceneFromLayout(ctx, node);
 }
 
 void Element::layoutWithModifiers(LayoutContext& ctx) const {
@@ -467,7 +475,7 @@ void Rectangle::renderFromLayout(RenderContext& ctx, LayoutNode const& node) con
     strokeEff = mods->stroke;
     shadowEff = mods->shadow;
   }
-  NodeId const id = ctx.graph().addRect(ctx.parentLayer(), RectNode{
+  NodeId const id = ctx.addRect(ctx.parentLayer(), RectNode{
       .bounds = bounds,
       .cornerRadius = cornerR,
       .fill = fillEff,
@@ -517,7 +525,7 @@ void views::Image::renderFromLayout(RenderContext& ctx, LayoutNode const& node) 
   }
   ComponentKey const stableKey = node.componentKey;
   Rect const bounds = node.frame;
-  NodeId const id = ctx.graph().addImage(ctx.parentLayer(), ImageNode{
+  NodeId const id = ctx.addImage(ctx.parentLayer(), ImageNode{
       .image = source,
       .bounds = bounds,
       .fillMode = fillMode,
@@ -581,10 +589,10 @@ void PathShape::renderFromLayout(RenderContext& ctx, LayoutNode const& node) con
   if (tx != 0.f || ty != 0.f) {
     LayerNode layer{};
     layer.transform = Mat3::translate(tx, ty);
-    NodeId const lid = ctx.graph().addLayer(ctx.parentLayer(), std::move(layer));
-    ctx.graph().addPath(lid, std::move(pathNode));
+    NodeId const lid = ctx.addLayer(ctx.parentLayer(), std::move(layer));
+    ctx.addPath(lid, std::move(pathNode));
   } else {
-    ctx.graph().addPath(ctx.parentLayer(), std::move(pathNode));
+    ctx.addPath(ctx.parentLayer(), std::move(pathNode));
   }
 }
 
@@ -616,7 +624,7 @@ void Line::layout(LayoutContext& ctx) const {
 }
 
 void Line::renderFromLayout(RenderContext& ctx, LayoutNode const&) const {
-  ctx.graph().addLine(ctx.parentLayer(), LineNode{
+  ctx.addLine(ctx.parentLayer(), LineNode{
       .from = from,
       .to = to,
       .stroke = stroke,

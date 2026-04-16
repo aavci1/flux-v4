@@ -24,7 +24,7 @@ void Spacer::layout(LayoutContext& ctx) const {
   layoutDebugLogLeaf("Spacer", ctx.constraints(), r, fg, fs, mm);
 }
 
-void Spacer::renderFromLayout(RenderContext&, LayoutNode const&) const {}
+void Spacer::renderFromLayout(RenderContext&, LayoutNode&) const {}
 
 Size Spacer::measure(LayoutContext& ctx, LayoutConstraints const&, LayoutHints const&, TextSystem&) const {
   ctx.advanceChildSlot();

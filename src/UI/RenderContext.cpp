@@ -9,10 +9,11 @@
 
 namespace flux {
 
-RenderContext::RenderContext(SceneGraph& g, EventMap& em, TextSystem& ts)
+RenderContext::RenderContext(SceneGraph& g, EventMap& em, TextSystem& ts, bool incrementalSceneReuse)
     : graph_(g)
     , eventMap_(em)
-    , textSystem_(ts) {
+    , textSystem_(ts)
+    , incrementalSceneReuse_(incrementalSceneReuse) {
   layoutStack_.push_back(LayoutFrame{});
 }
 
@@ -80,6 +81,72 @@ void RenderContext::popSuppressLeafModifierEvents() {
 
 bool RenderContext::suppressLeafModifierEvents() const noexcept {
   return !suppressLeafModifierEvents_.empty() && suppressLeafModifierEvents_.back();
+}
+
+bool RenderContext::incrementalSceneReuseEnabled() const noexcept {
+  return incrementalSceneReuse_;
+}
+
+void RenderContext::beginCapture(std::vector<NodeId>* out) {
+  captureStack_.push_back(out);
+  if (out) {
+    out->clear();
+  }
+}
+
+void RenderContext::endCapture() {
+#ifndef NDEBUG
+  assert(!captureStack_.empty());
+#endif
+  captureStack_.pop_back();
+}
+
+void RenderContext::recordCaptured(NodeId id) {
+  if (!captureStack_.empty() && captureStack_.back()) {
+    captureStack_.back()->push_back(id);
+  }
+}
+
+NodeId RenderContext::addLayer(NodeId parent, LayerNode node) {
+  NodeId const id = graph_.addLayer(parent, std::move(node));
+  recordCaptured(id);
+  return id;
+}
+
+NodeId RenderContext::addRect(NodeId parent, RectNode node) {
+  NodeId const id = graph_.addRect(parent, std::move(node));
+  recordCaptured(id);
+  return id;
+}
+
+NodeId RenderContext::addText(NodeId parent, TextNode node) {
+  NodeId const id = graph_.addText(parent, std::move(node));
+  recordCaptured(id);
+  return id;
+}
+
+NodeId RenderContext::addImage(NodeId parent, ImageNode node) {
+  NodeId const id = graph_.addImage(parent, std::move(node));
+  recordCaptured(id);
+  return id;
+}
+
+NodeId RenderContext::addPath(NodeId parent, PathNode node) {
+  NodeId const id = graph_.addPath(parent, std::move(node));
+  recordCaptured(id);
+  return id;
+}
+
+NodeId RenderContext::addLine(NodeId parent, LineNode node) {
+  NodeId const id = graph_.addLine(parent, std::move(node));
+  recordCaptured(id);
+  return id;
+}
+
+NodeId RenderContext::addCustomRender(NodeId parent, CustomRenderNode node) {
+  NodeId const id = graph_.addCustomRender(parent, std::move(node));
+  recordCaptured(id);
+  return id;
 }
 
 } // namespace flux

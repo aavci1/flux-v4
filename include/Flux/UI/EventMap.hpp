@@ -18,6 +18,8 @@
 
 namespace flux {
 
+class SceneGraph;
+
 struct EventHandlers {
   /// When non-empty, identifies this logical target across scene rebuilds (same subtree path).
   ComponentKey stableTargetKey;
@@ -47,6 +49,7 @@ struct NodeIdHash {
 class EventMap {
 public:
   void insert(NodeId id, EventHandlers handlers);
+  void remove(NodeId id);
   EventHandlers const* find(NodeId id) const;
   /// First entry whose `stableTargetKey` matches \p key (O(n)); used when `NodeId` is stale after rebuild.
   std::pair<NodeId, EventHandlers const*> findWithIdByKey(ComponentKey const& key) const;
@@ -54,6 +57,7 @@ public:
   /// Returns the nearest ancestor/descendant relation to \p key (never a sibling/cousin).
   std::pair<NodeId, EventHandlers const*> findClosestWithIdByKey(ComponentKey const& key) const;
   void clear();
+  void prune(SceneGraph const& graph);
 
   /// Stable keys of all focusable nodes, in build order.
   std::vector<ComponentKey> const& focusOrder() const;

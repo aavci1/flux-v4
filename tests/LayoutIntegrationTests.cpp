@@ -295,7 +295,7 @@ static RenderResult runLayoutAndRenderWithStateStore(Element el, float maxW, flo
     ctx->popConstraints();
     result.tree.endBuild();
 
-    RenderContext rctx {result.graph, result.eventMap, ts};
+    RenderContext rctx {result.graph, result.eventMap, ts, false};
     rctx.pushConstraints(rootCs, {});
     renderLayoutTree(result.tree, rctx);
     rctx.popConstraints();

@@ -55,7 +55,7 @@ struct Element::Model<ForEach<T>> final : Element::Concept {
   }
 
   void layout(LayoutContext& ctx) const override;
-  void renderFromLayout(RenderContext&, LayoutNode const&) const override {}
+  void renderFromLayout(RenderContext&, LayoutNode&) const override {}
   Size measure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
                TextSystem& ts) const override;
 

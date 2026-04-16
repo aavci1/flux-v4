@@ -5,6 +5,7 @@
 /// Intermediate layout result: geometry and structure only (no SceneGraph).
 
 #include <Flux/Core/Types.hpp>
+#include <Flux/Scene/NodeId.hpp>
 #include <Flux/UI/ComponentKey.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 
@@ -109,6 +110,11 @@ struct LayoutNode {
   /// Modifier pass: scene layer transform relative to parent (when effect layer is used).
   bool modifierHasEffectLayer = false;
   Mat3 modifierLayerTransform = Mat3::identity();
+
+  /// Direct scene nodes emitted for this layout node in parent-child order.
+  std::vector<NodeId> sceneNodes;
+  /// True when this exact layout slot was reused by subtree retention in the current build.
+  bool reusedSubtreeThisBuild = false;
 };
 
 /// Complete layout result for one tree (main or overlay).
@@ -124,6 +130,8 @@ public:
     activeNodes_.clear();
     rootId_ = {};
     firstNodeForKey_.clear();
+    retainedNodeForKey_.clear();
+    retiredSceneNodes_.clear();
     ++buildEpoch_;
   }
 
@@ -163,6 +171,7 @@ public:
   bool reuseSubtree(LayoutNodeId rootId, LayoutNodeId parent);
   bool canTranslateSubtree(LayoutNodeId rootId) const;
   void translateSubtree(LayoutNodeId rootId, Vec2 delta);
+  std::vector<NodeId> takeRetiredSceneNodes();
 
   void setRoot(LayoutNodeId id) noexcept { rootId_ = id; }
 
@@ -177,8 +186,10 @@ private:
   mutable bool activeNodesDirty_{true};
   LayoutNodeId rootId_{};
   std::unordered_map<ComponentKey, LayoutNodeId, ComponentKeyHash> firstNodeForKey_{};
+  std::unordered_map<ComponentKey, LayoutNodeId, ComponentKeyHash> retainedNodeForKey_{};
   std::uint64_t buildEpoch_{0};
   std::vector<std::uint64_t> slotEpoch_{};
+  std::vector<NodeId> retiredSceneNodes_{};
 };
 
 /// Axis-aligned bounding rect of \p r after transforming its four corners by \p t.

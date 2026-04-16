@@ -7,6 +7,7 @@ namespace flux {
 class RenderContext;
 
 /// Emit SceneGraph nodes + EventMap from a completed \ref LayoutTree (second phase after \ref Element::layout).
-void renderLayoutTree(LayoutTree const& tree, RenderContext& ctx);
+bool canIncrementallyRenderLayoutTree(LayoutTree const& tree);
+void renderLayoutTree(LayoutTree& tree, RenderContext& ctx);
 
 } // namespace flux

@@ -132,8 +132,6 @@ struct FrameContext {
       return;
     }
 
-    graph.clear();
-    eventMap = EventMap{};
     le.resetForBuild();
     store.beginRebuild(false);
     if (store.shouldForceFullRebuild()) {
@@ -164,7 +162,18 @@ struct FrameContext {
     hasCurrentLayout = true;
     store.endRebuild();
 
-    RenderContext rctx{graph, eventMap, ts};
+    bool const incrementalSceneReuse = useRetainedLayoutBuild && canIncrementallyRenderLayoutTree(tree);
+    if (!incrementalSceneReuse) {
+      graph.clear();
+      eventMap.clear();
+    } else {
+      for (NodeId retired : tree.takeRetiredSceneNodes()) {
+        graph.remove(retired);
+        eventMap.remove(retired);
+      }
+    }
+
+    RenderContext rctx{graph, eventMap, ts, incrementalSceneReuse};
     rctx.pushConstraints(rootCs, {});
     renderLayoutTree(tree, rctx);
     rctx.popConstraints();

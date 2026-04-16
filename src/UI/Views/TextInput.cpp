@@ -309,7 +309,7 @@ struct TextLayoutDisplay {
         if (!textLayout) {
             return;
         }
-        ctx.graph().addText(ctx.parentLayer(), TextNode {
+        ctx.addText(ctx.parentLayer(), TextNode {
                                                    .layout = textLayout,
                                                    .origin = {node.frame.x, node.frame.y},
                                                    .allocation = node.frame,

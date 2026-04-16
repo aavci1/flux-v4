@@ -234,7 +234,7 @@ void Text::renderFromLayout(RenderContext &ctx, LayoutNode const &node) const {
                 for (Rect const &rect :
                      detail::selectionRects(selectableState->layoutResult, selectableState->selection,
                                             &selectableState->text, bounds.x, bounds.y)) {
-                    ctx.graph().addRect(ctx.parentLayer(), RectNode {
+                    ctx.addRect(ctx.parentLayer(), RectNode {
                                                                .bounds = rect,
                                                                .fill = FillStyle::solid(resolvedSelectionColor),
                                                            });
@@ -242,7 +242,7 @@ void Text::renderFromLayout(RenderContext &ctx, LayoutNode const &node) const {
             }
         }
 
-        NodeId const textId = ctx.graph().addText(ctx.parentLayer(), TextNode {
+        NodeId const textId = ctx.addText(ctx.parentLayer(), TextNode {
                                                                          .layout = textLayout,
                                                                          .origin = {bounds.x, bounds.y},
                                                                          .allocation = bounds,

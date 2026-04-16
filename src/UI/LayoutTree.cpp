@@ -12,6 +12,7 @@ void LayoutTree::beginBuild() {
   firstNodeForKey_.clear();
   activeOrder_.clear();
   activeNodesDirty_ = true;
+  retiredSceneNodes_.clear();
 }
 
 void LayoutTree::endBuild() {
@@ -21,6 +22,10 @@ void LayoutTree::endBuild() {
     }
     if (slotEpoch_[i] == buildEpoch_) {
       continue;
+    }
+    if (!slots_[i]->sceneNodes.empty()) {
+      retiredSceneNodes_.insert(retiredSceneNodes_.end(), slots_[i]->sceneNodes.begin(),
+                                slots_[i]->sceneNodes.end());
     }
     slots_[i].reset();
     freeList_.push_back(i);
@@ -75,6 +80,7 @@ LayoutNodeId LayoutTree::pushNode(LayoutNode&& node, LayoutNodeId parent) {
   node.id = id;
   node.parent = parent;
   node.children.clear();
+  node.reusedSubtreeThisBuild = false;
   if (parent.isValid()) {
     if (LayoutNode* p = get(parent)) {
       p->children.push_back(id);
@@ -102,6 +108,7 @@ bool LayoutTree::reuseSubtree(LayoutNodeId rootId, LayoutNodeId parent) {
     if (!node) {
       return;
     }
+    node->reusedSubtreeThisBuild = true;
     slotEpoch_[id.index()] = buildEpoch_;
     activeOrder_.push_back(id);
     if (!node->componentKey.empty()) {
@@ -165,6 +172,12 @@ void LayoutTree::translateSubtree(LayoutNodeId rootId, Vec2 delta) {
   };
   visit(visit, rootId);
   activeNodesDirty_ = true;
+}
+
+std::vector<NodeId> LayoutTree::takeRetiredSceneNodes() {
+  std::vector<NodeId> out;
+  out.swap(retiredSceneNodes_);
+  return out;
 }
 
 Rect LayoutTree::unionSubtreeWorldBounds(LayoutNodeId nodeId) const {
