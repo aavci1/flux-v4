@@ -326,6 +326,42 @@ struct ShrinkingListRoot {
   }
 };
 
+struct ForEachSignalRow {
+  int id = 0;
+  std::shared_ptr<std::vector<std::shared_ptr<int>>> counts;
+  std::shared_ptr<std::vector<State<int>>> handles;
+
+  Element body() const {
+    ++*(*counts)[static_cast<std::size_t>(id)];
+    State<int> state = useState(0);
+    (*handles)[static_cast<std::size_t>(id)] = state;
+    return Element{Rectangle{}}.size(40.f, 12.f + static_cast<float>(*state));
+  }
+};
+
+struct ForEachSignalRoot {
+  int count = 0;
+  std::shared_ptr<std::vector<std::shared_ptr<int>>> counts;
+  std::shared_ptr<std::vector<State<int>>> handles;
+
+  Element body() const {
+    std::vector<int> items(static_cast<std::size_t>(count));
+    for (int i = 0; i < count; ++i) {
+      items[static_cast<std::size_t>(i)] = i;
+    }
+    return Element{ForEach<int>{
+        std::move(items),
+        [counts = counts, handles = handles](int id) {
+          return Element{ForEachSignalRow{
+              .id = id,
+              .counts = counts,
+              .handles = handles,
+          }};
+        },
+        0.f}};
+  }
+};
+
 } // namespace
 
 TEST_CASE("incremental rebuild skips clean composite bodies on unrelated signal writes") {
@@ -511,6 +547,36 @@ TEST_CASE("incremental rebuild retains clean child composite subtree ids") {
   auto const secondIt = harness.roots.find(ComponentKey{0, 0, 0});
   REQUIRE(secondIt != harness.roots.end());
   CHECK(secondIt->second == firstCleanRoot);
+}
+
+TEST_CASE("incremental rebuild retains clean ForEach item subtree ids") {
+  auto counts = std::make_shared<std::vector<std::shared_ptr<int>>>();
+  auto handles = std::make_shared<std::vector<State<int>>>(2);
+  counts->push_back(std::make_shared<int>(0));
+  counts->push_back(std::make_shared<int>(0));
+
+  StoreScope scope;
+  RebuildHarness harness{scope.store};
+  Element root = Element{ForEachSignalRoot{
+      .count = 2,
+      .counts = counts,
+      .handles = handles,
+  }};
+
+  harness.rebuild(root);
+  auto const firstIt = harness.roots.find(ComponentKey{0, 0, 0});
+  REQUIRE(firstIt != harness.roots.end());
+  LayoutNodeId const firstCleanRoot = firstIt->second;
+
+  (*handles)[1] = 1;
+  CHECK(scope.store.hasPendingDirtyComponents());
+  harness.rebuild(root);
+
+  auto const secondIt = harness.roots.find(ComponentKey{0, 0, 0});
+  REQUIRE(secondIt != harness.roots.end());
+  CHECK(secondIt->second == firstCleanRoot);
+  CHECK(*(*counts)[0] == 1);
+  CHECK(*(*counts)[1] == 2);
 }
 
 TEST_CASE("incremental rebuild retains clean child composite subtree ids") {

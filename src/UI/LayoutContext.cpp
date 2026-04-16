@@ -175,7 +175,13 @@ bool LayoutContext::canReuseRetainedCompositeSubtree(ComponentKey const& composi
   if (it == retainedRoots_->end()) {
     return false;
   }
-  LayoutNode const* root = tree_.get(it->second);
+  return canReuseRetainedCompositeSubtree(it->second, assignedFrame, constraints, hints);
+}
+
+bool LayoutContext::canReuseRetainedCompositeSubtree(LayoutNodeId rootId, Rect const& assignedFrame,
+                                                     LayoutConstraints const& constraints,
+                                                     LayoutHints const& hints) const {
+  LayoutNode const* root = tree_.get(rootId);
   if (!root) {
     return false;
   }
@@ -187,7 +193,7 @@ bool LayoutContext::canReuseRetainedCompositeSubtree(ComponentKey const& composi
   }
   return root->assignedFrame.width == assignedFrame.width &&
          root->assignedFrame.height == assignedFrame.height &&
-         tree_.canTranslateSubtree(it->second);
+         tree_.canTranslateSubtree(rootId);
 }
 
 bool LayoutContext::reuseRetainedCompositeSubtree(ComponentKey const& compositeKey, Rect const& assignedFrame) {
@@ -198,7 +204,11 @@ bool LayoutContext::reuseRetainedCompositeSubtree(ComponentKey const& compositeK
   if (it == retainedRoots_->end()) {
     return false;
   }
-  LayoutNodeId const rootId = it->second;
+  return reuseRetainedCompositeSubtree(compositeKey, it->second, assignedFrame);
+}
+
+bool LayoutContext::reuseRetainedCompositeSubtree(ComponentKey const& compositeKey, LayoutNodeId rootId,
+                                                  Rect const& assignedFrame) {
   if (!tree_.reuseSubtree(rootId, currentLayoutParent())) {
     return false;
   }

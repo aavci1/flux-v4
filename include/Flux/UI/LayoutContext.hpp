@@ -69,7 +69,11 @@ public:
   SubtreeRootMap const& subtreeRootLayouts() const;
   bool canReuseRetainedCompositeSubtree(ComponentKey const& compositeKey, Rect const& assignedFrame,
                                         LayoutConstraints const& constraints, LayoutHints const& hints) const;
+  bool canReuseRetainedCompositeSubtree(LayoutNodeId rootId, Rect const& assignedFrame,
+                                        LayoutConstraints const& constraints, LayoutHints const& hints) const;
   bool reuseRetainedCompositeSubtree(ComponentKey const& compositeKey, Rect const& assignedFrame);
+  bool reuseRetainedCompositeSubtree(ComponentKey const& compositeKey, LayoutNodeId rootId,
+                                     Rect const& assignedFrame);
 
   void pushActiveElementModifiers(ElementModifiers const* m);
   void popActiveElementModifiers();
