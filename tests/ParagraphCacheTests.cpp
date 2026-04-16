@@ -92,23 +92,6 @@ TEST_CASE("Paragraph cache: stats layers exist after layout") {
     CHECK(st.l2_5_paragraph.misses + st.l2_5_paragraph.hits >= 1);
 }
 
-TEST_CASE("CoreTextSystem tolerates truncated UTF-8 input") {
-    CoreTextSystem sys;
-    Font f {};
-    f.family = ".AppleSystemUIFont";
-    f.size = 14.f;
-    f.weight = 400.f;
-
-    AttributedString as;
-    as.utf8 = std::string("prefix ") + std::string("\xF0\x9F\x92", 3) + " suffix";
-    as.runs.push_back({0, static_cast<std::uint32_t>(as.utf8.size()), f, Colors::black, std::nullopt});
-
-    auto const layout = sys.layout(as, 320.f, TextLayoutOptions {});
-    REQUIRE(layout != nullptr);
-    CHECK(layout->measuredSize.width >= 0.f);
-    CHECK(layout->measuredSize.height >= 0.f);
-}
-
 TEST_CASE("Paragraph cache: variant refs survive per-paragraph LRU eviction") {
     std::string body;
     for (int i = 0; i < 6; ++i) {

@@ -35,19 +35,6 @@ Element& LayoutContext::pinElement(Element&& el) {
   return elementPins_->pins.back();
 }
 
-Element* LayoutContext::findPinnedCompositeBody(ComponentKey const& key) const {
-  if (auto it = compositeBodyPins_.find(key); it != compositeBodyPins_.end()) {
-    return it->second;
-  }
-  return nullptr;
-}
-
-Element& LayoutContext::pinCompositeBody(ComponentKey key, Element&& el) {
-  Element& pinned = pinElement(std::move(el));
-  compositeBodyPins_.insert_or_assign(std::move(key), &pinned);
-  return pinned;
-}
-
 TextSystem& LayoutContext::textSystem() { return textSystem_; }
 
 LayoutEngine& LayoutContext::layoutEngine() { return layoutEngine_; }

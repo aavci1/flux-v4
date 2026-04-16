@@ -315,34 +315,7 @@ static LayoutContextPtr makeLayoutContext(TextSystem &ts, LayoutEngine &le, Layo
     return ctx;
 }
 
-struct CountingComposite {
-    std::shared_ptr<int> bodyCalls;
-
-    Element body() const {
-        ++*bodyCalls;
-        return Element {Rectangle {}}.size(40.f, 20.f);
-    }
-};
-
 // ── VStack ────────────────────────────────────────────────────────────────────
-
-TEST_CASE("Composite body is built once across measure and layout in one rebuild") {
-    auto calls = std::make_shared<int>(0);
-
-    auto tree = runLayout(
-        Element {VStack {
-            .spacing = 0.f,
-            .children = children(
-                CountingComposite {.bodyCalls = calls}
-            ),
-        }},
-        200.f, 200.f
-    );
-
-    auto leaves = leavesOf(tree);
-    REQUIRE(leaves.size() == 1);
-    CHECK(*calls == 1);
-}
 
 TEST_CASE("VStack: 3 fixed-height rectangles stacked with no spacing") {
     auto tree = runLayout(

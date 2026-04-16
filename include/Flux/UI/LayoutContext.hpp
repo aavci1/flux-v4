@@ -82,9 +82,6 @@ public:
   void setCurrentElement(Element const* el) noexcept { currentElement_ = el; }
   [[nodiscard]] Element const* currentElement() const noexcept { return currentElement_; }
 
-  Element* findPinnedCompositeBody(ComponentKey const& key) const;
-  Element& pinCompositeBody(ComponentKey key, Element&& el);
-
   /// Move a subtree root \c Element into frame-local storage so \p LayoutNode::element pointers
   /// remain valid through the render phase (stack temporaries are not safe across layout → render).
   Element& pinElement(Element&& el);
@@ -124,7 +121,6 @@ private:
   bool pendingCompositeSubtreeRoot_{false};
   ComponentKey pendingCompositeSubtreeKey_{};
   std::unordered_map<ComponentKey, LayoutNodeId, ComponentKeyHash> subtreeRootLayouts_{};
-  std::unordered_map<ComponentKey, Element*, ComponentKeyHash> compositeBodyPins_{};
   MeasureCache* measureCache_{nullptr};
   std::vector<ElementModifiers const*> activeElementModifiers_{};
 
