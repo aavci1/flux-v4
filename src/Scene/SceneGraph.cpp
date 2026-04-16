@@ -171,7 +171,7 @@ bool SceneGraph::isDescendant(NodeId ancestor, NodeId possibleDescendant) const 
   return false;
 }
 
-void SceneGraph::removeRecursive(NodeId id) {
+void SceneGraph::removeRecursive(NodeId id, std::optional<NodeId> parent, bool detachFromParent) {
   SceneNode* sn = store_.get(id);
   if (!sn) {
     return;
@@ -181,14 +181,12 @@ void SceneGraph::removeRecursive(NodeId id) {
     // must not iterate the live vector.
     std::vector<NodeId> const ch = layer->children;
     for (NodeId c : ch) {
-      removeRecursive(c);
+      removeRecursive(c, id, false);
     }
     layer->children.clear();
   }
-  if (id != root_) {
-    if (std::optional<NodeId> p = findParent(root_, id)) {
-      eraseFromParentChildren(*p, id);
-    }
+  if (detachFromParent && parent.has_value()) {
+    eraseFromParentChildren(*parent, id);
   }
   store_.remove(id);
 }
@@ -197,7 +195,7 @@ void SceneGraph::remove(NodeId id) {
   if (id == root_) {
     return;
   }
-  removeRecursive(id);
+  removeRecursive(id, findParent(root_, id), true);
 }
 
 void SceneGraph::clear() {
@@ -207,8 +205,9 @@ void SceneGraph::clear() {
   }
   std::vector<NodeId> const children = rootLayer->children;
   for (NodeId c : children) {
-    remove(c);
+    removeRecursive(c, root_, false);
   }
+  rootLayer->children.clear();
 }
 
 void SceneGraph::reparent(NodeId id, NodeId newParent, std::size_t index) {
