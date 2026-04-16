@@ -34,7 +34,6 @@ void StateStore::clearComponentState(ComponentState& state) {
   state.lastBody = {nullptr, nullptr};
   state.lastBodyEpoch = 0;
   state.reusableConstraints.clear();
-  state.reusableLayoutBoundaries.clear();
   state.reusableMeasures.clear();
   state.valueSnapshot = {};
   state.subscriptions.clear();
@@ -227,39 +226,6 @@ void StateStore::recordBodyConstraints(ComponentKey const& key, LayoutConstraint
     }
   }
   state.reusableConstraints.push_back(constraints);
-}
-
-bool StateStore::canReuseRetainedLayoutSubtree(ComponentKey const& key,
-                                               LayoutConstraints const& constraints,
-                                               Rect const& assignedFrame) const {
-  if (forceFullRebuild_ || activeDirtyComposites_.count(key) != 0) {
-    return false;
-  }
-  auto const it = states_.find(key);
-  if (it == states_.end()) {
-    return false;
-  }
-  for (auto const& [recordedConstraints, recordedFrame] : it->second.reusableLayoutBoundaries) {
-    if (constraintsEqual(recordedConstraints, constraints) && rectEqual(recordedFrame, assignedFrame)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-void StateStore::recordLayoutBoundary(ComponentKey const& key, LayoutConstraints const& constraints,
-                                      Rect assignedFrame) {
-  auto it = states_.find(key);
-  if (it == states_.end()) {
-    return;
-  }
-  ComponentState& state = it->second;
-  for (auto const& [recordedConstraints, recordedFrame] : state.reusableLayoutBoundaries) {
-    if (constraintsEqual(recordedConstraints, constraints) && rectEqual(recordedFrame, assignedFrame)) {
-      return;
-    }
-  }
-  state.reusableLayoutBoundaries.emplace_back(constraints, assignedFrame);
 }
 
 std::optional<Size> StateStore::cachedMeasure(ComponentKey const& key,

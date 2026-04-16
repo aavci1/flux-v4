@@ -65,10 +65,7 @@ private:
   StateStore stateStore_;
   LayoutRectCache layoutRects_;
   LayoutContext::SubtreeRootMap layoutSubtreeRoots_{};
-  std::unordered_map<ComponentKey, LayoutNodeId, ComponentKeyHash> retainedSubtreeRoots_{};
   std::shared_ptr<detail::ElementPinStorage> layoutPins_{};
-  std::shared_ptr<detail::ElementPinStorage> retainedLayoutPins_{};
-  LayoutTree retainedLayoutTree_{};
   LayoutTree layoutTree_{};
   LayoutConstraints latestRootConstraints_{};
   std::uint64_t latestRootIdentityToken_{0};

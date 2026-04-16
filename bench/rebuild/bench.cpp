@@ -70,9 +70,8 @@ namespace flux {
 
 struct LayoutContextTestAccess {
   static LayoutContext* create(TextSystem& ts, LayoutEngine& le, LayoutTree& tree,
-                               MeasureCache* mc, LayoutTree const* retainedTree = nullptr,
-                               LayoutContext::SubtreeRootMap const* retainedRoots = nullptr) {
-    return new LayoutContext(ts, le, tree, mc, retainedTree, retainedRoots);
+                               MeasureCache* mc) {
+    return new LayoutContext(ts, le, tree, mc);
   }
 
   static void destroy(LayoutContext* ctx) { delete ctx; }
@@ -108,10 +107,7 @@ struct FrameContext {
   LayoutEngine le{};
   MeasureCache mc{};
   LayoutContext::SubtreeRootMap roots{};
-  LayoutContext::SubtreeRootMap retainedRoots{};
   std::shared_ptr<detail::ElementPinStorage> pins{};
-  std::shared_ptr<detail::ElementPinStorage> retainedPins{};
-  LayoutTree retainedTree{};
   LayoutTree tree{};
   SceneGraph graph{};
   EventMap eventMap{};
@@ -143,18 +139,10 @@ struct FrameContext {
     if (store.shouldForceFullRebuild()) {
       mc.clear();
     }
-    if (hasCurrentLayout) {
-      retainedTree.clear();
-      std::swap(retainedTree, tree);
-      retainedRoots = std::move(roots);
-      retainedPins = std::move(pins);
-      hasCurrentLayout = false;
-    } else {
-      tree.clear();
-    }
+    tree.clear();
 
     LayoutContextPtr ctx{
-        flux::LayoutContextTestAccess::create(ts, le, tree, &mc, &retainedTree, &retainedRoots)};
+        flux::LayoutContextTestAccess::create(ts, le, tree, &mc)};
     ctx->pushConstraints(rootCs);
     le.setChildFrame(Rect{0.f, 0.f, w, h});
 

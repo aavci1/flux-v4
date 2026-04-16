@@ -202,11 +202,9 @@ struct LayoutContextTestAccess {
     static LayoutContext *create(
         TextSystem &ts,
         LayoutEngine &le,
-        LayoutTree &tree,
-        LayoutTree const *retainedTree = nullptr,
-        LayoutContext::SubtreeRootMap const *retainedRoots = nullptr
+        LayoutTree &tree
     ) {
-        return new LayoutContext(ts, le, tree, nullptr, retainedTree, retainedRoots);
+        return new LayoutContext(ts, le, tree, nullptr);
     }
     static void destroy(LayoutContext *ctx) { delete ctx; }
 };

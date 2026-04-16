@@ -66,8 +66,6 @@ public:
   void registerCompositeSubtreeRootIfPending(LayoutNodeId layoutNodeId);
 
   SubtreeRootMap const& subtreeRootLayouts() const;
-  bool canCloneRetainedSubtree(ComponentKey const& compositeKey) const;
-  bool cloneRetainedSubtree(ComponentKey const& compositeKey);
 
   void pushActiveElementModifiers(ElementModifiers const* m);
   void popActiveElementModifiers();
@@ -107,17 +105,12 @@ private:
   friend class OverlayManager;
   friend struct LayoutContextTestAccess;
 
-  LayoutContext(TextSystem& ts, LayoutEngine& layout, LayoutTree& tree, MeasureCache* measureCache = nullptr,
-                LayoutTree const* retainedTree = nullptr, SubtreeRootMap const* retainedRoots = nullptr);
+  LayoutContext(TextSystem& ts, LayoutEngine& layout, LayoutTree& tree, MeasureCache* measureCache = nullptr);
   ~LayoutContext();
-
-  LayoutNodeId cloneRetainedSubtreeRecursive(LayoutNodeId retainedId, LayoutNodeId parent);
 
   TextSystem& textSystem_;
   LayoutEngine& layoutEngine_;
   LayoutTree& tree_;
-  LayoutTree const* retainedTree_ = nullptr;
-  SubtreeRootMap const* retainedRoots_ = nullptr;
   struct LayoutFrame {
     LayoutConstraints constraints{};
     LayoutHints hints{};

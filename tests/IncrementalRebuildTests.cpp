@@ -60,9 +60,8 @@ namespace flux {
 
 struct LayoutContextTestAccess {
   static LayoutContext* create(TextSystem& ts, LayoutEngine& le, LayoutTree& tree,
-                               MeasureCache* mc, LayoutTree const* retainedTree = nullptr,
-                               LayoutContext::SubtreeRootMap const* retainedRoots = nullptr) {
-    return new LayoutContext(ts, le, tree, mc, retainedTree, retainedRoots);
+                               MeasureCache* mc) {
+    return new LayoutContext(ts, le, tree, mc);
   }
 
   static void destroy(LayoutContext* ctx) { delete ctx; }
@@ -98,10 +97,7 @@ struct RebuildHarness {
   LayoutEngine le{};
   MeasureCache mc{};
   LayoutContext::SubtreeRootMap roots{};
-  LayoutContext::SubtreeRootMap retainedRoots{};
   std::shared_ptr<detail::ElementPinStorage> pins{};
-  std::shared_ptr<detail::ElementPinStorage> retainedPins{};
-  LayoutTree retainedTree{};
   LayoutTree tree{};
   SceneGraph graph{};
   EventMap eventMap{};
@@ -109,24 +105,13 @@ struct RebuildHarness {
   void rebuild(Element const& root, bool forceFull = false, float w = 800.f, float h = 1200.f) {
     store.beginRebuild(forceFull);
     mc.beginBuild(store.shouldForceFullRebuild());
-    if (!forceFull) {
-      retainedTree.clear();
-      std::swap(retainedTree, tree);
-      retainedRoots = std::move(roots);
-      retainedPins = std::move(pins);
-    } else {
-      retainedTree.clear();
-      retainedRoots.clear();
-      retainedPins.reset();
-      tree.clear();
-    }
     tree.clear();
     graph.clear();
     eventMap = EventMap{};
     le.resetForBuild();
 
     LayoutContextPtr ctx{
-        flux::LayoutContextTestAccess::create(ts, le, tree, &mc, &retainedTree, &retainedRoots)};
+        flux::LayoutContextTestAccess::create(ts, le, tree, &mc)};
     LayoutConstraints rootCs{};
     rootCs.minWidth = w;
     rootCs.minHeight = h;
@@ -452,39 +437,4 @@ TEST_CASE("removing a composite unsubscribes its external signal and destroys it
 
   (*signals)[1]->set(1);
   CHECK_FALSE(scope.store.hasPendingDirtyComponents());
-}
-
-TEST_CASE("clean retained child subtree is not reused when its assigned frame changes") {
-  auto firstHandle = std::make_shared<State<int>>();
-
-  StoreScope scope;
-  RebuildHarness harness{scope.store};
-  Element root = Element{ShiftingPairRoot{
-      .firstHandle = firstHandle,
-  }};
-
-  harness.rebuild(root);
-
-  std::vector<float> ys;
-  for (LayoutNode const& node : harness.tree.nodes()) {
-    if (node.kind == LayoutNode::Kind::Leaf) {
-      ys.push_back(node.worldBounds.y);
-    }
-  }
-  std::sort(ys.begin(), ys.end());
-  REQUIRE(ys.size() == 2);
-  CHECK((ys[1] - ys[0]) == doctest::Approx(12.f));
-
-  *firstHandle = 10;
-  harness.rebuild(root);
-
-  ys.clear();
-  for (LayoutNode const& node : harness.tree.nodes()) {
-    if (node.kind == LayoutNode::Kind::Leaf) {
-      ys.push_back(node.worldBounds.y);
-    }
-  }
-  std::sort(ys.begin(), ys.end());
-  REQUIRE(ys.size() == 2);
-  CHECK((ys[1] - ys[0]) == doctest::Approx(22.f));
 }

@@ -69,11 +69,8 @@ void BuildOrchestrator::setRoot(std::unique_ptr<RootHolder> holder) {
   latestLayoutIsCurrent_ = false;
   latestRootIdentityToken_ = 0;
   layoutTree_.clear();
-  retainedLayoutTree_.clear();
   layoutSubtreeRoots_.clear();
-  retainedSubtreeRoots_.clear();
   layoutPins_.reset();
-  retainedLayoutPins_.reset();
   // Do not call `rebuild()` here — `Runtime::setRoot` calls `Runtime::rebuild()` so `sCurrent`
   // is set for hooks (`Runtime::current()`) during the layout/render pass.
 }
@@ -122,17 +119,8 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
 
   actionRegistryBuild_.beginRebuild();
   StateStore::setCurrent(&stateStore_);
-
-  if (latestLayoutIsCurrent_) {
-    retainedLayoutTree_.clear();
-    std::swap(retainedLayoutTree_, layoutTree_);
-    retainedSubtreeRoots_ = std::move(layoutSubtreeRoots_);
-    retainedLayoutPins_ = std::move(layoutPins_);
-    latestLayoutIsCurrent_ = false;
-  }
   layoutTree_.clear();
-  LayoutContext lctx{Application::instance().textSystem(), layoutEngine_, layoutTree_, &measureCache_,
-                     &retainedLayoutTree_, &retainedSubtreeRoots_};
+  LayoutContext lctx{Application::instance().textSystem(), layoutEngine_, layoutTree_, &measureCache_};
   lctx.pushConstraints(rootCs);
   EnvironmentLayer windowEnvBaseline = window_.environmentLayer();
   EnvironmentStack::current().push(std::move(windowEnvBaseline));

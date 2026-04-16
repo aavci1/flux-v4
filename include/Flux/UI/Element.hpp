@@ -356,7 +356,6 @@ Element& StateStore::commitBody(ComponentKey const& key, C const& value,
   state.lastBodyEpoch = buildEpoch_;
   state.reusableConstraints.clear();
   state.reusableConstraints.push_back(constraints);
-  state.reusableLayoutBoundaries.clear();
   return *raw;
 }
 
