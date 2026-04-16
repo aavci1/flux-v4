@@ -195,20 +195,38 @@ void applyBoxOptions(TextLayout &layout, Rect const &box, TextLayoutOptions cons
     recomputeTextLayoutMetrics(layout);
 }
 
-std::vector<std::size_t> filterDrawableGlyphs(std::span<std::uint16_t const> gids) {
-    std::vector<std::size_t> kept;
-    kept.reserve(gids.size());
-    for (std::size_t i = 0; i < gids.size(); ++i) {
-        if (gids[i] != 0) {
-            kept.push_back(i);
+bool hasNotdefGlyph(std::span<std::uint16_t const> gids) noexcept {
+    for (std::uint16_t g : gids) {
+        if (g == 0) {
+            return true;
         }
     }
-    return kept;
+    return false;
+}
+
+void collectDrawableGlyphIndices(std::span<std::uint16_t const> gids, std::vector<std::size_t>& out) {
+    out.clear();
+    out.reserve(gids.size());
+    for (std::size_t i = 0; i < gids.size(); ++i) {
+        if (gids[i] != 0) {
+            out.push_back(i);
+        }
+    }
 }
 
 } // namespace detail
 
 namespace {
+
+std::size_t countDrawableGlyphs(std::span<std::uint16_t const> gids) noexcept {
+    std::size_t total = 0;
+    for (std::uint16_t g : gids) {
+        if (g != 0) {
+            ++total;
+        }
+    }
+    return total;
+}
 
 /// Total glyphs written by `cloneTextLayout` (must match the main loop). Used to `reserve` arenas so
 /// `glyphArena` never reallocates while earlier `PlacedRun::run.glyphIds` spans still point into it.
@@ -221,7 +239,8 @@ std::size_t cloneTextLayoutOutputGlyphCount(TextLayout const &src) noexcept {
         if (n == 0) {
             continue;
         }
-        total += detail::filterDrawableGlyphs({pr.run.glyphIds.data(), n}).size();
+        std::span<std::uint16_t const> const gids {pr.run.glyphIds.data(), n};
+        total += detail::hasNotdefGlyph(gids) ? countDrawableGlyphs(gids) : n;
     }
     return total;
 }
@@ -335,6 +354,7 @@ std::shared_ptr<TextLayout> cloneTextLayout(TextLayout const &src) {
     storage->glyphArena.reserve(totalGlyphs);
     storage->positionArena.reserve(totalGlyphs);
     out->runs.reserve(src.runs.size());
+    std::vector<std::size_t> kept;
     for (auto const &pr : src.runs) {
         TextLayout::PlacedRun copy = pr;
         std::size_t const gidCount = pr.run.glyphIds.size();
@@ -347,15 +367,8 @@ std::shared_ptr<TextLayout> cloneTextLayout(TextLayout const &src) {
             continue;
         }
 
-        std::vector<std::size_t> const kept = detail::filterDrawableGlyphs({pr.run.glyphIds.data(), n});
-        if (kept.empty()) {
-            copy.run.glyphIds = {};
-            copy.run.positions = {};
-            out->runs.push_back(std::move(copy));
-            continue;
-        }
-
-        if (kept.size() == n) {
+        std::span<std::uint16_t const> const gids {pr.run.glyphIds.data(), n};
+        if (!detail::hasNotdefGlyph(gids)) {
             std::size_t const gGlyphStart = storage->glyphArena.size();
             std::size_t const gPosStart = storage->positionArena.size();
             storage->glyphArena.insert(storage->glyphArena.end(), pr.run.glyphIds.begin(),
@@ -365,6 +378,14 @@ std::shared_ptr<TextLayout> cloneTextLayout(TextLayout const &src) {
             copy.run.glyphIds =
                 std::span<std::uint16_t const>(storage->glyphArena.data() + gGlyphStart, n);
             copy.run.positions = std::span<Point const>(storage->positionArena.data() + gPosStart, n);
+            out->runs.push_back(std::move(copy));
+            continue;
+        }
+
+        detail::collectDrawableGlyphIndices(gids, kept);
+        if (kept.empty()) {
+            copy.run.glyphIds = {};
+            copy.run.positions = {};
             out->runs.push_back(std::move(copy));
             continue;
         }

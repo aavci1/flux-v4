@@ -531,17 +531,69 @@ static void styleFromCTFont(CTFontRef ctFont, CGColorRef cgColor, CoreTextSystem
   outFontId = sys.resolveFontId(fam, cssWeight, italic);
 }
 
-/// Count drawable (non-`.notdef`) glyphs for arena sizing — see \c detail::filterDrawableGlyphs.
-static std::size_t countDrawableGlyphsInRun(CTRunRef run) {
+struct RunEmitInfo {
+  std::uint32_t drawableCount = 0;
+  std::uint32_t firstKeptIdx = 0;
+  bool hasNotdef = false;
+};
+
+static std::size_t countDrawableGlyphs(std::span<std::uint16_t const> gids) noexcept {
+  std::size_t total = 0;
+  for (std::uint16_t g : gids) {
+    if (g != 0) {
+      ++total;
+    }
+  }
+  return total;
+}
+
+static CGGlyph const* runGlyphs(CTRunRef run, CFIndex glyphCount, std::vector<CGGlyph>& scratch) {
+  if (glyphCount <= 0) {
+    return nullptr;
+  }
+  if (CGGlyph const* ptr = CTRunGetGlyphsPtr(run)) {
+    return ptr;
+  }
+  scratch.resize(static_cast<std::size_t>(glyphCount));
+  CTRunGetGlyphs(run, CFRangeMake(0, 0), scratch.data());
+  return scratch.data();
+}
+
+static CGPoint const* runPositions(CTRunRef run, CFIndex glyphCount, std::vector<CGPoint>& scratch) {
+  if (glyphCount <= 0) {
+    return nullptr;
+  }
+  if (CGPoint const* ptr = CTRunGetPositionsPtr(run)) {
+    return ptr;
+  }
+  scratch.resize(static_cast<std::size_t>(glyphCount));
+  CTRunGetPositions(run, CFRangeMake(0, 0), scratch.data());
+  return scratch.data();
+}
+
+/// Count drawable (non-`.notdef`) glyphs for arena sizing while caching the first kept index for emit.
+static RunEmitInfo analyzeRunGlyphs(CTRunRef run, std::vector<CGGlyph>& glyphScratch) {
+  RunEmitInfo info;
   CFIndex const glyphCount = CTRunGetGlyphCount(run);
   if (glyphCount <= 0) {
-    return 0;
+    return info;
   }
-  std::vector<CGGlyph> gids(static_cast<std::size_t>(glyphCount));
-  CTRunGetGlyphs(run, CFRangeMake(0, 0), gids.data());
-  return detail::filterDrawableGlyphs(std::span<std::uint16_t const>(
-             reinterpret_cast<std::uint16_t const*>(gids.data()), static_cast<std::size_t>(glyphCount)))
-      .size();
+  CGGlyph const* gids = runGlyphs(run, glyphCount, glyphScratch);
+  if (!gids) {
+    return info;
+  }
+  std::span<std::uint16_t const> const gidSpan(
+      reinterpret_cast<std::uint16_t const*>(gids), static_cast<std::size_t>(glyphCount));
+  info.hasNotdef = detail::hasNotdefGlyph(gidSpan);
+  if (!info.hasNotdef) {
+    info.drawableCount = static_cast<std::uint32_t>(glyphCount);
+    return info;
+  }
+  info.drawableCount = static_cast<std::uint32_t>(countDrawableGlyphs(gidSpan));
+  while (info.firstKeptIdx < gidSpan.size() && gidSpan[info.firstKeptIdx] == 0) {
+    ++info.firstKeptIdx;
+  }
+  return info;
 }
 
 /// One `CTRun` appended to `TextLayoutStorage` arenas. Glyph positions are relative to the run's
@@ -549,10 +601,12 @@ static std::size_t countDrawableGlyphsInRun(CTRunRef run) {
 /// `frameHeight` is the CT frame path height (Quartz, Y up).
 static void appendPlacedRunToStorage(CTRunRef run, CGPoint lineOrigin, CGFloat frameHeight, CoreTextSystem& sys,
                                      TextLayout& layout, TextLayoutStorage& storage,
+                                     RunEmitInfo const& emitInfo, std::vector<CGGlyph>& glyphScratch,
+                                     std::vector<CGPoint>& positionScratch, std::vector<std::size_t>& keptScratch,
                                      std::span<std::uint32_t const> utf16ToUtf8PrefixMap,
                                      CFIndex ctLineIndex, std::size_t& arenaWrite) {
   CFIndex const glyphCount = CTRunGetGlyphCount(run);
-  if (glyphCount <= 0) {
+  if (glyphCount <= 0 || emitInfo.drawableCount == 0) {
     return;
   }
   NSDictionary* attrs = (__bridge NSDictionary*)CTRunGetAttributes(run);
@@ -565,35 +619,51 @@ static void appendPlacedRunToStorage(CTRunRef run, CGPoint lineOrigin, CGFloat f
   Color color = Colors::black;
   styleFromCTFont(ctFont, cgColor, sys, fontId, fontSize, color);
 
-  std::vector<CGPoint> cpos(static_cast<std::size_t>(glyphCount));
-  CTRunGetPositions(run, CFRangeMake(0, 0), cpos.data());
-  std::vector<CGGlyph> gids(static_cast<std::size_t>(glyphCount));
-  CTRunGetGlyphs(run, CFRangeMake(0, 0), gids.data());
-
-  std::vector<std::size_t> const kept = detail::filterDrawableGlyphs(std::span<std::uint16_t const>(
-      reinterpret_cast<std::uint16_t const*>(gids.data()), static_cast<std::size_t>(glyphCount)));
-  if (kept.empty()) {
+  CGPoint const* cpos = runPositions(run, glyphCount, positionScratch);
+  CGGlyph const* gids = runGlyphs(run, glyphCount, glyphScratch);
+  if (!cpos || !gids) {
     return;
   }
-  std::size_t const fi = kept[0];
+  std::span<std::uint16_t const> const gidSpan(
+      reinterpret_cast<std::uint16_t const*>(gids), static_cast<std::size_t>(glyphCount));
+
+  std::size_t const n = emitInfo.drawableCount;
+  std::size_t fi = emitInfo.firstKeptIdx;
+  if (emitInfo.hasNotdef) {
+    detail::collectDrawableGlyphIndices(gidSpan, keptScratch);
+    if (keptScratch.empty()) {
+      return;
+    }
+    fi = keptScratch[0];
+  } else {
+    keptScratch.clear();
+  }
 
   CGFloat ascent = 0, descent = 0, leading = 0;
   double const runWidth = CTRunGetTypographicBounds(
       run, CFRangeMake(static_cast<CFIndex>(fi), glyphCount - static_cast<CFIndex>(fi)), &ascent, &descent, &leading);
 
   std::size_t const gOff = arenaWrite;
-  std::size_t const n = kept.size();
   assert(gOff + n <= storage.glyphArena.size() && gOff + n <= storage.positionArena.size());
   arenaWrite += n;
 
   // LTR: anchor to first drawable glyph (`fi`). For RTL, a different anchor would be needed.
-  for (std::size_t j = 0; j < n; ++j) {
-    std::size_t const gi = kept[j];
-    storage.glyphArena[gOff + j] = static_cast<std::uint16_t>(gids[gi]);
-    float const dx = static_cast<float>(cpos[gi].x - cpos[fi].x);
-    float const dy =
-        -static_cast<float>(cpos[gi].y - cpos[fi].y); // Quartz Y up -> canvas Y down
-    storage.positionArena[gOff + j] = Point{dx, dy};
+  CGPoint const anchor = cpos[fi];
+  if (!emitInfo.hasNotdef) {
+    for (std::size_t j = 0; j < n; ++j) {
+      storage.glyphArena[gOff + j] = static_cast<std::uint16_t>(gids[j]);
+      float const dx = static_cast<float>(cpos[j].x - anchor.x);
+      float const dy = -static_cast<float>(cpos[j].y - anchor.y); // Quartz Y up -> canvas Y down
+      storage.positionArena[gOff + j] = Point{dx, dy};
+    }
+  } else {
+    for (std::size_t j = 0; j < n; ++j) {
+      std::size_t const gi = keptScratch[j];
+      storage.glyphArena[gOff + j] = static_cast<std::uint16_t>(gids[gi]);
+      float const dx = static_cast<float>(cpos[gi].x - anchor.x);
+      float const dy = -static_cast<float>(cpos[gi].y - anchor.y); // Quartz Y up -> canvas Y down
+      storage.positionArena[gOff + j] = Point{dx, dy};
+    }
   }
 
   TextLayout::PlacedRun placed{};
@@ -1651,13 +1721,20 @@ static void fillTextLayoutFromFramesetter(CoreTextSystem& sys, CTFramesetterRef 
   // Single allocation: count glyphs, resize arenas once, then fill with a write cursor so we never call
   // `vector::resize` during append (which could reallocate and invalidate earlier `std::span`s).
   std::size_t totalGlyphs = 0;
+  std::vector<CGGlyph> glyphScratch;
+  std::vector<CGPoint> positionScratch;
+  std::vector<std::size_t> keptScratch;
+  std::vector<RunEmitInfo> emitInfo;
+  emitInfo.reserve(static_cast<std::size_t>(std::max(lineCount, CFIndex{0})));
   for (CFIndex li = 0; li < lineCount; ++li) {
     CTLineRef const line = (CTLineRef)CFArrayGetValueAtIndex(lines, li);
     CFArrayRef const glyphRuns = CTLineGetGlyphRuns(line);
     CFIndex const runCount = CFArrayGetCount(glyphRuns);
     for (CFIndex ri = 0; ri < runCount; ++ri) {
       CTRunRef const run = (CTRunRef)CFArrayGetValueAtIndex(glyphRuns, ri);
-      totalGlyphs += countDrawableGlyphsInRun(run);
+      RunEmitInfo const info = analyzeRunGlyphs(run, glyphScratch);
+      totalGlyphs += info.drawableCount;
+      emitInfo.push_back(info);
     }
   }
   storage.glyphArena.resize(totalGlyphs);
@@ -1665,6 +1742,7 @@ static void fillTextLayoutFromFramesetter(CoreTextSystem& sys, CTFramesetterRef 
   std::size_t arenaWrite = 0;
   std::vector<std::uint32_t> lineRunEnd;
   lineRunEnd.reserve(static_cast<std::size_t>(std::max(lineCount, CFIndex{0})));
+  std::size_t emitInfoIndex = 0;
 
   for (CFIndex li = 0; li < lineCount; ++li) {
     CTLineRef line = (CTLineRef)CFArrayGetValueAtIndex(lines, li);
@@ -1673,10 +1751,14 @@ static void fillTextLayoutFromFramesetter(CoreTextSystem& sys, CTFramesetterRef 
     CFIndex const runCount = CFArrayGetCount(glyphRuns);
     for (CFIndex ri = 0; ri < runCount; ++ri) {
       CTRunRef run = (CTRunRef)CFArrayGetValueAtIndex(glyphRuns, ri);
-      appendPlacedRunToStorage(run, lineOrigin, fh, sys, out, storage, utf16ToUtf8PrefixMap, li, arenaWrite);
+      appendPlacedRunToStorage(run, lineOrigin, fh, sys, out, storage, emitInfo[emitInfoIndex],
+                               glyphScratch, positionScratch, keptScratch, utf16ToUtf8PrefixMap, li,
+                               arenaWrite);
+      ++emitInfoIndex;
     }
     lineRunEnd.push_back(static_cast<std::uint32_t>(out.runs.size()));
   }
+  assert(emitInfoIndex == emitInfo.size());
   assert(arenaWrite == totalGlyphs);
 #ifndef NDEBUG
   for (std::size_t i = 1; i < out.runs.size(); ++i) {

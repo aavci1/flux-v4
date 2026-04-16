@@ -24,10 +24,8 @@ bool paragraphCacheLayoutsStructurallyEqual(TextLayout const& a, TextLayout cons
                                           std::string* dumpOut = nullptr);
 
 /// OpenType glyph id 0 is `.notdef`. \c CTRunGetGlyphs may still return it while \c CTLineDraw skips it
-/// visually; we filter at storage time so runs match what is drawn. The first kept glyph anchors the run;
-/// positions are stored relative to that anchor. Call \c CTRunGetTypographicBounds over
-/// \c CFRange{ firstKeptIndex, glyphCount - firstKeptIndex } so bounds exclude empty leading space from
-/// leading `.notdef` glyphs.
-std::vector<std::size_t> filterDrawableGlyphs(std::span<std::uint16_t const> gids);
+/// visually; probe for that cheaply, then let callers collect indices only when they need to re-anchor.
+bool hasNotdefGlyph(std::span<std::uint16_t const> gids) noexcept;
+void collectDrawableGlyphIndices(std::span<std::uint16_t const> gids, std::vector<std::size_t>& out);
 
 } // namespace flux::detail
