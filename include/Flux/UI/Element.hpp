@@ -460,20 +460,11 @@ void Element::Model<C>::layout(LayoutContext& ctx) const {
     Element& child = store ? *resolution.body : ctx.pinElement(Element{value.body()});
     ctx.beginCompositeBodySubtree(key);
     ctx.pushCompositeKeyTail(key);
-    bool clonedRetainedSubtree = false;
     if (store) {
-      Rect const assignedFrame = ctx.layoutEngine().lastAssignedFrame();
       store->recordBodyConstraints(key, ctx.constraints());
-      store->recordLayoutBoundary(key, ctx.constraints(), assignedFrame);
       store->pushCompositePathStable(resolution.descendantsStable);
-      clonedRetainedSubtree =
-          resolution.descendantsStable && !store->hasDirtyDescendant(key) &&
-          store->canReuseRetainedLayoutSubtree(key, ctx.constraints(), assignedFrame) &&
-          ctx.cloneRetainedSubtree(key);
     }
-    if (!clonedRetainedSubtree) {
-      child.layout(ctx);
-    }
+    child.layout(ctx);
     if (store) {
       store->popCompositePathStable();
     }

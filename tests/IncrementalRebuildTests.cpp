@@ -1,6 +1,7 @@
 #include <doctest/doctest.h>
 
 #include <Flux/Graphics/TextSystem.hpp>
+#include <Flux/Reactive/Computed.hpp>
 #include <Flux/Reactive/Signal.hpp>
 #include <Flux/Scene/SceneGraph.hpp>
 #include <Flux/UI/Element.hpp>
@@ -194,6 +195,16 @@ struct ExternalSignalLeaf {
   }
 };
 
+struct ComputedLeaf {
+  std::shared_ptr<int> count;
+  std::shared_ptr<Computed<int>> computed;
+
+  Element body() const {
+    ++*count;
+    return Element{Rectangle{}}.size(40.f, 12.f + static_cast<float>(computed->get()));
+  }
+};
+
 struct PairRoot {
   std::shared_ptr<int> cleanCount;
   std::shared_ptr<int> dirtyCount;
@@ -314,6 +325,28 @@ TEST_CASE("incremental rebuild reruns the composite that owns the changed signal
   REQUIRE(*count == 1);
 
   *handle = 1;
+  CHECK(scope.store.hasPendingDirtyComponents());
+  harness.rebuild(root);
+
+  CHECK(*count == 2);
+}
+
+TEST_CASE("incremental rebuild reruns a composite that depends on a Computed") {
+  auto count = std::make_shared<int>(0);
+  auto signal = std::make_shared<Signal<int>>(0);
+  auto computed = std::make_shared<Computed<int>>([signal] { return signal->get(); });
+
+  StoreScope scope;
+  RebuildHarness harness{scope.store};
+  Element root = Element{ComputedLeaf{
+      .count = count,
+      .computed = computed,
+  }};
+
+  harness.rebuild(root);
+  REQUIRE(*count == 1);
+
+  signal->set(1);
   CHECK(scope.store.hasPendingDirtyComponents());
   harness.rebuild(root);
 
