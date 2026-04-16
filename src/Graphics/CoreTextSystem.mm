@@ -2642,7 +2642,7 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layoutUnboxed(AttributedString
       }
       recomputeTextLayoutMetrics(*builtProbe);
     }
-    std::shared_ptr<TextLayout const> result = cloneTextLayout(*builtProbe);
+    std::shared_ptr<TextLayout const> result = std::const_pointer_cast<TextLayout const>(builtProbe);
     LayoutSlot slot;
     slot.maxWidthQ1 = wq;
     slot.maxWidthExact = maxWidth;
@@ -2682,7 +2682,7 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layoutUnboxed(AttributedString
   auto stor = std::make_unique<TextLayoutStorage>();
   fillTextLayoutFromFramesetter(*this, e.framesetter, text, maxWidth, options, *built, *stor);
   built->ownedStorage = std::move(stor);
-  std::shared_ptr<TextLayout const> result = cloneTextLayout(*built);
+  std::shared_ptr<TextLayout const> result = std::const_pointer_cast<TextLayout const>(built);
   LayoutSlot slot;
   slot.maxWidthQ1 = wq;
   slot.maxWidthExact = maxWidth;
