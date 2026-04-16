@@ -1769,6 +1769,12 @@ static void fillTextLayoutFromFramesetter(CoreTextSystem& sys, CTFramesetterRef 
   out.lines.clear();
   out.lines.reserve(static_cast<std::size_t>(std::max(lineCount, CFIndex{0})));
   std::uint32_t runBegin = 0;
+  float docMinX = std::numeric_limits<float>::infinity();
+  float docMaxX = -std::numeric_limits<float>::infinity();
+  float docMinTop = std::numeric_limits<float>::infinity();
+  float docMaxBot = -std::numeric_limits<float>::infinity();
+  float docMinBaselineY = std::numeric_limits<float>::infinity();
+  float docMaxBaselineY = -std::numeric_limits<float>::infinity();
   for (CFIndex li = 0; li < lineCount; ++li) {
     CTLineRef line = (CTLineRef)CFArrayGetValueAtIndex(lines, li);
     CGPoint const lineOrigin = origins[static_cast<std::size_t>(li)];
@@ -1789,6 +1795,12 @@ static void fillTextLayoutFromFramesetter(CoreTextSystem& sys, CTFramesetterRef 
     std::uint32_t const runEnd = lineRunEnd[static_cast<std::size_t>(li)];
     for (std::uint32_t i = runBegin; i < runEnd; ++i) {
       auto const& pr = out.runs[i];
+      docMinX = std::min(docMinX, pr.origin.x);
+      docMaxX = std::max(docMaxX, pr.origin.x + pr.run.width);
+      docMinTop = std::min(docMinTop, pr.origin.y - pr.run.ascent);
+      docMaxBot = std::max(docMaxBot, pr.origin.y + pr.run.descent);
+      docMinBaselineY = std::min(docMinBaselineY, pr.origin.y);
+      docMaxBaselineY = std::max(docMaxBaselineY, pr.origin.y);
       baselineY = std::max(baselineY, pr.origin.y);
       minTop = std::min(minTop, pr.origin.y - pr.run.ascent);
       maxBot = std::max(maxBot, pr.origin.y + pr.run.descent);
@@ -1818,7 +1830,16 @@ static void fillTextLayoutFromFramesetter(CoreTextSystem& sys, CTFramesetterRef 
 
   CFRelease(frame);
 
-  recomputeTextLayoutMetrics(out);
+  if (options.maxLines == 0 && !out.runs.empty() &&
+      std::isfinite(docMinX) && std::isfinite(docMaxX) && std::isfinite(docMinTop) &&
+      std::isfinite(docMaxBot) && std::isfinite(docMinBaselineY) && std::isfinite(docMaxBaselineY)) {
+    out.measuredSize.width = std::max(0.f, docMaxX - docMinX);
+    out.measuredSize.height = std::max(0.f, docMaxBot - docMinTop);
+    out.firstBaseline = docMinBaselineY - docMinTop;
+    out.lastBaseline = docMaxBaselineY - docMinTop;
+  } else {
+    recomputeTextLayoutMetrics(out);
+  }
   if (out.measuredSize.width <= 0.f && out.measuredSize.height <= 0.f && !text.utf8.empty()) {
     out.measuredSize = Size{static_cast<float>(fw), static_cast<float>(fh)};
   }
