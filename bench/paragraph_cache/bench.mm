@@ -8,6 +8,7 @@
 
 #include <chrono>
 #include <iostream>
+#include <vector>
 #include <string>
 
 namespace {
@@ -23,6 +24,10 @@ static std::string makeDocument() {
     s.push_back('\n');
   }
   return s;
+}
+
+static std::string makeSmallLabel(int i) {
+  return "Hello World " + std::to_string(i);
 }
 
 static double secondsSince(std::chrono::steady_clock::time_point t0) {
@@ -157,6 +162,41 @@ int main() {
     }
     double const tPer = secondsSince(t0) / N;
     std::cout << "B6 T_tier0_hit (pointer-identity repeat): " << (tPer * 1e9) << " ns\n";
+  }
+
+  // B7: small-text cold plain-overload path with unique labels.
+  {
+    flux::CoreTextSystem sys;
+    constexpr int N = 1000;
+    std::vector<std::string> labels;
+    labels.reserve(N);
+    for (int i = 0; i < N; ++i) {
+      labels.push_back(makeSmallLabel(i));
+    }
+
+    auto const t0 = std::chrono::steady_clock::now();
+    for (auto const& label : labels) {
+      (void)sys.layout(std::string_view(label), f, Colors::black, 300.f, opt);
+    }
+    double const tPer = secondsSince(t0) / N;
+    std::cout << "B7 T_small_cold (plain overload, unique labels): " << (tPer * 1e6) << " us\n";
+  }
+
+  // B8: same small text content with a fresh owning std::string each call. This bypasses Tier 0 while
+  // exercising the current small-label content-hash + framesetter/layout-cache path.
+  {
+    flux::CoreTextSystem sys;
+    constexpr int N = 1000;
+    std::string const label = "Hello World";
+    std::vector<std::string> owners(N, label);
+    (void)sys.layout(std::string_view(label), f, Colors::black, 300.f, opt);  // warm framesetter/layout slot
+
+    auto const t0 = std::chrono::steady_clock::now();
+    for (auto const& owner : owners) {
+      (void)sys.layout(std::string_view(owner), f, Colors::black, 300.f, opt);
+    }
+    double const tPer = secondsSince(t0) / N;
+    std::cout << "B8 T_small_warm (plain overload, fresh owner): " << (tPer * 1e6) << " us\n";
   }
 
   return 0;

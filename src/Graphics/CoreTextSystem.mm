@@ -2876,7 +2876,7 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layout(std::string_view utf8, 
   auto stor2 = std::make_unique<TextLayoutStorage>();
   fillTextLayoutFromFramesetter(*this, e.framesetter, as, maxWidth, options, *built, *stor2);
   built->ownedStorage = std::move(stor2);
-  std::shared_ptr<TextLayout const> result = cloneTextLayout(*built);
+  std::shared_ptr<TextLayout const> result = std::const_pointer_cast<TextLayout const>(built);
   LayoutSlot slot;
   slot.maxWidthQ1 = wq;
   slot.maxWidthExact = maxWidth;
