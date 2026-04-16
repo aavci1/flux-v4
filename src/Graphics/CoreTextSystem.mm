@@ -272,6 +272,28 @@ void accumulateInheritance(std::vector<ResolvedStyle>& out, AttributedString con
   }
 }
 
+void accumulateInheritance(flux::detail::SmallVector<ResolvedStyle, 4>& out, AttributedString const& text) {
+  out.clear();
+  Font inherited = baseDefaultsFont();
+  for (std::size_t i = 0; i < text.runs.size(); ++i) {
+    AttributedRun const& run = text.runs[i];
+    Font const& rf = run.font;
+    ResolvedStyle& rs = out.emplace_back();
+    rs.font = resolveFont(inherited, rf);
+    rs.color = run.color;
+    rs.backgroundColor = run.backgroundColor;
+    if (!rf.family.empty()) {
+      inherited.family = rf.family;
+    }
+    if (rf.size > 0.f) {
+      inherited.size = rf.size;
+    }
+    if (rf.weight > 0.f) {
+      inherited.weight = rf.weight;
+    }
+  }
+}
+
 CTFontRef createCTFont(Font const& attr) {
   NSString* fam = [NSString stringWithUTF8String:attr.family.c_str()];
   // Empty string is a valid NSString (not nil) but must not be passed as kCTFontFamilyNameAttribute.
@@ -1163,7 +1185,7 @@ struct CoreTextSystem::Impl {
   void bumpEntryApproxBytes(FramesetterEntry& e, AttributedString const& text);
 
   FramesetterEntry& insertFramesetterMiss(ContentHash const& h, AttributedString const& text,
-                                          std::vector<ResolvedStyle> const& resolved,
+                                          std::span<ResolvedStyle const> resolved,
                                           TextLayoutOptions const& options, CoreTextSystem& sys);
 
   FramesetterEntry& findOrInsertFramesetterEntry(ContentHash const& h, AttributedString const& text,
@@ -1322,7 +1344,7 @@ struct CoreTextSystem::Impl {
   }
 
   CFAttributedStringRef createCFAttributed(CoreTextSystem& sys, AttributedString const& text,
-                                           std::vector<ResolvedStyle> const& resolved,
+                                           std::span<ResolvedStyle const> resolved,
                                            TextLayoutOptions const& options) {
     NSString* ns = [NSString stringWithUTF8String:text.utf8.c_str()];
     if (!ns) {
@@ -1367,9 +1389,9 @@ struct CoreTextSystem::Impl {
                        .end = static_cast<std::uint32_t>(utf8.size()),
                        .font = font,
                        .color = color});
-    std::vector<ResolvedStyle> resolved;
+    flux::detail::SmallVector<ResolvedStyle, 4> resolved;
     accumulateInheritance(resolved, as);
-    return createCFAttributed(sys, as, resolved, options);
+    return createCFAttributed(sys, as, {resolved.data(), resolved.size()}, options);
   }
 
   void releaseFramesetterEntry(FramesetterEntry& e) {
@@ -1436,7 +1458,7 @@ void CoreTextSystem::Impl::bumpEntryApproxBytes(FramesetterEntry& e, AttributedS
 
 FramesetterEntry& CoreTextSystem::Impl::insertFramesetterMiss(ContentHash const& h,
                                                               AttributedString const& text,
-                                                              std::vector<ResolvedStyle> const& resolved,
+                                                              std::span<ResolvedStyle const> resolved,
                                                               TextLayoutOptions const& options,
                                                               CoreTextSystem& sys) {
   if (!options.suppressCacheStats) {
@@ -2683,9 +2705,9 @@ Size CoreTextSystem::measure(std::string_view utf8, Font const& font, Color cons
                        .end = static_cast<std::uint32_t>(utf8.size()),
                        .font = font,
                        .color = color});
-    std::vector<ResolvedStyle> resolved;
+    flux::detail::SmallVector<ResolvedStyle, 4> resolved;
     accumulateInheritance(resolved, as);
-    return d->insertFramesetterMiss(h, as, resolved, options, *this);
+    return d->insertFramesetterMiss(h, as, {resolved.data(), resolved.size()}, options, *this);
   }();
 
   for (std::size_t i = 0; i < e.measures.size(); ++i) {
@@ -2844,9 +2866,9 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layout(std::string_view utf8, 
                        .end = static_cast<std::uint32_t>(utf8.size()),
                        .font = font,
                        .color = color});
-    std::vector<ResolvedStyle> resolved;
+    flux::detail::SmallVector<ResolvedStyle, 4> resolved;
     accumulateInheritance(resolved, as);
-    return d->insertFramesetterMiss(h, as, resolved, options, *this);
+    return d->insertFramesetterMiss(h, as, {resolved.data(), resolved.size()}, options, *this);
   }();
 
   for (std::size_t i = 0; i < e.layouts.size(); ++i) {
