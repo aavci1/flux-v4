@@ -74,23 +74,29 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
     gesture_.clearPress();
   }
 
+  stateStore_.beginRebuild(sizeOverride.has_value() || !stateStore_.hasPendingDirtyComponents());
+
   SceneGraph& graph = window_.sceneGraph();
   graph.clear();
 
   layoutEngine_.resetForBuild();
   ++textFrameIndex_;
   Application::instance().textSystem().onFrameBegin(textFrameIndex_);
-  measureCache_.clear();
+  if (stateStore_.shouldForceFullRebuild()) {
+    measureCache_.clear();
+  }
   layoutDebugBeginPass();
 
   actionRegistryBuild_.beginRebuild();
 
-  stateStore_.beginRebuild(sizeOverride.has_value() || !stateStore_.hasPendingDirtyComponents());
   StateStore::setCurrent(&stateStore_);
 
   EventMap newMap;
+  retainedLayoutTree_.clear();
+  std::swap(retainedLayoutTree_, layoutTree_);
   layoutTree_.clear();
-  LayoutContext lctx{Application::instance().textSystem(), layoutEngine_, layoutTree_, &measureCache_};
+  LayoutContext lctx{Application::instance().textSystem(), layoutEngine_, layoutTree_, &measureCache_,
+                     &retainedLayoutTree_, &retainedSubtreeRoots_};
   Size const raw = sizeOverride.value_or(window_.getSize());
   Size const sz = snapRootLayoutSize(raw);
   LayoutConstraints rootCs{};
@@ -116,6 +122,7 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
   rctx.popConstraints();
 
   layoutRects_.fill(layoutTree_, lctx);
+  retainedSubtreeRoots_ = lctx.subtreeRootLayouts();
   layoutDebugEndPass();
 
   StateStore::setCurrent(nullptr);

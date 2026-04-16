@@ -30,6 +30,8 @@ class Element;
 
 class LayoutContext {
 public:
+  using SubtreeRootMap = std::unordered_map<ComponentKey, LayoutNodeId, ComponentKeyHash>;
+
   TextSystem& textSystem();
   LayoutEngine& layoutEngine();
   MeasureCache* measureCache() const;
@@ -63,7 +65,9 @@ public:
 
   void registerCompositeSubtreeRootIfPending(LayoutNodeId layoutNodeId);
 
-  std::unordered_map<ComponentKey, LayoutNodeId, ComponentKeyHash> const& subtreeRootLayouts() const;
+  SubtreeRootMap const& subtreeRootLayouts() const;
+  bool canCloneRetainedSubtree(ComponentKey const& compositeKey) const;
+  bool cloneRetainedSubtree(ComponentKey const& compositeKey);
 
   void pushActiveElementModifiers(ElementModifiers const* m);
   void popActiveElementModifiers();
@@ -102,12 +106,17 @@ private:
   friend class OverlayManager;
   friend struct LayoutContextTestAccess;
 
-  LayoutContext(TextSystem& ts, LayoutEngine& layout, LayoutTree& tree, MeasureCache* measureCache = nullptr);
+  LayoutContext(TextSystem& ts, LayoutEngine& layout, LayoutTree& tree, MeasureCache* measureCache = nullptr,
+                LayoutTree const* retainedTree = nullptr, SubtreeRootMap const* retainedRoots = nullptr);
   ~LayoutContext();
+
+  LayoutNodeId cloneRetainedSubtreeRecursive(LayoutNodeId retainedId, LayoutNodeId parent);
 
   TextSystem& textSystem_;
   LayoutEngine& layoutEngine_;
   LayoutTree& tree_;
+  LayoutTree const* retainedTree_ = nullptr;
+  SubtreeRootMap const* retainedRoots_ = nullptr;
   struct LayoutFrame {
     LayoutConstraints constraints{};
     LayoutHints hints{};
@@ -120,7 +129,7 @@ private:
   bool skipNextLayoutChildAdvance_{false};
   bool pendingCompositeSubtreeRoot_{false};
   ComponentKey pendingCompositeSubtreeKey_{};
-  std::unordered_map<ComponentKey, LayoutNodeId, ComponentKeyHash> subtreeRootLayouts_{};
+  SubtreeRootMap subtreeRootLayouts_{};
   MeasureCache* measureCache_{nullptr};
   std::vector<ElementModifiers const*> activeElementModifiers_{};
 

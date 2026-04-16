@@ -54,6 +54,7 @@ struct ComponentState {
   std::unique_ptr<void, void (*)(void*)> lastBody{nullptr, nullptr};
   std::uint64_t lastBodyEpoch = 0;
   std::vector<LayoutConstraints> reusableConstraints;
+  std::vector<std::pair<LayoutConstraints, Size>> reusableMeasures;
   ComponentValueSnapshot valueSnapshot{};
   std::vector<ComponentSubscription> subscriptions;
 };
@@ -118,6 +119,7 @@ public:
   [[nodiscard]] bool hasPendingDirtyComponents() const noexcept;
   [[nodiscard]] bool shouldForceFullRebuild() const noexcept { return forceFullRebuild_; }
   [[nodiscard]] bool isComponentDirty(ComponentKey const& key) const;
+  [[nodiscard]] bool hasDirtyDescendant(ComponentKey const& key) const;
   [[nodiscard]] bool currentCompositePathStable() const noexcept;
   void pushCompositePathStable(bool stable);
   void popCompositePathStable();
@@ -129,6 +131,8 @@ public:
   Element* cachedBody(ComponentKey const& key);
   Element const* cachedBody(ComponentKey const& key) const;
   void recordBodyConstraints(ComponentKey const& key, LayoutConstraints const& constraints);
+  std::optional<Size> cachedMeasure(ComponentKey const& key, LayoutConstraints const& constraints) const;
+  void recordMeasure(ComponentKey const& key, LayoutConstraints const& constraints, Size size);
 
   template<typename C>
   Element& commitBody(ComponentKey const& key, C const& value, LayoutConstraints const& constraints,

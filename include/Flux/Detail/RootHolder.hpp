@@ -53,11 +53,16 @@ struct TypedRootHolder final : RootHolder {
       Element& child = store ? *resolution.body : ctx.pinElement(Element{value.body()});
       ctx.beginCompositeBodySubtree(key);
       ctx.pushCompositeKeyTail(key);
+      bool clonedRetainedSubtree = false;
       if (store) {
         store->recordBodyConstraints(key, ctx.constraints());
         store->pushCompositePathStable(resolution.descendantsStable);
+        clonedRetainedSubtree =
+            resolution.descendantsStable && !store->hasDirtyDescendant(key) && ctx.cloneRetainedSubtree(key);
       }
-      child.layout(ctx);
+      if (!clonedRetainedSubtree) {
+        child.layout(ctx);
+      }
       if (store) {
         store->popCompositePathStable();
       }

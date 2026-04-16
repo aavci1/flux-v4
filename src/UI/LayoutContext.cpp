@@ -18,10 +18,13 @@ struct ElementPinStorage {
 
 } // namespace detail
 
-LayoutContext::LayoutContext(TextSystem& ts, LayoutEngine& layout, LayoutTree& tree, MeasureCache* measureCache)
+LayoutContext::LayoutContext(TextSystem& ts, LayoutEngine& layout, LayoutTree& tree, MeasureCache* measureCache,
+                             LayoutTree const* retainedTree, SubtreeRootMap const* retainedRoots)
     : textSystem_(ts)
     , layoutEngine_(layout)
     , tree_(tree)
+    , retainedTree_(retainedTree)
+    , retainedRoots_(retainedRoots)
     , measureCache_(measureCache)
     , elementPins_(std::make_unique<detail::ElementPinStorage>()) {
   layoutStack_.push_back(LayoutFrame{});
@@ -132,8 +135,46 @@ void LayoutContext::registerCompositeSubtreeRootIfPending(LayoutNodeId layoutNod
 
 MeasureCache* LayoutContext::measureCache() const { return measureCache_; }
 
-std::unordered_map<ComponentKey, LayoutNodeId, ComponentKeyHash> const& LayoutContext::subtreeRootLayouts() const {
+LayoutContext::SubtreeRootMap const& LayoutContext::subtreeRootLayouts() const {
   return subtreeRootLayouts_;
+}
+
+bool LayoutContext::canCloneRetainedSubtree(ComponentKey const& compositeKey) const {
+  if (!retainedTree_ || !retainedRoots_) {
+    return false;
+  }
+  auto const it = retainedRoots_->find(compositeKey);
+  if (it == retainedRoots_->end()) {
+    return false;
+  }
+  return retainedTree_->get(it->second) != nullptr;
+}
+
+LayoutNodeId LayoutContext::cloneRetainedSubtreeRecursive(LayoutNodeId retainedId, LayoutNodeId parent) {
+  assert(retainedTree_ && "retained tree required for subtree clone");
+  LayoutNode const* retained = retainedTree_->get(retainedId);
+  assert(retained && "retained subtree root must exist");
+
+  LayoutNode clone = *retained;
+  clone.id = {};
+  clone.parent = parent;
+  std::vector<LayoutNodeId> retainedChildren = retained->children;
+  clone.children.clear();
+  LayoutNodeId const newId = tree_.pushNode(std::move(clone), parent);
+  for (LayoutNodeId childId : retainedChildren) {
+    cloneRetainedSubtreeRecursive(childId, newId);
+  }
+  return newId;
+}
+
+bool LayoutContext::cloneRetainedSubtree(ComponentKey const& compositeKey) {
+  if (!canCloneRetainedSubtree(compositeKey)) {
+    return false;
+  }
+  auto const it = retainedRoots_->find(compositeKey);
+  LayoutNodeId const newRoot = cloneRetainedSubtreeRecursive(it->second, currentLayoutParent());
+  registerCompositeSubtreeRootIfPending(newRoot);
+  return true;
 }
 
 void LayoutContext::pushActiveElementModifiers(ElementModifiers const* m) { activeElementModifiers_.push_back(m); }

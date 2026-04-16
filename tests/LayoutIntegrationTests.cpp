@@ -199,8 +199,14 @@ class EmptyRunsGuardTextSystem final : public TextSystem {
 
 namespace flux {
 struct LayoutContextTestAccess {
-    static LayoutContext *create(TextSystem &ts, LayoutEngine &le, LayoutTree &tree) {
-        return new LayoutContext(ts, le, tree, nullptr);
+    static LayoutContext *create(
+        TextSystem &ts,
+        LayoutEngine &le,
+        LayoutTree &tree,
+        LayoutTree const *retainedTree = nullptr,
+        LayoutContext::SubtreeRootMap const *retainedRoots = nullptr
+    ) {
+        return new LayoutContext(ts, le, tree, nullptr, retainedTree, retainedRoots);
     }
     static void destroy(LayoutContext *ctx) { delete ctx; }
 };

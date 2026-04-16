@@ -30,6 +30,7 @@ void StateStore::clearComponentState(ComponentState& state) {
   state.lastBody = {nullptr, nullptr};
   state.lastBodyEpoch = 0;
   state.reusableConstraints.clear();
+  state.reusableMeasures.clear();
   state.valueSnapshot = {};
   state.subscriptions.clear();
 }
@@ -151,6 +152,21 @@ bool StateStore::isComponentDirty(ComponentKey const& key) const {
   return forceFullRebuild_ || activeDirtyComposites_.count(key) != 0;
 }
 
+bool StateStore::hasDirtyDescendant(ComponentKey const& key) const {
+  if (forceFullRebuild_) {
+    return true;
+  }
+  for (ComponentKey const& candidate : activeDirtyComposites_) {
+    if (candidate.size() <= key.size()) {
+      continue;
+    }
+    if (std::equal(key.begin(), key.end(), candidate.begin())) {
+      return true;
+    }
+  }
+  return false;
+}
+
 bool StateStore::currentCompositePathStable() const noexcept {
   if (compositePathStableStack_.empty()) {
     return true;
@@ -200,6 +216,31 @@ void StateStore::recordBodyConstraints(ComponentKey const& key, LayoutConstraint
     }
   }
   state.reusableConstraints.push_back(constraints);
+}
+
+std::optional<Size> StateStore::cachedMeasure(ComponentKey const& key,
+                                              LayoutConstraints const& constraints) const {
+  auto const it = states_.find(key);
+  if (it == states_.end()) {
+    return std::nullopt;
+  }
+  for (auto const& [recordedConstraints, size] : it->second.reusableMeasures) {
+    if (constraintsEqual(recordedConstraints, constraints)) {
+      return size;
+    }
+  }
+  return std::nullopt;
+}
+
+void StateStore::recordMeasure(ComponentKey const& key, LayoutConstraints const& constraints, Size size) {
+  ComponentState& state = states_[key];
+  for (auto& [recordedConstraints, recordedSize] : state.reusableMeasures) {
+    if (constraintsEqual(recordedConstraints, constraints)) {
+      recordedSize = size;
+      return;
+    }
+  }
+  state.reusableMeasures.emplace_back(constraints, size);
 }
 
 void StateStore::setOverlayScope(std::optional<std::uint64_t> overlayIdValue) {

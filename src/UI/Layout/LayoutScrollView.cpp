@@ -68,11 +68,16 @@ void ScrollView::layout(LayoutContext &ctx) const {
     Element &childEl = store ? *resolution.body : ctx.pinElement(body());
     ctx.beginCompositeBodySubtree(key);
     ctx.pushCompositeKeyTail(key);
+    bool clonedRetainedSubtree = false;
     if (store) {
         store->recordBodyConstraints(key, ctx.constraints());
         store->pushCompositePathStable(resolution.descendantsStable);
+        clonedRetainedSubtree =
+            resolution.descendantsStable && !store->hasDirtyDescendant(key) && ctx.cloneRetainedSubtree(key);
     }
-    childEl.layout(ctx);
+    if (!clonedRetainedSubtree) {
+        childEl.layout(ctx);
+    }
     if (store) {
         store->popCompositePathStable();
     }

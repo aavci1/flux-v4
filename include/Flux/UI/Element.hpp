@@ -458,11 +458,16 @@ void Element::Model<C>::layout(LayoutContext& ctx) const {
     Element& child = store ? *resolution.body : ctx.pinElement(Element{value.body()});
     ctx.beginCompositeBodySubtree(key);
     ctx.pushCompositeKeyTail(key);
+    bool clonedRetainedSubtree = false;
     if (store) {
       store->recordBodyConstraints(key, ctx.constraints());
       store->pushCompositePathStable(resolution.descendantsStable);
+      clonedRetainedSubtree =
+          resolution.descendantsStable && !store->hasDirtyDescendant(key) && ctx.cloneRetainedSubtree(key);
     }
-    child.layout(ctx);
+    if (!clonedRetainedSubtree) {
+      child.layout(ctx);
+    }
     if (store) {
       store->popCompositePathStable();
     }
@@ -576,6 +581,11 @@ Size Element::Model<C>::measure(LayoutContext& ctx, LayoutConstraints const& con
       store->popCompositeConstraints();
       store->popComponent();
     }
+    if (store && resolution.descendantsStable && !store->hasDirtyDescendant(key)) {
+      if (std::optional<Size> const cached = store->cachedMeasure(key, constraints)) {
+        return *cached;
+      }
+    }
     Element fallbackChild = store ? Element{Rectangle{}} : Element{value.body()};
     Element const& child = store ? *resolution.body : fallbackChild;
     ctx.beginCompositeBodySubtree(key);
@@ -586,6 +596,7 @@ Size Element::Model<C>::measure(LayoutContext& ctx, LayoutConstraints const& con
     }
     Size const sz = child.measure(ctx, constraints, hints, textSystem);
     if (store) {
+      store->recordMeasure(key, constraints, sz);
       store->popCompositePathStable();
     }
     ctx.popCompositeKeyTail();

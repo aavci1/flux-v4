@@ -68,8 +68,9 @@ namespace flux {
 
 struct LayoutContextTestAccess {
   static LayoutContext* create(TextSystem& ts, LayoutEngine& le, LayoutTree& tree,
-                               MeasureCache* mc) {
-    return new LayoutContext(ts, le, tree, mc);
+                               MeasureCache* mc, LayoutTree const* retainedTree = nullptr,
+                               LayoutContext::SubtreeRootMap const* retainedRoots = nullptr) {
+    return new LayoutContext(ts, le, tree, mc, retainedTree, retainedRoots);
   }
 
   static void destroy(LayoutContext* ctx) { delete ctx; }
@@ -104,6 +105,8 @@ struct FrameContext {
   NullTextSystem ts{};
   LayoutEngine le{};
   MeasureCache mc{};
+  LayoutContext::SubtreeRootMap retainedRoots{};
+  LayoutTree retainedTree{};
   LayoutTree tree{};
   SceneGraph graph{};
   EventMap eventMap{};
@@ -111,12 +114,18 @@ struct FrameContext {
   void rebuild(Element const& root, float w, float h) {
     store.beginRebuild(false);
     tree.clear();
+    retainedTree.clear();
+    std::swap(retainedTree, tree);
+    tree.clear();
     graph.clear();
     eventMap = EventMap{};
-    mc.clear();
+    if (store.shouldForceFullRebuild()) {
+      mc.clear();
+    }
     le.resetForBuild();
 
-    LayoutContextPtr ctx{flux::LayoutContextTestAccess::create(ts, le, tree, &mc)};
+    LayoutContextPtr ctx{
+        flux::LayoutContextTestAccess::create(ts, le, tree, &mc, &retainedTree, &retainedRoots)};
     LayoutConstraints rootCs{};
     rootCs.minWidth = w;
     rootCs.minHeight = h;
@@ -133,6 +142,7 @@ struct FrameContext {
     renderLayoutTree(tree, rctx);
     rctx.popConstraints();
 
+    retainedRoots = ctx->subtreeRootLayouts();
     store.endRebuild();
   }
 };

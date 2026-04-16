@@ -18,6 +18,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <unordered_map>
 
 namespace flux {
 
@@ -63,6 +64,8 @@ private:
   LayoutEngine layoutEngine_;
   StateStore stateStore_;
   LayoutRectCache layoutRects_;
+  std::unordered_map<ComponentKey, LayoutNodeId, ComponentKeyHash> retainedSubtreeRoots_{};
+  LayoutTree retainedLayoutTree_{};
   LayoutTree layoutTree_{};
   EventMap eventMap_;
   ObserverHandle rebuildHandle_{};

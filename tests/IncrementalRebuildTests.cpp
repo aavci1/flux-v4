@@ -58,8 +58,9 @@ namespace flux {
 
 struct LayoutContextTestAccess {
   static LayoutContext* create(TextSystem& ts, LayoutEngine& le, LayoutTree& tree,
-                               MeasureCache* mc) {
-    return new LayoutContext(ts, le, tree, mc);
+                               MeasureCache* mc, LayoutTree const* retainedTree = nullptr,
+                               LayoutContext::SubtreeRootMap const* retainedRoots = nullptr) {
+    return new LayoutContext(ts, le, tree, mc, retainedTree, retainedRoots);
   }
 
   static void destroy(LayoutContext* ctx) { delete ctx; }
