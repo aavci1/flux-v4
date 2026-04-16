@@ -25,6 +25,7 @@
 #include <Flux/UI/Hooks.hpp>
 
 #include <chrono>
+#include <cstdlib>
 #include <cstdint>
 #include <iostream>
 #include <memory>
@@ -270,6 +271,14 @@ static void printRow(char const* label, double seconds) {
   }
 }
 
+static void requirePendingDirty(StateStore const& store, char const* label) {
+  if (store.hasPendingDirtyComponents()) {
+    return;
+  }
+  std::cerr << label << " expected a pending dirty component after the signal write\n";
+  std::abort();
+}
+
 } // namespace
 
 int main() {
@@ -292,7 +301,7 @@ int main() {
     Element root = flatVStack(5000, 16.f);
     constexpr int N = 20;
     double const per = timeAveraged(N, [&] { fc.rebuild(root, W, H); });
-    std::cout << "B2 flat 5000-row VStack steady-state:   ";
+    std::cout << "B2 flat 5000-row VStack steady-state (same root): ";
     printRow("", per);
   }
 
@@ -300,9 +309,25 @@ int main() {
     StateStoreGuard guard;
     FrameContext fc{guard.store};
     constexpr int N = 20;
+    double const per = timeAveraged(N, [&] {
+      Element root = flatVStack(5000, 16.f);
+      fc.rebuild(root, W, H);
+    });
+    std::cout << "B2' flat 5000-row VStack steady-state (new root): ";
+    printRow("", per);
+  }
+
+  {
+    StateStoreGuard guard;
+    FrameContext fc{guard.store};
+    auto handles = std::make_shared<std::vector<State<int>>>(5000);
+    Element root = Element{SignalRowsTree{.count = 5000, .handles = handles, .rowH = 16.f}};
+    fc.rebuild(root, W, H);
+    constexpr int N = 20;
     double total = 0.0;
-    for (int k = 0; k < N; ++k) {
-      Element root = flatVStack(5000, 16.f + 0.001f * static_cast<float>(k));
+    for (int i = 0; i < N; ++i) {
+      (*handles)[2500] = (i & 1) != 0 ? 0 : 1;
+      requirePendingDirty(guard.store, "B3");
       total += timeIt([&] { fc.rebuild(root, W, H); });
     }
     std::cout << "B3 flat 5000-row VStack 1-leaf-delta:   ";
@@ -319,7 +344,19 @@ int main() {
     std::cout << "   layout_tree_nodes: " << fc.tree.nodes().size() << "\n";
     constexpr int N = 50;
     double const steady = timeAveraged(N, [&] { fc.rebuild(root, W, H); });
-    std::cout << "B4 card tree steady-state:              ";
+    std::cout << "B4 card tree steady-state (same root):  ";
+    printRow("", steady);
+  }
+
+  {
+    StateStoreGuard guard;
+    FrameContext fc{guard.store};
+    constexpr int N = 50;
+    double const steady = timeAveraged(N, [&] {
+      Element root = card(4, 5, 12.f);
+      fc.rebuild(root, W, H);
+    });
+    std::cout << "B4' card tree steady-state (new root):  ";
     printRow("", steady);
   }
 
@@ -332,7 +369,19 @@ int main() {
     printRow("", cold);
     constexpr int N = 10;
     double const steady = timeAveraged(N, [&] { fc.rebuild(root, W, H); });
-    std::cout << "B5 ForEach 5000 rows steady-state:      ";
+    std::cout << "B5 ForEach 5000 rows steady-state (same root): ";
+    printRow("", steady);
+  }
+
+  {
+    StateStoreGuard guard;
+    FrameContext fc{guard.store};
+    constexpr int N = 10;
+    double const steady = timeAveraged(N, [&] {
+      Element root = foreachRows(5000, 24.f);
+      fc.rebuild(root, W, H);
+    });
+    std::cout << "B5' ForEach 5000 rows steady-state (new root): ";
     printRow("", steady);
   }
 
@@ -342,7 +391,19 @@ int main() {
     Element root = foreachRows(100, 32.f);
     constexpr int N = 500;
     double const per = timeAveraged(N, [&] { fc.rebuild(root, W, H); });
-    std::cout << "B6 ForEach 100 rows steady-state:       ";
+    std::cout << "B6 ForEach 100 rows steady-state (same root): ";
+    printRow("", per);
+  }
+
+  {
+    StateStoreGuard guard;
+    FrameContext fc{guard.store};
+    constexpr int N = 500;
+    double const per = timeAveraged(N, [&] {
+      Element root = foreachRows(100, 32.f);
+      fc.rebuild(root, W, H);
+    });
+    std::cout << "B6' ForEach 100 rows steady-state (new root): ";
     printRow("", per);
   }
 
@@ -384,6 +445,7 @@ int main() {
     double total = 0.0;
     for (int i = 0; i < N; ++i) {
       (*handles)[500] = (i & 1) != 0 ? 0 : 1;
+      requirePendingDirty(guard.store, "B9");
       total += timeIt([&] { fc.rebuild(root, W, H); });
     }
     std::cout << "B9 signal-write 1000 composite tree:    ";
@@ -400,6 +462,7 @@ int main() {
     double total = 0.0;
     for (int i = 0; i < N; ++i) {
       (*handles)[5000] = (i & 1) != 0 ? 0 : 1;
+      requirePendingDirty(guard.store, "B10");
       total += timeIt([&] { fc.rebuild(root, W, H * 8.f); });
     }
     std::cout << "B10 signal-write 10000 composite tree:  ";
