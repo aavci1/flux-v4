@@ -7,10 +7,10 @@
 
 #include <Flux/UI/ComponentKey.hpp>
 #include <Flux/Core/Types.hpp>
+#include <Flux/UI/LayoutTree.hpp>
 
 namespace flux {
 class LayoutContext;
-class LayoutTree;
 } // namespace flux
 
 #include <optional>
@@ -31,6 +31,7 @@ public:
   /// composite container's allotted frame), not a union of all descendants — a
   /// union can exceed the container when children overflow (e.g. flex rows).
   void fill(LayoutTree const& tree, LayoutContext const& ctx);
+  void fill(LayoutTree const& tree, std::unordered_map<ComponentKey, LayoutNodeId, ComponentKeyHash> const& roots);
 
   /// Rect for the composite currently executing `body()`.
   /// Returns nullopt when called outside a build pass.

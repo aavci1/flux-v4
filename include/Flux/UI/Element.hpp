@@ -222,6 +222,7 @@ public:
   void renderFromLayout(RenderContext& ctx, LayoutNode const& node) const;
   Size measure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
                TextSystem& textSystem) const;
+  [[nodiscard]] std::uint64_t measureId() const noexcept { return measureId_; }
 
   /// Optional flex overrides on the wrapper (from \c flex()). When set, they replace the
   /// underlying component's flex hints for layout.

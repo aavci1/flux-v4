@@ -89,6 +89,7 @@ public:
   /// Move a subtree root \c Element into frame-local storage so \p LayoutNode::element pointers
   /// remain valid through the render phase (stack temporaries are not safe across layout → render).
   Element& pinElement(Element&& el);
+  [[nodiscard]] std::shared_ptr<detail::ElementPinStorage> pinnedElements() const noexcept;
 
   /// Append a completed layout node as a child of \ref currentLayoutParent (or root).
   LayoutNodeId pushLayoutNode(LayoutNode&& node);
@@ -137,7 +138,7 @@ private:
   std::vector<LayoutNodeId> layoutParentStack_{};
   Element const* currentElement_{nullptr};
 
-  std::unique_ptr<detail::ElementPinStorage> elementPins_{};
+  std::shared_ptr<detail::ElementPinStorage> elementPins_{};
 };
 
 } // namespace flux

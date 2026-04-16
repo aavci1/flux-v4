@@ -41,6 +41,11 @@ bool inputDebugEnabled() {
   return cached != 0;
 }
 
+bool constraintsEqual(LayoutConstraints const& a, LayoutConstraints const& b) {
+  return a.minWidth == b.minWidth && a.minHeight == b.minHeight &&
+         a.maxWidth == b.maxWidth && a.maxHeight == b.maxHeight;
+}
+
 } // namespace
 
 BuildOrchestrator::BuildOrchestrator(Window& window, FocusController& focus, HoverController& hover,
@@ -61,6 +66,14 @@ BuildOrchestrator::~BuildOrchestrator() {
 
 void BuildOrchestrator::setRoot(std::unique_ptr<RootHolder> holder) {
   rootHolder_ = std::move(holder);
+  latestLayoutIsCurrent_ = false;
+  latestRootIdentityToken_ = 0;
+  layoutTree_.clear();
+  retainedLayoutTree_.clear();
+  layoutSubtreeRoots_.clear();
+  retainedSubtreeRoots_.clear();
+  layoutPins_.reset();
+  retainedLayoutPins_.reset();
   // Do not call `rebuild()` here — `Runtime::setRoot` calls `Runtime::rebuild()` so `sCurrent`
   // is set for hooks (`Runtime::current()`) during the layout/render pass.
 }
@@ -74,29 +87,6 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
     gesture_.clearPress();
   }
 
-  stateStore_.beginRebuild(sizeOverride.has_value() || !stateStore_.hasPendingDirtyComponents());
-
-  SceneGraph& graph = window_.sceneGraph();
-  graph.clear();
-
-  layoutEngine_.resetForBuild();
-  ++textFrameIndex_;
-  Application::instance().textSystem().onFrameBegin(textFrameIndex_);
-  if (stateStore_.shouldForceFullRebuild()) {
-    measureCache_.clear();
-  }
-  layoutDebugBeginPass();
-
-  actionRegistryBuild_.beginRebuild();
-
-  StateStore::setCurrent(&stateStore_);
-
-  EventMap newMap;
-  retainedLayoutTree_.clear();
-  std::swap(retainedLayoutTree_, layoutTree_);
-  layoutTree_.clear();
-  LayoutContext lctx{Application::instance().textSystem(), layoutEngine_, layoutTree_, &measureCache_,
-                     &retainedLayoutTree_, &retainedSubtreeRoots_};
   Size const raw = sizeOverride.value_or(window_.getSize());
   Size const sz = snapRootLayoutSize(raw);
   LayoutConstraints rootCs{};
@@ -106,6 +96,62 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
   rootCs.minHeight = sz.height;
   rootCs.maxWidth = sz.width;
   rootCs.maxHeight = sz.height;
+
+  bool const canReuseWholeLayout =
+      rootHolder_ && latestLayoutIsCurrent_ && !stateStore_.hasPendingDirtyComponents() &&
+      latestRootIdentityToken_ == rootHolder_->layoutIdentityToken() &&
+      constraintsEqual(latestRootConstraints_, rootCs);
+
+  SceneGraph& graph = window_.sceneGraph();
+  graph.clear();
+
+  layoutEngine_.resetForBuild();
+  ++textFrameIndex_;
+  Application::instance().textSystem().onFrameBegin(textFrameIndex_);
+  layoutDebugBeginPass();
+
+  EventMap newMap;
+  if (canReuseWholeLayout) {
+    RenderContext rctx{graph, newMap, Application::instance().textSystem()};
+    rctx.pushConstraints(rootCs);
+    renderLayoutTree(layoutTree_, rctx);
+    rctx.popConstraints();
+
+    layoutRects_.fill(layoutTree_, layoutSubtreeRoots_);
+    layoutDebugEndPass();
+
+    eventMap_ = std::move(newMap);
+    focus_.validateAfterRebuild(eventMap_);
+    window_.overlayManager().rebuild(sz, runtime);
+
+    if (inputDebugEnabled()) {
+      std::fprintf(stderr,
+                   "[flux:input] rebuild layout=%.1fx%.1f scene root children (if any) updated\n",
+                   static_cast<double>(sz.width), static_cast<double>(sz.height));
+    }
+    Application::instance().textSystem().onFrameEnd();
+    window_.requestRedraw();
+    return;
+  }
+
+  stateStore_.beginRebuild(sizeOverride.has_value() || !stateStore_.hasPendingDirtyComponents());
+  if (stateStore_.shouldForceFullRebuild()) {
+    measureCache_.clear();
+  }
+
+  actionRegistryBuild_.beginRebuild();
+  StateStore::setCurrent(&stateStore_);
+
+  if (latestLayoutIsCurrent_) {
+    retainedLayoutTree_.clear();
+    std::swap(retainedLayoutTree_, layoutTree_);
+    retainedSubtreeRoots_ = std::move(layoutSubtreeRoots_);
+    retainedLayoutPins_ = std::move(layoutPins_);
+    latestLayoutIsCurrent_ = false;
+  }
+  layoutTree_.clear();
+  LayoutContext lctx{Application::instance().textSystem(), layoutEngine_, layoutTree_, &measureCache_,
+                     &retainedLayoutTree_, &retainedSubtreeRoots_};
   lctx.pushConstraints(rootCs);
   EnvironmentLayer windowEnvBaseline = window_.environmentLayer();
   EnvironmentStack::current().push(std::move(windowEnvBaseline));
@@ -122,7 +168,11 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
   rctx.popConstraints();
 
   layoutRects_.fill(layoutTree_, lctx);
-  retainedSubtreeRoots_ = lctx.subtreeRootLayouts();
+  layoutSubtreeRoots_ = lctx.subtreeRootLayouts();
+  layoutPins_ = lctx.pinnedElements();
+  latestRootConstraints_ = rootCs;
+  latestRootIdentityToken_ = rootHolder_ ? rootHolder_->layoutIdentityToken() : 0;
+  latestLayoutIsCurrent_ = true;
   layoutDebugEndPass();
 
   StateStore::setCurrent(nullptr);

@@ -26,7 +26,7 @@ LayoutContext::LayoutContext(TextSystem& ts, LayoutEngine& layout, LayoutTree& t
     , retainedTree_(retainedTree)
     , retainedRoots_(retainedRoots)
     , measureCache_(measureCache)
-    , elementPins_(std::make_unique<detail::ElementPinStorage>()) {
+    , elementPins_(std::make_shared<detail::ElementPinStorage>()) {
   layoutStack_.push_back(LayoutFrame{});
   layerWorldStack_.push_back(Mat3::identity());
 }
@@ -36,6 +36,10 @@ LayoutContext::~LayoutContext() = default;
 Element& LayoutContext::pinElement(Element&& el) {
   elementPins_->pins.push_back(std::move(el));
   return elementPins_->pins.back();
+}
+
+std::shared_ptr<detail::ElementPinStorage> LayoutContext::pinnedElements() const noexcept {
+  return elementPins_;
 }
 
 TextSystem& LayoutContext::textSystem() { return textSystem_; }
