@@ -450,6 +450,25 @@ TEST_CASE("incremental rebuild preserves memoized leaf measures across parent bo
   CHECK(*measureCount == 1);
 }
 
+TEST_CASE("layout containers publish stable component keys in the layout tree") {
+  StoreScope scope;
+  RebuildHarness harness{scope.store};
+  Element root = Element{VStack{
+      .spacing = 0.f,
+      .children = std::vector<Element>{
+          Element{Rectangle{}}.size(40.f, 12.f),
+          Element{Rectangle{}}.size(40.f, 18.f),
+      },
+  }};
+
+  harness.rebuild(root, true);
+
+  std::optional<Rect> const rootRect = harness.tree.rectForKey(ComponentKey{0});
+  REQUIRE(rootRect.has_value());
+  CHECK(rootRect->width == doctest::Approx(800.f));
+  CHECK(rootRect->height == doctest::Approx(1200.f));
+}
+
 TEST_CASE("removing a composite unsubscribes its external signal and destroys its state") {
   auto items = std::make_shared<std::vector<int>>(std::vector<int>{0, 1});
   auto destroyCount = std::make_shared<int>(0);

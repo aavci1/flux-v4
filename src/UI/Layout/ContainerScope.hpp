@@ -29,6 +29,7 @@ public:
     keyPathDepth0_ = ctx.debugKeyPathDepth();
     savedDepth0_ = ctx.debugSavedChildDepth();
 #endif
+    stableKey_ = ctx.leafComponentKey();
     if (!ctx.consumeCompositeBodySubtreeRootSkip()) {
       ctx.advanceChildSlot();
     }
@@ -48,6 +49,7 @@ public:
     n.frame = parentFrame;
     n.constraints = outer;
     n.hints = ctx.hints();
+    n.componentKey = stableKey_;
     n.containerSpec.kind = ContainerLayerSpec::Kind::Standard;
     n.containerSpec.clip = clip;
     n.containerSpec.clipW = assignedW;
@@ -71,6 +73,7 @@ public:
     n.frame = parentFrame;
     n.constraints = outer;
     n.hints = ctx.hints();
+    n.componentKey = stableKey_;
     n.containerSpec.kind = ContainerLayerSpec::Kind::OffsetScroll;
     n.containerSpec.scrollOffset = scrollOffset;
     n.element = ctx.currentElement();
@@ -88,6 +91,7 @@ public:
     n.frame = parentFrame;
     n.constraints = outer;
     n.hints = ctx.hints();
+    n.componentKey = stableKey_;
     n.containerSpec.kind = ContainerLayerSpec::Kind::ScaleAroundCenter;
     n.containerSpec.customTransform = fullLayerTransform;
     n.element = ctx.currentElement();
@@ -155,6 +159,7 @@ public:
 
 private:
   bool layerPushed_{false};
+  ComponentKey stableKey_{};
 #ifndef NDEBUG
   std::size_t layerWorldDepth0_{};
   std::size_t constraintDepth0_{};

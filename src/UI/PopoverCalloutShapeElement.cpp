@@ -110,6 +110,7 @@ Size PopoverCalloutShape::measure(LayoutContext& ctx, LayoutConstraints const& c
 }
 
 void PopoverCalloutShape::layout(LayoutContext& ctx) const {
+  ComponentKey const stableKey = ctx.leafComponentKey();
   if (!ctx.consumeCompositeBodySubtreeRootSkip()) {
     ctx.advanceChildSlot();
   }
@@ -172,6 +173,7 @@ void PopoverCalloutShape::layout(LayoutContext& ctx) const {
   shell.kind = LayoutNode::Kind::Container;
   shell.frame = Rect{0.f, 0.f, tw, th};
   shell.constraints = outer;
+  shell.componentKey = stableKey;
   shell.containerSpec.kind = ContainerLayerSpec::Kind::Standard;
   shell.containerTag = LayoutNode::ContainerTag::PopoverCalloutShape;
   shell.element = ctx.currentElement();

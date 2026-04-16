@@ -11,6 +11,7 @@
 #include <cassert>
 #include <cstdint>
 #include <span>
+#include <unordered_map>
 #include <vector>
 
 namespace flux {
@@ -113,6 +114,7 @@ public:
   void clear() {
     nodes_.clear();
     rootId_ = {};
+    firstNodeForKey_.clear();
   }
 
   [[nodiscard]] LayoutNodeId root() const noexcept { return rootId_; }
@@ -148,6 +150,7 @@ public:
 private:
   std::vector<LayoutNode> nodes_{};
   LayoutNodeId rootId_{};
+  std::unordered_map<ComponentKey, LayoutNodeId, ComponentKeyHash> firstNodeForKey_{};
 };
 
 /// Axis-aligned bounding rect of \p r after transforming its four corners by \p t.

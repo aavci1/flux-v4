@@ -29,6 +29,9 @@ LayoutNodeId LayoutTree::pushNode(LayoutNode&& node, LayoutNodeId parent) {
   } else {
     rootId_ = id;
   }
+  if (!node.componentKey.empty()) {
+    firstNodeForKey_.emplace(node.componentKey, id);
+  }
   nodes_.push_back(std::move(node));
   return id;
 }
@@ -68,10 +71,12 @@ Rect LayoutTree::unionSubtreeWorldBounds(LayoutNodeId nodeId) const {
 }
 
 std::optional<Rect> LayoutTree::rectForKey(ComponentKey const& key) const {
-  for (LayoutNode const& n : nodes_) {
-    if (n.componentKey == key) {
-      return n.worldBounds;
-    }
+  auto const it = firstNodeForKey_.find(key);
+  if (it == firstNodeForKey_.end()) {
+    return std::nullopt;
+  }
+  if (LayoutNode const* n = get(it->second)) {
+    return n->worldBounds;
   }
   return std::nullopt;
 }

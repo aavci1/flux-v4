@@ -112,6 +112,7 @@ void Element::Model<ForEach<T>>::layout(LayoutContext& ctx) const {
   fx.frame = box;
   fx.constraints = outer;
   fx.hints = ctx.hints();
+  fx.componentKey = forEachKey;
   fx.containerSpec.kind = ContainerLayerSpec::Kind::Standard;
   fx.element = ctx.currentElement();
   LayoutNodeId const feId = ctx.pushLayoutNode(std::move(fx));
