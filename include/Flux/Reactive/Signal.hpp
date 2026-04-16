@@ -10,6 +10,7 @@
 #include <Flux/Reactive/Detail/Notify.hpp>
 #include <Flux/Reactive/Detail/TypeTraits.hpp>
 #include <Flux/Reactive/Observer.hpp>
+#include <Flux/UI/StateStore.hpp>
 
 #include <algorithm>
 #include <cstdint>
@@ -38,6 +39,7 @@ public:
 
   ObserverHandle observe(std::function<void()> callback) override;
   void unobserve(ObserverHandle handle) override;
+  ObserverHandle observeComposite(StateStore& store, ComponentKey const& key) override;
 
 private:
   void notifyObservers();
@@ -45,6 +47,7 @@ private:
   T value_;
   std::uint64_t nextId_ = 1;
   std::vector<std::pair<std::uint64_t, std::function<void()>>> observers_;
+  std::vector<std::pair<std::uint64_t, CompositeObserver>> compositeObservers_;
 };
 
 } // namespace flux
@@ -86,6 +89,14 @@ void Signal<T>::unobserve(ObserverHandle handle) {
     return;
   }
   std::erase_if(observers_, [handle](auto const& p) { return p.first == handle.id; });
+  std::erase_if(compositeObservers_, [handle](auto const& p) { return p.first == handle.id; });
+}
+
+template<typename T>
+ObserverHandle Signal<T>::observeComposite(StateStore& store, ComponentKey const& key) {
+  std::uint64_t const id = nextId_++;
+  compositeObservers_.emplace_back(id, CompositeObserver{.store = &store, .key = key});
+  return ObserverHandle{id};
 }
 
 template<typename T>
@@ -93,8 +104,15 @@ void Signal<T>::notifyObservers() {
   // `useState` / internal `Signal`s often have no `observe()` callbacks; `notifyObserverList` would
   // otherwise skip `markReactiveDirty`, so `Runtime`'s next-frame rebuild never runs (resize still
   // rebuilt via `WindowEvent::Resize`).
-  if (observers_.empty() && detail::signalBridgeApplicationHasInstance()) {
+  if (observers_.empty() && compositeObservers_.empty() && detail::signalBridgeApplicationHasInstance()) {
     detail::signalBridgeMarkReactiveDirty();
+  }
+  auto compositeSnapshot = compositeObservers_;
+  for (auto const& [id, observer] : compositeSnapshot) {
+    (void)id;
+    if (observer.store) {
+      observer.store->markCompositeDirty(observer.key);
+    }
   }
   detail::notifyObserverList(observers_);
 }

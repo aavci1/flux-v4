@@ -7,14 +7,19 @@
 
 #include <Flux/UI/ComponentKey.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
+#include <Flux/Reactive/Observer.hpp>
+#include <Flux/Reactive/Detail/TypeTraits.hpp>
 
 #include <cassert>
+#include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <deque>
 #include <memory>
 #include <optional>
 #include <utility>
 #include <typeindex>
+#include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -22,10 +27,22 @@
 namespace flux {
 
 struct ElementModifiers;
+class Element;
 
 /// One heap-allocated state value (a Signal<T>, Animation<T>, or any type).
 struct StateSlot {
   std::unique_ptr<void, void (*)(void*)> value{nullptr, nullptr};
+  std::type_index type{typeid(void)};
+};
+
+struct ComponentSubscription {
+  Observable* observable = nullptr;
+  ObserverHandle handle{};
+};
+
+struct ComponentValueSnapshot {
+  std::unique_ptr<void, void (*)(void*)> value{nullptr, nullptr};
+  bool (*equals)(void const*, void const*) = nullptr;
   std::type_index type{typeid(void)};
 };
 
@@ -34,6 +51,11 @@ struct ComponentState {
   std::deque<StateSlot> slots;
   std::size_t cursor = 0; // reset to 0 at the start of each build pass
   std::type_index componentType{typeid(void)};
+  std::unique_ptr<void, void (*)(void*)> lastBody{nullptr, nullptr};
+  std::uint64_t lastBodyEpoch = 0;
+  std::vector<LayoutConstraints> reusableConstraints;
+  ComponentValueSnapshot valueSnapshot{};
+  std::vector<ComponentSubscription> subscriptions;
 };
 
 /// Owns all component state for the lifetime of the window.
@@ -41,12 +63,13 @@ struct ComponentState {
 class StateStore {
 public:
   StateStore() = default;
+  ~StateStore();
   StateStore(StateStore const&) = delete;
   StateStore& operator=(StateStore const&) = delete;
 
   /// Call before the build pass begins. Resets per-component cursors and
   /// clears the visited set.
-  void beginRebuild();
+  void beginRebuild(bool forceFullRebuild = true);
 
   /// Call after the build pass completes. Destroys state for components
   /// whose keys were not visited in this pass (they were removed from the tree).
@@ -89,6 +112,28 @@ public:
   /// Key of the composite component whose `body()` is executing (top of the active stack).
   ComponentKey const& currentComponentKey() const;
 
+  /// Marks one composite dirty for the next rebuild.
+  void markCompositeDirty(ComponentKey const& key);
+
+  [[nodiscard]] bool hasPendingDirtyComponents() const noexcept;
+  [[nodiscard]] bool shouldForceFullRebuild() const noexcept { return forceFullRebuild_; }
+  [[nodiscard]] bool isComponentDirty(ComponentKey const& key) const;
+  [[nodiscard]] bool currentCompositePathStable() const noexcept;
+  void pushCompositePathStable(bool stable);
+  void popCompositePathStable();
+
+  template<typename C>
+  bool canReuseBody(ComponentKey const& key, C const& value, LayoutConstraints const& constraints) const;
+
+  [[nodiscard]] bool hasBodyForCurrentRebuild(ComponentKey const& key) const;
+  Element* cachedBody(ComponentKey const& key);
+  Element const* cachedBody(ComponentKey const& key) const;
+  void recordBodyConstraints(ComponentKey const& key, LayoutConstraints const& constraints);
+
+  template<typename C>
+  Element& commitBody(ComponentKey const& key, C const& value, LayoutConstraints const& constraints,
+                      std::unique_ptr<Element> body, std::vector<Observable*> deps);
+
   /// When building an overlay subtree, set to that overlay's id value (for `useFocus` / `useHover`).
   void setOverlayScope(std::optional<std::uint64_t> overlayIdValue);
   std::optional<std::uint64_t> overlayScope() const;
@@ -105,13 +150,24 @@ private:
   // Stack of active component keys (depth > 1 when body() calls a helper
   // that returns an Element containing further composites — rare but valid).
   std::vector<ComponentKey> activeStack_;
+  std::vector<bool> compositePathStableStack_{};
 
   std::optional<std::uint64_t> overlayScope_{};
 
   std::vector<LayoutConstraints> compositeConstraintStack_{};
   std::vector<ElementModifiers const*> compositeElementModifierStack_{};
+  std::unordered_set<ComponentKey, ComponentKeyHash> pendingDirtyComposites_{};
+  std::unordered_set<ComponentKey, ComponentKeyHash> activeDirtyComposites_{};
+  bool forceFullRebuild_ = true;
+  std::uint64_t buildEpoch_ = 0;
 
   static thread_local StateStore* sCurrent;
+
+  static bool constraintsEqual(LayoutConstraints const& a, LayoutConstraints const& b) noexcept;
+  static void clearComponentState(ComponentState& state);
+
+  template<typename C>
+  static ComponentValueSnapshot makeValueSnapshot(C const& value);
 };
 
 } // namespace flux
@@ -119,6 +175,30 @@ private:
 // --- template implementation ---
 
 namespace flux {
+
+template<typename C>
+ComponentValueSnapshot StateStore::makeValueSnapshot(C const& value) {
+  if constexpr (std::is_copy_constructible_v<C>) {
+    ComponentValueSnapshot snapshot{};
+    C* raw = new C(value);
+    snapshot.value = std::unique_ptr<void, void (*)(void*)>(
+        raw, [](void* p) { delete static_cast<C*>(p); });
+    if constexpr (detail::equalityComparableV<C>) {
+      snapshot.equals = [](void const* lhs, void const* rhs) {
+        return *static_cast<C const*>(lhs) == *static_cast<C const*>(rhs);
+      };
+    } else if constexpr (std::is_trivially_copyable_v<C>) {
+      snapshot.equals = [](void const* lhs, void const* rhs) {
+        return std::memcmp(lhs, rhs, sizeof(C)) == 0;
+      };
+    }
+    snapshot.type = std::type_index(typeid(C));
+    return snapshot;
+  } else {
+    (void)value;
+    return {};
+  }
+}
 
 template<typename S, typename... Args>
 S& StateStore::claimSlot(Args&&... args) {
@@ -145,6 +225,40 @@ S& StateStore::claimSlot(Args&&... args) {
       }),
       std::type_index(typeid(S))});
   return *raw;
+}
+
+template<typename C>
+bool StateStore::canReuseBody(ComponentKey const& key, C const& value,
+                              LayoutConstraints const& constraints) const {
+  if (forceFullRebuild_ || activeDirtyComposites_.count(key) != 0) {
+    return false;
+  }
+  auto const it = states_.find(key);
+  if (it == states_.end()) {
+    return false;
+  }
+  ComponentState const& state = it->second;
+  if (!state.lastBody || state.lastBodyEpoch == buildEpoch_ || state.reusableConstraints.empty()) {
+    return false;
+  }
+  bool constraintsMatched = false;
+  for (LayoutConstraints const& recorded : state.reusableConstraints) {
+    if (constraintsEqual(recorded, constraints)) {
+      constraintsMatched = true;
+      break;
+    }
+  }
+  if (!constraintsMatched) {
+    return false;
+  }
+  if (currentCompositePathStable()) {
+    return true;
+  }
+  if (!state.valueSnapshot.value || state.valueSnapshot.type != std::type_index(typeid(C)) ||
+      !state.valueSnapshot.equals) {
+    return false;
+  }
+  return state.valueSnapshot.equals(state.valueSnapshot.value.get(), &value);
 }
 
 } // namespace flux

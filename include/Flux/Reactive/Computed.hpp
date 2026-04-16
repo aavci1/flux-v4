@@ -8,6 +8,7 @@
 #include <Flux/Reactive/Detail/DependencyTracker.hpp>
 #include <Flux/Reactive/Detail/Notify.hpp>
 #include <Flux/Reactive/Observer.hpp>
+#include <Flux/UI/StateStore.hpp>
 
 #include <algorithm>
 #include <cstdint>
@@ -27,6 +28,7 @@ public:
 
   ObserverHandle observe(std::function<void()> callback) override;
   void unobserve(ObserverHandle handle) override;
+  ObserverHandle observeComposite(StateStore& store, ComponentKey const& key) override;
 
 private:
   void recompute() const;
@@ -40,6 +42,7 @@ private:
 
   std::uint64_t nextId_ = 1;
   mutable std::vector<std::pair<std::uint64_t, std::function<void()>>> observers_;
+  mutable std::vector<std::pair<std::uint64_t, CompositeObserver>> compositeObservers_;
 };
 
 } // namespace flux
@@ -65,6 +68,7 @@ T const& Computed<T>::get() const {
   if (dirty_) {
     recompute();
   }
+  detail::DependencyTracker::track(const_cast<Observable*>(static_cast<Observable const*>(this)));
   return value_;
 }
 
@@ -81,6 +85,14 @@ void Computed<T>::unobserve(ObserverHandle handle) {
     return;
   }
   std::erase_if(observers_, [handle](auto const& p) { return p.first == handle.id; });
+  std::erase_if(compositeObservers_, [handle](auto const& p) { return p.first == handle.id; });
+}
+
+template<typename T>
+ObserverHandle Computed<T>::observeComposite(StateStore& store, ComponentKey const& key) {
+  std::uint64_t const id = nextId_++;
+  compositeObservers_.emplace_back(id, CompositeObserver{.store = &store, .key = key});
+  return ObserverHandle{id};
 }
 
 template<typename T>
@@ -125,6 +137,13 @@ void Computed<T>::recompute() const {
 template<typename T>
 void Computed<T>::markDirty() const {
   dirty_ = true;
+  auto compositeSnapshot = compositeObservers_;
+  for (auto const& [id, observer] : compositeSnapshot) {
+    (void)id;
+    if (observer.store) {
+      observer.store->markCompositeDirty(observer.key);
+    }
+  }
   detail::notifyObserverList(observers_);
 }
 

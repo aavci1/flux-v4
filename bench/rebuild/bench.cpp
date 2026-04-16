@@ -22,6 +22,7 @@
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/VStack.hpp>
+#include <Flux/UI/Hooks.hpp>
 
 #include <chrono>
 #include <cstdint>
@@ -90,17 +91,16 @@ struct StateStoreGuard {
 
   StateStoreGuard() {
     previous = StateStore::current();
-    store.beginRebuild();
     StateStore::setCurrent(&store);
   }
 
-  ~StateStoreGuard() {
-    store.endRebuild();
-    StateStore::setCurrent(previous);
-  }
+  ~StateStoreGuard() { StateStore::setCurrent(previous); }
 };
 
 struct FrameContext {
+  explicit FrameContext(StateStore& stateStore) : store(stateStore) {}
+
+  StateStore& store;
   NullTextSystem ts{};
   LayoutEngine le{};
   MeasureCache mc{};
@@ -109,6 +109,7 @@ struct FrameContext {
   EventMap eventMap{};
 
   void rebuild(Element const& root, float w, float h) {
+    store.beginRebuild(false);
     tree.clear();
     graph.clear();
     eventMap = EventMap{};
@@ -131,6 +132,8 @@ struct FrameContext {
     rctx.pushConstraints(rootCs, {});
     renderLayoutTree(tree, rctx);
     rctx.popConstraints();
+
+    store.endRebuild();
   }
 };
 
@@ -172,6 +175,33 @@ Element foreachRows(int n, float rowH = 24.f) {
       0.f}};
 }
 
+struct SignalRow {
+  int index = 0;
+  std::shared_ptr<std::vector<State<int>>> handles;
+  float rowH = 16.f;
+
+  Element body() const {
+    State<int> state = useState(0);
+    (*handles)[static_cast<std::size_t>(index)] = state;
+    return Element{Rectangle{}}.size(200.f, rowH + 0.001f * static_cast<float>(*state));
+  }
+};
+
+struct SignalRowsTree {
+  int count = 0;
+  std::shared_ptr<std::vector<State<int>>> handles;
+  float rowH = 16.f;
+
+  Element body() const {
+    std::vector<Element> rows;
+    rows.reserve(static_cast<std::size_t>(count));
+    for (int i = 0; i < count; ++i) {
+      rows.push_back(Element{SignalRow{.index = i, .handles = handles, .rowH = rowH}});
+    }
+    return Element{VStack{.spacing = 0.f, .children = std::move(rows)}};
+  }
+};
+
 static double secondsSince(std::chrono::steady_clock::time_point t0) {
   auto const t1 = std::chrono::steady_clock::now();
   return std::chrono::duration<double>(t1 - t0).count();
@@ -212,7 +242,7 @@ int main() {
 
   {
     StateStoreGuard guard;
-    FrameContext fc;
+    FrameContext fc{guard.store};
     Element root = flatVStack(5000, 16.f);
     double const t = timeIt([&] { fc.rebuild(root, W, H); });
     std::cout << "B1 flat 5000-row VStack cold:           ";
@@ -222,7 +252,7 @@ int main() {
 
   {
     StateStoreGuard guard;
-    FrameContext fc;
+    FrameContext fc{guard.store};
     Element root = flatVStack(5000, 16.f);
     constexpr int N = 20;
     double const per = timeAveraged(N, [&] { fc.rebuild(root, W, H); });
@@ -232,7 +262,7 @@ int main() {
 
   {
     StateStoreGuard guard;
-    FrameContext fc;
+    FrameContext fc{guard.store};
     constexpr int N = 20;
     double total = 0.0;
     for (int k = 0; k < N; ++k) {
@@ -245,7 +275,7 @@ int main() {
 
   {
     StateStoreGuard guard;
-    FrameContext fc;
+    FrameContext fc{guard.store};
     Element root = card(4, 5, 12.f);
     double const cold = timeIt([&] { fc.rebuild(root, W, H); });
     std::cout << "B4 card tree (depth=4, width=5) cold:   ";
@@ -259,7 +289,7 @@ int main() {
 
   {
     StateStoreGuard guard;
-    FrameContext fc;
+    FrameContext fc{guard.store};
     Element root = foreachRows(5000, 24.f);
     double const cold = timeIt([&] { fc.rebuild(root, W, H); });
     std::cout << "B5 ForEach 5000 rows cold:              ";
@@ -272,7 +302,7 @@ int main() {
 
   {
     StateStoreGuard guard;
-    FrameContext fc;
+    FrameContext fc{guard.store};
     Element root = foreachRows(100, 32.f);
     constexpr int N = 500;
     double const per = timeAveraged(N, [&] { fc.rebuild(root, W, H); });
@@ -282,7 +312,7 @@ int main() {
 
   {
     StateStoreGuard guard;
-    FrameContext fc;
+    FrameContext fc{guard.store};
     Element root = flatVStack(1000, 16.f);
     fc.rebuild(root, W, H);
     constexpr int N = 50;
@@ -300,12 +330,44 @@ int main() {
     std::cout << "B8 scaling (flat VStack, cold rebuild):\n";
     for (int n : {100, 500, 2000, 10000}) {
       StateStoreGuard guard;
-      FrameContext fc;
+      FrameContext fc{guard.store};
       Element root = flatVStack(n, 10.f);
       double const t = timeIt([&] { fc.rebuild(root, W, H * 5.f); });
       std::cout << "   N=" << n << ": " << (t * 1e6) << " us ("
                 << (t * 1e9 / n) << " ns/leaf)\n";
     }
+  }
+
+  {
+    StateStoreGuard guard;
+    FrameContext fc{guard.store};
+    auto handles = std::make_shared<std::vector<State<int>>>(1000);
+    Element root = Element{SignalRowsTree{.count = 1000, .handles = handles, .rowH = 16.f}};
+    fc.rebuild(root, W, H);
+    constexpr int N = 50;
+    double total = 0.0;
+    for (int i = 0; i < N; ++i) {
+      (*handles)[500] = (i & 1) != 0 ? 0 : 1;
+      total += timeIt([&] { fc.rebuild(root, W, H); });
+    }
+    std::cout << "B9 signal-write 1000 composite tree:    ";
+    printRow("", total / N);
+  }
+
+  {
+    StateStoreGuard guard;
+    FrameContext fc{guard.store};
+    auto handles = std::make_shared<std::vector<State<int>>>(10000);
+    Element root = Element{SignalRowsTree{.count = 10000, .handles = handles, .rowH = 16.f}};
+    fc.rebuild(root, W, H * 8.f);
+    constexpr int N = 20;
+    double total = 0.0;
+    for (int i = 0; i < N; ++i) {
+      (*handles)[5000] = (i & 1) != 0 ? 0 : 1;
+      total += timeIt([&] { fc.rebuild(root, W, H * 8.f); });
+    }
+    std::cout << "B10 signal-write 10000 composite tree:  ";
+    printRow("", total / N);
   }
 
   return 0;

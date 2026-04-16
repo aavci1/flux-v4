@@ -35,16 +35,32 @@ struct TypedRootHolder final : RootHolder {
       ctx.pushChildIndex();
       ComponentKey const key = ctx.nextCompositeKey();
       StateStore* store = StateStore::current();
+      detail::CompositeBodyResolution resolution{};
       if (store) {
         store->pushComponent(key, std::type_index(typeid(C)));
-      }
-      Element& child = ctx.pinElement(Element{value.body()});
-      if (store) {
+        store->pushCompositeConstraints(ctx.constraints());
+        try {
+          resolution = detail::resolveCompositeBody(store, key, ctx.constraints(), value,
+                                                    [&] { return value.body(); });
+        } catch (...) {
+          store->popCompositeConstraints();
+          store->popComponent();
+          throw;
+        }
+        store->popCompositeConstraints();
         store->popComponent();
       }
+      Element& child = store ? *resolution.body : ctx.pinElement(Element{value.body()});
       ctx.beginCompositeBodySubtree(key);
       ctx.pushCompositeKeyTail(key);
+      if (store) {
+        store->recordBodyConstraints(key, ctx.constraints());
+        store->pushCompositePathStable(resolution.descendantsStable);
+      }
       child.layout(ctx);
+      if (store) {
+        store->popCompositePathStable();
+      }
       ctx.popCompositeKeyTail();
       ctx.popChildIndex();
     } else {

@@ -15,6 +15,7 @@
 #include <Flux/UI/LayoutEngine.hpp>
 #include <Flux/UI/StateStore.hpp>
 #include <Flux/UI/Environment.hpp>
+#include <Flux/Reactive/Detail/DependencyTracker.hpp>
 
 #include <Flux/Graphics/Styles.hpp>
 #include <Flux/UI/Detail/RenderComponentEmit.hpp>
@@ -46,6 +47,16 @@ namespace detail {
 std::uint64_t nextElementMeasureId();
 
 Popover* popoverOverlayStateIf(Element& el);
+
+struct CompositeBodyResolution {
+  Element* body = nullptr;
+  bool descendantsStable = false;
+};
+
+template<typename C, typename BuildFn>
+CompositeBodyResolution resolveCompositeBody(StateStore* store, ComponentKey const& key,
+                                             LayoutConstraints const& constraints, C const& value,
+                                             BuildFn&& buildFn);
 
 template<typename C>
 float flexGrowOf(C const& v) {
@@ -315,6 +326,76 @@ private:
 };
 
 template<typename C>
+Element& StateStore::commitBody(ComponentKey const& key, C const& value,
+                                LayoutConstraints const& constraints, std::unique_ptr<Element> body,
+                                std::vector<Observable*> deps) {
+  ComponentState& state = states_[key];
+
+  for (ComponentSubscription const& sub : state.subscriptions) {
+    if (sub.observable) {
+      sub.observable->unobserve(sub.handle);
+    }
+  }
+  state.subscriptions.clear();
+
+  std::sort(deps.begin(), deps.end());
+  deps.erase(std::unique(deps.begin(), deps.end()), deps.end());
+  for (Observable* dep : deps) {
+    if (!dep) {
+      continue;
+    }
+    ObserverHandle const handle = dep->observeComposite(*this, key);
+    state.subscriptions.push_back(ComponentSubscription{.observable = dep, .handle = handle});
+  }
+
+  state.valueSnapshot = makeValueSnapshot(value);
+  Element* raw = body.release();
+  state.lastBody = std::unique_ptr<void, void (*)(void*)>(
+      raw, [](void* p) { delete static_cast<Element*>(p); });
+  state.lastBodyEpoch = buildEpoch_;
+  state.reusableConstraints.clear();
+  state.reusableConstraints.push_back(constraints);
+  return *raw;
+}
+
+namespace detail {
+
+template<typename C, typename BuildFn>
+CompositeBodyResolution resolveCompositeBody(StateStore* store, ComponentKey const& key,
+                                             LayoutConstraints const& constraints, C const& value,
+                                             BuildFn&& buildFn) {
+  CompositeBodyResolution resolution{};
+  if (!store) {
+    return resolution;
+  }
+  if (store->hasBodyForCurrentRebuild(key)) {
+    resolution.body = store->cachedBody(key);
+    return resolution;
+  }
+  if (store->canReuseBody(key, value, constraints)) {
+    resolution.body = store->cachedBody(key);
+    resolution.descendantsStable = true;
+    return resolution;
+  }
+
+  detail::DependencyTracker tracker;
+  detail::DependencyTracker::push(&tracker);
+  std::unique_ptr<Element> body;
+  try {
+    body = std::make_unique<Element>(std::invoke(std::forward<BuildFn>(buildFn)));
+  } catch (...) {
+    detail::DependencyTracker::pop();
+    throw;
+  }
+  detail::DependencyTracker::pop();
+
+  resolution.body = &store->commitBody(key, value, constraints, std::move(body), std::move(tracker.deps));
+  return resolution;
+}
+
+} // namespace detail
+
+template<typename C>
 struct Element::Model : Concept {
   C value;
   explicit Model(C c) : value(std::move(c)) {}
@@ -359,18 +440,32 @@ void Element::Model<C>::layout(LayoutContext& ctx) const {
   if constexpr (CompositeComponent<C>) {
     ComponentKey const key = ctx.nextCompositeKey();
     StateStore* store = StateStore::current();
+    detail::CompositeBodyResolution resolution{};
     if (store) {
       store->pushComponent(key, std::type_index(typeid(C)));
       store->pushCompositeConstraints(ctx.constraints());
-    }
-    Element& child = ctx.pinElement(Element{value.body()});
-    if (store) {
+      try {
+        resolution = detail::resolveCompositeBody(store, key, ctx.constraints(), value,
+                                                  [&] { return value.body(); });
+      } catch (...) {
+        store->popCompositeConstraints();
+        store->popComponent();
+        throw;
+      }
       store->popCompositeConstraints();
       store->popComponent();
     }
+    Element& child = store ? *resolution.body : ctx.pinElement(Element{value.body()});
     ctx.beginCompositeBodySubtree(key);
     ctx.pushCompositeKeyTail(key);
+    if (store) {
+      store->recordBodyConstraints(key, ctx.constraints());
+      store->pushCompositePathStable(resolution.descendantsStable);
+    }
     child.layout(ctx);
+    if (store) {
+      store->popCompositePathStable();
+    }
     ctx.popCompositeKeyTail();
   } else if constexpr (RenderComponent<C>) {
     ComponentKey const stableKey = ctx.leafComponentKey();
@@ -466,18 +561,33 @@ Size Element::Model<C>::measure(LayoutContext& ctx, LayoutConstraints const& con
   if constexpr (CompositeComponent<C>) {
     ComponentKey const key = ctx.nextCompositeKey();
     StateStore* store = StateStore::current();
+    detail::CompositeBodyResolution resolution{};
     if (store) {
       store->pushComponent(key, std::type_index(typeid(C)));
       store->pushCompositeConstraints(constraints);
-    }
-    Element child{value.body()};
-    if (store) {
+      try {
+        resolution = detail::resolveCompositeBody(store, key, constraints, value,
+                                                  [&] { return value.body(); });
+      } catch (...) {
+        store->popCompositeConstraints();
+        store->popComponent();
+        throw;
+      }
       store->popCompositeConstraints();
       store->popComponent();
     }
+    Element fallbackChild = store ? Element{Rectangle{}} : Element{value.body()};
+    Element const& child = store ? *resolution.body : fallbackChild;
     ctx.beginCompositeBodySubtree(key);
     ctx.pushCompositeKeyTail(key);
+    if (store) {
+      store->recordBodyConstraints(key, constraints);
+      store->pushCompositePathStable(resolution.descendantsStable);
+    }
     Size const sz = child.measure(ctx, constraints, hints, textSystem);
+    if (store) {
+      store->popCompositePathStable();
+    }
     ctx.popCompositeKeyTail();
     return sz;
   } else if constexpr (RenderComponent<C>) {

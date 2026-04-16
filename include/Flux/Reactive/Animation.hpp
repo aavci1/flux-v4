@@ -12,6 +12,7 @@
 #include <Flux/Reactive/Interpolatable.hpp>
 #include <Flux/Reactive/Observer.hpp>
 #include <Flux/Reactive/Transition.hpp>
+#include <Flux/UI/StateStore.hpp>
 
 #include <algorithm>
 #include <chrono>
@@ -84,6 +85,7 @@ public:
 
   ObserverHandle observe(std::function<void()> callback) override;
   void unobserve(ObserverHandle handle) override;
+  ObserverHandle observeComposite(StateStore& store, ComponentKey const& key) override;
 
 private:
   friend class AnimationClock;
@@ -110,6 +112,7 @@ private:
 
   std::uint64_t nextId_ = 1;
   std::vector<std::pair<std::uint64_t, std::function<void()>>> observers_;
+  std::vector<std::pair<std::uint64_t, CompositeObserver>> compositeObservers_;
 };
 
 } // namespace flux
@@ -309,10 +312,25 @@ void Animation<T>::unobserve(ObserverHandle handle) {
     return;
   }
   std::erase_if(observers_, [handle](auto const& p) { return p.first == handle.id; });
+  std::erase_if(compositeObservers_, [handle](auto const& p) { return p.first == handle.id; });
+}
+
+template<Interpolatable T>
+ObserverHandle Animation<T>::observeComposite(StateStore& store, ComponentKey const& key) {
+  std::uint64_t const id = nextId_++;
+  compositeObservers_.emplace_back(id, CompositeObserver{.store = &store, .key = key});
+  return ObserverHandle{id};
 }
 
 template<Interpolatable T>
 void Animation<T>::notifyObservers() {
+  auto compositeSnapshot = compositeObservers_;
+  for (auto const& [id, observer] : compositeSnapshot) {
+    (void)id;
+    if (observer.store) {
+      observer.store->markCompositeDirty(observer.key);
+    }
+  }
   // `detail::notifyObserverList` only calls `markReactiveDirty` when explicit `observe()` callbacks
   // exist. Views that read `Animation` in `body()` (without a Computed dependency tracker) have no
   // callbacks, so animation ticks must still schedule a rebuild to refresh scene nodes.

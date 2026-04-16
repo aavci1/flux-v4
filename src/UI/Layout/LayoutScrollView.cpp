@@ -50,16 +50,32 @@ Size resolveMeasuredScrollViewSize(ScrollAxis axis, Size contentSize, LayoutCons
 void ScrollView::layout(LayoutContext &ctx) const {
     ComponentKey const key = ctx.nextCompositeKey();
     StateStore *store = StateStore::current();
+    detail::CompositeBodyResolution resolution{};
     if (store) {
         store->pushComponent(key, std::type_index(typeid(ScrollView)));
-    }
-    Element &childEl = ctx.pinElement(body());
-    if (store) {
+        store->pushCompositeConstraints(ctx.constraints());
+        try {
+            resolution = detail::resolveCompositeBody(store, key, ctx.constraints(), *this,
+                                                      [&] { return body(); });
+        } catch (...) {
+            store->popCompositeConstraints();
+            store->popComponent();
+            throw;
+        }
+        store->popCompositeConstraints();
         store->popComponent();
     }
+    Element &childEl = store ? *resolution.body : ctx.pinElement(body());
     ctx.beginCompositeBodySubtree(key);
     ctx.pushCompositeKeyTail(key);
+    if (store) {
+        store->recordBodyConstraints(key, ctx.constraints());
+        store->pushCompositePathStable(resolution.descendantsStable);
+    }
     childEl.layout(ctx);
+    if (store) {
+        store->popCompositePathStable();
+    }
     ctx.popCompositeKeyTail();
 }
 
