@@ -219,7 +219,7 @@ void Runtime::subscribeWindowEvents() {
       for (auto const& up : entries) {
         ovs.push_back(up.get());
       }
-      gesture_.cancelPress(Point{}, ovs, window_.sceneGraph(), buildOrchestrator_.mainEventMap());
+      gesture_.cancelPress(Point{}, ovs, window_.sceneTree());
       cursor_.reset();
       hover_.clear();
     } else if (ev.kind == WindowEvent::Kind::FocusGained) {

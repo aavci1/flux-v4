@@ -5,6 +5,8 @@
 /// Part of the Flux public API.
 
 
+#include <Flux/Scene/InteractionData.hpp>
+#include <Flux/Scene/SceneTree.hpp>
 #include <Flux/UI/ComponentKey.hpp>
 #include <Flux/UI/EventMap.hpp>
 #include <Flux/UI/Overlay.hpp>
@@ -36,7 +38,7 @@ public:
                    std::optional<OverlayId> overlayScope);
 
   void cancelPress(Point cancelPoint, std::vector<OverlayEntry const*> const& overlayEntries,
-                   SceneGraph const& mainGraph, EventMap const& mainEventMap);
+                   SceneTree const& mainTree);
 
   void clearPress();
 
@@ -50,17 +52,18 @@ public:
   bool pressMatchesStoreContext(StateStore const& store) const noexcept;
 
   bool dispatchTap(PressState const& released, std::vector<OverlayEntry const*> const& overlayEntries,
-                   EventMap const& mainEventMap);
+                   SceneTree const& mainTree);
 
   ComponentKey const& pendingTapLeafKey() const noexcept;
 
   std::pair<NodeId, EventHandlers const*> findPressHandlers(PressState const& ps,
-                                                            std::vector<OverlayEntry const*> const& overlayEntries,
-                                                            EventMap const& mainEventMap) const;
+                                                            std::vector<OverlayEntry const*> const& overlayEntries) const;
+
+  std::pair<NodeId, InteractionData const*> findPressInteraction(PressState const& ps,
+                                                                 SceneTree const& mainTree) const;
 
   SceneGraph const* sceneGraphForPress(PressState const& ps,
-                                       std::vector<OverlayEntry const*> const& overlayEntries,
-                                       SceneGraph const& mainGraph) const;
+                                       std::vector<OverlayEntry const*> const& overlayEntries) const;
 
 private:
   std::optional<PressState> activePress_{};

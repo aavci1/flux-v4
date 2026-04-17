@@ -2,6 +2,7 @@
 
 #include <Flux/Core/Window.hpp>
 #include <Flux/Scene/HitTester.hpp>
+#include <Flux/Scene/SceneTreeInteraction.hpp>
 #include <Flux/UI/GestureTracker.hpp>
 
 namespace flux {
@@ -22,13 +23,22 @@ void CursorController::apply(Cursor kind) {
 
 void CursorController::updateForPoint(Point windowPoint, GestureTracker const& gesture,
                                       std::vector<OverlayEntry const*> const& overlayEntries,
-                                      SceneGraph const& mainGraph, EventMap const& mainEventMap) {
+                                      SceneTree const& mainTree) {
   if (auto const* ps = gesture.press()) {
-    auto const [pressId, pressed] = gesture.findPressHandlers(*ps, overlayEntries, mainEventMap);
-    (void)pressId;
-    if (pressed && pressed->cursor != Cursor::Inherit) {
-      apply(pressed->cursor);
-      return;
+    if (ps->overlayScope.has_value()) {
+      auto const [pressId, pressed] = gesture.findPressHandlers(*ps, overlayEntries);
+      (void)pressId;
+      if (pressed && pressed->cursor != Cursor::Inherit) {
+        apply(pressed->cursor);
+        return;
+      }
+    } else {
+      auto const [pressId, pressed] = gesture.findPressInteraction(*ps, mainTree);
+      (void)pressId;
+      if (pressed && pressed->cursor != Cursor::Inherit) {
+        apply(pressed->cursor);
+        return;
+      }
     }
   }
 
@@ -54,23 +64,11 @@ void CursorController::updateForPoint(Point windowPoint, GestureTracker const& g
     }
   }
 
-  auto const acceptFn = [&mainEventMap](NodeId id) {
-    EventHandlers const* h = mainEventMap.find(id);
-    if (!h) {
-      return false;
-    }
-    if (h->cursor == Cursor::Inherit) {
-      return false;
-    }
-    return true;
-  };
-  auto hit = HitTester{}.hitTest(mainGraph, windowPoint, acceptFn);
+  auto hit = hitTestInteraction(mainTree, windowPoint, [](InteractionData const& interaction) {
+    return interaction.cursor != Cursor::Inherit;
+  });
   if (hit) {
-    if (EventHandlers const* h = mainEventMap.find(hit->nodeId)) {
-      apply(h->cursor);
-    } else {
-      apply(Cursor::Arrow);
-    }
+    apply(hit->interaction->cursor);
   } else {
     apply(Cursor::Arrow);
   }

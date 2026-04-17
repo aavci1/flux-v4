@@ -1,10 +1,18 @@
 #include <Flux/Scene/HitTester.hpp>
 
+#include <Flux/Scene/CustomTransformSceneNode.hpp>
 #include <Flux/Scene/SceneTree.hpp>
 
 namespace flux {
 
 namespace {
+
+Point pointInChildSpace(SceneNode const& parent, SceneNode const& child, Point point) {
+  if (auto const* transformNode = dynamic_cast<CustomTransformSceneNode const*>(&parent)) {
+    return transformNode->transform.inverse().apply(point) - child.position;
+  }
+  return point - child.position;
+}
 
 std::optional<HitResult> hitTestSceneTreeNode(SceneNode const& node, Point point,
                                               std::function<bool(NodeId)> const* acceptTarget) {
@@ -12,7 +20,7 @@ std::optional<HitResult> hitTestSceneTreeNode(SceneNode const& node, Point point
     return std::nullopt;
   }
   for (auto it = node.children().rbegin(); it != node.children().rend(); ++it) {
-    Point const childPoint = point - (*it)->position;
+    Point const childPoint = pointInChildSpace(node, **it, point);
     if (auto hit = hitTestSceneTreeNode(**it, childPoint, acceptTarget)) {
       return hit;
     }
@@ -30,7 +38,7 @@ std::optional<Point> localPointForSceneTreeNode(SceneNode const& node, Point poi
     return point;
   }
   for (std::unique_ptr<SceneNode> const& child : node.children()) {
-    if (auto local = localPointForSceneTreeNode(*child, point - child->position, targetId)) {
+    if (auto local = localPointForSceneTreeNode(*child, pointInChildSpace(node, *child, point), targetId)) {
       return local;
     }
   }

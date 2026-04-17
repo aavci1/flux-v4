@@ -2,6 +2,7 @@
 
 #include <Flux/Core/Application.hpp>
 #include <Flux/Scene/HitTester.hpp>
+#include <Flux/Scene/SceneTreeInteraction.hpp>
 #include <Flux/UI/StateStore.hpp>
 
 namespace flux {
@@ -47,7 +48,7 @@ void HoverController::clear() {
 }
 
 void HoverController::updateForPoint(Point windowPoint, std::vector<OverlayEntry const*> const& overlayEntries,
-                                     SceneGraph const& mainGraph, EventMap const& mainEventMap) {
+                                     SceneTree const& mainTree) {
   // `overlayEntries` is top-to-bottom (front = topmost overlay), matching `entries().rbegin()` order.
   for (OverlayEntry const* p : overlayEntries) {
     OverlayEntry const& oe = *p;
@@ -64,14 +65,10 @@ void HoverController::updateForPoint(Point windowPoint, std::vector<OverlayEntry
     }
   }
 
-  auto const acceptFn = [&mainEventMap](NodeId id) -> bool {
-    return mainEventMap.find(id) != nullptr;
-  };
-
-  auto hit = HitTester{}.hitTest(mainGraph, windowPoint, acceptFn);
+  auto hit = hitTestInteraction(mainTree, windowPoint);
   if (hit) {
-    if (EventHandlers const* h = mainEventMap.find(hit->nodeId)) {
-      set(h->stableTargetKey, std::nullopt);
+    if (hit->interaction && !hit->interaction->stableTargetKey.empty()) {
+      set(hit->interaction->stableTargetKey, std::nullopt);
     } else {
       clear();
     }

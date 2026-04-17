@@ -5,10 +5,9 @@
 /// Part of the Flux public API.
 
 
+#include <Flux/Scene/SceneTree.hpp>
 #include <Flux/UI/ComponentKey.hpp>
-#include <Flux/UI/EventMap.hpp>
 #include <Flux/UI/Overlay.hpp>
-#include <Flux/Scene/SceneGraph.hpp>
 #include <Flux/Core/Types.hpp>
 
 #include <optional>
@@ -30,7 +29,7 @@ public:
   void clear();
 
   void updateForPoint(Point windowPoint, std::vector<OverlayEntry const*> const& overlayEntries,
-                      SceneGraph const& mainGraph, EventMap const& mainEventMap);
+                      SceneTree const& mainTree);
 
   /// When `teardown` is true (window destroying), only clears overlay scope — not `hoveredKey_`
   /// (matches legacy `imploding_` path).

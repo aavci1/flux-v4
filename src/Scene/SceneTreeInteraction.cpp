@@ -1,5 +1,7 @@
 #include <Flux/Scene/SceneTreeInteraction.hpp>
 
+#include <Flux/Scene/CustomTransformSceneNode.hpp>
+
 #include <algorithm>
 #include <cstddef>
 
@@ -9,6 +11,13 @@ namespace {
 
 bool isPrefix(ComponentKey const& prefix, ComponentKey const& key) {
   return prefix.size() <= key.size() && std::equal(prefix.begin(), prefix.end(), key.begin());
+}
+
+Point pointInChildSpace(SceneNode const& parent, SceneNode const& child, Point point) {
+  if (auto const* transformNode = dynamic_cast<CustomTransformSceneNode const*>(&parent)) {
+    return transformNode->transform.inverse().apply(point) - child.position;
+  }
+  return point - child.position;
 }
 
 void collectFocusableKeysImpl(SceneNode const& node, std::vector<ComponentKey>& out) {
@@ -73,6 +82,29 @@ void findClosestInteractionImpl(SceneNode const& node, ComponentKey const& key, 
   }
 }
 
+std::optional<InteractionHitResult> hitTestInteractionImpl(
+    SceneNode const& node, Point point, std::function<bool(InteractionData const&)> const* acceptTarget) {
+  if (!node.bounds.contains(point)) {
+    return std::nullopt;
+  }
+  for (auto it = node.children().rbegin(); it != node.children().rend(); ++it) {
+    Point const childPoint = pointInChildSpace(node, **it, point);
+    if (auto hit = hitTestInteractionImpl(**it, childPoint, acceptTarget)) {
+      return hit;
+    }
+  }
+  if (InteractionData const* interaction = node.interaction()) {
+    if (!acceptTarget || (*acceptTarget)(*interaction)) {
+      return InteractionHitResult{
+          .nodeId = node.id(),
+          .localPoint = point,
+          .interaction = interaction,
+      };
+    }
+  }
+  return std::nullopt;
+}
+
 } // namespace
 
 std::pair<NodeId, InteractionData const*> findInteractionById(SceneTree const& tree, NodeId id) {
@@ -102,6 +134,15 @@ std::pair<NodeId, InteractionData const*> findClosestInteractionByKey(SceneTree 
   std::size_t bestDistance = 0;
   findClosestInteractionImpl(tree.root(), key, bestId, bestInteraction, bestSharedDepth, bestDistance);
   return {bestId, bestInteraction};
+}
+
+std::optional<InteractionHitResult> hitTestInteraction(SceneTree const& tree, Point rootPoint) {
+  return hitTestInteraction(tree, rootPoint, [](InteractionData const&) { return true; });
+}
+
+std::optional<InteractionHitResult> hitTestInteraction(
+    SceneTree const& tree, Point rootPoint, std::function<bool(InteractionData const&)> const& acceptTarget) {
+  return hitTestInteractionImpl(tree.root(), rootPoint, &acceptTarget);
 }
 
 std::vector<ComponentKey> collectFocusableKeys(SceneTree const& tree) {

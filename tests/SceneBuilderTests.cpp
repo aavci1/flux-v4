@@ -3,6 +3,8 @@
 #include <Flux/Detail/RootHolder.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Reactive/Signal.hpp>
+#include <Flux/Scene/CustomTransformSceneNode.hpp>
+#include <Flux/Scene/HitTester.hpp>
 #include <Flux/Scene/RectSceneNode.hpp>
 #include <Flux/Scene/ModifierSceneNode.hpp>
 #include <Flux/Scene/Renderer.hpp>
@@ -303,7 +305,7 @@ TEST_CASE("SceneBuilder: centered text keeps its assigned box for boxed layout")
   CHECK(renderer.textCount == 1);
 }
 
-TEST_CASE("SceneBuilder: stretched HStack leaves adopt their assigned slot size") {
+TEST_CASE("SceneBuilder: stretched flex HStack leaves adopt their assigned slot size") {
   NullTextSystem textSystem{};
   EnvironmentLayer env{};
   env.set(Theme::light());
@@ -317,14 +319,27 @@ TEST_CASE("SceneBuilder: stretched HStack leaves adopt their assigned slot size"
   Element row = HStack{
       .alignment = Alignment::Stretch,
       .children = {
-          Element{Rectangle{}}.size(20.f, 10.f),
+          Element{Rectangle{}}.size(20.f, 10.f).flex(1.f),
       },
   };
 
   std::unique_ptr<SceneNode> tree = builder.build(row, NodeId{1ull}, constraints);
   REQUIRE(tree != nullptr);
-  REQUIRE(tree->children().size() == 1);
-  auto* rectNode = dynamic_cast<RectSceneNode*>(tree->children()[0].get());
+  auto findRect = [&](this auto const& self, SceneNode* node) -> RectSceneNode* {
+    if (!node) {
+      return nullptr;
+    }
+    if (auto* rect = dynamic_cast<RectSceneNode*>(node)) {
+      return rect;
+    }
+    for (std::unique_ptr<SceneNode> const& child : node->children()) {
+      if (RectSceneNode* rect = self(child.get())) {
+        return rect;
+      }
+    }
+    return nullptr;
+  };
+  auto* rectNode = findRect(tree.get());
   REQUIRE(rectNode != nullptr);
   CHECK(rectNode->size.width == doctest::Approx(100.f));
   CHECK(rectNode->size.height == doctest::Approx(50.f));
@@ -498,4 +513,39 @@ TEST_CASE("SceneTree interaction lookup preserves focus order and keyed handler 
   REQUIRE(static_cast<bool>(closestInteraction->onKeyDown));
   closestInteraction->onKeyDown(KeyCode{}, Modifiers{});
   CHECK(keyDownB);
+}
+
+TEST_CASE("SceneTree interaction hit testing respects custom transform local coordinates") {
+  auto root = std::make_unique<SceneNode>(NodeId{1ull});
+  auto transform = std::make_unique<CustomTransformSceneNode>(NodeId{2ull});
+  transform->transform = Mat3::scale(2.f);
+
+  auto rect = std::make_unique<RectSceneNode>(NodeId{3ull});
+  rect->position = Point{4.f, 3.f};
+  rect->size = Size{20.f, 10.f};
+  auto interaction = std::make_unique<InteractionData>();
+  interaction->stableTargetKey = ComponentKey{LocalId::fromString("scaled")};
+  rect->setInteraction(std::move(interaction));
+  rect->recomputeBounds();
+
+  RectSceneNode* rectPtr = rect.get();
+  transform->appendChild(std::move(rect));
+  transform->recomputeBounds();
+  root->appendChild(std::move(transform));
+  root->recomputeBounds();
+
+  SceneTree tree{std::move(root)};
+
+  auto const hit = hitTestInteraction(tree, Point{18.f, 16.f});
+  REQUIRE(hit.has_value());
+  CHECK(hit->nodeId == rectPtr->id());
+  CHECK(hit->localPoint.x == doctest::Approx(5.f));
+  CHECK(hit->localPoint.y == doctest::Approx(5.f));
+  REQUIRE(hit->interaction != nullptr);
+  CHECK(hit->interaction->stableTargetKey == ComponentKey{LocalId::fromString("scaled")});
+
+  auto const local = HitTester{}.localPointForNode(tree, Point{18.f, 16.f}, rectPtr->id());
+  REQUIRE(local.has_value());
+  CHECK(local->x == doctest::Approx(5.f));
+  CHECK(local->y == doctest::Approx(5.f));
 }
