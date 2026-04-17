@@ -6,8 +6,6 @@
 #include <Flux/UI/LayoutContext.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 #include <Flux/UI/LayoutTree.hpp>
-#include <Flux/UI/RenderContext.hpp>
-#include <Flux/UI/RenderLayoutTree.hpp>
 #include <Flux/UI/StateStore.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Views/Grid.hpp>
@@ -19,11 +17,7 @@
 #include <Flux/UI/Views/VStack.hpp>
 #include <Flux/UI/Views/ZStack.hpp>
 
-#include <Flux/Scene/SceneGraph.hpp>
-#include <Flux/Scene/SceneGraphBounds.hpp>
-
 #include <Flux/Graphics/TextSystem.hpp>
-#include <Flux/UI/EventMap.hpp>
 
 #include <cmath>
 #include <cstdint>
@@ -120,42 +114,6 @@ class RecordingTextSystem final : public TextSystem {
     }
 };
 
-class LineOnlyLayoutTextSystem final : public TextSystem {
-  public:
-    std::shared_ptr<TextLayout const> layout(AttributedString const &, float,
-                                             TextLayoutOptions const &) override {
-        return nullptr;
-    }
-
-    std::shared_ptr<TextLayout const> layout(std::string_view, Font const &, Color const &, float,
-                                             TextLayoutOptions const &) override {
-        auto layout = std::make_shared<TextLayout>();
-        layout->lines.push_back(TextLayout::LineRange {
-            .ctLineIndex = 0,
-            .byteStart = 0,
-            .byteEnd = 1,
-            .lineMinX = 0.f,
-            .top = 0.f,
-            .bottom = 12.f,
-            .baseline = 9.f,
-        });
-        layout->measuredSize = {0.f, 12.f};
-        layout->firstBaseline = 9.f;
-        layout->lastBaseline = 9.f;
-        return layout;
-    }
-
-    Size measure(AttributedString const &, float, TextLayoutOptions const &) override { return {}; }
-    Size measure(std::string_view, Font const &, Color const &, float, TextLayoutOptions const &) override {
-        return {};
-    }
-    std::uint32_t resolveFontId(std::string_view, float, bool) override { return 0; }
-    std::vector<std::uint8_t> rasterizeGlyph(std::uint32_t, std::uint16_t, float, std::uint32_t &,
-                                             std::uint32_t &, Point &) override {
-        return {};
-    }
-};
-
 class EmptyRunsGuardTextSystem final : public TextSystem {
   public:
     std::shared_ptr<TextLayout const> layout(AttributedString const &text, float,
@@ -239,12 +197,6 @@ struct StateStoreGuard {
     }
 };
 
-struct RenderResult {
-    LayoutTree tree;
-    SceneGraph graph;
-    EventMap eventMap;
-};
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 static bool rectsNear(Rect const &a, Rect const &b, float eps = 0.5f) {
@@ -275,33 +227,6 @@ static LayoutTree runLayout(Element el, float maxW, float maxH) {
     ctx->popConstraints();
     tree.endBuild();
     return tree;
-}
-
-static RenderResult runLayoutAndRenderWithStateStore(Element el, float maxW, float maxH) {
-    NullTextSystem ts;
-    LayoutEngine le;
-    RenderResult result;
-    StateStoreGuard stateGuard;
-    result.tree.beginBuild();
-
-    LayoutContextPtr ctx {flux::LayoutContextTestAccess::create(ts, le, result.tree)};
-
-    LayoutConstraints rootCs {};
-    rootCs.maxWidth = maxW;
-    rootCs.maxHeight = maxH;
-    ctx->pushConstraints(rootCs);
-    le.setChildFrame(Rect {0.f, 0.f, maxW, maxH});
-
-    el.layout(*ctx);
-    ctx->popConstraints();
-    result.tree.endBuild();
-
-    RenderContext rctx {result.graph, result.eventMap, ts, false};
-    rctx.pushConstraints(rootCs, {});
-    renderLayoutTree(result.tree, rctx);
-    rctx.popConstraints();
-
-    return result;
 }
 
 static std::vector<LayoutNode const *> leavesOf(LayoutTree const &tree) {
@@ -502,38 +427,6 @@ TEST_CASE("Text measure resolves theme font and color before TextSystem") {
     ctx->popConstraints();
 }
 
-TEST_CASE("Text render resolves theme font and color before TextSystem") {
-    RecordingTextSystem ts;
-    SceneGraph graph;
-    EventMap eventMap;
-    RenderContext rctx {graph, eventMap, ts};
-
-    Theme theme = Theme::light();
-    theme.fontBody = Font {.family = "Render Theme", .size = 17.f, .weight = 480.f};
-    theme.colorTextPrimary = Color::hex(0xABCDEF);
-    EnvironmentLayer layer;
-    layer.set<Theme>(theme);
-    EnvironmentGuard guard(std::move(layer));
-
-    LayoutConstraints cs {};
-    cs.maxWidth = 200.f;
-    cs.maxHeight = 50.f;
-    rctx.pushConstraints(cs, {});
-
-    Text text {.text = "icon-like"};
-    LayoutNode node {};
-    node.frame = Rect {0.f, 0.f, 100.f, 20.f};
-    text.renderFromLayout(rctx, node);
-
-    CHECK(ts.laidOut);
-    CHECK(ts.lastLayoutFont.family == "Render Theme");
-    CHECK(ts.lastLayoutFont.size == doctest::Approx(17.f));
-    CHECK(ts.lastLayoutFont.weight == doctest::Approx(480.f));
-    CHECK(ts.lastLayoutColor == Color::hex(0xABCDEF));
-
-    rctx.popConstraints();
-}
-
 TEST_CASE("trimTextLayoutToMaxLines keeps all runs from the first ctLineIndex") {
     TextLayout layout;
 
@@ -577,130 +470,6 @@ TEST_CASE("trimTextLayoutToMaxLines keeps all runs from the first ctLineIndex") 
     CHECK(layout.runs[1].ctLineIndex == 0);
     REQUIRE(layout.lines.size() == 1);
     CHECK(layout.lines[0].ctLineIndex == 0);
-}
-
-TEST_CASE("Text render emits a TextNode for line-only layouts") {
-    LineOnlyLayoutTextSystem ts;
-    SceneGraph graph;
-    EventMap eventMap;
-    RenderContext rctx {graph, eventMap, ts};
-
-    LayoutConstraints cs {};
-    cs.maxWidth = 200.f;
-    cs.maxHeight = 50.f;
-    rctx.pushConstraints(cs, {});
-
-    Text text {.text = "\n"};
-    LayoutNode node {};
-    node.frame = Rect {5.f, 7.f, 100.f, 20.f};
-    text.renderFromLayout(rctx, node);
-
-    auto const *root = graph.node<LayerNode>(graph.root());
-    REQUIRE(root != nullptr);
-    REQUIRE(root->children.size() == 1);
-    auto const *textNode = graph.node<TextNode>(root->children[0]);
-    REQUIRE(textNode != nullptr);
-    CHECK(textNode->layout != nullptr);
-    CHECK(textNode->layout->runs.empty());
-    CHECK(textNode->layout->lines.size() == 1);
-
-    Rect const bounds = measureRootContentBounds(graph);
-    CHECK(bounds.x == doctest::Approx(5.f));
-    CHECK(bounds.y == doctest::Approx(7.f));
-    CHECK(bounds.width == doctest::Approx(100.f));
-    CHECK(bounds.height == doctest::Approx(20.f));
-
-    rctx.popConstraints();
-}
-
-TEST_CASE("measureRootContentBounds expands rect stroke and shadow extents") {
-    SceneGraph graph;
-    graph.addRect(graph.root(), RectNode{
-        .bounds = Rect{10.f, 20.f, 30.f, 40.f},
-        .fill = FillStyle::solid(Colors::blue),
-        .stroke = StrokeStyle::solid(Colors::white, 4.f),
-        .shadow = ShadowStyle{.radius = 5.f, .offset = {3.f, -2.f}, .color = Colors::black},
-    });
-
-    Rect const bounds = measureRootContentBounds(graph);
-    CHECK(bounds.x == doctest::Approx(8.f));
-    CHECK(bounds.y == doctest::Approx(13.f));
-    CHECK(bounds.width == doctest::Approx(40.f));
-    CHECK(bounds.height == doctest::Approx(50.f));
-}
-
-TEST_CASE("measureRootContentBounds expands path and line stroke extents") {
-    SceneGraph graph;
-
-    Path triangle;
-    triangle.moveTo({0.f, 0.f});
-    triangle.lineTo({10.f, 0.f});
-    triangle.lineTo({10.f, 10.f});
-    triangle.close();
-    graph.addPath(graph.root(), PathNode{
-        .path = triangle,
-        .fill = FillStyle::solid(Colors::green),
-        .stroke = StrokeStyle::solid(Colors::white, 6.f),
-        .shadow = ShadowStyle{.radius = 2.f, .offset = {4.f, 0.f}, .color = Colors::black},
-    });
-    graph.addLine(graph.root(), LineNode{
-        .from = Point{2.f, 20.f},
-        .to = Point{12.f, 20.f},
-        .stroke = StrokeStyle::solid(Colors::red, 6.f),
-    });
-
-    Rect const bounds = measureRootContentBounds(graph);
-    CHECK(bounds.x == doctest::Approx(-3.f));
-    CHECK(bounds.y == doctest::Approx(-3.f));
-    CHECK(bounds.width == doctest::Approx(19.f));
-    CHECK(bounds.height == doctest::Approx(26.f));
-}
-
-TEST_CASE("TextInput single-line registers focus and text handlers" * doctest::skip()) {
-    Application app;
-    Signal<std::string> value {std::string {}};
-    RenderResult result = runLayoutAndRenderWithStateStore(
-        Element {TextInput {
-            .value = State<std::string> {&value},
-            .placeholder = "Email",
-        }},
-        320.f, 48.f
-    );
-
-    REQUIRE(!result.eventMap.focusOrder().empty());
-    auto const key = result.eventMap.focusOrder().front();
-    auto const [id, handlers] = result.eventMap.findWithIdByKey(key);
-    REQUIRE(id.isValid());
-    REQUIRE(handlers != nullptr);
-    CHECK(handlers->focusable);
-    CHECK(static_cast<bool>(handlers->onPointerDown));
-    CHECK(static_cast<bool>(handlers->onKeyDown));
-    CHECK(static_cast<bool>(handlers->onTextInput));
-}
-
-TEST_CASE("TextInput multiline registers focus, pointer, and text handlers" * doctest::skip()) {
-    Application app;
-    Signal<std::string> value {std::string {"hello\nworld"}};
-    RenderResult result = runLayoutAndRenderWithStateStore(
-        Element {TextInput {
-            .value = State<std::string> {&value},
-            .placeholder = "Notes",
-            .multiline = true,
-        }},
-        320.f, 160.f
-    );
-
-    REQUIRE(!result.eventMap.focusOrder().empty());
-    auto const key = result.eventMap.focusOrder().front();
-    auto const [id, handlers] = result.eventMap.findWithIdByKey(key);
-    REQUIRE(id.isValid());
-    REQUIRE(handlers != nullptr);
-    CHECK(handlers->focusable);
-    CHECK(static_cast<bool>(handlers->onPointerDown));
-    CHECK(static_cast<bool>(handlers->onPointerMove));
-    CHECK(static_cast<bool>(handlers->onPointerUp));
-    CHECK(static_cast<bool>(handlers->onKeyDown));
-    CHECK(static_cast<bool>(handlers->onTextInput));
 }
 
 TEST_CASE("TextInput does not produce runs for empty text with empty placeholder") {

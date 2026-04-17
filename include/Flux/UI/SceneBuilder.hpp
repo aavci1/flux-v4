@@ -52,7 +52,7 @@ private:
   void popFrame();
 
   [[nodiscard]] Size measureElement(Element const& el, LayoutConstraints const& constraints,
-                                    LayoutHints const& hints) const;
+                                    LayoutHints const& hints, ComponentKey const& key) const;
 
   std::unique_ptr<SceneNode> buildResolved(Element const& el, Element const& sceneEl, NodeId id,
                                            std::unique_ptr<SceneNode> existing);

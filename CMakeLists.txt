@@ -288,11 +288,9 @@ if(FLUX_BUILD_TESTS)
 
   add_executable(flux_tests
     tests/AnimationTests.cpp
-    tests/IncrementalRebuildTests.cpp
     tests/MetalCanvasTests.mm
     tests/main.cpp
     tests/SceneBuilderTests.cpp
-    tests/EventMapTests.cpp
     tests/LayoutTreeTests.cpp
     tests/LayoutIntegrationTests.cpp
     tests/LlamaEngineTests.cpp

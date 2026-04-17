@@ -356,12 +356,27 @@ void SceneBuilder::popFrame() {
 }
 
 Size SceneBuilder::measureElement(Element const& el, LayoutConstraints const& constraints,
-                                  LayoutHints const& hints) const {
+                                  LayoutHints const& hints, ComponentKey const& key) const {
   LayoutEngine layoutEngine{};
   layoutEngine.resetForBuild();
   LayoutTree layoutTree{};
   LayoutContext layoutContext{textSystem_, layoutEngine, layoutTree};
   layoutContext.pushConstraints(constraints, hints);
+  layoutContext.keyStack_.clear();
+  layoutContext.savedChildIndices_.clear();
+  layoutContext.explicitChildLocalIdStack_.clear();
+  layoutContext.nextChildIndex_ = 0;
+  if (!key.empty()) {
+    for (std::size_t i = 0; i + 1 < key.size(); ++i) {
+      layoutContext.keyStack_.push_back(key[i]);
+    }
+    LocalId const local = key.back();
+    if (local.kind == LocalId::Kind::Positional) {
+      layoutContext.nextChildIndex_ = local.value == 0 ? 0u : static_cast<std::size_t>(local.value - 1ull);
+    } else {
+      layoutContext.explicitChildLocalIdStack_.push_back(local);
+    }
+  }
   layoutContext.setCurrentElement(&el);
   return el.measure(layoutContext, constraints, hints, textSystem_);
 }
@@ -455,7 +470,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
   FrameState const current = frame();
   ElementModifiers const* mods = el.modifiers();
   Point const subtreeOffset = modifierOffset(mods);
-  Size const outerSize = measureElement(el, current.constraints, current.hints);
+  Size const outerSize = measureElement(el, current.constraints, current.hints, current.key);
   EdgeInsets const padding = mods ? mods->padding : EdgeInsets{};
   LayoutConstraints innerConstraints = insetConstraints(current.constraints, padding);
   Size const paddedContentSize{
@@ -658,8 +673,11 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     std::vector<Size> sizes{};
     sizes.reserve(stack.children.size());
     float maxChildW = 0.f;
-    for (Element const& child : stack.children) {
-      Size const size = measureElement(child, childConstraints, childHints);
+    for (std::size_t i = 0; i < stack.children.size(); ++i) {
+      Element const& child = stack.children[i];
+      ComponentKey childKey = current.key;
+      childKey.push_back(childLocalId(child, i));
+      Size const size = measureElement(child, childConstraints, childHints, childKey);
       sizes.push_back(size);
       maxChildW = std::max(maxChildW, size.width);
     }
@@ -753,8 +771,11 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
 
     std::vector<Size> sizes{};
     sizes.reserve(stack.children.size());
-    for (Element const& child : stack.children) {
-      sizes.push_back(measureElement(child, childConstraints, LayoutHints{}));
+    for (std::size_t i = 0; i < stack.children.size(); ++i) {
+      Element const& child = stack.children[i];
+      ComponentKey childKey = current.key;
+      childKey.push_back(childLocalId(child, i));
+      sizes.push_back(measureElement(child, childConstraints, LayoutHints{}, childKey));
     }
 
     std::vector<float> allocW(stack.children.size(), 0.f);
@@ -786,7 +807,9 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
       childMeasure.maxHeight = heightConstrained ? assignedH : std::numeric_limits<float>::infinity();
       LayoutHints rowHints{};
       rowHints.hStackCrossAlign = stack.alignment;
-      Size const measured = measureElement(stack.children[i], childMeasure, rowHints);
+      ComponentKey childKey = current.key;
+      childKey.push_back(childLocalId(stack.children[i], i));
+      Size const measured = measureElement(stack.children[i], childMeasure, rowHints, childKey);
       rowInnerH = std::max(rowInnerH, measured.height);
     }
     if (stack.alignment == Alignment::Stretch && heightConstrained) {
@@ -859,8 +882,11 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     float maxH = 0.f;
     std::vector<Size> sizes{};
     sizes.reserve(stack.children.size());
-    for (Element const& child : stack.children) {
-      Size const size = measureElement(child, childConstraints, LayoutHints{});
+    for (std::size_t i = 0; i < stack.children.size(); ++i) {
+      Element const& child = stack.children[i];
+      ComponentKey childKey = current.key;
+      childKey.push_back(childLocalId(child, i));
+      Size const size = measureElement(child, childConstraints, LayoutHints{}, childKey);
       sizes.push_back(size);
       maxW = std::max(maxW, size.width);
       maxH = std::max(maxH, size.height);
@@ -939,8 +965,11 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
 
     std::vector<Size> sizes{};
     sizes.reserve(n);
-    for (Element const& child : grid.children) {
-      sizes.push_back(measureElement(child, childConstraints, LayoutHints{}));
+    for (std::size_t i = 0; i < grid.children.size(); ++i) {
+      Element const& child = grid.children[i];
+      ComponentKey childKey = current.key;
+      childKey.push_back(childLocalId(child, i));
+      sizes.push_back(measureElement(child, childConstraints, LayoutHints{}, childKey));
     }
 
     std::vector<float> rowH(rowCount, cellH);
@@ -1055,8 +1084,11 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     LayoutConstraints childConstraints = scrollChildConstraints(offsetView.axis, innerConstraints, viewport);
     std::vector<Size> sizes{};
     sizes.reserve(offsetView.children.size());
-    for (Element const& child : offsetView.children) {
-      sizes.push_back(measureElement(child, childConstraints, LayoutHints{}));
+    for (std::size_t i = 0; i < offsetView.children.size(); ++i) {
+      Element const& child = offsetView.children[i];
+      ComponentKey childKey = current.key;
+      childKey.push_back(childLocalId(child, i));
+      sizes.push_back(measureElement(child, childConstraints, LayoutHints{}, childKey));
     }
     Size const contentSize = scrollContentSize(offsetView.axis, sizes);
     if (offsetView.contentSize.signal && !sizeApproximatelyEqual(*offsetView.contentSize, contentSize)) {
@@ -1147,8 +1179,11 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     std::vector<Element> contentChildren = scrollView.children;
     std::vector<Size> sizes{};
     sizes.reserve(contentChildren.size());
-    for (Element const& child : contentChildren) {
-      sizes.push_back(measureElement(child, childConstraints, LayoutHints{}));
+    for (std::size_t i = 0; i < contentChildren.size(); ++i) {
+      Element const& child = contentChildren[i];
+      ComponentKey childKey = current.key;
+      childKey.push_back(childLocalId(child, i));
+      sizes.push_back(measureElement(child, childConstraints, LayoutHints{}, childKey));
     }
     Size const contentSize = scrollContentSize(scrollView.axis, sizes);
     if (scrollView.contentSize.signal && !sizeApproximatelyEqual(*scrollView.contentSize, contentSize)) {
@@ -1270,9 +1305,11 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
         existingChild = std::move(children.front());
       }
     }
-    Size const childSize = measureElement(scaled.child, innerConstraints, LayoutHints{});
-    Point const pivot{childSize.width * 0.5f, childSize.height * 0.5f};
     ComponentKey childKey = current.key;
+    childKey.push_back(LocalId::fromString("$child"));
+    Size const childSize = measureElement(scaled.child, innerConstraints, LayoutHints{}, childKey);
+    Point const pivot{childSize.width * 0.5f, childSize.height * 0.5f};
+    childKey = current.key;
     childKey.push_back(LocalId::fromString("$child"));
     pushFrame(innerConstraints, LayoutHints{}, contentOrigin, childKey);
     std::unique_ptr<SceneNode> childNode =
