@@ -258,6 +258,7 @@ Element ScrollView::body() const {
         makeVerticalIndicator(clampedOffset, effectiveViewport, contentSize, showsHorizontalIndicator);
     ScrollIndicatorMetrics const horizontalIndicator =
         makeHorizontalIndicator(clampedOffset, effectiveViewport, contentSize, showsVerticalIndicator);
+    bool const showsAnyIndicator = verticalIndicator.visible() || horizontalIndicator.visible();
     Transition const indicatorShow = Transition::instant();
     Transition const indicatorHide = Transition::linear(theme.durationMedium).delayed(0.85f);
     Color const indicatorColor = indicatorColorForTheme(theme);
@@ -268,8 +269,21 @@ Element ScrollView::body() const {
         .contentSize = content,
         .children = children,
     };
-    scrollContent = std::move(scrollContent).overlay(makeIndicatorOverlay(verticalIndicator, horizontalIndicator, indicatorColor, *indicatorOpacity));
-    auto revealIndicators = [indicatorOpacity, indicatorShow, indicatorHide]() {
+    std::vector<Element> layers;
+    layers.reserve(2);
+    layers.push_back(std::move(scrollContent));
+    if (showsAnyIndicator) {
+        layers.push_back(makeIndicatorOverlay(verticalIndicator, horizontalIndicator, indicatorColor, *indicatorOpacity));
+    }
+    Element root = Element {ZStack {
+        .horizontalAlignment = Alignment::Start,
+        .verticalAlignment = Alignment::Start,
+        .children = std::move(layers),
+    }};
+    auto revealIndicators = [indicatorOpacity, indicatorShow, indicatorHide, showsAnyIndicator]() {
+        if (!showsAnyIndicator) {
+            return;
+        }
         indicatorOpacity.set(1.f, indicatorShow);
         indicatorOpacity.set(0.f, indicatorHide);
     };
@@ -282,7 +296,7 @@ Element ScrollView::body() const {
         return false;
     };
 
-    return std::move(scrollContent)
+    return std::move(root)
         .clipContent(true)
         .onPointerDown(
             [dragging, downPoint, clampedOffset, dragScroll](Point p) {
