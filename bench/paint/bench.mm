@@ -361,7 +361,6 @@ static void mutateText(BenchmarkEnv& env, LayeredTexts& scene, int iteration) {
 static void advanceRootScroll(flux::SceneGraph& graph, int iteration) {
   if (auto* root = graph.node<flux::LayerNode>(graph.root())) {
     root->transform = flux::Mat3::translate(0.f, static_cast<float>(iteration + 1));
-    graph.markPaintDirty(root->id);
   }
 }
 

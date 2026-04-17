@@ -212,7 +212,6 @@ bool applyDirectScroll(Runtime *runtime, ComponentKey const &key, Point offset) 
     }
 
     layer->transform = next;
-    runtime->window().sceneGraph().markPaintDirty(layer->id);
     runtime->window().requestRedraw();
     return true;
 }
