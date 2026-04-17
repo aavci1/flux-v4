@@ -3,11 +3,13 @@
 #include <Flux/Graphics/Canvas.hpp>
 
 #include <memory>
+#include <vector>
 
 namespace flux {
 
 class TextSystem;
 class Window;
+struct MetalFrameRecorder;
 
 /// Creates the Metal-backed canvas for a window (macOS only).
 std::unique_ptr<Canvas> createMetalCanvas(Window* window, void* caMetalLayer, unsigned int handle,
@@ -20,5 +22,25 @@ void setSyncPresentForCanvas(Canvas* canvas, bool sync);
 /// Waits for the most recently submitted Metal frame for this canvas to complete on the GPU.
 /// No-op if `canvas` is not a Metal-backed canvas or no frame has been submitted yet.
 void waitForCanvasLastPresentComplete(Canvas* canvas);
+
+/// Starts recording Metal draw ops into `target` instead of the live frame.
+/// Returns false if `canvas` is not Metal-backed.
+bool beginRecordedOpsCaptureForCanvas(Canvas* canvas, MetalFrameRecorder* target);
+
+/// Stops Metal draw-op recording started by `beginRecordedOpsCaptureForCanvas`.
+void endRecordedOpsCaptureForCanvas(Canvas* canvas);
+
+/// Replays a slice of cached Metal draw data into the current live frame.
+void replayRecordedOpsForCanvas(Canvas* canvas, MetalFrameRecorder const& recorded, std::uint32_t opStart,
+                                std::uint32_t opCount, std::uint32_t pathStart, std::uint32_t pathCount,
+                                std::uint32_t glyphStart, std::uint32_t glyphCount, bool hasPathOps,
+                                bool hasGlyphOps, bool hasImageOps);
+
+/// Requests a CPU readback of the next presented Metal frame.
+bool requestNextFrameCaptureForCanvas(Canvas* canvas);
+
+/// Retrieves the most recent captured frame bytes (BGRA8). Returns false if no capture is available.
+bool takeCapturedFrameForCanvas(Canvas* canvas, std::vector<std::uint8_t>& out, std::uint32_t& width,
+                                std::uint32_t& height);
 
 } // namespace flux

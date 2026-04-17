@@ -4,8 +4,12 @@
 #include <Flux/Scene/Nodes.hpp>
 #include <Flux/Scene/SceneGraph.hpp>
 
+#include "Graphics/Metal/MetalCanvas.hpp"
+#include "Graphics/Metal/MetalFrameRecorder.hpp"
+
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <unordered_map>
 #include <utility>
 #include <variant>
@@ -15,69 +19,27 @@ namespace flux {
 
 namespace {
 
-struct SaveCmd {};
-struct RestoreCmd {};
-struct SetTransformCmd {
-  Mat3 transform{};
-};
-struct TransformCmd {
-  Mat3 transform{};
-};
-struct ClipRectCmd {
-  Rect rect{};
-  bool antiAlias = false;
-};
-struct SetOpacityCmd {
-  float opacity = 1.f;
-};
-struct SetBlendModeCmd {
-  BlendMode blendMode = BlendMode::Normal;
-};
-struct DrawRectCmd {
-  Rect bounds{};
-  CornerRadius cornerRadius{};
-  FillStyle fill = FillStyle::none();
-  StrokeStyle stroke = StrokeStyle::none();
-  ShadowStyle shadow = ShadowStyle::none();
-};
-struct DrawLineCmd {
-  Point from{};
-  Point to{};
-  StrokeStyle stroke = StrokeStyle::none();
-};
-struct DrawPathCmd {
-  Path path{};
-  FillStyle fill = FillStyle::none();
-  StrokeStyle stroke = StrokeStyle::none();
-  ShadowStyle shadow = ShadowStyle::none();
-};
-struct DrawCircleCmd {
-  Point center{};
-  float radius = 0.f;
-  FillStyle fill = FillStyle::none();
-  StrokeStyle stroke = StrokeStyle::none();
-};
-struct DrawTextNodeCmd {
-  TextNode node{};
-};
-struct DrawImageNodeCmd {
-  ImageNode node{};
-};
-struct DrawCustomClearCmd {
-  Color color = Colors::transparent;
-};
 struct RenderChildLayerCmd {
   NodeId child{};
 };
 
-using RecordedCommand = std::variant<SaveCmd, RestoreCmd, SetTransformCmd, TransformCmd, ClipRectCmd,
-                                     SetOpacityCmd, SetBlendModeCmd, DrawRectCmd, DrawLineCmd,
-                                     DrawPathCmd, DrawCircleCmd, DrawTextNodeCmd, DrawImageNodeCmd,
-                                     DrawCustomClearCmd, RenderChildLayerCmd>;
+struct ReplayOpBatch {
+  std::uint32_t opStart = 0;
+  std::uint32_t opCount = 0;
+  std::uint32_t pathStart = 0;
+  std::uint32_t pathCount = 0;
+  std::uint32_t glyphStart = 0;
+  std::uint32_t glyphCount = 0;
+  bool hasPathOps = false;
+  bool hasGlyphOps = false;
+  bool hasImageOps = false;
+};
 
-class RecordingCanvas final : public Canvas {
+using LayerReplayStep = std::variant<ReplayOpBatch, RenderChildLayerCmd>;
+
+class MetalRecordingCanvas final : public Canvas {
 public:
-  explicit RecordingCanvas(Canvas& target)
+  explicit MetalRecordingCanvas(Canvas& target)
       : target_(target) {
     stateStack_.push_back(State{
         .transform = target.currentTransform(),
@@ -96,7 +58,6 @@ public:
 
   void save() override {
     stateStack_.push_back(currentState());
-    commands_.emplace_back(SaveCmd{});
     target_.save();
   }
 
@@ -104,19 +65,16 @@ public:
     if (stateStack_.size() > 1) {
       stateStack_.pop_back();
     }
-    commands_.emplace_back(RestoreCmd{});
     target_.restore();
   }
 
   void setTransform(Mat3 const& m) override {
     currentState().transform = m;
-    commands_.emplace_back(SetTransformCmd{.transform = m});
     target_.setTransform(m);
   }
 
   void transform(Mat3 const& m) override {
     currentState().transform = currentState().transform * m;
-    commands_.emplace_back(TransformCmd{.transform = m});
     target_.transform(m);
   }
 
@@ -144,7 +102,6 @@ public:
         clip = Rect::sharp(x0, y0, x1 - x0, y1 - y0);
       }
     }
-    commands_.emplace_back(ClipRectCmd{.rect = rect, .antiAlias = antiAlias});
     target_.clipRect(rect, antiAlias);
   }
 
@@ -159,7 +116,6 @@ public:
 
   void setOpacity(float opacity) override {
     currentState().opacity = opacity;
-    commands_.emplace_back(SetOpacityCmd{.opacity = opacity});
     target_.setOpacity(opacity);
   }
 
@@ -167,7 +123,6 @@ public:
 
   void setBlendMode(BlendMode mode) override {
     currentState().blendMode = mode;
-    commands_.emplace_back(SetBlendModeCmd{.blendMode = mode});
     target_.setBlendMode(mode);
   }
 
@@ -175,84 +130,44 @@ public:
 
   void drawRect(Rect const& rect, CornerRadius const& cornerRadius, FillStyle const& fill,
                 StrokeStyle const& stroke, ShadowStyle const& shadow) override {
-    commands_.emplace_back(DrawRectCmd{
-        .bounds = rect,
-        .cornerRadius = cornerRadius,
-        .fill = fill,
-        .stroke = stroke,
-        .shadow = shadow,
-    });
     target_.drawRect(rect, cornerRadius, fill, stroke, shadow);
   }
 
   void drawLine(Point from, Point to, StrokeStyle const& stroke) override {
-    commands_.emplace_back(DrawLineCmd{.from = from, .to = to, .stroke = stroke});
     target_.drawLine(from, to, stroke);
   }
 
   void drawPath(Path const& path, FillStyle const& fill, StrokeStyle const& stroke,
                 ShadowStyle const& shadow) override {
-    commands_.emplace_back(DrawPathCmd{
-        .path = path,
-        .fill = fill,
-        .stroke = stroke,
-        .shadow = shadow,
-    });
     target_.drawPath(path, fill, stroke, shadow);
   }
 
   void drawCircle(Point center, float radius, FillStyle const& fill, StrokeStyle const& stroke) override {
-    commands_.emplace_back(DrawCircleCmd{
-        .center = center,
-        .radius = radius,
-        .fill = fill,
-        .stroke = stroke,
-    });
     target_.drawCircle(center, radius, fill, stroke);
   }
 
-  void drawTextLayout(TextLayout const& layout, Point origin) override {
-    cacheable_ = false;
-    target_.drawTextLayout(layout, origin);
-  }
+  void drawTextLayout(TextLayout const& layout, Point origin) override { target_.drawTextLayout(layout, origin); }
 
-  void drawTextNode(TextNode const& node) override {
-    commands_.emplace_back(DrawTextNodeCmd{.node = node});
-    target_.drawTextNode(node);
-  }
+  void drawTextNode(TextNode const& node) override { target_.drawTextNode(node); }
 
-  void drawImageNode(ImageNode const& node) override {
-    commands_.emplace_back(DrawImageNodeCmd{.node = node});
-    target_.drawImageNode(node);
-  }
+  void drawImageNode(ImageNode const& node) override { target_.drawImageNode(node); }
 
   void drawImage(Image const& image, Rect const& src, Rect const& dst, CornerRadius const& corners,
                  float opacity) override {
-    cacheable_ = false;
     target_.drawImage(image, src, dst, corners, opacity);
   }
 
   void drawImageTiled(Image const& image, Rect const& dst, CornerRadius const& corners,
                       float opacity) override {
-    cacheable_ = false;
     target_.drawImageTiled(image, dst, corners, opacity);
   }
 
   void* gpuDevice() const override { return target_.gpuDevice(); }
 
-  void clear(Color color = Colors::transparent) override {
-    commands_.emplace_back(DrawCustomClearCmd{.color = color});
-    target_.clear(color);
-  }
+  void clear(Color color = Colors::transparent) override { target_.clear(color); }
 
   void markUncacheable() noexcept { cacheable_ = false; }
   bool cacheable() const noexcept { return cacheable_; }
-  void drainInto(std::vector<RecordedCommand>& out) {
-    out.insert(out.end(),
-               std::make_move_iterator(commands_.begin()),
-               std::make_move_iterator(commands_.end()));
-    commands_.clear();
-  }
 
 private:
   struct State {
@@ -267,7 +182,6 @@ private:
 
   Canvas& target_;
   std::vector<State> stateStack_{};
-  std::vector<RecordedCommand> commands_{};
   bool cacheable_ = true;
 };
 
@@ -291,8 +205,52 @@ struct LayerCacheKeyHash {
 
 struct LayerCacheEntry {
   std::uint64_t epoch = 0;
-  std::vector<RecordedCommand> commands{};
+  MetalFrameRecorder recorded{};
+  std::vector<LayerReplayStep> steps{};
 };
+
+bool flushRecordedBatch(Canvas& canvas, LayerCacheEntry& entry, std::uint32_t& lastOp, std::uint32_t& lastPath,
+                        std::uint32_t& lastGlyph) {
+  std::uint32_t const opEnd = static_cast<std::uint32_t>(entry.recorded.ops.size());
+  std::uint32_t const pathEnd = static_cast<std::uint32_t>(entry.recorded.pathVerts.size());
+  std::uint32_t const glyphEnd = static_cast<std::uint32_t>(entry.recorded.glyphVerts.size());
+  if (opEnd == lastOp && pathEnd == lastPath && glyphEnd == lastGlyph) {
+    return false;
+  }
+
+  ReplayOpBatch batch{
+      .opStart = lastOp,
+      .opCount = opEnd - lastOp,
+      .pathStart = lastPath,
+      .pathCount = pathEnd - lastPath,
+      .glyphStart = lastGlyph,
+      .glyphCount = glyphEnd - lastGlyph,
+  };
+  for (std::uint32_t i = batch.opStart; i < opEnd; ++i) {
+    switch (entry.recorded.ops[static_cast<std::size_t>(i)].kind) {
+    case MetalDrawOp::PathMesh:
+      batch.hasPathOps = true;
+      break;
+    case MetalDrawOp::GlyphMesh:
+      batch.hasGlyphOps = true;
+      break;
+    case MetalDrawOp::Image:
+      batch.hasImageOps = true;
+      break;
+    case MetalDrawOp::Rect:
+    case MetalDrawOp::Line:
+      break;
+    }
+  }
+  entry.steps.emplace_back(batch);
+  replayRecordedOpsForCanvas(&canvas, entry.recorded, batch.opStart, batch.opCount, batch.pathStart,
+                             batch.pathCount, batch.glyphStart, batch.glyphCount, batch.hasPathOps,
+                             batch.hasGlyphOps, batch.hasImageOps);
+  lastOp = opEnd;
+  lastPath = pathEnd;
+  lastGlyph = glyphEnd;
+  return true;
+}
 
 } // namespace
 
@@ -348,7 +306,7 @@ void SceneRenderer::renderNode(NodeId id, SceneGraph const& graph, Canvas& canva
         } else if constexpr (std::is_same_v<T, LineNode>) {
           canvas.drawLine(node.from, node.to, node.stroke);
         } else if constexpr (std::is_same_v<T, CustomRenderNode>) {
-          if (auto* recorder = dynamic_cast<RecordingCanvas*>(&canvas)) {
+          if (auto* recorder = dynamic_cast<MetalRecordingCanvas*>(&canvas)) {
             recorder->markUncacheable();
           }
           canvas.save();
@@ -377,45 +335,13 @@ void SceneRenderer::renderLayer(LayerNode const& layer, SceneGraph const& graph,
   if (allowLayerCache) {
     auto const it = impl_->layerCache_.find(key);
     if (it != impl_->layerCache_.end() && it->second.epoch == epoch) {
-      for (RecordedCommand const& command : it->second.commands) {
-        if (auto const* child = std::get_if<RenderChildLayerCmd>(&command)) {
+      for (LayerReplayStep const& step : it->second.steps) {
+        if (auto const* batch = std::get_if<ReplayOpBatch>(&step)) {
+          replayRecordedOpsForCanvas(&canvas, it->second.recorded, batch->opStart, batch->opCount,
+                                     batch->pathStart, batch->pathCount, batch->glyphStart, batch->glyphCount,
+                                     batch->hasPathOps, batch->hasGlyphOps, batch->hasImageOps);
+        } else if (auto const* child = std::get_if<RenderChildLayerCmd>(&step)) {
           renderNode(child->child, graph, canvas, true);
-        } else {
-          std::visit(
-              [&](auto const& cmd) {
-                using T = std::decay_t<decltype(cmd)>;
-                if constexpr (std::is_same_v<T, SaveCmd>) {
-                  canvas.save();
-                } else if constexpr (std::is_same_v<T, RestoreCmd>) {
-                  canvas.restore();
-                } else if constexpr (std::is_same_v<T, SetTransformCmd>) {
-                  canvas.setTransform(cmd.transform);
-                } else if constexpr (std::is_same_v<T, TransformCmd>) {
-                  canvas.transform(cmd.transform);
-                } else if constexpr (std::is_same_v<T, ClipRectCmd>) {
-                  canvas.clipRect(cmd.rect, cmd.antiAlias);
-                } else if constexpr (std::is_same_v<T, SetOpacityCmd>) {
-                  canvas.setOpacity(cmd.opacity);
-                } else if constexpr (std::is_same_v<T, SetBlendModeCmd>) {
-                  canvas.setBlendMode(cmd.blendMode);
-                } else if constexpr (std::is_same_v<T, DrawRectCmd>) {
-                  canvas.drawRect(cmd.bounds, cmd.cornerRadius, cmd.fill, cmd.stroke, cmd.shadow);
-                } else if constexpr (std::is_same_v<T, DrawLineCmd>) {
-                  canvas.drawLine(cmd.from, cmd.to, cmd.stroke);
-                } else if constexpr (std::is_same_v<T, DrawPathCmd>) {
-                  canvas.drawPath(cmd.path, cmd.fill, cmd.stroke, cmd.shadow);
-                } else if constexpr (std::is_same_v<T, DrawCircleCmd>) {
-                  canvas.drawCircle(cmd.center, cmd.radius, cmd.fill, cmd.stroke);
-                } else if constexpr (std::is_same_v<T, DrawTextNodeCmd>) {
-                  canvas.drawTextNode(cmd.node);
-                } else if constexpr (std::is_same_v<T, DrawImageNodeCmd>) {
-                  canvas.drawImageNode(cmd.node);
-                } else if constexpr (std::is_same_v<T, DrawCustomClearCmd>) {
-                  canvas.clear(cmd.color);
-                } else if constexpr (std::is_same_v<T, RenderChildLayerCmd>) {
-                }
-              },
-              command);
         }
       }
       canvas.restore();
@@ -423,24 +349,43 @@ void SceneRenderer::renderLayer(LayerNode const& layer, SceneGraph const& graph,
     }
   }
 
-  std::vector<RecordedCommand> commands;
-  RecordingCanvas recorder(canvas);
+  LayerCacheEntry cacheEntry;
+  cacheEntry.epoch = epoch;
+
+  MetalRecordingCanvas recorder(canvas);
+  bool const captureSupported = allowLayerCache && beginRecordedOpsCaptureForCanvas(&canvas, &cacheEntry.recorded);
+  bool captureActive = captureSupported;
+  std::uint32_t lastOp = 0;
+  std::uint32_t lastPath = 0;
+  std::uint32_t lastGlyph = 0;
+
   for (NodeId childId : layer.children) {
     if (graph.node<LayerNode>(childId)) {
-      recorder.drainInto(commands);
-      commands.emplace_back(RenderChildLayerCmd{.child = childId});
+      if (captureActive) {
+        endRecordedOpsCaptureForCanvas(&canvas);
+        captureActive = false;
+        flushRecordedBatch(canvas, cacheEntry, lastOp, lastPath, lastGlyph);
+      }
+      cacheEntry.steps.emplace_back(RenderChildLayerCmd{.child = childId});
       renderNode(childId, graph, canvas, true);
-    } else {
+      if (captureSupported) {
+        beginRecordedOpsCaptureForCanvas(&canvas, &cacheEntry.recorded);
+        captureActive = true;
+      }
+    } else if (captureSupported) {
       renderNode(childId, graph, recorder, false);
+    } else {
+      renderNode(childId, graph, canvas, false);
     }
   }
-  recorder.drainInto(commands);
 
-  if (recorder.cacheable()) {
-    impl_->layerCache_[key] = LayerCacheEntry{
-        .epoch = epoch,
-        .commands = std::move(commands),
-    };
+  if (captureActive) {
+    endRecordedOpsCaptureForCanvas(&canvas);
+    flushRecordedBatch(canvas, cacheEntry, lastOp, lastPath, lastGlyph);
+  }
+
+  if (captureSupported && recorder.cacheable()) {
+    impl_->layerCache_[key] = std::move(cacheEntry);
   } else {
     impl_->layerCache_.erase(key);
   }

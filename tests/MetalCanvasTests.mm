@@ -44,6 +44,7 @@ static TestSurface makeSurface() {
   surface.layer.contentsScale = 2.f;
   surface.layer.maximumDrawableCount = 3;
   surface.layer.allowsNextDrawableTimeout = YES;
+  surface.layer.displaySyncEnabled = NO;
   surface.layer.frame = surface.view.bounds;
   surface.layer.drawableSize = CGSizeMake(1280.f, 960.f);
   surface.view.layer = surface.layer;

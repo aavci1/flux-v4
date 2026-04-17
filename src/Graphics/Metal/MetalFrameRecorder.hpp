@@ -13,6 +13,13 @@ struct MetalFrameRecorder {
   std::vector<PathVertex> pathVerts;
   std::vector<MetalGlyphVertex> glyphVerts;
 
+  MetalFrameRecorder() = default;
+  ~MetalFrameRecorder();
+  MetalFrameRecorder(MetalFrameRecorder const&) = delete;
+  MetalFrameRecorder& operator=(MetalFrameRecorder const&) = delete;
+  MetalFrameRecorder(MetalFrameRecorder&& other) noexcept;
+  MetalFrameRecorder& operator=(MetalFrameRecorder&& other) noexcept;
+
   void clear();
 };
 

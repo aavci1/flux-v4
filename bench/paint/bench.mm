@@ -20,6 +20,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <cstdint>
 #include <vector>
 
 namespace {
@@ -73,10 +74,18 @@ struct LayeredRects {
   std::vector<flux::Rect> baseBounds;
 };
 
+struct FlatRects {
+  flux::SceneGraph graph;
+};
+
 struct LayeredTexts {
   flux::SceneGraph graph;
   std::vector<flux::NodeId> textIds;
   std::vector<std::string> labels;
+};
+
+struct FlatTexts {
+  flux::SceneGraph graph;
 };
 
 struct MixedScene {
@@ -112,6 +121,7 @@ static BenchSurface makeSurface() {
   surface.layer.contentsScale = kCanvasScale;
   surface.layer.maximumDrawableCount = 3;
   surface.layer.allowsNextDrawableTimeout = YES;
+  surface.layer.displaySyncEnabled = NO;
   surface.layer.frame = surface.view.bounds;
   surface.layer.drawableSize =
       CGSizeMake(frame.size.width * kCanvasScale, frame.size.height * kCanvasScale);
@@ -171,6 +181,18 @@ static void primeScene(flux::SceneRenderer& renderer, flux::SceneGraph const& gr
   (void)renderFrame(renderer, graph, canvas, false);
 }
 
+static std::vector<std::uint8_t> captureFrame(flux::SceneRenderer& renderer, flux::SceneGraph const& graph,
+                                              flux::Canvas& canvas, std::uint32_t& width,
+                                              std::uint32_t& height) {
+  (void)flux::requestNextFrameCaptureForCanvas(&canvas);
+  (void)renderFrame(renderer, graph, canvas, false);
+  std::vector<std::uint8_t> pixels;
+  width = 0;
+  height = 0;
+  (void)flux::takeCapturedFrameForCanvas(&canvas, pixels, width, height);
+  return pixels;
+}
+
 static CaseMetrics averageCase(std::string name, int iterations, auto&& fn) {
   double cpu = 0.0;
   double gpu = 0.0;
@@ -217,6 +239,24 @@ static LayeredRects makeRectScene(int count) {
   return scene;
 }
 
+static FlatRects makeFlatRectScene(int count) {
+  FlatRects scene;
+  constexpr int cols = 100;
+  constexpr float cellW = 18.f;
+  constexpr float cellH = 18.f;
+  for (int i = 0; i < count; ++i) {
+    flux::Rect const bounds = rectGridBounds(i, cols, cellW, cellH, 2.f, 2.f);
+    scene.graph.addRect(scene.graph.root(), flux::RectNode{
+                                              .bounds = bounds,
+                                              .cornerRadius = flux::CornerRadius{3.f, 3.f, 3.f, 3.f},
+                                              .fill = flux::FillStyle::solid(paletteColor(i)),
+                                              .stroke = flux::StrokeStyle::none(),
+                                              .shadow = flux::ShadowStyle::none(),
+                                          });
+  }
+  return scene;
+}
+
 static LayeredTexts makeTextScene(BenchmarkEnv& env, int count) {
   LayeredTexts scene;
   scene.textIds.reserve(static_cast<std::size_t>(count));
@@ -239,44 +279,59 @@ static LayeredTexts makeTextScene(BenchmarkEnv& env, int count) {
   return scene;
 }
 
+static FlatTexts makeFlatTextScene(BenchmarkEnv& env, int count) {
+  FlatTexts scene;
+  constexpr int cols = 100;
+  constexpr float cellW = 18.f;
+  constexpr float cellH = 18.f;
+  for (int i = 0; i < count; ++i) {
+    flux::Rect const bounds = rectGridBounds(i, cols, cellW, cellH, 1.f, 1.f);
+    scene.graph.addText(scene.graph.root(), flux::TextNode{
+                                               .layout = makeLabelLayout(env, "Label " + std::to_string(i),
+                                                                         paletteColor(i), 80.f),
+                                               .origin = flux::Point{bounds.x, bounds.y + 12.f},
+                                               .allocation = flux::Rect::sharp(bounds.x, bounds.y, 80.f, 14.f),
+                                           });
+  }
+  return scene;
+}
+
 static MixedScene makeMixedScene(BenchmarkEnv& env) {
   MixedScene scene;
   for (int i = 0; i < kMixedRectCount; ++i) {
-    flux::NodeId const layerId = scene.graph.addLayer(scene.graph.root(), flux::LayerNode{});
     flux::Rect const bounds = rectGridBounds(i, 40, 40.f, 28.f, 3.f, 3.f);
-    scene.graph.addRect(layerId, flux::RectNode{
-                                     .bounds = bounds,
-                                     .cornerRadius = flux::CornerRadius{4.f, 4.f, 4.f, 4.f},
-                                     .fill = flux::FillStyle::solid(paletteColor(i)),
-                                     .stroke = flux::StrokeStyle::none(),
-                                     .shadow = flux::ShadowStyle::none(),
-                                 });
+    scene.graph.addRect(scene.graph.root(), flux::RectNode{
+                                               .bounds = bounds,
+                                               .cornerRadius = flux::CornerRadius{4.f, 4.f, 4.f, 4.f},
+                                               .fill = flux::FillStyle::solid(paletteColor(i)),
+                                               .stroke = flux::StrokeStyle::none(),
+                                               .shadow = flux::ShadowStyle::none(),
+                                           });
   }
 
   for (int i = 0; i < kMixedTextCount; ++i) {
-    flux::NodeId const layerId = scene.graph.addLayer(scene.graph.root(), flux::LayerNode{});
     float const x = static_cast<float>((i % 25) * 74);
     float const y = 720.f + static_cast<float>(i / 25) * 16.f;
-    scene.graph.addText(layerId, flux::TextNode{
-                                     .layout = makeLabelLayout(env, "Row " + std::to_string(i),
-                                                               flux::Color{0.95f, 0.96f, 0.98f, 1.f}, 64.f),
-                                     .origin = flux::Point{x, y},
-                                     .allocation = flux::Rect::sharp(x, y - 12.f, 64.f, 14.f),
-                                 });
+    scene.graph.addText(scene.graph.root(), flux::TextNode{
+                                              .layout = makeLabelLayout(env, "Row " + std::to_string(i),
+                                                                        flux::Color{0.95f, 0.96f, 0.98f, 1.f},
+                                                                        64.f),
+                                              .origin = flux::Point{x, y},
+                                              .allocation = flux::Rect::sharp(x, y - 12.f, 64.f, 14.f),
+                                          });
   }
 
   if (env.image) {
     for (int i = 0; i < kMixedImageCount; ++i) {
-      flux::NodeId const layerId = scene.graph.addLayer(scene.graph.root(), flux::LayerNode{});
       float const x = static_cast<float>((i % 10) * 90);
       float const y = 880.f + static_cast<float>(i / 10) * 90.f;
-      scene.graph.addImage(layerId, flux::ImageNode{
-                                        .image = env.image,
-                                        .bounds = flux::Rect::sharp(x, y, 72.f, 72.f),
-                                        .fillMode = flux::ImageFillMode::Cover,
-                                        .cornerRadius = flux::CornerRadius{8.f, 8.f, 8.f, 8.f},
-                                        .opacity = 1.f,
-                                    });
+      scene.graph.addImage(scene.graph.root(), flux::ImageNode{
+                                                 .image = env.image,
+                                                 .bounds = flux::Rect::sharp(x, y, 72.f, 72.f),
+                                                 .fillMode = flux::ImageFillMode::Cover,
+                                                 .cornerRadius = flux::CornerRadius{8.f, 8.f, 8.f, 8.f},
+                                                 .opacity = 1.f,
+                                             });
     }
   }
 
@@ -317,6 +372,11 @@ static void printCase(CaseMetrics const& metrics) {
             << "  iters=" << metrics.iterations << "\n";
 }
 
+static void printPixelCheck(std::string_view name, bool pass, std::uint32_t width, std::uint32_t height) {
+  std::cout << std::left << std::setw(28) << std::string(name) << (pass ? "PASS" : "FAIL") << "  "
+            << width << "x" << height << "\n";
+}
+
 } // namespace
 
 int main() {
@@ -334,14 +394,14 @@ int main() {
     std::cout << "cases report average CPU-only and GPU-inclusive frame time.\n\n";
 
     {
-      LayeredRects scene = makeRectScene(kRectCount);
+      FlatRects scene = makeFlatRectScene(kRectCount);
       printCase(averageCase("P1 cold", 1, [&](int) {
         return renderFrame(renderer, scene.graph, *env->canvas, false);
       }));
     }
 
     {
-      LayeredRects scene = makeRectScene(kRectCount);
+      FlatRects scene = makeFlatRectScene(kRectCount);
       primeScene(renderer, scene.graph, *env->canvas);
       printCase(averageCase("P2 steady unchanged", kSteadyIterations, [&](int) {
         return renderFrame(renderer, scene.graph, *env->canvas, false);
@@ -358,7 +418,7 @@ int main() {
     }
 
     {
-      LayeredTexts scene = makeTextScene(*env, kTextCount);
+      FlatTexts scene = makeFlatTextScene(*env, kTextCount);
       primeScene(renderer, scene.graph, *env->canvas);
       printCase(averageCase("P4 5000 Text unchanged", kTextIterations, [&](int) {
         return renderFrame(renderer, scene.graph, *env->canvas, false);
@@ -383,7 +443,7 @@ int main() {
     }
 
     {
-      LayeredRects scene = makeRectScene(kScrollRectCount);
+      FlatRects scene = makeFlatRectScene(kScrollRectCount);
       primeScene(renderer, scene.graph, *env->canvas);
       printCase(averageCase("P7 scroll", kSteadyIterations, [&](int i) {
         advanceRootScroll(scene.graph, i);
@@ -392,22 +452,43 @@ int main() {
     }
 
     {
-      std::vector<LayeredRects> scenes;
+      std::vector<FlatRects> scenes;
       for (int count : kArenaCounts) {
-        scenes.push_back(makeRectScene(count));
+        scenes.push_back(makeFlatRectScene(count));
       }
       printCase(averageCase("P8 arena churn", kArenaIterations, [&](int i) {
-        LayeredRects& scene = scenes[static_cast<std::size_t>(i) % scenes.size()];
+        FlatRects& scene = scenes[static_cast<std::size_t>(i) % scenes.size()];
         return renderFrame(renderer, scene.graph, *env->canvas, false);
       }));
     }
 
     {
-      LayeredRects scene = makeRectScene(kRectCount);
+      FlatRects scene = makeFlatRectScene(kRectCount);
       primeScene(renderer, scene.graph, *env->canvas);
       printCase(averageCase("P9 synchronous present", kSteadyIterations, [&](int) {
         return renderFrame(renderer, scene.graph, *env->canvas, true);
       }));
+    }
+
+    {
+      FlatRects rectScene = makeFlatRectScene(kRectCount);
+      FlatTexts textScene = makeFlatTextScene(*env, kTextCount);
+      MixedScene mixedScene = makeMixedScene(*env);
+
+      auto runCheck = [&](std::string_view name, auto& scene) {
+        std::uint32_t coldW = 0;
+        std::uint32_t coldH = 0;
+        std::vector<std::uint8_t> const cold = captureFrame(renderer, scene.graph, *env->canvas, coldW, coldH);
+        std::uint32_t warmW = 0;
+        std::uint32_t warmH = 0;
+        std::vector<std::uint8_t> const warm = captureFrame(renderer, scene.graph, *env->canvas, warmW, warmH);
+        bool const pass = !cold.empty() && coldW == warmW && coldH == warmH && cold == warm;
+        printPixelCheck(std::string("P10 pixel ") + std::string(name), pass, warmW, warmH);
+      };
+
+      runCheck("rect", rectScene);
+      runCheck("text", textScene);
+      runCheck("mixed", mixedScene);
     }
   }
   return 0;
