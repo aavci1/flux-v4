@@ -9,7 +9,11 @@ namespace flux {
 
 /// Per-frame CPU-side display list: primitive ops + accumulated path mesh vertices.
 struct MetalFrameRecorder {
-  std::vector<MetalDrawOp> ops;
+  std::vector<MetalRectOp> rectOps;
+  std::vector<MetalImageOp> imageOps;
+  std::vector<MetalPathOp> pathOps;
+  std::vector<MetalGlyphOp> glyphOps;
+  std::vector<MetalOpRef> opOrder;
   std::vector<PathVertex> pathVerts;
   std::vector<MetalGlyphVertex> glyphVerts;
 

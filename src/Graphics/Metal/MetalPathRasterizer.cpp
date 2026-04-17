@@ -7,7 +7,8 @@ namespace flux {
 
 void metalPathRasterizeToMesh(Path const& path, FillStyle const& fs, StrokeStyle const& ss, Mat3 const& transform,
                               float dpiScaleX, float dpiScaleY, float opacity, float viewportW, float viewportH,
-                              std::vector<PathVertex>& pathVerts, std::vector<MetalDrawOp>& ops, BlendMode blendMode) {
+                              std::vector<PathVertex>& pathVerts, std::vector<MetalPathOp>& pathOps,
+                              std::vector<MetalOpRef>& opOrder, BlendMode blendMode) {
   if (path.isEmpty() || viewportW < 1.f || viewportH < 1.f) {
     return;
   }
@@ -71,12 +72,15 @@ void metalPathRasterizeToMesh(Path const& path, FillStyle const& fs, StrokeStyle
 
   const size_t pathEnd = pathVerts.size();
   if (pathEnd > pathBegin) {
-    MetalDrawOp pop{};
-    pop.kind = MetalDrawOp::PathMesh;
+    MetalPathOp pop{};
     pop.pathStart = static_cast<std::uint32_t>(pathBegin);
     pop.pathCount = static_cast<std::uint32_t>(pathEnd - pathBegin);
     pop.blendMode = blendMode;
-    ops.push_back(pop);
+    opOrder.push_back(MetalOpRef{
+        .kind = MetalOpRef::Path,
+        .index = static_cast<std::uint32_t>(pathOps.size()),
+    });
+    pathOps.push_back(pop);
   }
 }
 

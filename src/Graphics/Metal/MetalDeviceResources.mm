@@ -420,23 +420,14 @@ void MetalDeviceResources::ensureGlyphVertexArenaCapacity(std::uint32_t byteCoun
   glyphVertexArenaCapacityBytes_[currentFrameIndex_] = newCap;
 }
 
-void MetalDeviceResources::uploadInstanceInstances(const std::vector<MetalDrawOp>& ops) {
-  NSUInteger rectLineInstanceCount = 0;
-  for (const MetalDrawOp& op : ops) {
-    if (op.kind == MetalDrawOp::Rect || op.kind == MetalDrawOp::Line) {
-      ++rectLineInstanceCount;
-    }
-  }
-  ensureInstanceArenaCapacity(static_cast<std::uint32_t>(rectLineInstanceCount));
-  if (rectLineInstanceCount == 0) {
+void MetalDeviceResources::uploadRectOps(const std::vector<MetalRectOp>& ops) {
+  ensureInstanceArenaCapacity(static_cast<std::uint32_t>(ops.size()));
+  if (ops.empty()) {
     return;
   }
   auto* dst = static_cast<MetalRectInstance*>([instanceArenas_[currentFrameIndex_] contents]);
-  NSUInteger slot = 0;
-  for (const MetalDrawOp& op : ops) {
-    if (op.kind == MetalDrawOp::Rect || op.kind == MetalDrawOp::Line) {
-      dst[slot++] = op.rectInst;
-    }
+  for (std::size_t i = 0; i < ops.size(); ++i) {
+    dst[i] = ops[i].inst;
   }
 }
 
@@ -458,23 +449,14 @@ void MetalDeviceResources::uploadGlyphVertices(const std::vector<MetalGlyphVerte
   std::memcpy([glyphVertexArenas_[currentFrameIndex_] contents], verts.data(), bytes);
 }
 
-void MetalDeviceResources::uploadImageInstances(const std::vector<MetalDrawOp>& ops) {
-  NSUInteger imageCount = 0;
-  for (const MetalDrawOp& op : ops) {
-    if (op.kind == MetalDrawOp::Image) {
-      ++imageCount;
-    }
-  }
-  ensureImageInstanceArenaCapacity(static_cast<std::uint32_t>(imageCount));
-  if (imageCount == 0) {
+void MetalDeviceResources::uploadImageOps(const std::vector<MetalImageOp>& ops) {
+  ensureImageInstanceArenaCapacity(static_cast<std::uint32_t>(ops.size()));
+  if (ops.empty()) {
     return;
   }
   auto* dst = static_cast<MetalImageInstance*>([imageInstanceArenas_[currentFrameIndex_] contents]);
-  NSUInteger slot = 0;
-  for (const MetalDrawOp& op : ops) {
-    if (op.kind == MetalDrawOp::Image) {
-      dst[slot++] = op.imageInst;
-    }
+  for (std::size_t i = 0; i < ops.size(); ++i) {
+    dst[i] = ops[i].inst;
   }
 }
 

@@ -24,15 +24,7 @@ struct RenderChildLayerCmd {
 };
 
 struct ReplayOpBatch {
-  std::uint32_t opStart = 0;
-  std::uint32_t opCount = 0;
-  std::uint32_t pathStart = 0;
-  std::uint32_t pathCount = 0;
-  std::uint32_t glyphStart = 0;
-  std::uint32_t glyphCount = 0;
-  bool hasPathOps = false;
-  bool hasGlyphOps = false;
-  bool hasImageOps = false;
+  MetalRecorderSlice slice{};
 };
 
 using LayerReplayStep = std::variant<ReplayOpBatch, RenderChildLayerCmd>;
@@ -209,46 +201,39 @@ struct LayerCacheEntry {
   std::vector<LayerReplayStep> steps{};
 };
 
-bool flushRecordedBatch(Canvas& canvas, LayerCacheEntry& entry, std::uint32_t& lastOp, std::uint32_t& lastPath,
-                        std::uint32_t& lastGlyph) {
-  std::uint32_t const opEnd = static_cast<std::uint32_t>(entry.recorded.ops.size());
-  std::uint32_t const pathEnd = static_cast<std::uint32_t>(entry.recorded.pathVerts.size());
-  std::uint32_t const glyphEnd = static_cast<std::uint32_t>(entry.recorded.glyphVerts.size());
-  if (opEnd == lastOp && pathEnd == lastPath && glyphEnd == lastGlyph) {
+bool flushRecordedBatch(Canvas& canvas, LayerCacheEntry& entry, MetalRecorderSlice& lastSlice) {
+  MetalRecorderSlice slice{
+      .orderStart = lastSlice.orderStart + lastSlice.orderCount,
+      .orderCount = static_cast<std::uint32_t>(entry.recorded.opOrder.size()) -
+                    (lastSlice.orderStart + lastSlice.orderCount),
+      .rectStart = lastSlice.rectStart + lastSlice.rectCount,
+      .rectCount = static_cast<std::uint32_t>(entry.recorded.rectOps.size()) -
+                   (lastSlice.rectStart + lastSlice.rectCount),
+      .imageStart = lastSlice.imageStart + lastSlice.imageCount,
+      .imageCount = static_cast<std::uint32_t>(entry.recorded.imageOps.size()) -
+                    (lastSlice.imageStart + lastSlice.imageCount),
+      .pathOpStart = lastSlice.pathOpStart + lastSlice.pathOpCount,
+      .pathOpCount = static_cast<std::uint32_t>(entry.recorded.pathOps.size()) -
+                     (lastSlice.pathOpStart + lastSlice.pathOpCount),
+      .glyphOpStart = lastSlice.glyphOpStart + lastSlice.glyphOpCount,
+      .glyphOpCount = static_cast<std::uint32_t>(entry.recorded.glyphOps.size()) -
+                      (lastSlice.glyphOpStart + lastSlice.glyphOpCount),
+      .pathVertexStart = lastSlice.pathVertexStart + lastSlice.pathVertexCount,
+      .pathVertexCount = static_cast<std::uint32_t>(entry.recorded.pathVerts.size()) -
+                         (lastSlice.pathVertexStart + lastSlice.pathVertexCount),
+      .glyphVertexStart = lastSlice.glyphVertexStart + lastSlice.glyphVertexCount,
+      .glyphVertexCount = static_cast<std::uint32_t>(entry.recorded.glyphVerts.size()) -
+                          (lastSlice.glyphVertexStart + lastSlice.glyphVertexCount),
+  };
+  if (slice.orderCount == 0 && slice.rectCount == 0 && slice.imageCount == 0 && slice.pathOpCount == 0 &&
+      slice.glyphOpCount == 0 && slice.pathVertexCount == 0 && slice.glyphVertexCount == 0) {
     return false;
   }
 
-  ReplayOpBatch batch{
-      .opStart = lastOp,
-      .opCount = opEnd - lastOp,
-      .pathStart = lastPath,
-      .pathCount = pathEnd - lastPath,
-      .glyphStart = lastGlyph,
-      .glyphCount = glyphEnd - lastGlyph,
-  };
-  for (std::uint32_t i = batch.opStart; i < opEnd; ++i) {
-    switch (entry.recorded.ops[static_cast<std::size_t>(i)].kind) {
-    case MetalDrawOp::PathMesh:
-      batch.hasPathOps = true;
-      break;
-    case MetalDrawOp::GlyphMesh:
-      batch.hasGlyphOps = true;
-      break;
-    case MetalDrawOp::Image:
-      batch.hasImageOps = true;
-      break;
-    case MetalDrawOp::Rect:
-    case MetalDrawOp::Line:
-      break;
-    }
-  }
+  ReplayOpBatch batch{.slice = slice};
   entry.steps.emplace_back(batch);
-  replayRecordedOpsForCanvas(&canvas, entry.recorded, batch.opStart, batch.opCount, batch.pathStart,
-                             batch.pathCount, batch.glyphStart, batch.glyphCount, batch.hasPathOps,
-                             batch.hasGlyphOps, batch.hasImageOps);
-  lastOp = opEnd;
-  lastPath = pathEnd;
-  lastGlyph = glyphEnd;
+  replayRecordedOpsForCanvas(&canvas, entry.recorded, batch.slice);
+  lastSlice = slice;
   return true;
 }
 
@@ -337,9 +322,7 @@ void SceneRenderer::renderLayer(LayerNode const& layer, SceneGraph const& graph,
     if (it != impl_->layerCache_.end() && it->second.epoch == epoch) {
       for (LayerReplayStep const& step : it->second.steps) {
         if (auto const* batch = std::get_if<ReplayOpBatch>(&step)) {
-          replayRecordedOpsForCanvas(&canvas, it->second.recorded, batch->opStart, batch->opCount,
-                                     batch->pathStart, batch->pathCount, batch->glyphStart, batch->glyphCount,
-                                     batch->hasPathOps, batch->hasGlyphOps, batch->hasImageOps);
+          replayRecordedOpsForCanvas(&canvas, it->second.recorded, batch->slice);
         } else if (auto const* child = std::get_if<RenderChildLayerCmd>(&step)) {
           renderNode(child->child, graph, canvas, true);
         }
@@ -355,16 +338,14 @@ void SceneRenderer::renderLayer(LayerNode const& layer, SceneGraph const& graph,
   MetalRecordingCanvas recorder(canvas);
   bool const captureSupported = allowLayerCache && beginRecordedOpsCaptureForCanvas(&canvas, &cacheEntry.recorded);
   bool captureActive = captureSupported;
-  std::uint32_t lastOp = 0;
-  std::uint32_t lastPath = 0;
-  std::uint32_t lastGlyph = 0;
+  MetalRecorderSlice lastSlice{};
 
   for (NodeId childId : layer.children) {
     if (graph.node<LayerNode>(childId)) {
       if (captureActive) {
         endRecordedOpsCaptureForCanvas(&canvas);
         captureActive = false;
-        flushRecordedBatch(canvas, cacheEntry, lastOp, lastPath, lastGlyph);
+        flushRecordedBatch(canvas, cacheEntry, lastSlice);
       }
       cacheEntry.steps.emplace_back(RenderChildLayerCmd{.child = childId});
       renderNode(childId, graph, canvas, true);
@@ -381,7 +362,7 @@ void SceneRenderer::renderLayer(LayerNode const& layer, SceneGraph const& graph,
 
   if (captureActive) {
     endRecordedOpsCaptureForCanvas(&canvas);
-    flushRecordedBatch(canvas, cacheEntry, lastOp, lastPath, lastGlyph);
+    flushRecordedBatch(canvas, cacheEntry, lastSlice);
   }
 
   if (captureSupported && recorder.cacheable()) {

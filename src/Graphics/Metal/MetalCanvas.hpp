@@ -10,6 +10,7 @@ namespace flux {
 class TextSystem;
 class Window;
 struct MetalFrameRecorder;
+struct MetalRecorderSlice;
 
 /// Creates the Metal-backed canvas for a window (macOS only).
 std::unique_ptr<Canvas> createMetalCanvas(Window* window, void* caMetalLayer, unsigned int handle,
@@ -31,10 +32,7 @@ bool beginRecordedOpsCaptureForCanvas(Canvas* canvas, MetalFrameRecorder* target
 void endRecordedOpsCaptureForCanvas(Canvas* canvas);
 
 /// Replays a slice of cached Metal draw data into the current live frame.
-void replayRecordedOpsForCanvas(Canvas* canvas, MetalFrameRecorder const& recorded, std::uint32_t opStart,
-                                std::uint32_t opCount, std::uint32_t pathStart, std::uint32_t pathCount,
-                                std::uint32_t glyphStart, std::uint32_t glyphCount, bool hasPathOps,
-                                bool hasGlyphOps, bool hasImageOps);
+void replayRecordedOpsForCanvas(Canvas* canvas, MetalFrameRecorder const& recorded, MetalRecorderSlice const& slice);
 
 /// Requests a CPU readback of the next presented Metal frame.
 bool requestNextFrameCaptureForCanvas(Canvas* canvas);

@@ -44,22 +44,82 @@ struct MetalImageInstance {
 
 static_assert(std::is_trivially_copyable_v<MetalImageInstance>);
 
-struct MetalDrawOp {
-  enum Kind : std::uint8_t { Rect, Line, PathMesh, GlyphMesh, Image } kind = Rect;
-  union {
-    MetalRectInstance rectInst;
-    MetalImageInstance imageInst;
-  };
-  std::uint32_t pathStart = 0;
-  std::uint32_t pathCount = 0;
-  std::uint32_t glyphStart = 0;
-  std::uint32_t glyphVertexCount = 0;
-  /// Blend state for this draw (fixed-function blend in the PSO).
+struct MetalRectOp {
+  MetalRectInstance inst{};
   BlendMode blendMode = BlendMode::Normal;
-  /// Valid when `kind == Image` — `id<MTLTexture>` retained per op (`__bridge_retained`); released in `MetalFrameRecorder::clear`.
+  bool isLine = false;
+  bool scissorValid = false;
+  std::uint32_t scissorX = 0;
+  std::uint32_t scissorY = 0;
+  std::uint32_t scissorW = 0;
+  std::uint32_t scissorH = 0;
+};
+
+static_assert(std::is_trivially_copyable_v<MetalRectOp>);
+
+struct MetalImageOp {
+  MetalImageInstance inst{};
+  BlendMode blendMode = BlendMode::Normal;
   void* texture = nullptr;
   bool repeatSampler = false;
-  /// GPU scissor for this draw (physical pixels). If `false`, use full drawable in `present()`.
+  bool scissorValid = false;
+  std::uint32_t scissorX = 0;
+  std::uint32_t scissorY = 0;
+  std::uint32_t scissorW = 0;
+  std::uint32_t scissorH = 0;
+};
+
+struct MetalPathOp {
+  std::uint32_t pathStart = 0;
+  std::uint32_t pathCount = 0;
+  BlendMode blendMode = BlendMode::Normal;
+  bool scissorValid = false;
+  std::uint32_t scissorX = 0;
+  std::uint32_t scissorY = 0;
+  std::uint32_t scissorW = 0;
+  std::uint32_t scissorH = 0;
+};
+
+struct MetalGlyphOp {
+  std::uint32_t glyphStart = 0;
+  std::uint32_t glyphVertexCount = 0;
+  BlendMode blendMode = BlendMode::Normal;
+  bool scissorValid = false;
+  std::uint32_t scissorX = 0;
+  std::uint32_t scissorY = 0;
+  std::uint32_t scissorW = 0;
+  std::uint32_t scissorH = 0;
+};
+
+struct MetalOpRef {
+  enum Kind : std::uint8_t { Rect, Image, Path, Glyph } kind = Rect;
+  std::uint32_t index = 0;
+};
+
+struct MetalRecorderSlice {
+  std::uint32_t orderStart = 0;
+  std::uint32_t orderCount = 0;
+  std::uint32_t rectStart = 0;
+  std::uint32_t rectCount = 0;
+  std::uint32_t imageStart = 0;
+  std::uint32_t imageCount = 0;
+  std::uint32_t pathOpStart = 0;
+  std::uint32_t pathOpCount = 0;
+  std::uint32_t glyphOpStart = 0;
+  std::uint32_t glyphOpCount = 0;
+  std::uint32_t pathVertexStart = 0;
+  std::uint32_t pathVertexCount = 0;
+  std::uint32_t glyphVertexStart = 0;
+  std::uint32_t glyphVertexCount = 0;
+};
+
+static_assert(std::is_trivially_copyable_v<MetalImageOp>);
+static_assert(std::is_trivially_copyable_v<MetalPathOp>);
+static_assert(std::is_trivially_copyable_v<MetalGlyphOp>);
+static_assert(std::is_trivially_copyable_v<MetalOpRef>);
+static_assert(std::is_trivially_copyable_v<MetalRecorderSlice>);
+
+struct MetalScissorState {
   bool scissorValid = false;
   std::uint32_t scissorX = 0;
   std::uint32_t scissorY = 0;

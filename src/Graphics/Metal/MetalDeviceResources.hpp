@@ -46,9 +46,8 @@ public:
   id<MTLBuffer> quadBuffer() const { return quadBuffer_; }
   void advanceFrame();
 
-  /// Pack rect/line instance data for this frame (submission order preserved).
-  void uploadInstanceInstances(const std::vector<MetalDrawOp>& ops);
-  void uploadImageInstances(const std::vector<MetalDrawOp>& ops);
+  void uploadRectOps(const std::vector<MetalRectOp>& ops);
+  void uploadImageOps(const std::vector<MetalImageOp>& ops);
   /// Copy path vertices into the path arena (no-op if empty).
   void uploadPathVertices(const std::vector<PathVertex>& pathVerts);
 

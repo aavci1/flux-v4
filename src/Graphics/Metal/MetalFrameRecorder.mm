@@ -9,10 +9,18 @@ MetalFrameRecorder::~MetalFrameRecorder() {
 }
 
 MetalFrameRecorder::MetalFrameRecorder(MetalFrameRecorder&& other) noexcept
-    : ops(std::move(other.ops)),
+    : rectOps(std::move(other.rectOps)),
+      imageOps(std::move(other.imageOps)),
+      pathOps(std::move(other.pathOps)),
+      glyphOps(std::move(other.glyphOps)),
+      opOrder(std::move(other.opOrder)),
       pathVerts(std::move(other.pathVerts)),
       glyphVerts(std::move(other.glyphVerts)) {
-  other.ops.clear();
+  other.rectOps.clear();
+  other.imageOps.clear();
+  other.pathOps.clear();
+  other.glyphOps.clear();
+  other.opOrder.clear();
   other.pathVerts.clear();
   other.glyphVerts.clear();
 }
@@ -22,23 +30,35 @@ MetalFrameRecorder& MetalFrameRecorder::operator=(MetalFrameRecorder&& other) no
     return *this;
   }
   clear();
-  ops = std::move(other.ops);
+  rectOps = std::move(other.rectOps);
+  imageOps = std::move(other.imageOps);
+  pathOps = std::move(other.pathOps);
+  glyphOps = std::move(other.glyphOps);
+  opOrder = std::move(other.opOrder);
   pathVerts = std::move(other.pathVerts);
   glyphVerts = std::move(other.glyphVerts);
-  other.ops.clear();
+  other.rectOps.clear();
+  other.imageOps.clear();
+  other.pathOps.clear();
+  other.glyphOps.clear();
+  other.opOrder.clear();
   other.pathVerts.clear();
   other.glyphVerts.clear();
   return *this;
 }
 
 void MetalFrameRecorder::clear() {
-  for (auto& op : ops) {
-    if (op.kind == MetalDrawOp::Image && op.texture) {
+  for (auto& op : imageOps) {
+    if (op.texture) {
       (void)(__bridge_transfer id<MTLTexture>)op.texture;
-      op.texture = nullptr;
     }
+    op.texture = nullptr;
   }
-  ops.clear();
+  rectOps.clear();
+  imageOps.clear();
+  pathOps.clear();
+  glyphOps.clear();
+  opOrder.clear();
   pathVerts.clear();
   glyphVerts.clear();
 }
