@@ -334,4 +334,17 @@ if(FLUX_BUILD_BENCHMARKS)
   )
   target_link_libraries(rebuild_bench PRIVATE flux)
   set_target_properties(rebuild_bench PROPERTIES CXX_STANDARD 23)
+
+  if(APPLE)
+    add_executable(paint_bench
+      bench/paint/bench.mm
+    )
+    target_include_directories(paint_bench PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/include
+      ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_link_libraries(paint_bench PRIVATE flux)
+    set_target_properties(paint_bench PROPERTIES CXX_STANDARD 23)
+    target_compile_options(paint_bench PRIVATE $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>)
+  endif()
 endif()

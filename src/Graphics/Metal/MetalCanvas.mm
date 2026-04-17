@@ -454,6 +454,7 @@ public:
     [enc endEncoding];
 
     if (syncPresent_) {
+      lastSubmittedCmdBuf_ = cmdBuf_;
       [cmdBuf_ commit];
       [cmdBuf_ waitUntilScheduled];
       [drawable_ present];
@@ -463,6 +464,7 @@ public:
       __block dispatch_semaphore_t sem = frameSem_;
       [cmdBuf_ addCompletedHandler:^(id<MTLCommandBuffer> /*cb*/) { dispatch_semaphore_signal(sem); }];
       [cmdBuf_ presentDrawable:drawable_];
+      lastSubmittedCmdBuf_ = cmdBuf_;
       [cmdBuf_ commit];
     }
 
@@ -991,6 +993,7 @@ private:
 
   dispatch_semaphore_t frameSem_{nullptr};
   id<MTLCommandBuffer> cmdBuf_{nil};
+  id<MTLCommandBuffer> lastSubmittedCmdBuf_{nil};
   id<CAMetalDrawable> drawable_{nil};
   bool inFrame_{false};
   bool syncPresent_{false};
@@ -1105,6 +1108,14 @@ private:
     op.repeatSampler = repeat;
     pushOp(std::move(op));
   }
+
+public:
+  void waitForLastPresentComplete() {
+    if (!lastSubmittedCmdBuf_) {
+      return;
+    }
+    [lastSubmittedCmdBuf_ waitUntilCompleted];
+  }
 };
 
 std::unique_ptr<Canvas> createMetalCanvas(Window* window, void* caMetalLayer, unsigned int handle,
@@ -1118,6 +1129,15 @@ void setSyncPresentForCanvas(Canvas* canvas, bool sync) {
   }
   if (auto* mc = dynamic_cast<MetalCanvas*>(canvas)) {
     mc->setSyncPresent(sync);
+  }
+}
+
+void waitForCanvasLastPresentComplete(Canvas* canvas) {
+  if (!canvas) {
+    return;
+  }
+  if (auto* mc = dynamic_cast<MetalCanvas*>(canvas)) {
+    mc->waitForLastPresentComplete();
   }
 }
 

@@ -17,4 +17,8 @@ std::unique_ptr<Canvas> createMetalCanvas(Window* window, void* caMetalLayer, un
 /// No-op if `canvas` is not a Metal-backed canvas.
 void setSyncPresentForCanvas(Canvas* canvas, bool sync);
 
+/// Waits for the most recently submitted Metal frame for this canvas to complete on the GPU.
+/// No-op if `canvas` is not a Metal-backed canvas or no frame has been submitted yet.
+void waitForCanvasLastPresentComplete(Canvas* canvas);
+
 } // namespace flux
