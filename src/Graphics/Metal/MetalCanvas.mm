@@ -272,6 +272,7 @@ public:
   void updateDpiScale(float scaleX, float scaleY) override {
     dpiScaleX_ = scaleX;
     dpiScaleY_ = scaleY;
+    dpiScale_ = std::min(dpiScaleX_, dpiScaleY_);
   }
 
   void beginFrame() override {
@@ -306,6 +307,7 @@ public:
     }
     dpiScaleX_ = static_cast<float>(cs);
     dpiScaleY_ = static_cast<float>(cs);
+    dpiScale_ = std::min(dpiScaleX_, dpiScaleY_);
     if (logicalW_ <= 0 || logicalH_ <= 0) {
       logicalW_ = static_cast<int>(std::lround(static_cast<double>(ds.width) / static_cast<double>(cs)));
       logicalH_ = static_cast<int>(std::lround(static_cast<double>(ds.height) / static_cast<double>(cs)));
@@ -627,15 +629,21 @@ public:
     }
 
     float rotationRad = 0.f;
-    float tx = 0.f;
-    float ty = 0.f;
-    bool const decomposed = tryDecomposeRotationTranslation(M, &rotationRad, &tx, &ty);
-    Rect const mapped = boundsOfTransformedRect(drawR, M);
-    if (decomposed) {
+    Rect mapped{};
+    if (M.isTranslationOnly()) {
+      mapped = Rect::sharp(drawR.x + M.m[6], drawR.y + M.m[7], drawR.width, drawR.height);
       rotationRad = 0.f;
+    } else {
+      float tx = 0.f;
+      float ty = 0.f;
+      bool const decomposed = tryDecomposeRotationTranslation(M, &rotationRad, &tx, &ty);
+      mapped = boundsOfTransformedRect(drawR, M);
+      if (decomposed) {
+        rotationRad = 0.f;
+      }
     }
 
-    const float s = std::min(dpiScaleX_, dpiScaleY_);
+    const float s = dpiScale_;
     CornerRadius cr{};
     cr.topLeft = crEffective.topLeft * s;
     cr.topRight = crEffective.topRight * s;
@@ -678,8 +686,15 @@ public:
         return;
       }
     }
-    Point ta = currentState().transform.apply(a);
-    Point tb = currentState().transform.apply(b);
+    Point ta{};
+    Point tb{};
+    if (currentState().transform.isTranslationOnly()) {
+      ta = Point{a.x + currentState().transform.m[6], a.y + currentState().transform.m[7]};
+      tb = Point{b.x + currentState().transform.m[6], b.y + currentState().transform.m[7]};
+    } else {
+      ta = currentState().transform.apply(a);
+      tb = currentState().transform.apply(b);
+    }
     const float dx = tb.x - ta.x;
     const float dy = tb.y - ta.y;
     const float len = std::sqrt(dx * dx + dy * dy);
@@ -704,7 +719,7 @@ public:
     op.rectInst.fillColor = simd_make_float4(0.f, 0.f, 0.f, 0.f);
     op.rectInst.strokeColor = toSimd4(stroke);
     op.rectInst.strokeWidthOpacity =
-        simd_make_float2(ss.width * std::min(dpiScaleX_, dpiScaleY_), paintOpacity);
+        simd_make_float2(ss.width * dpiScale_, paintOpacity);
     op.rectInst.viewport = simd_make_float2(frameDrawableW_, frameDrawableH_);
     op.rectInst.rotationPad = simd_make_float4(0.f, 0.f, 0.f, 0.f);
     op.rectInst.shadowColor = simd_make_float4(0.f, 0.f, 0.f, 0.f);
@@ -831,12 +846,10 @@ public:
       }
     }
 
-    float rotationRad = 0.f;
-    float tx = 0.f;
-    float ty = 0.f;
     Rect mapped{};
-    if (tryDecomposeRotationTranslation(M, &rotationRad, &tx, &ty)) {
-      mapped = Rect::sharp(dst.x + tx, dst.y + ty, dst.width, dst.height);
+    float rotationRad = 0.f;
+    if (M.isTranslationOnly()) {
+      mapped = Rect::sharp(dst.x + M.m[6], dst.y + M.m[7], dst.width, dst.height);
     } else {
       if (currentState().clip.has_value()) {
         Rect const clipped = intersectRects(dst, *currentState().clip);
@@ -849,7 +862,7 @@ public:
       }
     }
 
-    const float s = std::min(dpiScaleX_, dpiScaleY_);
+    const float s = dpiScale_;
     CornerRadius cr{};
     cr.topLeft = corners.topLeft * s;
     cr.topRight = corners.topRight * s;
@@ -897,12 +910,10 @@ public:
       }
     }
 
-    float rotationRad = 0.f;
-    float tx = 0.f;
-    float ty = 0.f;
     Rect mapped{};
-    if (tryDecomposeRotationTranslation(M, &rotationRad, &tx, &ty)) {
-      mapped = Rect::sharp(dst.x + tx, dst.y + ty, dst.width, dst.height);
+    float rotationRad = 0.f;
+    if (M.isTranslationOnly()) {
+      mapped = Rect::sharp(dst.x + M.m[6], dst.y + M.m[7], dst.width, dst.height);
     } else {
       if (currentState().clip.has_value()) {
         Rect const clipped = intersectRects(dst, *currentState().clip);
@@ -915,7 +926,7 @@ public:
       }
     }
 
-    const float s = std::min(dpiScaleX_, dpiScaleY_);
+    const float s = dpiScale_;
     CornerRadius cr{};
     cr.topLeft = corners.topLeft * s;
     cr.topRight = corners.topRight * s;
@@ -1041,6 +1052,7 @@ private:
   int logicalH_{0};
   float dpiScaleX_{1.f};
   float dpiScaleY_{1.f};
+  float dpiScale_{1.f};
   CGSize frameDrawableSize_{};
   float frameDrawableW_{0.f};
   float frameDrawableH_{0.f};

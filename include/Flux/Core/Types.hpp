@@ -271,6 +271,12 @@ struct Mat3 {
     return {x, y};
   }
 
+  bool isTranslationOnly(float eps = 1e-6f) const {
+    return std::abs(m[0] - 1.f) <= eps && std::abs(m[1]) <= eps && std::abs(m[2]) <= eps &&
+           std::abs(m[3]) <= eps && std::abs(m[4] - 1.f) <= eps && std::abs(m[5]) <= eps &&
+           std::abs(m[8] - 1.f) <= eps;
+  }
+
   /// Full 3×3 inverse. Returns `identity()` if the matrix is singular (|det| below epsilon).
   Mat3 inverse() const {
     constexpr float kEps = 1e-12f;
