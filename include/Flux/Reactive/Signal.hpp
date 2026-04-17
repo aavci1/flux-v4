@@ -34,6 +34,7 @@ public:
   T const& get() const;
 
   void set(T value);
+  void setSilently(T value);
 
   void notifyChanged();
 
@@ -69,6 +70,16 @@ void Signal<T>::set(T value) {
   }
   value_ = std::move(value);
   notifyObservers();
+}
+
+template<typename T>
+void Signal<T>::setSilently(T value) {
+  if constexpr (detail::equalityComparableV<T>) {
+    if (value == value_) {
+      return;
+    }
+  }
+  value_ = std::move(value);
 }
 
 template<typename T>

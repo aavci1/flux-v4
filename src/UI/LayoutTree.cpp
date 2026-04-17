@@ -195,19 +195,26 @@ Rect LayoutTree::unionSubtreeWorldBounds(LayoutNodeId nodeId) const {
 }
 
 std::optional<Rect> LayoutTree::rectForKey(ComponentKey const& key) const {
+  if (LayoutNode const* n = nodeForKey(key)) {
+    return n->worldBounds;
+  }
+  return std::nullopt;
+}
+
+LayoutNode const* LayoutTree::nodeForKey(ComponentKey const& key) const {
   auto const it = firstNodeForKey_.find(key);
   if (it != firstNodeForKey_.end()) {
     if (LayoutNode const* n = get(it->second)) {
-      return n->worldBounds;
+      return n;
     }
   }
   auto const retained = retainedNodeForKey_.find(key);
   if (retained != retainedNodeForKey_.end()) {
     if (LayoutNode const* n = get(retained->second)) {
-      return n->worldBounds;
+      return n;
     }
   }
-  return std::nullopt;
+  return nullptr;
 }
 
 LayoutNode const* LayoutTree::retainedNodeForKey(ComponentKey const& key) const {

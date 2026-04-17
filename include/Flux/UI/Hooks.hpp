@@ -67,6 +67,7 @@ struct State {
   operator T const&() const { return signal->get(); }
   /// Mutates through the stored pointer — safe to call on a const `State` (e.g. in a lambda capture).
   void operator=(T value) const { signal->set(std::move(value)); }
+  void setSilently(T value) const { signal->setSilently(std::move(value)); }
 };
 
 /// Copyable handle to the persistent `Animation<T>` for this hook slot.
