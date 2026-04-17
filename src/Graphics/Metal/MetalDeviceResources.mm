@@ -355,58 +355,69 @@ MetalDeviceResources::MetalDeviceResources(CAMetalLayer* layer) : layer_(layer) 
 
 MetalDeviceResources::~MetalDeviceResources() = default;
 
+void MetalDeviceResources::advanceFrame() {
+  currentFrameIndex_ = (currentFrameIndex_ + 1) % kFramesInFlight;
+}
+
 void MetalDeviceResources::ensureInstanceArenaCapacity(std::uint32_t instanceCount) {
   if (instanceCount == 0) {
     return;
   }
-  if (instanceCount <= instanceArenaCapacityInstanceCount_) {
+  if (instanceCount <= instanceArenaCapacityInstanceCounts_[currentFrameIndex_]) {
     return;
   }
-  const std::uint32_t newCap = instanceArenaCapacityInstanceCount_ == 0
+  const std::uint32_t newCap = instanceArenaCapacityInstanceCounts_[currentFrameIndex_] == 0
                                    ? instanceCount
-                                   : std::max(instanceCount, instanceArenaCapacityInstanceCount_ * 2);
-  instanceArena_ = [device_ newBufferWithLength:newCap * sizeof(MetalRectInstance) options:MTLResourceStorageModeShared];
-  instanceArenaCapacityInstanceCount_ = newCap;
+                                   : std::max(instanceCount, instanceArenaCapacityInstanceCounts_[currentFrameIndex_] * 2);
+  instanceArenas_[currentFrameIndex_] =
+      [device_ newBufferWithLength:newCap * sizeof(MetalRectInstance) options:MTLResourceStorageModeShared];
+  instanceArenaCapacityInstanceCounts_[currentFrameIndex_] = newCap;
 }
 
 void MetalDeviceResources::ensureImageInstanceArenaCapacity(std::uint32_t instanceCount) {
   if (instanceCount == 0) {
     return;
   }
-  if (instanceCount <= imageInstanceArenaCapacity_) {
+  if (instanceCount <= imageInstanceArenaCapacities_[currentFrameIndex_]) {
     return;
   }
   const std::uint32_t newCap =
-      imageInstanceArenaCapacity_ == 0 ? instanceCount : std::max(instanceCount, imageInstanceArenaCapacity_ * 2);
-  imageInstanceArena_ =
+      imageInstanceArenaCapacities_[currentFrameIndex_] == 0
+          ? instanceCount
+          : std::max(instanceCount, imageInstanceArenaCapacities_[currentFrameIndex_] * 2);
+  imageInstanceArenas_[currentFrameIndex_] =
       [device_ newBufferWithLength:newCap * sizeof(MetalImageInstance) options:MTLResourceStorageModeShared];
-  imageInstanceArenaCapacity_ = newCap;
+  imageInstanceArenaCapacities_[currentFrameIndex_] = newCap;
 }
 
 void MetalDeviceResources::ensurePathVertexArenaCapacity(std::uint32_t byteCount) {
   if (byteCount == 0) {
     return;
   }
-  if (byteCount <= pathVertexArenaCapacityBytes_) {
+  if (byteCount <= pathVertexArenaCapacityBytes_[currentFrameIndex_]) {
     return;
   }
   const std::uint32_t newCap =
-      pathVertexArenaCapacityBytes_ == 0 ? byteCount : std::max(byteCount, pathVertexArenaCapacityBytes_ * 2);
-  pathVertexArena_ = [device_ newBufferWithLength:newCap options:MTLResourceStorageModeShared];
-  pathVertexArenaCapacityBytes_ = newCap;
+      pathVertexArenaCapacityBytes_[currentFrameIndex_] == 0
+          ? byteCount
+          : std::max(byteCount, pathVertexArenaCapacityBytes_[currentFrameIndex_] * 2);
+  pathVertexArenas_[currentFrameIndex_] = [device_ newBufferWithLength:newCap options:MTLResourceStorageModeShared];
+  pathVertexArenaCapacityBytes_[currentFrameIndex_] = newCap;
 }
 
 void MetalDeviceResources::ensureGlyphVertexArenaCapacity(std::uint32_t byteCount) {
   if (byteCount == 0) {
     return;
   }
-  if (byteCount <= glyphVertexArenaCapacityBytes_) {
+  if (byteCount <= glyphVertexArenaCapacityBytes_[currentFrameIndex_]) {
     return;
   }
   const std::uint32_t newCap =
-      glyphVertexArenaCapacityBytes_ == 0 ? byteCount : std::max(byteCount, glyphVertexArenaCapacityBytes_ * 2);
-  glyphVertexArena_ = [device_ newBufferWithLength:newCap options:MTLResourceStorageModeShared];
-  glyphVertexArenaCapacityBytes_ = newCap;
+      glyphVertexArenaCapacityBytes_[currentFrameIndex_] == 0
+          ? byteCount
+          : std::max(byteCount, glyphVertexArenaCapacityBytes_[currentFrameIndex_] * 2);
+  glyphVertexArenas_[currentFrameIndex_] = [device_ newBufferWithLength:newCap options:MTLResourceStorageModeShared];
+  glyphVertexArenaCapacityBytes_[currentFrameIndex_] = newCap;
 }
 
 void MetalDeviceResources::uploadInstanceInstances(const std::vector<MetalDrawOp>& ops) {
@@ -420,7 +431,7 @@ void MetalDeviceResources::uploadInstanceInstances(const std::vector<MetalDrawOp
   if (rectLineInstanceCount == 0) {
     return;
   }
-  auto* dst = static_cast<MetalRectInstance*>([instanceArena_ contents]);
+  auto* dst = static_cast<MetalRectInstance*>([instanceArenas_[currentFrameIndex_] contents]);
   NSUInteger slot = 0;
   for (const MetalDrawOp& op : ops) {
     if (op.kind == MetalDrawOp::Rect || op.kind == MetalDrawOp::Line) {
@@ -435,7 +446,7 @@ void MetalDeviceResources::uploadPathVertices(const std::vector<PathVertex>& pat
   if (pathVertBytes == 0) {
     return;
   }
-  std::memcpy([pathVertexArena_ contents], pathVerts.data(), pathVertBytes);
+  std::memcpy([pathVertexArenas_[currentFrameIndex_] contents], pathVerts.data(), pathVertBytes);
 }
 
 void MetalDeviceResources::uploadGlyphVertices(const std::vector<MetalGlyphVertex>& verts) {
@@ -444,7 +455,7 @@ void MetalDeviceResources::uploadGlyphVertices(const std::vector<MetalGlyphVerte
   if (bytes == 0) {
     return;
   }
-  std::memcpy([glyphVertexArena_ contents], verts.data(), bytes);
+  std::memcpy([glyphVertexArenas_[currentFrameIndex_] contents], verts.data(), bytes);
 }
 
 void MetalDeviceResources::uploadImageInstances(const std::vector<MetalDrawOp>& ops) {
@@ -458,7 +469,7 @@ void MetalDeviceResources::uploadImageInstances(const std::vector<MetalDrawOp>& 
   if (imageCount == 0) {
     return;
   }
-  auto* dst = static_cast<MetalImageInstance*>([imageInstanceArena_ contents]);
+  auto* dst = static_cast<MetalImageInstance*>([imageInstanceArenas_[currentFrameIndex_] contents]);
   NSUInteger slot = 0;
   for (const MetalDrawOp& op : ops) {
     if (op.kind == MetalDrawOp::Image) {

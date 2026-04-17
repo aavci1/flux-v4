@@ -6,6 +6,7 @@
 #include "Graphics/PathFlattener.hpp"
 
 #include <cstdint>
+#include <array>
 #include <unordered_map>
 #include <vector>
 
@@ -22,6 +23,8 @@ namespace flux {
  */
 class MetalDeviceResources {
 public:
+  static constexpr std::size_t kFramesInFlight = 3;
+
   explicit MetalDeviceResources(CAMetalLayer* layer);
   ~MetalDeviceResources();
 
@@ -41,6 +44,7 @@ public:
   id<MTLSamplerState> linearSampler() const { return linearSampler_; }
   id<MTLSamplerState> repeatSampler() const { return repeatSampler_; }
   id<MTLBuffer> quadBuffer() const { return quadBuffer_; }
+  void advanceFrame();
 
   /// Pack rect/line instance data for this frame (submission order preserved).
   void uploadInstanceInstances(const std::vector<MetalDrawOp>& ops);
@@ -50,10 +54,10 @@ public:
 
   void uploadGlyphVertices(const std::vector<MetalGlyphVertex>& verts);
 
-  id<MTLBuffer> instanceArenaBuffer() const { return instanceArena_; }
-  id<MTLBuffer> imageInstanceArenaBuffer() const { return imageInstanceArena_; }
-  id<MTLBuffer> pathVertexArenaBuffer() const { return pathVertexArena_; }
-  id<MTLBuffer> glyphVertexArenaBuffer() const { return glyphVertexArena_; }
+  id<MTLBuffer> instanceArenaBuffer() const { return instanceArenas_[currentFrameIndex_]; }
+  id<MTLBuffer> imageInstanceArenaBuffer() const { return imageInstanceArenas_[currentFrameIndex_]; }
+  id<MTLBuffer> pathVertexArenaBuffer() const { return pathVertexArenas_[currentFrameIndex_]; }
+  id<MTLBuffer> glyphVertexArenaBuffer() const { return glyphVertexArenas_[currentFrameIndex_]; }
 
 private:
   CAMetalLayer* layer_{nil};
@@ -69,14 +73,15 @@ private:
   id<MTLSamplerState> linearSampler_{nil};
   id<MTLSamplerState> repeatSampler_{nil};
 
-  id<MTLBuffer> instanceArena_{nil};
-  std::uint32_t instanceArenaCapacityInstanceCount_{0};
-  id<MTLBuffer> imageInstanceArena_{nil};
-  std::uint32_t imageInstanceArenaCapacity_{0};
-  id<MTLBuffer> pathVertexArena_{nil};
-  std::uint32_t pathVertexArenaCapacityBytes_{0};
-  id<MTLBuffer> glyphVertexArena_{nil};
-  std::uint32_t glyphVertexArenaCapacityBytes_{0};
+  std::array<id<MTLBuffer>, kFramesInFlight> instanceArenas_{};
+  std::array<std::uint32_t, kFramesInFlight> instanceArenaCapacityInstanceCounts_{};
+  std::array<id<MTLBuffer>, kFramesInFlight> imageInstanceArenas_{};
+  std::array<std::uint32_t, kFramesInFlight> imageInstanceArenaCapacities_{};
+  std::array<id<MTLBuffer>, kFramesInFlight> pathVertexArenas_{};
+  std::array<std::uint32_t, kFramesInFlight> pathVertexArenaCapacityBytes_{};
+  std::array<id<MTLBuffer>, kFramesInFlight> glyphVertexArenas_{};
+  std::array<std::uint32_t, kFramesInFlight> glyphVertexArenaCapacityBytes_{};
+  std::size_t currentFrameIndex_ = kFramesInFlight - 1;
 
   void ensureInstanceArenaCapacity(std::uint32_t instanceCount);
   void ensureImageInstanceArenaCapacity(std::uint32_t instanceCount);

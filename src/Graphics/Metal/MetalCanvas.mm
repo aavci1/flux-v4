@@ -279,6 +279,7 @@ public:
       updateClipScissor();
     }
     dispatch_semaphore_wait(frameSem_, DISPATCH_TIME_FOREVER);
+    metal_.advanceFrame();
     refreshFrameDrawableMetrics();
     drawable_ = [metal_.layer() nextDrawable];
     cmdBuf_ = [metal_.queue() commandBuffer];
