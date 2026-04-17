@@ -123,6 +123,7 @@ add_library(flux STATIC
   src/UI/LayoutRectCache.cpp
   src/UI/MeasureCache.cpp
   src/UI/SceneBuilder.cpp
+  src/UI/SceneGeometryIndex.cpp
   src/UI/ComponentKey.cpp
   src/UI/ComponentKeyUtil.cpp
   src/UI/Detail/LeafBounds.cpp
@@ -176,6 +177,7 @@ add_library(flux STATIC
   src/Scene/CustomTransformSceneNode.cpp
   src/Scene/SceneTree.cpp
   src/Scene/SceneTreeDump.cpp
+  src/Scene/SceneTreeInteraction.cpp
   src/Scene/SceneGraphBounds.cpp
   src/Scene/NodeStore.cpp
   src/Scene/SceneGraph.cpp

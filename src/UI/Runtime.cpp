@@ -4,6 +4,7 @@
 #include <Flux/Core/EventQueue.hpp>
 #include <Flux/Core/Window.hpp>
 #include <Flux/Core/Events.hpp>
+#include <Flux/Scene/SceneTree.hpp>
 #include <Flux/UI/StateStore.hpp>
 
 #include <cstdio>
@@ -95,7 +96,7 @@ EventMap const& Runtime::mainEventMap() const noexcept {
 }
 
 void Runtime::requestFocusInSubtree(ComponentKey const& subtreeKey) {
-  focus_.requestInSubtree(subtreeKey, mainEventMap());
+  focus_.requestInSubtree(subtreeKey, window_.sceneTree());
 }
 
 Rect Runtime::buildSlotRect() const {
@@ -143,19 +144,19 @@ std::optional<Rect> Runtime::layoutRectForCurrentComponent() const {
   if (!store) {
     return std::nullopt;
   }
-  return buildOrchestrator_.layoutRects().forCurrentComponent(*store);
+  return buildOrchestrator_.sceneGeometry().forCurrentComponent(*store);
 }
 
 std::optional<Rect> Runtime::layoutRectForKey(ComponentKey const& key) const {
-  return buildOrchestrator_.layoutRects().forKey(key);
+  return buildOrchestrator_.sceneGeometry().forKey(key);
 }
 
 std::optional<Rect> Runtime::layoutRectForTapAnchor() const {
-  return buildOrchestrator_.layoutRects().forTapAnchor(gesture_.pendingTapLeafKey());
+  return buildOrchestrator_.sceneGeometry().forTapAnchor(gesture_.pendingTapLeafKey());
 }
 
 std::optional<Rect> Runtime::layoutRectForLeafKeyPrefix(ComponentKey const& stableTargetKey) const {
-  return buildOrchestrator_.layoutRects().forLeafKeyPrefix(stableTargetKey);
+  return buildOrchestrator_.sceneGeometry().forLeafKeyPrefix(stableTargetKey);
 }
 
 std::optional<ComponentKey> Runtime::tapAnchorLeafKeySnapshot() const {
@@ -176,7 +177,7 @@ void Runtime::onOverlayPushed(OverlayEntry& entry) {
 }
 
 void Runtime::onOverlayRemoved(OverlayEntry const& entry) {
-  focus_.onOverlayRemoved(entry, shuttingDown_ ? nullptr : &buildOrchestrator_.mainEventMap());
+  focus_.onOverlayRemoved(entry, shuttingDown_ ? nullptr : &window_.sceneTree());
   hover_.onOverlayRemoved(entry.id, shuttingDown_);
 }
 

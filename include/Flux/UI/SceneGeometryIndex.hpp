@@ -12,27 +12,33 @@
 
 namespace flux {
 
+class StateStore;
+
 /// Assigned-frame geometry index for retained scene builds.
 class SceneGeometryIndex {
 public:
-  void clear() { rects_.clear(); }
+  void beginBuild() { building_.clear(); }
+  void finishBuild();
+  void clear();
 
   void record(ComponentKey const& key, Rect rect) {
     if (key.empty()) {
       return;
     }
-    rects_[key] = rect;
+    building_[key] = rect;
   }
 
-  [[nodiscard]] std::optional<Rect> rectForKey(ComponentKey const& key) const {
-    if (auto it = rects_.find(key); it != rects_.end()) {
-      return it->second;
-    }
-    return std::nullopt;
-  }
+  [[nodiscard]] std::optional<Rect> forCurrentComponent(StateStore const& store) const;
+  [[nodiscard]] std::optional<Rect> forKey(ComponentKey const& key) const;
+  [[nodiscard]] std::optional<Rect> forLeafKeyPrefix(ComponentKey const& stableTargetKey) const;
+  [[nodiscard]] std::optional<Rect> forTapAnchor(ComponentKey const& tapLeafKey) const;
+
+  [[nodiscard]] std::optional<Rect> rectForKey(ComponentKey const& key) const { return forKey(key); }
 
 private:
-  std::unordered_map<ComponentKey, Rect, ComponentKeyHash> rects_{};
+  std::unordered_map<ComponentKey, Rect, ComponentKeyHash> current_{};
+  std::unordered_map<ComponentKey, Rect, ComponentKeyHash> prev_{};
+  std::unordered_map<ComponentKey, Rect, ComponentKeyHash> building_{};
 };
 
 } // namespace flux

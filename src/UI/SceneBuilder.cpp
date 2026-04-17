@@ -358,11 +358,14 @@ std::unique_ptr<SceneNode> SceneBuilder::build(Element const& el, NodeId id,
                                                std::unique_ptr<SceneNode> existing,
                                                ComponentKey rootKey) {
   if (geometryIndex_) {
-    geometryIndex_->clear();
+    geometryIndex_->beginBuild();
   }
   pushFrame(constraints, LayoutHints{}, Point{}, std::move(rootKey));
   std::unique_ptr<SceneNode> node = buildOrReuse(el, id, std::move(existing));
   popFrame();
+  if (geometryIndex_) {
+    geometryIndex_->finishBuild();
+  }
   return node;
 }
 

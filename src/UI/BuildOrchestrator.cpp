@@ -201,7 +201,7 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
   StateStore::setCurrent(nullptr);
   stateStore_.endRebuild();
 
-  focus_.validateAfterRebuild(eventMap_);
+  focus_.validateAfterRebuild(window_.sceneTree());
 
   window_.overlayManager().rebuild(sz, runtime);
 
@@ -230,6 +230,14 @@ LayoutRectCache& BuildOrchestrator::layoutRects() noexcept {
 
 LayoutRectCache const& BuildOrchestrator::layoutRects() const noexcept {
   return layoutRects_;
+}
+
+SceneGeometryIndex& BuildOrchestrator::sceneGeometry() noexcept {
+  return sceneGeometry_;
+}
+
+SceneGeometryIndex const& BuildOrchestrator::sceneGeometry() const noexcept {
+  return sceneGeometry_;
 }
 
 LayoutTree const& BuildOrchestrator::layoutTree() const noexcept {

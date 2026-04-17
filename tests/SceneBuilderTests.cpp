@@ -7,6 +7,7 @@
 #include <Flux/Scene/ModifierSceneNode.hpp>
 #include <Flux/Scene/Renderer.hpp>
 #include <Flux/Scene/SceneTree.hpp>
+#include <Flux/Scene/SceneTreeInteraction.hpp>
 #include <Flux/UI/Environment.hpp>
 #include <Flux/UI/LayoutContext.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
@@ -23,6 +24,7 @@
 
 #include <memory>
 #include <string_view>
+#include <typeindex>
 
 namespace {
 
@@ -269,6 +271,58 @@ TEST_CASE("SceneBuilder: geometry index records assigned frames by keyed path") 
   CHECK(bRect->height == doctest::Approx(15.f));
 }
 
+TEST_CASE("SceneGeometryIndex: committed queries use current frames and previous-frame fallback") {
+  SceneGeometryIndex geometry{};
+  ComponentKey const parentKey{LocalId::fromString("parent")};
+  ComponentKey const childKey{LocalId::fromString("parent"), LocalId::fromString("child")};
+  ComponentKey const grandchildKey{
+      LocalId::fromString("parent"),
+      LocalId::fromString("child"),
+      LocalId::fromString("grandchild"),
+  };
+  ComponentKey const removedKey{LocalId::fromString("removed")};
+
+  geometry.beginBuild();
+  geometry.record(parentKey, Rect{1.f, 2.f, 30.f, 40.f});
+  geometry.record(childKey, Rect{3.f, 4.f, 10.f, 12.f});
+  geometry.record(removedKey, Rect{7.f, 8.f, 9.f, 10.f});
+  geometry.finishBuild();
+
+  {
+    StoreScope scope{};
+    scope.store.pushComponent(parentKey, std::type_index(typeid(HelloRoot)));
+    std::optional<Rect> currentRect = geometry.forCurrentComponent(scope.store);
+    REQUIRE(currentRect.has_value());
+    CHECK(currentRect->x == doctest::Approx(1.f));
+    CHECK(currentRect->y == doctest::Approx(2.f));
+    scope.store.popComponent();
+  }
+
+  std::optional<Rect> initialPrefixRect = geometry.forLeafKeyPrefix(grandchildKey);
+  REQUIRE(initialPrefixRect.has_value());
+  CHECK(initialPrefixRect->x == doctest::Approx(3.f));
+  CHECK(initialPrefixRect->y == doctest::Approx(4.f));
+
+  geometry.beginBuild();
+  geometry.record(parentKey, Rect{11.f, 12.f, 30.f, 40.f});
+  geometry.finishBuild();
+
+  std::optional<Rect> currentRect = geometry.forKey(parentKey);
+  REQUIRE(currentRect.has_value());
+  CHECK(currentRect->x == doctest::Approx(11.f));
+  CHECK(currentRect->y == doctest::Approx(12.f));
+
+  std::optional<Rect> removedRect = geometry.forKey(removedKey);
+  REQUIRE(removedRect.has_value());
+  CHECK(removedRect->x == doctest::Approx(7.f));
+  CHECK(removedRect->y == doctest::Approx(8.f));
+
+  std::optional<Rect> prefixRect = geometry.forTapAnchor(grandchildKey);
+  REQUIRE(prefixRect.has_value());
+  CHECK(prefixRect->x == doctest::Approx(3.f));
+  CHECK(prefixRect->y == doctest::Approx(4.f));
+}
+
 TEST_CASE("SceneBuilder: rectangle retains modifier paint on the primitive node") {
   NullTextSystem textSystem{};
   EnvironmentLayer env{};
@@ -336,4 +390,53 @@ TEST_CASE("SceneBuilder: composite root exposes a retained scene body with the r
   CHECK(renderer.textCount == 1);
 
   scope.store.endRebuild();
+}
+
+TEST_CASE("SceneTree interaction lookup preserves focus order and keyed handler lookup") {
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 200.f;
+  constraints.maxHeight = 120.f;
+
+  bool keyDownA = false;
+  bool keyDownB = false;
+  Element root = VStack{
+      .spacing = 4.f,
+      .children = {
+          keyedRect("a", 40.f, 20.f)
+              .focusable(true)
+              .onKeyDown([&](KeyCode, Modifiers) { keyDownA = true; }),
+          keyedRect("b", 40.f, 20.f)
+              .focusable(true)
+              .onKeyDown([&](KeyCode, Modifiers) { keyDownB = true; }),
+      },
+  };
+
+  SceneTree tree{builder.build(root, NodeId{1ull}, constraints)};
+
+  std::vector<ComponentKey> const order = collectFocusableKeys(tree);
+  REQUIRE(order.size() == 2);
+  CHECK(order[0] == ComponentKey{LocalId::fromString("a")});
+  CHECK(order[1] == ComponentKey{LocalId::fromString("b")});
+
+  auto const [idA, interactionA] = findInteractionByKey(tree, ComponentKey{LocalId::fromString("a")});
+  REQUIRE(idA.isValid());
+  REQUIRE(interactionA != nullptr);
+  REQUIRE(interactionA->focusable);
+  REQUIRE(static_cast<bool>(interactionA->onKeyDown));
+  interactionA->onKeyDown(KeyCode{}, Modifiers{});
+  CHECK(keyDownA);
+
+  auto const [closestId, closestInteraction] = findClosestInteractionByKey(
+      tree, ComponentKey{LocalId::fromString("b"), LocalId::fromString("child")});
+  REQUIRE(closestId.isValid());
+  REQUIRE(closestInteraction != nullptr);
+  REQUIRE(static_cast<bool>(closestInteraction->onKeyDown));
+  closestInteraction->onKeyDown(KeyCode{}, Modifiers{});
+  CHECK(keyDownB);
 }

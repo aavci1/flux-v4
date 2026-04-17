@@ -48,6 +48,8 @@ public:
   LayoutEngine& layoutEngine() noexcept;
   LayoutRectCache& layoutRects() noexcept;
   LayoutRectCache const& layoutRects() const noexcept;
+  SceneGeometryIndex& sceneGeometry() noexcept;
+  SceneGeometryIndex const& sceneGeometry() const noexcept;
   LayoutTree const& layoutTree() const noexcept;
   EventMap const& mainEventMap() const noexcept;
   ActionRegistry& actionRegistryForBuild() noexcept;

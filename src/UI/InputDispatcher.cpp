@@ -6,6 +6,7 @@
 #include <Flux/Core/Window.hpp>
 #include <Flux/Scene/HitTester.hpp>
 #include <Flux/Scene/SceneGraph.hpp>
+#include <Flux/Scene/SceneTreeInteraction.hpp>
 #include <Flux/UI/BuildOrchestrator.hpp>
 #include <Flux/UI/CursorController.hpp>
 #include <Flux/UI/FocusController.hpp>
@@ -157,13 +158,13 @@ void InputDispatcher::onKeyDown(InputEvent const& e) {
     }
     if (e.key == keys::Tab && windowHasFocus_) {
       bool const reverse = any(e.modifiers & Modifiers::Shift);
-      focus_.cycleNonModal(overlayEntriesBottomFirst(), build_.mainEventMap(), reverse);
+      focus_.cycleNonModal(overlayEntriesBottomFirst(), window_.sceneTree(), reverse);
       return;
     }
   }
   if (e.key == keys::Tab && windowHasFocus_) {
     bool const reverse = any(e.modifiers & Modifiers::Shift);
-    focus_.cycleInMap(build_.mainEventMap(), reverse, std::nullopt);
+    focus_.cycleInTree(window_.sceneTree(), reverse, std::nullopt);
     return;
   }
   bool shortcutConsumed = false;
@@ -175,10 +176,10 @@ void InputDispatcher::onKeyDown(InputEvent const& e) {
     }
   }
   if (!focus_.focusedKey().empty() && windowHasFocus_) {
-    auto const [id, h] = build_.mainEventMap().findWithIdByKey(focus_.focusedKey());
+    auto const [id, interaction] = findInteractionByKey(window_.sceneTree(), focus_.focusedKey());
     (void)id;
-    if (h && h->onKeyDown) {
-      h->onKeyDown(e.key, e.modifiers);
+    if (interaction && interaction->onKeyDown) {
+      interaction->onKeyDown(e.key, e.modifiers);
     }
   }
 }
@@ -204,10 +205,10 @@ void InputDispatcher::onKeyUp(InputEvent const& e) {
     }
   }
   if (!focus_.focusedKey().empty() && windowHasFocus_) {
-    auto const [id, h] = build_.mainEventMap().findWithIdByKey(focus_.focusedKey());
+    auto const [id, interaction] = findInteractionByKey(window_.sceneTree(), focus_.focusedKey());
     (void)id;
-    if (h && h->onKeyUp) {
-      h->onKeyUp(e.key, e.modifiers);
+    if (interaction && interaction->onKeyUp) {
+      interaction->onKeyUp(e.key, e.modifiers);
     }
   }
 }
@@ -232,10 +233,10 @@ void InputDispatcher::onTextInput(InputEvent const& e) {
     }
   }
   if (!focus_.focusedKey().empty() && windowHasFocus_) {
-    auto const [id, h] = build_.mainEventMap().findWithIdByKey(focus_.focusedKey());
+    auto const [id, interaction] = findInteractionByKey(window_.sceneTree(), focus_.focusedKey());
     (void)id;
-    if (h && h->onTextInput) {
-      h->onTextInput(e.text);
+    if (interaction && interaction->onTextInput) {
+      interaction->onTextInput(e.text);
     }
   }
 }
