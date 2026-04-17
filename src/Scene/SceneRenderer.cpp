@@ -29,6 +29,36 @@ struct ReplayOpBatch {
 
 using LayerReplayStep = std::variant<ReplayOpBatch, RenderChildLayerCmd>;
 
+struct CanvasStateSnapshot {
+  Mat3 transform = Mat3::identity();
+  Rect clip = Rect::sharp(0.f, 0.f, 0.f, 0.f);
+  float opacity = 1.f;
+  BlendMode blendMode = BlendMode::Normal;
+};
+
+bool mat3Equal(Mat3 const& a, Mat3 const& b) {
+  for (int i = 0; i < 9; ++i) {
+    if (a.m[i] != b.m[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+CanvasStateSnapshot captureCanvasState(Canvas const& canvas) {
+  return CanvasStateSnapshot{
+      .transform = canvas.currentTransform(),
+      .clip = canvas.clipBounds(),
+      .opacity = canvas.opacity(),
+      .blendMode = canvas.blendMode(),
+  };
+}
+
+bool canvasStateEqual(CanvasStateSnapshot const& lhs, CanvasStateSnapshot const& rhs) {
+  return mat3Equal(lhs.transform, rhs.transform) && lhs.clip == rhs.clip && lhs.opacity == rhs.opacity &&
+         lhs.blendMode == rhs.blendMode;
+}
+
 class MetalRecordingCanvas final : public Canvas {
 public:
   explicit MetalRecordingCanvas(Canvas& target)
@@ -178,17 +208,17 @@ private:
 };
 
 struct LayerCacheKey {
-  SceneGraph const* graph = nullptr;
+  void const* graphIdentity = nullptr;
   NodeId node{};
 
   bool operator==(LayerCacheKey const& other) const {
-    return graph == other.graph && node == other.node;
+    return graphIdentity == other.graphIdentity && node == other.node;
   }
 };
 
 struct LayerCacheKeyHash {
   std::size_t operator()(LayerCacheKey const& key) const noexcept {
-    std::size_t h = std::hash<void const*>{}(key.graph);
+    std::size_t h = std::hash<void const*>{}(key.graphIdentity);
     h ^= std::hash<std::uint32_t>{}(key.node.index) + 0x9e3779b9 + (h << 6U) + (h >> 2U);
     h ^= std::hash<std::uint32_t>{}(key.node.generation) + 0x9e3779b9 + (h << 6U) + (h >> 2U);
     return h;
@@ -197,6 +227,8 @@ struct LayerCacheKeyHash {
 
 struct LayerCacheEntry {
   std::uint64_t epoch = 0;
+  std::weak_ptr<void const> graphLifetime{};
+  CanvasStateSnapshot canvasState{};
   MetalFrameRecorder recorded{};
   std::vector<LayerReplayStep> steps{};
 };
@@ -241,7 +273,6 @@ bool flushRecordedBatch(Canvas& canvas, LayerCacheEntry& entry, MetalRecorderSli
 
 struct SceneRenderer::Impl {
   mutable std::unordered_map<LayerCacheKey, LayerCacheEntry, LayerCacheKeyHash> layerCache_{};
-  mutable std::uint64_t renderCount_ = 0;
 };
 
 SceneRenderer::SceneRenderer()
@@ -252,20 +283,24 @@ SceneRenderer::SceneRenderer(SceneRenderer&&) noexcept = default;
 SceneRenderer& SceneRenderer::operator=(SceneRenderer&&) noexcept = default;
 
 void SceneRenderer::render(SceneGraph const& graph, Canvas& canvas) const {
-  if ((++impl_->renderCount_ & 1023U) == 0) {
-    std::erase_if(impl_->layerCache_, [&](auto const& entry) {
-      return entry.first.graph == &graph && graph.get(entry.first.node) == nullptr;
-    });
-  }
+  void const* const graphIdentity = graph.cacheIdentity();
+  std::erase_if(impl_->layerCache_, [&](auto const& entry) {
+    if (entry.second.graphLifetime.expired()) {
+      return true;
+    }
+    return entry.first.graphIdentity == graphIdentity && graph.get(entry.first.node) == nullptr;
+  });
   renderNode(graph.root(), graph, canvas, true);
 }
 
 void SceneRenderer::render(SceneGraph const& graph, Canvas& canvas, Color clearColor) const {
-  if ((++impl_->renderCount_ & 1023U) == 0) {
-    std::erase_if(impl_->layerCache_, [&](auto const& entry) {
-      return entry.first.graph == &graph && graph.get(entry.first.node) == nullptr;
-    });
-  }
+  void const* const graphIdentity = graph.cacheIdentity();
+  std::erase_if(impl_->layerCache_, [&](auto const& entry) {
+    if (entry.second.graphLifetime.expired()) {
+      return true;
+    }
+    return entry.first.graphIdentity == graphIdentity && graph.get(entry.first.node) == nullptr;
+  });
   canvas.clear(clearColor);
   renderNode(graph.root(), graph, canvas, true);
 }
@@ -314,12 +349,14 @@ void SceneRenderer::renderLayer(LayerNode const& layer, SceneGraph const& graph,
     canvas.clipRect(*layer.clip);
   }
 
-  LayerCacheKey const key{.graph = &graph, .node = layer.id};
+  CanvasStateSnapshot const canvasState = captureCanvasState(canvas);
+  LayerCacheKey const key{.graphIdentity = graph.cacheIdentity(), .node = layer.id};
   std::uint64_t const epoch = graph.subtreePaintEpoch(layer.id);
 
   if (allowLayerCache) {
     auto const it = impl_->layerCache_.find(key);
-    if (it != impl_->layerCache_.end() && it->second.epoch == epoch) {
+    if (it != impl_->layerCache_.end() && it->second.epoch == epoch &&
+        canvasStateEqual(it->second.canvasState, canvasState)) {
       for (LayerReplayStep const& step : it->second.steps) {
         if (auto const* batch = std::get_if<ReplayOpBatch>(&step)) {
           replayRecordedOpsForCanvas(&canvas, it->second.recorded, batch->slice);
@@ -334,6 +371,8 @@ void SceneRenderer::renderLayer(LayerNode const& layer, SceneGraph const& graph,
 
   LayerCacheEntry cacheEntry;
   cacheEntry.epoch = epoch;
+  cacheEntry.graphLifetime = graph.cacheLifetime();
+  cacheEntry.canvasState = canvasState;
 
   MetalRecordingCanvas recorder(canvas);
   bool const captureSupported = allowLayerCache && beginRecordedOpsCaptureForCanvas(&canvas, &cacheEntry.recorded);

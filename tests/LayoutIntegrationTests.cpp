@@ -613,6 +613,49 @@ TEST_CASE("Text render emits a TextNode for line-only layouts") {
     rctx.popConstraints();
 }
 
+TEST_CASE("measureRootContentBounds expands rect stroke and shadow extents") {
+    SceneGraph graph;
+    graph.addRect(graph.root(), RectNode{
+        .bounds = Rect{10.f, 20.f, 30.f, 40.f},
+        .fill = FillStyle::solid(Colors::blue),
+        .stroke = StrokeStyle::solid(Colors::white, 4.f),
+        .shadow = ShadowStyle{.radius = 5.f, .offset = {3.f, -2.f}, .color = Colors::black},
+    });
+
+    Rect const bounds = measureRootContentBounds(graph);
+    CHECK(bounds.x == doctest::Approx(8.f));
+    CHECK(bounds.y == doctest::Approx(13.f));
+    CHECK(bounds.width == doctest::Approx(40.f));
+    CHECK(bounds.height == doctest::Approx(50.f));
+}
+
+TEST_CASE("measureRootContentBounds expands path and line stroke extents") {
+    SceneGraph graph;
+
+    Path triangle;
+    triangle.moveTo({0.f, 0.f});
+    triangle.lineTo({10.f, 0.f});
+    triangle.lineTo({10.f, 10.f});
+    triangle.close();
+    graph.addPath(graph.root(), PathNode{
+        .path = triangle,
+        .fill = FillStyle::solid(Colors::green),
+        .stroke = StrokeStyle::solid(Colors::white, 6.f),
+        .shadow = ShadowStyle{.radius = 2.f, .offset = {4.f, 0.f}, .color = Colors::black},
+    });
+    graph.addLine(graph.root(), LineNode{
+        .from = Point{2.f, 20.f},
+        .to = Point{12.f, 20.f},
+        .stroke = StrokeStyle::solid(Colors::red, 6.f),
+    });
+
+    Rect const bounds = measureRootContentBounds(graph);
+    CHECK(bounds.x == doctest::Approx(-3.f));
+    CHECK(bounds.y == doctest::Approx(-3.f));
+    CHECK(bounds.width == doctest::Approx(19.f));
+    CHECK(bounds.height == doctest::Approx(26.f));
+}
+
 TEST_CASE("TextInput single-line registers focus and text handlers" * doctest::skip()) {
     Application app;
     Signal<std::string> value {std::string {}};

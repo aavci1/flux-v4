@@ -11,17 +11,25 @@
 
 #include <cstddef>
 #include <limits>
+#include <memory>
 #include <optional>
 #include <variant>
 #include <vector>
 
 namespace flux {
 
+class SceneRenderer;
+
 class SceneGraph {
 public:
   static constexpr std::size_t npos = std::numeric_limits<std::size_t>::max();
 
   explicit SceneGraph();
+  ~SceneGraph() = default;
+  SceneGraph(SceneGraph const&) = delete;
+  SceneGraph& operator=(SceneGraph const&) = delete;
+  SceneGraph(SceneGraph&&) noexcept = default;
+  SceneGraph& operator=(SceneGraph&&) noexcept = default;
 
   /// Adds a layer under the scene root (same as `addLayer(root(), node)`).
   NodeId addLayer(LayerNode node);
@@ -71,11 +79,17 @@ public:
   std::optional<NodeId> parentOf(NodeId child) const;
 
 private:
+  friend class SceneRenderer;
+
+  void const* cacheIdentity() const noexcept { return lifetime_.get(); }
+  std::weak_ptr<void const> cacheLifetime() const noexcept { return lifetime_; }
+
   bool isDescendant(NodeId ancestor, NodeId possibleDescendant) const;
   void removeRecursive(NodeId id, std::optional<NodeId> parent, bool detachFromParent);
   void eraseFromParentChildren(NodeId parent, NodeId child);
   void markPaintDirtyUpwards(NodeId id);
 
+  std::shared_ptr<char> lifetime_ = std::make_shared<char>();
   NodeStore store_{};
   NodeId root_{};
   std::uint64_t nextPaintEpoch_{1};

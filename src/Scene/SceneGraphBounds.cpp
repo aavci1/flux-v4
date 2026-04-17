@@ -14,6 +14,36 @@ namespace {
 
 constexpr float kDetEps = 1e-12f;
 
+Rect unionRects(Rect const& a, Rect const& b) {
+  float const minx = std::min(a.x, b.x);
+  float const miny = std::min(a.y, b.y);
+  float const maxx = std::max(a.x + a.width, b.x + b.width);
+  float const maxy = std::max(a.y + a.height, b.y + b.height);
+  return Rect{minx, miny, maxx - minx, maxy - miny};
+}
+
+Rect outsetRect(Rect const& rect, float amount) {
+  if (amount <= 0.f) {
+    return rect;
+  }
+  return Rect{rect.x - amount, rect.y - amount, rect.width + amount * 2.f, rect.height + amount * 2.f};
+}
+
+Rect paintBounds(Rect const& rect, StrokeStyle const& stroke, ShadowStyle const& shadow) {
+  Rect painted = rect;
+  if (!stroke.isNone()) {
+    painted = outsetRect(painted, std::max(0.f, stroke.width * 0.5f));
+  }
+  if (!shadow.isNone()) {
+    Rect shadowRect = rect;
+    shadowRect.x += shadow.offset.x;
+    shadowRect.y += shadow.offset.y;
+    shadowRect = outsetRect(shadowRect, std::max(0.f, shadow.radius));
+    painted = unionRects(painted, shadowRect);
+  }
+  return painted;
+}
+
 void unionWorldRect(Rect& acc, bool& has, Rect const& worldRect) {
   if (!has) {
     acc = worldRect;
@@ -85,7 +115,8 @@ void accumulate(NodeId id, SceneGraph const& graph, Mat3 const& parentWorld,
     return;
   }
   if (auto const* rect = std::get_if<RectNode>(sn)) {
-    if (std::optional<Rect> const worldRect = quadWorldAabb(rect->bounds, parentWorld)) {
+    if (std::optional<Rect> const worldRect = quadWorldAabb(paintBounds(rect->bounds, rect->stroke, rect->shadow),
+                                                            parentWorld)) {
       unionClippedWorldRect(*worldRect, clipWorld, acc, has);
     }
     return;
@@ -119,7 +150,7 @@ void accumulate(NodeId id, SceneGraph const& graph, Mat3 const& parentWorld,
     return;
   }
   if (auto const* path = std::get_if<PathNode>(sn)) {
-    Rect const b = path->path.getBounds();
+    Rect const b = paintBounds(path->path.getBounds(), path->stroke, path->shadow);
     if (std::optional<Rect> const worldRect = quadWorldAabb(b, parentWorld)) {
       unionClippedWorldRect(*worldRect, clipWorld, acc, has);
     }
@@ -132,7 +163,8 @@ void accumulate(NodeId id, SceneGraph const& graph, Mat3 const& parentWorld,
     float const maxy = std::max(line->from.y, line->to.y);
     float const w = std::max(0.f, maxx - minx);
     float const h = std::max(0.f, maxy - miny);
-    if (std::optional<Rect> const worldRect = quadWorldAabb(Rect{minx, miny, w, h}, parentWorld)) {
+    Rect const bounds = paintBounds(Rect{minx, miny, w, h}, line->stroke, ShadowStyle::none());
+    if (std::optional<Rect> const worldRect = quadWorldAabb(bounds, parentWorld)) {
       unionClippedWorldRect(*worldRect, clipWorld, acc, has);
     }
     return;
