@@ -8,6 +8,20 @@
 
 namespace flux {
 
+namespace {
+
+Point pointInPressTreeRoot(Point windowPoint, OverlayEntry const* overlay) {
+  if (!overlay) {
+    return windowPoint;
+  }
+  return Point{
+      windowPoint.x - overlay->resolvedFrame.x,
+      windowPoint.y - overlay->resolvedFrame.y,
+  };
+}
+
+} // namespace
+
 void GestureTracker::recordPress(NodeId nodeId, ComponentKey stableTargetKey, Point downPoint, bool hadOnTap,
                                  std::optional<OverlayId> overlayScope) {
   PressState ps{};
@@ -20,29 +34,29 @@ void GestureTracker::recordPress(NodeId nodeId, ComponentKey stableTargetKey, Po
   activePress_ = std::move(ps);
 }
 
-std::pair<NodeId, EventHandlers const*> GestureTracker::findPressHandlers(
-    PressState const& ps, std::vector<OverlayEntry const*> const& overlayEntries) const {
+OverlayEntry const* GestureTracker::overlayForPress(PressState const& ps,
+                                                    std::vector<OverlayEntry const*> const& overlayEntries) const {
   if (ps.overlayScope.has_value()) {
     for (OverlayEntry const* p : overlayEntries) {
-      OverlayEntry const& e = *p;
-      if (e.id.value != ps.overlayScope->value) {
-        continue;
+      if (p->id.value == ps.overlayScope->value) {
+        return p;
       }
-      if (EventHandlers const* h = e.eventMap.find(ps.nodeId)) {
-        return {ps.nodeId, h};
-      }
-      if (!ps.stableTargetKey.empty()) {
-        return e.eventMap.findClosestWithIdByKey(ps.stableTargetKey);
-      }
-      return {kInvalidNodeId, nullptr};
+    }
+  }
+  return nullptr;
+}
+
+std::pair<NodeId, InteractionData const*> GestureTracker::findPressInteraction(
+    PressState const& ps, std::vector<OverlayEntry const*> const& overlayEntries, SceneTree const& mainTree) const {
+  if (OverlayEntry const* overlay = overlayForPress(ps, overlayEntries)) {
+    if (auto const [id, interaction] = findInteractionById(overlay->sceneTree, ps.nodeId); interaction) {
+      return {id, interaction};
+    }
+    if (!ps.stableTargetKey.empty()) {
+      return findClosestInteractionByKey(overlay->sceneTree, ps.stableTargetKey);
     }
     return {kInvalidNodeId, nullptr};
   }
-  return {kInvalidNodeId, nullptr};
-}
-
-std::pair<NodeId, InteractionData const*> GestureTracker::findPressInteraction(PressState const& ps,
-                                                                               SceneTree const& mainTree) const {
   if (ps.overlayScope.has_value()) {
     return {kInvalidNodeId, nullptr};
   }
@@ -55,17 +69,16 @@ std::pair<NodeId, InteractionData const*> GestureTracker::findPressInteraction(P
   return {kInvalidNodeId, nullptr};
 }
 
-SceneGraph const* GestureTracker::sceneGraphForPress(PressState const& ps,
-                                                     std::vector<OverlayEntry const*> const& overlayEntries) const {
-  if (ps.overlayScope.has_value()) {
-    for (OverlayEntry const* p : overlayEntries) {
-      OverlayEntry const& e = *p;
-      if (e.id.value == ps.overlayScope->value) {
-        return &e.graph;
-      }
-    }
+SceneTree const* GestureTracker::sceneTreeForPress(PressState const& ps,
+                                                   std::vector<OverlayEntry const*> const& overlayEntries,
+                                                   SceneTree const& mainTree) const {
+  if (OverlayEntry const* overlay = overlayForPress(ps, overlayEntries)) {
+    return &overlay->sceneTree;
   }
-  return nullptr;
+  if (ps.overlayScope.has_value()) {
+    return nullptr;
+  }
+  return &mainTree;
 }
 
 bool GestureTracker::pressMatchesStoreContext(StateStore const& store) const noexcept {
@@ -84,25 +97,15 @@ void GestureTracker::cancelPress(Point windowPoint, std::vector<OverlayEntry con
   if (!activePress_) {
     return;
   }
-  if (activePress_->overlayScope.has_value()) {
-    if (SceneGraph const* graph = sceneGraphForPress(*activePress_, overlayEntries)) {
-      auto const [currentId, h] = findPressHandlers(*activePress_, overlayEntries);
-      if (h && h->onPointerUp && currentId.isValid()) {
-        HitTester tester{};
-        std::optional<Point> local = tester.localPointForNode(*graph, activePress_->downPoint, currentId);
-        if (!local) {
-          local = tester.localPointForNode(*graph, windowPoint, currentId);
-        }
-        h->onPointerUp(local.value_or(Point{0.f, 0.f}));
-      }
-    }
-  } else {
-    auto const [currentId, interaction] = findPressInteraction(*activePress_, mainTree);
+  OverlayEntry const* overlay = overlayForPress(*activePress_, overlayEntries);
+  if (SceneTree const* tree = sceneTreeForPress(*activePress_, overlayEntries, mainTree)) {
+    auto const [currentId, interaction] = findPressInteraction(*activePress_, overlayEntries, mainTree);
     if (interaction && interaction->onPointerUp && currentId.isValid()) {
       HitTester tester{};
-      std::optional<Point> local = tester.localPointForNode(mainTree, activePress_->downPoint, currentId);
+      std::optional<Point> local =
+          tester.localPointForNode(*tree, pointInPressTreeRoot(activePress_->downPoint, overlay), currentId);
       if (!local) {
-        local = tester.localPointForNode(mainTree, windowPoint, currentId);
+        local = tester.localPointForNode(*tree, pointInPressTreeRoot(windowPoint, overlay), currentId);
       }
       interaction->onPointerUp(local.value_or(Point{0.f, 0.f}));
     }
@@ -122,19 +125,17 @@ bool GestureTracker::dispatchTap(PressState const& released,
   }
 
   if (released.overlayScope.has_value()) {
-    for (OverlayEntry const* p : overlayEntries) {
-      if (p->id != *released.overlayScope) {
-        continue;
-      }
-      auto const [id, h] = p->eventMap.findClosestWithIdByKey(released.stableTargetKey);
+    if (OverlayEntry const* overlay = overlayForPress(released, overlayEntries)) {
+      auto const [id, interaction] = findClosestInteractionByKey(overlay->sceneTree, released.stableTargetKey);
       (void)id;
-      if (h && h->onTap) {
+      if (interaction && interaction->onTap) {
         pendingTapLeafKey_ = released.stableTargetKey;
-        h->onTap();
+        pendingTapOverlayScope_ = released.overlayScope;
+        interaction->onTap();
         pendingTapLeafKey_.clear();
+        pendingTapOverlayScope_.reset();
         return true;
       }
-      return false;
     }
     return false;
   }
@@ -143,8 +144,10 @@ bool GestureTracker::dispatchTap(PressState const& released,
   (void)id;
   if (interaction && interaction->onTap) {
     pendingTapLeafKey_ = released.stableTargetKey;
+    pendingTapOverlayScope_.reset();
     interaction->onTap();
     pendingTapLeafKey_.clear();
+    pendingTapOverlayScope_.reset();
     return true;
   }
   return false;
@@ -175,6 +178,10 @@ ComponentKey const& GestureTracker::activePressKey() const noexcept {
 
 ComponentKey const& GestureTracker::pendingTapLeafKey() const noexcept {
   return pendingTapLeafKey_;
+}
+
+std::optional<OverlayId> GestureTracker::pendingTapOverlayScope() const noexcept {
+  return pendingTapOverlayScope_;
 }
 
 } // namespace flux

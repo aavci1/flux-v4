@@ -6,13 +6,13 @@
 
 
 #include <Flux/Core/Types.hpp>
-#include <Flux/Scene/SceneGraph.hpp>
+#include <Flux/Scene/SceneTree.hpp>
 #include <Flux/UI/ComponentKey.hpp>
 #include <Flux/UI/Element.hpp>
-#include <Flux/UI/EventMap.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 #include <Flux/UI/LayoutTree.hpp>
 #include <Flux/UI/MeasureCache.hpp>
+#include <Flux/UI/SceneGeometryIndex.hpp>
 #include <Flux/UI/StateStore.hpp>
 #include <Flux/UI/Views/PopoverPlacement.hpp>
 
@@ -97,9 +97,9 @@ struct OverlayEntry {
   std::optional<Element> content;
   OverlayConfig config;
 
-  SceneGraph graph;
+  SceneTree sceneTree;
+  SceneGeometryIndex sceneGeometry;
   LayoutTree layoutTree;
-  EventMap eventMap;
   std::unique_ptr<StateStore> stateStore = std::make_unique<StateStore>();
   Rect resolvedFrame{};
 
@@ -125,6 +125,8 @@ public:
   bool hasOverlays() const noexcept;
 
   OverlayEntry const* top() const;
+  OverlayEntry* find(OverlayId id);
+  OverlayEntry const* find(OverlayId id) const;
 
   std::vector<std::unique_ptr<OverlayEntry>> const& entries() const;
 
@@ -132,8 +134,8 @@ private:
   Rect resolveFrame(Size windowSize, OverlayConfig const& config, Rect contentBounds) const;
   LayoutConstraints resolveConstraints(Size windowSize, OverlayConfig const& config) const;
 
-  void insertOverlayBackdropChrome(OverlayEntry& entry, Size windowSize, Runtime& runtime,
-                                   bool dismissOnBackdropTap);
+  void insertOverlayBackdropChrome(SceneNode& root, OverlayEntry& entry, Size windowSize,
+                                   Runtime& runtime, bool dismissOnBackdropTap);
 
   std::vector<std::unique_ptr<OverlayEntry>> overlays_;
   std::uint64_t nextId_ = 1;

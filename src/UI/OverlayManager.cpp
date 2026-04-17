@@ -4,18 +4,20 @@
 #include <Flux/Core/Window.hpp>
 #include <Flux/Detail/Runtime.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
-#include <Flux/Scene/SceneGraphBounds.hpp>
+#include <Flux/Scene/InteractionData.hpp>
+#include <Flux/Scene/RectSceneNode.hpp>
+#include <Flux/Scene/SceneTree.hpp>
 #include <Flux/UI/Environment.hpp>
 #include <Flux/UI/LayoutContext.hpp>
 #include <Flux/UI/LayoutTree.hpp>
-#include <Flux/UI/RenderContext.hpp>
-#include <Flux/UI/RenderLayoutTree.hpp>
+#include <Flux/UI/SceneBuilder.hpp>
 #include <Flux/UI/Views/Popover.hpp>
 
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <limits>
+#include <typeinfo>
 #include <utility>
 
 namespace flux {
@@ -33,6 +35,51 @@ Rect applyAnchorOutsets(Rect rect, EdgeInsets const &outsets) {
         rect.width + left + right,
         rect.height + top + bottom,
     };
+}
+
+Rect offsetRect(Rect rect, Point delta) {
+    rect.x += delta.x;
+    rect.y += delta.y;
+    return rect;
+}
+
+bool isPlainGroup(SceneNode const& node) {
+    return node.kind() == SceneNodeKind::Group && typeid(node) == typeid(SceneNode);
+}
+
+NodeId overlayRootId() {
+    return NodeId{1ull};
+}
+
+NodeId overlayContentId() {
+    return SceneTree::childId(overlayRootId(), LocalId::fromString("$content"));
+}
+
+NodeId overlayBackdropId() {
+    return SceneTree::childId(overlayRootId(), LocalId::fromString("$backdrop"));
+}
+
+NodeId overlayCaptureId() {
+    return SceneTree::childId(overlayRootId(), LocalId::fromString("$capture"));
+}
+
+std::unique_ptr<SceneNode> extractOverlayContentRoot(std::unique_ptr<SceneNode> root) {
+    if (!root) {
+        return nullptr;
+    }
+    if (root->id() == overlayContentId()) {
+        return root;
+    }
+    if (!isPlainGroup(*root)) {
+        return nullptr;
+    }
+    std::vector<std::unique_ptr<SceneNode>> children = root->releaseChildren();
+    for (std::unique_ptr<SceneNode>& child : children) {
+        if (child && child->id() == overlayContentId()) {
+            return std::move(child);
+        }
+    }
+    return nullptr;
 }
 
 char const *overlayPlacementName(OverlayConfig::Placement placement) {
@@ -107,6 +154,22 @@ OverlayEntry const *OverlayManager::top() const {
     return overlays_.back().get();
 }
 
+OverlayEntry* OverlayManager::find(OverlayId id) {
+    if (!id.isValid()) {
+        return nullptr;
+    }
+    for (std::unique_ptr<OverlayEntry>& up : overlays_) {
+        if (up->id == id) {
+            return up.get();
+        }
+    }
+    return nullptr;
+}
+
+OverlayEntry const* OverlayManager::find(OverlayId id) const {
+    return const_cast<OverlayManager*>(this)->find(id);
+}
+
 LayoutConstraints OverlayManager::resolveConstraints(Size windowSize, OverlayConfig const &config) const {
     LayoutConstraints cs {};
     cs.minWidth = 0.f;
@@ -169,59 +232,41 @@ Rect OverlayManager::resolveFrame(Size win, OverlayConfig const &cfg, Rect conte
     return {x, y, contentBounds.width, contentBounds.height};
 }
 
-void OverlayManager::insertOverlayBackdropChrome(OverlayEntry &entry, Size windowSize, Runtime &runtime,
-                                                 bool dismissOnBackdropTap) {
-    SceneGraph &g = entry.graph;
-    if (!g.node<LayerNode>(g.root())) {
-        return;
-    }
-
-    float const w = windowSize.width;
-    float const h = windowSize.height;
-    // Window::render translates the overlay graph by resolvedFrame (popover position). Offset the
-    // full-window backdrop/capture so they still cover (0,0)—(W,H) in screen space after that transform.
+void OverlayManager::insertOverlayBackdropChrome(SceneNode &root, OverlayEntry &entry, Size windowSize,
+                                                 Runtime &runtime, bool dismissOnBackdropTap) {
+    float const w = std::max(0.f, windowSize.width);
+    float const h = std::max(0.f, windowSize.height);
     float const ox = -entry.resolvedFrame.x;
     float const oy = -entry.resolvedFrame.y;
 
-    RectNode backdrop {};
-    backdrop.bounds = Rect {ox, oy, w, h};
-    backdrop.fill = FillStyle::solid(entry.config.backdropColor);
-    backdrop.stroke = StrokeStyle::none();
-    NodeId const backdropId = g.addRect(g.root(), std::move(backdrop));
+    auto backdrop = std::make_unique<RectSceneNode>(overlayBackdropId());
+    backdrop->position = Point{ox, oy};
+    backdrop->size = Size{w, h};
+    backdrop->fill = FillStyle::solid(entry.config.backdropColor);
+    backdrop->stroke = StrokeStyle::none();
+    backdrop->shadow = ShadowStyle::none();
+    backdrop->cornerRadius = {};
+    backdrop->recomputeBounds();
+    root.appendChild(std::move(backdrop));
 
-    RectNode capture {};
-    capture.bounds = Rect {ox, oy, w, h};
-    capture.fill = FillStyle::none();
-    capture.stroke = StrokeStyle::none();
-    NodeId const captureId = g.addRect(g.root(), std::move(capture));
-
-    EventHandlers captureHandlers {};
-    captureHandlers.stableTargetKey = ComponentKey {};
+    auto capture = std::make_unique<RectSceneNode>(overlayCaptureId());
+    capture->position = Point{ox, oy};
+    capture->size = Size{w, h};
+    capture->fill = FillStyle::none();
+    capture->stroke = StrokeStyle::none();
+    capture->shadow = ShadowStyle::none();
+    capture->cornerRadius = {};
+    auto interaction = std::make_unique<InteractionData>();
     if (dismissOnBackdropTap) {
         OverlayId const oid = entry.id;
         Window &wnd = runtime.window();
-        captureHandlers.onPointerDown = [oid, &wnd](Point) { wnd.removeOverlay(oid); };
+        interaction->onPointerDown = [oid, &wnd](Point) { wnd.removeOverlay(oid); };
     } else {
-        captureHandlers.onPointerDown = [](Point) {};
+        interaction->onPointerDown = [](Point) {};
     }
-    entry.eventMap.insert(captureId, std::move(captureHandlers));
-
-    // Re-fetch root after addRect: NodeStore::insert may reallocate slots_, invalidating
-    // any LayerNode* taken before new nodes were inserted.
-    auto *rootLayer = g.node<LayerNode>(g.root());
-    if (!rootLayer) {
-        return;
-    }
-    std::vector<NodeId> newOrder;
-    newOrder.reserve(rootLayer->children.size());
-    newOrder.push_back(backdropId);
-    newOrder.push_back(captureId);
-    for (NodeId c : rootLayer->children) {
-        if (c != backdropId && c != captureId) {
-            newOrder.push_back(c);
-        }
-    }
-    g.reorder(g.root(), newOrder);
+    capture->setInteraction(std::move(interaction));
+    capture->recomputeBounds();
+    root.appendChild(std::move(capture));
 }
 
 void OverlayManager::rebuild(Size windowSize, Runtime &runtime) {
@@ -257,10 +302,6 @@ void OverlayManager::rebuild(Size windowSize, Runtime &runtime) {
                 entry.onPlacementResolved(resolved);
             }
         }
-        entry.graph.clear();
-        entry.layoutTree.beginBuild();
-        entry.eventMap.clear();
-
         entry.stateStore->beginRebuild();
         entry.stateStore->setOverlayScope(entry.id.value);
         StateStore::setCurrent(entry.stateStore.get());
@@ -268,28 +309,36 @@ void OverlayManager::rebuild(Size windowSize, Runtime &runtime) {
         layoutEngine_.resetForBuild();
         overlayMeasureCache_.clear();
         LayoutConstraints const cs = resolveConstraints(windowSize, entry.config);
-        LayoutContext lctx {Application::instance().textSystem(), layoutEngine_, entry.layoutTree, &overlayMeasureCache_};
-        lctx.pushConstraints(cs);
-        EnvironmentLayer windowEnvBaseline = runtime.window().environmentLayer();
-        EnvironmentStack::current().push(std::move(windowEnvBaseline));
-        layoutEngine_.setChildFrame(Rect {0.f, 0.f, cs.maxWidth, cs.maxHeight});
-        if (entry.content.has_value()) {
-            entry.content->layout(lctx);
+        entry.layoutTree.clear();
+        entry.layoutTree.beginBuild();
+        {
+            LayoutContext lctx {Application::instance().textSystem(), layoutEngine_, entry.layoutTree, &overlayMeasureCache_};
+            lctx.pushConstraints(cs);
+            EnvironmentLayer windowEnvBaseline = runtime.window().environmentLayer();
+            EnvironmentStack::current().push(std::move(windowEnvBaseline));
+            layoutEngine_.setChildFrame(Rect {0.f, 0.f, cs.maxWidth, cs.maxHeight});
+            if (entry.content.has_value()) {
+                entry.content->layout(lctx);
+            }
+            EnvironmentStack::current().pop();
+            lctx.popConstraints();
         }
-        EnvironmentStack::current().pop();
-        lctx.popConstraints();
         entry.layoutTree.endBuild();
 
-        RenderContext rctx {entry.graph, entry.eventMap, Application::instance().textSystem()};
-        rctx.pushConstraints(cs);
-        renderLayoutTree(entry.layoutTree, rctx);
-        rctx.popConstraints();
+        std::unique_ptr<SceneNode> existingContent = extractOverlayContentRoot(entry.sceneTree.takeRoot());
+        std::unique_ptr<SceneNode> contentRoot{};
+        if (entry.content.has_value()) {
+            SceneBuilder sceneBuilder{Application::instance().textSystem(), EnvironmentStack::current(), &entry.sceneGeometry};
+            EnvironmentLayer windowEnv = runtime.window().environmentLayer();
+            EnvironmentStack::current().push(std::move(windowEnv));
+            contentRoot = sceneBuilder.build(*entry.content, overlayContentId(), cs, std::move(existingContent),
+                                             ComponentKey{LocalId::fromIndex(0)});
+            EnvironmentStack::current().pop();
+        } else {
+            entry.sceneGeometry.clear();
+        }
 
-        StateStore::setCurrent(prevCurrent);
-        entry.stateStore->setOverlayScope(std::nullopt);
-        entry.stateStore->endRebuild();
-
-        Rect contentBounds = measureRootContentBounds(entry.graph);
+        Rect contentBounds = contentRoot ? offsetRect(contentRoot->bounds, contentRoot->position) : Rect{};
         if (contentBounds.width <= 0.f || !std::isfinite(contentBounds.width)) {
             contentBounds.width = 1.f;
         }
@@ -298,6 +347,8 @@ void OverlayManager::rebuild(Size windowSize, Runtime &runtime) {
         }
 
         entry.resolvedFrame = resolveFrame(windowSize, entry.config, contentBounds);
+
+        auto root = std::make_unique<SceneNode>(overlayRootId());
 
         if (!entry.config.debugName.empty()) {
             if (entry.config.anchor.has_value()) {
@@ -322,10 +373,20 @@ void OverlayManager::rebuild(Size windowSize, Runtime &runtime) {
         }
 
         if (entry.config.modal) {
-            insertOverlayBackdropChrome(entry, windowSize, runtime, false);
+            insertOverlayBackdropChrome(*root, entry, windowSize, runtime, false);
         } else if (entry.config.backdropColor.a > 0.001f) {
-            insertOverlayBackdropChrome(entry, windowSize, runtime, entry.config.dismissOnOutsideTap);
+            insertOverlayBackdropChrome(*root, entry, windowSize, runtime, entry.config.dismissOnOutsideTap);
         }
+
+        if (contentRoot) {
+            root->appendChild(std::move(contentRoot));
+        }
+        root->recomputeBounds();
+        entry.sceneTree.setRoot(std::move(root));
+
+        StateStore::setCurrent(prevCurrent);
+        entry.stateStore->setOverlayScope(std::nullopt);
+        entry.stateStore->endRebuild();
 
         runtime.syncModalOverlayFocusAfterRebuild(entry);
     }

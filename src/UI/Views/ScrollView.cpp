@@ -3,7 +3,6 @@
 #include <Flux/UI/Views/ScrollView.hpp>
 
 #include <Flux/Detail/Runtime.hpp>
-#include <Flux/Core/Window.hpp>
 #include <Flux/UI/StateStore.hpp>
 
 #include <Flux/Reactive/Transition.hpp>
@@ -30,11 +29,6 @@ struct ScrollIndicatorStyle {
     static constexpr float thickness = 4.f;
     static constexpr float outerInset = 3.f;
     static constexpr float minLength = 24.f;
-};
-
-struct ScrollSceneTarget {
-    NodeId layerId{};
-    Rect frame{};
 };
 
 [[nodiscard]] float indicatorTrackLength(float viewportExtent, bool reserveTrailing) {
@@ -157,65 +151,6 @@ struct ScrollSceneTarget {
     };
 }
 
-bool mat3Equal(Mat3 const &a, Mat3 const &b) {
-    for (int i = 0; i < 9; ++i) {
-        if (a.m[i] != b.m[i]) {
-            return false;
-        }
-    }
-    return true;
-}
-
-std::optional<ScrollSceneTarget> findScrollSceneTarget(LayoutTree const &tree, LayoutNodeId id) {
-    LayoutNode const *node = tree.get(id);
-    if (!node) {
-        return std::nullopt;
-    }
-    if (node->kind == LayoutNode::Kind::Container &&
-        node->containerSpec.kind == ContainerLayerSpec::Kind::OffsetScroll &&
-        node->sceneNodes.size() == 1) {
-        return ScrollSceneTarget{
-            .layerId = node->sceneNodes[0],
-            .frame = node->frame,
-        };
-    }
-    for (LayoutNodeId childId : node->children) {
-        if (std::optional<ScrollSceneTarget> const target = findScrollSceneTarget(tree, childId)) {
-            return target;
-        }
-    }
-    return std::nullopt;
-}
-
-bool applyDirectScroll(Runtime *runtime, ComponentKey const &key, Point offset) {
-    if (!runtime || runtime->window().overlayManager().hasOverlays()) {
-        return false;
-    }
-
-    LayoutNode const *root = runtime->mainLayoutTree().nodeForKey(key);
-    if (!root) {
-        return false;
-    }
-    std::optional<ScrollSceneTarget> const target = findScrollSceneTarget(runtime->mainLayoutTree(), root->id);
-    if (!target.has_value()) {
-        return false;
-    }
-
-    LayerNode *layer = runtime->window().sceneGraph().node<LayerNode>(target->layerId);
-    if (!layer) {
-        return false;
-    }
-
-    Mat3 const next = Mat3::translate(target->frame.x - offset.x, target->frame.y - offset.y);
-    if (mat3Equal(layer->transform, next)) {
-        return true;
-    }
-
-    layer->transform = next;
-    runtime->window().requestRedraw();
-    return true;
-}
-
 } // namespace
 
 Point clampScrollOffset(ScrollAxis axis, Point o, Size const &viewport, Size const &content) {
@@ -236,9 +171,6 @@ Point clampScrollOffset(ScrollAxis axis, Point o, Size const &viewport, Size con
 
 Element ScrollView::body() const {
     Theme const &theme = useEnvironment<Theme>();
-    Runtime *runtime = Runtime::current();
-    StateStore *store = StateStore::current();
-    ComponentKey const componentKey = store ? store->currentComponentKey() : ComponentKey{};
     State<Point> const offset = scrollOffset.signal ? scrollOffset : useState<Point>({0.f, 0.f});
     auto downPoint = useState<Point>({0.f, 0.f});
     auto dragging = useState(false);
@@ -287,13 +219,9 @@ Element ScrollView::body() const {
         indicatorOpacity.set(1.f, indicatorShow);
         indicatorOpacity.set(0.f, indicatorHide);
     };
-    auto commitOffset = [offset, runtime, componentKey](Point clamped) {
-        if (runtime && applyDirectScroll(runtime, componentKey, clamped)) {
-            offset.setSilently(clamped);
-            return true;
-        }
+    auto commitOffset = [offset](Point clamped) {
         offset = clamped;
-        return false;
+        return true;
     };
 
     return std::move(root)
@@ -325,9 +253,8 @@ Element ScrollView::body() const {
                 }
                 Point const next {(*downPoint).x - p.x, (*downPoint).y - p.y};
                 Point const clamped = clampScrollOffset(ax, next, effectiveViewport, *content);
-                if (!commitOffset(clamped)) {
-                    revealIndicators();
-                }
+                commitOffset(clamped);
+                revealIndicators();
             }
         )
         .onScroll(
@@ -344,9 +271,8 @@ Element ScrollView::body() const {
                 }
                 Point const clamped =
                     clampScrollOffset(ax, next, effectiveViewport, *content);
-                if (!commitOffset(clamped)) {
-                    revealIndicators();
-                }
+                commitOffset(clamped);
+                revealIndicators();
             }
         );
 }

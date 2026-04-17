@@ -108,7 +108,7 @@ void FocusController::cycleNonModal(std::vector<OverlayEntry const*> const& over
   std::vector<std::pair<ComponentKey, std::optional<OverlayId>>> merged;
   for (OverlayEntry const* p : overlayEntries) {
     OverlayEntry const& e = *p;
-    for (ComponentKey const& k : e.eventMap.focusOrder()) {
+    for (ComponentKey const& k : collectFocusableKeys(e.sceneTree)) {
       merged.push_back({ k, e.id });
     }
   }
@@ -152,7 +152,7 @@ void FocusController::cycleNonModal(std::vector<OverlayEntry const*> const& over
   std::vector<std::pair<ComponentKey, std::optional<OverlayId>>> merged;
   for (OverlayEntry const* p : overlayEntries) {
     OverlayEntry const& e = *p;
-    for (ComponentKey const& k : e.eventMap.focusOrder()) {
+    for (ComponentKey const& k : collectFocusableKeys(e.sceneTree)) {
       merged.push_back({k, e.id});
     }
   }
@@ -335,13 +335,13 @@ void FocusController::syncAfterOverlayRebuild(OverlayEntry& entry) {
   if (focusInOverlay_ != entry.id) {
     return;
   }
-  auto const& order = entry.eventMap.focusOrder();
+  std::vector<ComponentKey> const order = collectFocusableKeys(entry.sceneTree);
   if (order.empty()) {
     return;
   }
-  auto const [id, h] = entry.eventMap.findWithIdByKey(focusedKey_);
+  auto const [id, interaction] = findInteractionByKey(entry.sceneTree, focusedKey_);
   (void)id;
-  if (!h) {
+  if (!interaction || !interaction->focusable) {
     focusedKey_ = order.front();
     lastInputKind_ = FocusInputKind::Keyboard;
   }

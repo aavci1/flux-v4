@@ -8,9 +8,7 @@
 #include <Flux/Detail/RootHolder.hpp>
 #include <Flux/Reactive/Observer.hpp>
 #include <Flux/UI/ActionRegistry.hpp>
-#include <Flux/UI/EventMap.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
-#include <Flux/UI/LayoutRectCache.hpp>
 #include <Flux/UI/LayoutTree.hpp>
 #include <Flux/UI/MeasureCache.hpp>
 #include <Flux/UI/SceneGeometryIndex.hpp>
@@ -46,12 +44,9 @@ public:
 
   StateStore& stateStore() noexcept;
   LayoutEngine& layoutEngine() noexcept;
-  LayoutRectCache& layoutRects() noexcept;
-  LayoutRectCache const& layoutRects() const noexcept;
   SceneGeometryIndex& sceneGeometry() noexcept;
   SceneGeometryIndex const& sceneGeometry() const noexcept;
   LayoutTree const& layoutTree() const noexcept;
-  EventMap const& mainEventMap() const noexcept;
   ActionRegistry& actionRegistryForBuild() noexcept;
   ActionRegistry const& actionRegistryCommitted() const noexcept;
 
@@ -66,7 +61,6 @@ private:
   std::unique_ptr<RootHolder> rootHolder_;
   LayoutEngine layoutEngine_;
   StateStore stateStore_;
-  LayoutRectCache layoutRects_;
   LayoutContext::SubtreeRootMap layoutSubtreeRoots_{};
   std::uint64_t layoutSubtreeRootEpoch_{0};
   std::vector<std::shared_ptr<detail::ElementPinStorage>> pinGenerations_{};
@@ -74,7 +68,6 @@ private:
   LayoutConstraints latestRootConstraints_{};
   std::uint64_t latestRootIdentityToken_{0};
   bool latestLayoutIsCurrent_{false};
-  EventMap eventMap_;
   ObserverHandle rebuildHandle_{};
   ActionRegistry actionRegistryBuild_{};
   ActionRegistry actionRegistryCommitted_{};

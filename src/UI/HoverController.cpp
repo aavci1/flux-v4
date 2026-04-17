@@ -1,7 +1,6 @@
 #include <Flux/UI/HoverController.hpp>
 
 #include <Flux/Core/Application.hpp>
-#include <Flux/Scene/HitTester.hpp>
 #include <Flux/Scene/SceneTreeInteraction.hpp>
 #include <Flux/UI/StateStore.hpp>
 
@@ -53,15 +52,13 @@ void HoverController::updateForPoint(Point windowPoint, std::vector<OverlayEntry
   for (OverlayEntry const* p : overlayEntries) {
     OverlayEntry const& oe = *p;
     Point const local{ windowPoint.x - oe.resolvedFrame.x, windowPoint.y - oe.resolvedFrame.y };
-    auto const acceptFn = [&oe](NodeId id) -> bool {
-      return oe.eventMap.find(id) != nullptr;
-    };
-    HitTester tester{};
-    if (auto hit = tester.hitTest(oe.graph, local, acceptFn)) {
-      if (EventHandlers const* h = oe.eventMap.find(hit->nodeId)) {
-        set(h->stableTargetKey, oe.id);
-        return;
+    if (auto hit = hitTestInteraction(oe.sceneTree, local)) {
+      if (hit->interaction && !hit->interaction->stableTargetKey.empty()) {
+        set(hit->interaction->stableTargetKey, oe.id);
+      } else {
+        clear();
       }
+      return;
     }
   }
 

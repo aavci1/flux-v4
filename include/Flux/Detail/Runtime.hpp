@@ -40,16 +40,13 @@ public:
   FocusController& focus() noexcept;
   HoverController& hover() noexcept;
   GestureTracker& gesture() noexcept;
-  LayoutRectCache& layoutRects() noexcept;
 
   ActionRegistry& actionRegistryForBuild() noexcept;
   LayoutTree const& mainLayoutTree() const noexcept;
 
-  EventMap const& mainEventMap() const noexcept;
-
   bool isActionCurrentlyEnabled(std::string const& name) const;
 
-  void requestFocusInSubtree(ComponentKey const& subtreeKey);
+  void requestFocusInSubtree(ComponentKey const& subtreeKey, std::optional<OverlayId> overlayScope = std::nullopt);
 
   std::optional<Rect> layoutRectForCurrentComponent() const;
   std::optional<Rect> layoutRectForKey(ComponentKey const& key) const;

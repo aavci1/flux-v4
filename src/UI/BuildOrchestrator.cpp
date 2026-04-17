@@ -4,13 +4,10 @@
 #include <Flux/Core/Window.hpp>
 #include <Flux/Detail/Runtime.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
-#include <Flux/Scene/SceneGraph.hpp>
 #include <Flux/Scene/SceneTree.hpp>
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/LayoutContext.hpp>
 #include <Flux/UI/LayoutTree.hpp>
-#include <Flux/UI/RenderContext.hpp>
-#include <Flux/UI/RenderLayoutTree.hpp>
 #include <Flux/UI/SceneBuilder.hpp>
 #include <Flux/UI/Environment.hpp>
 #include <Flux/UI/Overlay.hpp>
@@ -101,7 +98,6 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
       latestRootIdentityToken_ == rootHolder_->layoutIdentityToken() &&
       constraintsEqual(latestRootConstraints_, rootCs);
 
-  SceneGraph& graph = window_.sceneGraph();
   if (canReuseWholeLayout) {
     window_.overlayManager().rebuild(sz, runtime);
     return;
@@ -140,25 +136,6 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
     layoutTree_.endBuild();
   }
 
-  bool const incrementalSceneReuse = useRetainedLayoutBuild;
-  if (!incrementalSceneReuse) {
-    graph.clear();
-    eventMap_.clear();
-  } else {
-    for (NodeId retired : layoutTree_.takeRetiredSceneNodes()) {
-      graph.remove(retired);
-      eventMap_.remove(retired);
-    }
-  }
-
-  RenderContext rctx{graph, eventMap_, Application::instance().textSystem(), incrementalSceneReuse};
-  rctx.pushConstraints(rootCs);
-  renderLayoutTree(layoutTree_, rctx);
-  rctx.popConstraints();
-  if (incrementalSceneReuse) {
-    eventMap_.prune(graph);
-  }
-
   {
     SceneTree& sceneTree = window_.sceneTree();
     std::unique_ptr<SceneNode> existingRoot = sceneTree.takeRoot();
@@ -177,8 +154,6 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
       sceneTree.clear();
     }
   }
-
-  layoutRects_.fill(layoutTree_, lctx);
   for (auto it = layoutSubtreeRoots_.begin(); it != layoutSubtreeRoots_.end();) {
     if (it->second.lastVisitedEpoch != layoutSubtreeRootEpoch_ || !layoutTree_.get(it->second.rootId)) {
       it = layoutSubtreeRoots_.erase(it);
@@ -224,14 +199,6 @@ LayoutEngine& BuildOrchestrator::layoutEngine() noexcept {
   return layoutEngine_;
 }
 
-LayoutRectCache& BuildOrchestrator::layoutRects() noexcept {
-  return layoutRects_;
-}
-
-LayoutRectCache const& BuildOrchestrator::layoutRects() const noexcept {
-  return layoutRects_;
-}
-
 SceneGeometryIndex& BuildOrchestrator::sceneGeometry() noexcept {
   return sceneGeometry_;
 }
@@ -242,10 +209,6 @@ SceneGeometryIndex const& BuildOrchestrator::sceneGeometry() const noexcept {
 
 LayoutTree const& BuildOrchestrator::layoutTree() const noexcept {
   return layoutTree_;
-}
-
-EventMap const& BuildOrchestrator::mainEventMap() const noexcept {
-  return eventMap_;
 }
 
 ActionRegistry& BuildOrchestrator::actionRegistryForBuild() noexcept {

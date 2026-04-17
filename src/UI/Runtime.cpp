@@ -28,6 +28,22 @@ bool inputDebugEnabled() {
   return cached != 0;
 }
 
+OverlayEntry const* overlayEntryForScope(OverlayManager const& overlays, std::optional<std::uint64_t> scope) {
+  if (!scope.has_value()) {
+    return nullptr;
+  }
+  return overlays.find(OverlayId{*scope});
+}
+
+std::optional<Rect> offsetOverlayRect(std::optional<Rect> rect, OverlayEntry const* overlay) {
+  if (!rect || !overlay) {
+    return rect;
+  }
+  rect->x += overlay->resolvedFrame.x;
+  rect->y += overlay->resolvedFrame.y;
+  return rect;
+}
+
 char const* inputKindName(InputEvent::Kind k) {
   switch (k) {
   case InputEvent::Kind::PointerMove:
@@ -79,10 +95,6 @@ GestureTracker& Runtime::gesture() noexcept {
   return gesture_;
 }
 
-LayoutRectCache& Runtime::layoutRects() noexcept {
-  return buildOrchestrator_.layoutRects();
-}
-
 ActionRegistry& Runtime::actionRegistryForBuild() noexcept {
   return buildOrchestrator_.actionRegistryForBuild();
 }
@@ -91,11 +103,13 @@ LayoutTree const& Runtime::mainLayoutTree() const noexcept {
   return buildOrchestrator_.layoutTree();
 }
 
-EventMap const& Runtime::mainEventMap() const noexcept {
-  return buildOrchestrator_.mainEventMap();
-}
-
-void Runtime::requestFocusInSubtree(ComponentKey const& subtreeKey) {
+void Runtime::requestFocusInSubtree(ComponentKey const& subtreeKey, std::optional<OverlayId> overlayScope) {
+  if (overlayScope.has_value()) {
+    if (OverlayEntry const* entry = window_.overlayManager().find(*overlayScope)) {
+      focus_.requestInSubtree(subtreeKey, entry->sceneTree, *overlayScope);
+      return;
+    }
+  }
   focus_.requestInSubtree(subtreeKey, window_.sceneTree());
 }
 
@@ -144,18 +158,41 @@ std::optional<Rect> Runtime::layoutRectForCurrentComponent() const {
   if (!store) {
     return std::nullopt;
   }
+  if (OverlayEntry const* overlay = overlayEntryForScope(window_.overlayManager(), store->overlayScope())) {
+    return offsetOverlayRect(overlay->sceneGeometry.forCurrentComponent(*store), overlay);
+  }
   return buildOrchestrator_.sceneGeometry().forCurrentComponent(*store);
 }
 
 std::optional<Rect> Runtime::layoutRectForKey(ComponentKey const& key) const {
+  StateStore* store = StateStore::current();
+  if (store) {
+    if (OverlayEntry const* overlay = overlayEntryForScope(window_.overlayManager(), store->overlayScope())) {
+      return offsetOverlayRect(overlay->sceneGeometry.forKey(key), overlay);
+    }
+  }
   return buildOrchestrator_.sceneGeometry().forKey(key);
 }
 
 std::optional<Rect> Runtime::layoutRectForTapAnchor() const {
+  if (gesture_.pendingTapLeafKey().empty()) {
+    return std::nullopt;
+  }
+  if (std::optional<OverlayId> overlayScope = gesture_.pendingTapOverlayScope()) {
+    if (OverlayEntry const* overlay = window_.overlayManager().find(*overlayScope)) {
+      return offsetOverlayRect(overlay->sceneGeometry.forTapAnchor(gesture_.pendingTapLeafKey()), overlay);
+    }
+  }
   return buildOrchestrator_.sceneGeometry().forTapAnchor(gesture_.pendingTapLeafKey());
 }
 
 std::optional<Rect> Runtime::layoutRectForLeafKeyPrefix(ComponentKey const& stableTargetKey) const {
+  StateStore* store = StateStore::current();
+  if (store) {
+    if (OverlayEntry const* overlay = overlayEntryForScope(window_.overlayManager(), store->overlayScope())) {
+      return offsetOverlayRect(overlay->sceneGeometry.forLeafKeyPrefix(stableTargetKey), overlay);
+    }
+  }
   return buildOrchestrator_.sceneGeometry().forLeafKeyPrefix(stableTargetKey);
 }
 

@@ -60,8 +60,10 @@ std::function<void()> useRequestFocus() {
   assert(store && "useRequestFocus called outside of a build pass");
 
   ComponentKey const key = store->currentComponentKey();
+  std::optional<OverlayId> const overlayScope =
+      store->overlayScope().has_value() ? std::optional<OverlayId>{OverlayId{*store->overlayScope()}} : std::nullopt;
 
-  return [rt, key] { rt->requestFocusInSubtree(key); };
+  return [rt, key, overlayScope] { rt->requestFocusInSubtree(key, overlayScope); };
 }
 
 std::function<void()> useClearFocus() {

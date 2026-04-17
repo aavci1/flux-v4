@@ -12,6 +12,8 @@
 #include <Flux/Scene/SceneTreeInteraction.hpp>
 #include <Flux/Scene/TextSceneNode.hpp>
 #include <Flux/UI/Environment.hpp>
+#include <Flux/UI/FocusController.hpp>
+#include <Flux/UI/GestureTracker.hpp>
 #include <Flux/UI/LayoutContext.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 #include <Flux/UI/LayoutTree.hpp>
@@ -132,6 +134,28 @@ using LayoutContextPtr = std::unique_ptr<flux::LayoutContext, LayoutContextDelet
 
 Element keyedRect(std::string key, float width, float height) {
   return Element{Rectangle{}}.key(std::move(key)).size(width, height);
+}
+
+struct InteractiveRectTree {
+  SceneTree tree;
+  NodeId leafId{};
+};
+
+InteractiveRectTree makeInteractiveRectTree(std::string key, bool focusable = false,
+                                            std::function<void()> onTap = {}) {
+  auto root = std::make_unique<SceneNode>(NodeId{1ull});
+  auto rect = std::make_unique<RectSceneNode>(NodeId{2ull});
+  RectSceneNode* rectPtr = rect.get();
+  rect->size = Size{40.f, 20.f};
+  auto interaction = std::make_unique<InteractionData>();
+  interaction->stableTargetKey = ComponentKey{LocalId::fromString(key)};
+  interaction->focusable = focusable;
+  interaction->onTap = std::move(onTap);
+  rect->setInteraction(std::move(interaction));
+  rect->recomputeBounds();
+  root->appendChild(std::move(rect));
+  root->recomputeBounds();
+  return InteractiveRectTree{SceneTree{std::move(root)}, rectPtr->id()};
 }
 
 struct HelloRoot {
@@ -548,4 +572,78 @@ TEST_CASE("SceneTree interaction hit testing respects custom transform local coo
   REQUIRE(local.has_value());
   CHECK(local->x == doctest::Approx(5.f));
   CHECK(local->y == doctest::Approx(5.f));
+}
+
+TEST_CASE("GestureTracker: overlay-scoped taps resolve through the overlay scene tree") {
+  GestureTracker tracker{};
+
+  bool mainTapped = false;
+  InteractiveRectTree main = makeInteractiveRectTree("shared", false, [&] { mainTapped = true; });
+
+  bool overlayTapped = false;
+  ComponentKey observedTapKey{};
+  std::optional<OverlayId> observedOverlayScope{};
+  InteractiveRectTree overlayTree = makeInteractiveRectTree("shared", false, [&] {
+    overlayTapped = true;
+    observedTapKey = tracker.pendingTapLeafKey();
+    observedOverlayScope = tracker.pendingTapOverlayScope();
+  });
+
+  OverlayEntry overlay{};
+  overlay.id = OverlayId{42ull};
+  overlay.sceneTree = std::move(overlayTree.tree);
+  std::vector<OverlayEntry const*> overlays{&overlay};
+
+  GestureTracker::PressState released{};
+  released.stableTargetKey = ComponentKey{LocalId::fromString("shared")};
+  released.hadOnTapOnDown = true;
+  released.overlayScope = overlay.id;
+
+  CHECK(tracker.dispatchTap(released, overlays, main.tree));
+  CHECK(overlayTapped);
+  CHECK_FALSE(mainTapped);
+  CHECK(observedTapKey == released.stableTargetKey);
+  REQUIRE(observedOverlayScope.has_value());
+  CHECK(observedOverlayScope->value == overlay.id.value);
+  CHECK(tracker.pendingTapLeafKey().empty());
+  CHECK_FALSE(tracker.pendingTapOverlayScope().has_value());
+}
+
+TEST_CASE("GestureTracker: overlay press lookup falls back by stable key inside the overlay tree") {
+  GestureTracker tracker{};
+  InteractiveRectTree main = makeInteractiveRectTree("shared");
+  InteractiveRectTree overlayTree = makeInteractiveRectTree("shared");
+
+  OverlayEntry overlay{};
+  overlay.id = OverlayId{7ull};
+  overlay.sceneTree = std::move(overlayTree.tree);
+  std::vector<OverlayEntry const*> overlays{&overlay};
+
+  GestureTracker::PressState press{};
+  press.nodeId = NodeId{999ull};
+  press.stableTargetKey = ComponentKey{LocalId::fromString("shared")};
+  press.overlayScope = overlay.id;
+
+  auto const [resolvedId, interaction] = tracker.findPressInteraction(press, overlays, main.tree);
+  REQUIRE(interaction != nullptr);
+  CHECK(resolvedId == overlayTree.leafId);
+  CHECK(interaction->stableTargetKey == press.stableTargetKey);
+  CHECK(tracker.sceneTreeForPress(press, overlays, main.tree) == &overlay.sceneTree);
+}
+
+TEST_CASE("FocusController: modal overlay rebuild syncs focus from the retained overlay tree") {
+  FocusController focus{};
+  InteractiveRectTree overlayTree = makeInteractiveRectTree("dialog-primary", true);
+
+  OverlayEntry overlay{};
+  overlay.id = OverlayId{9ull};
+  overlay.config.modal = true;
+  overlay.sceneTree = std::move(overlayTree.tree);
+
+  focus.onOverlayPushed(overlay);
+  focus.syncAfterOverlayRebuild(overlay);
+
+  REQUIRE(focus.focusInOverlay().has_value());
+  CHECK(focus.focusInOverlay()->value == overlay.id.value);
+  CHECK(focus.focusedKey() == ComponentKey{LocalId::fromString("dialog-primary")});
 }

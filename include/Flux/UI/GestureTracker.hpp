@@ -7,13 +7,10 @@
 
 #include <Flux/Scene/InteractionData.hpp>
 #include <Flux/Scene/SceneTree.hpp>
-#include <Flux/UI/ComponentKey.hpp>
-#include <Flux/UI/EventMap.hpp>
-#include <Flux/UI/Overlay.hpp>
-#include <Flux/Scene/SceneGraph.hpp>
 #include <Flux/Core/Types.hpp>
+#include <Flux/UI/ComponentKey.hpp>
+#include <Flux/UI/Overlay.hpp>
 
-#include <functional>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -55,19 +52,20 @@ public:
                    SceneTree const& mainTree);
 
   ComponentKey const& pendingTapLeafKey() const noexcept;
+  std::optional<OverlayId> pendingTapOverlayScope() const noexcept;
 
-  std::pair<NodeId, EventHandlers const*> findPressHandlers(PressState const& ps,
-                                                            std::vector<OverlayEntry const*> const& overlayEntries) const;
-
-  std::pair<NodeId, InteractionData const*> findPressInteraction(PressState const& ps,
-                                                                 SceneTree const& mainTree) const;
-
-  SceneGraph const* sceneGraphForPress(PressState const& ps,
-                                       std::vector<OverlayEntry const*> const& overlayEntries) const;
+  OverlayEntry const* overlayForPress(PressState const& ps,
+                                      std::vector<OverlayEntry const*> const& overlayEntries) const;
+  std::pair<NodeId, InteractionData const*> findPressInteraction(
+      PressState const& ps, std::vector<OverlayEntry const*> const& overlayEntries, SceneTree const& mainTree) const;
+  SceneTree const* sceneTreeForPress(PressState const& ps,
+                                     std::vector<OverlayEntry const*> const& overlayEntries,
+                                     SceneTree const& mainTree) const;
 
 private:
   std::optional<PressState> activePress_{};
   ComponentKey pendingTapLeafKey_{};
+  std::optional<OverlayId> pendingTapOverlayScope_{};
 };
 
 } // namespace flux

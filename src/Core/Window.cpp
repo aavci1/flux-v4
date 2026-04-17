@@ -223,13 +223,11 @@ void Window::render(Canvas& canvas) {
     OverlayEntry const& entry = *up;
     canvas.save();
     canvas.transform(Mat3::translate(Point{entry.resolvedFrame.x, entry.resolvedFrame.y}));
-    d->renderer_.render(entry.graph, canvas);
+    flux::render(entry.sceneTree, canvas);
     canvas.restore();
   }
   if (d->runtime_ && d->runtime_->layoutOverlayEnabled()) {
-    if (d->sceneGraph_) {
-      renderLayoutOverlay(d->runtime_->mainLayoutTree(), canvas);
-    }
+    renderLayoutOverlay(d->runtime_->mainLayoutTree(), canvas);
     for (std::unique_ptr<OverlayEntry> const& up : d->overlayMgr_.entries()) {
       OverlayEntry const& entry = *up;
       canvas.save();
