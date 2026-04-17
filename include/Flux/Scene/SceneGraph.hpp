@@ -18,8 +18,6 @@
 
 namespace flux {
 
-class SceneRenderer;
-
 class SceneGraph {
 public:
   static constexpr std::size_t npos = std::numeric_limits<std::size_t>::max();
@@ -79,8 +77,6 @@ public:
   std::optional<NodeId> parentOf(NodeId child) const;
 
 private:
-  friend class SceneRenderer;
-
   void const* cacheIdentity() const noexcept { return lifetime_.get(); }
   std::weak_ptr<void const> cacheLifetime() const noexcept { return lifetime_; }
 

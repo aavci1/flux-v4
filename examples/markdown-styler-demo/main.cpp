@@ -205,14 +205,14 @@ The pipeline for each rebuild has three distinct phases:
 ```
 Phase 1: Layout   — Element tree → LayoutTree
 Phase 2: Render   — LayoutTree + EventMap + SceneGraph
-Phase 3: Paint    — SceneGraph → Canvas (unchanged each frame; pure renderer)
+Phase 3: Paint    — Retained scene tree → Canvas
 ```
 
 **Phase 1** walks the element tree, runs `measure` and flex distribution, and writes a `LayoutTree` of `LayoutNode`s — geometry and structure only, no SceneGraph, no EventMap. The only dependencies are `LayoutConstraints`, `LayoutHints`, and `TextSystem` (for text measurement).
 
 **Phase 2** walks the `LayoutTree` and emits SceneGraph nodes (`RectNode`, `TextNode`, `LayerNode`, etc.) and `EventMap` entries via `renderLayoutTree`. Each `LayoutNode` carries the resolved `frame`, so the render phase only creates the appropriate node at the computed position.
 
-**Phase 3** is `SceneRenderer::render`, which walks the SceneGraph and draws to Canvas. Already fully separated; unchanged by the layout/render split.
+**Phase 3** is a retained scene-tree walk to Canvas. Paint retention is node-local rather than a separate scene-renderer layer.
 
 )"
         });

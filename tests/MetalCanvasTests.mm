@@ -4,8 +4,11 @@
 #include "Graphics/Metal/MetalCanvas.hpp"
 
 #include <Flux/Graphics/Image.hpp>
-#include <Flux/Scene/SceneGraph.hpp>
-#include <Flux/Scene/SceneRenderer.hpp>
+#include <Flux/Scene/ImageSceneNode.hpp>
+#include <Flux/Scene/PathSceneNode.hpp>
+#include <Flux/Scene/RectSceneNode.hpp>
+#include <Flux/Scene/SceneTree.hpp>
+#include <Flux/Scene/TextSceneNode.hpp>
 
 #import <AppKit/AppKit.h>
 #import <Metal/Metal.h>
@@ -68,36 +71,52 @@ static std::shared_ptr<TextLayout const> makeLabel(CoreTextSystem& textSystem, s
   return textSystem.layout(text, font, Colors::white, 120.f, {});
 }
 
-static SceneGraph makeStressScene(CoreTextSystem& textSystem, std::shared_ptr<Image> const& image) {
-  SceneGraph graph;
+struct StressScene {
+  SceneTree tree{};
+  SceneNode* animatedGroup = nullptr;
+};
+
+static StressScene makeStressScene(CoreTextSystem& textSystem, std::shared_ptr<Image> const& image) {
+  auto root = std::make_unique<SceneNode>(NodeId{1ull});
+
+  auto bg = std::make_unique<RectSceneNode>(NodeId{2ull});
+  bg->size = flux::Size{640.f, 480.f};
+  bg->fill = FillStyle::solid(Color{0.08f, 0.09f, 0.11f, 1.f});
+  bg->recomputeBounds();
+  root->appendChild(std::move(bg));
+
+  auto animatedGroup = std::make_unique<SceneNode>(NodeId{3ull});
+  SceneNode* animatedGroupPtr = animatedGroup.get();
 
   for (int i = 0; i < 256; ++i) {
-    NodeId const layerId = graph.addLayer(graph.root(), LayerNode{});
-    float const x = static_cast<float>((i % 32) * 18);
-    float const y = static_cast<float>((i / 32) * 18);
-    graph.addRect(layerId, RectNode{
-                               .bounds = flux::Rect::sharp(x, y, 14.f, 14.f),
-                               .cornerRadius = CornerRadius{3.f, 3.f, 3.f, 3.f},
-                               .fill = FillStyle::solid(Color{
-                                   static_cast<float>((17 * i) % 255) / 255.f,
-                                   static_cast<float>((37 * i) % 255) / 255.f,
-                                   static_cast<float>((53 * i) % 255) / 255.f,
-                                   1.f,
-                               }),
-                               .stroke = StrokeStyle::none(),
-                               .shadow = ShadowStyle::none(),
-                           });
+    auto rect = std::make_unique<RectSceneNode>(NodeId{100ull + static_cast<std::uint64_t>(i)});
+    rect->position = flux::Point{
+        static_cast<float>((i % 32) * 18),
+        static_cast<float>((i / 32) * 18),
+    };
+    rect->size = flux::Size{14.f, 14.f};
+    rect->cornerRadius = CornerRadius{3.f, 3.f, 3.f, 3.f};
+    rect->fill = FillStyle::solid(Color{
+        static_cast<float>((17 * i) % 255) / 255.f,
+        static_cast<float>((37 * i) % 255) / 255.f,
+        static_cast<float>((53 * i) % 255) / 255.f,
+        1.f,
+    });
+    rect->recomputeBounds();
+    animatedGroup->appendChild(std::move(rect));
   }
 
   for (int i = 0; i < 64; ++i) {
-    NodeId const layerId = graph.addLayer(graph.root(), LayerNode{});
-    float const x = static_cast<float>((i % 8) * 72);
-    float const y = 170.f + static_cast<float>(i / 8) * 16.f;
-    graph.addText(layerId, TextNode{
-                               .layout = makeLabel(textSystem, "Row " + std::to_string(i)),
-                               .origin = flux::Point{x, y},
-                               .allocation = flux::Rect::sharp(x, y - 12.f, 64.f, 14.f),
-                           });
+    auto text = std::make_unique<TextSceneNode>(NodeId{1000ull + static_cast<std::uint64_t>(i)});
+    text->layout = makeLabel(textSystem, "Row " + std::to_string(i));
+    text->position = flux::Point{
+        static_cast<float>((i % 8) * 72),
+        170.f + static_cast<float>(i / 8) * 16.f,
+    };
+    text->origin = flux::Point{0.f, 0.f};
+    text->allocation = flux::Rect::sharp(0.f, -12.f, 64.f, 14.f);
+    text->recomputeBounds();
+    animatedGroup->appendChild(std::move(text));
   }
 
   Path triangle;
@@ -105,29 +124,35 @@ static SceneGraph makeStressScene(CoreTextSystem& textSystem, std::shared_ptr<Im
   triangle.lineTo({420.f, 180.f});
   triangle.lineTo({240.f, 180.f});
   triangle.close();
-  graph.addPath(graph.root(), PathNode{
-                                 .path = triangle,
-                                 .fill = FillStyle::solid(Color{0.2f, 0.6f, 0.9f, 1.f}),
-                                 .stroke = StrokeStyle::none(),
-                                 .shadow = ShadowStyle::none(),
-                             });
+  auto path = std::make_unique<PathSceneNode>(NodeId{2000ull});
+  path->path = triangle;
+  path->fill = FillStyle::solid(Color{0.2f, 0.6f, 0.9f, 1.f});
+  path->stroke = StrokeStyle::none();
+  path->shadow = ShadowStyle::none();
+  path->recomputeBounds();
+  animatedGroup->appendChild(std::move(path));
 
   if (image) {
     for (int i = 0; i < 9; ++i) {
-      NodeId const layerId = graph.addLayer(graph.root(), LayerNode{});
-      float const x = static_cast<float>((i % 3) * 88);
-      float const y = 320.f + static_cast<float>(i / 3) * 88.f;
-      graph.addImage(layerId, ImageNode{
-                                  .image = image,
-                                  .bounds = flux::Rect::sharp(x, y, 72.f, 72.f),
-                                  .fillMode = ImageFillMode::Cover,
-                                  .cornerRadius = CornerRadius{6.f, 6.f, 6.f, 6.f},
-                                  .opacity = 1.f,
-                              });
+      auto imageNode = std::make_unique<ImageSceneNode>(NodeId{3000ull + static_cast<std::uint64_t>(i)});
+      imageNode->image = image;
+      imageNode->position = flux::Point{
+          static_cast<float>((i % 3) * 88),
+          320.f + static_cast<float>(i / 3) * 88.f,
+      };
+      imageNode->size = flux::Size{72.f, 72.f};
+      imageNode->fillMode = ImageFillMode::Cover;
+      imageNode->cornerRadius = CornerRadius{6.f, 6.f, 6.f, 6.f};
+      imageNode->opacity = 1.f;
+      imageNode->recomputeBounds();
+      animatedGroup->appendChild(std::move(imageNode));
     }
   }
 
-  return graph;
+  animatedGroup->recomputeBounds();
+  root->appendChild(std::move(animatedGroup));
+  root->recomputeBounds();
+  return StressScene{SceneTree{std::move(root)}, animatedGroupPtr};
 }
 
 } // namespace
@@ -145,16 +170,15 @@ TEST_CASE("MetalCanvas can render multiple queued frames without arena aliasing 
     canvas->updateDpiScale(2.f, 2.f);
 
     std::shared_ptr<Image> image = loadImageFromFile(imageFixturePath().string(), canvas->gpuDevice());
-    SceneGraph graph = makeStressScene(textSystem, image);
-    SceneRenderer renderer;
+    StressScene scene = makeStressScene(textSystem, image);
+    REQUIRE(scene.animatedGroup != nullptr);
 
     for (int frame = 0; frame < 18; ++frame) {
-      if (auto* root = graph.node<LayerNode>(graph.root())) {
-        root->transform = Mat3::translate(0.f, static_cast<float>(frame % 3));
-        graph.markPaintDirty(root->id);
-      }
+      scene.animatedGroup->position = flux::Point{0.f, static_cast<float>(frame % 3)};
+      scene.tree.root().recomputeBounds();
       canvas->beginFrame();
-      renderer.render(graph, *canvas, Color{0.08f, 0.09f, 0.11f, 1.f});
+      canvas->clear(Color{0.08f, 0.09f, 0.11f, 1.f});
+      render(scene.tree, *canvas);
       canvas->present();
     }
 
