@@ -14,12 +14,16 @@ void TextSceneNode::rebuildLocalPaint() {
     opts.wrapping = wrapping;
     opts.maxLines = maxLines;
     opts.firstBaselineOffset = firstBaselineOffset;
-    layout = textSystem->layout(text, font, color, widthConstraint, opts);
+    if (allocation.width > 0.f || allocation.height > 0.f) {
+      layout = textSystem->layout(text, font, color, allocation, opts);
+    } else {
+      layout = textSystem->layout(text, font, color, widthConstraint, opts);
+    }
   }
   if (layout) {
     localPaintCache().push_back(DrawTextPaintCommand{
         .layout = layout,
-        .origin = origin,
+        .origin = allocation.width > 0.f || allocation.height > 0.f ? Point{allocation.x, allocation.y} : origin,
     });
   }
 }

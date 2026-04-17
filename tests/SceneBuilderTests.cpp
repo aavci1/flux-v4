@@ -8,6 +8,7 @@
 #include <Flux/Scene/Renderer.hpp>
 #include <Flux/Scene/SceneTree.hpp>
 #include <Flux/Scene/SceneTreeInteraction.hpp>
+#include <Flux/Scene/TextSceneNode.hpp>
 #include <Flux/UI/Environment.hpp>
 #include <Flux/UI/LayoutContext.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
@@ -19,6 +20,7 @@
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/ScrollView.hpp>
+#include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Text.hpp>
 #include <Flux/UI/Views/VStack.hpp>
 
@@ -269,6 +271,63 @@ TEST_CASE("SceneBuilder: geometry index records assigned frames by keyed path") 
   CHECK(bRect->y == doctest::Approx(61.5f));
   CHECK(bRect->width == doctest::Approx(30.f));
   CHECK(bRect->height == doctest::Approx(15.f));
+}
+
+TEST_CASE("SceneBuilder: centered text keeps its assigned box for boxed layout") {
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  LayoutConstraints constraints{};
+  constraints.minWidth = 320.f;
+  constraints.minHeight = 320.f;
+  constraints.maxWidth = 320.f;
+  constraints.maxHeight = 320.f;
+
+  Element text = Text{
+      .text = "Hello, World!",
+      .horizontalAlignment = HorizontalAlignment::Center,
+      .verticalAlignment = VerticalAlignment::Center,
+  };
+
+  std::unique_ptr<SceneNode> tree = builder.build(text, NodeId{1ull}, constraints);
+  auto* textNode = dynamic_cast<TextSceneNode*>(tree.get());
+  REQUIRE(textNode != nullptr);
+  CHECK(textNode->allocation.width == doctest::Approx(320.f));
+  CHECK(textNode->allocation.height == doctest::Approx(320.f));
+
+  NullRenderer renderer{};
+  render(*tree, renderer);
+  CHECK(renderer.textCount == 1);
+}
+
+TEST_CASE("SceneBuilder: stretched HStack leaves adopt their assigned slot size") {
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 100.f;
+  constraints.maxHeight = 50.f;
+
+  Element row = HStack{
+      .alignment = Alignment::Stretch,
+      .children = {
+          Element{Rectangle{}}.size(20.f, 10.f),
+      },
+  };
+
+  std::unique_ptr<SceneNode> tree = builder.build(row, NodeId{1ull}, constraints);
+  REQUIRE(tree != nullptr);
+  REQUIRE(tree->children().size() == 1);
+  auto* rectNode = dynamic_cast<RectSceneNode*>(tree->children()[0].get());
+  REQUIRE(rectNode != nullptr);
+  CHECK(rectNode->size.width == doctest::Approx(100.f));
+  CHECK(rectNode->size.height == doctest::Approx(50.f));
 }
 
 TEST_CASE("SceneGeometryIndex: committed queries use current frames and previous-frame fallback") {

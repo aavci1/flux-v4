@@ -210,18 +210,31 @@ LocalId childLocalId(Element const& child, std::size_t index) {
   return LocalId::fromIndex(index);
 }
 
-Rect assignedFrameForLeaf(Size size, ElementModifiers const* mods, LayoutHints const& hints) {
+Rect assignedFrameForLeaf(Size measuredSize, LayoutConstraints const& constraints, ElementModifiers const* mods,
+                          LayoutHints const& hints) {
   Rect explicitBox{};
   if (mods) {
     explicitBox.width = std::max(0.f, mods->sizeWidth);
     explicitBox.height = std::max(0.f, mods->sizeHeight);
   }
-  Rect const childFrame{0.f, 0.f, size.width, size.height};
-  LayoutConstraints constraints{};
-  constraints.maxWidth = size.width;
-  constraints.maxHeight = size.height;
-  constraints.minWidth = size.width;
-  constraints.minHeight = size.height;
+  float slotWidth = 0.f;
+  float slotHeight = 0.f;
+  if (std::isfinite(constraints.maxWidth) && constraints.maxWidth > 0.f) {
+    slotWidth = constraints.maxWidth;
+  } else if (std::isfinite(constraints.minWidth) && constraints.minWidth > 0.f) {
+    slotWidth = constraints.minWidth;
+  }
+  if (std::isfinite(constraints.maxHeight) && constraints.maxHeight > 0.f) {
+    slotHeight = constraints.maxHeight;
+  } else if (std::isfinite(constraints.minHeight) && constraints.minHeight > 0.f) {
+    slotHeight = constraints.minHeight;
+  }
+  Rect const childFrame{
+      0.f,
+      0.f,
+      slotWidth > 0.f ? slotWidth : measuredSize.width,
+      slotHeight > 0.f ? slotHeight : measuredSize.height,
+  };
   return detail::resolveLeafLayoutBounds(explicitBox, childFrame, constraints, hints);
 }
 
@@ -463,13 +476,15 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
   };
 
   std::unique_ptr<SceneNode> core{};
+  Size geometrySize = outerSize;
   switch (sceneEl.typeTag()) {
   case ElementType::Rectangle: {
     std::unique_ptr<RectSceneNode> rectNode = releaseAs<RectSceneNode>(std::move(existing));
     if (!rectNode) {
       rectNode = std::make_unique<RectSceneNode>(id);
     }
-    Size const resolvedRectSize = rectSize(assignedFrameForLeaf(paddedContentSize, mods, current.hints));
+    Size const resolvedRectSize =
+        rectSize(assignedFrameForLeaf(paddedContentSize, current.constraints, mods, current.hints));
     bool dirty = false;
     dirty |= updateIfChanged(rectNode->size, resolvedRectSize);
     dirty |= updateIfChanged(rectNode->cornerRadius, mods ? mods->cornerRadius : CornerRadius{});
@@ -482,6 +497,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     }
     rectNode->position = {};
     rectNode->recomputeBounds();
+    geometrySize = resolvedRectSize;
     core = std::move(rectNode);
     break;
   }
@@ -492,7 +508,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
       textNode = std::make_unique<TextSceneNode>(id);
     }
     auto const [resolvedFont, resolvedColor] = text_detail::resolveBodyTextStyle(text.font, text.color);
-    Rect const frameRect = assignedFrameForLeaf(paddedContentSize, mods, current.hints);
+    Rect const frameRect = assignedFrameForLeaf(paddedContentSize, current.constraints, mods, current.hints);
     TextLayoutOptions const options = text_detail::makeTextLayoutOptions(text);
     std::string const displayText =
         text.selectable ? text.text
@@ -522,6 +538,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     }
     textNode->position = {};
     textNode->recomputeBounds();
+    geometrySize = rectSize(frameRect);
     core = std::move(textNode);
     break;
   }
@@ -531,7 +548,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     if (!renderNode) {
       renderNode = std::make_unique<RenderSceneNode>(id);
     }
-    Rect const frameRect{0.f, 0.f, paddedContentSize.width, paddedContentSize.height};
+    Rect const frameRect = assignedFrameForLeaf(paddedContentSize, current.constraints, mods, current.hints);
     bool dirty = false;
     dirty |= updateIfChanged(renderNode->frame, frameRect);
     if (renderNode->pure != renderView.pure) {
@@ -548,6 +565,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     }
     renderNode->position = {};
     renderNode->recomputeBounds();
+    geometrySize = rectSize(frameRect);
     core = std::move(renderNode);
     break;
   }
@@ -557,7 +575,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     if (!imageNode) {
       imageNode = std::make_unique<ImageSceneNode>(id);
     }
-    Rect const frameRect = assignedFrameForLeaf(paddedContentSize, mods, current.hints);
+    Rect const frameRect = assignedFrameForLeaf(paddedContentSize, current.constraints, mods, current.hints);
     bool dirty = false;
     dirty |= updateIfChanged(imageNode->image, image.source);
     dirty |= updateIfChanged(imageNode->size, Size{frameRect.width, frameRect.height});
@@ -570,6 +588,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     }
     imageNode->position = {};
     imageNode->recomputeBounds();
+    geometrySize = rectSize(frameRect);
     core = std::move(imageNode);
     break;
   }
@@ -1337,7 +1356,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
   if (root->bounds.width <= 0.f && root->bounds.height <= 0.f) {
     root->bounds = sizeRect(outerSize);
   }
-  recordGeometry(outerSize.width > 0.f || outerSize.height > 0.f ? outerSize : rectSize(root->bounds));
+  recordGeometry(geometrySize.width > 0.f || geometrySize.height > 0.f ? geometrySize : rectSize(root->bounds));
   return root;
 }
 
