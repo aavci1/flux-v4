@@ -81,7 +81,7 @@ struct CustomRenderNode {
   std::function<void(Canvas&)> draw;
 };
 
-using SceneNode =
+using LegacySceneNode =
     std::variant<LayerNode, RectNode, TextNode, ImageNode, PathNode, LineNode, CustomRenderNode>;
 
 } // namespace flux

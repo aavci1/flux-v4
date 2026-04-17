@@ -5,7 +5,7 @@
 
 namespace flux {
 
-NodeId NodeStore::insert(SceneNode node) {
+NodeId NodeStore::insert(LegacySceneNode node) {
   std::size_t idx;
   if (!free_.empty()) {
     idx = free_.back();
@@ -38,7 +38,7 @@ void NodeStore::remove(NodeId id) {
   free_.push_back(static_cast<std::size_t>(id.index));
 }
 
-SceneNode* NodeStore::get(NodeId id) {
+LegacySceneNode* NodeStore::get(NodeId id) {
   if (id.index >= slots_.size()) {
     return nullptr;
   }
@@ -49,7 +49,7 @@ SceneNode* NodeStore::get(NodeId id) {
   return &*s.node;
 }
 
-SceneNode const* NodeStore::get(NodeId id) const {
+LegacySceneNode const* NodeStore::get(NodeId id) const {
   if (id.index >= slots_.size()) {
     return nullptr;
   }

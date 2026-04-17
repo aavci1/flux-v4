@@ -95,7 +95,7 @@ void unionClippedWorldRect(Rect const& worldRect, std::optional<Rect> const& cli
 
 void accumulate(NodeId id, SceneGraph const& graph, Mat3 const& parentWorld,
                 std::optional<Rect> const& clipWorld, Rect& acc, bool& has) {
-  SceneNode const* sn = graph.get(id);
+  LegacySceneNode const* sn = graph.get(id);
   if (!sn) {
     return;
   }

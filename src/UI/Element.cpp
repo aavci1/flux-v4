@@ -116,12 +116,28 @@ std::uint64_t modifierMeasureHash(ElementModifiers const& mods) {
   return h;
 }
 
+struct ChildLocalIdScope {
+  LayoutContext& ctx;
+
+  ChildLocalIdScope(LayoutContext& context, std::optional<std::string> const& explicitKey)
+      : ctx(context) {
+    if (explicitKey.has_value()) {
+      ctx.pushExplicitChildLocalId(LocalId::fromString(*explicitKey));
+    } else {
+      ctx.pushExplicitChildLocalId(std::nullopt);
+    }
+  }
+
+  ~ChildLocalIdScope() { ctx.popExplicitChildLocalId(); }
+};
+
 } // namespace
 
 using flux::detail::eventHandlersFromModifiers;
 using flux::detail::shouldInsertHandlers;
 
 void Element::layout(LayoutContext& ctx) const {
+  ChildLocalIdScope const childIdScope{ctx, key_};
   Element const* const prevEl = ctx.currentElement();
   ctx.setCurrentElement(this);
   layoutDebugPushElementBuild(measureId_);
@@ -141,6 +157,7 @@ void Element::layout(LayoutContext& ctx) const {
 }
 
 bool Element::tryRetainedLayout(LayoutContext& ctx) const {
+  ChildLocalIdScope const childIdScope{ctx, key_};
   if (envLayer_ || modifiers_) {
     return false;
   }
@@ -152,6 +169,7 @@ bool Element::tryRetainedLayout(LayoutContext& ctx) const {
 }
 
 bool Element::canRetainedLayout(LayoutContext& ctx) const {
+  ChildLocalIdScope const childIdScope{ctx, key_};
   if (envLayer_ || modifiers_) {
     return false;
   }
@@ -165,6 +183,7 @@ bool Element::canRetainedLayout(LayoutContext& ctx) const {
 bool Element::canRetainedLayout(LayoutContext& ctx, ComponentKey const& key, LayoutNodeId retainedRoot,
                                 Rect const& assignedFrame, LayoutConstraints const& constraints,
                                 LayoutHints const& hints) const {
+  ChildLocalIdScope const childIdScope{ctx, key_};
   if (envLayer_ || modifiers_) {
     return false;
   }
@@ -179,6 +198,7 @@ bool Element::canRetainedLayout(LayoutContext& ctx, ComponentKey const& key, Lay
 bool Element::tryRetainedLayout(LayoutContext& ctx, ComponentKey const& key, LayoutNodeId retainedRoot,
                                 Rect const& assignedFrame, LayoutConstraints const& constraints,
                                 LayoutHints const& hints) const {
+  ChildLocalIdScope const childIdScope{ctx, key_};
   if (envLayer_ || modifiers_) {
     return false;
   }
@@ -192,6 +212,7 @@ bool Element::tryRetainedLayout(LayoutContext& ctx, ComponentKey const& key, Lay
 
 bool Element::tryCachedMeasure(LayoutContext& ctx, LayoutConstraints const& constraints,
                                LayoutHints const& hints, TextSystem& textSystem, Size& out) const {
+  ChildLocalIdScope const childIdScope{ctx, key_};
   if (envLayer_ || modifiers_) {
     return false;
   }
@@ -377,6 +398,7 @@ Size Element::measureWithModifiersImpl(LayoutContext& ctx, LayoutConstraints con
 
 Size Element::measure(LayoutContext& ctx, LayoutConstraints const& constraints,
                       LayoutHints const& hints, TextSystem& textSystem) const {
+  ChildLocalIdScope const childIdScope{ctx, key_};
   if (envLayer_) {
     EnvironmentStack::current().push(*envLayer_);
   }
@@ -452,6 +474,7 @@ Element::Element(Element const& other)
     , minMainSizeOverride_(other.minMainSizeOverride_)
     , envLayer_(other.envLayer_)
     , modifiers_(other.modifiers_)
+    , key_(other.key_)
     , measureId_(detail::nextElementMeasureId()) {}
 
 Element& Element::operator=(Element const& other) {
@@ -462,6 +485,7 @@ Element& Element::operator=(Element const& other) {
     minMainSizeOverride_ = other.minMainSizeOverride_;
     envLayer_ = other.envLayer_;
     modifiers_ = other.modifiers_;
+    key_ = other.key_;
     measureId_ = detail::nextElementMeasureId();
   }
   return *this;
@@ -483,6 +507,11 @@ Element Element::flex(float grow, float shrink, float minMain) && {
   flexGrowOverride_ = grow;
   flexShrinkOverride_ = shrink;
   minMainSizeOverride_ = minMain;
+  return std::move(*this);
+}
+
+Element Element::key(std::string key) && {
+  key_ = std::move(key);
   return std::move(*this);
 }
 

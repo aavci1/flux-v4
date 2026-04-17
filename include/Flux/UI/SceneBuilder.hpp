@@ -1,0 +1,61 @@
+#pragma once
+
+/// \file Flux/UI/SceneBuilder.hpp
+///
+/// Part of the Flux public API.
+
+#include <Flux/Scene/SceneNode.hpp>
+#include <Flux/UI/ComponentKey.hpp>
+#include <Flux/UI/Element.hpp>
+#include <Flux/UI/Environment.hpp>
+#include <Flux/UI/LayoutEngine.hpp>
+#include <Flux/UI/SceneGeometryIndex.hpp>
+
+#include <memory>
+#include <span>
+#include <vector>
+
+namespace flux {
+
+class TextSystem;
+
+class SceneBuilder {
+public:
+  SceneBuilder(TextSystem& textSystem, EnvironmentStack& environment,
+               SceneGeometryIndex* geometryIndex = nullptr);
+
+  std::unique_ptr<SceneNode> build(Element const& el, NodeId id, LayoutConstraints const& constraints,
+                                   std::unique_ptr<SceneNode> existing = nullptr,
+                                   ComponentKey rootKey = {});
+
+  std::unique_ptr<SceneNode> buildOrReuse(Element const& el, NodeId id, std::unique_ptr<SceneNode> existing);
+
+  void reconcileChildren(SceneNode& parent, std::span<Element const> newChildren,
+                         std::vector<std::unique_ptr<SceneNode>>& existingChildren);
+
+private:
+  struct FrameState {
+    LayoutConstraints constraints{};
+    LayoutHints hints{};
+    Point origin{};
+    ComponentKey key{};
+  };
+
+  TextSystem& textSystem_;
+  EnvironmentStack& environment_;
+  SceneGeometryIndex* geometryIndex_ = nullptr;
+  std::vector<FrameState> frames_{};
+
+  [[nodiscard]] FrameState const& frame() const;
+  void pushFrame(LayoutConstraints const& constraints, LayoutHints const& hints, Point origin,
+                 ComponentKey key);
+  void popFrame();
+
+  [[nodiscard]] Size measureElement(Element const& el, LayoutConstraints const& constraints,
+                                    LayoutHints const& hints) const;
+
+  std::unique_ptr<SceneNode> buildResolved(Element const& el, Element const& sceneEl, NodeId id,
+                                           std::unique_ptr<SceneNode> existing);
+};
+
+} // namespace flux

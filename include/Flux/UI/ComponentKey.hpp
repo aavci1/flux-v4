@@ -4,6 +4,8 @@
 ///
 /// Part of the Flux public API.
 
+#include <Flux/Scene/LocalId.hpp>
+
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -14,12 +16,13 @@
 
 namespace flux {
 
-/// Structural position of a composite component: sequence of child indices
-/// from the root, assigned at build time. Stable as long as tree structure
-/// is stable (same container types and child counts at each level).
+/// Structural path of a component: sequence of per-parent local ids from the root.
+///
+/// Positional children use `LocalId::fromIndex(i)`. Explicit keys use `LocalId::fromString(...)`
+/// and remain stable across reorder.
 class ComponentKey {
 public:
-  using value_type = std::size_t;
+  using value_type = LocalId;
   using iterator = value_type*;
   using const_iterator = value_type const*;
 

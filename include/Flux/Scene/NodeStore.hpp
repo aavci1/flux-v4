@@ -16,10 +16,10 @@ namespace flux {
 
 class NodeStore {
 public:
-  NodeId insert(SceneNode node);
+  NodeId insert(LegacySceneNode node);
   void remove(NodeId id);
-  SceneNode* get(NodeId id);
-  SceneNode const* get(NodeId id) const;
+  LegacySceneNode* get(NodeId id);
+  LegacySceneNode const* get(NodeId id) const;
   bool contains(NodeId id) const;
   NodeId parentOf(NodeId id) const;
   void setParent(NodeId id, NodeId parent);
@@ -31,7 +31,7 @@ private:
     std::uint32_t generation = 0;
     NodeId parent{};
     std::uint64_t paintEpoch = 0;
-    std::optional<SceneNode> node;
+    std::optional<LegacySceneNode> node;
   };
 
   std::vector<Slot> slots_{};

@@ -13,6 +13,7 @@
 #include <Flux/UI/LayoutRectCache.hpp>
 #include <Flux/UI/LayoutTree.hpp>
 #include <Flux/UI/MeasureCache.hpp>
+#include <Flux/UI/SceneGeometryIndex.hpp>
 #include <Flux/UI/StateStore.hpp>
 
 #include <functional>
@@ -76,6 +77,7 @@ private:
   ActionRegistry actionRegistryBuild_{};
   ActionRegistry actionRegistryCommitted_{};
   MeasureCache measureCache_{};
+  SceneGeometryIndex sceneGeometry_{};
   std::uint64_t textFrameIndex_{0};
 };
 

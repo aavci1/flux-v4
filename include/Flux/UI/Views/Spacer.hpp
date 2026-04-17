@@ -28,6 +28,9 @@ struct Element::Model<Spacer> final : Element::Concept {
   Spacer value;
   explicit Model(Spacer c) : value(std::move(c)) {}
   std::unique_ptr<Concept> clone() const override { return std::make_unique<Element::Model<Spacer>>(value); }
+  ElementType elementType() const noexcept override { return ElementType::Spacer; }
+  std::type_index modelType() const noexcept override { return std::type_index(typeid(Spacer)); }
+  void const* rawValuePtr() const noexcept override { return &value; }
   void layout(LayoutContext& ctx) const override { value.layout(ctx); }
   void renderFromLayout(RenderContext& ctx, LayoutNode& node) const override {
     value.renderFromLayout(ctx, node);

@@ -39,9 +39,45 @@ namespace flux {
 
 class Element;
 struct Popover;
+struct Rectangle;
+struct Text;
+struct Render;
+struct PathShape;
+struct Line;
+struct VStack;
+struct HStack;
+struct ZStack;
+struct Grid;
+struct OffsetView;
+struct ScrollView;
+struct ScaleAroundCenter;
+struct Spacer;
+struct PopoverCalloutShape;
+namespace views {
+struct Image;
+} // namespace views
 
 template<typename>
 inline constexpr bool alwaysFalse = false;
+
+enum class ElementType : std::uint8_t {
+  Unknown,
+  Rectangle,
+  Text,
+  Render,
+  Image,
+  Path,
+  Line,
+  VStack,
+  HStack,
+  ZStack,
+  Grid,
+  OffsetView,
+  ScrollView,
+  ScaleAroundCenter,
+  Spacer,
+  PopoverCalloutShape,
+};
 
 namespace detail {
 
@@ -54,6 +90,7 @@ Popover* popoverOverlayStateIf(Element& el);
 
 struct CompositeBodyResolution {
   Element* body = nullptr;
+  std::unique_ptr<Element> ownedBody{};
   bool descendantsStable = false;
 };
 
@@ -240,6 +277,28 @@ public:
   Size measure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
                TextSystem& textSystem) const;
   [[nodiscard]] std::uint64_t measureId() const noexcept { return measureId_; }
+  [[nodiscard]] ElementType typeTag() const noexcept { return impl_ ? impl_->elementType() : ElementType::Unknown; }
+  [[nodiscard]] bool isComposite() const noexcept { return impl_ && impl_->isComposite(); }
+  [[nodiscard]] std::unique_ptr<Element> buildCompositeBody() const {
+    return impl_ ? impl_->buildCompositeBody() : nullptr;
+  }
+  [[nodiscard]] detail::CompositeBodyResolution resolveCompositeBody(ComponentKey const& key,
+                                                                     LayoutConstraints const& constraints) const {
+    return impl_ ? impl_->resolveCompositeBody(key, constraints, modifiers())
+                 : detail::CompositeBodyResolution{};
+  }
+  [[nodiscard]] ElementModifiers const* modifiers() const noexcept {
+    return modifiers_ ? &*modifiers_ : nullptr;
+  }
+  [[nodiscard]] EnvironmentLayer const* environmentLayer() const noexcept {
+    return envLayer_ ? &*envLayer_ : nullptr;
+  }
+
+  template<typename T>
+  [[nodiscard]] bool is() const noexcept;
+
+  template<typename T>
+  [[nodiscard]] T const& as() const;
 
   /// Optional flex overrides on the wrapper (from \c flex()). When set, they replace the
   /// underlying component's flex hints for layout.
@@ -254,6 +313,8 @@ public:
 
   /// Sets flex metadata for this child in its parent stack. Overrides struct-level flex fields.
   Element flex(float grow, float shrink = 1.f, float minMain = 0.f) &&;
+  Element key(std::string key) &&;
+  [[nodiscard]] std::optional<std::string> const& explicitKey() const noexcept { return key_; }
 
   /// Pushes environment values for this subtree's layout and measure passes.
   template<typename T>
@@ -305,6 +366,16 @@ private:
   struct Concept {
     virtual ~Concept() = default;
     virtual std::unique_ptr<Concept> clone() const = 0;
+    virtual ElementType elementType() const noexcept { return ElementType::Unknown; }
+    virtual std::type_index modelType() const noexcept = 0;
+    virtual void const* rawValuePtr() const noexcept = 0;
+    virtual bool isComposite() const noexcept { return false; }
+    virtual std::unique_ptr<Element> buildCompositeBody() const { return nullptr; }
+    virtual detail::CompositeBodyResolution resolveCompositeBody(ComponentKey const&,
+                                                                 LayoutConstraints const&,
+                                                                 ElementModifiers const*) const {
+      return {};
+    }
     virtual void layout(LayoutContext& ctx) const = 0;
     virtual bool canRetainedLayout(LayoutContext&) const { return false; }
     virtual bool tryRetainedLayout(LayoutContext&) const { return false; }
@@ -351,6 +422,7 @@ private:
   std::optional<float> minMainSizeOverride_;
   std::optional<EnvironmentLayer> envLayer_;
   std::optional<ElementModifiers> modifiers_;
+  std::optional<std::string> key_{};
   /// Stable for this \ref Element instance; used as the fallback \ref MeasureCache identity when
   /// the wrapped leaf does not provide a structural token.
   std::uint64_t measureId_{};
@@ -401,6 +473,8 @@ CompositeBodyResolution resolveCompositeBody(StateStore* store, ComponentKey con
                                              BuildFn&& buildFn) {
   CompositeBodyResolution resolution{};
   if (!store) {
+    resolution.ownedBody = std::make_unique<Element>(std::invoke(std::forward<BuildFn>(buildFn)));
+    resolution.body = resolution.ownedBody.get();
     return resolution;
   }
   if (store->hasBodyForCurrentRebuild(key)) {
@@ -442,6 +516,19 @@ struct Element::Model : Concept {
       std::abort();
     }
   }
+  ElementType elementType() const noexcept override;
+  std::type_index modelType() const noexcept override { return std::type_index(typeid(C)); }
+  void const* rawValuePtr() const noexcept override { return &value; }
+  bool isComposite() const noexcept override { return CompositeComponent<C>; }
+  std::unique_ptr<Element> buildCompositeBody() const override {
+    if constexpr (CompositeComponent<C>) {
+      return std::make_unique<Element>(value.body());
+    }
+    return nullptr;
+  }
+  detail::CompositeBodyResolution resolveCompositeBody(ComponentKey const& key,
+                                                       LayoutConstraints const& constraints,
+                                                       ElementModifiers const* modifiers) const override;
   void layout(LayoutContext& ctx) const override;
   bool canRetainedLayout(LayoutContext& ctx) const override;
   bool tryRetainedLayout(LayoutContext& ctx) const override;
@@ -490,6 +577,53 @@ struct Element::Model : Concept {
     return false;
   }
 };
+
+template<typename C>
+detail::CompositeBodyResolution Element::Model<C>::resolveCompositeBody(ComponentKey const& key,
+                                                                        LayoutConstraints const& constraints,
+                                                                        ElementModifiers const* modifiers) const {
+  if constexpr (!CompositeComponent<C>) {
+    (void)key;
+    (void)constraints;
+    (void)modifiers;
+    return {};
+  } else {
+    StateStore* store = StateStore::current();
+    if (!store) {
+      detail::CompositeBodyResolution resolution{};
+      resolution.ownedBody = std::make_unique<Element>(value.body());
+      resolution.body = resolution.ownedBody.get();
+      return resolution;
+    }
+
+    store->pushComponent(key, std::type_index(typeid(C)));
+    store->pushCompositeConstraints(constraints);
+    if (modifiers) {
+      store->pushCompositeElementModifiers(modifiers);
+    }
+
+    detail::CompositeBodyResolution resolution{};
+    try {
+      resolution =
+          detail::resolveCompositeBody(store, key, constraints, value, [&] { return value.body(); });
+    } catch (...) {
+      if (modifiers) {
+        store->popCompositeElementModifiers();
+      }
+      store->popCompositeConstraints();
+      store->popComponent();
+      throw;
+    }
+
+    if (modifiers) {
+      store->popCompositeElementModifiers();
+    }
+    store->popCompositeConstraints();
+    store->popComponent();
+    store->recordBodyConstraints(key, constraints);
+    return resolution;
+  }
+}
 
 template<typename C>
 void Element::Model<C>::layout(LayoutContext& ctx) const {
@@ -735,6 +869,43 @@ bool Element::Model<C>::supportsIncrementalSceneReuse() const {
     return true;
   }
   return false;
+}
+
+template<typename C>
+ElementType Element::Model<C>::elementType() const noexcept {
+  if constexpr (std::is_same_v<C, Rectangle>) {
+    return ElementType::Rectangle;
+  } else if constexpr (std::is_same_v<C, Text>) {
+    return ElementType::Text;
+  } else if constexpr (std::is_same_v<C, Render>) {
+    return ElementType::Render;
+  } else if constexpr (std::is_same_v<C, views::Image>) {
+    return ElementType::Image;
+  } else if constexpr (std::is_same_v<C, PathShape>) {
+    return ElementType::Path;
+  } else if constexpr (std::is_same_v<C, Line>) {
+    return ElementType::Line;
+  } else if constexpr (std::is_same_v<C, VStack>) {
+    return ElementType::VStack;
+  } else if constexpr (std::is_same_v<C, HStack>) {
+    return ElementType::HStack;
+  } else if constexpr (std::is_same_v<C, ZStack>) {
+    return ElementType::ZStack;
+  } else if constexpr (std::is_same_v<C, Grid>) {
+    return ElementType::Grid;
+  } else if constexpr (std::is_same_v<C, OffsetView>) {
+    return ElementType::OffsetView;
+  } else if constexpr (std::is_same_v<C, ScrollView>) {
+    return ElementType::ScrollView;
+  } else if constexpr (std::is_same_v<C, ScaleAroundCenter>) {
+    return ElementType::ScaleAroundCenter;
+  } else if constexpr (std::is_same_v<C, Spacer>) {
+    return ElementType::Spacer;
+  } else if constexpr (std::is_same_v<C, PopoverCalloutShape>) {
+    return ElementType::PopoverCalloutShape;
+  } else {
+    return ElementType::Unknown;
+  }
 }
 
 template<typename C>
@@ -1027,6 +1198,17 @@ Element::Element(C component)
     : impl_(std::make_unique<Model<C>>(std::move(component)))
     , measureId_(detail::nextElementMeasureId()) {}
 
+template<typename T>
+bool Element::is() const noexcept {
+  return impl_ && impl_->modelType() == std::type_index(typeid(T));
+}
+
+template<typename T>
+T const& Element::as() const {
+  assert(is<T>());
+  return *static_cast<T const*>(impl_->rawValuePtr());
+}
+
 /// Build \c std::vector<Element> from components without \c std::initializer_list (which forces
 /// copy-construction for each entry). Prefer this for \c VStack / \c HStack / \c .children lists.
 template<typename... Args>
@@ -1132,6 +1314,11 @@ Element ViewModifiers<Derived>::clipContent(bool clip) && {
 template<typename Derived>
 Element ViewModifiers<Derived>::overlay(Element over) && {
   return Element{std::move(static_cast<Derived&>(*this))}.overlay(std::move(over));
+}
+
+template<typename Derived>
+Element ViewModifiers<Derived>::key(std::string key) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.key(std::move(key));
 }
 
 template<typename Derived>

@@ -12,6 +12,7 @@
 #include <Flux/Graphics/Styles.hpp>
 
 #include <functional>
+#include <string>
 
 namespace flux {
 
@@ -40,6 +41,7 @@ struct ViewModifiers {
   Element translate(float dx, float dy) &&;
   Element clipContent(bool clip) &&;
   Element overlay(Element over) &&;
+  Element key(std::string key) &&;
 
   Element onTap(std::function<void()> handler) &&;
   Element onPointerDown(std::function<void(Point)> handler) &&;

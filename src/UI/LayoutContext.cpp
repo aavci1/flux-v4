@@ -101,15 +101,34 @@ void LayoutContext::popChildIndex() {
 
 void LayoutContext::setChildIndex(std::size_t index) { nextChildIndex_ = index; }
 
+void LayoutContext::pushExplicitChildLocalId(std::optional<LocalId> localId) {
+  explicitChildLocalIdStack_.push_back(std::move(localId));
+}
+
+void LayoutContext::popExplicitChildLocalId() {
+#ifndef NDEBUG
+  assert(!explicitChildLocalIdStack_.empty());
+#endif
+  explicitChildLocalIdStack_.pop_back();
+}
+
+LocalId LayoutContext::currentChildLocalId() const {
+  if (!explicitChildLocalIdStack_.empty() && explicitChildLocalIdStack_.back().has_value()) {
+    return *explicitChildLocalIdStack_.back();
+  }
+  return LocalId::fromIndex(nextChildIndex_);
+}
+
 ComponentKey LayoutContext::nextCompositeKey() {
   ComponentKey key = keyStack_;
-  key.push_back(nextChildIndex_++);
+  key.push_back(currentChildLocalId());
+  ++nextChildIndex_;
   return key;
 }
 
 ComponentKey LayoutContext::peekNextCompositeKey() const {
   ComponentKey key = keyStack_;
-  key.push_back(nextChildIndex_);
+  key.push_back(currentChildLocalId());
   return key;
 }
 
@@ -117,7 +136,7 @@ void LayoutContext::advanceChildSlot() { ++nextChildIndex_; }
 
 ComponentKey LayoutContext::leafComponentKey() const {
   ComponentKey key = keyStack_;
-  key.push_back(nextChildIndex_);
+  key.push_back(currentChildLocalId());
   return key;
 }
 

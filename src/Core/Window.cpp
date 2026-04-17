@@ -8,9 +8,10 @@
 #include <Flux/Detail/Runtime.hpp>
 #include <Flux/Graphics/Canvas.hpp>
 #include <Flux/Scene/LayoutOverlayRenderer.hpp>
-#include <Flux/Scene/TextCacheDebugOverlay.hpp>
 #include <Flux/Scene/SceneGraph.hpp>
 #include <Flux/Scene/SceneRenderer.hpp>
+#include <Flux/Scene/SceneTree.hpp>
+#include <Flux/Scene/TextCacheDebugOverlay.hpp>
 #include <Flux/UI/Overlay.hpp>
 #include <Flux/UI/Theme.hpp>
 
@@ -27,6 +28,7 @@ struct Window::Impl {
   std::unique_ptr<PlatformWindow> platform_;
   std::unique_ptr<Canvas> canvas_;
   std::optional<SceneGraph> sceneGraph_;
+  std::optional<SceneTree> sceneTree_;
   SceneRenderer renderer_{};
   Color clearColor_{Color::hex(0xF5F7F9)};
   /// Declared before `runtime_` so `~Runtime` (and `OverlayHookSlot` teardown calling `removeOverlay`)
@@ -115,6 +117,17 @@ SceneGraph& Window::sceneGraph() {
 
 SceneGraph const& Window::sceneGraph() const { return const_cast<Window*>(this)->sceneGraph(); }
 
+bool Window::hasSceneTree() const { return d->sceneTree_.has_value(); }
+
+SceneTree& Window::sceneTree() {
+  if (!d->sceneTree_) {
+    d->sceneTree_.emplace();
+  }
+  return *d->sceneTree_;
+}
+
+SceneTree const& Window::sceneTree() const { return const_cast<Window*>(this)->sceneTree(); }
+
 void Window::requestRedraw() { postRedraw(handle()); }
 
 void Window::setCursor(Cursor kind) {
@@ -200,7 +213,10 @@ EnvironmentLayer const& Window::environmentLayer() const {
 }
 
 void Window::render(Canvas& canvas) {
-  if (d->sceneGraph_) {
+  if (d->sceneTree_) {
+    canvas.clear(d->clearColor_);
+    flux::render(*d->sceneTree_, canvas);
+  } else if (d->sceneGraph_) {
     d->renderer_.render(*d->sceneGraph_, canvas, d->clearColor_);
   }
   for (std::unique_ptr<OverlayEntry> const& up : d->overlayMgr_.entries()) {

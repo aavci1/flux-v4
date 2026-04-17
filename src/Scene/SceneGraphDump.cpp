@@ -46,7 +46,7 @@ void dumpNode(SceneGraph const& graph, NodeId id, int depth, std::ostream& os) {
     os << p << "(invalid NodeId)\n";
     return;
   }
-  SceneNode const* sn = graph.get(id);
+  LegacySceneNode const* sn = graph.get(id);
   if (!sn) {
     os << p << "NodeId ";
     fmtNodeId(os, id);

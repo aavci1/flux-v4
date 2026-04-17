@@ -53,6 +53,13 @@ struct Element::Model<ScrollView> final : Element::Concept {
     std::unique_ptr<Concept> clone() const override {
         return std::make_unique<Model<ScrollView>>(value);
     }
+    ElementType elementType() const noexcept override { return ElementType::ScrollView; }
+    std::type_index modelType() const noexcept override { return std::type_index(typeid(ScrollView)); }
+    void const* rawValuePtr() const noexcept override { return &value; }
+    bool isComposite() const noexcept override { return true; }
+    std::unique_ptr<Element> buildCompositeBody() const override {
+        return std::make_unique<Element>(value.body());
+    }
     void layout(LayoutContext &ctx) const override { value.layout(ctx); }
     void renderFromLayout(RenderContext &ctx, LayoutNode &node) const override {
         value.renderFromLayout(ctx, node);

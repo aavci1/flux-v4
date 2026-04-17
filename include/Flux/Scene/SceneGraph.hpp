@@ -52,7 +52,7 @@ public:
 
   template <typename T>
   T* node(NodeId id) {
-    SceneNode* sn = store_.get(id);
+    LegacySceneNode* sn = store_.get(id);
     if (!sn) {
       return nullptr;
     }
@@ -61,15 +61,15 @@ public:
 
   template <typename T>
   T const* node(NodeId id) const {
-    SceneNode const* sn = store_.get(id);
+    LegacySceneNode const* sn = store_.get(id);
     if (!sn) {
       return nullptr;
     }
     return std::get_if<T>(sn);
   }
 
-  SceneNode* get(NodeId id) { return store_.get(id); }
-  SceneNode const* get(NodeId id) const { return store_.get(id); }
+  LegacySceneNode* get(NodeId id) { return store_.get(id); }
+  LegacySceneNode const* get(NodeId id) const { return store_.get(id); }
 
   NodeId root() const { return root_; }
   std::uint64_t subtreePaintEpoch(NodeId id) const;

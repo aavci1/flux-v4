@@ -10,11 +10,21 @@
 namespace flux {
 
 struct NodeId {
-  std::uint32_t index = 0;
-  std::uint32_t generation = 0;
+  constexpr NodeId() = default;
+  constexpr explicit NodeId(std::uint64_t raw) : value(raw) {}
+  constexpr NodeId(std::uint32_t slotIndex, std::uint32_t slotGeneration)
+      : value((static_cast<std::uint64_t>(slotGeneration) << 32u) | slotIndex) {}
 
-  constexpr bool isValid() const { return generation != 0; }
-  constexpr bool operator==(NodeId const&) const = default;
+  constexpr bool isValid() const { return value != 0; }
+  constexpr bool operator==(NodeId const& other) const { return value == other.value; }
+
+  union {
+    std::uint64_t value = 0;
+    struct {
+      std::uint32_t index;
+      std::uint32_t generation;
+    };
+  };
 };
 
 inline constexpr NodeId kInvalidNodeId{};

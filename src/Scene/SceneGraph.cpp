@@ -13,7 +13,7 @@ namespace {
 /// `NodeStore::insert` may reallocate `slots_`, invalidating any raw `SceneNode*` from `get(parent)`
 /// taken before the insert. Always append children after insert, re-resolving `parent`.
 bool appendChild(NodeStore& store, NodeId parent, NodeId child) {
-  SceneNode* p = store.get(parent);
+  LegacySceneNode* p = store.get(parent);
   if (!p) {
     return false;
   }
@@ -30,18 +30,18 @@ bool appendChild(NodeStore& store, NodeId parent, NodeId child) {
 
 SceneGraph::SceneGraph() {
   LayerNode root{};
-  root_ = store_.insert(SceneNode{std::move(root)});
+  root_ = store_.insert(LegacySceneNode{std::move(root)});
   store_.setPaintEpoch(root_, nextPaintEpoch_++);
 }
 
 NodeId SceneGraph::addLayer(LayerNode node) { return addLayer(root_, std::move(node)); }
 
 NodeId SceneGraph::addLayer(NodeId parent, LayerNode node) {
-  SceneNode* p = store_.get(parent);
+  LegacySceneNode* p = store_.get(parent);
   if (!p || !std::get_if<LayerNode>(p)) {
     return kInvalidNodeId;
   }
-  NodeId const id = store_.insert(SceneNode{std::move(node)});
+  NodeId const id = store_.insert(LegacySceneNode{std::move(node)});
   if (!appendChild(store_, parent, id)) {
     return kInvalidNodeId;
   }
@@ -50,11 +50,11 @@ NodeId SceneGraph::addLayer(NodeId parent, LayerNode node) {
 }
 
 NodeId SceneGraph::addRect(NodeId parent, RectNode node) {
-  SceneNode* p = store_.get(parent);
+  LegacySceneNode* p = store_.get(parent);
   if (!p || !std::get_if<LayerNode>(p)) {
     return kInvalidNodeId;
   }
-  NodeId const id = store_.insert(SceneNode{std::move(node)});
+  NodeId const id = store_.insert(LegacySceneNode{std::move(node)});
   if (!appendChild(store_, parent, id)) {
     return kInvalidNodeId;
   }
@@ -63,11 +63,11 @@ NodeId SceneGraph::addRect(NodeId parent, RectNode node) {
 }
 
 NodeId SceneGraph::addText(NodeId parent, TextNode node) {
-  SceneNode* p = store_.get(parent);
+  LegacySceneNode* p = store_.get(parent);
   if (!p || !std::get_if<LayerNode>(p)) {
     return kInvalidNodeId;
   }
-  NodeId const id = store_.insert(SceneNode{std::move(node)});
+  NodeId const id = store_.insert(LegacySceneNode{std::move(node)});
   if (!appendChild(store_, parent, id)) {
     return kInvalidNodeId;
   }
@@ -76,11 +76,11 @@ NodeId SceneGraph::addText(NodeId parent, TextNode node) {
 }
 
 NodeId SceneGraph::addImage(NodeId parent, ImageNode node) {
-  SceneNode* p = store_.get(parent);
+  LegacySceneNode* p = store_.get(parent);
   if (!p || !std::get_if<LayerNode>(p)) {
     return kInvalidNodeId;
   }
-  NodeId const id = store_.insert(SceneNode{std::move(node)});
+  NodeId const id = store_.insert(LegacySceneNode{std::move(node)});
   if (!appendChild(store_, parent, id)) {
     return kInvalidNodeId;
   }
@@ -89,11 +89,11 @@ NodeId SceneGraph::addImage(NodeId parent, ImageNode node) {
 }
 
 NodeId SceneGraph::addPath(NodeId parent, PathNode node) {
-  SceneNode* p = store_.get(parent);
+  LegacySceneNode* p = store_.get(parent);
   if (!p || !std::get_if<LayerNode>(p)) {
     return kInvalidNodeId;
   }
-  NodeId const id = store_.insert(SceneNode{std::move(node)});
+  NodeId const id = store_.insert(LegacySceneNode{std::move(node)});
   if (!appendChild(store_, parent, id)) {
     return kInvalidNodeId;
   }
@@ -102,11 +102,11 @@ NodeId SceneGraph::addPath(NodeId parent, PathNode node) {
 }
 
 NodeId SceneGraph::addLine(NodeId parent, LineNode node) {
-  SceneNode* p = store_.get(parent);
+  LegacySceneNode* p = store_.get(parent);
   if (!p || !std::get_if<LayerNode>(p)) {
     return kInvalidNodeId;
   }
-  NodeId const id = store_.insert(SceneNode{std::move(node)});
+  NodeId const id = store_.insert(LegacySceneNode{std::move(node)});
   if (!appendChild(store_, parent, id)) {
     return kInvalidNodeId;
   }
@@ -115,11 +115,11 @@ NodeId SceneGraph::addLine(NodeId parent, LineNode node) {
 }
 
 NodeId SceneGraph::addCustomRender(NodeId parent, CustomRenderNode node) {
-  SceneNode* p = store_.get(parent);
+  LegacySceneNode* p = store_.get(parent);
   if (!p || !std::get_if<LayerNode>(p)) {
     return kInvalidNodeId;
   }
-  NodeId const id = store_.insert(SceneNode{std::move(node)});
+  NodeId const id = store_.insert(LegacySceneNode{std::move(node)});
   if (!appendChild(store_, parent, id)) {
     return kInvalidNodeId;
   }
@@ -152,7 +152,7 @@ bool SceneGraph::isDescendant(NodeId ancestor, NodeId possibleDescendant) const 
   if (possibleDescendant == ancestor) {
     return true;
   }
-  SceneNode const* sn = get(ancestor);
+  LegacySceneNode const* sn = get(ancestor);
   auto const* layer = std::get_if<LayerNode>(sn);
   if (!layer) {
     return false;
@@ -166,7 +166,7 @@ bool SceneGraph::isDescendant(NodeId ancestor, NodeId possibleDescendant) const 
 }
 
 void SceneGraph::removeRecursive(NodeId id, std::optional<NodeId> parent, bool detachFromParent) {
-  SceneNode* sn = store_.get(id);
+  LegacySceneNode* sn = store_.get(id);
   if (!sn) {
     return;
   }
@@ -213,7 +213,7 @@ void SceneGraph::reparent(NodeId id, NodeId newParent, std::size_t index) {
   if (id == root_) {
     return;
   }
-  SceneNode* np = store_.get(newParent);
+  LegacySceneNode* np = store_.get(newParent);
   if (!np) {
     return;
   }

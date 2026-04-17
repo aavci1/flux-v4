@@ -25,6 +25,7 @@ class Application;
 class Canvas;
 class PlatformWindow;
 class SceneGraph;
+class SceneTree;
 
 class OverlayManager;
 
@@ -58,6 +59,13 @@ public:
   /// Lazily creates the scene graph on first access. Does not create the canvas.
   SceneGraph& sceneGraph();
   SceneGraph const& sceneGraph() const;
+
+  /// True after the retained scene tree has been created (first `sceneTree()` call).
+  bool hasSceneTree() const;
+
+  /// Lazily creates the retained scene tree on first access. Does not create the canvas.
+  SceneTree& sceneTree();
+  SceneTree const& sceneTree() const;
 
   /// Request a frame; `Application::exec()` renders all windows when the event pump runs.
   void requestRedraw();

@@ -11,6 +11,7 @@
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 #include <Flux/UI/LayoutTree.hpp>
+#include <Flux/UI/Views/VStack.hpp>
 
 #include <algorithm>
 #include <cstddef>
@@ -42,6 +43,19 @@ struct ForEach {
 
   ForEach(std::vector<T> itemsIn, std::function<Element(T const&)> factoryIn, float spacingIn = 0.f)
       : items(std::move(itemsIn)), factory(std::move(factoryIn)), spacing(spacingIn) {}
+
+  Element body() const {
+    std::vector<Element> children;
+    children.reserve(items.size());
+    for (T const& item : items) {
+      children.push_back(factory(item));
+    }
+    return Element{VStack{
+        .spacing = spacing,
+        .alignment = alignment,
+        .children = std::move(children),
+    }};
+  }
 };
 
 template<typename T>
@@ -53,6 +67,11 @@ struct Element::Model<ForEach<T>> final : Element::Concept {
   std::unique_ptr<Concept> clone() const override {
     return std::make_unique<Model<ForEach<T>>>(value);
   }
+  ElementType elementType() const noexcept override { return ElementType::Unknown; }
+  std::type_index modelType() const noexcept override { return std::type_index(typeid(ForEach<T>)); }
+  void const* rawValuePtr() const noexcept override { return &value; }
+  bool isComposite() const noexcept override { return true; }
+  std::unique_ptr<Element> buildCompositeBody() const override { return std::make_unique<Element>(value.body()); }
 
   void layout(LayoutContext& ctx) const override;
   void renderFromLayout(RenderContext&, LayoutNode&) const override {}

@@ -35,6 +35,7 @@ auto makeCachedLeaf(C const& value) {
 struct RootHolder {
   virtual ~RootHolder() = default;
   virtual void layoutInto(LayoutContext& ctx) const = 0;
+  [[nodiscard]] virtual Element const* sceneElementForCurrentBuild() const noexcept = 0;
   [[nodiscard]] virtual std::uint64_t layoutIdentityToken() const noexcept = 0;
 };
 
@@ -91,6 +92,20 @@ struct TypedRootHolder final : RootHolder {
           "Leaf root component must be copy-constructible. "
           "If C has Signal/Animation members, give it a body() method.");
       cachedLeaf_.layout(ctx);
+    }
+  }
+
+  [[nodiscard]] Element const* sceneElementForCurrentBuild() const noexcept override {
+    if constexpr (CompositeComponent<C>) {
+      StateStore* const store = StateStore::current();
+      if (!store) {
+        return nullptr;
+      }
+      ComponentKey rootKey{};
+      rootKey.push_back(LocalId::fromIndex(0));
+      return store->cachedBody(rootKey);
+    } else {
+      return &cachedLeaf_;
     }
   }
 

@@ -5,11 +5,13 @@
 #include <Flux/Detail/Runtime.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Scene/SceneGraph.hpp>
+#include <Flux/Scene/SceneTree.hpp>
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/LayoutContext.hpp>
 #include <Flux/UI/LayoutTree.hpp>
 #include <Flux/UI/RenderContext.hpp>
 #include <Flux/UI/RenderLayoutTree.hpp>
+#include <Flux/UI/SceneBuilder.hpp>
 #include <Flux/UI/Environment.hpp>
 #include <Flux/UI/Overlay.hpp>
 
@@ -155,6 +157,26 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
   rctx.popConstraints();
   if (incrementalSceneReuse) {
     eventMap_.prune(graph);
+  }
+
+  {
+    SceneTree& sceneTree = window_.sceneTree();
+    std::unique_ptr<SceneNode> existingRoot = sceneTree.takeRoot();
+    Element const* sceneRoot = rootHolder_ ? rootHolder_->sceneElementForCurrentBuild() : nullptr;
+    if (sceneRoot) {
+      SceneBuilder sceneBuilder{Application::instance().textSystem(), EnvironmentStack::current(), &sceneGeometry_};
+      EnvironmentLayer windowEnv = window_.environmentLayer();
+      EnvironmentStack::current().push(std::move(windowEnv));
+      ComponentKey rootKey{};
+      rootKey.push_back(LocalId::fromIndex(0));
+      std::unique_ptr<SceneNode> nextRoot =
+          sceneBuilder.build(*sceneRoot, NodeId{1ull}, rootCs, std::move(existingRoot), std::move(rootKey));
+      EnvironmentStack::current().pop();
+      sceneTree.setRoot(std::move(nextRoot));
+    } else {
+      sceneGeometry_.clear();
+      sceneTree.clear();
+    }
   }
 
   layoutRects_.fill(layoutTree_, lctx);

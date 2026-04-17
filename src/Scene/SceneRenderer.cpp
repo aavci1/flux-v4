@@ -306,7 +306,7 @@ void SceneRenderer::render(SceneGraph const& graph, Canvas& canvas, Color clearC
 }
 
 void SceneRenderer::renderNode(NodeId id, SceneGraph const& graph, Canvas& canvas, bool allowLayerCache) const {
-  SceneNode const* sn = graph.get(id);
+  LegacySceneNode const* sn = graph.get(id);
   if (!sn) {
     return;
   }

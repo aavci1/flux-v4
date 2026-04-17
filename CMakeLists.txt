@@ -122,6 +122,7 @@ add_library(flux STATIC
   src/UI/Layout/LayoutScrollView.cpp
   src/UI/LayoutRectCache.cpp
   src/UI/MeasureCache.cpp
+  src/UI/SceneBuilder.cpp
   src/UI/ComponentKey.cpp
   src/UI/ComponentKeyUtil.cpp
   src/UI/Detail/LeafBounds.cpp
@@ -163,6 +164,18 @@ add_library(flux STATIC
   src/UI/Views/Tooltip.cpp
   src/UI/Views/PopoverCalloutPath.cpp
   src/UI/PopoverCalloutShapeElement.cpp
+  src/Scene/PaintCommand.cpp
+  src/Scene/SceneNode.cpp
+  src/Scene/ModifierSceneNode.cpp
+  src/Scene/RectSceneNode.cpp
+  src/Scene/TextSceneNode.cpp
+  src/Scene/ImageSceneNode.cpp
+  src/Scene/PathSceneNode.cpp
+  src/Scene/LineSceneNode.cpp
+  src/Scene/RenderSceneNode.cpp
+  src/Scene/CustomTransformSceneNode.cpp
+  src/Scene/SceneTree.cpp
+  src/Scene/SceneTreeDump.cpp
   src/Scene/SceneGraphBounds.cpp
   src/Scene/NodeStore.cpp
   src/Scene/SceneGraph.cpp
@@ -170,6 +183,7 @@ add_library(flux STATIC
   src/Scene/LayoutOverlayRenderer.cpp
   src/Scene/TextCacheDebugOverlay.cpp
   src/Scene/HitTester.cpp
+  src/Scene/SceneTreeHitTester.cpp
   src/Scene/SceneGraphDump.cpp
   src/Graphics/Styles.cpp
   src/Graphics/AttributedString.cpp
@@ -276,6 +290,7 @@ if(FLUX_BUILD_TESTS)
     tests/IncrementalRebuildTests.cpp
     tests/MetalCanvasTests.mm
     tests/main.cpp
+    tests/SceneBuilderTests.cpp
     tests/EventMapTests.cpp
     tests/LayoutTreeTests.cpp
     tests/LayoutIntegrationTests.cpp
