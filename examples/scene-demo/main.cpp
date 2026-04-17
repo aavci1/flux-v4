@@ -2,14 +2,18 @@
 #include <Flux/Core/Events.hpp>
 #include <Flux/Graphics/Canvas.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
-#include <Flux/UI/Theme.hpp>
+#include <Flux/Scene/CustomTransformSceneNode.hpp>
 #include <Flux/Scene/HitTester.hpp>
-#include <Flux/Scene/Nodes.hpp>
-#include <Flux/Scene/SceneGraph.hpp>
-#include <Flux/Scene/SceneGraphDump.hpp>
-#include <Flux/Scene/SceneRenderer.hpp>
+#include <Flux/Scene/LineSceneNode.hpp>
+#include <Flux/Scene/ModifierSceneNode.hpp>
+#include <Flux/Scene/RectSceneNode.hpp>
+#include <Flux/Scene/SceneTree.hpp>
+#include <Flux/Scene/SceneTreeDump.hpp>
+#include <Flux/Scene/TextSceneNode.hpp>
+#include <Flux/UI/Theme.hpp>
 
 #include <algorithm>
+#include <cassert>
 #include <iostream>
 #include <optional>
 #include <string>
@@ -48,27 +52,45 @@ class SceneDemoWindow : public Window {
   bool sceneBuilt_ = false;
   Size lastLayout_{};
 
-  NodeId bgId_{};
-  NodeId groupId_{};
-  NodeId cardA_{};
-  NodeId cardB_{};
-  NodeId cardC_{};
-  NodeId lineId_{};
-  NodeId titleId_{};
-  NodeId hintId_{};
+  static constexpr NodeId rootId_{1ull};
+  static constexpr NodeId bgId_{2ull};
+  static constexpr NodeId transformId_{3ull};
+  static constexpr NodeId clipId_{4ull};
+  static constexpr NodeId cardA_{5ull};
+  static constexpr NodeId cardB_{6ull};
+  static constexpr NodeId cardC_{7ull};
+  static constexpr NodeId lineId_{8ull};
+  static constexpr NodeId titleId_{9ull};
+  static constexpr NodeId hintId_{10ull};
 
   std::optional<NodeId> lastHover_{};
 
+  static SceneNode* findNodeById(SceneNode& node, NodeId id) {
+    if (node.id() == id) {
+      return &node;
+    }
+    for (std::unique_ptr<SceneNode> const& child : node.children()) {
+      if (SceneNode* found = findNodeById(*child, id)) {
+        return found;
+      }
+    }
+    return nullptr;
+  }
+
+  template <typename T>
+  static T* findNode(SceneTree& tree, NodeId id) {
+    return dynamic_cast<T*>(findNodeById(tree.root(), id));
+  }
+
 public:
   explicit SceneDemoWindow(WindowConfig const& c) : Window(c) {
-    sceneGraph();
     Application::instance().eventQueue().on<WindowEvent>([this](WindowEvent const& ev) {
       if (ev.handle != handle() || ev.kind != WindowEvent::Kind::Resize) {
         return;
       }
       // Geometry will be rebuilt in `render`; clear hover label so we do not show hits against stale bounds.
       lastHover_ = std::nullopt;
-      setTitle("Flux — Scene graph — hover: —");
+      setTitle("Flux — Scene tree — hover: —");
     });
     Application::instance().eventQueue().on<InputEvent>([this](InputEvent const& e) {
       if (e.handle != handle()) {
@@ -79,7 +101,10 @@ public:
         return;
       }
       Point const p{e.position.x, e.position.y};
-      auto const hit = HitTester{}.hitTest(sceneGraph(), p);
+      if (!hasSceneTree()) {
+        return;
+      }
+      auto const hit = HitTester{}.hitTest(sceneTree(), p);
       std::optional<NodeId> const curOpt = hit ? std::optional<NodeId>(hit->nodeId) : std::nullopt;
       if (e.kind == InputEvent::Kind::PointerMove && curOpt == lastHover_) {
         return;
@@ -88,7 +113,7 @@ public:
       NodeId const cur = hit ? hit->nodeId : kInvalidNodeId;
 
       char const* label = describeHit(cur, bgId_, cardA_, cardB_, cardC_, titleId_, hintId_);
-      std::string t = "Flux — Scene graph — hover: ";
+      std::string t = "Flux — Scene tree — hover: ";
       t += label;
       if (e.kind == InputEvent::Kind::PointerDown && hit) {
         t += " (down)";
@@ -98,26 +123,27 @@ public:
   }
 
   void buildScene(Size const& s) {
-    SceneGraph& g = sceneGraph();
-    NodeId const root = g.root();
-
     float const margin = 28.f;
     TextSystem& ts = Application::instance().textSystem();
     Theme const theme = Theme::dark();
     Font const titleFont = theme.fontDisplay;
     Font const hintFont = theme.fontBodySmall;
     auto titleLayout =
-        ts.layout("Scene graph", titleFont, theme.colorTextPrimary, s.width - margin * 2.f);
+        ts.layout("Scene tree", titleFont, theme.colorTextPrimary, s.width - margin * 2.f);
     float const titleBand = titleLayout->measuredSize.height;
     float const rowTop = margin + titleBand + 18.f;
     float const rowH = 160.f;
     float const gap = 18.f;
 
-    Rect const full = Rect::sharp(0.f, 0.f, s.width, s.height);
-    bgId_ = g.addRect(root, RectNode{.bounds = full,
-                                     .cornerRadius = {},
-                                     .fill = FillStyle::solid(Color::hex(0x1e2229)),
-                                     .stroke = StrokeStyle::none()});
+    auto root = std::make_unique<SceneNode>(rootId_);
+
+    auto bg = std::make_unique<RectSceneNode>(bgId_);
+    bg->size = Size{s.width, s.height};
+    bg->fill = FillStyle::solid(Color::hex(0x1e2229));
+    bg->stroke = StrokeStyle::none();
+    bg->cornerRadius = {};
+    bg->recomputeBounds();
+    root->appendChild(std::move(bg));
 
     float const contentW = std::max(s.width - margin * 2.f, 120.f);
     float const cardW = (contentW - gap * 2.f) / 3.f;
@@ -125,67 +151,104 @@ public:
 
     Point const pivot{s.width * 0.5f, rowTop + rowH * 0.5f};
     float const rot = 0.055f;
-    Mat3 const localFromParent =
+    Mat3 const transform =
         Mat3::translate(pivot) * Mat3::rotate(rot) * Mat3::translate(Point{-pivot.x, -pivot.y});
 
-    LayerNode group{};
-    group.transform = localFromParent;
-    group.opacity = 0.98f;
-    group.clip = Rect::sharp(margin - 8.f, rowTop - 8.f, contentW + 16.f, rowH + 16.f);
-    groupId_ = g.addLayer(std::move(group));
+    auto transformedGroup = std::make_unique<CustomTransformSceneNode>(transformId_);
+    transformedGroup->transform = transform;
 
-    auto cardR = [&](float x, float y, float w, float h, Color fill) {
-      return RectNode{.bounds = Rect::sharp(x, y, w, h),
-                     .cornerRadius = CornerRadius(14.f),
-                     .fill = FillStyle::solid(fill),
-                     .stroke = StrokeStyle::solid(Color::rgb(255, 255, 255), 1.6f)};
+    auto clipGroup = std::make_unique<ModifierSceneNode>(clipId_);
+    clipGroup->opacity = 0.98f;
+    clipGroup->clip = Rect::sharp(margin - 8.f, rowTop - 8.f, contentW + 16.f, rowH + 16.f);
+
+    auto makeCard = [&](NodeId id, float x, float y, float w, float h, Color fill) {
+      auto card = std::make_unique<RectSceneNode>(id);
+      card->position = Point{x, y};
+      card->size = Size{w, h};
+      card->cornerRadius = CornerRadius(14.f);
+      card->fill = FillStyle::solid(fill);
+      card->stroke = StrokeStyle::solid(Color::rgb(255, 255, 255), 1.6f);
+      card->recomputeBounds();
+      return card;
     };
 
-    cardA_ = g.addRect(groupId_, cardR(rowOrigin.x, rowOrigin.y, cardW, rowH, Color::hex(0x3d5a80)));
-    cardB_ = g.addRect(groupId_, cardR(rowOrigin.x + cardW + gap, rowOrigin.y, cardW, rowH, Color::hex(0x5a7d3a)));
-    cardC_ = g.addRect(groupId_, cardR(rowOrigin.x + 2.f * (cardW + gap), rowOrigin.y, cardW, rowH, Color::hex(0x8a4a6a)));
+    clipGroup->appendChild(makeCard(cardA_, rowOrigin.x, rowOrigin.y, cardW, rowH, Color::hex(0x3d5a80)));
+    clipGroup->appendChild(makeCard(cardB_, rowOrigin.x + cardW + gap, rowOrigin.y, cardW, rowH,
+                                    Color::hex(0x5a7d3a)));
+    clipGroup->appendChild(makeCard(cardC_, rowOrigin.x + 2.f * (cardW + gap), rowOrigin.y, cardW, rowH,
+                                    Color::hex(0x8a4a6a)));
 
-    Point const c1{rowOrigin.x + cardW * 0.85f, rowOrigin.y + rowH * 0.72f};
-    Point const c2{rowOrigin.x + cardW + gap + cardW * 0.15f, rowOrigin.y + rowH * 0.72f};
-    LineNode line{};
-    line.from = c1;
-    line.to = c2;
-    line.stroke = StrokeStyle::solid(Color::rgb(255, 255, 255), 3.f);
-    lineId_ = g.addLine(groupId_, std::move(line));
+    auto line = std::make_unique<LineSceneNode>(lineId_);
+    line->from = Point{rowOrigin.x + cardW * 0.85f, rowOrigin.y + rowH * 0.72f};
+    line->to = Point{rowOrigin.x + cardW + gap + cardW * 0.15f, rowOrigin.y + rowH * 0.72f};
+    line->stroke = StrokeStyle::solid(Color::rgb(255, 255, 255), 3.f);
+    line->recomputeBounds();
+    clipGroup->appendChild(std::move(line));
+
+    clipGroup->recomputeBounds();
+    transformedGroup->appendChild(std::move(clipGroup));
+    transformedGroup->recomputeBounds();
+    root->appendChild(std::move(transformedGroup));
 
     float const titleW = titleLayout->measuredSize.width;
     float const titleX = margin + (s.width - margin * 2.f - titleW) * 0.5f;
-    titleId_ = g.addText(root, TextNode{.layout = std::move(titleLayout), .origin = Point{titleX, margin}});
+    auto title = std::make_unique<TextSceneNode>(titleId_);
+    title->textSystem = &ts;
+    title->layout = std::move(titleLayout);
+    title->position = Point{titleX, margin};
+    title->origin = Point{0.f, 0.f};
+    title->recomputeBounds();
+    root->appendChild(std::move(title));
 
     auto hintLayout =
-        ts.layout("Layer, clip, transform, rects, line, text, hit-test", hintFont, theme.colorTextMuted,
+        ts.layout("Transform, clip, rects, line, text, hit-test", hintFont, theme.colorTextMuted,
                   s.width - margin * 2.f);
     float const hintW = hintLayout->measuredSize.width;
     float const hintX = margin + (s.width - margin * 2.f - hintW) * 0.5f;
-    hintId_ = g.addText(root,
-                        TextNode{.layout = std::move(hintLayout), .origin = Point{hintX, margin + titleBand + 6.f}});
+    auto hint = std::make_unique<TextSceneNode>(hintId_);
+    hint->textSystem = &ts;
+    hint->layout = std::move(hintLayout);
+    hint->position = Point{hintX, margin + titleBand + 6.f};
+    hint->origin = Point{0.f, 0.f};
+    hint->recomputeBounds();
+    root->appendChild(std::move(hint));
+
+    root->recomputeBounds();
+    sceneTree().setRoot(std::move(root));
 
     sceneBuilt_ = true;
     lastLayout_ = s;
   }
 
   void layoutScene(Size const& s) {
-    SceneGraph& g = sceneGraph();
-
     float const margin = 28.f;
     TextSystem& ts = Application::instance().textSystem();
     Theme const theme = Theme::dark();
     Font const titleFont = theme.fontDisplay;
     Font const hintFont = theme.fontBodySmall;
     float const titleBand =
-        ts.layout("Scene graph", titleFont, theme.colorTextPrimary, s.width - margin * 2.f)->measuredSize.height;
+        ts.layout("Scene tree", titleFont, theme.colorTextPrimary, s.width - margin * 2.f)->measuredSize.height;
     float const rowTop = margin + titleBand + 18.f;
     float const rowH = 160.f;
     float const gap = 18.f;
 
-    if (RectNode* bg = g.node<RectNode>(bgId_)) {
-      bg->bounds = Rect::sharp(0.f, 0.f, s.width, s.height);
-    }
+    SceneTree& tree = sceneTree();
+    auto* bg = findNode<RectSceneNode>(tree, bgId_);
+    auto* transformNode = findNode<CustomTransformSceneNode>(tree, transformId_);
+    auto* clipNode = findNode<ModifierSceneNode>(tree, clipId_);
+    auto* cardA = findNode<RectSceneNode>(tree, cardA_);
+    auto* cardB = findNode<RectSceneNode>(tree, cardB_);
+    auto* cardC = findNode<RectSceneNode>(tree, cardC_);
+    auto* line = findNode<LineSceneNode>(tree, lineId_);
+    auto* title = findNode<TextSceneNode>(tree, titleId_);
+    auto* hint = findNode<TextSceneNode>(tree, hintId_);
+
+    assert(bg && transformNode && clipNode && cardA && cardB && cardC && line && title && hint);
+
+    bg->size = Size{s.width, s.height};
+    bg->markPaintDirty();
+    bg->markBoundsDirty();
+    bg->recomputeBounds();
 
     float const contentW = std::max(s.width - margin * 2.f, 120.f);
     float const cardW = (contentW - gap * 2.f) / 3.f;
@@ -193,39 +256,47 @@ public:
 
     Point const pivot{s.width * 0.5f, rowTop + rowH * 0.5f};
     float const rot = 0.055f;
-    if (LayerNode* group = g.node<LayerNode>(groupId_)) {
-      group->transform =
-          Mat3::translate(pivot) * Mat3::rotate(rot) * Mat3::translate(Point{-pivot.x, -pivot.y});
-      group->clip = Rect::sharp(margin - 8.f, rowTop - 8.f, contentW + 16.f, rowH + 16.f);
-    }
+    transformNode->transform =
+        Mat3::translate(pivot) * Mat3::rotate(rot) * Mat3::translate(Point{-pivot.x, -pivot.y});
+    transformNode->markBoundsDirty();
 
-    if (RectNode* r = g.node<RectNode>(cardA_)) {
-      r->bounds = Rect::sharp(rowOrigin.x, rowOrigin.y, cardW, rowH);
-    }
-    if (RectNode* r = g.node<RectNode>(cardB_)) {
-      r->bounds = Rect::sharp(rowOrigin.x + cardW + gap, rowOrigin.y, cardW, rowH);
-    }
-    if (RectNode* r = g.node<RectNode>(cardC_)) {
-      r->bounds = Rect::sharp(rowOrigin.x + 2.f * (cardW + gap), rowOrigin.y, cardW, rowH);
-    }
+    clipNode->clip = Rect::sharp(margin - 8.f, rowTop - 8.f, contentW + 16.f, rowH + 16.f);
+    clipNode->markBoundsDirty();
 
-    if (LineNode* ln = g.node<LineNode>(lineId_)) {
-      ln->from = Point{rowOrigin.x + cardW * 0.85f, rowOrigin.y + rowH * 0.72f};
-      ln->to = Point{rowOrigin.x + cardW + gap + cardW * 0.15f, rowOrigin.y + rowH * 0.72f};
-    }
+    auto layoutCard = [&](RectSceneNode* card, float x) {
+      card->position = Point{x, rowOrigin.y};
+      card->size = Size{cardW, rowH};
+      card->markPaintDirty();
+      card->markBoundsDirty();
+      card->recomputeBounds();
+    };
+    layoutCard(cardA, rowOrigin.x);
+    layoutCard(cardB, rowOrigin.x + cardW + gap);
+    layoutCard(cardC, rowOrigin.x + 2.f * (cardW + gap));
 
-    if (TextNode* t = g.node<TextNode>(titleId_)) {
-      t->layout = ts.layout("Scene graph", titleFont, theme.colorTextPrimary, s.width - margin * 2.f);
-      float const titleW = t->layout->measuredSize.width;
-      t->origin = Point{margin + (s.width - margin * 2.f - titleW) * 0.5f, margin};
-    }
+    line->from = Point{rowOrigin.x + cardW * 0.85f, rowOrigin.y + rowH * 0.72f};
+    line->to = Point{rowOrigin.x + cardW + gap + cardW * 0.15f, rowOrigin.y + rowH * 0.72f};
+    line->markPaintDirty();
+    line->markBoundsDirty();
+    line->recomputeBounds();
 
-    if (TextNode* t = g.node<TextNode>(hintId_)) {
-      t->layout = ts.layout("Layer, clip, transform, rects, line, text, hit-test", hintFont,
-                            theme.colorTextMuted, s.width - margin * 2.f);
-      float const hintW = t->layout->measuredSize.width;
-      t->origin = Point{margin + (s.width - margin * 2.f - hintW) * 0.5f, margin + titleBand + 6.f};
-    }
+    title->layout = ts.layout("Scene tree", titleFont, theme.colorTextPrimary, s.width - margin * 2.f);
+    title->position = Point{margin + (s.width - margin * 2.f - title->layout->measuredSize.width) * 0.5f, margin};
+    title->markPaintDirty();
+    title->markBoundsDirty();
+    title->recomputeBounds();
+
+    hint->layout = ts.layout("Transform, clip, rects, line, text, hit-test", hintFont,
+                             theme.colorTextMuted, s.width - margin * 2.f);
+    hint->position =
+        Point{margin + (s.width - margin * 2.f - hint->layout->measuredSize.width) * 0.5f, margin + titleBand + 6.f};
+    hint->markPaintDirty();
+    hint->markBoundsDirty();
+    hint->recomputeBounds();
+
+    clipNode->recomputeBounds();
+    transformNode->recomputeBounds();
+    tree.root().recomputeBounds();
 
     lastLayout_ = s;
   }
@@ -242,13 +313,14 @@ public:
     }
     if (!sceneBuilt_) {
       buildScene(layout);
-      dumpSceneGraph(sceneGraph(), std::cerr);
+      dumpSceneTree(sceneTree(), std::cerr);
     } else if (layout.width != lastLayout_.width || layout.height != lastLayout_.height) {
       layoutScene(layout);
-      dumpSceneGraph(sceneGraph(), std::cerr);
+      dumpSceneTree(sceneTree(), std::cerr);
     }
 
-    SceneRenderer{}.render(sceneGraph(), canvas, Color::hex(0x1a1d24));
+    canvas.clear(Color::hex(0x1a1d24));
+    flux::render(sceneTree(), canvas);
   }
 };
 
@@ -259,7 +331,7 @@ int main(int argc, char* argv[]) {
 
   app.createWindow<SceneDemoWindow>({
       .size = {720, 480},
-      .title = "Flux — Scene graph demo",
+      .title = "Flux — Scene tree demo",
       .resizable = true,
   });
 

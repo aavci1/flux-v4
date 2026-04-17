@@ -8,8 +8,6 @@
 #include <Flux/Detail/Runtime.hpp>
 #include <Flux/Graphics/Canvas.hpp>
 #include <Flux/Scene/LayoutOverlayRenderer.hpp>
-#include <Flux/Scene/SceneGraph.hpp>
-#include <Flux/Scene/SceneRenderer.hpp>
 #include <Flux/Scene/SceneTree.hpp>
 #include <Flux/Scene/TextCacheDebugOverlay.hpp>
 #include <Flux/UI/Overlay.hpp>
@@ -27,9 +25,7 @@ namespace flux {
 struct Window::Impl {
   std::unique_ptr<PlatformWindow> platform_;
   std::unique_ptr<Canvas> canvas_;
-  std::optional<SceneGraph> sceneGraph_;
   std::optional<SceneTree> sceneTree_;
-  SceneRenderer renderer_{};
   Color clearColor_{Color::hex(0xF5F7F9)};
   /// Declared before `runtime_` so `~Runtime` (and `OverlayHookSlot` teardown calling `removeOverlay`)
   /// runs while `OverlayManager` is still alive. Reverse member destruction order would destroy
@@ -105,17 +101,6 @@ Canvas& Window::canvas() {
   }
   return *d->canvas_;
 }
-
-bool Window::hasSceneGraph() const { return d->sceneGraph_.has_value(); }
-
-SceneGraph& Window::sceneGraph() {
-  if (!d->sceneGraph_) {
-    d->sceneGraph_.emplace();
-  }
-  return *d->sceneGraph_;
-}
-
-SceneGraph const& Window::sceneGraph() const { return const_cast<Window*>(this)->sceneGraph(); }
 
 bool Window::hasSceneTree() const { return d->sceneTree_.has_value(); }
 
@@ -216,8 +201,6 @@ void Window::render(Canvas& canvas) {
   if (d->sceneTree_) {
     canvas.clear(d->clearColor_);
     flux::render(*d->sceneTree_, canvas);
-  } else if (d->sceneGraph_) {
-    d->renderer_.render(*d->sceneGraph_, canvas, d->clearColor_);
   }
   for (std::unique_ptr<OverlayEntry> const& up : d->overlayMgr_.entries()) {
     OverlayEntry const& entry = *up;

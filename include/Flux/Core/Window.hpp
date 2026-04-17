@@ -24,7 +24,6 @@ struct RootHolder;
 class Application;
 class Canvas;
 class PlatformWindow;
-class SceneGraph;
 class SceneTree;
 
 class OverlayManager;
@@ -53,13 +52,6 @@ public:
   /// Lazily creates the backing canvas on first use.
   Canvas& canvas();
 
-  /// True after the scene graph has been created (first `sceneGraph()` call).
-  bool hasSceneGraph() const;
-
-  /// Lazily creates the scene graph on first access. Does not create the canvas.
-  SceneGraph& sceneGraph();
-  SceneGraph const& sceneGraph() const;
-
   /// True after the retained scene tree has been created (first `sceneTree()` call).
   bool hasSceneTree() const;
 
@@ -78,10 +70,10 @@ public:
   static void postRedraw(unsigned int handle);
 
   /// Drawing only; `Application` wraps each call with `beginFrame` and `present` when handling redraw.
-  /// Default implementation clears with `clearColor()` then draws the scene graph (if any).
+  /// Default implementation clears with `clearColor()` then draws the retained scene tree (if any).
   virtual void render(Canvas& canvas);
 
-  /// Color passed to `SceneRenderer::render` for the initial canvas clear. Default is transparent;
+  /// Color passed to the retained scene-tree render for the initial canvas clear. Default is transparent;
   /// use an opaque color if the scene has no full-window background rect.
   void setClearColor(Color color);
   Color clearColor() const;
