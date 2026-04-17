@@ -24,7 +24,7 @@ RectSceneNode::RectSceneNode(NodeId id)
     : SceneNode(SceneNodeKind::Rect, id) {}
 
 void RectSceneNode::rebuildLocalPaint() {
-  localPaintCache().clear();
+  SceneNode::rebuildLocalPaint();
   localPaintCache().push_back(DrawRectPaintCommand{
       .rect = Rect{0.f, 0.f, size.width, size.height},
       .cornerRadius = cornerRadius,
@@ -32,7 +32,6 @@ void RectSceneNode::rebuildLocalPaint() {
       .stroke = stroke,
       .shadow = shadow,
   });
-  SceneNode::rebuildLocalPaint();
 }
 
 Rect RectSceneNode::computeOwnBounds() const {

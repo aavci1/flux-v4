@@ -51,7 +51,7 @@ void ModifierSceneNode::applyNodeState(Renderer& renderer) const {
 }
 
 void ModifierSceneNode::rebuildLocalPaint() {
-  localPaintCache().clear();
+  SceneNode::rebuildLocalPaint();
   if (!children().empty() && paints()) {
     Rect childBounds = children().front()->bounds;
     localPaintCache().push_back(DrawRectPaintCommand{
@@ -63,7 +63,6 @@ void ModifierSceneNode::rebuildLocalPaint() {
     });
   }
   markBoundsDirty();
-  SceneNode::rebuildLocalPaint();
 }
 
 Rect ModifierSceneNode::computeOwnBounds() const {

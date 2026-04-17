@@ -6,7 +6,7 @@ TextSceneNode::TextSceneNode(NodeId id)
     : SceneNode(SceneNodeKind::Text, id) {}
 
 void TextSceneNode::rebuildLocalPaint() {
-  localPaintCache().clear();
+  SceneNode::rebuildLocalPaint();
   if (!layout && textSystem) {
     TextLayoutOptions opts{};
     opts.horizontalAlignment = horizontalAlignment;
@@ -22,7 +22,6 @@ void TextSceneNode::rebuildLocalPaint() {
         .origin = origin,
     });
   }
-  SceneNode::rebuildLocalPaint();
 }
 
 Rect TextSceneNode::computeOwnBounds() const {

@@ -167,10 +167,9 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
       SceneBuilder sceneBuilder{Application::instance().textSystem(), EnvironmentStack::current(), &sceneGeometry_};
       EnvironmentLayer windowEnv = window_.environmentLayer();
       EnvironmentStack::current().push(std::move(windowEnv));
-      ComponentKey rootKey{};
-      rootKey.push_back(LocalId::fromIndex(0));
+      ComponentKey const rootKey = rootHolder_->sceneRootKey();
       std::unique_ptr<SceneNode> nextRoot =
-          sceneBuilder.build(*sceneRoot, NodeId{1ull}, rootCs, std::move(existingRoot), std::move(rootKey));
+          sceneBuilder.build(*sceneRoot, NodeId{1ull}, rootCs, std::move(existingRoot), rootKey);
       EnvironmentStack::current().pop();
       sceneTree.setRoot(std::move(nextRoot));
     } else {

@@ -6,7 +6,7 @@ ImageSceneNode::ImageSceneNode(NodeId id)
     : SceneNode(SceneNodeKind::Image, id) {}
 
 void ImageSceneNode::rebuildLocalPaint() {
-  localPaintCache().clear();
+  SceneNode::rebuildLocalPaint();
   if (image) {
     localPaintCache().push_back(DrawImagePaintCommand{
         .image = image,
@@ -16,7 +16,6 @@ void ImageSceneNode::rebuildLocalPaint() {
         .opacity = opacity,
     });
   }
-  SceneNode::rebuildLocalPaint();
 }
 
 Rect ImageSceneNode::computeOwnBounds() const {

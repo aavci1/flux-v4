@@ -8,7 +8,6 @@ RenderSceneNode::RenderSceneNode(NodeId id)
 void RenderSceneNode::rebuildLocalPaint() {
   // User draw callbacks remain immediate-mode. The retained tree keeps the callback and its frame;
   // we do not attempt to record arbitrary Canvas calls into PaintCommand here.
-  localPaintCache().clear();
   SceneNode::rebuildLocalPaint();
 }
 

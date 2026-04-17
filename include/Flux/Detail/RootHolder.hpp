@@ -35,6 +35,7 @@ auto makeCachedLeaf(C const& value) {
 struct RootHolder {
   virtual ~RootHolder() = default;
   virtual void layoutInto(LayoutContext& ctx) const = 0;
+  [[nodiscard]] virtual ComponentKey sceneRootKey() const noexcept = 0;
   [[nodiscard]] virtual Element const* sceneElementForCurrentBuild() const noexcept = 0;
   [[nodiscard]] virtual std::uint64_t layoutIdentityToken() const noexcept = 0;
 };
@@ -101,11 +102,17 @@ struct TypedRootHolder final : RootHolder {
       if (!store) {
         return nullptr;
       }
-      ComponentKey rootKey{};
-      rootKey.push_back(LocalId::fromIndex(0));
-      return store->cachedBody(rootKey);
+      return store->cachedBody(sceneRootKey());
     } else {
       return &cachedLeaf_;
+    }
+  }
+
+  [[nodiscard]] ComponentKey sceneRootKey() const noexcept override {
+    if constexpr (CompositeComponent<C>) {
+      return ComponentKey{LocalId::fromIndex(0), LocalId::fromIndex(0)};
+    } else {
+      return ComponentKey{LocalId::fromIndex(0)};
     }
   }
 

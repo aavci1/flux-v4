@@ -8,13 +8,12 @@ LineSceneNode::LineSceneNode(NodeId id)
     : SceneNode(SceneNodeKind::Line, id) {}
 
 void LineSceneNode::rebuildLocalPaint() {
-  localPaintCache().clear();
+  SceneNode::rebuildLocalPaint();
   localPaintCache().push_back(DrawLinePaintCommand{
       .from = from,
       .to = to,
       .stroke = stroke,
   });
-  SceneNode::rebuildLocalPaint();
 }
 
 Rect LineSceneNode::computeOwnBounds() const {

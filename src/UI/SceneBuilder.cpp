@@ -149,12 +149,17 @@ Point modifierOffset(ElementModifiers const* mods) {
   return Point{mods->positionX + mods->translation.x, mods->positionY + mods->translation.y};
 }
 
-bool needsModifierWrapper(ElementModifiers const* mods) {
+bool needsModifierWrapper(ElementModifiers const* mods, bool leafOwnsPaint) {
   if (!mods) {
     return false;
   }
-  return mods->clip || mods->opacity < 1.f - 1e-6f || !mods->fill.isNone() || !mods->stroke.isNone() ||
-         !mods->shadow.isNone() || !mods->cornerRadius.isZero();
+  if (mods->clip || mods->opacity < 1.f - 1e-6f) {
+    return true;
+  }
+  if (leafOwnsPaint) {
+    return false;
+  }
+  return !mods->fill.isNone() || !mods->stroke.isNone() || !mods->shadow.isNone() || !mods->cornerRadius.isZero();
 }
 
 bool hasOverlay(ElementModifiers const* mods) {
@@ -464,10 +469,10 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     Size const resolvedRectSize = rectSize(assignedFrameForLeaf(paddedContentSize, mods, current.hints));
     bool dirty = false;
     dirty |= updateIfChanged(rectNode->size, resolvedRectSize);
-    dirty |= updateIfChanged(rectNode->cornerRadius, CornerRadius{});
-    dirty |= updateIfChanged(rectNode->fill, FillStyle::none());
-    dirty |= updateIfChanged(rectNode->stroke, StrokeStyle::none());
-    dirty |= updateIfChanged(rectNode->shadow, ShadowStyle::none());
+    dirty |= updateIfChanged(rectNode->cornerRadius, mods ? mods->cornerRadius : CornerRadius{});
+    dirty |= updateIfChanged(rectNode->fill, mods ? mods->fill : FillStyle::none());
+    dirty |= updateIfChanged(rectNode->stroke, mods ? mods->stroke : StrokeStyle::none());
+    dirty |= updateIfChanged(rectNode->shadow, mods ? mods->shadow : ShadowStyle::none());
     if (dirty) {
       rectNode->markPaintDirty();
       rectNode->markBoundsDirty();
@@ -554,8 +559,8 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     dirty |= updateIfChanged(imageNode->image, image.source);
     dirty |= updateIfChanged(imageNode->size, Size{frameRect.width, frameRect.height});
     dirty |= updateIfChanged(imageNode->fillMode, image.fillMode);
-    dirty |= updateIfChanged(imageNode->cornerRadius, CornerRadius{});
-    dirty |= updateIfChanged(imageNode->opacity, 1.f);
+    dirty |= updateIfChanged(imageNode->cornerRadius, mods ? mods->cornerRadius : CornerRadius{});
+    dirty |= updateIfChanged(imageNode->opacity, mods ? mods->opacity : 1.f);
     if (dirty) {
       imageNode->markPaintDirty();
       imageNode->markBoundsDirty();
@@ -573,9 +578,9 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     }
     bool dirty = false;
     dirty |= updateIfChanged(pathNode->path, path.path);
-    dirty |= updateIfChanged(pathNode->fill, FillStyle::none());
-    dirty |= updateIfChanged(pathNode->stroke, StrokeStyle::none());
-    dirty |= updateIfChanged(pathNode->shadow, ShadowStyle::none());
+    dirty |= updateIfChanged(pathNode->fill, mods ? mods->fill : FillStyle::none());
+    dirty |= updateIfChanged(pathNode->stroke, mods ? mods->stroke : StrokeStyle::none());
+    dirty |= updateIfChanged(pathNode->shadow, mods ? mods->shadow : ShadowStyle::none());
     if (dirty) {
       pathNode->markPaintDirty();
       pathNode->markBoundsDirty();
@@ -1273,6 +1278,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
   Size const contentSize = rectSize(core->bounds);
   std::unique_ptr<SceneNode> root = std::move(core);
   root->position = {};
+  bool const leafOwnsModifierPaint = el.leafDrawsFillStrokeShadowFromModifiers();
 
   if (needsLayoutWrapper(mods, outerSize, contentSize)) {
     std::unique_ptr<SceneNode> wrapper = std::make_unique<SceneNode>(id);
@@ -1300,7 +1306,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     root = std::move(wrapper);
   }
 
-  if (needsModifierWrapper(mods)) {
+  if (needsModifierWrapper(mods, leafOwnsModifierPaint)) {
     std::unique_ptr<ModifierSceneNode> wrapper = releaseAs<ModifierSceneNode>(std::move(existing));
     if (!wrapper) {
       wrapper = std::make_unique<ModifierSceneNode>(id);
@@ -1310,10 +1316,10 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     wrapper->appendChild(std::move(root));
     wrapper->clip = mods->clip ? std::optional<Rect>(Rect{0.f, 0.f, outerSize.width, outerSize.height}) : std::nullopt;
     wrapper->opacity = mods->opacity;
-    wrapper->fill = mods->fill;
-    wrapper->stroke = mods->stroke;
-    wrapper->shadow = mods->shadow;
-    wrapper->cornerRadius = mods->cornerRadius;
+    wrapper->fill = leafOwnsModifierPaint ? FillStyle::none() : mods->fill;
+    wrapper->stroke = leafOwnsModifierPaint ? StrokeStyle::none() : mods->stroke;
+    wrapper->shadow = leafOwnsModifierPaint ? ShadowStyle::none() : mods->shadow;
+    wrapper->cornerRadius = leafOwnsModifierPaint ? CornerRadius{} : mods->cornerRadius;
     wrapper->recomputeBounds();
     root = std::move(wrapper);
   }

@@ -1,16 +1,24 @@
 #include <doctest/doctest.h>
 
+#include <Flux/Detail/RootHolder.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Reactive/Signal.hpp>
+#include <Flux/Scene/RectSceneNode.hpp>
 #include <Flux/Scene/ModifierSceneNode.hpp>
 #include <Flux/Scene/Renderer.hpp>
 #include <Flux/Scene/SceneTree.hpp>
 #include <Flux/UI/Environment.hpp>
+#include <Flux/UI/LayoutContext.hpp>
+#include <Flux/UI/LayoutEngine.hpp>
+#include <Flux/UI/LayoutTree.hpp>
+#include <Flux/UI/MeasureCache.hpp>
 #include <Flux/UI/SceneBuilder.hpp>
 #include <Flux/UI/SceneGeometryIndex.hpp>
+#include <Flux/UI/StateStore.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/ScrollView.hpp>
+#include <Flux/UI/Views/Text.hpp>
 #include <Flux/UI/Views/VStack.hpp>
 
 #include <memory>
@@ -53,6 +61,9 @@ public:
 
 class NullRenderer final : public Renderer {
 public:
+  int rectCount = 0;
+  int textCount = 0;
+
   void save() override {}
   void restore() override {}
   void translate(Point) override {}
@@ -61,10 +72,12 @@ public:
   bool quickReject(Rect) const override { return false; }
   void setOpacity(float) override {}
   void setBlendMode(BlendMode) override {}
-  void drawRect(Rect const&, CornerRadius const&, FillStyle const&, StrokeStyle const&, ShadowStyle const&) override {}
+  void drawRect(Rect const&, CornerRadius const&, FillStyle const&, StrokeStyle const&, ShadowStyle const&) override {
+    ++rectCount;
+  }
   void drawLine(Point, Point, StrokeStyle const&) override {}
   void drawPath(Path const&, FillStyle const&, StrokeStyle const&, ShadowStyle const&) override {}
-  void drawTextLayout(TextLayout const&, Point) override {}
+  void drawTextLayout(TextLayout const&, Point) override { ++textCount; }
   void drawImage(Image const&, Rect const&, ImageFillMode, CornerRadius const&, float) override {}
 };
 
@@ -75,9 +88,53 @@ struct EnvironmentScope {
   ~EnvironmentScope() { EnvironmentStack::current().pop(); }
 };
 
+struct StoreScope {
+  flux::StateStore store;
+  flux::StateStore* previous = nullptr;
+
+  StoreScope() {
+    previous = flux::StateStore::current();
+    flux::StateStore::setCurrent(&store);
+  }
+
+  ~StoreScope() { flux::StateStore::setCurrent(previous); }
+};
+
+} // namespace
+
+namespace flux {
+
+struct LayoutContextTestAccess {
+  static LayoutContext* create(TextSystem& ts, LayoutEngine& le, LayoutTree& tree, MeasureCache* mc = nullptr,
+                               LayoutContext::SubtreeRootMap* retainedRoots = nullptr,
+                               std::uint64_t subtreeRootEpoch = 0) {
+    return new LayoutContext(ts, le, tree, mc, retainedRoots, subtreeRootEpoch);
+  }
+
+  static void destroy(LayoutContext* ctx) { delete ctx; }
+};
+
+} // namespace flux
+
+namespace {
+
+struct LayoutContextDeleter {
+  void operator()(flux::LayoutContext* p) const { flux::LayoutContextTestAccess::destroy(p); }
+};
+
+using LayoutContextPtr = std::unique_ptr<flux::LayoutContext, LayoutContextDeleter>;
+
 Element keyedRect(std::string key, float width, float height) {
   return Element{Rectangle{}}.key(std::move(key)).size(width, height);
 }
+
+struct HelloRoot {
+  Element body() const {
+    return Text{
+        .text = "Hello, World!",
+    };
+  }
+};
 
 } // namespace
 
@@ -210,4 +267,73 @@ TEST_CASE("SceneBuilder: geometry index records assigned frames by keyed path") 
   CHECK(bRect->y == doctest::Approx(61.5f));
   CHECK(bRect->width == doctest::Approx(30.f));
   CHECK(bRect->height == doctest::Approx(15.f));
+}
+
+TEST_CASE("SceneBuilder: rectangle retains modifier paint on the primitive node") {
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 120.f;
+  constraints.maxHeight = 120.f;
+
+  Element rect = Element{Rectangle{}}
+                     .size(20.f, 10.f)
+                     .fill(FillStyle::solid(Color::hex(0x3366cc)));
+
+  std::unique_ptr<SceneNode> tree = builder.build(rect, NodeId{1ull}, constraints);
+  auto* rectNode = dynamic_cast<RectSceneNode*>(tree.get());
+  REQUIRE(rectNode != nullptr);
+  CHECK_FALSE(rectNode->fill.isNone());
+
+  NullRenderer renderer{};
+  render(*tree, renderer);
+  CHECK(renderer.rectCount == 1);
+}
+
+TEST_CASE("SceneBuilder: composite root exposes a retained scene body with the runtime root key") {
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  StoreScope scope{};
+
+  flux::TypedRootHolder<HelloRoot> holder{std::in_place};
+  flux::LayoutEngine layoutEngine{};
+  flux::LayoutTree layoutTree{};
+  flux::MeasureCache measureCache{};
+  LayoutContextPtr ctx{LayoutContextTestAccess::create(textSystem, layoutEngine, layoutTree, &measureCache)};
+
+  flux::LayoutConstraints constraints{};
+  constraints.minWidth = 320.f;
+  constraints.minHeight = 320.f;
+  constraints.maxWidth = 320.f;
+  constraints.maxHeight = 320.f;
+
+  scope.store.beginRebuild(true);
+  measureCache.beginBuild(scope.store.shouldForceFullRebuild());
+  layoutEngine.resetForBuild();
+  ctx->pushConstraints(constraints);
+  layoutEngine.setChildFrame(Rect{0.f, 0.f, 320.f, 320.f});
+  holder.layoutInto(*ctx);
+  ctx->popConstraints();
+
+  Element const* sceneRoot = holder.sceneElementForCurrentBuild();
+  REQUIRE(sceneRoot != nullptr);
+  CHECK(sceneRoot->typeTag() == ElementType::Text);
+  CHECK(holder.sceneRootKey() == ComponentKey{LocalId::fromIndex(0), LocalId::fromIndex(0)});
+
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+  std::unique_ptr<SceneNode> tree =
+      builder.build(*sceneRoot, NodeId{1ull}, constraints, nullptr, holder.sceneRootKey());
+  REQUIRE(tree != nullptr);
+
+  NullRenderer renderer{};
+  render(*tree, renderer);
+  CHECK(renderer.textCount == 1);
+
+  scope.store.endRebuild();
 }
