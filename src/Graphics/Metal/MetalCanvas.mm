@@ -1064,9 +1064,9 @@ private:
     clipScissorValid_ = clipScissor_.width > 0 && clipScissor_.height > 0;
   }
 
-  void pushOp(MetalDrawOp op) {
+  void pushOp(MetalDrawOp&& op) {
     tagOpWithClip(op, clipScissorValid_, clipScissor_);
-    frame_.ops.push_back(op);
+    frame_.ops.push_back(std::move(op));
   }
 
   void emitRect(Rect const& deviceRect, CornerRadius const& corners, Color const& fillColor, Color const& strokeColor,

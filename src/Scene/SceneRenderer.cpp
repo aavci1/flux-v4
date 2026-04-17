@@ -298,6 +298,7 @@ struct LayerCacheEntry {
 
 struct SceneRenderer::Impl {
   mutable std::unordered_map<LayerCacheKey, LayerCacheEntry, LayerCacheKeyHash> layerCache_{};
+  mutable std::uint64_t renderCount_ = 0;
 };
 
 SceneRenderer::SceneRenderer()
@@ -308,10 +309,20 @@ SceneRenderer::SceneRenderer(SceneRenderer&&) noexcept = default;
 SceneRenderer& SceneRenderer::operator=(SceneRenderer&&) noexcept = default;
 
 void SceneRenderer::render(SceneGraph const& graph, Canvas& canvas) const {
+  if ((++impl_->renderCount_ & 1023U) == 0) {
+    std::erase_if(impl_->layerCache_, [&](auto const& entry) {
+      return entry.first.graph == &graph && graph.get(entry.first.node) == nullptr;
+    });
+  }
   renderNode(graph.root(), graph, canvas, true);
 }
 
 void SceneRenderer::render(SceneGraph const& graph, Canvas& canvas, Color clearColor) const {
+  if ((++impl_->renderCount_ & 1023U) == 0) {
+    std::erase_if(impl_->layerCache_, [&](auto const& entry) {
+      return entry.first.graph == &graph && graph.get(entry.first.node) == nullptr;
+    });
+  }
   canvas.clear(clearColor);
   renderNode(graph.root(), graph, canvas, true);
 }
