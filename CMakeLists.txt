@@ -101,15 +101,12 @@ add_library(flux STATIC
   src/Reactive/AnimationRebuild.cpp
   src/Reactive/AnimationClock.cpp
   src/Core/Window.cpp
-  src/UI/LayoutTree.cpp
-  src/UI/LayoutContext.cpp
   src/UI/MeasureContext.cpp
   src/UI/Environment.cpp
   src/UI/Theme.cpp
   src/UI/StateStore.cpp
   src/UI/Element.cpp
   src/UI/ActionRegistry.cpp
-  src/UI/LayoutEngine.cpp
   src/UI/Layout/LayoutVStack.cpp
   src/UI/Layout/LayoutHStack.cpp
   src/UI/Layout/LayoutZStack.cpp
@@ -118,7 +115,6 @@ add_library(flux STATIC
   src/UI/Layout/LayoutSpacer.cpp
   src/UI/Layout/LayoutOffsetView.cpp
   src/UI/Layout/LayoutScrollView.cpp
-  src/UI/MeasureCache.cpp
   src/UI/SceneBuilder.cpp
   src/UI/SceneGeometryIndex.cpp
   src/UI/ComponentKey.cpp

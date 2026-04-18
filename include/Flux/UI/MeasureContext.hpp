@@ -14,17 +14,15 @@
 namespace flux {
 
 class TextSystem;
-class MeasureCache;
 struct ElementModifiers;
 class Element;
 
 class MeasureContext {
 public:
-  explicit MeasureContext(TextSystem& ts, MeasureCache* measureCache = nullptr);
+  explicit MeasureContext(TextSystem& ts);
   ~MeasureContext();
 
   TextSystem& textSystem();
-  MeasureCache* measureCache() const;
 
   LayoutConstraints const& constraints() const;
   LayoutHints const& hints() const;
@@ -52,10 +50,6 @@ public:
   void pushCompositeKeyTail(ComponentKey const& compositeKey);
   void popCompositeKeyTail();
 
-  void pushActiveElementModifiers(ElementModifiers const* m);
-  void popActiveElementModifiers();
-  ElementModifiers const* activeElementModifiers() const noexcept;
-
   void setCurrentElement(Element const* el) noexcept { currentElement_ = el; }
   [[nodiscard]] Element const* currentElement() const noexcept { return currentElement_; }
 
@@ -79,8 +73,6 @@ protected:
   std::vector<std::size_t> savedChildIndices_;
   std::size_t nextChildIndex_{0};
   bool skipNextLayoutChildAdvance_{false};
-  MeasureCache* measureCache_{nullptr};
-  std::vector<ElementModifiers const*> activeElementModifiers_{};
   Element const* currentElement_{nullptr};
 
 private:

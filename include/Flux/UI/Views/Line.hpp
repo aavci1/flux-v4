@@ -13,11 +13,7 @@
 namespace flux {
 
 struct Line : ViewModifiers<Line> {
-  static constexpr bool memoizable = true;
-
-  void layout(LayoutContext&) const;
   Size measure(MeasureContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
-  [[nodiscard]] std::uint64_t measureCacheKey() const noexcept;
 
   Point from{};
   Point to{};

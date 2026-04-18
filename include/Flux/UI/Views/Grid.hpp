@@ -28,7 +28,6 @@ namespace flux {
 /// For outer inset or clipping, use **`.padding(float)`** / **`.clipContent(bool)`** on the wrapping
 /// `Element`.
 struct Grid : ViewModifiers<Grid> {
-  void layout(LayoutContext&) const;
   Size measure(MeasureContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
 
   /// Number of columns. Values below 1 are clamped to 1 during layout.

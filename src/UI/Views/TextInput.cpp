@@ -4,7 +4,6 @@
 #include <Flux/Graphics/TextLayoutOptions.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/UI/InputFieldLayout.hpp>
-#include <Flux/UI/LayoutContext.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Views/Render.hpp>
 #include <Flux/UI/Views/Text.hpp>

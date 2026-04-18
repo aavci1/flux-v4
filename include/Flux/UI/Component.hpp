@@ -13,7 +13,6 @@
 namespace flux {
 
 class Canvas;
-class LayoutContext;
 class MeasureContext;
 class TextSystem;
 
@@ -30,9 +29,7 @@ concept Component = true;
 
 template<typename T>
 concept PrimitiveComponent =
-    requires(T const& t, LayoutContext& lctx, MeasureContext& mctx, LayoutConstraints const& c, LayoutHints const& h,
-             TextSystem& ts) {
-      { t.layout(lctx) };
+    requires(T const& t, MeasureContext& mctx, LayoutConstraints const& c, LayoutHints const& h, TextSystem& ts) {
       { t.measure(mctx, c, h, ts) } -> std::convertible_to<Size>;
     } && !CompositeComponent<T>;
 

@@ -380,8 +380,6 @@ inline std::shared_ptr<flux::TextLayout const> resolveMarkdownLayout(MarkdownLay
 } // namespace detail
 
 struct MarkdownText : flux::ViewModifiers<MarkdownText> {
-    static constexpr bool memoizable = true;
-
     std::string text;
     std::uint64_t cacheKey = 0;
     std::uint64_t textRevision = 0;

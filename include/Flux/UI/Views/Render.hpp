@@ -21,7 +21,6 @@ struct Render : ViewModifiers<Render> {
   std::function<void(Canvas&, Rect)> draw{};
   bool pure = false;
 
-  void layout(LayoutContext& ctx) const;
   Size measure(MeasureContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
                TextSystem& textSystem) const;
 

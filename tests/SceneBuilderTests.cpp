@@ -14,10 +14,7 @@
 #include <Flux/UI/Environment.hpp>
 #include <Flux/UI/FocusController.hpp>
 #include <Flux/UI/GestureTracker.hpp>
-#include <Flux/UI/LayoutContext.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
-#include <Flux/UI/LayoutTree.hpp>
-#include <Flux/UI/MeasureCache.hpp>
 #include <Flux/UI/SceneBuilder.hpp>
 #include <Flux/UI/SceneGeometryIndex.hpp>
 #include <Flux/UI/StateStore.hpp>
@@ -110,25 +107,7 @@ struct StoreScope {
 
 } // namespace
 
-namespace flux {
-
-struct LayoutContextTestAccess {
-  static LayoutContext* create(TextSystem& ts, LayoutEngine& le, LayoutTree& tree, MeasureCache* mc = nullptr) {
-    return new LayoutContext(ts, le, tree, mc);
-  }
-
-  static void destroy(LayoutContext* ctx) { delete ctx; }
-};
-
-} // namespace flux
-
 namespace {
-
-struct LayoutContextDeleter {
-  void operator()(flux::LayoutContext* p) const { flux::LayoutContextTestAccess::destroy(p); }
-};
-
-using LayoutContextPtr = std::unique_ptr<flux::LayoutContext, LayoutContextDeleter>;
 
 Element keyedRect(std::string key, float width, float height) {
   return Element{Rectangle{}}.key(std::move(key)).size(width, height);

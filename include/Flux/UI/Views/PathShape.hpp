@@ -14,11 +14,7 @@ namespace flux {
 /// Scene path primitive (name avoids clashing with `flux::Path`). Fill, stroke, and shadow use \ref Element
 /// modifiers (\c fill, \c stroke, \c shadow).
 struct PathShape : ViewModifiers<PathShape> {
-  static constexpr bool memoizable = true;
-
-  void layout(LayoutContext&) const;
   Size measure(MeasureContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
-  [[nodiscard]] std::uint64_t measureCacheKey() const noexcept { return path.contentHash(); }
 
   Path path{};
 };

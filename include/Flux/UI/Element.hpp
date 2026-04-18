@@ -2,10 +2,9 @@
 
 /// \file Flux/UI/Element.hpp
 ///
-/// Type-erased UI component wrapper: holds any view or composite, dispatches \c layout / \c measure,
+/// Type-erased UI component wrapper: holds any view or composite, dispatches \c measure,
 /// optional flex overrides, and per-subtree environment values.
 
-#include <Flux/UI/LayoutContext.hpp>
 #include <Flux/UI/MeasureContext.hpp>
 #include <Flux/UI/Component.hpp>
 #include <Flux/UI/Detail/LeafBounds.hpp>
@@ -78,8 +77,7 @@ enum class ElementType : std::uint8_t {
 namespace detail {
 
 /// Monotonic id for \ref Element::measureId_; never reused (unlike heap addresses after temp
-/// \ref Element destruction). Used as the fallback measure-cache identity when a leaf does not
-/// provide a structural key.
+/// \ref Element destruction). Used by layout debug instrumentation.
 std::uint64_t nextElementMeasureId();
 
 Popover* popoverOverlayStateIf(Element& el);
@@ -129,7 +127,7 @@ float minMainSizeOf(C const& v) {
 
 class TextSystem;
 
-/// Flat modifier state applied by \ref Element during \c layout / \c measure (single decoration path).
+/// Flat modifier state applied by \ref Element during \c measure / scene build.
 struct ElementModifiers {
   EdgeInsets padding{};
   FillStyle fill = FillStyle::none();
@@ -198,9 +196,6 @@ public:
   Element(Element&&) noexcept = default;
   Element& operator=(Element&&) noexcept = default;
 
-  void layout(LayoutContext& ctx) const;
-  bool tryCachedMeasure(MeasureContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
-                        TextSystem& textSystem, Size& out) const;
   Size measure(MeasureContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
                TextSystem& textSystem) const;
   [[nodiscard]] std::uint64_t measureId() const noexcept { return measureId_; }
@@ -243,7 +238,7 @@ public:
   Element key(std::string key) &&;
   [[nodiscard]] std::optional<std::string> const& explicitKey() const noexcept { return key_; }
 
-  /// Pushes environment values for this subtree's layout and measure passes.
+  /// Pushes environment values for this subtree's measurement and scene-build passes.
   template<typename T>
   Element environment(T value) && {
     if (!envLayer_) {
@@ -287,7 +282,6 @@ public:
   Element cursor(Cursor c) &&;
 
 private:
-  friend class LayoutEngine;
   friend Popover* detail::popoverOverlayStateIf(Element& el);
 
   struct Concept {
@@ -303,25 +297,11 @@ private:
                                                                  ElementModifiers const*) const {
       return {};
     }
-    virtual void layout(LayoutContext& ctx) const = 0;
-    virtual bool tryCachedMeasure(MeasureContext&, LayoutConstraints const&, LayoutHints const&,
-                                  TextSystem&, Size&) const {
-      return false;
-    }
     virtual Size measure(MeasureContext& ctx, LayoutConstraints const& constraints,
                          LayoutHints const& hints, TextSystem& textSystem) const = 0;
     virtual float flexGrow() const { return 0.f; }
     virtual float flexShrink() const { return 0.f; }
     virtual float minMainSize() const { return 0.f; }
-    /// When true, \ref Element::measure may return a cached \ref Size for the same
-    /// `(identity, constraints)` after replaying \ref LayoutContext::advanceChildSlot. Composites
-    /// and layouts must return false. Leaves whose \ref measure depends on reactive or mutable
-    /// state not represented by \ref measureCacheToken must return false.
-    virtual bool canMemoizeMeasure() const { return false; }
-    /// Stable structural identity for cross-rebuild measure-cache reuse. Returning \c std::nullopt
-    /// falls back to the wrapper's per-instance \ref measureId_, which only enables same-instance
-    /// hits.
-    virtual std::optional<std::uint64_t> measureCacheToken() const { return std::nullopt; }
     /// When true, the retained-scene leaf applies fill/stroke/shadow from \ref ElementModifiers itself.
     virtual bool leafDrawsFillStrokeShadowFromModifiers() const { return false; }
   };
@@ -336,11 +316,9 @@ private:
   std::optional<EnvironmentLayer> envLayer_;
   std::optional<ElementModifiers> modifiers_;
   std::optional<std::string> key_{};
-  /// Stable for this \ref Element instance; used as the fallback \ref MeasureCache identity when
-  /// the wrapped leaf does not provide a structural token.
+  /// Stable for this \ref Element instance; used by layout debug instrumentation.
   std::uint64_t measureId_{};
 
-  void layoutWithModifiers(LayoutContext& ctx) const;
   Size measureWithModifiersImpl(MeasureContext& ctx, LayoutConstraints const& constraints,
                                 LayoutHints const& hints, TextSystem& textSystem) const;
 };
@@ -442,34 +420,11 @@ struct Element::Model : Concept {
   detail::CompositeBodyResolution resolveCompositeBody(ComponentKey const& key,
                                                        LayoutConstraints const& constraints,
                                                        ElementModifiers const* modifiers) const override;
-  void layout(LayoutContext& ctx) const override;
-  bool tryCachedMeasure(MeasureContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
-                        TextSystem& textSystem, Size& out) const override;
   Size measure(MeasureContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
                TextSystem& textSystem) const override;
   float flexGrow() const override { return detail::flexGrowOf(value); }
   float flexShrink() const override { return detail::flexShrinkOf(value); }
   float minMainSize() const override { return detail::minMainSizeOf(value); }
-  bool canMemoizeMeasure() const override {
-    if constexpr (CompositeComponent<C>) {
-      return false;
-    } else if constexpr (PrimitiveComponent<C>) {
-      if constexpr (requires { C::memoizable; }) {
-        return C::memoizable;
-      }
-      return false;
-    }
-    return false;
-  }
-  std::optional<std::uint64_t> measureCacheToken() const override {
-    if constexpr (PrimitiveComponent<C> &&
-                  requires(C const& v) {
-                    { v.measureCacheKey() } -> std::convertible_to<std::uint64_t>;
-                  }) {
-      return value.measureCacheKey();
-    }
-    return std::nullopt;
-  }
   bool leafDrawsFillStrokeShadowFromModifiers() const override {
     if constexpr (std::is_same_v<C, Rectangle> || std::is_same_v<C, PathShape>) {
       return true;
@@ -522,73 +477,6 @@ detail::CompositeBodyResolution Element::Model<C>::resolveCompositeBody(Componen
     store->popComponent();
     store->recordBodyConstraints(key, constraints);
     return resolution;
-  }
-}
-
-template<typename C>
-void Element::Model<C>::layout(LayoutContext& ctx) const {
-  if constexpr (CompositeComponent<C>) {
-    ComponentKey const key = ctx.nextCompositeKey();
-    StateStore* store = StateStore::current();
-    detail::CompositeBodyResolution resolution{};
-    if (store) {
-      store->pushComponent(key, std::type_index(typeid(C)));
-      store->pushCompositeConstraints(ctx.constraints());
-      try {
-        resolution = detail::resolveCompositeBody(store, key, ctx.constraints(), value,
-                                                  [&] { return value.body(); });
-      } catch (...) {
-        store->popCompositeConstraints();
-        store->popComponent();
-        throw;
-      }
-      store->popCompositeConstraints();
-      store->popComponent();
-    }
-    Element& child = store ? *resolution.body : ctx.pinElement(Element{value.body()});
-    ctx.beginCompositeBodySubtree(key);
-    ctx.pushCompositeKeyTail(key);
-    if (store) {
-      store->recordBodyConstraints(key, ctx.constraints());
-      store->pushCompositePathStable(resolution.descendantsStable);
-    }
-    child.layout(ctx);
-    if (store) {
-      store->popCompositePathStable();
-    }
-    ctx.popCompositeKeyTail();
-  } else if constexpr (PrimitiveComponent<C>) {
-    value.layout(ctx);
-  } else {
-    static_assert(alwaysFalse<C>,
-        "Component must satisfy CompositeComponent (body()) or PrimitiveComponent (layout + measure with "
-        "LayoutContext).");
-  }
-}
-
-template<typename C>
-bool Element::Model<C>::tryCachedMeasure(MeasureContext& ctx, LayoutConstraints const& constraints,
-                                         LayoutHints const& hints, TextSystem& textSystem, Size& out) const {
-  (void)hints;
-  (void)textSystem;
-  if constexpr (!CompositeComponent<C>) {
-    return false;
-  } else {
-    StateStore* store = StateStore::current();
-    if (!store) {
-      return false;
-    }
-    ComponentKey const key = ctx.peekNextCompositeKey();
-    if (!store->canReuseBody(key, value, constraints) || store->hasDirtyDescendant(key)) {
-      return false;
-    }
-    std::optional<Size> const cached = store->cachedMeasure(key, constraints);
-    if (!cached.has_value()) {
-      return false;
-    }
-    ctx.advanceChildSlot();
-    out = *cached;
-    return true;
   }
 }
 
@@ -674,7 +562,7 @@ Size Element::Model<C>::measure(MeasureContext& ctx, LayoutConstraints const& co
     return value.measure(ctx, constraints, hints, textSystem);
   } else {
     static_assert(alwaysFalse<C>,
-        "Component must satisfy CompositeComponent (body()) or PrimitiveComponent (layout + measure with "
+        "Component must satisfy CompositeComponent (body()) or PrimitiveComponent (measure with "
         "MeasureContext).");
     return {};
   }

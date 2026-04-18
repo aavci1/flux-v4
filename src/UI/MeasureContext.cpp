@@ -7,17 +7,14 @@
 
 namespace flux {
 
-MeasureContext::MeasureContext(TextSystem& ts, MeasureCache* measureCache)
-    : textSystem_(ts)
-    , measureCache_(measureCache) {
+MeasureContext::MeasureContext(TextSystem& ts)
+    : textSystem_(ts) {
   layoutStack_.push_back(LayoutFrame{});
 }
 
 MeasureContext::~MeasureContext() = default;
 
 TextSystem& MeasureContext::textSystem() { return textSystem_; }
-
-MeasureCache* MeasureContext::measureCache() const { return measureCache_; }
 
 LayoutConstraints const& MeasureContext::constraints() const { return layoutStack_.back().constraints; }
 
@@ -138,21 +135,6 @@ void MeasureContext::popCompositeKeyTail() {
   assert(!savedChildIndices_.empty());
   nextChildIndex_ = savedChildIndices_.back();
   savedChildIndices_.pop_back();
-}
-
-void MeasureContext::pushActiveElementModifiers(ElementModifiers const* m) {
-  activeElementModifiers_.push_back(m);
-}
-
-void MeasureContext::popActiveElementModifiers() {
-#ifndef NDEBUG
-  assert(!activeElementModifiers_.empty());
-#endif
-  activeElementModifiers_.pop_back();
-}
-
-ElementModifiers const* MeasureContext::activeElementModifiers() const noexcept {
-  return activeElementModifiers_.empty() ? nullptr : activeElementModifiers_.back();
 }
 
 } // namespace flux

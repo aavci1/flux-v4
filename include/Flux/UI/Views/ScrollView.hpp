@@ -32,8 +32,7 @@ struct ScrollView : ViewModifiers<ScrollView> {
     bool dragScrollEnabled = true;
     std::vector<Element> children;
 
-    /// Custom subtree hook (not the generic \ref CompositeComponent path in \ref Element::Model).
-    void layout(LayoutContext &) const;
+    /// Custom measurement hook (not the generic \ref CompositeComponent path in \ref Element::Model).
     Size measure(MeasureContext &, LayoutConstraints const &, LayoutHints const &, TextSystem &) const;
 
     // ── Component protocol ─────────────────────────────────────────────────────
@@ -57,7 +56,6 @@ struct Element::Model<ScrollView> final : Element::Concept {
     std::unique_ptr<Element> buildCompositeBody() const override {
         return std::make_unique<Element>(value.body());
     }
-    void layout(LayoutContext &ctx) const override { value.layout(ctx); }
     Size measure(MeasureContext &ctx, LayoutConstraints const &c, LayoutHints const &h,
                  TextSystem &ts) const override {
         return value.measure(ctx, c, h, ts);
@@ -66,7 +64,6 @@ struct Element::Model<ScrollView> final : Element::Concept {
     float flexGrow() const override { return 0.f; }
     float flexShrink() const override { return 0.f; }
     float minMainSize() const override { return 0.f; }
-    bool canMemoizeMeasure() const override { return false; }
 };
 
 } // namespace flux

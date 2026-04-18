@@ -35,7 +35,6 @@ namespace flux {
 /// To clip children to the stack’s bounds (e.g. scroll viewport), chain **`.clipContent(true)`** on the
 /// `Element` that wraps this `ZStack` (same as other views).
 struct ZStack : ViewModifiers<ZStack> {
-  void layout(LayoutContext&) const;
   Size measure(MeasureContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
 
   Alignment horizontalAlignment = Alignment::Start;

@@ -14,11 +14,7 @@ namespace flux {
 /// Axis-aligned rounded rect leaf. Size, layout-space position, flex, corners, paint, and interaction use
 /// \ref Element / \ref ViewModifiers (e.g. \c size, \c position, \c fill, \c stroke).
 struct Rectangle : ViewModifiers<Rectangle> {
-  static constexpr bool memoizable = true;
-
-  void layout(LayoutContext&) const;
   Size measure(MeasureContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
-  [[nodiscard]] std::uint64_t measureCacheKey() const noexcept { return 0x6f0a4d3f2c1b9e17ull; }
 };
 
 } // namespace flux
