@@ -1,4 +1,5 @@
 #include <Flux/UI/StateStore.hpp>
+#include <Flux/Core/Application.hpp>
 #include <Flux/UI/Element.hpp>
 
 namespace flux {
@@ -165,6 +166,9 @@ ComponentKey const& StateStore::currentComponentKey() const {
 
 void StateStore::markCompositeDirty(ComponentKey const& key) {
   pendingDirtyComposites_.insert(key);
+  if (Application::hasInstance()) {
+    Application::instance().markReactiveDirty();
+  }
 }
 
 bool StateStore::hasPendingDirtyComponents() const noexcept {

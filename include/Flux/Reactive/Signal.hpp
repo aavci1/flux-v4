@@ -112,9 +112,9 @@ ObserverHandle Signal<T>::observeComposite(StateStore& store, ComponentKey const
 
 template<typename T>
 void Signal<T>::notifyObservers() {
-  // `useState` / internal `Signal`s often have no `observe()` callbacks; `notifyObserverList` would
-  // otherwise skip `markReactiveDirty`, so `Runtime`'s next-frame rebuild never runs (resize still
-  // rebuilt via `WindowEvent::Resize`).
+  // `useState` / internal `Signal`s can be completely observer-less; composite observers wake the
+  // runtime via `StateStore::markCompositeDirty`, but a bare signal still needs to schedule the next
+  // reactive rebuild here.
   if (observers_.empty() && compositeObservers_.empty() && detail::signalBridgeApplicationHasInstance()) {
     detail::signalBridgeMarkReactiveDirty();
   }
