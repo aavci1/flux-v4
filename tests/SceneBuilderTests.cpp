@@ -137,6 +137,8 @@ public:
   int rectCount = 0;
   int textCount = 0;
   int pathCount = 0;
+  std::vector<Rect> rects;
+  std::vector<Point> textOrigins;
 
   void save() override {}
   void restore() override {}
@@ -146,12 +148,16 @@ public:
   bool quickReject(Rect) const override { return false; }
   void setOpacity(float) override {}
   void setBlendMode(BlendMode) override {}
-  void drawRect(Rect const&, CornerRadius const&, FillStyle const&, StrokeStyle const&, ShadowStyle const&) override {
+  void drawRect(Rect const& rect, CornerRadius const&, FillStyle const&, StrokeStyle const&, ShadowStyle const&) override {
     ++rectCount;
+    rects.push_back(rect);
   }
   void drawLine(Point, Point, StrokeStyle const&) override {}
   void drawPath(Path const&, FillStyle const&, StrokeStyle const&, ShadowStyle const&) override { ++pathCount; }
-  void drawTextLayout(TextLayout const&, Point) override { ++textCount; }
+  void drawTextLayout(TextLayout const&, Point origin) override {
+    ++textCount;
+    textOrigins.push_back(origin);
+  }
   void drawImage(Image const&, Rect const&, ImageFillMode, CornerRadius const&, float) override {}
 };
 
@@ -665,6 +671,44 @@ TEST_CASE("SceneBuilder: composite root scroll view keeps local state separate f
   CHECK(contentGroup->children()[1]->position.y == doctest::Approx(18.f));
 }
 
+TEST_CASE("SceneBuilder: modifier chrome repaints when child bounds change across reuse") {
+  VariableTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 300.f;
+  constraints.maxHeight = 80.f;
+
+  auto makeLabel = [](std::string text) -> Element {
+    return Text{
+        .text = std::move(text),
+        .horizontalAlignment = HorizontalAlignment::Center,
+        .verticalAlignment = VerticalAlignment::Center,
+    }
+        .padding(6.f, 10.f, 6.f, 10.f)
+        .fill(FillStyle::solid(Colors::black));
+  };
+
+  std::unique_ptr<SceneNode> tree = builder.build(makeLabel("Short"), NodeId{1ull}, constraints);
+  REQUIRE(tree != nullptr);
+
+  NullRenderer firstRenderer{};
+  render(*tree, firstRenderer);
+  REQUIRE(firstRenderer.rects.size() == 1);
+  float const firstWidth = firstRenderer.rects.front().width;
+
+  tree = builder.build(makeLabel("A much longer label"), NodeId{1ull}, constraints, std::move(tree));
+  REQUIRE(tree != nullptr);
+
+  NullRenderer secondRenderer{};
+  render(*tree, secondRenderer);
+  REQUIRE(secondRenderer.rects.size() == 1);
+  CHECK(secondRenderer.rects.front().width > firstWidth);
+}
+
 TEST_CASE("SceneBuilder: geometry index records assigned frames by keyed path") {
   NullTextSystem textSystem{};
   SceneGeometryIndex geometry{};
@@ -792,6 +836,42 @@ TEST_CASE("SceneBuilder: centered text keeps its assigned box for boxed layout")
   NullRenderer renderer{};
   render(*tree, renderer);
   CHECK(renderer.textCount == 1);
+}
+
+TEST_CASE("SceneBuilder: padded text uses the inner content box for layout") {
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 200.f;
+  constraints.maxHeight = 80.f;
+
+  Element text = Text{
+      .text = "Hello, World!",
+      .horizontalAlignment = HorizontalAlignment::Center,
+      .verticalAlignment = VerticalAlignment::Center,
+  }
+                     .padding(8.f, 12.f, 8.f, 12.f)
+                     .fill(FillStyle::solid(Colors::black));
+
+  std::unique_ptr<SceneNode> tree = builder.build(text, NodeId{1ull}, constraints);
+  REQUIRE(tree != nullptr);
+
+  auto* wrapper = dynamic_cast<ModifierSceneNode*>(tree.get());
+  REQUIRE(wrapper != nullptr);
+  REQUIRE(wrapper->children().size() == 1);
+
+  SceneNode* layoutWrapper = wrapper->children()[0].get();
+  REQUIRE(layoutWrapper != nullptr);
+  REQUIRE(layoutWrapper->children().size() == 1);
+
+  auto* textNode = dynamic_cast<TextSceneNode*>(layoutWrapper->children()[0].get());
+  REQUIRE(textNode != nullptr);
+  CHECK(textNode->allocation.width == doctest::Approx(48.f));
+  CHECK(textNode->allocation.height == doctest::Approx(14.f));
 }
 
 TEST_CASE("SceneBuilder: stretched flex HStack leaves adopt their assigned slot size") {

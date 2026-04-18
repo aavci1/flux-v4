@@ -748,6 +748,12 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
       std::max(0.f, outerSize.width - std::max(0.f, padding.left) - std::max(0.f, padding.right)),
       std::max(0.f, outerSize.height - std::max(0.f, padding.top) - std::max(0.f, padding.bottom)),
   };
+  LayoutConstraints leafFrameConstraints = innerConstraints;
+  leafFrameConstraints.maxWidth = paddedContentSize.width;
+  leafFrameConstraints.maxHeight = paddedContentSize.height;
+  leafFrameConstraints.minWidth = std::min(leafFrameConstraints.minWidth, leafFrameConstraints.maxWidth);
+  leafFrameConstraints.minHeight = std::min(leafFrameConstraints.minHeight, leafFrameConstraints.maxHeight);
+  clampLayoutMinToMax(leafFrameConstraints);
   Point const contentOrigin{
       current.origin.x + subtreeOffset.x + std::max(0.f, padding.left),
       current.origin.y + subtreeOffset.y + std::max(0.f, padding.top),
@@ -771,7 +777,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
       rectNode = std::make_unique<RectSceneNode>(id);
     }
     Size const resolvedRectSize =
-        rectSize(assignedFrameForLeaf(paddedContentSize, current.constraints, mods, current.hints));
+        rectSize(assignedFrameForLeaf(paddedContentSize, leafFrameConstraints, mods, current.hints));
     bool dirty = false;
     dirty |= updateIfChanged(rectNode->size, resolvedRectSize);
     dirty |= updateIfChanged(rectNode->cornerRadius, mods ? mods->cornerRadius : CornerRadius{});
@@ -794,7 +800,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     Font const resolvedFont = resolveFont(text.font, theme.fontBody);
     Color const resolvedColor = resolveColor(text.color, theme.colorTextPrimary);
     Color const resolvedSelectionColor = resolveColor(text.selectionColor, theme.colorAccentSubtle);
-    Rect const frameRect = assignedFrameForLeaf(paddedContentSize, current.constraints, mods, current.hints);
+    Rect const frameRect = assignedFrameForLeaf(paddedContentSize, leafFrameConstraints, mods, current.hints);
     TextLayoutOptions const options = text_detail::makeTextLayoutOptions(text);
     std::string const displayText =
         text.selectable ? text.text
@@ -890,7 +896,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     if (!renderNode) {
       renderNode = std::make_unique<RenderSceneNode>(id);
     }
-    Rect const frameRect = assignedFrameForLeaf(paddedContentSize, current.constraints, mods, current.hints);
+    Rect const frameRect = assignedFrameForLeaf(paddedContentSize, leafFrameConstraints, mods, current.hints);
     bool dirty = false;
     dirty |= updateIfChanged(renderNode->frame, frameRect);
     if (renderNode->pure != renderView.pure) {
@@ -917,7 +923,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     if (!imageNode) {
       imageNode = std::make_unique<ImageSceneNode>(id);
     }
-    Rect const frameRect = assignedFrameForLeaf(paddedContentSize, current.constraints, mods, current.hints);
+    Rect const frameRect = assignedFrameForLeaf(paddedContentSize, leafFrameConstraints, mods, current.hints);
     bool dirty = false;
     dirty |= updateIfChanged(imageNode->image, image.source);
     dirty |= updateIfChanged(imageNode->size, Size{frameRect.width, frameRect.height});
@@ -1994,15 +2000,35 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     if (!wrapper) {
       wrapper = std::make_unique<ModifierSceneNode>(id);
     }
+    Rect const previousChildBounds =
+        !wrapper->children().empty() ? wrapper->children().front()->bounds : Rect{};
+    bool const hadPreviousChild = !wrapper->children().empty();
     wrapper->replaceChildren({});
     root->position = {};
     wrapper->appendChild(std::move(root));
-    wrapper->clip = mods->clip ? std::optional<Rect>(Rect{0.f, 0.f, outerSize.width, outerSize.height}) : std::nullopt;
+    std::optional<Rect> const nextClip =
+        mods->clip ? std::optional<Rect>(Rect{0.f, 0.f, outerSize.width, outerSize.height}) : std::nullopt;
+    FillStyle const nextFill = leafOwnsModifierPaint ? FillStyle::none() : mods->fill;
+    StrokeStyle const nextStroke = leafOwnsModifierPaint ? StrokeStyle::none() : mods->stroke;
+    ShadowStyle const nextShadow = leafOwnsModifierPaint ? ShadowStyle::none() : mods->shadow;
+    CornerRadius const nextCornerRadius = leafOwnsModifierPaint ? CornerRadius{} : mods->cornerRadius;
+    bool const paintAffectingFieldsChanged =
+        wrapper->fill != nextFill || wrapper->stroke != nextStroke || wrapper->shadow != nextShadow ||
+        wrapper->cornerRadius != nextCornerRadius;
+    bool const boundsAffectingFieldsChanged =
+        wrapper->clip != nextClip || wrapper->opacity != mods->opacity || paintAffectingFieldsChanged;
+    wrapper->clip = nextClip;
     wrapper->opacity = mods->opacity;
-    wrapper->fill = leafOwnsModifierPaint ? FillStyle::none() : mods->fill;
-    wrapper->stroke = leafOwnsModifierPaint ? StrokeStyle::none() : mods->stroke;
-    wrapper->shadow = leafOwnsModifierPaint ? ShadowStyle::none() : mods->shadow;
-    wrapper->cornerRadius = leafOwnsModifierPaint ? CornerRadius{} : mods->cornerRadius;
+    wrapper->fill = nextFill;
+    wrapper->stroke = nextStroke;
+    wrapper->shadow = nextShadow;
+    wrapper->cornerRadius = nextCornerRadius;
+    if (paintAffectingFieldsChanged || !hadPreviousChild || previousChildBounds != wrapper->children().front()->bounds) {
+      wrapper->markPaintDirty();
+    }
+    if (boundsAffectingFieldsChanged) {
+      wrapper->markBoundsDirty();
+    }
     wrapper->recomputeBounds();
     root = std::move(wrapper);
   }
