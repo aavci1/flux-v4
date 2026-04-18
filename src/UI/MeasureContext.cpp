@@ -45,7 +45,6 @@ void MeasureContext::popChildIndex() {
   keyStack_.pop_back();
   nextChildIndex_ = savedChildIndices_.back();
   savedChildIndices_.pop_back();
-  ++nextChildIndex_;
 }
 
 void MeasureContext::setChildIndex(std::size_t index) { nextChildIndex_ = index; }

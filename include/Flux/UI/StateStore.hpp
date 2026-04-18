@@ -267,9 +267,6 @@ bool StateStore::canReuseBody(ComponentKey const& key, ComponentState const* sta
   if (!constraintsMatched) {
     return false;
   }
-  if (currentCompositePathStable()) {
-    return true;
-  }
   if (!state->valueSnapshot.value || state->valueSnapshot.type != std::type_index(typeid(C)) ||
       !state->valueSnapshot.equals) {
     return false;

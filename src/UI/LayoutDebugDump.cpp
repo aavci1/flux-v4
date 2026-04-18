@@ -1,6 +1,7 @@
 #include <Flux/UI/Detail/LayoutDebugDump.hpp>
 
 #include <Flux/Scene/SceneTree.hpp>
+#include <Flux/Scene/TextSceneNode.hpp>
 #include <Flux/UI/SceneGeometryIndex.hpp>
 
 #include "UI/Layout/LayoutHelpers.hpp"
@@ -49,14 +50,33 @@ std::string formatComponentKey(ComponentKey const& key) {
 }
 
 void dumpSceneNode(SceneNode const& node, int depth) {
+  std::string extra;
+  if (node.kind() == SceneNodeKind::Text) {
+    auto const& textNode = static_cast<TextSceneNode const&>(node);
+    std::string preview = textNode.text;
+    constexpr std::size_t kMaxPreview = 40;
+    if (preview.size() > kMaxPreview) {
+      preview.resize(kMaxPreview - 3);
+      preview += "...";
+    }
+    for (char& ch : preview) {
+      if (ch == '\n' || ch == '\r' || ch == '\t') {
+        ch = ' ';
+      }
+    }
+    extra = " text=\"";
+    extra += preview;
+    extra += "\"";
+  }
   printIndent(depth);
   std::fprintf(stderr,
-               "[flux:layout] node kind=%.*s id=0x%016llx pos=(%.1f, %.1f) bounds=(%.1f, %.1f, %.1f, %.1f)%s\n",
+               "[flux:layout] node kind=%.*s id=0x%016llx pos=(%.1f, %.1f) bounds=(%.1f, %.1f, %.1f, %.1f)%s%s\n",
                static_cast<int>(sceneNodeKindName(node.kind()).size()), sceneNodeKindName(node.kind()).data(),
                static_cast<unsigned long long>(node.id().value), static_cast<double>(node.position.x),
                static_cast<double>(node.position.y), static_cast<double>(node.bounds.x),
                static_cast<double>(node.bounds.y), static_cast<double>(node.bounds.width),
-               static_cast<double>(node.bounds.height), node.interaction() ? " interactive" : "");
+               static_cast<double>(node.bounds.height), node.interaction() ? " interactive" : "",
+               extra.c_str());
   for (std::unique_ptr<SceneNode> const& child : node.children()) {
     dumpSceneNode(*child, depth + 1);
   }

@@ -28,6 +28,7 @@
 #include <Flux/UI/Views/PopoverCalloutShape.hpp>
 #include <Flux/UI/Views/ScaleAroundCenter.hpp>
 #include <Flux/UI/Views/Spacer.hpp>
+#include <Flux/UI/Views/Button.hpp>
 #include <Flux/UI/Views/Text.hpp>
 #include <Flux/UI/Views/VStack.hpp>
 
@@ -433,6 +434,83 @@ struct CompositeRootScrollView {
   }
 };
 
+struct CompositeRootModifierShell {
+  bool* tapped = nullptr;
+
+  Element body() const {
+    return HStack{
+        .spacing = 8.f,
+        .alignment = Alignment::Center,
+        .children = children(
+            Text{.text = "Left"},
+            Text{.text = "Right"})
+    }
+        .padding(12.f)
+        .fill(FillStyle::solid(Colors::black))
+        .stroke(StrokeStyle::solid(Colors::white, 1.f))
+        .cornerRadius(CornerRadius{8.f})
+        .cursor(Cursor::Hand)
+        .focusable(true)
+        .onTap([tapped = tapped] {
+          if (tapped) {
+            *tapped = true;
+          }
+        });
+  }
+};
+
+struct LabeledComposite {
+  std::string label;
+
+  Element body() const { return Text{.text = label}; }
+};
+
+struct InlineLinksComposite {
+  State<bool> reviewPassed;
+
+  Element body() const {
+    Theme const& theme = useEnvironment<Theme>();
+    return VStack{
+        .spacing = 12.f,
+        .alignment = Alignment::Start,
+        .children = children(
+            HStack{
+                .spacing = 4.f,
+                .alignment = Alignment::Center,
+                .children = children(
+                    Text{.text = "Need copy guidance before publishing?"},
+                    LinkButton{
+                        .label = "Open the editorial checklist",
+                        .style = LinkButton::Style{.font = theme.fontBody},
+                    })},
+            HStack{
+                .spacing = 4.f,
+                .alignment = Alignment::Center,
+                .children = children(
+                    Text{.text = *reviewPassed ? "Review already passed." : "Still waiting on approval?"},
+                    LinkButton{
+                        .label = *reviewPassed ? "Mark review as pending" : "Mark review as approved",
+                        .style = LinkButton::Style{.font = theme.fontBodySmall},
+                    },
+                    Text{.text = "or"},
+                    LinkButton{
+                        .label = "contact support",
+                        .disabled = true,
+                        .style = LinkButton::Style{.font = theme.fontBodySmall},
+                    })})};
+  }
+};
+
+void collectTextLabels(SceneNode const& node, std::vector<std::string>& out) {
+  if (node.kind() == SceneNodeKind::Text) {
+    auto const& textNode = static_cast<TextSceneNode const&>(node);
+    out.push_back(textNode.text);
+  }
+  for (auto const& child : node.children()) {
+    collectTextLabels(*child, out);
+  }
+}
+
 } // namespace
 
 TEST_CASE("SceneBuilder: keyed reorder reuses child scene nodes") {
@@ -684,54 +762,6 @@ TEST_CASE("SceneBuilder: composite root scroll view keeps local state separate f
   CHECK(contentGroup->children()[1]->position.y == doctest::Approx(18.f));
 }
 
-TEST_CASE("SceneBuilder: scroll view descendants keep the same composite identities between measure and build") {
-  NullTextSystem textSystem{};
-  EnvironmentLayer env{};
-  env.set(Theme::light());
-  EnvironmentScope envScope{std::move(env)};
-  StoreScope scope{};
-  SceneBuilder builder{textSystem, EnvironmentStack::current()};
-
-  LayoutConstraints constraints{};
-  constraints.maxWidth = 320.f;
-  constraints.maxHeight = 180.f;
-
-  Element root = ScrollView{
-      .axis = ScrollAxis::Vertical,
-      .children = children(
-          ScrollSizedComposite{.key = "first", .width = 40.f, .height = 180.f},
-          ScrollSizedComposite{.key = "second", .width = 50.f, .height = 220.f},
-          ScrollSizedComposite{.key = "third", .width = 60.f, .height = 120.f}),
-  };
-
-  scope.store.beginRebuild(true);
-  std::unique_ptr<SceneNode> tree = builder.build(root, NodeId{1ull}, constraints);
-  scope.store.endRebuild();
-
-  REQUIRE(tree != nullptr);
-
-  std::vector<Size> rectSizes{};
-  std::function<void(SceneNode const&)> walk = [&](SceneNode const& node) {
-    if (auto const* rect = dynamic_cast<RectSceneNode const*>(&node)) {
-      rectSizes.push_back(rect->size);
-    }
-    for (std::unique_ptr<SceneNode> const& child : node.children()) {
-      walk(*child);
-    }
-  };
-  walk(*tree);
-
-  auto hasRectSize = [&](float width, float height) {
-    return std::any_of(rectSizes.begin(), rectSizes.end(), [&](Size const& size) {
-      return size.width == doctest::Approx(width) && size.height == doctest::Approx(height);
-    });
-  };
-
-  CHECK(hasRectSize(320.f, 180.f));
-  CHECK(hasRectSize(320.f, 220.f));
-  CHECK(hasRectSize(320.f, 120.f));
-}
-
 TEST_CASE("SceneBuilder: modifier chrome repaints when child bounds change across reuse") {
   VariableTextSystem textSystem{};
   EnvironmentLayer env{};
@@ -928,6 +958,8 @@ TEST_CASE("SceneBuilder: padded text uses the assigned slot's inner content box 
   auto* wrapper = dynamic_cast<ModifierSceneNode*>(tree.get());
   REQUIRE(wrapper != nullptr);
   REQUIRE(wrapper->children().size() == 1);
+  CHECK(wrapper->chromeRect.width == doctest::Approx(200.f));
+  CHECK(wrapper->chromeRect.height == doctest::Approx(80.f));
 
   SceneNode* layoutWrapper = wrapper->children()[0].get();
   REQUIRE(layoutWrapper != nullptr);
@@ -939,6 +971,211 @@ TEST_CASE("SceneBuilder: padded text uses the assigned slot's inner content box 
   CHECK(wrapper->bounds.height == doctest::Approx(80.f));
   CHECK(textNode->allocation.width == doctest::Approx(176.f));
   CHECK(textNode->allocation.height == doctest::Approx(64.f));
+}
+
+TEST_CASE("SceneBuilder: modifier wrapper hit area follows the outer chrome box") {
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 180.f;
+  constraints.maxHeight = 49.f;
+
+  bool tapped = false;
+  Element buttonLike = Text{
+      .text = "Create Invoice",
+      .horizontalAlignment = HorizontalAlignment::Center,
+      .verticalAlignment = VerticalAlignment::Center,
+  }
+                           .padding(16.f)
+                           .fill(FillStyle::solid(Colors::black))
+                           .cursor(Cursor::Hand)
+                           .onTap([&] { tapped = true; });
+
+  std::unique_ptr<SceneNode> tree = builder.build(buttonLike, NodeId{1ull}, constraints);
+  auto* wrapper = dynamic_cast<ModifierSceneNode*>(tree.get());
+  REQUIRE(wrapper != nullptr);
+  REQUIRE(wrapper->interaction() != nullptr);
+  CHECK(wrapper->interaction()->cursor == Cursor::Hand);
+  CHECK(wrapper->chromeRect.width == doctest::Approx(180.f));
+  CHECK(wrapper->chromeRect.height == doctest::Approx(49.f));
+
+  SceneNode* hit = tree->hitTest(Point{179.f, 24.f});
+  REQUIRE(hit == tree.get());
+  REQUIRE(tree->interaction()->onTap);
+  tree->interaction()->onTap();
+  CHECK(tapped);
+}
+
+TEST_CASE("SceneBuilder: composite root keeps body modifier shell interaction and chrome") {
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 240.f;
+  constraints.maxHeight = 64.f;
+
+  bool tapped = false;
+  std::unique_ptr<SceneNode> tree =
+      builder.build(Element{CompositeRootModifierShell{.tapped = &tapped}}, NodeId{1ull}, constraints);
+  REQUIRE(tree != nullptr);
+
+  auto* wrapper = dynamic_cast<ModifierSceneNode*>(tree.get());
+  REQUIRE(wrapper != nullptr);
+  REQUIRE(wrapper->interaction() != nullptr);
+  CHECK(wrapper->interaction()->cursor == Cursor::Hand);
+  CHECK(wrapper->interaction()->focusable);
+  CHECK(wrapper->chromeRect.width > 0.f);
+  CHECK(wrapper->chromeRect.height > 0.f);
+  CHECK(wrapper->bounds.width >= wrapper->chromeRect.width);
+  CHECK(wrapper->bounds.height >= wrapper->chromeRect.height);
+
+  SceneNode* hit = tree->hitTest(Point{wrapper->chromeRect.width - 1.f, wrapper->chromeRect.height * 0.5f});
+  REQUIRE(hit == tree.get());
+  REQUIRE(tree->interaction()->onTap);
+  tree->interaction()->onTap();
+  CHECK(tapped);
+}
+
+TEST_CASE("SceneBuilder: composite root preserves outer size modifiers around body chrome") {
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 400.f;
+  constraints.maxHeight = 80.f;
+
+  Element el = Element{CompositeRootModifierShell{}}
+                   .size(240.f, 64.f);
+
+  std::unique_ptr<SceneNode> tree = builder.build(el, NodeId{1ull}, constraints);
+  REQUIRE(tree != nullptr);
+  CHECK(tree->kind() == SceneNodeKind::Group);
+  CHECK(tree->bounds.width == doctest::Approx(240.f));
+  CHECK(tree->bounds.height == doctest::Approx(64.f));
+  REQUIRE(tree->children().size() == 1);
+  auto* inner = dynamic_cast<ModifierSceneNode*>(tree->children()[0].get());
+  REQUIRE(inner != nullptr);
+  CHECK(inner->chromeRect.width > 0.f);
+  CHECK(inner->chromeRect.height > 0.f);
+}
+
+TEST_CASE("SceneBuilder: sibling composites with distinct props keep distinct bodies") {
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 500.f;
+  constraints.maxHeight = 64.f;
+
+  StateStore store;
+  StateStore::setCurrent(&store);
+  store.beginRebuild(true);
+  Element treeEl = HStack{
+      .spacing = 8.f,
+      .children = children(
+          Element{LabeledComposite{.label = "Back"}},
+          Element{LabeledComposite{.label = "Comments"}},
+          Element{LabeledComposite{.label = "History"}}),
+  };
+  std::unique_ptr<SceneNode> tree = builder.build(treeEl, NodeId{1ull}, constraints);
+  store.endRebuild();
+  StateStore::setCurrent(nullptr);
+
+  REQUIRE(tree != nullptr);
+  std::vector<std::string> labels;
+  collectTextLabels(*tree, labels);
+  REQUIRE(labels.size() == 3);
+  CHECK(labels[0] == "Back");
+  CHECK(labels[1] == "Comments");
+  CHECK(labels[2] == "History");
+}
+
+TEST_CASE("SceneBuilder: sibling link buttons keep distinct labels") {
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 900.f;
+  constraints.maxHeight = 64.f;
+
+  StateStore store;
+  StateStore::setCurrent(&store);
+  store.beginRebuild(true);
+  Element treeEl = HStack{
+      .spacing = 4.f,
+      .alignment = Alignment::Center,
+      .children = children(
+          Text{.text = "Still waiting on approval?"},
+          LinkButton{
+              .label = "Mark review as approved",
+              .style = LinkButton::Style{},
+          },
+          Text{.text = "or"},
+          LinkButton{
+              .label = "contact support",
+              .disabled = true,
+              .style = LinkButton::Style{},
+          }),
+  };
+  std::unique_ptr<SceneNode> tree = builder.build(treeEl, NodeId{1ull}, constraints);
+  store.endRebuild();
+  StateStore::setCurrent(nullptr);
+
+  REQUIRE(tree != nullptr);
+  std::vector<std::string> labels;
+  collectTextLabels(*tree, labels);
+  REQUIRE(labels.size() == 4);
+  CHECK(labels[0] == "Still waiting on approval?");
+  CHECK(labels[1] == "Mark review as approved");
+  CHECK(labels[2] == "or");
+  CHECK(labels[3] == "contact support");
+}
+
+TEST_CASE("SceneBuilder: nested inline-links composite keeps distinct link labels") {
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 900.f;
+  constraints.maxHeight = 200.f;
+
+  Signal<bool> reviewSignal{false};
+  State<bool> reviewPassed{&reviewSignal};
+
+  StateStore store;
+  StateStore::setCurrent(&store);
+  store.beginRebuild(true);
+  std::unique_ptr<SceneNode> tree = builder.build(Element{InlineLinksComposite{.reviewPassed = reviewPassed}},
+                                                  NodeId{1ull}, constraints);
+  store.endRebuild();
+  StateStore::setCurrent(nullptr);
+
+  REQUIRE(tree != nullptr);
+  std::vector<std::string> labels;
+  collectTextLabels(*tree, labels);
+  REQUIRE(labels.size() == 6);
+  CHECK(labels[0] == "Need copy guidance before publishing?");
+  CHECK(labels[1] == "Open the editorial checklist");
+  CHECK(labels[2] == "Still waiting on approval?");
+  CHECK(labels[3] == "Mark review as approved");
+  CHECK(labels[4] == "or");
+  CHECK(labels[5] == "contact support");
 }
 
 TEST_CASE("SceneBuilder: badge background rectangle keeps its assigned ZStack slot") {

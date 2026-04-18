@@ -201,6 +201,29 @@ bool needsLayoutWrapper(ElementModifiers const* mods, Size outerSize, Size conte
   return !nearlyEqual(outerSize, contentSize);
 }
 
+bool needsDecorationPass(ElementModifiers const* mods, Size outerSize, Size contentSize,
+                         bool leafOwnsPaint, InteractionData const* interaction) {
+  if (!mods) {
+    return interaction != nullptr;
+  }
+  if (needsLayoutWrapper(mods, outerSize, contentSize) || needsModifierWrapper(mods, leafOwnsPaint)) {
+    return true;
+  }
+  if (interaction != nullptr) {
+    return true;
+  }
+  Point const offset = modifierOffset(mods);
+  return std::fabs(offset.x) > 1e-6f || std::fabs(offset.y) > 1e-6f;
+}
+
+Rect chromeRectForSize(Size size) {
+  return Rect{0.f, 0.f, std::max(0.f, size.width), std::max(0.f, size.height)};
+}
+
+bool rectIsMeaningful(Rect rect) {
+  return rect.width > 0.f || rect.height > 0.f;
+}
+
 std::unique_ptr<InteractionData> makeInteractionData(ElementModifiers const* mods, ComponentKey const& key) {
   if (!mods) {
     return nullptr;
@@ -690,16 +713,99 @@ Size SceneBuilder::measureElement(Element const& el, LayoutConstraints const& co
                                   LayoutHints const& hints, ComponentKey const& key) const {
   MeasureContext measureContext{textSystem_};
   measureContext.pushConstraints(constraints, hints);
-  ComponentKey traversalKey = key;
-  if (el.isComposite() && !traversalKey.empty()) {
-    LocalId& local = traversalKey.back();
-    if (local.kind == LocalId::Kind::Positional) {
-      local.value += 1ull;
-    }
-  }
-  measureContext.resetTraversalState(traversalKey);
+  measureContext.resetTraversalState(key);
   measureContext.setCurrentElement(&el);
   return el.measure(measureContext, constraints, hints, textSystem_);
+}
+
+std::unique_ptr<SceneNode>
+SceneBuilder::decorateNode(std::unique_ptr<SceneNode> root, Element const& el, ElementModifiers const* mods,
+                           std::unique_ptr<SceneNode> existing, Size layoutOuterSize, Size outerSize,
+                           Point subtreeOffset, EdgeInsets const& padding,
+                           std::unique_ptr<InteractionData> interaction) {
+  if (!root) {
+    return nullptr;
+  }
+
+  FrameState const current = frame();
+  Size const contentSize = rectSize(root->bounds);
+  bool const leafOwnsModifierPaint = el.leafDrawsFillStrokeShadowFromModifiers();
+  root->position = {};
+
+  if (needsLayoutWrapper(mods, layoutOuterSize, contentSize)) {
+    std::unique_ptr<SceneNode> wrapper = std::make_unique<SceneNode>(root->id());
+    std::vector<std::unique_ptr<SceneNode>> children{};
+    children.reserve(hasOverlay(mods) ? 2 : 1);
+    root->position = Point{std::max(0.f, padding.left), std::max(0.f, padding.top)};
+    children.push_back(std::move(root));
+    if (hasOverlay(mods)) {
+      LayoutConstraints overlayConstraints = current.constraints;
+      overlayConstraints.maxWidth =
+          outerSize.width > 0.f ? outerSize.width : std::numeric_limits<float>::infinity();
+      overlayConstraints.maxHeight =
+          outerSize.height > 0.f ? outerSize.height : std::numeric_limits<float>::infinity();
+      ComponentKey overlayKey = current.key;
+      overlayKey.push_back(LocalId::fromString("$overlay"));
+      pushFrame(overlayConstraints, current.hints,
+                Point{current.origin.x + subtreeOffset.x, current.origin.y + subtreeOffset.y},
+                std::move(overlayKey), layoutOuterSize, layoutOuterSize.width > 0.f,
+                layoutOuterSize.height > 0.f);
+      std::unique_ptr<SceneNode> overlayNode =
+          buildOrReuse(*mods->overlay, SceneTree::childId(wrapper->id(), LocalId::fromString("$overlay")), nullptr);
+      popFrame();
+      children.push_back(std::move(overlayNode));
+    }
+    wrapper->replaceChildren(std::move(children));
+    setAssignedGroupBounds(*wrapper, layoutOuterSize);
+    root = std::move(wrapper);
+  }
+
+  if (needsModifierWrapper(mods, leafOwnsModifierPaint)) {
+    std::unique_ptr<ModifierSceneNode> wrapper = releaseAs<ModifierSceneNode>(std::move(existing));
+    if (!wrapper) {
+      wrapper = std::make_unique<ModifierSceneNode>(root->id());
+    }
+    wrapper->replaceChildren({});
+    root->position = {};
+    wrapper->appendChild(std::move(root));
+
+    std::optional<Rect> const nextClip =
+        mods->clip ? std::optional<Rect>(chromeRectForSize(outerSize)) : std::nullopt;
+    FillStyle const nextFill = leafOwnsModifierPaint ? FillStyle::none() : mods->fill;
+    StrokeStyle const nextStroke = leafOwnsModifierPaint ? StrokeStyle::none() : mods->stroke;
+    ShadowStyle const nextShadow = leafOwnsModifierPaint ? ShadowStyle::none() : mods->shadow;
+    CornerRadius const nextCornerRadius = leafOwnsModifierPaint ? CornerRadius{} : mods->cornerRadius;
+    Rect const nextChromeRect =
+        !leafOwnsModifierPaint && rectIsMeaningful(chromeRectForSize(layoutOuterSize))
+            ? chromeRectForSize(layoutOuterSize)
+            : Rect{};
+
+    bool const paintChanged = wrapper->chromeRect != nextChromeRect || wrapper->fill != nextFill ||
+                              wrapper->stroke != nextStroke || wrapper->shadow != nextShadow ||
+                              wrapper->cornerRadius != nextCornerRadius;
+    bool const boundsChanged =
+        wrapper->clip != nextClip || wrapper->opacity != mods->opacity || paintChanged;
+
+    wrapper->chromeRect = nextChromeRect;
+    wrapper->clip = nextClip;
+    wrapper->opacity = mods->opacity;
+    wrapper->fill = nextFill;
+    wrapper->stroke = nextStroke;
+    wrapper->shadow = nextShadow;
+    wrapper->cornerRadius = nextCornerRadius;
+    if (paintChanged) {
+      wrapper->markPaintDirty();
+    }
+    if (boundsChanged) {
+      wrapper->markBoundsDirty();
+    }
+    wrapper->recomputeBounds();
+    root = std::move(wrapper);
+  }
+
+  root->setInteraction(std::move(interaction));
+  root->position = subtreeOffset;
+  return root;
 }
 
 std::unique_ptr<SceneNode> SceneBuilder::build(Element const& el, NodeId id,
@@ -811,7 +917,8 @@ void SceneBuilder::reconcileChildren(SceneNode& parent, std::span<Element const>
 std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Element const& sceneEl, NodeId id,
                                                        std::unique_ptr<SceneNode> existing) {
   FrameState const current = frame();
-  ElementModifiers const* mods = el.modifiers();
+  ElementModifiers const* mods = sceneEl.modifiers();
+  ElementModifiers const* outerMods = (&sceneEl != &el) ? el.modifiers() : nullptr;
   Point const subtreeOffset = modifierOffset(mods);
   Size const outerSize = measureElement(el, current.constraints, current.hints, current.key);
   Size layoutOuterSize = outerSize;
@@ -2080,84 +2187,20 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     break;
   }
 
-  Size const contentSize = rectSize(core->bounds);
-  std::unique_ptr<SceneNode> root = std::move(core);
-  root->position = {};
-  bool const leafOwnsModifierPaint = el.leafDrawsFillStrokeShadowFromModifiers();
-
-  if (needsLayoutWrapper(mods, layoutOuterSize, contentSize)) {
-    std::unique_ptr<SceneNode> wrapper = std::make_unique<SceneNode>(id);
-    std::vector<std::unique_ptr<SceneNode>> children{};
-    children.reserve(hasOverlay(mods) ? 2 : 1);
-    root->position = Point{std::max(0.f, padding.left), std::max(0.f, padding.top)};
-    children.push_back(std::move(root));
-    if (hasOverlay(mods)) {
-      LayoutConstraints overlayConstraints = current.constraints;
-      overlayConstraints.maxWidth =
-          outerSize.width > 0.f ? outerSize.width : std::numeric_limits<float>::infinity();
-      overlayConstraints.maxHeight =
-          outerSize.height > 0.f ? outerSize.height : std::numeric_limits<float>::infinity();
-      ComponentKey overlayKey = current.key;
-      overlayKey.push_back(LocalId::fromString("$overlay"));
-      pushFrame(overlayConstraints, current.hints, Point{current.origin.x + subtreeOffset.x, current.origin.y + subtreeOffset.y},
-                std::move(overlayKey), layoutOuterSize, layoutOuterSize.width > 0.f, layoutOuterSize.height > 0.f);
-      std::unique_ptr<SceneNode> overlayNode =
-          buildOrReuse(*mods->overlay, SceneTree::childId(id, LocalId::fromString("$overlay")), nullptr);
-      popFrame();
-      children.push_back(std::move(overlayNode));
-    }
-    wrapper->replaceChildren(std::move(children));
-    setAssignedGroupBounds(*wrapper, layoutOuterSize);
-    root = std::move(wrapper);
+  std::unique_ptr<InteractionData> interaction = std::move(resolvedInteraction);
+  if (!interaction) {
+    interaction = makeInteractionData(mods, current.key);
   }
+  std::unique_ptr<SceneNode> root =
+      decorateNode(std::move(core), el, mods, std::move(existing), layoutOuterSize, outerSize,
+                   subtreeOffset, padding, std::move(interaction));
 
-  if (needsModifierWrapper(mods, leafOwnsModifierPaint)) {
-    std::unique_ptr<ModifierSceneNode> wrapper = releaseAs<ModifierSceneNode>(std::move(existing));
-    if (!wrapper) {
-      wrapper = std::make_unique<ModifierSceneNode>(id);
-    }
-    Rect const previousChildBounds =
-        !wrapper->children().empty() ? wrapper->children().front()->bounds : Rect{};
-    bool const hadPreviousChild = !wrapper->children().empty();
-    wrapper->replaceChildren({});
-    root->position = {};
-    wrapper->appendChild(std::move(root));
-    std::optional<Rect> const nextClip =
-        mods->clip ? std::optional<Rect>(Rect{0.f, 0.f, outerSize.width, outerSize.height}) : std::nullopt;
-    FillStyle const nextFill = leafOwnsModifierPaint ? FillStyle::none() : mods->fill;
-    StrokeStyle const nextStroke = leafOwnsModifierPaint ? StrokeStyle::none() : mods->stroke;
-    ShadowStyle const nextShadow = leafOwnsModifierPaint ? ShadowStyle::none() : mods->shadow;
-    CornerRadius const nextCornerRadius = leafOwnsModifierPaint ? CornerRadius{} : mods->cornerRadius;
-    bool const paintAffectingFieldsChanged =
-        wrapper->fill != nextFill || wrapper->stroke != nextStroke || wrapper->shadow != nextShadow ||
-        wrapper->cornerRadius != nextCornerRadius;
-    bool const boundsAffectingFieldsChanged =
-        wrapper->clip != nextClip || wrapper->opacity != mods->opacity || paintAffectingFieldsChanged;
-    wrapper->clip = nextClip;
-    wrapper->opacity = mods->opacity;
-    wrapper->fill = nextFill;
-    wrapper->stroke = nextStroke;
-    wrapper->shadow = nextShadow;
-    wrapper->cornerRadius = nextCornerRadius;
-    if (paintAffectingFieldsChanged || !hadPreviousChild || previousChildBounds != wrapper->children().front()->bounds) {
-      wrapper->markPaintDirty();
-    }
-    if (boundsAffectingFieldsChanged) {
-      wrapper->markBoundsDirty();
-    }
-    wrapper->recomputeBounds();
-    root = std::move(wrapper);
+  std::unique_ptr<InteractionData> outerInteraction =
+      outerMods ? makeInteractionData(outerMods, current.key) : nullptr;
+  if (outerMods && needsDecorationPass(outerMods, outerSize, rectSize(root->bounds), false, outerInteraction.get())) {
+    root = decorateNode(std::move(root), el, outerMods, nullptr, outerSize, outerSize,
+                        modifierOffset(outerMods), outerMods->padding, std::move(outerInteraction));
   }
-
-  if (resolvedInteraction) {
-    root->setInteraction(std::move(resolvedInteraction));
-  } else if (std::unique_ptr<InteractionData> interaction = makeInteractionData(mods, current.key)) {
-    root->setInteraction(std::move(interaction));
-  } else {
-    root->setInteraction(nullptr);
-  }
-
-  root->position = subtreeOffset;
   if (root->bounds.width <= 0.f && root->bounds.height <= 0.f) {
     root->bounds = sizeRect(outerSize);
   }

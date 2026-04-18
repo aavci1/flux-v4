@@ -52,10 +52,9 @@ void ModifierSceneNode::applyNodeState(Renderer& renderer) const {
 
 void ModifierSceneNode::rebuildLocalPaint() {
   SceneNode::rebuildLocalPaint();
-  if (!children().empty() && paints()) {
-    Rect childBounds = children().front()->bounds;
+  if (paints() && (chromeRect.width > 0.f || chromeRect.height > 0.f)) {
     localPaintCache().push_back(DrawRectPaintCommand{
-        .rect = childBounds,
+        .rect = chromeRect,
         .cornerRadius = cornerRadius,
         .fill = fill,
         .stroke = stroke,
@@ -66,10 +65,10 @@ void ModifierSceneNode::rebuildLocalPaint() {
 }
 
 Rect ModifierSceneNode::computeOwnBounds() const {
-  if (children().empty() || !paints()) {
+  if (!paints() || (chromeRect.width <= 0.f && chromeRect.height <= 0.f)) {
     return {};
   }
-  return expandForStrokeAndShadow(children().front()->bounds, stroke, shadow);
+  return expandForStrokeAndShadow(chromeRect, stroke, shadow);
 }
 
 Rect ModifierSceneNode::adjustSubtreeBounds(Rect r) const {

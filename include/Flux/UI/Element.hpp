@@ -528,8 +528,13 @@ Size Element::Model<C>::measure(MeasureContext& ctx, LayoutConstraints const& co
       store->pushComponent(key, std::type_index(typeid(C)));
       store->pushCompositeConstraints(constraints);
       try {
-        resolution = detail::resolveCompositeBody(store, key, constraints, value,
-                                                  [&] { return value.body(); });
+        if (store->canReuseBody(key, value, constraints)) {
+          resolution.body = store->cachedBody(key);
+          resolution.descendantsStable = true;
+        } else {
+          resolution.ownedBody = std::make_unique<Element>(value.body());
+          resolution.body = resolution.ownedBody.get();
+        }
       } catch (...) {
         store->popCompositeConstraints();
         store->popComponent();

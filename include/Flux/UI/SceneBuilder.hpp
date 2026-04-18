@@ -58,6 +58,11 @@ private:
   [[nodiscard]] Size measureElement(Element const& el, LayoutConstraints const& constraints,
                                     LayoutHints const& hints, ComponentKey const& key) const;
 
+  std::unique_ptr<SceneNode> decorateNode(std::unique_ptr<SceneNode> root, Element const& el,
+                                          ElementModifiers const* mods, std::unique_ptr<SceneNode> existing,
+                                          Size layoutOuterSize, Size outerSize, Point subtreeOffset,
+                                          EdgeInsets const& padding, std::unique_ptr<InteractionData> interaction);
+
   std::unique_ptr<SceneNode> buildResolved(Element const& el, Element const& sceneEl, NodeId id,
                                            std::unique_ptr<SceneNode> existing);
 };

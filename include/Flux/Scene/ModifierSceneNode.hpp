@@ -15,6 +15,7 @@ class ModifierSceneNode final : public SceneNode {
 public:
   explicit ModifierSceneNode(NodeId id);
 
+  Rect chromeRect{};
   std::optional<Rect> clip{};
   float opacity = 1.f;
   BlendMode blendMode = BlendMode::Normal;
