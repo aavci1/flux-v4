@@ -5,8 +5,8 @@
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/UI/InputFieldLayout.hpp>
 #include <Flux/UI/LayoutContext.hpp>
-#include <Flux/UI/RenderContext.hpp>
 #include <Flux/UI/Theme.hpp>
+#include <Flux/UI/Views/Render.hpp>
 #include <Flux/UI/Views/Text.hpp>
 #include <Flux/UI/Views/TextEditBehavior.hpp>
 #include <Flux/UI/Views/TextEditUtils.hpp>
@@ -287,41 +287,6 @@ Element decorateInputField(Element field, ResolvedTextInputStyle const &rs, bool
     return shell;
 }
 
-struct TextLayoutDisplay {
-    std::shared_ptr<TextLayout const> textLayout;
-
-    void layout(LayoutContext &ctx) const {
-        ComponentKey const stableKey = ctx.leafComponentKey();
-        ctx.advanceChildSlot();
-        Rect const bounds = ctx.layoutEngine().consumeAssignedFrame();
-        LayoutNode n {};
-        n.kind = LayoutNode::Kind::Leaf;
-        n.frame = bounds;
-        n.componentKey = stableKey;
-        n.element = ctx.currentElement();
-        n.constraints = ctx.constraints();
-        n.hints = ctx.hints();
-        LayoutNodeId const id = ctx.pushLayoutNode(std::move(n));
-        ctx.registerCompositeSubtreeRootIfPending(id);
-    }
-
-    void renderFromLayout(RenderContext &ctx, LayoutNode const &node) const {
-        if (!textLayout) {
-            return;
-        }
-        ctx.addText(ctx.parentLayer(), TextNode {
-                                                   .layout = textLayout,
-                                                   .origin = {node.frame.x, node.frame.y},
-                                                   .allocation = node.frame,
-                                               });
-    }
-
-    Size measure(LayoutContext &ctx, LayoutConstraints const &, LayoutHints const &, TextSystem &) const {
-        ctx.advanceChildSlot();
-        return textLayout ? textLayout->measuredSize : Size {};
-    }
-};
-
 std::vector<Element> makeSelectionAndCaretElements(detail::TextEditLayoutResult const &layoutResult,
                                                    detail::TextEditSelection const *selection, int caretByte,
                                                    bool showCaret, std::string const *text, Point origin,
@@ -363,11 +328,22 @@ Element buildTextInputContent(detail::TextEditLayoutResult const &layoutResult, 
                               float blinkPhase) {
     std::vector<Element> layers;
     if (layoutResult.layout) {
+        std::shared_ptr<TextLayout const> textLayout = layoutResult.layout;
         auto overlayChildren =
             makeSelectionAndCaretElements(layoutResult, selection, caretByte, showCaret, text, origin, rs, blinkPhase);
         layers.insert(layers.end(), std::make_move_iterator(overlayChildren.begin()),
                       std::make_move_iterator(overlayChildren.end()));
-        layers.push_back(Element {TextLayoutDisplay {.textLayout = layoutResult.layout}}
+        layers.push_back(Element {Render {
+                             .measureFn = [textLayout](LayoutConstraints const &, LayoutHints const &) {
+                                 return textLayout ? textLayout->measuredSize : Size {};
+                             },
+                             .draw = [textLayout](Canvas &canvas, Rect) {
+                                 if (textLayout) {
+                                     canvas.drawTextLayout(*textLayout, Point {});
+                                 }
+                             },
+                             .pure = true,
+                         }}
                              .size(contentWidth, layoutResult.layout->measuredSize.height)
                              .position(origin.x, origin.y));
     }

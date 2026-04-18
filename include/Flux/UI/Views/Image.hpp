@@ -22,7 +22,6 @@ struct Image : ViewModifiers<Image> {
   static constexpr bool memoizable = true;
 
   void layout(::flux::LayoutContext&) const;
-  void renderFromLayout(::flux::RenderContext&, ::flux::LayoutNode const&) const;
   ::flux::Size measure(::flux::LayoutContext&, ::flux::LayoutConstraints const&, ::flux::LayoutHints const&,
                        ::flux::TextSystem&) const;
   [[nodiscard]] std::uint64_t measureCacheKey() const noexcept { return 0x54e12f98b3c476adull; }

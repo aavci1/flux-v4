@@ -28,7 +28,9 @@
 #include <Flux/UI/Views/ScaleAroundCenter.hpp>
 #include <Flux/UI/Views/ScrollView.hpp>
 #include <Flux/UI/Views/Spacer.hpp>
+#include <Flux/UI/Views/SelectableTextSupport.hpp>
 #include <Flux/UI/Views/Text.hpp>
+#include <Flux/UI/Views/TextEditUtils.hpp>
 #include <Flux/UI/Views/TextSupport.hpp>
 #include <Flux/UI/Views/VStack.hpp>
 #include <Flux/UI/Views/ZStack.hpp>
@@ -200,6 +202,71 @@ std::unique_ptr<InteractionData> makeInteractionData(ElementModifiers const* mod
   if (data->isEmpty()) {
     return nullptr;
   }
+  return data;
+}
+
+Theme const& activeTheme(EnvironmentStack const& environment) {
+  if (Theme const* theme = environment.find<Theme>()) {
+    return *theme;
+  }
+  static Theme const fallback = Theme::light();
+  return fallback;
+}
+
+bool updateIfChanged(Size& field, Size value);
+bool updateIfChanged(Point& field, Point value);
+template<typename T>
+bool updateIfChanged(T& field, T const& value);
+bool updateIfChanged(Font& field, Font const& value);
+
+bool configureTextSceneNode(TextSceneNode& textNode, TextSystem& textSystem, Text const& text, Font const& resolvedFont,
+                            Color const& resolvedColor, Rect frameRect, std::string const& displayText,
+                            std::shared_ptr<TextLayout const> const& layout) {
+  bool dirty = false;
+  dirty |= updateIfChanged(textNode.text, displayText);
+  dirty |= updateIfChanged(textNode.font, resolvedFont);
+  dirty |= updateIfChanged(textNode.color, resolvedColor);
+  dirty |= updateIfChanged(textNode.horizontalAlignment, text.horizontalAlignment);
+  dirty |= updateIfChanged(textNode.verticalAlignment, text.verticalAlignment);
+  dirty |= updateIfChanged(textNode.wrapping, text.wrapping);
+  dirty |= updateIfChanged(textNode.maxLines, text.maxLines);
+  dirty |= updateIfChanged(textNode.firstBaselineOffset, text.firstBaselineOffset);
+  dirty |= updateIfChanged(textNode.widthConstraint, text.wrapping == TextWrapping::NoWrap ? 0.f : frameRect.width);
+  dirty |= updateIfChanged(textNode.origin, Point{0.f, 0.f});
+  dirty |= updateIfChanged(textNode.allocation, Rect{0.f, 0.f, frameRect.width, frameRect.height});
+  dirty |= updateIfChanged(textNode.layout, layout);
+  if (textNode.textSystem != &textSystem) {
+    textNode.textSystem = &textSystem;
+    dirty = true;
+  }
+  if (dirty) {
+    textNode.markPaintDirty();
+    textNode.markBoundsDirty();
+  }
+  textNode.position = {};
+  textNode.recomputeBounds();
+  return dirty;
+}
+
+std::unique_ptr<InteractionData>
+makeSelectableTextInteraction(ElementModifiers const* mods, ComponentKey const& key,
+                              std::shared_ptr<detail::SelectableTextState> const& state) {
+  if (!state) {
+    return makeInteractionData(mods, key);
+  }
+  std::unique_ptr<InteractionData> data = makeInteractionData(mods, key);
+  if (!data) {
+    data = std::make_unique<InteractionData>();
+  }
+  data->stableTargetKey = key;
+  data->focusable = true;
+  data->cursor = Cursor::IBeam;
+  data->onPointerDown = [state](Point local) { detail::handleSelectableTextPointerDown(*state, local); };
+  data->onPointerMove = [state](Point local) { detail::handleSelectableTextPointerDrag(*state, local); };
+  data->onPointerUp = [state](Point) { detail::handleSelectableTextPointerUp(*state); };
+  data->onKeyDown = [state](KeyCode keyCode, Modifiers modifiers) {
+    detail::handleSelectableTextKey(*state, keyCode, modifiers);
+  };
   return data;
 }
 
@@ -491,6 +558,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
   };
 
   std::unique_ptr<SceneNode> core{};
+  std::unique_ptr<InteractionData> resolvedInteraction{};
   Size geometrySize = outerSize;
   switch (sceneEl.typeTag()) {
   case ElementType::Rectangle: {
@@ -518,43 +586,98 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
   }
   case ElementType::Text: {
     Text const& text = sceneEl.as<Text>();
-    std::unique_ptr<TextSceneNode> textNode = releaseAs<TextSceneNode>(std::move(existing));
-    if (!textNode) {
-      textNode = std::make_unique<TextSceneNode>(id);
-    }
-    auto const [resolvedFont, resolvedColor] = text_detail::resolveBodyTextStyle(text.font, text.color);
+    Theme const& theme = activeTheme(environment_);
+    Font const resolvedFont = resolveFont(text.font, theme.fontBody);
+    Color const resolvedColor = resolveColor(text.color, theme.colorTextPrimary);
+    Color const resolvedSelectionColor = resolveColor(text.selectionColor, theme.colorAccentSubtle);
     Rect const frameRect = assignedFrameForLeaf(paddedContentSize, current.constraints, mods, current.hints);
     TextLayoutOptions const options = text_detail::makeTextLayoutOptions(text);
     std::string const displayText =
         text.selectable ? text.text
                         : text_detail::ellipsizedPlainText(text.text, resolvedFont, resolvedColor, frameRect,
                                                             options, textSystem_);
-    bool dirty = false;
-    dirty |= updateIfChanged(textNode->text, displayText);
-    dirty |= updateIfChanged(textNode->font, resolvedFont);
-    dirty |= updateIfChanged(textNode->color, resolvedColor);
-    dirty |= updateIfChanged(textNode->horizontalAlignment, text.horizontalAlignment);
-    dirty |= updateIfChanged(textNode->verticalAlignment, text.verticalAlignment);
-    dirty |= updateIfChanged(textNode->wrapping, text.wrapping);
-    dirty |= updateIfChanged(textNode->maxLines, text.maxLines);
-    dirty |= updateIfChanged(textNode->firstBaselineOffset, text.firstBaselineOffset);
-    dirty |= updateIfChanged(textNode->widthConstraint,
-                             text.wrapping == TextWrapping::NoWrap ? 0.f : frameRect.width);
-    dirty |= updateIfChanged(textNode->origin, Point{0.f, 0.f});
-    dirty |= updateIfChanged(textNode->allocation, Rect{0.f, 0.f, frameRect.width, frameRect.height});
-    if (textNode->textSystem != &textSystem_) {
-      textNode->textSystem = &textSystem_;
-      dirty = true;
+    std::shared_ptr<TextLayout const> textLayout = textSystem_.layout(displayText, resolvedFont, resolvedColor,
+                                                                      Rect{0.f, 0.f, frameRect.width, frameRect.height},
+                                                                      options);
+    std::shared_ptr<detail::SelectableTextState> selectableState{};
+
+    if (text.selectable && textLayout && text_detail::hasRenderableTextGeometry(*textLayout)) {
+      selectableState = detail::selectableTextState(current.key);
+      detail::updateSelectableTextLayout(*selectableState, textLayout, text.text, frameRect.width);
+
+      std::unique_ptr<SceneNode> group = releasePlainGroup(std::move(existing));
+      if (!group) {
+        group = std::make_unique<SceneNode>(id);
+      }
+      std::vector<std::unique_ptr<SceneNode>> existingChildren = group->releaseChildren();
+      std::unordered_map<NodeId, std::unique_ptr<SceneNode>, ::flux::NodeIdHash> reusable{};
+      reusable.reserve(existingChildren.size());
+      for (std::unique_ptr<SceneNode>& child : existingChildren) {
+        if (child) {
+          reusable.emplace(child->id(), std::move(child));
+        }
+      }
+
+      std::vector<std::unique_ptr<SceneNode>> nextChildren{};
+      if (selectableState->selection.hasSelection()) {
+        std::vector<Rect> const selectionRects =
+            detail::selectionRects(selectableState->layoutResult, selectableState->selection,
+                                   &selectableState->text, 0.f, 0.f);
+        nextChildren.reserve(selectionRects.size() + 1);
+        for (std::size_t i = 0; i < selectionRects.size(); ++i) {
+          NodeId const rectId = SceneTree::childId(id, LocalId::fromIndex(i));
+          std::unique_ptr<RectSceneNode> rectNode{};
+          if (auto it = reusable.find(rectId); it != reusable.end()) {
+            rectNode = releaseAs<RectSceneNode>(std::move(it->second));
+            reusable.erase(it);
+          }
+          if (!rectNode) {
+            rectNode = std::make_unique<RectSceneNode>(rectId);
+          }
+          Rect const rect = selectionRects[i];
+          bool dirty = false;
+          dirty |= updateIfChanged(rectNode->size, Size{rect.width, rect.height});
+          dirty |= updateIfChanged(rectNode->fill, FillStyle::solid(resolvedSelectionColor));
+          dirty |= updateIfChanged(rectNode->stroke, StrokeStyle::none());
+          dirty |= updateIfChanged(rectNode->shadow, ShadowStyle::none());
+          dirty |= updateIfChanged(rectNode->cornerRadius, CornerRadius{});
+          if (dirty) {
+            rectNode->markPaintDirty();
+            rectNode->markBoundsDirty();
+          }
+          rectNode->position = Point{rect.x, rect.y};
+          rectNode->recomputeBounds();
+          nextChildren.push_back(std::move(rectNode));
+        }
+      }
+
+      NodeId const textId = SceneTree::childId(id, LocalId::fromString("$text"));
+      std::unique_ptr<TextSceneNode> textNode{};
+      if (auto it = reusable.find(textId); it != reusable.end()) {
+        textNode = releaseAs<TextSceneNode>(std::move(it->second));
+        reusable.erase(it);
+      }
+      if (!textNode) {
+        textNode = std::make_unique<TextSceneNode>(textId);
+      }
+      configureTextSceneNode(*textNode, textSystem_, text, resolvedFont, resolvedColor, frameRect, displayText,
+                             textLayout);
+      nextChildren.push_back(std::move(textNode));
+
+      group->replaceChildren(std::move(nextChildren));
+      setGroupBounds(*group, rectSize(frameRect));
+      resolvedInteraction = makeSelectableTextInteraction(mods, current.key, selectableState);
+      core = std::move(group);
+    } else {
+      std::unique_ptr<TextSceneNode> textNode = releaseAs<TextSceneNode>(std::move(existing));
+      if (!textNode) {
+        textNode = std::make_unique<TextSceneNode>(id);
+      }
+      configureTextSceneNode(*textNode, textSystem_, text, resolvedFont, resolvedColor, frameRect, displayText,
+                             textLayout);
+      core = std::move(textNode);
     }
-    if (dirty) {
-      textNode->layout.reset();
-      textNode->markPaintDirty();
-      textNode->markBoundsDirty();
-    }
-    textNode->position = {};
-    textNode->recomputeBounds();
     geometrySize = rectSize(frameRect);
-    core = std::move(textNode);
     break;
   }
   case ElementType::Render: {
@@ -1383,7 +1506,9 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     root = std::move(wrapper);
   }
 
-  if (std::unique_ptr<InteractionData> interaction = makeInteractionData(mods, current.key)) {
+  if (resolvedInteraction) {
+    root->setInteraction(std::move(resolvedInteraction));
+  } else if (std::unique_ptr<InteractionData> interaction = makeInteractionData(mods, current.key)) {
     root->setInteraction(std::move(interaction));
   } else {
     root->setInteraction(nullptr);

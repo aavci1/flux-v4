@@ -17,7 +17,6 @@ struct PathShape : ViewModifiers<PathShape> {
   static constexpr bool memoizable = true;
 
   void layout(LayoutContext&) const;
-  void renderFromLayout(RenderContext&, LayoutNode const&) const;
   Size measure(LayoutContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
   [[nodiscard]] std::uint64_t measureCacheKey() const noexcept { return path.contentHash(); }
 

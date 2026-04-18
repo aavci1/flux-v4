@@ -2,24 +2,20 @@
 
 /// \file Flux/UI/Element.hpp
 ///
-/// Type-erased UI component wrapper: holds any view or composite, dispatches \c layout / \c measure
-/// and render-phase emission, optional flex overrides, and per-subtree environment values.
+/// Type-erased UI component wrapper: holds any view or composite, dispatches \c layout / \c measure,
+/// optional flex overrides, and per-subtree environment values.
 
 #include <Flux/UI/LayoutContext.hpp>
 #include <Flux/UI/LayoutTree.hpp>
-#include <Flux/UI/RenderContext.hpp>
 #include <Flux/UI/Component.hpp>
 #include <Flux/UI/Detail/LeafBounds.hpp>
-#include <Flux/UI/EventMap.hpp>
 #include <Flux/UI/Leaves.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 #include <Flux/UI/StateStore.hpp>
 #include <Flux/UI/Environment.hpp>
 #include <Flux/Reactive/Detail/DependencyTracker.hpp>
-#include <Flux/Scene/SceneGraph.hpp>
 
 #include <Flux/Graphics/Styles.hpp>
-#include <Flux/UI/Detail/RenderComponentEmit.hpp>
 #include <Flux/UI/Views/TextSupport.hpp>
 
 #include <algorithm>
@@ -185,71 +181,13 @@ struct ElementModifiers {
   ~ElementModifiers();
 };
 
-namespace detail {
-
-/// Wrap one pointer callback (e.g. struct-level \c onPointerDown on a \c RenderComponent).
-inline std::function<void(Point)> pointerCallbackInLocalSpace(std::function<void(Point)> cb, Rect const& frame) {
-  if (!cb) {
-    return {};
-  }
-  return [cb = std::move(cb), frame](Point local) {
-    cb(Point{local.x - frame.x, local.y - frame.y});
-  };
-}
-
-/// Merges \ref ElementModifiers interaction handlers into \p handlers for \ref RenderComponent leaves.
-/// Modifier callbacks override struct-derived handlers when set (same rule as primitives under a modifier node).
-/// Pointer positions are adjusted by \p frame (\ref detail::pointerCallbackInLocalSpace).
-inline void mergeRenderLeafHandlersWithActiveModifiers(EventHandlers& h, ElementModifiers const* mods,
-                                                       bool suppressLeafModifierEvents,
-                                                       Rect const& frame) {
-  if (!mods || suppressLeafModifierEvents) {
-    return;
-  }
-  if (mods->onTap) {
-    h.onTap = mods->onTap;
-  }
-  if (mods->onPointerDown) {
-    h.onPointerDown = pointerCallbackInLocalSpace(mods->onPointerDown, frame);
-  }
-  if (mods->onPointerUp) {
-    h.onPointerUp = pointerCallbackInLocalSpace(mods->onPointerUp, frame);
-  }
-  if (mods->onPointerMove) {
-    h.onPointerMove = pointerCallbackInLocalSpace(mods->onPointerMove, frame);
-  }
-  if (mods->onScroll) {
-    h.onScroll = mods->onScroll;
-  }
-  if (mods->onKeyDown) {
-    h.onKeyDown = mods->onKeyDown;
-  }
-  if (mods->onKeyUp) {
-    h.onKeyUp = mods->onKeyUp;
-  }
-  if (mods->onTextInput) {
-    h.onTextInput = mods->onTextInput;
-  }
-  bool const effModFocusable =
-      mods->focusable || static_cast<bool>(mods->onKeyDown) || static_cast<bool>(mods->onKeyUp) ||
-      static_cast<bool>(mods->onTextInput);
-  if (effModFocusable) {
-    h.focusable = true;
-  }
-  if (mods->cursor != Cursor::Inherit) {
-    h.cursor = mods->cursor;
-  }
-}
-
-} // namespace detail
-
-/// Erased handle to a component model (\ref CompositeComponent, \ref PrimitiveComponent, or \ref RenderComponent).
+/// Erased handle to a component model (\ref CompositeComponent or \ref PrimitiveComponent).
 /// Copying allocates a new \c measureId_ so fallback measure-cache identity never aliases a
 /// short-lived prior wrapper instance.
 class Element {
 public:
-  /// Wraps a concrete component type; \c C must satisfy \ref CompositeComponent, \ref PrimitiveComponent, or
-  /// \ref RenderComponent.
+  /// Wraps a concrete component type; \c C must satisfy \ref CompositeComponent or
+  /// \ref PrimitiveComponent.
   template<typename C>
   Element(C component);
 
@@ -271,9 +209,6 @@ public:
                          LayoutHints const& hints) const;
   bool tryCachedMeasure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
                         TextSystem& textSystem, Size& out) const;
-  void renderFromLayout(RenderContext& ctx, LayoutNode& node) const;
-  bool supportsIncrementalSceneReuse() const;
-  bool reuseSceneFromLayout(RenderContext& ctx, LayoutNode& node) const;
   Size measure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
                TextSystem& textSystem) const;
   [[nodiscard]] std::uint64_t measureId() const noexcept { return measureId_; }
@@ -391,9 +326,6 @@ private:
                                   TextSystem&, Size&) const {
       return false;
     }
-    virtual void renderFromLayout(RenderContext& ctx, LayoutNode& node) const = 0;
-    virtual bool supportsIncrementalSceneReuse() const { return false; }
-    virtual bool reuseSceneFromLayout(RenderContext&, LayoutNode&) const { return false; }
     virtual Size measure(LayoutContext& ctx, LayoutConstraints const& constraints,
                          LayoutHints const& hints, TextSystem& textSystem) const = 0;
     virtual float flexGrow() const { return 0.f; }
@@ -408,8 +340,7 @@ private:
     /// falls back to the wrapper's per-instance \ref measureId_, which only enables same-instance
     /// hits.
     virtual std::optional<std::uint64_t> measureCacheToken() const { return std::nullopt; }
-    /// When true, \ref RenderLayoutTree must not paint fill/stroke/shadow on the modifier chrome rect;
-    /// the leaf primitive applies those from \ref ElementModifiers (e.g. \ref Rectangle, \ref PathShape).
+    /// When true, the retained-scene leaf applies fill/stroke/shadow from \ref ElementModifiers itself.
     virtual bool leafDrawsFillStrokeShadowFromModifiers() const { return false; }
   };
 
@@ -540,9 +471,6 @@ struct Element::Model : Concept {
                          LayoutHints const& hints) const override;
   bool tryCachedMeasure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
                         TextSystem& textSystem, Size& out) const override;
-  void renderFromLayout(RenderContext& ctx, LayoutNode& node) const override;
-  bool supportsIncrementalSceneReuse() const override;
-  bool reuseSceneFromLayout(RenderContext& ctx, LayoutNode& node) const override;
   Size measure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
                TextSystem& textSystem) const override;
   float flexGrow() const override { return detail::flexGrowOf(value); }
@@ -556,13 +484,11 @@ struct Element::Model : Concept {
         return C::memoizable;
       }
       return false;
-    } else if constexpr (RenderComponent<C>) {
-      return true;
     }
     return false;
   }
   std::optional<std::uint64_t> measureCacheToken() const override {
-    if constexpr ((PrimitiveComponent<C> || RenderComponent<C>) &&
+    if constexpr (PrimitiveComponent<C> &&
                   requires(C const& v) {
                     { v.measureCacheKey() } -> std::convertible_to<std::uint64_t>;
                   }) {
@@ -667,27 +593,12 @@ void Element::Model<C>::layout(LayoutContext& ctx) const {
       store->popCompositePathStable();
     }
     ctx.popCompositeKeyTail();
-  } else if constexpr (RenderComponent<C>) {
-    ComponentKey const stableKey = ctx.leafComponentKey();
-    ctx.advanceChildSlot();
-    Rect const frame = flux::detail::resolveLeafLayoutBounds(
-        {}, ctx.layoutEngine().consumeAssignedFrame(), ctx.constraints(), ctx.hints());
-    LayoutNode n{};
-    n.kind = LayoutNode::Kind::Leaf;
-    n.frame = frame;
-    n.componentKey = stableKey;
-    n.element = ctx.currentElement();
-    n.isCustomRenderLeaf = true;
-    n.constraints = ctx.constraints();
-    n.hints = ctx.hints();
-    LayoutNodeId const id = ctx.pushLayoutNode(std::move(n));
-    ctx.registerCompositeSubtreeRootIfPending(id);
   } else if constexpr (PrimitiveComponent<C>) {
     value.layout(ctx);
   } else {
     static_assert(alwaysFalse<C>,
-        "Component must satisfy CompositeComponent (body()), PrimitiveComponent (layout + measure with "
-        "LayoutContext), or RenderComponent (render + measure).");
+        "Component must satisfy CompositeComponent (body()) or PrimitiveComponent (layout + measure with "
+        "LayoutContext).");
   }
 }
 
@@ -797,81 +708,6 @@ bool Element::Model<C>::tryCachedMeasure(LayoutContext& ctx, LayoutConstraints c
 }
 
 template<typename C>
-void Element::Model<C>::renderFromLayout(RenderContext& ctx, LayoutNode& node) const {
-  if constexpr (CompositeComponent<C>) {
-    (void)ctx;
-    (void)node;
-  } else if constexpr (RenderComponent<C>) {
-    Rect const frame = node.frame;
-    C const copy = value;
-    NodeId const id = detail::emitCustomRenderNode(ctx, frame,
-        [copy, frame](Canvas& canvas) { copy.render(canvas, frame); });
-
-    EventHandlers handlers{};
-    handlers.stableTargetKey = node.componentKey;
-    if constexpr (requires { value.onTap; }) {
-      handlers.onTap = value.onTap;
-    }
-    if constexpr (requires { value.onPointerDown; }) {
-      if (value.onPointerDown) {
-        handlers.onPointerDown = detail::pointerCallbackInLocalSpace(value.onPointerDown, frame);
-      }
-    }
-    if constexpr (requires { value.onPointerUp; }) {
-      if (value.onPointerUp) {
-        handlers.onPointerUp = detail::pointerCallbackInLocalSpace(value.onPointerUp, frame);
-      }
-    }
-    if constexpr (requires { value.onPointerMove; }) {
-      if (value.onPointerMove) {
-        handlers.onPointerMove = detail::pointerCallbackInLocalSpace(value.onPointerMove, frame);
-      }
-    }
-    if constexpr (requires { value.onScroll; }) {
-      handlers.onScroll = value.onScroll;
-    }
-    if constexpr (requires { value.onKeyDown; }) {
-      handlers.onKeyDown = value.onKeyDown;
-    }
-    if constexpr (requires { value.onKeyUp; }) {
-      handlers.onKeyUp = value.onKeyUp;
-    }
-    if constexpr (requires { value.onTextInput; }) {
-      handlers.onTextInput = value.onTextInput;
-    }
-    if constexpr (requires { value.cursor; }) {
-      handlers.cursor = value.cursor;
-    }
-    if constexpr (requires { value.focusable; }) {
-      handlers.focusable =
-          value.focusable || static_cast<bool>(handlers.onKeyDown) || static_cast<bool>(handlers.onKeyUp) ||
-          static_cast<bool>(handlers.onTextInput);
-    } else {
-      handlers.focusable =
-          static_cast<bool>(handlers.onKeyDown) || static_cast<bool>(handlers.onKeyUp) ||
-          static_cast<bool>(handlers.onTextInput);
-    }
-    detail::mergeRenderLeafHandlersWithActiveModifiers(handlers, ctx.activeElementModifiers(),
-                                                       ctx.suppressLeafModifierEvents(), frame);
-    detail::registerRenderLeafEvents(ctx, id, std::move(handlers));
-  } else if constexpr (PrimitiveComponent<C>) {
-    value.renderFromLayout(ctx, node);
-  } else {
-    static_assert(alwaysFalse<C>, "Invalid component type for renderFromLayout.");
-  }
-}
-
-template<typename C>
-bool Element::Model<C>::supportsIncrementalSceneReuse() const {
-  if constexpr (std::is_same_v<C, Rectangle> || std::is_same_v<C, Text> ||
-                std::is_same_v<C, views::Image> || std::is_same_v<C, Line> ||
-                std::is_same_v<C, PathShape>) {
-    return true;
-  }
-  return false;
-}
-
-template<typename C>
 ElementType Element::Model<C>::elementType() const noexcept {
   if constexpr (std::is_same_v<C, Rectangle>) {
     return ElementType::Rectangle;
@@ -905,236 +741,6 @@ ElementType Element::Model<C>::elementType() const noexcept {
     return ElementType::PopoverCalloutShape;
   } else {
     return ElementType::Unknown;
-  }
-}
-
-template<typename C>
-bool Element::Model<C>::reuseSceneFromLayout(RenderContext& ctx, LayoutNode& node) const {
-  auto mat3Equal = [](Mat3 const& a, Mat3 const& b) {
-    for (int i = 0; i < 9; ++i) {
-      if (a.m[i] != b.m[i]) {
-        return false;
-      }
-    }
-    return true;
-  };
-  auto updateModifierEvents = [&](NodeId sceneNodeId, Rect const& bounds) {
-    if (ElementModifiers const* mods = ctx.activeElementModifiers()) {
-      if (!ctx.suppressLeafModifierEvents()) {
-        bool const effFocusable =
-            mods->focusable || static_cast<bool>(mods->onKeyDown) || static_cast<bool>(mods->onKeyUp) ||
-            static_cast<bool>(mods->onTextInput);
-        EventHandlers h{
-            .stableTargetKey = node.componentKey,
-            .onTap = mods->onTap,
-            .onPointerDown = mods->onPointerDown ? detail::pointerCallbackInLocalSpace(mods->onPointerDown, bounds)
-                                                 : nullptr,
-            .onPointerUp = mods->onPointerUp ? detail::pointerCallbackInLocalSpace(mods->onPointerUp, bounds)
-                                             : nullptr,
-            .onPointerMove = mods->onPointerMove ? detail::pointerCallbackInLocalSpace(mods->onPointerMove, bounds)
-                                                 : nullptr,
-            .onScroll = mods->onScroll,
-            .onKeyDown = mods->onKeyDown,
-            .onKeyUp = mods->onKeyUp,
-            .onTextInput = mods->onTextInput,
-            .focusable = effFocusable,
-            .cursor = mods->cursor,
-        };
-        if (h.onTap || h.onPointerDown || h.onPointerUp || h.onPointerMove || h.onScroll || h.onKeyDown ||
-            h.onKeyUp || h.onTextInput || h.focusable || h.cursor != Cursor::Inherit) {
-          ctx.eventMap().insert(sceneNodeId, std::move(h));
-        } else {
-          ctx.eventMap().remove(sceneNodeId);
-        }
-      }
-    } else if (!node.reusedSubtreeThisBuild) {
-      ctx.eventMap().remove(sceneNodeId);
-    }
-  };
-
-  if constexpr (std::is_same_v<C, Rectangle>) {
-    if (node.sceneNodes.size() != 1) {
-      return false;
-    }
-    RectNode* rect = ctx.graph().template node<RectNode>(node.sceneNodes[0]);
-    if (!rect) {
-      return false;
-    }
-    Rect const bounds = node.frame;
-    CornerRadius cornerR{};
-    FillStyle fillEff = FillStyle::none();
-    StrokeStyle strokeEff = StrokeStyle::none();
-    ShadowStyle shadowEff = ShadowStyle::none();
-    if (ElementModifiers const* mods = ctx.activeElementModifiers()) {
-      cornerR = mods->cornerRadius;
-      fillEff = mods->fill;
-      strokeEff = mods->stroke;
-      shadowEff = mods->shadow;
-    }
-    if (rect->bounds == bounds && rect->cornerRadius == cornerR &&
-        rect->fill == fillEff && rect->stroke == strokeEff && rect->shadow == shadowEff &&
-        node.renderedModifiers == ctx.activeElementModifiers()) {
-      return true;
-    }
-    rect->bounds = bounds;
-    rect->cornerRadius = cornerR;
-    rect->fill = fillEff;
-    rect->stroke = strokeEff;
-    rect->shadow = shadowEff;
-    ctx.markSceneDirty(node.sceneNodes[0]);
-    updateModifierEvents(node.sceneNodes[0], bounds);
-    node.renderedModifiers = ctx.activeElementModifiers();
-    return true;
-  } else if constexpr (std::is_same_v<C, Text>) {
-    if (value.selectable || node.sceneNodes.size() != 1) {
-      return false;
-    }
-    TextNode* text = ctx.graph().template node<TextNode>(node.sceneNodes[0]);
-    if (!text) {
-      return false;
-    }
-    Theme const& theme = useEnvironment<Theme>();
-    Font const resolvedFont = resolveFont(value.font, theme.fontBody);
-    Color const resolvedColor = resolveColor(value.color, theme.colorTextPrimary);
-    TextLayoutOptions opts{};
-    opts.horizontalAlignment = value.horizontalAlignment;
-    opts.verticalAlignment = value.verticalAlignment;
-    opts.wrapping = value.wrapping;
-    opts.maxLines = value.maxLines;
-    opts.firstBaselineOffset = value.firstBaselineOffset;
-    Rect const bounds = node.frame;
-    std::string const displayText =
-        text_detail::ellipsizedPlainText(value.text, resolvedFont, resolvedColor, bounds, opts, ctx.textSystem());
-    std::shared_ptr<TextLayout const> layout =
-        ctx.textSystem().layout(displayText, resolvedFont, resolvedColor, bounds, opts);
-    if (!layout || !text_detail::hasRenderableTextGeometry(*layout)) {
-      return false;
-    }
-    Point const origin{bounds.x, bounds.y};
-    if (text->layout == layout && text->origin == origin && text->allocation == bounds &&
-        node.renderedModifiers == ctx.activeElementModifiers()) {
-      return true;
-    }
-    text->layout = std::move(layout);
-    text->origin = origin;
-    text->allocation = bounds;
-    ctx.markSceneDirty(node.sceneNodes[0]);
-    updateModifierEvents(node.sceneNodes[0], bounds);
-    node.renderedModifiers = ctx.activeElementModifiers();
-    return true;
-  } else if constexpr (std::is_same_v<C, views::Image>) {
-    if (!value.source || node.sceneNodes.size() != 1) {
-      return false;
-    }
-    ImageNode* image = ctx.graph().template node<ImageNode>(node.sceneNodes[0]);
-    if (!image) {
-      return false;
-    }
-    Rect const bounds = node.frame;
-    CornerRadius cornerR{};
-    float opacity = 1.f;
-    if (ElementModifiers const* mods = ctx.activeElementModifiers()) {
-      cornerR = mods->cornerRadius;
-      opacity = mods->opacity;
-    }
-    if (image->image == value.source && image->bounds == bounds && image->fillMode == value.fillMode &&
-        image->cornerRadius == cornerR && image->opacity == opacity &&
-        node.renderedModifiers == ctx.activeElementModifiers()) {
-      return true;
-    }
-    image->image = value.source;
-    image->bounds = bounds;
-    image->fillMode = value.fillMode;
-    image->cornerRadius = cornerR;
-    image->opacity = opacity;
-    ctx.markSceneDirty(node.sceneNodes[0]);
-    updateModifierEvents(node.sceneNodes[0], bounds);
-    node.renderedModifiers = ctx.activeElementModifiers();
-    return true;
-  } else if constexpr (std::is_same_v<C, Line>) {
-    if (node.sceneNodes.size() != 1) {
-      return false;
-    }
-    LineNode* line = ctx.graph().template node<LineNode>(node.sceneNodes[0]);
-    if (!line) {
-      return false;
-    }
-    if (line->from == value.from && line->to == value.to && line->stroke == value.stroke) {
-      return true;
-    }
-    line->from = value.from;
-    line->to = value.to;
-    line->stroke = value.stroke;
-    ctx.markSceneDirty(node.sceneNodes[0]);
-    return true;
-  } else if constexpr (std::is_same_v<C, PathShape>) {
-    Rect const cf = node.frame;
-    Rect const pb = value.path.getBounds();
-    float dx = 0.f;
-    float dy = 0.f;
-    if (cf.width > pb.width + 1e-6f) {
-      dx = (cf.width - pb.width) * 0.5f - pb.x;
-    }
-    if (cf.height > pb.height + 1e-6f) {
-      dy = (cf.height - pb.height) * 0.5f - pb.y;
-    }
-    float const tx = cf.x + dx;
-    float const ty = cf.y + dy;
-    FillStyle fillEff = FillStyle::none();
-    StrokeStyle strokeEff = StrokeStyle::none();
-    ShadowStyle shadowEff = ShadowStyle::none();
-    if (ElementModifiers const* mods = ctx.activeElementModifiers()) {
-      fillEff = mods->fill;
-      strokeEff = mods->stroke;
-      shadowEff = mods->shadow;
-    }
-    if (tx != 0.f || ty != 0.f) {
-      if (node.sceneNodes.size() != 2) {
-        return false;
-      }
-      LayerNode* layer = ctx.graph().template node<LayerNode>(node.sceneNodes[0]);
-      PathNode* pathNode = ctx.graph().template node<PathNode>(node.sceneNodes[1]);
-      if (!layer || !pathNode) {
-        return false;
-      }
-      Mat3 const transform = Mat3::translate(tx, ty);
-      if (mat3Equal(layer->transform, transform) && pathNode->path.contentHash() == value.path.contentHash() &&
-          pathNode->fill == fillEff && pathNode->stroke == strokeEff && pathNode->shadow == shadowEff) {
-        return true;
-      }
-      bool const pathChanged = pathNode->path.contentHash() != value.path.contentHash() || pathNode->fill != fillEff ||
-                               pathNode->stroke != strokeEff || pathNode->shadow != shadowEff;
-      layer->transform = transform;
-      pathNode->path = value.path;
-      pathNode->fill = fillEff;
-      pathNode->stroke = strokeEff;
-      pathNode->shadow = shadowEff;
-      if (pathChanged) {
-        ctx.markSceneDirty(node.sceneNodes[0]);
-      }
-      return true;
-    }
-    if (node.sceneNodes.size() != 1) {
-      return false;
-    }
-    PathNode* pathNode = ctx.graph().template node<PathNode>(node.sceneNodes[0]);
-    if (!pathNode) {
-      return false;
-    }
-    if (pathNode->path.contentHash() == value.path.contentHash() && pathNode->fill == fillEff &&
-        pathNode->stroke == strokeEff && pathNode->shadow == shadowEff) {
-      return true;
-    }
-    pathNode->path = value.path;
-    pathNode->fill = fillEff;
-    pathNode->stroke = strokeEff;
-    pathNode->shadow = shadowEff;
-    ctx.markSceneDirty(node.sceneNodes[0]);
-    return true;
-  } else {
-    (void)ctx;
-    (void)node;
-    return false;
   }
 }
 
@@ -1179,16 +785,12 @@ Size Element::Model<C>::measure(LayoutContext& ctx, LayoutConstraints const& con
     }
     ctx.popCompositeKeyTail();
     return sz;
-  } else if constexpr (RenderComponent<C>) {
-    ctx.advanceChildSlot();
-    (void)textSystem;
-    return value.measure(constraints, hints);
   } else if constexpr (PrimitiveComponent<C>) {
     return value.measure(ctx, constraints, hints, textSystem);
   } else {
     static_assert(alwaysFalse<C>,
-        "Component must satisfy CompositeComponent (body()), PrimitiveComponent (layout + measure with "
-        "LayoutContext), or RenderComponent (render + measure).");
+        "Component must satisfy CompositeComponent (body()) or PrimitiveComponent (layout + measure with "
+        "LayoutContext).");
     return {};
   }
 }

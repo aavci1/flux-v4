@@ -2,7 +2,7 @@
 
 /// \file Flux/UI/LayoutContext.hpp
 ///
-/// Context for \ref Element::measure and \ref Element::layout (no SceneGraph / EventMap).
+/// Context for \ref Element::measure and \ref Element::layout during retained-scene rebuilds.
 
 #include <Flux/UI/ComponentKey.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
@@ -87,7 +87,7 @@ public:
   void popActiveElementModifiers();
   ElementModifiers const* activeElementModifiers() const noexcept;
 
-  /// Layer-local → window transform stack (mirrors SceneGraph layer stack during layout).
+  /// Layer-local → window transform stack used while building layout/world geometry.
   void pushLayerWorldTransform(Mat3 const& localToParentLayer);
   void popLayerWorldTransform();
 
@@ -101,7 +101,7 @@ public:
   [[nodiscard]] Element const* currentElement() const noexcept { return currentElement_; }
 
   /// Move a subtree root \c Element into frame-local storage so \p LayoutNode::element pointers
-  /// remain valid through the render phase (stack temporaries are not safe across layout → render).
+  /// remain valid through the current rebuild (stack temporaries are not safe across layout → scene build).
   Element& pinElement(Element&& el);
   [[nodiscard]] std::shared_ptr<detail::ElementPinStorage> pinnedElements() const noexcept;
 

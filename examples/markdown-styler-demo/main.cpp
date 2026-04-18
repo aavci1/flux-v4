@@ -200,19 +200,16 @@ struct MarkdownEditor {
 
 Flux uses a **two-phase, type-erased layout** model. There is no base `View` class — views are plain structs that satisfy one of three C++ concepts. A universal wrapper called `Element` type-erases them and dispatches `layout`, `measure`, and `renderFromLayout` through a virtual `Concept`/`Model<C>` pattern.
 
-The pipeline for each rebuild has three distinct phases:
+The pipeline for each rebuild has two distinct phases:
 
 ```
-Phase 1: Layout   — Element tree → LayoutTree
-Phase 2: Render   — LayoutTree + EventMap + SceneGraph
-Phase 3: Paint    — Retained scene tree → Canvas
+Phase 1: Layout + Reconcile   — Element tree → LayoutTree + retained SceneTree
+Phase 2: Paint                — Retained SceneTree → Canvas
 ```
 
-**Phase 1** walks the element tree, runs `measure` and flex distribution, and writes a `LayoutTree` of `LayoutNode`s — geometry and structure only, no SceneGraph, no EventMap. The only dependencies are `LayoutConstraints`, `LayoutHints`, and `TextSystem` (for text measurement).
+**Phase 1** walks the element tree, runs `measure` and flex distribution, writes a `LayoutTree` of `LayoutNode`s for geometry, and reconciles a retained `SceneTree`. The only dependencies are `LayoutConstraints`, `LayoutHints`, and `TextSystem` (for text measurement).
 
-**Phase 2** walks the `LayoutTree` and emits SceneGraph nodes (`RectNode`, `TextNode`, `LayerNode`, etc.) and `EventMap` entries via `renderLayoutTree`. Each `LayoutNode` carries the resolved `frame`, so the render phase only creates the appropriate node at the computed position.
-
-**Phase 3** is a retained scene-tree walk to Canvas. Paint retention is node-local rather than a separate scene-renderer layer.
+**Phase 2** walks the retained `SceneTree` to Canvas. Paint retention is node-local, and input/hit testing also resolves directly against retained scene nodes rather than a separate event map.
 
 )"
         });

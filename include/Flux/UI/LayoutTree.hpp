@@ -2,11 +2,9 @@
 
 /// \file Flux/UI/LayoutTree.hpp
 ///
-/// Intermediate layout result: geometry and structure only (no SceneGraph).
+/// Intermediate layout result: geometry and structure used during retained-scene rebuilds.
 
 #include <Flux/Core/Types.hpp>
-#include <Flux/Detail/SmallVector.hpp>
-#include <Flux/Scene/NodeId.hpp>
 #include <Flux/UI/ComponentKey.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 
@@ -45,7 +43,7 @@ constexpr bool operator==(LayoutNodeId a, LayoutNodeId b) noexcept {
 }
 constexpr bool operator!=(LayoutNodeId a, LayoutNodeId b) noexcept { return !(a == b); }
 
-/// How a container layer is emitted in the render phase (matches ContainerBuildScope behavior).
+/// How a container affects subtree-local layout/world transforms for retained-layout reuse.
 struct ContainerLayerSpec {
   enum class Kind : std::uint8_t {
     Standard,         ///< translate(parentFrame.x, parentFrame.y)
@@ -73,7 +71,7 @@ struct LayoutNode {
   /// Parent-assigned frame that this node was laid out under before the node consumed/adjusted it.
   Rect assignedFrame{};
 
-  /// Axis-aligned bounds in window / root space (for \ref LayoutRectCache and debugging).
+  /// Axis-aligned bounds in window / root space (for geometry queries and debugging).
   Rect worldBounds{};
 
   enum class Kind : std::uint8_t {
@@ -94,15 +92,12 @@ struct LayoutNode {
   /// For Modifier nodes: resolved modifier state (owned by the Element tree).
   ElementModifiers const* modifiers = nullptr;
 
-  /// Source element for the render phase (valid for the duration of layout + render).
+  /// Source element for the current rebuild (valid for the duration of layout + scene build).
   Element const* element = nullptr;
 
   ContainerLayerSpec containerSpec{};
 
-  /// When set, this leaf is a \ref RenderComponent custom draw (see \ref Element::Model render path).
-  bool isCustomRenderLeaf = false;
-
-  /// Optional tag for render-phase special cases (e.g. popover chrome ordering).
+  /// Optional tag for retained-layout special cases (e.g. popover chrome ordering).
   enum class ContainerTag : std::uint8_t { None, PopoverCalloutShape };
   ContainerTag containerTag = ContainerTag::None;
 
@@ -110,10 +105,6 @@ struct LayoutNode {
   bool modifierHasEffectLayer = false;
   Mat3 modifierLayerTransform = Mat3::identity();
 
-  /// Direct scene nodes emitted for this layout node in parent-child order.
-  detail::SmallVector<NodeId, 2> sceneNodes;
-  /// The pinned modifier state used for the last scene emission / update.
-  ElementModifiers const* renderedModifiers = nullptr;
   /// True when this exact layout slot was reused by subtree retention in the current build.
   bool reusedSubtreeThisBuild = false;
 };
@@ -131,7 +122,6 @@ public:
     rootId_ = {};
     firstNodeForKey_.clear();
     retainedNodeForKey_.clear();
-    retiredSceneNodes_.clear();
     ++buildEpoch_;
   }
 
@@ -173,7 +163,6 @@ public:
   bool reuseSubtree(LayoutNodeId rootId, LayoutNodeId parent);
   bool canTranslateSubtree(LayoutNodeId rootId) const;
   void translateSubtree(LayoutNodeId rootId, Vec2 delta);
-  std::vector<NodeId> takeRetiredSceneNodes();
 
   void setRoot(LayoutNodeId id) noexcept { rootId_ = id; }
 
@@ -188,7 +177,6 @@ private:
   std::unordered_map<ComponentKey, LayoutNodeId, ComponentKeyHash> retainedNodeForKey_{};
   std::uint64_t buildEpoch_{0};
   std::vector<std::uint64_t> slotEpoch_{};
-  std::vector<NodeId> retiredSceneNodes_{};
 };
 
 /// Axis-aligned bounding rect of \p r after transforming its four corners by \p t.

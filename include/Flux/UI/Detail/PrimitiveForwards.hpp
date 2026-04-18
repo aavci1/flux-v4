@@ -7,7 +7,6 @@
 namespace flux {
 
 class LayoutContext;
-class RenderContext;
 struct LayoutNode;
 class TextSystem;
 struct LayoutConstraints;

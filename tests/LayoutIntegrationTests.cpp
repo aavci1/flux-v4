@@ -205,7 +205,7 @@ static bool rectsNear(Rect const &a, Rect const &b, float eps = 0.5f) {
 }
 
 // Lay out a single root element at the given constraints and return the LayoutTree.
-// No SceneGraph, no EventMap, no RenderContext involved.
+// Retained-scene path only; no legacy graph or event map involved.
 static LayoutTree runLayout(Element el, float maxW, float maxH) {
     NullTextSystem ts;
     LayoutEngine le;

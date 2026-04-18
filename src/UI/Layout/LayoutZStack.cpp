@@ -1,6 +1,5 @@
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/LayoutContext.hpp>
-#include <Flux/UI/RenderContext.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 #include <Flux/UI/Views/ZStack.hpp>
 
@@ -94,8 +93,6 @@ void ZStack::layout(LayoutContext& ctx) const {
     scope.layoutChild(children[i], Rect{x, y, outW, outH}, innerForBuild);
   }
 }
-
-void ZStack::renderFromLayout(RenderContext&, LayoutNode const&) const {}
 
 Size ZStack::measure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const&,
                      TextSystem& ts) const {

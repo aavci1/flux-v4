@@ -147,8 +147,8 @@ struct CardListView {
                          .detail = "Signal<T>, Computed<T>, Animation<T>.",
                          .availableWidth = listContentWidth},
                     Card{.accent = pal::accent2,
-                         .title = "Scene Graph",
-                         .detail = "Slot-map NodeStore, LayerNode, HitTester.",
+                         .title = "Scene Tree",
+                         .detail = "Retained nodes, keyed reconciliation, hit testing.",
                          .availableWidth = listContentWidth}
                 ),
             }.padding(24.f)

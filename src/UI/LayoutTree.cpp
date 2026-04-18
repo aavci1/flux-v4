@@ -13,7 +13,6 @@ void LayoutTree::beginBuild() {
   firstNodeForKey_.clear();
   activeOrder_.clear();
   activeOrder_.reserve(slots_.size());
-  retiredSceneNodes_.clear();
 }
 
 void LayoutTree::endBuild() {
@@ -23,10 +22,6 @@ void LayoutTree::endBuild() {
     }
     if (slotEpoch_[i] == buildEpoch_) {
       continue;
-    }
-    if (!slots_[i]->sceneNodes.empty()) {
-      retiredSceneNodes_.insert(retiredSceneNodes_.end(), slots_[i]->sceneNodes.begin(),
-                                slots_[i]->sceneNodes.end());
     }
     slots_[i].reset();
     freeList_.push_back(i);
@@ -152,12 +147,6 @@ void LayoutTree::translateSubtree(LayoutNodeId rootId, Vec2 delta) {
     }
   };
   visit(visit, rootId);
-}
-
-std::vector<NodeId> LayoutTree::takeRetiredSceneNodes() {
-  std::vector<NodeId> out;
-  out.swap(retiredSceneNodes_);
-  return out;
 }
 
 Rect LayoutTree::unionSubtreeWorldBounds(LayoutNodeId nodeId) const {

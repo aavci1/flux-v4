@@ -29,7 +29,6 @@ namespace flux {
 /// `Element`.
 struct Grid : ViewModifiers<Grid> {
   void layout(LayoutContext&) const;
-  void renderFromLayout(RenderContext&, LayoutNode const&) const;
   Size measure(LayoutContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
 
   /// Number of columns. Values below 1 are clamped to 1 during layout.

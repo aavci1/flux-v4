@@ -74,7 +74,6 @@ struct Element::Model<ForEach<T>> final : Element::Concept {
   std::unique_ptr<Element> buildCompositeBody() const override { return std::make_unique<Element>(value.body()); }
 
   void layout(LayoutContext& ctx) const override;
-  void renderFromLayout(RenderContext&, LayoutNode&) const override {}
   Size measure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
                TextSystem& ts) const override;
 

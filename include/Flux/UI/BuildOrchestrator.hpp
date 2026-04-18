@@ -28,7 +28,7 @@ class Runtime;
 class Window;
 
 /// Drives the reactive rebuild loop for one window.
-/// Owns `StateStore`, `LayoutEngine`, `RootHolder`, and `LayoutRectCache`.
+/// Owns `StateStore`, `LayoutEngine`, `RootHolder`, committed scene geometry, and retained-scene rebuild state.
 class BuildOrchestrator {
 public:
   BuildOrchestrator(Window& window, FocusController& focus, HoverController& hover, GestureTracker& gesture);

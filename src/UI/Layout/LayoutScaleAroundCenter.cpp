@@ -1,7 +1,6 @@
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/LayoutContext.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
-#include <Flux/UI/RenderContext.hpp>
 #include <Flux/UI/Views/ScaleAroundCenter.hpp>
 
 #include "UI/Layout/ContainerScope.hpp"
@@ -53,8 +52,6 @@ void ScaleAroundCenter::layout(LayoutContext& ctx) const {
   innerForBuild.maxHeight = innerH;
   scope.layoutChild(child, Rect{x, y, childW, childH}, innerForBuild);
 }
-
-void ScaleAroundCenter::renderFromLayout(RenderContext&, LayoutNode const&) const {}
 
 Size ScaleAroundCenter::measure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const&,
                                 TextSystem& ts) const {

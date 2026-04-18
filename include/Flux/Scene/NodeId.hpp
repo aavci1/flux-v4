@@ -5,6 +5,7 @@
 /// Part of the Flux public API.
 
 
+#include <cstddef>
 #include <cstdint>
 
 namespace flux {
@@ -12,19 +13,16 @@ namespace flux {
 struct NodeId {
   constexpr NodeId() = default;
   constexpr explicit NodeId(std::uint64_t raw) : value(raw) {}
-  constexpr NodeId(std::uint32_t slotIndex, std::uint32_t slotGeneration)
-      : value((static_cast<std::uint64_t>(slotGeneration) << 32u) | slotIndex) {}
 
-  constexpr bool isValid() const { return value != 0; }
-  constexpr bool operator==(NodeId const& other) const { return value == other.value; }
+  constexpr bool isValid() const noexcept { return value != 0; }
+  constexpr bool operator==(NodeId const& other) const noexcept { return value == other.value; }
+  constexpr bool operator!=(NodeId const& other) const noexcept { return value != other.value; }
 
-  union {
-    std::uint64_t value = 0;
-    struct {
-      std::uint32_t index;
-      std::uint32_t generation;
-    };
-  };
+  std::uint64_t value = 0;
+};
+
+struct NodeIdHash {
+  std::size_t operator()(NodeId const& id) const noexcept { return static_cast<std::size_t>(id.value); }
 };
 
 inline constexpr NodeId kInvalidNodeId{};

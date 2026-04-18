@@ -1,6 +1,5 @@
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/LayoutContext.hpp>
-#include <Flux/UI/RenderContext.hpp>
 #include <Flux/UI/Views/Spacer.hpp>
 #include <Flux/UI/Detail/LayoutDebugDump.hpp>
 #include <Flux/UI/Layout.hpp>
@@ -23,8 +22,6 @@ void Spacer::layout(LayoutContext& ctx) const {
   }
   layoutDebugLogLeaf("Spacer", ctx.constraints(), r, fg, fs, mm);
 }
-
-void Spacer::renderFromLayout(RenderContext&, LayoutNode&) const {}
 
 Size Spacer::measure(LayoutContext& ctx, LayoutConstraints const&, LayoutHints const&, TextSystem&) const {
   ctx.advanceChildSlot();

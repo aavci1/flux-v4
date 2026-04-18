@@ -1,6 +1,5 @@
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/LayoutContext.hpp>
-#include <Flux/UI/RenderContext.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 #include <Flux/UI/Views/Grid.hpp>
 
@@ -110,8 +109,6 @@ void Grid::layout(LayoutContext& ctx) const {
     }
   }
 }
-
-void Grid::renderFromLayout(RenderContext&, LayoutNode const&) const {}
 
 Size Grid::measure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const&,
                    TextSystem& ts) const {

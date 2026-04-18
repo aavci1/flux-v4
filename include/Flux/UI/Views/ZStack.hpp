@@ -36,7 +36,6 @@ namespace flux {
 /// `Element` that wraps this `ZStack` (same as other views).
 struct ZStack : ViewModifiers<ZStack> {
   void layout(LayoutContext&) const;
-  void renderFromLayout(RenderContext&, LayoutNode const&) const;
   Size measure(LayoutContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
 
   Alignment horizontalAlignment = Alignment::Start;

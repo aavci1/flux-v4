@@ -8,7 +8,6 @@
 #include <Flux/Core/Types.hpp>
 #include <Flux/Scene/SceneTree.hpp>
 #include <Flux/UI/ComponentKey.hpp>
-#include <Flux/UI/EventMap.hpp>
 #include <Flux/UI/Overlay.hpp>
 
 #include <optional>
@@ -36,43 +35,32 @@ public:
   void set(ComponentKey const& key, std::optional<OverlayId> overlayScope, FocusInputKind kind);
   void clear();
 
-  /// Tab cycling within one EventMap (used for modal overlays).
-  void cycleInMap(EventMap const& em, bool reverse, std::optional<OverlayId> overlayId);
   void cycleInTree(SceneTree const& tree, bool reverse, std::optional<OverlayId> overlayId);
 
   /// Tab cycling across all non-modal overlays and the main tree.
   /// `overlayEntries` are the live overlay entries in stack order (bottom first).
-  void cycleNonModal(std::vector<OverlayEntry const*> const& overlayEntries, EventMap const& mainEventMap,
-                     bool reverse);
   void cycleNonModal(std::vector<OverlayEntry const*> const& overlayEntries, SceneTree const& mainTree,
                      bool reverse);
 
   /// Focus the first focusable leaf whose key has `subtreeKey` as a prefix.
-  void requestInSubtree(ComponentKey const& subtreeKey, EventMap const& eventMap,
-                        std::optional<OverlayId> overlayId = std::nullopt);
   void requestInSubtree(ComponentKey const& subtreeKey, SceneTree const& tree,
                         std::optional<OverlayId> overlayId = std::nullopt);
 
   /// When the hit target is not focusable (e.g. Text inside Button), focus the first focusable
-  /// leaf in \p em whose key shares a prefix with \p pressedKey (same composite subtree).
-  void claimFocusForSubtree(ComponentKey const& pressedKey, EventMap const& em,
-                            std::optional<OverlayId> overlayScope);
+  /// leaf in \p tree whose key shares a prefix with \p pressedKey (same composite subtree).
   void claimFocusForSubtree(ComponentKey const& pressedKey, SceneTree const& tree,
                             std::optional<OverlayId> overlayScope);
 
   /// Called by `BuildOrchestrator` when a modal overlay is pushed.
   void onOverlayPushed(OverlayEntry& entry);
 
-  /// Called when an overlay is removed. `mainEventMap` is null during Runtime teardown
+  /// Called when an overlay is removed. `mainTree` is null during Runtime teardown
   /// (StateStore shutdown) so modal focus restore is skipped.
-  void onOverlayRemoved(OverlayEntry const& entry, EventMap const* mainEventMap);
   void onOverlayRemoved(OverlayEntry const& entry, SceneTree const* mainTree);
 
   /// Called after an overlay rebuild completes.
   void syncAfterOverlayRebuild(OverlayEntry& entry);
 
-  /// Validate `focusedKey_` against `mainEventMap` after a main-tree rebuild.
-  void validateAfterRebuild(EventMap const& mainEventMap);
   void validateAfterRebuild(SceneTree const& mainTree);
 
 private:

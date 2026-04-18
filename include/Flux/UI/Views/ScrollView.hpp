@@ -6,10 +6,10 @@
 
 #include <Flux/Core/Types.hpp>
 #include <Flux/Graphics/Styles.hpp>
+#include <Flux/UI/Detail/PrimitiveForwards.hpp>
 #include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/LayoutContext.hpp>
 #include <Flux/UI/LayoutTree.hpp>
-#include <Flux/UI/RenderContext.hpp>
 #include <Flux/UI/Views/OffsetView.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/ZStack.hpp>
@@ -36,7 +36,6 @@ struct ScrollView : ViewModifiers<ScrollView> {
 
     /// Custom subtree hook (not the generic \ref CompositeComponent path in \ref Element::Model).
     void layout(LayoutContext &) const;
-    void renderFromLayout(RenderContext &, LayoutNode &) const;
     Size measure(LayoutContext &, LayoutConstraints const &, LayoutHints const &, TextSystem &) const;
 
     // ── Component protocol ─────────────────────────────────────────────────────
@@ -61,9 +60,6 @@ struct Element::Model<ScrollView> final : Element::Concept {
         return std::make_unique<Element>(value.body());
     }
     void layout(LayoutContext &ctx) const override { value.layout(ctx); }
-    void renderFromLayout(RenderContext &ctx, LayoutNode &node) const override {
-        value.renderFromLayout(ctx, node);
-    }
     Size measure(LayoutContext &ctx, LayoutConstraints const &c, LayoutHints const &h, TextSystem &ts) const override {
         return value.measure(ctx, c, h, ts);
     }

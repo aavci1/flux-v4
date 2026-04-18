@@ -1,7 +1,6 @@
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/Layout.hpp>
 #include <Flux/UI/LayoutContext.hpp>
-#include <Flux/UI/RenderContext.hpp>
 #include <Flux/UI/StateStore.hpp>
 
 #include <cmath>
@@ -78,8 +77,6 @@ void ScrollView::layout(LayoutContext &ctx) const {
     }
     ctx.popCompositeKeyTail();
 }
-
-void ScrollView::renderFromLayout(RenderContext &, LayoutNode &) const {}
 
 Size ScrollView::measure(LayoutContext &ctx, LayoutConstraints const &constraints, LayoutHints const &hints,
                          TextSystem &ts) const {

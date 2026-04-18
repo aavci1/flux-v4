@@ -6,18 +6,13 @@
 
 #include <Flux/Core/Cursor.hpp>
 #include <Flux/UI/LayoutContext.hpp>
-#include <Flux/UI/RenderContext.hpp>
 #include <Flux/UI/MeasureCache.hpp>
 #include <Flux/UI/StateStore.hpp>
 #include <Flux/UI/Detail/LeafBounds.hpp>
-#include <Flux/UI/EventMap.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
-#include <Flux/Scene/Nodes.hpp>
-#include <Flux/Scene/SceneGraph.hpp>
 
 #include <Flux/UI/Views/Rectangle.hpp>
 
-#include "UI/Detail/EventHelpers.hpp"
 #include "UI/Layout/ContainerScope.hpp"
 #include "UI/Layout/LayoutHelpers.hpp"
 
@@ -133,9 +128,6 @@ struct ChildLocalIdScope {
 
 } // namespace
 
-using flux::detail::eventHandlersFromModifiers;
-using flux::detail::shouldInsertHandlers;
-
 void Element::layout(LayoutContext& ctx) const {
   ChildLocalIdScope const childIdScope{ctx, key_};
   Element const* const prevEl = ctx.currentElement();
@@ -221,18 +213,6 @@ bool Element::tryCachedMeasure(LayoutContext& ctx, LayoutConstraints const& cons
   bool const reused = impl_->tryCachedMeasure(ctx, constraints, hints, textSystem, out);
   ctx.setCurrentElement(prevEl);
   return reused;
-}
-
-void Element::renderFromLayout(RenderContext& ctx, LayoutNode& node) const {
-  impl_->renderFromLayout(ctx, node);
-}
-
-bool Element::supportsIncrementalSceneReuse() const {
-  return impl_ && impl_->supportsIncrementalSceneReuse();
-}
-
-bool Element::reuseSceneFromLayout(RenderContext& ctx, LayoutNode& node) const {
-  return impl_ && impl_->reuseSceneFromLayout(ctx, node);
 }
 
 void Element::layoutWithModifiers(LayoutContext& ctx) const {
@@ -542,36 +522,6 @@ void Rectangle::layout(LayoutContext& ctx) const {
                      detail::flexShrinkOf(*this), detail::minMainSizeOf(*this));
 }
 
-void Rectangle::renderFromLayout(RenderContext& ctx, LayoutNode const& node) const {
-  ComponentKey const stableKey = node.componentKey;
-  Rect const bounds = node.frame;
-  CornerRadius cornerR{};
-  FillStyle fillEff = FillStyle::none();
-  StrokeStyle strokeEff = StrokeStyle::none();
-  ShadowStyle shadowEff = ShadowStyle::none();
-  if (ElementModifiers const* mods = ctx.activeElementModifiers()) {
-    cornerR = mods->cornerRadius;
-    fillEff = mods->fill;
-    strokeEff = mods->stroke;
-    shadowEff = mods->shadow;
-  }
-  NodeId const id = ctx.addRect(ctx.parentLayer(), RectNode{
-      .bounds = bounds,
-      .cornerRadius = cornerR,
-      .fill = fillEff,
-      .stroke = strokeEff,
-      .shadow = shadowEff,
-  });
-  if (ElementModifiers const* mods = ctx.activeElementModifiers()) {
-    if (!ctx.suppressLeafModifierEvents()) {
-      EventHandlers h = eventHandlersFromModifiers(*mods, stableKey, bounds);
-      if (shouldInsertHandlers(h)) {
-        ctx.eventMap().insert(id, std::move(h));
-      }
-    }
-  }
-}
-
 Size Rectangle::measure(LayoutContext& ctx, LayoutConstraints const& c, LayoutHints const&, TextSystem&) const {
   ctx.advanceChildSlot();
   float const w = std::isfinite(c.maxWidth) ? c.maxWidth : 0.f;
@@ -599,29 +549,6 @@ void views::Image::layout(LayoutContext& ctx) const {
                      detail::flexShrinkOf(*this), detail::minMainSizeOf(*this));
 }
 
-void views::Image::renderFromLayout(RenderContext& ctx, LayoutNode const& node) const {
-  if (!source) {
-    return;
-  }
-  ComponentKey const stableKey = node.componentKey;
-  Rect const bounds = node.frame;
-  NodeId const id = ctx.addImage(ctx.parentLayer(), ImageNode{
-      .image = source,
-      .bounds = bounds,
-      .fillMode = fillMode,
-      .cornerRadius = ctx.activeElementModifiers() ? ctx.activeElementModifiers()->cornerRadius : CornerRadius{},
-      .opacity = ctx.activeElementModifiers() ? ctx.activeElementModifiers()->opacity : 1.f,
-  });
-  if (ElementModifiers const* mods = ctx.activeElementModifiers()) {
-    if (!ctx.suppressLeafModifierEvents()) {
-      EventHandlers h = eventHandlersFromModifiers(*mods, stableKey, bounds);
-      if (shouldInsertHandlers(h)) {
-        ctx.eventMap().insert(id, std::move(h));
-      }
-    }
-  }
-}
-
 Size views::Image::measure(LayoutContext& ctx, LayoutConstraints const& c, LayoutHints const&, TextSystem&) const {
   ctx.advanceChildSlot();
   float const w = std::isfinite(c.maxWidth) ? c.maxWidth : 0.f;
@@ -644,38 +571,6 @@ void PathShape::layout(LayoutContext& ctx) const {
   ctx.registerCompositeSubtreeRootIfPending(id);
   layoutDebugLogLeaf("PathShape", ctx.constraints(), cf, detail::flexGrowOf(*this),
                      detail::flexShrinkOf(*this), detail::minMainSizeOf(*this));
-}
-
-void PathShape::renderFromLayout(RenderContext& ctx, LayoutNode const& node) const {
-  FillStyle fillEff = FillStyle::none();
-  StrokeStyle strokeEff = StrokeStyle::none();
-  ShadowStyle shadowEff = ShadowStyle::none();
-  if (ElementModifiers const* mods = ctx.activeElementModifiers()) {
-    fillEff = mods->fill;
-    strokeEff = mods->stroke;
-    shadowEff = mods->shadow;
-  }
-  PathNode pathNode{.path = path, .fill = fillEff, .stroke = strokeEff, .shadow = shadowEff};
-  Rect const cf = node.frame;
-  Rect const pb = path.getBounds();
-  float dx = 0.f;
-  float dy = 0.f;
-  if (cf.width > pb.width + 1e-6f) {
-    dx = (cf.width - pb.width) * 0.5f - pb.x;
-  }
-  if (cf.height > pb.height + 1e-6f) {
-    dy = (cf.height - pb.height) * 0.5f - pb.y;
-  }
-  float const tx = cf.x + dx;
-  float const ty = cf.y + dy;
-  if (tx != 0.f || ty != 0.f) {
-    LayerNode layer{};
-    layer.transform = Mat3::translate(tx, ty);
-    NodeId const lid = ctx.addLayer(ctx.parentLayer(), std::move(layer));
-    ctx.addPath(lid, std::move(pathNode));
-  } else {
-    ctx.addPath(ctx.parentLayer(), std::move(pathNode));
-  }
 }
 
 Size PathShape::measure(LayoutContext& ctx, LayoutConstraints const&, LayoutHints const&, TextSystem&) const {
@@ -703,14 +598,6 @@ void Line::layout(LayoutContext& ctx) const {
   ctx.registerCompositeSubtreeRootIfPending(id);
   layoutDebugLogLeaf("Line", ctx.constraints(), lineBounds, detail::flexGrowOf(*this),
                      detail::flexShrinkOf(*this), detail::minMainSizeOf(*this));
-}
-
-void Line::renderFromLayout(RenderContext& ctx, LayoutNode const&) const {
-  ctx.addLine(ctx.parentLayer(), LineNode{
-      .from = from,
-      .to = to,
-      .stroke = stroke,
-  });
 }
 
 std::uint64_t Line::measureCacheKey() const noexcept {

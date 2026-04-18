@@ -13,29 +13,34 @@
 using namespace flux;
 
 struct ClockFace : ViewModifiers<ClockFace> {
-  Size measure(LayoutConstraints const& c, LayoutHints const&) const {
-    float const s = std::min(
-        std::isfinite(c.maxWidth) ? c.maxWidth : 360.f,
-        std::isfinite(c.maxHeight) ? c.maxHeight : 360.f);
-    return {s, s};
-  }
-
-  /// Angles come from wall-clock time at draw time — independent of layout/rebuild cadence.
-  void render(Canvas& canvas, Rect frame) const {
-    using namespace std::chrono;
-    auto const now = system_clock::now();
-    std::time_t const tt = system_clock::to_time_t(now);
-    double const fracSec = duration<double>(now - system_clock::from_time_t(tt)).count();
-    std::tm* local = std::localtime(&tt);
-    if (!local) {
-      return;
-    }
-    int const h12 = local->tm_hour % 12;
-    float const s = static_cast<float>(local->tm_sec) + static_cast<float>(fracSec);
-    float const hDeg = static_cast<float>(h12) * 30.f + static_cast<float>(local->tm_min) * 0.5f + s / 120.f;
-    float const mDeg = static_cast<float>(local->tm_min) * 6.f + s * 0.1f;
-    float const sDeg = s * 6.f;
-    clock_demo::drawClock(canvas, frame, hDeg, mDeg, sDeg);
+  auto body() const {
+    return Render{
+        .measureFn =
+            [](LayoutConstraints const& c, LayoutHints const&) {
+              float const s = std::min(std::isfinite(c.maxWidth) ? c.maxWidth : 360.f,
+                                       std::isfinite(c.maxHeight) ? c.maxHeight : 360.f);
+              return Size{s, s};
+            },
+        .draw =
+            [](Canvas& canvas, Rect frame) {
+              using namespace std::chrono;
+              auto const now = system_clock::now();
+              std::time_t const tt = system_clock::to_time_t(now);
+              double const fracSec = duration<double>(now - system_clock::from_time_t(tt)).count();
+              std::tm* local = std::localtime(&tt);
+              if (!local) {
+                return;
+              }
+              int const h12 = local->tm_hour % 12;
+              float const s = static_cast<float>(local->tm_sec) + static_cast<float>(fracSec);
+              float const hDeg =
+                  static_cast<float>(h12) * 30.f + static_cast<float>(local->tm_min) * 0.5f + s / 120.f;
+              float const mDeg = static_cast<float>(local->tm_min) * 6.f + s * 0.1f;
+              float const sDeg = s * 6.f;
+              clock_demo::drawClock(canvas, frame, hDeg, mDeg, sDeg);
+            },
+        .pure = false,
+    };
   }
 };
 

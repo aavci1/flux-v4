@@ -5,6 +5,7 @@
 /// Part of the Flux public API.
 
 #include <Flux/Graphics/Canvas.hpp>
+#include <Flux/UI/Detail/PrimitiveForwards.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 #include <Flux/UI/ViewModifiers.hpp>
 
@@ -19,6 +20,10 @@ struct Render : ViewModifiers<Render> {
   std::function<Size(LayoutConstraints const&, LayoutHints const&)> measureFn{};
   std::function<void(Canvas&, Rect)> draw{};
   bool pure = false;
+
+  void layout(LayoutContext& ctx) const;
+  Size measure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
+               TextSystem& textSystem) const;
 
   Size measure(LayoutConstraints const& constraints, LayoutHints const& hints) const {
     if (measureFn) {

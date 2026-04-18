@@ -1,7 +1,6 @@
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/LayoutContext.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
-#include <Flux/UI/RenderContext.hpp>
 #include <Flux/UI/Views/OffsetView.hpp>
 
 #include "UI/Layout/ContainerScope.hpp"
@@ -160,8 +159,6 @@ void OffsetView::layout(LayoutContext &ctx) const {
         }
     }
 }
-
-void OffsetView::renderFromLayout(RenderContext &, LayoutNode const &) const {}
 
 Size OffsetView::measure(LayoutContext &ctx, LayoutConstraints const &constraints, LayoutHints const &,
                          TextSystem &ts) const {

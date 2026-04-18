@@ -1,6 +1,5 @@
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/LayoutContext.hpp>
-#include <Flux/UI/RenderContext.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 
@@ -105,8 +104,6 @@ void HStack::layout(LayoutContext& ctx) const {
     x += allocW[i] + spacing;
   }
 }
-
-void HStack::renderFromLayout(RenderContext&, LayoutNode const&) const {}
 
 Size HStack::measure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const&,
                      TextSystem& ts) const {

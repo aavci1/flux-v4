@@ -17,7 +17,6 @@ namespace flux {
 /// inset and clipping.
 struct HStack : ViewModifiers<HStack> {
   void layout(LayoutContext&) const;
-  void renderFromLayout(RenderContext&, LayoutNode const&) const;
   Size measure(LayoutContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
 
   float spacing = 8.f;

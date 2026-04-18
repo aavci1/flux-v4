@@ -103,14 +103,11 @@ add_library(flux STATIC
   src/Core/Window.cpp
   src/UI/LayoutTree.cpp
   src/UI/LayoutContext.cpp
-  src/UI/RenderContext.cpp
-  src/UI/RenderLayoutTree.cpp
   src/UI/Environment.cpp
   src/UI/Theme.cpp
   src/UI/StateStore.cpp
   src/UI/Element.cpp
   src/UI/ActionRegistry.cpp
-  src/UI/EventMap.cpp
   src/UI/LayoutEngine.cpp
   src/UI/Layout/LayoutVStack.cpp
   src/UI/Layout/LayoutHStack.cpp
@@ -120,15 +117,12 @@ add_library(flux STATIC
   src/UI/Layout/LayoutSpacer.cpp
   src/UI/Layout/LayoutOffsetView.cpp
   src/UI/Layout/LayoutScrollView.cpp
-  src/UI/LayoutRectCache.cpp
   src/UI/MeasureCache.cpp
   src/UI/SceneBuilder.cpp
   src/UI/SceneGeometryIndex.cpp
   src/UI/ComponentKey.cpp
   src/UI/ComponentKeyUtil.cpp
   src/UI/Detail/LeafBounds.cpp
-  src/UI/Detail/RenderComponentEmit.cpp
-  src/UI/HitTestUtil.cpp
   src/UI/FocusController.cpp
   src/UI/HoverController.cpp
   src/UI/GestureTracker.cpp
@@ -146,6 +140,7 @@ add_library(flux STATIC
   src/UI/OverlaySurfaceHelpers.cpp
   src/UI/Views/TextEditUtils.cpp
   src/UI/Views/TextEditBehavior.cpp
+  src/UI/Views/Render.cpp
   src/UI/Views/Text.cpp
   src/UI/Views/TextInput.cpp
   src/UI/Views/Badge.cpp
@@ -178,14 +173,9 @@ add_library(flux STATIC
   src/Scene/SceneTree.cpp
   src/Scene/SceneTreeDump.cpp
   src/Scene/SceneTreeInteraction.cpp
-  src/Scene/SceneGraphBounds.cpp
-  src/Scene/NodeStore.cpp
-  src/Scene/SceneGraph.cpp
   src/Scene/LayoutOverlayRenderer.cpp
   src/Scene/TextCacheDebugOverlay.cpp
-  src/Scene/HitTester.cpp
   src/Scene/SceneTreeHitTester.cpp
-  src/Scene/SceneGraphDump.cpp
   src/Graphics/Styles.cpp
   src/Graphics/AttributedString.cpp
   src/Graphics/Canvas.cpp

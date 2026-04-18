@@ -41,7 +41,7 @@ public:
   void pushStandardLayer(bool clip, float assignedW, float assignedH) {
     Mat3 local = Mat3::translate(parentFrame.x, parentFrame.y);
     if (clip && assignedW > 0.f && assignedH > 0.f) {
-      // clip rect is in layer-local space — recorded on spec for render phase
+      // clip rect is in layer-local space and carried through retained-layout reuse checks
     }
 
     LayoutNode n{};

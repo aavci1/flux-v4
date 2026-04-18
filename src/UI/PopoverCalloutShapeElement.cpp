@@ -2,7 +2,6 @@
 
 #include <Flux/UI/LayoutContext.hpp>
 #include <Flux/UI/LayoutTree.hpp>
-#include <Flux/UI/RenderContext.hpp>
 #include <Flux/UI/Views/PopoverCalloutShape.hpp>
 #include <Flux/UI/Detail/LayoutDebugDump.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
@@ -15,8 +14,6 @@
 #include <Flux/Core/Cursor.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Scene/Nodes.hpp>
-#include <Flux/Scene/SceneGraph.hpp>
-#include <Flux/UI/EventMap.hpp>
 
 #include "UI/Layout/LayoutHelpers.hpp"
 
@@ -261,7 +258,5 @@ void PopoverCalloutShape::layout(LayoutContext& ctx) const {
     ctx.popLayerWorldTransform();
   }
 }
-
-void PopoverCalloutShape::renderFromLayout(RenderContext&, LayoutNode const&) const {}
 
 } // namespace flux
