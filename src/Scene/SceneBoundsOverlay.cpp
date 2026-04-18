@@ -1,4 +1,4 @@
-#include <Flux/Scene/LayoutOverlayRenderer.hpp>
+#include <Flux/Scene/SceneBoundsOverlay.hpp>
 
 #include <Flux/Graphics/Canvas.hpp>
 #include <Flux/Graphics/Styles.hpp>
@@ -95,7 +95,7 @@ void renderNodeOverlay(SceneNode const& node, Mat3 const& parentTransform, Canva
 
 } // namespace
 
-void renderLayoutOverlay(SceneTree const& tree, Canvas& canvas) {
+void renderSceneBoundsOverlay(SceneTree const& tree, Canvas& canvas) {
   std::unordered_set<OverlayRectKey, OverlayRectKeyHash> seen;
   renderNodeOverlay(tree.root(), Mat3::identity(), canvas, seen);
 }

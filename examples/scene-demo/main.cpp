@@ -246,7 +246,7 @@ public:
     assert(bg && transformNode && clipNode && cardA && cardB && cardC && line && title && hint);
 
     bg->size = Size{s.width, s.height};
-    bg->markPaintDirty();
+    bg->invalidatePaint();
     bg->markBoundsDirty();
     bg->recomputeBounds();
 
@@ -266,7 +266,7 @@ public:
     auto layoutCard = [&](RectSceneNode* card, float x) {
       card->position = Point{x, rowOrigin.y};
       card->size = Size{cardW, rowH};
-      card->markPaintDirty();
+      card->invalidatePaint();
       card->markBoundsDirty();
       card->recomputeBounds();
     };
@@ -276,13 +276,13 @@ public:
 
     line->from = Point{rowOrigin.x + cardW * 0.85f, rowOrigin.y + rowH * 0.72f};
     line->to = Point{rowOrigin.x + cardW + gap + cardW * 0.15f, rowOrigin.y + rowH * 0.72f};
-    line->markPaintDirty();
+    line->invalidatePaint();
     line->markBoundsDirty();
     line->recomputeBounds();
 
     title->layout = ts.layout("Scene tree", titleFont, theme.colorTextPrimary, s.width - margin * 2.f);
     title->position = Point{margin + (s.width - margin * 2.f - title->layout->measuredSize.width) * 0.5f, margin};
-    title->markPaintDirty();
+    title->invalidatePaint();
     title->markBoundsDirty();
     title->recomputeBounds();
 
@@ -290,7 +290,7 @@ public:
                              theme.colorTextMuted, s.width - margin * 2.f);
     hint->position =
         Point{margin + (s.width - margin * 2.f - hint->layout->measuredSize.width) * 0.5f, margin + titleBand + 6.f};
-    hint->markPaintDirty();
+    hint->invalidatePaint();
     hint->markBoundsDirty();
     hint->recomputeBounds();
 

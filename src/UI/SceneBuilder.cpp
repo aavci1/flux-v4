@@ -282,7 +282,7 @@ bool configureTextSceneNode(TextSceneNode& textNode, TextSystem& textSystem, Tex
     dirty = true;
   }
   if (dirty) {
-    textNode.markPaintDirty();
+    textNode.invalidatePaint();
     textNode.markBoundsDirty();
   }
   textNode.position = {};
@@ -794,7 +794,7 @@ SceneBuilder::decorateNode(std::unique_ptr<SceneNode> root, Element const& el, E
     wrapper->shadow = nextShadow;
     wrapper->cornerRadius = nextCornerRadius;
     if (paintChanged) {
-      wrapper->markPaintDirty();
+      wrapper->invalidatePaint();
     }
     if (boundsChanged) {
       wrapper->markBoundsDirty();
@@ -979,7 +979,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     dirty |= updateIfChanged(rectNode->stroke, mods ? mods->stroke : StrokeStyle::none());
     dirty |= updateIfChanged(rectNode->shadow, mods ? mods->shadow : ShadowStyle::none());
     if (dirty) {
-      rectNode->markPaintDirty();
+      rectNode->invalidatePaint();
       rectNode->markBoundsDirty();
     }
     rectNode->position = {};
@@ -1049,7 +1049,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
           dirty |= updateIfChanged(rectNode->shadow, ShadowStyle::none());
           dirty |= updateIfChanged(rectNode->cornerRadius, CornerRadius{});
           if (dirty) {
-            rectNode->markPaintDirty();
+            rectNode->invalidatePaint();
             rectNode->markBoundsDirty();
           }
           rectNode->position = Point{rect.x, rect.y};
@@ -1107,7 +1107,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
       dirty = true;
     }
     if (dirty) {
-      renderNode->markPaintDirty();
+      renderNode->invalidatePaint();
       renderNode->markBoundsDirty();
     }
     renderNode->position = {};
@@ -1132,7 +1132,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     dirty |= updateIfChanged(imageNode->cornerRadius, mods ? mods->cornerRadius : CornerRadius{});
     dirty |= updateIfChanged(imageNode->opacity, mods ? mods->opacity : 1.f);
     if (dirty) {
-      imageNode->markPaintDirty();
+      imageNode->invalidatePaint();
       imageNode->markBoundsDirty();
     }
     imageNode->position = {};
@@ -1153,7 +1153,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     dirty |= updateIfChanged(pathNode->stroke, mods ? mods->stroke : StrokeStyle::none());
     dirty |= updateIfChanged(pathNode->shadow, mods ? mods->shadow : ShadowStyle::none());
     if (dirty) {
-      pathNode->markPaintDirty();
+      pathNode->invalidatePaint();
       pathNode->markBoundsDirty();
     }
     pathNode->position = {};
@@ -1172,7 +1172,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     dirty |= updateIfChanged(lineNode->to, line.to);
     dirty |= updateIfChanged(lineNode->stroke, line.stroke);
     if (dirty) {
-      lineNode->markPaintDirty();
+      lineNode->invalidatePaint();
       lineNode->markBoundsDirty();
     }
     lineNode->position = {};
@@ -1941,7 +1941,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
       dirty |= updateIfChanged(rectNode->stroke, StrokeStyle::none());
       dirty |= updateIfChanged(rectNode->shadow, ShadowStyle::none());
       if (dirty) {
-        rectNode->markPaintDirty();
+        rectNode->invalidatePaint();
         rectNode->markBoundsDirty();
       }
       rectNode->position = Point{metrics.x, metrics.y};
@@ -2146,7 +2146,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     chromeDirty |= updateIfChanged(chromeNode->stroke, StrokeStyle::solid(callout.borderColor, callout.borderWidth));
     chromeDirty |= updateIfChanged(chromeNode->shadow, ShadowStyle::none());
     if (chromeDirty) {
-      chromeNode->markPaintDirty();
+      chromeNode->invalidatePaint();
       chromeNode->markBoundsDirty();
     }
     chromeNode->position = {};

@@ -1,6 +1,6 @@
 #pragma once
 
-/// \file Flux/Scene/LayoutOverlayRenderer.hpp
+/// \file Flux/Scene/SceneBoundsOverlay.hpp
 ///
 /// Debug overlay: strokes bounds for each retained scene node, including non-painting groups and modifiers.
 
@@ -12,6 +12,6 @@ namespace flux {
 class Canvas;
 
 /// Draws semi-transparent wireframes for every node in \p tree using transformed \ref SceneNode::bounds.
-void renderLayoutOverlay(SceneTree const& tree, Canvas& canvas);
+void renderSceneBoundsOverlay(SceneTree const& tree, Canvas& canvas);
 
 } // namespace flux

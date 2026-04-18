@@ -61,7 +61,7 @@ Public headers live under `Flux/Core/`, **`Flux/Graphics/`**, **`Flux/UI/`**, **
 ## Umbrella include
 
 - Prefer **`#include <Flux.hpp>`** for apps that want the main surface area; it pulls `Application`, `EventQueue`, `Events`, `Types`, `Window`, the **`Reactive`** umbrella, **`Canvas`**, and **`Styles`** (see `include/Flux.hpp`). Graphics-only consumers can include **`TextSystem.hpp`**, **`Path.hpp`**, etc., directly under `Flux/Graphics/`.
-- Declarative UI: **`#include <Flux/UI/UI.hpp>`** (and `WindowUI.hpp` is included there for **`Window::setView`**). Scene-only or imperative demos can include **`Flux/Scene/SceneGraph.hpp`** and related headers without the UI layer.
+- Declarative UI: **`#include <Flux/UI/UI.hpp>`** (and `WindowUI.hpp` is included there for **`Window::setView`**). Scene-only or imperative demos can include the retained scene tree headers under **`Flux/Scene/`** without the UI layer.
 - Finer-grained includes (`<Flux/Core/…>`) are fine when dependencies should stay minimal.
 
 ## Private implementation (pimpl)
@@ -128,7 +128,7 @@ Shared vocabulary lives in `Types.hpp` (`Size`, `Vec2`, time aliases, `MouseButt
 | `examples/blend-demo` | Opacity and blend modes on the canvas |
 | `examples/text-demo` | `TextSystem`, `AttributedString`, `TextLayout`, `Canvas::drawTextLayout` |
 | `examples/image-demo` | `loadImageFromFile`, `Image`, `Canvas::drawImage` |
-| `examples/scene-demo` | Imperative `SceneGraph`, `SceneRenderer`, `HitTester`, hit labels |
+| `examples/scene-demo` | Imperative retained scene tree, hit testing, hit labels |
 | `examples/reactive-demo` | `Signal`, `Computed`, `Animation`, `Observer` with canvas |
 | `examples/animation-demo` | `useAnimation`, `WithTransition`, repeat/autoreverse, reduced motion |
 | `examples/card-demo` | `setView`, `VStack` / `HStack`, hooks, `useAnimation`, interactions |

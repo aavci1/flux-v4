@@ -1,6 +1,6 @@
 # Flux v4
 
-A small **C++23** application framework for **macOS** with a **Metal** 2D canvas, vector paths (tessellated via [libtess2](https://github.com/memononen/libtess2)), and **CoreText**-backed text layout and glyph rasterization. It also provides an optional **declarative UI** layer (layout, views, input routing into a **scene graph**), plus **reactive** primitives (`Signal`, `Computed`, `Animated`, transitions) coordinated with the main loop.
+A small **C++23** application framework for **macOS** with a **Metal** 2D canvas, vector paths (tessellated via [libtess2](https://github.com/memononen/libtess2)), and **CoreText**-backed text layout and glyph rasterization. It also provides an optional **declarative UI** layer built on a retained **scene tree**, plus **reactive** primitives (`Signal`, `Computed`, `Animated`, transitions) coordinated with the main loop.
 
 Linux desktop (Wayland/Vulkan) and embedded Linux (KMS/DRM) are reserved in CMake but not implemented yet.
 
@@ -22,7 +22,7 @@ By default only the static `flux` library is built. Pass **`-DFLUX_BUILD_EXAMPLE
 | `blend_demo` | Opacity and blend modes |
 | `text_demo` | `TextSystem`, `AttributedString`, `Canvas::drawTextLayout` |
 | `image_demo` | Loading and drawing `Image` from a file |
-| `scene_demo` | Imperative `SceneGraph`, `SceneRenderer`, `HitTester` |
+| `scene_demo` | Imperative retained scene tree API and hit testing |
 | `reactive_demo` | `Signal` / `Computed` / `Animated` and observers |
 | `card_demo` | Declarative UI (`setView`), stacks, state hooks, animation |
 | `scroll_demo` | `ScrollView` with a scrollable list |
@@ -36,7 +36,6 @@ Configure-time options:
 ## Documentation
 
 - [Documentation index](docs/README.md) — table of contents for `docs/`.
-- [Architecture](docs/architecture.md) — layers, rendering loop, graphics stack.
 - [Conventions](docs/conventions.md) — layout, naming, pimpl, platform boundaries.
 - [Event queue](docs/event_queue.md) — `EventQueue`, dispatch order, timers, custom events.
 

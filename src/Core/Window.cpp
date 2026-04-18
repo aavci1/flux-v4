@@ -7,7 +7,7 @@
 #include <Flux/Detail/RootHolder.hpp>
 #include <Flux/Detail/Runtime.hpp>
 #include <Flux/Graphics/Canvas.hpp>
-#include <Flux/Scene/LayoutOverlayRenderer.hpp>
+#include <Flux/Scene/SceneBoundsOverlay.hpp>
 #include <Flux/Scene/SceneTree.hpp>
 #include <Flux/Scene/TextCacheDebugOverlay.hpp>
 #include <Flux/UI/Overlay.hpp>
@@ -211,13 +211,13 @@ void Window::render(Canvas& canvas) {
   }
   if (d->runtime_ && d->runtime_->layoutOverlayEnabled()) {
     if (d->sceneTree_) {
-      renderLayoutOverlay(*d->sceneTree_, canvas);
+      renderSceneBoundsOverlay(*d->sceneTree_, canvas);
     }
     for (std::unique_ptr<OverlayEntry> const& up : d->overlayMgr_.entries()) {
       OverlayEntry const& entry = *up;
       canvas.save();
       canvas.transform(Mat3::translate(Point{entry.resolvedFrame.x, entry.resolvedFrame.y}));
-      renderLayoutOverlay(entry.sceneTree, canvas);
+      renderSceneBoundsOverlay(entry.sceneTree, canvas);
       canvas.restore();
     }
   }

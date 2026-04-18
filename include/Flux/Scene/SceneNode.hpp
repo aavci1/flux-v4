@@ -56,7 +56,7 @@ public:
 
   bool paintDirty() const noexcept { return paintDirty_; }
   bool boundsDirty() const noexcept { return boundsDirty_; }
-  void markPaintDirty() noexcept { paintDirty_ = true; }
+  void invalidatePaint() noexcept { paintDirty_ = true; }
   void markBoundsDirty() noexcept { boundsDirty_ = true; }
 
   virtual bool paints() const noexcept { return false; }
