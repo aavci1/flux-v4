@@ -1,5 +1,6 @@
 #include <doctest/doctest.h>
 
+#include <Flux/Core/Application.hpp>
 #include <Flux/Detail/RootHolder.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Reactive/Signal.hpp>
@@ -30,7 +31,9 @@
 #include <Flux/UI/Views/VStack.hpp>
 
 #include <memory>
+#include <chrono>
 #include <string_view>
+#include <thread>
 #include <typeindex>
 
 namespace {
@@ -545,7 +548,9 @@ TEST_CASE("SceneBuilder: scroll view local wheel state moves content and shows i
 
   SceneNode* viewportGroup = scrollRoot->children()[0].get();
   REQUIRE(viewportGroup->children().size() == 2);
-  CHECK(viewportGroup->children()[1]->kind() == SceneNodeKind::Rect);
+  auto* indicatorOverlay = dynamic_cast<ModifierSceneNode*>(viewportGroup->children()[1].get());
+  REQUIRE(indicatorOverlay != nullptr);
+  CHECK(indicatorOverlay->opacity == doctest::Approx(0.f));
 
   SceneNode* contentGroup = viewportGroup->children()[0].get();
   REQUIRE(contentGroup->children().size() == 2);
@@ -559,11 +564,73 @@ TEST_CASE("SceneBuilder: scroll view local wheel state moves content and shows i
   REQUIRE(scrollRoot != nullptr);
   viewportGroup = scrollRoot->children()[0].get();
   REQUIRE(viewportGroup->children().size() == 2);
+  indicatorOverlay = dynamic_cast<ModifierSceneNode*>(viewportGroup->children()[1].get());
+  REQUIRE(indicatorOverlay != nullptr);
+  CHECK(indicatorOverlay->opacity == doctest::Approx(1.f));
   contentGroup = viewportGroup->children()[0].get();
   REQUIRE(contentGroup->children().size() == 2);
 
   CHECK(contentGroup->children()[0]->position.y == doctest::Approx(-12.f));
   CHECK(contentGroup->children()[1]->position.y == doctest::Approx(18.f));
+}
+
+TEST_CASE("SceneBuilder: scroll indicators fade out after inactivity") {
+  using namespace std::chrono_literals;
+
+  Application app;
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  StoreScope scope{};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 80.f;
+  constraints.maxHeight = 40.f;
+
+  auto makeScrollElement = [&]() -> Element {
+    return ScrollView{
+        .axis = ScrollAxis::Vertical,
+        .children = {
+            keyedRect("a", 60.f, 30.f),
+            keyedRect("b", 60.f, 30.f),
+        },
+    };
+  };
+
+  std::unique_ptr<SceneNode> tree = builder.build(makeScrollElement(), NodeId{1ull}, constraints);
+  REQUIRE(tree);
+  auto* scrollRoot = dynamic_cast<ModifierSceneNode*>(tree.get());
+  REQUIRE(scrollRoot != nullptr);
+  REQUIRE(scrollRoot->interaction() != nullptr);
+  REQUIRE(scrollRoot->interaction()->onScroll);
+
+  scrollRoot->interaction()->onScroll(Vec2{0.f, -12.f});
+  tree = builder.build(makeScrollElement(), NodeId{1ull}, constraints, std::move(tree));
+  REQUIRE(tree);
+  scrollRoot = dynamic_cast<ModifierSceneNode*>(tree.get());
+  REQUIRE(scrollRoot != nullptr);
+  auto* viewportGroup = scrollRoot->children()[0].get();
+  REQUIRE(viewportGroup->children().size() == 2);
+  auto* indicatorOverlay = dynamic_cast<ModifierSceneNode*>(viewportGroup->children()[1].get());
+  REQUIRE(indicatorOverlay != nullptr);
+  CHECK(indicatorOverlay->opacity == doctest::Approx(1.f));
+
+  std::jthread stopLater([&app] {
+    std::this_thread::sleep_for(1200ms);
+    app.quit();
+  });
+  CHECK(app.exec() == 0);
+
+  tree = builder.build(makeScrollElement(), NodeId{1ull}, constraints, std::move(tree));
+  REQUIRE(tree);
+  scrollRoot = dynamic_cast<ModifierSceneNode*>(tree.get());
+  REQUIRE(scrollRoot != nullptr);
+  viewportGroup = scrollRoot->children()[0].get();
+  REQUIRE(viewportGroup->children().size() == 2);
+  indicatorOverlay = dynamic_cast<ModifierSceneNode*>(viewportGroup->children()[1].get());
+  REQUIRE(indicatorOverlay != nullptr);
+  CHECK(indicatorOverlay->opacity == doctest::Approx(0.f).epsilon(0.05f));
 }
 
 TEST_CASE("SceneBuilder: composite root scroll view keeps local state separate from outer body") {

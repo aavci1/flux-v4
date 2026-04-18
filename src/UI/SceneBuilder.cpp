@@ -1,6 +1,7 @@
 #include <Flux/UI/SceneBuilder.hpp>
 
 #include <Flux/Graphics/TextSystem.hpp>
+#include <Flux/Reactive/Animation.hpp>
 #include <Flux/Scene/CustomTransformSceneNode.hpp>
 #include <Flux/Scene/ImageSceneNode.hpp>
 #include <Flux/Scene/InteractionData.hpp>
@@ -1531,6 +1532,10 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     if (!contentState.signal && store) {
       contentState = State<Size>{&store->claimSlot<Signal<Size>>(Size{})};
     }
+    Animation<float>* indicatorOpacityAnimation = nullptr;
+    if (store) {
+      indicatorOpacityAnimation = &store->claimSlot<Animation<float>>(0.f);
+    }
     State<Point> downPointState{};
     State<bool> draggingState{};
     if (store) {
@@ -1567,8 +1572,13 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     Point const scrollRange = maxScrollOffset(ax, viewport, contentSize);
     bool const showsVerticalIndicator = scrollRange.y > 0.f;
     bool const showsHorizontalIndicator = scrollRange.x > 0.f;
+    bool const showsAnyIndicator = showsVerticalIndicator || showsHorizontalIndicator;
     Theme const& theme = activeTheme(environment_);
     Color const indicatorColor = scrollIndicatorColorForTheme(theme);
+    Transition const indicatorShow = Transition::instant();
+    Transition const indicatorHide = Transition::linear(theme.durationMedium).delayed(0.85f);
+    float const indicatorOpacity =
+        indicatorOpacityAnimation ? indicatorOpacityAnimation->get() : 0.f;
     ScrollIndicatorMetrics const verticalIndicator =
         makeVerticalIndicator(scrollOffset, viewport, contentSize, showsHorizontalIndicator);
     ScrollIndicatorMetrics const horizontalIndicator =
@@ -1683,12 +1693,14 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     scrolledGroup->replaceChildren(std::move(scrolledChildren));
     setGroupBounds(*scrolledGroup, contentSize);
 
-    auto updateIndicatorNode = [&](NodeId indicatorId, ScrollIndicatorMetrics const& metrics, bool vertical)
+    auto updateIndicatorNode =
+        [&](std::unordered_map<NodeId, std::unique_ptr<SceneNode>, ::flux::NodeIdHash>& reusableMap,
+            NodeId indicatorId, ScrollIndicatorMetrics const& metrics, bool vertical)
         -> std::unique_ptr<SceneNode> {
       std::unique_ptr<RectSceneNode> rectNode{};
-      if (auto it = reusableViewport.find(indicatorId); it != reusableViewport.end()) {
+      if (auto it = reusableMap.find(indicatorId); it != reusableMap.end()) {
         rectNode = releaseAs<RectSceneNode>(std::move(it->second));
-        reusableViewport.erase(it);
+        reusableMap.erase(it);
       }
       if (!rectNode) {
         rectNode = std::make_unique<RectSceneNode>(indicatorId);
@@ -1710,15 +1722,43 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     };
 
     std::vector<std::unique_ptr<SceneNode>> viewportNext{};
-    viewportNext.reserve(3);
+    viewportNext.reserve(2);
     viewportNext.push_back(std::move(scrolledGroup));
-    if (verticalIndicator.visible()) {
-      viewportNext.push_back(updateIndicatorNode(
-          SceneTree::childId(viewportGroup->id(), LocalId::fromString("$v-indicator")), verticalIndicator, true));
-    }
-    if (horizontalIndicator.visible()) {
-      viewportNext.push_back(updateIndicatorNode(
-          SceneTree::childId(viewportGroup->id(), LocalId::fromString("$h-indicator")), horizontalIndicator, false));
+    if (showsAnyIndicator) {
+      NodeId const indicatorOverlayId =
+          SceneTree::childId(viewportGroup->id(), LocalId::fromString("$indicators"));
+      std::unique_ptr<ModifierSceneNode> indicatorOverlay{};
+      if (auto it = reusableViewport.find(indicatorOverlayId); it != reusableViewport.end()) {
+        indicatorOverlay = releaseAs<ModifierSceneNode>(std::move(it->second));
+        reusableViewport.erase(it);
+      }
+      if (!indicatorOverlay) {
+        indicatorOverlay = std::make_unique<ModifierSceneNode>(indicatorOverlayId);
+      }
+      indicatorOverlay->clip.reset();
+      indicatorOverlay->opacity = indicatorOpacity;
+      indicatorOverlay->blendMode = BlendMode::Normal;
+      indicatorOverlay->fill = FillStyle::none();
+      indicatorOverlay->stroke = StrokeStyle::none();
+      indicatorOverlay->shadow = ShadowStyle::none();
+      indicatorOverlay->cornerRadius = {};
+      indicatorOverlay->position = {};
+
+      std::vector<std::unique_ptr<SceneNode>> indicatorChildren{};
+      indicatorChildren.reserve(2);
+      if (verticalIndicator.visible()) {
+        indicatorChildren.push_back(updateIndicatorNode(
+            reusableViewport, SceneTree::childId(indicatorOverlay->id(), LocalId::fromString("$v-indicator")),
+            verticalIndicator, true));
+      }
+      if (horizontalIndicator.visible()) {
+        indicatorChildren.push_back(updateIndicatorNode(
+            reusableViewport, SceneTree::childId(indicatorOverlay->id(), LocalId::fromString("$h-indicator")),
+            horizontalIndicator, false));
+      }
+      indicatorOverlay->replaceChildren(std::move(indicatorChildren));
+      indicatorOverlay->recomputeBounds();
+      viewportNext.push_back(std::move(indicatorOverlay));
     }
     viewportGroup->replaceChildren(std::move(viewportNext));
     setGroupBounds(*viewportGroup, Size{std::max(contentSize.width, viewport.width),
@@ -1735,6 +1775,13 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     std::function<void(Vec2)> priorScroll = interaction->onScroll;
 
     bool const dragScroll = scrollView.dragScrollEnabled;
+    auto revealIndicators = [indicatorOpacityAnimation, indicatorShow, indicatorHide, showsAnyIndicator]() {
+      if (!indicatorOpacityAnimation || !showsAnyIndicator) {
+        return;
+      }
+      indicatorOpacityAnimation->set(1.f, indicatorShow);
+      indicatorOpacityAnimation->set(0.f, indicatorHide);
+    };
     interaction->onPointerDown =
         [priorPointerDown, dragScroll, draggingState, downPointState, offsetState](Point p) {
           if (priorPointerDown) {
@@ -1756,7 +1803,8 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
       draggingState = false;
     };
     interaction->onPointerMove =
-        [priorPointerMove, dragScroll, draggingState, downPointState, ax, contentState, viewport, offsetState](Point p) {
+        [priorPointerMove, dragScroll, draggingState, downPointState, ax, contentState, viewport,
+         offsetState, revealIndicators](Point p) {
           if (priorPointerMove) {
             priorPointerMove(p);
           }
@@ -1766,9 +1814,10 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
           }
           Point const next{(*downPointState).x - p.x, (*downPointState).y - p.y};
           offsetState = clampScrollOffset(ax, next, viewport, *contentState);
+          revealIndicators();
         };
     interaction->onScroll =
-        [priorScroll, ax, offsetState, contentState, viewport](Vec2 d) {
+        [priorScroll, ax, offsetState, contentState, viewport, revealIndicators](Vec2 d) {
           if (priorScroll) {
             priorScroll(d);
           }
@@ -1783,6 +1832,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
             next.x -= d.x;
           }
           offsetState = clampScrollOffset(ax, next, viewport, *contentState);
+          revealIndicators();
         };
     resolvedInteraction = std::move(interaction);
 
