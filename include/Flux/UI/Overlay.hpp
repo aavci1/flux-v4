@@ -9,9 +9,6 @@
 #include <Flux/Scene/SceneTree.hpp>
 #include <Flux/UI/ComponentKey.hpp>
 #include <Flux/UI/Element.hpp>
-#include <Flux/UI/LayoutEngine.hpp>
-#include <Flux/UI/LayoutTree.hpp>
-#include <Flux/UI/MeasureCache.hpp>
 #include <Flux/UI/SceneGeometryIndex.hpp>
 #include <Flux/UI/StateStore.hpp>
 #include <Flux/UI/Views/PopoverPlacement.hpp>
@@ -99,7 +96,6 @@ struct OverlayEntry {
 
   SceneTree sceneTree;
   SceneGeometryIndex sceneGeometry;
-  LayoutTree layoutTree;
   std::unique_ptr<StateStore> stateStore = std::make_unique<StateStore>();
   Rect resolvedFrame{};
 
@@ -139,8 +135,6 @@ private:
 
   std::vector<std::unique_ptr<OverlayEntry>> overlays_;
   std::uint64_t nextId_ = 1;
-  LayoutEngine layoutEngine_{};
-  MeasureCache overlayMeasureCache_{};
 };
 
 } // namespace flux

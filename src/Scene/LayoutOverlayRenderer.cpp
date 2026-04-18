@@ -2,6 +2,7 @@
 
 #include <Flux/Graphics/Canvas.hpp>
 #include <Flux/Graphics/Styles.hpp>
+#include <Flux/Scene/CustomTransformSceneNode.hpp>
 
 #include <cmath>
 #include <cstdint>
@@ -49,34 +50,31 @@ void strokeBounds(Canvas& canvas, Rect const& r) {
   canvas.drawRect(r, kNoRadius, FillStyle::none(), overlayStroke());
 }
 
-Rect overlayBounds(LayoutNode const& node, LayoutTree const& tree) {
-  switch (node.kind) {
-  case LayoutNode::Kind::Container:
-  case LayoutNode::Kind::Modifier:
-    return node.worldBounds;
-  case LayoutNode::Kind::Leaf:
-  case LayoutNode::Kind::Composite:
-    break;
-  }
-  return tree.unionSubtreeWorldBounds(node.id);
+Rect transformBounds(Mat3 const& t, Rect const& r) {
+  Point const p0 = t.apply({r.x, r.y});
+  Point const p1 = t.apply({r.x + r.width, r.y});
+  Point const p2 = t.apply({r.x, r.y + r.height});
+  Point const p3 = t.apply({r.x + r.width, r.y + r.height});
+  float const minX = std::min({p0.x, p1.x, p2.x, p3.x});
+  float const maxX = std::max({p0.x, p1.x, p2.x, p3.x});
+  float const minY = std::min({p0.y, p1.y, p2.y, p3.y});
+  float const maxY = std::max({p0.y, p1.y, p2.y, p3.y});
+  return Rect{minX, minY, maxX - minX, maxY - minY};
 }
 
-} // namespace
+Mat3 nodeLocalTransform(SceneNode const& node) {
+  Mat3 transform = Mat3::translate(node.position);
+  if (auto const* custom = dynamic_cast<CustomTransformSceneNode const*>(&node)) {
+    transform = transform * custom->transform;
+  }
+  return transform;
+}
 
-void renderLayoutOverlay(LayoutTree const& tree, Canvas& canvas) {
-  std::unordered_set<OverlayRectKey, OverlayRectKeyHash> seen;
-  seen.reserve(tree.activeIds().size());
-  for (LayoutNodeId id : tree.activeIds()) {
-    LayoutNode const* node = tree.get(id);
-    if (!node) {
-      continue;
-    }
-    Rect const bounds = overlayBounds(*node, tree);
-    if (bounds.width <= 0.f || bounds.height <= 0.f) {
-      continue;
-    }
-
-    // Deduplicate equivalent boxes so leaf subtree unions do not redraw the same outline repeatedly.
+void renderNodeOverlay(SceneNode const& node, Mat3 const& parentTransform, Canvas& canvas,
+                       std::unordered_set<OverlayRectKey, OverlayRectKeyHash>& seen) {
+  Mat3 const worldTransform = parentTransform * nodeLocalTransform(node);
+  Rect const bounds = transformBounds(worldTransform, node.bounds);
+  if (bounds.width > 0.f && bounds.height > 0.f) {
     auto quantize = [](float value) {
       return static_cast<std::int32_t>(std::lround(value * 2.f));
     };
@@ -86,11 +84,20 @@ void renderLayoutOverlay(LayoutTree const& tree, Canvas& canvas) {
         .width = quantize(bounds.width),
         .height = quantize(bounds.height),
     };
-    if (!seen.insert(key).second) {
-      continue;
+    if (seen.insert(key).second) {
+      strokeBounds(canvas, bounds);
     }
-    strokeBounds(canvas, bounds);
   }
+  for (std::unique_ptr<SceneNode> const& child : node.children()) {
+    renderNodeOverlay(*child, worldTransform, canvas, seen);
+  }
+}
+
+} // namespace
+
+void renderLayoutOverlay(SceneTree const& tree, Canvas& canvas) {
+  std::unordered_set<OverlayRectKey, OverlayRectKeyHash> seen;
+  renderNodeOverlay(tree.root(), Mat3::identity(), canvas, seen);
 }
 
 } // namespace flux

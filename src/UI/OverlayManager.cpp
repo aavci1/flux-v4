@@ -8,8 +8,6 @@
 #include <Flux/Scene/RectSceneNode.hpp>
 #include <Flux/Scene/SceneTree.hpp>
 #include <Flux/UI/Environment.hpp>
-#include <Flux/UI/LayoutContext.hpp>
-#include <Flux/UI/LayoutTree.hpp>
 #include <Flux/UI/SceneBuilder.hpp>
 #include <Flux/UI/Views/Popover.hpp>
 
@@ -305,25 +303,7 @@ void OverlayManager::rebuild(Size windowSize, Runtime &runtime) {
         entry.stateStore->beginRebuild();
         entry.stateStore->setOverlayScope(entry.id.value);
         StateStore::setCurrent(entry.stateStore.get());
-
-        layoutEngine_.resetForBuild();
-        overlayMeasureCache_.clear();
         LayoutConstraints const cs = resolveConstraints(windowSize, entry.config);
-        entry.layoutTree.clear();
-        entry.layoutTree.beginBuild();
-        {
-            LayoutContext lctx {Application::instance().textSystem(), layoutEngine_, entry.layoutTree, &overlayMeasureCache_};
-            lctx.pushConstraints(cs);
-            EnvironmentLayer windowEnvBaseline = runtime.window().environmentLayer();
-            EnvironmentStack::current().push(std::move(windowEnvBaseline));
-            layoutEngine_.setChildFrame(Rect {0.f, 0.f, cs.maxWidth, cs.maxHeight});
-            if (entry.content.has_value()) {
-                entry.content->layout(lctx);
-            }
-            EnvironmentStack::current().pop();
-            lctx.popConstraints();
-        }
-        entry.layoutTree.endBuild();
 
         std::unique_ptr<SceneNode> existingContent = extractOverlayContentRoot(entry.sceneTree.takeRoot());
         std::unique_ptr<SceneNode> contentRoot{};

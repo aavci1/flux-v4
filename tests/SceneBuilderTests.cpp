@@ -452,10 +452,6 @@ TEST_CASE("SceneBuilder: composite root exposes a retained scene body with the r
   StoreScope scope{};
 
   flux::TypedRootHolder<HelloRoot> holder{std::in_place};
-  flux::LayoutEngine layoutEngine{};
-  flux::LayoutTree layoutTree{};
-  flux::MeasureCache measureCache{};
-  LayoutContextPtr ctx{LayoutContextTestAccess::create(textSystem, layoutEngine, layoutTree, &measureCache)};
 
   flux::LayoutConstraints constraints{};
   constraints.minWidth = 320.f;
@@ -464,12 +460,7 @@ TEST_CASE("SceneBuilder: composite root exposes a retained scene body with the r
   constraints.maxHeight = 320.f;
 
   scope.store.beginRebuild(true);
-  measureCache.beginBuild(scope.store.shouldForceFullRebuild());
-  layoutEngine.resetForBuild();
-  ctx->pushConstraints(constraints);
-  layoutEngine.setChildFrame(Rect{0.f, 0.f, 320.f, 320.f});
-  holder.layoutInto(*ctx);
-  ctx->popConstraints();
+  holder.prepareSceneElement(constraints);
 
   Element const* sceneRoot = holder.sceneElementForCurrentBuild();
   REQUIRE(sceneRoot != nullptr);

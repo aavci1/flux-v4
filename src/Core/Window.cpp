@@ -210,12 +210,14 @@ void Window::render(Canvas& canvas) {
     canvas.restore();
   }
   if (d->runtime_ && d->runtime_->layoutOverlayEnabled()) {
-    renderLayoutOverlay(d->runtime_->mainLayoutTree(), canvas);
+    if (d->sceneTree_) {
+      renderLayoutOverlay(*d->sceneTree_, canvas);
+    }
     for (std::unique_ptr<OverlayEntry> const& up : d->overlayMgr_.entries()) {
       OverlayEntry const& entry = *up;
       canvas.save();
       canvas.transform(Mat3::translate(Point{entry.resolvedFrame.x, entry.resolvedFrame.y}));
-      renderLayoutOverlay(entry.layoutTree, canvas);
+      renderLayoutOverlay(entry.sceneTree, canvas);
       canvas.restore();
     }
   }

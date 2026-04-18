@@ -15,7 +15,6 @@
 #include <Flux/Core/Types.hpp>
 #include <Flux/Detail/RootHolder.hpp>
 #include <Flux/UI/ComponentKey.hpp>
-#include <Flux/UI/LayoutTree.hpp>
 #include <Flux/UI/Overlay.hpp>
 
 #include <memory>
@@ -42,7 +41,6 @@ public:
   GestureTracker& gesture() noexcept;
 
   ActionRegistry& actionRegistryForBuild() noexcept;
-  LayoutTree const& mainLayoutTree() const noexcept;
 
   bool isActionCurrentlyEnabled(std::string const& name) const;
 
@@ -61,7 +59,7 @@ public:
   /// Alias for overlay teardown checks (same as `shuttingDown()`).
   bool imploding() const noexcept;
 
-  /// When true, \ref Window::render draws a semi-transparent wireframe overlay for each layout node.
+  /// When true, \ref Window::render draws a semi-transparent wireframe overlay for each retained scene node.
   bool layoutOverlayEnabled() const noexcept { return layoutOverlayEnabled_; }
   void setLayoutOverlayEnabled(bool enabled) noexcept { layoutOverlayEnabled_ = enabled; }
 

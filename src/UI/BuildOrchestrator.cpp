@@ -5,9 +5,6 @@
 #include <Flux/Detail/Runtime.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Scene/SceneTree.hpp>
-#include <Flux/UI/Element.hpp>
-#include <Flux/UI/LayoutContext.hpp>
-#include <Flux/UI/LayoutTree.hpp>
 #include <Flux/UI/SceneBuilder.hpp>
 #include <Flux/UI/Environment.hpp>
 #include <Flux/UI/Overlay.hpp>
@@ -60,7 +57,6 @@ BuildOrchestrator::~BuildOrchestrator() {
 
 void BuildOrchestrator::setRoot(std::unique_ptr<RootHolder> holder) {
   rootHolder_ = std::move(holder);
-  layoutTree_.clear();
   // Do not call `rebuild()` here — `Runtime::setRoot` calls `Runtime::rebuild()` so `sCurrent`
   // is set for hooks (`Runtime::current()`) during the layout/render pass.
 }
@@ -84,39 +80,38 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
   rootCs.maxWidth = sz.width;
   rootCs.maxHeight = sz.height;
 
-  layoutEngine_.resetForBuild();
   ++textFrameIndex_;
   Application::instance().textSystem().onFrameBegin(textFrameIndex_);
   layoutDebugBeginPass();
 
   stateStore_.beginRebuild(sizeOverride.has_value() || !stateStore_.hasPendingDirtyComponents());
-  measureCache_.beginBuild(stateStore_.shouldForceFullRebuild());
-
   actionRegistryBuild_.beginRebuild();
   StateStore::setCurrent(&stateStore_);
-  layoutTree_.clear();
-  LayoutContext lctx{Application::instance().textSystem(), layoutEngine_, layoutTree_, &measureCache_};
-  lctx.pushConstraints(rootCs);
-  EnvironmentLayer windowEnvBaseline = window_.environmentLayer();
-  EnvironmentStack::current().push(std::move(windowEnvBaseline));
-  layoutEngine_.setChildFrame(Rect{0.f, 0.f, sz.width, sz.height});
-  if (rootHolder_) {
-    rootHolder_->layoutInto(lctx);
-  }
-  EnvironmentStack::current().pop();
-  lctx.popConstraints();
+  buildSlotRect_ = Rect{0.f, 0.f, sz.width, sz.height};
 
   {
     SceneTree& sceneTree = window_.sceneTree();
     std::unique_ptr<SceneNode> existingRoot = sceneTree.takeRoot();
-    Element const* sceneRoot = rootHolder_ ? rootHolder_->sceneElementForCurrentBuild() : nullptr;
+    Element const* sceneRoot = nullptr;
+    bool rootDescendantsStable = false;
+    if (rootHolder_) {
+      rootHolder_->prepareSceneElement(rootCs);
+      sceneRoot = rootHolder_->sceneElementForCurrentBuild();
+      rootDescendantsStable = rootHolder_->sceneElementDescendantsStable();
+    }
     if (sceneRoot) {
       SceneBuilder sceneBuilder{Application::instance().textSystem(), EnvironmentStack::current(), &sceneGeometry_};
       EnvironmentLayer windowEnv = window_.environmentLayer();
       EnvironmentStack::current().push(std::move(windowEnv));
       ComponentKey const rootKey = rootHolder_->sceneRootKey();
+      if (StateStore* store = StateStore::current()) {
+        store->pushCompositePathStable(rootDescendantsStable);
+      }
       std::unique_ptr<SceneNode> nextRoot =
           sceneBuilder.build(*sceneRoot, NodeId{1ull}, rootCs, std::move(existingRoot), rootKey);
+      if (StateStore* store = StateStore::current()) {
+        store->popCompositePathStable();
+      }
       EnvironmentStack::current().pop();
       sceneTree.setRoot(std::move(nextRoot));
     } else {
@@ -148,20 +143,12 @@ StateStore& BuildOrchestrator::stateStore() noexcept {
   return stateStore_;
 }
 
-LayoutEngine& BuildOrchestrator::layoutEngine() noexcept {
-  return layoutEngine_;
-}
-
 SceneGeometryIndex& BuildOrchestrator::sceneGeometry() noexcept {
   return sceneGeometry_;
 }
 
 SceneGeometryIndex const& BuildOrchestrator::sceneGeometry() const noexcept {
   return sceneGeometry_;
-}
-
-LayoutTree const& BuildOrchestrator::layoutTree() const noexcept {
-  return layoutTree_;
 }
 
 ActionRegistry& BuildOrchestrator::actionRegistryForBuild() noexcept {
@@ -173,7 +160,7 @@ ActionRegistry const& BuildOrchestrator::actionRegistryCommitted() const noexcep
 }
 
 Rect BuildOrchestrator::buildSlotRect() const {
-  return layoutEngine_.lastAssignedFrame();
+  return buildSlotRect_;
 }
 
 } // namespace flux

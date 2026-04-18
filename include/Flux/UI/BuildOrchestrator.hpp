@@ -8,9 +8,6 @@
 #include <Flux/Detail/RootHolder.hpp>
 #include <Flux/Reactive/Observer.hpp>
 #include <Flux/UI/ActionRegistry.hpp>
-#include <Flux/UI/LayoutEngine.hpp>
-#include <Flux/UI/LayoutTree.hpp>
-#include <Flux/UI/MeasureCache.hpp>
 #include <Flux/UI/SceneGeometryIndex.hpp>
 #include <Flux/UI/StateStore.hpp>
 
@@ -27,7 +24,7 @@ class Runtime;
 class Window;
 
 /// Drives the reactive rebuild loop for one window.
-/// Owns `StateStore`, `LayoutEngine`, `RootHolder`, committed scene geometry, and retained-scene rebuild state.
+/// Owns `StateStore`, `RootHolder`, committed scene geometry, and retained-scene rebuild state.
 class BuildOrchestrator {
 public:
   BuildOrchestrator(Window& window, FocusController& focus, HoverController& hover, GestureTracker& gesture);
@@ -42,10 +39,8 @@ public:
   void rebuild(std::optional<Size> sizeOverride, Runtime& runtime);
 
   StateStore& stateStore() noexcept;
-  LayoutEngine& layoutEngine() noexcept;
   SceneGeometryIndex& sceneGeometry() noexcept;
   SceneGeometryIndex const& sceneGeometry() const noexcept;
-  LayoutTree const& layoutTree() const noexcept;
   ActionRegistry& actionRegistryForBuild() noexcept;
   ActionRegistry const& actionRegistryCommitted() const noexcept;
 
@@ -58,14 +53,12 @@ private:
   GestureTracker& gesture_;
 
   std::unique_ptr<RootHolder> rootHolder_;
-  LayoutEngine layoutEngine_;
   StateStore stateStore_;
-  LayoutTree layoutTree_{};
   ObserverHandle rebuildHandle_{};
   ActionRegistry actionRegistryBuild_{};
   ActionRegistry actionRegistryCommitted_{};
-  MeasureCache measureCache_{};
   SceneGeometryIndex sceneGeometry_{};
+  Rect buildSlotRect_{};
   std::uint64_t textFrameIndex_{0};
 };
 

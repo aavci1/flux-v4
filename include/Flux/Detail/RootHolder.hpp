@@ -5,11 +5,9 @@
 /// Part of the Flux public API.
 
 
-#include <Flux/UI/LayoutContext.hpp>
 #include <Flux/UI/Component.hpp>
 #include <Flux/UI/Element.hpp>
 
-#include <cstdint>
 #include <memory>
 #include <type_traits>
 #include <utility>
@@ -34,15 +32,17 @@ auto makeCachedLeaf(C const& value) {
 /// for the lifetime of the window.
 struct RootHolder {
   virtual ~RootHolder() = default;
-  virtual void layoutInto(LayoutContext& ctx) const = 0;
+  virtual void prepareSceneElement(LayoutConstraints const& constraints) const = 0;
   [[nodiscard]] virtual ComponentKey sceneRootKey() const noexcept = 0;
   [[nodiscard]] virtual Element const* sceneElementForCurrentBuild() const noexcept = 0;
+  [[nodiscard]] virtual bool sceneElementDescendantsStable() const noexcept = 0;
 };
 
 template<typename C>
 struct TypedRootHolder final : RootHolder {
   C value;
   [[no_unique_address]] std::conditional_t<CompositeComponent<C>, std::monostate, Element> cachedLeaf_;
+  mutable bool sceneDescendantsStable_ = false;
 
   explicit TypedRootHolder(std::in_place_t)
       : value{}
@@ -54,17 +54,16 @@ struct TypedRootHolder final : RootHolder {
       : value(std::move(c))
       , cachedLeaf_(detail::makeCachedLeaf(value)) {}
 
-  void layoutInto(LayoutContext& ctx) const override {
+  void prepareSceneElement(LayoutConstraints const& constraints) const override {
     if constexpr (CompositeComponent<C>) {
-      ctx.pushChildIndex();
-      ComponentKey const key = ctx.nextCompositeKey();
+      ComponentKey const key = sceneRootKey();
       StateStore* store = StateStore::current();
       detail::CompositeBodyResolution resolution{};
       if (store) {
         store->pushComponent(key, std::type_index(typeid(C)));
-        store->pushCompositeConstraints(ctx.constraints());
+        store->pushCompositeConstraints(constraints);
         try {
-          resolution = detail::resolveCompositeBody(store, key, ctx.constraints(), value,
+          resolution = detail::resolveCompositeBody(store, key, constraints, value,
                                                     [&] { return value.body(); });
         } catch (...) {
           store->popCompositeConstraints();
@@ -74,24 +73,12 @@ struct TypedRootHolder final : RootHolder {
         store->popCompositeConstraints();
         store->popComponent();
       }
-      Element& child = store ? *resolution.body : ctx.pinElement(Element{value.body()});
-      ctx.beginCompositeBodySubtree(key);
-      ctx.pushCompositeKeyTail(key);
       if (store) {
-        store->recordBodyConstraints(key, ctx.constraints());
-        store->pushCompositePathStable(resolution.descendantsStable);
+        store->recordBodyConstraints(key, constraints);
       }
-      child.layout(ctx);
-      if (store) {
-        store->popCompositePathStable();
-      }
-      ctx.popCompositeKeyTail();
-      ctx.popChildIndex();
+      sceneDescendantsStable_ = resolution.descendantsStable;
     } else {
-      static_assert(std::is_copy_constructible_v<C>,
-          "Leaf root component must be copy-constructible. "
-          "If C has Signal/Animation members, give it a body() method.");
-      cachedLeaf_.layout(ctx);
+      sceneDescendantsStable_ = false;
     }
   }
 
@@ -113,6 +100,10 @@ struct TypedRootHolder final : RootHolder {
     } else {
       return ComponentKey{LocalId::fromIndex(0)};
     }
+  }
+
+  [[nodiscard]] bool sceneElementDescendantsStable() const noexcept override {
+    return sceneDescendantsStable_;
   }
 };
 

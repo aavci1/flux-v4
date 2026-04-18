@@ -99,10 +99,6 @@ ActionRegistry& Runtime::actionRegistryForBuild() noexcept {
   return buildOrchestrator_.actionRegistryForBuild();
 }
 
-LayoutTree const& Runtime::mainLayoutTree() const noexcept {
-  return buildOrchestrator_.layoutTree();
-}
-
 void Runtime::requestFocusInSubtree(ComponentKey const& subtreeKey, std::optional<OverlayId> overlayScope) {
   if (overlayScope.has_value()) {
     if (OverlayEntry const* entry = window_.overlayManager().find(*overlayScope)) {
