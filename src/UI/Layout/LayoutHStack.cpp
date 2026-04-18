@@ -95,6 +95,9 @@ Size HStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints, 
   for (float w : allocW) {
     outW += w;
   }
+  if (widthConstrained) {
+    outW = assignedW;
+  }
   return {outW, outH};
 }
 

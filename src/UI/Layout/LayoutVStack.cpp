@@ -67,11 +67,9 @@ Size VStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints, 
   for (float h : allocH) {
     sumH += h;
   }
-  float w = maxW;
-  if (std::isfinite(assignedW) && assignedW > 0.f) {
-    w = std::max(w, assignedW);
-  }
-  return {w, sumH};
+  float const outW = assignedW > 0.f ? assignedW : maxW;
+  float const outH = heightConstrained ? assignedH : sumH;
+  return {outW, outH};
 }
 
 } // namespace flux

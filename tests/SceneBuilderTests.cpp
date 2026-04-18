@@ -25,6 +25,7 @@
 #include <Flux/UI/Views/ScrollView.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/PopoverCalloutShape.hpp>
+#include <Flux/UI/Views/Spacer.hpp>
 #include <Flux/UI/Views/Text.hpp>
 #include <Flux/UI/Views/VStack.hpp>
 
@@ -84,6 +85,50 @@ public:
   }
 };
 
+class VariableTextSystem final : public TextSystem {
+public:
+  std::shared_ptr<TextLayout const> layout(AttributedString const& text, float maxWidth,
+                                           TextLayoutOptions const&) override {
+    auto out = std::make_shared<TextLayout>();
+    out->measuredSize = measuredSizeForLength(text.utf8.size(), maxWidth);
+    return out;
+  }
+
+  std::shared_ptr<TextLayout const> layout(std::string_view text, Font const&, Color const&, float maxWidth,
+                                           TextLayoutOptions const&) override {
+    auto out = std::make_shared<TextLayout>();
+    out->measuredSize = measuredSizeForLength(text.size(), maxWidth);
+    return out;
+  }
+
+  Size measure(AttributedString const& text, float maxWidth, TextLayoutOptions const&) override {
+    return measuredSizeForLength(text.utf8.size(), maxWidth);
+  }
+
+  Size measure(std::string_view text, Font const&, Color const&, float maxWidth,
+               TextLayoutOptions const&) override {
+    return measuredSizeForLength(text.size(), maxWidth);
+  }
+
+  std::uint32_t resolveFontId(std::string_view, float, bool) override { return 0; }
+
+  std::vector<std::uint8_t> rasterizeGlyph(std::uint32_t, std::uint16_t, float, std::uint32_t&,
+                                           std::uint32_t&, Point&) override {
+    return {};
+  }
+
+private:
+  static Size measuredSizeForLength(std::size_t length, float maxWidth) {
+    float const intrinsicWidth = std::max(1.f, 7.f * static_cast<float>(length));
+    if (maxWidth > 0.f) {
+      float const lineWidth = std::min(intrinsicWidth, maxWidth);
+      float const lines = std::max(1.f, std::ceil(intrinsicWidth / maxWidth));
+      return Size{lineWidth, 14.f * lines};
+    }
+    return Size{intrinsicWidth, 14.f};
+  }
+};
+
 class NullRenderer final : public Renderer {
 public:
   int rectCount = 0;
@@ -132,6 +177,166 @@ namespace {
 
 Element keyedRect(std::string key, float width, float height) {
   return Element{Rectangle{}}.key(std::move(key)).size(width, height);
+}
+
+Element demoColorBlock(float width, float height) {
+  return Element{Rectangle{}}.size(width, height);
+}
+
+Element demoSectionCard(std::string title, std::string caption, Element content) {
+  return VStack{
+      .spacing = 16.f,
+      .children = children(
+          Text{
+              .text = std::move(title),
+              .horizontalAlignment = HorizontalAlignment::Leading,
+          },
+          Text{
+              .text = std::move(caption),
+              .horizontalAlignment = HorizontalAlignment::Leading,
+              .wrapping = TextWrapping::Wrap,
+          },
+          std::move(content)
+      ),
+  }
+      .padding(16.f)
+      .fill(FillStyle::solid(Color::hex(0xFFFFFF)))
+      .stroke(StrokeStyle::solid(Color::hex(0xE0E0E0), 1.f))
+      .cornerRadius(CornerRadius{12.f});
+}
+
+Element demoVStackCard() {
+  return demoSectionCard(
+      "VStack",
+      "Children flow top-to-bottom. Center alignment keeps each child at its intrinsic width and centers it in the column.",
+      VStack{
+          .spacing = 12.f,
+          .alignment = Alignment::Center,
+          .children = children(
+              demoColorBlock(160.f, 34.f),
+              demoColorBlock(220.f, 42.f),
+              demoColorBlock(120.f, 30.f),
+              HStack{
+                  .spacing = 8.f,
+                  .alignment = Alignment::Center,
+                  .children = children(
+                      Text{
+                          .text = "Rows can also host nested stacks",
+                          .horizontalAlignment = HorizontalAlignment::Leading,
+                      },
+                      Spacer{},
+                      Text{
+                          .text = "nested",
+                          .horizontalAlignment = HorizontalAlignment::Trailing,
+                      }
+                  )
+              }
+                  .padding(12.f)
+                  .fill(FillStyle::solid(Color::hex(0xF7F7F7)))
+                  .cornerRadius(CornerRadius{8.f})
+          )
+      }
+          .padding(12.f)
+          .fill(FillStyle::solid(Color::hex(0xFAFAFA)))
+          .cornerRadius(CornerRadius{8.f}));
+}
+
+Element demoHStackCard() {
+  return demoSectionCard(
+      "HStack",
+      "Children flow left-to-right. Flex growth lets selected items absorb remaining width.",
+      VStack{
+          .spacing = 12.f,
+          .children = children(
+              HStack{
+                  .spacing = 12.f,
+                  .alignment = Alignment::Stretch,
+                  .children = children(
+                      demoColorBlock(56.f, 54.f).flex(2.f, 1.f, 0.f),
+                      demoColorBlock(56.f, 76.f),
+                      demoColorBlock(56.f, 40.f).flex(1.f, 1.f, 0.f),
+                      demoColorBlock(56.f, 54.f)
+                  )
+              },
+              HStack{
+                  .spacing = 0.f,
+                  .alignment = Alignment::Center,
+                  .children = children(
+                      Text{.text = "Leading"},
+                      Spacer{},
+                      Text{
+                          .text = "Spacer pushes this trailing label",
+                          .horizontalAlignment = HorizontalAlignment::Trailing,
+                      }
+                  )
+              }
+                  .padding(12.f)
+                  .fill(FillStyle::solid(Color::hex(0xF7F7F7)))
+                  .cornerRadius(CornerRadius{8.f})
+          )
+      }
+          .padding(12.f)
+          .fill(FillStyle::solid(Color::hex(0xFAFAFA)))
+          .cornerRadius(CornerRadius{8.f}));
+}
+
+Element demoZStackCard() {
+  return demoSectionCard(
+      "ZStack",
+      "Children share the same space. This is useful for overlays, badges, and stacked decoration.",
+      ZStack{
+          .horizontalAlignment = Alignment::Center,
+          .verticalAlignment = Alignment::Center,
+          .children = children(
+              Element{Rectangle{}}.size(0.f, 180.f),
+              Element{Rectangle{}}.size(220.f, 104.f),
+              Element{VStack{
+                  .spacing = 4.f,
+                  .alignment = Alignment::Center,
+                  .children = children(
+                      Text{
+                          .text = "Overlay content",
+                          .horizontalAlignment = HorizontalAlignment::Center,
+                      },
+                      Text{
+                          .text = "Centered inside a shared layer",
+                          .horizontalAlignment = HorizontalAlignment::Center,
+                      }
+                  )
+              }}
+          )
+      }
+          .padding(12.f)
+          .fill(FillStyle::solid(Color::hex(0xFAFAFA)))
+          .cornerRadius(CornerRadius{8.f}));
+}
+
+Element demoLayoutRoot() {
+  return ScrollView{
+      .axis = ScrollAxis::Vertical,
+      .children = children(
+          VStack{
+              .spacing = 16.f,
+              .children = children(
+                  Text{
+                      .text = "Layout Demo",
+                      .horizontalAlignment = HorizontalAlignment::Leading,
+                  },
+                  Text{
+                      .text =
+                          "Focused examples for VStack, HStack, ZStack, Grid, and how they compose in practice.",
+                      .horizontalAlignment = HorizontalAlignment::Leading,
+                      .wrapping = TextWrapping::Wrap,
+                  },
+                  demoVStackCard(),
+                  demoHStackCard(),
+                  demoZStackCard()
+              )
+          }
+              .padding(20.f)
+      )
+  }
+      .fill(FillStyle::solid(Color::hex(0xFFFFFF)));
 }
 
 struct InteractiveRectTree {
@@ -560,6 +765,259 @@ TEST_CASE("SceneBuilder: stretched flex HStack leaves adopt their assigned slot 
   REQUIRE(rectNode != nullptr);
   CHECK(rectNode->size.width == doctest::Approx(100.f));
   CHECK(rectNode->size.height == doctest::Approx(50.f));
+}
+
+TEST_CASE("SceneBuilder: constrained stacks report their assigned slot instead of growing with overflowing content") {
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 198.f;
+  constraints.maxHeight = 180.f;
+
+  Element column = VStack{
+      .alignment = Alignment::Center,
+      .children = {
+          HStack{
+              .spacing = 0.f,
+              .children = {
+                  Text{.text = "Leading"},
+                  Element{Spacer{}},
+                  Text{.text = "Spacer pushes this trailing label"},
+              },
+          },
+      },
+  };
+
+  std::unique_ptr<SceneNode> tree = builder.build(column, NodeId{1ull}, constraints);
+  REQUIRE(tree != nullptr);
+  CHECK(tree->bounds.width == doctest::Approx(198.f));
+  CHECK(tree->bounds.height == doctest::Approx(180.f));
+  REQUIRE(tree->children().size() == 1);
+  CHECK(tree->children()[0]->position.x == doctest::Approx(0.f));
+  CHECK(tree->children()[0]->bounds.width == doctest::Approx(198.f));
+}
+
+TEST_CASE("SceneBuilder: centered ZStack overlay is not centered twice") {
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 220.f;
+  constraints.maxHeight = 180.f;
+
+  Element overlay = ZStack{
+      .horizontalAlignment = Alignment::Center,
+      .verticalAlignment = Alignment::Center,
+      .children = {
+          Element{Rectangle{}}.size(0.f, 180.f),
+          Element{Rectangle{}}.size(220.f, 104.f),
+          Element{VStack{
+              .spacing = 4.f,
+              .alignment = Alignment::Center,
+              .children = {
+                  Text{.text = "Overlay content", .horizontalAlignment = HorizontalAlignment::Center},
+                  Text{.text = "Centered inside a shared layer", .horizontalAlignment = HorizontalAlignment::Center},
+              },
+          }},
+      },
+  };
+
+  std::unique_ptr<SceneNode> tree = builder.build(overlay, NodeId{1ull}, constraints);
+  REQUIRE(tree != nullptr);
+  REQUIRE(tree->children().size() == 3);
+  SceneNode* overlayColumn = tree->children()[2].get();
+  CHECK(overlayColumn->position.x == doctest::Approx(0.f));
+  CHECK(overlayColumn->position.y == doctest::Approx(0.f));
+  CHECK(overlayColumn->bounds.width == doctest::Approx(220.f));
+  CHECK(overlayColumn->bounds.height == doctest::Approx(180.f));
+}
+
+TEST_CASE("SceneBuilder: centered VStack overflow is allowed to go negative") {
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 120.f;
+  constraints.maxHeight = 80.f;
+
+  Element column = VStack{
+      .alignment = Alignment::Center,
+      .children = {
+          Element{Rectangle{}}.size(160.f, 24.f),
+      },
+  };
+
+  std::unique_ptr<SceneNode> tree = builder.build(column, NodeId{1ull}, constraints);
+  REQUIRE(tree != nullptr);
+  REQUIRE(tree->children().size() == 1);
+  CHECK(tree->bounds.width == doctest::Approx(120.f));
+  CHECK(tree->children()[0]->position.x == doctest::Approx(-20.f));
+}
+
+TEST_CASE("SceneBuilder: HStack flexed explicit leaves stay collapsed when resized narrower") {
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  auto makeRow = []() -> Element {
+    return HStack{
+        .spacing = 12.f,
+        .alignment = Alignment::Stretch,
+        .children = children(
+            Element{Rectangle{}}.size(56.f, 54.f).flex(2.f, 1.f, 0.f),
+            Element{Rectangle{}}.size(56.f, 76.f),
+            Element{Rectangle{}}.size(56.f, 40.f).flex(1.f, 1.f, 0.f),
+            Element{Rectangle{}}.size(56.f, 54.f)),
+    };
+  };
+
+  auto findLeafRects = [](SceneNode const& root) {
+    std::vector<RectSceneNode const*> rects{};
+    std::function<void(SceneNode const&)> walk = [&](SceneNode const& node) {
+      if (auto const* rect = dynamic_cast<RectSceneNode const*>(&node)) {
+        rects.push_back(rect);
+      }
+      for (std::unique_ptr<SceneNode> const& child : node.children()) {
+        walk(*child);
+      }
+    };
+    walk(root);
+    return rects;
+  };
+
+  LayoutConstraints wider{};
+  wider.maxWidth = 151.f;
+  wider.maxHeight = 76.f;
+
+  LayoutConstraints narrower{};
+  narrower.maxWidth = 145.f;
+  narrower.maxHeight = 76.f;
+
+  std::unique_ptr<SceneNode> tree = builder.build(makeRow(), NodeId{1ull}, wider);
+  REQUIRE(tree != nullptr);
+  std::vector<RectSceneNode const*> rects = findLeafRects(*tree);
+  REQUIRE(rects.size() == 4);
+  CHECK(rects[0]->size.width == doctest::Approx(1.5f));
+  CHECK(rects[1]->size.width == doctest::Approx(56.f));
+  CHECK(rects[2]->size.width == doctest::Approx(1.5f));
+  CHECK(rects[3]->size.width == doctest::Approx(56.f));
+
+  tree = builder.build(makeRow(), NodeId{1ull}, narrower, std::move(tree));
+  REQUIRE(tree != nullptr);
+  rects = findLeafRects(*tree);
+  REQUIRE(rects.size() == 4);
+  CHECK(rects[0]->size.width == doctest::Approx(0.f));
+  CHECK(rects[1]->size.width == doctest::Approx(56.f));
+  CHECK(rects[2]->size.width == doctest::Approx(0.f));
+  CHECK(rects[3]->size.width == doctest::Approx(56.f));
+}
+
+TEST_CASE("SceneBuilder: layout demo cards shrink on narrow rebuild instead of retaining wide widths") {
+  VariableTextSystem textSystem{};
+  SceneGeometryIndex geometry{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  SceneBuilder builder{textSystem, EnvironmentStack::current(), &geometry};
+
+  LayoutConstraints wide{};
+  wide.maxWidth = 960.f;
+  wide.maxHeight = 920.f;
+
+  LayoutConstraints narrow{};
+  narrow.maxWidth = 294.f;
+  narrow.maxHeight = 921.f;
+
+  std::unique_ptr<SceneNode> tree = builder.build(demoLayoutRoot(), NodeId{1ull}, wide);
+  REQUIRE(tree != nullptr);
+  tree = builder.build(demoLayoutRoot(), NodeId{1ull}, narrow, std::move(tree));
+  REQUIRE(tree != nullptr);
+
+  std::optional<Rect> rootContent = geometry.rectForKey(ComponentKey{LocalId::fromIndex(0)});
+  std::optional<Rect> vstackCard = geometry.rectForKey(ComponentKey{LocalId::fromIndex(0), LocalId::fromIndex(2)});
+  std::optional<Rect> vstackCardContent =
+      geometry.rectForKey(ComponentKey{LocalId::fromIndex(0), LocalId::fromIndex(2), LocalId::fromIndex(2)});
+  std::optional<Rect> vstackNestedRow = geometry.rectForKey(
+      ComponentKey{LocalId::fromIndex(0), LocalId::fromIndex(2), LocalId::fromIndex(2), LocalId::fromIndex(3)});
+  std::optional<Rect> hstackNestedRow = geometry.rectForKey(
+      ComponentKey{LocalId::fromIndex(0), LocalId::fromIndex(3), LocalId::fromIndex(2), LocalId::fromIndex(1)});
+
+  REQUIRE(rootContent.has_value());
+  REQUIRE(vstackCard.has_value());
+  REQUIRE(vstackCardContent.has_value());
+  REQUIRE(vstackNestedRow.has_value());
+  REQUIRE(hstackNestedRow.has_value());
+
+  CHECK(rootContent->width == doctest::Approx(294.f));
+  CHECK(vstackCard->width == doctest::Approx(254.f));
+  CHECK(vstackCardContent->width == doctest::Approx(222.f));
+  CHECK(vstackNestedRow->width == doctest::Approx(198.f));
+  CHECK(hstackNestedRow->width == doctest::Approx(198.f));
+
+  REQUIRE(tree->children().size() == 1);
+  SceneNode const* scrollViewport = tree->children()[0].get();
+  REQUIRE(scrollViewport->children().size() >= 1);
+  SceneNode const* scrollContent = scrollViewport->children()[0].get();
+  CHECK(scrollContent->bounds.x >= doctest::Approx(0.f));
+  CHECK(scrollContent->bounds.width <= doctest::Approx(294.f));
+}
+
+TEST_CASE("SceneBuilder: layout demo overlay text column stays centered after narrow rebuild") {
+  VariableTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  LayoutConstraints wide{};
+  wide.maxWidth = 960.f;
+  wide.maxHeight = 920.f;
+
+  LayoutConstraints narrow{};
+  narrow.maxWidth = 294.f;
+  narrow.maxHeight = 921.f;
+
+  std::unique_ptr<SceneNode> tree = builder.build(demoZStackCard(), NodeId{1ull}, wide);
+  REQUIRE(tree != nullptr);
+  tree = builder.build(demoZStackCard(), NodeId{1ull}, narrow, std::move(tree));
+  REQUIRE(tree != nullptr);
+
+  std::function<SceneNode const*(SceneNode const*)> findOverlayStack = [&](SceneNode const* node) -> SceneNode const* {
+    if (!node) {
+      return nullptr;
+    }
+    if (node->kind() == SceneNodeKind::Group && node->children().size() == 3 &&
+        node->children()[0]->kind() == SceneNodeKind::Rect &&
+        node->children()[1]->kind() == SceneNodeKind::Rect) {
+      return node;
+    }
+    for (std::unique_ptr<SceneNode> const& child : node->children()) {
+      if (SceneNode const* match = findOverlayStack(child.get())) {
+        return match;
+      }
+    }
+    return nullptr;
+  };
+
+  SceneNode const* overlayStack = findOverlayStack(tree.get());
+  REQUIRE(overlayStack != nullptr);
+  SceneNode const* overlayColumn = overlayStack->children()[2].get();
+  CHECK(overlayColumn->position.x == doctest::Approx(0.f));
+  CHECK(overlayColumn->position.y == doctest::Approx(0.f));
+  CHECK(overlayColumn->bounds.width == doctest::Approx(238.f));
+  CHECK(overlayColumn->bounds.height == doctest::Approx(180.f));
 }
 
 TEST_CASE("SceneGeometryIndex: committed queries use current frames and previous-frame fallback") {

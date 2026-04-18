@@ -132,6 +132,11 @@ void setGroupBounds(SceneNode& node, Size minSize = {}) {
   node.markBoundsDirty();
 }
 
+void setAssignedGroupBounds(SceneNode& node, Size size) {
+  node.bounds = sizeRect(size);
+  node.markBoundsDirty();
+}
+
 LayoutConstraints insetConstraints(LayoutConstraints constraints, EdgeInsets const& padding) {
   float const dx = std::max(0.f, padding.left) + std::max(0.f, padding.right);
   float const dy = std::max(0.f, padding.top) + std::max(0.f, padding.bottom);
@@ -289,21 +294,27 @@ Rect assignedFrameForLeaf(Size measuredSize, LayoutConstraints const& constraint
   }
   float slotWidth = 0.f;
   float slotHeight = 0.f;
-  if (std::isfinite(constraints.maxWidth) && constraints.maxWidth > 0.f) {
-    slotWidth = constraints.maxWidth;
+  bool hasAssignedWidth = false;
+  bool hasAssignedHeight = false;
+  if (std::isfinite(constraints.maxWidth)) {
+    slotWidth = std::max(0.f, constraints.maxWidth);
+    hasAssignedWidth = true;
   } else if (std::isfinite(constraints.minWidth) && constraints.minWidth > 0.f) {
     slotWidth = constraints.minWidth;
+    hasAssignedWidth = true;
   }
-  if (std::isfinite(constraints.maxHeight) && constraints.maxHeight > 0.f) {
-    slotHeight = constraints.maxHeight;
+  if (std::isfinite(constraints.maxHeight)) {
+    slotHeight = std::max(0.f, constraints.maxHeight);
+    hasAssignedHeight = true;
   } else if (std::isfinite(constraints.minHeight) && constraints.minHeight > 0.f) {
     slotHeight = constraints.minHeight;
+    hasAssignedHeight = true;
   }
   Rect const childFrame{
       0.f,
       0.f,
-      slotWidth > 0.f ? slotWidth : measuredSize.width,
-      slotHeight > 0.f ? slotHeight : measuredSize.height,
+      hasAssignedWidth ? slotWidth : measuredSize.width,
+      hasAssignedHeight ? slotHeight : measuredSize.height,
   };
   return detail::resolveLeafLayoutBounds(explicitBox, childFrame, constraints, hints);
 }
@@ -1028,7 +1039,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     for (float h : allocH) {
       usedH += h;
     }
-    float y = heightConstrained ? std::max(0.f, (assignedH - usedH) * 0.5f) : 0.f;
+    float y = heightConstrained ? (assignedH - usedH) * 0.5f : 0.f;
     for (std::size_t i = 0; i < stack.children.size(); ++i) {
       Element const& child = stack.children[i];
       LocalId const local = childLocalId(child, i);
@@ -1055,7 +1066,11 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
       y += allocH[i] + stack.spacing;
     }
     group->replaceChildren(std::move(nextChildren));
-    setGroupBounds(*group, Size{std::max(maxChildW, assignedW), std::max(usedH, 0.f)});
+    Size const groupSize{
+        innerW > 0.f ? innerW : maxChildW,
+        heightConstrained ? std::max(0.f, assignedH) : std::max(usedH, 0.f),
+    };
+    setAssignedGroupBounds(*group, groupSize);
     core = std::move(group);
     break;
   }
@@ -1135,7 +1150,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     for (float w : allocW) {
       usedW += w;
     }
-    float x = widthConstrained ? std::max(0.f, (assignedW - usedW) * 0.5f) : 0.f;
+    float x = widthConstrained ? (assignedW - usedW) * 0.5f : 0.f;
 
     std::vector<std::unique_ptr<SceneNode>> nextChildren{};
     nextChildren.reserve(stack.children.size());
@@ -1169,7 +1184,12 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
       x += allocW[i] + stack.spacing;
     }
     group->replaceChildren(std::move(nextChildren));
-    setGroupBounds(*group, Size{std::max(usedW, 0.f), std::max(rowInnerH, 0.f)});
+    Size const groupSize{
+        widthConstrained ? std::max(0.f, assignedW) : std::max(usedW, 0.f),
+        stack.alignment == Alignment::Stretch && heightConstrained ? std::max(0.f, assignedH)
+                                                                   : std::max(rowInnerH, 0.f),
+    };
+    setAssignedGroupBounds(*group, groupSize);
     core = std::move(group);
     break;
   }
