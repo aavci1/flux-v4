@@ -38,6 +38,9 @@ private:
     LayoutConstraints constraints{};
     LayoutHints hints{};
     Point origin{};
+    Size assignedSize{};
+    bool hasAssignedWidth = false;
+    bool hasAssignedHeight = false;
     ComponentKey key{};
   };
 
@@ -48,7 +51,8 @@ private:
 
   [[nodiscard]] FrameState const& frame() const;
   void pushFrame(LayoutConstraints const& constraints, LayoutHints const& hints, Point origin,
-                 ComponentKey key);
+                 ComponentKey key, Size assignedSize = {}, bool hasAssignedWidth = false,
+                 bool hasAssignedHeight = false);
   void popFrame();
 
   [[nodiscard]] Size measureElement(Element const& el, LayoutConstraints const& constraints,

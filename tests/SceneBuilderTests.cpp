@@ -26,6 +26,7 @@
 #include <Flux/UI/Views/ScrollView.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/PopoverCalloutShape.hpp>
+#include <Flux/UI/Views/ScaleAroundCenter.hpp>
 #include <Flux/UI/Views/Spacer.hpp>
 #include <Flux/UI/Views/Text.hpp>
 #include <Flux/UI/Views/VStack.hpp>
@@ -178,6 +179,18 @@ struct StoreScope {
   }
 
   ~StoreScope() { flux::StateStore::setCurrent(previous); }
+};
+
+struct ScrollSizedComposite {
+  std::string key;
+  float width = 0.f;
+  float height = 0.f;
+
+  Element body() const {
+    return Element{Rectangle{}}
+        .key(key)
+        .size(width, height);
+  }
 };
 
 } // namespace
@@ -671,6 +684,54 @@ TEST_CASE("SceneBuilder: composite root scroll view keeps local state separate f
   CHECK(contentGroup->children()[1]->position.y == doctest::Approx(18.f));
 }
 
+TEST_CASE("SceneBuilder: scroll view descendants keep the same composite identities between measure and build") {
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  StoreScope scope{};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 320.f;
+  constraints.maxHeight = 180.f;
+
+  Element root = ScrollView{
+      .axis = ScrollAxis::Vertical,
+      .children = children(
+          ScrollSizedComposite{.key = "first", .width = 40.f, .height = 180.f},
+          ScrollSizedComposite{.key = "second", .width = 50.f, .height = 220.f},
+          ScrollSizedComposite{.key = "third", .width = 60.f, .height = 120.f}),
+  };
+
+  scope.store.beginRebuild(true);
+  std::unique_ptr<SceneNode> tree = builder.build(root, NodeId{1ull}, constraints);
+  scope.store.endRebuild();
+
+  REQUIRE(tree != nullptr);
+
+  std::vector<Size> rectSizes{};
+  std::function<void(SceneNode const&)> walk = [&](SceneNode const& node) {
+    if (auto const* rect = dynamic_cast<RectSceneNode const*>(&node)) {
+      rectSizes.push_back(rect->size);
+    }
+    for (std::unique_ptr<SceneNode> const& child : node.children()) {
+      walk(*child);
+    }
+  };
+  walk(*tree);
+
+  auto hasRectSize = [&](float width, float height) {
+    return std::any_of(rectSizes.begin(), rectSizes.end(), [&](Size const& size) {
+      return size.width == doctest::Approx(width) && size.height == doctest::Approx(height);
+    });
+  };
+
+  CHECK(hasRectSize(320.f, 180.f));
+  CHECK(hasRectSize(320.f, 220.f));
+  CHECK(hasRectSize(320.f, 120.f));
+}
+
 TEST_CASE("SceneBuilder: modifier chrome repaints when child bounds change across reuse") {
   VariableTextSystem textSystem{};
   EnvironmentLayer env{};
@@ -678,9 +739,13 @@ TEST_CASE("SceneBuilder: modifier chrome repaints when child bounds change acros
   EnvironmentScope envScope{std::move(env)};
   SceneBuilder builder{textSystem, EnvironmentStack::current()};
 
-  LayoutConstraints constraints{};
-  constraints.maxWidth = 300.f;
-  constraints.maxHeight = 80.f;
+  LayoutConstraints narrowConstraints{};
+  narrowConstraints.maxWidth = 120.f;
+  narrowConstraints.maxHeight = 80.f;
+
+  LayoutConstraints wideConstraints{};
+  wideConstraints.maxWidth = 300.f;
+  wideConstraints.maxHeight = 80.f;
 
   auto makeLabel = [](std::string text) -> Element {
     return Text{
@@ -692,7 +757,7 @@ TEST_CASE("SceneBuilder: modifier chrome repaints when child bounds change acros
         .fill(FillStyle::solid(Colors::black));
   };
 
-  std::unique_ptr<SceneNode> tree = builder.build(makeLabel("Short"), NodeId{1ull}, constraints);
+  std::unique_ptr<SceneNode> tree = builder.build(makeLabel("Short"), NodeId{1ull}, narrowConstraints);
   REQUIRE(tree != nullptr);
 
   NullRenderer firstRenderer{};
@@ -700,7 +765,7 @@ TEST_CASE("SceneBuilder: modifier chrome repaints when child bounds change acros
   REQUIRE(firstRenderer.rects.size() == 1);
   float const firstWidth = firstRenderer.rects.front().width;
 
-  tree = builder.build(makeLabel("A much longer label"), NodeId{1ull}, constraints, std::move(tree));
+  tree = builder.build(makeLabel("A much longer label"), NodeId{1ull}, wideConstraints, std::move(tree));
   REQUIRE(tree != nullptr);
 
   NullRenderer secondRenderer{};
@@ -838,7 +903,7 @@ TEST_CASE("SceneBuilder: centered text keeps its assigned box for boxed layout")
   CHECK(renderer.textCount == 1);
 }
 
-TEST_CASE("SceneBuilder: padded text uses the inner content box for layout") {
+TEST_CASE("SceneBuilder: padded text uses the assigned slot's inner content box for layout") {
   NullTextSystem textSystem{};
   EnvironmentLayer env{};
   env.set(Theme::light());
@@ -870,8 +935,93 @@ TEST_CASE("SceneBuilder: padded text uses the inner content box for layout") {
 
   auto* textNode = dynamic_cast<TextSceneNode*>(layoutWrapper->children()[0].get());
   REQUIRE(textNode != nullptr);
-  CHECK(textNode->allocation.width == doctest::Approx(48.f));
-  CHECK(textNode->allocation.height == doctest::Approx(14.f));
+  CHECK(wrapper->bounds.width == doctest::Approx(200.f));
+  CHECK(wrapper->bounds.height == doctest::Approx(80.f));
+  CHECK(textNode->allocation.width == doctest::Approx(176.f));
+  CHECK(textNode->allocation.height == doctest::Approx(64.f));
+}
+
+TEST_CASE("SceneBuilder: badge background rectangle keeps its assigned ZStack slot") {
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 48.2f;
+  constraints.maxHeight = 39.f;
+
+  Element badge = ZStack{
+      .horizontalAlignment = Alignment::Center,
+      .verticalAlignment = Alignment::Center,
+      .children = children(
+          Rectangle{}.fill(FillStyle::solid(Colors::black)).cornerRadius(CornerRadius{10.f}),
+          Text{
+              .text = "Saved",
+              .horizontalAlignment = HorizontalAlignment::Center,
+              .verticalAlignment = VerticalAlignment::Center,
+          }
+              .padding(6.f, 10.f, 6.f, 10.f)),
+  };
+
+  std::unique_ptr<SceneNode> tree = builder.build(badge, NodeId{1ull}, constraints);
+  REQUIRE(tree != nullptr);
+
+  auto findRect = [&](this auto const& self, SceneNode* node) -> RectSceneNode* {
+    if (!node) {
+      return nullptr;
+    }
+    if (auto* rect = dynamic_cast<RectSceneNode*>(node)) {
+      return rect;
+    }
+    for (std::unique_ptr<SceneNode> const& child : node->children()) {
+      if (RectSceneNode* rect = self(child.get())) {
+        return rect;
+      }
+    }
+    return nullptr;
+  };
+
+  auto* rectNode = findRect(tree.get());
+  REQUIRE(rectNode != nullptr);
+  CHECK(rectNode->size.width == doctest::Approx(48.2f));
+  CHECK(rectNode->size.height == doctest::Approx(39.f));
+}
+
+TEST_CASE("SceneBuilder: scale around center keeps the parent-assigned slot") {
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 414.f;
+  constraints.maxHeight = 49.f;
+
+  Element scaled = ScaleAroundCenter{
+      .scale = 1.f,
+      .child = Text{
+          .text = "Create Invoice",
+          .horizontalAlignment = HorizontalAlignment::Center,
+          .verticalAlignment = VerticalAlignment::Center,
+      }
+                   .fill(FillStyle::solid(Colors::black))
+                   .padding(16.f),
+  };
+
+  std::unique_ptr<SceneNode> tree = builder.build(scaled, NodeId{1ull}, constraints);
+  auto* transformNode = dynamic_cast<CustomTransformSceneNode*>(tree.get());
+  REQUIRE(transformNode != nullptr);
+  CHECK(transformNode->bounds.width == doctest::Approx(414.f));
+  CHECK(transformNode->bounds.height == doctest::Approx(49.f));
+  REQUIRE(transformNode->children().size() == 1);
+
+  auto* wrapper = dynamic_cast<ModifierSceneNode*>(transformNode->children()[0].get());
+  REQUIRE(wrapper != nullptr);
+  CHECK(wrapper->children()[0]->bounds.width == doctest::Approx(414.f));
+  CHECK(wrapper->children()[0]->bounds.height == doctest::Approx(49.f));
 }
 
 TEST_CASE("SceneBuilder: stretched flex HStack leaves adopt their assigned slot size") {
@@ -946,6 +1096,44 @@ TEST_CASE("SceneBuilder: constrained stacks report their assigned slot instead o
   REQUIRE(tree->children().size() == 1);
   CHECK(tree->children()[0]->position.x == doctest::Approx(0.f));
   CHECK(tree->children()[0]->bounds.width == doctest::Approx(198.f));
+}
+
+TEST_CASE("SceneBuilder: non-stretch HStack children keep their intrinsic height slot") {
+  VariableTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 640.f;
+  constraints.maxHeight = 320.f;
+
+  Element row = HStack{
+      .spacing = 16.f,
+      .alignment = Alignment::Start,
+      .children = children(
+          Element{VStack{
+              .spacing = 12.f,
+              .alignment = Alignment::Start,
+              .children = {
+                  Text{.text = "Section title"},
+                  Text{.text = "Section body copy that should stay top aligned."},
+              },
+          }}
+              .flex(1.f, 1.f, 0.f),
+          Element{Rectangle{}}.size(24.f, 24.f)),
+  };
+
+  std::unique_ptr<SceneNode> tree = builder.build(row, NodeId{1ull}, constraints);
+  REQUIRE(tree != nullptr);
+  REQUIRE(tree->children().size() == 2);
+
+  SceneNode const& card = *tree->children()[0];
+  REQUIRE(card.children().size() == 2);
+  CHECK(card.bounds.height < 200.f);
+  CHECK(card.children()[0]->position.y == doctest::Approx(0.f));
+  CHECK(card.children()[1]->position.y > card.children()[0]->position.y);
 }
 
 TEST_CASE("SceneBuilder: centered ZStack overlay is not centered twice") {

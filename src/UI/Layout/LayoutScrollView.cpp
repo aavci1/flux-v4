@@ -1,6 +1,8 @@
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/Layout.hpp>
 
+#include "UI/Layout/ContainerScope.hpp"
+
 #include <cmath>
 
 namespace flux {
@@ -46,16 +48,13 @@ Size resolveMeasuredScrollViewSize(ScrollAxis axis, Size contentSize, LayoutCons
 
 Size ScrollView::measure(MeasureContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
                          TextSystem& ts) const {
-  ComponentKey const key = ctx.nextCompositeKey();
-  ctx.beginCompositeBodySubtree(key);
-  ctx.pushCompositeKeyTail(key);
+  ContainerMeasureScope scope(ctx);
   Element contentEl = OffsetView{
       .offset = Point{0.f, 0.f},
       .axis = axis,
       .children = children,
   };
   Size const bodySize = contentEl.measure(ctx, constraints, hints, ts);
-  ctx.popCompositeKeyTail();
   return resolveMeasuredScrollViewSize(axis, bodySize, constraints);
 }
 
