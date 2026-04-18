@@ -11,7 +11,6 @@
 #include <Flux/UI/Views/TextEditUtils.hpp>
 
 #include <Flux/Graphics/Font.hpp>
-#include <Flux/Scene/Nodes.hpp>
 #include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/StateStore.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>

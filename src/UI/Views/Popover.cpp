@@ -3,6 +3,7 @@
 
 #include <Flux/Core/Types.hpp>
 #include <Flux/Core/Window.hpp>
+#include <Flux/Core/WindowUI.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/Detail/Runtime.hpp>
 #include <Flux/UI/Overlay.hpp>

@@ -2,38 +2,12 @@
 
 #include <Flux/Scene/Renderer.hpp>
 
+#include "Scene/SceneGeometry.hpp"
+
 #include <algorithm>
 #include <cassert>
 
 namespace flux {
-
-namespace {
-
-Rect offsetRect(Rect rect, Point delta) {
-  rect.x += delta.x;
-  rect.y += delta.y;
-  return rect;
-}
-
-bool rectEmpty(Rect const& rect) {
-  return rect.width == 0.f && rect.height == 0.f;
-}
-
-Rect unionRect(Rect lhs, Rect rhs) {
-  if (rectEmpty(lhs)) {
-    return rhs;
-  }
-  if (rectEmpty(rhs)) {
-    return lhs;
-  }
-  float const x0 = std::min(lhs.x, rhs.x);
-  float const y0 = std::min(lhs.y, rhs.y);
-  float const x1 = std::max(lhs.x + lhs.width, rhs.x + rhs.width);
-  float const y1 = std::max(lhs.y + lhs.height, rhs.y + rhs.height);
-  return Rect{x0, y0, x1 - x0, y1 - y0};
-}
-
-} // namespace
 
 std::string_view sceneNodeKindName(SceneNodeKind kind) noexcept {
   switch (kind) {
@@ -164,7 +138,7 @@ Rect SceneNode::adjustSubtreeBounds(Rect r) const {
 void SceneNode::recomputeBounds() {
   Rect subtree = computeOwnBounds();
   for (std::unique_ptr<SceneNode> const& child : children_) {
-    subtree = unionRect(subtree, offsetRect(child->bounds, child->position));
+    subtree = scene::unionRect(subtree, scene::offsetRect(child->bounds, child->position));
   }
   Rect const next = adjustSubtreeBounds(subtree);
   if (next == bounds) {

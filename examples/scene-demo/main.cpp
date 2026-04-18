@@ -7,6 +7,7 @@
 #include <Flux/Scene/LineSceneNode.hpp>
 #include <Flux/Scene/ModifierSceneNode.hpp>
 #include <Flux/Scene/RectSceneNode.hpp>
+#include <Flux/Scene/Render.hpp>
 #include <Flux/Scene/SceneTree.hpp>
 #include <Flux/Scene/SceneTreeDump.hpp>
 #include <Flux/Scene/TextSceneNode.hpp>

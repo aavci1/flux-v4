@@ -12,42 +12,11 @@
 #include <optional>
 #include <utility>
 
+#include "UI/Layout/Algorithms/ScrollLayout.hpp"
+
 namespace flux {
 
 namespace {
-
-struct ScrollIndicatorMetrics {
-    float x = 0.f;
-    float y = 0.f;
-    float width = 0.f;
-    float height = 0.f;
-
-    [[nodiscard]] bool visible() const { return width > 0.f && height > 0.f; }
-};
-
-struct ScrollIndicatorStyle {
-    static constexpr float thickness = 4.f;
-    static constexpr float outerInset = 3.f;
-    static constexpr float minLength = 24.f;
-};
-
-[[nodiscard]] float indicatorTrackLength(float viewportExtent, bool reserveTrailing) {
-    float const trailingInset =
-        ScrollIndicatorStyle::outerInset +
-        (reserveTrailing ? ScrollIndicatorStyle::thickness + ScrollIndicatorStyle::outerInset : 0.f);
-    return std::max(0.f, viewportExtent - ScrollIndicatorStyle::outerInset - trailingInset);
-}
-
-[[nodiscard]] float indicatorThumbLength(float viewportExtent, float contentExtent, float trackLength) {
-    return std::clamp((viewportExtent / contentExtent) * trackLength, ScrollIndicatorStyle::minLength, trackLength);
-}
-
-[[nodiscard]] Point maxScrollOffset(ScrollAxis axis, Size const &viewport, Size const &content) {
-    return Point {
-        (axis == ScrollAxis::Horizontal || axis == ScrollAxis::Both) ? std::max(0.f, content.width - viewport.width) : 0.f,
-        (axis == ScrollAxis::Vertical || axis == ScrollAxis::Both) ? std::max(0.f, content.height - viewport.height) : 0.f,
-    };
-}
 
 [[nodiscard]] Size resolveViewportSize(Size viewport, Rect const &bounds) {
     if (viewport.width <= 0.f && bounds.width > 0.f) {
@@ -68,8 +37,8 @@ struct ScrollIndicatorStyle {
     };
 }
 
-[[nodiscard]] Element makeIndicatorOverlay(ScrollIndicatorMetrics const &verticalIndicator,
-                                           ScrollIndicatorMetrics const &horizontalIndicator,
+[[nodiscard]] Element makeIndicatorOverlay(layout::ScrollIndicatorMetrics const &verticalIndicator,
+                                           layout::ScrollIndicatorMetrics const &horizontalIndicator,
                                            Color const &indicatorColor,
                                            float indicatorOpacity) {
     std::vector<Element> indicatorChildren;
@@ -103,70 +72,10 @@ struct ScrollIndicatorStyle {
     }};
 }
 
-[[nodiscard]] ScrollIndicatorMetrics makeVerticalIndicator(Point const &offset, Size const &viewport, Size const &content,
-                                                           bool reserveBottom) {
-    if (viewport.width <= 0.f || viewport.height <= 0.f || content.height <= viewport.height) {
-        return {};
-    }
-
-    float const trackLength = indicatorTrackLength(viewport.height, reserveBottom);
-    if (trackLength <= 0.f) {
-        return {};
-    }
-
-    float const maxOffset = maxScrollOffset(ScrollAxis::Vertical, viewport, content).y;
-    float const thumbLength = indicatorThumbLength(viewport.height, content.height, trackLength);
-    float const travel = std::max(0.f, trackLength - thumbLength);
-    float const t = maxOffset > 0.f ? std::clamp(offset.y / maxOffset, 0.f, 1.f) : 0.f;
-
-    return ScrollIndicatorMetrics {
-        .x = std::max(0.f, viewport.width - ScrollIndicatorStyle::thickness - ScrollIndicatorStyle::outerInset),
-        .y = ScrollIndicatorStyle::outerInset + travel * t,
-        .width = ScrollIndicatorStyle::thickness,
-        .height = thumbLength,
-    };
-}
-
-[[nodiscard]] ScrollIndicatorMetrics makeHorizontalIndicator(Point const &offset, Size const &viewport, Size const &content,
-                                                             bool reserveTrailing) {
-    if (viewport.width <= 0.f || viewport.height <= 0.f || content.width <= viewport.width) {
-        return {};
-    }
-
-    float const trackLength = indicatorTrackLength(viewport.width, reserveTrailing);
-    if (trackLength <= 0.f) {
-        return {};
-    }
-
-    float const maxOffset = maxScrollOffset(ScrollAxis::Horizontal, viewport, content).x;
-    float const thumbLength = indicatorThumbLength(viewport.width, content.width, trackLength);
-    float const travel = std::max(0.f, trackLength - thumbLength);
-    float const t = maxOffset > 0.f ? std::clamp(offset.x / maxOffset, 0.f, 1.f) : 0.f;
-
-    return ScrollIndicatorMetrics {
-        .x = ScrollIndicatorStyle::outerInset + travel * t,
-        .y = std::max(0.f, viewport.height - ScrollIndicatorStyle::thickness - ScrollIndicatorStyle::outerInset),
-        .width = thumbLength,
-        .height = ScrollIndicatorStyle::thickness,
-    };
-}
-
 } // namespace
 
 Point clampScrollOffset(ScrollAxis axis, Point o, Size const &viewport, Size const &content) {
-    Point const maxOffset = maxScrollOffset(axis, viewport, content);
-    Point r = o;
-    if (axis == ScrollAxis::Vertical || axis == ScrollAxis::Both) {
-        r.y = std::clamp(r.y, 0.f, maxOffset.y);
-    } else {
-        r.y = 0.f;
-    }
-    if (axis == ScrollAxis::Horizontal || axis == ScrollAxis::Both) {
-        r.x = std::clamp(r.x, 0.f, maxOffset.x);
-    } else {
-        r.x = 0.f;
-    }
-    return r;
+    return layout::clampScrollOffset(axis, o, viewport, content);
 }
 
 Element ScrollView::body() const {
@@ -182,14 +91,14 @@ Element ScrollView::body() const {
     ScrollAxis const ax = axis;
     bool const dragScroll = dragScrollEnabled;
     Size const contentSize = *content;
-    Point const scrollRange = maxScrollOffset(ax, effectiveViewport, contentSize);
+    Point const scrollRange = layout::maxScrollOffset(ax, effectiveViewport, contentSize);
     Point const clampedOffset = clampScrollOffset(ax, *offset, effectiveViewport, contentSize);
     bool const showsVerticalIndicator = scrollRange.y > 0.f;
     bool const showsHorizontalIndicator = scrollRange.x > 0.f;
-    ScrollIndicatorMetrics const verticalIndicator =
-        makeVerticalIndicator(clampedOffset, effectiveViewport, contentSize, showsHorizontalIndicator);
-    ScrollIndicatorMetrics const horizontalIndicator =
-        makeHorizontalIndicator(clampedOffset, effectiveViewport, contentSize, showsVerticalIndicator);
+    layout::ScrollIndicatorMetrics const verticalIndicator =
+        layout::makeVerticalIndicator(clampedOffset, effectiveViewport, contentSize, showsHorizontalIndicator);
+    layout::ScrollIndicatorMetrics const horizontalIndicator =
+        layout::makeHorizontalIndicator(clampedOffset, effectiveViewport, contentSize, showsVerticalIndicator);
     bool const showsAnyIndicator = verticalIndicator.visible() || horizontalIndicator.visible();
     Transition const indicatorShow = Transition::instant();
     Transition const indicatorHide = Transition::linear(theme.durationMedium).delayed(0.85f);

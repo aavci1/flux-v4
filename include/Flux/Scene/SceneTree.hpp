@@ -5,14 +5,11 @@
 /// Part of the Flux public API.
 
 #include <Flux/Scene/LocalId.hpp>
-#include <Flux/Scene/Renderer.hpp>
 #include <Flux/Scene/SceneNode.hpp>
 
 #include <memory>
 
 namespace flux {
-
-class Canvas;
 
 class SceneTree {
 public:
@@ -38,13 +35,6 @@ public:
 private:
   std::unique_ptr<SceneNode> root_;
 };
-
-void render(SceneNode& node, Renderer& renderer);
-void render(SceneNode const& node, Renderer& renderer);
-void render(SceneTree& tree, Renderer& renderer);
-void render(SceneTree const& tree, Renderer& renderer);
-void render(SceneTree& tree, Canvas& canvas);
-void render(SceneTree const& tree, Canvas& canvas);
 
 Rect measureRootContentBounds(SceneTree const& tree);
 Size measureRootContentSize(SceneTree const& tree);

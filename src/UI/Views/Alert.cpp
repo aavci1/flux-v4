@@ -1,4 +1,5 @@
 #include <Flux/Core/Window.hpp>
+#include <Flux/Core/WindowUI.hpp>
 #include <Flux/Detail/Runtime.hpp>
 #include <Flux/UI/StateStore.hpp>
 #include <Flux/UI/Theme.hpp>

@@ -7,9 +7,7 @@
 #include <Flux/Detail/RootHolder.hpp>
 #include <Flux/Detail/Runtime.hpp>
 #include <Flux/Graphics/Canvas.hpp>
-#include <Flux/Scene/SceneBoundsOverlay.hpp>
 #include <Flux/Scene/SceneTree.hpp>
-#include <Flux/Scene/TextCacheDebugOverlay.hpp>
 #include <Flux/UI/Overlay.hpp>
 #include <Flux/UI/Theme.hpp>
 
@@ -18,6 +16,7 @@
 
 #include "Core/PlatformWindow.hpp"
 #include "Core/PlatformWindowCreate.hpp"
+#include "Core/WindowRender.hpp"
 #include <optional>
 
 namespace flux {
@@ -198,33 +197,8 @@ EnvironmentLayer const& Window::environmentLayer() const {
 }
 
 void Window::render(Canvas& canvas) {
-  if (d->sceneTree_) {
-    canvas.clear(d->clearColor_);
-    flux::render(*d->sceneTree_, canvas);
-  }
-  for (std::unique_ptr<OverlayEntry> const& up : d->overlayMgr_.entries()) {
-    OverlayEntry const& entry = *up;
-    canvas.save();
-    canvas.transform(Mat3::translate(Point{entry.resolvedFrame.x, entry.resolvedFrame.y}));
-    flux::render(entry.sceneTree, canvas);
-    canvas.restore();
-  }
-  if (d->runtime_ && d->runtime_->layoutOverlayEnabled()) {
-    if (d->sceneTree_) {
-      renderSceneBoundsOverlay(*d->sceneTree_, canvas);
-    }
-    for (std::unique_ptr<OverlayEntry> const& up : d->overlayMgr_.entries()) {
-      OverlayEntry const& entry = *up;
-      canvas.save();
-      canvas.transform(Mat3::translate(Point{entry.resolvedFrame.x, entry.resolvedFrame.y}));
-      renderSceneBoundsOverlay(entry.sceneTree, canvas);
-      canvas.restore();
-    }
-  }
-  if (d->runtime_ && d->runtime_->textCacheOverlayEnabled()) {
-    Rect const cb = canvas.clipBounds();
-    renderTextCacheDebugOverlay(canvas, cb, d->textCacheRing_);
-  }
+  renderWindowFrame(canvas, d->sceneTree_, d->overlayMgr_, d->runtime_.get(), d->clearColor_,
+                    d->textCacheRing_);
 }
 
 } // namespace flux

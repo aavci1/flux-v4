@@ -1,6 +1,7 @@
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 
+#include "UI/Layout/Algorithms/StackLayout.hpp"
 #include "UI/Layout/ContainerScope.hpp"
 #include "UI/Layout/LayoutHelpers.hpp"
 
@@ -33,36 +34,26 @@ Size HStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints, 
 
   std::vector<Size> sizes;
   sizes.reserve(n);
+  std::vector<StackMainAxisChild> stackChildren;
+  stackChildren.reserve(n);
   for (Element const& ch : children) {
     Size const s = ch.measure(ctx, childCs, LayoutHints{}, ts);
     sizes.push_back(s);
+    stackChildren.push_back(StackMainAxisChild{
+        .naturalMainSize = s.width,
+        .minMainSize = ch.minMainSize(),
+        .flexGrow = ch.flexGrow(),
+        .flexShrink = ch.flexShrink(),
+    });
   }
 
   float const assignedW = stackMainAxisSpan(0.f, constraints.maxWidth);
-
-  std::vector<float> allocW(n);
-  for (std::size_t i = 0; i < n; ++i) {
-    allocW[i] = std::max(sizes[i].width, children[i].minMainSize());
-  }
-
   bool const widthConstrained = std::isfinite(assignedW) && assignedW > 0.f;
-  if (widthConstrained && n > 0) {
-    float const innerW = std::max(0.f, assignedW);
-    float const gaps = n > 1 ? static_cast<float>(n - 1) * spacing : 0.f;
-    float const targetSum = std::max(0.f, innerW - gaps);
-    float sumNat = 0.f;
-    for (float w : allocW) {
-      sumNat += w;
-    }
-    float const extra = targetSum - sumNat;
-    if (extra > kFlexEpsilon) {
-      flexGrowAlongMainAxis(allocW, children, extra);
-    } else if (extra < -kFlexEpsilon) {
-      flexShrinkAlongMainAxis(allocW, children, targetSum);
-    }
-  } else if (n > 0) {
+  if (!widthConstrained && n > 0) {
     warnFlexGrowIfParentMainAxisUnconstrained(children, widthConstrained);
   }
+  StackMainAxisLayout const mainLayout =
+      layoutStackMainAxis(stackChildren, spacing, assignedW, widthConstrained);
 
   if (StateStore* store = StateStore::current()) {
     store->resetSlotCursors();
@@ -72,33 +63,24 @@ Size HStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints, 
   float maxH = 0.f;
   for (std::size_t i = 0; i < n; ++i) {
     LayoutConstraints cs2 = constraints;
-    cs2.maxWidth = allocW[i];
+    cs2.maxWidth = mainLayout.mainSizes[i];
     cs2.maxHeight = heightConstrained ? assignedHCross : std::numeric_limits<float>::infinity();
     LayoutHints rh{};
     rh.hStackCrossAlign = alignment;
     Size const s2 = children[i].measure(ctx, cs2, rh, ts);
     maxH = std::max(maxH, s2.height);
+    sizes[i] = s2;
   }
   if (StateStore* store = StateStore::current()) {
     store->resetSlotCursors();
   }
   ctx.rewindChildKeyIndex();
 
-  float outH = maxH;
-  if (alignment == Alignment::Stretch && heightConstrained) {
-    outH = std::max(outH, assignedHCross);
-  }
-  float outW = 0.f;
-  if (n > 1) {
-    outW += static_cast<float>(n - 1) * spacing;
-  }
-  for (float w : allocW) {
-    outW += w;
-  }
-  if (widthConstrained) {
-    outW = assignedW;
-  }
-  return {outW, outH};
+  StackLayoutResult const layoutResult =
+      layoutStack(StackAxis::Horizontal, alignment, sizes, mainLayout.mainSizes,
+                  spacing, mainLayout.containerMainSize, mainLayout.startOffset, assignedHCross,
+                  heightConstrained);
+  return layoutResult.containerSize;
 }
 
 } // namespace flux

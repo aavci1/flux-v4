@@ -20,8 +20,6 @@ namespace flux {
 
 class Image;
 class Window;
-struct ImageNode;
-struct TextNode;
 
 enum class Backend : std::uint8_t { Metal };
 
@@ -95,10 +93,6 @@ public:
 
   /// Draw laid-out text. `origin` is the layout box top-left (`TextLayout::measuredSize`).
   virtual void drawTextLayout(TextLayout const& layout, Point origin) = 0;
-  /// Scene-oriented text draw hook. Default forwards to `drawTextLayout`.
-  virtual void drawTextNode(TextNode const& node);
-  /// Scene-oriented image draw hook. Default forwards to `drawImage`.
-  virtual void drawImageNode(ImageNode const& node);
 
   /// Draw `src` sub-rect of the image (pixel space) into `dst` (logical space). UVs are derived as src/size.
   virtual void drawImage(Image const& image, Rect const& src, Rect const& dst, CornerRadius const& corners = {},

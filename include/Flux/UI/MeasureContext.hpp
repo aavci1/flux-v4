@@ -14,8 +14,10 @@
 namespace flux {
 
 class TextSystem;
-struct ElementModifiers;
 class Element;
+namespace detail {
+struct ElementModifiers;
+}
 
 class MeasureContext {
 public:

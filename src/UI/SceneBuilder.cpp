@@ -47,7 +47,13 @@
 #include <unordered_map>
 #include <utility>
 
+#include "Scene/SceneGeometry.hpp"
+#include "UI/Layout/Algorithms/GridLayout.hpp"
+#include "UI/Layout/Algorithms/OverlayLayout.hpp"
+#include "UI/Layout/Algorithms/ScrollLayout.hpp"
+#include "UI/Layout/Algorithms/StackLayout.hpp"
 #include "UI/Layout/LayoutHelpers.hpp"
+#include "UI/SceneBuilder/NodeReuse.hpp"
 
 namespace flux {
 
@@ -55,10 +61,7 @@ namespace {
 
 using layout::assignedSpan;
 using layout::clampLayoutMinToMax;
-using layout::flexGrowAlongMainAxis;
-using layout::flexShrinkAlongMainAxis;
 using layout::hAlignOffset;
-using layout::kFlexEpsilon;
 using layout::stackMainAxisSpan;
 using layout::vAlignOffset;
 using layout::warnFlexGrowIfParentMainAxisUnconstrained;
@@ -71,26 +74,6 @@ bool nearlyEqual(float lhs, float rhs, float eps = kApproxEpsilon) {
 
 bool nearlyEqual(Size lhs, Size rhs) {
   return nearlyEqual(lhs.width, rhs.width) && nearlyEqual(lhs.height, rhs.height);
-}
-
-Rect unionRect(Rect lhs, Rect rhs) {
-  if ((lhs.width <= 0.f && lhs.height <= 0.f)) {
-    return rhs;
-  }
-  if ((rhs.width <= 0.f && rhs.height <= 0.f)) {
-    return lhs;
-  }
-  float const x0 = std::min(lhs.x, rhs.x);
-  float const y0 = std::min(lhs.y, rhs.y);
-  float const x1 = std::max(lhs.x + lhs.width, rhs.x + rhs.width);
-  float const y1 = std::max(lhs.y + lhs.height, rhs.y + rhs.height);
-  return Rect{x0, y0, x1 - x0, y1 - y0};
-}
-
-Rect offsetRect(Rect rect, Point delta) {
-  rect.x += delta.x;
-  rect.y += delta.y;
-  return rect;
 }
 
 float resolvedAssignedSpan(float assignedSpan, bool hasAssignedSpan, float fallbackSpan) {
@@ -137,7 +120,7 @@ std::unique_ptr<SceneNode> releasePlainGroup(std::unique_ptr<SceneNode> node) {
 void setGroupBounds(SceneNode& node, Size minSize = {}) {
   Rect bounds = sizeRect(minSize);
   for (std::unique_ptr<SceneNode> const& child : node.children()) {
-    bounds = unionRect(bounds, offsetRect(child->bounds, child->position));
+    bounds = scene::unionRect(bounds, scene::offsetRect(child->bounds, child->position));
   }
   node.bounds = bounds;
   node.markBoundsDirty();
@@ -163,14 +146,14 @@ LayoutConstraints insetConstraints(LayoutConstraints constraints, EdgeInsets con
   return constraints;
 }
 
-Point modifierOffset(ElementModifiers const* mods) {
+Point modifierOffset(detail::ElementModifiers const* mods) {
   if (!mods) {
     return {};
   }
   return Point{mods->positionX + mods->translation.x, mods->positionY + mods->translation.y};
 }
 
-bool needsModifierWrapper(ElementModifiers const* mods, bool leafOwnsPaint) {
+bool needsModifierWrapper(detail::ElementModifiers const* mods, bool leafOwnsPaint) {
   if (!mods) {
     return false;
   }
@@ -183,15 +166,15 @@ bool needsModifierWrapper(ElementModifiers const* mods, bool leafOwnsPaint) {
   return !mods->fill.isNone() || !mods->stroke.isNone() || !mods->shadow.isNone() || !mods->cornerRadius.isZero();
 }
 
-bool hasOverlay(ElementModifiers const* mods) {
+bool hasOverlay(detail::ElementModifiers const* mods) {
   return mods && mods->overlay != nullptr;
 }
 
-bool hasPadding(ElementModifiers const* mods) {
+bool hasPadding(detail::ElementModifiers const* mods) {
   return mods && !mods->padding.isZero();
 }
 
-bool needsLayoutWrapper(ElementModifiers const* mods, Size outerSize, Size contentSize) {
+bool needsLayoutWrapper(detail::ElementModifiers const* mods, Size outerSize, Size contentSize) {
   if (!mods) {
     return false;
   }
@@ -201,7 +184,7 @@ bool needsLayoutWrapper(ElementModifiers const* mods, Size outerSize, Size conte
   return !nearlyEqual(outerSize, contentSize);
 }
 
-bool needsDecorationPass(ElementModifiers const* mods, Size outerSize, Size contentSize,
+bool needsDecorationPass(detail::ElementModifiers const* mods, Size outerSize, Size contentSize,
                          bool leafOwnsPaint, InteractionData const* interaction) {
   if (!mods) {
     return interaction != nullptr;
@@ -224,7 +207,8 @@ bool rectIsMeaningful(Rect rect) {
   return rect.width > 0.f || rect.height > 0.f;
 }
 
-std::unique_ptr<InteractionData> makeInteractionData(ElementModifiers const* mods, ComponentKey const& key) {
+std::unique_ptr<InteractionData> makeInteractionData(detail::ElementModifiers const* mods,
+                                                     ComponentKey const& key) {
   if (!mods) {
     return nullptr;
   }
@@ -291,7 +275,7 @@ bool configureTextSceneNode(TextSceneNode& textNode, TextSystem& textSystem, Tex
 }
 
 std::unique_ptr<InteractionData>
-makeSelectableTextInteraction(ElementModifiers const* mods, ComponentKey const& key,
+makeSelectableTextInteraction(detail::ElementModifiers const* mods, ComponentKey const& key,
                               std::shared_ptr<detail::SelectableTextState> const& state) {
   if (!state) {
     return makeInteractionData(mods, key);
@@ -320,7 +304,7 @@ LocalId childLocalId(Element const& child, std::size_t index) {
 }
 
 Rect assignedFrameForLeaf(Size measuredSize, LayoutConstraints const& constraints, Size assignedSize,
-                          bool hasAssignedWidth, bool hasAssignedHeight, ElementModifiers const* mods,
+                          bool hasAssignedWidth, bool hasAssignedHeight, detail::ElementModifiers const* mods,
                           LayoutHints const& hints) {
   Rect explicitBox{};
   if (mods) {
@@ -362,7 +346,7 @@ Rect assignedFrameForLeaf(Size measuredSize, LayoutConstraints const& constraint
 
 Size assignedOuterSizeForFrame(Size measuredSize, LayoutConstraints const& constraints, Size assignedSize,
                                bool hasAssignedWidth, bool hasAssignedHeight,
-                               ElementModifiers const* mods = nullptr) {
+                               detail::ElementModifiers const* mods = nullptr) {
   Size size = measuredSize;
   bool const explicitWidth = mods && mods->sizeWidth > 0.f;
   bool const explicitHeight = mods && mods->sizeHeight > 0.f;
@@ -384,7 +368,7 @@ Size assignedOuterSizeForFrame(Size measuredSize, LayoutConstraints const& const
   return size;
 }
 
-bool textUsesContentBox(ElementModifiers const* mods) {
+bool textUsesContentBox(detail::ElementModifiers const* mods) {
   if (!mods) {
     return false;
   }
@@ -437,90 +421,8 @@ bool updateIfChanged(Path& field, Path const& value) {
   return true;
 }
 
-LayoutConstraints scrollChildConstraints(ScrollAxis axis, LayoutConstraints constraints, Size viewport) {
-  switch (axis) {
-  case ScrollAxis::Vertical:
-    constraints.maxWidth = viewport.width > 0.f ? viewport.width : std::numeric_limits<float>::infinity();
-    constraints.maxHeight = std::numeric_limits<float>::infinity();
-    break;
-  case ScrollAxis::Horizontal:
-    constraints.maxWidth = std::numeric_limits<float>::infinity();
-    constraints.maxHeight = viewport.height > 0.f ? viewport.height : std::numeric_limits<float>::infinity();
-    break;
-  case ScrollAxis::Both:
-    constraints.maxWidth = std::numeric_limits<float>::infinity();
-    constraints.maxHeight = std::numeric_limits<float>::infinity();
-    break;
-  }
-  clampLayoutMinToMax(constraints);
-  return constraints;
-}
-
-Size scrollContentSize(ScrollAxis axis, std::vector<Size> const& sizes) {
-  float totalW = 0.f;
-  float totalH = 0.f;
-  switch (axis) {
-  case ScrollAxis::Horizontal:
-    for (Size const size : sizes) {
-      totalW += size.width;
-      totalH = std::max(totalH, size.height);
-    }
-    break;
-  case ScrollAxis::Vertical:
-    for (Size const size : sizes) {
-      totalW = std::max(totalW, size.width);
-      totalH += size.height;
-    }
-    break;
-  case ScrollAxis::Both:
-    for (Size const size : sizes) {
-      totalW = std::max(totalW, size.width);
-      totalH = std::max(totalH, size.height);
-    }
-    break;
-  }
-  return Size{totalW, totalH};
-}
-
 bool sizeApproximatelyEqual(Size lhs, Size rhs) {
   return nearlyEqual(lhs.width, rhs.width, 0.5f) && nearlyEqual(lhs.height, rhs.height, 0.5f);
-}
-
-struct ScrollIndicatorMetrics {
-  float x = 0.f;
-  float y = 0.f;
-  float width = 0.f;
-  float height = 0.f;
-
-  [[nodiscard]] bool visible() const { return width > 0.f && height > 0.f; }
-};
-
-struct ScrollIndicatorStyle {
-  static constexpr float thickness = 4.f;
-  static constexpr float outerInset = 3.f;
-  static constexpr float minLength = 24.f;
-};
-
-float indicatorTrackLength(float viewportExtent, bool reserveTrailing) {
-  float const trailingInset =
-      ScrollIndicatorStyle::outerInset +
-      (reserveTrailing ? ScrollIndicatorStyle::thickness + ScrollIndicatorStyle::outerInset : 0.f);
-  return std::max(0.f, viewportExtent - ScrollIndicatorStyle::outerInset - trailingInset);
-}
-
-float indicatorThumbLength(float viewportExtent, float contentExtent, float trackLength) {
-  return std::clamp((viewportExtent / contentExtent) * trackLength, ScrollIndicatorStyle::minLength, trackLength);
-}
-
-Point maxScrollOffset(ScrollAxis axis, Size const& viewport, Size const& content) {
-  return Point{
-      (axis == ScrollAxis::Horizontal || axis == ScrollAxis::Both)
-          ? std::max(0.f, content.width - viewport.width)
-          : 0.f,
-      (axis == ScrollAxis::Vertical || axis == ScrollAxis::Both)
-          ? std::max(0.f, content.height - viewport.height)
-          : 0.f,
-  };
 }
 
 Color scrollIndicatorColorForTheme(Theme const& theme) {
@@ -530,153 +432,6 @@ Color scrollIndicatorColorForTheme(Theme const& theme) {
       theme.colorTextSecondary.b,
       0.55f,
   };
-}
-
-ScrollIndicatorMetrics makeVerticalIndicator(Point const& offset, Size const& viewport, Size const& content,
-                                             bool reserveBottom) {
-  if (viewport.width <= 0.f || viewport.height <= 0.f || content.height <= viewport.height) {
-    return {};
-  }
-
-  float const trackLength = indicatorTrackLength(viewport.height, reserveBottom);
-  if (trackLength <= 0.f) {
-    return {};
-  }
-
-  float const maxOffset = maxScrollOffset(ScrollAxis::Vertical, viewport, content).y;
-  float const thumbLength = indicatorThumbLength(viewport.height, content.height, trackLength);
-  float const travel = std::max(0.f, trackLength - thumbLength);
-  float const t = maxOffset > 0.f ? std::clamp(offset.y / maxOffset, 0.f, 1.f) : 0.f;
-
-  return ScrollIndicatorMetrics{
-      .x = std::max(0.f, viewport.width - ScrollIndicatorStyle::thickness - ScrollIndicatorStyle::outerInset),
-      .y = ScrollIndicatorStyle::outerInset + travel * t,
-      .width = ScrollIndicatorStyle::thickness,
-      .height = thumbLength,
-  };
-}
-
-ScrollIndicatorMetrics makeHorizontalIndicator(Point const& offset, Size const& viewport, Size const& content,
-                                               bool reserveTrailing) {
-  if (viewport.width <= 0.f || viewport.height <= 0.f || content.width <= viewport.width) {
-    return {};
-  }
-
-  float const trackLength = indicatorTrackLength(viewport.width, reserveTrailing);
-  if (trackLength <= 0.f) {
-    return {};
-  }
-
-  float const maxOffset = maxScrollOffset(ScrollAxis::Horizontal, viewport, content).x;
-  float const thumbLength = indicatorThumbLength(viewport.width, content.width, trackLength);
-  float const travel = std::max(0.f, trackLength - thumbLength);
-  float const t = maxOffset > 0.f ? std::clamp(offset.x / maxOffset, 0.f, 1.f) : 0.f;
-
-  return ScrollIndicatorMetrics{
-      .x = ScrollIndicatorStyle::outerInset + travel * t,
-      .y = std::max(0.f, viewport.height - ScrollIndicatorStyle::thickness - ScrollIndicatorStyle::outerInset),
-      .width = thumbLength,
-      .height = ScrollIndicatorStyle::thickness,
-  };
-}
-
-LayoutConstraints innerConstraintsForPopoverContent(PopoverCalloutShape const& value, LayoutConstraints constraints) {
-  if (value.maxSize) {
-    if (std::isfinite(value.maxSize->width) && value.maxSize->width > 0.f) {
-      constraints.maxWidth = std::min(constraints.maxWidth, value.maxSize->width);
-    }
-    if (std::isfinite(value.maxSize->height) && value.maxSize->height > 0.f) {
-      constraints.maxHeight = std::min(constraints.maxHeight, value.maxSize->height);
-    }
-  }
-
-  float const pad = value.padding;
-  float const arrowDepth = PopoverCalloutShape::kArrowH;
-  float availableWidth = constraints.maxWidth;
-  float availableHeight = constraints.maxHeight;
-  if (std::isfinite(availableWidth)) {
-    availableWidth -= 2.f * pad;
-  }
-  if (std::isfinite(availableHeight)) {
-    availableHeight -= 2.f * pad;
-  }
-
-  if (value.arrow) {
-    switch (value.placement) {
-    case PopoverPlacement::Below:
-    case PopoverPlacement::Above:
-      if (std::isfinite(availableHeight)) {
-        availableHeight -= arrowDepth;
-      }
-      break;
-    case PopoverPlacement::End:
-    case PopoverPlacement::Start:
-      if (std::isfinite(availableWidth)) {
-        availableWidth -= arrowDepth;
-      }
-      break;
-    }
-  }
-
-  constraints.maxWidth = std::max(0.f, availableWidth);
-  constraints.maxHeight = std::max(0.f, availableHeight);
-  clampLayoutMinToMax(constraints);
-  return constraints;
-}
-
-struct PopoverCalloutLayout {
-  Size totalSize{};
-  Size contentSize{};
-  Rect cardRect{};
-  Point contentOrigin{};
-  LayoutConstraints contentConstraints{};
-  Path chromePath{};
-};
-
-PopoverCalloutLayout layoutPopoverCallout(PopoverCalloutShape const& value, Size contentSize,
-                                          LayoutConstraints const& constraints) {
-  PopoverCalloutLayout layout{};
-  layout.contentSize = contentSize;
-  layout.contentConstraints = innerConstraintsForPopoverContent(value, constraints);
-
-  float const pad = std::max(0.f, value.padding);
-  float const arrowWidth = value.arrow ? PopoverCalloutShape::kArrowW : 0.f;
-  float const arrowDepth = value.arrow ? PopoverCalloutShape::kArrowH : 0.f;
-  float const cardWidth = contentSize.width + 2.f * pad;
-  float const cardHeight = contentSize.height + 2.f * pad;
-
-  switch (value.placement) {
-  case PopoverPlacement::Below:
-    layout.totalSize = Size{cardWidth, cardHeight + arrowDepth};
-    layout.cardRect = Rect{0.f, arrowDepth, cardWidth, cardHeight};
-    layout.contentOrigin = Point{pad, arrowDepth + pad};
-    break;
-  case PopoverPlacement::Above:
-    layout.totalSize = Size{cardWidth, cardHeight + arrowDepth};
-    layout.cardRect = Rect{0.f, 0.f, cardWidth, cardHeight};
-    layout.contentOrigin = Point{pad, pad};
-    break;
-  case PopoverPlacement::End: {
-    float const totalHeight = std::max(cardHeight, arrowWidth);
-    float const cardY = std::max(0.f, (totalHeight - cardHeight) * 0.5f);
-    layout.totalSize = Size{cardWidth + arrowDepth, totalHeight};
-    layout.cardRect = Rect{arrowDepth, cardY, cardWidth, cardHeight};
-    layout.contentOrigin = Point{arrowDepth + pad, cardY + pad};
-    break;
-  }
-  case PopoverPlacement::Start: {
-    float const totalHeight = std::max(cardHeight, arrowWidth);
-    float const cardY = std::max(0.f, (totalHeight - cardHeight) * 0.5f);
-    layout.totalSize = Size{cardWidth + arrowDepth, totalHeight};
-    layout.cardRect = Rect{0.f, cardY, cardWidth, cardHeight};
-    layout.contentOrigin = Point{pad, cardY + pad};
-    break;
-  }
-  }
-
-  layout.chromePath = buildPopoverCalloutPath(value.placement, value.cornerRadius, value.arrow, arrowWidth,
-                                              arrowDepth, layout.cardRect, layout.totalSize);
-  return layout;
 }
 
 } // namespace
@@ -719,7 +474,8 @@ Size SceneBuilder::measureElement(Element const& el, LayoutConstraints const& co
 }
 
 std::unique_ptr<SceneNode>
-SceneBuilder::decorateNode(std::unique_ptr<SceneNode> root, Element const& el, ElementModifiers const* mods,
+SceneBuilder::decorateNode(std::unique_ptr<SceneNode> root, Element const& el,
+                           detail::ElementModifiers const* mods,
                            std::unique_ptr<SceneNode> existing, Size layoutOuterSize, Size outerSize,
                            Point subtreeOffset, EdgeInsets const& padding,
                            std::unique_ptr<InteractionData> interaction) {
@@ -891,24 +647,14 @@ std::unique_ptr<SceneNode> SceneBuilder::buildOrReuse(Element const& el, NodeId 
 
 void SceneBuilder::reconcileChildren(SceneNode& parent, std::span<Element const> newChildren,
                                      std::vector<std::unique_ptr<SceneNode>>& existingChildren) {
-  std::unordered_map<NodeId, std::unique_ptr<SceneNode>, ::flux::NodeIdHash> reusable{};
-  reusable.reserve(existingChildren.size());
-  for (std::unique_ptr<SceneNode>& child : existingChildren) {
-    if (child) {
-      reusable.emplace(child->id(), std::move(child));
-    }
-  }
+  detail::ReusableSceneNodes reusable = detail::collectReusableSceneNodes(std::move(existingChildren));
 
   std::vector<std::unique_ptr<SceneNode>> next{};
   next.reserve(newChildren.size());
   for (std::size_t i = 0; i < newChildren.size(); ++i) {
     Element const& child = newChildren[i];
     NodeId const childId = SceneTree::childId(parent.id(), childLocalId(child, i));
-    std::unique_ptr<SceneNode> reuse{};
-    if (auto it = reusable.find(childId); it != reusable.end()) {
-      reuse = std::move(it->second);
-      reusable.erase(it);
-    }
+    std::unique_ptr<SceneNode> reuse = detail::takeReusableNode(reusable, childId);
     next.push_back(buildOrReuse(child, childId, std::move(reuse)));
   }
   parent.replaceChildren(std::move(next));
@@ -917,8 +663,8 @@ void SceneBuilder::reconcileChildren(SceneNode& parent, std::span<Element const>
 std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Element const& sceneEl, NodeId id,
                                                        std::unique_ptr<SceneNode> existing) {
   FrameState const current = frame();
-  ElementModifiers const* mods = sceneEl.modifiers();
-  ElementModifiers const* outerMods = (&sceneEl != &el) ? el.modifiers() : nullptr;
+  detail::ElementModifiers const* mods = sceneEl.modifiers();
+  detail::ElementModifiers const* outerMods = (&sceneEl != &el) ? el.modifiers() : nullptr;
   Point const subtreeOffset = modifierOffset(mods);
   Size const outerSize = measureElement(el, current.constraints, current.hints, current.key);
   Size layoutOuterSize = outerSize;
@@ -1016,14 +762,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
       if (!group) {
         group = std::make_unique<SceneNode>(id);
       }
-      std::vector<std::unique_ptr<SceneNode>> existingChildren = group->releaseChildren();
-      std::unordered_map<NodeId, std::unique_ptr<SceneNode>, ::flux::NodeIdHash> reusable{};
-      reusable.reserve(existingChildren.size());
-      for (std::unique_ptr<SceneNode>& child : existingChildren) {
-        if (child) {
-          reusable.emplace(child->id(), std::move(child));
-        }
-      }
+      detail::ReusableSceneNodes reusable = detail::releaseReusableChildren(*group);
 
       std::vector<std::unique_ptr<SceneNode>> nextChildren{};
       if (selectableState->selection.hasSelection()) {
@@ -1033,11 +772,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
         nextChildren.reserve(selectionRects.size() + 1);
         for (std::size_t i = 0; i < selectionRects.size(); ++i) {
           NodeId const rectId = SceneTree::childId(id, LocalId::fromIndex(i));
-          std::unique_ptr<RectSceneNode> rectNode{};
-          if (auto it = reusable.find(rectId); it != reusable.end()) {
-            rectNode = releaseAs<RectSceneNode>(std::move(it->second));
-            reusable.erase(it);
-          }
+          std::unique_ptr<RectSceneNode> rectNode = detail::takeReusableNodeAs<RectSceneNode>(reusable, rectId);
           if (!rectNode) {
             rectNode = std::make_unique<RectSceneNode>(rectId);
           }
@@ -1059,11 +794,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
       }
 
       NodeId const textId = SceneTree::childId(id, LocalId::fromString("$text"));
-      std::unique_ptr<TextSceneNode> textNode{};
-      if (auto it = reusable.find(textId); it != reusable.end()) {
-        textNode = releaseAs<TextSceneNode>(std::move(it->second));
-        reusable.erase(it);
-      }
+      std::unique_ptr<TextSceneNode> textNode = detail::takeReusableNodeAs<TextSceneNode>(reusable, textId);
       if (!textNode) {
         textNode = std::make_unique<TextSceneNode>(textId);
       }
@@ -1186,14 +917,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     if (!group) {
       group = std::make_unique<SceneNode>(id);
     }
-    std::vector<std::unique_ptr<SceneNode>> existingChildren = group->releaseChildren();
-    std::unordered_map<NodeId, std::unique_ptr<SceneNode>, ::flux::NodeIdHash> reusable{};
-    reusable.reserve(existingChildren.size());
-    for (std::unique_ptr<SceneNode>& child : existingChildren) {
-      if (child) {
-        reusable.emplace(child->id(), std::move(child));
-      }
-    }
+    detail::ReusableSceneNodes reusable = detail::releaseReusableChildren(*group);
 
     float const assignedW = current.hasAssignedWidth ? std::max(0.f, contentAssignedSize.width) : 0.f;
     float const assignedH = current.hasAssignedHeight ? std::max(0.f, contentAssignedSize.height) : 0.f;
@@ -1206,80 +930,59 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
 
     std::vector<Size> sizes{};
     sizes.reserve(stack.children.size());
-    float maxChildW = 0.f;
+    std::vector<layout::StackMainAxisChild> stackChildren{};
+    stackChildren.reserve(stack.children.size());
     for (std::size_t i = 0; i < stack.children.size(); ++i) {
       Element const& child = stack.children[i];
       ComponentKey childKey = current.key;
       childKey.push_back(childLocalId(child, i));
       Size const size = measureElement(child, childConstraints, childHints, childKey);
       sizes.push_back(size);
-      maxChildW = std::max(maxChildW, size.width);
-    }
-    if (innerW <= 0.f) {
-      innerW = maxChildW;
-    }
-
-    std::vector<float> allocH(stack.children.size(), 0.f);
-    for (std::size_t i = 0; i < stack.children.size(); ++i) {
-      allocH[i] = std::max(sizes[i].height, stack.children[i].minMainSize());
+      stackChildren.push_back(layout::StackMainAxisChild{
+          .naturalMainSize = size.height,
+          .minMainSize = child.minMainSize(),
+          .flexGrow = child.flexGrow(),
+          .flexShrink = child.flexShrink(),
+      });
     }
     bool const heightConstrained = current.hasAssignedHeight;
-    if (heightConstrained && !allocH.empty()) {
-      float const gaps = stack.children.size() > 1 ? static_cast<float>(stack.children.size() - 1) * stack.spacing : 0.f;
-      float const targetSum = std::max(0.f, assignedH - gaps);
-      float sumNat = 0.f;
-      for (float h : allocH) {
-        sumNat += h;
-      }
-      float const extra = targetSum - sumNat;
-      if (extra > kFlexEpsilon) {
-        flexGrowAlongMainAxis(allocH, stack.children, extra);
-      } else if (extra < -kFlexEpsilon) {
-        flexShrinkAlongMainAxis(allocH, stack.children, targetSum);
-      }
-    } else {
+    if (!heightConstrained) {
       warnFlexGrowIfParentMainAxisUnconstrained(stack.children, heightConstrained);
     }
+    layout::StackMainAxisLayout const mainLayout =
+        layout::layoutStackMainAxis(stackChildren, stack.spacing, assignedH, heightConstrained);
+    layout::StackLayoutResult const stackLayout =
+        layout::layoutStack(layout::StackAxis::Vertical, stack.alignment, sizes, mainLayout.mainSizes,
+                            stack.spacing, mainLayout.containerMainSize, mainLayout.startOffset,
+                            innerW, innerW > 0.f);
 
     std::vector<std::unique_ptr<SceneNode>> nextChildren{};
     nextChildren.reserve(stack.children.size());
-    float usedH = stack.children.size() > 1 ? static_cast<float>(stack.children.size() - 1) * stack.spacing : 0.f;
-    for (float h : allocH) {
-      usedH += h;
-    }
-    float y = heightConstrained ? (assignedH - usedH) * 0.5f : 0.f;
     for (std::size_t i = 0; i < stack.children.size(); ++i) {
       Element const& child = stack.children[i];
       LocalId const local = childLocalId(child, i);
       NodeId const childId = SceneTree::childId(id, local);
-      std::unique_ptr<SceneNode> reuse{};
-      if (auto it = reusable.find(childId); it != reusable.end()) {
-        reuse = std::move(it->second);
-        reusable.erase(it);
-      }
+      std::unique_ptr<SceneNode> reuse = detail::takeReusableNode(reusable, childId);
+      layout::StackSlot const& slot = stackLayout.slots[i];
       LayoutConstraints childBuild = innerConstraints;
-      childBuild.maxWidth = innerW > 0.f ? innerW : std::numeric_limits<float>::infinity();
-      childBuild.maxHeight = allocH[i];
+      childBuild.maxWidth = slot.assignedSize.width > 0.f ? slot.assignedSize.width
+                                                          : std::numeric_limits<float>::infinity();
+      childBuild.maxHeight = slot.assignedSize.height;
       childBuild.minHeight = child.minMainSize();
       clampLayoutMinToMax(childBuild);
       ComponentKey childKey = current.key;
       childKey.push_back(local);
-      pushFrame(childBuild, childHints, Point{contentOrigin.x, contentOrigin.y + y}, std::move(childKey),
-                Size{innerW > 0.f ? innerW : maxChildW, allocH[i]}, innerW > 0.f || maxChildW > 0.f, true);
+      pushFrame(childBuild, childHints,
+                Point{contentOrigin.x, contentOrigin.y + slot.origin.y},
+                std::move(childKey), slot.assignedSize, slot.assignedSize.width > 0.f, true);
       std::unique_ptr<SceneNode> childNode = buildOrReuse(child, childId, std::move(reuse));
       popFrame();
-      childNode->position.x += hAlignOffset(childNode->bounds.width, innerW > 0.f ? innerW : childNode->bounds.width,
-                                            stack.alignment);
-      childNode->position.y += y;
+      childNode->position.x += slot.origin.x;
+      childNode->position.y += slot.origin.y;
       nextChildren.push_back(std::move(childNode));
-      y += allocH[i] + stack.spacing;
     }
     group->replaceChildren(std::move(nextChildren));
-    Size const groupSize{
-        innerW > 0.f ? innerW : maxChildW,
-        heightConstrained ? std::max(0.f, assignedH) : std::max(usedH, 0.f),
-    };
-    setAssignedGroupBounds(*group, groupSize);
+    setAssignedGroupBounds(*group, stackLayout.containerSize);
     core = std::move(group);
     break;
   }
@@ -1289,14 +992,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     if (!group) {
       group = std::make_unique<SceneNode>(id);
     }
-    std::vector<std::unique_ptr<SceneNode>> existingChildren = group->releaseChildren();
-    std::unordered_map<NodeId, std::unique_ptr<SceneNode>, ::flux::NodeIdHash> reusable{};
-    reusable.reserve(existingChildren.size());
-    for (std::unique_ptr<SceneNode>& child : existingChildren) {
-      if (child) {
-        reusable.emplace(child->id(), std::move(child));
-      }
-    }
+    detail::ReusableSceneNodes reusable = detail::releaseReusableChildren(*group);
 
     float const assignedW = current.hasAssignedWidth ? std::max(0.f, contentAssignedSize.width) : 0.f;
     float const assignedH = current.hasAssignedHeight ? std::max(0.f, contentAssignedSize.height) : 0.f;
@@ -1311,41 +1007,35 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
 
     std::vector<Size> sizes{};
     sizes.reserve(stack.children.size());
+    std::vector<layout::StackMainAxisChild> stackChildren{};
+    stackChildren.reserve(stack.children.size());
     for (std::size_t i = 0; i < stack.children.size(); ++i) {
       Element const& child = stack.children[i];
       ComponentKey childKey = current.key;
       childKey.push_back(childLocalId(child, i));
-      sizes.push_back(measureElement(child, childConstraints, LayoutHints{}, childKey));
+      Size const size = measureElement(child, childConstraints, LayoutHints{}, childKey);
+      sizes.push_back(size);
+      stackChildren.push_back(layout::StackMainAxisChild{
+          .naturalMainSize = size.width,
+          .minMainSize = child.minMainSize(),
+          .flexGrow = child.flexGrow(),
+          .flexShrink = child.flexShrink(),
+      });
     }
 
-    std::vector<float> allocW(stack.children.size(), 0.f);
-    for (std::size_t i = 0; i < stack.children.size(); ++i) {
-      allocW[i] = std::max(sizes[i].width, stack.children[i].minMainSize());
-    }
     bool const widthConstrained = current.hasAssignedWidth;
-    if (widthConstrained && !allocW.empty()) {
-      float const gaps = stack.children.size() > 1 ? static_cast<float>(stack.children.size() - 1) * stack.spacing : 0.f;
-      float const targetSum = std::max(0.f, assignedW - gaps);
-      float sumNat = 0.f;
-      for (float w : allocW) {
-        sumNat += w;
-      }
-      float const extra = targetSum - sumNat;
-      if (extra > kFlexEpsilon) {
-        flexGrowAlongMainAxis(allocW, stack.children, extra);
-      } else if (extra < -kFlexEpsilon) {
-        flexShrinkAlongMainAxis(allocW, stack.children, targetSum);
-      }
-    } else {
+    if (!widthConstrained) {
       warnFlexGrowIfParentMainAxisUnconstrained(stack.children, widthConstrained);
     }
+    layout::StackMainAxisLayout const mainLayout =
+        layout::layoutStackMainAxis(stackChildren, stack.spacing, assignedW, widthConstrained);
 
     float rowInnerH = 0.f;
     std::vector<Size> rowSizes{};
     rowSizes.reserve(stack.children.size());
     for (std::size_t i = 0; i < stack.children.size(); ++i) {
       LayoutConstraints childMeasure = innerConstraints;
-      childMeasure.maxWidth = allocW[i];
+      childMeasure.maxWidth = mainLayout.mainSizes[i];
       childMeasure.maxHeight =
           stack.alignment == Alignment::Stretch && heightConstrained ? assignedH : std::numeric_limits<float>::infinity();
       LayoutHints rowHints{};
@@ -1359,12 +1049,10 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     if (stack.alignment == Alignment::Stretch && heightConstrained) {
       rowInnerH = std::max(rowInnerH, assignedH);
     }
-
-    float usedW = stack.children.size() > 1 ? static_cast<float>(stack.children.size() - 1) * stack.spacing : 0.f;
-    for (float w : allocW) {
-      usedW += w;
-    }
-    float x = widthConstrained ? (assignedW - usedW) * 0.5f : 0.f;
+    layout::StackLayoutResult const stackLayout =
+        layout::layoutStack(layout::StackAxis::Horizontal, stack.alignment, rowSizes, mainLayout.mainSizes,
+                            stack.spacing, mainLayout.containerMainSize, mainLayout.startOffset,
+                            rowInnerH, rowInnerH > 0.f);
 
     std::vector<std::unique_ptr<SceneNode>> nextChildren{};
     nextChildren.reserve(stack.children.size());
@@ -1372,41 +1060,28 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
       Element const& child = stack.children[i];
       LocalId const local = childLocalId(child, i);
       NodeId const childId = SceneTree::childId(id, local);
-      std::unique_ptr<SceneNode> reuse{};
-      if (auto it = reusable.find(childId); it != reusable.end()) {
-        reuse = std::move(it->second);
-        reusable.erase(it);
-      }
+      std::unique_ptr<SceneNode> reuse = detail::takeReusableNode(reusable, childId);
+      layout::StackSlot const& slot = stackLayout.slots[i];
       LayoutConstraints childBuild = innerConstraints;
-      childBuild.maxWidth = allocW[i];
-      float const childAssignedH =
-          stack.alignment == Alignment::Stretch && rowInnerH > 0.f ? rowInnerH : rowSizes[i].height;
-      childBuild.maxHeight = childAssignedH;
+      childBuild.maxWidth = slot.assignedSize.width;
+      childBuild.maxHeight = slot.assignedSize.height;
       childBuild.minWidth = child.minMainSize();
       clampLayoutMinToMax(childBuild);
       LayoutHints rowHints{};
       rowHints.hStackCrossAlign = stack.alignment;
       ComponentKey childKey = current.key;
       childKey.push_back(local);
-      pushFrame(childBuild, rowHints, Point{contentOrigin.x + x, contentOrigin.y}, std::move(childKey),
-                Size{allocW[i], childAssignedH}, true, true);
+      pushFrame(childBuild, rowHints,
+                Point{contentOrigin.x + slot.origin.x, contentOrigin.y},
+                std::move(childKey), slot.assignedSize, true, slot.assignedSize.height > 0.f);
       std::unique_ptr<SceneNode> childNode = buildOrReuse(child, childId, std::move(reuse));
       popFrame();
-      childNode->position.x += x;
-      childNode->position.y += vAlignOffset(childNode->bounds.height,
-                                            stack.alignment == Alignment::Stretch && rowInnerH > 0.f ? rowInnerH
-                                                                                                      : std::max(rowInnerH, childNode->bounds.height),
-                                            stack.alignment);
+      childNode->position.x += slot.origin.x;
+      childNode->position.y += slot.origin.y;
       nextChildren.push_back(std::move(childNode));
-      x += allocW[i] + stack.spacing;
     }
     group->replaceChildren(std::move(nextChildren));
-    Size const groupSize{
-        widthConstrained ? std::max(0.f, assignedW) : std::max(usedW, 0.f),
-        stack.alignment == Alignment::Stretch && heightConstrained ? std::max(0.f, assignedH)
-                                                                   : std::max(rowInnerH, 0.f),
-    };
-    setAssignedGroupBounds(*group, groupSize);
+    setAssignedGroupBounds(*group, stackLayout.containerSize);
     core = std::move(group);
     break;
   }
@@ -1416,14 +1091,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     if (!group) {
       group = std::make_unique<SceneNode>(id);
     }
-    std::vector<std::unique_ptr<SceneNode>> existingChildren = group->releaseChildren();
-    std::unordered_map<NodeId, std::unique_ptr<SceneNode>, ::flux::NodeIdHash> reusable{};
-    reusable.reserve(existingChildren.size());
-    for (std::unique_ptr<SceneNode>& child : existingChildren) {
-      if (child) {
-        reusable.emplace(child->id(), std::move(child));
-      }
-    }
+    detail::ReusableSceneNodes reusable = detail::releaseReusableChildren(*group);
 
     float innerW = resolvedAssignedSpan(contentAssignedSize.width, current.hasAssignedWidth, innerConstraints.maxWidth);
     float innerH =
@@ -1459,11 +1127,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
       Element const& child = stack.children[i];
       LocalId const local = childLocalId(child, i);
       NodeId const childId = SceneTree::childId(id, local);
-      std::unique_ptr<SceneNode> reuse{};
-      if (auto it = reusable.find(childId); it != reusable.end()) {
-        reuse = std::move(it->second);
-        reusable.erase(it);
-      }
+      std::unique_ptr<SceneNode> reuse = detail::takeReusableNode(reusable, childId);
       LayoutConstraints childBuild{};
       childBuild.maxWidth = innerW;
       childBuild.maxHeight = innerH;
@@ -1488,36 +1152,17 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     if (!group) {
       group = std::make_unique<SceneNode>(id);
     }
-    std::vector<std::unique_ptr<SceneNode>> existingChildren = group->releaseChildren();
-    std::unordered_map<NodeId, std::unique_ptr<SceneNode>, ::flux::NodeIdHash> reusable{};
-    reusable.reserve(existingChildren.size());
-    for (std::unique_ptr<SceneNode>& child : existingChildren) {
-      if (child) {
-        reusable.emplace(child->id(), std::move(child));
-      }
-    }
+    detail::ReusableSceneNodes reusable = detail::releaseReusableChildren(*group);
 
     float const innerW =
         resolvedAssignedSpan(contentAssignedSize.width, current.hasAssignedWidth, innerConstraints.maxWidth);
     float const innerH =
         resolvedAssignedSpan(contentAssignedSize.height, current.hasAssignedHeight, innerConstraints.maxHeight);
-    std::size_t const cols = std::max<std::size_t>(1, grid.columns);
     std::size_t const n = grid.children.size();
-    std::size_t const rowCount = n == 0 ? 0 : (n + cols - 1) / cols;
-    float const cellW =
-        innerW > 0.f ? std::max(0.f, (innerW - static_cast<float>(cols - 1) * grid.horizontalSpacing) /
-                                        static_cast<float>(cols))
-                     : 0.f;
-    float const cellH =
-        innerH > 0.f && rowCount > 0
-            ? std::max(0.f, (innerH - static_cast<float>(rowCount - 1) * grid.verticalSpacing) /
-                                 static_cast<float>(rowCount))
-            : 0.f;
-
-    LayoutConstraints childConstraints = innerConstraints;
-    childConstraints.maxWidth = cellW > 0.f ? cellW : std::numeric_limits<float>::infinity();
-    childConstraints.maxHeight = cellH > 0.f ? cellH : std::numeric_limits<float>::infinity();
-    clampLayoutMinToMax(childConstraints);
+    layout::GridTrackMetrics const metrics =
+        layout::resolveGridTrackMetrics(grid.columns, n, grid.horizontalSpacing, grid.verticalSpacing,
+                                        innerW, innerW > 0.f, innerH, innerH > 0.f);
+    LayoutConstraints const childConstraints = layout::gridChildConstraints(innerConstraints, metrics);
 
     std::vector<Size> sizes{};
     sizes.reserve(n);
@@ -1527,92 +1172,34 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
       childKey.push_back(childLocalId(child, i));
       sizes.push_back(measureElement(child, childConstraints, LayoutHints{}, childKey));
     }
-
-    std::vector<float> rowH(rowCount, cellH);
-    std::vector<float> colW(cols, cellW);
-    if (cellH <= 0.f) {
-      std::fill(rowH.begin(), rowH.end(), 0.f);
-      for (std::size_t i = 0; i < n; ++i) {
-        rowH[i / cols] = std::max(rowH[i / cols], sizes[i].height);
-      }
-    }
-    if (cellW <= 0.f) {
-      std::fill(colW.begin(), colW.end(), 0.f);
-      for (std::size_t i = 0; i < n; ++i) {
-        colW[i % cols] = std::max(colW[i % cols], sizes[i].width);
-      }
-    }
+    layout::GridLayoutResult const gridLayout =
+        layout::layoutGrid(metrics, grid.horizontalSpacing, grid.verticalSpacing,
+                           innerW, innerW > 0.f, innerH, innerH > 0.f, sizes);
 
     std::vector<std::unique_ptr<SceneNode>> nextChildren{};
     nextChildren.reserve(n);
-    float y = 0.f;
-    for (std::size_t row = 0; row < rowCount; ++row) {
-      float x = 0.f;
-      for (std::size_t col = 0; col < cols; ++col) {
-        std::size_t const index = row * cols + col;
-        if (index >= n) {
-          break;
-        }
-        Element const& child = grid.children[index];
-        LocalId const local = childLocalId(child, index);
-        NodeId const childId = SceneTree::childId(id, local);
-        std::unique_ptr<SceneNode> reuse{};
-        if (auto it = reusable.find(childId); it != reusable.end()) {
-          reuse = std::move(it->second);
-          reusable.erase(it);
-        }
-        LayoutConstraints childBuild = childConstraints;
-        if (cellW > 0.f) {
-          childBuild.maxWidth = cellW;
-        }
-        if (rowH[row] > 0.f) {
-          childBuild.maxHeight = rowH[row];
-        }
-        clampLayoutMinToMax(childBuild);
-        ComponentKey childKey = current.key;
-        childKey.push_back(local);
-        float const frameW = cellW > 0.f ? cellW : colW[col];
-        float const frameH = rowH[row] > 0.f ? rowH[row] : sizes[index].height;
-        pushFrame(childBuild, LayoutHints{}, Point{contentOrigin.x + x, contentOrigin.y + y}, std::move(childKey),
-                  Size{frameW, frameH}, true, true);
-        std::unique_ptr<SceneNode> childNode = buildOrReuse(child, childId, std::move(reuse));
-        popFrame();
-        childNode->position.x += x + hAlignOffset(childNode->bounds.width, frameW, grid.horizontalAlignment);
-        childNode->position.y += y + vAlignOffset(childNode->bounds.height, frameH, grid.verticalAlignment);
-        nextChildren.push_back(std::move(childNode));
-        x += frameW;
-        if (col + 1 < cols && index + 1 < n) {
-          x += grid.horizontalSpacing;
-        }
-      }
-      y += rowH[row];
-      if (row + 1 < rowCount) {
-        y += grid.verticalSpacing;
-      }
+    for (std::size_t index = 0; index < n; ++index) {
+      Element const& child = grid.children[index];
+      LocalId const local = childLocalId(child, index);
+      NodeId const childId = SceneTree::childId(id, local);
+      std::unique_ptr<SceneNode> reuse = detail::takeReusableNode(reusable, childId);
+      Rect const slot = gridLayout.slots[index];
+      LayoutConstraints childBuild = childConstraints;
+      childBuild.maxWidth = slot.width;
+      childBuild.maxHeight = slot.height;
+      clampLayoutMinToMax(childBuild);
+      ComponentKey childKey = current.key;
+      childKey.push_back(local);
+      pushFrame(childBuild, LayoutHints{}, Point{contentOrigin.x + slot.x, contentOrigin.y + slot.y},
+                std::move(childKey), Size{slot.width, slot.height}, true, true);
+      std::unique_ptr<SceneNode> childNode = buildOrReuse(child, childId, std::move(reuse));
+      popFrame();
+      childNode->position.x += slot.x + hAlignOffset(childNode->bounds.width, slot.width, grid.horizontalAlignment);
+      childNode->position.y += slot.y + vAlignOffset(childNode->bounds.height, slot.height, grid.verticalAlignment);
+      nextChildren.push_back(std::move(childNode));
     }
     group->replaceChildren(std::move(nextChildren));
-    float totalW = innerW;
-    if (totalW <= 0.f) {
-      totalW = 0.f;
-      std::size_t const usedCols = std::min(cols, n);
-      if (usedCols > 1) {
-        totalW += static_cast<float>(usedCols - 1) * grid.horizontalSpacing;
-      }
-      for (std::size_t col = 0; col < usedCols; ++col) {
-        totalW += colW[col];
-      }
-    }
-    float totalH = innerH;
-    if (totalH <= 0.f) {
-      totalH = 0.f;
-      if (rowCount > 1) {
-        totalH += static_cast<float>(rowCount - 1) * grid.verticalSpacing;
-      }
-      for (float rowHeight : rowH) {
-        totalH += rowHeight;
-      }
-    }
-    setGroupBounds(*group, Size{totalW, totalH});
+    setGroupBounds(*group, gridLayout.containerSize);
     core = std::move(group);
     break;
   }
@@ -1622,14 +1209,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     if (!group) {
       group = std::make_unique<SceneNode>(id);
     }
-    std::vector<std::unique_ptr<SceneNode>> existingChildren = group->releaseChildren();
-    std::unordered_map<NodeId, std::unique_ptr<SceneNode>, ::flux::NodeIdHash> reusable{};
-    reusable.reserve(existingChildren.size());
-    for (std::unique_ptr<SceneNode>& child : existingChildren) {
-      if (child) {
-        reusable.emplace(child->id(), std::move(child));
-      }
-    }
+    detail::ReusableSceneNodes reusable = detail::releaseReusableChildren(*group);
 
     Size const viewport{
         current.hasAssignedWidth ? std::max(0.f, contentAssignedSize.width)
@@ -1640,7 +1220,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     if (offsetView.viewportSize.signal && !sizeApproximatelyEqual(*offsetView.viewportSize, viewport)) {
       offsetView.viewportSize.setSilently(viewport);
     }
-    LayoutConstraints childConstraints = scrollChildConstraints(offsetView.axis, innerConstraints, viewport);
+    LayoutConstraints const childConstraints = layout::scrollChildConstraints(offsetView.axis, innerConstraints, viewport);
     std::vector<Size> sizes{};
     sizes.reserve(offsetView.children.size());
     for (std::size_t i = 0; i < offsetView.children.size(); ++i) {
@@ -1649,79 +1229,39 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
       childKey.push_back(childLocalId(child, i));
       sizes.push_back(measureElement(child, childConstraints, LayoutHints{}, childKey));
     }
-    Size const contentSize = scrollContentSize(offsetView.axis, sizes);
+    layout::ScrollContentLayout const scrollLayout =
+        layout::layoutScrollContent(offsetView.axis, viewport, offsetView.offset, sizes);
+    Size const contentSize = scrollLayout.contentSize;
     if (offsetView.contentSize.signal && !sizeApproximatelyEqual(*offsetView.contentSize, contentSize)) {
       offsetView.contentSize.setSilently(contentSize);
     }
 
     std::vector<std::unique_ptr<SceneNode>> nextChildren{};
     nextChildren.reserve(offsetView.children.size());
-    if (offsetView.axis == ScrollAxis::Horizontal) {
-      float x = -offsetView.offset.x;
-      for (std::size_t i = 0; i < offsetView.children.size(); ++i) {
-        Element const& child = offsetView.children[i];
-        LocalId const local = childLocalId(child, i);
-        NodeId const childId = SceneTree::childId(id, local);
-        std::unique_ptr<SceneNode> reuse{};
-        if (auto it = reusable.find(childId); it != reusable.end()) {
-          reuse = std::move(it->second);
-          reusable.erase(it);
-        }
-        LayoutConstraints childBuild = childConstraints;
-        ComponentKey childKey = current.key;
-        childKey.push_back(local);
-        pushFrame(childBuild, LayoutHints{}, Point{contentOrigin.x + x, contentOrigin.y}, std::move(childKey),
-                  Size{sizes[i].width, viewport.height}, true, viewport.height > 0.f);
-        std::unique_ptr<SceneNode> childNode = buildOrReuse(child, childId, std::move(reuse));
-        popFrame();
-        childNode->position.x += x;
-        nextChildren.push_back(std::move(childNode));
-        x += sizes[i].width;
+    for (std::size_t i = 0; i < offsetView.children.size(); ++i) {
+      Element const& child = offsetView.children[i];
+      LocalId const local = childLocalId(child, i);
+      NodeId const childId = SceneTree::childId(id, local);
+      std::unique_ptr<SceneNode> reuse = detail::takeReusableNode(reusable, childId);
+      layout::ScrollChildSlot const& slot = scrollLayout.slots[i];
+      LayoutConstraints childBuild = childConstraints;
+      if (slot.assignedSize.width > 0.f) {
+        childBuild.maxWidth = slot.assignedSize.width;
       }
-    } else if (offsetView.axis == ScrollAxis::Vertical) {
-      float y = -offsetView.offset.y;
-      for (std::size_t i = 0; i < offsetView.children.size(); ++i) {
-        Element const& child = offsetView.children[i];
-        LocalId const local = childLocalId(child, i);
-        NodeId const childId = SceneTree::childId(id, local);
-        std::unique_ptr<SceneNode> reuse{};
-        if (auto it = reusable.find(childId); it != reusable.end()) {
-          reuse = std::move(it->second);
-          reusable.erase(it);
-        }
-        LayoutConstraints childBuild = childConstraints;
-        ComponentKey childKey = current.key;
-        childKey.push_back(local);
-        pushFrame(childBuild, LayoutHints{}, Point{contentOrigin.x, contentOrigin.y + y}, std::move(childKey),
-                  Size{viewport.width, sizes[i].height}, viewport.width > 0.f, true);
-        std::unique_ptr<SceneNode> childNode = buildOrReuse(child, childId, std::move(reuse));
-        popFrame();
-        childNode->position.y += y;
-        nextChildren.push_back(std::move(childNode));
-        y += sizes[i].height;
+      if (slot.assignedSize.height > 0.f) {
+        childBuild.maxHeight = slot.assignedSize.height;
       }
-    } else {
-      for (std::size_t i = 0; i < offsetView.children.size(); ++i) {
-        Element const& child = offsetView.children[i];
-        LocalId const local = childLocalId(child, i);
-        NodeId const childId = SceneTree::childId(id, local);
-        std::unique_ptr<SceneNode> reuse{};
-        if (auto it = reusable.find(childId); it != reusable.end()) {
-          reuse = std::move(it->second);
-          reusable.erase(it);
-        }
-        LayoutConstraints childBuild = childConstraints;
-        ComponentKey childKey = current.key;
-        childKey.push_back(local);
-        pushFrame(childBuild, LayoutHints{},
-                  Point{contentOrigin.x - offsetView.offset.x, contentOrigin.y - offsetView.offset.y},
-                  std::move(childKey), sizes[i], true, true);
-        std::unique_ptr<SceneNode> childNode = buildOrReuse(child, childId, std::move(reuse));
-        popFrame();
-        childNode->position.x -= offsetView.offset.x;
-        childNode->position.y -= offsetView.offset.y;
-        nextChildren.push_back(std::move(childNode));
-      }
+      ComponentKey childKey = current.key;
+      childKey.push_back(local);
+      pushFrame(childBuild, LayoutHints{},
+                Point{contentOrigin.x + slot.origin.x, contentOrigin.y + slot.origin.y},
+                std::move(childKey), slot.assignedSize, slot.assignedSize.width > 0.f,
+                slot.assignedSize.height > 0.f);
+      std::unique_ptr<SceneNode> childNode = buildOrReuse(child, childId, std::move(reuse));
+      popFrame();
+      childNode->position.x += slot.origin.x;
+      childNode->position.y += slot.origin.y;
+      nextChildren.push_back(std::move(childNode));
     }
     group->replaceChildren(std::move(nextChildren));
     setGroupBounds(*group, contentSize);
@@ -1774,7 +1314,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     if (viewportState.signal && !sizeApproximatelyEqual(*viewportState, viewport)) {
       viewportState.setSilently(viewport);
     }
-    LayoutConstraints childConstraints = scrollChildConstraints(ax, innerConstraints, viewport);
+    LayoutConstraints const childConstraints = layout::scrollChildConstraints(ax, innerConstraints, viewport);
 
     std::vector<Element> contentChildren = scrollView.children;
     std::vector<Size> sizes{};
@@ -1785,16 +1325,18 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
       childKey.push_back(childLocalId(child, i));
       sizes.push_back(measureElement(child, childConstraints, LayoutHints{}, childKey));
     }
-    Size const contentSize = scrollContentSize(ax, sizes);
+    layout::ScrollContentLayout const scrollLayout =
+        layout::layoutScrollContent(ax, viewport, scrollOffset, sizes);
+    Size const contentSize = scrollLayout.contentSize;
     if (contentState.signal && !sizeApproximatelyEqual(*contentState, contentSize)) {
       contentState.setSilently(contentSize);
     }
-    scrollOffset = clampScrollOffset(ax, scrollOffset, viewport, contentSize);
+    scrollOffset = scrollLayout.clampedOffset;
     if (offsetState.signal && scrollOffset != *offsetState) {
       offsetState.setSilently(scrollOffset);
     }
 
-    Point const scrollRange = maxScrollOffset(ax, viewport, contentSize);
+    Point const scrollRange = layout::maxScrollOffset(ax, viewport, contentSize);
     bool const showsVerticalIndicator = scrollRange.y > 0.f;
     bool const showsHorizontalIndicator = scrollRange.x > 0.f;
     bool const showsAnyIndicator = showsVerticalIndicator || showsHorizontalIndicator;
@@ -1804,10 +1346,10 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     Transition const indicatorHide = Transition::linear(theme.durationMedium).delayed(0.85f);
     float const indicatorOpacity =
         indicatorOpacityAnimation ? indicatorOpacityAnimation->get() : 0.f;
-    ScrollIndicatorMetrics const verticalIndicator =
-        makeVerticalIndicator(scrollOffset, viewport, contentSize, showsHorizontalIndicator);
-    ScrollIndicatorMetrics const horizontalIndicator =
-        makeHorizontalIndicator(scrollOffset, viewport, contentSize, showsVerticalIndicator);
+    layout::ScrollIndicatorMetrics const verticalIndicator =
+        layout::makeVerticalIndicator(scrollOffset, viewport, contentSize, showsHorizontalIndicator);
+    layout::ScrollIndicatorMetrics const horizontalIndicator =
+        layout::makeHorizontalIndicator(scrollOffset, viewport, contentSize, showsVerticalIndicator);
 
     std::unique_ptr<ModifierSceneNode> modifier = releaseAs<ModifierSceneNode>(std::move(existing));
     if (!modifier) {
@@ -1824,112 +1366,43 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     if (!viewportGroup) {
       viewportGroup = std::make_unique<SceneNode>(SceneTree::childId(id, LocalId::fromString("$content")));
     }
-    std::vector<std::unique_ptr<SceneNode>> viewportChildren = viewportGroup->releaseChildren();
-    std::unordered_map<NodeId, std::unique_ptr<SceneNode>, ::flux::NodeIdHash> reusableViewport{};
-    reusableViewport.reserve(viewportChildren.size());
-    for (std::unique_ptr<SceneNode>& child : viewportChildren) {
-      if (child) {
-        reusableViewport.emplace(child->id(), std::move(child));
-      }
-    }
+    detail::ReusableSceneNodes reusableViewport = detail::releaseReusableChildren(*viewportGroup);
 
     NodeId const scrolledGroupId = SceneTree::childId(viewportGroup->id(), LocalId::fromString("$scroll"));
-    std::unique_ptr<SceneNode> existingScrolledGroup{};
-    if (auto it = reusableViewport.find(scrolledGroupId); it != reusableViewport.end()) {
-      existingScrolledGroup = std::move(it->second);
-      reusableViewport.erase(it);
-    }
+    std::unique_ptr<SceneNode> existingScrolledGroup = detail::takeReusableNode(reusableViewport, scrolledGroupId);
     std::unique_ptr<SceneNode> scrolledGroup = releasePlainGroup(std::move(existingScrolledGroup));
     if (!scrolledGroup) {
       scrolledGroup = std::make_unique<SceneNode>(scrolledGroupId);
     }
-    std::vector<std::unique_ptr<SceneNode>> existingChildren = scrolledGroup->releaseChildren();
-    std::unordered_map<NodeId, std::unique_ptr<SceneNode>, ::flux::NodeIdHash> reusable{};
-    reusable.reserve(existingChildren.size());
-    for (std::unique_ptr<SceneNode>& child : existingChildren) {
-      if (child) {
-        reusable.emplace(child->id(), std::move(child));
-      }
-    }
+    detail::ReusableSceneNodes reusable = detail::releaseReusableChildren(*scrolledGroup);
 
     std::vector<std::unique_ptr<SceneNode>> scrolledChildren{};
     scrolledChildren.reserve(contentChildren.size());
-    if (ax == ScrollAxis::Horizontal) {
-      float x = -scrollOffset.x;
-      for (std::size_t i = 0; i < contentChildren.size(); ++i) {
-        Element const& child = contentChildren[i];
-        LocalId const local = childLocalId(child, i);
-        NodeId const childId = SceneTree::childId(scrolledGroup->id(), local);
-        std::unique_ptr<SceneNode> reuse{};
-        if (auto it = reusable.find(childId); it != reusable.end()) {
-          reuse = std::move(it->second);
-          reusable.erase(it);
-        }
-        ComponentKey childKey = current.key;
-        childKey.push_back(local);
-        pushFrame(childConstraints, LayoutHints{}, Point{contentOrigin.x + x, contentOrigin.y}, std::move(childKey),
-                  Size{sizes[i].width, viewport.height}, true, viewport.height > 0.f);
-        std::unique_ptr<SceneNode> childNode = buildOrReuse(child, childId, std::move(reuse));
-        popFrame();
-        childNode->position.x += x;
-        scrolledChildren.push_back(std::move(childNode));
-        x += sizes[i].width;
-      }
-    } else if (ax == ScrollAxis::Vertical) {
-      float y = -scrollOffset.y;
-      for (std::size_t i = 0; i < contentChildren.size(); ++i) {
-        Element const& child = contentChildren[i];
-        LocalId const local = childLocalId(child, i);
-        NodeId const childId = SceneTree::childId(scrolledGroup->id(), local);
-        std::unique_ptr<SceneNode> reuse{};
-        if (auto it = reusable.find(childId); it != reusable.end()) {
-          reuse = std::move(it->second);
-          reusable.erase(it);
-        }
-        ComponentKey childKey = current.key;
-        childKey.push_back(local);
-        pushFrame(childConstraints, LayoutHints{}, Point{contentOrigin.x, contentOrigin.y + y}, std::move(childKey),
-                  Size{viewport.width, sizes[i].height}, viewport.width > 0.f, true);
-        std::unique_ptr<SceneNode> childNode = buildOrReuse(child, childId, std::move(reuse));
-        popFrame();
-        childNode->position.y += y;
-        scrolledChildren.push_back(std::move(childNode));
-        y += sizes[i].height;
-      }
-    } else {
-      for (std::size_t i = 0; i < contentChildren.size(); ++i) {
-        Element const& child = contentChildren[i];
-        LocalId const local = childLocalId(child, i);
-        NodeId const childId = SceneTree::childId(scrolledGroup->id(), local);
-        std::unique_ptr<SceneNode> reuse{};
-        if (auto it = reusable.find(childId); it != reusable.end()) {
-          reuse = std::move(it->second);
-          reusable.erase(it);
-        }
-        ComponentKey childKey = current.key;
-        childKey.push_back(local);
-        pushFrame(childConstraints, LayoutHints{},
-                  Point{contentOrigin.x - scrollOffset.x, contentOrigin.y - scrollOffset.y}, std::move(childKey),
-                  sizes[i], true, true);
-        std::unique_ptr<SceneNode> childNode = buildOrReuse(child, childId, std::move(reuse));
-        popFrame();
-        childNode->position.x -= scrollOffset.x;
-        childNode->position.y -= scrollOffset.y;
-        scrolledChildren.push_back(std::move(childNode));
-      }
+    for (std::size_t i = 0; i < contentChildren.size(); ++i) {
+      Element const& child = contentChildren[i];
+      LocalId const local = childLocalId(child, i);
+      NodeId const childId = SceneTree::childId(scrolledGroup->id(), local);
+      std::unique_ptr<SceneNode> reuse = detail::takeReusableNode(reusable, childId);
+      layout::ScrollChildSlot const& slot = scrollLayout.slots[i];
+      ComponentKey childKey = current.key;
+      childKey.push_back(local);
+      pushFrame(childConstraints, LayoutHints{},
+                Point{contentOrigin.x + slot.origin.x, contentOrigin.y + slot.origin.y},
+                std::move(childKey), slot.assignedSize, slot.assignedSize.width > 0.f,
+                slot.assignedSize.height > 0.f);
+      std::unique_ptr<SceneNode> childNode = buildOrReuse(child, childId, std::move(reuse));
+      popFrame();
+      childNode->position.x += slot.origin.x;
+      childNode->position.y += slot.origin.y;
+      scrolledChildren.push_back(std::move(childNode));
     }
     scrolledGroup->replaceChildren(std::move(scrolledChildren));
     setGroupBounds(*scrolledGroup, contentSize);
 
     auto updateIndicatorNode =
-        [&](std::unordered_map<NodeId, std::unique_ptr<SceneNode>, ::flux::NodeIdHash>& reusableMap,
-            NodeId indicatorId, ScrollIndicatorMetrics const& metrics, bool vertical)
-        -> std::unique_ptr<SceneNode> {
-      std::unique_ptr<RectSceneNode> rectNode{};
-      if (auto it = reusableMap.find(indicatorId); it != reusableMap.end()) {
-        rectNode = releaseAs<RectSceneNode>(std::move(it->second));
-        reusableMap.erase(it);
-      }
+        [&](detail::ReusableSceneNodes& reusableMap, NodeId indicatorId, layout::ScrollIndicatorMetrics const& metrics,
+            bool vertical) -> std::unique_ptr<SceneNode> {
+      std::unique_ptr<RectSceneNode> rectNode = detail::takeReusableNodeAs<RectSceneNode>(reusableMap, indicatorId);
       if (!rectNode) {
         rectNode = std::make_unique<RectSceneNode>(indicatorId);
       }
@@ -1955,11 +1428,8 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     if (showsAnyIndicator) {
       NodeId const indicatorOverlayId =
           SceneTree::childId(viewportGroup->id(), LocalId::fromString("$indicators"));
-      std::unique_ptr<ModifierSceneNode> indicatorOverlay{};
-      if (auto it = reusableViewport.find(indicatorOverlayId); it != reusableViewport.end()) {
-        indicatorOverlay = releaseAs<ModifierSceneNode>(std::move(it->second));
-        reusableViewport.erase(it);
-      }
+      std::unique_ptr<ModifierSceneNode> indicatorOverlay =
+          detail::takeReusableNodeAs<ModifierSceneNode>(reusableViewport, indicatorOverlayId);
       if (!indicatorOverlay) {
         indicatorOverlay = std::make_unique<ModifierSceneNode>(indicatorOverlayId);
       }
@@ -2041,7 +1511,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
             return;
           }
           Point const next{(*downPointState).x - p.x, (*downPointState).y - p.y};
-          offsetState = clampScrollOffset(ax, next, viewport, *contentState);
+          offsetState = layout::clampScrollOffset(ax, next, viewport, *contentState);
           revealIndicators();
         };
     interaction->onScroll =
@@ -2059,7 +1529,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
           if (ax == ScrollAxis::Horizontal || ax == ScrollAxis::Both) {
             next.x -= d.x;
           }
-          offsetState = clampScrollOffset(ax, next, viewport, *contentState);
+          offsetState = layout::clampScrollOffset(ax, next, viewport, *contentState);
           revealIndicators();
         };
     resolvedInteraction = std::move(interaction);
@@ -2114,29 +1584,20 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     PopoverCalloutShape const& callout = sceneEl.as<PopoverCalloutShape>();
     ComponentKey contentKey = current.key;
     contentKey.push_back(LocalId::fromString("$content"));
-    LayoutConstraints const contentConstraints = innerConstraintsForPopoverContent(callout, innerConstraints);
+    LayoutConstraints const contentConstraints =
+        layout::innerConstraintsForPopoverContent(callout, innerConstraints);
     Size const contentMeasured = measureElement(callout.content, contentConstraints, LayoutHints{}, contentKey);
-    PopoverCalloutLayout const calloutLayout = layoutPopoverCallout(callout, contentMeasured, innerConstraints);
+    layout::PopoverCalloutLayout const calloutLayout =
+        layout::layoutPopoverCallout(callout, contentMeasured, innerConstraints);
 
     std::unique_ptr<SceneNode> group = releasePlainGroup(std::move(existing));
     if (!group) {
       group = std::make_unique<SceneNode>(id);
     }
-    std::vector<std::unique_ptr<SceneNode>> existingChildren = group->releaseChildren();
-    std::unordered_map<NodeId, std::unique_ptr<SceneNode>, ::flux::NodeIdHash> reusable{};
-    reusable.reserve(existingChildren.size());
-    for (std::unique_ptr<SceneNode>& child : existingChildren) {
-      if (child) {
-        reusable.emplace(child->id(), std::move(child));
-      }
-    }
+    detail::ReusableSceneNodes reusable = detail::releaseReusableChildren(*group);
 
     NodeId const chromeId = SceneTree::childId(id, LocalId::fromString("$chrome"));
-    std::unique_ptr<PathSceneNode> chromeNode{};
-    if (auto it = reusable.find(chromeId); it != reusable.end()) {
-      chromeNode = releaseAs<PathSceneNode>(std::move(it->second));
-      reusable.erase(it);
-    }
+    std::unique_ptr<PathSceneNode> chromeNode = detail::takeReusableNodeAs<PathSceneNode>(reusable, chromeId);
     if (!chromeNode) {
       chromeNode = std::make_unique<PathSceneNode>(chromeId);
     }
@@ -2153,11 +1614,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     chromeNode->recomputeBounds();
 
     NodeId const contentId = SceneTree::childId(id, LocalId::fromString("$content"));
-    std::unique_ptr<SceneNode> reuseContent{};
-    if (auto it = reusable.find(contentId); it != reusable.end()) {
-      reuseContent = std::move(it->second);
-      reusable.erase(it);
-    }
+    std::unique_ptr<SceneNode> reuseContent = detail::takeReusableNode(reusable, contentId);
     pushFrame(contentConstraints, LayoutHints{},
               Point{contentOrigin.x + calloutLayout.contentOrigin.x, contentOrigin.y + calloutLayout.contentOrigin.y},
               std::move(contentKey), contentMeasured, true, true);

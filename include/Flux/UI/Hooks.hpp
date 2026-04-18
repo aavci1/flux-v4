@@ -228,12 +228,14 @@ Rect useBounds();
 /// Layout constraints for the current composite `body()` call (see `Runtime::pushCompositeConstraints`).
 LayoutConstraints const* useLayoutConstraints();
 
+namespace detail {
 struct ElementModifiers;
+}
 
 /// Outer \ref Element wrapper modifiers during \c body() when the view uses chained
 /// \c .padding() / \c .fill() / \c .stroke() / … (see \c StateStore::pushCompositeElementModifiers).
 /// \c nullptr when there is no modifier pass or outside \c body().
-ElementModifiers const* useOuterElementModifiers() noexcept;
+detail::ElementModifiers const* useOuterElementModifiers() noexcept;
 
 /// Registers a handler for the named action that fires only when the calling component subtree has focus.
 ///

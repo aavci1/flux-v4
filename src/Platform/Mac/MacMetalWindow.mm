@@ -14,12 +14,11 @@
 #include "Core/PlatformWindow.hpp"
 #include "Core/PlatformWindowCreate.hpp"
 #include "Graphics/Metal/MetalCanvas.hpp"
+#include "UI/DebugFlags.hpp"
 
 #include <algorithm>
 #include <atomic>
 #include <cstdio>
-#include <cstdlib>
-#include <cstring>
 #include <dispatch/dispatch.h>
 #include <memory>
 #include <string>
@@ -326,12 +325,7 @@ MouseButton buttonFromNSEvent(NSEvent* e) {
 }
 
 bool fluxDebugInputMacPost() {
-  static int cached = -1;
-  if (cached < 0) {
-    char const* v = std::getenv("FLUX_DEBUG_INPUT");
-    cached = (v && v[0] != '\0' && std::strcmp(v, "0") != 0 && std::strcmp(v, "false") != 0) ? 1 : 0;
-  }
-  return cached != 0;
+  return debug::inputEnabled();
 }
 
 void postInputFromView(FluxMetalView* view, InputEvent::Kind kind, NSEvent* e, std::string text) {

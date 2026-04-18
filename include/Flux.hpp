@@ -13,6 +13,7 @@
 #include <Flux/Core/KeyCodes.hpp>
 #include <Flux/Core/Types.hpp>
 #include <Flux/Core/Window.hpp>
+#include <Flux/Core/WindowUI.hpp>
 #include <Flux/Reactive/Reactive.hpp>
 #include <Flux/Graphics/Canvas.hpp>
 #include <Flux/Graphics/Styles.hpp>

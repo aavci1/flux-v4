@@ -8,10 +8,10 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdio>
-#include <cstdlib>
-#include <cstring>
 #include <limits>
 #include <vector>
+
+#include "UI/DebugFlags.hpp"
 
 namespace flux::layout {
 
@@ -85,12 +85,7 @@ constexpr float kFlexEpsilon = 1e-4f;
 /// Opt-in layout diagnostics (same env as the layout tree dump). When set, stderr may include
 /// flex-ineffectiveness hints.
 inline bool layoutDebugLayoutEnabled() {
-  static int cached = -1;
-  if (cached < 0) {
-    char const* v = std::getenv("FLUX_DEBUG_LAYOUT");
-    cached = (v && v[0] != '\0' && std::strcmp(v, "0") != 0) ? 1 : 0;
-  }
-  return cached != 0;
+  return debug::layoutEnabled();
 }
 
 /// Warn when `flexGrow > 0` on a child cannot apply because the stack has no finite main-axis size.

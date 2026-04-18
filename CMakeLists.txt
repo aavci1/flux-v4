@@ -101,12 +101,20 @@ add_library(flux STATIC
   src/Reactive/AnimationRebuild.cpp
   src/Reactive/AnimationClock.cpp
   src/Core/Window.cpp
+  src/Core/WindowRender.cpp
   src/UI/MeasureContext.cpp
   src/UI/Environment.cpp
   src/UI/Theme.cpp
   src/UI/StateStore.cpp
-  src/UI/Element.cpp
+  src/UI/Element/ElementMeasurement.cpp
+  src/UI/Element/ElementModifiers.cpp
+  src/UI/Element/ElementTypeErasure.cpp
   src/UI/ActionRegistry.cpp
+  src/UI/BuildSession.cpp
+  src/UI/Layout/Algorithms/StackLayout.cpp
+  src/UI/Layout/Algorithms/GridLayout.cpp
+  src/UI/Layout/Algorithms/ScrollLayout.cpp
+  src/UI/Layout/Algorithms/OverlayLayout.cpp
   src/UI/Layout/LayoutVStack.cpp
   src/UI/Layout/LayoutHStack.cpp
   src/UI/Layout/LayoutZStack.cpp
@@ -167,6 +175,8 @@ add_library(flux STATIC
   src/Scene/LineSceneNode.cpp
   src/Scene/RenderSceneNode.cpp
   src/Scene/CustomTransformSceneNode.cpp
+  src/Scene/SceneGeometry.cpp
+  src/Scene/SceneRender.cpp
   src/Scene/SceneTree.cpp
   src/Scene/SceneTreeDump.cpp
   src/Scene/SceneTreeInteraction.cpp
@@ -277,7 +287,11 @@ if(FLUX_BUILD_TESTS)
     tests/AnimationTests.cpp
     tests/MetalCanvasTests.mm
     tests/main.cpp
-    tests/SceneBuilderTests.cpp
+    tests/LayoutAlgorithmTests.cpp
+    tests/SceneBuilderReuseTests.cpp
+    tests/SceneBuilderLayoutTests.cpp
+    tests/SceneGeometryIndexTests.cpp
+    tests/SceneTraversalTests.cpp
     tests/LlamaEngineTests.cpp
     tests/ParagraphCacheTests.cpp
     tests/ParagraphCacheIncrementalTests.cpp

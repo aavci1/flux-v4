@@ -5,7 +5,7 @@
 /// CRTP base providing modifier methods on all view types, removing the need for
 /// explicit Element{...} wrapping before calling modifiers.
 ///
-/// Method bodies live at the bottom of Element.hpp (Element must be a complete type).
+/// Inline bodies live in `Flux/UI/Detail/ViewModifierInlines.hpp` and require `Element` to be complete.
 
 #include <Flux/Core/Cursor.hpp>
 #include <Flux/Core/Types.hpp>

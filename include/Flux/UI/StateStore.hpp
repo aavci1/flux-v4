@@ -26,8 +26,10 @@
 
 namespace flux {
 
-struct ElementModifiers;
 class Element;
+namespace detail {
+struct ElementModifiers;
+}
 
 /// One heap-allocated state value (a Signal<T>, Animation<T>, or any type).
 struct StateSlot {
@@ -98,9 +100,9 @@ public:
   LayoutConstraints const* currentCompositeConstraints() const;
 
   /// Outer \ref Element modifiers while the composite's \c body() runs (paired with \c pushComponent).
-  void pushCompositeElementModifiers(ElementModifiers const* m);
+  void pushCompositeElementModifiers(detail::ElementModifiers const* m);
   void popCompositeElementModifiers();
-  ElementModifiers const* currentCompositeElementModifiers() const noexcept;
+  detail::ElementModifiers const* currentCompositeElementModifiers() const noexcept;
 
   /// Called by useState<T> / useAnimation<T> inside body().
   /// Returns a reference to the next slot for the active component, creating
@@ -169,7 +171,7 @@ private:
   std::optional<std::uint64_t> overlayScope_{};
 
   std::vector<LayoutConstraints> compositeConstraintStack_{};
-  std::vector<ElementModifiers const*> compositeElementModifierStack_{};
+  std::vector<detail::ElementModifiers const*> compositeElementModifierStack_{};
   std::unordered_set<ComponentKey, ComponentKeyHash> pendingDirtyComposites_{};
   std::unordered_set<ComponentKey, ComponentKeyHash> activeDirtyComposites_{};
   bool forceFullRebuild_ = true;

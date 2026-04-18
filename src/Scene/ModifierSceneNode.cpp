@@ -2,38 +2,9 @@
 
 #include <Flux/Scene/Renderer.hpp>
 
-#include <algorithm>
+#include "Scene/SceneGeometry.hpp"
 
 namespace flux {
-
-namespace {
-
-Rect intersectRects(Rect lhs, Rect rhs) {
-  float const x0 = std::max(lhs.x, rhs.x);
-  float const y0 = std::max(lhs.y, rhs.y);
-  float const x1 = std::min(lhs.x + lhs.width, rhs.x + rhs.width);
-  float const y1 = std::min(lhs.y + lhs.height, rhs.y + rhs.height);
-  if (x1 <= x0 || y1 <= y0) {
-    return {};
-  }
-  return Rect{x0, y0, x1 - x0, y1 - y0};
-}
-
-Rect expandForStrokeAndShadow(Rect rect, StrokeStyle const& stroke, ShadowStyle const& shadow) {
-  float const strokeInset = stroke.isNone() ? 0.f : stroke.width * 0.5f;
-  float const blur = shadow.isNone() ? 0.f : shadow.radius;
-  float const left = std::max(strokeInset, blur - shadow.offset.x);
-  float const right = std::max(strokeInset, blur + shadow.offset.x);
-  float const top = std::max(strokeInset, blur - shadow.offset.y);
-  float const bottom = std::max(strokeInset, blur + shadow.offset.y);
-  rect.x -= left;
-  rect.y -= top;
-  rect.width += left + right;
-  rect.height += top + bottom;
-  return rect;
-}
-
-} // namespace
 
 ModifierSceneNode::ModifierSceneNode(NodeId id)
     : SceneNode(SceneNodeKind::Modifier, id) {}
@@ -68,12 +39,12 @@ Rect ModifierSceneNode::computeOwnBounds() const {
   if (!paints() || (chromeRect.width <= 0.f && chromeRect.height <= 0.f)) {
     return {};
   }
-  return expandForStrokeAndShadow(chromeRect, stroke, shadow);
+  return scene::expandForStrokeAndShadow(chromeRect, stroke, shadow);
 }
 
 Rect ModifierSceneNode::adjustSubtreeBounds(Rect r) const {
   if (clip.has_value()) {
-    return intersectRects(r, *clip);
+    return scene::intersectRects(r, *clip);
   }
   return r;
 }

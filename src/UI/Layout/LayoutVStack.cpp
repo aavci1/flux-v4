@@ -1,6 +1,7 @@
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/Views/VStack.hpp>
 
+#include "UI/Layout/Algorithms/StackLayout.hpp"
 #include "UI/Layout/ContainerScope.hpp"
 #include "UI/Layout/LayoutHelpers.hpp"
 
@@ -27,49 +28,33 @@ Size VStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints, 
 
   std::vector<Size> sizes;
   sizes.reserve(children.size());
-  float maxW = 0.f;
+  std::vector<StackMainAxisChild> stackChildren;
+  stackChildren.reserve(children.size());
   std::size_t n = children.size();
   for (Element const& ch : children) {
     Size const s = ch.measure(ctx, childCs, childHints, ts);
     sizes.push_back(s);
-    maxW = std::max(maxW, s.width);
-  }
-
-  std::vector<float> allocH(n);
-  for (std::size_t i = 0; i < n; ++i) {
-    allocH[i] = std::max(sizes[i].height, children[i].minMainSize());
+    stackChildren.push_back(StackMainAxisChild{
+        .naturalMainSize = s.height,
+        .minMainSize = ch.minMainSize(),
+        .flexGrow = ch.flexGrow(),
+        .flexShrink = ch.flexShrink(),
+    });
   }
 
   float const assignedH = stackMainAxisSpan(0.f, constraints.maxHeight);
   bool const heightConstrained = std::isfinite(assignedH) && assignedH > 0.f;
-  if (heightConstrained && n > 0) {
-    float const innerH = std::max(0.f, assignedH);
-    float const gaps = n > 1 ? static_cast<float>(n - 1) * spacing : 0.f;
-    float const targetSum = std::max(0.f, innerH - gaps);
-    float sumNat = 0.f;
-    for (float h : allocH) {
-      sumNat += h;
-    }
-    float const extra = targetSum - sumNat;
-    if (extra > kFlexEpsilon) {
-      flexGrowAlongMainAxis(allocH, children, extra);
-    } else if (extra < -kFlexEpsilon) {
-      flexShrinkAlongMainAxis(allocH, children, targetSum);
-    }
-  } else if (n > 0) {
+  if (!heightConstrained && n > 0) {
     warnFlexGrowIfParentMainAxisUnconstrained(children, heightConstrained);
   }
 
-  float sumH = 0.f;
-  if (n > 1) {
-    sumH += static_cast<float>(n - 1) * spacing;
-  }
-  for (float h : allocH) {
-    sumH += h;
-  }
-  float const outW = assignedW > 0.f ? assignedW : maxW;
-  float const outH = heightConstrained ? assignedH : sumH;
-  return {outW, outH};
+  StackMainAxisLayout const mainLayout =
+      layoutStackMainAxis(stackChildren, spacing, assignedH, heightConstrained);
+  StackLayoutResult const layoutResult =
+      layoutStack(StackAxis::Vertical, alignment, sizes, mainLayout.mainSizes,
+                  spacing, mainLayout.containerMainSize, mainLayout.startOffset, assignedW,
+                  assignedW > 0.f);
+  return layoutResult.containerSize;
 }
 
 } // namespace flux

@@ -13,13 +13,14 @@
 
 #include <Flux/Core/Cursor.hpp>
 #include <Flux/Core/Types.hpp>
-#include <Flux/UI/Element.hpp>
-#include <Flux/UI/Environment.hpp>
-#include <Flux/UI/Overlay.hpp>
 
 namespace flux {
 
 struct RootHolder;
+class Element;
+class EnvironmentLayer;
+struct OverlayConfig;
+struct OverlayId;
 
 class Application;
 class Canvas;
@@ -80,7 +81,7 @@ public:
 
   /// Pushes content onto the overlay stack. Safe from event handlers and outside build passes.
   /// Returns a handle for `removeOverlay`.
-  OverlayId pushOverlay(Element content, OverlayConfig config = {});
+  OverlayId pushOverlay(Element content, OverlayConfig config);
 
   /// Removes the overlay with the given id; no-op if invalid or already removed. Calls `onDismiss`.
   void removeOverlay(OverlayId id);
@@ -117,14 +118,10 @@ public:
   EnvironmentLayer const& environmentLayer() const;
 
   template<typename T>
-  void setEnvironmentValue(T value) {
-    environmentLayerMut().set(std::move(value));
-  }
+  void setEnvironmentValue(T value);
 
   template<typename T>
-  T const* environmentValue() const {
-    return environmentLayer().get<T>();
-  }
+  T const* environmentValue() const;
 
 protected:
   friend class Application;

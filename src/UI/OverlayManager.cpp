@@ -8,7 +8,6 @@
 #include <Flux/Scene/RectSceneNode.hpp>
 #include <Flux/Scene/SceneTree.hpp>
 #include <Flux/UI/Environment.hpp>
-#include <Flux/UI/SceneBuilder.hpp>
 #include <Flux/UI/Views/Popover.hpp>
 
 #include <algorithm>
@@ -17,6 +16,10 @@
 #include <limits>
 #include <typeinfo>
 #include <utility>
+
+#include "Scene/SceneGeometry.hpp"
+#include "UI/BuildSession.hpp"
+#include "UI/Layout/Algorithms/OverlayLayout.hpp"
 
 namespace flux {
 
@@ -33,12 +36,6 @@ Rect applyAnchorOutsets(Rect rect, EdgeInsets const &outsets) {
         rect.width + left + right,
         rect.height + top + bottom,
     };
-}
-
-Rect offsetRect(Rect rect, Point delta) {
-    rect.x += delta.x;
-    rect.y += delta.y;
-    return rect;
 }
 
 bool isPlainGroup(SceneNode const& node) {
@@ -92,43 +89,6 @@ char const *overlayPlacementName(OverlayConfig::Placement placement) {
         return "start";
     }
     return "unknown";
-}
-
-float resolveCrossAlignedX(Size win, Rect const &anchor, Rect contentBounds,
-                           OverlayConfig::CrossAlignment alignment) {
-    float const centeredX = (anchor.x + anchor.width * 0.5f) - (contentBounds.x + contentBounds.width * 0.5f);
-    float const startAlignedX = anchor.x - contentBounds.x;
-    float const endAlignedX = (anchor.x + anchor.width) - (contentBounds.x + contentBounds.width);
-
-    auto fitsHorizontally = [win, width = contentBounds.width](float x) {
-        return x >= 0.f && (x + width) <= win.width;
-    };
-
-    switch (alignment) {
-    case OverlayConfig::CrossAlignment::Center:
-        return centeredX;
-    case OverlayConfig::CrossAlignment::Start:
-        return startAlignedX;
-    case OverlayConfig::CrossAlignment::End:
-        return endAlignedX;
-    case OverlayConfig::CrossAlignment::PreferStart:
-        if (fitsHorizontally(startAlignedX)) {
-            return startAlignedX;
-        }
-        if (fitsHorizontally(endAlignedX)) {
-            return endAlignedX;
-        }
-        return startAlignedX;
-    case OverlayConfig::CrossAlignment::PreferEnd:
-        if (fitsHorizontally(endAlignedX)) {
-            return endAlignedX;
-        }
-        if (fitsHorizontally(startAlignedX)) {
-            return startAlignedX;
-        }
-        return endAlignedX;
-    }
-    return centeredX;
 }
 
 } // namespace
@@ -191,43 +151,7 @@ LayoutConstraints OverlayManager::resolveConstraints(Size windowSize, OverlayCon
 }
 
 Rect OverlayManager::resolveFrame(Size win, OverlayConfig const &cfg, Rect contentBounds) const {
-    if (!cfg.anchor.has_value()) {
-        return {0.f, 0.f, win.width, win.height};
-    }
-    Rect const &a = *cfg.anchor;
-    float const cy = a.y + a.height * 0.5f;
-    // Geometric center of drawn content in root-local coords (may be != (W/2, H/2) if min x/y != 0).
-    float const centerLocalY = contentBounds.y + contentBounds.height * 0.5f;
-    // Tip Y for Below: top of drawable union (arrow tip points up at anchor bottom).
-    float const tipTopLocalY = contentBounds.y;
-    // Tip Y for Above: bottom of drawable union (arrow tip points down at anchor top).
-    float const tipBottomLocalY = contentBounds.y + contentBounds.height;
-    float x = 0.f;
-    float y = 0.f;
-    // Center the arrow horizontally on the anchor; vertically align the tip to the anchor edge.
-    switch (cfg.placement) {
-    case OverlayConfig::Placement::Below:
-        x = resolveCrossAlignedX(win, a, contentBounds, cfg.crossAlignment);
-        y = a.y + a.height - tipTopLocalY;
-        break;
-    case OverlayConfig::Placement::Above:
-        x = resolveCrossAlignedX(win, a, contentBounds, cfg.crossAlignment);
-        y = a.y - tipBottomLocalY;
-        break;
-    case OverlayConfig::Placement::End:
-        x = a.x + a.width;
-        y = cy - centerLocalY;
-        break;
-    case OverlayConfig::Placement::Start:
-        x = a.x - contentBounds.width;
-        y = cy - centerLocalY;
-        break;
-    }
-    x += cfg.offset.x;
-    y += cfg.offset.y;
-    x = std::clamp(x, 0.f, std::max(0.f, win.width - contentBounds.width));
-    y = std::clamp(y, 0.f, std::max(0.f, win.height - contentBounds.height));
-    return {x, y, contentBounds.width, contentBounds.height};
+    return layout::resolveOverlayFrame(win, cfg, contentBounds);
 }
 
 void OverlayManager::insertOverlayBackdropChrome(SceneNode &root, OverlayEntry &entry, Size windowSize,
@@ -306,19 +230,16 @@ void OverlayManager::rebuild(Size windowSize, Runtime &runtime) {
         LayoutConstraints const cs = resolveConstraints(windowSize, entry.config);
 
         std::unique_ptr<SceneNode> existingContent = extractOverlayContentRoot(entry.sceneTree.takeRoot());
-        std::unique_ptr<SceneNode> contentRoot{};
-        if (entry.content.has_value()) {
-            SceneBuilder sceneBuilder{Application::instance().textSystem(), EnvironmentStack::current(), &entry.sceneGeometry};
-            EnvironmentLayer windowEnv = runtime.window().environmentLayer();
-            EnvironmentStack::current().push(std::move(windowEnv));
-            contentRoot = sceneBuilder.build(*entry.content, overlayContentId(), cs, std::move(existingContent),
-                                             ComponentKey{LocalId::fromIndex(0)});
-            EnvironmentStack::current().pop();
-        } else {
-            entry.sceneGeometry.clear();
-        }
+        BuildSession buildSession{
+            Application::instance().textSystem(),
+            EnvironmentStack::current(),
+            runtime.window().environmentLayer(),
+            &entry.sceneGeometry,
+        };
+        std::unique_ptr<SceneNode> contentRoot =
+            buildSession.buildRoot(resolveOverlayRootScene(entry.content), overlayContentId(), cs, std::move(existingContent));
 
-        Rect contentBounds = contentRoot ? offsetRect(contentRoot->bounds, contentRoot->position) : Rect{};
+        Rect contentBounds = contentRoot ? scene::offsetRect(contentRoot->bounds, contentRoot->position) : Rect{};
         if (contentBounds.width <= 0.f || !std::isfinite(contentBounds.width)) {
             contentBounds.width = 1.f;
         }

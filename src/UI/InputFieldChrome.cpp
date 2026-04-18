@@ -34,7 +34,7 @@ ResolvedPickerFieldChrome resolvePickerFieldChrome(PickerFieldChromeSpec const& 
 }
 
 InputFieldDecoration applyOuterInputFieldDecoration(ResolvedInputFieldChrome const& chrome,
-                                                    ElementModifiers const* outerMods) {
+                                                    detail::ElementModifiers const* outerMods) {
   FillStyle bgFill = FillStyle::solid(chrome.backgroundColor);
   StrokeStyle strokeN = StrokeStyle::solid(chrome.borderColor, chrome.borderWidth);
   StrokeStyle strokeF = StrokeStyle::solid(chrome.borderFocusColor, chrome.borderFocusWidth);

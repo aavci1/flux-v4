@@ -5,16 +5,16 @@
 #include <Flux/Detail/Runtime.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Scene/SceneTree.hpp>
-#include <Flux/UI/SceneBuilder.hpp>
 #include <Flux/UI/Environment.hpp>
 #include <Flux/UI/Overlay.hpp>
 
 #include <Flux/UI/Detail/LayoutDebugDump.hpp>
 
+#include "UI/BuildSession.hpp"
+#include "UI/DebugFlags.hpp"
+
 #include <cmath>
 #include <cstdio>
-#include <cstdlib>
-#include <cstring>
 #include <utility>
 
 namespace flux {
@@ -25,16 +25,8 @@ Size snapRootLayoutSize(Size s) {
   return { std::max(1.f, std::round(s.width)), std::max(1.f, std::round(s.height)) };
 }
 
-bool envTruthy(char const* v) {
-  return v && v[0] != '\0' && std::strcmp(v, "0") != 0 && std::strcmp(v, "false") != 0;
-}
-
 bool inputDebugEnabled() {
-  static int cached = -1;
-  if (cached < 0) {
-    cached = envTruthy(std::getenv("FLUX_DEBUG_INPUT")) ? 1 : 0;
-  }
-  return cached != 0;
+  return debug::inputEnabled();
 }
 
 } // namespace
@@ -92,27 +84,16 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
   {
     SceneTree& sceneTree = window_.sceneTree();
     std::unique_ptr<SceneNode> existingRoot = sceneTree.takeRoot();
-    Element const* sceneRoot = nullptr;
-    bool rootDescendantsStable = false;
-    if (rootHolder_) {
-      rootHolder_->prepareSceneElement(rootCs);
-      sceneRoot = rootHolder_->sceneElementForCurrentBuild();
-      rootDescendantsStable = rootHolder_->sceneElementDescendantsStable();
-    }
-    if (sceneRoot) {
-      SceneBuilder sceneBuilder{Application::instance().textSystem(), EnvironmentStack::current(), &sceneGeometry_};
-      EnvironmentLayer windowEnv = window_.environmentLayer();
-      EnvironmentStack::current().push(std::move(windowEnv));
-      ComponentKey const rootKey = rootHolder_->sceneRootKey();
-      if (StateStore* store = StateStore::current()) {
-        store->pushCompositePathStable(rootDescendantsStable);
-      }
-      std::unique_ptr<SceneNode> nextRoot =
-          sceneBuilder.build(*sceneRoot, NodeId{1ull}, rootCs, std::move(existingRoot), rootKey);
-      if (StateStore* store = StateStore::current()) {
-        store->popCompositePathStable();
-      }
-      EnvironmentStack::current().pop();
+    ResolvedRootScene const resolvedRoot = rootHolder_ ? rootHolder_->resolveScene(rootCs) : ResolvedRootScene{};
+    BuildSession buildSession{
+        Application::instance().textSystem(),
+        EnvironmentStack::current(),
+        window_.environmentLayer(),
+        &sceneGeometry_,
+    };
+    std::unique_ptr<SceneNode> nextRoot =
+        buildSession.buildRoot(resolvedRoot, NodeId{1ull}, rootCs, std::move(existingRoot));
+    if (nextRoot) {
       sceneTree.setRoot(std::move(nextRoot));
       layoutDebugDumpRetained(sceneTree, sceneGeometry_);
     } else {

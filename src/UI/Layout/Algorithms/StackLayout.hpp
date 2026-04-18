@@ -1,0 +1,53 @@
+#pragma once
+
+#include <Flux/Core/Types.hpp>
+#include <Flux/UI/Alignment.hpp>
+
+#include <span>
+#include <vector>
+
+namespace flux::layout {
+
+enum class StackAxis {
+  Vertical,
+  Horizontal,
+};
+
+struct StackMainAxisChild {
+  float naturalMainSize = 0.f;
+  float minMainSize = 0.f;
+  float flexGrow = 0.f;
+  float flexShrink = 0.f;
+};
+
+struct StackMainAxisLayout {
+  std::vector<float> mainSizes{};
+  float containerMainSize = 0.f;
+  float usedMainSize = 0.f;
+  float startOffset = 0.f;
+  bool constrained = false;
+};
+
+struct StackSlot {
+  Point origin{};
+  Size assignedSize{};
+};
+
+struct StackLayoutResult {
+  Size containerSize{};
+  std::vector<StackSlot> slots{};
+};
+
+StackMainAxisLayout layoutStackMainAxis(std::span<StackMainAxisChild const> children, float spacing,
+                                        float assignedMainSize, bool hasAssignedMainSize);
+
+StackLayoutResult layoutStack(StackAxis axis, Alignment crossAlignment,
+                              std::span<Size const> measuredSizes,
+                              std::span<float const> mainSizes,
+                              float spacing,
+                              float containerMainSize,
+                              float startOffset,
+                              float assignedCrossSize,
+                              bool hasAssignedCrossSize);
+
+} // namespace flux::layout

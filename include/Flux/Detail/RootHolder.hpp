@@ -30,12 +30,15 @@ auto makeCachedLeaf(C const& value) {
 
 /// Heap-allocated owner for the root component. Keeps the component at a stable address
 /// for the lifetime of the window.
+struct ResolvedRootScene {
+  Element const* element = nullptr;
+  ComponentKey rootKey{};
+  bool descendantsStable = false;
+};
+
 struct RootHolder {
   virtual ~RootHolder() = default;
-  virtual void prepareSceneElement(LayoutConstraints const& constraints) const = 0;
-  [[nodiscard]] virtual ComponentKey sceneRootKey() const noexcept = 0;
-  [[nodiscard]] virtual Element const* sceneElementForCurrentBuild() const noexcept = 0;
-  [[nodiscard]] virtual bool sceneElementDescendantsStable() const noexcept = 0;
+  [[nodiscard]] virtual ResolvedRootScene resolveScene(LayoutConstraints const& constraints) const = 0;
 };
 
 template<typename C>
@@ -54,9 +57,9 @@ struct TypedRootHolder final : RootHolder {
       : value(std::move(c))
       , cachedLeaf_(detail::makeCachedLeaf(value)) {}
 
-  void prepareSceneElement(LayoutConstraints const& constraints) const override {
+  [[nodiscard]] ResolvedRootScene resolveScene(LayoutConstraints const& constraints) const override {
+    ComponentKey const key = sceneRootKey();
     if constexpr (CompositeComponent<C>) {
-      ComponentKey const key = sceneRootKey();
       StateStore* store = StateStore::current();
       detail::CompositeBodyResolution resolution{};
       if (store) {
@@ -75,35 +78,36 @@ struct TypedRootHolder final : RootHolder {
       }
       if (store) {
         store->recordBodyConstraints(key, constraints);
+        sceneDescendantsStable_ = resolution.descendantsStable;
+        return ResolvedRootScene{
+            .element = store->cachedBody(key),
+            .rootKey = std::move(key),
+            .descendantsStable = sceneDescendantsStable_,
+        };
       }
       sceneDescendantsStable_ = resolution.descendantsStable;
+      return ResolvedRootScene{
+          .element = nullptr,
+          .rootKey = std::move(key),
+          .descendantsStable = sceneDescendantsStable_,
+      };
     } else {
       sceneDescendantsStable_ = false;
+      return ResolvedRootScene{
+          .element = &cachedLeaf_,
+          .rootKey = std::move(key),
+          .descendantsStable = false,
+      };
     }
   }
 
-  [[nodiscard]] Element const* sceneElementForCurrentBuild() const noexcept override {
-    if constexpr (CompositeComponent<C>) {
-      StateStore* const store = StateStore::current();
-      if (!store) {
-        return nullptr;
-      }
-      return store->cachedBody(sceneRootKey());
-    } else {
-      return &cachedLeaf_;
-    }
-  }
-
-  [[nodiscard]] ComponentKey sceneRootKey() const noexcept override {
+private:
+  [[nodiscard]] ComponentKey sceneRootKey() const noexcept {
     if constexpr (CompositeComponent<C>) {
       return ComponentKey{LocalId::fromIndex(0), LocalId::fromIndex(0)};
     } else {
       return ComponentKey{LocalId::fromIndex(0)};
     }
-  }
-
-  [[nodiscard]] bool sceneElementDescendantsStable() const noexcept override {
-    return sceneDescendantsStable_;
   }
 };
 

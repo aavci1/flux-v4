@@ -8,24 +8,16 @@
 #include <Flux/UI/StateStore.hpp>
 
 #include <cstdio>
-#include <cstdlib>
-#include <cstring>
 #include <vector>
+
+#include "UI/DebugFlags.hpp"
 
 namespace flux {
 
 namespace {
 
-bool envTruthy(char const* v) {
-  return v && v[0] != '\0' && std::strcmp(v, "0") != 0 && std::strcmp(v, "false") != 0;
-}
-
 bool inputDebugEnabled() {
-  static int cached = -1;
-  if (cached < 0) {
-    cached = envTruthy(std::getenv("FLUX_DEBUG_INPUT")) ? 1 : 0;
-  }
-  return cached != 0;
+  return debug::inputEnabled();
 }
 
 OverlayEntry const* overlayEntryForScope(OverlayManager const& overlays, std::optional<std::uint64_t> scope) {

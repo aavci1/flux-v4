@@ -12,7 +12,9 @@
 namespace flux {
 
 struct Theme;
+namespace detail {
 struct ElementModifiers;
+}
 
 /// Raw tokens matching \ref TextInput field chrome (sentinels \c kColorFromTheme / \c kFloatFromTheme allowed).
 struct InputFieldChromeSpec {
@@ -76,6 +78,6 @@ struct InputFieldDecoration {
 };
 
 InputFieldDecoration applyOuterInputFieldDecoration(ResolvedInputFieldChrome const& chrome,
-                                                    ElementModifiers const* outerMods);
+                                                    detail::ElementModifiers const* outerMods);
 
 } // namespace flux

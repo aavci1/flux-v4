@@ -143,7 +143,7 @@ LayoutConstraints const* StateStore::currentCompositeConstraints() const {
   return &compositeConstraintStack_.back();
 }
 
-void StateStore::pushCompositeElementModifiers(ElementModifiers const* m) {
+void StateStore::pushCompositeElementModifiers(detail::ElementModifiers const* m) {
   compositeElementModifierStack_.push_back(m);
 }
 
@@ -152,7 +152,7 @@ void StateStore::popCompositeElementModifiers() {
   compositeElementModifierStack_.pop_back();
 }
 
-ElementModifiers const* StateStore::currentCompositeElementModifiers() const noexcept {
+detail::ElementModifiers const* StateStore::currentCompositeElementModifiers() const noexcept {
   if (compositeElementModifierStack_.empty()) {
     return nullptr;
   }

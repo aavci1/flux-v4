@@ -15,8 +15,8 @@
 
 #include <cmath>
 #include <cstdio>
-#include <cstdlib>
-#include <cstring>
+
+#include "UI/DebugFlags.hpp"
 
 namespace flux {
 
@@ -24,24 +24,12 @@ namespace {
 
 constexpr float kTapSlop = 8.f;
 
-bool envTruthy(char const* v) {
-  return v && v[0] != '\0' && std::strcmp(v, "0") != 0 && std::strcmp(v, "false") != 0;
-}
-
 bool inputDebugEnabled() {
-  static int cached = -1;
-  if (cached < 0) {
-    cached = envTruthy(std::getenv("FLUX_DEBUG_INPUT")) ? 1 : 0;
-  }
-  return cached != 0;
+  return debug::inputEnabled();
 }
 
 bool inputDebugVerbose() {
-  static int cached = -1;
-  if (cached < 0) {
-    cached = envTruthy(std::getenv("FLUX_DEBUG_INPUT_VERBOSE")) ? 1 : 0;
-  }
-  return cached != 0;
+  return debug::inputVerbose();
 }
 
 void logNodeId(char const* label, NodeId id) {
