@@ -98,7 +98,7 @@ void VStack::layout(LayoutContext& ctx) const {
   }
 }
 
-Size VStack::measure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const&,
+Size VStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints, LayoutHints const&,
                      TextSystem& ts) const {
   ContainerMeasureScope scope(ctx);
   float const assignedW =

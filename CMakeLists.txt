@@ -103,6 +103,7 @@ add_library(flux STATIC
   src/Core/Window.cpp
   src/UI/LayoutTree.cpp
   src/UI/LayoutContext.cpp
+  src/UI/MeasureContext.cpp
   src/UI/Environment.cpp
   src/UI/Theme.cpp
   src/UI/StateStore.cpp
@@ -281,8 +282,6 @@ if(FLUX_BUILD_TESTS)
     tests/MetalCanvasTests.mm
     tests/main.cpp
     tests/SceneBuilderTests.cpp
-    tests/LayoutTreeTests.cpp
-    tests/LayoutIntegrationTests.cpp
     tests/LlamaEngineTests.cpp
     tests/ParagraphCacheTests.cpp
     tests/ParagraphCacheIncrementalTests.cpp

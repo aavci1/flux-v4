@@ -53,7 +53,7 @@ void ScaleAroundCenter::layout(LayoutContext& ctx) const {
   scope.layoutChild(child, Rect{x, y, childW, childH}, innerForBuild);
 }
 
-Size ScaleAroundCenter::measure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const&,
+Size ScaleAroundCenter::measure(MeasureContext& ctx, LayoutConstraints const& constraints, LayoutHints const&,
                                 TextSystem& ts) const {
   ContainerMeasureScope scope(ctx);
   float const assignedW = std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;

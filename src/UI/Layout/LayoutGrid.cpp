@@ -110,7 +110,7 @@ void Grid::layout(LayoutContext& ctx) const {
   }
 }
 
-Size Grid::measure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const&,
+Size Grid::measure(MeasureContext& ctx, LayoutConstraints const& constraints, LayoutHints const&,
                    TextSystem& ts) const {
   ContainerMeasureScope scope(ctx);
   float const assignedW =

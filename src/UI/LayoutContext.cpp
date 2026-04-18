@@ -18,12 +18,10 @@ struct ElementPinStorage {
 
 } // namespace detail
 LayoutContext::LayoutContext(TextSystem& ts, LayoutEngine& layout, LayoutTree& tree, MeasureCache* measureCache)
-    : textSystem_(ts)
+    : MeasureContext(ts, measureCache)
     , layoutEngine_(layout)
     , tree_(tree)
-    , measureCache_(measureCache)
     , elementPins_(std::make_shared<detail::ElementPinStorage>()) {
-  layoutStack_.push_back(LayoutFrame{});
   layerWorldStack_.push_back(Mat3::identity());
 }
 
@@ -37,135 +35,14 @@ Element& LayoutContext::pinElement(Element&& el) {
 std::shared_ptr<detail::ElementPinStorage> LayoutContext::pinnedElements() const noexcept {
   return elementPins_;
 }
-
-TextSystem& LayoutContext::textSystem() { return textSystem_; }
-
 LayoutEngine& LayoutContext::layoutEngine() { return layoutEngine_; }
 
 LayoutTree& LayoutContext::tree() { return tree_; }
 
 LayoutTree const& LayoutContext::tree() const { return tree_; }
 
-LayoutConstraints const& LayoutContext::constraints() const { return layoutStack_.back().constraints; }
-
-LayoutHints const& LayoutContext::hints() const { return layoutStack_.back().hints; }
-
-void LayoutContext::pushConstraints(LayoutConstraints const& c, LayoutHints hints) {
-#ifndef NDEBUG
-  assert(std::isfinite(c.minWidth) && std::isfinite(c.minHeight));
-  assert(c.minWidth <= c.maxWidth);
-  assert(c.minHeight <= c.maxHeight);
-#endif
-  layoutStack_.push_back(LayoutFrame{.constraints = c, .hints = std::move(hints)});
-}
-
-void LayoutContext::popConstraints() {
-  if (layoutStack_.size() > 1) {
-    layoutStack_.pop_back();
-  }
-}
-
-void LayoutContext::pushChildIndex() {
-  keyStack_.push_back(nextChildIndex_);
-  savedChildIndices_.push_back(nextChildIndex_);
-  nextChildIndex_ = 0;
-}
-
-void LayoutContext::popChildIndex() {
-  keyStack_.pop_back();
-  nextChildIndex_ = savedChildIndices_.back();
-  savedChildIndices_.pop_back();
-  ++nextChildIndex_;
-}
-
-void LayoutContext::setChildIndex(std::size_t index) { nextChildIndex_ = index; }
-
-void LayoutContext::pushExplicitChildLocalId(std::optional<LocalId> localId) {
-  explicitChildLocalIdStack_.push_back(std::move(localId));
-}
-
-void LayoutContext::popExplicitChildLocalId() {
-#ifndef NDEBUG
-  assert(!explicitChildLocalIdStack_.empty());
-#endif
-  explicitChildLocalIdStack_.pop_back();
-}
-
-LocalId LayoutContext::currentChildLocalId() const {
-  if (!explicitChildLocalIdStack_.empty() && explicitChildLocalIdStack_.back().has_value()) {
-    return *explicitChildLocalIdStack_.back();
-  }
-  return LocalId::fromIndex(nextChildIndex_);
-}
-
-ComponentKey LayoutContext::nextCompositeKey() {
-  ComponentKey key = keyStack_;
-  key.push_back(currentChildLocalId());
-  ++nextChildIndex_;
-  return key;
-}
-
-ComponentKey LayoutContext::peekNextCompositeKey() const {
-  ComponentKey key = keyStack_;
-  key.push_back(currentChildLocalId());
-  return key;
-}
-
-void LayoutContext::advanceChildSlot() { ++nextChildIndex_; }
-
-ComponentKey LayoutContext::leafComponentKey() const {
-  ComponentKey key = keyStack_;
-  key.push_back(currentChildLocalId());
-  return key;
-}
-
-void LayoutContext::rewindChildKeyIndex() { nextChildIndex_ = 0; }
-
-void LayoutContext::beginCompositeBodySubtree(ComponentKey compositeKey) {
-  (void)compositeKey;
-  skipNextLayoutChildAdvance_ = true;
-}
-
-bool LayoutContext::consumeCompositeBodySubtreeRootSkip() {
-  if (skipNextLayoutChildAdvance_) {
-    skipNextLayoutChildAdvance_ = false;
-    return true;
-  }
-  return false;
-}
-
-void LayoutContext::pushCompositeKeyTail(ComponentKey const& compositeKey) {
-  assert(!compositeKey.empty());
-  keyStack_.push_back(compositeKey.back());
-  savedChildIndices_.push_back(nextChildIndex_);
-  nextChildIndex_ = 0;
-}
-
-void LayoutContext::popCompositeKeyTail() {
-  assert(!keyStack_.empty());
-  keyStack_.pop_back();
-  assert(!savedChildIndices_.empty());
-  nextChildIndex_ = savedChildIndices_.back();
-  savedChildIndices_.pop_back();
-}
-
 void LayoutContext::registerCompositeSubtreeRootIfPending(LayoutNodeId layoutNodeId) {
   (void)layoutNodeId;
-}
-
-MeasureCache* LayoutContext::measureCache() const { return measureCache_; }
-
-void LayoutContext::pushActiveElementModifiers(ElementModifiers const* m) { activeElementModifiers_.push_back(m); }
-
-void LayoutContext::popActiveElementModifiers() {
-#ifndef NDEBUG
-  assert(!activeElementModifiers_.empty());
-#endif
-  activeElementModifiers_.pop_back();
-}
-
-ElementModifiers const* LayoutContext::activeElementModifiers() const noexcept {
-  return activeElementModifiers_.empty() ? nullptr : activeElementModifiers_.back();
 }
 
 void LayoutContext::pushLayerWorldTransform(Mat3 const& localToParentLayer) {

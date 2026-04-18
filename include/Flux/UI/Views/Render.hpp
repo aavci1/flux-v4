@@ -22,7 +22,7 @@ struct Render : ViewModifiers<Render> {
   bool pure = false;
 
   void layout(LayoutContext& ctx) const;
-  Size measure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
+  Size measure(MeasureContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
                TextSystem& textSystem) const;
 
   Size measure(LayoutConstraints const& constraints, LayoutHints const& hints) const {

@@ -179,7 +179,7 @@ private:
 
 class ContainerMeasureScope {
 public:
-  explicit ContainerMeasureScope(LayoutContext& ctx) : ctx_(ctx) {
+  explicit ContainerMeasureScope(MeasureContext& ctx) : ctx_(ctx) {
 #ifndef NDEBUG
     keyPathDepth0_ = ctx_.debugKeyPathDepth();
     savedDepth0_ = ctx_.debugSavedChildDepth();
@@ -202,7 +202,7 @@ public:
   ContainerMeasureScope& operator=(ContainerMeasureScope const&) = delete;
 
 private:
-  LayoutContext& ctx_;
+  MeasureContext& ctx_;
 #ifndef NDEBUG
   std::size_t keyPathDepth0_{};
   std::size_t savedDepth0_{};

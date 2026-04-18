@@ -78,7 +78,7 @@ void ScrollView::layout(LayoutContext &ctx) const {
     ctx.popCompositeKeyTail();
 }
 
-Size ScrollView::measure(LayoutContext &ctx, LayoutConstraints const &constraints, LayoutHints const &hints,
+Size ScrollView::measure(MeasureContext &ctx, LayoutConstraints const &constraints, LayoutHints const &hints,
                          TextSystem &ts) const {
     ComponentKey const key = ctx.nextCompositeKey();
     ctx.beginCompositeBodySubtree(key);

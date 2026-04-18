@@ -17,7 +17,7 @@ namespace flux {
 /// inset and clipping.
 struct HStack : ViewModifiers<HStack> {
   void layout(LayoutContext&) const;
-  Size measure(LayoutContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
+  Size measure(MeasureContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
 
   float spacing = 8.f;
   Alignment alignment = Alignment::Center;

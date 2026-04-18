@@ -20,7 +20,7 @@ enum class ScrollAxis { Vertical, Horizontal, Both };
 /// `VStack`/`HStack` (or similar) as the child when you need spacing.
 struct OffsetView : ViewModifiers<OffsetView> {
   void layout(LayoutContext&) const;
-  Size measure(LayoutContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
+  Size measure(MeasureContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
 
   Point offset{};
   ScrollAxis axis = ScrollAxis::Vertical;

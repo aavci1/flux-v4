@@ -21,7 +21,7 @@ void Render::layout(LayoutContext& ctx) const {
   ctx.registerCompositeSubtreeRootIfPending(id);
 }
 
-Size Render::measure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
+Size Render::measure(MeasureContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
                      TextSystem&) const {
   ctx.advanceChildSlot();
   return measure(constraints, hints);

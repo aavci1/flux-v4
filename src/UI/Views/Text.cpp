@@ -97,7 +97,7 @@ std::uint64_t Text::measureCacheKey() const noexcept {
   return h;
 }
 
-Size Text::measure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
+Size Text::measure(MeasureContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
                    TextSystem& textSystem) const {
   ctx.advanceChildSlot();
   (void)hints;

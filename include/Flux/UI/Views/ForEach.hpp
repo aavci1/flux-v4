@@ -73,7 +73,7 @@ struct Element::Model<ForEach<T>> final : Element::Concept {
   std::unique_ptr<Element> buildCompositeBody() const override { return std::make_unique<Element>(value.body()); }
 
   void layout(LayoutContext& ctx) const override;
-  Size measure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
+  Size measure(MeasureContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
                TextSystem& ts) const override;
 
   float flexGrow() const override { return 0.f; }
@@ -175,8 +175,8 @@ void Element::Model<ForEach<T>>::layout(LayoutContext& ctx) const {
 }
 
 template<typename T>
-Size Element::Model<ForEach<T>>::measure(LayoutContext& ctx, LayoutConstraints const& constraints,
-                                            LayoutHints const&, TextSystem& ts) const {
+Size Element::Model<ForEach<T>>::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
+                                         LayoutHints const&, TextSystem& ts) const {
   ComponentKey const forEachKey = ctx.nextCompositeKey();
   LayoutConstraints childCs = constraints;
   childCs.maxHeight = std::numeric_limits<float>::infinity();

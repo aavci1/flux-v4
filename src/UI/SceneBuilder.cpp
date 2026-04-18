@@ -14,7 +14,7 @@
 #include <Flux/UI/Detail/LeafBounds.hpp>
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/Hooks.hpp>
-#include <Flux/UI/LayoutContext.hpp>
+#include <Flux/UI/MeasureContext.hpp>
 #include <Flux/UI/StateStore.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Views/Grid.hpp>
@@ -424,28 +424,11 @@ void SceneBuilder::popFrame() {
 
 Size SceneBuilder::measureElement(Element const& el, LayoutConstraints const& constraints,
                                   LayoutHints const& hints, ComponentKey const& key) const {
-  LayoutEngine layoutEngine{};
-  layoutEngine.resetForBuild();
-  LayoutTree layoutTree{};
-  LayoutContext layoutContext{textSystem_, layoutEngine, layoutTree};
-  layoutContext.pushConstraints(constraints, hints);
-  layoutContext.keyStack_.clear();
-  layoutContext.savedChildIndices_.clear();
-  layoutContext.explicitChildLocalIdStack_.clear();
-  layoutContext.nextChildIndex_ = 0;
-  if (!key.empty()) {
-    for (std::size_t i = 0; i + 1 < key.size(); ++i) {
-      layoutContext.keyStack_.push_back(key[i]);
-    }
-    LocalId const local = key.back();
-    if (local.kind == LocalId::Kind::Positional) {
-      layoutContext.nextChildIndex_ = local.value == 0 ? 0u : static_cast<std::size_t>(local.value - 1ull);
-    } else {
-      layoutContext.explicitChildLocalIdStack_.push_back(local);
-    }
-  }
-  layoutContext.setCurrentElement(&el);
-  return el.measure(layoutContext, constraints, hints, textSystem_);
+  MeasureContext measureContext{textSystem_};
+  measureContext.pushConstraints(constraints, hints);
+  measureContext.resetTraversalState(key);
+  measureContext.setCurrentElement(&el);
+  return el.measure(measureContext, constraints, hints, textSystem_);
 }
 
 std::unique_ptr<SceneNode> SceneBuilder::build(Element const& el, NodeId id,

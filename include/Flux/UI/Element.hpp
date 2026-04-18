@@ -6,6 +6,7 @@
 /// optional flex overrides, and per-subtree environment values.
 
 #include <Flux/UI/LayoutContext.hpp>
+#include <Flux/UI/MeasureContext.hpp>
 #include <Flux/UI/LayoutTree.hpp>
 #include <Flux/UI/Component.hpp>
 #include <Flux/UI/Detail/LeafBounds.hpp>
@@ -199,9 +200,9 @@ public:
   Element& operator=(Element&&) noexcept = default;
 
   void layout(LayoutContext& ctx) const;
-  bool tryCachedMeasure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
+  bool tryCachedMeasure(MeasureContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
                         TextSystem& textSystem, Size& out) const;
-  Size measure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
+  Size measure(MeasureContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
                TextSystem& textSystem) const;
   [[nodiscard]] std::uint64_t measureId() const noexcept { return measureId_; }
   [[nodiscard]] ElementType typeTag() const noexcept { return impl_ ? impl_->elementType() : ElementType::Unknown; }
@@ -304,11 +305,11 @@ private:
       return {};
     }
     virtual void layout(LayoutContext& ctx) const = 0;
-    virtual bool tryCachedMeasure(LayoutContext&, LayoutConstraints const&, LayoutHints const&,
+    virtual bool tryCachedMeasure(MeasureContext&, LayoutConstraints const&, LayoutHints const&,
                                   TextSystem&, Size&) const {
       return false;
     }
-    virtual Size measure(LayoutContext& ctx, LayoutConstraints const& constraints,
+    virtual Size measure(MeasureContext& ctx, LayoutConstraints const& constraints,
                          LayoutHints const& hints, TextSystem& textSystem) const = 0;
     virtual float flexGrow() const { return 0.f; }
     virtual float flexShrink() const { return 0.f; }
@@ -341,7 +342,7 @@ private:
   std::uint64_t measureId_{};
 
   void layoutWithModifiers(LayoutContext& ctx) const;
-  Size measureWithModifiersImpl(LayoutContext& ctx, LayoutConstraints const& constraints,
+  Size measureWithModifiersImpl(MeasureContext& ctx, LayoutConstraints const& constraints,
                                 LayoutHints const& hints, TextSystem& textSystem) const;
 };
 
@@ -443,9 +444,9 @@ struct Element::Model : Concept {
                                                        LayoutConstraints const& constraints,
                                                        ElementModifiers const* modifiers) const override;
   void layout(LayoutContext& ctx) const override;
-  bool tryCachedMeasure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
+  bool tryCachedMeasure(MeasureContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
                         TextSystem& textSystem, Size& out) const override;
-  Size measure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
+  Size measure(MeasureContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
                TextSystem& textSystem) const override;
   float flexGrow() const override { return detail::flexGrowOf(value); }
   float flexShrink() const override { return detail::flexShrinkOf(value); }
@@ -567,7 +568,7 @@ void Element::Model<C>::layout(LayoutContext& ctx) const {
 }
 
 template<typename C>
-bool Element::Model<C>::tryCachedMeasure(LayoutContext& ctx, LayoutConstraints const& constraints,
+bool Element::Model<C>::tryCachedMeasure(MeasureContext& ctx, LayoutConstraints const& constraints,
                                          LayoutHints const& hints, TextSystem& textSystem, Size& out) const {
   (void)hints;
   (void)textSystem;
@@ -630,7 +631,7 @@ ElementType Element::Model<C>::elementType() const noexcept {
 }
 
 template<typename C>
-Size Element::Model<C>::measure(LayoutContext& ctx, LayoutConstraints const& constraints,
+Size Element::Model<C>::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
                                 LayoutHints const& hints, TextSystem& textSystem) const {
   if constexpr (CompositeComponent<C>) {
     ComponentKey const key = ctx.nextCompositeKey();
@@ -675,7 +676,7 @@ Size Element::Model<C>::measure(LayoutContext& ctx, LayoutConstraints const& con
   } else {
     static_assert(alwaysFalse<C>,
         "Component must satisfy CompositeComponent (body()) or PrimitiveComponent (layout + measure with "
-        "LayoutContext).");
+        "MeasureContext).");
     return {};
   }
 }

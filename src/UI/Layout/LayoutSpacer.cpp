@@ -23,7 +23,7 @@ void Spacer::layout(LayoutContext& ctx) const {
   layoutDebugLogLeaf("Spacer", ctx.constraints(), r, fg, fs, mm);
 }
 
-Size Spacer::measure(LayoutContext& ctx, LayoutConstraints const&, LayoutHints const&, TextSystem&) const {
+Size Spacer::measure(MeasureContext& ctx, LayoutConstraints const&, LayoutHints const&, TextSystem&) const {
   ctx.advanceChildSlot();
   float m = 0.f;
   if (Element const* el = ctx.currentElement()) {

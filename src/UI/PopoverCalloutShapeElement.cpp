@@ -74,7 +74,7 @@ LayoutConstraints innerConstraintsForPopoverContent(PopoverCalloutShape const& v
 
 } // namespace
 
-Size PopoverCalloutShape::measure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const&,
+Size PopoverCalloutShape::measure(MeasureContext& ctx, LayoutConstraints const& constraints, LayoutHints const&,
                                   TextSystem& ts) const {
   if (!ctx.consumeCompositeBodySubtreeRootSkip()) {
     ctx.advanceChildSlot();

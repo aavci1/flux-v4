@@ -23,7 +23,7 @@ struct Text : ViewModifiers<Text> {
   static constexpr bool memoizable = true;
 
   void layout(LayoutContext&) const;
-  Size measure(LayoutContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
+  Size measure(MeasureContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
   [[nodiscard]] std::uint64_t measureCacheKey() const noexcept;
 
   std::string text;

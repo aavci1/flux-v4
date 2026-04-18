@@ -112,9 +112,9 @@ std::uint64_t modifierMeasureHash(ElementModifiers const& mods) {
 }
 
 struct ChildLocalIdScope {
-  LayoutContext& ctx;
+  MeasureContext& ctx;
 
-  ChildLocalIdScope(LayoutContext& context, std::optional<std::string> const& explicitKey)
+  ChildLocalIdScope(MeasureContext& context, std::optional<std::string> const& explicitKey)
       : ctx(context) {
     if (explicitKey.has_value()) {
       ctx.pushExplicitChildLocalId(LocalId::fromString(*explicitKey));
@@ -148,7 +148,7 @@ void Element::layout(LayoutContext& ctx) const {
   layoutDebugPopElementBuild();
 }
 
-bool Element::tryCachedMeasure(LayoutContext& ctx, LayoutConstraints const& constraints,
+bool Element::tryCachedMeasure(MeasureContext& ctx, LayoutConstraints const& constraints,
                                LayoutHints const& hints, TextSystem& textSystem, Size& out) const {
   ChildLocalIdScope const childIdScope{ctx, key_};
   if (envLayer_ || modifiers_) {
@@ -259,7 +259,7 @@ void Element::layoutWithModifiers(LayoutContext& ctx) const {
   }
 }
 
-Size Element::measureWithModifiersImpl(LayoutContext& ctx, LayoutConstraints const& constraints,
+Size Element::measureWithModifiersImpl(MeasureContext& ctx, LayoutConstraints const& constraints,
                                        LayoutHints const& hints, TextSystem& textSystem) const {
   ElementModifiers const& m = *modifiers_;
   float const padL = std::max(0.f, m.padding.left);
@@ -322,7 +322,7 @@ Size Element::measureWithModifiersImpl(LayoutContext& ctx, LayoutConstraints con
   return sz;
 }
 
-Size Element::measure(LayoutContext& ctx, LayoutConstraints const& constraints,
+Size Element::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
                       LayoutHints const& hints, TextSystem& textSystem) const {
   ChildLocalIdScope const childIdScope{ctx, key_};
   if (envLayer_) {
@@ -468,7 +468,7 @@ void Rectangle::layout(LayoutContext& ctx) const {
                      detail::flexShrinkOf(*this), detail::minMainSizeOf(*this));
 }
 
-Size Rectangle::measure(LayoutContext& ctx, LayoutConstraints const& c, LayoutHints const&, TextSystem&) const {
+Size Rectangle::measure(MeasureContext& ctx, LayoutConstraints const& c, LayoutHints const&, TextSystem&) const {
   ctx.advanceChildSlot();
   float const w = std::isfinite(c.maxWidth) ? c.maxWidth : 0.f;
   return {w, 0.f};
@@ -495,7 +495,7 @@ void views::Image::layout(LayoutContext& ctx) const {
                      detail::flexShrinkOf(*this), detail::minMainSizeOf(*this));
 }
 
-Size views::Image::measure(LayoutContext& ctx, LayoutConstraints const& c, LayoutHints const&, TextSystem&) const {
+Size views::Image::measure(MeasureContext& ctx, LayoutConstraints const& c, LayoutHints const&, TextSystem&) const {
   ctx.advanceChildSlot();
   float const w = std::isfinite(c.maxWidth) ? c.maxWidth : 0.f;
   float const h = std::isfinite(c.maxHeight) ? c.maxHeight : 0.f;
@@ -519,7 +519,7 @@ void PathShape::layout(LayoutContext& ctx) const {
                      detail::flexShrinkOf(*this), detail::minMainSizeOf(*this));
 }
 
-Size PathShape::measure(LayoutContext& ctx, LayoutConstraints const&, LayoutHints const&, TextSystem&) const {
+Size PathShape::measure(MeasureContext& ctx, LayoutConstraints const&, LayoutHints const&, TextSystem&) const {
   ctx.advanceChildSlot();
   Rect const b = path.getBounds();
   return {b.width, b.height};
@@ -555,7 +555,7 @@ std::uint64_t Line::measureCacheKey() const noexcept {
   return h;
 }
 
-Size Line::measure(LayoutContext& ctx, LayoutConstraints const&, LayoutHints const&, TextSystem&) const {
+Size Line::measure(MeasureContext& ctx, LayoutConstraints const&, LayoutHints const&, TextSystem&) const {
   ctx.advanceChildSlot();
   float const minX = std::min(from.x, to.x);
   float const maxX = std::max(from.x, to.x);

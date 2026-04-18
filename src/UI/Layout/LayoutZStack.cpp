@@ -94,7 +94,7 @@ void ZStack::layout(LayoutContext& ctx) const {
   }
 }
 
-Size ZStack::measure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const&,
+Size ZStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints, LayoutHints const&,
                      TextSystem& ts) const {
   ContainerMeasureScope scope(ctx);
   float const assignedW = std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;

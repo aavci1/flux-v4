@@ -20,7 +20,7 @@ struct PopoverCalloutShape : ViewModifiers<PopoverCalloutShape> {
   static constexpr bool memoizable = true;
 
   void layout(LayoutContext&) const;
-  Size measure(LayoutContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
+  Size measure(MeasureContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
 
   PopoverPlacement placement = PopoverPlacement::Below;
   bool arrow = true;

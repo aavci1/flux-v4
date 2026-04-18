@@ -36,7 +36,7 @@ struct ScrollView : ViewModifiers<ScrollView> {
 
     /// Custom subtree hook (not the generic \ref CompositeComponent path in \ref Element::Model).
     void layout(LayoutContext &) const;
-    Size measure(LayoutContext &, LayoutConstraints const &, LayoutHints const &, TextSystem &) const;
+    Size measure(MeasureContext &, LayoutConstraints const &, LayoutHints const &, TextSystem &) const;
 
     // ── Component protocol ─────────────────────────────────────────────────────
 
@@ -60,7 +60,8 @@ struct Element::Model<ScrollView> final : Element::Concept {
         return std::make_unique<Element>(value.body());
     }
     void layout(LayoutContext &ctx) const override { value.layout(ctx); }
-    Size measure(LayoutContext &ctx, LayoutConstraints const &c, LayoutHints const &h, TextSystem &ts) const override {
+    Size measure(MeasureContext &ctx, LayoutConstraints const &c, LayoutHints const &h,
+                 TextSystem &ts) const override {
         return value.measure(ctx, c, h, ts);
     }
     /// `ScrollView` keeps its measured viewport size by default; opt into fill with `.flex(...)`.

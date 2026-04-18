@@ -105,7 +105,7 @@ void HStack::layout(LayoutContext& ctx) const {
   }
 }
 
-Size HStack::measure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const&,
+Size HStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints, LayoutHints const&,
                      TextSystem& ts) const {
   ContainerMeasureScope scope(ctx);
   float const assignedHCross = stackMainAxisSpan(0.f, constraints.maxHeight);
