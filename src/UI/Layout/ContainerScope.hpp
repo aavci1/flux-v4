@@ -41,7 +41,7 @@ public:
   void pushStandardLayer(bool clip, float assignedW, float assignedH) {
     Mat3 local = Mat3::translate(parentFrame.x, parentFrame.y);
     if (clip && assignedW > 0.f && assignedH > 0.f) {
-      // clip rect is in layer-local space and carried through retained-layout reuse checks
+      // clip rect is in layer-local space so world-bounds/debug math stays consistent
     }
 
     LayoutNode n{};
@@ -136,9 +136,7 @@ public:
   void layoutChild(Element const& child, Rect frame, LayoutConstraints const& cs, LayoutHints hints = {}) {
     le.setChildFrame(frame);
     ctx.pushConstraints(cs, std::move(hints));
-    if (!child.tryRetainedLayout(ctx)) {
-      child.layout(ctx);
-    }
+    child.layout(ctx);
     ctx.popConstraints();
   }
 

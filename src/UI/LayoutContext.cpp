@@ -17,31 +17,10 @@ struct ElementPinStorage {
 };
 
 } // namespace detail
-
-namespace {
-
-bool constraintsEqual(LayoutConstraints const& a, LayoutConstraints const& b) {
-  return a.minWidth == b.minWidth && a.minHeight == b.minHeight &&
-         a.maxWidth == b.maxWidth && a.maxHeight == b.maxHeight;
-}
-
-bool hintsEqual(LayoutHints const& a, LayoutHints const& b) {
-  return a.hStackCrossAlign == b.hStackCrossAlign && a.vStackCrossAlign == b.vStackCrossAlign;
-}
-
-bool rectEqual(Rect const& a, Rect const& b) {
-  return a.x == b.x && a.y == b.y && a.width == b.width && a.height == b.height;
-}
-
-} // namespace
-
-LayoutContext::LayoutContext(TextSystem& ts, LayoutEngine& layout, LayoutTree& tree, MeasureCache* measureCache,
-                             SubtreeRootMap* retainedRoots, std::uint64_t subtreeRootEpoch)
+LayoutContext::LayoutContext(TextSystem& ts, LayoutEngine& layout, LayoutTree& tree, MeasureCache* measureCache)
     : textSystem_(ts)
     , layoutEngine_(layout)
     , tree_(tree)
-    , subtreeRoots_(retainedRoots ? retainedRoots : &ownedSubtreeRoots_)
-    , subtreeRootEpoch_(subtreeRootEpoch)
     , measureCache_(measureCache)
     , elementPins_(std::make_shared<detail::ElementPinStorage>()) {
   layoutStack_.push_back(LayoutFrame{});
@@ -143,9 +122,8 @@ ComponentKey LayoutContext::leafComponentKey() const {
 void LayoutContext::rewindChildKeyIndex() { nextChildIndex_ = 0; }
 
 void LayoutContext::beginCompositeBodySubtree(ComponentKey compositeKey) {
+  (void)compositeKey;
   skipNextLayoutChildAdvance_ = true;
-  pendingCompositeSubtreeRoot_ = true;
-  pendingCompositeSubtreeKey_ = std::move(compositeKey);
 }
 
 bool LayoutContext::consumeCompositeBodySubtreeRootSkip() {
@@ -172,87 +150,10 @@ void LayoutContext::popCompositeKeyTail() {
 }
 
 void LayoutContext::registerCompositeSubtreeRootIfPending(LayoutNodeId layoutNodeId) {
-  if (!pendingCompositeSubtreeRoot_) {
-    return;
-  }
-  pendingCompositeSubtreeRoot_ = false;
-  auto [it, inserted] =
-      subtreeRoots_->try_emplace(pendingCompositeSubtreeKey_, SubtreeRootRecord{layoutNodeId, subtreeRootEpoch_});
-  if (!inserted) {
-    it->second.rootId = layoutNodeId;
-    it->second.lastVisitedEpoch = subtreeRootEpoch_;
-  }
+  (void)layoutNodeId;
 }
 
 MeasureCache* LayoutContext::measureCache() const { return measureCache_; }
-
-LayoutContext::SubtreeRootMap const& LayoutContext::subtreeRootLayouts() const {
-  return *subtreeRoots_;
-}
-
-bool LayoutContext::canReuseRetainedCompositeSubtree(ComponentKey const& compositeKey, Rect const& assignedFrame,
-                                                     LayoutConstraints const& constraints,
-                                                     LayoutHints const& hints) const {
-  if (!subtreeRoots_) {
-    return false;
-  }
-  auto const it = subtreeRoots_->find(compositeKey);
-  if (it == subtreeRoots_->end()) {
-    return false;
-  }
-  return canReuseRetainedCompositeSubtree(it->second.rootId, assignedFrame, constraints, hints);
-}
-
-bool LayoutContext::canReuseRetainedCompositeSubtree(LayoutNodeId rootId, Rect const& assignedFrame,
-                                                     LayoutConstraints const& constraints,
-                                                     LayoutHints const& hints) const {
-  LayoutNode const* root = tree_.get(rootId);
-  if (!root) {
-    return false;
-  }
-  if (!constraintsEqual(root->constraints, constraints) || !hintsEqual(root->hints, hints)) {
-    return false;
-  }
-  if (rectEqual(root->assignedFrame, assignedFrame)) {
-    return true;
-  }
-  return root->assignedFrame.width == assignedFrame.width &&
-         root->assignedFrame.height == assignedFrame.height &&
-         tree_.canTranslateSubtree(rootId);
-}
-
-bool LayoutContext::reuseRetainedCompositeSubtree(ComponentKey const& compositeKey, Rect const& assignedFrame) {
-  if (!subtreeRoots_) {
-    return false;
-  }
-  auto const it = subtreeRoots_->find(compositeKey);
-  if (it == subtreeRoots_->end()) {
-    return false;
-  }
-  return reuseRetainedCompositeSubtree(compositeKey, it->second.rootId, assignedFrame);
-}
-
-bool LayoutContext::reuseRetainedCompositeSubtree(ComponentKey const& compositeKey, LayoutNodeId rootId,
-                                                  Rect const& assignedFrame) {
-  if (!tree_.reuseSubtree(rootId, currentLayoutParent())) {
-    return false;
-  }
-  if (LayoutNode* root = tree_.get(rootId)) {
-    Vec2 const delta{assignedFrame.x - root->assignedFrame.x, assignedFrame.y - root->assignedFrame.y};
-    if (delta.x != 0.f || delta.y != 0.f) {
-      tree_.translateSubtree(rootId, delta);
-    }
-  }
-  auto it = subtreeRoots_->find(compositeKey);
-  if (it != subtreeRoots_->end()) {
-    it->second.rootId = rootId;
-    it->second.lastVisitedEpoch = subtreeRootEpoch_;
-  } else {
-    subtreeRoots_->emplace(compositeKey, SubtreeRootRecord{rootId, subtreeRootEpoch_});
-  }
-  pendingCompositeSubtreeRoot_ = false;
-  return true;
-}
 
 void LayoutContext::pushActiveElementModifiers(ElementModifiers const* m) { activeElementModifiers_.push_back(m); }
 

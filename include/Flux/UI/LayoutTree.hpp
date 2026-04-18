@@ -43,7 +43,7 @@ constexpr bool operator==(LayoutNodeId a, LayoutNodeId b) noexcept {
 }
 constexpr bool operator!=(LayoutNodeId a, LayoutNodeId b) noexcept { return !(a == b); }
 
-/// How a container affects subtree-local layout/world transforms for retained-layout reuse.
+/// How a container affects subtree-local layout/world transforms.
 struct ContainerLayerSpec {
   enum class Kind : std::uint8_t {
     Standard,         ///< translate(parentFrame.x, parentFrame.y)
@@ -97,7 +97,7 @@ struct LayoutNode {
 
   ContainerLayerSpec containerSpec{};
 
-  /// Optional tag for retained-layout special cases (e.g. popover chrome ordering).
+  /// Optional tag for layout special cases (e.g. popover chrome ordering).
   enum class ContainerTag : std::uint8_t { None, PopoverCalloutShape };
   ContainerTag containerTag = ContainerTag::None;
 
@@ -105,8 +105,6 @@ struct LayoutNode {
   bool modifierHasEffectLayer = false;
   Mat3 modifierLayerTransform = Mat3::identity();
 
-  /// True when this exact layout slot was reused by subtree retention in the current build.
-  bool reusedSubtreeThisBuild = false;
 };
 
 /// Complete layout result for one tree (main or overlay).
@@ -121,8 +119,6 @@ public:
     activeOrder_.clear();
     rootId_ = {};
     firstNodeForKey_.clear();
-    retainedNodeForKey_.clear();
-    ++buildEpoch_;
   }
 
   [[nodiscard]] LayoutNodeId root() const noexcept { return rootId_; }
@@ -156,13 +152,9 @@ public:
 
   [[nodiscard]] std::optional<Rect> rectForKey(ComponentKey const& key) const;
   [[nodiscard]] LayoutNode const* nodeForKey(ComponentKey const& key) const;
-  [[nodiscard]] LayoutNode const* retainedNodeForKey(ComponentKey const& key) const;
 
   /// Internal: append node; returns assigned id. If \p parent is invalid, this becomes the root.
   LayoutNodeId pushNode(LayoutNode&& node, LayoutNodeId parent);
-  bool reuseSubtree(LayoutNodeId rootId, LayoutNodeId parent);
-  bool canTranslateSubtree(LayoutNodeId rootId) const;
-  void translateSubtree(LayoutNodeId rootId, Vec2 delta);
 
   void setRoot(LayoutNodeId id) noexcept { rootId_ = id; }
 
@@ -174,9 +166,6 @@ private:
   std::vector<LayoutNodeId> activeOrder_{};
   LayoutNodeId rootId_{};
   std::unordered_map<ComponentKey, LayoutNodeId, ComponentKeyHash> firstNodeForKey_{};
-  std::unordered_map<ComponentKey, LayoutNodeId, ComponentKeyHash> retainedNodeForKey_{};
-  std::uint64_t buildEpoch_{0};
-  std::vector<std::uint64_t> slotEpoch_{};
 };
 
 /// Axis-aligned bounding rect of \p r after transforming its four corners by \p t.

@@ -40,11 +40,6 @@ bool inputDebugEnabled() {
   return cached != 0;
 }
 
-bool constraintsEqual(LayoutConstraints const& a, LayoutConstraints const& b) {
-  return a.minWidth == b.minWidth && a.minHeight == b.minHeight &&
-         a.maxWidth == b.maxWidth && a.maxHeight == b.maxHeight;
-}
-
 } // namespace
 
 BuildOrchestrator::BuildOrchestrator(Window& window, FocusController& focus, HoverController& hover,
@@ -65,11 +60,7 @@ BuildOrchestrator::~BuildOrchestrator() {
 
 void BuildOrchestrator::setRoot(std::unique_ptr<RootHolder> holder) {
   rootHolder_ = std::move(holder);
-  latestLayoutIsCurrent_ = false;
-  latestRootIdentityToken_ = 0;
   layoutTree_.clear();
-  layoutSubtreeRoots_.clear();
-  pinGenerations_.clear();
   // Do not call `rebuild()` here — `Runtime::setRoot` calls `Runtime::rebuild()` so `sCurrent`
   // is set for hooks (`Runtime::current()`) during the layout/render pass.
 }
@@ -93,16 +84,6 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
   rootCs.maxWidth = sz.width;
   rootCs.maxHeight = sz.height;
 
-  bool const canReuseWholeLayout =
-      rootHolder_ && latestLayoutIsCurrent_ && !stateStore_.hasPendingDirtyComponents() &&
-      latestRootIdentityToken_ == rootHolder_->layoutIdentityToken() &&
-      constraintsEqual(latestRootConstraints_, rootCs);
-
-  if (canReuseWholeLayout) {
-    window_.overlayManager().rebuild(sz, runtime);
-    return;
-  }
-
   layoutEngine_.resetForBuild();
   ++textFrameIndex_;
   Application::instance().textSystem().onFrameBegin(textFrameIndex_);
@@ -113,16 +94,8 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
 
   actionRegistryBuild_.beginRebuild();
   StateStore::setCurrent(&stateStore_);
-  bool const useRetainedLayoutBuild = !layoutSubtreeRoots_.empty() && !stateStore_.shouldForceFullRebuild();
-  ++layoutSubtreeRootEpoch_;
-  if (useRetainedLayoutBuild) {
-    layoutTree_.beginBuild();
-  } else {
-    layoutTree_.clear();
-    layoutSubtreeRoots_.clear();
-  }
-  LayoutContext lctx{Application::instance().textSystem(), layoutEngine_, layoutTree_, &measureCache_,
-                     &layoutSubtreeRoots_, layoutSubtreeRootEpoch_};
+  layoutTree_.clear();
+  LayoutContext lctx{Application::instance().textSystem(), layoutEngine_, layoutTree_, &measureCache_};
   lctx.pushConstraints(rootCs);
   EnvironmentLayer windowEnvBaseline = window_.environmentLayer();
   EnvironmentStack::current().push(std::move(windowEnvBaseline));
@@ -132,9 +105,6 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
   }
   EnvironmentStack::current().pop();
   lctx.popConstraints();
-  if (useRetainedLayoutBuild) {
-    layoutTree_.endBuild();
-  }
 
   {
     SceneTree& sceneTree = window_.sceneTree();
@@ -154,23 +124,6 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
       sceneTree.clear();
     }
   }
-  for (auto it = layoutSubtreeRoots_.begin(); it != layoutSubtreeRoots_.end();) {
-    if (it->second.lastVisitedEpoch != layoutSubtreeRootEpoch_ || !layoutTree_.get(it->second.rootId)) {
-      it = layoutSubtreeRoots_.erase(it);
-    } else {
-      ++it;
-    }
-  }
-  if (stateStore_.shouldForceFullRebuild()) {
-    pinGenerations_.clear();
-  }
-  pinGenerations_.push_back(lctx.pinnedElements());
-  while (pinGenerations_.size() > 2) {
-    pinGenerations_.erase(pinGenerations_.begin());
-  }
-  latestRootConstraints_ = rootCs;
-  latestRootIdentityToken_ = rootHolder_ ? rootHolder_->layoutIdentityToken() : 0;
-  latestLayoutIsCurrent_ = true;
   layoutDebugEndPass();
 
   StateStore::setCurrent(nullptr);

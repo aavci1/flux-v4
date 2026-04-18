@@ -148,60 +148,6 @@ void Element::layout(LayoutContext& ctx) const {
   layoutDebugPopElementBuild();
 }
 
-bool Element::tryRetainedLayout(LayoutContext& ctx) const {
-  ChildLocalIdScope const childIdScope{ctx, key_};
-  if (envLayer_ || modifiers_) {
-    return false;
-  }
-  Element const* const prevEl = ctx.currentElement();
-  ctx.setCurrentElement(this);
-  bool const reused = impl_->tryRetainedLayout(ctx);
-  ctx.setCurrentElement(prevEl);
-  return reused;
-}
-
-bool Element::canRetainedLayout(LayoutContext& ctx) const {
-  ChildLocalIdScope const childIdScope{ctx, key_};
-  if (envLayer_ || modifiers_) {
-    return false;
-  }
-  Element const* const prevEl = ctx.currentElement();
-  ctx.setCurrentElement(this);
-  bool const reusable = impl_->canRetainedLayout(ctx);
-  ctx.setCurrentElement(prevEl);
-  return reusable;
-}
-
-bool Element::canRetainedLayout(LayoutContext& ctx, ComponentKey const& key, LayoutNodeId retainedRoot,
-                                Rect const& assignedFrame, LayoutConstraints const& constraints,
-                                LayoutHints const& hints) const {
-  ChildLocalIdScope const childIdScope{ctx, key_};
-  if (envLayer_ || modifiers_) {
-    return false;
-  }
-  Element const* const prevEl = ctx.currentElement();
-  ctx.setCurrentElement(this);
-  bool const reusable =
-      impl_->canRetainedLayout(ctx, key, retainedRoot, assignedFrame, constraints, hints);
-  ctx.setCurrentElement(prevEl);
-  return reusable;
-}
-
-bool Element::tryRetainedLayout(LayoutContext& ctx, ComponentKey const& key, LayoutNodeId retainedRoot,
-                                Rect const& assignedFrame, LayoutConstraints const& constraints,
-                                LayoutHints const& hints) const {
-  ChildLocalIdScope const childIdScope{ctx, key_};
-  if (envLayer_ || modifiers_) {
-    return false;
-  }
-  Element const* const prevEl = ctx.currentElement();
-  ctx.setCurrentElement(this);
-  bool const reused =
-      impl_->tryRetainedLayout(ctx, key, retainedRoot, assignedFrame, constraints, hints);
-  ctx.setCurrentElement(prevEl);
-  return reused;
-}
-
 bool Element::tryCachedMeasure(LayoutContext& ctx, LayoutConstraints const& constraints,
                                LayoutHints const& hints, TextSystem& textSystem, Size& out) const {
   ChildLocalIdScope const childIdScope{ctx, key_};

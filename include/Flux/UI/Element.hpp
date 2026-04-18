@@ -199,14 +199,6 @@ public:
   Element& operator=(Element&&) noexcept = default;
 
   void layout(LayoutContext& ctx) const;
-  bool canRetainedLayout(LayoutContext& ctx) const;
-  bool tryRetainedLayout(LayoutContext& ctx) const;
-  bool canRetainedLayout(LayoutContext& ctx, ComponentKey const& key, LayoutNodeId retainedRoot,
-                         Rect const& assignedFrame, LayoutConstraints const& constraints,
-                         LayoutHints const& hints) const;
-  bool tryRetainedLayout(LayoutContext& ctx, ComponentKey const& key, LayoutNodeId retainedRoot,
-                         Rect const& assignedFrame, LayoutConstraints const& constraints,
-                         LayoutHints const& hints) const;
   bool tryCachedMeasure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
                         TextSystem& textSystem, Size& out) const;
   Size measure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
@@ -312,16 +304,6 @@ private:
       return {};
     }
     virtual void layout(LayoutContext& ctx) const = 0;
-    virtual bool canRetainedLayout(LayoutContext&) const { return false; }
-    virtual bool tryRetainedLayout(LayoutContext&) const { return false; }
-    virtual bool canRetainedLayout(LayoutContext&, ComponentKey const&, LayoutNodeId, Rect const&,
-                                   LayoutConstraints const&, LayoutHints const&) const {
-      return false;
-    }
-    virtual bool tryRetainedLayout(LayoutContext&, ComponentKey const&, LayoutNodeId, Rect const&,
-                                   LayoutConstraints const&, LayoutHints const&) const {
-      return false;
-    }
     virtual bool tryCachedMeasure(LayoutContext&, LayoutConstraints const&, LayoutHints const&,
                                   TextSystem&, Size&) const {
       return false;
@@ -461,14 +443,6 @@ struct Element::Model : Concept {
                                                        LayoutConstraints const& constraints,
                                                        ElementModifiers const* modifiers) const override;
   void layout(LayoutContext& ctx) const override;
-  bool canRetainedLayout(LayoutContext& ctx) const override;
-  bool tryRetainedLayout(LayoutContext& ctx) const override;
-  bool canRetainedLayout(LayoutContext& ctx, ComponentKey const& key, LayoutNodeId retainedRoot,
-                         Rect const& assignedFrame, LayoutConstraints const& constraints,
-                         LayoutHints const& hints) const override;
-  bool tryRetainedLayout(LayoutContext& ctx, ComponentKey const& key, LayoutNodeId retainedRoot,
-                         Rect const& assignedFrame, LayoutConstraints const& constraints,
-                         LayoutHints const& hints) const override;
   bool tryCachedMeasure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
                         TextSystem& textSystem, Size& out) const override;
   Size measure(LayoutContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
@@ -578,17 +552,7 @@ void Element::Model<C>::layout(LayoutContext& ctx) const {
       store->recordBodyConstraints(key, ctx.constraints());
       store->pushCompositePathStable(resolution.descendantsStable);
     }
-    bool reusedLayoutSubtree = false;
-    if (store && resolution.descendantsStable && !store->hasDirtyDescendant(key) &&
-        ctx.canReuseRetainedCompositeSubtree(key, ctx.layoutEngine().lastAssignedFrame(), ctx.constraints(),
-                                             ctx.hints())) {
-      Rect const assignedFrame = ctx.layoutEngine().consumeAssignedFrame();
-      store->markRetainedSubtreeVisited(key);
-      reusedLayoutSubtree = ctx.reuseRetainedCompositeSubtree(key, assignedFrame);
-    }
-    if (!reusedLayoutSubtree) {
-      child.layout(ctx);
-    }
+    child.layout(ctx);
     if (store) {
       store->popCompositePathStable();
     }
@@ -599,85 +563,6 @@ void Element::Model<C>::layout(LayoutContext& ctx) const {
     static_assert(alwaysFalse<C>,
         "Component must satisfy CompositeComponent (body()) or PrimitiveComponent (layout + measure with "
         "LayoutContext).");
-  }
-}
-
-template<typename C>
-bool Element::Model<C>::tryRetainedLayout(LayoutContext& ctx) const {
-  if constexpr (!CompositeComponent<C>) {
-    return false;
-  } else {
-    StateStore* store = StateStore::current();
-    if (!store) {
-      return false;
-    }
-    ComponentKey const key = ctx.peekNextCompositeKey();
-    Rect const assignedFrame = ctx.layoutEngine().lastAssignedFrame();
-    if (!store->canReuseBody(key, value, ctx.constraints()) ||
-        store->hasDirtyDescendant(key) ||
-        !ctx.canReuseRetainedCompositeSubtree(key, assignedFrame, ctx.constraints(), ctx.hints())) {
-      return false;
-    }
-    store->markRetainedSubtreeVisited(key);
-    ctx.advanceChildSlot();
-    (void)ctx.layoutEngine().consumeAssignedFrame();
-    return ctx.reuseRetainedCompositeSubtree(key, assignedFrame);
-  }
-}
-
-template<typename C>
-bool Element::Model<C>::canRetainedLayout(LayoutContext& ctx) const {
-  if constexpr (!CompositeComponent<C>) {
-    return false;
-  } else {
-    StateStore* store = StateStore::current();
-    if (!store) {
-      return false;
-    }
-    ComponentKey const key = ctx.peekNextCompositeKey();
-    Rect const assignedFrame = ctx.layoutEngine().lastAssignedFrame();
-    return store->canReuseBody(key, value, ctx.constraints()) &&
-           !store->hasDirtyDescendant(key) &&
-           ctx.canReuseRetainedCompositeSubtree(key, assignedFrame, ctx.constraints(), ctx.hints());
-  }
-}
-
-template<typename C>
-bool Element::Model<C>::canRetainedLayout(LayoutContext& ctx, ComponentKey const& key,
-                                          LayoutNodeId retainedRoot, Rect const& assignedFrame,
-                                          LayoutConstraints const& constraints,
-                                          LayoutHints const& hints) const {
-  if constexpr (!CompositeComponent<C>) {
-    return false;
-  } else {
-    StateStore* store = StateStore::current();
-    if (!store) {
-      return false;
-    }
-    return store->canReuseBody(key, value, constraints) &&
-           !store->hasDirtyDescendant(key) &&
-           ctx.canReuseRetainedCompositeSubtree(retainedRoot, assignedFrame, constraints, hints);
-  }
-}
-
-template<typename C>
-bool Element::Model<C>::tryRetainedLayout(LayoutContext& ctx, ComponentKey const& key,
-                                          LayoutNodeId retainedRoot, Rect const& assignedFrame,
-                                          LayoutConstraints const& constraints,
-                                          LayoutHints const& hints) const {
-  if constexpr (!CompositeComponent<C>) {
-    return false;
-  } else {
-    StateStore* store = StateStore::current();
-    if (!store) {
-      return false;
-    }
-    if (!canRetainedLayout(ctx, key, retainedRoot, assignedFrame, constraints, hints)) {
-      return false;
-    }
-    store->markRetainedSubtreeVisited(key);
-    ctx.advanceChildSlot();
-    return ctx.reuseRetainedCompositeSubtree(key, retainedRoot, assignedFrame);
   }
 }
 

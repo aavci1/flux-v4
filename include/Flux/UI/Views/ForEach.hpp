@@ -10,7 +10,6 @@
 #include <Flux/UI/Detail/LayoutDebugDump.hpp>
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
-#include <Flux/UI/LayoutTree.hpp>
 #include <Flux/UI/Views/VStack.hpp>
 
 #include <algorithm>
@@ -97,15 +96,6 @@ void Element::Model<ForEach<T>>::layout(LayoutContext& ctx) const {
   float const assignedW = std::isfinite(outer.maxWidth) ? outer.maxWidth : 0.f;
   childCsMeasure.maxWidth =
       assignedW > 0.f ? assignedW : std::numeric_limits<float>::infinity();
-  LayoutNode const* retainedContainer = ctx.tree().retainedNodeForKey(forEachKey);
-  bool const canDirectReuseChildren =
-      retainedContainer && retainedContainer->kind == LayoutNode::Kind::Container &&
-      retainedContainer->children.size() == n &&
-      retainedContainer->containerSpec.kind == ContainerLayerSpec::Kind::Standard;
-  std::vector<LayoutNodeId> retainedChildRoots;
-  if (canDirectReuseChildren) {
-    retainedChildRoots.assign(retainedContainer->children.begin(), retainedContainer->children.end());
-  }
 
   std::vector<Size> sizes;
   sizes.reserve(n);
@@ -171,21 +161,12 @@ void Element::Model<ForEach<T>>::layout(LayoutContext& ctx) const {
     childBuild.minHeight = item.minMainSize();
     LayoutHints rowHints{};
     rowHints.vStackCrossAlign = value.alignment;
-    bool reusedItem = false;
-    if (canDirectReuseChildren) {
-      ComponentKey itemKey = forEachKey;
-      itemKey.push_back(i);
-      LayoutNodeId const retainedChildRoot = retainedChildRoots[i];
-      reusedItem = item.tryRetainedLayout(ctx, itemKey, retainedChildRoot, rowFrame, childBuild, rowHints);
-    }
-    if (!reusedItem) {
-      ctx.pushConstraints(childBuild, rowHints);
-      ctx.pushCompositeKeyTail(forEachKey);
-      ctx.setChildIndex(i);
-      item.layout(ctx);
-      ctx.popCompositeKeyTail();
-      ctx.popConstraints();
-    }
+    ctx.pushConstraints(childBuild, rowHints);
+    ctx.pushCompositeKeyTail(forEachKey);
+    ctx.setChildIndex(i);
+    item.layout(ctx);
+    ctx.popCompositeKeyTail();
+    ctx.popConstraints();
     y += sz.height;
   }
 
@@ -209,15 +190,6 @@ Size Element::Model<ForEach<T>>::measure(LayoutContext& ctx, LayoutConstraints c
   float totalW = 0.f;
   float totalH = 0.f;
   std::size_t const n = value.items.size();
-  LayoutNode const* retainedContainer = ctx.tree().retainedNodeForKey(forEachKey);
-  bool const canDirectReuseChildren =
-      retainedContainer && retainedContainer->kind == LayoutNode::Kind::Container &&
-      retainedContainer->children.size() == n &&
-      retainedContainer->containerSpec.kind == ContainerLayerSpec::Kind::Standard;
-  std::vector<LayoutNodeId> retainedChildRoots;
-  if (canDirectReuseChildren) {
-    retainedChildRoots.assign(retainedContainer->children.begin(), retainedContainer->children.end());
-  }
 
   for (std::size_t i = 0; i < n; ++i) {
     Element item{value.factory(value.items[i])};

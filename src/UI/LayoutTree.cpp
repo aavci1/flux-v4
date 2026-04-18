@@ -7,26 +7,10 @@
 namespace flux {
 
 void LayoutTree::beginBuild() {
-  ++buildEpoch_;
-  rootId_ = {};
-  retainedNodeForKey_.swap(firstNodeForKey_);
-  firstNodeForKey_.clear();
-  activeOrder_.clear();
-  activeOrder_.reserve(slots_.size());
+  clear();
 }
 
-void LayoutTree::endBuild() {
-  for (std::size_t i = 0; i < slots_.size(); ++i) {
-    if (!slots_[i].has_value()) {
-      continue;
-    }
-    if (slotEpoch_[i] == buildEpoch_) {
-      continue;
-    }
-    slots_[i].reset();
-    freeList_.push_back(i);
-  }
-}
+void LayoutTree::endBuild() {}
 
 Rect transformWorldBounds(Mat3 const& t, Rect const& r) {
   Point const p0 = t.apply({r.x, r.y});
@@ -47,7 +31,6 @@ LayoutNodeId LayoutTree::allocateNodeId() {
     return LayoutNodeId::fromIndex(index);
   }
   slots_.push_back(std::nullopt);
-  slotEpoch_.push_back(0);
   return LayoutNodeId::fromIndex(slots_.size() - 1U);
 }
 
@@ -57,7 +40,6 @@ LayoutNodeId LayoutTree::pushNode(LayoutNode&& node, LayoutNodeId parent) {
   node.id = id;
   node.parent = parent;
   node.children.clear();
-  node.reusedSubtreeThisBuild = false;
   if (parent.isValid()) {
     if (LayoutNode* p = get(parent)) {
       p->children.push_back(id);
@@ -69,84 +51,8 @@ LayoutNodeId LayoutTree::pushNode(LayoutNode&& node, LayoutNodeId parent) {
     firstNodeForKey_.emplace(node.componentKey, id);
   }
   slots_[id.index()] = std::move(node);
-  slotEpoch_[id.index()] = buildEpoch_;
   activeOrder_.push_back(id);
   return id;
-}
-
-bool LayoutTree::reuseSubtree(LayoutNodeId rootId, LayoutNodeId parent) {
-  LayoutNode* root = get(rootId);
-  if (!root) {
-    return false;
-  }
-
-  auto const visit = [&](auto&& self, LayoutNodeId id) -> void {
-    LayoutNode* node = get(id);
-    if (!node) {
-      return;
-    }
-    node->reusedSubtreeThisBuild = true;
-    slotEpoch_[id.index()] = buildEpoch_;
-    activeOrder_.push_back(id);
-    for (LayoutNodeId childId : node->children) {
-      self(self, childId);
-    }
-  };
-
-  root->parent = parent;
-  if (parent.isValid()) {
-    if (LayoutNode* p = get(parent)) {
-      p->children.push_back(rootId);
-    }
-  } else {
-    rootId_ = rootId;
-  }
-
-  visit(visit, rootId);
-  return true;
-}
-
-bool LayoutTree::canTranslateSubtree(LayoutNodeId rootId) const {
-  auto const visit = [&](auto&& self, LayoutNodeId id) -> bool {
-    LayoutNode const* node = get(id);
-    if (!node) {
-      return false;
-    }
-    if (node->kind == LayoutNode::Kind::Container) {
-      if (node->containerSpec.kind != ContainerLayerSpec::Kind::Standard) {
-        return false;
-      }
-    }
-    if (node->kind == LayoutNode::Kind::Modifier && node->modifierHasEffectLayer) {
-      return false;
-    }
-    for (LayoutNodeId childId : node->children) {
-      if (!self(self, childId)) {
-        return false;
-      }
-    }
-    return true;
-  };
-  return visit(visit, rootId);
-}
-
-void LayoutTree::translateSubtree(LayoutNodeId rootId, Vec2 delta) {
-  auto const visit = [&](auto&& self, LayoutNodeId id) -> void {
-    LayoutNode* node = get(id);
-    if (!node) {
-      return;
-    }
-    node->frame.x += delta.x;
-    node->frame.y += delta.y;
-    node->assignedFrame.x += delta.x;
-    node->assignedFrame.y += delta.y;
-    node->worldBounds.x += delta.x;
-    node->worldBounds.y += delta.y;
-    for (LayoutNodeId childId : node->children) {
-      self(self, childId);
-    }
-  };
-  visit(visit, rootId);
 }
 
 Rect LayoutTree::unionSubtreeWorldBounds(LayoutNodeId nodeId) const {
@@ -197,21 +103,7 @@ LayoutNode const* LayoutTree::nodeForKey(ComponentKey const& key) const {
       return n;
     }
   }
-  auto const retained = retainedNodeForKey_.find(key);
-  if (retained != retainedNodeForKey_.end()) {
-    if (LayoutNode const* n = get(retained->second)) {
-      return n;
-    }
-  }
   return nullptr;
-}
-
-LayoutNode const* LayoutTree::retainedNodeForKey(ComponentKey const& key) const {
-  auto const it = retainedNodeForKey_.find(key);
-  if (it == retainedNodeForKey_.end()) {
-    return nullptr;
-  }
-  return get(it->second);
 }
 
 } // namespace flux

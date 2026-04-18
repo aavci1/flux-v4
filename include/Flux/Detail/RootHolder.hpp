@@ -37,7 +37,6 @@ struct RootHolder {
   virtual void layoutInto(LayoutContext& ctx) const = 0;
   [[nodiscard]] virtual ComponentKey sceneRootKey() const noexcept = 0;
   [[nodiscard]] virtual Element const* sceneElementForCurrentBuild() const noexcept = 0;
-  [[nodiscard]] virtual std::uint64_t layoutIdentityToken() const noexcept = 0;
 };
 
 template<typename C>
@@ -113,14 +112,6 @@ struct TypedRootHolder final : RootHolder {
       return ComponentKey{LocalId::fromIndex(0), LocalId::fromIndex(0)};
     } else {
       return ComponentKey{LocalId::fromIndex(0)};
-    }
-  }
-
-  [[nodiscard]] std::uint64_t layoutIdentityToken() const noexcept override {
-    if constexpr (CompositeComponent<C>) {
-      return static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(&value));
-    } else {
-      return cachedLeaf_.measureId();
     }
   }
 };

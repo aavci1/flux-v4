@@ -32,12 +32,6 @@ class SceneBuilder;
 
 class LayoutContext {
 public:
-  struct SubtreeRootRecord {
-    LayoutNodeId rootId{};
-    std::uint64_t lastVisitedEpoch = 0;
-  };
-  using SubtreeRootMap = std::unordered_map<ComponentKey, SubtreeRootRecord, ComponentKeyHash>;
-
   TextSystem& textSystem();
   LayoutEngine& layoutEngine();
   MeasureCache* measureCache() const;
@@ -73,15 +67,6 @@ public:
   void popCompositeKeyTail();
 
   void registerCompositeSubtreeRootIfPending(LayoutNodeId layoutNodeId);
-
-  SubtreeRootMap const& subtreeRootLayouts() const;
-  bool canReuseRetainedCompositeSubtree(ComponentKey const& compositeKey, Rect const& assignedFrame,
-                                        LayoutConstraints const& constraints, LayoutHints const& hints) const;
-  bool canReuseRetainedCompositeSubtree(LayoutNodeId rootId, Rect const& assignedFrame,
-                                        LayoutConstraints const& constraints, LayoutHints const& hints) const;
-  bool reuseRetainedCompositeSubtree(ComponentKey const& compositeKey, Rect const& assignedFrame);
-  bool reuseRetainedCompositeSubtree(ComponentKey const& compositeKey, LayoutNodeId rootId,
-                                     Rect const& assignedFrame);
 
   void pushActiveElementModifiers(ElementModifiers const* m);
   void popActiveElementModifiers();
@@ -122,8 +107,7 @@ private:
   friend class OverlayManager;
   friend struct LayoutContextTestAccess;
 
-  LayoutContext(TextSystem& ts, LayoutEngine& layout, LayoutTree& tree, MeasureCache* measureCache = nullptr,
-                SubtreeRootMap* retainedRoots = nullptr, std::uint64_t subtreeRootEpoch = 0);
+  LayoutContext(TextSystem& ts, LayoutEngine& layout, LayoutTree& tree, MeasureCache* measureCache = nullptr);
   ~LayoutContext();
 
   TextSystem& textSystem_;
@@ -140,11 +124,6 @@ private:
   std::vector<std::size_t> savedChildIndices_;
   std::size_t nextChildIndex_{0};
   bool skipNextLayoutChildAdvance_{false};
-  bool pendingCompositeSubtreeRoot_{false};
-  ComponentKey pendingCompositeSubtreeKey_{};
-  SubtreeRootMap ownedSubtreeRoots_{};
-  SubtreeRootMap* subtreeRoots_{nullptr};
-  std::uint64_t subtreeRootEpoch_{0};
   MeasureCache* measureCache_{nullptr};
   std::vector<ElementModifiers const*> activeElementModifiers_{};
 

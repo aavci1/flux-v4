@@ -113,10 +113,8 @@ struct StoreScope {
 namespace flux {
 
 struct LayoutContextTestAccess {
-  static LayoutContext* create(TextSystem& ts, LayoutEngine& le, LayoutTree& tree, MeasureCache* mc = nullptr,
-                               LayoutContext::SubtreeRootMap* retainedRoots = nullptr,
-                               std::uint64_t subtreeRootEpoch = 0) {
-    return new LayoutContext(ts, le, tree, mc, retainedRoots, subtreeRootEpoch);
+  static LayoutContext* create(TextSystem& ts, LayoutEngine& le, LayoutTree& tree, MeasureCache* mc = nullptr) {
+    return new LayoutContext(ts, le, tree, mc);
   }
 
   static void destroy(LayoutContext* ctx) { delete ctx; }

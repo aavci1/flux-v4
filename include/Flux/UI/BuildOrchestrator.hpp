@@ -17,7 +17,6 @@
 #include <functional>
 #include <memory>
 #include <optional>
-#include <unordered_map>
 
 namespace flux {
 
@@ -61,13 +60,7 @@ private:
   std::unique_ptr<RootHolder> rootHolder_;
   LayoutEngine layoutEngine_;
   StateStore stateStore_;
-  LayoutContext::SubtreeRootMap layoutSubtreeRoots_{};
-  std::uint64_t layoutSubtreeRootEpoch_{0};
-  std::vector<std::shared_ptr<detail::ElementPinStorage>> pinGenerations_{};
   LayoutTree layoutTree_{};
-  LayoutConstraints latestRootConstraints_{};
-  std::uint64_t latestRootIdentityToken_{0};
-  bool latestLayoutIsCurrent_{false};
   ObserverHandle rebuildHandle_{};
   ActionRegistry actionRegistryBuild_{};
   ActionRegistry actionRegistryCommitted_{};

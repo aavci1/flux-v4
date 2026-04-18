@@ -161,11 +161,9 @@ struct LayoutContextTestAccess {
         TextSystem &ts,
         LayoutEngine &le,
         LayoutTree &tree,
-        MeasureCache *mc = nullptr,
-        LayoutContext::SubtreeRootMap *retainedRoots = nullptr,
-        std::uint64_t subtreeRootEpoch = 0
+        MeasureCache *mc = nullptr
     ) {
-        return new LayoutContext(ts, le, tree, mc, retainedRoots, subtreeRootEpoch);
+        return new LayoutContext(ts, le, tree, mc);
     }
     static void destroy(LayoutContext *ctx) { delete ctx; }
 };
