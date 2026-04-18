@@ -7,7 +7,6 @@
 
 #include <Flux/UI/LayoutContext.hpp>
 #include <Flux/UI/MeasureContext.hpp>
-#include <Flux/UI/LayoutTree.hpp>
 #include <Flux/UI/Component.hpp>
 #include <Flux/UI/Detail/LeafBounds.hpp>
 #include <Flux/UI/Leaves.hpp>

@@ -198,16 +198,16 @@ struct MarkdownEditor {
 
 ## Architecture Overview
 
-Flux uses a **two-phase, type-erased layout** model. There is no base `View` class — views are plain structs that satisfy one of three C++ concepts. A universal wrapper called `Element` type-erases them and dispatches `layout`, `measure`, and `renderFromLayout` through a virtual `Concept`/`Model<C>` pattern.
+Flux uses a **retained scene tree** model. There is no base `View` class — views are plain structs that satisfy one of three C++ concepts. A universal wrapper called `Element` type-erases them and dispatches `layout` and `measure` through a virtual `Concept`/`Model<C>` pattern, then `SceneBuilder` reconciles the retained `SceneTree`.
 
 The pipeline for each rebuild has two distinct phases:
 
 ```
-Phase 1: Layout + Reconcile   — Element tree → LayoutTree + retained SceneTree
+Phase 1: Build + Reconcile    — Element tree → retained SceneTree
 Phase 2: Paint                — Retained SceneTree → Canvas
 ```
 
-**Phase 1** walks the element tree, runs `measure` and flex distribution, writes a `LayoutTree` of `LayoutNode`s for geometry, and reconciles a retained `SceneTree`. The only dependencies are `LayoutConstraints`, `LayoutHints`, and `TextSystem` (for text measurement).
+**Phase 1** walks the element tree, runs `measure` and flex distribution, records assigned geometry in scene nodes and the geometry index, and reconciles a retained `SceneTree`. The only dependencies are `LayoutConstraints`, `LayoutHints`, and `TextSystem` (for text measurement).
 
 **Phase 2** walks the retained `SceneTree` to Canvas. Paint retention is node-local, and input/hit testing also resolves directly against retained scene nodes rather than a separate event map.
 
