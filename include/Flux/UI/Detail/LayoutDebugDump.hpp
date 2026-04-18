@@ -11,9 +11,13 @@
 
 namespace flux {
 
+class SceneGeometryIndex;
+class SceneTree;
+
 void layoutDebugBeginPass();
 void layoutDebugEndPass();
 
 void layoutDebugRecordMeasure(std::uint64_t measureId, LayoutConstraints const& constraints, Size sz);
+void layoutDebugDumpRetained(SceneTree const& tree, SceneGeometryIndex const& geometry);
 
 } // namespace flux

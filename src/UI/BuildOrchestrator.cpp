@@ -114,9 +114,11 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
       }
       EnvironmentStack::current().pop();
       sceneTree.setRoot(std::move(nextRoot));
+      layoutDebugDumpRetained(sceneTree, sceneGeometry_);
     } else {
       sceneGeometry_.clear();
       sceneTree.clear();
+      layoutDebugDumpRetained(sceneTree, sceneGeometry_);
     }
   }
   layoutDebugEndPass();

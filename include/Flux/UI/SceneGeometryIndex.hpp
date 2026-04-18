@@ -9,6 +9,7 @@
 
 #include <optional>
 #include <unordered_map>
+#include <vector>
 
 namespace flux {
 
@@ -35,6 +36,7 @@ public:
   [[nodiscard]] std::optional<Rect> forTapAnchor(ComponentKey const& tapLeafKey) const;
 
   [[nodiscard]] std::optional<Rect> rectForKey(ComponentKey const& key) const { return forKey(key); }
+  [[nodiscard]] std::vector<std::pair<ComponentKey, Rect>> snapshotCurrent() const;
 
 private:
   std::unordered_map<ComponentKey, Rect, ComponentKeyHash> current_{};

@@ -80,4 +80,13 @@ std::optional<Rect> SceneGeometryIndex::forTapAnchor(ComponentKey const& tapLeaf
   return forLeafKeyPrefix(tapLeafKey);
 }
 
+std::vector<std::pair<ComponentKey, Rect>> SceneGeometryIndex::snapshotCurrent() const {
+  std::vector<std::pair<ComponentKey, Rect>> out;
+  out.reserve(current_.size());
+  for (auto const& [key, rect] : current_) {
+    out.emplace_back(key, rect);
+  }
+  return out;
+}
+
 } // namespace flux
