@@ -81,7 +81,7 @@ struct Card {
         ),
     });
 
-    if (bodyOpacity > 0.5f) {
+    if (*expanded || *bodyOpacity > 0.001f) {
       rows.emplace_back(HStack{
           .spacing = 0.f,
           .children = children(
@@ -91,11 +91,19 @@ struct Card {
                       .color = pal::sublabel,
                       .wrapping = TextWrapping::Wrap,
                   }
-                      .size(0.f, bodyOpacity * bodyTextHeight)
+                      .size(0.f, *bodyOpacity * bodyTextHeight)
+                      .opacity(*bodyOpacity)
                       .flex(1.f)
               ),
       });
     }
+
+    auto handleTap = [expanded, bodyOpacity] {
+      bool const next = !*expanded;
+      expanded = next;
+      WithTransition t{Transition::spring(500.f, 25.f, 0.5f)};
+      bodyOpacity = next ? 1.f : 0.f;
+    };
 
     return ZStack{
         .horizontalAlignment = Alignment::Start,
@@ -104,16 +112,12 @@ struct Card {
             Rectangle{}
                 .fill(FillStyle::solid(pal::surface))
                 .stroke(StrokeStyle::solid(pal::border, 1.f))
-                .onTap([expanded, bodyOpacity] {
-                  bool const next = !expanded;
-                  expanded = next;
-                  WithTransition t{Transition::spring(500.f, 25.f, 0.5f)};
-                  bodyOpacity = next ? 1.f : 0.f;
-                })
                 .cornerRadius(14.f),
             VStack{.spacing = 10.f, .children = std::move(rows)}.padding(18.f)
         ),
-    };
+    }
+        .cursor(Cursor::Hand)
+        .onTap(handleTap);
   }
 };
 

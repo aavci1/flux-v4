@@ -338,27 +338,34 @@ void InputDispatcher::onPointerDown(InputEvent const& e) {
         logNodeId("press target", hit->nodeId);
       }
       if (InteractionData const* interaction = hit->interaction) {
+        bool const modalOverlay = oe.config.modal;
+        OverlayId const overlayId = oe.id;
+        ComponentKey const stableTargetKey = interaction->stableTargetKey;
         gesture_.recordPress(hit->nodeId, interaction->stableTargetKey, p,
                              static_cast<bool>(interaction->onTap), oe.id);
         Application::instance().markReactiveDirty();
         if (interaction->onPointerDown) {
           interaction->onPointerDown(hit->localPoint);
         }
-        if (oe.config.modal) {
+        if (modalOverlay) {
           if (shouldClaimFocus(*interaction)) {
-            focus_.set(interaction->stableTargetKey, oe.id, FocusInputKind::Pointer);
-          } else if (!interaction->stableTargetKey.empty()) {
-            focus_.claimFocusForSubtree(interaction->stableTargetKey, oe.sceneTree, oe.id);
+            focus_.set(stableTargetKey, overlayId, FocusInputKind::Pointer);
+          } else if (!stableTargetKey.empty()) {
+            if (OverlayEntry const* refreshedOverlay = window_.overlayManager().find(overlayId)) {
+              focus_.claimFocusForSubtree(stableTargetKey, refreshedOverlay->sceneTree, overlayId);
+            }
           }
         }
       }
-      cursor_.updateForPoint(p, gesture_, overlays, tree);
-      hover_.updateForPoint(p, overlays, tree);
+      auto freshOverlays = overlayEntriesTopFirst();
+      cursor_.updateForPoint(p, gesture_, freshOverlays, tree);
+      hover_.updateForPoint(p, freshOverlays, tree);
       return;
     }
     if (oe.config.modal) {
-      cursor_.updateForPoint(p, gesture_, overlays, tree);
-      hover_.updateForPoint(p, overlays, tree);
+      auto freshOverlays = overlayEntriesTopFirst();
+      cursor_.updateForPoint(p, gesture_, freshOverlays, tree);
+      hover_.updateForPoint(p, freshOverlays, tree);
       return;
     }
   }
@@ -396,8 +403,9 @@ void InputDispatcher::onPointerDown(InputEvent const& e) {
   } else if (dbg) {
     std::fprintf(stderr, "[flux:input] PointerDown: no interactive node under cursor\n");
   }
-  cursor_.updateForPoint(p, gesture_, overlays, tree);
-  hover_.updateForPoint(p, overlays, tree);
+  auto freshOverlays = overlayEntriesTopFirst();
+  cursor_.updateForPoint(p, gesture_, freshOverlays, tree);
+  hover_.updateForPoint(p, freshOverlays, tree);
 }
 
 void InputDispatcher::onPointerMove(InputEvent const& e) {
@@ -440,8 +448,9 @@ void InputDispatcher::onPointerMove(InputEvent const& e) {
                          static_cast<double>(local->x), static_cast<double>(local->y));
           }
           pressed->onPointerMove(*local);
-          cursor_.updateForPoint(p, gesture_, overlays, tree);
-          hover_.updateForPoint(p, overlays, tree);
+          auto freshOverlays = overlayEntriesTopFirst();
+          cursor_.updateForPoint(p, gesture_, freshOverlays, tree);
+          hover_.updateForPoint(p, freshOverlays, tree);
           return;
         }
       }
@@ -463,8 +472,9 @@ void InputDispatcher::onPointerMove(InputEvent const& e) {
       if (hit->interaction && hit->interaction->onPointerMove) {
         hit->interaction->onPointerMove(hit->localPoint);
       }
-      cursor_.updateForPoint(p, gesture_, overlays, tree);
-      hover_.updateForPoint(p, overlays, tree);
+      auto freshOverlays = overlayEntriesTopFirst();
+      cursor_.updateForPoint(p, gesture_, freshOverlays, tree);
+      hover_.updateForPoint(p, freshOverlays, tree);
       return;
     }
   }
@@ -480,8 +490,9 @@ void InputDispatcher::onPointerMove(InputEvent const& e) {
   } else if (logThisMove) {
     std::fprintf(stderr, "[flux:input] PointerMove: no interactive node under cursor\n");
   }
-  cursor_.updateForPoint(p, gesture_, overlays, tree);
-  hover_.updateForPoint(p, overlays, tree);
+  auto freshOverlays = overlayEntriesTopFirst();
+  cursor_.updateForPoint(p, gesture_, freshOverlays, tree);
+  hover_.updateForPoint(p, freshOverlays, tree);
 }
 
 void InputDispatcher::onPointerUp(InputEvent const& e) {
@@ -570,11 +581,13 @@ void InputDispatcher::onPointerUp(InputEvent const& e) {
     }
   }
 
+  auto freshOverlays = overlayEntriesTopFirst();
   if (released) {
-    gesture_.dispatchTap(*released, overlays, tree);
+    gesture_.dispatchTap(*released, freshOverlays, tree);
+    freshOverlays = overlayEntriesTopFirst();
   }
-  cursor_.updateForPoint(p, gesture_, overlays, tree);
-  hover_.updateForPoint(p, overlays, tree);
+  cursor_.updateForPoint(p, gesture_, freshOverlays, tree);
+  hover_.updateForPoint(p, freshOverlays, tree);
 }
 
 } // namespace flux

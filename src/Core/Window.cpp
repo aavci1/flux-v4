@@ -54,6 +54,7 @@ void Window::Impl::setViewRoot(Window& window, std::unique_ptr<RootHolder> holde
 
 Window::Impl::~Impl() {
   if (runtime_) {
+    runtime_->beginShutdown();
     overlayMgr_.clear(runtime_.get(), false);
   }
 }

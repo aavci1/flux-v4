@@ -144,6 +144,8 @@ struct SliderDemoRoot {
                                                                 .text = fmtHex(*red, *green, *blue),
                                                                 .font = theme.fontTitle,
                                                                 .color = luminance(preview) > 0.55f ? theme.colorTextPrimary : theme.colorOnAccent,
+                                                                .horizontalAlignment = HorizontalAlignment::Center,
+                                                                .verticalAlignment = VerticalAlignment::Center,
                                                             }
                                                         )
                                                     },

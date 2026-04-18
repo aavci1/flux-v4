@@ -37,9 +37,6 @@ target_link_libraries(typography_demo PRIVATE flux)
 add_executable(image_demo image-demo/main.cpp)
 target_link_libraries(image_demo PRIVATE flux)
 
-add_executable(scene_demo scene-demo/main.cpp)
-target_link_libraries(scene_demo PRIVATE flux)
-
 add_executable(reactive_demo reactive-demo/main.cpp)
 target_link_libraries(reactive_demo PRIVATE flux)
 
@@ -49,35 +46,11 @@ target_link_libraries(animation_demo PRIVATE flux)
 add_executable(card_demo card-demo/main.cpp)
 target_link_libraries(card_demo PRIVATE flux)
 
-add_executable(scroll_demo scroll-demo/main.cpp)
-target_link_libraries(scroll_demo PRIVATE flux)
-
-add_executable(focus_demo focus-demo/main.cpp)
-target_link_libraries(focus_demo PRIVATE flux)
-
-add_executable(request_focus_demo request-focus-demo/main.cpp)
-target_link_libraries(request_focus_demo PRIVATE flux)
-
-add_executable(memo_demo memo-demo/main.cpp)
-target_link_libraries(memo_demo PRIVATE flux)
-
 add_executable(cursor_demo cursor-demo/main.cpp)
 target_link_libraries(cursor_demo PRIVATE flux)
 
-add_executable(foreach_demo foreach-demo/main.cpp)
-target_link_libraries(foreach_demo PRIVATE flux)
-
-add_executable(hover_demo hover-demo/main.cpp)
-target_link_libraries(hover_demo PRIVATE flux)
-
-add_executable(overlay_confirm_demo overlay-confirm-demo/main.cpp)
-target_link_libraries(overlay_confirm_demo PRIVATE flux)
-
 add_executable(alert_demo alert-demo/main.cpp)
 target_link_libraries(alert_demo PRIVATE flux)
-
-add_executable(actions_editor_demo actions-editor-demo/main.cpp)
-target_link_libraries(actions_editor_demo PRIVATE flux)
 
 add_executable(textinput_demo textinput-demo/main.cpp)
 target_link_libraries(textinput_demo PRIVATE flux)
@@ -112,14 +85,8 @@ target_link_libraries(tooltip_demo PRIVATE flux)
 add_executable(icon_demo icon-demo/main.cpp)
 target_link_libraries(icon_demo PRIVATE flux)
 
-add_executable(theme_demo theme-demo/main.cpp)
-target_link_libraries(theme_demo PRIVATE flux)
-
 add_executable(layout_demo layout-demo/main.cpp)
 target_link_libraries(layout_demo PRIVATE flux)
-
-add_executable(notes_demo notes/main.cpp)
-target_link_libraries(notes_demo PRIVATE flux)
 
 set(LLAMA_BUILD_COMMON ON CACHE BOOL "" FORCE)
 set(LLAMA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
@@ -137,20 +104,11 @@ set(FLUX_EXAMPLE_TARGETS
     text_demo
     typography_demo
     image_demo
-    scene_demo
     reactive_demo
     animation_demo
     card_demo
-    scroll_demo
-    focus_demo
-    request_focus_demo
-    memo_demo
     cursor_demo
-    foreach_demo
-    hover_demo
-    overlay_confirm_demo
     alert_demo
-    actions_editor_demo
     textinput_demo
     markdown_styler_demo
     button_demo
@@ -162,9 +120,7 @@ set(FLUX_EXAMPLE_TARGETS
     popover_demo
     tooltip_demo
     icon_demo
-    theme_demo
     layout_demo
-    notes_demo
 )
 foreach(t ${FLUX_EXAMPLE_TARGETS})
   flux_copy_example_resources(${t})

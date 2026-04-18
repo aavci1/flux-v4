@@ -457,8 +457,9 @@ Element buildMultilineTextInput(TextInput const &input) {
         scrollOffset = scroll;
     }
 
+    float const assignedHeight = bounds.height > 0.f ? bounds.height : 0.f;
     float const fieldHeight = input.multilineHeight.fixed > 0.f ? input.multilineHeight.fixed :
-                              input.multilineHeight.minIntrinsic;
+                              std::max(input.multilineHeight.minIntrinsic, assignedHeight);
     float const contentHeight =
         (snap.layoutResult.layout ? snap.layoutResult.layout->measuredSize.height : 0.f) + 2.f * resolved.paddingV;
     float const editorHeight = std::max(contentHeight, fieldHeight);

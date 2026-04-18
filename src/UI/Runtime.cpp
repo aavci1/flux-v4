@@ -109,6 +109,10 @@ bool Runtime::shuttingDown() const noexcept {
   return shuttingDown_;
 }
 
+void Runtime::beginShutdown() noexcept {
+  shuttingDown_ = true;
+}
+
 bool Runtime::imploding() const noexcept {
   return shuttingDown_;
 }
@@ -124,7 +128,7 @@ Runtime::Runtime(Window& window)
 }
 
 Runtime::~Runtime() {
-  shuttingDown_ = true;
+  beginShutdown();
 }
 
 void Runtime::setRoot(std::unique_ptr<RootHolder> holder) {

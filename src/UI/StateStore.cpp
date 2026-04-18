@@ -16,6 +16,28 @@ bool keyHasPrefix(ComponentKey const& key, ComponentKey const& prefix) {
   return std::equal(prefix.begin(), prefix.end(), key.begin());
 }
 
+void unsubscribeComponentState(ComponentState& state) {
+  std::vector<ComponentSubscription> subscriptions = std::move(state.subscriptions);
+  state.subscriptions.clear();
+  for (ComponentSubscription const& sub : subscriptions) {
+    if (sub.observable) {
+      sub.observable->unobserve(sub.handle);
+    }
+  }
+}
+
+void resetComponentStateStorage(ComponentState& state) {
+  state.slots.clear();
+  state.cursor = 0;
+  state.componentType = std::type_index(typeid(void));
+  state.lastVisitedEpoch = 0;
+  state.lastBody = {nullptr, nullptr};
+  state.lastBodyEpoch = 0;
+  state.reusableConstraints.clear();
+  state.reusableMeasures.clear();
+  state.valueSnapshot = {};
+}
+
 } // namespace
 
 thread_local StateStore* StateStore::sCurrent = nullptr;
@@ -38,21 +60,8 @@ bool StateStore::rectEqual(Rect const& a, Rect const& b) noexcept {
 }
 
 void StateStore::clearComponentState(ComponentState& state) {
-  for (ComponentSubscription const& sub : state.subscriptions) {
-    if (sub.observable) {
-      sub.observable->unobserve(sub.handle);
-    }
-  }
-  state.slots.clear();
-  state.cursor = 0;
-  state.componentType = std::type_index(typeid(void));
-  state.lastVisitedEpoch = 0;
-  state.lastBody = {nullptr, nullptr};
-  state.lastBodyEpoch = 0;
-  state.reusableConstraints.clear();
-  state.reusableMeasures.clear();
-  state.valueSnapshot = {};
-  state.subscriptions.clear();
+  unsubscribeComponentState(state);
+  resetComponentStateStorage(state);
 }
 
 void StateStore::beginRebuild(bool forceFullRebuild) {
@@ -72,13 +81,27 @@ void StateStore::beginRebuild(bool forceFullRebuild) {
 }
 
 void StateStore::endRebuild() {
+  std::vector<ComponentKey> staleKeys{};
+  staleKeys.reserve(states_.size());
   for (auto it = states_.begin(); it != states_.end();) {
     if (it->second.lastVisitedEpoch != buildEpoch_) {
-      clearComponentState(it->second);
-      it = states_.erase(it);
-    } else {
-      ++it;
+      staleKeys.push_back(it->first);
     }
+    ++it;
+  }
+  for (ComponentKey const& key : staleKeys) {
+    auto it = states_.find(key);
+    if (it != states_.end()) {
+      unsubscribeComponentState(it->second);
+    }
+  }
+  for (ComponentKey const& key : staleKeys) {
+    auto it = states_.find(key);
+    if (it == states_.end()) {
+      continue;
+    }
+    resetComponentStateStorage(it->second);
+    states_.erase(it);
   }
   activeDirtyComposites_.clear();
   compositePathStableStack_.clear();
@@ -87,7 +110,11 @@ void StateStore::endRebuild() {
 void StateStore::shutdown() {
   for (auto& [key, state] : states_) {
     (void)key;
-    clearComponentState(state);
+    unsubscribeComponentState(state);
+  }
+  for (auto& [key, state] : states_) {
+    (void)key;
+    resetComponentStateStorage(state);
   }
   states_.clear();
   activeStack_.clear();

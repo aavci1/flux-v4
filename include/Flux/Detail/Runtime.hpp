@@ -55,6 +55,7 @@ public:
   Rect buildSlotRect() const;
 
   bool shuttingDown() const noexcept;
+  void beginShutdown() noexcept;
 
   /// Alias for overlay teardown checks (same as `shuttingDown()`).
   bool imploding() const noexcept;

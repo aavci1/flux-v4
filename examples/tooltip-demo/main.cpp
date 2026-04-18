@@ -53,11 +53,13 @@ struct TooltipIcon {
 
         useTooltip(tooltip);
 
-        return Icon {
+        return Element {Icon {
             .name = name,
             .size = 24.f,
             .color = theme.colorTextSecondary,
-        };
+        }}
+            .padding(4.f)
+            .cursor(Cursor::Arrow);
     }
 };
 

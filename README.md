@@ -22,10 +22,8 @@ By default only the static `flux` library is built. Pass **`-DFLUX_BUILD_EXAMPLE
 | `blend_demo` | Opacity and blend modes |
 | `text_demo` | `TextSystem`, `AttributedString`, `Canvas::drawTextLayout` |
 | `image_demo` | Loading and drawing `Image` from a file |
-| `scene_demo` | Imperative retained scene tree API and hit testing |
 | `reactive_demo` | `Signal` / `Computed` / `Animated` and observers |
 | `card_demo` | Declarative UI (`setView`), stacks, state hooks, animation |
-| `scroll_demo` | `ScrollView` with a scrollable list |
 
 Configure-time options:
 
