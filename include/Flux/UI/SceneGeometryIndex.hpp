@@ -20,6 +20,7 @@ public:
   void beginBuild() { building_.clear(); }
   void finishBuild();
   void clear();
+  void retainSubtree(ComponentKey const& key, Point delta = {});
 
   void record(ComponentKey const& key, Rect rect) {
     if (key.empty()) {

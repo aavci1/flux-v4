@@ -121,6 +121,7 @@ public:
   [[nodiscard]] bool shouldForceFullRebuild() const noexcept { return forceFullRebuild_; }
   [[nodiscard]] bool isComponentDirty(ComponentKey const& key) const;
   [[nodiscard]] bool hasDirtyDescendant(ComponentKey const& key) const;
+  /// Marks the component at \p key and every descendant component state as visited for this rebuild.
   void markRetainedSubtreeVisited(ComponentKey const& key);
   void markRetainedSubtreeVisited(ComponentState& state);
   [[nodiscard]] bool currentCompositePathStable() const noexcept;

@@ -4,6 +4,26 @@
 
 namespace flux {
 
+namespace {
+
+bool keyHasPrefix(ComponentKey const& key, ComponentKey const& prefix) {
+  if (prefix.empty()) {
+    return true;
+  }
+  if (key.size() < prefix.size()) {
+    return false;
+  }
+  return std::equal(prefix.begin(), prefix.end(), key.begin());
+}
+
+Rect offsetRect(Rect rect, Point delta) {
+  rect.x += delta.x;
+  rect.y += delta.y;
+  return rect;
+}
+
+} // namespace
+
 void SceneGeometryIndex::finishBuild() {
   prev_.swap(current_);
   current_ = std::move(building_);
@@ -14,6 +34,19 @@ void SceneGeometryIndex::clear() {
   current_.clear();
   prev_.clear();
   building_.clear();
+}
+
+void SceneGeometryIndex::retainSubtree(ComponentKey const& key, Point delta) {
+  auto copyMatches = [&](auto const& source) {
+    for (auto const& [candidateKey, rect] : source) {
+      if (!keyHasPrefix(candidateKey, key)) {
+        continue;
+      }
+      building_.try_emplace(candidateKey, offsetRect(rect, delta));
+    }
+  };
+  copyMatches(current_);
+  copyMatches(prev_);
 }
 
 std::optional<Rect> SceneGeometryIndex::forCurrentComponent(StateStore const& store) const {

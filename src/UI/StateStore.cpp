@@ -3,6 +3,20 @@
 
 namespace flux {
 
+namespace {
+
+bool keyHasPrefix(ComponentKey const& key, ComponentKey const& prefix) {
+  if (prefix.empty()) {
+    return true;
+  }
+  if (key.size() < prefix.size()) {
+    return false;
+  }
+  return std::equal(prefix.begin(), prefix.end(), key.begin());
+}
+
+} // namespace
+
 thread_local StateStore* StateStore::sCurrent = nullptr;
 
 StateStore::~StateStore() {
@@ -177,9 +191,10 @@ bool StateStore::hasDirtyDescendant(ComponentKey const& key) const {
 }
 
 void StateStore::markRetainedSubtreeVisited(ComponentKey const& key) {
-  auto const it = states_.find(key);
-  if (it != states_.end()) {
-    it->second.lastVisitedEpoch = buildEpoch_;
+  for (auto& [candidateKey, state] : states_) {
+    if (keyHasPrefix(candidateKey, key)) {
+      state.lastVisitedEpoch = buildEpoch_;
+    }
   }
 }
 

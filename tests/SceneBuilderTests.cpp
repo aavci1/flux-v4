@@ -5,6 +5,7 @@
 #include <Flux/Reactive/Signal.hpp>
 #include <Flux/Scene/CustomTransformSceneNode.hpp>
 #include <Flux/Scene/HitTester.hpp>
+#include <Flux/Scene/PathSceneNode.hpp>
 #include <Flux/Scene/RectSceneNode.hpp>
 #include <Flux/Scene/ModifierSceneNode.hpp>
 #include <Flux/Scene/Renderer.hpp>
@@ -13,6 +14,7 @@
 #include <Flux/Scene/TextSceneNode.hpp>
 #include <Flux/UI/Environment.hpp>
 #include <Flux/UI/FocusController.hpp>
+#include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/GestureTracker.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 #include <Flux/UI/SceneBuilder.hpp>
@@ -22,6 +24,7 @@
 #include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/ScrollView.hpp>
 #include <Flux/UI/Views/HStack.hpp>
+#include <Flux/UI/Views/PopoverCalloutShape.hpp>
 #include <Flux/UI/Views/Text.hpp>
 #include <Flux/UI/Views/VStack.hpp>
 
@@ -33,7 +36,7 @@ namespace {
 
 using namespace flux;
 
-class NullTextSystem final : public TextSystem {
+class NullTextSystem : public TextSystem {
 public:
   std::shared_ptr<TextLayout const> layout(AttributedString const&, float, TextLayoutOptions const&) override {
     auto out = std::make_shared<TextLayout>();
@@ -64,10 +67,28 @@ public:
   }
 };
 
+class CountingTextSystem final : public NullTextSystem {
+public:
+  int layoutCount = 0;
+
+  std::shared_ptr<TextLayout const> layout(AttributedString const& text, float maxWidth,
+                                           TextLayoutOptions const& options) override {
+    ++layoutCount;
+    return NullTextSystem::layout(text, maxWidth, options);
+  }
+
+  std::shared_ptr<TextLayout const> layout(std::string_view text, Font const& font, Color const& color,
+                                           float maxWidth, TextLayoutOptions const& options) override {
+    ++layoutCount;
+    return NullTextSystem::layout(text, font, color, maxWidth, options);
+  }
+};
+
 class NullRenderer final : public Renderer {
 public:
   int rectCount = 0;
   int textCount = 0;
+  int pathCount = 0;
 
   void save() override {}
   void restore() override {}
@@ -81,7 +102,7 @@ public:
     ++rectCount;
   }
   void drawLine(Point, Point, StrokeStyle const&) override {}
-  void drawPath(Path const&, FillStyle const&, StrokeStyle const&, ShadowStyle const&) override {}
+  void drawPath(Path const&, FillStyle const&, StrokeStyle const&, ShadowStyle const&) override { ++pathCount; }
   void drawTextLayout(TextLayout const&, Point) override { ++textCount; }
   void drawImage(Image const&, Rect const&, ImageFillMode, CornerRadius const&, float) override {}
 };
@@ -139,6 +160,34 @@ struct HelloRoot {
   Element body() const {
     return Text{
         .text = "Hello, World!",
+    };
+  }
+};
+
+struct RetainedTextChild {
+  int* bodyCalls = nullptr;
+
+  Element body() const {
+    ++*bodyCalls;
+    return Text{
+        .text = "Retained child",
+    };
+  }
+};
+
+struct RetainedParent {
+  State<int> tick{};
+  int* parentCalls = nullptr;
+  int* childCalls = nullptr;
+
+  Element body() const {
+    ++*parentCalls;
+    return VStack{
+        .spacing = static_cast<float>(*tick),
+        .children = {
+            Element{Rectangle{}}.size(24.f + static_cast<float>(*tick), 8.f),
+            Element{RetainedTextChild{childCalls}}.key("child"),
+        },
     };
   }
 };
@@ -274,6 +323,69 @@ TEST_CASE("SceneBuilder: geometry index records assigned frames by keyed path") 
   CHECK(bRect->y == doctest::Approx(61.5f));
   CHECK(bRect->width == doctest::Approx(30.f));
   CHECK(bRect->height == doctest::Approx(15.f));
+}
+
+TEST_CASE("SceneBuilder: clean composite subtree is skipped and geometry is retained across parent rebuilds") {
+  CountingTextSystem textSystem{};
+  SceneGeometryIndex geometry{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  StoreScope scope{};
+  SceneBuilder builder{textSystem, EnvironmentStack::current(), &geometry};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 200.f;
+  constraints.maxHeight = 120.f;
+
+  Signal<int> tickSignal{0};
+  State<int> tick{&tickSignal};
+  int parentCalls = 0;
+  int childCalls = 0;
+
+  auto makeRoot = [&]() -> Element {
+    return Element{RetainedParent{
+        .tick = tick,
+        .parentCalls = &parentCalls,
+        .childCalls = &childCalls,
+    }};
+  };
+
+  scope.store.beginRebuild(true);
+  std::unique_ptr<SceneNode> tree = builder.build(makeRoot(), NodeId{1ull}, constraints);
+  scope.store.endRebuild();
+
+  REQUIRE(tree != nullptr);
+  REQUIRE(tree->children().size() == 2);
+  SceneNode* retainedChild = tree->children()[1].get();
+  REQUIRE(dynamic_cast<TextSceneNode*>(retainedChild) != nullptr);
+  int const initialChildCalls = childCalls;
+  int const initialParentCalls = parentCalls;
+  int const initialLayoutCount = textSystem.layoutCount;
+  REQUIRE(initialChildCalls > 0);
+  REQUIRE(initialParentCalls > 0);
+  REQUIRE(initialLayoutCount > 0);
+
+  std::optional<Rect> beforeRect = geometry.forKey(ComponentKey{LocalId::fromString("child")});
+  REQUIRE(beforeRect.has_value());
+
+  tick = 12;
+
+  scope.store.beginRebuild(false);
+  tree = builder.build(makeRoot(), NodeId{1ull}, constraints, std::move(tree));
+  scope.store.endRebuild();
+
+  REQUIRE(tree != nullptr);
+  REQUIRE(tree->children().size() == 2);
+  CHECK(tree->children()[1].get() == retainedChild);
+  CHECK(parentCalls > initialParentCalls);
+  CHECK(childCalls == initialChildCalls);
+  CHECK(textSystem.layoutCount == initialLayoutCount);
+
+  std::optional<Rect> afterRect = geometry.forKey(ComponentKey{LocalId::fromString("child")});
+  REQUIRE(afterRect.has_value());
+  CHECK(afterRect->x == doctest::Approx(beforeRect->x));
+  CHECK(afterRect->y > beforeRect->y);
 }
 
 TEST_CASE("SceneBuilder: centered text keeps its assigned box for boxed layout") {
@@ -421,6 +533,47 @@ TEST_CASE("SceneBuilder: rectangle retains modifier paint on the primitive node"
   NullRenderer renderer{};
   render(*tree, renderer);
   CHECK(renderer.rectCount == 1);
+}
+
+TEST_CASE("SceneBuilder: PopoverCalloutShape builds retained chrome and content nodes") {
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 200.f;
+  constraints.maxHeight = 200.f;
+
+  Element popover = PopoverCalloutShape{
+      .placement = PopoverPlacement::Below,
+      .arrow = true,
+      .padding = 12.f,
+      .cornerRadius = CornerRadius{10.f},
+      .backgroundColor = Color::hex(0xFFFFFF),
+      .borderColor = Color::hex(0xE0E0E6),
+      .borderWidth = 1.5f,
+      .content = Element{Rectangle{}}.size(40.f, 20.f),
+  };
+
+  std::unique_ptr<SceneNode> tree = builder.build(popover, NodeId{1ull}, constraints);
+  REQUIRE(tree != nullptr);
+  REQUIRE(tree->children().size() == 2);
+
+  auto* chrome = dynamic_cast<PathSceneNode*>(tree->children()[0].get());
+  auto* content = dynamic_cast<RectSceneNode*>(tree->children()[1].get());
+  REQUIRE(chrome != nullptr);
+  REQUIRE(content != nullptr);
+  CHECK_FALSE(chrome->fill.isNone());
+  CHECK(chrome->stroke.width == doctest::Approx(1.5f));
+  CHECK(content->position.x == doctest::Approx(12.f));
+  CHECK(content->position.y == doctest::Approx(PopoverCalloutShape::kArrowH + 12.f));
+  CHECK(tree->bounds.height == doctest::Approx(20.f + 24.f + PopoverCalloutShape::kArrowH));
+
+  NullRenderer renderer{};
+  render(*tree, renderer);
+  CHECK(renderer.pathCount == 1);
 }
 
 TEST_CASE("SceneBuilder: composite root exposes a retained scene body with the runtime root key") {

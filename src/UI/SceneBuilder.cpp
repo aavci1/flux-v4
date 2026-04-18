@@ -23,6 +23,8 @@
 #include <Flux/UI/Views/Line.hpp>
 #include <Flux/UI/Views/OffsetView.hpp>
 #include <Flux/UI/Views/PathShape.hpp>
+#include <Flux/UI/Views/PopoverCalloutPath.hpp>
+#include <Flux/UI/Views/PopoverCalloutShape.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/Render.hpp>
 #include <Flux/UI/Views/ScaleAroundCenter.hpp>
@@ -396,6 +398,105 @@ bool sizeApproximatelyEqual(Size lhs, Size rhs) {
   return nearlyEqual(lhs.width, rhs.width, 0.5f) && nearlyEqual(lhs.height, rhs.height, 0.5f);
 }
 
+LayoutConstraints innerConstraintsForPopoverContent(PopoverCalloutShape const& value, LayoutConstraints constraints) {
+  if (value.maxSize) {
+    if (std::isfinite(value.maxSize->width) && value.maxSize->width > 0.f) {
+      constraints.maxWidth = std::min(constraints.maxWidth, value.maxSize->width);
+    }
+    if (std::isfinite(value.maxSize->height) && value.maxSize->height > 0.f) {
+      constraints.maxHeight = std::min(constraints.maxHeight, value.maxSize->height);
+    }
+  }
+
+  float const pad = value.padding;
+  float const arrowDepth = PopoverCalloutShape::kArrowH;
+  float availableWidth = constraints.maxWidth;
+  float availableHeight = constraints.maxHeight;
+  if (std::isfinite(availableWidth)) {
+    availableWidth -= 2.f * pad;
+  }
+  if (std::isfinite(availableHeight)) {
+    availableHeight -= 2.f * pad;
+  }
+
+  if (value.arrow) {
+    switch (value.placement) {
+    case PopoverPlacement::Below:
+    case PopoverPlacement::Above:
+      if (std::isfinite(availableHeight)) {
+        availableHeight -= arrowDepth;
+      }
+      break;
+    case PopoverPlacement::End:
+    case PopoverPlacement::Start:
+      if (std::isfinite(availableWidth)) {
+        availableWidth -= arrowDepth;
+      }
+      break;
+    }
+  }
+
+  constraints.maxWidth = std::max(0.f, availableWidth);
+  constraints.maxHeight = std::max(0.f, availableHeight);
+  clampLayoutMinToMax(constraints);
+  return constraints;
+}
+
+struct PopoverCalloutLayout {
+  Size totalSize{};
+  Size contentSize{};
+  Rect cardRect{};
+  Point contentOrigin{};
+  LayoutConstraints contentConstraints{};
+  Path chromePath{};
+};
+
+PopoverCalloutLayout layoutPopoverCallout(PopoverCalloutShape const& value, Size contentSize,
+                                          LayoutConstraints const& constraints) {
+  PopoverCalloutLayout layout{};
+  layout.contentSize = contentSize;
+  layout.contentConstraints = innerConstraintsForPopoverContent(value, constraints);
+
+  float const pad = std::max(0.f, value.padding);
+  float const arrowWidth = value.arrow ? PopoverCalloutShape::kArrowW : 0.f;
+  float const arrowDepth = value.arrow ? PopoverCalloutShape::kArrowH : 0.f;
+  float const cardWidth = contentSize.width + 2.f * pad;
+  float const cardHeight = contentSize.height + 2.f * pad;
+
+  switch (value.placement) {
+  case PopoverPlacement::Below:
+    layout.totalSize = Size{cardWidth, cardHeight + arrowDepth};
+    layout.cardRect = Rect{0.f, arrowDepth, cardWidth, cardHeight};
+    layout.contentOrigin = Point{pad, arrowDepth + pad};
+    break;
+  case PopoverPlacement::Above:
+    layout.totalSize = Size{cardWidth, cardHeight + arrowDepth};
+    layout.cardRect = Rect{0.f, 0.f, cardWidth, cardHeight};
+    layout.contentOrigin = Point{pad, pad};
+    break;
+  case PopoverPlacement::End: {
+    float const totalHeight = std::max(cardHeight, arrowWidth);
+    float const cardY = std::max(0.f, (totalHeight - cardHeight) * 0.5f);
+    layout.totalSize = Size{cardWidth + arrowDepth, totalHeight};
+    layout.cardRect = Rect{arrowDepth, cardY, cardWidth, cardHeight};
+    layout.contentOrigin = Point{arrowDepth + pad, cardY + pad};
+    break;
+  }
+  case PopoverPlacement::Start: {
+    float const totalHeight = std::max(cardHeight, arrowWidth);
+    float const cardY = std::max(0.f, (totalHeight - cardHeight) * 0.5f);
+    layout.totalSize = Size{cardWidth + arrowDepth, totalHeight};
+    layout.cardRect = Rect{0.f, cardY, cardWidth, cardHeight};
+    layout.contentOrigin = Point{pad, cardY + pad};
+    break;
+  }
+  }
+
+  layout.chromePath = buildPopoverCalloutPath(value.placement, value.cornerRadius, value.arrow, arrowWidth,
+                                              arrowDepth, layout.cardRect, layout.totalSize);
+  return layout;
+}
+
 } // namespace
 
 SceneBuilder::SceneBuilder(TextSystem& textSystem, EnvironmentStack& environment,
@@ -472,6 +573,19 @@ std::unique_ptr<SceneNode> SceneBuilder::buildOrReuse(Element const& el, NodeId 
     detail::CompositeBodyResolution resolution = el.resolveCompositeBody(frame().key, frame().constraints);
     if (resolution.body) {
       StateStore* const store = StateStore::current();
+      if (store && existing && resolution.descendantsStable && !el.environmentLayer() && !el.modifiers()) {
+        store->markRetainedSubtreeVisited(frame().key);
+        if (geometryIndex_) {
+          Point delta{};
+          if (!frame().key.empty()) {
+            if (std::optional<Rect> previousRect = geometryIndex_->forKey(frame().key)) {
+              delta = Point{frame().origin.x - previousRect->x, frame().origin.y - previousRect->y};
+            }
+          }
+          geometryIndex_->retainSubtree(frame().key, delta);
+        }
+        return existing;
+      }
       if (store) {
         store->pushCompositePathStable(resolution.descendantsStable);
       }
@@ -1428,6 +1542,73 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
         Mat3::translate(pivot) * Mat3::scale(scaled.scale) * Mat3::translate(Point{-pivot.x, -pivot.y});
     transformNode->recomputeBounds();
     core = std::move(transformNode);
+    break;
+  }
+  case ElementType::PopoverCalloutShape: {
+    PopoverCalloutShape const& callout = sceneEl.as<PopoverCalloutShape>();
+    ComponentKey contentKey = current.key;
+    contentKey.push_back(LocalId::fromString("$content"));
+    LayoutConstraints const contentConstraints = innerConstraintsForPopoverContent(callout, innerConstraints);
+    Size const contentMeasured = measureElement(callout.content, contentConstraints, LayoutHints{}, contentKey);
+    PopoverCalloutLayout const calloutLayout = layoutPopoverCallout(callout, contentMeasured, innerConstraints);
+
+    std::unique_ptr<SceneNode> group = releasePlainGroup(std::move(existing));
+    if (!group) {
+      group = std::make_unique<SceneNode>(id);
+    }
+    std::vector<std::unique_ptr<SceneNode>> existingChildren = group->releaseChildren();
+    std::unordered_map<NodeId, std::unique_ptr<SceneNode>, ::flux::NodeIdHash> reusable{};
+    reusable.reserve(existingChildren.size());
+    for (std::unique_ptr<SceneNode>& child : existingChildren) {
+      if (child) {
+        reusable.emplace(child->id(), std::move(child));
+      }
+    }
+
+    NodeId const chromeId = SceneTree::childId(id, LocalId::fromString("$chrome"));
+    std::unique_ptr<PathSceneNode> chromeNode{};
+    if (auto it = reusable.find(chromeId); it != reusable.end()) {
+      chromeNode = releaseAs<PathSceneNode>(std::move(it->second));
+      reusable.erase(it);
+    }
+    if (!chromeNode) {
+      chromeNode = std::make_unique<PathSceneNode>(chromeId);
+    }
+    bool chromeDirty = false;
+    chromeDirty |= updateIfChanged(chromeNode->path, calloutLayout.chromePath);
+    chromeDirty |= updateIfChanged(chromeNode->fill, FillStyle::solid(callout.backgroundColor));
+    chromeDirty |= updateIfChanged(chromeNode->stroke, StrokeStyle::solid(callout.borderColor, callout.borderWidth));
+    chromeDirty |= updateIfChanged(chromeNode->shadow, ShadowStyle::none());
+    if (chromeDirty) {
+      chromeNode->markPaintDirty();
+      chromeNode->markBoundsDirty();
+    }
+    chromeNode->position = {};
+    chromeNode->recomputeBounds();
+
+    NodeId const contentId = SceneTree::childId(id, LocalId::fromString("$content"));
+    std::unique_ptr<SceneNode> reuseContent{};
+    if (auto it = reusable.find(contentId); it != reusable.end()) {
+      reuseContent = std::move(it->second);
+      reusable.erase(it);
+    }
+    pushFrame(contentConstraints, LayoutHints{},
+              Point{contentOrigin.x + calloutLayout.contentOrigin.x, contentOrigin.y + calloutLayout.contentOrigin.y},
+              std::move(contentKey));
+    std::unique_ptr<SceneNode> contentNode =
+        buildOrReuse(callout.content, contentId, std::move(reuseContent));
+    popFrame();
+    contentNode->position.x += calloutLayout.contentOrigin.x;
+    contentNode->position.y += calloutLayout.contentOrigin.y;
+
+    std::vector<std::unique_ptr<SceneNode>> nextChildren{};
+    nextChildren.reserve(2);
+    nextChildren.push_back(std::move(chromeNode));
+    nextChildren.push_back(std::move(contentNode));
+    group->replaceChildren(std::move(nextChildren));
+    setGroupBounds(*group, calloutLayout.totalSize);
+    geometrySize = calloutLayout.totalSize;
+    core = std::move(group);
     break;
   }
   case ElementType::Spacer:
