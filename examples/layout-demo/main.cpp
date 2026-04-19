@@ -156,7 +156,6 @@ Element makeZStackDemo(Theme const &theme) {
                     .cornerRadius(CornerRadius {theme.radiusLarge}),
                 VStack {
                     .spacing = theme.space1,
-                    .alignment = Alignment::Center,
                     .children = children(
                         Text {
                             .text = "Overlay content",
@@ -172,7 +171,7 @@ Element makeZStackDemo(Theme const &theme) {
                         }
                     )
                 }
-            ) //
+            )
         }
             .padding(theme.space3)
             .fill(FillStyle::solid(theme.colorBackground))

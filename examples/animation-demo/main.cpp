@@ -324,7 +324,6 @@ struct AmbientLoopLab : ViewModifiers<AmbientLoopLab> {
                     .size(22.f, barHeight)
                     .cornerRadius(CornerRadius {11.f})
                     .fill(FillStyle::solid(alpha(theme.colorAccent, 0.30f + emphasis * 0.70f)))
-                    .position(0.f, (1.f - emphasis) * 6.f)
             );
         }
 
@@ -335,8 +334,8 @@ struct AmbientLoopLab : ViewModifiers<AmbientLoopLab> {
                 .spacing = theme.space3,
                 .children = children(
                     ZStack {
-                        .horizontalAlignment = Alignment::Start,
-                        .verticalAlignment = Alignment::Start,
+                        .horizontalAlignment = Alignment::Center,
+                        .verticalAlignment = Alignment::Center,
                         .children = children(
                             Rectangle {}
                                 .size(260.f, 104.f)
@@ -345,13 +344,12 @@ struct AmbientLoopLab : ViewModifiers<AmbientLoopLab> {
                                 .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f)),
                             HStack {
                                 .spacing = theme.space2,
-                                .alignment = Alignment::End,
+                                .alignment = Alignment::Center,
                                 .children = std::move(bars),
                             }
-                                .position(28.f, 22.f)
                         )
                     }
-                        .size(260.f, 104.f),
+,
                     HStack {
                         .spacing = theme.space3,
                         .alignment = Alignment::Stretch,

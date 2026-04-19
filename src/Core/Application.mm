@@ -159,6 +159,7 @@ Application::Application(int /*argc*/, char** /*argv*/) {
 }
 
 Application::~Application() {
+  AnimationClock::instance().shutdown();
   if (d->iconFont_) {
     CFRelease(reinterpret_cast<CTFontRef>(reinterpret_cast<std::uintptr_t>(d->iconFont_)));
     d->iconFont_ = nullptr;

@@ -46,6 +46,7 @@ void AnimationClock::shutdown() {
   active_.clear();
   subscribers_.clear();
   nextSubscriberId_ = 1;
+  installed_ = false;
 }
 
 bool AnimationClock::needsTimer() const {

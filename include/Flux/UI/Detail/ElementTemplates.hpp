@@ -16,6 +16,11 @@ Element& StateStore::commitBody(ComponentKey const& key, C const& value,
                                 LayoutConstraints const& constraints, std::unique_ptr<Element> body,
                                 std::vector<Observable*> deps) {
   ComponentState& state = states_[key];
+  bool const preserveReusableConstraints =
+      state.valueSnapshot.value != nullptr &&
+      state.valueSnapshot.type == std::type_index(typeid(C)) &&
+      state.valueSnapshot.equals != nullptr &&
+      state.valueSnapshot.equals(state.valueSnapshot.value.get(), &value);
 
   for (ComponentSubscription const& sub : state.subscriptions) {
     if (sub.observable) {
@@ -39,8 +44,19 @@ Element& StateStore::commitBody(ComponentKey const& key, C const& value,
   state.lastBody = std::unique_ptr<void, void (*)(void*)>(
       raw, [](void* p) { delete static_cast<Element*>(p); });
   state.lastBodyEpoch = buildEpoch_;
-  state.reusableConstraints.clear();
-  state.reusableConstraints.push_back(constraints);
+  if (!preserveReusableConstraints) {
+    state.reusableConstraints.clear();
+  }
+  bool hasRecordedConstraints = false;
+  for (LayoutConstraints const& recorded : state.reusableConstraints) {
+    if (constraintsEqual(recorded, constraints)) {
+      hasRecordedConstraints = true;
+      break;
+    }
+  }
+  if (!hasRecordedConstraints) {
+    state.reusableConstraints.push_back(constraints);
+  }
   return *raw;
 }
 
@@ -216,13 +232,8 @@ Size Element::Model<C>::measure(MeasureContext& ctx, LayoutConstraints const& co
       store->pushComponent(key, std::type_index(typeid(C)));
       store->pushCompositeConstraints(constraints);
       try {
-        if (store->canReuseBody(key, value, constraints)) {
-          resolution.body = store->cachedBody(key);
-          resolution.descendantsStable = true;
-        } else {
-          resolution.ownedBody = std::make_unique<Element>(value.body());
-          resolution.body = resolution.ownedBody.get();
-        }
+        resolution =
+            detail::resolveCompositeBody(store, key, constraints, value, [&] { return value.body(); });
       } catch (...) {
         store->popCompositeConstraints();
         store->popComponent();

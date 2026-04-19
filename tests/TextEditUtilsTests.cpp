@@ -96,7 +96,7 @@ TEST_CASE("TextEditUtils: shouldCoalesceInsert") {
 
 TEST_CASE("TextEditUtils: insertText replaces selection and respects max length") {
     TextEditMutation const inserted = insertText("hello", TextEditSelection {.caretByte = 5, .anchorByte = 2}, "yy", 0);
-    CHECK(inserted.text == "heyyo");
+    CHECK(inserted.text == "heyy");
     CHECK(inserted.selection.caretByte == 4);
     CHECK(inserted.selection.anchorByte == 4);
     CHECK(inserted.valueChanged);

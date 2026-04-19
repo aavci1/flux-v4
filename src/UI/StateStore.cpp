@@ -38,6 +38,26 @@ void resetComponentStateStorage(ComponentState& state) {
   state.valueSnapshot = {};
 }
 
+void scrubObservableSubscriptions(std::unordered_map<ComponentKey, ComponentState, ComponentKeyHash>& states,
+                                  Observable const* observable) {
+  if (!observable) {
+    return;
+  }
+  for (auto& [key, candidate] : states) {
+    (void)key;
+    std::erase_if(candidate.subscriptions, [observable](ComponentSubscription const& sub) {
+      return sub.observable == observable;
+    });
+  }
+}
+
+void scrubOwnedObservableSubscriptions(std::unordered_map<ComponentKey, ComponentState, ComponentKeyHash>& states,
+                                       ComponentState const& owner) {
+  for (StateSlot const& slot : owner.slots) {
+    scrubObservableSubscriptions(states, slot.observable);
+  }
+}
+
 } // namespace
 
 thread_local StateStore* StateStore::sCurrent = nullptr;
@@ -60,6 +80,7 @@ bool StateStore::rectEqual(Rect const& a, Rect const& b) noexcept {
 }
 
 void StateStore::clearComponentState(ComponentState& state) {
+  scrubOwnedObservableSubscriptions(states_, state);
   unsubscribeComponentState(state);
   resetComponentStateStorage(state);
 }
@@ -92,6 +113,7 @@ void StateStore::endRebuild() {
   for (ComponentKey const& key : staleKeys) {
     auto it = states_.find(key);
     if (it != states_.end()) {
+      scrubOwnedObservableSubscriptions(states_, it->second);
       unsubscribeComponentState(it->second);
     }
   }
@@ -110,6 +132,7 @@ void StateStore::endRebuild() {
 void StateStore::shutdown() {
   for (auto& [key, state] : states_) {
     (void)key;
+    scrubOwnedObservableSubscriptions(states_, state);
     unsubscribeComponentState(state);
   }
   for (auto& [key, state] : states_) {

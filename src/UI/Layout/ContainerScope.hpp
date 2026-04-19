@@ -18,14 +18,20 @@ public:
     keyPathDepth0_ = ctx_.debugKeyPathDepth();
     savedDepth0_ = ctx_.debugSavedChildDepth();
 #endif
-    if (!ctx_.consumeCompositeBodySubtreeRootSkip()) {
+    if (ctx_.consumeCompositeBodySubtreeRootSkip()) {
+      ctx_.pushChildIndex(false);
+    } else {
+      LocalId const containerLocalId = ctx_.peekCurrentChildLocalId();
       ctx_.advanceChildSlot();
+      ctx_.pushChildIndexWithLocalId(containerLocalId);
     }
-    ctx_.pushChildIndex();
+    pushedChildIndex_ = true;
   }
 
   ~ContainerMeasureScope() {
-    ctx_.popChildIndex();
+    if (pushedChildIndex_) {
+      ctx_.popChildIndex();
+    }
 #ifndef NDEBUG
     assert(ctx_.debugKeyPathDepth() == keyPathDepth0_);
     assert(ctx_.debugSavedChildDepth() == savedDepth0_);
@@ -37,6 +43,7 @@ public:
 
 private:
   MeasureContext& ctx_;
+  bool pushedChildIndex_ = false;
 #ifndef NDEBUG
   std::size_t keyPathDepth0_{};
   std::size_t savedDepth0_{};

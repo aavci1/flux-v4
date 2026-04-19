@@ -448,8 +448,11 @@ static std::uint32_t rgba8Pack(Color const& c) {
 }
 
 static Color rgba8Unpack(std::uint32_t rgba) {
-  auto ch = [](std::uint32_t x) -> float { return static_cast<float>(x) / 255.f; };
-  return Color{ch((rgba >> 24) & 0xFFu), ch((rgba >> 16) & 0xFFu), ch((rgba >> 8) & 0xFFu), ch(rgba & 0xFFu)};
+  Color color = Color::rgb(static_cast<std::uint8_t>((rgba >> 24) & 0xFFu),
+                           static_cast<std::uint8_t>((rgba >> 16) & 0xFFu),
+                           static_cast<std::uint8_t>((rgba >> 8) & 0xFFu));
+  color.a = static_cast<float>(rgba & 0xFFu) * (1.f / 255.f);
+  return color;
 }
 
 // computeContentHash / computeContentHashPlain are defined after CoreTextSystem::Impl (needs findFontId).

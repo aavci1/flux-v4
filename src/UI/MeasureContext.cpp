@@ -35,14 +35,28 @@ void MeasureContext::popConstraints() {
   }
 }
 
-void MeasureContext::pushChildIndex() {
-  keyStack_.push_back(nextChildIndex_);
+void MeasureContext::pushChildIndex(bool pushKeySegment) {
+  if (pushKeySegment) {
+    keyStack_.push_back(nextChildIndex_);
+  }
   savedChildIndices_.push_back(nextChildIndex_);
+  pushedChildIndexKeyStack_.push_back(pushKeySegment);
+  nextChildIndex_ = 0;
+}
+
+void MeasureContext::pushChildIndexWithLocalId(LocalId localId) {
+  keyStack_.push_back(localId);
+  savedChildIndices_.push_back(nextChildIndex_);
+  pushedChildIndexKeyStack_.push_back(true);
   nextChildIndex_ = 0;
 }
 
 void MeasureContext::popChildIndex() {
-  keyStack_.pop_back();
+  assert(!pushedChildIndexKeyStack_.empty());
+  if (pushedChildIndexKeyStack_.back()) {
+    keyStack_.pop_back();
+  }
+  pushedChildIndexKeyStack_.pop_back();
   nextChildIndex_ = savedChildIndices_.back();
   savedChildIndices_.pop_back();
 }
@@ -68,6 +82,10 @@ LocalId MeasureContext::currentChildLocalId() const {
 }
 
 ComponentKey MeasureContext::nextCompositeKey() {
+  if (useMeasurementRootKey_) {
+    useMeasurementRootKey_ = false;
+    return measurementRootKey_;
+  }
   ComponentKey key = keyStack_;
   key.push_back(currentChildLocalId());
   ++nextChildIndex_;
@@ -75,6 +93,9 @@ ComponentKey MeasureContext::nextCompositeKey() {
 }
 
 ComponentKey MeasureContext::peekNextCompositeKey() const {
+  if (useMeasurementRootKey_) {
+    return measurementRootKey_;
+  }
   ComponentKey key = keyStack_;
   key.push_back(currentChildLocalId());
   return key;
@@ -91,8 +112,12 @@ ComponentKey MeasureContext::leafComponentKey() const {
 void MeasureContext::rewindChildKeyIndex() { nextChildIndex_ = 0; }
 
 void MeasureContext::resetTraversalState(ComponentKey const& key) {
+  measurementRootKey_ = key;
+  useMeasurementRootKey_ = false;
   keyStack_.clear();
   savedChildIndices_.clear();
+  pushedChildIndexKeyStack_.clear();
+  pushedCompositeKeyTailStack_.clear();
   explicitChildLocalIdStack_.clear();
   nextChildIndex_ = 0;
   if (!key.empty()) {
@@ -106,6 +131,15 @@ void MeasureContext::resetTraversalState(ComponentKey const& key) {
       explicitChildLocalIdStack_.push_back(local);
     }
   }
+}
+
+void MeasureContext::setMeasurementRootKey(ComponentKey key) {
+  measurementRootKey_ = std::move(key);
+  useMeasurementRootKey_ = true;
+}
+
+void MeasureContext::clearMeasurementRootKey() noexcept {
+  useMeasurementRootKey_ = false;
 }
 
 void MeasureContext::beginCompositeBodySubtree(ComponentKey compositeKey) {
@@ -122,15 +156,22 @@ bool MeasureContext::consumeCompositeBodySubtreeRootSkip() {
 }
 
 void MeasureContext::pushCompositeKeyTail(ComponentKey const& compositeKey) {
-  assert(!compositeKey.empty());
-  keyStack_.push_back(compositeKey.back());
   savedChildIndices_.push_back(nextChildIndex_);
+  bool const pushedKeyTail = !compositeKey.empty();
+  pushedCompositeKeyTailStack_.push_back(pushedKeyTail);
+  if (pushedKeyTail) {
+    keyStack_.push_back(compositeKey.back());
+  }
   nextChildIndex_ = 0;
 }
 
 void MeasureContext::popCompositeKeyTail() {
-  assert(!keyStack_.empty());
-  keyStack_.pop_back();
+  assert(!pushedCompositeKeyTailStack_.empty());
+  if (pushedCompositeKeyTailStack_.back()) {
+    assert(!keyStack_.empty());
+    keyStack_.pop_back();
+  }
+  pushedCompositeKeyTailStack_.pop_back();
   assert(!savedChildIndices_.empty());
   nextChildIndex_ = savedChildIndices_.back();
   savedChildIndices_.pop_back();

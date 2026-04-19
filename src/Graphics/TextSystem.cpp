@@ -166,7 +166,6 @@ void applyBoxOptions(TextLayout &layout, Rect const &box, TextLayoutOptions cons
         return;
     }
 
-    normalizeOriginsToTopLeft(layout);
     applyHorizontalPerLine(layout, box, options.horizontalAlignment);
 
     float const h = layout.measuredSize.height;

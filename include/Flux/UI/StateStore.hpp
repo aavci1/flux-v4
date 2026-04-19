@@ -35,6 +35,7 @@ struct ElementModifiers;
 struct StateSlot {
   std::unique_ptr<void, void (*)(void*)> value{nullptr, nullptr};
   std::type_index type{typeid(void)};
+  Observable* observable = nullptr;
 };
 
 struct ComponentSubscription {
@@ -181,7 +182,7 @@ private:
 
   static bool constraintsEqual(LayoutConstraints const& a, LayoutConstraints const& b) noexcept;
   static bool rectEqual(Rect const& a, Rect const& b) noexcept;
-  static void clearComponentState(ComponentState& state);
+  void clearComponentState(ComponentState& state);
 
   template<typename C>
   static ComponentValueSnapshot makeValueSnapshot(C const& value);
@@ -233,11 +234,16 @@ S& StateStore::claimSlot(Args&&... args) {
 
   // New slot — construct in place (Signal/Animation are non-movable).
   S* raw = new S(std::forward<Args>(args)...);
+  Observable* slotObservable = nullptr;
+  if constexpr (std::is_base_of_v<Observable, S>) {
+    slotObservable = raw;
+  }
   cs.slots.push_back(StateSlot{
       std::unique_ptr<void, void (*)(void*)>(raw, [](void* p) {
         delete static_cast<S*>(p);
       }),
-      std::type_index(typeid(S))});
+      std::type_index(typeid(S)),
+      slotObservable});
   return *raw;
 }
 

@@ -12,11 +12,15 @@ namespace lambda_studio_backend {
 
 inline std::optional<std::filesystem::path> canonicalPathIfExists(std::filesystem::path const &path) {
     std::error_code ec;
-    std::filesystem::path const canonical = std::filesystem::weakly_canonical(path, ec);
+    std::filesystem::path const absolute = std::filesystem::absolute(path, ec);
     if (ec) {
         return std::nullopt;
     }
-    return canonical;
+    std::filesystem::path const normalized = absolute.lexically_normal();
+    if (!std::filesystem::exists(normalized, ec) || ec) {
+        return std::nullopt;
+    }
+    return normalized;
 }
 
 inline bool hasWorkspaceMarker(std::filesystem::path const &path) {
@@ -93,7 +97,7 @@ inline std::string normalizeToolWorkspaceRoot(std::string workspaceRoot) {
 
     auto normalized = canonicalPathIfExists(workspaceRoot);
     if (!normalized.has_value()) {
-        return defaultToolWorkspaceRoot();
+        return std::filesystem::path(workspaceRoot).lexically_normal().string();
     }
 
     if (auto discovered = discoverWorkspaceRoot(*normalized);

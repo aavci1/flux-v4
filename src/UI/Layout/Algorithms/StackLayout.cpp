@@ -126,17 +126,20 @@ StackLayoutResult layoutStack(StackAxis axis, Alignment crossAlignment,
     float const mainSize = i < mainSizes.size() ? mainSizes[i] : 0.f;
     StackSlot slot{};
     if (axis == StackAxis::Vertical) {
+      float const crossSlotSize =
+          crossAlignment == Alignment::Stretch && containerCrossSize > 0.f ? containerCrossSize : measured.width;
       slot.origin = Point{
           hAlignOffset(measured.width, containerCrossSize > 0.f ? containerCrossSize : measured.width, crossAlignment),
           mainOffset,
       };
-      slot.assignedSize = Size{containerCrossSize > 0.f ? containerCrossSize : measured.width, mainSize};
+      slot.assignedSize = Size{crossSlotSize, mainSize};
     } else {
       float const crossSlotSize =
           crossAlignment == Alignment::Stretch && containerCrossSize > 0.f ? containerCrossSize : measured.height;
+      float const crossSpace = containerCrossSize > 0.f ? containerCrossSize : measured.height;
       slot.origin = Point{
           mainOffset,
-          vAlignOffset(measured.height, std::max(crossSlotSize, measured.height), crossAlignment),
+          vAlignOffset(measured.height, crossSpace, crossAlignment),
       };
       slot.assignedSize = Size{mainSize, crossSlotSize};
     }

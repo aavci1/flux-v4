@@ -470,8 +470,37 @@ TEST_CASE("SceneBuilder: non-stretch HStack children keep their intrinsic height
   CHECK(card.children()[1]->position.y > card.children()[0]->position.y);
 }
 
-TEST_CASE("SceneBuilder: centered ZStack overlay is not centered twice") {
+TEST_CASE("SceneBuilder: centered HStack vertically centers shorter children within the row") {
   NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 200.f;
+  constraints.maxHeight = 120.f;
+
+  Element row = HStack{
+      .spacing = 8.f,
+      .alignment = Alignment::Center,
+      .children = children(
+          Element{Rectangle{}}.size(22.f, 18.f),
+          Element{Rectangle{}}.size(22.f, 52.f),
+          Element{Rectangle{}}.size(22.f, 26.f)),
+  };
+
+  std::unique_ptr<SceneNode> tree = builder.build(row, NodeId{1ull}, constraints);
+  REQUIRE(tree != nullptr);
+  REQUIRE(tree->children().size() == 3);
+  CHECK(tree->bounds.height == doctest::Approx(52.f));
+  CHECK(tree->children()[0]->position.y == doctest::Approx(17.f));
+  CHECK(tree->children()[1]->position.y == doctest::Approx(0.f));
+  CHECK(tree->children()[2]->position.y == doctest::Approx(13.f));
+}
+
+TEST_CASE("SceneBuilder: centered ZStack overlay shrink-wraps intrinsic children before centering") {
+  VariableTextSystem textSystem{};
   EnvironmentLayer env{};
   env.set(Theme::light());
   EnvironmentScope envScope{std::move(env)};
@@ -502,10 +531,16 @@ TEST_CASE("SceneBuilder: centered ZStack overlay is not centered twice") {
   REQUIRE(tree != nullptr);
   REQUIRE(tree->children().size() == 3);
   SceneNode* overlayColumn = tree->children()[2].get();
-  CHECK(overlayColumn->position.x == doctest::Approx(0.f));
-  CHECK(overlayColumn->position.y == doctest::Approx(0.f));
-  CHECK(overlayColumn->bounds.width == doctest::Approx(220.f));
-  CHECK(overlayColumn->bounds.height == doctest::Approx(180.f));
+  CHECK(overlayColumn->position.x == doctest::Approx(5.f));
+  CHECK(overlayColumn->position.y == doctest::Approx(74.f));
+  CHECK(overlayColumn->bounds.width == doctest::Approx(210.f));
+  CHECK(overlayColumn->bounds.height == doctest::Approx(32.f));
+  REQUIRE(overlayColumn->children().size() == 2);
+  CHECK(overlayColumn->children()[0]->position.x == doctest::Approx(52.5f));
+  CHECK(overlayColumn->children()[0]->bounds.width == doctest::Approx(105.f));
+  CHECK(overlayColumn->children()[1]->position.x == doctest::Approx(0.f));
+  CHECK(overlayColumn->children()[1]->bounds.width == doctest::Approx(210.f));
+  CHECK(overlayColumn->children()[1]->position.y == doctest::Approx(18.f));
 }
 
 TEST_CASE("SceneBuilder: centered VStack overflow is allowed to go negative") {
@@ -683,10 +718,15 @@ TEST_CASE("SceneBuilder: layout demo overlay text column stays centered after na
   SceneNode const* overlayStack = findOverlayStack(tree.get());
   REQUIRE(overlayStack != nullptr);
   SceneNode const* overlayColumn = overlayStack->children()[2].get();
-  CHECK(overlayColumn->position.x == doctest::Approx(0.f));
-  CHECK(overlayColumn->position.y == doctest::Approx(0.f));
-  CHECK(overlayColumn->bounds.width == doctest::Approx(238.f));
-  CHECK(overlayColumn->bounds.height == doctest::Approx(180.f));
+  CHECK(overlayColumn->position.x == doctest::Approx(14.f));
+  CHECK(overlayColumn->position.y == doctest::Approx(74.f));
+  CHECK(overlayColumn->bounds.width == doctest::Approx(210.f));
+  CHECK(overlayColumn->bounds.height == doctest::Approx(32.f));
+  REQUIRE(overlayColumn->children().size() == 2);
+  CHECK(overlayColumn->children()[0]->position.x == doctest::Approx(52.5f));
+  CHECK(overlayColumn->children()[0]->bounds.width == doctest::Approx(105.f));
+  CHECK(overlayColumn->children()[1]->position.x == doctest::Approx(0.f));
+  CHECK(overlayColumn->children()[1]->bounds.width == doctest::Approx(210.f));
 }
 
 TEST_CASE("SceneBuilder: rectangle retains modifier paint on the primitive node") {

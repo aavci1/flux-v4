@@ -31,7 +31,8 @@ public:
   void pushConstraints(LayoutConstraints const& c, LayoutHints hints = {});
   void popConstraints();
 
-  void pushChildIndex();
+  void pushChildIndex(bool pushKeySegment = true);
+  void pushChildIndexWithLocalId(LocalId localId);
   void popChildIndex();
 
   void setChildIndex(std::size_t index);
@@ -45,6 +46,8 @@ public:
   ComponentKey leafComponentKey() const;
   void rewindChildKeyIndex();
   void resetTraversalState(ComponentKey const& key = {});
+  void setMeasurementRootKey(ComponentKey key);
+  void clearMeasurementRootKey() noexcept;
 
   void beginCompositeBodySubtree(ComponentKey compositeKey);
   bool consumeCompositeBodySubtreeRootSkip();
@@ -60,6 +63,7 @@ public:
   std::size_t debugKeyPathDepth() const noexcept { return keyStack_.size(); }
   std::size_t debugSavedChildDepth() const noexcept { return savedChildIndices_.size(); }
 #endif
+  LocalId peekCurrentChildLocalId() const { return currentChildLocalId(); }
 
 protected:
   struct LayoutFrame {
@@ -73,8 +77,12 @@ protected:
   std::vector<LocalId> keyStack_;
   std::vector<std::optional<LocalId>> explicitChildLocalIdStack_;
   std::vector<std::size_t> savedChildIndices_;
+  std::vector<bool> pushedChildIndexKeyStack_;
+  std::vector<bool> pushedCompositeKeyTailStack_;
+  ComponentKey measurementRootKey_{};
   std::size_t nextChildIndex_{0};
   bool skipNextLayoutChildAdvance_{false};
+  bool useMeasurementRootKey_{false};
   Element const* currentElement_{nullptr};
 
 private:

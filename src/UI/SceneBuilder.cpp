@@ -469,6 +469,11 @@ Size SceneBuilder::measureElement(Element const& el, LayoutConstraints const& co
   MeasureContext measureContext{textSystem_};
   measureContext.pushConstraints(constraints, hints);
   measureContext.resetTraversalState(key);
+  if (el.isComposite() && el.typeTag() == ElementType::Unknown) {
+    measureContext.setMeasurementRootKey(key);
+  } else {
+    measureContext.clearMeasurementRootKey();
+  }
   measureContext.setCurrentElement(&el);
   return el.measure(measureContext, constraints, hints, textSystem_);
 }
@@ -1133,8 +1138,10 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
       childBuild.maxHeight = innerH;
       ComponentKey childKey = current.key;
       childKey.push_back(local);
+      // ZStack supplies available shared space, but intrinsic children should still shrink-wrap
+      // within that space so the stack can center them as a unit.
       pushFrame(childBuild, LayoutHints{}, contentOrigin, std::move(childKey), Size{innerW, innerH},
-                innerW > 0.f, innerH > 0.f);
+                false, false);
       std::unique_ptr<SceneNode> childNode = buildOrReuse(child, childId, std::move(reuse));
       popFrame();
       childNode->position.x += hAlignOffset(childNode->bounds.width, innerW, stack.horizontalAlignment);
