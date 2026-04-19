@@ -15,6 +15,8 @@
 
 #include <utility>
 
+#include "UI/Views/AlertActionHelpers.hpp"
+
 namespace flux {
 
 Element Alert::body() const {
@@ -132,13 +134,7 @@ std::tuple<std::function<void(Alert)>, std::function<void()>, bool> useAlert() {
     }
 
     for (auto& btn : alert.buttons) {
-      auto originalAction = std::move(btn.action);
-      btn.action = [hideOverlay, originalAction = std::move(originalAction)]() {
-        hideOverlay();
-        if (originalAction) {
-          originalAction();
-        }
-      };
+      btn.action = detail::wrapDismissThenInvoke(hideOverlay, std::move(btn.action));
     }
 
     // show() runs outside a build pass — read window storage, not useEnvironment (backdrop is show-time).
