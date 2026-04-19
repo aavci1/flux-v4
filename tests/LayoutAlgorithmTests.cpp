@@ -61,6 +61,32 @@ TEST_CASE("GridLayout: intrinsic sizing uses widest column and tallest row") {
   CHECK(layout.slots[2].y == doctest::Approx(18.f));
 }
 
+TEST_CASE("GridLayout: assigned outer height does not flatten per-row intrinsic heights") {
+  GridTrackMetrics const metrics =
+      resolveGridTrackMetrics(2, 4, 8.f, 6.f, 96.f, true, 100.f, true);
+  std::array<Size, 4> childSizes{{
+      Size{44.f, 12.f},
+      Size{44.f, 12.f},
+      Size{44.f, 36.f},
+      Size{44.f, 12.f},
+  }};
+
+  LayoutConstraints childConstraints{};
+  childConstraints.maxWidth = 96.f;
+  childConstraints.maxHeight = 100.f;
+  childConstraints = gridChildConstraints(childConstraints, metrics);
+  CHECK(std::isinf(childConstraints.maxHeight));
+
+  GridLayoutResult const layout =
+      layoutGrid(metrics, 8.f, 6.f, 96.f, true, 100.f, true, childSizes);
+  REQUIRE(layout.rowHeights.size() == 2);
+  CHECK(layout.rowHeights[0] == doctest::Approx(12.f));
+  CHECK(layout.rowHeights[1] == doctest::Approx(36.f));
+  CHECK(layout.slots[2].y == doctest::Approx(18.f));
+  CHECK(layout.slots[2].height == doctest::Approx(36.f));
+  CHECK(layout.containerSize.height == doctest::Approx(100.f));
+}
+
 TEST_CASE("ScrollLayout: clamps offsets and assigns vertical child slots") {
   std::array<Size, 2> childSizes{{
       Size{40.f, 60.f},

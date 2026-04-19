@@ -12,34 +12,40 @@ using namespace flux;
 namespace {
 
 struct NamedIcon {
-  IconName name;
-  std::string label;
+    IconName name;
+    std::string label;
 };
 
 // Same order as IconName.hpp (grouped for the demo UI).
 constexpr NamedIcon kIcons[] = {
     {IconName::ArrowBack, "ArrowBack"},
     {IconName::ArrowForward, "ArrowForward"},
+    {IconName::ArrowUpward, "ArrowUpward"},
+    {IconName::ArrowDownward, "ArrowDownward"},
+
     {IconName::ChevronLeft, "ChevronLeft"},
     {IconName::ChevronRight, "ChevronRight"},
-    {IconName::ExpandMore, "ExpandMore"},
     {IconName::ExpandLess, "ExpandLess"},
+    {IconName::ExpandMore, "ExpandMore"},
+
     {IconName::Menu, "Menu"},
     {IconName::MoreHoriz, "MoreHoriz"},
     {IconName::MoreVert, "MoreVert"},
-
     {IconName::Add, "Add"},
-    {IconName::Check, "Check"},
+
+    {IconName::Undo, "Undo"},
+    {IconName::Redo, "Redo"},
     {IconName::Close, "Close"},
+    {IconName::Check, "Check"},
+
     {IconName::ContentCopy, "ContentCopy"},
     {IconName::ContentCut, "ContentCut"},
     {IconName::ContentPaste, "ContentPaste"},
     {IconName::Delete, "Delete"},
+    
     {IconName::Edit, "Edit"},
-    {IconName::Redo, "Redo"},
     {IconName::Save, "Save"},
     {IconName::Search, "Search"},
-    {IconName::Undo, "Undo"},
 
     {IconName::CheckCircle, "CheckCircle"},
     {IconName::Error, "Error"},
@@ -69,92 +75,97 @@ struct IconCell {
     std::string label;
 
     auto body() const {
-        Theme const &t = useEnvironment<Theme>();
+        Theme const &theme = useEnvironment<Theme>();
 
         return VStack {
-            .spacing = t.space2,
+            .spacing = theme.space2,
             .alignment = Alignment::Center,
             .children = children(
                 Icon {
                     .name = name,
                     .size = 32.f,
                     .weight = 600.f,
-                    .color = t.colorTextSecondary
+                    .color = theme.colorTextSecondary
                 },
+                Spacer {},
                 Text {
                     .text = label,
-                    .font = t.fontBodySmall,
-                    .color = t.colorTextSecondary,
+                    .font = theme.fontBodySmall,
+                    .color = theme.colorTextSecondary,
                     .horizontalAlignment = HorizontalAlignment::Center,
                     .wrapping = TextWrapping::Wrap,
                 }
             ),
-        }.padding(t.space2);
+        }
+            .padding(theme.space2);
     }
 };
 
 struct IconDemoRoot {
-  auto body() const {
-    Theme const &t = useEnvironment<Theme>();
+    auto body() const {
+        Theme const &theme = useEnvironment<Theme>();
 
-    std::vector<Element> gridCells;
-    gridCells.reserve(sizeof(kIcons) / sizeof(kIcons[0]));
-    for (NamedIcon const &item : kIcons) {
-      gridCells.push_back(
-        IconCell {
-            .name = item.name,
-            .label = item.label,
+        std::vector<Element> gridCells;
+        gridCells.reserve(sizeof(kIcons) / sizeof(kIcons[0]));
+        for (NamedIcon const &item : kIcons) {
+            gridCells.push_back(
+                IconCell {
+                    .name = item.name,
+                    .label = item.label,
+                }
+            );
         }
-      );
-    }
 
-    return ScrollView {
-        .axis = ScrollAxis::Vertical,
-        .children = children(
-                VStack{
-                    .spacing = t.space5,
-                    .alignment = Alignment::Start,
+        return ScrollView {
+            .axis = ScrollAxis::Vertical,
+            .children = children(
+                VStack {
+                    .spacing = theme.space4,
                     .children = children(
-                            Text{.text = "Icon demo",
-                                 .font = t.fontDisplay,
-                                 .color = t.colorTextPrimary},
-                            Text{
-                                .text = "Material Symbols Rounded — curated "
-                                        "IconName set. "
-                                        "Resize the window; scroll for the "
-                                        "full grid.",
-                                .font = t.fontBody,
-                                .color = t.colorTextSecondary,
-                                .wrapping = TextWrapping::Wrap,
-                            },
+                        Text {
+                            .text = "Icon demo", 
+                            .font = theme.fontDisplay, 
+                            .color = theme.colorTextPrimary
+                        },
+                        Text {
+                            .text = "Material Symbols Rounded — curated "
+                                    "IconName setheme. "
+                                    "Resize the window; scroll for the "
+                                    "full grid.",
+                            .font = theme.fontBody,
+                            .color = theme.colorTextSecondary,
+                            .wrapping = TextWrapping::Wrap,
+                        },
 
-                            Text{.text = "All curated icons",
-                                 .font = t.fontHeading,
-                                 .color = t.colorTextPrimary},
-                            Grid {
-                                .columns = 8,
-                                .horizontalSpacing = t.space2,
-                                .verticalSpacing = t.space4,
-                                .horizontalAlignment = Alignment::Center,
-                                .verticalAlignment = Alignment::Center,
-                                .children = std::move(gridCells),
-                            }
-                        ),
-                }.padding(t.space5)
+                        Grid {
+                            .columns = 4,
+                            .horizontalSpacing = theme.space2,
+                            .verticalSpacing = theme.space4,
+                            .horizontalAlignment = Alignment::Center,
+                            .verticalAlignment = Alignment::Center,
+                            .children = std::move(gridCells),
+                        }
+                            .padding(theme.space4)
+                            .fill(FillStyle::solid(theme.colorSurfaceOverlay))
+                            .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
+                            .cornerRadius(CornerRadius {theme.radiusLarge})
+                    ),
+                }
+                    .padding(theme.space5)
             ),
-    };
-  }
+        };
+    }
 };
 
 } // namespace
 
 int main(int argc, char *argv[]) {
-  Application app(argc, argv);
-  auto &w = app.createWindow<Window>({
-      .size = {880, 720},
-      .title = "Flux — Icon demo",
-      .resizable = true,
-  });
-  w.setView<IconDemoRoot>();
-  return app.exec();
+    Application app(argc, argv);
+    auto &w = app.createWindow<Window>({
+        .size = {800, 800},
+        .title = "Flux — Icon demo",
+        .resizable = true,
+    });
+    w.setView<IconDemoRoot>();
+    return app.exec();
 }

@@ -3,6 +3,7 @@
 #include <Flux/UI/MeasureContext.hpp>
 #include <Flux/UI/Views/Icon.hpp>
 #include <Flux/UI/Views/Popover.hpp>
+#include <Flux/UI/Views/Grid.hpp>
 
 TEST_CASE("SceneBuilder: centered text keeps its assigned box for boxed layout") {
   NullTextSystem textSystem{};
@@ -501,6 +502,46 @@ TEST_CASE("SceneBuilder: centered HStack vertically centers shorter children wit
   CHECK(tree->children()[0]->position.y == doctest::Approx(17.f));
   CHECK(tree->children()[1]->position.y == doctest::Approx(0.f));
   CHECK(tree->children()[2]->position.y == doctest::Approx(13.f));
+}
+
+TEST_CASE("SceneBuilder: grid rows follow wrapped content height after parent-assigned rebuild slots") {
+  VariableTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 100.f;
+  constraints.maxHeight = 200.f;
+
+  Element treeEl = VStack{
+      .alignment = Alignment::Start,
+      .children = children(
+          Grid{
+              .columns = 2,
+              .horizontalSpacing = 8.f,
+              .verticalSpacing = 6.f,
+              .horizontalAlignment = Alignment::Center,
+              .verticalAlignment = Alignment::Center,
+              .children = children(
+                  Text{.text = "Short", .wrapping = TextWrapping::Wrap},
+                  Text{.text = "Short", .wrapping = TextWrapping::Wrap},
+                  Text{.text = "This wraps", .wrapping = TextWrapping::Wrap},
+                  Text{.text = "Short", .wrapping = TextWrapping::Wrap}),
+          }),
+  };
+
+  std::unique_ptr<SceneNode> tree = builder.build(treeEl, NodeId{1ull}, constraints);
+  REQUIRE(tree != nullptr);
+  REQUIRE(tree->children().size() == 1);
+
+  SceneNode const& grid = *tree->children()[0];
+  REQUIRE(grid.children().size() == 4);
+  CHECK(grid.bounds.height == doctest::Approx(48.f));
+  CHECK(grid.children()[0]->position.y == doctest::Approx(0.f));
+  CHECK(grid.children()[2]->position.y == doctest::Approx(20.f));
+  CHECK(grid.children()[2]->bounds.height == doctest::Approx(28.f));
 }
 
 TEST_CASE("SceneBuilder: centered ZStack overlay shrink-wraps intrinsic children before centering") {

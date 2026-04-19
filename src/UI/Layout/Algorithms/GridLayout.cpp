@@ -23,12 +23,17 @@ GridTrackMetrics resolveGridTrackMetrics(std::size_t columns, std::size_t childC
                                          float horizontalSpacing, float verticalSpacing,
                                          float assignedWidth, bool hasAssignedWidth,
                                          float assignedHeight, bool hasAssignedHeight) {
+  (void)verticalSpacing;
+  (void)assignedHeight;
+  (void)hasAssignedHeight;
   GridTrackMetrics metrics{};
   metrics.columns = std::max<std::size_t>(1, columns);
   metrics.rowCount = childCount == 0 ? 0 : (childCount + metrics.columns - 1) / metrics.columns;
   metrics.cellWidth = hasAssignedWidth ? gridCellSize(assignedWidth, metrics.columns, horizontalSpacing) : 0.f;
-  metrics.cellHeight =
-      hasAssignedHeight ? gridCellSize(assignedHeight, metrics.rowCount, verticalSpacing) : 0.f;
+  // Grid rows are content-sized. Even when a parent assigns an outer height to the grid,
+  // row tracks should still expand to fit the tallest child in each row instead of being
+  // flattened into equal slices of the container height.
+  metrics.cellHeight = 0.f;
   return metrics;
 }
 

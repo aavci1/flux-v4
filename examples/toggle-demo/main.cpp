@@ -124,13 +124,11 @@ struct ToggleDemoRoot {
                             .text = "Toggle Demo",
                             .font = theme.fontDisplay,
                             .color = theme.colorTextPrimary,
-                            .horizontalAlignment = HorizontalAlignment::Leading,
                         },
                         Text {
                             .text = "A cleaner toggle showcase with realistic settings rows, styling variations, and compact control density.",
                             .font = theme.fontBody,
                             .color = theme.colorTextSecondary,
-                            .horizontalAlignment = HorizontalAlignment::Leading,
                             .wrapping = TextWrapping::Wrap,
                         },
                         makeSectionCard(
@@ -192,15 +190,14 @@ struct ToggleDemoRoot {
                 } //
                     .padding(theme.space5)
             )
-        } //
-            .fill(FillStyle::solid(theme.colorBackground));
+        };
     }
 };
 
 int main(int argc, char *argv[]) {
     Application app(argc, argv);
     auto &w = app.createWindow<Window>({
-        .size = {760, 760},
+        .size = {800, 800},
         .title = "Flux - Toggle demo",
         .resizable = true,
     });
