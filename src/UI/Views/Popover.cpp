@@ -103,6 +103,46 @@ PopoverPlacement resolvePopoverPlacement(PopoverPlacement preferred, std::option
   return preferred;
 }
 
+PopoverPlacement resolveMeasuredPopoverPlacement(PopoverPlacement preferred, std::optional<Rect> const& anchor,
+                                                 Size popoverSize, float gap, Size win) {
+  if (!anchor.has_value()) {
+    return preferred;
+  }
+  Rect const& a = *anchor;
+
+  switch (preferred) {
+  case PopoverPlacement::Below: {
+    float const bottom = a.y + a.height + gap + popoverSize.height;
+    if (bottom <= win.height) {
+      return PopoverPlacement::Below;
+    }
+    return PopoverPlacement::Above;
+  }
+  case PopoverPlacement::Above: {
+    float const top = a.y - gap - popoverSize.height;
+    if (top >= 0.f) {
+      return PopoverPlacement::Above;
+    }
+    return PopoverPlacement::Below;
+  }
+  case PopoverPlacement::End: {
+    float const right = a.x + a.width + gap + popoverSize.width;
+    if (right <= win.width) {
+      return PopoverPlacement::End;
+    }
+    return PopoverPlacement::Start;
+  }
+  case PopoverPlacement::Start: {
+    float const left = a.x - gap - popoverSize.width;
+    if (left >= 0.f) {
+      return PopoverPlacement::Start;
+    }
+    return PopoverPlacement::End;
+  }
+  }
+  return preferred;
+}
+
 Vec2 popoverOverlayGapOffset(PopoverPlacement resolved, float gap) {
   Vec2 offset{};
   switch (resolved) {

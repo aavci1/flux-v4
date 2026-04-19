@@ -1,5 +1,8 @@
 #include "SceneBuilderTestSupport.hpp"
 
+#include <Flux/UI/MeasureContext.hpp>
+#include <Flux/UI/Views/Popover.hpp>
+
 TEST_CASE("SceneBuilder: centered text keeps its assigned box for boxed layout") {
   NullTextSystem textSystem{};
   EnvironmentLayer env{};
@@ -793,6 +796,55 @@ TEST_CASE("SceneBuilder: PopoverCalloutShape builds retained chrome and content 
   NullRenderer renderer{};
   render(*tree, renderer);
   CHECK(renderer.pathCount == 1);
+}
+
+TEST_CASE("SceneBuilder: Popover rebuild uses updated resolved placement after same-pass measurement") {
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  StoreScope scope{};
+  scope.store.beginRebuild();
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 200.f;
+  constraints.maxHeight = 200.f;
+
+  Element popover = Popover{
+      .content = Element{Rectangle{}}.size(40.f, 20.f),
+      .placement = PopoverPlacement::Below,
+      .arrow = true,
+      .backgroundColor = Color::hex(0xFFFFFF),
+      .borderColor = Color::hex(0xE0E0E6),
+      .borderWidth = 1.f,
+      .cornerRadius = 10.f,
+      .contentPadding = 12.f,
+      .resolvedPlacement = PopoverPlacement::Below,
+  };
+
+  MeasureContext measureContext{textSystem};
+  ComponentKey const rootKey{LocalId::fromIndex(0)};
+  measureContext.pushConstraints(constraints, LayoutHints{});
+  measureContext.resetTraversalState(rootKey);
+  measureContext.setMeasurementRootKey(rootKey);
+  measureContext.setCurrentElement(&popover);
+  popover.measure(measureContext, constraints, LayoutHints{}, textSystem);
+
+  auto& popoverState = const_cast<Popover&>(popover.as<Popover>());
+  popoverState.resolvedPlacement = PopoverPlacement::Above;
+  scope.store.discardCurrentRebuildBody(rootKey);
+
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+  std::unique_ptr<SceneNode> tree = builder.build(popover, NodeId{1ull}, constraints, nullptr, rootKey);
+  REQUIRE(tree != nullptr);
+  REQUIRE(tree->children().size() == 2);
+
+  auto* content = dynamic_cast<RectSceneNode*>(tree->children()[1].get());
+  REQUIRE(content != nullptr);
+  CHECK(content->position.y == doctest::Approx(12.f));
+  CHECK(tree->bounds.height == doctest::Approx(20.f + 24.f + PopoverCalloutShape::kArrowH));
+
+  scope.store.endRebuild();
 }
 
 TEST_CASE("SceneBuilder: composite root exposes a retained scene body with the runtime root key") {

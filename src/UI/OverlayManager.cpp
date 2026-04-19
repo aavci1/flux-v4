@@ -8,6 +8,7 @@
 #include <Flux/Scene/RectSceneNode.hpp>
 #include <Flux/Scene/SceneTree.hpp>
 #include <Flux/UI/Environment.hpp>
+#include <Flux/UI/MeasureContext.hpp>
 #include <Flux/UI/Views/Popover.hpp>
 
 #include <algorithm>
@@ -56,6 +57,21 @@ NodeId overlayBackdropId() {
 
 NodeId overlayCaptureId() {
     return SceneTree::childId(overlayRootId(), LocalId::fromString("$capture"));
+}
+
+Size measureOverlayContent(Element const& element, LayoutConstraints const& constraints,
+                          TextSystem& textSystem) {
+    MeasureContext measureContext{textSystem};
+    measureContext.pushConstraints(constraints, LayoutHints{});
+    ComponentKey const rootKey{LocalId::fromIndex(0)};
+    measureContext.resetTraversalState(rootKey);
+    if (element.isComposite() && element.typeTag() == ElementType::Unknown) {
+        measureContext.setMeasurementRootKey(rootKey);
+    } else {
+        measureContext.clearMeasurementRootKey();
+    }
+    measureContext.setCurrentElement(&element);
+    return element.measure(measureContext, constraints, LayoutHints{}, textSystem);
 }
 
 std::unique_ptr<SceneNode> extractOverlayContentRoot(std::unique_ptr<SceneNode> root) {
@@ -212,22 +228,39 @@ void OverlayManager::rebuild(Size windowSize, Runtime &runtime) {
         if (entry.config.anchor.has_value() && !entry.config.anchorOutsets.isZero()) {
             entry.config.anchor = applyAnchorOutsets(*entry.config.anchor, entry.config.anchorOutsets);
         }
-        if (entry.config.popoverPreferredPlacement.has_value() && entry.content.has_value() &&
-            entry.config.anchor.has_value()) {
-            PopoverPlacement const resolved = resolvePopoverPlacement(
-                *entry.config.popoverPreferredPlacement, entry.config.anchor, entry.config.maxSize,
-                entry.config.popoverGapTotal, windowSize
-            );
-            entry.config.placement = overlayPlacementFromPopover(resolved);
-            entry.config.offset = popoverOverlayGapOffset(resolved, entry.config.popoverGap);
-            if (entry.onPlacementResolved) {
-                entry.onPlacementResolved(resolved);
-            }
-        }
         entry.stateStore->beginRebuild();
         entry.stateStore->setOverlayScope(entry.id.value);
         StateStore::setCurrent(entry.stateStore.get());
         LayoutConstraints const cs = resolveConstraints(windowSize, entry.config);
+
+        if (entry.config.popoverPreferredPlacement.has_value() && entry.content.has_value() &&
+            entry.config.anchor.has_value()) {
+            if (Popover* pop = detail::popoverOverlayStateIf(*entry.content)) {
+                ComponentKey const overlayRootKey{LocalId::fromIndex(0)};
+                PopoverPlacement const measuredPlacement = *entry.config.popoverPreferredPlacement;
+                pop->resolvedPlacement = measuredPlacement;
+                Size const measured = measureOverlayContent(*entry.content, cs, Application::instance().textSystem());
+                PopoverPlacement const resolved = resolveMeasuredPopoverPlacement(
+                    *entry.config.popoverPreferredPlacement, entry.config.anchor, measured,
+                    entry.config.popoverGap, windowSize
+                );
+                entry.config.placement = overlayPlacementFromPopover(resolved);
+                entry.config.offset = popoverOverlayGapOffset(resolved, entry.config.popoverGap);
+                if (entry.onPlacementResolved) {
+                    entry.onPlacementResolved(resolved);
+                }
+                if (resolved != measuredPlacement) {
+                    entry.stateStore->discardCurrentRebuildBody(overlayRootKey);
+                }
+            } else {
+                PopoverPlacement const resolved = resolvePopoverPlacement(
+                    *entry.config.popoverPreferredPlacement, entry.config.anchor, entry.config.maxSize,
+                    entry.config.popoverGapTotal, windowSize
+                );
+                entry.config.placement = overlayPlacementFromPopover(resolved);
+                entry.config.offset = popoverOverlayGapOffset(resolved, entry.config.popoverGap);
+            }
+        }
 
         std::unique_ptr<SceneNode> existingContent = extractOverlayContentRoot(entry.sceneTree.takeRoot());
         BuildSession buildSession{

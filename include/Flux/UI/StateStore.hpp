@@ -143,6 +143,7 @@ public:
   [[nodiscard]] bool hasBodyForCurrentRebuild(ComponentKey const& key) const;
   Element* cachedBody(ComponentKey const& key);
   Element const* cachedBody(ComponentKey const& key) const;
+  void discardCurrentRebuildBody(ComponentKey const& key);
   void recordBodyConstraints(ComponentKey const& key, LayoutConstraints const& constraints);
   std::optional<Size> cachedMeasure(ComponentKey const& key, LayoutConstraints const& constraints) const;
   void recordMeasure(ComponentKey const& key, LayoutConstraints const& constraints, Size size);

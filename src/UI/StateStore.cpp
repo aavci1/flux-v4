@@ -293,6 +293,15 @@ Element const* StateStore::cachedBody(ComponentKey const& key) const {
   return static_cast<Element const*>(it->second.lastBody.get());
 }
 
+void StateStore::discardCurrentRebuildBody(ComponentKey const& key) {
+  auto it = states_.find(key);
+  if (it == states_.end() || it->second.lastBodyEpoch != buildEpoch_) {
+    return;
+  }
+  it->second.lastBody = {nullptr, nullptr};
+  it->second.lastBodyEpoch = 0;
+}
+
 void StateStore::recordBodyConstraints(ComponentKey const& key, LayoutConstraints const& constraints) {
   auto it = states_.find(key);
   if (it == states_.end()) {

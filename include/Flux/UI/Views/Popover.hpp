@@ -116,6 +116,10 @@ std::tuple<std::function<void(Popover)>, std::function<void()>, bool> usePopover
 PopoverPlacement resolvePopoverPlacement(PopoverPlacement preferred, std::optional<Rect> const& anchor,
                                          std::optional<Size> const& maxSize, float gapTotal, Size win);
 
+/// Resolves preferred placement using the measured total popover bounds (including card padding and arrow).
+PopoverPlacement resolveMeasuredPopoverPlacement(PopoverPlacement preferred, std::optional<Rect> const& anchor,
+                                                 Size popoverSize, float gap, Size win);
+
 Vec2 popoverOverlayGapOffset(PopoverPlacement resolved, float gap);
 
 OverlayConfig::Placement overlayPlacementFromPopover(PopoverPlacement p);

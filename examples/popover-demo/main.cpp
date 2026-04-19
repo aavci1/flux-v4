@@ -31,25 +31,20 @@ struct PopoverDemoRoot {
                     .font = theme.fontHeading,
                     .color = theme.colorTextPrimary,
                 }
-                    .padding(8.f)
+                    .padding(8.f, 0.f, 8.f, 0.f)
             );
         };
 
         addSection("Placement");
         scrollChildren.push_back(
-            HStack {
-                .spacing = 0.f,
-                .children = children(
-                    Text {
-                        .text = "Scroll so triggers sit near window edges to see flip.",
-                        .font = theme.fontLabelSmall,
-                        .color = theme.colorTextSecondary,
-                        .wrapping = TextWrapping::Wrap,
-                    }
-                        .padding(8.f)
-                        .flex(1.f)
-                ),
+            Text {
+                .text = "Scroll so triggers sit near window edges to see flip.",
+                .font = theme.fontLabelSmall,
+                .color = theme.colorTextSecondary,
+                .wrapping = TextWrapping::Wrap,
             }
+                .padding(8.f)
+                .flex(1.f)
         );
 
         auto addPlacementButton = [&](char const *label, PopoverPlacement placement) {
@@ -58,25 +53,20 @@ struct PopoverDemoRoot {
                 .variant = ButtonVariant::Secondary,
                 .onTap = [=] {
                     showPopover(Popover {
-                        .content = Element {VStack {
+                        .content = VStack {
                             .spacing = 8.f,
                             .alignment = Alignment::Start,
                             .children = children(
                                 Text {.text = std::string(label), .font = theme.fontSubtitle, .color = theme.colorTextPrimary},
-                                HStack {
-                                    .spacing = 0.f,
-                                    .children = children(
-                                        Text {.text = "Placement follows preference when space allows.", .font = theme.fontBodySmall, .color = theme.colorTextSecondary, .wrapping = TextWrapping::Wrap}
-                                            .flex(1.f)
-                                    ),
-                                },
+                                Text {.text = "Placement follows preference when space allows.", .font = theme.fontBodySmall, .color = theme.colorTextSecondary, .wrapping = TextWrapping::Wrap}
+                                    .flex(1.f),
                                 Button {
                                     .label = "Close",
                                     .variant = ButtonVariant::Secondary,
                                     .onTap = hidePopover,
                                 }
                             ),
-                        }},
+                        },
                         .placement = placement,
                         .arrow = *showArrow,
                         .maxSize = Size {260.f, 200.f},
@@ -99,6 +89,7 @@ struct PopoverDemoRoot {
             .alignment = Alignment::Center,
             .children = children(
                 Text {.text = "Arrow", .font = theme.fontLabel, .color = theme.colorTextPrimary},
+                Spacer {},
                 Button {
                     .label = *showArrow ? "On" : "Off",
                     .variant = ButtonVariant::Ghost,
@@ -111,6 +102,7 @@ struct PopoverDemoRoot {
             .alignment = Alignment::Center,
             .children = children(
                 Text {.text = "Dismiss outside tap", .font = theme.fontLabel, .color = theme.colorTextPrimary},
+                Spacer {},
                 Button {
                     .label = *dismissOutside ? "On" : "Off",
                     .variant = ButtonVariant::Ghost,
@@ -233,6 +225,7 @@ struct PopoverDemoRoot {
                     .children = children(
                         VStack {
                             .spacing = 10.f,
+                            .alignment = Alignment::Stretch,
                             .children = std::move(scrollChildren),
                         }
                             .padding(20.f)

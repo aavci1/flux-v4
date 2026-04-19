@@ -1,5 +1,6 @@
 #include <doctest/doctest.h>
 
+#include <Flux/UI/Views/Popover.hpp>
 #include <Flux/UI/Views/PopoverCalloutShape.hpp>
 
 #include "UI/Layout/Algorithms/GridLayout.hpp"
@@ -103,6 +104,17 @@ TEST_CASE("OverlayLayout: popover callout layout reserves arrow depth in total s
   CHECK(layout.totalSize.height ==
         doctest::Approx(20.f + 24.f + PopoverCalloutShape::kArrowH));
   CHECK(layout.contentOrigin.y == doctest::Approx(PopoverCalloutShape::kArrowH + 12.f));
+}
+
+TEST_CASE("PopoverPlacement: measured popover size avoids premature flip from max-size estimate") {
+  Rect const anchor{120.f, 500.f, 80.f, 32.f};
+  Size const window{420.f, 640.f};
+  std::optional<Rect> anchorOpt{anchor};
+
+  CHECK(resolvePopoverPlacement(PopoverPlacement::Below, anchorOpt, Size{260.f, 220.f}, 14.f, window) ==
+        PopoverPlacement::Above);
+  CHECK(resolveMeasuredPopoverPlacement(PopoverPlacement::Below, anchorOpt, Size{180.f, 88.f}, 8.f, window) ==
+        PopoverPlacement::Below);
 }
 
 } // namespace

@@ -978,7 +978,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
       ComponentKey childKey = current.key;
       childKey.push_back(local);
       pushFrame(childBuild, childHints,
-                Point{contentOrigin.x, contentOrigin.y + slot.origin.y},
+                Point{contentOrigin.x + slot.origin.x, contentOrigin.y + slot.origin.y},
                 std::move(childKey), slot.assignedSize, slot.assignedSize.width > 0.f, true);
       std::unique_ptr<SceneNode> childNode = buildOrReuse(child, childId, std::move(reuse));
       popFrame();
@@ -1077,7 +1077,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
       ComponentKey childKey = current.key;
       childKey.push_back(local);
       pushFrame(childBuild, rowHints,
-                Point{contentOrigin.x + slot.origin.x, contentOrigin.y},
+                Point{contentOrigin.x + slot.origin.x, contentOrigin.y + slot.origin.y},
                 std::move(childKey), slot.assignedSize, true, slot.assignedSize.height > 0.f);
       std::unique_ptr<SceneNode> childNode = buildOrReuse(child, childId, std::move(reuse));
       popFrame();

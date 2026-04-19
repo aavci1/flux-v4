@@ -26,14 +26,46 @@ TEST_CASE("SceneBuilder: geometry index records assigned frames by keyed path") 
   std::optional<Rect> bRect = geometry.rectForKey(ComponentKey{LocalId::fromString("b")});
   REQUIRE(aRect.has_value());
   REQUIRE(bRect.has_value());
-  CHECK(aRect->x == doctest::Approx(0.f));
+  CHECK(aRect->x == doctest::Approx(50.f));
   CHECK(aRect->y == doctest::Approx(43.5f));
   CHECK(aRect->width == doctest::Approx(20.f));
   CHECK(aRect->height == doctest::Approx(10.f));
-  CHECK(bRect->x == doctest::Approx(0.f));
+  CHECK(bRect->x == doctest::Approx(45.f));
   CHECK(bRect->y == doctest::Approx(61.5f));
   CHECK(bRect->width == doctest::Approx(30.f));
   CHECK(bRect->height == doctest::Approx(15.f));
+}
+
+TEST_CASE("SceneBuilder: geometry index tracks centered VStack child cross-axis offsets") {
+  NullTextSystem textSystem{};
+  SceneGeometryIndex geometry{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  SceneBuilder builder{textSystem, EnvironmentStack::current(), &geometry};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 100.f;
+  constraints.maxHeight = 60.f;
+
+  Element centeredColumn = VStack{
+      .alignment = Alignment::Center,
+      .children = {
+          keyedRect("column-child", 20.f, 10.f),
+      },
+  };
+
+  std::unique_ptr<SceneNode> tree = builder.build(centeredColumn, NodeId{1ull}, constraints);
+  REQUIRE(tree);
+
+  std::optional<Rect> columnChildRect =
+      geometry.rectForKey(ComponentKey{LocalId::fromString("column-child")});
+  REQUIRE(columnChildRect.has_value());
+  CHECK(columnChildRect->x == doctest::Approx(40.f));
+  CHECK(columnChildRect->y == doctest::Approx(25.f));
+  CHECK(columnChildRect->width == doctest::Approx(20.f));
+  CHECK(columnChildRect->height == doctest::Approx(10.f));
+
 }
 
 TEST_CASE("SceneGeometryIndex: committed queries use current frames and previous-frame fallback") {
