@@ -128,11 +128,13 @@ public:
   Element padding(EdgeInsets insets) &&;
   Element padding(float top, float right, float bottom, float left) &&;
   Element fill(FillStyle style) &&;
+  Element fill(Color color) &&;
   Element shadow(ShadowStyle style) &&;
   Element size(float width, float height) &&;
   Element width(float w) &&;
   Element height(float h) &&;
   Element stroke(StrokeStyle style) &&;
+  Element stroke(Color c, float width) &&;
   Element cornerRadius(CornerRadius radius) &&;
   Element cornerRadius(float radius) &&;
   Element opacity(float opacity) &&;

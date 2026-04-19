@@ -26,11 +26,13 @@ struct ViewModifiers {
   Element padding(EdgeInsets insets) &&;
   Element padding(float top, float right, float bottom, float left) &&;
   Element fill(FillStyle style) &&;
+  Element fill(Color color) &&;
   Element shadow(ShadowStyle style) &&;
   Element size(float width, float height) &&;
   Element width(float w) &&;
   Element height(float h) &&;
   Element stroke(StrokeStyle style) &&;
+  Element stroke(Color color, float width) &&;
   Element cornerRadius(CornerRadius radius) &&;
   /// Uniform radius on all corners (same as \c cornerRadius(CornerRadius{all})).
   Element cornerRadius(float radius) &&;

@@ -24,6 +24,11 @@ Element ViewModifiers<Derived>::fill(FillStyle style) && {
   return Element{std::move(static_cast<Derived&>(*this))}.fill(std::move(style));
 }
 
+template <typename Derived>
+Element ViewModifiers<Derived>::fill(Color color) && {
+  return Element {std::move(static_cast<Derived &>(*this))}.fill(FillStyle::solid(std::move(color)));
+}
+
 template<typename Derived>
 Element ViewModifiers<Derived>::shadow(ShadowStyle style) && {
   return Element{std::move(static_cast<Derived&>(*this))}.shadow(std::move(style));
@@ -47,6 +52,11 @@ Element ViewModifiers<Derived>::height(float h) && {
 template<typename Derived>
 Element ViewModifiers<Derived>::stroke(StrokeStyle style) && {
   return Element{std::move(static_cast<Derived&>(*this))}.stroke(std::move(style));
+}
+
+template <typename Derived>
+Element ViewModifiers<Derived>::stroke(Color color, float width) && {
+  return Element {std::move(static_cast<Derived &>(*this))}.stroke(StrokeStyle::solid(std::move(color), width));
 }
 
 template<typename Derived>

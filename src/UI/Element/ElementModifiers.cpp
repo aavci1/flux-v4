@@ -82,6 +82,14 @@ Element Element::fill(FillStyle style) && {
   return std::move(*this);
 }
 
+Element Element::fill(Color color) && {
+  if (!modifiers_) {
+      modifiers_.emplace();
+  }
+  modifiers_->fill = FillStyle::solid(std::move(color));
+  return std::move(*this);
+}
+
 Element Element::shadow(ShadowStyle style) && {
   if (!modifiers_) {
     modifiers_.emplace();
@@ -120,6 +128,14 @@ Element Element::stroke(StrokeStyle style) && {
     modifiers_.emplace();
   }
   modifiers_->stroke = std::move(style);
+  return std::move(*this);
+}
+
+Element Element::stroke(Color color, float width) && {
+  if (!modifiers_) {
+      modifiers_.emplace();
+  }
+  modifiers_->stroke = StrokeStyle::solid(std::move(color), width);
   return std::move(*this);
 }
 
