@@ -28,8 +28,8 @@ struct PopoverDemoRoot {
             scrollChildren.push_back(
                 Text {
                     .text = heading,
-                    .font = theme.fontHeading,
-                    .color = theme.colorTextPrimary,
+                    .font = Font::title(),
+                    .color = Color::primary(),
                 }
                     .padding(8.f, 0.f, 8.f, 0.f)
             );
@@ -39,8 +39,8 @@ struct PopoverDemoRoot {
         scrollChildren.push_back(
             Text {
                 .text = "Scroll so triggers sit near window edges to see flip.",
-                .font = theme.fontLabelSmall,
-                .color = theme.colorTextSecondary,
+                .font = Font::caption(),
+                .color = Color::secondary(),
                 .wrapping = TextWrapping::Wrap,
             }
                 .padding(8.f)
@@ -57,8 +57,8 @@ struct PopoverDemoRoot {
                             .spacing = 8.f,
                             .alignment = Alignment::Start,
                             .children = children(
-                                Text {.text = std::string(label), .font = theme.fontSubtitle, .color = theme.colorTextPrimary},
-                                Text {.text = "Placement follows preference when space allows.", .font = theme.fontBodySmall, .color = theme.colorTextSecondary, .wrapping = TextWrapping::Wrap}
+                                Text {.text = std::string(label), .font = Font::title3(), .color = Color::primary()},
+                                Text {.text = "Placement follows preference when space allows.", .font = Font::footnote(), .color = Color::secondary(), .wrapping = TextWrapping::Wrap}
                                     .flex(1.f),
                                 Button {
                                     .label = "Close",
@@ -88,7 +88,7 @@ struct PopoverDemoRoot {
             .spacing = 12.f,
             .alignment = Alignment::Center,
             .children = children(
-                Text {.text = "Arrow", .font = theme.fontLabel, .color = theme.colorTextPrimary},
+                Text {.text = "Arrow", .font = Font::headline(), .color = Color::primary()},
                 Spacer {},
                 Button {
                     .label = *showArrow ? "On" : "Off",
@@ -101,7 +101,7 @@ struct PopoverDemoRoot {
             .spacing = 12.f,
             .alignment = Alignment::Center,
             .children = children(
-                Text {.text = "Dismiss outside tap", .font = theme.fontLabel, .color = theme.colorTextPrimary},
+                Text {.text = "Dismiss outside tap", .font = Font::headline(), .color = Color::primary()},
                 Spacer {},
                 Button {
                     .label = *dismissOutside ? "On" : "Off",
@@ -116,8 +116,8 @@ struct PopoverDemoRoot {
             scrollChildren.push_back(
                 Text {
                     .text = "Spacer row — scroll the list",
-                    .font = theme.fontBodySmall,
-                    .color = theme.colorTextSecondary,
+                    .font = Font::footnote(),
+                    .color = Color::secondary(),
                 }
                     .padding(6.f)
             );
@@ -125,21 +125,21 @@ struct PopoverDemoRoot {
         scrollChildren.push_back(Button {
             .label = "Below — middle of scroll",
             .variant = ButtonVariant::Primary,
-            .style = Button::Style {.accentColor = theme.colorAccent},
+            .style = Button::Style {.accentColor = Color::accent()},
             .onTap = [=] {
                 showPopover(Popover {
                     .content = Element {VStack {
                         .spacing = 8.f,
                         .alignment = Alignment::Start,
                         .children = children(
-                            Text {.text = "Popover anchored to this button.", .font = theme.fontTitle, .color = theme.colorTextPrimary},
+                            Text {.text = "Popover anchored to this button.", .font = Font::title2(), .color = Color::primary()},
                             HStack {
                                 .spacing = 0.f,
                                 .children = children(
                                     Text {
                                         .text = "ScrollView keeps layout rects updated; anchor follows the trigger.",
-                                        .font = theme.fontBodySmall,
-                                        .color = theme.colorTextSecondary,
+                                        .font = Font::footnote(),
+                                        .color = Color::secondary(),
                                         .wrapping = TextWrapping::Wrap,
                                     }
                                         .flex(1.f)
@@ -161,8 +161,8 @@ struct PopoverDemoRoot {
             scrollChildren.push_back(
                 Text {
                     .text = "Spacer row — scroll the list",
-                    .font = theme.fontBodySmall,
-                    .color = theme.colorTextSecondary,
+                    .font = Font::footnote(),
+                    .color = Color::secondary(),
                 }
                     .padding(6.f)
             );
@@ -170,21 +170,21 @@ struct PopoverDemoRoot {
         scrollChildren.push_back(Button {
             .label = "Below — near bottom (may flip Above)",
             .variant = ButtonVariant::Primary,
-            .style = Button::Style {.accentColor = theme.colorAccent},
+            .style = Button::Style {.accentColor = Color::accent()},
             .onTap = [=] {
                 showPopover(Popover {
                     .content = Element {VStack {
                         .spacing = 8.f,
                         .alignment = Alignment::Start,
                         .children = children(
-                            Text {.text = "Flip test", .font = theme.fontTitle, .color = theme.colorTextPrimary},
+                            Text {.text = "Flip test", .font = Font::title2(), .color = Color::primary()},
                             HStack {
                                 .spacing = 0.f,
                                 .children = children(
                                     Text {
                                         .text = "If there is not enough room below the anchor, placement flips to Above.",
-                                        .font = theme.fontBodySmall,
-                                        .color = theme.colorTextSecondary,
+                                        .font = Font::footnote(),
+                                        .color = Color::secondary(),
                                         .wrapping = TextWrapping::Wrap,
                                     }
                                         .flex(1.f)
@@ -208,15 +208,15 @@ struct PopoverDemoRoot {
             .children = children(
                 Text {
                     .text = "Popover demo",
-                    .font = theme.fontDisplay,
-                    .color = theme.colorTextPrimary,
+                    .font = Font::largeTitle(),
+                    .color = Color::primary(),
                     .horizontalAlignment = HorizontalAlignment::Center,
                 }
                     .padding(16.f),
                 Text {
                     .text = popoverOpen ? "Popover visible" : "Popover hidden",
-                    .font = theme.fontLabel,
-                    .color = theme.colorTextSecondary,
+                    .font = Font::headline(),
+                    .color = Color::secondary(),
                     .horizontalAlignment = HorizontalAlignment::Center,
                 }
                     .padding(8.f),
@@ -232,12 +232,12 @@ struct PopoverDemoRoot {
                     ),
                 }
                     .flex(1.f, 1.f, 0.f)
-                    .fill(FillStyle::solid(theme.colorSurfaceOverlay))
+                    .fill(FillStyle::solid(Color::elevatedBackground()))
                     .cornerRadius(CornerRadius {theme.radiusLarge})
             ),
         }
             .padding(20.f)
-            .fill(FillStyle::solid(theme.colorBackground));
+            .fill(FillStyle::solid(Color::windowBackground()));
     }
 };
 

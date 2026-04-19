@@ -41,7 +41,7 @@ struct CursorDemo {
                 }
                     // .cornerRadius(theme.radiusXLarge)
                     .cursor(cursor)
-                    .fill(theme.colorSurfaceOverlay)
+                    .fill(Color::elevatedBackground())
                     .height(200.f)
             );
         }
@@ -54,13 +54,13 @@ struct CursorDemo {
                     .children = children(
                         Text {
                             .text = "Cursor Demo",
-                            .font = theme.fontDisplay,
-                            .color = theme.colorTextPrimary,
+                            .font = Font::largeTitle(),
+                            .color = Color::primary(),
                         },
                         Text {
                             .text = "Move the pointer over each swatch. Drag the resize strip — the cursor stays locked to that node during the drag.",
-                            .font = theme.fontBody,
-                            .color = theme.colorTextSecondary,
+                            .font = Font::body(),
+                            .color = Color::secondary(),
                             .wrapping = TextWrapping::Wrap,
                         },
                         Grid {

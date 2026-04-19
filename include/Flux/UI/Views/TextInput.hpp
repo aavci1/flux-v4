@@ -26,15 +26,15 @@ struct TextInputHeight {
 
 struct TextInput : ViewModifiers<TextInput> {
     struct Style {
-        Font font = kFontFromTheme;
-        Color textColor = kColorFromTheme;
-        Color placeholderColor = kColorFromTheme;
-        Color backgroundColor = kColorFromTheme;
-        Color borderColor = kColorFromTheme;
-        Color borderFocusColor = kColorFromTheme;
-        Color caretColor = kColorFromTheme;
-        Color selectionColor = kColorFromTheme;
-        Color disabledColor = kColorFromTheme;
+        Font font = Font::theme();
+        Color textColor = Color::theme();
+        Color placeholderColor = Color::theme();
+        Color backgroundColor = Color::theme();
+        Color borderColor = Color::theme();
+        Color borderFocusColor = Color::theme();
+        Color caretColor = Color::theme();
+        Color selectionColor = Color::theme();
+        Color disabledColor = Color::theme();
         float borderWidth = kFloatFromTheme;
         float borderFocusWidth = kFloatFromTheme;
         float cornerRadius = kFloatFromTheme;

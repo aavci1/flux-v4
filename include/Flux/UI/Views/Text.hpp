@@ -23,9 +23,9 @@ struct Text : ViewModifiers<Text> {
   Size measure(MeasureContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
 
   std::string text;
-  Font font = kFontFromTheme;
-  Color color = kColorFromTheme;
-  Color selectionColor = kColorFromTheme;
+  Font font = Font::theme();
+  Color color = Color::theme();
+  Color selectionColor = Color::theme();
   bool selectable = false;
 
   HorizontalAlignment horizontalAlignment = HorizontalAlignment::Leading;

@@ -5,10 +5,144 @@
 namespace flux {
 
 Font resolveFont(Font const& override, Font const& themeValue) {
-  if (override.size < 0.f) {
+  if (override.semanticToken() == 1) {
     return themeValue;
   }
   return override;
+}
+
+namespace {
+
+Color resolveSemanticColorToken(int token, Theme const& theme) {
+  switch (token) {
+  case 1:
+  case 2:
+    return theme.labelColor;
+  case 3:
+    return theme.secondaryLabelColor;
+  case 4:
+    return theme.tertiaryLabelColor;
+  case 5:
+    return theme.quaternaryLabelColor;
+  case 6:
+    return theme.placeholderTextColor;
+  case 7:
+    return theme.disabledTextColor;
+  case 8:
+    return theme.accentColor;
+  case 9:
+    return theme.accentForegroundColor;
+  case 10:
+    return theme.windowBackgroundColor;
+  case 11:
+    return theme.controlBackgroundColor;
+  case 12:
+    return theme.elevatedBackgroundColor;
+  case 13:
+    return theme.textBackgroundColor;
+  case 14:
+    return theme.separatorColor;
+  case 15:
+    return theme.opaqueSeparatorColor;
+  case 16:
+    return theme.selectedContentBackgroundColor;
+  case 17:
+    return theme.keyboardFocusIndicatorColor;
+  case 18:
+    return theme.modalScrimColor;
+  case 19:
+    return theme.popoverScrimColor;
+  case 20:
+    return theme.successColor;
+  case 21:
+    return theme.successForegroundColor;
+  case 22:
+    return theme.successBackgroundColor;
+  case 23:
+    return theme.warningColor;
+  case 24:
+    return theme.warningForegroundColor;
+  case 25:
+    return theme.warningBackgroundColor;
+  case 26:
+    return theme.dangerColor;
+  case 27:
+    return theme.dangerForegroundColor;
+  case 28:
+    return theme.dangerBackgroundColor;
+  default:
+    return theme.labelColor;
+  }
+}
+
+Font resolveSemanticFontToken(int token, Theme const& theme) {
+  switch (token) {
+  case 1:
+  case 8:
+    return theme.bodyFont;
+  case 2:
+    return theme.largeTitleFont;
+  case 3:
+    return theme.titleFont;
+  case 4:
+    return theme.title2Font;
+  case 5:
+    return theme.title3Font;
+  case 6:
+    return theme.headlineFont;
+  case 7:
+    return theme.subheadlineFont;
+  case 9:
+    return theme.calloutFont;
+  case 10:
+    return theme.footnoteFont;
+  case 11:
+    return theme.captionFont;
+  case 12:
+    return theme.caption2Font;
+  case 13:
+    return theme.monospacedBodyFont;
+  default:
+    return theme.bodyFont;
+  }
+}
+
+} // namespace
+
+Color resolveColor(Color value, Theme const& theme) {
+  if (!value.isSemantic()) {
+    return value;
+  }
+  return resolveSemanticColorToken(value.semanticToken(), theme);
+}
+
+Color resolveColor(Color override, Color themeValue, Theme const& theme) {
+  int const token = override.semanticToken();
+  if (token == 0) {
+    return override;
+  }
+  if (token == 1) {
+    return themeValue;
+  }
+  return resolveSemanticColorToken(token, theme);
+}
+
+Font resolveFont(Font const& value, Theme const& theme) {
+  if (!value.isSemantic()) {
+    return value;
+  }
+  return resolveSemanticFontToken(value.semanticToken(), theme);
+}
+
+Font resolveFont(Font const& override, Font const& themeValue, Theme const& theme) {
+  int const token = override.semanticToken();
+  if (token == 0) {
+    return override;
+  }
+  if (token == 1) {
+    return themeValue;
+  }
+  return resolveSemanticFontToken(token, theme);
 }
 
 Theme Theme::light() { return Theme{}; }
@@ -16,43 +150,54 @@ Theme Theme::light() { return Theme{}; }
 Theme Theme::dark() {
   Theme t;
 
-  t.colorAccent = Color::hex(0x5B9CF6);
-  t.colorOnAccent = Color::hex(0x000000);
-  t.colorAccentSubtle = Color{0.36f, 0.61f, 0.97f, 0.15f};
+  t.accentColor = Color::hex(0x0A84FF);
+  t.accentForegroundColor = Color::hex(0xFFFFFF);
+  t.selectedContentBackgroundColor = Color{0.04f, 0.52f, 1.f, 0.28f};
 
-  t.colorDanger = Color::hex(0xFF6B6B);
-  t.colorOnDanger = Color::hex(0x000000);
-  t.colorDangerSubtle = Color{1.f, 0.42f, 0.42f, 0.15f};
+  t.successColor = Color::hex(0x32D74B);
+  t.successForegroundColor = Color::hex(0x08120A);
+  t.successBackgroundColor = Color{0.20f, 0.84f, 0.29f, 0.25f};
 
-  t.colorSuccess = Color::hex(0x4ADE80);
-  t.colorOnSuccess = Color::hex(0x000000);
-  t.colorSuccessSubtle = Color{0.29f, 0.87f, 0.50f, 0.15f};
+  t.warningColor = Color::hex(0xFFD60A);
+  t.warningForegroundColor = Color::hex(0x111118);
+  t.warningBackgroundColor = Color{1.f, 0.84f, 0.04f, 0.22f};
 
-  t.colorWarning = Color::hex(0xFBBF24);
-  t.colorOnWarning = Color::hex(0x000000);
-  t.colorWarningSubtle = Color{0.98f, 0.75f, 0.14f, 0.15f};
+  t.dangerColor = Color::hex(0xFF6961);
+  t.dangerForegroundColor = Color::hex(0x111118);
+  t.dangerBackgroundColor = Color{1.f, 0.41f, 0.38f, 0.22f};
 
-  t.colorBackground = Color::hex(0x000000);
-  t.colorSurface = Color::hex(0xF5F7F9);
-  t.colorSurfaceOverlay = Color::hex(0x2C2C2E);
-  t.colorSurfaceField = Color::hex(0x2C2C2E);
-  t.colorSurfaceHover = Color::hex(0x3A3A3C);
-  t.colorSurfaceRowHover = Color::hex(0x48484A);
-  t.colorSurfaceDisabled = Color::hex(0x3A3A3C);
+  t.windowBackgroundColor = Color::hex(0x1C1C1E);
+  t.controlBackgroundColor = Color::hex(0x242426);
+  t.elevatedBackgroundColor = Color::hex(0x2C2C2E);
+  t.textBackgroundColor = Color::hex(0x2C2C2E);
+  t.hoveredControlBackgroundColor = Color::hex(0x343437);
+  t.rowHoverBackgroundColor = Color::hex(0x3A3A3C);
+  t.disabledControlBackgroundColor = Color::hex(0x2A2A2C);
 
-  t.colorBorder = Color::hex(0x48484A);
-  t.colorBorderSubtle = Color::hex(0x3A3A3C);
-  t.colorBorderFocus = Color::hex(0x5B9CF6);
+  t.separatorColor = Color::hex(0x3A3A3C);
+  t.opaqueSeparatorColor = Color::hex(0x545458);
+  t.keyboardFocusIndicatorColor = Color::hex(0x0A84FF);
 
-  t.colorTextPrimary = Color::hex(0xF2F2F7);
-  t.colorTextSecondary = Color::hex(0xAEAEB2);
-  t.colorTextMuted = Color::hex(0x8E8E93);
-  t.colorTextPlaceholder = Color::hex(0x6E6E73);
-  t.colorTextDisabled = Color::hex(0x48484A);
-  t.colorTextOnAccent = Color::hex(0x000000);
+  t.labelColor = Color::hex(0xF5F5F7);
+  t.secondaryLabelColor = Color::hex(0xAEAEB2);
+  t.tertiaryLabelColor = Color::hex(0x8E8E93);
+  t.quaternaryLabelColor = Color::hex(0x636366);
+  t.placeholderTextColor = Color::hex(0x6E6E73);
+  t.disabledTextColor = Color::hex(0x636366);
 
-  t.colorScrimModal = Color{0.f, 0.f, 0.f, 0.60f};
-  t.colorScrimPopover = Color{0.f, 0.f, 0.f, 0.f};
+  t.modalScrimColor = Color{0.f, 0.f, 0.f, 0.55f};
+  t.popoverScrimColor = Color{0.f, 0.f, 0.f, 0.f};
+
+  t.toggleOnColor = t.accentColor;
+  t.toggleOffColor = t.opaqueSeparatorColor;
+  t.toggleBorderColor = t.separatorColor;
+
+  t.checkboxCheckedColor = t.accentColor;
+  t.checkboxUncheckedColor = t.opaqueSeparatorColor;
+  t.checkboxBorderColor = t.opaqueSeparatorColor;
+
+  t.sliderTrackColor = t.opaqueSeparatorColor;
+  t.sliderThumbBorderColor = t.separatorColor;
 
   t.shadowColor = Color{0.f, 0.f, 0.f, 0.35f};
 

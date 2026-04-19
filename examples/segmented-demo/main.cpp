@@ -24,14 +24,14 @@ Element makeSectionCard(Theme const &theme, std::string title, std::string capti
         .children = children(
             Text {
                 .text = std::move(title),
-                .font = theme.fontTitle,
-                .color = theme.colorTextPrimary,
+                .font = Font::title2(),
+                .color = Color::primary(),
                 .horizontalAlignment = HorizontalAlignment::Leading,
             },
             Text {
                 .text = std::move(caption),
-                .font = theme.fontBodySmall,
-                .color = theme.colorTextSecondary,
+                .font = Font::footnote(),
+                .color = Color::secondary(),
                 .horizontalAlignment = HorizontalAlignment::Leading,
                 .wrapping = TextWrapping::Wrap,
             },
@@ -39,8 +39,8 @@ Element makeSectionCard(Theme const &theme, std::string title, std::string capti
         )
     }
         .padding(theme.space4)
-        .fill(FillStyle::solid(theme.colorSurfaceOverlay))
-        .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
+        .fill(FillStyle::solid(Color::elevatedBackground()))
+        .stroke(StrokeStyle::solid(Color::separator(), 1.f))
         .cornerRadius(CornerRadius {theme.radiusLarge});
 }
 
@@ -51,20 +51,20 @@ Element metricTile(Theme const &theme, std::string value, std::string label, Col
         .children = children(
             Text {
                 .text = std::move(value),
-                .font = theme.fontTitle,
+                .font = Font::title2(),
                 .color = accent,
                 .horizontalAlignment = HorizontalAlignment::Leading,
             },
             Text {
                 .text = std::move(label),
-                .font = theme.fontBodySmall,
-                .color = theme.colorTextSecondary,
+                .font = Font::footnote(),
+                .color = Color::secondary(),
                 .horizontalAlignment = HorizontalAlignment::Leading,
             }
         )
     }
         .padding(theme.space3)
-        .fill(FillStyle::solid(theme.colorBackground))
+        .fill(FillStyle::solid(Color::windowBackground()))
         .cornerRadius(CornerRadius {theme.radiusMedium})
         .flex(1.f, 1.f, 0.f);
 }
@@ -72,7 +72,7 @@ Element metricTile(Theme const &theme, std::string value, std::string label, Col
 Element statusPill(Theme const &theme, std::string text, Color fill, Color label) {
     return Text {
         .text = std::move(text),
-        .font = theme.fontLabelSmall,
+        .font = Font::caption(),
         .color = label,
         .horizontalAlignment = HorizontalAlignment::Center,
         .verticalAlignment = VerticalAlignment::Center,
@@ -89,14 +89,14 @@ Element surfacePreview(Theme const &theme, std::string title, std::string body, 
         .children = children(
             Text {
                 .text = std::move(title),
-                .font = theme.fontSubtitle,
-                .color = theme.colorTextPrimary,
+                .font = Font::title3(),
+                .color = Color::primary(),
                 .horizontalAlignment = HorizontalAlignment::Leading,
             },
             Text {
                 .text = std::move(body),
-                .font = theme.fontBodySmall,
-                .color = theme.colorTextSecondary,
+                .font = Font::footnote(),
+                .color = Color::secondary(),
                 .horizontalAlignment = HorizontalAlignment::Leading,
                 .wrapping = TextWrapping::Wrap,
             },
@@ -107,7 +107,7 @@ Element surfacePreview(Theme const &theme, std::string title, std::string body, 
         )
     }
         .padding(theme.space3)
-        .fill(FillStyle::solid(theme.colorBackground))
+        .fill(FillStyle::solid(Color::windowBackground()))
         .cornerRadius(CornerRadius {theme.radiusMedium})
         .flex(1.f, 1.f, 0.f);
 }
@@ -186,17 +186,17 @@ Element makeHeroDemo(Theme const &theme, State<int> workspace, State<std::string
                         }
                             .size(360.f, 0.f),
                         Spacer {}.flex(1.f, 1.f),
-                        statusPill(theme, current, theme.colorAccentSubtle, theme.colorAccent)
+                        statusPill(theme, current, Color::selectedContentBackground(), Color::accent())
                     )
                 },
                 HStack {
                     .spacing = theme.space3,
                     .alignment = Alignment::Stretch,
                     .children = children(
-                        surfacePreview(theme, std::move(title), std::move(body), theme.colorAccent),
+                        surfacePreview(theme, std::move(title), std::move(body), Color::accent()),
                         surfacePreview(theme, "Why it works",
                                        "The selected segment owns the same content region, so the control reads as a mode switch rather than a loose set of buttons.",
-                                       theme.colorSuccess)
+                                       Color::success())
                     )
                 }
             )
@@ -218,8 +218,8 @@ Element makeToolbarDemo(Theme const &theme, State<int> channel, State<int> densi
                     .children = children(
                         Text {
                             .text = "Notifications",
-                            .font = theme.fontLabel,
-                            .color = theme.colorTextPrimary,
+                            .font = Font::headline(),
+                            .color = Color::primary(),
                         },
                         SegmentedControl {
                             .selectedIndex = channel,
@@ -238,8 +238,8 @@ Element makeToolbarDemo(Theme const &theme, State<int> channel, State<int> densi
                         Spacer {}.flex(1.f, 1.f),
                         Text {
                             .text = "Density",
-                            .font = theme.fontLabel,
-                            .color = theme.colorTextPrimary,
+                            .font = Font::headline(),
+                            .color = Color::primary(),
                         },
                         SegmentedControl {
                             .selectedIndex = density,
@@ -261,9 +261,9 @@ Element makeToolbarDemo(Theme const &theme, State<int> channel, State<int> densi
                     .spacing = theme.space3,
                     .alignment = Alignment::Stretch,
                     .children = children(
-                        metricTile(theme, channelLabel(*channel), "Delivery channel", theme.colorAccent),
-                        metricTile(theme, densityLabel(*density), "Interface density", theme.colorSuccess),
-                        metricTile(theme, "3", "Choices per group", theme.colorWarning)
+                        metricTile(theme, channelLabel(*channel), "Delivery channel", Color::accent()),
+                        metricTile(theme, densityLabel(*density), "Interface density", Color::success()),
+                        metricTile(theme, "3", "Choices per group", Color::warning())
                     )
                 }
             )
@@ -285,8 +285,8 @@ Element makeStateDemo(Theme const &theme, State<int> branch, State<std::string> 
                     .children = children(
                         Text {
                             .text = "Release branch",
-                            .font = theme.fontLabel,
-                            .color = theme.colorTextPrimary,
+                            .font = Font::headline(),
+                            .color = Color::primary(),
                         },
                         SegmentedControl {
                             .selectedIndex = branch,
@@ -302,13 +302,13 @@ Element makeStateDemo(Theme const &theme, State<int> branch, State<std::string> 
                             },
                         }
                             .size(280.f, 0.f),
-                        statusPill(theme, "Canary locked", theme.colorWarningSubtle, theme.colorWarning)
+                        statusPill(theme, "Canary locked", Color::warningBackground(), Color::warning())
                     )
                 },
                 Text {
                     .text = "Try using arrow keys after focusing the control. Navigation skips disabled segments and keeps focus inside the same group.",
-                    .font = theme.fontBodySmall,
-                    .color = theme.colorTextSecondary,
+                    .font = Font::footnote(),
+                    .color = Color::secondary(),
                     .wrapping = TextWrapping::Wrap,
                 },
                 HStack {
@@ -317,10 +317,10 @@ Element makeStateDemo(Theme const &theme, State<int> branch, State<std::string> 
                     .children = children(
                         surfacePreview(theme, "Enabled segment",
                                        "Stable and Beta are available today, so switching is instant and uses the same interaction pattern as pointer taps.",
-                                       theme.colorAccent),
+                                       Color::accent()),
                         surfacePreview(theme, "Disabled segment",
                                        "Canary remains visible to communicate roadmap and access gating without behaving like a broken control.",
-                                       theme.colorWarning)
+                                       Color::warning())
                     )
                 }
             )
@@ -342,8 +342,8 @@ Element makeLayoutDemo(Theme const &theme, State<int> compactMode, State<std::st
                     .children = children(
                         Text {
                             .text = "Full-width usage",
-                            .font = theme.fontLabel,
-                            .color = theme.colorTextPrimary,
+                            .font = Font::headline(),
+                            .color = Color::primary(),
                         },
                         SegmentedControl {
                             .selectedIndex = compactMode,
@@ -363,7 +363,7 @@ Element makeLayoutDemo(Theme const &theme, State<int> compactMode, State<std::st
                     )
                 }
                     .padding(theme.space3)
-                    .fill(FillStyle::solid(theme.colorBackground))
+                    .fill(FillStyle::solid(Color::windowBackground()))
                     .cornerRadius(CornerRadius {theme.radiusMedium}),
                 HStack {
                     .spacing = theme.space3,
@@ -375,8 +375,8 @@ Element makeLayoutDemo(Theme const &theme, State<int> compactMode, State<std::st
                             .children = children(
                                 Text {
                                     .text = "Compact card",
-                                    .font = theme.fontLabel,
-                                    .color = theme.colorTextPrimary,
+                                    .font = Font::headline(),
+                                    .color = Color::primary(),
                                 },
                                 SegmentedControl {
                                     .selectedIndex = compactMode,
@@ -389,7 +389,7 @@ Element makeLayoutDemo(Theme const &theme, State<int> compactMode, State<std::st
                             )
                         }
                             .padding(theme.space3)
-                            .fill(FillStyle::solid(theme.colorBackground))
+                            .fill(FillStyle::solid(Color::windowBackground()))
                             .cornerRadius(CornerRadius {theme.radiusMedium})
                             .flex(1.f, 1.f, 0.f),
                         VStack {
@@ -398,8 +398,8 @@ Element makeLayoutDemo(Theme const &theme, State<int> compactMode, State<std::st
                             .children = children(
                                 Text {
                                     .text = "Disabled whole group",
-                                    .font = theme.fontLabel,
-                                    .color = theme.colorTextPrimary,
+                                    .font = Font::headline(),
+                                    .color = Color::primary(),
                                 },
                                 SegmentedControl {
                                     .selectedIndex = compactMode,
@@ -413,7 +413,7 @@ Element makeLayoutDemo(Theme const &theme, State<int> compactMode, State<std::st
                             )
                         }
                             .padding(theme.space3)
-                            .fill(FillStyle::solid(theme.colorBackground))
+                            .fill(FillStyle::solid(Color::windowBackground()))
                             .cornerRadius(CornerRadius {theme.radiusMedium})
                             .flex(1.f, 1.f, 0.f)
                     )
@@ -446,14 +446,14 @@ struct SegmentedDemoRoot {
                     .children = children(
                         Text {
                             .text = "Segmented Control Demo",
-                            .font = theme.fontDisplay,
-                            .color = theme.colorTextPrimary,
+                            .font = Font::largeTitle(),
+                            .color = Color::primary(),
                             .horizontalAlignment = HorizontalAlignment::Leading,
                         },
                         Text {
                             .text = "A segmented control for short, exclusive mode switches. This demo covers app-shell navigation, compact toolbars, disabled segments, and width variations similar to real product surfaces.",
-                            .font = theme.fontBody,
-                            .color = theme.colorTextSecondary,
+                            .font = Font::body(),
+                            .color = Color::secondary(),
                             .horizontalAlignment = HorizontalAlignment::Leading,
                             .wrapping = TextWrapping::Wrap,
                         },
@@ -461,9 +461,9 @@ struct SegmentedDemoRoot {
                             .spacing = theme.space3,
                             .alignment = Alignment::Stretch,
                             .children = children(
-                                metricTile(theme, workspaceLabel(*workspace), "Primary workspace", theme.colorAccent),
-                                metricTile(theme, channelLabel(*channel), "Delivery mode", theme.colorSuccess),
-                                metricTile(theme, densityLabel(*density), "Density preset", theme.colorWarning)
+                                metricTile(theme, workspaceLabel(*workspace), "Primary workspace", Color::accent()),
+                                metricTile(theme, channelLabel(*channel), "Delivery mode", Color::success()),
+                                metricTile(theme, densityLabel(*density), "Density preset", Color::warning())
                             )
                         },
                         makeHeroDemo(theme, workspace, lastEvent),
@@ -472,8 +472,8 @@ struct SegmentedDemoRoot {
                         makeLayoutDemo(theme, layoutMode, lastEvent),
                         Text {
                             .text = *lastEvent,
-                            .font = theme.fontBodySmall,
-                            .color = theme.colorTextMuted,
+                            .font = Font::footnote(),
+                            .color = Color::tertiary(),
                             .horizontalAlignment = HorizontalAlignment::Leading,
                             .wrapping = TextWrapping::Wrap,
                         }
@@ -482,7 +482,7 @@ struct SegmentedDemoRoot {
                     .padding(theme.space5)
             )
         }
-            .fill(FillStyle::solid(theme.colorBackground));
+            .fill(FillStyle::solid(Color::windowBackground()));
     }
 };
 

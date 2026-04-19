@@ -30,9 +30,9 @@ namespace {
 
 [[nodiscard]] Color indicatorColorForTheme(Theme const &theme) {
     return Color {
-        theme.colorTextSecondary.r,
-        theme.colorTextSecondary.g,
-        theme.colorTextSecondary.b,
+        theme.secondaryLabelColor.r,
+        theme.secondaryLabelColor.g,
+        theme.secondaryLabelColor.b,
         0.55f,
     };
 }

@@ -21,7 +21,7 @@ public:
 
   std::string text{};
   Font font{};
-  Color color = kColorFromTheme;
+  Color color = Color::theme();
   HorizontalAlignment horizontalAlignment = HorizontalAlignment::Leading;
   VerticalAlignment verticalAlignment = VerticalAlignment::Top;
   TextWrapping wrapping = TextWrapping::NoWrap;

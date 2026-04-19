@@ -98,14 +98,14 @@ struct ResolvedTextInputStyle {
 
 ResolvedTextInputStyle resolveTextInputStyle(TextInput::Style const &style, Theme const &theme) {
     return ResolvedTextInputStyle {
-        .textColor = resolveColor(style.textColor, theme.colorTextPrimary),
-        .placeholderColor = resolveColor(style.placeholderColor, theme.colorTextPlaceholder),
-        .backgroundColor = resolveColor(style.backgroundColor, theme.colorSurfaceField),
-        .borderColor = resolveColor(style.borderColor, theme.colorBorder),
-        .borderFocusColor = resolveColor(style.borderFocusColor, theme.colorBorderFocus),
-        .caretColor = resolveColor(style.caretColor, theme.colorAccent),
-        .selectionColor = resolveColor(style.selectionColor, theme.colorAccentSubtle),
-        .disabledColor = resolveColor(style.disabledColor, theme.colorSurfaceDisabled),
+        .textColor = resolveColor(style.textColor, theme.labelColor, theme),
+        .placeholderColor = resolveColor(style.placeholderColor, theme.placeholderTextColor, theme),
+        .backgroundColor = resolveColor(style.backgroundColor, theme.textBackgroundColor, theme),
+        .borderColor = resolveColor(style.borderColor, theme.separatorColor, theme),
+        .borderFocusColor = resolveColor(style.borderFocusColor, theme.keyboardFocusIndicatorColor, theme),
+        .caretColor = resolveColor(style.caretColor, theme.accentColor, theme),
+        .selectionColor = resolveColor(style.selectionColor, theme.selectedContentBackgroundColor, theme),
+        .disabledColor = resolveColor(style.disabledColor, theme.disabledControlBackgroundColor, theme),
         .borderWidth = resolveFloat(style.borderWidth, 1.f),
         .borderFocusWidth = resolveFloat(style.borderFocusWidth, 2.f),
         .cornerRadius = resolveFloat(style.cornerRadius, theme.radiusMedium),
@@ -413,7 +413,7 @@ int hitTestMultilineByte(detail::TextEditLayoutResult const &layoutResult, Point
 Element buildMultilineTextInput(TextInput const &input) {
     Theme const &theme = useEnvironment<Theme>();
     ResolvedTextInputStyle const resolved = resolveTextInputStyle(input.style, theme);
-    Font const defaultFont = text_detail::resolveBodyTextStyle(input.style.font, kColorFromTheme).first;
+    Font const defaultFont = text_detail::resolveBodyTextStyle(input.style.font, Color::theme()).first;
 
     TextInputLayoutSnap &snap = StateStore::current()->claimSlot<TextInputLayoutSnap>();
     TextInputStylerMemo &stylerMemo = StateStore::current()->claimSlot<TextInputStylerMemo>();
@@ -506,7 +506,7 @@ Element buildMultilineTextInput(TextInput const &input) {
 Element buildSingleLineTextInput(TextInput const &input) {
     Theme const &theme = useEnvironment<Theme>();
     ResolvedTextInputStyle const resolved = resolveTextInputStyle(input.style, theme);
-    Font const defaultFont = text_detail::resolveBodyTextStyle(input.style.font, kColorFromTheme).first;
+    Font const defaultFont = text_detail::resolveBodyTextStyle(input.style.font, Color::theme()).first;
 
     auto &behavior = useTextEditBehavior(input.value, {.multiline = false,
                                                        .maxLength = input.maxLength,

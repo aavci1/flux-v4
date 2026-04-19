@@ -42,8 +42,8 @@ struct Popover : ViewModifiers<Popover> {
 
   // ── Appearance ───────────────────────────────────────────────────────────
 
-  Color backgroundColor = kColorFromTheme;
-  Color borderColor = kColorFromTheme;
+  Color backgroundColor = Color::theme();
+  Color borderColor = Color::theme();
   float borderWidth = 1.f;
   /// Uniform card radius (`kFloatFromTheme` = `Theme::radiusLarge`). Per-corner control lives in
   /// `PopoverCalloutShape` / path geometry, not this scalar.
@@ -56,8 +56,8 @@ struct Popover : ViewModifiers<Popover> {
   /// nullopt = size to content, clamped to window bounds.
   std::optional<Size> maxSize;
 
-  /// Full-window dim behind the popover. Default `kColorFromTheme` uses `Theme::colorScrimPopover`.
-  Color backdropColor = kColorFromTheme;
+  /// Full-window dim behind the popover. Default `Color::theme()` uses `Theme::popoverScrimColor`.
+  Color backdropColor = Color::theme();
 
   /// When set, the overlay anchor height is clamped to this value (use the trigger row height).
   std::optional<float> anchorMaxHeight;

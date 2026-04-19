@@ -23,8 +23,8 @@ struct ChatListRow : ViewModifiers<ChatListRow> {
 
     auto body() const {
         Theme const &theme = useEnvironment<Theme>();
-        Color const titleColor = theme.colorTextPrimary;
-        Color const detailColor = selected ? theme.colorTextPrimary : theme.colorTextSecondary;
+        Color const titleColor = Color::primary();
+        Color const detailColor = selected ? Color::primary() : Color::secondary();
 
         return ListRow {
             .content = HStack {
@@ -36,14 +36,14 @@ struct ChatListRow : ViewModifiers<ChatListRow> {
                         .children = children(
                             Text {
                                 .text = chat.title,
-                                .font = theme.fontLabel,
+                                .font = Font::headline(),
                                 .color = titleColor,
                                 .horizontalAlignment = HorizontalAlignment::Leading,
                                 .wrapping = TextWrapping::NoWrap,
                             },
                             Text {
                                 .text = chatPreview(chat),
-                                .font = theme.fontBodySmall,
+                                .font = Font::footnote(),
                                 .color = detailColor,
                                 .horizontalAlignment = HorizontalAlignment::Leading,
                                 .wrapping = TextWrapping::Wrap,
@@ -54,7 +54,7 @@ struct ChatListRow : ViewModifiers<ChatListRow> {
                         .flex(1.f, 1.f),
                     Text {
                         .text = chatUpdatedAtLabel(chat),
-                        .font = theme.fontLabelSmall,
+                        .font = Font::caption(),
                         .color = detailColor,
                         .horizontalAlignment = HorizontalAlignment::Trailing,
                         .verticalAlignment = VerticalAlignment::Center,
@@ -173,16 +173,16 @@ struct ChatsView : ViewModifiers<ChatsView> {
                             .children = {
                                 Text {
                                     .text = "Chats",
-                                    .font = theme.fontHeading,
-                                    .color = theme.colorTextPrimary,
+                                    .font = Font::title(),
+                                    .color = Color::primary(),
                                     .horizontalAlignment = HorizontalAlignment::Leading,
                                 }
                                     .flex(1.f, 1.f),
                                 IconButton {
                                     .icon = IconName::Add,
                                     .style = {
-                                        .size = theme.fontHeading.size,
-                                        .weight = theme.fontLabel.weight,
+                                        .size = theme.titleFont.size,
+                                        .weight = theme.headlineFont.weight,
                                     },
                                     .onTap = onNewChat
                                 }
@@ -195,7 +195,7 @@ struct ChatsView : ViewModifiers<ChatsView> {
                             .flex(1.f, 1.f, 0.f),
                     },
                 }
-                    .fill(FillStyle::solid(theme.colorSurfaceOverlay))
+                    .fill(FillStyle::solid(Color::elevatedBackground()))
                     .size(320.f, 0.f),
                 Divider { .orientation = Divider::Orientation::Vertical },
                 std::move(detail),

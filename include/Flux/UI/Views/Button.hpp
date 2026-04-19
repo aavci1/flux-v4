@@ -26,11 +26,12 @@ enum class ButtonVariant : std::uint8_t {
 
 struct Button : ViewModifiers<Button> {
     struct Style {
-        Font font = kFontFromTheme;
+        Font font = Font::theme();
         float paddingH = kFloatFromTheme;
+        float paddingV = kFloatFromTheme;
         float cornerRadius = kFloatFromTheme;
-        Color accentColor = kColorFromTheme;
-        Color destructiveColor = kColorFromTheme;
+        Color accentColor = Color::theme();
+        Color destructiveColor = Color::theme();
     };
 
     std::string label;
@@ -43,8 +44,8 @@ struct Button : ViewModifiers<Button> {
 
 struct LinkButton : ViewModifiers<LinkButton> {
     struct Style {
-        Font font = kFontFromTheme;
-        Color color = kColorFromTheme;
+        Font font = Font::theme();
+        Color color = Color::theme();
     };
 
     std::string label;
@@ -59,7 +60,7 @@ struct IconButton : ViewModifiers<IconButton> {
     struct Style {
         float size = kFloatFromTheme;
         float weight = kFloatFromTheme;
-        Color color = kColorFromTheme;
+        Color color = Color::theme();
     };
 
     IconName icon {};

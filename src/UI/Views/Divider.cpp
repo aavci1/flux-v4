@@ -13,7 +13,7 @@ Divider::Style resolveStyle(Divider::Style const &style, Theme const &theme) {
     return Divider::Style {
         .thickness = thickness,
         .cornerRadius = resolveFloat(style.cornerRadius, thickness * 0.5f),
-        .color = resolveColor(style.color, theme.colorBorderSubtle),
+        .color = resolveColor(style.color, theme.separatorColor, theme),
     };
 }
 

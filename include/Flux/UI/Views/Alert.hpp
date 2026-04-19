@@ -44,11 +44,11 @@ struct Alert : ViewModifiers<Alert> {
   /// Width of the card. 360 pt matches macOS alert width convention.
   float cardWidth = 360.f;
 
-  Color cardColor = kColorFromTheme;
-  Color cardStrokeColor = kColorFromTheme;
-  Color titleColor = kColorFromTheme;
-  Color messageColor = kColorFromTheme;
-  Color backdropColor = kColorFromTheme;
+  Color cardColor = Color::theme();
+  Color cardStrokeColor = Color::theme();
+  Color titleColor = Color::theme();
+  Color messageColor = Color::theme();
+  Color backdropColor = Color::theme();
   /// Uniform card corner radius (`kFloatFromTheme` = `Theme::radiusXLarge`). Not a `CornerRadius`
   /// struct field — all corners share one value; asymmetric cards need a custom element.
   float cornerRadius = kFloatFromTheme;

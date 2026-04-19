@@ -11,9 +11,11 @@
 
 namespace flux {
 
-inline constexpr Font kFontFromTheme {.size = -1.f};
+struct Theme;
 
 Font resolveFont(Font const &override, Font const &themeValue);
+Font resolveFont(Font const &value, Theme const &theme);
+Font resolveFont(Font const &override, Font const &themeValue, Theme const &theme);
 
 /// Raw colour palette — 50 named swatches across 5 hues × 10 steps.
 /// Used to build Theme presets; not consumed by components directly.
@@ -77,61 +79,57 @@ struct FluxPalette {
 };
 
 struct Theme {
-    Color colorAccent = Color::hex(0x3A7BD5);
-    Color colorOnAccent = Color::hex(0xFFFFFF);
-    Color colorAccentSubtle = Color {0.23f, 0.48f, 0.84f, 0.25f};
+    Color accentColor = Color::hex(0x0A84FF);
+    Color accentForegroundColor = Color::hex(0xFFFFFF);
+    Color selectedContentBackgroundColor = Color {0.04f, 0.52f, 1.f, 0.18f};
 
-    Color colorDanger = Color::hex(0xD94040);
-    Color colorOnDanger = Color::hex(0xFFFFFF);
-    Color colorDangerSubtle = Color {0.85f, 0.25f, 0.25f, 0.25f};
+    Color successColor = Color::hex(0x28CD41);
+    Color successForegroundColor = Color::hex(0xFFFFFF);
+    Color successBackgroundColor = Color {0.16f, 0.80f, 0.25f, 0.18f};
 
-    Color colorSuccess = Color::hex(0x16A34A);
-    Color colorOnSuccess = Color::hex(0xFFFFFF);
-    Color colorSuccessSubtle = Color {0.09f, 0.64f, 0.29f, 0.25f};
+    Color warningColor = Color::hex(0xFF9F0A);
+    Color warningForegroundColor = Color::hex(0x111118);
+    Color warningBackgroundColor = Color {1.f, 0.62f, 0.04f, 0.18f};
 
-    Color colorWarning = Color::hex(0xD97706);
-    Color colorOnWarning = Color::hex(0xFFFFFF);
-    Color colorWarningSubtle = Color {0.85f, 0.47f, 0.02f, 0.25f};
+    Color dangerColor = Color::hex(0xFF453A);
+    Color dangerForegroundColor = Color::hex(0xFFFFFF);
+    Color dangerBackgroundColor = Color {1.f, 0.27f, 0.23f, 0.18f};
 
-    Color colorBackground = Color::hex(0xF2F2F7);
-    Color colorSurface = Color::hex(0xF5F7F9);
-    Color colorSurfaceOverlay = Color::hex(0xFFFFFF);
-    Color colorSurfaceField = Color::hex(0xFFFFFF);
-    Color colorSurfaceHover = Color::hex(0xF8F8FA);
-    Color colorSurfaceRowHover = Color::hex(0xF0F0F5);
-    Color colorSurfaceDisabled = Color::hex(0xE5E5EA);
+    Color windowBackgroundColor = Color::hex(0xF4F4F7);
+    Color controlBackgroundColor = Color::hex(0xFFFFFF);
+    Color elevatedBackgroundColor = Color::hex(0xFFFFFF);
+    Color textBackgroundColor = Color::hex(0xFFFFFF);
+    Color hoveredControlBackgroundColor = Color::hex(0xFAFAFC);
+    Color rowHoverBackgroundColor = Color::hex(0xF1F3F8);
+    Color disabledControlBackgroundColor = Color::hex(0xE8E8ED);
 
-    Color colorBorder = Color::hex(0xDADCDE);
-    Color colorBorderSubtle = Color::hex(0xEFEFEF);
-    Color colorBorderFocus = Color::hex(0x7ABBF5);
+    Color separatorColor = Color::hex(0xE5E5EA);
+    Color opaqueSeparatorColor = Color::hex(0xD1D1D6);
+    Color keyboardFocusIndicatorColor = Color::hex(0x0A84FF);
 
-    Color colorTextPrimary = Color::hex(0x111118);
-    Color colorTextSecondary = Color::hex(0x6E6E80);
-    Color colorTextMuted = Color::hex(0x8E8E9A);
-    Color colorTextPlaceholder = Color::hex(0xAAAAAA);
-    Color colorTextDisabled = Color::hex(0xAAAAAA);
-    Color colorTextOnAccent = Color::hex(0xFFFFFF);
+    Color labelColor = Color::hex(0x111118);
+    Color secondaryLabelColor = Color::hex(0x6E6E73);
+    Color tertiaryLabelColor = Color::hex(0x8E8E93);
+    Color quaternaryLabelColor = Color::hex(0xAEAEB2);
+    Color placeholderTextColor = Color::hex(0x8E8E93);
+    Color disabledTextColor = Color::hex(0xAEAEB2);
 
-    Color colorScrimModal = Color {0.f, 0.f, 0.f, 0.45f};
-    Color colorScrimPopover = Color {0.f, 0.f, 0.f, 0.f};
+    Color modalScrimColor = Color {0.f, 0.f, 0.f, 0.35f};
+    Color popoverScrimColor = Color {0.f, 0.f, 0.f, 0.f};
 
-    /// Typography scale — use these roles consistently (pair with `colorText*` for emphasis).
-    /// - `fontDisplay`: single screen / hero title.
-    /// - `fontHeading`: major section headings within a screen.
-    /// - `fontTitle`: card titles, modal sheets, and nested panel titles.
-    /// - `fontSubtitle`: subsections and group headings under a section.
-    /// - `fontLabel` / `fontLabelSmall`: field labels, compact control labels, footnotes.
-    /// - `fontBody` / `fontBodySmall`: paragraphs, descriptions, captions, supporting text.
-    /// - `fontCode`: monospace snippets.
-    Font fontDisplay {.size = 34.f, .weight = 700.f};
-    Font fontHeading {.size = 22.f, .weight = 700.f};
-    Font fontTitle {.size = 17.f, .weight = 400.f};
-    Font fontSubtitle {.size = 16.f, .weight = 400.f};
-    Font fontBody {.size = 15.f, .weight = 400.f};
-    Font fontBodySmall {.size = 13.f, .weight = 400.f};
-    Font fontLabel {.size = 14.f, .weight = 500.f};
-    Font fontLabelSmall {.size = 12.f, .weight = 500.f};
-    Font fontCode {.size = 13.f, .weight = 400.f};
+    /// Apple-style type roles. Use these directly or via `Font::...()` semantic tokens.
+    Font largeTitleFont {.size = 34.f, .weight = 400.f};
+    Font titleFont {.size = 28.f, .weight = 400.f};
+    Font title2Font {.size = 22.f, .weight = 400.f};
+    Font title3Font {.size = 20.f, .weight = 400.f};
+    Font headlineFont {.size = 13.f, .weight = 600.f};
+    Font subheadlineFont {.size = 12.f, .weight = 400.f};
+    Font bodyFont {.size = 13.f, .weight = 400.f};
+    Font calloutFont {.size = 12.f, .weight = 400.f};
+    Font footnoteFont {.size = 11.f, .weight = 400.f};
+    Font captionFont {.size = 11.f, .weight = 400.f};
+    Font caption2Font {.size = 10.f, .weight = 400.f};
+    Font monospacedBodyFont {.family = "Menlo", .size = 13.f, .weight = 400.f};
 
     // Spacing scale (8 pt grid). At density 1.0, space3 is 12 pt, space4 is 16 pt, etc.
     // `withDensity(d)` scales space1–space8 by d (and updates paddingFieldH/V to match space3/space2).
@@ -179,28 +177,28 @@ struct Theme {
     float toggleThumbInset = 4.f;
     float toggleBorderWidth = 1.f;
     float toggleThumbBorderWidth = 0.f;
-    Color toggleOnColor = Color::hex(0x3A7BD5);
-    Color toggleOffColor = Color::hex(0xD7D7D7);
+    Color toggleOnColor = Color::hex(0x0A84FF);
+    Color toggleOffColor = Color::hex(0xD1D1D6);
     Color toggleThumbColor = Color::hex(0xFFFFFF);
     Color toggleThumbBorderColor = Color::hex(0xFFFFFF);
-    Color toggleBorderColor = Color::hex(0xE5E5E5);
+    Color toggleBorderColor = Color::hex(0xD1D1D6);
 
     // Checkbox
     float checkboxBoxSize = 20.f;
     float checkboxCornerRadius = 4.f;
     float checkboxBorderWidth = 2.0f;
-    Color checkboxCheckedColor = Color::hex(0x3A7BD5);
-    Color checkboxUncheckedColor = Color::hex(0xD7D7D7);
+    Color checkboxCheckedColor = Color::hex(0x0A84FF);
+    Color checkboxUncheckedColor = Color::hex(0xD1D1D6);
     Color checkboxCheckColor = Color::hex(0xFFFFFF);
-    Color checkboxBorderColor = Color::hex(0xEEEEEE);
+    Color checkboxBorderColor = Color::hex(0xD1D1D6);
 
     // Slider
     float sliderTrackHeight = 4.f;
     float sliderThumbSize = 20.f;
     float sliderThumbBorderWidth = 2.f;
-    Color sliderTrackColor = Color::hex(0xE5E5E5);
+    Color sliderTrackColor = Color::hex(0xD1D1D6);
     Color sliderThumbColor = Color::hex(0xFFFFFF);
-    Color sliderThumbBorderColor = Color::hex(0xEEEEEE);
+    Color sliderThumbBorderColor = Color::hex(0xD1D1D6);
 
     /// Bundled Material Symbols Rounded (override to swap icon sets globally).
     std::string iconFontFamily = "Material Symbols Rounded";

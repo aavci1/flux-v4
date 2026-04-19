@@ -13,8 +13,8 @@ constexpr float kDefaultProgressBarWidth = 160.f;
 
 ProgressBar::Style resolveStyle(ProgressBar::Style const &style, Theme const &theme) {
     return ProgressBar::Style {
-        .activeColor = resolveColor(style.activeColor, theme.colorAccent),
-        .inactiveColor = resolveColor(style.inactiveColor, theme.colorSurfaceDisabled),
+        .activeColor = resolveColor(style.activeColor, theme.accentColor, theme),
+        .inactiveColor = resolveColor(style.inactiveColor, theme.disabledControlBackgroundColor, theme),
         .trackHeight = std::max(1.f, resolveFloat(style.trackHeight, theme.sliderTrackHeight)),
     };
 }

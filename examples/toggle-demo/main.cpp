@@ -22,14 +22,14 @@ Element makeSectionCard(Theme const &theme, std::string title, std::string capti
         .children = children(
             Text {
                 .text = std::move(title),
-                .font = theme.fontTitle,
-                .color = theme.colorTextPrimary,
+                .font = Font::title2(),
+                .color = Color::primary(),
                 .horizontalAlignment = HorizontalAlignment::Leading,
             },
             Text {
                 .text = std::move(caption),
-                .font = theme.fontBodySmall,
-                .color = theme.colorTextSecondary,
+                .font = Font::body(),
+                .color = Color::secondary(),
                 .horizontalAlignment = HorizontalAlignment::Leading,
                 .wrapping = TextWrapping::Wrap,
             },
@@ -37,8 +37,8 @@ Element makeSectionCard(Theme const &theme, std::string title, std::string capti
         )
     } //
         .padding(theme.space4)
-        .fill(FillStyle::solid(theme.colorSurfaceOverlay))
-        .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
+        .fill(FillStyle::solid(Color::elevatedBackground()))
+        .stroke(StrokeStyle::solid(Color::separator(), 1.f))
         .cornerRadius(CornerRadius {theme.radiusLarge});
 }
 
@@ -53,14 +53,14 @@ Element settingRow(Theme const &theme, std::string title, std::string detail, El
                 .children = children(
                     Text {
                         .text = std::move(title),
-                        .font = theme.fontLabel,
-                        .color = theme.colorTextPrimary,
+                        .font = Font::headline(),
+                        .color = Color::primary(),
                         .horizontalAlignment = HorizontalAlignment::Leading,
                     },
                     Text {
                         .text = std::move(detail),
-                        .font = theme.fontBodySmall,
-                        .color = theme.colorTextSecondary,
+                        .font = Font::callout(),
+                        .color = Color::secondary(),
                         .horizontalAlignment = HorizontalAlignment::Leading,
                         .wrapping = TextWrapping::Wrap,
                     }
@@ -71,7 +71,7 @@ Element settingRow(Theme const &theme, std::string title, std::string detail, El
         )
     } //
         .padding(theme.space3)
-        .fill(FillStyle::solid(theme.colorBackground))
+        .fill(FillStyle::solid(Color::windowBackground()))
         .cornerRadius(CornerRadius {theme.radiusMedium});
 }
 
@@ -82,18 +82,18 @@ Element metricTile(Theme const &theme, std::string value, std::string label, Col
         .children = children(
             Text {
                 .text = std::move(value),
-                .font = theme.fontTitle,
+                .font = Font::title2(),
                 .color = accent,
             },
             Text {
                 .text = std::move(label),
-                .font = theme.fontBodySmall,
-                .color = theme.colorTextSecondary,
+                .font = Font::footnote(),
+                .color = Color::secondary(),
             }
         )
     } //
         .padding(theme.space3)
-        .fill(FillStyle::solid(theme.colorBackground))
+        .fill(FillStyle::solid(Color::windowBackground()))
         .cornerRadius(CornerRadius {theme.radiusMedium})
         .flex(1.f, 1.f, 0.f);
 }
@@ -122,13 +122,13 @@ struct ToggleDemoRoot {
                     .children = children(
                         Text {
                             .text = "Toggle Demo",
-                            .font = theme.fontDisplay,
-                            .color = theme.colorTextPrimary,
+                            .font = Font::largeTitle(),
+                            .color = Color::primary(),
                         },
                         Text {
                             .text = "A cleaner toggle showcase with realistic settings rows, styling variations, and compact control density.",
-                            .font = theme.fontBody,
-                            .color = theme.colorTextSecondary,
+                            .font = Font::body(),
+                            .color = Color::secondary(),
                             .wrapping = TextWrapping::Wrap,
                         },
                         makeSectionCard(
@@ -165,10 +165,10 @@ struct ToggleDemoRoot {
                                 ),
                             }
                         ),
-                        makeSectionCard(theme, "States", "A small summary helps show the control in a real context instead of as an isolated widget.", HStack {.spacing = theme.space3, .alignment = Alignment::Stretch, .children = children(metricTile(theme, std::to_string(enabledCount), "Enabled settings", theme.colorAccent), metricTile(theme, *notificationsEnabled ? "Live" : "Quiet", "Notifications", *notificationsEnabled ? theme.colorSuccess : theme.colorWarning), metricTile(theme, *wifiEnabled ? "Online" : "Offline", "Connectivity", *wifiEnabled ? theme.colorSuccess : theme.colorTextSecondary))}), makeSectionCard(theme, "Styling", "Style tokens should support subtle variations without turning the control into a different component.", VStack {.spacing = theme.space2, .children = children(settingRow(theme, "Success accent", "Useful when a toggle implies a positive enabled state.", Toggle {
+                        makeSectionCard(theme, "States", "A small summary helps show the control in a real context instead of as an isolated widget.", HStack {.spacing = theme.space3, .alignment = Alignment::Stretch, .children = children(metricTile(theme, std::to_string(enabledCount), "Enabled settings", Color::accent()), metricTile(theme, *notificationsEnabled ? "Live" : "Quiet", "Notifications", *notificationsEnabled ? Color::success() : Color::warning()), metricTile(theme, *wifiEnabled ? "Online" : "Offline", "Connectivity", *wifiEnabled ? Color::success() : Color::secondary()))}), makeSectionCard(theme, "Styling", "Style tokens should support subtle variations without turning the control into a different component.", VStack {.spacing = theme.space2, .children = children(settingRow(theme, "Success accent", "Useful when a toggle implies a positive enabled state.", Toggle {
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  .value = greenAccent,
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  .style = Toggle::Style {
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     .onColor = theme.colorSuccess,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     .onColor = Color::success(),
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  },
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              }),
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                settingRow(theme, "Compact density", "A narrower track works for table rows and denser settings surfaces.", Toggle {
@@ -181,8 +181,8 @@ struct ToggleDemoRoot {
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            }))}),
                         Text {
                             .text = "Try keyboard focus as well: Tab to a toggle, then use Space or Return.",
-                            .font = theme.fontBodySmall,
-                            .color = theme.colorTextMuted,
+                            .font = Font::footnote(),
+                            .color = Color::tertiary(),
                             .horizontalAlignment = HorizontalAlignment::Leading,
                             .wrapping = TextWrapping::Wrap,
                         }

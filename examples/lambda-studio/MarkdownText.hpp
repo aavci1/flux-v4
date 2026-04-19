@@ -40,26 +40,26 @@ struct MarkdownResolvedStyle {
 };
 
 inline MarkdownResolvedStyle resolveMarkdownStyle(flux::Theme const &theme, flux::Font const &font, flux::Color color) {
-    flux::Font const baseFont = flux::resolveFont(font, theme.fontBody);
-    flux::Font const codeFont = flux::resolveFont(theme.fontCode, baseFont);
-    flux::Color const baseColor = flux::resolveColor(color, theme.colorTextPrimary);
+    flux::Font const baseFont = flux::resolveFont(font, theme.bodyFont, theme);
+    flux::Font const codeFont = flux::resolveFont(theme.monospacedBodyFont, baseFont);
+    flux::Color const baseColor = flux::resolveColor(color, theme.labelColor, theme);
 
     flux::Font boldFont = baseFont;
     boldFont.weight = std::clamp((boldFont.weight > 0.f ? boldFont.weight : 400.f) + 250.f, 400.f, 900.f);
 
     flux::Font h1Font = baseFont;
-    h1Font.size = std::max(baseFont.size * 2.f, theme.fontHeading.size);
-    h1Font.weight = std::max(baseFont.weight, theme.fontHeading.weight);
+    h1Font.size = std::max(baseFont.size * 2.f, theme.titleFont.size);
+    h1Font.weight = std::max(baseFont.weight, theme.titleFont.weight);
 
     flux::Font h2Font = baseFont;
-    h2Font.size = std::max(baseFont.size * 1.6f, theme.fontTitle.size);
-    h2Font.weight = std::max(baseFont.weight, theme.fontHeading.weight);
+    h2Font.size = std::max(baseFont.size * 1.6f, theme.title2Font.size);
+    h2Font.weight = std::max(baseFont.weight, theme.titleFont.weight);
 
     flux::Font h3Font = baseFont;
-    h3Font.size = std::max(baseFont.size * 1.3f, theme.fontSubtitle.size);
-    h3Font.weight = std::max(baseFont.weight, theme.fontLabel.weight);
+    h3Font.size = std::max(baseFont.size * 1.3f, theme.title3Font.size);
+    h3Font.weight = std::max(baseFont.weight, theme.headlineFont.weight);
 
-    flux::Color codeBackground = theme.colorSurface;
+    flux::Color codeBackground = theme.controlBackgroundColor;
     codeBackground.a = 0.9f;
 
     return MarkdownResolvedStyle {
@@ -390,7 +390,7 @@ struct MarkdownText : flux::ViewModifiers<MarkdownText> {
     flux::Font h3Font {};
     flux::Color baseColor {};
     flux::Color codeBackground {};
-    flux::Color selectionColor = flux::kColorFromTheme;
+    flux::Color selectionColor = flux::Color::theme();
     flux::HorizontalAlignment horizontalAlignment = flux::HorizontalAlignment::Leading;
     flux::VerticalAlignment verticalAlignment = flux::VerticalAlignment::Top;
     flux::TextWrapping wrapping = flux::TextWrapping::Wrap;
@@ -459,7 +459,7 @@ struct MarkdownText : flux::ViewModifiers<MarkdownText> {
                                                          textLayout->measuredSize.width);
                 if (selectableState->selection.hasSelection()) {
                     flux::Color const resolvedSelectionColor =
-                        flux::resolveColor(selectionColor, theme.colorAccentSubtle);
+                        flux::resolveColor(selectionColor, theme.selectedContentBackgroundColor, theme);
                     for (flux::Rect const &rect :
                          flux::detail::selectionRects(selectableState->layoutResult, selectableState->selection,
                                                       &selectableState->text, 0.f, 0.f)) {

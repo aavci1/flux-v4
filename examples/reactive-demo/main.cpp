@@ -132,18 +132,18 @@ public:
     c.drawCircle(center, r, FillStyle::solid(Color::rgb(255, 255, 255)), StrokeStyle::solid(Color::rgb(40, 44, 55), 2.f));
 
     Theme const theme = Theme::light();
-    Font const bodyFont = theme.fontBody;
-    Font const hintFont = theme.fontBodySmall;
+    Font const bodyFont = theme.bodyFont;
+    Font const hintFont = theme.footnoteFont;
 
     std::string const line = std::string("Signal<int> clicks: ") + std::to_string(s_.clicks.get()) +
                              "  |  Computed<float> dist: " +
                              std::to_string(static_cast<int>(s_.distanceToPointer.get())) +
                              " px  |  Animation<Color> (spring) + Animation<Point> (ease)";
-    auto bodyLayout = ts.layout(line, bodyFont, theme.colorTextPrimary, panel.width - 32.f);
+    auto bodyLayout = ts.layout(line, bodyFont, theme.labelColor, panel.width - 32.f);
     c.drawTextLayout(*bodyLayout, Point{panel.x + 16.f, panel.y + 16.f});
 
     auto hintLayout = ts.layout("Click: spring palette + ease circle to click. Move pointer: Computed distance updates.",
-                                hintFont, theme.colorTextSecondary, panel.width - 32.f);
+                                hintFont, theme.secondaryLabelColor, panel.width - 32.f);
     c.drawTextLayout(*hintLayout, Point{panel.x + 16.f, panel.y + panel.height - 52.f});
   }
 };

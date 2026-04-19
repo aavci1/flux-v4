@@ -37,10 +37,10 @@ float fractionForValue(float val, float lo, float hi) {
 
 Slider::Style resolveStyle(Slider::Style const &style, Theme const &theme) {
     return Slider::Style {
-        .activeColor = resolveColor(style.activeColor, theme.colorAccent),
-        .inactiveColor = resolveColor(style.inactiveColor, theme.colorSurfaceDisabled),
-        .thumbColor = resolveColor(style.thumbColor, theme.sliderThumbColor),
-        .thumbBorderColor = resolveColor(style.thumbBorderColor, theme.sliderThumbBorderColor),
+        .activeColor = resolveColor(style.activeColor, theme.accentColor, theme),
+        .inactiveColor = resolveColor(style.inactiveColor, theme.disabledControlBackgroundColor, theme),
+        .thumbColor = resolveColor(style.thumbColor, theme.sliderThumbColor, theme),
+        .thumbBorderColor = resolveColor(style.thumbBorderColor, theme.sliderThumbBorderColor, theme),
         .trackHeight = resolveFloat(style.trackHeight, theme.sliderTrackHeight),
         .thumbSize = resolveFloat(style.thumbSize, theme.sliderThumbSize),
     };
@@ -55,7 +55,7 @@ Element Slider::body() const {
           thumbBorderColor,
           trackHeight,
           thumbSize] = resolveStyle(style, theme);
-    auto focusColor = theme.colorBorderFocus;
+    auto focusColor = theme.keyboardFocusIndicatorColor;
 
     auto isDisabled = disabled;
     auto focused = useFocus();
@@ -163,18 +163,18 @@ Element Slider::body() const {
             Rectangle {}
                 .size(componentWidth, componentHeight),
             Rectangle {}
-                .fill(FillStyle::solid(isDisabled ? theme.colorSurfaceDisabled : inactiveColor))
+                .fill(FillStyle::solid(isDisabled ? theme.disabledControlBackgroundColor : inactiveColor))
                 .position(0.f, trackY)
                 .size(componentWidth, trackHeight)
                 .cornerRadius(CornerRadius {trackHeight * 0.5f}),
             Rectangle {}
-                .fill(FillStyle::solid(isDisabled ? theme.colorSurfaceDisabled : activeColor))
+                .fill(FillStyle::solid(isDisabled ? theme.disabledControlBackgroundColor : activeColor))
                 .position(0.f, trackY)
                 .size(filledWidth, trackHeight)
                 .cornerRadius(CornerRadius {trackHeight * 0.5f}),
             Rectangle {}
-                .fill(FillStyle::solid(isDisabled ? theme.colorTextDisabled : thumbColor))
-                .stroke(isDisabled ? StrokeStyle::solid(theme.colorTextDisabled, 1.f) : thumbStroke)
+                .fill(FillStyle::solid(isDisabled ? theme.disabledTextColor : thumbColor))
+                .stroke(isDisabled ? StrokeStyle::solid(theme.disabledTextColor, 1.f) : thumbStroke)
                 .shadow(isDisabled ? ShadowStyle::none() : ShadowStyle {.radius = theme.shadowRadiusControl, .offset = {0.f, theme.shadowOffsetYControl}, .color = theme.shadowColor})
                 .position(thumbX + thumbOffset, thumbY)
                 .size(thumbDiameter, thumbDiameter)

@@ -20,11 +20,11 @@ Toggle::Style resolveStyle(Toggle::Style const &style, Theme const &theme) {
         .thumbInset = std::max(0.f, resolveFloat(style.thumbInset, theme.toggleThumbInset)),
         .borderWidth = std::max(0.f, resolveFloat(style.borderWidth, theme.toggleBorderWidth)),
         .thumbBorderWidth = std::max(0.f, resolveFloat(style.thumbBorderWidth, theme.toggleThumbBorderWidth)),
-        .onColor = resolveColor(style.onColor, theme.toggleOnColor),
-        .offColor = resolveColor(style.offColor, theme.toggleOffColor),
-        .thumbColor = resolveColor(style.thumbColor, theme.toggleThumbColor),
-        .thumbBorderColor = resolveColor(style.thumbBorderColor, theme.toggleThumbBorderColor),
-        .borderColor = resolveColor(style.borderColor, theme.toggleBorderColor),
+        .onColor = resolveColor(style.onColor, theme.toggleOnColor, theme),
+        .offColor = resolveColor(style.offColor, theme.toggleOffColor, theme),
+        .thumbColor = resolveColor(style.thumbColor, theme.toggleThumbColor, theme),
+        .thumbBorderColor = resolveColor(style.thumbBorderColor, theme.toggleThumbBorderColor, theme),
+        .borderColor = resolveColor(style.borderColor, theme.toggleBorderColor, theme),
     };
 }
 
@@ -41,8 +41,8 @@ Element Toggle::body() const {
           thumbColor,
           thumbBorderColor,
           borderColor] = resolveStyle(style, theme);
-    auto disabledColor = theme.colorTextDisabled;
-    auto focusColor = theme.colorBorderFocus;
+    auto disabledColor = theme.disabledTextColor;
+    auto focusColor = theme.keyboardFocusIndicatorColor;
 
     float const maxInset = std::max(0.f, trackHeight * 0.5f - 0.5f);
     thumbInset = std::min(thumbInset, maxInset);
@@ -73,7 +73,7 @@ Element Toggle::body() const {
 
     auto trackFillAnim = useAnimation<Color>(isOn ? onColor : offColor);
     {
-        Color const targetFill = isDisabled ? theme.colorSurfaceDisabled : isOn ? onColor :
+        Color const targetFill = isDisabled ? theme.disabledControlBackgroundColor : isOn ? onColor :
                                                                                   offColor;
         if (*trackFillAnim != targetFill) {
             trackFillAnim.set(targetFill, tr);

@@ -23,22 +23,22 @@ Element makeSectionCard(Theme const &theme, std::string title, std::string capti
       .children = children(
           Text{
               .text = std::move(title),
-              .font = theme.fontTitle,
-              .color = theme.colorTextPrimary,
+              .font = Font::title2(),
+              .color = Color::primary(),
               .horizontalAlignment = HorizontalAlignment::Leading,
           },
           Text{
               .text = std::move(caption),
-              .font = theme.fontBodySmall,
-              .color = theme.colorTextSecondary,
+              .font = Font::footnote(),
+              .color = Color::secondary(),
               .horizontalAlignment = HorizontalAlignment::Leading,
               .wrapping = TextWrapping::Wrap,
           },
           std::move(content))
   }
       .padding(theme.space4)
-      .fill(FillStyle::solid(theme.colorSurfaceOverlay))
-      .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
+      .fill(FillStyle::solid(Color::elevatedBackground()))
+      .stroke(StrokeStyle::solid(Color::separator(), 1.f))
       .cornerRadius(CornerRadius{theme.radiusLarge});
 }
 
@@ -49,19 +49,19 @@ Element metricTile(Theme const &theme, std::string value, std::string label, Col
       .children = children(
           Text{
               .text = std::move(value),
-              .font = theme.fontTitle,
+              .font = Font::title2(),
               .color = accent,
               .horizontalAlignment = HorizontalAlignment::Leading,
           },
           Text{
               .text = std::move(label),
-              .font = theme.fontBodySmall,
-              .color = theme.colorTextSecondary,
+              .font = Font::footnote(),
+              .color = Color::secondary(),
               .horizontalAlignment = HorizontalAlignment::Leading,
           })
   }
       .padding(theme.space3)
-      .fill(FillStyle::solid(theme.colorBackground))
+      .fill(FillStyle::solid(Color::windowBackground()))
       .cornerRadius(CornerRadius{theme.radiusMedium})
       .flex(1.f, 1.f, 0.f);
 }
@@ -73,21 +73,21 @@ Element controlBlock(Theme const &theme, std::string label, std::string caption,
       .children = children(
           Text{
               .text = std::move(label),
-              .font = theme.fontLabel,
-              .color = theme.colorTextPrimary,
+              .font = Font::headline(),
+              .color = Color::primary(),
               .horizontalAlignment = HorizontalAlignment::Leading,
           },
           Text{
               .text = std::move(caption),
-              .font = theme.fontBodySmall,
-              .color = theme.colorTextSecondary,
+              .font = Font::footnote(),
+              .color = Color::secondary(),
               .horizontalAlignment = HorizontalAlignment::Leading,
               .wrapping = TextWrapping::Wrap,
           },
           std::move(control))
   }
       .padding(theme.space3)
-      .fill(FillStyle::solid(theme.colorBackground))
+      .fill(FillStyle::solid(Color::windowBackground()))
       .cornerRadius(CornerRadius{theme.radiusMedium});
 }
 
@@ -168,14 +168,14 @@ struct SelectDemoRoot {
                 .children = children(
                     Text{
                         .text = "Select Demo",
-                        .font = theme.fontDisplay,
-                        .color = theme.colorTextPrimary,
+                        .font = Font::largeTitle(),
+                        .color = Color::primary(),
                         .horizontalAlignment = HorizontalAlignment::Leading,
                     },
                     Text{
                         .text = "A popover-backed dropdown with placeholders, detailed options, disabled rows, keyboard navigation on the trigger, configurable placement, and scrollable menus for longer datasets.",
-                        .font = theme.fontBody,
-                        .color = theme.colorTextSecondary,
+                        .font = Font::body(),
+                        .color = Color::secondary(),
                         .horizontalAlignment = HorizontalAlignment::Leading,
                         .wrapping = TextWrapping::Wrap,
                     },
@@ -183,9 +183,9 @@ struct SelectDemoRoot {
                         .spacing = theme.space3,
                         .alignment = Alignment::Stretch,
                         .children = children(
-                            metricTile(theme, std::to_string(configuredCount), "Configured fields", theme.colorAccent),
-                            metricTile(theme, selectedLabel(backlogOptions, *sprint, "None"), "Active sprint", theme.colorSuccess),
-                            metricTile(theme, selectedLabel(densityChoices, *density, "Balanced"), "Density preset", theme.colorWarning))
+                            metricTile(theme, std::to_string(configuredCount), "Configured fields", Color::accent()),
+                            metricTile(theme, selectedLabel(backlogOptions, *sprint, "None"), "Active sprint", Color::success()),
+                            metricTile(theme, selectedLabel(densityChoices, *density, "Balanced"), "Density preset", Color::warning()))
                     },
                     makeSectionCard(
                         theme, "Release Setup",
@@ -258,9 +258,9 @@ struct SelectDemoRoot {
                                         .helperText = "A small token shift is enough to fit the control into a different surface personality.",
                                         .style = Select::Style{
                                             .menuMaxHeight = 180.f,
-                                            .accentColor = theme.colorSuccess,
-                                            .fieldHoverColor = theme.colorSuccessSubtle,
-                                            .rowHoverColor = Color{theme.colorSuccessSubtle.r, theme.colorSuccessSubtle.g, theme.colorSuccessSubtle.b, 0.4f},
+                                            .accentColor = Color::success(),
+                                            .fieldHoverColor = Color::successBackground(),
+                                            .rowHoverColor = Color{theme.successBackgroundColor.r, theme.successBackgroundColor.g, theme.successBackgroundColor.b, 0.4f},
                                         },
                                         .onChange =
                                             [lastEvent, densityChoices](int index) {
@@ -294,15 +294,15 @@ struct SelectDemoRoot {
                         }),
                     Text{
                         .text = *lastEvent,
-                        .font = theme.fontBodySmall,
-                        .color = theme.colorTextMuted,
+                        .font = Font::footnote(),
+                        .color = Color::tertiary(),
                         .horizontalAlignment = HorizontalAlignment::Leading,
                         .wrapping = TextWrapping::Wrap,
                     })
             }
                 .padding(theme.space5))
     }
-        .fill(FillStyle::solid(theme.colorBackground));
+        .fill(FillStyle::solid(Color::windowBackground()));
   }
 };
 

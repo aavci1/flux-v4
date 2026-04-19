@@ -39,26 +39,27 @@ struct ButtonColors {
 
 Button::Style resolveStyle(Button::Style const &style, Theme const &theme) {
     return Button::Style {
-        .font = resolveFont(style.font, theme.fontLabel),
+        .font = resolveFont(style.font, theme.headlineFont, theme),
         .paddingH = resolveFloat(style.paddingH, theme.space4),
-        .cornerRadius = resolveFloat(style.cornerRadius, theme.radiusMedium * 0.5f),
-        .accentColor = resolveColor(style.accentColor, theme.colorAccent),
-        .destructiveColor = resolveColor(style.destructiveColor, theme.colorDanger),
+        .paddingV = resolveFloat(style.paddingV, theme.space3),
+        .cornerRadius = resolveFloat(style.cornerRadius, theme.radiusMedium),
+        .accentColor = resolveColor(style.accentColor, theme.accentColor, theme),
+        .destructiveColor = resolveColor(style.destructiveColor, theme.dangerColor, theme),
     };
 }
 
 LinkButton::Style resolveStyle(LinkButton::Style const &style, Theme const &theme) {
     return LinkButton::Style {
-        .font = resolveFont(style.font, theme.fontLabel),
-        .color = resolveColor(style.color, theme.colorAccent),
+        .font = resolveFont(style.font, theme.headlineFont, theme),
+        .color = resolveColor(style.color, theme.accentColor, theme),
     };
 }
 
 IconButton::Style resolveStyle(IconButton::Style const &style, Theme const &theme) {
     return IconButton::Style {
-        .size = resolveFloat(style.size, theme.fontBody.size),
-        .weight = resolveFloat(style.weight, theme.fontBody.weight),
-        .color = resolveColor(style.color, theme.colorAccent),
+        .size = resolveFloat(style.size, theme.bodyFont.size),
+        .weight = resolveFloat(style.weight, theme.bodyFont.weight),
+        .color = resolveColor(style.color, theme.accentColor, theme),
     };
 }
 
@@ -72,17 +73,17 @@ ButtonColors deriveColors(ButtonVariant variant, Color accent, Color destructive
             .fillPress = darken(accent, 0.08f),
             .label = onAccent,
             .border = Colors::transparent,
-            .focusRing = theme.colorBorderFocus,
-            .shadow = ShadowStyle {.radius = theme.shadowRadiusControl, .offset = {0.f, theme.shadowOffsetYControl}, .color = theme.shadowColor},
+            .focusRing = theme.keyboardFocusIndicatorColor,
+            .shadow = ShadowStyle::none(),
         };
     case ButtonVariant::Secondary:
         return {
-            .fill = theme.colorSurfaceOverlay,
-            .fillHover = theme.colorSurfaceHover,
-            .fillPress = theme.colorSurfaceDisabled,
-            .label = theme.colorTextPrimary,
-            .border = theme.colorBorder,
-            .focusRing = theme.colorBorderFocus,
+            .fill = theme.elevatedBackgroundColor,
+            .fillHover = theme.hoveredControlBackgroundColor,
+            .fillPress = theme.disabledControlBackgroundColor,
+            .label = theme.labelColor,
+            .border = theme.separatorColor,
+            .focusRing = theme.keyboardFocusIndicatorColor,
             .shadow = ShadowStyle::none(),
         };
     case ButtonVariant::Destructive:
@@ -92,17 +93,17 @@ ButtonColors deriveColors(ButtonVariant variant, Color accent, Color destructive
             .fillPress = darken(destructive, 0.08f),
             .label = onDanger,
             .border = Colors::transparent,
-            .focusRing = theme.colorBorderFocus,
-            .shadow = ShadowStyle {.radius = theme.shadowRadiusControl, .offset = {0.f, theme.shadowOffsetYControl}, .color = theme.shadowColor},
+            .focusRing = theme.keyboardFocusIndicatorColor,
+            .shadow = ShadowStyle::none(),
         };
     case ButtonVariant::Ghost:
         return {
             .fill = Colors::transparent,
-            .fillHover = theme.colorAccentSubtle,
-            .fillPress = Color {theme.colorAccentSubtle.r, theme.colorAccentSubtle.g, theme.colorAccentSubtle.b, std::min(theme.colorAccentSubtle.a + 0.08f, 1.f)},
+            .fillHover = theme.selectedContentBackgroundColor,
+            .fillPress = Color {theme.selectedContentBackgroundColor.r, theme.selectedContentBackgroundColor.g, theme.selectedContentBackgroundColor.b, std::min(theme.selectedContentBackgroundColor.a + 0.08f, 1.f)},
             .label = accent,
             .border = Colors::transparent,
-            .focusRing = theme.colorBorderFocus,
+            .focusRing = theme.keyboardFocusIndicatorColor,
             .shadow = ShadowStyle::none(),
         };
     }
@@ -113,19 +114,19 @@ ButtonColors deriveColors(ButtonVariant variant, Color accent, Color destructive
 
 Element Button::body() const {
     Theme const &theme = useEnvironment<Theme>();
-    auto [fontResolved, paddingResolved, radiusResolved, accent, destructive] = resolveStyle(style, theme);
+    auto [fontResolved, paddingH, paddingV, radiusResolved, accent, destructive] = resolveStyle(style, theme);
     bool const isDisabled = disabled;
-    ButtonColors const colors = deriveColors(variant, accent, destructive, theme.colorOnAccent, theme.colorOnDanger, theme);
+    ButtonColors const colors = deriveColors(variant, accent, destructive, theme.accentForegroundColor, theme.dangerForegroundColor, theme);
 
     bool const hovered = useHover();
     bool const pressed = usePress();
     bool const focused = useFocus();
 
-    Color const fillTarget = isDisabled ? theme.colorSurfaceDisabled :
+    Color const fillTarget = isDisabled ? theme.disabledControlBackgroundColor :
                              pressed    ? colors.fillPress :
                              hovered    ? colors.fillHover :
                                           colors.fill;
-    Color const labelTarget = isDisabled ? theme.colorTextDisabled : colors.label;
+    Color const labelTarget = isDisabled ? theme.disabledTextColor : colors.label;
     float const scaleTarget = (pressed && !isDisabled) ? 0.97f : 1.f;
 
     ShadowStyle shadow = ShadowStyle::none();
@@ -173,7 +174,7 @@ Element Button::body() const {
                      .stroke(stroke)
                      .cornerRadius(cr)
                      .shadow(shadow)
-                     .padding(paddingResolved)
+                     .padding(paddingV, paddingH, paddingV, paddingH)
                      .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
                      .focusable(!isDisabled)
                      .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})
@@ -191,7 +192,7 @@ Element LinkButton::body() const {
     bool const keyboardFocused = useKeyboardFocus();
 
     Color const labelColor =
-        isDisabled ? theme.colorTextDisabled : pressed ? darken(accentResolved, 0.12f) :
+        isDisabled ? theme.disabledTextColor : pressed ? darken(accentResolved, 0.12f) :
                                            hovered     ? lighten(accentResolved, 0.12f) :
                                                          accentResolved;
 
@@ -211,7 +212,7 @@ Element LinkButton::body() const {
 
     StrokeStyle focusStroke = StrokeStyle::none();
     if (!isDisabled && focused && keyboardFocused) {
-        focusStroke = StrokeStyle::solid(theme.colorBorderFocus, 2.f);
+        focusStroke = StrokeStyle::solid(theme.keyboardFocusIndicatorColor, 2.f);
     }
 
     return Text {
@@ -241,7 +242,7 @@ Element IconButton::body() const {
     bool const keyboardFocused = useKeyboardFocus();
 
     Color const iconColor =
-        isDisabled ? theme.colorTextDisabled : pressed ? darken(accentResolved, 0.12f) :
+        isDisabled ? theme.disabledTextColor : pressed ? darken(accentResolved, 0.12f) :
                                            hovered     ? lighten(accentResolved, 0.12f) :
                                                          accentResolved;
 
@@ -261,7 +262,7 @@ Element IconButton::body() const {
 
     StrokeStyle focusStroke = StrokeStyle::none();
     if (!isDisabled && focused && keyboardFocused) {
-        focusStroke = StrokeStyle::solid(theme.colorBorderFocus, 2.f);
+        focusStroke = StrokeStyle::solid(theme.keyboardFocusIndicatorColor, 2.f);
     }
 
     return Icon {

@@ -17,18 +17,18 @@ namespace flux {
 /// On/off switch control (track + thumb). Binds to \ref value, supports keyboard (Space/Return),
 /// pointer, focus ring, and theme-driven motion when \ref Theme::reducedMotion is false.
 struct Toggle : ViewModifiers<Toggle> {
-  /// Visual tokens; any field may use \c kColorFromTheme / \c kFloatFromTheme to inherit from \ref Theme.
+  /// Visual tokens; any field may use \c Color::theme() / \c kFloatFromTheme to inherit from \ref Theme.
   struct Style {
     float trackWidth = kFloatFromTheme;
     float trackHeight = kFloatFromTheme;
     float thumbInset = kFloatFromTheme;
     float borderWidth = kFloatFromTheme;
     float thumbBorderWidth = kFloatFromTheme;
-    Color onColor = kColorFromTheme;
-    Color offColor = kColorFromTheme;
-    Color thumbColor = kColorFromTheme;
-    Color thumbBorderColor = kColorFromTheme;
-    Color borderColor = kColorFromTheme;
+    Color onColor = Color::theme();
+    Color offColor = Color::theme();
+    Color thumbColor = Color::theme();
+    Color thumbBorderColor = Color::theme();
+    Color borderColor = Color::theme();
   };
 
   // ── State ──────────────────────────────────────────────────────────────────

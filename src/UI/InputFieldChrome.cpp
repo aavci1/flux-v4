@@ -8,14 +8,14 @@ namespace flux {
 
 ResolvedInputFieldChrome resolveInputFieldChrome(InputFieldChromeSpec const& spec, Theme const& theme) {
   return ResolvedInputFieldChrome{
-      .textColor = resolveColor(spec.textColor, theme.colorTextPrimary),
-      .placeholderColor = resolveColor(spec.placeholderColor, theme.colorTextPlaceholder),
-      .backgroundColor = resolveColor(spec.backgroundColor, theme.colorSurfaceField),
-      .borderColor = resolveColor(spec.borderColor, theme.colorBorder),
-      .borderFocusColor = resolveColor(spec.borderFocusColor, theme.colorBorderFocus),
-      .caretColor = resolveColor(spec.caretColor, theme.colorAccent),
-      .selectionColor = resolveColor(spec.selectionColor, theme.colorAccentSubtle),
-      .disabledColor = resolveColor(spec.disabledColor, theme.colorSurfaceDisabled),
+      .textColor = resolveColor(spec.textColor, theme.labelColor, theme),
+      .placeholderColor = resolveColor(spec.placeholderColor, theme.placeholderTextColor, theme),
+      .backgroundColor = resolveColor(spec.backgroundColor, theme.textBackgroundColor, theme),
+      .borderColor = resolveColor(spec.borderColor, theme.separatorColor, theme),
+      .borderFocusColor = resolveColor(spec.borderFocusColor, theme.keyboardFocusIndicatorColor, theme),
+      .caretColor = resolveColor(spec.caretColor, theme.accentColor, theme),
+      .selectionColor = resolveColor(spec.selectionColor, theme.selectedContentBackgroundColor, theme),
+      .disabledColor = resolveColor(spec.disabledColor, theme.disabledControlBackgroundColor, theme),
       .borderWidth = resolveFloat(spec.borderWidth, 1.f),
       .borderFocusWidth = resolveFloat(spec.borderFocusWidth, 2.f),
       .cornerRadius = resolveFloat(spec.cornerRadius, theme.radiusMedium),
@@ -27,9 +27,9 @@ ResolvedInputFieldChrome resolveInputFieldChrome(InputFieldChromeSpec const& spe
 ResolvedPickerFieldChrome resolvePickerFieldChrome(PickerFieldChromeSpec const& spec, Theme const& theme) {
   return ResolvedPickerFieldChrome{
       .input = resolveInputFieldChrome(spec.input, theme),
-      .chevronColor = resolveColor(spec.chevronColor, theme.colorTextMuted),
-      .rowHoverColor = resolveColor(spec.rowHoverColor, theme.colorSurfaceRowHover),
-      .rowSelectedColor = resolveColor(spec.rowSelectedColor, theme.colorAccentSubtle),
+      .chevronColor = resolveColor(spec.chevronColor, theme.tertiaryLabelColor, theme),
+      .rowHoverColor = resolveColor(spec.rowHoverColor, theme.rowHoverBackgroundColor, theme),
+      .rowSelectedColor = resolveColor(spec.rowSelectedColor, theme.selectedContentBackgroundColor, theme),
   };
 }
 

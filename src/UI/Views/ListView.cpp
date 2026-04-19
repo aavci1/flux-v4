@@ -31,8 +31,8 @@ Element ListRow::body() const {
     bool const pressed = usePress();
     bool const isDisabled = disabled;
 
-    Color const fill = selected ? theme.colorAccentSubtle : pressed ? theme.colorSurfaceRowHover :
-                                                        hovered     ? theme.colorSurfaceHover :
+    Color const fill = selected ? theme.selectedContentBackgroundColor : pressed ? theme.rowHoverBackgroundColor :
+                                                        hovered     ? theme.hoveredControlBackgroundColor :
                                                                       Colors::transparent;
 
     auto handleTap = [onTap = onTap, isDisabled]() {
@@ -68,7 +68,7 @@ Element ListView::body() const {
             childrenList.emplace_back(
                 Rectangle {}
                     .size(0.f, 1.f)
-                    .fill(FillStyle::solid(theme.colorBorderSubtle))
+                    .fill(FillStyle::solid(Color::separator()))
                     .padding(0.f, resolved.dividerInsetH, 0.f, resolved.dividerInsetH)
             );
         }

@@ -50,7 +50,7 @@ struct Card {
 
     float const bodyTextHeight = useMemo([&] {
       TextSystem& ts = Application::instance().textSystem();
-      Font const bodyFont = theme.fontBody;
+      Font const bodyFont = theme.bodyFont;
       TextLayoutOptions opts{.wrapping = TextWrapping::Wrap};
       return ts.measure(detail, bodyFont, pal::sublabel, innerTextWidth, opts).height;
     }, detail, availableWidth);
@@ -66,14 +66,14 @@ struct Card {
                 .cornerRadius(7.f),
             Text {
                 .text = title,
-                .font = theme.fontTitle,
+                .font = Font::title2(),
                 .color = pal::label,
             }
                 .size(0.f, 24.f)
                 .flex(1.f),
             Icon {
                 .name = expanded ? IconName::ExpandLess : IconName::ExpandMore,
-                .size = theme.fontLabel.size,
+                .size = theme.headlineFont.size,
             }
         ),
     });
@@ -84,7 +84,7 @@ struct Card {
           .children = children(
                   Text{
                       .text = detail,
-                      .font = theme.fontBody,
+                      .font = Font::body(),
                       .color = pal::sublabel,
                       .wrapping = TextWrapping::Wrap,
                   }
@@ -106,8 +106,8 @@ struct Card {
         .spacing = theme.space4,
         .children = std::move(rows)
     }
-        .fill(FillStyle::solid(theme.colorSurface))
-        .stroke(StrokeStyle::solid(theme.colorBorder, 1.f))
+        .fill(FillStyle::solid(Color::controlBackground()))
+        .stroke(StrokeStyle::solid(Color::opaqueSeparator(), 1.f))
         .cornerRadius(theme.radiusXLarge)
         .padding(theme.space4)
         .cursor(Cursor::Hand)
@@ -129,31 +129,31 @@ struct CardListView {
                     .children = children(
                         Text {
                             .text = "Flux Components",
-                            .font = theme.fontDisplay,
-                            .color = theme.colorTextPrimary,
+                            .font = Font::largeTitle(),
+                            .color = Color::primary(),
                             .horizontalAlignment = HorizontalAlignment::Leading,
                         },
                         Text {
                             .text = "Tap a card to expand",
-                            .font = theme.fontBody,
-                            .color = theme.colorTextSecondary,
+                            .font = Font::body(),
+                            .color = Color::secondary(),
                             .horizontalAlignment = HorizontalAlignment::Leading,
                             .wrapping = TextWrapping::Wrap,
                         },
                         Card {
-                            .accent = theme.colorAccent,
+                            .accent = Color::accent(),
                             .title = "Metal Renderer",
                             .detail = "SDF rounded-rect shaders, glyph atlas, libtess2.",
                             .availableWidth = listContentWidth
                         },
                         Card {
-                            .accent = theme.colorAccent,
+                            .accent = Color::accent(),
                             .title = "Reactive State",
                             .detail = "Signal<T>, Computed<T>, Animation<T>.",
                             .availableWidth = listContentWidth
                         },
                         Card {
-                            .accent = theme.colorAccent,
+                            .accent = Color::accent(),
                             .title = "Scene Tree",
                             .detail = "Retained nodes, keyed reconciliation, hit testing.",
                             .availableWidth = listContentWidth

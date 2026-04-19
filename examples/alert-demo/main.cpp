@@ -33,20 +33,20 @@ struct AlertDemoRoot {
                     .children = children(
                         Text {
                             .text = "Alert demo",
-                            .font = theme.fontDisplay,
-                            .color = theme.colorTextPrimary
+                            .font = Font::largeTitle(),
+                            .color = Color::primary()
                         },
                         Text {
                             .text = "Modal alerts via useAlert(). Escape dismisses when enabled. "
                                     "Outside tap does not dismiss.",
-                            .font = theme.fontBody,
-                            .color = theme.colorTextSecondary,
+                            .font = Font::body(),
+                            .color = Color::secondary(),
                             .wrapping = TextWrapping::Wrap
                         },
                         Text {
                             .text = status,
-                            .font = theme.fontBodySmall,
-                            .color = theme.colorAccent,
+                            .font = Font::footnote(),
+                            .color = Color::accent(),
                             .wrapping = TextWrapping::Wrap
                         },
 

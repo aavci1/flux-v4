@@ -19,10 +19,10 @@ Checkbox::Style resolveStyle(Checkbox::Style const &style, Theme const &theme) {
         .boxSize = resolveFloat(style.boxSize, theme.checkboxBoxSize),
         .cornerRadius = resolveFloat(style.cornerRadius, theme.checkboxCornerRadius),
         .borderWidth = resolveFloat(style.borderWidth, theme.checkboxBorderWidth),
-        .checkedColor = resolveColor(style.checkedColor, theme.checkboxCheckedColor),
-        .uncheckedColor = resolveColor(style.uncheckedColor, theme.checkboxUncheckedColor),
-        .checkColor = resolveColor(style.checkColor, theme.checkboxCheckColor),
-        .borderColor = resolveColor(style.borderColor, theme.checkboxBorderColor),
+        .checkedColor = resolveColor(style.checkedColor, theme.checkboxCheckedColor, theme),
+        .uncheckedColor = resolveColor(style.uncheckedColor, theme.checkboxUncheckedColor, theme),
+        .checkColor = resolveColor(style.checkColor, theme.checkboxCheckColor, theme),
+        .borderColor = resolveColor(style.borderColor, theme.checkboxBorderColor, theme),
     };
 }
 
@@ -36,8 +36,8 @@ Element Checkbox::body() const {
           uncheckedColor,
           checkColor,
           borderColor] = resolveStyle(style, theme);
-    auto disabledColor = theme.colorTextDisabled;
-    auto focusColor = theme.colorBorderFocus;
+    auto disabledColor = theme.disabledTextColor;
+    auto focusColor = theme.keyboardFocusIndicatorColor;
 
     float const iconSz = boxSize * 0.6f;
 
@@ -54,7 +54,7 @@ Element Checkbox::body() const {
 
     auto boxFillAnim = useAnimation<Color>(showFilled ? checkedColor : uncheckedColor);
     {
-        Color const target = isDisabled ? theme.colorSurfaceDisabled : showFilled ? checkedColor :
+        Color const target = isDisabled ? theme.disabledControlBackgroundColor : showFilled ? checkedColor :
                                                                                     uncheckedColor;
         if (*boxFillAnim != target) {
             boxFillAnim.set(target, tr);

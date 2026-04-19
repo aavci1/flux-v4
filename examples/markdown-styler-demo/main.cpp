@@ -52,8 +52,8 @@ std::vector<AttributedRun> markdownStyler(std::string_view sv) {
     colors[Elements::body] = baseColor;
     colors[Elements::code] = baseColor;
 
-    Font headingFont = resolveFont(kFontFromTheme, fonts[Elements::h1]);
-    Font codeFont = resolveFont(kFontFromTheme, fonts[Elements::code]);
+    Font headingFont = resolveFont(Font::theme(), fonts[Elements::h1]);
+    Font codeFont = resolveFont(Font::theme(), fonts[Elements::code]);
     Font boldFont = baseFont;
     boldFont.weight = (boldFont.weight > 0.f ? boldFont.weight : 400.f) + 250.f;
     if (boldFont.weight > 900.f) {
@@ -214,8 +214,8 @@ Phase 2: Paint                — Retained SceneTree → Canvas
 )"
         });
 
-        Font const baseFont = resolveFont(kFontFromTheme, theme.fontBody);
-        Color const baseColor = theme.colorTextPrimary;
+        Font const baseFont = resolveFont(Font::theme(), Font::body(), theme);
+        Color const baseColor = Color::primary();
 
         return VStack {
             .spacing = 12.f,
@@ -223,13 +223,13 @@ Phase 2: Paint                — Retained SceneTree → Canvas
                 children(
                     Text {
                         .text = "Markdown styler (multiline TextInput)",
-                        .font = theme.fontDisplay,
-                        .color = theme.colorTextPrimary,
+                        .font = Font::largeTitle(),
+                        .color = Color::primary(),
                     },
                     Text {
                         .text = "The `.styler` field receives the full document and returns AttributedRun ranges.",
-                        .font = theme.fontBody,
-                        .color = theme.colorTextSecondary,
+                        .font = Font::body(),
+                        .color = Color::secondary(),
                         .wrapping = TextWrapping::Wrap,
                     },
                     TextInput {

@@ -38,13 +38,13 @@ struct ResolvedStyle {
 
 ResolvedStyle resolveStyle(SegmentedControl::Style const &style, Theme const &theme) {
     return ResolvedStyle {
-        .font = resolveFont(style.font, theme.fontLabel),
+        .font = resolveFont(style.font, theme.headlineFont, theme),
         .paddingH = resolveFloat(style.paddingH, theme.space4),
         .paddingV = resolveFloat(style.paddingV, theme.space2),
         .cornerRadius = resolveFloat(style.cornerRadius, theme.radiusMedium),
-        .accentColor = resolveColor(style.accentColor, theme.colorAccent),
-        .trackColor = resolveColor(style.trackColor, theme.colorSurfaceField),
-        .borderColor = resolveColor(style.borderColor, theme.colorBorderSubtle),
+        .accentColor = resolveColor(style.accentColor, theme.accentColor, theme),
+        .trackColor = resolveColor(style.trackColor, theme.windowBackgroundColor, theme),
+        .borderColor = resolveColor(style.borderColor, theme.separatorColor, theme),
     };
 }
 
@@ -74,17 +74,17 @@ struct SegmentedControlItem : ViewModifiers<SegmentedControlItem> {
         Color const selectedHoverFill = lighten(style.accentColor, 0.08f);
         Color const selectedPressFill = darken(style.accentColor, 0.08f);
         Color const idleFill = Colors::transparent;
-        Color const hoverFill = theme.colorSurfaceHover;
-        Color const pressFill = theme.colorSurfaceRowHover;
+        Color const hoverFill = darken(style.trackColor, 0.04f);
+        Color const pressFill = darken(style.trackColor, 0.12f);
         Color const fill = isDisabled ? Colors::transparent
                            : selected ? (pressed ? selectedPressFill : hovered ? selectedHoverFill : selectedFill)
                                       : (pressed ? pressFill : hovered ? hoverFill : idleFill);
-        Color const labelColor = isDisabled ? theme.colorTextDisabled
-                                 : selected ? theme.colorOnAccent
-                                            : theme.colorTextSecondary;
+        Color const labelColor = isDisabled ? theme.disabledTextColor
+                                 : selected ? theme.accentForegroundColor
+                                            : theme.secondaryLabelColor;
         StrokeStyle const stroke =
             !isDisabled && focused && keyboardFocused
-                ? StrokeStyle::solid(theme.colorBorderFocus, 2.f)
+                ? StrokeStyle::solid(theme.keyboardFocusIndicatorColor, 2.f)
                 : StrokeStyle::none();
 
         auto handleTap = [isDisabled, onTap = onTap]() {
@@ -98,18 +98,12 @@ struct SegmentedControlItem : ViewModifiers<SegmentedControlItem> {
             }
         };
 
-        return ZStack {
-            .horizontalAlignment = Alignment::Center,
-            .verticalAlignment = Alignment::Center,
-            .children = children(
-                Text {
-                    .text = option.label,
-                    .font = style.font,
-                    .color = labelColor,
-                    .horizontalAlignment = HorizontalAlignment::Center,
-                    .verticalAlignment = VerticalAlignment::Center,
-                }
-            ),
+        return Text {
+            .text = option.label,
+            .font = style.font,
+            .color = labelColor,
+            .horizontalAlignment = HorizontalAlignment::Center,
+            .verticalAlignment = VerticalAlignment::Center,
         }
             .padding(style.paddingV, style.paddingH, style.paddingV, style.paddingH)
             .fill(FillStyle::solid(fill))
@@ -177,12 +171,12 @@ Element SegmentedControl::body() const {
     }
 
     Element root = HStack {
-        .spacing = theme.space1,
+        .spacing = 0.f,
         .alignment = Alignment::Stretch,
         .children = std::move(items),
     }
         .padding(2.f)
-        .fill(FillStyle::solid(disabled ? theme.colorSurfaceDisabled : resolved.trackColor))
+        .fill(FillStyle::solid(disabled ? theme.disabledControlBackgroundColor : resolved.trackColor))
         .stroke(StrokeStyle::solid(resolved.borderColor, 1.f))
         .cornerRadius(CornerRadius {resolved.cornerRadius})
         .focusable(!disabled)

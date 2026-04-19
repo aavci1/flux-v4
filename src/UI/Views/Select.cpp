@@ -110,28 +110,28 @@ struct SelectResolvedStyle {
 
 SelectResolvedStyle resolveStyle(Select::Style const &style, Theme const &theme) {
     return SelectResolvedStyle {
-        .labelFont = resolveFont(style.labelFont, theme.fontBody),
-        .detailFont = resolveFont(style.detailFont, theme.fontBodySmall),
+        .labelFont = resolveFont(style.labelFont, theme.bodyFont, theme),
+        .detailFont = resolveFont(style.detailFont, theme.footnoteFont, theme),
         .cornerRadius = resolveFloat(style.cornerRadius, theme.radiusMedium),
         .menuCornerRadius = resolveFloat(style.menuCornerRadius, theme.radiusLarge),
         .menuMaxHeight = resolveFloat(style.menuMaxHeight, 260.f),
         .menuMaxWidth = resolveFloat(style.menuMaxWidth, 0.f),
         .minMenuWidth = resolveFloat(style.minMenuWidth, 180.f),
-        .accentColor = resolveColor(style.accentColor, theme.colorAccent),
-        .fieldColor = resolveColor(style.fieldColor, theme.colorSurfaceField),
-        .fieldHoverColor = resolveColor(style.fieldHoverColor, theme.colorSurfaceHover),
-        .borderColor = resolveColor(style.borderColor, theme.colorBorder),
-        .rowHoverColor = resolveColor(style.rowHoverColor, theme.colorSurfaceRowHover),
+        .accentColor = resolveColor(style.accentColor, theme.accentColor, theme),
+        .fieldColor = resolveColor(style.fieldColor, theme.textBackgroundColor, theme),
+        .fieldHoverColor = resolveColor(style.fieldHoverColor, theme.hoveredControlBackgroundColor, theme),
+        .borderColor = resolveColor(style.borderColor, theme.opaqueSeparatorColor, theme),
+        .rowHoverColor = resolveColor(style.rowHoverColor, theme.rowHoverBackgroundColor, theme),
     };
 }
 
 float intrinsicMenuWidth(std::vector<SelectOption> const &options, SelectResolvedStyle const &style,
                          Theme const &theme, bool showCheckmark, std::string const &emptyText) {
     auto rowContentWidth = [&](SelectOption const &option) {
-        float const labelWidth = intrinsicTextWidth(option.label, style.labelFont, theme.colorTextPrimary);
+        float const labelWidth = intrinsicTextWidth(option.label, style.labelFont, theme.labelColor);
         float contentWidth = labelWidth;
         if (!option.detail.empty()) {
-            float const detailWidth = intrinsicTextWidth(option.detail, style.detailFont, theme.colorTextSecondary);
+            float const detailWidth = intrinsicTextWidth(option.detail, style.detailFont, theme.secondaryLabelColor);
             contentWidth = std::max(contentWidth, detailWidth);
         }
         return contentWidth;
@@ -139,7 +139,7 @@ float intrinsicMenuWidth(std::vector<SelectOption> const &options, SelectResolve
 
     float maxContentWidth = 0.f;
     if (options.empty()) {
-        maxContentWidth = intrinsicTextWidth(emptyText, style.detailFont, theme.colorTextSecondary);
+        maxContentWidth = intrinsicTextWidth(emptyText, style.detailFont, theme.secondaryLabelColor);
     } else {
         for (SelectOption const &option : options) {
             maxContentWidth = std::max(maxContentWidth, rowContentWidth(option));
@@ -184,12 +184,12 @@ struct SelectMenuRow : ViewModifiers<SelectMenuRow> {
                                                         (pressed ? pressFill : hovered ? hoverFill :
                                                                                          idleFill);
         Color const labelTarget =
-            disabled ? theme.colorTextDisabled : selected ? style.accentColor :
-                                                            theme.colorTextPrimary;
+            disabled ? theme.disabledTextColor : selected ? style.accentColor :
+                                                            theme.labelColor;
         Color const detailTarget =
-            disabled ? theme.colorTextDisabled : selected ? lighten(style.accentColor, 0.08f) :
-                                                            theme.colorTextSecondary;
-        Color const iconTarget = disabled ? theme.colorTextDisabled : style.accentColor;
+            disabled ? theme.disabledTextColor : selected ? lighten(style.accentColor, 0.08f) :
+                                                            theme.secondaryLabelColor;
+        Color const iconTarget = disabled ? theme.disabledTextColor : style.accentColor;
 
         bool const hasDetail = !option.detail.empty();
         Element textBlock = Text {
@@ -256,7 +256,7 @@ struct SelectMenuRow : ViewModifiers<SelectMenuRow> {
         }
             .padding(theme.space2, theme.space3, theme.space2, theme.space3)
             .fill(FillStyle::solid(fillTarget))
-            .stroke(focused && !disabled ? StrokeStyle::solid(theme.colorBorderFocus, 2.f) : StrokeStyle::none())
+            .stroke(focused && !disabled ? StrokeStyle::solid(theme.keyboardFocusIndicatorColor, 2.f) : StrokeStyle::none())
             .cornerRadius(CornerRadius {style.cornerRadius})
             .cursor(disabled ? Cursor::Inherit : Cursor::Hand)
             .focusable(!disabled)
@@ -280,7 +280,7 @@ struct SelectMenuContent {
             return Text {
                 .text = emptyText,
                 .font = style.detailFont,
-                .color = theme.colorTextSecondary,
+                .color = Color::secondary(),
                 .horizontalAlignment = HorizontalAlignment::Leading,
                 .wrapping = TextWrapping::Wrap,
             }
@@ -359,25 +359,25 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
         Transition const trMotion = Transition::ease(theme.durationMedium);
         Transition const trFast = Transition::ease(theme.durationFast);
 
-        Color const idleFill = isDisabled ? theme.colorSurfaceDisabled : style.fieldColor;
-        Color const hoverFill = isDisabled ? theme.colorSurfaceDisabled : style.fieldHoverColor;
-        Color const pressFill = isDisabled ? theme.colorSurfaceDisabled : darken(style.fieldHoverColor, 0.03f);
-        Color const openFill = isDisabled ? theme.colorSurfaceDisabled : lighten(style.fieldHoverColor, 0.02f);
+        Color const idleFill = isDisabled ? theme.disabledControlBackgroundColor : style.fieldColor;
+        Color const hoverFill = isDisabled ? theme.disabledControlBackgroundColor : style.fieldHoverColor;
+        Color const pressFill = isDisabled ? theme.disabledControlBackgroundColor : darken(style.fieldHoverColor, 0.03f);
+        Color const openFill = isDisabled ? theme.disabledControlBackgroundColor : lighten(style.fieldHoverColor, 0.02f);
         Color const fillTarget = pressed ? pressFill : open ? openFill :
                                                    hovered  ? hoverFill :
                                                               idleFill;
 
         Color const labelTarget =
-            triggerMode == SelectTriggerMode::Link ? (isDisabled ? theme.colorTextDisabled : pressed       ? darken(style.accentColor, 0.12f) :
+            triggerMode == SelectTriggerMode::Link ? (isDisabled ? theme.disabledTextColor : pressed       ? darken(style.accentColor, 0.12f) :
                                                                                          (hovered || open) ? lighten(style.accentColor, 0.12f) :
                                                                                                              style.accentColor) :
-                                                     (isDisabled ? theme.colorTextDisabled : currentOption ? theme.colorTextPrimary :
-                                                                                                             theme.colorTextPlaceholder);
+                                                     (isDisabled ? theme.disabledTextColor : currentOption ? theme.labelColor :
+                                                                                                             theme.placeholderTextColor);
         Color const detailTarget =
-            triggerMode == SelectTriggerMode::Link ? labelTarget : (isDisabled ? theme.colorTextDisabled : theme.colorTextSecondary);
+            triggerMode == SelectTriggerMode::Link ? labelTarget : (isDisabled ? theme.disabledTextColor : theme.secondaryLabelColor);
         Color const chevronTarget =
-            triggerMode == SelectTriggerMode::Link ? labelTarget : (isDisabled ? theme.colorTextDisabled : open ? style.accentColor :
-                                                                                                                  theme.colorTextSecondary);
+            triggerMode == SelectTriggerMode::Link ? labelTarget : (isDisabled ? theme.disabledTextColor : open ? style.accentColor :
+                                                                                                                  theme.secondaryLabelColor);
 
         auto fillAnim = useAnimation<Color>(fillTarget);
         if (*fillAnim != fillTarget) {
@@ -470,8 +470,8 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
                 .placement = placement,
                 .crossAlignment = triggerMode == SelectTriggerMode::Link ? OverlayConfig::CrossAlignment::PreferStart : OverlayConfig::CrossAlignment::Center,
                 .arrow = false,
-                .backgroundColor = theme.colorSurfaceOverlay,
-                .borderColor = theme.colorBorderSubtle,
+                .backgroundColor = Color::elevatedBackground(),
+                .borderColor = Color::separator(),
                 .borderWidth = 1.f,
                 .cornerRadius = style.menuCornerRadius,
                 .contentPadding = 0.f,
@@ -610,7 +610,7 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
         if (triggerMode == SelectTriggerMode::Link) {
             bool const keyboardFocused = useKeyboardFocus();
             StrokeStyle const focusStroke =
-                !isDisabled && focused && keyboardFocused ? StrokeStyle::solid(theme.colorBorderFocus, 2.f) : StrokeStyle::none();
+                !isDisabled && focused && keyboardFocused ? StrokeStyle::solid(theme.keyboardFocusIndicatorColor, 2.f) : StrokeStyle::none();
             return std::move(trigger)
                 .padding(0.f, 3.f, 0.f, 3.f)
                 .fill(FillStyle::none())
@@ -625,7 +625,7 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
         return std::move(trigger)
             .padding(theme.paddingFieldV, theme.paddingFieldH, theme.paddingFieldV, theme.paddingFieldH)
             .fill(FillStyle::solid(*fillAnim))
-            .stroke(focused && !isDisabled ? StrokeStyle::solid(theme.colorBorderFocus, 2.f) : StrokeStyle::solid(open && !isDisabled ? style.accentColor : style.borderColor, 1.f))
+            .stroke(focused && !isDisabled ? StrokeStyle::solid(theme.keyboardFocusIndicatorColor, 2.f) : StrokeStyle::solid(open && !isDisabled ? style.accentColor : style.borderColor, 1.f))
             .cornerRadius(CornerRadius {style.cornerRadius})
             .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
             .focusable(!isDisabled)
@@ -669,7 +669,7 @@ Element Select::body() const {
             Text {
                 .text = helperText,
                 .font = resolved.detailFont,
-                .color = disabled ? theme.colorTextDisabled : theme.colorTextSecondary,
+                .color = disabled ? theme.disabledTextColor : theme.secondaryLabelColor,
                 .horizontalAlignment = HorizontalAlignment::Leading,
                 .wrapping = TextWrapping::Wrap,
             }

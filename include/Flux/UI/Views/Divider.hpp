@@ -18,7 +18,7 @@ struct Divider : ViewModifiers<Divider> {
     struct Style {
         float thickness = kFloatFromTheme;
         float cornerRadius = kFloatFromTheme;
-        Color color = kColorFromTheme;
+        Color color = Color::theme();
     };
 
     Orientation orientation = Orientation::Horizontal;

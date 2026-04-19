@@ -39,14 +39,14 @@ Element makeSectionCard(Theme const &theme, std::string title, std::string capti
         .children = children(
             Text {
                 .text = std::move(title),
-                .font = theme.fontTitle,
-                .color = theme.colorTextPrimary,
+                .font = Font::title2(),
+                .color = Color::primary(),
                 .horizontalAlignment = HorizontalAlignment::Leading,
             },
             Text {
                 .text = std::move(caption),
-                .font = theme.fontBodySmall,
-                .color = theme.colorTextSecondary,
+                .font = Font::footnote(),
+                .color = Color::secondary(),
                 .horizontalAlignment = HorizontalAlignment::Leading,
                 .wrapping = TextWrapping::Wrap,
             },
@@ -54,8 +54,8 @@ Element makeSectionCard(Theme const &theme, std::string title, std::string capti
         )
     }
         .padding(theme.space4)
-        .fill(theme.colorSurfaceOverlay)
-        .stroke(theme.colorBorderSubtle, 1.f)
+        .fill(Color::elevatedBackground())
+        .stroke(Color::separator(), 1.f)
         .cornerRadius(theme.radiusLarge);
 }
 
@@ -66,20 +66,20 @@ Element metricTile(Theme const &theme, std::string value, std::string label, Col
         .children = children(
             Text {
                 .text = std::move(value),
-                .font = theme.fontTitle,
+                .font = Font::title2(),
                 .color = accent,
                 .horizontalAlignment = HorizontalAlignment::Leading,
             },
             Text {
                 .text = std::move(label),
-                .font = theme.fontBodySmall,
-                .color = theme.colorTextSecondary,
+                .font = Font::footnote(),
+                .color = Color::secondary(),
                 .horizontalAlignment = HorizontalAlignment::Leading,
             }
         )
     }
         .padding(theme.space3)
-        .fill(theme.colorBackground)
+        .fill(Color::windowBackground())
         .cornerRadius(theme.radiusMedium)
         .flex(1.f, 1.f, 0.f);
 }
@@ -149,10 +149,10 @@ struct PlaybackLab : ViewModifiers<PlaybackLab> {
                         .spacing = theme.space3,
                         .alignment = Alignment::Stretch,
                         .children = children(
-                            metricTile(theme, state, "State", theme.colorAccent),
-                            metricTile(theme, formatFloat(progress), "Progress", theme.colorSuccess),
+                            metricTile(theme, state, "State", Color::accent()),
+                            metricTile(theme, formatFloat(progress), "Progress", Color::success()),
                             metricTile(theme, theme.reducedMotion ? "On" : "Off", "Reduced motion",
-                                       theme.reducedMotion ? theme.colorWarning : theme.colorTextSecondary)
+                                       theme.reducedMotion ? Color::warning() : Color::secondary())
                         )
                     },
                     buttonRow(
@@ -187,7 +187,7 @@ struct MorphLab : ViewModifiers<MorphLab> {
         auto height = useAnimation<float>(52.f);
         auto radius = useAnimation<float>(16.f);
         auto lift = useAnimation<float>(0.f);
-        auto fill = useAnimation<Color>(theme.colorAccent);
+        auto fill = useAnimation<Color>(Color::accent());
 
         auto calmPreset = [travel, width, height, radius, lift, fill, theme] {
             WithTransition transition {Transition::ease(std::max(0.01f, theme.durationSlow))};
@@ -196,7 +196,7 @@ struct MorphLab : ViewModifiers<MorphLab> {
             height = 52.f;
             radius = theme.radiusLarge;
             lift = 0.f;
-            fill = theme.colorAccent;
+            fill = Color::accent();
         };
         auto springPreset = [travel, width, height, radius, lift, fill, theme] {
             WithTransition transition {Transition::spring(420.f, 24.f, 0.70f)};
@@ -205,7 +205,7 @@ struct MorphLab : ViewModifiers<MorphLab> {
             height = 74.f;
             radius = 30.f;
             lift = -10.f;
-            fill = theme.colorWarning;
+            fill = Color::warning();
         };
         auto snapPreset = [travel, width, height, radius, lift, fill, theme] {
             travel.set(0.35f, Transition::instant());
@@ -213,7 +213,7 @@ struct MorphLab : ViewModifiers<MorphLab> {
             height.set(40.f, Transition::instant());
             radius.set(theme.radiusFull, Transition::instant());
             lift.set(10.f, Transition::instant());
-            fill.set(theme.colorSuccess, Transition::instant());
+            fill.set(Color::success(), Transition::instant());
         };
 
         float const previewWidth = 260.f;
@@ -232,12 +232,12 @@ struct MorphLab : ViewModifiers<MorphLab> {
                             Rectangle {}
                                 .size(previewWidth, 118.f)
                                 .cornerRadius(theme.radiusLarge)
-                                .fill(theme.colorBackground)
-                                .stroke(theme.colorBorderSubtle, 1.f),
+                                .fill(Color::windowBackground())
+                                .stroke(Color::separator(), 1.f),
                             Rectangle {}
                                 .size(previewWidth - 32.f, 2.f)
                                 .cornerRadius(1.f)
-                                .fill(theme.colorBorderSubtle)
+                                .fill(Color::separator())
                                 .position(16.f, 58.f),
                             Rectangle {}
                                 .size(*width, *height)
@@ -251,9 +251,9 @@ struct MorphLab : ViewModifiers<MorphLab> {
                         .spacing = theme.space3,
                         .alignment = Alignment::Stretch,
                         .children = children(
-                            metricTile(theme, formatFloat(*travel), "Travel", theme.colorAccent),
-                            metricTile(theme, formatFloat(*width), "Width", theme.colorWarning),
-                            metricTile(theme, formatFloat(*radius), "Corner radius", theme.colorSuccess)
+                            metricTile(theme, formatFloat(*travel), "Travel", Color::accent()),
+                            metricTile(theme, formatFloat(*width), "Width", Color::warning()),
+                            metricTile(theme, formatFloat(*radius), "Corner radius", Color::success())
                         )
                     },
                     buttonRow(
@@ -303,7 +303,7 @@ struct AmbientLoopLab : ViewModifiers<AmbientLoopLab> {
                 Rectangle {}
                     .size(22.f, barHeight)
                     .cornerRadius(11.f)
-                    .fill(alpha(theme.colorAccent, 0.30f + emphasis * 0.70f))
+                    .fill(alpha(Color::accent(), 0.30f + emphasis * 0.70f))
             );
         }
 
@@ -320,8 +320,8 @@ struct AmbientLoopLab : ViewModifiers<AmbientLoopLab> {
                             Rectangle {}
                                 .size(260.f, 104.f)
                                 .cornerRadius(theme.radiusLarge)
-                                .fill(theme.colorBackground)
-                                .stroke(theme.colorBorderSubtle, 1.f),
+                                .fill(Color::windowBackground())
+                                .stroke(Color::separator(), 1.f),
                             HStack {
                                 .spacing = theme.space2,
                                 .alignment = Alignment::Center,
@@ -334,9 +334,9 @@ struct AmbientLoopLab : ViewModifiers<AmbientLoopLab> {
                         .spacing = theme.space3,
                         .alignment = Alignment::Stretch,
                         .children = children(
-                            metricTile(theme, formatFloat(*phase), "Phase", theme.colorAccent),
+                            metricTile(theme, formatFloat(*phase), "Phase", Color::accent()),
                             metricTile(theme, phase.isRunning() ? "Looping" : "Settled", "Runtime state",
-                                       phase.isRunning() ? theme.colorSuccess : theme.colorWarning)
+                                       phase.isRunning() ? Color::success() : Color::warning())
                         )
                     }
                 )
@@ -362,14 +362,14 @@ struct AnimationDemoRoot {
                     .children = children(
                         Text {
                             .text = "Animation Demo",
-                            .font = demoTheme.fontDisplay,
-                            .color = demoTheme.colorTextPrimary,
+                            .font = Font::largeTitle(),
+                            .color = Color::primary(),
                             .horizontalAlignment = HorizontalAlignment::Leading,
                         },
                         Text {
                             .text = "Detailed useAnimation walkthrough: explicit play/set controls, repeat and autoreverse, synchronized WithTransition updates, and automatic reduced-motion handling from Theme.",
-                            .font = demoTheme.fontBody,
-                            .color = demoTheme.colorTextSecondary,
+                            .font = Font::body(),
+                            .color = Color::secondary(),
                             .horizontalAlignment = HorizontalAlignment::Leading,
                             .wrapping = TextWrapping::Wrap,
                         },
@@ -386,16 +386,16 @@ struct AnimationDemoRoot {
                                         .children = children(
                                             Text {
                                                 .text = "Reduced motion",
-                                                .font = demoTheme.fontLabel,
-                                                .color = demoTheme.colorTextPrimary,
+                                                .font = Font::headline(),
+                                                .color = Color::primary(),
                                                 .horizontalAlignment = HorizontalAlignment::Leading,
                                             },
                                             Text {
                                                 .text = *reducedMotion
                                                             ? "Transitions collapse to their final values."
                                                             : "Animations run with their configured timing and repeats.",
-                                                .font = demoTheme.fontBodySmall,
-                                                .color = demoTheme.colorTextSecondary,
+                                                .font = Font::footnote(),
+                                                .color = Color::secondary(),
                                                 .horizontalAlignment = HorizontalAlignment::Leading,
                                                 .wrapping = TextWrapping::Wrap,
                                             }
@@ -411,8 +411,8 @@ struct AnimationDemoRoot {
                         AmbientLoopLab {},
                         Text {
                             .text = "Tip: the playback panel demonstrates imperative control; the morph panel demonstrates scoped transitions; the ambient panel demonstrates a loop owned by the component body.",
-                            .font = demoTheme.fontBodySmall,
-                            .color = demoTheme.colorTextMuted,
+                            .font = demoTheme.footnoteFont,
+                            .color = demoTheme.tertiaryLabelColor,
                             .horizontalAlignment = HorizontalAlignment::Leading,
                             .wrapping = TextWrapping::Wrap,
                         }
@@ -421,7 +421,7 @@ struct AnimationDemoRoot {
                     .padding(demoTheme.space5)
             )
         }
-            .fill(demoTheme.colorBackground)
+            .fill(demoTheme.windowBackgroundColor)
             .environment(demoTheme);
     }
 };

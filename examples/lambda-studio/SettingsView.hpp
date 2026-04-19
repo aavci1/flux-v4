@@ -94,28 +94,28 @@ inline StatusTone primaryStatusTone(AppState const &state) {
 inline Color toneForeground(Theme const &theme, StatusTone tone) {
     switch (tone) {
     case StatusTone::Success:
-        return theme.colorSuccess;
+        return Color::success();
     case StatusTone::Warning:
-        return theme.colorWarning;
+        return Color::warning();
     case StatusTone::Danger:
-        return theme.colorDanger;
+        return Color::danger();
     case StatusTone::Accent:
     default:
-        return theme.colorAccent;
+        return Color::accent();
     }
 }
 
 inline Color toneBackground(Theme const &theme, StatusTone tone) {
     switch (tone) {
     case StatusTone::Success:
-        return theme.colorSuccessSubtle;
+        return Color::successBackground();
     case StatusTone::Warning:
-        return theme.colorWarningSubtle;
+        return Color::warningBackground();
     case StatusTone::Danger:
-        return theme.colorDangerSubtle;
+        return Color::dangerBackground();
     case StatusTone::Accent:
     default:
-        return theme.colorAccentSubtle;
+        return Color::selectedContentBackground();
     }
 }
 
@@ -161,19 +161,19 @@ inline Element statCard(Theme const &theme, std::string label, std::string value
         .children = children(
             Text {
                 .text = std::move(label),
-                .font = theme.fontLabelSmall,
-                .color = theme.colorTextMuted,
+                .font = Font::caption(),
+                .color = Color::tertiary(),
             },
             Text {
                 .text = std::move(value),
-                .font = theme.fontHeading,
-                .color = theme.colorTextPrimary,
+                .font = Font::title(),
+                .color = Color::primary(),
                 .horizontalAlignment = HorizontalAlignment::Leading,
             },
             Text {
                 .text = std::move(detail),
-                .font = theme.fontBodySmall,
-                .color = theme.colorTextSecondary,
+                .font = Font::footnote(),
+                .color = Color::secondary(),
                 .horizontalAlignment = HorizontalAlignment::Leading,
                 .wrapping = TextWrapping::Wrap,
                 .maxLines = 2,
@@ -181,7 +181,7 @@ inline Element statCard(Theme const &theme, std::string label, std::string value
         )
     }
         .padding(theme.space4)
-        .fill(FillStyle::solid(theme.colorSurfaceOverlay))
+        .fill(FillStyle::solid(Color::elevatedBackground()))
         .stroke(StrokeStyle::solid(accent, 1.f))
         .cornerRadius(theme.radiusXLarge)
         .flex(1.f, 1.f, 0.f);
@@ -194,24 +194,24 @@ inline Element sectionCard(Theme const &theme, std::string eyebrow, std::string 
     children.push_back(
         Text {
             .text = std::move(eyebrow),
-            .font = theme.fontLabelSmall,
-            .color = theme.colorTextMuted,
+            .font = Font::caption(),
+            .color = Color::tertiary(),
             .horizontalAlignment = HorizontalAlignment::Leading,
         }
     );
     children.push_back(
         Text {
             .text = std::move(title),
-            .font = theme.fontTitle,
-            .color = theme.colorTextPrimary,
+            .font = Font::title2(),
+            .color = Color::primary(),
             .horizontalAlignment = HorizontalAlignment::Leading,
         }
     );
     children.push_back(
         Text {
             .text = std::move(detail),
-            .font = theme.fontBodySmall,
-            .color = theme.colorTextSecondary,
+            .font = Font::footnote(),
+            .color = Color::secondary(),
             .horizontalAlignment = HorizontalAlignment::Leading,
             .wrapping = TextWrapping::Wrap,
         }
@@ -232,8 +232,8 @@ inline Element sectionCard(Theme const &theme, std::string eyebrow, std::string 
         .children = std::move(children),
     }
         .padding(theme.space4)
-        .fill(FillStyle::solid(theme.colorSurfaceOverlay))
-        .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
+        .fill(FillStyle::solid(Color::elevatedBackground()))
+        .stroke(StrokeStyle::solid(Color::separator(), 1.f))
         .cornerRadius(theme.radiusXLarge);
 }
 
@@ -252,23 +252,23 @@ inline Element adjustmentRow(
         .children = children(
             Text {
                 .text = std::move(label),
-                .font = theme.fontLabelSmall,
-                .color = theme.colorTextMuted,
+                .font = Font::caption(),
+                .color = Color::tertiary(),
             }
                 .size(126.f, 0.f),
             Text {
                 .text = std::move(value),
-                .font = theme.fontBodySmall,
-                .color = theme.colorTextPrimary,
+                .font = Font::footnote(),
+                .color = Color::primary(),
                 .horizontalAlignment = HorizontalAlignment::Leading,
             }
                 .flex(1.f, 1.f),
             Badge {
                 .label = std::move(scopeHint),
                 .style = {
-                    .font = theme.fontLabelSmall,
-                    .foregroundColor = theme.colorTextSecondary,
-                    .backgroundColor = theme.colorSurfaceHover,
+                    .font = Font::caption(),
+                    .foregroundColor = Color::secondary(),
+                    .backgroundColor = theme.hoveredControlBackgroundColor,
                 },
             },
             LinkButton {
@@ -310,7 +310,7 @@ struct SettingsView : ViewModifiers<SettingsView> {
             "Conversations",
             std::to_string(state.chats.size()),
             state.chats.empty() ? "No chats" : formatCountLabel(static_cast<int>(state.chats.size()), "thread", "threads"),
-            theme.colorAccentSubtle
+            Color::selectedContentBackground()
         ));
         overviewStats.push_back(statCard(
             theme,
@@ -318,7 +318,7 @@ struct SettingsView : ViewModifiers<SettingsView> {
             std::to_string(state.localModels.size()),
             state.localModels.empty() ? "No local models discovered" :
                                         formatCountLabel(static_cast<int>(state.localModels.size()), "model", "models"),
-            theme.colorSuccessSubtle
+            Color::successBackground()
         ));
         overviewStats.push_back(statCard(
             theme,
@@ -326,7 +326,7 @@ struct SettingsView : ViewModifiers<SettingsView> {
             std::to_string(activeTasks),
             activeTasks == 0 ? "Everything is quiet right now" :
                                formatCountLabel(activeTasks, "active task", "active tasks"),
-            downloadsFailed > 0 ? theme.colorDangerSubtle : theme.colorWarningSubtle
+            downloadsFailed > 0 ? Color::dangerBackground() : Color::warningBackground()
         ));
 
         std::vector<Element> runtimeRows;
@@ -879,20 +879,20 @@ struct SettingsView : ViewModifiers<SettingsView> {
                             .children = children(
                                 Text {
                                     .text = "Studio settings",
-                                    .font = theme.fontLabelSmall,
-                                    .color = theme.colorTextMuted,
+                                    .font = Font::caption(),
+                                    .color = Color::tertiary(),
                                     .horizontalAlignment = HorizontalAlignment::Leading,
                                 },
                                 Text {
                                     .text = "Settings",
-                                    .font = theme.fontDisplay,
-                                    .color = theme.colorTextPrimary,
+                                    .font = Font::largeTitle(),
+                                    .color = Color::primary(),
                                     .horizontalAlignment = HorizontalAlignment::Leading,
                                 },
                                 Text {
                                     .text = "A cleaner snapshot of the local workspace, runtime state, and background activity.",
-                                    .font = theme.fontBody,
-                                    .color = theme.colorTextSecondary,
+                                    .font = Font::body(),
+                                    .color = Color::secondary(),
                                     .horizontalAlignment = HorizontalAlignment::Leading,
                                     .wrapping = TextWrapping::Wrap,
                                 }
@@ -912,20 +912,20 @@ struct SettingsView : ViewModifiers<SettingsView> {
                                             .children = children(
                                                 Text {
                                                     .text = "Runtime overview",
-                                                    .font = theme.fontLabelSmall,
-                                                    .color = theme.colorTextMuted,
+                                                    .font = Font::caption(),
+                                                    .color = Color::tertiary(),
                                                 },
                                                 Text {
                                                     .text = loadedModelSummary(state),
-                                                    .font = theme.fontHeading,
-                                                    .color = theme.colorTextPrimary,
+                                                    .font = Font::title(),
+                                                    .color = Color::primary(),
                                                     .horizontalAlignment = HorizontalAlignment::Leading,
                                                     .wrapping = TextWrapping::Wrap,
                                                 },
                                                 Text {
                                                     .text = loadedModelDetail(state),
-                                                    .font = theme.fontBodySmall,
-                                                    .color = theme.colorTextSecondary,
+                                                    .font = Font::footnote(),
+                                                    .color = Color::secondary(),
                                                     .horizontalAlignment = HorizontalAlignment::Leading,
                                                     .wrapping = TextWrapping::Wrap,
                                                     .maxLines = 4,
@@ -936,7 +936,7 @@ struct SettingsView : ViewModifiers<SettingsView> {
                                         Badge {
                                             .label = statusText,
                                             .style = {
-                                                .font = theme.fontLabelSmall,
+                                                .font = Font::caption(),
                                                 .foregroundColor = toneForeground(theme, statusTone),
                                                 .backgroundColor = toneBackground(theme, statusTone),
                                             },
@@ -951,7 +951,7 @@ struct SettingsView : ViewModifiers<SettingsView> {
                             )
                         }
                             .padding(theme.space4)
-                            .fill(FillStyle::solid(theme.colorSurfaceOverlay))
+                            .fill(FillStyle::solid(Color::elevatedBackground()))
                             .stroke(StrokeStyle::solid(toneBackground(theme, statusTone), 1.f))
                             .cornerRadius(theme.radiusXLarge),
                         sectionCard(
@@ -987,7 +987,7 @@ struct SettingsView : ViewModifiers<SettingsView> {
                     .padding(theme.space5)
             )
         }
-            .fill(FillStyle::solid(theme.colorBackground));
+            .fill(FillStyle::solid(Color::windowBackground()));
     }
 };
 

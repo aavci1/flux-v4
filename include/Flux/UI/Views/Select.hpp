@@ -34,18 +34,18 @@ struct SelectOption {
 /// `selectedIndex == -1` means “no selection”, which shows \ref placeholder when present.
 struct Select : ViewModifiers<Select> {
     struct Style {
-        Font labelFont = kFontFromTheme;
-        Font detailFont = kFontFromTheme;
+        Font labelFont = Font::theme();
+        Font detailFont = Font::theme();
         float cornerRadius = kFloatFromTheme;
         float menuCornerRadius = kFloatFromTheme;
         float menuMaxHeight = kFloatFromTheme;
         float menuMaxWidth = 0.f;
         float minMenuWidth = kFloatFromTheme;
-        Color accentColor = kColorFromTheme;
-        Color fieldColor = kColorFromTheme;
-        Color fieldHoverColor = kColorFromTheme;
-        Color borderColor = kColorFromTheme;
-        Color rowHoverColor = kColorFromTheme;
+        Color accentColor = Color::theme();
+        Color fieldColor = Color::theme();
+        Color fieldHoverColor = Color::theme();
+        Color borderColor = Color::theme();
+        Color rowHoverColor = Color::theme();
     };
 
     /// Controlled selection state. When omitted, the control manages its own local selection.

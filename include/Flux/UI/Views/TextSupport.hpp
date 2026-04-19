@@ -18,8 +18,8 @@ namespace flux::text_detail {
 inline std::pair<Font, Color> resolveBodyTextStyle(Font const& font, Color color) {
   Theme const& theme = useEnvironment<Theme>();
   return {
-      resolveFont(font, theme.fontBody),
-      resolveColor(color, theme.colorTextPrimary),
+      resolveFont(font, theme.bodyFont, theme),
+      resolveColor(color, theme.labelColor, theme),
   };
 }
 

@@ -245,6 +245,29 @@ Theme const& activeTheme(EnvironmentStack const& environment) {
   return fallback;
 }
 
+FillStyle resolveFillStyle(FillStyle const& style, Theme const& theme) {
+  FillStyle resolved = style;
+  Color color{};
+  if (resolved.solidColor(&color)) {
+    resolved.data = resolveColor(color, theme);
+  }
+  return resolved;
+}
+
+StrokeStyle resolveStrokeStyle(StrokeStyle const& style, Theme const& theme) {
+  StrokeStyle resolved = style;
+  if (resolved.type == StrokeStyle::Type::Solid) {
+    resolved.color = resolveColor(resolved.color, theme);
+  }
+  return resolved;
+}
+
+ShadowStyle resolveShadowStyle(ShadowStyle const& style, Theme const& theme) {
+  ShadowStyle resolved = style;
+  resolved.color = resolveColor(resolved.color, theme);
+  return resolved;
+}
+
 bool updateIfChanged(Size& field, Size value);
 bool updateIfChanged(Point& field, Point value);
 template<typename T>
@@ -433,9 +456,9 @@ bool sizeApproximatelyEqual(Size lhs, Size rhs) {
 
 Color scrollIndicatorColorForTheme(Theme const& theme) {
   return Color{
-      theme.colorTextSecondary.r,
-      theme.colorTextSecondary.g,
-      theme.colorTextSecondary.b,
+      theme.secondaryLabelColor.r,
+      theme.secondaryLabelColor.g,
+      theme.secondaryLabelColor.b,
       0.55f,
   };
 }
@@ -538,9 +561,12 @@ SceneBuilder::decorateNode(std::unique_ptr<SceneNode> root, Element const& el,
 
     std::optional<Rect> const nextClip =
         mods->clip ? std::optional<Rect>(chromeRectForSize(outerSize)) : std::nullopt;
-    FillStyle const nextFill = leafOwnsModifierPaint ? FillStyle::none() : mods->fill;
-    StrokeStyle const nextStroke = leafOwnsModifierPaint ? StrokeStyle::none() : mods->stroke;
-    ShadowStyle const nextShadow = leafOwnsModifierPaint ? ShadowStyle::none() : mods->shadow;
+    Theme const& theme = activeTheme(environment_);
+    FillStyle const nextFill = leafOwnsModifierPaint ? FillStyle::none() : resolveFillStyle(mods->fill, theme);
+    StrokeStyle const nextStroke =
+        leafOwnsModifierPaint ? StrokeStyle::none() : resolveStrokeStyle(mods->stroke, theme);
+    ShadowStyle const nextShadow =
+        leafOwnsModifierPaint ? ShadowStyle::none() : resolveShadowStyle(mods->shadow, theme);
     CornerRadius const nextCornerRadius = leafOwnsModifierPaint ? CornerRadius{} : mods->cornerRadius;
     Rect const nextChromeRect =
         !leafOwnsModifierPaint && rectIsMeaningful(chromeRectForSize(layoutOuterSize))
@@ -747,15 +773,16 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     if (!rectNode) {
       rectNode = std::make_unique<RectSceneNode>(id);
     }
+    Theme const& theme = activeTheme(environment_);
     Size const resolvedRectSize =
         rectSize(assignedFrameForLeaf(paddedContentSize, innerConstraints, contentAssignedSize,
                                      current.hasAssignedWidth, current.hasAssignedHeight, mods, current.hints));
     bool dirty = false;
     dirty |= updateIfChanged(rectNode->size, resolvedRectSize);
     dirty |= updateIfChanged(rectNode->cornerRadius, mods ? mods->cornerRadius : CornerRadius{});
-    dirty |= updateIfChanged(rectNode->fill, mods ? mods->fill : FillStyle::none());
-    dirty |= updateIfChanged(rectNode->stroke, mods ? mods->stroke : StrokeStyle::none());
-    dirty |= updateIfChanged(rectNode->shadow, mods ? mods->shadow : ShadowStyle::none());
+    dirty |= updateIfChanged(rectNode->fill, mods ? resolveFillStyle(mods->fill, theme) : FillStyle::none());
+    dirty |= updateIfChanged(rectNode->stroke, mods ? resolveStrokeStyle(mods->stroke, theme) : StrokeStyle::none());
+    dirty |= updateIfChanged(rectNode->shadow, mods ? resolveShadowStyle(mods->shadow, theme) : ShadowStyle::none());
     if (dirty) {
       rectNode->invalidatePaint();
       rectNode->markBoundsDirty();
@@ -769,9 +796,9 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
   case ElementType::Text: {
     Text const& text = sceneEl.as<Text>();
     Theme const& theme = activeTheme(environment_);
-    Font const resolvedFont = resolveFont(text.font, theme.fontBody);
-    Color const resolvedColor = resolveColor(text.color, theme.colorTextPrimary);
-    Color const resolvedSelectionColor = resolveColor(text.selectionColor, theme.colorAccentSubtle);
+    Font const resolvedFont = resolveFont(text.font, theme.bodyFont, theme);
+    Color const resolvedColor = resolveColor(text.color, theme.labelColor, theme);
+    Color const resolvedSelectionColor = resolveColor(text.selectionColor, theme.selectedContentBackgroundColor, theme);
     LayoutConstraints const& textFrameConstraints = textUsesContentBox(mods) ? contentBoxConstraints : innerConstraints;
     Rect const frameRect =
         assignedFrameForLeaf(paddedContentSize, textFrameConstraints, contentAssignedSize,
@@ -910,11 +937,12 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     if (!pathNode) {
       pathNode = std::make_unique<PathSceneNode>(id);
     }
+    Theme const& theme = activeTheme(environment_);
     bool dirty = false;
     dirty |= updateIfChanged(pathNode->path, path.path);
-    dirty |= updateIfChanged(pathNode->fill, mods ? mods->fill : FillStyle::none());
-    dirty |= updateIfChanged(pathNode->stroke, mods ? mods->stroke : StrokeStyle::none());
-    dirty |= updateIfChanged(pathNode->shadow, mods ? mods->shadow : ShadowStyle::none());
+    dirty |= updateIfChanged(pathNode->fill, mods ? resolveFillStyle(mods->fill, theme) : FillStyle::none());
+    dirty |= updateIfChanged(pathNode->stroke, mods ? resolveStrokeStyle(mods->stroke, theme) : StrokeStyle::none());
+    dirty |= updateIfChanged(pathNode->shadow, mods ? resolveShadowStyle(mods->shadow, theme) : ShadowStyle::none());
     if (dirty) {
       pathNode->invalidatePaint();
       pathNode->markBoundsDirty();
@@ -930,10 +958,11 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     if (!lineNode) {
       lineNode = std::make_unique<LineSceneNode>(id);
     }
+    Theme const& theme = activeTheme(environment_);
     bool dirty = false;
     dirty |= updateIfChanged(lineNode->from, line.from);
     dirty |= updateIfChanged(lineNode->to, line.to);
-    dirty |= updateIfChanged(lineNode->stroke, line.stroke);
+    dirty |= updateIfChanged(lineNode->stroke, resolveStrokeStyle(line.stroke, theme));
     if (dirty) {
       lineNode->invalidatePaint();
       lineNode->markBoundsDirty();

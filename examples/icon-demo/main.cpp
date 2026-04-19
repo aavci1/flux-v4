@@ -85,13 +85,13 @@ struct IconCell {
                     .name = name,
                     .size = 32.f,
                     .weight = 600.f,
-                    .color = theme.colorTextSecondary
+                    .color = Color::secondary()
                 },
                 Spacer {},
                 Text {
                     .text = label,
-                    .font = theme.fontBodySmall,
-                    .color = theme.colorTextSecondary,
+                    .font = Font::footnote(),
+                    .color = Color::secondary(),
                     .horizontalAlignment = HorizontalAlignment::Center,
                     .wrapping = TextWrapping::Wrap,
                 }
@@ -124,16 +124,16 @@ struct IconDemoRoot {
                     .children = children(
                         Text {
                             .text = "Icon demo", 
-                            .font = theme.fontDisplay, 
-                            .color = theme.colorTextPrimary
+                            .font = Font::largeTitle(), 
+                            .color = Color::primary()
                         },
                         Text {
                             .text = "Material Symbols Rounded — curated "
                                     "IconName setheme. "
                                     "Resize the window; scroll for the "
                                     "full grid.",
-                            .font = theme.fontBody,
-                            .color = theme.colorTextSecondary,
+                            .font = Font::body(),
+                            .color = Color::secondary(),
                             .wrapping = TextWrapping::Wrap,
                         },
 
@@ -146,8 +146,8 @@ struct IconDemoRoot {
                             .children = std::move(gridCells),
                         }
                             .padding(theme.space4)
-                            .fill(FillStyle::solid(theme.colorSurfaceOverlay))
-                            .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
+                            .fill(FillStyle::solid(Color::elevatedBackground()))
+                            .stroke(StrokeStyle::solid(Color::separator(), 1.f))
                             .cornerRadius(CornerRadius {theme.radiusLarge})
                     ),
                 }

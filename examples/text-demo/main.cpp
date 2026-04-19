@@ -29,21 +29,21 @@ Element sectionCard(Theme const &theme, std::string title, std::string body, Ele
         .children = children(
             Text {
                 .text = std::move(title),
-                .font = theme.fontTitle,
-                .color = theme.colorTextPrimary,
+                .font = Font::title2(),
+                .color = Color::primary(),
             },
             Text {
                 .text = std::move(body),
-                .font = theme.fontBodySmall,
-                .color = theme.colorTextSecondary,
+                .font = Font::footnote(),
+                .color = Color::secondary(),
                 .wrapping = TextWrapping::Wrap,
             },
             std::move(content)
         )
     }
         .padding(theme.space4)
-        .fill(FillStyle::solid(theme.colorSurfaceOverlay))
-        .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
+        .fill(FillStyle::solid(Color::elevatedBackground()))
+        .stroke(StrokeStyle::solid(Color::separator(), 1.f))
         .cornerRadius(theme.radiusLarge);
 }
 
@@ -52,13 +52,13 @@ Element alignmentBand(Theme const &theme, std::string label, HorizontalAlignment
                                 .children = children(
                                     Rectangle {}
                                         .height(44.f)
-                                        .fill(FillStyle::solid(theme.colorSurfaceHover))
-                                        .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
+                                        .fill(FillStyle::solid(theme.hoveredControlBackgroundColor))
+                                        .stroke(StrokeStyle::solid(Color::separator(), 1.f))
                                         .cornerRadius(theme.radiusMedium),
                                     Text {
                                         .text = "Alignment sample",
-                                        .font = theme.fontBody,
-                                        .color = theme.colorTextPrimary,
+                                        .font = Font::body(),
+                                        .color = Color::primary(),
                                         .horizontalAlignment = alignment,
                                         .verticalAlignment = VerticalAlignment::Center,
                                     }
@@ -74,8 +74,8 @@ Element alignmentBand(Theme const &theme, std::string label, HorizontalAlignment
         .children = children(
             Text {
                 .text = std::move(label),
-                .font = theme.fontLabelSmall,
-                .color = theme.colorTextMuted,
+                .font = Font::caption(),
+                .color = Color::tertiary(),
             },
             std::move(band)
         )
@@ -90,48 +90,48 @@ Element wrappingExamples(Theme const &theme) {
         .children = children(
             Text {
                 .text = "Wrap",
-                .font = theme.fontLabel,
-                .color = theme.colorTextPrimary,
+                .font = Font::headline(),
+                .color = Color::primary(),
             },
             Text {
                 .text = kWrapSample,
-                .font = theme.fontBody,
-                .color = theme.colorTextPrimary,
+                .font = Font::body(),
+                .color = Color::primary(),
                 .wrapping = TextWrapping::Wrap,
             }
                 .padding(theme.space3)
-                .fill(FillStyle::solid(theme.colorSurfaceHover))
-                .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
+                .fill(FillStyle::solid(theme.hoveredControlBackgroundColor))
+                .stroke(StrokeStyle::solid(Color::separator(), 1.f))
                 .cornerRadius(theme.radiusMedium),
             Text {
                 .text = "NoWrap",
-                .font = theme.fontLabel,
-                .color = theme.colorTextPrimary,
+                .font = Font::headline(),
+                .color = Color::primary(),
             },
             Text {
                 .text = kLongToken,
-                .font = theme.fontBodySmall,
-                .color = theme.colorTextSecondary,
+                .font = Font::footnote(),
+                .color = Color::secondary(),
                 .wrapping = TextWrapping::NoWrap,
             }
                 .padding(theme.space3)
-                .fill(FillStyle::solid(theme.colorSurfaceHover))
-                .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
+                .fill(FillStyle::solid(theme.hoveredControlBackgroundColor))
+                .stroke(StrokeStyle::solid(Color::separator(), 1.f))
                 .cornerRadius(theme.radiusMedium),
             Text {
                 .text = "WrapAnywhere",
-                .font = theme.fontLabel,
-                .color = theme.colorTextPrimary,
+                .font = Font::headline(),
+                .color = Color::primary(),
             },
             Text {
                 .text = kLongToken,
-                .font = theme.fontBodySmall,
-                .color = theme.colorTextSecondary,
+                .font = Font::footnote(),
+                .color = Color::secondary(),
                 .wrapping = TextWrapping::WrapAnywhere,
             }
                 .padding(theme.space3)
-                .fill(FillStyle::solid(theme.colorSurfaceHover))
-                .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
+                .fill(FillStyle::solid(theme.hoveredControlBackgroundColor))
+                .stroke(StrokeStyle::solid(Color::separator(), 1.f))
                 .cornerRadius(theme.radiusMedium)
         )
     };
@@ -149,13 +149,13 @@ struct TextDemoRoot {
             .children = children(
                 Text {
                     .text = "Text Demo",
-                    .font = theme.fontDisplay,
-                    .color = theme.colorTextPrimary,
+                    .font = Font::largeTitle(),
+                    .color = Color::primary(),
                 },
                 Text {
                     .text = "A compact tour of wrapping, alignment, truncation, and semantic emphasis.",
-                    .font = theme.fontBody,
-                    .color = theme.colorTextSecondary,
+                    .font = Font::body(),
+                    .color = Color::secondary(),
                     .wrapping = TextWrapping::Wrap,
                 }
             )
@@ -188,34 +188,34 @@ struct TextDemoRoot {
                 .children = children(
                     Text {
                         .text = "Full paragraph",
-                        .font = theme.fontLabel,
-                        .color = theme.colorTextPrimary,
+                        .font = Font::headline(),
+                        .color = Color::primary(),
                     },
                     Text {
                         .text = std::string(kWrapSample) + " " + kWrapSample,
-                        .font = theme.fontBody,
-                        .color = theme.colorTextPrimary,
+                        .font = Font::body(),
+                        .color = Color::primary(),
                         .wrapping = TextWrapping::Wrap,
                     }
                         .padding(theme.space3)
-                        .fill(FillStyle::solid(theme.colorSurfaceHover))
-                        .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
+                        .fill(FillStyle::solid(theme.hoveredControlBackgroundColor))
+                        .stroke(StrokeStyle::solid(Color::separator(), 1.f))
                         .cornerRadius(theme.radiusMedium),
                     Text {
                         .text = "Same text with maxLines = 2",
-                        .font = theme.fontLabel,
-                        .color = theme.colorTextPrimary,
+                        .font = Font::headline(),
+                        .color = Color::primary(),
                     },
                     Text {
                         .text = std::string(kWrapSample) + " " + kWrapSample,
-                        .font = theme.fontBody,
-                        .color = theme.colorTextPrimary,
+                        .font = Font::body(),
+                        .color = Color::primary(),
                         .wrapping = TextWrapping::Wrap,
                         .maxLines = 2,
                     }
                         .padding(theme.space3)
-                        .fill(FillStyle::solid(theme.colorSurfaceHover))
-                        .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
+                        .fill(FillStyle::solid(theme.hoveredControlBackgroundColor))
+                        .stroke(StrokeStyle::solid(Color::separator(), 1.f))
                         .cornerRadius(theme.radiusMedium)
                 )
             }
@@ -232,9 +232,9 @@ struct TextDemoRoot {
                         .spacing = theme.space2,
                         .alignment = Alignment::Start,
                         .children = children(
-                            Text {.text = "Primary", .font = theme.fontBody, .color = theme.colorTextPrimary},
-                            Text {.text = "Secondary", .font = theme.fontBody, .color = theme.colorTextSecondary},
-                            Text {.text = "Muted", .font = theme.fontBody, .color = theme.colorTextMuted}
+                            Text {.text = "Primary", .font = Font::body(), .color = Color::primary()},
+                            Text {.text = "Secondary", .font = Font::body(), .color = Color::secondary()},
+                            Text {.text = "Muted", .font = Font::body(), .color = Color::tertiary()}
                         )
                     }
                         .flex(1.f),
@@ -242,9 +242,9 @@ struct TextDemoRoot {
                         .spacing = theme.space2,
                         .alignment = Alignment::Start,
                         .children = children(
-                            Text {.text = "Accent", .font = theme.fontBody, .color = theme.colorAccent},
-                            Text {.text = "Success", .font = theme.fontBody, .color = theme.colorSuccess},
-                            Text {.text = "Danger", .font = theme.fontBody, .color = theme.colorDanger}
+                            Text {.text = "Accent", .font = Font::body(), .color = Color::accent()},
+                            Text {.text = "Success", .font = Font::body(), .color = Color::success()},
+                            Text {.text = "Danger", .font = Font::body(), .color = Color::danger()}
                         )
                     }
                         .flex(1.f)
@@ -269,7 +269,7 @@ struct TextDemoRoot {
             .axis = ScrollAxis::Vertical,
             .children = children(std::move(content)),
         }
-            .fill(FillStyle::solid(theme.colorBackground));
+            .fill(FillStyle::solid(Color::windowBackground()));
     }
 };
 

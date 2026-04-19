@@ -30,14 +30,14 @@ struct SidebarButton : ViewModifiers<SidebarButton> {
         bool const pressed = usePress();
         bool const focused = useFocus();
 
-        Color color = theme.colorTextSecondary;
+        Color color = Color::secondary();
 
         if (hovered) {
-            color = theme.colorAccentSubtle;
+            color = Color::selectedContentBackground();
         }
 
         if (pressed || selected) {
-            color = theme.colorAccent;
+            color = Color::accent();
         }
 
         return VStack {
@@ -52,7 +52,7 @@ struct SidebarButton : ViewModifiers<SidebarButton> {
                 },
                 Text {
                     .text = label,
-                    .font = theme.fontLabelSmall,
+                    .font = Font::caption(),
                     .color = color,
                     .horizontalAlignment = HorizontalAlignment::Center,
                     .verticalAlignment = VerticalAlignment::Center,

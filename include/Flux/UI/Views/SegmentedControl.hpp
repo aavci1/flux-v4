@@ -23,13 +23,13 @@ struct SegmentedControlOption {
 
 struct SegmentedControl : ViewModifiers<SegmentedControl> {
     struct Style {
-        Font font = kFontFromTheme;
+        Font font = Font::theme();
         float paddingH = kFloatFromTheme;
         float paddingV = kFloatFromTheme;
         float cornerRadius = kFloatFromTheme;
-        Color accentColor = kColorFromTheme;
-        Color trackColor = kColorFromTheme;
-        Color borderColor = kColorFromTheme;
+        Color accentColor = Color::theme();
+        Color trackColor = Color::theme();
+        Color borderColor = Color::theme();
     };
 
     State<int> selectedIndex {};

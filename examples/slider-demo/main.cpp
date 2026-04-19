@@ -46,19 +46,19 @@ Element makeSectionCard(Theme const &theme, std::string title, std::string capti
     return VStack {
         .spacing = theme.space3,
         .children = children(
-            Text {.text = std::move(title), .font = theme.fontTitle, .color = theme.colorTextPrimary},
+            Text {.text = std::move(title), .font = Font::title2(), .color = Color::primary()},
             Text {
                 .text = std::move(caption),
-                .font = theme.fontBodySmall,
-                .color = theme.colorTextSecondary,
+                .font = Font::footnote(),
+                .color = Color::secondary(),
                 .wrapping = TextWrapping::Wrap,
             },
             std::move(content)
         )
     } //
         .padding(theme.space4)
-        .fill(FillStyle::solid(theme.colorSurfaceOverlay))
-        .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
+        .fill(FillStyle::solid(Color::elevatedBackground()))
+        .stroke(StrokeStyle::solid(Color::separator(), 1.f))
         .cornerRadius(CornerRadius {theme.radiusLarge});
 }
 
@@ -71,9 +71,9 @@ Element labeledSlider(Theme const &theme, std::string label, std::string valueTe
                 .spacing = theme.space2,
                 .alignment = Alignment::Center,
                 .children = children(
-                    Text {.text = std::move(label), .font = theme.fontLabel, .color = theme.colorTextPrimary},
+                    Text {.text = std::move(label), .font = Font::headline(), .color = Color::primary()},
                     Spacer {},
-                    Text {.text = std::move(valueText), .font = theme.fontLabel, .color = theme.colorTextSecondary}
+                    Text {.text = std::move(valueText), .font = Font::headline(), .color = Color::secondary()}
                 )
             },
             Slider {
@@ -86,7 +86,7 @@ Element labeledSlider(Theme const &theme, std::string label, std::string valueTe
         )
     } //
         .padding(theme.space3)
-        .fill(FillStyle::solid(theme.colorBackground))
+        .fill(FillStyle::solid(Color::windowBackground()))
         .cornerRadius(CornerRadius {theme.radiusMedium});
 }
 
@@ -113,14 +113,14 @@ struct SliderDemoRoot {
                                     .children = children(
                                         Text {
                                             .text = "Slider Demo",
-                                            .font = theme.fontDisplay,
-                                            .color = theme.colorTextPrimary,
+                                            .font = Font::largeTitle(),
+                                            .color = Color::primary(),
                                             .horizontalAlignment = HorizontalAlignment::Leading,
                                         },
                                         Text {
                                             .text = "Three focused examples: color mixing, media-style scrubbing, and compact percentage tuning.",
-                                            .font = theme.fontBody,
-                                            .color = theme.colorTextSecondary,
+                                            .font = Font::body(),
+                                            .color = Color::secondary(),
                                             .horizontalAlignment = HorizontalAlignment::Leading,
                                             .wrapping = TextWrapping::Wrap,
                                         },
@@ -136,25 +136,25 @@ struct SliderDemoRoot {
                                                         .children = children(
                                                             Rectangle {}
                                                                 .fill(FillStyle::solid(preview))
-                                                                .stroke(StrokeStyle::solid(theme.colorBorder, 1.f))
+                                                                .stroke(StrokeStyle::solid(Color::opaqueSeparator(), 1.f))
                                                                 .height(150.f)
                                                                 .cornerRadius(CornerRadius {theme.radiusLarge})
                                                                 .flex(1.f, 1.f, 0.f),
                                                             Text {
                                                                 .text = fmtHex(*red, *green, *blue),
-                                                                .font = theme.fontTitle,
-                                                                .color = luminance(preview) > 0.55f ? theme.colorTextPrimary : theme.colorOnAccent,
+                                                                .font = Font::title2(),
+                                                                .color = luminance(preview) > 0.55f ? Color::primary() : Color::accentForeground(),
                                                                 .horizontalAlignment = HorizontalAlignment::Center,
                                                                 .verticalAlignment = VerticalAlignment::Center,
                                                             }
                                                         )
                                                     },
                                                     labeledSlider(theme, "Red", fmtInt(*red), red, 0.f, 255.f, 1.f,
-                                                                  Slider::Style {.activeColor = theme.colorDanger}),
+                                                                  Slider::Style {.activeColor = Color::danger()}),
                                                     labeledSlider(theme, "Green", fmtInt(*green), green, 0.f, 255.f, 1.f,
-                                                                  Slider::Style {.activeColor = theme.colorSuccess}),
+                                                                  Slider::Style {.activeColor = Color::success()}),
                                                     labeledSlider(theme, "Blue", fmtInt(*blue), blue, 0.f, 255.f, 1.f,
-                                                                  Slider::Style {.activeColor = theme.colorAccent})
+                                                                  Slider::Style {.activeColor = Color::accent()})
                                                 )
                                             }
                                         ),
@@ -168,9 +168,9 @@ struct SliderDemoRoot {
                                                         .spacing = theme.space2,
                                                         .alignment = Alignment::Center,
                                                         .children = children(
-                                                            Text {.text = "Playback position", .font = theme.fontLabel, .color = theme.colorTextPrimary},
+                                                            Text {.text = "Playback position", .font = Font::headline(), .color = Color::primary()},
                                                             Spacer {},
-                                                            Text {.text = fmtMinutes(*scrubber), .font = theme.fontLabel, .color = theme.colorTextSecondary}
+                                                            Text {.text = fmtMinutes(*scrubber), .font = Font::headline(), .color = Color::secondary()}
                                                         )
                                                     },
                                                     Slider {
@@ -179,29 +179,29 @@ struct SliderDemoRoot {
                                                         .max = 96.f,
                                                         .step = 1.f,
                                                         .style = Slider::Style {
-                                                            .activeColor = theme.colorAccent,
+                                                            .activeColor = Color::accent(),
                                                             .trackHeight = 6.f,
                                                             .thumbSize = 18.f,
                                                         },
                                                     },
                                                     Text {
                                                         .text = "Arrow keys nudge the value; hold Shift for larger jumps.",
-                                                        .font = theme.fontBodySmall,
-                                                        .color = theme.colorTextSecondary,
+                                                        .font = Font::footnote(),
+                                                        .color = Color::secondary(),
                                                         .wrapping = TextWrapping::Wrap,
                                                     }
                                                 )
                                             }
                                         ),
                                         makeSectionCard(theme, "Compact Controls", "Sliders also work well in shorter utility rows when the value is the main feedback.", VStack {.spacing = theme.space2, .children = children(labeledSlider(theme, "Volume", fmtPercent(*volume), volume, 0.f, 100.f, 1.f, Slider::Style {
-                                                                                                                                                                                                                                                                                                                 .activeColor = theme.colorSuccess,
+                                                                                                                                                                                                                                                                                                                 .activeColor = Color::success(),
                                                                                                                                                                                                                                                                                                                  .trackHeight = 4.f,
                                                                                                                                                                                                                                                                                                                  .thumbSize = 16.f,
                                                                                                                                                                                                                                                                                                              }),
                                                                                                                                                                                                                                 Text {
                                                                                                                                                                                                                                     .text = "The minimum-value fill workaround stays in place here to avoid the zero-width rendering bug you called out.",
-                                                                                                                                                                                                                                    .font = theme.fontBodySmall,
-                                                                                                                                                                                                                                    .color = theme.colorTextMuted,
+                                                                                                                                                                                                                                    .font = Font::footnote(),
+                                                                                                                                                                                                                                    .color = Color::tertiary(),
                                                                                                                                                                                                                                     .wrapping = TextWrapping::Wrap,
                                                                                                                                                                                                                                 })})
                                     )
@@ -212,7 +212,7 @@ struct SliderDemoRoot {
             .axis = ScrollAxis::Vertical,
             .children = children(std::move(page)),
         }
-            .fill(FillStyle::solid(theme.colorBackground));
+            .fill(FillStyle::solid(Color::windowBackground()));
     }
 };
 

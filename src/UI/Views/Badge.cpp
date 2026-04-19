@@ -8,12 +8,12 @@ namespace {
 
 Badge::Style resolveStyle(Badge::Style const &style, Theme const &theme) {
     return Badge::Style {
-        .font = resolveFont(style.font, theme.fontLabelSmall),
+        .font = resolveFont(style.font, theme.captionFont, theme),
         .paddingH = resolveFloat(style.paddingH, theme.space2),
         .paddingV = resolveFloat(style.paddingV, theme.space1),
         .cornerRadius = resolveFloat(style.cornerRadius, theme.radiusFull),
-        .foregroundColor = resolveColor(style.foregroundColor, theme.colorTextPrimary),
-        .backgroundColor = resolveColor(style.backgroundColor, theme.colorAccentSubtle),
+        .foregroundColor = resolveColor(style.foregroundColor, theme.labelColor, theme),
+        .backgroundColor = resolveColor(style.backgroundColor, theme.selectedContentBackgroundColor, theme),
     };
 }
 

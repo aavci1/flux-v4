@@ -7,21 +7,21 @@ namespace flux {
 
 ResolvedAlertCardColors resolveAlertCardColors(Color cardColor, Color cardStrokeColor, float cornerRadius,
                                                Theme const& theme) {
-  return ResolvedAlertCardColors{.cardFill = resolveColor(cardColor, theme.colorSurface),
-                                 .cardStroke = resolveColor(cardStrokeColor, theme.colorBorderSubtle),
+  return ResolvedAlertCardColors{.cardFill = resolveColor(cardColor, theme.controlBackgroundColor, theme),
+                                 .cardStroke = resolveColor(cardStrokeColor, theme.separatorColor, theme),
                                  .cornerRadius = CornerRadius{resolveFloat(cornerRadius, theme.radiusXLarge)}};
 }
 
 Color resolveAlertBackdropColor(Color backdropColor, Theme const& theme) {
-  return resolveColor(backdropColor, theme.colorScrimModal);
+  return resolveColor(backdropColor, theme.modalScrimColor, theme);
 }
 
 ResolvedPopoverCardBody resolvePopoverCardBody(Color backgroundColor, Color borderColor, float borderWidth,
                                                float cornerRadius, float contentPadding,
                                                Theme const& theme) {
   return ResolvedPopoverCardBody{
-      .background = resolveColor(backgroundColor, theme.colorSurfaceOverlay),
-      .border = resolveColor(borderColor, theme.colorBorderSubtle),
+      .background = resolveColor(backgroundColor, theme.elevatedBackgroundColor, theme),
+      .border = resolveColor(borderColor, theme.separatorColor, theme),
       .borderWidth = borderWidth,
       .cornerRadius = CornerRadius{resolveFloat(cornerRadius, theme.radiusLarge)},
       .contentPadding = resolveFloat(contentPadding, theme.space3),
@@ -29,7 +29,7 @@ ResolvedPopoverCardBody resolvePopoverCardBody(Color backgroundColor, Color bord
 }
 
 Color resolvePopoverBackdropColor(Color backdropColor, Theme const& theme) {
-  return resolveColor(backdropColor, theme.colorScrimPopover);
+  return resolveColor(backdropColor, theme.popoverScrimColor, theme);
 }
 
 } // namespace flux

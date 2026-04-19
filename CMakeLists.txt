@@ -299,6 +299,7 @@ if(FLUX_BUILD_TESTS)
     tests/StoreTests.cpp
     tests/RuntimeTests.cpp
     tests/TextEditUtilsTests.cpp
+    tests/SemanticThemeTests.cpp
   )
 
   target_include_directories(flux_tests PRIVATE

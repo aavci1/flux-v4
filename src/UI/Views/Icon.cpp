@@ -39,9 +39,9 @@ std::string encodeUtf8(char32_t cp) {
 Element Icon::body() const {
     Theme const& theme = useEnvironment<Theme>();
 
-    float const s = resolveFloat(size, theme.fontBody.size);
-    float const w = resolveFloat(weight, theme.fontBody.weight);
-    Color const c = resolveColor(color, theme.colorTextPrimary);
+    float const s = resolveFloat(size, theme.bodyFont.size);
+    float const w = resolveFloat(weight, theme.bodyFont.weight);
+    Color const c = resolveColor(color, theme.labelColor, theme);
 
     return Text {
         .text = encodeUtf8(static_cast<char32_t>(name)),

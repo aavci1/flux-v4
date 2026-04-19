@@ -27,28 +27,28 @@ Element makeSectionCard(Theme const &theme, std::string title, std::string capti
         .children = children(
             Text {
                 .text = std::move(title),
-                .font = theme.fontTitle,
-                .color = theme.colorTextPrimary,
+                .font = Font::title2(),
+                .color = Color::primary(),
             },
             Text {
                 .text = std::move(caption),
-                .font = theme.fontBodySmall,
-                .color = theme.colorTextSecondary,
+                .font = Font::footnote(),
+                .color = Color::secondary(),
                 .wrapping = TextWrapping::Wrap,
             },
             std::move(content)
         )
     } //
         .padding(theme.space4)
-        .fill(FillStyle::solid(theme.colorSurfaceOverlay))
-        .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
+        .fill(FillStyle::solid(Color::elevatedBackground()))
+        .stroke(StrokeStyle::solid(Color::separator(), 1.f))
         .cornerRadius(CornerRadius {theme.radiusLarge});
 }
 
 Element makeBadge(Theme const &theme, std::string label, Color fill, Color textColor) {
     return Text {
         .text = std::move(label),
-        .font = theme.fontLabelSmall,
+        .font = Font::caption(),
         .color = textColor,
         .horizontalAlignment = HorizontalAlignment::Center,
         .verticalAlignment = VerticalAlignment::Center,
@@ -65,20 +65,20 @@ Element makeMetricTile(Theme const &theme, std::string value, std::string label,
         .children = children(
             Text {
                 .text = std::move(value),
-                .font = theme.fontTitle,
+                .font = Font::title2(),
                 .color = accent,
                 .horizontalAlignment = HorizontalAlignment::Leading,
             },
             Text {
                 .text = std::move(label),
-                .font = theme.fontBodySmall,
-                .color = theme.colorTextSecondary,
+                .font = Font::footnote(),
+                .color = Color::secondary(),
                 .horizontalAlignment = HorizontalAlignment::Leading,
             }
         )
     } //
         .padding(theme.space3)
-        .fill(FillStyle::solid(theme.colorBackground))
+        .fill(FillStyle::solid(Color::windowBackground()))
         .cornerRadius(CornerRadius {theme.radiusMedium})
         .flex(1.f, 1.f, 0.f);
 }
@@ -118,14 +118,14 @@ Element makeHeroDemo(Theme const &theme, State<bool> dirty, State<bool> reviewPa
                             .children = children(
                                 Text {
                                     .text = "Spring release brief",
-                                    .font = theme.fontSubtitle,
-                                    .color = theme.colorTextPrimary,
+                                    .font = Font::title3(),
+                                    .color = Color::primary(),
                                     .horizontalAlignment = HorizontalAlignment::Leading,
                                 },
                                 Text {
                                     .text = "Buttons feel strongest when the layout makes one decision unmistakably primary.",
-                                    .font = theme.fontBodySmall,
-                                    .color = theme.colorTextSecondary,
+                                    .font = Font::footnote(),
+                                    .color = Color::secondary(),
                                     .horizontalAlignment = HorizontalAlignment::Leading,
                                     .wrapping = TextWrapping::Wrap,
                                 }
@@ -133,11 +133,11 @@ Element makeHeroDemo(Theme const &theme, State<bool> dirty, State<bool> reviewPa
                         } //
                             .flex(1.f, 1.f, 0.f),
                         makeBadge(theme, *dirty ? "Dirty" : "Saved",
-                                  *dirty ? theme.colorWarningSubtle : theme.colorSuccessSubtle,
-                                  *dirty ? theme.colorWarning : theme.colorSuccess),
+                                  *dirty ? Color::warningBackground() : Color::successBackground(),
+                                  *dirty ? Color::warning() : Color::success()),
                         makeBadge(theme, *reviewPassed ? "Approved" : "Needs review",
-                                  *reviewPassed ? theme.colorSuccessSubtle : theme.colorAccentSubtle,
-                                  *reviewPassed ? theme.colorSuccess : theme.colorAccent)
+                                  *reviewPassed ? Color::successBackground() : Color::selectedContentBackground(),
+                                  *reviewPassed ? Color::success() : Color::accent())
                     )
                 },
                 VStack {
@@ -180,12 +180,12 @@ Element makeHeroDemo(Theme const &theme, State<bool> dirty, State<bool> reviewPa
                             .children = children(
                                 Text {
                                     .text = *dirty ? "Need to show the saved state?" : "Need to bring the dirty state back?",
-                                    .font = theme.fontBodySmall,
-                                    .color = theme.colorTextSecondary,
+                                    .font = Font::footnote(),
+                                    .color = Color::secondary(),
                                 },
                                 LinkButton {
                                     .label = *dirty ? "Save with Cmd+S" : "Mark this draft dirty again",
-                                    .style = LinkButton::Style {.font = theme.fontBodySmall},
+                                    .style = LinkButton::Style {.font = Font::footnote()},
                                     .onTap = heroLinkAction,
                                 }
                             )
@@ -193,12 +193,12 @@ Element makeHeroDemo(Theme const &theme, State<bool> dirty, State<bool> reviewPa
                     )
                 } //
                     .padding(theme.space3)
-                    .fill(FillStyle::solid(theme.colorBackground))
+                    .fill(FillStyle::solid(Color::windowBackground()))
                     .cornerRadius(CornerRadius {theme.radiusMedium}),
                 Text {
                     .text = *lastEvent,
-                    .font = theme.fontBodySmall,
-                    .color = theme.colorTextSecondary,
+                    .font = Font::footnote(),
+                    .color = Color::secondary(),
                     .horizontalAlignment = HorizontalAlignment::Leading,
                     .wrapping = TextWrapping::Wrap,
                 }
@@ -214,14 +214,14 @@ Element makeVariantTile(Theme const &theme, std::string title, std::string capti
         .children = children(
             Text {
                 .text = std::move(title),
-                .font = theme.fontSubtitle,
-                .color = theme.colorTextPrimary,
+                .font = Font::title3(),
+                .color = Color::primary(),
                 .horizontalAlignment = HorizontalAlignment::Leading,
             },
             Text {
                 .text = std::move(caption),
-                .font = theme.fontBodySmall,
-                .color = theme.colorTextSecondary,
+                .font = Font::footnote(),
+                .color = Color::secondary(),
                 .horizontalAlignment = HorizontalAlignment::Leading,
                 .wrapping = TextWrapping::Wrap,
             },
@@ -230,7 +230,7 @@ Element makeVariantTile(Theme const &theme, std::string title, std::string capti
         )
     } //
         .padding(theme.space3)
-        .fill(FillStyle::solid(theme.colorBackground))
+        .fill(FillStyle::solid(Color::windowBackground()))
         .cornerRadius(CornerRadius {theme.radiusMedium})
         .height(184.f)
         .flex(1.f, 1.f, 0.f);
@@ -385,16 +385,16 @@ Element makeToolbarDemo(Theme const &theme, State<bool> dirty, State<bool> revie
                     )
                 } //
                     .padding(theme.space3)
-                    .fill(FillStyle::solid(theme.colorBackground))
+                    .fill(FillStyle::solid(Color::windowBackground()))
                     .cornerRadius(CornerRadius {theme.radiusMedium}),
                 HStack {
                     .spacing = theme.space3,
                     .alignment = Alignment::Stretch,
                     .children = children(
-                        makeMetricTile(theme, std::to_string(*saveCount), "Saves", theme.colorAccent),
-                        makeMetricTile(theme, std::to_string(*publishCount), "Publishes", theme.colorSuccess),
+                        makeMetricTile(theme, std::to_string(*saveCount), "Saves", Color::accent()),
+                        makeMetricTile(theme, std::to_string(*publishCount), "Publishes", Color::success()),
                         makeMetricTile(theme, *reviewPassed ? "Ready" : "Blocked", "Review status",
-                                       *reviewPassed ? theme.colorSuccess : theme.colorWarning)
+                                       *reviewPassed ? Color::success() : Color::warning())
                     )
                 }
             )
@@ -416,13 +416,13 @@ Element makeInlineDemo(Theme const &theme, State<bool> reviewPassed, State<std::
                     .children = children(
                         Text {
                             .text = "Need copy guidance before publishing?",
-                            .font = theme.fontBody,
-                            .color = theme.colorTextPrimary,
+                            .font = Font::body(),
+                            .color = Color::primary(),
                             .wrapping = TextWrapping::Wrap,
                         },
                         LinkButton {
                             .label = "Open the editorial checklist",
-                            .style = LinkButton::Style {.font = theme.fontBody},
+                            .style = LinkButton::Style {.font = Font::body()},
                             .onTap =
                                 [lastEvent] {
                                     lastEvent = "Checklist opened from an inline link.";
@@ -437,12 +437,12 @@ Element makeInlineDemo(Theme const &theme, State<bool> reviewPassed, State<std::
                     .children = children(
                         Text {
                             .text = *reviewPassed ? "Review already passed." : "Still waiting on approval?",
-                            .font = theme.fontBodySmall,
-                            .color = theme.colorTextSecondary,
+                            .font = Font::footnote(),
+                            .color = Color::secondary(),
                         },
                         LinkButton {
                             .label = *reviewPassed ? "Mark review as pending" : "Mark review as approved",
-                            .style = LinkButton::Style {.font = theme.fontBodySmall},
+                            .style = LinkButton::Style {.font = Font::footnote()},
                             .onTap =
                                 [reviewPassed, lastEvent] {
                                     reviewPassed = !*reviewPassed;
@@ -452,20 +452,20 @@ Element makeInlineDemo(Theme const &theme, State<bool> reviewPassed, State<std::
                         },
                         Text {
                             .text = "or",
-                            .font = theme.fontBodySmall,
-                            .color = theme.colorTextSecondary,
+                            .font = Font::footnote(),
+                            .color = Color::secondary(),
                         },
                         LinkButton {
                             .label = "contact support",
                             .disabled = true,
-                            .style = LinkButton::Style {.font = theme.fontBodySmall},
+                            .style = LinkButton::Style {.font = Font::footnote()},
                         }
                     )
                 },
                 Text {
                     .text = "The disabled support link stays readable but no longer behaves like an active target.",
-                    .font = theme.fontBodySmall,
-                    .color = theme.colorTextSecondary,
+                    .font = Font::footnote(),
+                    .color = Color::secondary(),
                     .horizontalAlignment = HorizontalAlignment::Leading,
                     .wrapping = TextWrapping::Wrap,
                 }
@@ -488,21 +488,21 @@ Element makeIconButtonTile(Theme const &theme, std::string title, std::string ca
             },
             Text {
                 .text = std::move(title),
-                .font = theme.fontSubtitle,
-                .color = theme.colorTextPrimary,
+                .font = Font::title3(),
+                .color = Color::primary(),
                 .horizontalAlignment = HorizontalAlignment::Leading,
             },
             Text {
                 .text = std::move(caption),
-                .font = theme.fontBodySmall,
-                .color = theme.colorTextSecondary,
+                .font = Font::footnote(),
+                .color = Color::secondary(),
                 .horizontalAlignment = HorizontalAlignment::Leading,
                 .wrapping = TextWrapping::Wrap,
             }
         )
     }
         .padding(theme.space3)
-        .fill(FillStyle::solid(theme.colorBackground))
+        .fill(FillStyle::solid(Color::windowBackground()))
         .cornerRadius(CornerRadius {theme.radiusMedium})
         .flex(1.f, 1.f, 0.f);
 }
@@ -522,7 +522,7 @@ Element makeIconButtonDemo(Theme const &theme, State<std::string> lastEvent) {
                     IconButton {
                         .icon = IconName::PlayArrow,
                         .style = {
-                            .size = theme.fontDisplay.size,
+                            .size = theme.largeTitleFont.size,
                         },
                         .onTap =
                             [lastEvent] {
@@ -537,7 +537,7 @@ Element makeIconButtonDemo(Theme const &theme, State<std::string> lastEvent) {
                     IconButton {
                         .icon = IconName::Settings,
                         .style = {
-                            .size = theme.fontDisplay.size,
+                            .size = theme.largeTitleFont.size,
                         },
                         .onTap =
                             [lastEvent] {
@@ -553,7 +553,7 @@ Element makeIconButtonDemo(Theme const &theme, State<std::string> lastEvent) {
                         .icon = IconName::Delete,
                         .disabled = true,
                         .style = {
-                            .size = theme.fontDisplay.size,
+                            .size = theme.largeTitleFont.size,
                         },
                     }
                 )
@@ -599,14 +599,14 @@ struct ButtonDemoRoot {
                     .children = children(
                         Text {
                             .text = "Button Demo",
-                            .font = theme.fontDisplay,
-                            .color = theme.colorTextPrimary,
+                            .font = Font::largeTitle(),
+                            .color = Color::primary(),
                             .horizontalAlignment = HorizontalAlignment::Leading,
                         },
                         Text {
                             .text = "A cleaner button showcase with real layout context: one strong primary action, calm supporting controls, inline links, and a compact toolbar.",
-                            .font = theme.fontBody,
-                            .color = theme.colorTextSecondary,
+                            .font = Font::body(),
+                            .color = Color::secondary(),
                             .horizontalAlignment = HorizontalAlignment::Leading,
                             .wrapping = TextWrapping::Wrap,
                         },
@@ -620,7 +620,7 @@ struct ButtonDemoRoot {
                     .padding(theme.space5)
             )
         } //
-            .fill(FillStyle::solid(theme.colorBackground));
+            .fill(FillStyle::solid(Color::windowBackground()));
     }
 };
 

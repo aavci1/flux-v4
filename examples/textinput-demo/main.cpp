@@ -26,21 +26,21 @@ Element sectionCard(Theme const &theme, std::string title, std::string body, Ele
         .children = children(
             Text {
                 .text = std::move(title),
-                .font = theme.fontTitle,
-                .color = theme.colorTextPrimary,
+                .font = Font::title2(),
+                .color = Color::primary(),
             },
             Text {
                 .text = std::move(body),
-                .font = theme.fontBodySmall,
-                .color = theme.colorTextSecondary,
+                .font = Font::footnote(),
+                .color = Color::secondary(),
                 .wrapping = TextWrapping::Wrap,
             },
             std::move(content)
         )
     }
         .padding(theme.space4)
-        .fill(FillStyle::solid(theme.colorSurfaceOverlay))
-        .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
+        .fill(FillStyle::solid(Color::elevatedBackground()))
+        .stroke(StrokeStyle::solid(Color::separator(), 1.f))
         .cornerRadius(CornerRadius {theme.radiusLarge});
 }
 
@@ -51,8 +51,8 @@ Element labeledField(Theme const &theme, std::string label, Element field) {
         .children = children(
             Text {
                 .text = std::move(label),
-                .font = theme.fontLabel,
-                .color = theme.colorTextPrimary,
+                .font = Font::headline(),
+                .color = Color::primary(),
             },
             std::move(field)
         )
@@ -80,8 +80,8 @@ struct TextInputShowcase {
         });
         auto disabled = useState(std::string {"Disabled example"});
 
-        Color const okColor = theme.colorTextPrimary;
-        Color const badColor = theme.colorDanger;
+        Color const okColor = Color::primary();
+        Color const badColor = Color::danger();
 
         return VStack {
             .spacing = theme.space4,
@@ -89,15 +89,15 @@ struct TextInputShowcase {
             .children = children(
                 Text {
                     .text = "TextInput",
-                    .font = theme.fontDisplay,
-                    .color = theme.colorTextPrimary,
+                    .font = Font::largeTitle(),
+                    .color = Color::primary(),
                 },
                 Text {
                     .text =
                         "One control, two modes. This example covers submit-driven single-line fields, "
                         "validation, plain styling, multiline editing, and disabled states.",
-                    .font = theme.fontBody,
-                    .color = theme.colorTextSecondary,
+                    .font = Font::body(),
+                    .color = Color::secondary(),
                     .wrapping = TextWrapping::Wrap,
                 },
                 HStack {
@@ -132,8 +132,8 @@ struct TextInputShowcase {
                                                                       .style = TextInput::Style::plain(),
                                                                   }
                                                                       .padding(theme.space3)
-                                                                      .fill(FillStyle::solid(theme.colorSurface))
-                                                                      .stroke(StrokeStyle::solid(theme.colorBorder, 1.f))
+                                                                      .fill(FillStyle::solid(Color::controlBackground()))
+                                                                      .stroke(StrokeStyle::solid(Color::opaqueSeparator(), 1.f))
                                                                       .cornerRadius(CornerRadius {theme.radiusMedium})),
                                     labeledField(theme, "Disabled", TextInput {
                                                                         .value = disabled,

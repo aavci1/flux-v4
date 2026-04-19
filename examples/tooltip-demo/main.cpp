@@ -56,7 +56,7 @@ struct TooltipIcon {
         return Element {Icon {
             .name = name,
             .size = 24.f,
-            .color = theme.colorTextSecondary,
+            .color = Color::secondary(),
         }}
             .padding(4.f)
             .cursor(Cursor::Arrow);
@@ -88,22 +88,22 @@ struct TooltipDemoRoot {
             .children = children(
                 Text {
                     .text = "Tooltip",
-                    .font = theme.fontDisplay,
-                    .color = theme.colorTextPrimary,
+                    .font = Font::largeTitle(),
+                    .color = Color::primary(),
                 },
                 Text {
                     .text = "Hover over any control for 600 ms to "
                             "see its tooltip. Move the pointer away "
                             "to dismiss. Tapping also dismisses.",
-                    .font = theme.fontBody,
-                    .color = theme.colorTextSecondary,
+                    .font = Font::body(),
+                    .color = Color::secondary(),
                     .wrapping = TextWrapping::Wrap,
                 },
                 // ── Placement variants ──────────────────────────
                 Text {
                     .text = "Placement",
-                    .font = theme.fontHeading,
-                    .color = theme.colorTextPrimary,
+                    .font = Font::title(),
+                    .color = Color::primary(),
                 },
                 HStack {
                     .spacing = 12.f,
@@ -135,8 +135,8 @@ struct TooltipDemoRoot {
                 // ── Icon tooltips ───────────────────────────────
                 Text {
                     .text = "Icon tooltips",
-                    .font = theme.fontHeading,
-                    .color = theme.colorTextPrimary,
+                    .font = Font::title(),
+                    .color = Color::primary(),
                 },
                 HStack {
                     .spacing = 16.f,
@@ -164,8 +164,8 @@ struct TooltipDemoRoot {
                 // ── Long tooltip text ───────────────────────────
                 Text {
                     .text = "Long text",
-                    .font = theme.fontHeading,
-                    .color = theme.colorTextPrimary,
+                    .font = Font::title(),
+                    .color = Color::primary(),
                 },
                 TooltipButton {
                     .label = "Hover me",
@@ -177,8 +177,8 @@ struct TooltipDemoRoot {
                 // ── Toggle with tooltip ─────────────────────────
                 Text {
                     .text = "On other controls",
-                    .font = theme.fontHeading,
-                    .color = theme.colorTextPrimary,
+                    .font = Font::title(),
+                    .color = Color::primary(),
                 },
                 HStack {
                     .spacing = 12.f,
@@ -186,8 +186,8 @@ struct TooltipDemoRoot {
                     .children = children(
                         Text {
                             .text = "Notifications",
-                            .font = theme.fontBody,
-                            .color = theme.colorTextPrimary,
+                            .font = Font::body(),
+                            .color = Color::primary(),
                         },
                         Spacer {},
                         TooltipToggle {}

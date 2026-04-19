@@ -11,6 +11,8 @@
 
 namespace flux {
 
+struct Theme;
+
 // -----------------------------------------------------------------------------
 // Point / Vec2 (2D position)
 // -----------------------------------------------------------------------------
@@ -105,15 +107,50 @@ struct Color {
                static_cast<std::uint8_t>(h & 0xFF));
   }
 
+  static constexpr Color theme() { return semantic(1); }
+  static constexpr Color primary() { return semantic(2); }
+  static constexpr Color secondary() { return semantic(3); }
+  static constexpr Color tertiary() { return semantic(4); }
+  static constexpr Color quaternary() { return semantic(5); }
+  static constexpr Color placeholder() { return semantic(6); }
+  static constexpr Color disabled() { return semantic(7); }
+  static constexpr Color accent() { return semantic(8); }
+  static constexpr Color accentForeground() { return semantic(9); }
+  static constexpr Color windowBackground() { return semantic(10); }
+  static constexpr Color controlBackground() { return semantic(11); }
+  static constexpr Color elevatedBackground() { return semantic(12); }
+  static constexpr Color textBackground() { return semantic(13); }
+  static constexpr Color separator() { return semantic(14); }
+  static constexpr Color opaqueSeparator() { return semantic(15); }
+  static constexpr Color selectedContentBackground() { return semantic(16); }
+  static constexpr Color focusRing() { return semantic(17); }
+  static constexpr Color scrim() { return semantic(18); }
+  static constexpr Color popoverScrim() { return semantic(19); }
+  static constexpr Color success() { return semantic(20); }
+  static constexpr Color successForeground() { return semantic(21); }
+  static constexpr Color successBackground() { return semantic(22); }
+  static constexpr Color warning() { return semantic(23); }
+  static constexpr Color warningForeground() { return semantic(24); }
+  static constexpr Color warningBackground() { return semantic(25); }
+  static constexpr Color danger() { return semantic(26); }
+  static constexpr Color dangerForeground() { return semantic(27); }
+  static constexpr Color dangerBackground() { return semantic(28); }
+
+  constexpr int semanticToken() const { return a < 0.f ? static_cast<int>(-a) : 0; }
+  constexpr bool isSemantic() const { return semanticToken() != 0; }
+
   constexpr bool operator==(const Color& o) const = default;
+
+private:
+  static constexpr Color semantic(int token) { return Color(0.f, 0.f, 0.f, -static_cast<float>(token)); }
 };
 
-/// Sentinel: inherit from `Theme` (see `resolveColor`).
-inline constexpr Color kColorFromTheme{0.f, 0.f, 0.f, -1.f};
-
 constexpr inline Color resolveColor(Color override, Color themeValue) {
-  return (override.a < 0.f) ? themeValue : override;
+  return (override.semanticToken() == 1) ? themeValue : override;
 }
+
+Color resolveColor(Color value, Theme const& theme);
+Color resolveColor(Color override, Color themeValue, Theme const& theme);
 
 /// Sentinel float: inherit spacing, radius, or non-layout float from `Theme`.
 inline constexpr float kFloatFromTheme = -1.f;

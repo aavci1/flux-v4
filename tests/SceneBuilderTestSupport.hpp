@@ -484,7 +484,7 @@ struct InlineLinksComposite {
                     Text{.text = "Need copy guidance before publishing?"},
                     LinkButton{
                         .label = "Open the editorial checklist",
-                        .style = LinkButton::Style{.font = theme.fontBody},
+                        .style = LinkButton::Style{.font = Font::body()},
                     })},
             HStack{
                 .spacing = 4.f,
@@ -493,13 +493,13 @@ struct InlineLinksComposite {
                     Text{.text = *reviewPassed ? "Review already passed." : "Still waiting on approval?"},
                     LinkButton{
                         .label = *reviewPassed ? "Mark review as pending" : "Mark review as approved",
-                        .style = LinkButton::Style{.font = theme.fontBodySmall},
+                        .style = LinkButton::Style{.font = Font::footnote()},
                     },
                     Text{.text = "or"},
                     LinkButton{
                         .label = "contact support",
                         .disabled = true,
-                        .style = LinkButton::Style{.font = theme.fontBodySmall},
+                        .style = LinkButton::Style{.font = Font::footnote()},
                     })})};
   }
 };

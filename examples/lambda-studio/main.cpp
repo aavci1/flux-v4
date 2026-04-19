@@ -796,8 +796,8 @@ struct StudioApp : ViewModifiers<StudioApp> {
             return Element {
                 Text {
                     .text = "Runtime configuration missing",
-                    .font = theme.fontBody,
-                    .color = theme.colorDanger,
+                    .font = Font::body(),
+                    .color = Color::danger(),
                     .horizontalAlignment = HorizontalAlignment::Center,
                     .verticalAlignment = VerticalAlignment::Center,
                 }

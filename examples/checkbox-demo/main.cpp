@@ -22,14 +22,14 @@ Element makeSectionCard(Theme const &theme, std::string title, std::string capti
         .children = children(
             Text {
                 .text = std::move(title),
-                .font = theme.fontTitle,
-                .color = theme.colorTextPrimary,
+                .font = Font::title2(),
+                .color = Color::primary(),
                 .horizontalAlignment = HorizontalAlignment::Leading,
             },
             Text {
                 .text = std::move(caption),
-                .font = theme.fontBodySmall,
-                .color = theme.colorTextSecondary,
+                .font = Font::footnote(),
+                .color = Color::secondary(),
                 .horizontalAlignment = HorizontalAlignment::Leading,
                 .wrapping = TextWrapping::Wrap,
             },
@@ -37,8 +37,8 @@ Element makeSectionCard(Theme const &theme, std::string title, std::string capti
         )
     } //
         .padding(theme.space4)
-        .fill(FillStyle::solid(theme.colorSurfaceOverlay))
-        .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
+        .fill(FillStyle::solid(Color::elevatedBackground()))
+        .stroke(StrokeStyle::solid(Color::separator(), 1.f))
         .cornerRadius(CornerRadius {theme.radiusLarge});
 }
 
@@ -54,14 +54,14 @@ Element checkboxRow(Theme const &theme, std::string label, std::string detail, E
                 .children = children(
                     Text {
                         .text = std::move(label),
-                        .font = theme.fontLabel,
-                        .color = theme.colorTextPrimary,
+                        .font = Font::headline(),
+                        .color = Color::primary(),
                         .horizontalAlignment = HorizontalAlignment::Leading,
                     },
                     Text {
                         .text = std::move(detail),
-                        .font = theme.fontBodySmall,
-                        .color = theme.colorTextSecondary,
+                        .font = Font::footnote(),
+                        .color = Color::secondary(),
                         .horizontalAlignment = HorizontalAlignment::Leading,
                         .wrapping = TextWrapping::Wrap,
                     }
@@ -71,7 +71,7 @@ Element checkboxRow(Theme const &theme, std::string label, std::string detail, E
         )
     } //
         .padding(theme.space3)
-        .fill(FillStyle::solid(theme.colorBackground))
+        .fill(FillStyle::solid(Color::windowBackground()))
         .cornerRadius(CornerRadius {theme.radiusMedium});
 }
 
@@ -80,12 +80,12 @@ Element summaryTile(Theme const &theme, std::string value, std::string label, Co
         .spacing = theme.space1,
         .alignment = Alignment::Start,
         .children = children(
-            Text {.text = std::move(value), .font = theme.fontTitle, .color = accent},
-            Text {.text = std::move(label), .font = theme.fontBodySmall, .color = theme.colorTextSecondary}
+            Text {.text = std::move(value), .font = Font::title2(), .color = accent},
+            Text {.text = std::move(label), .font = Font::footnote(), .color = Color::secondary()}
         )
     } //
         .padding(theme.space3)
-        .fill(FillStyle::solid(theme.colorBackground))
+        .fill(FillStyle::solid(Color::windowBackground()))
         .cornerRadius(CornerRadius {theme.radiusMedium})
         .flex(1.f, 1.f, 0.f);
 }
@@ -123,14 +123,14 @@ struct CheckboxDemoRoot {
                     .children = children(
                         Text {
                             .text = "Checkbox Demo",
-                            .font = theme.fontDisplay,
-                            .color = theme.colorTextPrimary,
+                            .font = Font::largeTitle(),
+                            .color = Color::primary(),
                             .horizontalAlignment = HorizontalAlignment::Leading,
                         },
                         Text {
                             .text = "A more realistic checkbox showcase with form consent, tri-state selection, disabled rows, and a restrained style variation.",
-                            .font = theme.fontBody,
-                            .color = theme.colorTextSecondary,
+                            .font = Font::body(),
+                            .color = Color::secondary(),
                             .horizontalAlignment = HorizontalAlignment::Leading,
                             .wrapping = TextWrapping::Wrap,
                         },
@@ -172,15 +172,15 @@ struct CheckboxDemoRoot {
                                                                                                                                                                                                                                                                                                                                               itemC = v;
                                                                                                                                                                                                                                                                                                                                           },
                                                                                                                                                                                                                                                                                                                                       }),
-                                                                                                                                                                                                                                                       HStack {.spacing = theme.space3, .alignment = Alignment::Stretch, .children = children(summaryTile(theme, std::to_string(selectedCount), "Selected", theme.colorAccent), summaryTile(theme, selectAllIndeterminate ? "Mixed" : (allChecked ? "All" : "None"), "State", selectAllIndeterminate ? theme.colorWarning : theme.colorSuccess))}, checkboxRow(theme, "Homepage illustrations", "Ready for this week’s rollout.", Checkbox {.value = itemA}), checkboxRow(theme, "Campaign copy deck", "Still waiting on final review.", Checkbox {.value = itemB}), checkboxRow(theme, "Pricing screenshots", "Approved and ready to export.", Checkbox {.value = itemC}))}),
+                                                                                                                                                                                                                                                       HStack {.spacing = theme.space3, .alignment = Alignment::Stretch, .children = children(summaryTile(theme, std::to_string(selectedCount), "Selected", Color::accent()), summaryTile(theme, selectAllIndeterminate ? "Mixed" : (allChecked ? "All" : "None"), "State", selectAllIndeterminate ? Color::warning() : Color::success()))}, checkboxRow(theme, "Homepage illustrations", "Ready for this week’s rollout.", Checkbox {.value = itemA}), checkboxRow(theme, "Campaign copy deck", "Still waiting on final review.", Checkbox {.value = itemB}), checkboxRow(theme, "Pricing screenshots", "Approved and ready to export.", Checkbox {.value = itemC}))}),
                         makeSectionCard(theme, "Style Variation", "A small token change can adapt the control without changing its meaning.", checkboxRow(theme, "Success accent", "A green checked state works for positive checklist flows like “completed” or “verified”.", Checkbox {
                                                                                                                                                                                                                                                                                    .value = greenCheck,
-                                                                                                                                                                                                                                                                                   .style = Checkbox::Style {.checkedColor = theme.colorSuccess},
+                                                                                                                                                                                                                                                                                   .style = Checkbox::Style {.checkedColor = Color::success()},
                                                                                                                                                                                                                                                                                })),
                         Text {
                             .text = "Try keyboard focus here too: Tab onto a checkbox and use Space or Return to toggle it.",
-                            .font = theme.fontBodySmall,
-                            .color = theme.colorTextMuted,
+                            .font = Font::footnote(),
+                            .color = Color::tertiary(),
                             .horizontalAlignment = HorizontalAlignment::Leading,
                             .wrapping = TextWrapping::Wrap,
                         }
@@ -189,7 +189,7 @@ struct CheckboxDemoRoot {
                     .padding(theme.space5)
             )
         } //
-            .fill(FillStyle::solid(theme.colorBackground));
+            .fill(FillStyle::solid(Color::windowBackground()));
     }
 };
 

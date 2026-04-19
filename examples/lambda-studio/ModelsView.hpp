@@ -272,14 +272,14 @@ struct ModelRow : ViewModifiers<ModelRow> {
                         .children = children(
                             Text {
                                 .text = presented.title,
-                                .font = theme.fontLabel,
-                                .color = active ? theme.colorAccent : theme.colorTextPrimary,
+                                .font = Font::headline(),
+                                .color = active ? Color::accent() : Color::primary(),
                                 .horizontalAlignment = HorizontalAlignment::Leading,
                             },
                             Text {
                                 .text = presented.detail,
-                                .font = theme.fontBodySmall,
-                                .color = theme.colorTextSecondary,
+                                .font = Font::footnote(),
+                                .color = Color::secondary(),
                                 .horizontalAlignment = HorizontalAlignment::Leading,
                                 .wrapping = TextWrapping::Wrap,
                                 .maxLines = 2,
@@ -296,9 +296,9 @@ struct ModelRow : ViewModifiers<ModelRow> {
                         .icon = IconName::Delete,
                         .disabled = deleting,
                         .style = {
-                            .size = theme.fontHeading.size,
-                            .weight = theme.fontLabel.weight,
-                            .color = deleting ? theme.colorTextDisabled : theme.colorDanger,
+                            .size = theme.titleFont.size,
+                            .weight = theme.headlineFont.weight,
+                            .color = deleting ? Color::disabled() : Color::danger(),
                         },
                         .onTap = onDelete,
                     }
@@ -338,8 +338,8 @@ struct DownloadJobRow : ViewModifiers<DownloadJobRow> {
         infoChildren.push_back(
             Text {
                 .text = title,
-                .font = theme.fontLabelSmall,
-                .color = job.status == DownloadJobStatus::Failed ? theme.colorDanger : theme.colorTextPrimary,
+                .font = Font::caption(),
+                .color = job.status == DownloadJobStatus::Failed ? Color::danger() : Color::primary(),
                 .wrapping = TextWrapping::Wrap,
                 .maxLines = 2,
             }
@@ -347,8 +347,8 @@ struct DownloadJobRow : ViewModifiers<DownloadJobRow> {
         infoChildren.push_back(
             Text {
                 .text = meta,
-                .font = theme.fontBodySmall,
-                .color = theme.colorTextSecondary,
+                .font = Font::footnote(),
+                .color = Color::secondary(),
                 .wrapping = TextWrapping::Wrap,
                 .maxLines = 2,
             }
@@ -358,8 +358,8 @@ struct DownloadJobRow : ViewModifiers<DownloadJobRow> {
                 ProgressBar {
                     .progress = downloadJobProgress(job),
                     .style = {
-                        .activeColor = theme.colorAccent,
-                        .inactiveColor = theme.colorSurfaceHover,
+                        .activeColor = Color::accent(),
+                        .inactiveColor = theme.hoveredControlBackgroundColor,
                         .trackHeight = 6.f,
                     },
                 }.size(112.f, 0.f)
@@ -396,9 +396,9 @@ struct DownloadJobRow : ViewModifiers<DownloadJobRow> {
                                         IconButton {
                                             .icon = IconName::Delete,
                                             .style = {
-                                                .size = theme.fontBody.size,
-                                                .weight = theme.fontLabel.weight,
-                                                .color = theme.colorTextSecondary,
+                                                .size = theme.bodyFont.size,
+                                                .weight = theme.headlineFont.weight,
+                                                .color = Color::secondary(),
                                             },
                                             .onTap = onRemove,
                                         }
@@ -503,8 +503,8 @@ struct ModelsView : ViewModifiers<ModelsView> {
                     .children = children(
                         Text {
                             .text = "Models",
-                            .font = theme.fontHeading,
-                            .color = theme.colorTextPrimary,
+                            .font = Font::title(),
+                            .color = Color::primary(),
                         }
                             .flex(1.f, 1.f),
                         LinkButton {
@@ -521,7 +521,7 @@ struct ModelsView : ViewModifiers<ModelsView> {
                 std::move(content)
             )
         }
-            .fill(FillStyle::solid(theme.colorSurfaceOverlay));
+            .fill(FillStyle::solid(Color::elevatedBackground()));
     }
 };
 

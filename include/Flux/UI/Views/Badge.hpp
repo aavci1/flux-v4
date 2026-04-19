@@ -14,12 +14,12 @@ namespace flux {
 
 struct Badge : ViewModifiers<Badge> {
     struct Style {
-        Font font = kFontFromTheme;
+        Font font = Font::theme();
         float paddingH = kFloatFromTheme;
         float paddingV = kFloatFromTheme;
         float cornerRadius = kFloatFromTheme;
-        Color foregroundColor = kColorFromTheme;
-        Color backgroundColor = kColorFromTheme;
+        Color foregroundColor = Color::theme();
+        Color backgroundColor = Color::theme();
     };
 
     std::string label;

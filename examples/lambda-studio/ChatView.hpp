@@ -409,35 +409,35 @@ std::string toolCollapsedPreview(ChatMessage const &message) {
 Color toolStateForeground(Theme const &theme, ToolMessageState state) {
     switch (state) {
     case ToolMessageState::Completed:
-        return theme.colorSuccess;
+        return Color::success();
     case ToolMessageState::Denied:
     case ToolMessageState::Failed:
-        return theme.colorDanger;
+        return Color::danger();
     case ToolMessageState::PendingApproval:
-        return theme.colorWarning;
+        return Color::warning();
     case ToolMessageState::Running:
-        return theme.colorAccent;
+        return Color::accent();
     case ToolMessageState::None:
         break;
     }
-    return theme.colorTextSecondary;
+    return Color::secondary();
 }
 
 Color toolStateBackground(Theme const &theme, ToolMessageState state) {
     switch (state) {
     case ToolMessageState::Completed:
-        return theme.colorSuccessSubtle;
+        return Color::successBackground();
     case ToolMessageState::Denied:
     case ToolMessageState::Failed:
-        return theme.colorDangerSubtle;
+        return Color::dangerBackground();
     case ToolMessageState::PendingApproval:
-        return theme.colorWarningSubtle;
+        return Color::warningBackground();
     case ToolMessageState::Running:
-        return theme.colorAccentSubtle;
+        return Color::selectedContentBackground();
     case ToolMessageState::None:
         break;
     }
-    return theme.colorSurfaceHover;
+    return theme.hoveredControlBackgroundColor;
 }
 
 std::string formatToolArguments(std::string arguments) {
@@ -463,12 +463,12 @@ Element toolCallCard(Theme const &theme, ChatToolCall const &toolCall) {
                     Icon {
                         .name = toolIcon(toolCall.name),
                         .size = 16.f,
-                        .color = theme.colorTextSecondary,
+                        .color = Color::secondary(),
                     },
                     Text {
                         .text = toolCall.name,
-                        .font = theme.fontLabel,
-                        .color = theme.colorTextPrimary,
+                        .font = Font::headline(),
+                        .color = Color::primary(),
                         .horizontalAlignment = HorizontalAlignment::Leading,
                     }
                         .flex(1.f, 1.f),
@@ -477,7 +477,7 @@ Element toolCallCard(Theme const &theme, ChatToolCall const &toolCall) {
                         .style = {
                             .size = 14.f,
                             .weight = 500.f,
-                            .color = theme.colorTextSecondary,
+                            .color = Color::secondary(),
                         },
                         .onTap = [rawText = toolCall.arguments] {
                             if (!Application::hasInstance()) {
@@ -490,9 +490,9 @@ Element toolCallCard(Theme const &theme, ChatToolCall const &toolCall) {
             },
             Text {
                 .text = formatToolArguments(toolCall.arguments),
-                .font = theme.fontCode,
-                .color = theme.colorTextSecondary,
-                .selectionColor = theme.colorAccentSubtle,
+                .font = Font::monospacedBody(),
+                .color = Color::secondary(),
+                .selectionColor = Color::selectedContentBackground(),
                 .selectable = true,
                 .horizontalAlignment = HorizontalAlignment::Leading,
                 .wrapping = TextWrapping::Wrap,
@@ -500,8 +500,8 @@ Element toolCallCard(Theme const &theme, ChatToolCall const &toolCall) {
         )
     }
         .padding(theme.space3)
-        .fill(FillStyle::solid(theme.colorSurface))
-        .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
+        .fill(FillStyle::solid(Color::controlBackground()))
+        .stroke(StrokeStyle::solid(Color::separator(), 1.f))
         .cornerRadius(theme.radiusLarge);
 }
 
@@ -524,8 +524,8 @@ Element quickSettingControl(
             },
             Text {
                 .text = std::move(label) + ": " + std::move(value),
-                .font = theme.fontBodySmall,
-                .color = disabled ? theme.colorTextDisabled : theme.colorTextSecondary,
+                .font = Font::footnote(),
+                .color = disabled ? Color::disabled() : Color::secondary(),
                 .horizontalAlignment = HorizontalAlignment::Leading,
             },
             LinkButton {
@@ -618,16 +618,16 @@ struct ModelParametersDialog : ViewModifiers<ModelParametersDialog> {
                             .children = children(
                                 Text {
                                     .text = "Model Parameters",
-                                    .font = theme.fontHeading,
-                                    .color = theme.colorTextPrimary,
+                                    .font = Font::title(),
+                                    .color = Color::primary(),
                                 }
                                     .flex(1.f, 1.f),
                                 IconButton {
                                     .icon = IconName::Close,
                                     .style = {
-                                        .size = theme.fontHeading.size,
-                                        .weight = theme.fontLabel.weight,
-                                        .color = theme.colorTextSecondary,
+                                        .size = theme.titleFont.size,
+                                        .weight = theme.headlineFont.weight,
+                                        .color = Color::secondary(),
                                     },
                                     .onTap = onClose,
                                 }
@@ -701,8 +701,8 @@ struct ModelParametersDialog : ViewModifiers<ModelParametersDialog> {
                 }
                     .padding(theme.space4)
                     .size(420.f, 0.f)
-                    .fill(FillStyle::solid(theme.colorSurfaceOverlay))
-                    .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
+                    .fill(FillStyle::solid(Color::elevatedBackground()))
+                    .stroke(StrokeStyle::solid(Color::separator(), 1.f))
                     .cornerRadius(theme.radiusXLarge)
             ),
         };
@@ -740,7 +740,7 @@ struct ThinkingDots : ViewModifiers<ThinkingDots> {
                 Rectangle {}
                     .size(8.f, 8.f)
                     .cornerRadius(4.f)
-                    .fill(FillStyle::solid(theme.colorTextSecondary))
+                    .fill(FillStyle::solid(Color::secondary()))
                     .opacity(0.28f + emphasis * 0.72f)
                     .position(0.f, (emphasis - 0.5f) * 4.f)
             );
@@ -781,22 +781,22 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
             onApproveTool && onDenyTool;
         bool const showSummaryFooter = !collapsed && (message.generationStats.has_value() || hasDeleteAction || hasCopyAction);
 
-        Color const fill = isUser      ? theme.colorAccent :
-                           isReasoning ? theme.colorSurface :
-                                         theme.colorSurfaceOverlay;
-        Color const textColor = isUser ? theme.colorTextOnAccent : theme.colorTextPrimary;
-        Color const summaryColor = isUser ? theme.colorTextOnAccent : theme.colorTextMuted;
-        Color const deleteIconColor = isUser ? theme.colorTextOnAccent : theme.colorTextSecondary;
-        Color selectionColor = isUser ? Color {1.f, 1.f, 1.f, 0.22f} : theme.colorAccentSubtle;
+        Color const fill = isUser      ? Color::accent() :
+                           isReasoning ? Color::controlBackground() :
+                                         Color::elevatedBackground();
+        Color const textColor = isUser ? Color::accentForeground() : Color::primary();
+        Color const summaryColor = isUser ? Color::accentForeground() : Color::tertiary();
+        Color const deleteIconColor = isUser ? Color::accentForeground() : Color::secondary();
+        Color selectionColor = isUser ? Color {1.f, 1.f, 1.f, 0.22f} : Color::selectedContentBackground();
         MarkdownResolvedStyle const markdownStyle =
-            resolveMarkdownStyle(theme, isReasoning ? theme.fontBodySmall : theme.fontBody, textColor);
+            resolveMarkdownStyle(theme, isReasoning ? Font::footnote() : Font::body(), textColor);
         auto buildSummaryRow = [&](std::string primaryLine) -> Element {
             std::vector<Element> summaryChildren;
             if (!primaryLine.empty()) {
                 summaryChildren.push_back(
                     Text {
                         .text = primaryLine,
-                        .font = theme.fontLabelSmall,
+                        .font = Font::caption(),
                         .color = summaryColor,
                         .horizontalAlignment = HorizontalAlignment::Leading,
                         .wrapping = TextWrapping::Wrap,
@@ -866,14 +866,14 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
                     Icon {
                         .name = toolIcon(message.toolName),
                         .size = 18.f,
-                        .color = theme.colorTextSecondary,
+                        .color = Color::secondary(),
                     }
                 );
                 headerChildren.push_back(
                     Text {
                         .text = toolTitle(message),
-                        .font = theme.fontLabel,
-                        .color = theme.colorTextPrimary,
+                        .font = Font::headline(),
+                        .color = Color::primary(),
                         .horizontalAlignment = HorizontalAlignment::Leading,
                     }
                         .flex(1.f, 1.f)
@@ -882,7 +882,7 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
                     Badge {
                         .label = toolStateLabel(message.toolState),
                         .style = {
-                            .font = theme.fontLabelSmall,
+                            .font = Font::caption(),
                             .foregroundColor = toolStateForeground(theme, message.toolState),
                             .backgroundColor = toolStateBackground(theme, message.toolState),
                         },
@@ -904,8 +904,8 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
                     collapsedChildren.push_back(
                         Text {
                             .text = preview,
-                            .font = theme.fontBodySmall,
-                            .color = theme.colorTextMuted,
+                            .font = Font::footnote(),
+                            .color = Color::tertiary(),
                             .horizontalAlignment = HorizontalAlignment::Leading,
                             .wrapping = TextWrapping::Wrap,
                             .maxLines = 3,
@@ -930,8 +930,8 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
                     .children = std::move(collapsedChildren),
                 }
                     .padding(theme.space4)
-                    .fill(FillStyle::solid(theme.colorSurfaceOverlay))
-                    .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
+                    .fill(FillStyle::solid(Color::elevatedBackground()))
+                    .stroke(StrokeStyle::solid(Color::separator(), 1.f))
                     .cornerRadius(theme.radiusXLarge)
                     .cursor(onToggleReasoning ? Cursor::Hand : Cursor::Arrow)
                     .focusable(static_cast<bool>(onToggleReasoning))
@@ -944,8 +944,8 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
                 toolChildren.push_back(
                     Text {
                         .text = "Call ID: " + message.toolCallId,
-                        .font = theme.fontLabelSmall,
-                        .color = theme.colorTextMuted,
+                        .font = Font::caption(),
+                        .color = Color::tertiary(),
                         .horizontalAlignment = HorizontalAlignment::Leading,
                         .wrapping = TextWrapping::Wrap,
                     }
@@ -955,9 +955,9 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
                 toolChildren.push_back(
                     Text {
                         .text = message.text,
-                        .font = theme.fontCode,
-                        .color = theme.colorTextPrimary,
-                        .selectionColor = theme.colorAccentSubtle,
+                        .font = Font::monospacedBody(),
+                        .color = Color::primary(),
+                        .selectionColor = Color::selectedContentBackground(),
                         .selectable = true,
                         .horizontalAlignment = HorizontalAlignment::Leading,
                         .verticalAlignment = VerticalAlignment::Top,
@@ -1003,8 +1003,8 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
                 .children = std::move(toolChildren),
             }
                                  .padding(theme.space4)
-                                 .fill(FillStyle::solid(theme.colorSurfaceOverlay))
-                                 .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
+                                 .fill(FillStyle::solid(Color::elevatedBackground()))
+                                 .stroke(StrokeStyle::solid(Color::separator(), 1.f))
                                  .cornerRadius(theme.radiusXLarge);
 
             return HStack {
@@ -1025,7 +1025,7 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
                 toolCards.push_back(
                     Text {
                         .text = "Tool calls",
-                        .font = theme.fontLabelSmall,
+                        .font = Font::caption(),
                         .color = summaryColor,
                         .horizontalAlignment = HorizontalAlignment::Leading,
                     }
@@ -1104,7 +1104,7 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
             }
                                  .padding(theme.space4)
                                  .fill(FillStyle::solid(fill))
-                                 .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
+                                 .stroke(StrokeStyle::solid(Color::separator(), 1.f))
                                  .cornerRadius(theme.radiusXLarge);
 
             return HStack {
@@ -1119,16 +1119,16 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
 
         Element bubble = [&]() -> Element {
             if (isReasoning && collapsed) {
-                Color const collapsedFill = pressed ? theme.colorSurfaceRowHover :
-                                            hovered ? theme.colorSurfaceHover :
-                                                      theme.colorSurface;
+                Color const collapsedFill = pressed ? theme.rowHoverBackgroundColor :
+                                            hovered ? theme.hoveredControlBackgroundColor :
+                                                      Color::controlBackground();
                 std::vector<Element> collapsedChildren;
                 collapsedChildren.push_back(
                     reasoningFinished ? Element {
                                            Text {
                                                .text = thoughtSummary,
-                                               .font = theme.fontBodySmall,
-                                               .color = theme.colorTextMuted,
+                                               .font = Font::footnote(),
+                                               .color = Color::tertiary(),
                                                .horizontalAlignment = HorizontalAlignment::Leading,
                                                .wrapping = TextWrapping::Wrap,
                                            }
@@ -1154,7 +1154,7 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
                 }
                     .padding(theme.space4)
                     .fill(FillStyle::solid(collapsedFill))
-                    .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
+                    .stroke(StrokeStyle::solid(Color::separator(), 1.f))
                     .cornerRadius(theme.radiusXLarge)
                     .cursor(Cursor::Hand)
                     .focusable(true)
@@ -1202,7 +1202,7 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
             }
                 .padding(theme.space4)
                 .fill(FillStyle::solid(fill))
-                .stroke(isUser ? StrokeStyle::none() : StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
+                .stroke(isUser ? StrokeStyle::none() : StrokeStyle::solid(Color::separator(), 1.f))
                 .cornerRadius(theme.radiusXLarge)
                 .cursor(Cursor::Arrow);
         }();
@@ -1317,9 +1317,9 @@ struct ChatComposer : ViewModifiers<ChatComposer> {
                             .icon = IconName::Settings,
                             .disabled = !onAdjustGeneration,
                             .style = {
-                                .size = theme.fontLabel.size,
-                                .weight = theme.fontLabel.weight,
-                                .color = theme.colorTextSecondary,
+                                .size = theme.headlineFont.size,
+                                .weight = theme.headlineFont.weight,
+                                .color = Color::secondary(),
                             },
                             .onTap = [showDialog,
                                       hideDialog,
@@ -1353,12 +1353,12 @@ struct ChatComposer : ViewModifiers<ChatComposer> {
                             .matchTriggerWidth = false,
                             .triggerMode = SelectTriggerMode::Link,
                             .style = Select::Style {
-                                .labelFont = theme.fontLabel,
-                                .detailFont = theme.fontBodySmall,
+                                .labelFont = Font::headline(),
+                                .detailFont = Font::footnote(),
                                 .menuMaxHeight = 280.f,
                                 .menuMaxWidth = 420.f,
                                 .minMenuWidth = 0.f,
-                                .accentColor = localModels.empty() || streaming ? theme.colorTextDisabled : theme.colorAccent,
+                                .accentColor = localModels.empty() || streaming ? Color::disabled() : Color::accent(),
                             },
                             .onChange = [localModels = localModels, onSelectModel = onSelectModel](int index) {
                                 if (index < 0 || static_cast<std::size_t>(index) >= localModels.size()) {
@@ -1375,9 +1375,9 @@ struct ChatComposer : ViewModifiers<ChatComposer> {
                         streaming ? Element {IconButton {
                                     .icon = IconName::Cancel,
                                     .style = {
-                                        .size = theme.fontHeading.size,
-                                        .weight = theme.fontLabel.weight,
-                                        .color = theme.colorTextSecondary,
+                                        .size = theme.titleFont.size,
+                                        .weight = theme.headlineFont.weight,
+                                        .color = Color::secondary(),
                                     },
                                     .onTap = onStop,
                                 }} :
@@ -1385,9 +1385,9 @@ struct ChatComposer : ViewModifiers<ChatComposer> {
                                     .icon = IconName::ArrowUpward,
                                     .disabled = !canSend,
                                     .style = {
-                                        .size = theme.fontHeading.size,
-                                        .weight = theme.fontLabel.weight,
-                                        .color = theme.colorAccent,
+                                        .size = theme.titleFont.size,
+                                        .weight = theme.headlineFont.weight,
+                                        .color = Color::accent(),
                                     },
                                     .onTap = submit,
                                 }}
@@ -1396,8 +1396,8 @@ struct ChatComposer : ViewModifiers<ChatComposer> {
             ),
         }
             .padding(theme.space4)
-            .fill(FillStyle::solid(isEditingDisabled ? theme.colorSurfaceDisabled : theme.colorSurfaceOverlay))
-            .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
+            .fill(FillStyle::solid(isEditingDisabled ? theme.disabledControlBackgroundColor : Color::elevatedBackground()))
+            .stroke(StrokeStyle::solid(Color::separator(), 1.f))
             .cornerRadius(theme.radiusXLarge)
             .shadow(ShadowStyle {
                 .radius = 2.f,
@@ -1538,23 +1538,23 @@ struct ChatView : ViewModifiers<ChatView> {
                     .children = children(
                         Text {
                             .text = chat.title,
-                            .font = theme.fontHeading,
-                            .color = theme.colorTextPrimary,
+                            .font = Font::title(),
+                            .color = Color::primary(),
                             .verticalAlignment = VerticalAlignment::Center
                         }
                             .flex(1.f, 1.f),
                         IconButton {
                             .icon = IconName::Delete,
                             .style = {
-                                .size = theme.fontHeading.size,
-                                .weight = theme.fontLabel.weight,
-                                .color = theme.colorDanger,
+                                .size = theme.titleFont.size,
+                                .weight = theme.headlineFont.weight,
+                                .color = Color::danger(),
                             },
                             .onTap = onDeleteChat,
                         }
                     ),
                 }.padding(theme.space4)
-                .fill(FillStyle::solid(theme.colorSurfaceOverlay)),
+                .fill(FillStyle::solid(Color::elevatedBackground())),
                 Divider { .orientation = Divider::Orientation::Horizontal },
                 ZStack {
                     .horizontalAlignment = Alignment::Stretch,
@@ -1571,7 +1571,7 @@ struct ChatView : ViewModifiers<ChatView> {
                                     .padding(theme.space4, theme.space4, theme.space4 + composerFloatingReserve, theme.space4)
                             )
                         }
-                            .fill(FillStyle::solid(theme.colorBackground))
+                            .fill(FillStyle::solid(Color::windowBackground()))
                             .clipContent(true),
                         HStack {
                             .spacing = 0.f,
@@ -1596,10 +1596,10 @@ struct ChatView : ViewModifiers<ChatView> {
                     ),
                 }
                     .flex(1.f, 1.f, 0.f)
-                    .fill(FillStyle::solid(theme.colorBackground))
+                    .fill(FillStyle::solid(Color::windowBackground()))
             ),
         }
-            .fill(FillStyle::solid(theme.colorBackground))
+            .fill(FillStyle::solid(Color::windowBackground()))
             .clipContent(true)
             .flex(1.f, 1.f, 0.f);
     }

@@ -80,9 +80,9 @@ struct BlendCell : ViewModifiers<BlendCell> {
                               StrokeStyle::solid(Color::rgb(90, 90, 100), 1.2f));
 
               Theme const theme = Theme::light();
-              Font const labelFont = theme.fontLabel;
+              Font const labelFont = theme.headlineFont;
               auto labelLayout =
-                  Application::instance().textSystem().layout(label, labelFont, theme.colorTextPrimary, 0.f);
+                  Application::instance().textSystem().layout(label, labelFont, theme.labelColor, 0.f);
               Size const m = labelLayout->measuredSize;
               float const y = cell.y + cell.height - 16.f - m.height;
               float const x = cell.x + (cell.width - m.width) * 0.5f;

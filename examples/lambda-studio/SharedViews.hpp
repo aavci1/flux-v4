@@ -48,14 +48,14 @@ struct EmptyStatePanel : ViewModifiers<EmptyStatePanel> {
             .children = children(
                 Text {
                     .text = title,
-                    .font = theme.fontHeading,
-                    .color = theme.colorTextSecondary,
+                    .font = Font::title(),
+                    .color = Color::secondary(),
                     .horizontalAlignment = HorizontalAlignment::Center,
                 },
                 Text {
                     .text = detail,
-                    .font = theme.fontBody,
-                    .color = theme.colorTextSecondary,
+                    .font = Font::body(),
+                    .color = Color::secondary(),
                     .horizontalAlignment = HorizontalAlignment::Center,
                     .wrapping = TextWrapping::Wrap,
                 }
@@ -83,15 +83,15 @@ struct LabeledValueRow : ViewModifiers<LabeledValueRow> {
             .children = children(
                 Text {
                     .text = label,
-                    .font = theme.fontLabelSmall,
-                    .color = theme.colorTextMuted,
+                    .font = Font::caption(),
+                    .color = Color::tertiary(),
                     .horizontalAlignment = HorizontalAlignment::Leading,
                 }
                     .size(labelWidth, 0.f),
                 Text {
                     .text = value,
-                    .font = emphasize ? theme.fontLabel : theme.fontBodySmall,
-                    .color = emphasize ? theme.colorTextPrimary : theme.colorTextSecondary,
+                    .font = emphasize ? Font::headline() : Font::footnote(),
+                    .color = emphasize ? Color::primary() : Color::secondary(),
                     .horizontalAlignment = HorizontalAlignment::Leading,
                     .wrapping = TextWrapping::Wrap,
                     .maxLines = maxLines,

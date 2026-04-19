@@ -54,8 +54,8 @@ struct RemoteModelRow : ViewModifiers<RemoteModelRow> {
         contentChildren.push_back(
             Text {
                 .text = model.id,
-                .font = theme.fontLabel,
-                .color = selected ? theme.colorAccent : theme.colorTextPrimary,
+                .font = Font::headline(),
+                .color = selected ? Color::accent() : Color::primary(),
                 .horizontalAlignment = HorizontalAlignment::Leading,
                 .wrapping = TextWrapping::Wrap,
             }
@@ -63,8 +63,8 @@ struct RemoteModelRow : ViewModifiers<RemoteModelRow> {
         contentChildren.push_back(
             Text {
                 .text = std::move(meta),
-                .font = theme.fontBodySmall,
-                .color = theme.colorTextSecondary,
+                .font = Font::footnote(),
+                .color = Color::secondary(),
                 .horizontalAlignment = HorizontalAlignment::Leading,
                 .wrapping = TextWrapping::Wrap,
                 .maxLines = 2,
@@ -74,8 +74,8 @@ struct RemoteModelRow : ViewModifiers<RemoteModelRow> {
             contentChildren.push_back(
                 Text {
                     .text = tags,
-                    .font = theme.fontLabelSmall,
-                    .color = theme.colorTextMuted,
+                    .font = Font::caption(),
+                    .color = Color::tertiary(),
                     .horizontalAlignment = HorizontalAlignment::Leading,
                     .wrapping = TextWrapping::Wrap,
                     .maxLines = 2,
@@ -116,8 +116,8 @@ struct RemoteFileRow : ViewModifiers<RemoteFileRow> {
         fileInfo.push_back(
             Text {
                 .text = file.path,
-                .font = theme.fontLabel,
-                .color = theme.colorTextPrimary,
+                .font = Font::headline(),
+                .color = Color::primary(),
                 .horizontalAlignment = HorizontalAlignment::Leading,
                 .wrapping = TextWrapping::Wrap,
             }
@@ -125,8 +125,8 @@ struct RemoteFileRow : ViewModifiers<RemoteFileRow> {
         fileInfo.push_back(
             Text {
                 .text = std::move(meta),
-                .font = theme.fontBodySmall,
-                .color = theme.colorTextSecondary,
+                .font = Font::footnote(),
+                .color = Color::secondary(),
                 .horizontalAlignment = HorizontalAlignment::Leading,
             }
         );
@@ -135,8 +135,8 @@ struct RemoteFileRow : ViewModifiers<RemoteFileRow> {
                 ProgressBar {
                     .progress = static_cast<float>(downloadedBytes) / static_cast<float>(totalBytes),
                     .style = {
-                        .activeColor = theme.colorAccent,
-                        .inactiveColor = theme.colorSurfaceHover,
+                        .activeColor = Color::accent(),
+                        .inactiveColor = theme.hoveredControlBackgroundColor,
                         .trackHeight = 6.f,
                     },
                 }.size(112.f, 0.f)
@@ -315,8 +315,8 @@ struct HubView : ViewModifiers<HubView> {
             selectedRepoChildren.push_back(
                 Text {
                     .text = selectedRemoteModel->id,
-                    .font = theme.fontLabel,
-                    .color = theme.colorTextPrimary,
+                    .font = Font::headline(),
+                    .color = Color::primary(),
                     .wrapping = TextWrapping::Wrap,
                 }
             );
@@ -324,8 +324,8 @@ struct HubView : ViewModifiers<HubView> {
                 selectedRepoChildren.push_back(
                     Text {
                         .text = selectedMeta,
-                        .font = theme.fontBodySmall,
-                        .color = theme.colorTextSecondary,
+                        .font = Font::footnote(),
+                        .color = Color::secondary(),
                         .wrapping = TextWrapping::Wrap,
                     }
                 );
@@ -335,8 +335,8 @@ struct HubView : ViewModifiers<HubView> {
                 selectedRepoChildren.push_back(
                     Text {
                         .text = std::move(selectedTags),
-                        .font = theme.fontLabelSmall,
-                        .color = theme.colorTextMuted,
+                        .font = Font::caption(),
+                        .color = Color::tertiary(),
                         .wrapping = TextWrapping::Wrap,
                         .maxLines = 2,
                     }
@@ -346,8 +346,8 @@ struct HubView : ViewModifiers<HubView> {
                 selectedRepoChildren.push_back(
                     Text {
                         .text = "Loading repository details...",
-                        .font = theme.fontBodySmall,
-                        .color = theme.colorTextSecondary,
+                        .font = Font::footnote(),
+                        .color = Color::secondary(),
                     }
                 );
             } else if (selectedRemoteDetail != nullptr) {
@@ -491,7 +491,7 @@ struct HubView : ViewModifiers<HubView> {
                             .alignment = Alignment::Stretch,
                             .children = children(std::move(remoteResults))
                         }
-                            .fill(FillStyle::solid(theme.colorSurfaceOverlay))
+                            .fill(FillStyle::solid(Color::elevatedBackground()))
                             .size(420.f, 0.f),
                         Divider { .orientation = Divider::Orientation:: Vertical },
                         VStack {
@@ -511,7 +511,7 @@ struct HubView : ViewModifiers<HubView> {
                             )
                         }
                             .padding(theme.space4)
-                            .fill(FillStyle::solid(theme.colorSurfaceOverlay))
+                            .fill(FillStyle::solid(Color::elevatedBackground()))
                             .flex(1.f, 1.f)
                     )
                 }

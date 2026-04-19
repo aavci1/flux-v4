@@ -24,8 +24,8 @@ Element Alert::body() const {
   ResolvedAlertCardColors const surface = resolveAlertCardColors(cardColor, cardStrokeColor, cornerRadius, theme);
   Color const card = surface.cardFill;
   Color const stroke = surface.cardStroke;
-  Color const titleC = resolveColor(titleColor, theme.colorTextPrimary);
-  Color const msgC = resolveColor(messageColor, theme.colorTextSecondary);
+  Color const titleC = resolveColor(titleColor, Color::primary(), theme);
+  Color const msgC = resolveColor(messageColor, Color::secondary(), theme);
   CornerRadius const cardCorner = surface.cornerRadius;
 
   return VStack {
@@ -57,7 +57,7 @@ std::vector<Element> Alert::buildContent(Color titleC, Color msgC, Theme const& 
   float const contentW = std::max(0.f, cardWidth - 2.f * theme.space6);
   rows.push_back(Text{
                      .text = title,
-                     .font = theme.fontTitle,
+                     .font = Font::title2(),
                      .color = titleC,
                  }
                      .size(contentW, 0.f));
@@ -65,7 +65,7 @@ std::vector<Element> Alert::buildContent(Color titleC, Color msgC, Theme const& 
   if (!message.empty()) {
     rows.push_back(Text{
                        .text = message,
-                       .font = theme.fontBody,
+                       .font = Font::body(),
                        .color = msgC,
                        .wrapping = TextWrapping::Wrap,
                    }
