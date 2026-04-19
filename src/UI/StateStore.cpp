@@ -33,6 +33,7 @@ void resetComponentStateStorage(ComponentState& state) {
   state.lastVisitedEpoch = 0;
   state.lastBody = {nullptr, nullptr};
   state.lastBodyEpoch = 0;
+  state.lastBodyConstraints.reset();
   state.reusableConstraints.clear();
   state.reusableMeasures.clear();
   state.valueSnapshot = {};
@@ -272,9 +273,12 @@ void StateStore::popCompositePathStable() {
   compositePathStableStack_.pop_back();
 }
 
-bool StateStore::hasBodyForCurrentRebuild(ComponentKey const& key) const {
+bool StateStore::hasBodyForCurrentRebuild(ComponentKey const& key,
+                                          LayoutConstraints const& constraints) const {
   auto const it = states_.find(key);
-  return it != states_.end() && it->second.lastBody && it->second.lastBodyEpoch == buildEpoch_;
+  return it != states_.end() && it->second.lastBody && it->second.lastBodyEpoch == buildEpoch_ &&
+         it->second.lastBodyConstraints.has_value() &&
+         constraintsEqual(*it->second.lastBodyConstraints, constraints);
 }
 
 Element* StateStore::cachedBody(ComponentKey const& key) {
@@ -300,6 +304,7 @@ void StateStore::discardCurrentRebuildBody(ComponentKey const& key) {
   }
   it->second.lastBody = {nullptr, nullptr};
   it->second.lastBodyEpoch = 0;
+  it->second.lastBodyConstraints.reset();
 }
 
 void StateStore::recordBodyConstraints(ComponentKey const& key, LayoutConstraints const& constraints) {

@@ -19,9 +19,10 @@ Size HStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints, 
   ContainerMeasureScope scope(ctx);
   float const assignedHCross = stackMainAxisSpan(0.f, constraints.maxHeight);
   bool const heightConstrained = std::isfinite(assignedHCross) && assignedHCross > 0.f;
+  bool const stretchCrossAxis = alignment == Alignment::Stretch && heightConstrained;
   LayoutConstraints childCs = constraints;
   childCs.maxWidth = std::numeric_limits<float>::infinity();
-  childCs.maxHeight = heightConstrained ? assignedHCross : std::numeric_limits<float>::infinity();
+  childCs.maxHeight = stretchCrossAxis ? assignedHCross : std::numeric_limits<float>::infinity();
 
   std::size_t const n = children.size();
   if (n == 1 && std::isfinite(constraints.maxWidth) && constraints.maxWidth > 0.f) {
@@ -64,7 +65,7 @@ Size HStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints, 
   for (std::size_t i = 0; i < n; ++i) {
     LayoutConstraints cs2 = constraints;
     cs2.maxWidth = mainLayout.mainSizes[i];
-    cs2.maxHeight = heightConstrained ? assignedHCross : std::numeric_limits<float>::infinity();
+    cs2.maxHeight = stretchCrossAxis ? assignedHCross : std::numeric_limits<float>::infinity();
     LayoutHints rh{};
     rh.hStackCrossAlign = alignment;
     Size const s2 = children[i].measure(ctx, cs2, rh, ts);

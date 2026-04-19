@@ -5,6 +5,32 @@
 #include <Flux/UI/Views/Popover.hpp>
 #include <Flux/UI/Views/Grid.hpp>
 
+namespace {
+
+struct BoundsDrivenComposite {
+  float fallbackHeight = 0.f;
+
+  Element body() const {
+    Rect const bounds = useBounds();
+    return Element{Rectangle{}}.size(bounds.width > 0.f ? bounds.width : 1.f,
+                                     bounds.height > 0.f ? bounds.height : fallbackHeight);
+  }
+};
+
+struct CompositeFooterPanel {
+  Element body() const {
+    return VStack{
+        .spacing = 0.f,
+        .alignment = Alignment::Stretch,
+        .children = children(
+            Element{Rectangle{}}.size(40.f, 30.f),
+            Element{Rectangle{}}.size(40.f, 20.f)),
+    };
+  }
+};
+
+} // namespace
+
 TEST_CASE("SceneBuilder: centered text keeps its assigned box for boxed layout") {
   NullTextSystem textSystem{};
   EnvironmentLayer env{};
@@ -240,6 +266,37 @@ TEST_CASE("SceneBuilder: sibling composites with distinct props keep distinct bo
   CHECK(labels[2] == "History");
 }
 
+TEST_CASE("SceneBuilder: constraint-sensitive composite bodies rebuild when a flex slot becomes assigned") {
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 320.f;
+  constraints.maxHeight = 240.f;
+
+  StoreScope storeScope;
+  storeScope.store.beginRebuild(true);
+  std::unique_ptr<SceneNode> tree = builder.build(
+      Element{VStack{
+          .spacing = 12.f,
+          .children = children(
+              Text{.text = "Markdown styler"},
+              Element{BoundsDrivenComposite{.fallbackHeight = 32.f}}.flex(1.f, 1.f, 0.f)),
+      }},
+      NodeId{1ull}, constraints);
+  storeScope.store.endRebuild();
+
+  REQUIRE(tree != nullptr);
+  REQUIRE(tree->children().size() == 2);
+  auto* rectNode = dynamic_cast<RectSceneNode*>(tree->children()[1].get());
+  REQUIRE(rectNode != nullptr);
+  CHECK(rectNode->size.width == doctest::Approx(320.f));
+  CHECK(rectNode->size.height == doctest::Approx(214.f));
+}
+
 TEST_CASE("SceneBuilder: sibling link buttons keep distinct labels") {
   NullTextSystem textSystem{};
   EnvironmentLayer env{};
@@ -437,6 +494,78 @@ TEST_CASE("SceneBuilder: stretched flex HStack leaves adopt their assigned slot 
   REQUIRE(rectNode != nullptr);
   CHECK(rectNode->size.width == doctest::Approx(100.f));
   CHECK(rectNode->size.height == doctest::Approx(50.f));
+}
+
+TEST_CASE("SceneBuilder: one-child HStack in a ZStack keeps finite row width and bottom alignment") {
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 200.f;
+  constraints.maxHeight = 120.f;
+
+  Element overlay = ZStack{
+      .horizontalAlignment = Alignment::Stretch,
+      .verticalAlignment = Alignment::End,
+      .children = children(
+          Element{Rectangle{}}.size(200.f, 120.f),
+          Element{HStack{
+              .children = children(
+                  Element{Rectangle{}}.size(40.f, 30.f).flex(1.f)),
+          }}
+              .padding(10.f)),
+  };
+
+  std::unique_ptr<SceneNode> tree = builder.build(overlay, NodeId{1ull}, constraints);
+  REQUIRE(tree != nullptr);
+  REQUIRE(tree->children().size() == 2);
+
+  SceneNode const& footer = *tree->children()[1];
+  CHECK(footer.bounds.width == doctest::Approx(200.f));
+  CHECK(footer.bounds.height == doctest::Approx(50.f));
+  CHECK(footer.position.x == doctest::Approx(0.f));
+  CHECK(footer.position.y == doctest::Approx(70.f));
+}
+
+TEST_CASE("SceneBuilder: non-stretch HStack does not force composite children to full cross-axis height") {
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 200.f;
+  constraints.maxHeight = 120.f;
+
+  Element overlay = ZStack{
+      .horizontalAlignment = Alignment::Stretch,
+      .verticalAlignment = Alignment::End,
+      .children = children(
+          Element{Rectangle{}}.size(200.f, 120.f),
+          Element{HStack{
+              .alignment = Alignment::Center,
+              .children = children(
+                  Element{CompositeFooterPanel{}}.flex(1.f)),
+          }}
+              .padding(10.f)),
+  };
+
+  StoreScope storeScope;
+  storeScope.store.beginRebuild(true);
+  std::unique_ptr<SceneNode> tree = builder.build(overlay, NodeId{1ull}, constraints);
+  storeScope.store.endRebuild();
+
+  REQUIRE(tree != nullptr);
+  REQUIRE(tree->children().size() == 2);
+
+  SceneNode const& footer = *tree->children()[1];
+  CHECK(footer.bounds.width == doctest::Approx(200.f));
+  CHECK(footer.bounds.height == doctest::Approx(70.f));
+  CHECK(footer.position.y == doctest::Approx(50.f));
 }
 
 TEST_CASE("SceneBuilder: constrained stacks report their assigned slot instead of growing with overflowing content") {

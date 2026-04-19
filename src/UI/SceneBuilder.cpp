@@ -1026,14 +1026,18 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     }
     detail::ReusableSceneNodes reusable = detail::releaseReusableChildren(*group);
 
-    float const assignedW = current.hasAssignedWidth ? std::max(0.f, contentAssignedSize.width) : 0.f;
+    float const assignedW =
+        resolvedAssignedSpan(contentAssignedSize.width, current.hasAssignedWidth, innerConstraints.maxWidth);
     float const assignedH = current.hasAssignedHeight ? std::max(0.f, contentAssignedSize.height) : 0.f;
     bool const heightConstrained = current.hasAssignedHeight;
+    bool const widthConstrained =
+        current.hasAssignedWidth ||
+        (stack.children.size() == 1 && std::isfinite(innerConstraints.maxWidth) && innerConstraints.maxWidth > 0.f);
     LayoutConstraints childConstraints = innerConstraints;
     childConstraints.maxWidth = std::numeric_limits<float>::infinity();
     childConstraints.maxHeight =
         stack.alignment == Alignment::Stretch && heightConstrained ? assignedH : std::numeric_limits<float>::infinity();
-    if (stack.children.size() == 1 && current.hasAssignedWidth) {
+    if (stack.children.size() == 1 && widthConstrained) {
       childConstraints.maxWidth = assignedW;
     }
 
@@ -1055,7 +1059,6 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
       });
     }
 
-    bool const widthConstrained = current.hasAssignedWidth;
     if (!widthConstrained) {
       warnFlexGrowIfParentMainAxisUnconstrained(stack.children, widthConstrained);
     }

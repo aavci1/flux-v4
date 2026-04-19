@@ -44,6 +44,7 @@ Element& StateStore::commitBody(ComponentKey const& key, C const& value,
   state.lastBody = std::unique_ptr<void, void (*)(void*)>(
       raw, [](void* p) { delete static_cast<Element*>(p); });
   state.lastBodyEpoch = buildEpoch_;
+  state.lastBodyConstraints = constraints;
   if (!preserveReusableConstraints) {
     state.reusableConstraints.clear();
   }
@@ -72,7 +73,7 @@ CompositeBodyResolution resolveCompositeBody(StateStore* store, ComponentKey con
     resolution.body = resolution.ownedBody.get();
     return resolution;
   }
-  if (store->hasBodyForCurrentRebuild(key)) {
+  if (store->hasBodyForCurrentRebuild(key, constraints)) {
     resolution.body = store->cachedBody(key);
     return resolution;
   }

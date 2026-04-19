@@ -57,6 +57,7 @@ struct ComponentState {
   std::uint64_t lastVisitedEpoch = 0;
   std::unique_ptr<void, void (*)(void*)> lastBody{nullptr, nullptr};
   std::uint64_t lastBodyEpoch = 0;
+  std::optional<LayoutConstraints> lastBodyConstraints;
   std::vector<LayoutConstraints> reusableConstraints;
   std::vector<std::pair<LayoutConstraints, Size>> reusableMeasures;
   ComponentValueSnapshot valueSnapshot{};
@@ -140,7 +141,8 @@ public:
   bool canReuseBody(ComponentKey const& key, ComponentState const* state, C const& value,
                     LayoutConstraints const& constraints) const;
 
-  [[nodiscard]] bool hasBodyForCurrentRebuild(ComponentKey const& key) const;
+  [[nodiscard]] bool hasBodyForCurrentRebuild(ComponentKey const& key,
+                                              LayoutConstraints const& constraints) const;
   Element* cachedBody(ComponentKey const& key);
   Element const* cachedBody(ComponentKey const& key) const;
   void discardCurrentRebuildBody(ComponentKey const& key);
