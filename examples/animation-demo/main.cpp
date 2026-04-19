@@ -54,9 +54,9 @@ Element makeSectionCard(Theme const &theme, std::string title, std::string capti
         )
     }
         .padding(theme.space4)
-        .fill(FillStyle::solid(theme.colorSurfaceOverlay))
-        .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f))
-        .cornerRadius(CornerRadius {theme.radiusLarge});
+        .fill(theme.colorSurfaceOverlay)
+        .stroke(theme.colorBorderSubtle, 1.f)
+        .cornerRadius(theme.radiusLarge);
 }
 
 Element metricTile(Theme const &theme, std::string value, std::string label, Color accent) {
@@ -79,8 +79,8 @@ Element metricTile(Theme const &theme, std::string value, std::string label, Col
         )
     }
         .padding(theme.space3)
-        .fill(FillStyle::solid(theme.colorBackground))
-        .cornerRadius(CornerRadius {theme.radiusMedium})
+        .fill(theme.colorBackground)
+        .cornerRadius(theme.radiusMedium)
         .flex(1.f, 1.f, 0.f);
 }
 
@@ -231,18 +231,18 @@ struct MorphLab : ViewModifiers<MorphLab> {
                         .children = children(
                             Rectangle {}
                                 .size(previewWidth, 118.f)
-                                .cornerRadius(CornerRadius {theme.radiusLarge})
-                                .fill(FillStyle::solid(theme.colorBackground))
-                                .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f)),
+                                .cornerRadius(theme.radiusLarge)
+                                .fill(theme.colorBackground)
+                                .stroke(theme.colorBorderSubtle, 1.f),
                             Rectangle {}
                                 .size(previewWidth - 32.f, 2.f)
-                                .cornerRadius(CornerRadius {1.f})
-                                .fill(FillStyle::solid(theme.colorBorderSubtle))
+                                .cornerRadius(1.f)
+                                .fill(theme.colorBorderSubtle)
                                 .position(16.f, 58.f),
                             Rectangle {}
                                 .size(*width, *height)
-                                .cornerRadius(CornerRadius {*radius})
-                                .fill(FillStyle::solid(*fill))
+                                .cornerRadius(*radius)
+                                .fill(*fill)
                                 .position(objectX, 32.f + *lift)
                         )
                     }
@@ -302,8 +302,8 @@ struct AmbientLoopLab : ViewModifiers<AmbientLoopLab> {
             bars.push_back(
                 Rectangle {}
                     .size(22.f, barHeight)
-                    .cornerRadius(CornerRadius {11.f})
-                    .fill(FillStyle::solid(alpha(theme.colorAccent, 0.30f + emphasis * 0.70f)))
+                    .cornerRadius(11.f)
+                    .fill(alpha(theme.colorAccent, 0.30f + emphasis * 0.70f))
             );
         }
 
@@ -319,9 +319,9 @@ struct AmbientLoopLab : ViewModifiers<AmbientLoopLab> {
                         .children = children(
                             Rectangle {}
                                 .size(260.f, 104.f)
-                                .cornerRadius(CornerRadius {theme.radiusLarge})
-                                .fill(FillStyle::solid(theme.colorBackground))
-                                .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f)),
+                                .cornerRadius(theme.radiusLarge)
+                                .fill(theme.colorBackground)
+                                .stroke(theme.colorBorderSubtle, 1.f),
                             HStack {
                                 .spacing = theme.space2,
                                 .alignment = Alignment::Center,
@@ -421,7 +421,7 @@ struct AnimationDemoRoot {
                     .padding(demoTheme.space5)
             )
         }
-            .fill(FillStyle::solid(demoTheme.colorBackground))
+            .fill(demoTheme.colorBackground)
             .environment(demoTheme);
     }
 };
