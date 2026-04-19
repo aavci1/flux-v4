@@ -25,36 +25,27 @@ Element Alert::body() const {
   Color const titleC = resolveColor(titleColor, theme.colorTextPrimary);
   Color const msgC = resolveColor(messageColor, theme.colorTextSecondary);
   CornerRadius const cardCorner = surface.cornerRadius;
-  // A lone ZStack under the full-window overlay expands every child to the window size
-  // (see LayoutZStack — children share the stack's max proposed size). Spacers + flex center
-  // the card so the inner ZStack only receives the card's intrinsic width/height.
-  ZStack const cardStack{
-      // Card + content share top-left; center alignment would offset each
-      // child by its own measured size and misalign the background.
-      .horizontalAlignment = Alignment::Start,
-      .verticalAlignment = Alignment::Start,
-      .children = flux::children(
-          Rectangle{}
-              .fill(FillStyle::solid(card))
-              .stroke(StrokeStyle::solid(stroke, 1.f))
-              .size(cardWidth, 0.f)
-              .cornerRadius(cardCorner),
-          VStack{
-              .spacing = theme.space3,
-              .alignment = Alignment::Start,
-              .children = buildContent(titleC, msgC, theme),
-          }.padding(theme.space6)),
-  };
 
-  HStack const row{
-      .spacing = 0.f,
-      .children = flux::children(Spacer{}.flex(1.f), Element{cardStack}, Spacer{}.flex(1.f)),
-  };
-
-  return VStack{
+  return VStack {
       .spacing = 0.f,
       .alignment = Alignment::Center,
-      .children = flux::children(Spacer{}.flex(1.f), Element{row}, Spacer{}.flex(1.f)),
+      .children = children(
+          HStack {
+              .spacing = 0.f,
+              .children = children(
+                  VStack {
+                      .spacing = theme.space3,
+                      .alignment = Alignment::Start,
+                      .children = buildContent(titleC, msgC, theme),
+                  }
+                      .fill(FillStyle::solid(card))
+                      .stroke(StrokeStyle::solid(stroke, 1.f))
+                      .size(cardWidth, 0.f)
+                      .cornerRadius(cardCorner)
+                      .padding(theme.space6)
+              ),
+          }
+      ),
   };
 }
 
