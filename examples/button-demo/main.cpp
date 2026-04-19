@@ -47,23 +47,16 @@ Element makeSectionCard(Theme const &theme, std::string title, std::string capti
 }
 
 Element makeBadge(Theme const &theme, std::string label, Color fill, Color textColor) {
-    return ZStack {
-        .horizontalAlignment = Alignment::Center,
-        .verticalAlignment = Alignment::Center,
-        .children = children(
-            Rectangle {}
-                .fill(FillStyle::solid(fill))
-                .cornerRadius(CornerRadius {theme.radiusLarge}),
-            Text {
-                .text = std::move(label),
-                .font = theme.fontLabelSmall,
-                .color = textColor,
-                .horizontalAlignment = HorizontalAlignment::Center,
-                .verticalAlignment = VerticalAlignment::Center,
-            }
-                .padding(6.f, 10.f, 6.f, 10.f)
-        )
-    };
+    return Text {
+        .text = std::move(label),
+        .font = theme.fontLabelSmall,
+        .color = textColor,
+        .horizontalAlignment = HorizontalAlignment::Center,
+        .verticalAlignment = VerticalAlignment::Center,
+    }
+        .fill(FillStyle::solid(fill))
+        .cornerRadius(CornerRadius {theme.radiusLarge})
+        .padding(6.f, 10.f, 6.f, 10.f);
 }
 
 Element makeMetricTile(Theme const &theme, std::string value, std::string label, Color accent) {
