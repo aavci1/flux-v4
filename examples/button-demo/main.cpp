@@ -23,18 +23,17 @@ namespace {
 Element makeSectionCard(Theme const &theme, std::string title, std::string caption, Element content) {
     return VStack {
         .spacing = theme.space3,
+        .alignment = Alignment::Start,
         .children = children(
             Text {
                 .text = std::move(title),
                 .font = theme.fontTitle,
                 .color = theme.colorTextPrimary,
-                .horizontalAlignment = HorizontalAlignment::Leading,
             },
             Text {
                 .text = std::move(caption),
                 .font = theme.fontBodySmall,
                 .color = theme.colorTextSecondary,
-                .horizontalAlignment = HorizontalAlignment::Leading,
                 .wrapping = TextWrapping::Wrap,
             },
             std::move(content)
@@ -211,7 +210,7 @@ Element makeHeroDemo(Theme const &theme, State<bool> dirty, State<bool> reviewPa
 Element makeVariantTile(Theme const &theme, std::string title, std::string caption, Element action) {
     return VStack {
         .spacing = theme.space2,
-        .alignment = Alignment::Start,
+        .alignment = Alignment::Stretch,
         .children = children(
             Text {
                 .text = std::move(title),
@@ -522,31 +521,45 @@ Element makeIconButtonDemo(Theme const &theme, State<std::string> lastEvent) {
                     "A compact start action that works well in media and job-control rows.",
                     IconButton {
                         .icon = IconName::PlayArrow,
+                        .style = {
+                            .size = theme.fontDisplay.size,
+                        },
                         .onTap =
                             [lastEvent] {
                                 lastEvent = "Play pressed from the icon-button section.";
                                 std::fprintf(stderr, "[button-demo] Play icon button\n");
                             },
-                    }),
+                    }
+                ),
                 makeIconButtonTile(
                     theme, "Settings",
                     "Utility actions often read more cleanly as icons once the surrounding context is clear.",
                     IconButton {
                         .icon = IconName::Settings,
+                        .style = {
+                            .size = theme.fontDisplay.size,
+                        },
                         .onTap =
                             [lastEvent] {
                                 lastEvent = "Settings pressed from the icon-button section.";
                                 std::fprintf(stderr, "[button-demo] Settings icon button\n");
                             },
-                    }),
+                    }
+                ),
                 makeIconButtonTile(
                     theme, "Disabled",
                     "Disabled icon buttons should remain visible and legible without acting interactive.",
                     IconButton {
                         .icon = IconName::Delete,
                         .disabled = true,
-                    }))
-        });
+                        .style = {
+                            .size = theme.fontDisplay.size,
+                        },
+                    }
+                )
+            )
+        }
+    );
 }
 
 } // namespace
@@ -582,6 +595,7 @@ struct ButtonDemoRoot {
             .children = children(
                 VStack {
                     .spacing = theme.space4,
+                    .alignment = Alignment::Start,
                     .children = children(
                         Text {
                             .text = "Button Demo",
@@ -614,7 +628,7 @@ int main(int argc, char *argv[]) {
     Application app(argc, argv);
 
     auto &w = app.createWindow({
-        .size = {960, 920},
+        .size = {1024, 768},
         .title = "Flux - Button demo",
     });
 

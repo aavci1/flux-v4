@@ -273,7 +273,6 @@ Element IconButton::body() const {
         .fill(FillStyle::none())
         .stroke(focusStroke)
         .cornerRadius(CornerRadius {theme.radiusXSmall})
-        .padding(3.f)
         .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
         .focusable(!isDisabled)
         .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})
