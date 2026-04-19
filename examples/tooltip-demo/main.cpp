@@ -82,130 +82,121 @@ struct TooltipDemoRoot {
     auto body() const {
         Theme const &theme = useEnvironment<Theme>();
 
-        return ZStack {
-            .horizontalAlignment = Alignment::Start,
-            .verticalAlignment = Alignment::Start,
+        return VStack {
+            .spacing = 24.f,
+            .alignment = Alignment::Start,
             .children = children(
-                Rectangle {}.fill(FillStyle::solid(theme.colorBackground)),
-                VStack {
-                    .spacing = 24.f,
-                    .alignment = Alignment::Start,
+                Text {
+                    .text = "Tooltip",
+                    .font = theme.fontDisplay,
+                    .color = theme.colorTextPrimary,
+                },
+                Text {
+                    .text = "Hover over any control for 600 ms to "
+                            "see its tooltip. Move the pointer away "
+                            "to dismiss. Tapping also dismisses.",
+                    .font = theme.fontBody,
+                    .color = theme.colorTextSecondary,
+                    .wrapping = TextWrapping::Wrap,
+                },
+                // ── Placement variants ──────────────────────────
+                Text {
+                    .text = "Placement",
+                    .font = theme.fontHeading,
+                    .color = theme.colorTextPrimary,
+                },
+                HStack {
+                    .spacing = 12.f,
+                    .alignment = Alignment::Center,
                     .children = children(
-                        Text {
-                            .text = "Tooltip",
-                            .font = theme.fontDisplay,
-                            .color = theme.colorTextPrimary,
-                        },
-                        Text {
-                            .text = "Hover over any control for 600 ms to "
-                                    "see its tooltip. Move the pointer away "
-                                    "to dismiss. Tapping also dismisses.",
-                            .font = theme.fontBody,
-                            .color = theme.colorTextSecondary,
-                            .wrapping = TextWrapping::Wrap,
-                        }
-                            .flex(1.f),
-
-                        // ── Placement variants ──────────────────────────
-                        Text {
-                            .text = "Placement",
-                            .font = theme.fontHeading,
-                            .color = theme.colorTextPrimary,
-                        },
-                        HStack {
-                            .spacing = 12.f,
-                            .alignment = Alignment::Center,
-                            .children = children(
-                                TooltipButton {
-                                    .label = "Above",
-                                    .tooltip = "Tooltip above the button",
-                                    .placement = PopoverPlacement::Above,
-                                },
-                                TooltipButton {
-                                    .label = "Below",
-                                    .tooltip = "Tooltip below the button",
-                                    .placement = PopoverPlacement::Below,
-                                },
-                                TooltipButton {
-                                    .label = "End",
-                                    .tooltip = "Tooltip to the right",
-                                    .placement = PopoverPlacement::End,
-                                },
-                                TooltipButton {
-                                    .label = "Start",
-                                    .tooltip = "Tooltip to the left",
-                                    .placement = PopoverPlacement::Start,
-                                }
-                            ),
-                        },
-
-                        // ── Icon tooltips ───────────────────────────────
-                        Text {
-                            .text = "Icon tooltips",
-                            .font = theme.fontHeading,
-                            .color = theme.colorTextPrimary,
-                        },
-                        HStack {
-                            .spacing = 16.f,
-                            .alignment = Alignment::Center,
-                            .children = children(
-                                TooltipIcon {
-                                    .name = IconName::ContentCopy,
-                                    .tooltip = "Copy to clipboard",
-                                },
-                                TooltipIcon {
-                                    .name = IconName::Delete,
-                                    .tooltip = "Delete item",
-                                },
-                                TooltipIcon {
-                                    .name = IconName::Settings,
-                                    .tooltip = "Open settings",
-                                },
-                                TooltipIcon {
-                                    .name = IconName::Help,
-                                    .tooltip = "Help & documentation",
-                                }
-                            ),
-                        },
-
-                        // ── Long tooltip text ───────────────────────────
-                        Text {
-                            .text = "Long text",
-                            .font = theme.fontHeading,
-                            .color = theme.colorTextPrimary,
+                        TooltipButton {
+                            .label = "Above",
+                            .tooltip = "Tooltip above the button",
+                            .placement = PopoverPlacement::Above,
                         },
                         TooltipButton {
-                            .label = "Hover me",
-                            .tooltip = "This is a longer tooltip that demonstrates "
-                                       "text wrapping within the 240 pt max width "
-                                       "constraint. It should wrap gracefully.",
+                            .label = "Below",
+                            .tooltip = "Tooltip below the button",
+                            .placement = PopoverPlacement::Below,
                         },
-
-                        // ── Toggle with tooltip ─────────────────────────
-                        Text {
-                            .text = "On other controls",
-                            .font = theme.fontHeading,
-                            .color = theme.colorTextPrimary,
+                        TooltipButton {
+                            .label = "End",
+                            .tooltip = "Tooltip to the right",
+                            .placement = PopoverPlacement::End,
                         },
-                        HStack {
-                            .spacing = 12.f,
-                            .alignment = Alignment::Center,
-                            .children = children(
-                                Text {
-                                    .text = "Notifications",
-                                    .font = theme.fontBody,
-                                    .color = theme.colorTextPrimary,
-                                },
-                                Spacer {},
-                                TooltipToggle {}
-                            ),
+                        TooltipButton {
+                            .label = "Start",
+                            .tooltip = "Tooltip to the left",
+                            .placement = PopoverPlacement::Start,
                         }
                     ),
+                },
+
+                // ── Icon tooltips ───────────────────────────────
+                Text {
+                    .text = "Icon tooltips",
+                    .font = theme.fontHeading,
+                    .color = theme.colorTextPrimary,
+                },
+                HStack {
+                    .spacing = 16.f,
+                    .alignment = Alignment::Center,
+                    .children = children(
+                        TooltipIcon {
+                            .name = IconName::ContentCopy,
+                            .tooltip = "Copy to clipboard",
+                        },
+                        TooltipIcon {
+                            .name = IconName::Delete,
+                            .tooltip = "Delete item",
+                        },
+                        TooltipIcon {
+                            .name = IconName::Settings,
+                            .tooltip = "Open settings",
+                        },
+                        TooltipIcon {
+                            .name = IconName::Help,
+                            .tooltip = "Help & documentation",
+                        }
+                    ),
+                },
+
+                // ── Long tooltip text ───────────────────────────
+                Text {
+                    .text = "Long text",
+                    .font = theme.fontHeading,
+                    .color = theme.colorTextPrimary,
+                },
+                TooltipButton {
+                    .label = "Hover me",
+                    .tooltip = "This is a longer tooltip that demonstrates "
+                                "text wrapping within the 240 pt max width "
+                                "constraint. It should wrap gracefully.",
+                },
+
+                // ── Toggle with tooltip ─────────────────────────
+                Text {
+                    .text = "On other controls",
+                    .font = theme.fontHeading,
+                    .color = theme.colorTextPrimary,
+                },
+                HStack {
+                    .spacing = 12.f,
+                    .alignment = Alignment::Center,
+                    .children = children(
+                        Text {
+                            .text = "Notifications",
+                            .font = theme.fontBody,
+                            .color = theme.colorTextPrimary,
+                        },
+                        Spacer {},
+                        TooltipToggle {}
+                    ),
                 }
-                    .padding(24.f)
             ),
-        };
-    }
+        }
+            .padding(24.f);
+    };
 };
 
 int main(int argc, char *argv[]) {

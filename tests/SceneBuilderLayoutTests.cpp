@@ -1,6 +1,7 @@
 #include "SceneBuilderTestSupport.hpp"
 
 #include <Flux/UI/MeasureContext.hpp>
+#include <Flux/UI/Views/Icon.hpp>
 #include <Flux/UI/Views/Popover.hpp>
 
 TEST_CASE("SceneBuilder: centered text keeps its assigned box for boxed layout") {
@@ -843,6 +844,42 @@ TEST_CASE("SceneBuilder: Popover rebuild uses updated resolved placement after s
   REQUIRE(content != nullptr);
   CHECK(content->position.y == doctest::Approx(12.f));
   CHECK(tree->bounds.height == doctest::Approx(20.f + 24.f + PopoverCalloutShape::kArrowH));
+
+  scope.store.endRebuild();
+}
+
+namespace {
+
+struct CompositeWrappingIcon {
+  auto body() const {
+    return Icon{
+        .name = IconName::Info,
+        .size = 18.f,
+    };
+  }
+};
+
+} // namespace
+
+TEST_CASE("SceneBuilder: composite returning Icon resolves nested composite bodies") {
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  StoreScope scope{};
+  scope.store.beginRebuild();
+
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 200.f;
+  constraints.maxHeight = 120.f;
+
+  std::unique_ptr<SceneNode> tree = builder.build(Element{CompositeWrappingIcon{}}, NodeId{1ull}, constraints);
+  REQUIRE(tree != nullptr);
+
+  NullRenderer renderer{};
+  render(*tree, renderer);
+  CHECK(renderer.textCount == 1);
 
   scope.store.endRebuild();
 }

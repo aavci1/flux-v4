@@ -203,6 +203,12 @@ Rect chromeRectForSize(Size size) {
   return Rect{0.f, 0.f, std::max(0.f, size.width), std::max(0.f, size.height)};
 }
 
+ComponentKey directCompositeBodyKey(ComponentKey const& parentKey) {
+  ComponentKey key = parentKey;
+  key.push_back(LocalId::fromIndex(0));
+  return key;
+}
+
 bool rectIsMeaningful(Rect rect) {
   return rect.width > 0.f || rect.height > 0.f;
 }
@@ -710,6 +716,27 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
                             std::max(0.f, size.width), std::max(0.f, size.height)});
     }
   };
+
+  if (sceneEl.typeTag() == ElementType::Unknown && sceneEl.isComposite()) {
+    ComponentKey nestedKey = directCompositeBodyKey(current.key);
+    pushFrame(current.constraints, current.hints, current.origin, std::move(nestedKey), current.assignedSize,
+              current.hasAssignedWidth, current.hasAssignedHeight);
+    std::unique_ptr<SceneNode> root = buildOrReuse(sceneEl, id, std::move(existing));
+    popFrame();
+
+    std::unique_ptr<InteractionData> outerInteraction =
+        outerMods ? makeInteractionData(outerMods, current.key) : nullptr;
+    if (outerMods &&
+        needsDecorationPass(outerMods, outerSize, rectSize(root->bounds), false, outerInteraction.get())) {
+      root = decorateNode(std::move(root), el, outerMods, nullptr, outerSize, outerSize,
+                          modifierOffset(outerMods), outerMods->padding, std::move(outerInteraction));
+    }
+    if (root->bounds.width <= 0.f && root->bounds.height <= 0.f) {
+      root->bounds = sizeRect(outerSize);
+    }
+    recordGeometry(rectSize(root->bounds));
+    return root;
+  }
 
   std::unique_ptr<SceneNode> core{};
   std::unique_ptr<InteractionData> resolvedInteraction{};
