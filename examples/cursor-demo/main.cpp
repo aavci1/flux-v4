@@ -10,176 +10,82 @@
 #include <Flux/UI/Views/ZStack.hpp>
 
 #include <string>
+#include <tuple>
 
 using namespace flux;
 
-namespace pal {
-constexpr Color bg = Color::hex(0xF0F0F5);
-constexpr Color label = Color::hex(0x141418);
-constexpr Color sub = Color::hex(0x5C5C6A);
-constexpr Color chipDefault = Color::hex(0xE8E8EE);
-constexpr Color chipHand = Color::hex(0xD8E8FF);
-constexpr Color chipResize = Color::hex(0xE4F5E8);
-constexpr Color chipWarn = Color::hex(0xFFE8E0);
-constexpr Color chipAccent = Color::hex(0x3A7BD5);
-} // namespace pal
-
-namespace {
-
-Element cursorSwatchRow(std::string name, Cursor cursor, Color chip, Theme const& theme) {
-  return HStack{
-      .spacing = 0.f,
-      .children = children(
-              HStack{
-                    .spacing = 12.f,
-                    .alignment = Alignment::Center,
-                    .children = children(
-                            Text{.text = std::move(name),
-                                 .font = theme.fontLabel,
-                                 .color = pal::label,
-                             }
-                                .size(152.f, 0.f),
-                            Rectangle{}
-                                .fill(FillStyle::solid(chip))
-                                .stroke(StrokeStyle::solid(Color::hex(0xC8C8D0), 1.f))
-                                .height(44.f)
-                                .cursor(cursor)
-                                .cornerRadius(8.f)
-                                .flex(1.f)
-                        ),
-                }
-                  .flex(1.f)
-          ),
-  };
-}
-
-} // namespace
+const std::vector<std::tuple<std::string, Cursor>> cursors = {
+    {"Default", Cursor::Arrow},
+    {"Hand", Cursor::Hand},
+    {"ResizeEW", Cursor::ResizeEW},
+    {"ResizeNS", Cursor::ResizeNS},
+    {"ResizeNESW", Cursor::ResizeNESW},
+    {"ResizeNWSE", Cursor::ResizeNWSE},
+    {"ResizeAll", Cursor::ResizeAll},
+    {"Crosshair", Cursor::Crosshair},
+    {"NotAllowed", Cursor::NotAllowed},
+};
 
 /// Hover each row to see the platform cursor; drag the bottom strip to verify the cursor stays locked.
 struct CursorDemo {
-  auto body() const {
-    Theme const& theme = useEnvironment<Theme>();
-    return ZStack{
-        .children = children(
-                Rectangle{}.fill(FillStyle::solid(pal::bg)),
-                VStack{
-                    .spacing = 0.f,
-                    .children = children(
-                            VStack{
-                                .spacing = 6.f,
-                                .alignment = Alignment::Start,
-                                .children = children(
-                                        Text{.text = "Cursor shapes",
-                                             .font = theme.fontDisplay,
-                                             .color = pal::label},
-                                        HStack{
-                                            .spacing = 0.f,
-                                            .children = children(
-                                                    Text{
-                                                            .text = "Move the pointer over each swatch. Drag the resize strip — the "
-                                                                    "cursor stays locked to that node during the drag.",
-                                                            .font = theme.fontBody,
-                                                            .color = pal::sub,
-                                                            .wrapping = TextWrapping::Wrap,
-                                                        }
-                                                        .flex(1.f)
-                                                ),
-                                        }
-                                    ),
-                            }.padding(20.f),
-                            ScrollView{
-                                .axis = ScrollAxis::Vertical,
-                                .children = children(
-                                        VStack{
-                                            .spacing = 10.f,
-                                            .children = children(
-                                                    cursorSwatchRow("Default", Cursor::Arrow,
-                                                                    pal::chipDefault, theme),
-                                                    cursorSwatchRow("Hand", Cursor::Hand, pal::chipHand, theme),
-                                                    cursorSwatchRow("ResizeEW", Cursor::ResizeEW,
-                                                                    pal::chipResize, theme),
-                                                    cursorSwatchRow("ResizeNS", Cursor::ResizeNS,
-                                                                    pal::chipResize, theme),
-                                                    cursorSwatchRow("ResizeNESW", Cursor::ResizeNESW,
-                                                                    pal::chipResize, theme),
-                                                    cursorSwatchRow("ResizeNWSE", Cursor::ResizeNWSE,
-                                                                    pal::chipResize, theme),
-                                                    cursorSwatchRow("ResizeAll", Cursor::ResizeAll,
-                                                                    pal::chipHand, theme),
-                                                    cursorSwatchRow("Crosshair", Cursor::Crosshair,
-                                                                    pal::chipDefault, theme),
-                                                    cursorSwatchRow("NotAllowed", Cursor::NotAllowed,
-                                                                    pal::chipWarn, theme),
+    auto body() const {
+        Theme const &theme = useEnvironment<Theme>();
 
-                                                    HStack{
-                                                        .spacing = 12.f,
-                                                        .alignment = Alignment::Center,
-                                                        .children = children(
-                                                                Text{
-                                                                    .text = "Text + IBeam",
-                                                                    .font = theme.fontLabel,
-                                                                    .color = pal::label,
-                                                                }
-                                                                    .size(152.f, 0.f),
-                                                                Text{
-                                                                    .text = "Read-only label — cursor is I-beam over "
-                                                                            "glyphs (no pointer handlers).",
-                                                                    .font = theme.fontBody,
-                                                                    .color = pal::label,
-                                                                    .wrapping = TextWrapping::Wrap,
-                                                                }
-                                                                    .cursor(Cursor::IBeam)
-                                                                    .padding(10.f)
-                                                                    .fill(FillStyle::solid(Color::hex(0xFFFFFF)))
-                                                                    .stroke(StrokeStyle::solid(Color::hex(0xC8C8D0), 1.f))
-                                                                    .cornerRadius(8.f)
-                                                                    .flex(1.f)
-                                                            ),
-                                                    },
-
-                                                    HStack{
-                                                        .spacing = 0.f,
-                                                        .children = children(
-                                                                VStack{
-                                                                            .spacing = 8.f,
-                                                                            .alignment = Alignment::Start,
-                                                                            .children = children(
-                                                                                    Text{
-                                                                                        .text = "Drag lock (ResizeAll)",
-                                                                                        .font = theme.fontHeading,
-                                                                                        .color = pal::label,
-                                                                                    },
-                                                                                    Rectangle{}
-                                                                                        .fill(FillStyle::solid(pal::chipAccent))
-                                                                                        .height(52.f)
-                                                                                        .cursor(Cursor::ResizeAll)
-                                                                                        .onPointerDown([](Point) {})
-                                                                                        .onPointerUp([](Point) {})
-                                                                                        .onPointerMove([](Point) {})
-                                                                                        .cornerRadius(10.f)
-                                                                                ),
-                                                                        }
-                                                                    .flex(1.f)
-                                                            ),
-                                                    }
-                                                ),
-                                        }.padding(20.f)
-                                    ),
-                            }
-                        ),
+        std::vector<Element> cells = {};
+        for (auto const &[name, cursor] : cursors) {
+            cells.push_back(
+                Text {
+                    .text = name,
+                    .horizontalAlignment = HorizontalAlignment::Center,
+                    .verticalAlignment = VerticalAlignment::Center,
                 }
-            ),
-    };
-  }
+                    // .cornerRadius(theme.radiusXLarge)
+                    .cursor(cursor)
+                    .fill(theme.colorSurfaceOverlay)
+                    .height(200.f)
+            );
+        }
+
+        return ScrollView {
+            .axis = ScrollAxis::Vertical,
+            .children = children(
+                VStack {
+                    .spacing = theme.space4,
+                    .children = children(
+                        Text {
+                            .text = "Cursor Demo",
+                            .font = theme.fontDisplay,
+                            .color = theme.colorTextPrimary,
+                        },
+                        Text {
+                            .text = "Move the pointer over each swatch. Drag the resize strip — the cursor stays locked to that node during the drag.",
+                            .font = theme.fontBody,
+                            .color = theme.colorTextSecondary,
+                            .wrapping = TextWrapping::Wrap,
+                        },
+                        Grid {
+                            .columns = 3,
+                            .horizontalSpacing = theme.space1,
+                            .verticalSpacing = theme.space1,
+                            .horizontalAlignment = Alignment::Stretch,
+                            .verticalAlignment = Alignment::Stretch,
+                            .children = std::move(cells)
+                        }
+                    )
+                }
+            )
+        }
+            .padding(theme.space5);
+    }
 };
 
-int main(int argc, char* argv[]) {
-  Application app(argc, argv);
-  auto& w = app.createWindow<Window>({
-      .size = {800, 800},
-      .title = "Flux — Cursor demo",
-      .resizable = true,
-  });
-  w.setView<CursorDemo>();
-  return app.exec();
+int main(int argc, char *argv[]) {
+    Application app(argc, argv);
+    auto &w = app.createWindow<Window>({
+        .size = {800, 800},
+        .title = "Flux — Cursor demo",
+        .resizable = true,
+    });
+    w.setView<CursorDemo>();
+    return app.exec();
 }

@@ -244,8 +244,7 @@ Phase 2: Paint                — Retained SceneTree → Canvas
                         .flex(1.f, 1.f, 0.f)
                 ),
         }
-            .padding(20.f)
-            .flex(1.f, 1.f, 0.f);
+            .padding(20.f);
     }
 };
 
