@@ -51,7 +51,10 @@ Element Icon::body() const {
             .weight = w,
         },
         .color = c,
-    };
+        .horizontalAlignment = HorizontalAlignment::Center,
+        .verticalAlignment = VerticalAlignment::Center,
+    }
+        .size(s, s);
 }
 
 } // namespace flux

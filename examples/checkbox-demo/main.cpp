@@ -196,7 +196,7 @@ struct CheckboxDemoRoot {
 int main(int argc, char *argv[]) {
     Application app(argc, argv);
     auto &w = app.createWindow<Window>({
-        .size = {760, 860},
+        .size = {800, 800},
         .title = "Flux - Checkbox demo",
         .resizable = true,
     });

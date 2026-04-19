@@ -176,7 +176,7 @@ struct CursorDemo {
 int main(int argc, char* argv[]) {
   Application app(argc, argv);
   auto& w = app.createWindow<Window>({
-      .size = {520, 640},
+      .size = {800, 800},
       .title = "Flux — Cursor demo",
       .resizable = true,
   });

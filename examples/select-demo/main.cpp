@@ -309,7 +309,7 @@ struct SelectDemoRoot {
 int main(int argc, char *argv[]) {
   Application app(argc, argv);
   auto &w = app.createWindow<Window>({
-      .size = {780, 920},
+      .size = {800, 800},
       .title = "Flux - Select demo",
       .resizable = true,
   });

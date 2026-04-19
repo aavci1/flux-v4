@@ -6,6 +6,7 @@
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/ScrollView.hpp>
+#include <Flux/UI/Views/Slider.hpp>
 #include <Flux/UI/Views/Text.hpp>
 #include <Flux/UI/Views/Toggle.hpp>
 #include <Flux/UI/Views/VStack.hpp>
@@ -34,6 +35,7 @@ Color alpha(Color color, float opacity) {
 Element makeSectionCard(Theme const &theme, std::string title, std::string caption, Element content) {
     return VStack {
         .spacing = theme.space3,
+        .alignment = Alignment::Start,
         .children = children(
             Text {
                 .text = std::move(title),
@@ -96,11 +98,6 @@ struct PlaybackLab : ViewModifiers<PlaybackLab> {
 
         auto progress = useAnimation<float>(0.f);
 
-        float const clamped = std::clamp(*progress, 0.f, 1.f);
-        float const railWidth = 260.f;
-        float const knobSize = 28.f;
-        float const usableWidth = railWidth - knobSize;
-        float const knobX = usableWidth * clamped;
         std::string const state = progress.isPaused() ? "Paused" : progress.isRunning() ? "Running" : "Idle";
 
         auto playOnce = [progress, theme] {
@@ -131,46 +128,29 @@ struct PlaybackLab : ViewModifiers<PlaybackLab> {
             progress.set(0.f, Transition::instant());
         };
 
+        float clamped = std::clamp(*progress, 0.f, 1.f);
+        auto previewValue = useState(clamped);
+        previewValue.setSilently(clamped);
+
         return makeSectionCard(
             theme, "Playback Controls",
             "Drive one handle with play, pause, resume, stop, finite repeats, infinite repeats, and delayed starts.",
             VStack {
                 .spacing = theme.space3,
+                .alignment = Alignment::Stretch,
                 .children = children(
-                    ZStack {
-                        .horizontalAlignment = Alignment::Start,
-                        .verticalAlignment = Alignment::Start,
-                        .children = children(
-                            Rectangle {}
-                                .size(railWidth, 86.f)
-                                .cornerRadius(CornerRadius {theme.radiusLarge})
-                                .fill(FillStyle::solid(theme.colorBackground))
-                                .stroke(StrokeStyle::solid(theme.colorBorderSubtle, 1.f)),
-                            Rectangle {}
-                                .size(railWidth - 40.f, 8.f)
-                                .cornerRadius(CornerRadius {4.f})
-                                .fill(FillStyle::solid(theme.colorSurfaceDisabled))
-                                .position(20.f, 39.f),
-                            Rectangle {}
-                                .size(std::max(14.f, knobX + knobSize * 0.5f), 8.f)
-                                .cornerRadius(CornerRadius {4.f})
-                                .fill(FillStyle::solid(alpha(theme.colorAccent, 0.28f)))
-                                .position(20.f, 39.f),
-                            Rectangle {}
-                                .size(knobSize, knobSize)
-                                .cornerRadius(CornerRadius {knobSize * 0.5f})
-                                .fill(FillStyle::solid(theme.colorAccent))
-                                .stroke(StrokeStyle::solid(Color::hex(0xFFFFFF), 1.f))
-                                .position(knobX, 29.f)
-                        )
-                    }
-                        .size(railWidth, 86.f),
+                    Slider {
+                        .value = previewValue,
+                        .min = 0.f,
+                        .max = 1.f,
+                        .disabled = true
+                    },
                     HStack {
                         .spacing = theme.space3,
                         .alignment = Alignment::Stretch,
                         .children = children(
                             metricTile(theme, state, "State", theme.colorAccent),
-                            metricTile(theme, formatFloat(clamped), "Progress", theme.colorSuccess),
+                            metricTile(theme, formatFloat(progress), "Progress", theme.colorSuccess),
                             metricTile(theme, theme.reducedMotion ? "On" : "Off", "Reduced motion",
                                        theme.reducedMotion ? theme.colorWarning : theme.colorTextSecondary)
                         )
@@ -451,7 +431,7 @@ struct AnimationDemoRoot {
 int main(int argc, char *argv[]) {
     Application app(argc, argv);
     auto &w = app.createWindow<Window>({
-        .size = {900, 900},
+        .size = {800, 800},
         .title = "Flux - Animation demo",
         .resizable = true,
     });

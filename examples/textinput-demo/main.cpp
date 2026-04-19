@@ -179,7 +179,7 @@ struct TextInputShowcase {
 int main(int argc, char *argv[]) {
     Application app(argc, argv);
     auto &w = app.createWindow<Window>({
-        .size = {1040, 760},
+        .size = {800, 800},
         .title = "Flux — TextInput",
         .resizable = true,
     });

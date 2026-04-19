@@ -154,7 +154,7 @@ int main(int argc, char* argv[]) {
   Application app(argc, argv);
 
   app.createWindow<ReactiveDemoWindow>({
-      .size = {720, 520},
+      .size = {800, 800},
       .title = "Flux — Reactive & animation demo",
       .resizable = true,
   });

@@ -82,7 +82,7 @@ int main(int argc, char* argv[]) {
 
   app.createWindow<ImageDemoWindow>(
       {
-          .size = {640, 520},
+          .size = {800, 800},
           .title = "Flux · drawImage",
       },
       imagePath);

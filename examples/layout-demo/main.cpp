@@ -21,6 +21,7 @@ namespace {
 Element makeSectionCard(Theme const &theme, std::string title, std::string caption, Element content) {
     return VStack {
         .spacing = theme.space3,
+        .alignment = Alignment::Start,
         .children = children(
             Text {
                 .text = std::move(title),
@@ -297,6 +298,7 @@ struct StackDemoRoot {
             .children = children(
                 VStack {
                     .spacing = theme.space4,
+                    .alignment = Alignment::Start,
                     .children = children(
                         Text {
                             .text = "Layout Demo",
@@ -330,7 +332,7 @@ int main(int argc, char *argv[]) {
     Application app(argc, argv);
 
     auto &w = app.createWindow({
-        .size = {960, 920},
+        .size = {800, 800},
         .title = "Flux - Layout demo",
     });
 

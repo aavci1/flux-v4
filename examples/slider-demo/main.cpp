@@ -219,7 +219,7 @@ struct SliderDemoRoot {
 int main(int argc, char *argv[]) {
     Application app(argc, argv);
     auto &w = app.createWindow<Window>({
-        .size = {760, 820},
+        .size = {800, 800},
         .title = "Flux - Slider demo",
         .resizable = true,
     });

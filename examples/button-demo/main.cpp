@@ -628,7 +628,7 @@ int main(int argc, char *argv[]) {
     Application app(argc, argv);
 
     auto &w = app.createWindow({
-        .size = {1024, 768},
+        .size = {800, 800},
         .title = "Flux - Button demo",
     });
 

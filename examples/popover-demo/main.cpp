@@ -245,7 +245,7 @@ int main(int argc, char *argv[]) {
     Application app(argc, argv);
 
     auto &w = app.createWindow({
-        .size = {420, 620},
+        .size = {800, 800},
         .title = "Flux — Popover demo",
     });
 

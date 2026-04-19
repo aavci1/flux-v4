@@ -35,6 +35,42 @@ TEST_CASE("SceneBuilder: centered text keeps its assigned box for boxed layout")
   CHECK(renderer.textCount == 1);
 }
 
+TEST_CASE("SceneBuilder: icon reserves a square centered allocation matching its requested size") {
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 200.f;
+  constraints.maxHeight = 200.f;
+
+  std::unique_ptr<SceneNode> tree =
+      builder.build(Element{Icon{.name = IconName::Check, .size = 16.f}}, NodeId{1ull}, constraints);
+  REQUIRE(tree != nullptr);
+
+  auto findText = [&](this auto const& self, SceneNode* node) -> TextSceneNode* {
+    if (!node) {
+      return nullptr;
+    }
+    if (auto* text = dynamic_cast<TextSceneNode*>(node)) {
+      return text;
+    }
+    for (std::unique_ptr<SceneNode> const& child : node->children()) {
+      if (TextSceneNode* text = self(child.get())) {
+        return text;
+      }
+    }
+    return nullptr;
+  };
+
+  TextSceneNode* textNode = findText(tree.get());
+  REQUIRE(textNode != nullptr);
+  CHECK(textNode->allocation.width == doctest::Approx(16.f));
+  CHECK(textNode->allocation.height == doctest::Approx(16.f));
+}
+
 TEST_CASE("SceneBuilder: padded text uses the assigned slot's inner content box for layout") {
   NullTextSystem textSystem{};
   EnvironmentLayer env{};

@@ -7,6 +7,7 @@
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/UI.hpp>
 #include <Flux/UI/Views/HStack.hpp>
+#include <Flux/UI/Views/Icon.hpp>
 
 #include <algorithm>
 #include <string>
@@ -55,29 +56,25 @@ struct Card {
     }, detail, availableWidth);
 
     std::vector<Element> rows;
-    rows.emplace_back(HStack{
+    rows.emplace_back(HStack {
         .spacing = 12.f,
         .alignment = Alignment::Center,
         .children = children(
-            Rectangle{}
+            Rectangle {}
                 .fill(FillStyle::solid(accent))
                 .size(14.f, 14.f)
                 .cornerRadius(7.f),
-            Text{
+            Text {
                 .text = title,
                 .font = theme.fontTitle,
                 .color = pal::label,
             }
                 .size(0.f, 24.f)
                 .flex(1.f),
-            Text{
-                .text = expanded ? "⌄" : "›",
-                .font = theme.fontLabel,
-                .color = pal::sublabel,
-                .horizontalAlignment = HorizontalAlignment::Center,
-                .verticalAlignment = VerticalAlignment::Center,
+            Icon {
+                .name = expanded ? IconName::ExpandLess : IconName::ExpandMore,
+                .size = theme.fontLabel.size,
             }
-                .size(24.f, 24.f)
         ),
     });
 
@@ -105,66 +102,74 @@ struct Card {
       bodyOpacity = next ? 1.f : 0.f;
     };
 
-    return ZStack{
-        .horizontalAlignment = Alignment::Start,
-        .verticalAlignment = Alignment::Start,
-        .children = children(
-            Rectangle{}
-                .fill(FillStyle::solid(pal::surface))
-                .stroke(StrokeStyle::solid(pal::border, 1.f))
-                .cornerRadius(14.f),
-            VStack{.spacing = 10.f, .children = std::move(rows)}.padding(18.f)
-        ),
+    return VStack {
+        .spacing = theme.space4,
+        .children = std::move(rows)
     }
+        .fill(FillStyle::solid(theme.colorSurface))
+        .stroke(StrokeStyle::solid(theme.colorBorder, 1.f))
+        .cornerRadius(theme.radiusXLarge)
+        .padding(theme.space4)
         .cursor(Cursor::Hand)
         .onTap(handleTap);
   }
 };
 
 struct CardListView {
-  auto body() const {
-    Theme const& theme = useEnvironment<Theme>();
-    float const listContentWidth =
-        gCardDemoWindow ? std::max(1.f, gCardDemoWindow->getSize().width - 48.f) : 432.f;
+    auto body() const {
+        Theme const &theme = useEnvironment<Theme>();
+        float const listContentWidth = gCardDemoWindow ? std::max(1.f, gCardDemoWindow->getSize().width - 48.f) : 432.f;
 
-    return ZStack{
-        .horizontalAlignment = Alignment::Start,
-        .verticalAlignment = Alignment::Start,
-        .children = children(
-            Rectangle{}.fill(FillStyle::solid(pal::bg)),
-            VStack{
-                .spacing = 12.f,
-                .alignment = Alignment::Start,
-                .children = children(
-                    Text{.text = "Flux Components",
-                         .font = theme.fontDisplay,
-                         .color = pal::label},
-                    Text{.text = "Tap a card to expand",
-                         .font = theme.fontBody,
-                         .color = pal::sublabel},
-                    Card{.accent = pal::accent0,
-                         .title = "Metal Renderer",
-                         .detail = "SDF rounded-rect shaders, glyph atlas, libtess2.",
-                         .availableWidth = listContentWidth},
-                    Card{.accent = pal::accent1,
-                         .title = "Reactive State",
-                         .detail = "Signal<T>, Computed<T>, Animation<T>.",
-                         .availableWidth = listContentWidth},
-                    Card{.accent = pal::accent2,
-                         .title = "Scene Tree",
-                         .detail = "Retained nodes, keyed reconciliation, hit testing.",
-                         .availableWidth = listContentWidth}
-                ),
-            }.padding(24.f)
-        ),
-    };
-  }
+        return ScrollView {
+            .axis = ScrollAxis::Vertical,
+            .children = children(
+                VStack {
+                    .spacing = theme.space3,
+                    .alignment = Alignment::Stretch,
+                    .children = children(
+                        Text {
+                            .text = "Flux Components",
+                            .font = theme.fontDisplay,
+                            .color = theme.colorTextPrimary,
+                            .horizontalAlignment = HorizontalAlignment::Leading,
+                        },
+                        Text {
+                            .text = "Tap a card to expand",
+                            .font = theme.fontBody,
+                            .color = theme.colorTextSecondary,
+                            .horizontalAlignment = HorizontalAlignment::Leading,
+                            .wrapping = TextWrapping::Wrap,
+                        },
+                        Card {
+                            .accent = theme.colorAccent,
+                            .title = "Metal Renderer",
+                            .detail = "SDF rounded-rect shaders, glyph atlas, libtess2.",
+                            .availableWidth = listContentWidth
+                        },
+                        Card {
+                            .accent = theme.colorAccent,
+                            .title = "Reactive State",
+                            .detail = "Signal<T>, Computed<T>, Animation<T>.",
+                            .availableWidth = listContentWidth
+                        },
+                        Card {
+                            .accent = theme.colorAccent,
+                            .title = "Scene Tree",
+                            .detail = "Retained nodes, keyed reconciliation, hit testing.",
+                            .availableWidth = listContentWidth
+                        }
+                    ),
+                }
+                    .padding(24.f)
+            )
+        };
+    }
 };
 
 int main(int argc, char* argv[]) {
   Application app(argc, argv);
   auto& w = app.createWindow<Window>({
-      .size = {480, 560},
+      .size = {800, 800},
       .title = "Flux — Card demo",
       .resizable = true,
   });

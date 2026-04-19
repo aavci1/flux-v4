@@ -2013,7 +2013,7 @@ int main(int argc, char *argv[]) {
         ));
 
     auto &w = app.createWindow<Window>({
-        .size = {1100, 720},
+        .size = {800, 800},
         .title = "Lambda Studio",
         .resizable = true,
     });

@@ -217,7 +217,7 @@ int main(int argc, char *argv[]) {
     Application app(argc, argv);
 
     auto &w = app.createWindow<Window>({
-        .size = {900, 820},
+        .size = {800, 800},
         .title = "Flux — Typography Demo",
         .resizable = true,
     });

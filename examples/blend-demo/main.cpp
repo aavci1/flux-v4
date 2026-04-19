@@ -115,7 +115,7 @@ int main(int argc, char* argv[]) {
   Application app(argc, argv);
 
   app.createWindow<Window>({
-      .size = {BlendCell::kDefaultWinW, BlendCell::kDefaultWinH},
+      .size = {800, 800},
       .title = "Flux — blend modes",
   }).setView(BlendDemoView{});
 

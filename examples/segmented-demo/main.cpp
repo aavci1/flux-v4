@@ -490,7 +490,7 @@ int main(int argc, char *argv[]) {
     Application app(argc, argv);
 
     auto &w = app.createWindow<Window>({
-        .size = {920, 940},
+        .size = {800, 800},
         .title = "Flux - Segmented control demo",
         .resizable = true,
     });
