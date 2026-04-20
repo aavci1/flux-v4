@@ -46,6 +46,9 @@ target_link_libraries(animation_demo PRIVATE flux)
 add_executable(card_demo card-demo/main.cpp)
 target_link_libraries(card_demo PRIVATE flux)
 
+add_executable(scroll_demo scroll-demo/main.cpp)
+target_link_libraries(scroll_demo PRIVATE flux)
+
 add_executable(cursor_demo cursor-demo/main.cpp)
 target_link_libraries(cursor_demo PRIVATE flux)
 
@@ -107,6 +110,7 @@ set(FLUX_EXAMPLE_TARGETS
     reactive_demo
     animation_demo
     card_demo
+    scroll_demo
     cursor_demo
     alert_demo
     textinput_demo
