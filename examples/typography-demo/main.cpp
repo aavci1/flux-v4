@@ -2,6 +2,7 @@
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/UI.hpp>
 #include <Flux/UI/Views/Card.hpp>
+#include <Flux/UI/Views/Grid.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/ScrollView.hpp>
@@ -125,6 +126,17 @@ Element swatchTile(Theme const &theme, std::string name, Color swatch, std::stri
         )
     }
         .flex(1.f);
+}
+
+Element swatchGrid(Theme const &theme, std::vector<Element> tiles) {
+    return Grid {
+        .columns = 4,
+        .horizontalSpacing = theme.space3,
+        .verticalSpacing = theme.space3,
+        .horizontalAlignment = Alignment::Start,
+        .verticalAlignment = Alignment::Start,
+        .children = std::move(tiles),
+    };
 }
 
 Element previewWindow(Theme previewTheme, std::string name, std::string note) {
@@ -300,62 +312,47 @@ struct TypographyDemoRoot {
         Element textColors = sectionCard(
             theme, "Color", "Semantic text colors",
             "These follow the macOS model: content asks for meaning like primary or placeholder, not a concrete hex value.",
-            HStack {
-                .spacing = theme.space3,
-                .alignment = Alignment::Start,
-                .children = children(
+            swatchGrid(
+                theme,
+                children(
                     swatchTile(theme, "Color::primary()", Color::primary(), "Main reading ink."),
                     swatchTile(theme, "Color::secondary()", Color::secondary(), "Supporting descriptions.", Color::secondary()),
                     swatchTile(theme, "Color::tertiary()", Color::tertiary(), "Metadata and quiet detail.", Color::tertiary()),
                     swatchTile(theme, "Color::placeholder()", Color::placeholder(), "Transient hints before input.", Color::placeholder())
                 )
-            }
+            )
         );
 
         Element surfaces = sectionCard(
             theme, "Surfaces", "Background and separation",
             "Window, control, elevated, and text surfaces stay distinct without hard-coding different palettes in each component.",
-            HStack {
-                .spacing = theme.space3,
-                .alignment = Alignment::Start,
-                .children = children(
+            swatchGrid(
+                theme,
+                children(
                     swatchTile(theme, "Color::windowBackground()", Color::windowBackground(), "Canvas and app backdrop."),
                     swatchTile(theme, "Color::controlBackground()", Color::controlBackground(), "Cards and panels."),
                     swatchTile(theme, "Color::elevatedBackground()", Color::elevatedBackground(), "Raised surfaces like sheets."),
                     swatchTile(theme, "Color::textBackground()", Color::textBackground(), "Fields and editable regions.")
                 )
-            }
+            )
         );
 
         Element states = sectionCard(
             theme, "States", "Accent, focus, and feedback",
             "Interactive and status colors stay semantic too, including fills that now resolve late in the scene graph.",
-            VStack {
-                .spacing = theme.space3,
-                .alignment = Alignment::Start,
-                .children = children(
-                    HStack {
-                        .spacing = theme.space3,
-                        .alignment = Alignment::Start,
-                        .children = children(
-                            swatchTile(theme, "Color::accent()", Color::accent(), "Primary interaction tint.", Color::accent()),
-                            swatchTile(theme, "Color::selectedContentBackground()", Color::selectedContentBackground(), "Selected rows and ranges."),
-                            swatchTile(theme, "Color::focusRing()", Color::focusRing(), "Keyboard focus affordance.", Color::focusRing()),
-                            swatchTile(theme, "Color::separator()", Color::separator(), "Subtle chrome boundaries.", Color::secondary())
-                        )
-                    },
-                    HStack {
-                        .spacing = theme.space3,
-                        .alignment = Alignment::Start,
-                        .children = children(
-                            swatchTile(theme, "Color::success()", Color::success(), "Positive confirmation.", Color::success()),
-                            swatchTile(theme, "Color::warning()", Color::warning(), "Caution without failure.", Color::warning()),
-                            swatchTile(theme, "Color::danger()", Color::danger(), "Destructive or failed state.", Color::danger()),
-                            swatchTile(theme, "Color::scrim()", Color::scrim(), "Modal backdrop tone.", Color::secondary())
-                        )
-                    }
+            swatchGrid(
+                theme,
+                children(
+                    swatchTile(theme, "Color::accent()", Color::accent(), "Primary interaction tint.", Color::accent()),
+                    swatchTile(theme, "Color::selectedContentBackground()", Color::selectedContentBackground(), "Selected rows and ranges."),
+                    swatchTile(theme, "Color::focusRing()", Color::focusRing(), "Keyboard focus affordance.", Color::focusRing()),
+                    swatchTile(theme, "Color::separator()", Color::separator(), "Subtle chrome boundaries.", Color::secondary()),
+                    swatchTile(theme, "Color::success()", Color::success(), "Positive confirmation.", Color::success()),
+                    swatchTile(theme, "Color::warning()", Color::warning(), "Caution without failure.", Color::warning()),
+                    swatchTile(theme, "Color::danger()", Color::danger(), "Destructive or failed state.", Color::danger()),
+                    swatchTile(theme, "Color::scrim()", Color::scrim(), "Modal backdrop tone.", Color::secondary())
                 )
-            }
+            )
         );
 
         Element content = VStack {
