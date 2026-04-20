@@ -632,8 +632,8 @@ public:
           std::abs(drawR.width - rect.width) > eps || std::abs(drawR.height - rect.height) > eps;
       if (clipped) {
         crEffective = cornerRadiiAfterAxisAlignedClip(rect, drawR, cornerRadius);
-        clampRoundRectCornerRadii(drawR.width, drawR.height, crEffective);
       }
+      clampRoundRectCornerRadii(drawR.width, drawR.height, crEffective);
     }
 
     float rotationRad = 0.f;
@@ -1118,10 +1118,22 @@ private:
     float const maxY = (world.y + world.height) * dpiScaleY_;
     NSUInteger const dw = inFrame_ ? frameDrawablePixelsW_ : static_cast<NSUInteger>(metal_.layer().drawableSize.width);
     NSUInteger const dh = inFrame_ ? frameDrawablePixelsH_ : static_cast<NSUInteger>(metal_.layer().drawableSize.height);
-    clipScissor_.x = static_cast<NSUInteger>(std::clamp(minX, 0.f, static_cast<float>(dw - 1)));
-    clipScissor_.y = static_cast<NSUInteger>(std::clamp(minY, 0.f, static_cast<float>(dh - 1)));
-    clipScissor_.width = static_cast<NSUInteger>(std::clamp(maxX - minX, 0.f, static_cast<float>(dw)));
-    clipScissor_.height = static_cast<NSUInteger>(std::clamp(maxY - minY, 0.f, static_cast<float>(dh)));
+    float const clampedMinX = std::clamp(minX, 0.f, static_cast<float>(dw));
+    float const clampedMinY = std::clamp(minY, 0.f, static_cast<float>(dh));
+    float const clampedMaxX = std::clamp(maxX, 0.f, static_cast<float>(dw));
+    float const clampedMaxY = std::clamp(maxY, 0.f, static_cast<float>(dh));
+
+    // Expand to the covered pixel envelope instead of truncating. This avoids
+    // thin or partially clipped primitives blinking out when their visible
+    // extent is subpixel but still non-zero in logical space.
+    NSUInteger const x0 = static_cast<NSUInteger>(std::floor(clampedMinX));
+    NSUInteger const y0 = static_cast<NSUInteger>(std::floor(clampedMinY));
+    NSUInteger const x1 = static_cast<NSUInteger>(std::ceil(clampedMaxX));
+    NSUInteger const y1 = static_cast<NSUInteger>(std::ceil(clampedMaxY));
+    clipScissor_.x = std::min(x0, dw);
+    clipScissor_.y = std::min(y0, dh);
+    clipScissor_.width = x1 > clipScissor_.x ? std::min(x1 - clipScissor_.x, dw - clipScissor_.x) : 0;
+    clipScissor_.height = y1 > clipScissor_.y ? std::min(y1 - clipScissor_.y, dh - clipScissor_.y) : 0;
     clipScissorValid_ = clipScissor_.width > 0 && clipScissor_.height > 0;
   }
 
