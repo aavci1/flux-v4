@@ -2,6 +2,7 @@
 #include <Flux/UI/Views/ZStack.hpp>
 
 #include "UI/Layout/ContainerScope.hpp"
+#include "UI/Layout/LayoutHelpers.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -21,6 +22,7 @@ Size ZStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints, 
   LayoutConstraints childCs = constraints;
   childCs.maxWidth = innerW > 0.f ? innerW : std::numeric_limits<float>::infinity();
   childCs.maxHeight = innerH > 0.f ? innerH : std::numeric_limits<float>::infinity();
+  layout::clampLayoutMinToMax(childCs);
 
   float maxW = 0.f;
   float maxH = 0.f;

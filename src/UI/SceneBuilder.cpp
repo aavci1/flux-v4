@@ -700,12 +700,19 @@ void SceneBuilder::reconcileChildren(SceneNode& parent, std::span<Element const>
 std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Element const& sceneEl, NodeId id,
                                                        std::unique_ptr<SceneNode> existing) {
   FrameState const current = frame();
-  detail::ElementModifiers const* mods = sceneEl.modifiers();
-  detail::ElementModifiers const* outerMods = (&sceneEl != &el) ? el.modifiers() : nullptr;
+  bool const resolvedFromComposite = (&sceneEl != &el);
+  std::optional<Element> stableSceneStorage{};
+  if (resolvedFromComposite) {
+    stableSceneStorage.emplace(sceneEl);
+  }
+  Element const& stableSceneEl = stableSceneStorage ? *stableSceneStorage : sceneEl;
+
+  detail::ElementModifiers const* mods = stableSceneEl.modifiers();
+  detail::ElementModifiers const* outerMods = resolvedFromComposite ? el.modifiers() : nullptr;
   Point const subtreeOffset = modifierOffset(mods);
   Size const outerSize = measureElement(el, current.constraints, current.hints, current.key);
   Size layoutOuterSize = outerSize;
-  if (sceneEl.typeTag() == ElementType::Text && textUsesContentBox(mods)) {
+  if (stableSceneEl.typeTag() == ElementType::Text && textUsesContentBox(mods)) {
     layoutOuterSize = assignedOuterSizeForFrame(outerSize, current.constraints, current.assignedSize,
                                                 current.hasAssignedWidth, current.hasAssignedHeight, mods);
   }
@@ -743,11 +750,11 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     }
   };
 
-  if (sceneEl.typeTag() == ElementType::Unknown && sceneEl.isComposite()) {
+  if (stableSceneEl.typeTag() == ElementType::Unknown && stableSceneEl.isComposite()) {
     ComponentKey nestedKey = directCompositeBodyKey(current.key);
     pushFrame(current.constraints, current.hints, current.origin, std::move(nestedKey), current.assignedSize,
               current.hasAssignedWidth, current.hasAssignedHeight);
-    std::unique_ptr<SceneNode> root = buildOrReuse(sceneEl, id, std::move(existing));
+    std::unique_ptr<SceneNode> root = buildOrReuse(stableSceneEl, id, std::move(existing));
     popFrame();
 
     std::unique_ptr<InteractionData> outerInteraction =
@@ -767,7 +774,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
   std::unique_ptr<SceneNode> core{};
   std::unique_ptr<InteractionData> resolvedInteraction{};
   Size geometrySize = outerSize;
-  switch (sceneEl.typeTag()) {
+  switch (stableSceneEl.typeTag()) {
   case ElementType::Rectangle: {
     std::unique_ptr<RectSceneNode> rectNode = releaseAs<RectSceneNode>(std::move(existing));
     if (!rectNode) {
@@ -794,7 +801,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     break;
   }
   case ElementType::Text: {
-    Text const& text = sceneEl.as<Text>();
+    Text const& text = stableSceneEl.as<Text>();
     Theme const& theme = activeTheme(environment_);
     Font const resolvedFont = resolveFont(text.font, theme.bodyFont, theme);
     Color const resolvedColor = resolveColor(text.color, theme.labelColor, theme);
@@ -878,7 +885,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     break;
   }
   case ElementType::Render: {
-    Render const& renderView = sceneEl.as<Render>();
+    Render const& renderView = stableSceneEl.as<Render>();
     std::unique_ptr<RenderSceneNode> renderNode = releaseAs<RenderSceneNode>(std::move(existing));
     if (!renderNode) {
       renderNode = std::make_unique<RenderSceneNode>(id);
@@ -907,7 +914,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     break;
   }
   case ElementType::Image: {
-    views::Image const& image = sceneEl.as<views::Image>();
+    views::Image const& image = stableSceneEl.as<views::Image>();
     std::unique_ptr<ImageSceneNode> imageNode = releaseAs<ImageSceneNode>(std::move(existing));
     if (!imageNode) {
       imageNode = std::make_unique<ImageSceneNode>(id);
@@ -932,7 +939,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     break;
   }
   case ElementType::Path: {
-    PathShape const& path = sceneEl.as<PathShape>();
+    PathShape const& path = stableSceneEl.as<PathShape>();
     std::unique_ptr<PathSceneNode> pathNode = releaseAs<PathSceneNode>(std::move(existing));
     if (!pathNode) {
       pathNode = std::make_unique<PathSceneNode>(id);
@@ -953,7 +960,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     break;
   }
   case ElementType::Line: {
-    Line const& line = sceneEl.as<Line>();
+    Line const& line = stableSceneEl.as<Line>();
     std::unique_ptr<LineSceneNode> lineNode = releaseAs<LineSceneNode>(std::move(existing));
     if (!lineNode) {
       lineNode = std::make_unique<LineSceneNode>(id);
@@ -973,7 +980,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     break;
   }
   case ElementType::VStack: {
-    VStack const& stack = sceneEl.as<VStack>();
+    VStack const& stack = stableSceneEl.as<VStack>();
     std::unique_ptr<SceneNode> group = releasePlainGroup(std::move(existing));
     if (!group) {
       group = std::make_unique<SceneNode>(id);
@@ -986,6 +993,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     LayoutConstraints childConstraints = innerConstraints;
     childConstraints.maxHeight = std::numeric_limits<float>::infinity();
     childConstraints.maxWidth = innerW > 0.f ? innerW : std::numeric_limits<float>::infinity();
+    clampLayoutMinToMax(childConstraints);
     LayoutHints childHints{};
     childHints.vStackCrossAlign = stack.alignment;
 
@@ -1048,7 +1056,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     break;
   }
   case ElementType::HStack: {
-    HStack const& stack = sceneEl.as<HStack>();
+    HStack const& stack = stableSceneEl.as<HStack>();
     std::unique_ptr<SceneNode> group = releasePlainGroup(std::move(existing));
     if (!group) {
       group = std::make_unique<SceneNode>(id);
@@ -1069,6 +1077,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     if (stack.children.size() == 1 && widthConstrained) {
       childConstraints.maxWidth = assignedW;
     }
+    clampLayoutMinToMax(childConstraints);
 
     std::vector<Size> sizes{};
     sizes.reserve(stack.children.size());
@@ -1102,6 +1111,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
       childMeasure.maxWidth = mainLayout.mainSizes[i];
       childMeasure.maxHeight =
           stack.alignment == Alignment::Stretch && heightConstrained ? assignedH : std::numeric_limits<float>::infinity();
+      clampLayoutMinToMax(childMeasure);
       LayoutHints rowHints{};
       rowHints.hStackCrossAlign = stack.alignment;
       ComponentKey childKey = current.key;
@@ -1150,7 +1160,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     break;
   }
   case ElementType::ZStack: {
-    ZStack const& stack = sceneEl.as<ZStack>();
+    ZStack const& stack = stableSceneEl.as<ZStack>();
     std::unique_ptr<SceneNode> group = releasePlainGroup(std::move(existing));
     if (!group) {
       group = std::make_unique<SceneNode>(id);
@@ -1163,6 +1173,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     LayoutConstraints childConstraints = innerConstraints;
     childConstraints.maxWidth = innerW > 0.f ? innerW : std::numeric_limits<float>::infinity();
     childConstraints.maxHeight = innerH > 0.f ? innerH : std::numeric_limits<float>::infinity();
+    clampLayoutMinToMax(childConstraints);
     float maxW = 0.f;
     float maxH = 0.f;
     std::vector<Size> sizes{};
@@ -1213,7 +1224,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     break;
   }
   case ElementType::Grid: {
-    Grid const& grid = sceneEl.as<Grid>();
+    Grid const& grid = stableSceneEl.as<Grid>();
     std::unique_ptr<SceneNode> group = releasePlainGroup(std::move(existing));
     if (!group) {
       group = std::make_unique<SceneNode>(id);
@@ -1270,7 +1281,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     break;
   }
   case ElementType::OffsetView: {
-    OffsetView const& offsetView = sceneEl.as<OffsetView>();
+    OffsetView const& offsetView = stableSceneEl.as<OffsetView>();
     std::unique_ptr<SceneNode> group = releasePlainGroup(std::move(existing));
     if (!group) {
       group = std::make_unique<SceneNode>(id);
@@ -1317,6 +1328,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
       if (slot.assignedSize.height > 0.f) {
         childBuild.maxHeight = slot.assignedSize.height;
       }
+      clampLayoutMinToMax(childBuild);
       ComponentKey childKey = current.key;
       childKey.push_back(local);
       pushFrame(childBuild, LayoutHints{},
@@ -1335,7 +1347,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     break;
   }
   case ElementType::ScrollView: {
-    ScrollView const& scrollView = sceneEl.as<ScrollView>();
+    ScrollView const& scrollView = stableSceneEl.as<ScrollView>();
     ComponentKey scrollStateKey = current.key;
     scrollStateKey.push_back(LocalId::fromString("$scroll-state"));
     StateStore* const store = StateStore::current();
@@ -1614,7 +1626,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     break;
   }
   case ElementType::ScaleAroundCenter: {
-    ScaleAroundCenter const& scaled = sceneEl.as<ScaleAroundCenter>();
+    ScaleAroundCenter const& scaled = stableSceneEl.as<ScaleAroundCenter>();
     std::unique_ptr<CustomTransformSceneNode> transformNode = releaseAs<CustomTransformSceneNode>(std::move(existing));
     if (!transformNode) {
       transformNode = std::make_unique<CustomTransformSceneNode>(id);
@@ -1647,7 +1659,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     break;
   }
   case ElementType::PopoverCalloutShape: {
-    PopoverCalloutShape const& callout = sceneEl.as<PopoverCalloutShape>();
+    PopoverCalloutShape const& callout = stableSceneEl.as<PopoverCalloutShape>();
     ComponentKey contentKey = current.key;
     contentKey.push_back(LocalId::fromString("$content"));
     LayoutConstraints const contentConstraints =

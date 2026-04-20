@@ -2,6 +2,7 @@
 #include <Flux/UI/Views/ScaleAroundCenter.hpp>
 
 #include "UI/Layout/ContainerScope.hpp"
+#include "UI/Layout/LayoutHelpers.hpp"
 
 #include <limits>
 
@@ -18,6 +19,7 @@ Size ScaleAroundCenter::measure(MeasureContext& ctx, LayoutConstraints const& co
   LayoutConstraints childCs = constraints;
   childCs.maxWidth = innerW > 0.f ? innerW : std::numeric_limits<float>::infinity();
   childCs.maxHeight = innerH > 0.f ? innerH : std::numeric_limits<float>::infinity();
+  layout::clampLayoutMinToMax(childCs);
 
   return child.measure(ctx, childCs, LayoutHints{}, ts);
 }

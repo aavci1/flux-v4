@@ -838,6 +838,36 @@ TEST_CASE("SceneBuilder: HStack flexed explicit leaves stay collapsed when resiz
   CHECK(rects[3]->size.width == doctest::Approx(56.f));
 }
 
+TEST_CASE("SceneBuilder: HStack clamps child measure constraints after flex shrink under fixed root width") {
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  LayoutConstraints constraints{};
+  constraints.minWidth = 300.f;
+  constraints.maxWidth = 300.f;
+  constraints.maxHeight = 40.f;
+
+  Element row = HStack{
+      .spacing = 10.f,
+      .children = children(
+          Element{Rectangle{}}.size(200.f, 20.f).flex(1.f, 1.f, 0.f),
+          Element{Rectangle{}}.size(200.f, 20.f).flex(1.f, 1.f, 0.f)),
+  };
+
+  std::unique_ptr<SceneNode> tree = builder.build(row, NodeId{1ull}, constraints);
+  REQUIRE(tree != nullptr);
+  REQUIRE(tree->children().size() == 2);
+  auto const* left = dynamic_cast<RectSceneNode const*>(tree->children()[0].get());
+  auto const* right = dynamic_cast<RectSceneNode const*>(tree->children()[1].get());
+  REQUIRE(left != nullptr);
+  REQUIRE(right != nullptr);
+  CHECK(left->size.width == doctest::Approx(145.f));
+  CHECK(right->size.width == doctest::Approx(145.f));
+}
+
 TEST_CASE("SceneBuilder: layout demo cards shrink on narrow rebuild instead of retaining wide widths") {
   VariableTextSystem textSystem{};
   SceneGeometryIndex geometry{};

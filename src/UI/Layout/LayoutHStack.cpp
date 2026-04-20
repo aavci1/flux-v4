@@ -28,6 +28,7 @@ Size HStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints, 
   if (n == 1 && std::isfinite(constraints.maxWidth) && constraints.maxWidth > 0.f) {
     childCs.maxWidth = std::max(0.f, constraints.maxWidth);
   }
+  clampLayoutMinToMax(childCs);
 
   if (n == 0) {
     return {0.f, 0.f};
@@ -66,6 +67,7 @@ Size HStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints, 
     LayoutConstraints cs2 = constraints;
     cs2.maxWidth = mainLayout.mainSizes[i];
     cs2.maxHeight = stretchCrossAxis ? assignedHCross : std::numeric_limits<float>::infinity();
+    clampLayoutMinToMax(cs2);
     LayoutHints rh{};
     rh.hStackCrossAlign = alignment;
     Size const s2 = children[i].measure(ctx, cs2, rh, ts);

@@ -23,6 +23,7 @@ Size VStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints, 
   LayoutConstraints childCs = constraints;
   childCs.maxHeight = std::numeric_limits<float>::infinity();
   childCs.maxWidth = innerW > 0.f ? innerW : std::numeric_limits<float>::infinity();
+  clampLayoutMinToMax(childCs);
   LayoutHints childHints{};
   childHints.vStackCrossAlign = alignment;
 
