@@ -5,10 +5,13 @@
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Reactive/Interpolatable.hpp>
 #include <Flux/Reactive/Transition.hpp>
+#include <Flux/UI/InputFieldChrome.hpp>
+#include <Flux/UI/InputFieldLayout.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Icon.hpp>
 #include <Flux/UI/Views/Popover.hpp>
+#include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/ScrollView.hpp>
 #include <Flux/UI/Views/Text.hpp>
 #include <Flux/UI/Views/VStack.hpp>
@@ -23,10 +26,18 @@ namespace flux {
 
 namespace {
 
-float singleLineTriggerContentHeight(Theme const &theme, Font const &labelFont) {
-    float const themedInnerHeight = std::max(0.f, theme.controlHeightLarge - (theme.paddingFieldV * 2.f));
-    float const fontDrivenHeight = std::max(labelFont.size, 18.f);
-    return std::max(themedInnerHeight, fontDrivenHeight);
+float inputFieldShellInset(ResolvedInputFieldChrome const &chrome) {
+    return std::max(chrome.borderWidth, chrome.borderFocusWidth);
+}
+
+float singleLineTriggerFieldHeight(Font const &labelFont, ResolvedInputFieldChrome const &chrome) {
+    float const shellInset = inputFieldShellInset(chrome);
+    return resolvedInputFieldHeight(labelFont, chrome.textColor, chrome.paddingV + shellInset, 0.f);
+}
+
+float singleLineTriggerContentHeight(Font const &labelFont, ResolvedInputFieldChrome const &chrome) {
+    float const shellInset = inputFieldShellInset(chrome);
+    return std::max(0.f, singleLineTriggerFieldHeight(labelFont, chrome) - 2.f * (chrome.paddingV + shellInset));
 }
 
 Color lighten(Color c, float t) {
@@ -97,30 +108,34 @@ struct SelectResolvedStyle {
     Font labelFont {};
     Font detailFont {};
     float cornerRadius = 0.f;
+    ResolvedInputFieldChrome fieldChrome {};
     float menuCornerRadius = 0.f;
     float menuMaxHeight = 0.f;
     float menuMaxWidth = 0.f;
     float minMenuWidth = 0.f;
     Color accentColor {};
-    Color fieldColor {};
     Color fieldHoverColor {};
-    Color borderColor {};
     Color rowHoverColor {};
 };
 
 SelectResolvedStyle resolveStyle(Select::Style const &style, Theme const &theme) {
+    InputFieldChromeSpec fieldChromeSpec {};
+    fieldChromeSpec.backgroundColor = style.fieldColor;
+    fieldChromeSpec.borderColor = style.borderColor;
+    fieldChromeSpec.cornerRadius = style.cornerRadius;
+    ResolvedInputFieldChrome const fieldChrome = resolveInputFieldChrome(fieldChromeSpec, theme);
+
     return SelectResolvedStyle {
         .labelFont = resolveFont(style.labelFont, theme.bodyFont, theme),
         .detailFont = resolveFont(style.detailFont, theme.footnoteFont, theme),
         .cornerRadius = resolveFloat(style.cornerRadius, theme.radiusMedium),
+        .fieldChrome = fieldChrome,
         .menuCornerRadius = resolveFloat(style.menuCornerRadius, theme.radiusLarge),
         .menuMaxHeight = resolveFloat(style.menuMaxHeight, 260.f),
         .menuMaxWidth = resolveFloat(style.menuMaxWidth, 0.f),
         .minMenuWidth = resolveFloat(style.minMenuWidth, 180.f),
         .accentColor = resolveColor(style.accentColor, theme.accentColor, theme),
-        .fieldColor = resolveColor(style.fieldColor, theme.textBackgroundColor, theme),
-        .fieldHoverColor = resolveColor(style.fieldHoverColor, theme.hoveredControlBackgroundColor, theme),
-        .borderColor = resolveColor(style.borderColor, theme.opaqueSeparatorColor, theme),
+        .fieldHoverColor = resolveColor(style.fieldHoverColor, fieldChrome.backgroundColor, theme),
         .rowHoverColor = resolveColor(style.rowHoverColor, theme.rowHoverBackgroundColor, theme),
     };
 }
@@ -355,17 +370,23 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
         bool const focused = useFocus();
         bool const open = isPresented;
         Rect const bounds = useBounds();
+        ResolvedInputFieldChrome const &fieldChrome = style.fieldChrome;
+        float const shellInset = inputFieldShellInset(fieldChrome);
+        float const fieldVerticalPadding = fieldChrome.paddingV + shellInset;
+        float const fieldHorizontalPadding = fieldChrome.paddingH + shellInset;
 
         Transition const trMotion = Transition::ease(theme.durationMedium);
         Transition const trFast = Transition::ease(theme.durationFast);
 
-        Color const idleFill = isDisabled ? theme.disabledControlBackgroundColor : style.fieldColor;
-        Color const hoverFill = isDisabled ? theme.disabledControlBackgroundColor : style.fieldHoverColor;
-        Color const pressFill = isDisabled ? theme.disabledControlBackgroundColor : darken(style.fieldHoverColor, 0.03f);
-        Color const openFill = isDisabled ? theme.disabledControlBackgroundColor : lighten(style.fieldHoverColor, 0.02f);
-        Color const fillTarget = pressed ? pressFill : open ? openFill :
-                                                   hovered  ? hoverFill :
-                                                              idleFill;
+        Color const idleFill = fieldChrome.backgroundColor;
+        Color const hoverFill = style.fieldHoverColor;
+        Color const pressFill = darken(style.fieldHoverColor, 0.03f);
+        Color const openFill = style.fieldHoverColor;
+        Color const fillTarget =
+            triggerMode == SelectTriggerMode::Link ? Colors::transparent :
+            pressed ? pressFill : open ? openFill :
+            hovered ? hoverFill :
+                      idleFill;
 
         Color const labelTarget =
             triggerMode == SelectTriggerMode::Link ? (isDisabled ? theme.disabledTextColor : pressed       ? darken(style.accentColor, 0.12f) :
@@ -402,10 +423,10 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
         float const triggerWidth = bounds.width > 0.f ? bounds.width : style.minMenuWidth;
         EdgeInsets const anchorOutsets =
             triggerMode == SelectTriggerMode::Link ? EdgeInsets {} : EdgeInsets {
-                                                                         theme.paddingFieldV,
-                                                                         theme.paddingFieldH,
-                                                                         theme.paddingFieldV,
-                                                                         theme.paddingFieldH,
+                                                                         fieldVerticalPadding,
+                                                                         fieldHorizontalPadding,
+                                                                         fieldVerticalPadding,
+                                                                         fieldHorizontalPadding,
                                                                      };
         std::optional<float> const menuWidth = matchTriggerWidth ? std::optional<float> {std::max(triggerWidth + anchorOutsets.left + anchorOutsets.right,
                                                                                                   style.minMenuWidth)} :
@@ -558,7 +579,7 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
             .color = *labelAnim,
             .horizontalAlignment = HorizontalAlignment::Leading,
             .verticalAlignment = VerticalAlignment::Center,
-            .wrapping = TextWrapping::Wrap,
+            .wrapping = TextWrapping::NoWrap,
         };
 
         Element triggerTextBlock = ZStack {
@@ -566,7 +587,7 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
             .verticalAlignment = Alignment::Center,
             .children = children(std::move(triggerLabel)),
         }
-                                       .height(singleLineTriggerContentHeight(theme, style.labelFont));
+                                       .height(singleLineTriggerContentHeight(style.labelFont, fieldChrome));
         if (hasDetail) {
             std::vector<Element> triggerTextChildren;
             triggerTextChildren.reserve(2);
@@ -622,15 +643,24 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
                 .onTap(isDisabled ? std::function<void()> {} : std::function<void()> {toggleMenu});
         }
 
-        return std::move(trigger)
-            .padding(theme.paddingFieldV, theme.paddingFieldH, theme.paddingFieldV, theme.paddingFieldH)
+        Element fieldTrigger = std::move(trigger)
+            .padding(fieldVerticalPadding, fieldHorizontalPadding, fieldVerticalPadding, fieldHorizontalPadding)
             .fill(FillStyle::solid(*fillAnim))
-            .stroke(focused && !isDisabled ? StrokeStyle::solid(theme.keyboardFocusIndicatorColor, 2.f) : StrokeStyle::solid(open && !isDisabled ? style.accentColor : style.borderColor, 1.f))
-            .cornerRadius(CornerRadius {style.cornerRadius})
+            .stroke((focused || open) && !isDisabled ? StrokeStyle::solid(fieldChrome.borderFocusColor, fieldChrome.borderFocusWidth) :
+                                                       StrokeStyle::solid(fieldChrome.borderColor, fieldChrome.borderWidth))
+            .cornerRadius(CornerRadius {fieldChrome.cornerRadius})
             .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
             .focusable(!isDisabled)
             .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})
             .onTap(isDisabled ? std::function<void()> {} : std::function<void()> {toggleMenu});
+
+        if (isDisabled) {
+            Color overlay = fieldChrome.disabledColor;
+            overlay.a *= 0.35f;
+            fieldTrigger = std::move(fieldTrigger).overlay(Rectangle {}.fill(FillStyle::solid(overlay)));
+        }
+
+        return fieldTrigger;
     }
 };
 
