@@ -149,7 +149,7 @@ public:
   void restore() override {}
   void translate(Point) override {}
   void transform(Mat3 const&) override {}
-  void clipRect(Rect, bool = false) override {}
+  void clipRect(Rect, CornerRadius const& = CornerRadius{}, bool = false) override {}
   bool quickReject(Rect) const override { return false; }
   void setOpacity(float) override {}
   void setBlendMode(BlendMode) override {}
@@ -420,6 +420,37 @@ struct RetainedParent {
             Element{RetainedTextChild{childCalls}}.key("child"),
         },
     };
+  }
+};
+
+struct ThemeSensitiveChild {
+  int* bodyCalls = nullptr;
+
+  Element body() const {
+    ++*bodyCalls;
+    Theme const& theme = useEnvironment<Theme>();
+    return Element{Rectangle{}}
+        .size(24.f, 2.f)
+        .fill(FillStyle::solid(theme.separatorColor));
+  }
+};
+
+struct ThemeSensitiveParent {
+  State<bool> dark{};
+  int* parentCalls = nullptr;
+  int* childCalls = nullptr;
+
+  Element body() const {
+    ++*parentCalls;
+    Theme const theme = *dark ? Theme::dark() : Theme::light();
+    return Element{VStack{
+        .spacing = *dark ? 6.f : 0.f,
+        .alignment = Alignment::Stretch,
+        .children = {
+            Element{Rectangle{}}.size(24.f, 8.f),
+            Element{ThemeSensitiveChild{childCalls}}.key("child"),
+        },
+    }}.environment(theme);
   }
 };
 

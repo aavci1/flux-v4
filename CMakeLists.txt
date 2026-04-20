@@ -150,6 +150,7 @@ add_library(flux STATIC
   src/UI/Views/TextInput.cpp
   src/UI/Views/Badge.cpp
   src/UI/Views/Button.cpp
+  src/UI/Views/Card.cpp
   src/UI/Views/Divider.cpp
   src/UI/Views/Toggle.cpp
   src/UI/Views/Slider.cpp
@@ -160,8 +161,10 @@ add_library(flux STATIC
   src/UI/Views/Icon.cpp
   src/UI/Views/ListView.cpp
   src/UI/Views/ProgressBar.cpp
+  src/UI/Views/TableView.cpp
   src/UI/Views/Alert.cpp
   src/UI/Views/Popover.cpp
+  src/UI/Views/Toast.cpp
   src/UI/Views/Tooltip.cpp
   src/UI/Views/PopoverCalloutPath.cpp
   src/UI/PopoverCalloutShapeElement.cpp

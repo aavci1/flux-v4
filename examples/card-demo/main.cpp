@@ -1,15 +1,18 @@
 #include <Flux.hpp>
 #include <Flux/Core/Window.hpp>
 #include <Flux/Core/WindowUI.hpp>
-#include <Flux/Graphics/TextLayoutOptions.hpp>
-#include <Flux/Graphics/TextSystem.hpp>
-#include <Flux/Reactive/Reactive.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/UI.hpp>
+#include <Flux/UI/Views/Button.hpp>
+#include <Flux/UI/Views/Card.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Icon.hpp>
+#include <Flux/UI/Views/ScrollView.hpp>
+#include <Flux/UI/Views/Spacer.hpp>
+#include <Flux/UI/Views/Text.hpp>
+#include <Flux/UI/Views/Toggle.hpp>
+#include <Flux/UI/Views/VStack.hpp>
 
-#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -17,163 +20,309 @@ using namespace flux;
 
 namespace {
 
-/// Demo-only: `CardListView` needs live window width for `TextSystem::measure`. A proper fix is framework
-/// support for passing context (e.g. `Window` or size) through the component tree (environment / context).
-Window* gCardDemoWindow = nullptr;
+struct ExpandableCard : ViewModifiers<ExpandableCard> {
+    IconName icon = IconName::Dashboard;
+    Color accent = Color::accent();
+    std::string title;
+    std::string summary;
+    std::string detail;
 
-} // namespace
+    Element body() const {
+        Theme const &theme = useEnvironment<Theme>();
+        auto expanded = useState(false);
+        bool const hovered = useHover();
 
-namespace pal {
-constexpr Color bg = Color::hex(0xF2F2F7);
-constexpr Color surface = Color::hex(0xFFFFFF);
-constexpr Color border = Color::hex(0xE0E0E6);
-constexpr Color label = Color::hex(0x111118);
-constexpr Color sublabel = Color::hex(0x6E6E80);
-constexpr Color accent0 = Color::hex(0x3A7BD5);
-constexpr Color accent1 = Color::hex(0x2E9E5B);
-constexpr Color accent2 = Color::hex(0xD05A2B);
-} // namespace pal
+        bool const highlighted = *expanded || hovered;
+        ShadowStyle const shadow = highlighted
+                                       ? ShadowStyle {
+                                             .radius = theme.shadowRadiusPopover,
+                                             .offset = {0.f, theme.shadowOffsetYPopover},
+                                             .color = Color {0.f, 0.f, 0.f, 0.12f},
+                                         }
+                                       : ShadowStyle::none();
 
-struct Card {
-  Color accent = pal::accent0;
-  std::string title;
-  std::string detail;
-  /// Width available to the card row (matches parent content width). Used for wrapped body measurement.
-  float availableWidth = 400.f;
+        std::vector<Element> content;
+        content.push_back(
+            HStack {
+                .spacing = theme.space3,
+                .alignment = Alignment::Center,
+                .children = children(
+                    Icon {
+                        .name = icon,
+                        .size = 18.f,
+                        .color = accent,
+                    },
+                    VStack {
+                        .spacing = theme.space1,
+                        .alignment = Alignment::Start,
+                        .children = children(
+                            Text {
+                                .text = title,
+                                .font = Font::headline(),
+                                .color = Color::primary(),
+                            },
+                            Text {
+                                .text = summary,
+                                .font = Font::footnote(),
+                                .color = Color::secondary(),
+                                .wrapping = TextWrapping::Wrap,
+                            })
+                    }
+                        .flex(1.f, 1.f, 0.f),
+                    Icon {
+                        .name = *expanded ? IconName::ExpandLess : IconName::ExpandMore,
+                        .size = 18.f,
+                        .color = Color::tertiary(),
+                    })
+            });
 
-  auto body() const {
-    Theme const& theme = useEnvironment<Theme>();
-    auto expanded = useState<bool>(false);
-    auto bodyOpacity = useAnimation<float>(0.f);
+        if (*expanded) {
+            content.push_back(
+                Text {
+                    .text = detail,
+                    .font = Font::body(),
+                    .color = Color::secondary(),
+                    .wrapping = TextWrapping::Wrap,
+                });
+        }
 
-    float const innerTextWidth = std::max(1.f, availableWidth - 36.f);
-
-    float const bodyTextHeight = useMemo([&] {
-      TextSystem& ts = Application::instance().textSystem();
-      Font const bodyFont = theme.bodyFont;
-      TextLayoutOptions opts{.wrapping = TextWrapping::Wrap};
-      return ts.measure(detail, bodyFont, pal::sublabel, innerTextWidth, opts).height;
-    }, detail, availableWidth);
-
-    std::vector<Element> rows;
-    rows.emplace_back(HStack {
-        .spacing = 12.f,
-        .alignment = Alignment::Center,
-        .children = children(
-            Rectangle {}
-                .fill(FillStyle::solid(accent))
-                .size(14.f, 14.f)
-                .cornerRadius(7.f),
-            Text {
-                .text = title,
-                .font = Font::title2(),
-                .color = pal::label,
-            }
-                .size(0.f, 24.f)
-                .flex(1.f),
-            Icon {
-                .name = expanded ? IconName::ExpandLess : IconName::ExpandMore,
-                .size = theme.headlineFont.size,
-            }
-        ),
-    });
-
-    if (*expanded || *bodyOpacity > 0.001f) {
-      rows.emplace_back(HStack{
-          .spacing = 0.f,
-          .children = children(
-                  Text{
-                      .text = detail,
-                      .font = Font::body(),
-                      .color = pal::sublabel,
-                      .wrapping = TextWrapping::Wrap,
-                  }
-                      .size(0.f, *bodyOpacity * bodyTextHeight)
-                      .opacity(*bodyOpacity)
-                      .flex(1.f)
-              ),
-      });
+        return Card {
+            .child = VStack {
+                .spacing = theme.space3,
+                .alignment = Alignment::Stretch,
+                .children = std::move(content),
+            },
+            .style = Card::Style {
+                .padding = theme.space4,
+                .cornerRadius = theme.radiusXLarge,
+                .borderColor = highlighted ? accent : theme.separatorColor,
+                .shadow = shadow,
+            },
+        }
+            .cursor(Cursor::Hand)
+            .onTap([expanded] {
+                expanded = !*expanded;
+            });
     }
-
-    auto handleTap = [expanded, bodyOpacity] {
-      bool const next = !*expanded;
-      expanded = next;
-      WithTransition t{Transition::spring(500.f, 25.f, 0.5f)};
-      bodyOpacity = next ? 1.f : 0.f;
-    };
-
-    return VStack {
-        .spacing = theme.space4,
-        .children = std::move(rows)
-    }
-        .fill(FillStyle::solid(Color::controlBackground()))
-        .stroke(StrokeStyle::solid(Color::opaqueSeparator(), 1.f))
-        .cornerRadius(theme.radiusXLarge)
-        .padding(theme.space4)
-        .cursor(Cursor::Hand)
-        .onTap(handleTap);
-  }
 };
 
-struct CardListView {
-    auto body() const {
+struct CardDemoView {
+    Element body() const {
         Theme const &theme = useEnvironment<Theme>();
-        float const listContentWidth = gCardDemoWindow ? std::max(1.f, gCardDemoWindow->getSize().width - 48.f) : 432.f;
+
+        auto accentBorder = useState(true);
+        auto dropShadow = useState(true);
+
+        ShadowStyle const showcaseShadow = *dropShadow
+                                               ? ShadowStyle {
+                                                     .radius = theme.shadowRadiusPopover,
+                                                     .offset = {0.f, theme.shadowOffsetYPopover},
+                                                     .color = Color {0.f, 0.f, 0.f, 0.12f},
+                                                 }
+                                               : ShadowStyle::none();
 
         return ScrollView {
             .axis = ScrollAxis::Vertical,
             .children = children(
                 VStack {
-                    .spacing = theme.space3,
+                    .spacing = theme.space4,
                     .alignment = Alignment::Stretch,
                     .children = children(
                         Text {
-                            .text = "Flux Components",
+                            .text = "Card",
                             .font = Font::largeTitle(),
                             .color = Color::primary(),
-                            .horizontalAlignment = HorizontalAlignment::Leading,
                         },
                         Text {
-                            .text = "Tap a card to expand",
+                            .text =
+                                "Reusable surface container for elevated content. This demo shows default styling, "
+                                "custom borders, shadows, and composition with controls.",
                             .font = Font::body(),
                             .color = Color::secondary(),
-                            .horizontalAlignment = HorizontalAlignment::Leading,
                             .wrapping = TextWrapping::Wrap,
                         },
                         Card {
-                            .accent = Color::accent(),
-                            .title = "Metal Renderer",
-                            .detail = "SDF rounded-rect shaders, glyph atlas, libtess2.",
-                            .availableWidth = listContentWidth
+                            .child = HStack {
+                                .spacing = theme.space4,
+                                .alignment = Alignment::Center,
+                                .children = children(
+                                    VStack {
+                                        .spacing = theme.space1,
+                                        .alignment = Alignment::Start,
+                                        .children = children(
+                                            Text {
+                                                .text = "Style Knobs",
+                                                .font = Font::headline(),
+                                                .color = Color::primary(),
+                                            },
+                                            Text {
+                                                .text = "These toggles feed the next card's border and shadow.",
+                                                .font = Font::footnote(),
+                                                .color = Color::secondary(),
+                                                .wrapping = TextWrapping::Wrap,
+                                            })
+                                    }
+                                        .flex(1.f, 1.f, 0.f),
+                                    VStack {
+                                        .spacing = theme.space2,
+                                        .alignment = Alignment::Start,
+                                        .children = children(
+                                            HStack {
+                                                .spacing = theme.space2,
+                                                .alignment = Alignment::Center,
+                                                .children = children(
+                                                    Toggle {.value = accentBorder},
+                                                    Text {
+                                                        .text = "Accent border",
+                                                        .font = Font::footnote(),
+                                                        .color = Color::primary(),
+                                                    })
+                                            },
+                                            HStack {
+                                                .spacing = theme.space2,
+                                                .alignment = Alignment::Center,
+                                                .children = children(
+                                                    Toggle {.value = dropShadow},
+                                                    Text {
+                                                        .text = "Drop shadow",
+                                                        .font = Font::footnote(),
+                                                        .color = Color::primary(),
+                                                    })
+                                            })
+                                    })
+                            },
                         },
                         Card {
-                            .accent = Color::accent(),
-                            .title = "Reactive State",
-                            .detail = "Signal<T>, Computed<T>, Animation<T>.",
-                            .availableWidth = listContentWidth
+                            .child = VStack {
+                                .spacing = theme.space2,
+                                .alignment = Alignment::Start,
+                                .children = children(
+                                    Text {
+                                        .text = "Default card",
+                                        .font = Font::headline(),
+                                        .color = Color::primary(),
+                                    },
+                                    Text {
+                                        .text = "Uses the framework defaults: elevated background, separator border, large radius, and standard padding.",
+                                        .font = Font::body(),
+                                        .color = Color::secondary(),
+                                        .wrapping = TextWrapping::Wrap,
+                                    })
+                            },
                         },
                         Card {
-                            .accent = Color::accent(),
-                            .title = "Scene Tree",
-                            .detail = "Retained nodes, keyed reconciliation, hit testing.",
-                            .availableWidth = listContentWidth
-                        }
-                    ),
+                            .child = VStack {
+                                .spacing = theme.space3,
+                                .alignment = Alignment::Stretch,
+                                .children = children(
+                                    Text {
+                                        .text = "Customized card",
+                                        .font = Font::headline(),
+                                        .color = Color::primary(),
+                                    },
+                                    Text {
+                                        .text = "Same component, different tokens. This is the replacement path for the demo-specific surface wrappers.",
+                                        .font = Font::body(),
+                                        .color = Color::secondary(),
+                                        .wrapping = TextWrapping::Wrap,
+                                    },
+                                    HStack {
+                                        .spacing = theme.space2,
+                                        .alignment = Alignment::Center,
+                                        .children = children(
+                                            Icon {
+                                                .name = IconName::Palette,
+                                                .size = 18.f,
+                                                .color = Color::accent(),
+                                            },
+                                            Text {
+                                                .text = *accentBorder ? "Accent border enabled" : "Neutral border enabled",
+                                                .font = Font::footnote(),
+                                                .color = Color::secondary(),
+                                            },
+                                            Spacer {},
+                                            Text {
+                                                .text = *dropShadow ? "Shadow on" : "Shadow off",
+                                                .font = Font::footnote(),
+                                                .color = Color::tertiary(),
+                                            })
+                                    })
+                            },
+                            .style = Card::Style {
+                                .padding = theme.space4,
+                                .cornerRadius = theme.radiusXLarge,
+                                .borderColor = *accentBorder ? theme.accentColor : theme.separatorColor,
+                                .shadow = showcaseShadow,
+                            },
+                        },
+                        Card {
+                            .child = VStack {
+                                .spacing = theme.space3,
+                                .alignment = Alignment::Stretch,
+                                .children = children(
+                                    Text {
+                                        .text = "Composed with other controls",
+                                        .font = Font::headline(),
+                                        .color = Color::primary(),
+                                    },
+                                    Text {
+                                        .text = "Cards are just containers. Put buttons, toggles, metrics, or custom layouts inside them.",
+                                        .font = Font::body(),
+                                        .color = Color::secondary(),
+                                        .wrapping = TextWrapping::Wrap,
+                                    },
+                                    HStack {
+                                        .spacing = theme.space2,
+                                        .alignment = Alignment::Center,
+                                        .children = children(
+                                            Button {
+                                                .label = "Primary",
+                                                .onTap = [] {},
+                                            },
+                                            Button {
+                                                .label = "Secondary",
+                                                .variant = ButtonVariant::Secondary,
+                                                .onTap = [] {},
+                                            })
+                                    })
+                            },
+                            .style = Card::Style {
+                                .padding = theme.space4,
+                                .cornerRadius = theme.radiusLarge,
+                                .backgroundColor = theme.controlBackgroundColor,
+                            },
+                        },
+                        ExpandableCard {
+                            .icon = IconName::AutoAwesome,
+                            .accent = theme.accentColor,
+                            .title = "Interactive card",
+                            .summary = "Hover or tap to emphasize the card surface.",
+                            .detail = "The component does not own higher-level behavior. State, hover feedback, "
+                                      "and expansion remain in user code while the framework handles the surface.",
+                        },
+                        ExpandableCard {
+                            .icon = IconName::DashboardCustomize,
+                            .accent = theme.successColor,
+                            .title = "Another surface variant",
+                            .summary = "Same primitive, different accent and content.",
+                            .detail = "This is the intended replacement for demo-local section cards, stat cards, "
+                                      "and other repeated panel wrappers that only differed by border or shadow.",
+                        })
                 }
-                    .padding(24.f)
-            )
+                    .padding(theme.space6))
         };
     }
 };
 
-int main(int argc, char* argv[]) {
-  Application app(argc, argv);
-  auto& w = app.createWindow<Window>({
-      .size = {800, 800},
-      .title = "Flux — Card demo",
-      .resizable = true,
-  });
-  gCardDemoWindow = &w;
-  w.setView<CardListView>();
-  return app.exec();
+} // namespace
+
+int main(int argc, char *argv[]) {
+    Application app(argc, argv);
+    auto &w = app.createWindow<Window>({
+        .size = {820, 860},
+        .title = "Flux — Card demo",
+        .resizable = true,
+    });
+    w.setView<CardDemoView>();
+    return app.exec();
 }

@@ -27,7 +27,7 @@ public:
   virtual void translate(Point offset) = 0;
   virtual void transform(Mat3 const& matrix) = 0;
 
-  virtual void clipRect(Rect rect, bool antiAlias = false) = 0;
+  virtual void clipRect(Rect rect, CornerRadius const& cornerRadius = CornerRadius{}, bool antiAlias = false) = 0;
   virtual bool quickReject(Rect rect) const = 0;
 
   virtual void setOpacity(float opacity) = 0;

@@ -42,7 +42,7 @@ Button::Style resolveStyle(Button::Style const &style, Theme const &theme) {
         .font = resolveFont(style.font, theme.headlineFont, theme),
         .paddingH = resolveFloat(style.paddingH, theme.space4),
         .paddingV = resolveFloat(style.paddingV, theme.space3),
-        .cornerRadius = resolveFloat(style.cornerRadius, theme.radiusMedium),
+        .cornerRadius = resolveFloat(style.cornerRadius, theme.radiusLarge),
         .accentColor = resolveColor(style.accentColor, theme.accentColor, theme),
         .destructiveColor = resolveColor(style.destructiveColor, theme.dangerColor, theme),
     };

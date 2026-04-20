@@ -268,14 +268,23 @@ EnvironmentLayer const* windowEnvironmentLayerForCurrentRuntime();
 template<typename T>
 T const& useEnvironment() {
   if (T const* v = EnvironmentStack::current().find<T>()) {
+    if (StateStore* store = StateStore::current()) {
+      store->recordEnvironmentDependency(*v);
+    }
     return *v;
   }
   if (EnvironmentLayer const* layer = detail::windowEnvironmentLayerForCurrentRuntime()) {
     if (T const* v = layer->get<T>()) {
+      if (StateStore* store = StateStore::current()) {
+        store->recordEnvironmentDependency(*v);
+      }
       return *v;
     }
   }
   static T const sDefault{};
+  if (StateStore* store = StateStore::current()) {
+    store->recordEnvironmentDependency(sDefault);
+  }
   return sDefault;
 }
 

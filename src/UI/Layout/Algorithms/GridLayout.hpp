@@ -10,10 +10,18 @@
 namespace flux::layout {
 
 struct GridTrackMetrics {
+  struct Placement {
+    std::size_t row = 0;
+    std::size_t column = 0;
+    std::size_t columnSpan = 1;
+  };
+
   std::size_t columns = 1;
   std::size_t rowCount = 0;
   float cellWidth = 0.f;
   float cellHeight = 0.f;
+  float horizontalSpacing = 0.f;
+  std::vector<Placement> placements{};
 };
 
 struct GridLayoutResult {
@@ -28,7 +36,13 @@ GridTrackMetrics resolveGridTrackMetrics(std::size_t columns, std::size_t childC
                                          float assignedWidth, bool hasAssignedWidth,
                                          float assignedHeight, bool hasAssignedHeight);
 
-LayoutConstraints gridChildConstraints(LayoutConstraints constraints, GridTrackMetrics const& metrics);
+GridTrackMetrics resolveGridTrackMetrics(std::size_t columns, std::span<std::size_t const> columnSpans,
+                                         float horizontalSpacing, float verticalSpacing,
+                                         float assignedWidth, bool hasAssignedWidth,
+                                         float assignedHeight, bool hasAssignedHeight);
+
+LayoutConstraints gridChildConstraints(LayoutConstraints constraints, GridTrackMetrics const& metrics,
+                                       std::size_t childIndex = 0);
 
 GridLayoutResult layoutGrid(GridTrackMetrics const& metrics, float horizontalSpacing, float verticalSpacing,
                             float assignedWidth, bool hasAssignedWidth, float assignedHeight,

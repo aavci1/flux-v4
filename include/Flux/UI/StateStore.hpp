@@ -6,6 +6,7 @@
 
 
 #include <Flux/UI/ComponentKey.hpp>
+#include <Flux/UI/Environment.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 #include <Flux/Reactive/Observer.hpp>
 #include <Flux/Reactive/Detail/TypeTraits.hpp>
@@ -49,6 +50,12 @@ struct ComponentValueSnapshot {
   std::type_index type{typeid(void)};
 };
 
+struct EnvironmentValueSnapshot {
+  std::unique_ptr<void, void (*)(void*)> value{nullptr, nullptr};
+  bool (*equalsCurrent)(void const*, EnvironmentStack const&) = nullptr;
+  std::type_index type{typeid(void)};
+};
+
 /// State bucket for one component instance.
 struct ComponentState {
   std::deque<StateSlot> slots;
@@ -61,6 +68,8 @@ struct ComponentState {
   std::vector<LayoutConstraints> reusableConstraints;
   std::vector<std::pair<LayoutConstraints, Size>> reusableMeasures;
   ComponentValueSnapshot valueSnapshot{};
+  std::vector<EnvironmentValueSnapshot> environmentDependencies;
+  std::vector<EnvironmentValueSnapshot> pendingEnvironmentDependencies;
   std::vector<ComponentSubscription> subscriptions;
 };
 
@@ -154,6 +163,9 @@ public:
   Element& commitBody(ComponentKey const& key, C const& value, LayoutConstraints const& constraints,
                       std::unique_ptr<Element> body, std::vector<Observable*> deps);
 
+  template<typename T>
+  void recordEnvironmentDependency(T const& value);
+
   /// When building an overlay subtree, set to that overlay's id value (for `useFocus` / `useHover`).
   void setOverlayScope(std::optional<std::uint64_t> overlayIdValue);
   std::optional<std::uint64_t> overlayScope() const;
@@ -186,9 +198,13 @@ private:
   static bool constraintsEqual(LayoutConstraints const& a, LayoutConstraints const& b) noexcept;
   static bool rectEqual(Rect const& a, Rect const& b) noexcept;
   void clearComponentState(ComponentState& state);
+  bool environmentDependenciesMatch(ComponentState const& state) const;
 
   template<typename C>
   static ComponentValueSnapshot makeValueSnapshot(C const& value);
+
+  template<typename T>
+  static EnvironmentValueSnapshot makeEnvironmentSnapshot(T const& value);
 };
 
 } // namespace flux
@@ -282,7 +298,53 @@ bool StateStore::canReuseBody(ComponentKey const& key, ComponentState const* sta
       !state->valueSnapshot.equals) {
     return false;
   }
+  if (!environmentDependenciesMatch(*state)) {
+    return false;
+  }
   return state->valueSnapshot.equals(state->valueSnapshot.value.get(), &value);
+}
+
+template<typename T>
+EnvironmentValueSnapshot StateStore::makeEnvironmentSnapshot(T const& value) {
+  EnvironmentValueSnapshot snapshot{};
+  if constexpr (std::is_copy_constructible_v<T>) {
+    T* raw = new T(value);
+    snapshot.value = std::unique_ptr<void, void (*)(void*)>(
+        raw, [](void* p) { delete static_cast<T*>(p); });
+    if constexpr (detail::equalityComparableV<T>) {
+      snapshot.equalsCurrent = [](void const* lhs, EnvironmentStack const& environment) {
+        if (T const* current = environment.find<T>()) {
+          return *static_cast<T const*>(lhs) == *current;
+        }
+        static T const fallback{};
+        return *static_cast<T const*>(lhs) == fallback;
+      };
+    } else if constexpr (std::is_trivially_copyable_v<T>) {
+      snapshot.equalsCurrent = [](void const* lhs, EnvironmentStack const& environment) {
+        T const* current = environment.find<T>();
+        static T const fallback{};
+        T const* rhs = current ? current : &fallback;
+        return std::memcmp(lhs, rhs, sizeof(T)) == 0;
+      };
+    }
+    snapshot.type = std::type_index(typeid(T));
+  }
+  return snapshot;
+}
+
+template<typename T>
+void StateStore::recordEnvironmentDependency(T const& value) {
+  if (activeStateStack_.empty()) {
+    return;
+  }
+  ComponentState& state = *activeStateStack_.back();
+  std::type_index const type = std::type_index(typeid(T));
+  for (EnvironmentValueSnapshot const& dep : state.pendingEnvironmentDependencies) {
+    if (dep.type == type) {
+      return;
+    }
+  }
+  state.pendingEnvironmentDependencies.push_back(makeEnvironmentSnapshot(value));
 }
 
 } // namespace flux

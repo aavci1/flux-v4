@@ -44,3 +44,6 @@ DerivedData/
 *.py[cod]
 .pytest_cache/
 .coverage
+
+# codex
+.codex

@@ -5,6 +5,7 @@
 
 #include <Flux/Graphics/Image.hpp>
 #include <Flux/Scene/ImageSceneNode.hpp>
+#include <Flux/Scene/ModifierSceneNode.hpp>
 #include <Flux/Scene/PathSceneNode.hpp>
 #include <Flux/Scene/RectSceneNode.hpp>
 #include <Flux/Scene/Render.hpp>
@@ -17,8 +18,10 @@
 #import <QuartzCore/QuartzCore.h>
 
 #include <filesystem>
+#include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -156,6 +159,12 @@ static StressScene makeStressScene(CoreTextSystem& textSystem, std::shared_ptr<I
   return StressScene{SceneTree{std::move(root)}, animatedGroupPtr};
 }
 
+static std::uint8_t capturedChannel(std::vector<std::uint8_t> const& pixels, std::uint32_t width, std::uint32_t x,
+                                    std::uint32_t y, int channel) {
+  std::size_t const idx = (static_cast<std::size_t>(y) * width + x) * 4u + static_cast<std::size_t>(channel);
+  return pixels[idx];
+}
+
 } // namespace
 
 TEST_CASE("MetalCanvas can render multiple queued frames without arena aliasing regressions") {
@@ -185,6 +194,69 @@ TEST_CASE("MetalCanvas can render multiple queued frames without arena aliasing 
 
     waitForCanvasLastPresentComplete(canvas.get());
     CHECK(true);
+  }
+#endif
+}
+
+TEST_CASE("MetalCanvas applies rounded clip masks to child content") {
+#if !defined(__APPLE__)
+  SUCCEED();
+#else
+  @autoreleasepool {
+    CoreTextSystem textSystem;
+    TestSurface surface = makeSurface();
+    auto canvas = createMetalCanvas(nullptr, (__bridge void*)surface.layer, 0, textSystem);
+    REQUIRE(canvas);
+    canvas->resize(640, 480);
+    canvas->updateDpiScale(2.f, 2.f);
+
+    auto root = std::make_unique<SceneNode>(NodeId{1ull});
+
+    auto background = std::make_unique<RectSceneNode>(NodeId{2ull});
+    background->size = flux::Size{640.f, 480.f};
+    background->fill = FillStyle::solid(Colors::white);
+    background->recomputeBounds();
+    root->appendChild(std::move(background));
+
+    auto clip = std::make_unique<ModifierSceneNode>(NodeId{3ull});
+    clip->position = flux::Point{20.f, 20.f};
+    clip->clip = flux::Rect::sharp(0.f, 0.f, 80.f, 20.f);
+    clip->cornerRadius = CornerRadius::pill(flux::Rect::sharp(0.f, 0.f, 80.f, 20.f));
+
+    auto fill = std::make_unique<RectSceneNode>(NodeId{4ull});
+    fill->size = flux::Size{80.f, 20.f};
+    fill->fill = FillStyle::solid(Colors::red);
+    fill->recomputeBounds();
+    clip->appendChild(std::move(fill));
+    clip->recomputeBounds();
+    root->appendChild(std::move(clip));
+    root->recomputeBounds();
+
+    requestNextFrameCaptureForCanvas(canvas.get());
+    canvas->beginFrame();
+    canvas->clear(Colors::white);
+    render(SceneTree{std::move(root)}, *canvas);
+    canvas->present();
+    waitForCanvasLastPresentComplete(canvas.get());
+
+    std::vector<std::uint8_t> pixels;
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+    REQUIRE(takeCapturedFrameForCanvas(canvas.get(), pixels, width, height));
+    REQUIRE(width >= 200);
+    REQUIRE(height >= 120);
+
+    std::uint32_t const outsideX = 42;
+    std::uint32_t const outsideY = 42;
+    CHECK(capturedChannel(pixels, width, outsideX, outsideY, 0) >= 240);
+    CHECK(capturedChannel(pixels, width, outsideX, outsideY, 1) >= 240);
+    CHECK(capturedChannel(pixels, width, outsideX, outsideY, 2) >= 240);
+
+    std::uint32_t const insideX = 120;
+    std::uint32_t const insideY = 60;
+    CHECK(capturedChannel(pixels, width, insideX, insideY, 2) >= 200);
+    CHECK(capturedChannel(pixels, width, insideX, insideY, 1) <= 40);
+    CHECK(capturedChannel(pixels, width, insideX, insideY, 0) <= 40);
   }
 #endif
 }

@@ -108,7 +108,7 @@ ResolvedTextInputStyle resolveTextInputStyle(TextInput::Style const &style, Them
         .disabledColor = resolveColor(style.disabledColor, theme.disabledControlBackgroundColor, theme),
         .borderWidth = resolveFloat(style.borderWidth, 1.f),
         .borderFocusWidth = resolveFloat(style.borderFocusWidth, 2.f),
-        .cornerRadius = resolveFloat(style.cornerRadius, theme.radiusMedium),
+        .cornerRadius = resolveFloat(style.cornerRadius, theme.radiusLarge),
         .paddingH = resolveFloat(style.paddingH, theme.paddingFieldH),
         .paddingV = resolveFloat(style.paddingV, theme.paddingFieldV),
         .lineHeight = resolveFloat(style.lineHeight, 0.f),

@@ -54,6 +54,12 @@ target_link_libraries(animation_demo PRIVATE flux)
 add_executable(card_demo card-demo/main.cpp)
 target_link_libraries(card_demo PRIVATE flux)
 
+add_executable(table_demo table-demo/main.cpp)
+target_link_libraries(table_demo PRIVATE flux)
+
+add_executable(toast_demo toast-demo/main.cpp)
+target_link_libraries(toast_demo PRIVATE flux)
+
 add_executable(scroll_demo scroll-demo/main.cpp)
 target_link_libraries(scroll_demo PRIVATE flux)
 
@@ -110,6 +116,8 @@ set(FLUX_EXAMPLE_TARGETS
     reactive_demo
     animation_demo
     card_demo
+    table_demo
+    toast_demo
     scroll_demo
     cursor_demo
     alert_demo

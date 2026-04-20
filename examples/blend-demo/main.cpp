@@ -37,9 +37,9 @@ constexpr std::array<DemoCell, 12> kGrid{{
 struct BlendCell : ViewModifiers<BlendCell> {
   static constexpr float kMargin = 24.f;
   static constexpr float kGap = 10.f;
-  /// Default window size in `main` (explicit baseline; avoids relying on `WindowConfig` defaults).
-  static constexpr float kDefaultWinW = 920.f;
-  static constexpr float kDefaultWinH = 700.f;
+  /// Fallback viewport used on the first build before `useBounds()` has a prior layout rect.
+  static constexpr float kDefaultWinW = 800.f;
+  static constexpr float kDefaultWinH = 800.f;
 
   BlendMode mode = BlendMode::Normal;
   const char* title = "";
@@ -95,15 +95,33 @@ struct BlendCell : ViewModifiers<BlendCell> {
 
 struct BlendDemoView {
   auto body() const {
+    Rect const bounds = useBounds();
+    float const viewportWidth = bounds.width > 0.f ? bounds.width : BlendCell::kDefaultWinW;
+    float const viewportHeight = bounds.height > 0.f ? bounds.height : BlendCell::kDefaultWinH;
+    float const innerWidth = std::max(0.f, viewportWidth - BlendCell::kMargin * 2.f);
+    float const innerHeight = std::max(0.f, viewportHeight - BlendCell::kMargin * 2.f);
+    std::size_t constexpr columns = 4u;
+    std::size_t const rows = (kGrid.size() + columns - 1u) / columns;
+    float const cellWidth =
+        columns > 0u ? std::max(0.f, (innerWidth - static_cast<float>(columns - 1u) * BlendCell::kGap) /
+                                      static_cast<float>(columns))
+                     : 0.f;
+    float const cellHeight =
+        rows > 0u ? std::max(0.f, (innerHeight - static_cast<float>(rows - 1u) * BlendCell::kGap) /
+                                      static_cast<float>(rows))
+                  : 0.f;
+
     std::vector<Element> cells;
     cells.reserve(kGrid.size());
     for (DemoCell const& d : kGrid) {
-      cells.push_back(BlendCell{.mode = d.mode, .title = d.title});
+      cells.push_back(Element{BlendCell{.mode = d.mode, .title = d.title}}.size(cellWidth, cellHeight));
     }
     return Grid{
-                    .columns = 4,
+                    .columns = columns,
                     .horizontalSpacing = BlendCell::kGap,
                     .verticalSpacing = BlendCell::kGap,
+                    .horizontalAlignment = Alignment::Stretch,
+                    .verticalAlignment = Alignment::Stretch,
                     .children = std::move(cells),
     }.padding(BlendCell::kMargin);
   }

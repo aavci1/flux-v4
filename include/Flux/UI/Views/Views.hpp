@@ -16,6 +16,7 @@
 #include <Flux/UI/Views/Alert.hpp>
 #include <Flux/UI/Views/Badge.hpp>
 #include <Flux/UI/Views/Button.hpp>
+#include <Flux/UI/Views/Card.hpp>
 #include <Flux/UI/Views/Checkbox.hpp>
 #include <Flux/UI/Views/Divider.hpp>
 #include <Flux/UI/Views/ForEach.hpp>
@@ -30,7 +31,9 @@
 #include <Flux/UI/Views/Select.hpp>
 #include <Flux/UI/Views/Slider.hpp>
 #include <Flux/UI/Views/Spacer.hpp>
+#include <Flux/UI/Views/TableView.hpp>
 #include <Flux/UI/Views/TextInput.hpp>
+#include <Flux/UI/Views/Toast.hpp>
 #include <Flux/UI/Views/Toggle.hpp>
 #include <Flux/UI/Views/Tooltip.hpp>
 #include <Flux/UI/Views/VStack.hpp>

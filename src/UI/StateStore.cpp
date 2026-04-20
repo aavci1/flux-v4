@@ -37,6 +37,8 @@ void resetComponentStateStorage(ComponentState& state) {
   state.reusableConstraints.clear();
   state.reusableMeasures.clear();
   state.valueSnapshot = {};
+  state.environmentDependencies.clear();
+  state.pendingEnvironmentDependencies.clear();
 }
 
 void scrubObservableSubscriptions(std::unordered_map<ComponentKey, ComponentState, ComponentKeyHash>& states,
@@ -84,6 +86,15 @@ void StateStore::clearComponentState(ComponentState& state) {
   scrubOwnedObservableSubscriptions(states_, state);
   unsubscribeComponentState(state);
   resetComponentStateStorage(state);
+}
+
+bool StateStore::environmentDependenciesMatch(ComponentState const& state) const {
+  for (EnvironmentValueSnapshot const& dep : state.environmentDependencies) {
+    if (!dep.value || !dep.equalsCurrent || !dep.equalsCurrent(dep.value.get(), EnvironmentStack::current())) {
+      return false;
+    }
+  }
+  return true;
 }
 
 void StateStore::beginRebuild(bool forceFullRebuild) {
@@ -166,6 +177,7 @@ void StateStore::pushComponent(ComponentKey const& key, std::type_index componen
   }
   state.lastVisitedEpoch = buildEpoch_;
   state.cursor = 0;
+  state.pendingEnvironmentDependencies.clear();
   activeStack_.push_back(&it->first);
   activeStateStack_.push_back(&state);
 }

@@ -90,7 +90,7 @@ StackMainAxisLayout layoutStackMainAxis(std::span<StackMainAxisChild const> chil
   }
 
   result.containerMainSize = result.constrained ? std::max(0.f, assignedMainSize) : std::max(0.f, result.usedMainSize);
-  result.startOffset = result.constrained ? (result.containerMainSize - result.usedMainSize) * 0.5f : 0.f;
+  result.startOffset = 0.f;
   return result;
 }
 

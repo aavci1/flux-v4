@@ -40,8 +40,8 @@ ResolvedStyle resolveStyle(SegmentedControl::Style const &style, Theme const &th
     return ResolvedStyle {
         .font = resolveFont(style.font, theme.headlineFont, theme),
         .paddingH = resolveFloat(style.paddingH, theme.space4),
-        .paddingV = resolveFloat(style.paddingV, theme.space2),
-        .cornerRadius = resolveFloat(style.cornerRadius, theme.radiusMedium),
+        .paddingV = resolveFloat(style.paddingV, (theme.space3 + theme.space2) * 0.5f + 1.f),
+        .cornerRadius = resolveFloat(style.cornerRadius, theme.radiusLarge),
         .accentColor = resolveColor(style.accentColor, theme.accentColor, theme),
         .trackColor = resolveColor(style.trackColor, theme.windowBackgroundColor, theme),
         .borderColor = resolveColor(style.borderColor, theme.separatorColor, theme),
@@ -175,8 +175,7 @@ Element SegmentedControl::body() const {
         .alignment = Alignment::Stretch,
         .children = std::move(items),
     }
-        .padding(2.f)
-        .fill(FillStyle::solid(disabled ? theme.disabledControlBackgroundColor : resolved.trackColor))
+        .fill(FillStyle::solid(disabled ? theme.windowBackgroundColor : resolved.trackColor))
         .stroke(StrokeStyle::solid(resolved.borderColor, 1.f))
         .cornerRadius(CornerRadius {resolved.cornerRadius})
         .focusable(!disabled)

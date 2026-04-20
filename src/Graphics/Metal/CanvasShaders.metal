@@ -19,6 +19,13 @@ struct RectInstance {
   float4 shadowGeom;
 };
 
+constant uint kMaxRoundedClipMasks = 4;
+
+struct RoundedClipStack {
+  float4 header;
+  float4 entries[kMaxRoundedClipMasks * 2];
+};
+
 struct RectVertexOut {
   /// Clip-space output (NDC in xy).
   float4 clip [[position]];
@@ -97,9 +104,30 @@ static float roundedRectSDF(float2 p, float2 halfSize, float4 corners) {
   return min(max(q.x, q.y), 0.0f) + length(max(q, float2(0.0f))) - r;
 }
 
-fragment float4 rect_sdf_frag(RectFragmentIn in [[stage_in]], float4 fragCoord [[position]]) {
+static float roundedClipCoverage(float2 pixel, constant RoundedClipStack& clips) {
+  float coverage = 1.0f;
+  uint count = min((uint)clips.header.x, kMaxRoundedClipMasks);
+  for (uint i = 0; i < count; ++i) {
+    float4 clipRect = clips.entries[i * 2];
+    float4 clipCorners = clips.entries[i * 2 + 1];
+    float2 halfSize = clipRect.zw * 0.5f;
+    float2 center = clipRect.xy + halfSize;
+    float d = roundedRectSDF(pixel - center, halfSize, clipCorners);
+    coverage *= 1.0f - smoothstep(-0.75f, 0.75f, d);
+    if (coverage <= 0.001f) {
+      return 0.0f;
+    }
+  }
+  return coverage;
+}
+
+fragment float4 rect_sdf_frag(RectFragmentIn in [[stage_in]], float4 fragCoord [[position]],
+                              constant RoundedClipStack* clips [[buffer(0)]]) {
   // Built-in fragment position: pixel coordinates in the render target (same space as vertex `screenPos` / inst.rect).
   float2 pixel = fragCoord.xy;
+  float clipCoverage = roundedClipCoverage(pixel, clips[0]);
+  if (clipCoverage <= 0.001f)
+    discard_fragment();
   float2 delta = pixel - in.fragCenter;
   float ca = cos(-in.fragAngle);
   float sa = sin(-in.fragAngle);
@@ -139,7 +167,7 @@ fragment float4 rect_sdf_frag(RectFragmentIn in [[stage_in]], float4 fragCoord [
   if (outA < 0.001f)
     discard_fragment();
   // Premultiplied RGBA; blend state uses (One, OneMinusSourceAlpha) like glyph pipeline.
-  return float4(blended.rgb * in.fragOpacity, outA);
+  return float4(blended.rgb * (in.fragOpacity * clipCoverage), outA * clipCoverage);
 }
 
 // -----------------------------------------------------------------------------
@@ -233,9 +261,13 @@ vertex ImageVertexOut image_sdf_vert(uint vid [[vertex_id]], uint iid [[instance
   return out;
 }
 
-fragment float4 image_sdf_frag(ImageFragmentIn in [[stage_in]], float4 fragCoord [[position]], texture2d<float> tex [[texture(0)]],
+fragment float4 image_sdf_frag(ImageFragmentIn in [[stage_in]], float4 fragCoord [[position]],
+                               constant RoundedClipStack* clips [[buffer(0)]], texture2d<float> tex [[texture(0)]],
                                sampler smpl [[sampler(0)]]) {
   float2 pixel = fragCoord.xy;
+  float clipCoverage = roundedClipCoverage(pixel, clips[0]);
+  if (clipCoverage <= 0.001f)
+    discard_fragment();
   float2 delta = pixel - in.fragCenter;
   float ca = cos(-in.fragAngle);
   float sa = sin(-in.fragAngle);
@@ -253,7 +285,7 @@ fragment float4 image_sdf_frag(ImageFragmentIn in [[stage_in]], float4 fragCoord
   }
   float4 c = tex.sample(smpl, uv);
   float4 premul = float4(c.rgb * c.a, c.a);
-  premul *= coverage * in.fragOpacity;
+  premul *= coverage * in.fragOpacity * clipCoverage;
   if (premul.a < 0.001f)
     discard_fragment();
   return premul;
@@ -301,11 +333,15 @@ vertex RectVertexOut line_sdf_vert(uint vid [[vertex_id]], uint iid [[instance_i
   return out;
 }
 
-fragment float4 line_sdf_frag(RectFragmentIn in [[stage_in]], float4 fragCoord [[position]]) {
+fragment float4 line_sdf_frag(RectFragmentIn in [[stage_in]], float4 fragCoord [[position]],
+                              constant RoundedClipStack* clips [[buffer(0)]]) {
   // Capsule stroke in line space: +u along segment, v perpendicular.
   // Real half-length is `fragCorners.z` (device px). `fragHalfSize.x` includes quad padding and must
   // not be used for the SDF or ink extends past the true endpoints.
   float2 pixel = fragCoord.xy;
+  float clipCoverage = roundedClipCoverage(pixel, clips[0]);
+  if (clipCoverage <= 0.001f)
+    discard_fragment();
   float2 delta = pixel - in.fragCenter;
   float cosA = in.fragCorners.x;
   float sinA = in.fragCorners.y;
@@ -322,7 +358,7 @@ fragment float4 line_sdf_frag(RectFragmentIn in [[stage_in]], float4 fragCoord [
   float denom = dot(ba, ba);
   float h = denom > 1e-8f ? clamp(dot(pa, ba) / denom, 0.0f, 1.0f) : 0.0f;
   float d = length(pa - ba * h) - halfW;
-  float alpha = (1.0f - smoothstep(-0.75f, 0.75f, d)) * in.fragStrokeColor.a * in.fragOpacity;
+  float alpha = (1.0f - smoothstep(-0.75f, 0.75f, d)) * in.fragStrokeColor.a * in.fragOpacity * clipCoverage;
   if (alpha < 0.001f)
     discard_fragment();
   return float4(in.fragStrokeColor.rgb * alpha, alpha);
@@ -340,6 +376,7 @@ struct PathVertexIn {
 
 struct PathVertexOut {
   float4 clip [[position]];
+  float2 fragPixelPos;
   float4 color;
 };
 
@@ -348,13 +385,17 @@ vertex PathVertexOut path_vert(PathVertexIn in [[stage_in]]) {
   float2 ndc = (in.pos / in.viewport) * 2.0f - 1.0f;
   ndc.y = -ndc.y;
   out.clip = float4(ndc, 0.0f, 1.0f);
+  out.fragPixelPos = in.pos;
   out.color = in.color;
   return out;
 }
 
-fragment float4 path_frag(PathVertexOut in [[stage_in]]) {
+fragment float4 path_frag(PathVertexOut in [[stage_in]], constant RoundedClipStack* clips [[buffer(0)]]) {
+  float clipCoverage = roundedClipCoverage(in.fragPixelPos, clips[0]);
+  if (clipCoverage <= 0.001f)
+    discard_fragment();
   float4 c = in.color;
-  return float4(c.rgb * c.a, c.a);
+  return float4(c.rgb * c.a * clipCoverage, c.a * clipCoverage);
 }
 
 // -----------------------------------------------------------------------------
@@ -369,6 +410,7 @@ struct GlyphVertexIn {
 
 struct GlyphVertexOut {
   float4 clip [[position]];
+  float2 fragPixelPos;
   float2 uv;
   float4 color;
 };
@@ -378,17 +420,21 @@ vertex GlyphVertexOut glyph_vert(GlyphVertexIn in [[stage_in]], constant float2*
   ndc.y = -ndc.y;
   GlyphVertexOut out;
   out.clip = float4(ndc, 0.0f, 1.0f);
+  out.fragPixelPos = in.pos;
   out.uv = in.uv;
   out.color = in.color;
   return out;
 }
 
-fragment float4 glyph_frag(GlyphVertexOut in [[stage_in]], texture2d<float> atlas [[texture(0)]],
-                           sampler atlasSmpl [[sampler(0)]]) {
+fragment float4 glyph_frag(GlyphVertexOut in [[stage_in]], constant RoundedClipStack* clips [[buffer(0)]],
+                           texture2d<float> atlas [[texture(0)]], sampler atlasSmpl [[sampler(0)]]) {
   // in.color is premultiplied (rgb already multiplied by alpha * opacity).
   // Scale by R8 coverage and return; the pipeline uses (One, OneMinusSrcAlpha) premul blending.
+  float clipCoverage = roundedClipCoverage(in.fragPixelPos, clips[0]);
+  if (clipCoverage <= 0.001f)
+    discard_fragment();
   float cov = atlas.sample(atlasSmpl, in.uv).r;
   if (cov < 0.001f)
     discard_fragment();
-  return float4(in.color.rgb * cov, in.color.a * cov);
+  return float4(in.color.rgb * cov * clipCoverage, in.color.a * cov * clipCoverage);
 }

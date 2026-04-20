@@ -15,6 +15,7 @@
 namespace flux {
 
 /// Fixed-column grid: children flow left-to-right, top-to-bottom (row-major).
+/// Optional `columnSpans` let specific children occupy multiple adjacent columns.
 ///
 /// When the available width is unknown (`innerWidth == 0`), `cellW` is zero and each child is
 /// measured with unbounded width. Views that expand to fill width (e.g. `Rectangle` with no
@@ -40,6 +41,8 @@ struct Grid : ViewModifiers<Grid> {
   Alignment verticalAlignment = Alignment::Center;
   /// Children in row-major order (left-to-right, top-to-bottom).
   std::vector<Element> children;
+  /// Optional per-child column spans in row-major order. Missing entries default to `1`.
+  std::vector<std::size_t> columnSpans;
 };
 
 } // namespace flux

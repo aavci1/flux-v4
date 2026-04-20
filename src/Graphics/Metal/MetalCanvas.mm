@@ -23,6 +23,7 @@ class Window;
 #include "Graphics/Metal/MetalCanvas.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <cmath>
 #include <cstdint>
@@ -198,7 +199,7 @@ void appendGlyphQuad(std::vector<MetalGlyphVertex>& out, Mat3 const& M, float dp
 }
 
 template <typename T>
-void tagOpWithClip(T& op, bool clipValid, MTLScissorRect const& clip) {
+void tagOpWithClip(T& op, bool clipValid, MTLScissorRect const& clip, MetalRoundedClipStack const& roundedClip) {
   if (clipValid) {
     op.scissorValid = true;
     op.scissorX = static_cast<std::uint32_t>(clip.x);
@@ -208,6 +209,7 @@ void tagOpWithClip(T& op, bool clipValid, MTLScissorRect const& clip) {
   } else {
     op.scissorValid = false;
   }
+  op.roundedClip = roundedClip;
 }
 
 void* retainTexturePointer(void* texture) {
@@ -230,6 +232,11 @@ bool sameScissorForBatch(T const& a, T const& b) {
 }
 
 template <typename T>
+bool sameRoundedClipForBatch(T const& a, T const& b) {
+  return std::memcmp(&a.roundedClip, &b.roundedClip, sizeof(MetalRoundedClipStack)) == 0;
+}
+
+template <typename T>
 void setEncoderScissorForOp(id<MTLRenderCommandEncoder> enc, T const& op, MTLScissorRect fullScissor,
                             MTLScissorRect* last, bool* haveLast) {
   MTLScissorRect sc = fullScissor;
@@ -244,6 +251,11 @@ void setEncoderScissorForOp(id<MTLRenderCommandEncoder> enc, T const& op, MTLSci
     *last = sc;
     *haveLast = true;
   }
+}
+
+template <typename T>
+void setEncoderRoundedClipForOp(id<MTLRenderCommandEncoder> enc, T const& op) {
+  [enc setFragmentBytes:&op.roundedClip length:sizeof(MetalRoundedClipStack) atIndex:0];
 }
 
 } // namespace
@@ -378,13 +390,14 @@ public:
           MetalRectOp const& o2 = frame_.rectOps[nextRef.index];
           MetalOpRef const prevRef = frame_.opOrder[j - 1];
           if (o2.isLine != op.isLine || o2.blendMode != op.blendMode || !sameScissorForBatch(op, o2) ||
-              nextRef.index != prevRef.index + 1) {
+              !sameRoundedClipForBatch(op, o2) || nextRef.index != prevRef.index + 1) {
             break;
           }
           ++j;
         }
         std::size_t const runLen = j - i;
         setEncoderScissorForOp(enc, op, fullScissor, &lastScissor, &haveScissor);
+        setEncoderRoundedClipForOp(enc, op);
         if (!op.isLine) {
           [enc setRenderPipelineState:metal_.rectPSO(op.blendMode)];
           [enc setVertexBuffer:metal_.quadBuffer() offset:0 atIndex:0];
@@ -415,6 +428,7 @@ public:
           }
           MetalGlyphOp const& o2 = frame_.glyphOps[nextRef.index];
           if (o2.blendMode != op.blendMode || !sameScissorForBatch(op, o2) ||
+              !sameRoundedClipForBatch(op, o2) ||
               o2.glyphStart != runStart + runVerts || nextRef.index != frame_.opOrder[j - 1].index + 1) {
             break;
           }
@@ -422,6 +436,7 @@ public:
           ++j;
         }
         setEncoderScissorForOp(enc, op, fullScissor, &lastScissor, &haveScissor);
+        setEncoderRoundedClipForOp(enc, op);
         [enc setRenderPipelineState:metal_.glyphPSO(op.blendMode)];
         id<MTLBuffer> gbuf = metal_.glyphVertexArenaBuffer();
         const NSUInteger goff = static_cast<NSUInteger>(runStart) * sizeof(MetalGlyphVertex);
@@ -438,6 +453,7 @@ public:
       if (ref.kind == MetalOpRef::Image) {
         MetalImageOp const& op = frame_.imageOps[ref.index];
         setEncoderScissorForOp(enc, op, fullScissor, &lastScissor, &haveScissor);
+        setEncoderRoundedClipForOp(enc, op);
         if (!op.texture) {
           ++i;
           continue;
@@ -456,6 +472,7 @@ public:
       if (ref.kind == MetalOpRef::Path) {
         MetalPathOp const& op = frame_.pathOps[ref.index];
         setEncoderScissorForOp(enc, op, fullScissor, &lastScissor, &haveScissor);
+        setEncoderRoundedClipForOp(enc, op);
         if (op.pathCount == 0) {
           ++i;
           continue;
@@ -533,8 +550,33 @@ public:
 
   void transform(Mat3 const& m) override {
     auto& st = currentState();
+    auto const adjustRoundedClips = [&](float cornerScale) {
+      for (std::uint32_t i = 0; i < st.roundedClipCount; ++i) {
+        RoundedClipState& mask = st.roundedClips[i];
+        mask.rect = boundsOfTransformedRect(mask.rect, m.inverse());
+        mask.corners.topLeft *= cornerScale;
+        mask.corners.topRight *= cornerScale;
+        mask.corners.bottomRight *= cornerScale;
+        mask.corners.bottomLeft *= cornerScale;
+        clampRoundRectCornerRadii(mask.rect.width, mask.rect.height, mask.corners);
+      }
+    };
     if (st.clip.has_value()) {
       st.clip = boundsOfTransformedRect(*st.clip, m.inverse());
+    }
+    if (st.roundedClipCount > 0) {
+      if (m.isTranslationOnly()) {
+        adjustRoundedClips(1.f);
+      } else {
+        float const sx = std::hypot(m.m[0], m.m[1]);
+        float const sy = std::hypot(m.m[3], m.m[4]);
+        constexpr float eps = 1e-4f;
+        if (sx > eps && sy > eps && std::abs(sx - sy) <= eps && std::abs(m.m[1]) <= eps && std::abs(m.m[3]) <= eps) {
+          adjustRoundedClips(1.f / sx);
+        } else {
+          adjustRoundedClips(0.f);
+        }
+      }
     }
     st.transform = st.transform * m;
     updateClipScissor();
@@ -554,12 +596,35 @@ public:
 
   Mat3 currentTransform() const override { return currentState().transform; }
 
-  void clipRect(Rect rect, bool /*antiAlias*/) override {
+  void clipRect(Rect rect, CornerRadius const& cornerRadius, bool /*antiAlias*/) override {
     auto& st = currentState();
+    Rect effective = rect;
     if (!st.clip.has_value()) {
       st.clip = rect;
     } else {
-      st.clip = intersectRects(*st.clip, rect);
+      effective = intersectRects(*st.clip, rect);
+      st.clip = effective;
+    }
+
+    if (effective.width <= 0.f || effective.height <= 0.f || cornerRadius.isZero()) {
+      updateClipScissor();
+      return;
+    }
+
+    CornerRadius adjusted = cornerRadius;
+    constexpr float eps = 1e-3f;
+    bool const clipped =
+        std::abs(effective.x - rect.x) > eps || std::abs(effective.y - rect.y) > eps ||
+        std::abs(effective.width - rect.width) > eps || std::abs(effective.height - rect.height) > eps;
+    if (clipped) {
+      adjusted = cornerRadiiAfterAxisAlignedClip(rect, effective, cornerRadius);
+    }
+    clampRoundRectCornerRadii(effective.width, effective.height, adjusted);
+    if (!adjusted.isZero() && st.roundedClipCount < kMetalRoundedClipMaskCapacity) {
+      st.roundedClips[st.roundedClipCount++] = RoundedClipState{
+          .rect = effective,
+          .corners = adjusted,
+      };
     }
     updateClipScissor();
   }
@@ -806,7 +871,7 @@ public:
                                  recorder.pathVerts, recorder.pathOps, recorder.opOrder,
                                  currentState().blendMode);
         if (recorder.pathOps.size() > nShadow) {
-          tagOpWithClip(recorder.pathOps.back(), clipScissorValid_, clipScissor_);
+          tagOpWithClip(recorder.pathOps.back(), clipScissorValid_, clipScissor_, clipRoundedStack_);
         }
         restore();
       }
@@ -818,7 +883,7 @@ public:
                              recorder.opOrder,
                              currentState().blendMode);
     if (recorder.pathOps.size() > nOpsBefore) {
-      tagOpWithClip(recorder.pathOps.back(), clipScissorValid_, clipScissor_);
+      tagOpWithClip(recorder.pathOps.back(), clipScissorValid_, clipScissor_, clipRoundedStack_);
     }
   }
 
@@ -1031,11 +1096,18 @@ public:
   void* gpuDevice() const override { return (__bridge void*)metal_.device(); }
 
 private:
+  struct RoundedClipState {
+    Rect rect{};
+    CornerRadius corners{};
+  };
+
   struct GpuState {
     Mat3 transform = Mat3::identity();
     float opacity = 1.f;
     BlendMode blendMode = BlendMode::Normal;
     std::optional<Rect> clip;
+    std::array<RoundedClipState, kMetalRoundedClipMaskCapacity> roundedClips{};
+    std::uint32_t roundedClipCount = 0;
   };
 
   TextSystem& textSystem_;
@@ -1073,6 +1145,7 @@ private:
 
   MTLScissorRect clipScissor_{};
   bool clipScissorValid_{false};
+  MetalRoundedClipStack clipRoundedStack_{};
 
   GpuState& currentState() { return stateStack_.back(); }
   GpuState const& currentState() const { return stateStack_.back(); }
@@ -1105,7 +1178,47 @@ private:
     return Rect::sharp(0, 0, static_cast<float>(ds.width) / dpiScaleX_, static_cast<float>(ds.height) / dpiScaleY_);
   }
 
+  CornerRadius deviceCornerRadii(CornerRadius corners, Mat3 const& transform, Rect const& deviceRect) const {
+    float const sx = std::hypot(transform.m[0], transform.m[1]);
+    float const sy = std::hypot(transform.m[3], transform.m[4]);
+    float scale = 1.f;
+    constexpr float eps = 1e-4f;
+    if (sx > eps && sy > eps && std::abs(sx - sy) <= 0.01f) {
+      scale = 0.5f * (sx + sy);
+    }
+    corners.topLeft *= dpiScale_ * scale;
+    corners.topRight *= dpiScale_ * scale;
+    corners.bottomRight *= dpiScale_ * scale;
+    corners.bottomLeft *= dpiScale_ * scale;
+    clampRoundRectCornerRadii(deviceRect.width, deviceRect.height, corners);
+    return corners;
+  }
+
+  void updateRoundedClipStack() {
+    clipRoundedStack_ = {};
+    GpuState const& st = currentState();
+    if (st.roundedClipCount == 0) {
+      return;
+    }
+    Mat3 const& M = st.transform;
+    for (std::uint32_t i = 0; i < st.roundedClipCount && i < kMetalRoundedClipMaskCapacity; ++i) {
+      RoundedClipState const& mask = st.roundedClips[i];
+      Rect const world = boundsOfTransformedRect(mask.rect, M);
+      Rect const device = Rect::sharp(world.x * dpiScaleX_, world.y * dpiScaleY_, world.width * dpiScaleX_,
+                                      world.height * dpiScaleY_);
+      if (device.width <= 0.f || device.height <= 0.f) {
+        continue;
+      }
+      CornerRadius const deviceCorners = deviceCornerRadii(mask.corners, M, device);
+      std::uint32_t const slot = static_cast<std::uint32_t>(clipRoundedStack_.header.x);
+      clipRoundedStack_.entries[slot * 2] = simd_make_float4(device.x, device.y, device.width, device.height);
+      clipRoundedStack_.entries[slot * 2 + 1] = cornersToSimd(deviceCorners);
+      clipRoundedStack_.header.x = static_cast<float>(slot + 1);
+    }
+  }
+
   void updateClipScissor() {
+    updateRoundedClipStack();
     if (!currentState().clip.has_value()) {
       clipScissorValid_ = false;
       return;
@@ -1139,7 +1252,7 @@ private:
 
   void pushRectOp(MetalRectOp&& op) {
     MetalFrameRecorder& recorder = activeRecorder();
-    tagOpWithClip(op, clipScissorValid_, clipScissor_);
+    tagOpWithClip(op, clipScissorValid_, clipScissor_, clipRoundedStack_);
     recorder.opOrder.push_back(MetalOpRef{
         .kind = MetalOpRef::Rect,
         .index = static_cast<std::uint32_t>(recorder.rectOps.size()),
@@ -1149,7 +1262,7 @@ private:
 
   void pushImageOp(MetalImageOp&& op) {
     MetalFrameRecorder& recorder = activeRecorder();
-    tagOpWithClip(op, clipScissorValid_, clipScissor_);
+    tagOpWithClip(op, clipScissorValid_, clipScissor_, clipRoundedStack_);
     recorder.opOrder.push_back(MetalOpRef{
         .kind = MetalOpRef::Image,
         .index = static_cast<std::uint32_t>(recorder.imageOps.size()),
@@ -1159,7 +1272,7 @@ private:
 
   void pushGlyphOp(MetalGlyphOp&& op) {
     MetalFrameRecorder& recorder = activeRecorder();
-    tagOpWithClip(op, clipScissorValid_, clipScissor_);
+    tagOpWithClip(op, clipScissorValid_, clipScissor_, clipRoundedStack_);
     recorder.opOrder.push_back(MetalOpRef{
         .kind = MetalOpRef::Glyph,
         .index = static_cast<std::uint32_t>(recorder.glyphOps.size()),

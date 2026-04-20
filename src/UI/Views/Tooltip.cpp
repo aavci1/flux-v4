@@ -120,7 +120,7 @@ void useTooltip(TooltipConfig const& config) {
         .backgroundColor = Color::controlBackground(),
         .borderColor = Color::separator(),
         .borderWidth = 0.5f,
-        .cornerRadius = theme.radiusMedium,
+        .cornerRadius = theme.radiusLarge,
         .contentPadding = theme.space2,
         .maxSize = Size{maxW, 0.f},
         .backdropColor = Colors::transparent,

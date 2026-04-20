@@ -18,7 +18,7 @@ ResolvedInputFieldChrome resolveInputFieldChrome(InputFieldChromeSpec const& spe
       .disabledColor = resolveColor(spec.disabledColor, theme.disabledControlBackgroundColor, theme),
       .borderWidth = resolveFloat(spec.borderWidth, 1.f),
       .borderFocusWidth = resolveFloat(spec.borderFocusWidth, 2.f),
-      .cornerRadius = resolveFloat(spec.cornerRadius, theme.radiusMedium),
+      .cornerRadius = resolveFloat(spec.cornerRadius, theme.radiusLarge),
       .paddingH = resolveFloat(spec.paddingH, theme.paddingFieldH),
       .paddingV = resolveFloat(spec.paddingV, theme.paddingFieldV),
   };

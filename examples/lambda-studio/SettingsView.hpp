@@ -155,35 +155,38 @@ inline std::string formatCountLabel(int count, std::string singular, std::string
 
 inline Element statCard(Theme const &theme, std::string label, std::string value, std::string detail,
                         Color accent) {
-    return VStack {
-        .spacing = theme.space2,
-        .alignment = Alignment::Start,
-        .children = children(
-            Text {
-                .text = std::move(label),
-                .font = Font::caption(),
-                .color = Color::tertiary(),
-            },
-            Text {
-                .text = std::move(value),
-                .font = Font::title(),
-                .color = Color::primary(),
-                .horizontalAlignment = HorizontalAlignment::Leading,
-            },
-            Text {
-                .text = std::move(detail),
-                .font = Font::footnote(),
-                .color = Color::secondary(),
-                .horizontalAlignment = HorizontalAlignment::Leading,
-                .wrapping = TextWrapping::Wrap,
-                .maxLines = 2,
-            }
-        )
+    return Card {
+        .child = VStack {
+            .spacing = theme.space2,
+            .alignment = Alignment::Start,
+            .children = children(
+                Text {
+                    .text = std::move(label),
+                    .font = Font::caption(),
+                    .color = Color::tertiary(),
+                },
+                Text {
+                    .text = std::move(value),
+                    .font = Font::title(),
+                    .color = Color::primary(),
+                    .horizontalAlignment = HorizontalAlignment::Leading,
+                },
+                Text {
+                    .text = std::move(detail),
+                    .font = Font::footnote(),
+                    .color = Color::secondary(),
+                    .horizontalAlignment = HorizontalAlignment::Leading,
+                    .wrapping = TextWrapping::Wrap,
+                    .maxLines = 2,
+                }
+            )
+        },
+        .style = Card::Style {
+            .padding = theme.space4,
+            .cornerRadius = theme.radiusXLarge,
+            .borderColor = accent,
+        },
     }
-        .padding(theme.space4)
-        .fill(FillStyle::solid(Color::elevatedBackground()))
-        .stroke(StrokeStyle::solid(accent, 1.f))
-        .cornerRadius(theme.radiusXLarge)
         .flex(1.f, 1.f, 0.f);
 }
 
@@ -226,15 +229,17 @@ inline Element sectionCard(Theme const &theme, std::string eyebrow, std::string 
         children.push_back(std::move(rows[i]));
     }
 
-    return VStack {
-        .spacing = theme.space3,
-        .alignment = Alignment::Stretch,
-        .children = std::move(children),
-    }
-        .padding(theme.space4)
-        .fill(FillStyle::solid(Color::elevatedBackground()))
-        .stroke(StrokeStyle::solid(Color::separator(), 1.f))
-        .cornerRadius(theme.radiusXLarge);
+    return Card {
+        .child = VStack {
+            .spacing = theme.space3,
+            .alignment = Alignment::Stretch,
+            .children = std::move(children),
+        },
+        .style = Card::Style {
+            .padding = theme.space4,
+            .cornerRadius = theme.radiusXLarge,
+        },
+    };
 }
 
 inline Element adjustmentRow(

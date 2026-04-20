@@ -344,6 +344,7 @@ TEST_CASE("SceneBuilder: clean composite subtree is skipped and geometry is reta
   REQUIRE(tree != nullptr);
   REQUIRE(tree->children().size() == 2);
   CHECK(tree->children()[1].get() == retainedChild);
+  CHECK(tree->children()[1]->position.y == doctest::Approx(20.f));
   CHECK(parentCalls > initialParentCalls);
   CHECK(childCalls == initialChildCalls);
   CHECK(textSystem.layoutCount == initialLayoutCount);
@@ -352,4 +353,58 @@ TEST_CASE("SceneBuilder: clean composite subtree is skipped and geometry is reta
   REQUIRE(afterRect.has_value());
   CHECK(afterRect->x == doctest::Approx(beforeRect->x));
   CHECK(afterRect->y > beforeRect->y);
+}
+
+TEST_CASE("SceneBuilder: retained composite body rebuilds when an environment dependency changes") {
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  StoreScope scope{};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 200.f;
+  constraints.maxHeight = 120.f;
+
+  Signal<bool> darkSignal{false};
+  State<bool> dark{&darkSignal};
+  int parentCalls = 0;
+  int childCalls = 0;
+
+  auto makeRoot = [&]() -> Element {
+    return Element{ThemeSensitiveParent{
+        .dark = dark,
+        .parentCalls = &parentCalls,
+        .childCalls = &childCalls,
+    }};
+  };
+
+  scope.store.beginRebuild(true);
+  std::unique_ptr<SceneNode> tree = builder.build(makeRoot(), NodeId{1ull}, constraints);
+  scope.store.endRebuild();
+
+  REQUIRE(tree != nullptr);
+  REQUIRE(tree->children().size() == 2);
+  auto* firstChild = dynamic_cast<RectSceneNode*>(tree->children()[1].get());
+  REQUIRE(firstChild != nullptr);
+  Color firstFill{};
+  REQUIRE(firstChild->fill.solidColor(&firstFill));
+  CHECK(firstFill == Theme::light().separatorColor);
+  CHECK(childCalls == 1);
+
+  dark = true;
+
+  scope.store.beginRebuild(false);
+  tree = builder.build(makeRoot(), NodeId{1ull}, constraints, std::move(tree));
+  scope.store.endRebuild();
+
+  REQUIRE(tree != nullptr);
+  REQUIRE(tree->children().size() == 2);
+  auto* secondChild = dynamic_cast<RectSceneNode*>(tree->children()[1].get());
+  REQUIRE(secondChild != nullptr);
+  Color secondFill{};
+  REQUIRE(secondChild->fill.solidColor(&secondFill));
+  CHECK(secondFill == Theme::dark().separatorColor);
+  CHECK(childCalls == 2);
 }

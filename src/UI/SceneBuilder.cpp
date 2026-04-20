@@ -652,6 +652,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildOrReuse(Element const& el, NodeId 
     if (resolution.body) {
       StateStore* const store = StateStore::current();
       if (store && existing && resolution.descendantsStable && !el.environmentLayer() && !el.modifiers()) {
+        existing->position = modifierOffset(resolution.body ? resolution.body->modifiers() : nullptr);
         store->markRetainedSubtreeVisited(frame().key);
         if (geometryIndex_) {
           Point delta{};
@@ -1208,10 +1209,10 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
       childBuild.maxHeight = innerH;
       ComponentKey childKey = current.key;
       childKey.push_back(local);
-      // ZStack supplies available shared space, but intrinsic children should still shrink-wrap
-      // within that space so the stack can center them as a unit.
+      // ZStack owns the full shared slot. Its children should also see that full available space
+      // so nested layouts can expand and resolve against the actual container size.
       pushFrame(childBuild, LayoutHints{}, contentOrigin, std::move(childKey), Size{innerW, innerH},
-                false, false);
+                innerW > 0.f, innerH > 0.f);
       std::unique_ptr<SceneNode> childNode = buildOrReuse(child, childId, std::move(reuse));
       popFrame();
       childNode->position.x += hAlignOffset(childNode->bounds.width, innerW, stack.horizontalAlignment);
@@ -1236,10 +1237,13 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     float const innerH =
         resolvedAssignedSpan(contentAssignedSize.height, current.hasAssignedHeight, innerConstraints.maxHeight);
     std::size_t const n = grid.children.size();
+    std::vector<std::size_t> spans(n, 1u);
+    for (std::size_t i = 0; i < n && i < grid.columnSpans.size(); ++i) {
+      spans[i] = grid.columnSpans[i];
+    }
     layout::GridTrackMetrics const metrics =
-        layout::resolveGridTrackMetrics(grid.columns, n, grid.horizontalSpacing, grid.verticalSpacing,
+        layout::resolveGridTrackMetrics(grid.columns, spans, grid.horizontalSpacing, grid.verticalSpacing,
                                         innerW, innerW > 0.f, innerH, innerH > 0.f);
-    LayoutConstraints const childConstraints = layout::gridChildConstraints(innerConstraints, metrics);
 
     std::vector<Size> sizes{};
     sizes.reserve(n);
@@ -1247,6 +1251,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
       Element const& child = grid.children[i];
       ComponentKey childKey = current.key;
       childKey.push_back(childLocalId(child, i));
+      LayoutConstraints const childConstraints = layout::gridChildConstraints(innerConstraints, metrics, i);
       sizes.push_back(measureElement(child, childConstraints, LayoutHints{}, childKey));
     }
     layout::GridLayoutResult const gridLayout =
@@ -1261,7 +1266,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
       NodeId const childId = SceneTree::childId(id, local);
       std::unique_ptr<SceneNode> reuse = detail::takeReusableNode(reusable, childId);
       Rect const slot = gridLayout.slots[index];
-      LayoutConstraints childBuild = childConstraints;
+      LayoutConstraints childBuild = layout::gridChildConstraints(innerConstraints, metrics, index);
       childBuild.maxWidth = slot.width;
       childBuild.maxHeight = slot.height;
       clampLayoutMinToMax(childBuild);

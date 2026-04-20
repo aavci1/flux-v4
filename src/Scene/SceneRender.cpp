@@ -18,7 +18,9 @@ public:
   void restore() override { canvas_.restore(); }
   void translate(Point offset) override { canvas_.translate(offset); }
   void transform(Mat3 const& matrix) override { canvas_.transform(matrix); }
-  void clipRect(Rect rect, bool antiAlias = false) override { canvas_.clipRect(rect, antiAlias); }
+  void clipRect(Rect rect, CornerRadius const& cornerRadius, bool antiAlias = false) override {
+    canvas_.clipRect(rect, cornerRadius, antiAlias);
+  }
   bool quickReject(Rect rect) const override { return canvas_.quickReject(rect); }
   void setOpacity(float opacity) override { canvas_.setOpacity(opacity); }
   void setBlendMode(BlendMode mode) override { canvas_.setBlendMode(mode); }

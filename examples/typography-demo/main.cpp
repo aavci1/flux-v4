@@ -1,9 +1,11 @@
 #include <Flux.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/UI.hpp>
+#include <Flux/UI/Views/Card.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/ScrollView.hpp>
+#include <Flux/UI/Views/TableView.hpp>
 #include <Flux/UI/Views/Text.hpp>
 #include <Flux/UI/Views/VStack.hpp>
 
@@ -21,42 +23,38 @@ Element dot(Color color) {
 }
 
 Element sectionCard(Theme const &theme, std::string eyebrow, std::string title, std::string body, Element content) {
-    return VStack {
-        .spacing = theme.space3,
-        .alignment = Alignment::Start,
-        .children = children(
-            Text {
-                .text = std::move(eyebrow),
-                .font = Font::caption(),
-                .color = Color::accent(),
-            },
-            Text {
-                .text = std::move(title),
-                .font = Font::title2(),
-                .color = Color::primary(),
-            },
-            Text {
-                .text = std::move(body),
-                .font = Font::body(),
-                .color = Color::secondary(),
-                .wrapping = TextWrapping::Wrap,
-            },
-            std::move(content)
-        )
-    }
-        .padding(theme.space4)
-        .fill(Color::elevatedBackground())
-        .stroke(Color::separator(), 1.f)
-        .cornerRadius(theme.radiusXLarge)
-        .shadow(ShadowStyle {.radius = theme.shadowRadiusPopover, .offset = {0.f, theme.shadowOffsetYPopover}, .color = Color {0.f, 0.f, 0.f, 0.08f}});
+    return Card {
+        .child = VStack {
+            .spacing = theme.space3,
+            .alignment = Alignment::Start,
+            .children = children(
+                Text {
+                    .text = std::move(eyebrow),
+                    .font = Font::caption(),
+                    .color = Color::accent(),
+                },
+                Text {
+                    .text = std::move(title),
+                    .font = Font::title2(),
+                    .color = Color::primary(),
+                },
+                Text {
+                    .text = std::move(body),
+                    .font = Font::body(),
+                    .color = Color::secondary(),
+                    .wrapping = TextWrapping::Wrap,
+                },
+                std::move(content)
+            )
+        },
+    };
 }
 
 Element typeRow(Theme const &theme, std::string tokenName, Font token, std::string note) {
-    return HStack {
-        .spacing = theme.space3,
-        .alignment = Alignment::Start,
-        .children = children(
-            VStack {
+    std::vector<Element> cells;
+    cells.push_back(
+        TableCell {
+            .content = VStack {
                 .spacing = theme.space1,
                 .alignment = Alignment::Start,
                 .children = children(
@@ -70,18 +68,36 @@ Element typeRow(Theme const &theme, std::string tokenName, Font token, std::stri
                         .font = Font::caption(),
                         .color = Color::secondary(),
                         .wrapping = TextWrapping::Wrap,
-                    }
-                )
-            }
-                .size(210.f, 0.f),
-            Text {
+                    })
+            },
+            .style = TableCell::Style {
+                .width = 210.f,
+                .alignment = HorizontalAlignment::Leading,
+            },
+        });
+    cells.push_back(
+        TableCell {
+            .content = Text {
                 .text = "The quick brown fox jumps over the lazy dog.",
                 .font = token,
                 .color = Color::primary(),
                 .wrapping = TextWrapping::Wrap,
-            }
-                .flex(1.f)
-        )
+            },
+            .style = TableCell::Style {
+                .alignment = HorizontalAlignment::Leading,
+            },
+        });
+
+    return TableRow {
+        .cells = std::move(cells),
+        .style = TableRow::Style {
+            .paddingH = 0.f,
+            .paddingV = theme.space3,
+            .spacing = theme.space3,
+            .backgroundColor = Colors::transparent,
+            .hoverBackgroundColor = Colors::transparent,
+            .selectedBackgroundColor = Colors::transparent,
+        },
     };
 }
 
@@ -217,26 +233,67 @@ struct TypographyDemoRoot {
             )
         };
 
+        std::vector<Element> typeRows;
+        typeRows.push_back(typeRow(theme, "Font::largeTitle()", Font::largeTitle(), "Screen headline"));
+        typeRows.push_back(typeRow(theme, "Font::title()", Font::title(), "Primary section title"));
+        typeRows.push_back(typeRow(theme, "Font::title2()", Font::title2(), "Panel or card title"));
+        typeRows.push_back(typeRow(theme, "Font::title3()", Font::title3(), "Subsection title"));
+        typeRows.push_back(typeRow(theme, "Font::headline()", Font::headline(), "Control label or emphasized row"));
+        typeRows.push_back(typeRow(theme, "Font::subheadline()", Font::subheadline(), "Supporting hierarchy"));
+        typeRows.push_back(typeRow(theme, "Font::body()", Font::body(), "Default reading text"));
+        typeRows.push_back(typeRow(theme, "Font::callout()", Font::callout(), "Compact callout copy"));
+        typeRows.push_back(typeRow(theme, "Font::footnote()", Font::footnote(), "Metadata and support text"));
+        typeRows.push_back(typeRow(theme, "Font::caption()", Font::caption(), "Dense UI label"));
+        typeRows.push_back(typeRow(theme, "Font::caption2()", Font::caption2(), "Tight caption"));
+        typeRows.push_back(typeRow(theme, "Font::monospacedBody()", Font::monospacedBody(), "system.token = semantic"));
+
+        Element typeHeader = TableRow {
+            .cells = {
+                Element {TableCell {
+                    .content = Text {
+                        .text = "Token",
+                        .font = Font::headline(),
+                        .color = Color::tertiary(),
+                    },
+                    .style = TableCell::Style {
+                        .width = 210.f,
+                        .alignment = HorizontalAlignment::Leading,
+                    },
+                }},
+                Element {TableCell {
+                    .content = Text {
+                        .text = "Rendered sample",
+                        .font = Font::headline(),
+                        .color = Color::tertiary(),
+                    },
+                }},
+            },
+            .style = TableRow::Style {
+                .paddingH = 0.f,
+                .paddingV = theme.space2,
+                .spacing = theme.space3,
+                .backgroundColor = theme.controlBackgroundColor,
+                .hoverBackgroundColor = theme.controlBackgroundColor,
+                .selectedBackgroundColor = theme.controlBackgroundColor,
+            },
+        };
+
         Element scaleSection = sectionCard(
             theme, "Typography", "Apple-style text roles",
             "These samples render exclusively through semantic `Font::...` tokens. The theme decides the concrete face, size, and weight later.",
-            VStack {
-                .spacing = theme.space3,
-                .alignment = Alignment::Start,
-                .children = children(
-                    typeRow(theme, "Font::largeTitle()", Font::largeTitle(), "Screen headline"),
-                    typeRow(theme, "Font::title()", Font::title(), "Primary section title"),
-                    typeRow(theme, "Font::title2()", Font::title2(), "Panel or card title"),
-                    typeRow(theme, "Font::title3()", Font::title3(), "Subsection title"),
-                    typeRow(theme, "Font::headline()", Font::headline(), "Control label or emphasized row"),
-                    typeRow(theme, "Font::subheadline()", Font::subheadline(), "Supporting hierarchy"),
-                    typeRow(theme, "Font::body()", Font::body(), "Default reading text"),
-                    typeRow(theme, "Font::callout()", Font::callout(), "Compact callout copy"),
-                    typeRow(theme, "Font::footnote()", Font::footnote(), "Metadata and support text"),
-                    typeRow(theme, "Font::caption()", Font::caption(), "Dense UI label"),
-                    typeRow(theme, "Font::caption2()", Font::caption2(), "Tight caption"),
-                    typeRow(theme, "Font::monospacedBody()", Font::monospacedBody(), "system.token = semantic")
-                )
+            TableView {
+                .header = std::move(typeHeader),
+                .rows = std::move(typeRows),
+                .columns = {
+                    TableColumn {.width = 210.f},
+                    TableColumn {.flexGrow = 1.f},
+                },
+                .scrollBody = false,
+                .style = TableView::Style {
+                    .dividerInsetH = 0.f,
+                    .backgroundColor = theme.controlBackgroundColor,
+                    .dividerColor = theme.separatorColor,
+                },
             }
         );
 

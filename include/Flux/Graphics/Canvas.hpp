@@ -66,7 +66,7 @@ public:
   // Clip
   // -------------------------------------------------------------------------
 
-  virtual void clipRect(Rect rect, bool antiAlias = false) = 0;
+  virtual void clipRect(Rect rect, CornerRadius const& cornerRadius = CornerRadius{}, bool antiAlias = false) = 0;
 
   virtual Rect clipBounds() const = 0;
   virtual bool quickReject(Rect rect) const = 0;

@@ -40,6 +40,8 @@ Element& StateStore::commitBody(ComponentKey const& key, C const& value,
   }
 
   state.valueSnapshot = makeValueSnapshot(value);
+  state.environmentDependencies = std::move(state.pendingEnvironmentDependencies);
+  state.pendingEnvironmentDependencies.clear();
   Element* raw = body.release();
   state.lastBody = std::unique_ptr<void, void (*)(void*)>(
       raw, [](void* p) { delete static_cast<Element*>(p); });

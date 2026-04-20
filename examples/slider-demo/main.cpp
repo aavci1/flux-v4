@@ -1,6 +1,7 @@
 #include <Flux.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/UI.hpp>
+#include <Flux/UI/Views/Card.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/ScrollView.hpp>
@@ -43,23 +44,25 @@ std::string fmtPercent(float v) {
 }
 
 Element makeSectionCard(Theme const &theme, std::string title, std::string caption, Element content) {
-    return VStack {
-        .spacing = theme.space3,
-        .children = children(
-            Text {.text = std::move(title), .font = Font::title2(), .color = Color::primary()},
-            Text {
-                .text = std::move(caption),
-                .font = Font::footnote(),
-                .color = Color::secondary(),
-                .wrapping = TextWrapping::Wrap,
-            },
-            std::move(content)
-        )
-    } //
-        .padding(theme.space4)
-        .fill(FillStyle::solid(Color::elevatedBackground()))
-        .stroke(StrokeStyle::solid(Color::separator(), 1.f))
-        .cornerRadius(CornerRadius {theme.radiusLarge});
+    return Card {
+        .child = VStack {
+            .spacing = theme.space3,
+            .children = children(
+                Text {.text = std::move(title), .font = Font::title2(), .color = Color::primary()},
+                Text {
+                    .text = std::move(caption),
+                    .font = Font::footnote(),
+                    .color = Color::secondary(),
+                    .wrapping = TextWrapping::Wrap,
+                },
+                std::move(content)
+            )
+        },
+        .style = Card::Style {
+            .padding = theme.space4,
+            .cornerRadius = theme.radiusLarge,
+        },
+    };
 }
 
 Element labeledSlider(Theme const &theme, std::string label, std::string valueText, State<float> value,

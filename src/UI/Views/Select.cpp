@@ -128,7 +128,7 @@ SelectResolvedStyle resolveStyle(Select::Style const &style, Theme const &theme)
     return SelectResolvedStyle {
         .labelFont = resolveFont(style.labelFont, theme.bodyFont, theme),
         .detailFont = resolveFont(style.detailFont, theme.footnoteFont, theme),
-        .cornerRadius = resolveFloat(style.cornerRadius, theme.radiusMedium),
+        .cornerRadius = resolveFloat(style.cornerRadius, theme.radiusLarge),
         .fieldChrome = fieldChrome,
         .menuCornerRadius = resolveFloat(style.menuCornerRadius, theme.radiusLarge),
         .menuMaxHeight = resolveFloat(style.menuMaxHeight, 260.f),

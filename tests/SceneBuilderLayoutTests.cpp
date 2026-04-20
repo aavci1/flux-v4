@@ -4,6 +4,9 @@
 #include <Flux/UI/Views/Icon.hpp>
 #include <Flux/UI/Views/Popover.hpp>
 #include <Flux/UI/Views/Grid.hpp>
+#include <Flux/UI/Views/TableView.hpp>
+
+#include <algorithm>
 
 namespace {
 
@@ -27,6 +30,10 @@ struct CompositeFooterPanel {
             Element{Rectangle{}}.size(40.f, 20.f)),
     };
   }
+};
+
+struct SortPayload {
+  int raw = 0;
 };
 
 } // namespace
@@ -709,6 +716,50 @@ TEST_CASE("SceneBuilder: grid rows follow wrapped content height after parent-as
   CHECK(grid.children()[2]->bounds.height == doctest::Approx(28.f));
 }
 
+TEST_CASE("SceneBuilder: grid column spans align shared columns across rows") {
+  VariableTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 424.f;
+  constraints.maxHeight = 200.f;
+
+  Element treeEl = Grid{
+      .columns = 4,
+      .horizontalSpacing = 8.f,
+      .verticalSpacing = 6.f,
+      .horizontalAlignment = Alignment::Stretch,
+      .verticalAlignment = Alignment::Stretch,
+      .children = {
+          Element{Rectangle{}}.size(100.f, 12.f),
+          Element{Rectangle{}}.size(100.f, 12.f),
+          Element{Rectangle{}}.size(100.f, 12.f),
+          Element{Rectangle{}}.size(100.f, 12.f),
+          Element{Rectangle{}}.size(424.f, 20.f),
+          Element{Rectangle{}}.size(208.f, 16.f),
+          Element{Rectangle{}}.size(208.f, 18.f),
+      },
+      .columnSpans = {1u, 1u, 1u, 1u, 4u, 2u, 2u},
+  };
+
+  std::unique_ptr<SceneNode> tree = builder.build(treeEl, NodeId{1ull}, constraints);
+  REQUIRE(tree != nullptr);
+  REQUIRE(tree->children().size() == 7);
+
+  CHECK(tree->children()[4]->position.x == doctest::Approx(0.f));
+  CHECK(tree->children()[4]->position.y == doctest::Approx(18.f));
+  CHECK(tree->children()[4]->bounds.width == doctest::Approx(424.f));
+  CHECK(tree->children()[5]->position.x == doctest::Approx(0.f));
+  CHECK(tree->children()[5]->position.y == doctest::Approx(44.f));
+  CHECK(tree->children()[5]->bounds.width == doctest::Approx(208.f));
+  CHECK(tree->children()[6]->position.x == doctest::Approx(216.f));
+  CHECK(tree->children()[6]->position.y == doctest::Approx(44.f));
+  CHECK(tree->children()[6]->bounds.width == doctest::Approx(208.f));
+}
+
 TEST_CASE("SceneBuilder: centered ZStack overlay shrink-wraps intrinsic children before centering") {
   VariableTextSystem textSystem{};
   EnvironmentLayer env{};
@@ -751,6 +802,33 @@ TEST_CASE("SceneBuilder: centered ZStack overlay shrink-wraps intrinsic children
   CHECK(overlayColumn->children()[1]->position.x == doctest::Approx(0.f));
   CHECK(overlayColumn->children()[1]->bounds.width == doctest::Approx(210.f));
   CHECK(overlayColumn->children()[1]->position.y == doctest::Approx(18.f));
+}
+
+TEST_CASE("SceneBuilder: ZStack preserves child-local position modifiers") {
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 120.f;
+  constraints.maxHeight = 80.f;
+
+  Element overlay = ZStack{
+      .horizontalAlignment = Alignment::Start,
+      .verticalAlignment = Alignment::Start,
+      .children = {
+          Element{Rectangle{}}.size(120.f, 80.f),
+          Element{Rectangle{}}.size(14.f, 10.f).position(16.f, 7.f),
+      },
+  };
+
+  std::unique_ptr<SceneNode> tree = builder.build(overlay, NodeId{1ull}, constraints);
+  REQUIRE(tree != nullptr);
+  REQUIRE(tree->children().size() == 2);
+  CHECK(tree->children()[1]->position.x == doctest::Approx(16.f));
+  CHECK(tree->children()[1]->position.y == doctest::Approx(7.f));
 }
 
 TEST_CASE("SceneBuilder: centered VStack overflow is allowed to go negative") {
@@ -1082,6 +1160,163 @@ TEST_CASE("SceneBuilder: Popover rebuild uses updated resolved placement after s
   CHECK(tree->bounds.height == doctest::Approx(20.f + 24.f + PopoverCalloutShape::kArrowH));
 
   scope.store.endRebuild();
+}
+
+TEST_CASE("SceneBuilder: table view sortable headers reorder metadata-backed rows") {
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  StoreScope scope{};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 220.f;
+  constraints.maxHeight = 180.f;
+
+  auto makeRow = [](std::string name, std::string formatted) -> Element {
+    return TableRow{
+        .cells = {
+            Element{TableCell{
+                .content = Text{.text = std::move(name)},
+                .style = TableCell::Style{.width = 100.f},
+            }},
+            Element{TableCell{
+                .content = Text{
+                    .text = std::move(formatted),
+                    .horizontalAlignment = HorizontalAlignment::Trailing,
+                },
+                .style = TableCell::Style{
+                    .width = 100.f,
+                    .alignment = HorizontalAlignment::Trailing,
+                },
+            }},
+        },
+        .style = TableRow::Style{
+            .paddingH = 0.f,
+            .paddingV = 0.f,
+            .spacing = 0.f,
+            .backgroundColor = Colors::transparent,
+            .hoverBackgroundColor = Colors::transparent,
+            .selectedBackgroundColor = Colors::transparent,
+        },
+    };
+  };
+
+  auto makeTable = [&]() -> Element {
+    return TableView{
+        .header = Element{TableRow{
+            .cells = {
+                Element{TableCell{
+                    .content = Text{.text = "Name"},
+                    .style = TableCell::Style{.width = 100.f},
+                }},
+                Element{TableCell{
+                    .content = Text{
+                        .text = "Value",
+                        .horizontalAlignment = HorizontalAlignment::Trailing,
+                    },
+                    .style = TableCell::Style{
+                        .width = 100.f,
+                        .alignment = HorizontalAlignment::Trailing,
+                    },
+                }},
+            },
+            .style = TableRow::Style{
+                .paddingH = 0.f,
+                .paddingV = 0.f,
+                .spacing = 0.f,
+                .backgroundColor = Colors::transparent,
+                .hoverBackgroundColor = Colors::transparent,
+                .selectedBackgroundColor = Colors::transparent,
+            },
+        }},
+        .items = {
+            TableView::Item{
+                .row = makeRow("Alpha", "$20").key("alpha"),
+                .sortValues = {{1u, SortPayload{.raw = 20}}},
+            },
+            TableView::Item{
+                .row = makeRow("Beta", "$10").key("beta"),
+                .sortValues = {{1u, SortPayload{.raw = 10}}},
+            },
+        },
+        .rows = {
+            Element{TableRow{
+                .cells = {
+                    Element{TableCell{
+                        .content = Text{.text = "Summary"},
+                        .style = TableCell::Style{.width = 100.f},
+                    }},
+                    Element{TableCell{
+                        .content = Text{
+                            .text = "$30",
+                            .horizontalAlignment = HorizontalAlignment::Trailing,
+                        },
+                        .style = TableCell::Style{
+                            .width = 100.f,
+                            .alignment = HorizontalAlignment::Trailing,
+                        },
+                    }},
+                },
+                .style = TableRow::Style{
+                    .paddingH = 0.f,
+                    .paddingV = 0.f,
+                    .spacing = 0.f,
+                    .backgroundColor = Colors::transparent,
+                    .hoverBackgroundColor = Colors::transparent,
+                    .selectedBackgroundColor = Colors::transparent,
+                },
+            }},
+        },
+        .columns = {
+            TableColumn{.width = 100.f},
+            TableColumn{
+                .width = 100.f,
+                .sort = TableColumn::Sort::by<SortPayload>(
+                    [](SortPayload const& lhs, SortPayload const& rhs) { return lhs.raw < rhs.raw; }),
+            },
+        },
+        .showDividers = false,
+        .scrollBody = false,
+    };
+  };
+
+  auto indexOf = [](std::vector<std::string> const& labels, std::string const& target) {
+    auto const it = std::find(labels.begin(), labels.end(), target);
+    REQUIRE(it != labels.end());
+    return static_cast<std::size_t>(std::distance(labels.begin(), it));
+  };
+
+  SceneTree scene{builder.build(makeTable(), NodeId{1ull}, constraints)};
+  std::vector<std::string> labels;
+  collectTextLabels(scene.root(), labels);
+  CHECK(indexOf(labels, "Alpha") < indexOf(labels, "Beta"));
+  CHECK(indexOf(labels, "Summary") > indexOf(labels, "Beta"));
+
+  auto hit = hitTestInteraction(scene, Point{150.f, 7.f});
+  REQUIRE(hit.has_value());
+  REQUIRE(hit->interaction != nullptr);
+  REQUIRE(static_cast<bool>(hit->interaction->onTap));
+  hit->interaction->onTap();
+
+  scene.setRoot(builder.build(makeTable(), NodeId{1ull}, constraints, scene.takeRoot()));
+  labels.clear();
+  collectTextLabels(scene.root(), labels);
+  CHECK(indexOf(labels, "Beta") < indexOf(labels, "Alpha"));
+  CHECK(indexOf(labels, "Summary") > indexOf(labels, "Alpha"));
+
+  hit = hitTestInteraction(scene, Point{150.f, 7.f});
+  REQUIRE(hit.has_value());
+  REQUIRE(hit->interaction != nullptr);
+  REQUIRE(static_cast<bool>(hit->interaction->onTap));
+  hit->interaction->onTap();
+
+  scene.setRoot(builder.build(makeTable(), NodeId{1ull}, constraints, scene.takeRoot()));
+  labels.clear();
+  collectTextLabels(scene.root(), labels);
+  CHECK(indexOf(labels, "Alpha") < indexOf(labels, "Beta"));
+  CHECK(indexOf(labels, "Summary") > indexOf(labels, "Beta"));
 }
 
 namespace {

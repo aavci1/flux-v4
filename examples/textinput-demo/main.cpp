@@ -7,6 +7,7 @@
 #include <Flux/Reactive/Reactive.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/UI.hpp>
+#include <Flux/UI/Views/Card.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Text.hpp>
 #include <Flux/UI/Views/TextInput.hpp>
@@ -20,28 +21,30 @@ using namespace flux;
 namespace {
 
 Element sectionCard(Theme const &theme, std::string title, std::string body, Element content) {
-    return VStack {
-        .spacing = theme.space3,
-        .alignment = Alignment::Start,
-        .children = children(
-            Text {
-                .text = std::move(title),
-                .font = Font::title2(),
-                .color = Color::primary(),
-            },
-            Text {
-                .text = std::move(body),
-                .font = Font::footnote(),
-                .color = Color::secondary(),
-                .wrapping = TextWrapping::Wrap,
-            },
-            std::move(content)
-        )
-    }
-        .padding(theme.space4)
-        .fill(FillStyle::solid(Color::elevatedBackground()))
-        .stroke(StrokeStyle::solid(Color::separator(), 1.f))
-        .cornerRadius(CornerRadius {theme.radiusLarge});
+    return Card {
+        .child = VStack {
+            .spacing = theme.space3,
+            .alignment = Alignment::Start,
+            .children = children(
+                Text {
+                    .text = std::move(title),
+                    .font = Font::title2(),
+                    .color = Color::primary(),
+                },
+                Text {
+                    .text = std::move(body),
+                    .font = Font::footnote(),
+                    .color = Color::secondary(),
+                    .wrapping = TextWrapping::Wrap,
+                },
+                std::move(content)
+            )
+        },
+        .style = Card::Style {
+            .padding = theme.space4,
+            .cornerRadius = theme.radiusLarge,
+        },
+    };
 }
 
 Element labeledField(Theme const &theme, std::string label, Element field) {

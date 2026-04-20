@@ -22,10 +22,9 @@ namespace flux {
 /// the viewport proposal).
 ///
 /// During `build`, the shared inner width/height uses the same `max(proposed, largest child)` rule
-/// as `measure` before laying out children. Each child receives that box; child frames are expanded
-/// with `max(intrinsic, inner)` on each axis so nested flex (e.g. `HStack` + `Spacer`) still sees the
-/// full proposed size, then \ref ZStack::horizontalAlignment / \ref ZStack::verticalAlignment offset each child's frame using its intrinsic size
-/// (or the expanded frame when `flexGrow > 0`) within that box.
+/// as `measure` before laying out children. Each child receives that full box as its assigned size,
+/// so nested layouts resolve against the actual container space instead of shrink-wrapping by
+/// default. Alignment is then applied against the child’s resolved frame within that shared box.
 ///
 /// **Overlay composition:** siblings that share one coordinate system (e.g. a track `Rectangle` and a
 /// thumb `Rectangle` with `frame` positions relative to each other) should use `Start` / `Start`

@@ -2,6 +2,7 @@
 
 #include <Flux/Graphics/Styles.hpp>
 
+#include <cstddef>
 #include <cstdint>
 #include <type_traits>
 #include <vector>
@@ -44,9 +45,19 @@ struct MetalImageInstance {
 
 static_assert(std::is_trivially_copyable_v<MetalImageInstance>);
 
+inline constexpr std::size_t kMetalRoundedClipMaskCapacity = 4;
+
+struct MetalRoundedClipStack {
+  vector_float4 header{};
+  vector_float4 entries[kMetalRoundedClipMaskCapacity * 2]{};
+};
+
+static_assert(std::is_trivially_copyable_v<MetalRoundedClipStack>);
+
 struct MetalRectOp {
   MetalRectInstance inst{};
   BlendMode blendMode = BlendMode::Normal;
+  MetalRoundedClipStack roundedClip{};
   bool isLine = false;
   bool scissorValid = false;
   std::uint32_t scissorX = 0;
@@ -60,6 +71,7 @@ static_assert(std::is_trivially_copyable_v<MetalRectOp>);
 struct MetalImageOp {
   MetalImageInstance inst{};
   BlendMode blendMode = BlendMode::Normal;
+  MetalRoundedClipStack roundedClip{};
   void* texture = nullptr;
   bool repeatSampler = false;
   bool scissorValid = false;
@@ -73,6 +85,7 @@ struct MetalPathOp {
   std::uint32_t pathStart = 0;
   std::uint32_t pathCount = 0;
   BlendMode blendMode = BlendMode::Normal;
+  MetalRoundedClipStack roundedClip{};
   bool scissorValid = false;
   std::uint32_t scissorX = 0;
   std::uint32_t scissorY = 0;
@@ -84,6 +97,7 @@ struct MetalGlyphOp {
   std::uint32_t glyphStart = 0;
   std::uint32_t glyphVertexCount = 0;
   BlendMode blendMode = BlendMode::Normal;
+  MetalRoundedClipStack roundedClip{};
   bool scissorValid = false;
   std::uint32_t scissorX = 0;
   std::uint32_t scissorY = 0;
