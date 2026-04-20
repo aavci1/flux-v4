@@ -39,8 +39,8 @@ Slider::Style resolveStyle(Slider::Style const &style, Theme const &theme) {
     return Slider::Style {
         .activeColor = resolveColor(style.activeColor, theme.accentColor, theme),
         .inactiveColor = resolveColor(style.inactiveColor, theme.disabledControlBackgroundColor, theme),
-        .thumbColor = resolveColor(style.thumbColor, theme.sliderThumbColor, theme),
-        .thumbBorderColor = resolveColor(style.thumbBorderColor, theme.sliderThumbBorderColor, theme),
+        .thumbColor = resolveColor(style.thumbColor, theme.accentColor, theme),
+        .thumbBorderColor = resolveColor(style.thumbBorderColor, theme.separatorColor, theme),
         .trackHeight = resolveFloat(style.trackHeight, theme.sliderTrackHeight),
         .thumbSize = resolveFloat(style.thumbSize, theme.sliderThumbSize),
     };
@@ -143,7 +143,7 @@ Element Slider::body() const {
         }
     };
 
-    StrokeStyle thumbStroke = StrokeStyle::solid(thumbBorderColor, 1.f);
+    StrokeStyle thumbStroke = StrokeStyle::solid(thumbBorderColor, 2.f);
     if (focused && !isDisabled) {
         thumbStroke = StrokeStyle::solid(focusColor, 2.f);
     }

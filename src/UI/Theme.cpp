@@ -196,9 +196,6 @@ Theme Theme::dark() {
   t.checkboxUncheckedColor = t.opaqueSeparatorColor;
   t.checkboxBorderColor = t.opaqueSeparatorColor;
 
-  t.sliderTrackColor = t.opaqueSeparatorColor;
-  t.sliderThumbBorderColor = t.separatorColor;
-
   t.shadowColor = Color{0.f, 0.f, 0.f, 0.35f};
 
   return t;

@@ -195,10 +195,6 @@ struct Theme {
     // Slider
     float sliderTrackHeight = 4.f;
     float sliderThumbSize = 20.f;
-    float sliderThumbBorderWidth = 2.f;
-    Color sliderTrackColor = Color::hex(0xD1D1D6);
-    Color sliderThumbColor = Color::hex(0xFFFFFF);
-    Color sliderThumbBorderColor = Color::hex(0xD1D1D6);
 
     /// Bundled Material Symbols Rounded (override to swap icon sets globally).
     std::string iconFontFamily = "Material Symbols Rounded";
