@@ -16,11 +16,19 @@ endfunction()
 add_executable(hello_world hello-world/main.cpp)
 target_link_libraries(hello_world PRIVATE flux)
 
+set(LLAMA_BUILD_COMMON ON CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_SERVER OFF CACHE BOOL "" FORCE)
+add_subdirectory(${CMAKE_SOURCE_DIR}/vendor/llama.cpp
+                 ${CMAKE_BINARY_DIR}/vendor/llama.cpp)
+
 add_executable(lambda-studio
   lambda-studio/main.cpp
   lambda-studio/AppRuntime.cpp
 )
-target_link_libraries(lambda-studio PRIVATE flux common sqlite3)
+target_link_libraries(lambda-studio PRIVATE flux llama-common sqlite3)
 
 add_executable(clock_demo clock-demo/main.cpp)
 target_link_libraries(clock_demo PRIVATE flux)
@@ -90,14 +98,6 @@ target_link_libraries(icon_demo PRIVATE flux)
 
 add_executable(layout_demo layout-demo/main.cpp)
 target_link_libraries(layout_demo PRIVATE flux)
-
-set(LLAMA_BUILD_COMMON ON CACHE BOOL "" FORCE)
-set(LLAMA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-set(LLAMA_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
-set(LLAMA_BUILD_SERVER OFF CACHE BOOL "" FORCE)
-add_subdirectory(${CMAKE_SOURCE_DIR}/vendor/llama.cpp
-                 ${CMAKE_BINARY_DIR}/vendor/llama.cpp)
 
 set(FLUX_EXAMPLE_TARGETS
     hello_world
