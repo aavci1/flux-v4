@@ -24,37 +24,4 @@ ResolvedInputFieldChrome resolveInputFieldChrome(InputFieldChromeSpec const& spe
   };
 }
 
-ResolvedPickerFieldChrome resolvePickerFieldChrome(PickerFieldChromeSpec const& spec, Theme const& theme) {
-  return ResolvedPickerFieldChrome{
-      .input = resolveInputFieldChrome(spec.input, theme),
-      .chevronColor = resolveColor(spec.chevronColor, theme.tertiaryLabelColor, theme),
-      .rowHoverColor = resolveColor(spec.rowHoverColor, theme.rowHoverBackgroundColor, theme),
-      .rowSelectedColor = resolveColor(spec.rowSelectedColor, theme.selectedContentBackgroundColor, theme),
-  };
-}
-
-InputFieldDecoration applyOuterInputFieldDecoration(ResolvedInputFieldChrome const& chrome,
-                                                    detail::ElementModifiers const* outerMods) {
-  FillStyle bgFill = FillStyle::solid(chrome.backgroundColor);
-  StrokeStyle strokeN = StrokeStyle::solid(chrome.borderColor, chrome.borderWidth);
-  StrokeStyle strokeF = StrokeStyle::solid(chrome.borderFocusColor, chrome.borderFocusWidth);
-  CornerRadius cr{chrome.cornerRadius};
-  if (outerMods) {
-    if (!outerMods->fill.isNone()) {
-      bgFill = outerMods->fill;
-    }
-    if (!outerMods->stroke.isNone()) {
-      strokeN = outerMods->stroke;
-      strokeF = StrokeStyle::solid(chrome.borderFocusColor, chrome.borderFocusWidth);
-    }
-    if (!outerMods->cornerRadius.isZero()) {
-      cr = outerMods->cornerRadius;
-    }
-  }
-  return InputFieldDecoration{.bgFill = std::move(bgFill),
-                              .strokeNormal = std::move(strokeN),
-                              .strokeFocus = std::move(strokeF),
-                              .cornerRadius = cr};
-}
-
 } // namespace flux

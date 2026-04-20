@@ -52,32 +52,4 @@ struct ResolvedInputFieldChrome {
 
 ResolvedInputFieldChrome resolveInputFieldChrome(InputFieldChromeSpec const& spec, Theme const& theme);
 
-/// Picker adds menu/trigger colours on top of \ref InputFieldChromeSpec.
-struct PickerFieldChromeSpec {
-  InputFieldChromeSpec input{};
-  Color chevronColor = Color::theme();
-  Color rowHoverColor = Color::theme();
-  Color rowSelectedColor = Color::theme();
-};
-
-struct ResolvedPickerFieldChrome {
-  ResolvedInputFieldChrome input;
-  Color chevronColor;
-  Color rowHoverColor;
-  Color rowSelectedColor;
-};
-
-ResolvedPickerFieldChrome resolvePickerFieldChrome(PickerFieldChromeSpec const& spec, Theme const& theme);
-
-/// Merges resolved chrome with optional outer \c Element modifiers (e.g. \ref Picker trigger \c body()).
-struct InputFieldDecoration {
-  FillStyle bgFill;
-  StrokeStyle strokeNormal;
-  StrokeStyle strokeFocus;
-  CornerRadius cornerRadius;
-};
-
-InputFieldDecoration applyOuterInputFieldDecoration(ResolvedInputFieldChrome const& chrome,
-                                                    detail::ElementModifiers const* outerMods);
-
 } // namespace flux
