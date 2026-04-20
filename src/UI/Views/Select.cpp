@@ -421,15 +421,8 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
         }
 
         float const triggerWidth = bounds.width > 0.f ? bounds.width : style.minMenuWidth;
-        EdgeInsets const anchorOutsets =
-            triggerMode == SelectTriggerMode::Link ? EdgeInsets {} : EdgeInsets {
-                                                                         fieldVerticalPadding,
-                                                                         fieldHorizontalPadding,
-                                                                         fieldVerticalPadding,
-                                                                         fieldHorizontalPadding,
-                                                                     };
-        std::optional<float> const menuWidth = matchTriggerWidth ? std::optional<float> {std::max(triggerWidth + anchorOutsets.left + anchorOutsets.right,
-                                                                                                  style.minMenuWidth)} :
+        EdgeInsets const anchorOutsets = EdgeInsets {};
+        std::optional<float> const menuWidth = matchTriggerWidth ? std::optional<float> {triggerWidth} :
                                                                    std::optional<float> {intrinsicMenuWidth(options, style, theme, showCheckmark, emptyText)};
         std::optional<float> const anchorMaxHeight =
             triggerMode == SelectTriggerMode::Link ? std::nullopt : (bounds.height > 0.f ? std::optional<float> {bounds.height} : std::nullopt);
@@ -461,6 +454,7 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
                          placement = placement,
                          anchorMaxHeight,
                          anchorOutsets,
+                         popoverGap = triggerMode == SelectTriggerMode::Field ? theme.space1 : kFloatFromTheme,
                          onChange = onChange]() {
             auto handleSelect = [selectedIndex, options = options, dismissOnSelect, hidePopover, onChange](int nextIndex) {
                 if (!isValidIndex(nextIndex, options.size()) || options[static_cast<std::size_t>(nextIndex)].disabled) {
@@ -490,6 +484,7 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
                 }},
                 .placement = placement,
                 .crossAlignment = triggerMode == SelectTriggerMode::Link ? OverlayConfig::CrossAlignment::PreferStart : OverlayConfig::CrossAlignment::Center,
+                .gap = popoverGap,
                 .arrow = false,
                 .backgroundColor = Color::elevatedBackground(),
                 .borderColor = Color::separator(),
@@ -514,7 +509,7 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
                 .anchorOutsets = anchorOutsets,
                 .dismissOnEscape = true,
                 .dismissOnOutsideTap = true,
-                .useTapAnchor = false,
+                .useTapAnchor = triggerMode == SelectTriggerMode::Link,
             });
         };
 
