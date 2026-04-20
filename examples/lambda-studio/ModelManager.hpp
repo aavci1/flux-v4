@@ -641,7 +641,7 @@ class ModelManager : public lambda::IModelManager {
     }
 
     std::pair<std::vector<HfModelInfo>, std::string> searchHfSync(HfSearchRequest const &request) const {
-        std::string url = get_model_endpoint();
+        std::string url = common_get_model_endpoint();
         url += "api/models?library=gguf&direction=-1&limit=20&full=true&cardData=true";
         if (!request.sortKey.empty()) {
             url += "&sort=" + urlEncode(request.sortKey);
@@ -817,7 +817,7 @@ class ModelManager : public lambda::IModelManager {
 
     HfRepoDetailResponse fetchRepoDetailSync(std::string const &repoId) const {
         std::string const token = hfToken();
-        std::string url = get_model_endpoint() + "api/models/" + repoId;
+        std::string url = common_get_model_endpoint() + "api/models/" + repoId;
         common_remote_params params;
         params.timeout = 15;
         if (!token.empty()) {
@@ -907,7 +907,7 @@ class ModelManager : public lambda::IModelManager {
         }
 
         std::string readme;
-        std::string const readmeUrl = get_model_endpoint() + repoId + "/resolve/main/README.md";
+        std::string const readmeUrl = common_get_model_endpoint() + repoId + "/resolve/main/README.md";
         auto [readmeStatus, readmeBody] = common_remote_get_content(readmeUrl, params);
         if (readmeStatus == 200) {
             readme = std::string(readmeBody.begin(), readmeBody.end());
@@ -926,7 +926,7 @@ class ModelManager : public lambda::IModelManager {
     }
 
     static std::string resolveRepoCommitSync(std::string const &repoId, std::string const &token) {
-        std::string url = get_model_endpoint() + "api/models/" + repoId + "/refs";
+        std::string url = common_get_model_endpoint() + "api/models/" + repoId + "/refs";
         common_remote_params params;
         params.timeout = 15;
         if (!token.empty()) {
@@ -966,7 +966,7 @@ class ModelManager : public lambda::IModelManager {
         std::string const &commit,
         std::string const &token
     ) {
-        std::string url = get_model_endpoint() + "api/models/" + repoId + "/tree/" + commit + "?recursive=true";
+        std::string url = common_get_model_endpoint() + "api/models/" + repoId + "/tree/" + commit + "?recursive=true";
         common_remote_params params;
         params.timeout = 15;
         if (!token.empty()) {
