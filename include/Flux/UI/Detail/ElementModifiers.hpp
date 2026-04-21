@@ -13,6 +13,7 @@
 #include <cmath>
 #include <functional>
 #include <memory>
+#include <optional>
 
 namespace flux {
 
@@ -51,6 +52,14 @@ float flexShrinkOf(C const& v) {
     return v.flexShrink;
   }
   return 0.f;
+}
+
+template<typename C>
+std::optional<float> flexBasisOf(C const& v) {
+  if constexpr (requires { v.flexBasis; }) {
+    return std::max(0.f, v.flexBasis);
+  }
+  return std::nullopt;
 }
 
 template<typename C>

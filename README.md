@@ -23,6 +23,7 @@ By default only the static `flux` library is built. Pass **`-DFLUX_BUILD_EXAMPLE
 | `text_demo` | `TextSystem`, `AttributedString`, `Canvas::drawTextLayout` |
 | `image_demo` | Loading and drawing `Image` from a file |
 | `reactive_demo` | `Signal` / `Computed` / `Animated` and observers |
+| `theme_demo` | Full native port of the Flux theme showcase: colors, typography, spacing, density, and component tokens |
 | `card_demo` | Declarative UI (`setView`), stacks, state hooks, animation |
 
 Configure-time options:

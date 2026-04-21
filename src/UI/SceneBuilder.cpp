@@ -76,6 +76,10 @@ bool nearlyEqual(Size lhs, Size rhs) {
   return nearlyEqual(lhs.width, rhs.width) && nearlyEqual(lhs.height, rhs.height);
 }
 
+bool zStackAxisStretches(std::optional<Alignment> alignment) {
+  return !alignment || *alignment == Alignment::Stretch;
+}
+
 float resolvedAssignedSpan(float assignedSpan, bool hasAssignedSpan, float fallbackSpan) {
   if (hasAssignedSpan) {
     return std::max(0.f, assignedSpan);
@@ -988,12 +992,14 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     }
     detail::ReusableSceneNodes reusable = detail::releaseReusableChildren(*group);
 
-    float const assignedW = current.hasAssignedWidth ? std::max(0.f, contentAssignedSize.width) : 0.f;
-    float const assignedH = current.hasAssignedHeight ? std::max(0.f, contentAssignedSize.height) : 0.f;
-    float innerW = std::max(0.f, assignedW);
+    bool const widthAssigned = current.hasAssignedWidth && zStackAxisStretches(current.hints.zStackHorizontalAlign);
+    bool const heightAssigned = current.hasAssignedHeight && zStackAxisStretches(current.hints.zStackVerticalAlign);
+    float const availableW =
+        std::isfinite(innerConstraints.maxWidth) ? std::max(0.f, innerConstraints.maxWidth) : 0.f;
+    float const assignedW = widthAssigned ? std::max(0.f, contentAssignedSize.width) : 0.f;
     LayoutConstraints childConstraints = innerConstraints;
     childConstraints.maxHeight = std::numeric_limits<float>::infinity();
-    childConstraints.maxWidth = innerW > 0.f ? innerW : std::numeric_limits<float>::infinity();
+    childConstraints.maxWidth = availableW > 0.f ? availableW : std::numeric_limits<float>::infinity();
     clampLayoutMinToMax(childConstraints);
     LayoutHints childHints{};
     childHints.vStackCrossAlign = stack.alignment;
@@ -1010,21 +1016,25 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
       sizes.push_back(size);
       stackChildren.push_back(layout::StackMainAxisChild{
           .naturalMainSize = size.height,
+          .flexBasis = child.flexBasis(),
           .minMainSize = child.minMainSize(),
           .flexGrow = child.flexGrow(),
           .flexShrink = child.flexShrink(),
       });
     }
-    bool const heightConstrained = current.hasAssignedHeight;
+    bool const heightConstrained = heightAssigned;
     if (!heightConstrained) {
       warnFlexGrowIfParentMainAxisUnconstrained(stack.children, heightConstrained);
     }
     layout::StackMainAxisLayout const mainLayout =
-        layout::layoutStackMainAxis(stackChildren, stack.spacing, assignedH, heightConstrained);
+        layout::layoutStackMainAxis(stackChildren, stack.spacing,
+                                    heightAssigned ? std::max(0.f, contentAssignedSize.height) : 0.f,
+                                    heightConstrained,
+                                    stack.justifyContent);
     layout::StackLayoutResult const stackLayout =
         layout::layoutStack(layout::StackAxis::Vertical, stack.alignment, sizes, mainLayout.mainSizes,
-                            stack.spacing, mainLayout.containerMainSize, mainLayout.startOffset,
-                            innerW, innerW > 0.f);
+                            mainLayout.itemSpacing, mainLayout.containerMainSize, mainLayout.startOffset,
+                            assignedW, widthAssigned);
 
     std::vector<std::unique_ptr<SceneNode>> nextChildren{};
     nextChildren.reserve(stack.children.size());
@@ -1064,13 +1074,17 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     }
     detail::ReusableSceneNodes reusable = detail::releaseReusableChildren(*group);
 
+    bool const widthAssigned = current.hasAssignedWidth && zStackAxisStretches(current.hints.zStackHorizontalAlign);
+    bool const heightAssigned = current.hasAssignedHeight && zStackAxisStretches(current.hints.zStackVerticalAlign);
     float const assignedW =
-        resolvedAssignedSpan(contentAssignedSize.width, current.hasAssignedWidth, innerConstraints.maxWidth);
-    float const assignedH = current.hasAssignedHeight ? std::max(0.f, contentAssignedSize.height) : 0.f;
-    bool const heightConstrained = current.hasAssignedHeight;
+        widthAssigned ? resolvedAssignedSpan(contentAssignedSize.width, current.hasAssignedWidth, innerConstraints.maxWidth)
+                      : 0.f;
+    float const assignedH = heightAssigned ? std::max(0.f, contentAssignedSize.height) : 0.f;
+    bool const heightConstrained = heightAssigned;
     bool const widthConstrained =
-        current.hasAssignedWidth ||
-        (stack.children.size() == 1 && std::isfinite(innerConstraints.maxWidth) && innerConstraints.maxWidth > 0.f);
+        widthAssigned ||
+        (zStackAxisStretches(current.hints.zStackHorizontalAlign) && stack.children.size() == 1 &&
+         std::isfinite(innerConstraints.maxWidth) && innerConstraints.maxWidth > 0.f);
     LayoutConstraints childConstraints = innerConstraints;
     childConstraints.maxWidth = std::numeric_limits<float>::infinity();
     childConstraints.maxHeight =
@@ -1092,6 +1106,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
       sizes.push_back(size);
       stackChildren.push_back(layout::StackMainAxisChild{
           .naturalMainSize = size.width,
+          .flexBasis = child.flexBasis(),
           .minMainSize = child.minMainSize(),
           .flexGrow = child.flexGrow(),
           .flexShrink = child.flexShrink(),
@@ -1102,7 +1117,8 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
       warnFlexGrowIfParentMainAxisUnconstrained(stack.children, widthConstrained);
     }
     layout::StackMainAxisLayout const mainLayout =
-        layout::layoutStackMainAxis(stackChildren, stack.spacing, assignedW, widthConstrained);
+        layout::layoutStackMainAxis(stackChildren, stack.spacing, assignedW, widthConstrained,
+                                    stack.justifyContent);
 
     float rowInnerH = 0.f;
     std::vector<Size> rowSizes{};
@@ -1121,13 +1137,11 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
       rowSizes.push_back(measured);
       rowInnerH = std::max(rowInnerH, measured.height);
     }
-    if (stack.alignment == Alignment::Stretch && heightConstrained) {
-      rowInnerH = std::max(rowInnerH, assignedH);
-    }
+    float const rowCrossSize = heightConstrained ? assignedH : rowInnerH;
     layout::StackLayoutResult const stackLayout =
         layout::layoutStack(layout::StackAxis::Horizontal, stack.alignment, rowSizes, mainLayout.mainSizes,
-                            stack.spacing, mainLayout.containerMainSize, mainLayout.startOffset,
-                            rowInnerH, rowInnerH > 0.f);
+                            mainLayout.itemSpacing, mainLayout.containerMainSize, mainLayout.startOffset,
+                            rowCrossSize, heightConstrained);
 
     std::vector<std::unique_ptr<SceneNode>> nextChildren{};
     nextChildren.reserve(stack.children.size());
@@ -1175,6 +1189,9 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     childConstraints.maxWidth = innerW > 0.f ? innerW : std::numeric_limits<float>::infinity();
     childConstraints.maxHeight = innerH > 0.f ? innerH : std::numeric_limits<float>::infinity();
     clampLayoutMinToMax(childConstraints);
+    LayoutHints childHints{};
+    childHints.zStackHorizontalAlign = stack.horizontalAlignment;
+    childHints.zStackVerticalAlign = stack.verticalAlignment;
     float maxW = 0.f;
     float maxH = 0.f;
     std::vector<Size> sizes{};
@@ -1183,7 +1200,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
       Element const& child = stack.children[i];
       ComponentKey childKey = current.key;
       childKey.push_back(childLocalId(child, i));
-      Size const size = measureElement(child, childConstraints, LayoutHints{}, childKey);
+      Size const size = measureElement(child, childConstraints, childHints, childKey);
       sizes.push_back(size);
       maxW = std::max(maxW, size.width);
       maxH = std::max(maxH, size.height);
@@ -1211,7 +1228,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
       childKey.push_back(local);
       // ZStack owns the full shared slot. Its children should also see that full available space
       // so nested layouts can expand and resolve against the actual container size.
-      pushFrame(childBuild, LayoutHints{}, contentOrigin, std::move(childKey), Size{innerW, innerH},
+      pushFrame(childBuild, childHints, contentOrigin, std::move(childKey), Size{innerW, innerH},
                 innerW > 0.f, innerH > 0.f);
       std::unique_ptr<SceneNode> childNode = buildOrReuse(child, childId, std::move(reuse));
       popFrame();

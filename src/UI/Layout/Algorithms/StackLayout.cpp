@@ -6,25 +6,39 @@
 
 namespace flux::layout {
 
+namespace {
+
+float resolveSafeCenterOffset(float freeSpace) {
+  return freeSpace < 0.f ? 0.f : freeSpace * 0.5f;
+}
+
+float stackFlexBaseSize(StackMainAxisChild const& child) {
+  return std::max(0.f, child.flexBasis.value_or(child.naturalMainSize));
+}
+
+} // namespace
+
 StackMainAxisLayout layoutStackMainAxis(std::span<StackMainAxisChild const> children, float spacing,
-                                        float assignedMainSize, bool hasAssignedMainSize) {
+                                        float assignedMainSize, bool hasAssignedMainSize,
+                                        JustifyContent justifyContent) {
   StackMainAxisLayout result{};
   result.mainSizes.reserve(children.size());
   result.constrained = hasAssignedMainSize;
+  result.itemSpacing = spacing;
 
   for (StackMainAxisChild const& child : children) {
-    result.mainSizes.push_back(std::max(child.naturalMainSize, child.minMainSize));
+    result.mainSizes.push_back(std::max(stackFlexBaseSize(child), child.minMainSize));
   }
 
   if (result.constrained && !result.mainSizes.empty()) {
     float const gaps = children.size() > 1 ? static_cast<float>(children.size() - 1) * spacing : 0.f;
     float const targetSum = std::max(0.f, assignedMainSize - gaps);
-    float sumNatural = 0.f;
+    float sumBase = 0.f;
     for (float size : result.mainSizes) {
-      sumNatural += size;
+      sumBase += size;
     }
 
-    float const extra = targetSum - sumNatural;
+    float const extra = targetSum - sumBase;
     if (extra > kFlexEpsilon) {
       float totalGrow = 0.f;
       for (StackMainAxisChild const& child : children) {
@@ -38,7 +52,7 @@ StackMainAxisLayout layoutStackMainAxis(std::span<StackMainAxisChild const> chil
         }
       }
     } else if (extra < -kFlexEpsilon) {
-      std::vector<float> const naturalSizes = result.mainSizes;
+      std::vector<float> const shrinkBaseSizes = result.mainSizes;
       for (;;) {
         float allocatedSum = 0.f;
         for (float size : result.mainSizes) {
@@ -53,7 +67,7 @@ StackMainAxisLayout layoutStackMainAxis(std::span<StackMainAxisChild const> chil
         for (std::size_t i = 0; i < children.size(); ++i) {
           if (children[i].flexShrink > 0.f &&
               result.mainSizes[i] > children[i].minMainSize + kFlexEpsilon) {
-            shrinkBasis += children[i].flexShrink * naturalSizes[i];
+            shrinkBasis += children[i].flexShrink * shrinkBaseSizes[i];
           }
         }
         if (shrinkBasis <= 1e-6f) {
@@ -67,7 +81,7 @@ StackMainAxisLayout layoutStackMainAxis(std::span<StackMainAxisChild const> chil
             continue;
           }
           float const remove =
-              need * ((children[i].flexShrink * naturalSizes[i]) / shrinkBasis);
+              need * ((children[i].flexShrink * shrinkBaseSizes[i]) / shrinkBasis);
           float const nextSize = result.mainSizes[i] - remove;
           if (nextSize < children[i].minMainSize) {
             removedThisPass += result.mainSizes[i] - children[i].minMainSize;
@@ -91,6 +105,48 @@ StackMainAxisLayout layoutStackMainAxis(std::span<StackMainAxisChild const> chil
 
   result.containerMainSize = result.constrained ? std::max(0.f, assignedMainSize) : std::max(0.f, result.usedMainSize);
   result.startOffset = 0.f;
+  if (!result.constrained || result.mainSizes.empty()) {
+    return result;
+  }
+
+  float const freeSpace = result.containerMainSize - result.usedMainSize;
+  switch (justifyContent) {
+  case JustifyContent::Start:
+    break;
+  case JustifyContent::Center:
+    result.startOffset = freeSpace * 0.5f;
+    break;
+  case JustifyContent::End:
+    result.startOffset = freeSpace;
+    break;
+  case JustifyContent::SpaceBetween:
+    if (children.size() > 1 && freeSpace > 0.f) {
+      result.itemSpacing += freeSpace / static_cast<float>(children.size() - 1);
+    }
+    break;
+  case JustifyContent::SpaceAround:
+    if (freeSpace < 0.f) {
+      result.startOffset = resolveSafeCenterOffset(freeSpace);
+      break;
+    }
+    if (!children.empty()) {
+      float const distributedSpace = freeSpace / static_cast<float>(children.size());
+      result.startOffset = distributedSpace * 0.5f;
+      result.itemSpacing += distributedSpace;
+    }
+    break;
+  case JustifyContent::SpaceEvenly:
+    if (freeSpace < 0.f) {
+      result.startOffset = resolveSafeCenterOffset(freeSpace);
+      break;
+    }
+    {
+      float const distributedSpace = freeSpace / static_cast<float>(children.size() + 1);
+      result.startOffset = distributedSpace;
+      result.itemSpacing += distributedSpace;
+    }
+    break;
+  }
   return result;
 }
 
@@ -112,11 +168,7 @@ StackLayoutResult layoutStack(StackAxis axis, Alignment crossAlignment,
   }
 
   float containerCrossSize = maxCrossSize;
-  if (axis == StackAxis::Vertical) {
-    if (hasAssignedCrossSize) {
-      containerCrossSize = std::max(0.f, assignedCrossSize);
-    }
-  } else if (crossAlignment == Alignment::Stretch && hasAssignedCrossSize) {
+  if (hasAssignedCrossSize) {
     containerCrossSize = std::max(0.f, assignedCrossSize);
   }
 

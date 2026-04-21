@@ -3,7 +3,7 @@
 /// \file Flux/UI/Views/Spacer.hpp
 ///
 /// Flexible empty region for HStack/VStack: expands along the stack main axis.
-/// Set flex and minimum main size with chained `.flex(grow, shrink, minMain)` (defaults are grow=1).
+/// Use chained `.flex(...)` to override grow/shrink and, when needed, explicit flex-basis.
 
 #include <Flux/UI/Detail/PrimitiveForwards.hpp>
 #include <Flux/UI/ViewModifiers.hpp>

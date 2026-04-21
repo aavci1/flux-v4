@@ -56,7 +56,9 @@ struct ViewModifiers {
   Element focusable(bool enabled) &&;
   Element cursor(Cursor c) &&;
 
-  Element flex(float grow, float shrink = 1.f, float minMain = 0.f) &&;
+  Element flex(float grow) &&;
+  Element flex(float grow, float shrink) &&;
+  Element flex(float grow, float shrink, float basis) &&;
   template<typename T>
   Element environment(T value) &&;
 };

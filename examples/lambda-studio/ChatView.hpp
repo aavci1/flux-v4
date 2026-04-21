@@ -1011,7 +1011,7 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
                 .spacing = theme.space3,
                 .alignment = Alignment::Start,
                 .children = children(
-                    std::move(bubble).flex(0.f, 1.f, 0.f),
+                    std::move(bubble).flex(0.f, 1.f),
                     Spacer {}
                 ),
             };
@@ -1111,7 +1111,7 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
                 .spacing = theme.space3,
                 .alignment = Alignment::Start,
                 .children = children(
-                    std::move(bubble).flex(0.f, 1.f, 0.f),
+                    std::move(bubble).flex(0.f, 1.f),
                     Spacer {}
                 ),
             };
@@ -1213,7 +1213,7 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
                 .alignment = Alignment::Start,
                 .children = children(
                     Spacer {},
-                    std::move(bubble).flex(0.f, 1.f, 0.f)
+                    std::move(bubble).flex(0.f, 1.f)
                 ),
             };
         }
@@ -1222,7 +1222,7 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
             .spacing = theme.space3,
             .alignment = Alignment::Start,
             .children = children(
-                std::move(bubble).flex(0.f, 1.f, 0.f),
+                std::move(bubble).flex(0.f, 1.f),
                 Spacer {}
             ),
         };

@@ -105,13 +105,16 @@ public:
 
   float flexGrow() const;
   float flexShrink() const;
+  std::optional<float> flexBasis() const;
   float minMainSize() const;
 
   bool leafDrawsFillStrokeShadowFromModifiers() const {
     return impl_ && impl_->leafDrawsFillStrokeShadowFromModifiers();
   }
 
-  Element flex(float grow, float shrink = 1.f, float minMain = 0.f) &&;
+  Element flex(float grow) &&;
+  Element flex(float grow, float shrink) &&;
+  Element flex(float grow, float shrink, float basis) &&;
   Element key(std::string key) &&;
   [[nodiscard]] std::optional<std::string> const& explicitKey() const noexcept { return key_; }
 
@@ -176,6 +179,7 @@ private:
                          LayoutHints const& hints, TextSystem& textSystem) const = 0;
     virtual float flexGrow() const { return 0.f; }
     virtual float flexShrink() const { return 0.f; }
+    virtual std::optional<float> flexBasis() const { return std::nullopt; }
     virtual float minMainSize() const { return 0.f; }
     virtual bool leafDrawsFillStrokeShadowFromModifiers() const { return false; }
   };
@@ -186,6 +190,7 @@ private:
   std::unique_ptr<Concept> impl_;
   std::optional<float> flexGrowOverride_;
   std::optional<float> flexShrinkOverride_;
+  std::optional<float> flexBasisOverride_;
   std::optional<float> minMainSizeOverride_;
   std::optional<EnvironmentLayer> envLayer_;
   std::optional<detail::ElementModifiers> modifiers_;

@@ -18,7 +18,10 @@ struct VStack : ViewModifiers<VStack> {
   Size measure(MeasureContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
 
   float spacing = 8.f;
+  /// Cross-axis alignment (horizontal in a `VStack`).
   Alignment alignment = Alignment::Center;
+  /// Main-axis distribution, similar to CSS `justify-content`.
+  JustifyContent justifyContent = JustifyContent::Start;
   std::vector<Element> children;
 };
 

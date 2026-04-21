@@ -23,11 +23,14 @@ Size ZStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints, 
   childCs.maxWidth = innerW > 0.f ? innerW : std::numeric_limits<float>::infinity();
   childCs.maxHeight = innerH > 0.f ? innerH : std::numeric_limits<float>::infinity();
   layout::clampLayoutMinToMax(childCs);
+  LayoutHints childHints{};
+  childHints.zStackHorizontalAlign = horizontalAlignment;
+  childHints.zStackVerticalAlign = verticalAlignment;
 
   float maxW = 0.f;
   float maxH = 0.f;
   for (Element const& ch : children) {
-    Size const s = ch.measure(ctx, childCs, LayoutHints{}, ts);
+    Size const s = ch.measure(ctx, childCs, childHints, ts);
     maxW = std::max(maxW, s.width);
     maxH = std::max(maxH, s.height);
   }

@@ -3,6 +3,7 @@
 #include <Flux/Core/Types.hpp>
 #include <Flux/UI/Alignment.hpp>
 
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -15,6 +16,7 @@ enum class StackAxis {
 
 struct StackMainAxisChild {
   float naturalMainSize = 0.f;
+  std::optional<float> flexBasis{};
   float minMainSize = 0.f;
   float flexGrow = 0.f;
   float flexShrink = 0.f;
@@ -25,6 +27,7 @@ struct StackMainAxisLayout {
   float containerMainSize = 0.f;
   float usedMainSize = 0.f;
   float startOffset = 0.f;
+  float itemSpacing = 0.f;
   bool constrained = false;
 };
 
@@ -39,7 +42,8 @@ struct StackLayoutResult {
 };
 
 StackMainAxisLayout layoutStackMainAxis(std::span<StackMainAxisChild const> children, float spacing,
-                                        float assignedMainSize, bool hasAssignedMainSize);
+                                        float assignedMainSize, bool hasAssignedMainSize,
+                                        JustifyContent justifyContent = JustifyContent::Start);
 
 StackLayoutResult layoutStack(StackAxis axis, Alignment crossAlignment,
                               std::span<Size const> measuredSizes,

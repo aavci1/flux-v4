@@ -6,11 +6,13 @@
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/ScrollView.hpp>
+#include <Flux/UI/Views/Select.hpp>
 #include <Flux/UI/Views/Spacer.hpp>
 #include <Flux/UI/Views/Text.hpp>
 #include <Flux/UI/Views/VStack.hpp>
 #include <Flux/UI/Views/ZStack.hpp>
 
+#include <functional>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -53,6 +55,172 @@ Element colorBlock(Color color, float width, float height, float radius) {
         .size(width, height)
         .fill(FillStyle::solid(color))
         .cornerRadius(CornerRadius {radius});
+}
+
+Element justifyPreviewBlock(Color color, float width, float height, float radius) {
+    return Rectangle {}
+        .size(width, height)
+        .fill(FillStyle::solid(color))
+        .cornerRadius(CornerRadius {radius});
+}
+
+std::vector<SelectOption> stackAxisOptions() {
+    return {
+        SelectOption {.label = "HStack", .detail = "Horizontal main axis"},
+        SelectOption {.label = "VStack", .detail = "Vertical main axis"},
+    };
+}
+
+std::vector<SelectOption> stackAlignmentOptions() {
+    return {
+        SelectOption {.label = "Start", .detail = "Pin to the cross-axis start edge"},
+        SelectOption {.label = "Center", .detail = "Center items on the cross axis"},
+        SelectOption {.label = "End", .detail = "Pin to the cross-axis end edge"},
+        SelectOption {.label = "Stretch", .detail = "Expand each item across the cross axis"},
+    };
+}
+
+std::vector<SelectOption> justifyContentOptions() {
+    return {
+        SelectOption {.label = "Start", .detail = "Pack items at the start"},
+        SelectOption {.label = "Center", .detail = "Pack items at the center"},
+        SelectOption {.label = "End", .detail = "Pack items at the end"},
+        SelectOption {.label = "SpaceBetween", .detail = "Distribute only the inner gaps"},
+        SelectOption {.label = "SpaceAround", .detail = "Share space around each item"},
+        SelectOption {.label = "SpaceEvenly", .detail = "Use even outer and inner gaps"},
+    };
+}
+
+std::string stackAxisLabel(int index) {
+    return index == 1 ? "VStack" : "HStack";
+}
+
+std::string stackAlignmentLabel(int index) {
+    switch (index) {
+    case 0:
+        return "Start";
+    case 2:
+        return "End";
+    case 3:
+        return "Stretch";
+    default:
+        return "Center";
+    }
+}
+
+std::string justifyContentLabel(int index) {
+    switch (index) {
+    case 0:
+        return "Start";
+    case 1:
+        return "Center";
+    case 2:
+        return "End";
+    case 3:
+        return "SpaceBetween";
+    case 4:
+        return "SpaceAround";
+    case 5:
+        return "SpaceEvenly";
+    default:
+        return "Start";
+    }
+}
+
+Alignment stackAlignmentFromIndex(int index) {
+    switch (index) {
+    case 0:
+        return Alignment::Start;
+    case 2:
+        return Alignment::End;
+    case 3:
+        return Alignment::Stretch;
+    default:
+        return Alignment::Center;
+    }
+}
+
+JustifyContent justifyContentFromIndex(int index) {
+    switch (index) {
+    case 1:
+        return JustifyContent::Center;
+    case 2:
+        return JustifyContent::End;
+    case 3:
+        return JustifyContent::SpaceBetween;
+    case 4:
+        return JustifyContent::SpaceAround;
+    case 5:
+        return JustifyContent::SpaceEvenly;
+    default:
+        return JustifyContent::Start;
+    }
+}
+
+Element makeJustifyControl(Theme const &theme, std::string label, State<int> selection,
+                           std::vector<SelectOption> options) {
+    return VStack {
+        .spacing = theme.space1,
+        .alignment = Alignment::Stretch,
+        .children = children(
+            Text {
+                .text = std::move(label),
+                .font = Font::caption(),
+                .color = Color::secondary(),
+                .horizontalAlignment = HorizontalAlignment::Leading,
+            },
+            Select {
+                .selectedIndex = selection,
+                .options = std::move(options),
+                .showDetailInTrigger = false,
+                .style = Select::Style {
+                    .menuMaxHeight = 220.f,
+                },
+            }
+        )
+    };
+}
+
+Element makeHStackJustifyPlaygroundPreview(Theme const &theme, Alignment alignment, JustifyContent justifyContent) {
+    return HStack {
+        .spacing = theme.space2,
+        .alignment = alignment,
+        .justifyContent = justifyContent,
+        .children = children(
+            justifyPreviewBlock(Color::accent(), 40.f, 44.f, theme.radiusMedium),
+            justifyPreviewBlock(Color::success(), 56.f, 88.f, theme.radiusMedium),
+            justifyPreviewBlock(Color::warning(), 32.f, 60.f, theme.radiusMedium)
+        ),
+    }
+        .size(0.f, 152.f)
+        .padding(theme.space3)
+        .fill(FillStyle::solid(Color::controlBackground()))
+        .cornerRadius(CornerRadius {theme.radiusMedium});
+}
+
+Element makeVStackJustifyPlaygroundPreview(Theme const &theme, Alignment alignment, JustifyContent justifyContent) {
+    return HStack {
+        .alignment = Alignment::Center,
+        .children = children(
+            Spacer {},
+            VStack {
+                .spacing = theme.space2,
+                .alignment = alignment,
+                .justifyContent = justifyContent,
+                .children = children(
+                    justifyPreviewBlock(Color::accent(), 88.f, 32.f, theme.radiusMedium),
+                    justifyPreviewBlock(Color::success(), 124.f, 44.f, theme.radiusMedium),
+                    justifyPreviewBlock(Color::warning(), 68.f, 36.f, theme.radiusMedium)
+                ),
+            }
+                .size(160.f, 188.f)
+                .padding(theme.space3)
+                .fill(FillStyle::solid(Color::controlBackground()))
+                .cornerRadius(CornerRadius {theme.radiusMedium}),
+            Spacer {}
+        ),
+    }
+        .size(0.f, 188.f);
 }
 
 Element makeVStackDemo(Theme const &theme) {
@@ -105,7 +273,7 @@ Element makeHStackDemo(Theme const &theme) {
             .children = children(
                 HStack {
                     .spacing = theme.space3,
-                    .alignment = Alignment::Stretch,
+                    .alignment = Alignment::Center,
                     .children = children(
                         colorBlock(Color::accent(), 56.f, 54.f, theme.radiusMedium).flex(2.f, 1.f, 0.f),
                         colorBlock(Color::success(), 56.f, 76.f, theme.radiusMedium),
@@ -160,6 +328,8 @@ Element makeZStackDemo(Theme const &theme) {
                     .cornerRadius(CornerRadius {theme.radiusLarge}),
                 VStack {
                     .spacing = theme.space1,
+                    .alignment = Alignment::Center,
+                    .justifyContent = JustifyContent::Center,
                     .children = children(
                         Text {
                             .text = "Overlay content",
@@ -224,16 +394,144 @@ Element makeGridDemo(Theme const &theme) {
         );
     }
 
+    std::vector<Element> spanCells;
+    spanCells.reserve(5);
+    spanCells.push_back(
+        HStack {
+            .spacing = theme.space3,
+            .alignment = Alignment::Center,
+            .children = children(
+                VStack {
+                    .spacing = theme.space1,
+                    .alignment = Alignment::Start,
+                    .children = children(
+                        Text {
+                            .text = "Span 3",
+                            .font = Font::headline(),
+                            .color = Color::accentForeground(),
+                            .horizontalAlignment = HorizontalAlignment::Leading,
+                        },
+                        Text {
+                            .text = "A full-width cell can establish rhythm before smaller rows continue.",
+                            .font = Font::caption(),
+                            .color = Color::accentForeground(),
+                            .horizontalAlignment = HorizontalAlignment::Leading,
+                            .wrapping = TextWrapping::Wrap,
+                        }
+                    )
+                }
+                    .flex(1.f, 1.f, 0.f),
+                colorBlock(Color::accentForeground(), 28.f, 28.f, theme.radiusSmall)
+            )
+        }
+            .padding(theme.space3)
+            .fill(FillStyle::solid(Color::accent()))
+            .cornerRadius(CornerRadius {theme.radiusMedium})
+    );
+    spanCells.push_back(
+        VStack {
+            .spacing = theme.space1,
+            .alignment = Alignment::Start,
+            .children = children(
+                Text {
+                    .text = "Span 1",
+                    .font = Font::caption(),
+                    .color = Color::primary(),
+                    .horizontalAlignment = HorizontalAlignment::Leading,
+                },
+                colorBlock(Color::secondary(), 26.f, 18.f, theme.radiusSmall)
+            )
+        }
+            .padding(theme.space3)
+            .fill(FillStyle::solid(Color::controlBackground()))
+            .cornerRadius(CornerRadius {theme.radiusMedium})
+    );
+    spanCells.push_back(
+        VStack {
+            .spacing = theme.space1,
+            .alignment = Alignment::Start,
+            .children = children(
+                Text {
+                    .text = "Span 2",
+                    .font = Font::headline(),
+                    .color = Color::primary(),
+                    .horizontalAlignment = HorizontalAlignment::Leading,
+                },
+                Text {
+                    .text = "Wider cells make detail panels and summaries easier to read.",
+                    .font = Font::caption(),
+                    .color = Color::secondary(),
+                    .horizontalAlignment = HorizontalAlignment::Leading,
+                    .wrapping = TextWrapping::Wrap,
+                }
+            )
+        }
+            .padding(theme.space3)
+            .fill(FillStyle::solid(Color::successBackground()))
+            .cornerRadius(CornerRadius {theme.radiusMedium})
+    );
+    spanCells.push_back(
+        VStack {
+            .spacing = theme.space1,
+            .alignment = Alignment::Start,
+            .children = children(
+                Text {
+                    .text = "Span 1",
+                    .font = Font::caption(),
+                    .color = Color::primary(),
+                    .horizontalAlignment = HorizontalAlignment::Leading,
+                },
+                colorBlock(Color::warning(), 20.f, 20.f, theme.radiusSmall)
+            )
+        }
+            .padding(theme.space3)
+            .fill(FillStyle::solid(Color::warningBackground()))
+            .cornerRadius(CornerRadius {theme.radiusMedium})
+    );
+    spanCells.push_back(
+        VStack {
+            .spacing = theme.space1,
+            .alignment = Alignment::Start,
+            .children = children(
+                Text {
+                    .text = "Span 1",
+                    .font = Font::caption(),
+                    .color = Color::primary(),
+                    .horizontalAlignment = HorizontalAlignment::Leading,
+                },
+                colorBlock(Color::danger(), 20.f, 20.f, theme.radiusSmall)
+            )
+        }
+            .padding(theme.space3)
+            .fill(FillStyle::solid(Color::dangerBackground()))
+            .cornerRadius(CornerRadius {theme.radiusMedium})
+    );
+
     return makeSectionCard(
         theme, "Grid",
-        "Fixed columns place children row-by-row. Mixed intrinsic sizes stay aligned inside each cell.",
-        Grid {
-            .columns = 3,
-            .horizontalSpacing = theme.space3,
-            .verticalSpacing = theme.space3,
-            .horizontalAlignment = Alignment::Center,
-            .verticalAlignment = Alignment::Center,
-            .children = std::move(cells),
+        "Fixed columns place children row-by-row. Mixed intrinsic sizes stay aligned inside each cell, and column spans let specific items stretch across multiple tracks.",
+        VStack {
+            .spacing = theme.space3,
+            .alignment = Alignment::Stretch,
+            .children = children(
+                Grid {
+                    .columns = 3,
+                    .horizontalSpacing = theme.space3,
+                    .verticalSpacing = theme.space3,
+                    .horizontalAlignment = Alignment::Center,
+                    .verticalAlignment = Alignment::Center,
+                    .children = std::move(cells),
+                },
+                Grid {
+                    .columns = 3,
+                    .horizontalSpacing = theme.space3,
+                    .verticalSpacing = theme.space3,
+                    .horizontalAlignment = Alignment::Start,
+                    .verticalAlignment = Alignment::Center,
+                    .children = std::move(spanCells),
+                    .columnSpans = {3u, 1u, 2u, 1u, 1u},
+                }
+            )
         }
             .padding(theme.space3)
             .fill(FillStyle::solid(Color::windowBackground()))
@@ -290,6 +588,134 @@ Element makeMixedCompositionDemo(Theme const &theme) {
     );
 }
 
+struct JustifyPlaygroundSection {
+    Element body() const {
+        Theme const &theme = useEnvironment<Theme>();
+        State<int> const axisIndex = useState<int>(0);
+        State<int> const alignmentIndex = useState<int>(1);
+        State<int> const justifyIndex = useState<int>(4);
+
+        Alignment const alignment = stackAlignmentFromIndex(*alignmentIndex);
+        JustifyContent const justifyContent = justifyContentFromIndex(*justifyIndex);
+        Element preview = *axisIndex == 0 ? makeHStackJustifyPlaygroundPreview(theme, alignment, justifyContent)
+                                          : makeVStackJustifyPlaygroundPreview(theme, alignment, justifyContent);
+
+        return makeSectionCard(
+            theme, "Justify Content",
+            "Use the selects to switch between HStack and VStack, cross-axis alignment, and flexbox-like justify-content behavior in one preview.",
+            VStack {
+                .spacing = theme.space3,
+                .alignment = Alignment::Stretch,
+                .children = children(
+                    makeJustifyControl(theme, "Axis", axisIndex, stackAxisOptions()),
+                    makeJustifyControl(theme, "Alignment", alignmentIndex, stackAlignmentOptions()),
+                    makeJustifyControl(theme, "Justify", justifyIndex, justifyContentOptions()),
+                    VStack {
+                        .spacing = theme.space2,
+                        .alignment = Alignment::Stretch,
+                        .children = children(
+                            Text {
+                                .text = stackAxisLabel(*axisIndex) + " using " + stackAlignmentLabel(*alignmentIndex) +
+                                        " alignment and " + justifyContentLabel(*justifyIndex) + " distribution.",
+                                .font = Font::footnote(),
+                                .color = Color::secondary(),
+                                .horizontalAlignment = HorizontalAlignment::Leading,
+                                .wrapping = TextWrapping::Wrap,
+                            },
+                            std::move(preview)
+                        )
+                    }
+                        .padding(theme.space3)
+                        .fill(FillStyle::solid(Color::windowBackground()))
+                        .cornerRadius(CornerRadius {theme.radiusMedium})
+                )
+            }
+        );
+    }
+};
+
+Element makeBasisChip(Theme const &theme, std::string text, Color fill, Color foreground) {
+    return Text {
+        .text = std::move(text),
+        .font = Font::headline(),
+        .color = foreground,
+        .horizontalAlignment = HorizontalAlignment::Leading,
+    }
+        .padding(theme.space2, theme.space3, theme.space2, theme.space3)
+        .fill(FillStyle::solid(fill))
+        .cornerRadius(CornerRadius {theme.radiusMedium});
+}
+
+Element makeFlexBasisLane(Theme const &theme, std::string label, std::string caption,
+                          std::function<Element(Element)> applyLeft,
+                          std::function<Element(Element)> applyRight) {
+    return VStack {
+        .spacing = theme.space2,
+        .alignment = Alignment::Stretch,
+        .children = children(
+            Text {
+                .text = std::move(label),
+                .font = Font::headline(),
+                .color = Color::primary(),
+                .horizontalAlignment = HorizontalAlignment::Leading,
+            },
+            Text {
+                .text = std::move(caption),
+                .font = Font::caption(),
+                .color = Color::secondary(),
+                .horizontalAlignment = HorizontalAlignment::Leading,
+                .wrapping = TextWrapping::Wrap,
+            },
+            HStack {
+                .spacing = theme.space2,
+                .alignment = Alignment::Stretch,
+                .children = children(
+                    applyLeft(makeBasisChip(theme, "Short", Color::accent(), Color::accentForeground())),
+                    applyRight(makeBasisChip(theme, "A much wider content block", Color::success(), Color::accentForeground()))
+                ),
+            }
+                .size(0.f, 56.f)
+                .padding(theme.space2)
+                .fill(FillStyle::solid(Color::controlBackground()))
+                .cornerRadius(CornerRadius {theme.radiusMedium})
+        )
+    };
+}
+
+Element makeFlexBasisDemo(Theme const &theme) {
+    return makeSectionCard(
+        theme, "Flex Basis",
+        "Equal grow factors can either preserve intrinsic size or ignore it. `flex(1)` and `flex(1, 1)` both use an auto basis, while `flex(..., 0)` starts from zero for equal columns.",
+        VStack {
+            .spacing = theme.space3,
+            .alignment = Alignment::Stretch,
+            .children = children(
+                makeFlexBasisLane(
+                    theme, "flex(1, 1)",
+                    "Auto basis keeps the wider item wider, then distributes the remaining width equally.",
+                    [](Element chip) { return std::move(chip).flex(1.f, 1.f); },
+                    [](Element chip) { return std::move(chip).flex(1.f, 1.f); }
+                ),
+                makeFlexBasisLane(
+                    theme, "flex(1)",
+                    "The shorthand uses grow 1, shrink 1, and the same auto basis, so it matches the relative sizing above.",
+                    [](Element chip) { return std::move(chip).flex(1.f); },
+                    [](Element chip) { return std::move(chip).flex(1.f); }
+                ),
+                makeFlexBasisLane(
+                    theme, "flex(1, 1, 0)",
+                    "Zero basis ignores intrinsic width first, so equal grow factors produce equal columns.",
+                    [](Element chip) { return std::move(chip).flex(1.f, 1.f, 0.f); },
+                    [](Element chip) { return std::move(chip).flex(1.f, 1.f, 0.f); }
+                )
+            )
+        }
+            .padding(theme.space3)
+            .fill(FillStyle::solid(Color::windowBackground()))
+            .cornerRadius(CornerRadius {theme.radiusMedium})
+    );
+}
+
 } // namespace
 
 struct StackDemoRoot {
@@ -311,7 +737,7 @@ struct StackDemoRoot {
                         },
                         Text {
                             .text =
-                                "Focused examples for VStack, HStack, ZStack, Grid, and how they compose in practice.",
+                                "Focused examples for stacks, grids, an interactive justify-content playground, flex-basis behavior, and how they compose in practice.",
                             .font = Font::body(),
                             .color = Color::secondary(),
                             .horizontalAlignment = HorizontalAlignment::Leading,
@@ -321,7 +747,9 @@ struct StackDemoRoot {
                         makeHStackDemo(theme),
                         makeZStackDemo(theme),
                         makeGridDemo(theme),
-                        makeMixedCompositionDemo(theme)
+                        makeMixedCompositionDemo(theme),
+                        Element {JustifyPlaygroundSection {}},
+                        makeFlexBasisDemo(theme)
                     )
                 } //
                     .padding(theme.space5)

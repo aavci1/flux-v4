@@ -676,6 +676,222 @@ TEST_CASE("SceneBuilder: centered HStack vertically centers shorter children wit
   CHECK(tree->children()[2]->position.y == doctest::Approx(13.f));
 }
 
+TEST_CASE("SceneBuilder: HStack justifyContent space-between distributes remaining width across gaps") {
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 100.f;
+  constraints.maxHeight = 40.f;
+
+  Element row = HStack{
+      .spacing = 0.f,
+      .alignment = Alignment::Start,
+      .justifyContent = JustifyContent::SpaceBetween,
+      .children = children(
+          Element{Rectangle{}}.size(10.f, 10.f),
+          Element{Rectangle{}}.size(10.f, 10.f),
+          Element{Rectangle{}}.size(10.f, 10.f)),
+  };
+
+  std::unique_ptr<SceneNode> tree = builder.build(row, NodeId{1ull}, constraints);
+  REQUIRE(tree != nullptr);
+  REQUIRE(tree->children().size() == 3);
+  CHECK(tree->bounds.width == doctest::Approx(100.f));
+  CHECK(tree->children()[0]->position.x == doctest::Approx(0.f));
+  CHECK(tree->children()[1]->position.x == doctest::Approx(45.f));
+  CHECK(tree->children()[2]->position.x == doctest::Approx(90.f));
+}
+
+TEST_CASE("SceneBuilder: VStack justifyContent end packs children against the bottom") {
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 60.f;
+  constraints.maxHeight = 100.f;
+
+  Element column = VStack{
+      .spacing = 5.f,
+      .alignment = Alignment::Start,
+      .justifyContent = JustifyContent::End,
+      .children = children(
+          Element{Rectangle{}}.size(20.f, 10.f),
+          Element{Rectangle{}}.size(20.f, 20.f)),
+  };
+
+  std::unique_ptr<SceneNode> tree = builder.build(column, NodeId{1ull}, constraints);
+  REQUIRE(tree != nullptr);
+  REQUIRE(tree->children().size() == 2);
+  CHECK(tree->bounds.height == doctest::Approx(100.f));
+  CHECK(tree->children()[0]->position.y == doctest::Approx(65.f));
+  CHECK(tree->children()[1]->position.y == doctest::Approx(80.f));
+}
+
+TEST_CASE("SceneBuilder: HStack flex with auto basis places later children after a wider first slot") {
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 700.f;
+  constraints.maxHeight = 40.f;
+
+  Element row = HStack{
+      .spacing = 0.f,
+      .alignment = Alignment::Start,
+      .children = children(
+          Element{Rectangle{}}.size(100.f, 20.f).flex(1.f, 1.f),
+          Element{Rectangle{}}.size(200.f, 20.f).flex(1.f, 1.f)),
+  };
+
+  std::unique_ptr<SceneNode> tree = builder.build(row, NodeId{1ull}, constraints);
+  REQUIRE(tree != nullptr);
+  REQUIRE(tree->children().size() == 2);
+
+  auto findLeafRects = [](SceneNode const& root) {
+    std::vector<RectSceneNode const*> rects{};
+    std::function<void(SceneNode const&)> walk = [&](SceneNode const& node) {
+      if (auto const* rect = dynamic_cast<RectSceneNode const*>(&node)) {
+        rects.push_back(rect);
+      }
+      for (std::unique_ptr<SceneNode> const& child : node.children()) {
+        walk(*child);
+      }
+    };
+    walk(root);
+    return rects;
+  };
+
+  std::vector<RectSceneNode const*> rects = findLeafRects(*tree);
+  REQUIRE(rects.size() == 2);
+  CHECK(tree->children()[0]->position.x == doctest::Approx(0.f));
+  CHECK(tree->children()[1]->position.x == doctest::Approx(300.f));
+  CHECK(rects[0]->size.width == doctest::Approx(300.f));
+  CHECK(rects[1]->size.width == doctest::Approx(400.f));
+}
+
+TEST_CASE("Element: flex shorthand uses auto basis like flex(1, 1)") {
+  Element shorthand = Element{Rectangle{}}.size(100.f, 20.f).flex(1.f);
+  Element explicitAuto = Element{Rectangle{}}.size(100.f, 20.f).flex(1.f, 1.f);
+  Element explicitZero = Element{Rectangle{}}.size(100.f, 20.f).flex(1.f, 1.f, 0.f);
+
+  CHECK(shorthand.flexGrow() == doctest::Approx(1.f));
+  CHECK(shorthand.flexShrink() == doctest::Approx(1.f));
+  CHECK_FALSE(shorthand.flexBasis().has_value());
+
+  CHECK(explicitAuto.flexGrow() == doctest::Approx(1.f));
+  CHECK(explicitAuto.flexShrink() == doctest::Approx(1.f));
+  CHECK_FALSE(explicitAuto.flexBasis().has_value());
+
+  REQUIRE(explicitZero.flexBasis().has_value());
+  CHECK(*explicitZero.flexBasis() == doctest::Approx(0.f));
+}
+
+TEST_CASE("SceneBuilder: HStack flex with zero basis places later children after an equal first slot") {
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 700.f;
+  constraints.maxHeight = 40.f;
+
+  Element row = HStack{
+      .spacing = 0.f,
+      .alignment = Alignment::Start,
+      .children = children(
+          Element{Rectangle{}}.size(100.f, 20.f).flex(1.f, 1.f, 0.f),
+          Element{Rectangle{}}.size(200.f, 20.f).flex(1.f, 1.f, 0.f)),
+  };
+
+  std::unique_ptr<SceneNode> tree = builder.build(row, NodeId{1ull}, constraints);
+  REQUIRE(tree != nullptr);
+  REQUIRE(tree->children().size() == 2);
+
+  auto findLeafRects = [](SceneNode const& root) {
+    std::vector<RectSceneNode const*> rects{};
+    std::function<void(SceneNode const&)> walk = [&](SceneNode const& node) {
+      if (auto const* rect = dynamic_cast<RectSceneNode const*>(&node)) {
+        rects.push_back(rect);
+      }
+      for (std::unique_ptr<SceneNode> const& child : node.children()) {
+        walk(*child);
+      }
+    };
+    walk(root);
+    return rects;
+  };
+
+  std::vector<RectSceneNode const*> rects = findLeafRects(*tree);
+  REQUIRE(rects.size() == 2);
+  CHECK(tree->children()[0]->position.x == doctest::Approx(0.f));
+  CHECK(tree->children()[1]->position.x == doctest::Approx(350.f));
+  CHECK(rects[0]->size.width == doctest::Approx(350.f));
+  CHECK(rects[1]->size.width == doctest::Approx(350.f));
+}
+
+TEST_CASE("SceneBuilder: HStack center alignment uses the assigned row height") {
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 240.f;
+  constraints.maxHeight = 152.f;
+
+  Element row = Element{HStack{
+      .spacing = 8.f,
+      .alignment = Alignment::Center,
+      .children = children(
+          Element{Rectangle{}}.size(40.f, 44.f),
+          Element{Rectangle{}}.size(56.f, 88.f),
+          Element{Rectangle{}}.size(32.f, 60.f)),
+  }}
+                    .size(0.f, 152.f);
+
+  std::unique_ptr<SceneNode> tree = builder.build(row, NodeId{1ull}, constraints);
+  REQUIRE(tree != nullptr);
+
+  std::function<SceneNode const*(SceneNode const*)> findCenteredRow = [&](SceneNode const* node) -> SceneNode const* {
+    if (!node) {
+      return nullptr;
+    }
+    if (node->kind() == SceneNodeKind::Group && node->children().size() == 3 &&
+        node->children()[0]->kind() == SceneNodeKind::Rect &&
+        node->children()[1]->kind() == SceneNodeKind::Rect &&
+        node->children()[2]->kind() == SceneNodeKind::Rect) {
+      return node;
+    }
+    for (std::unique_ptr<SceneNode> const& child : node->children()) {
+      if (SceneNode const* match = findCenteredRow(child.get())) {
+        return match;
+      }
+    }
+    return nullptr;
+  };
+
+  SceneNode const* centeredRow = findCenteredRow(tree.get());
+  REQUIRE(centeredRow != nullptr);
+  REQUIRE(centeredRow->children().size() == 3);
+  CHECK(centeredRow->bounds.height == doctest::Approx(152.f));
+  CHECK(centeredRow->children()[0]->position.y == doctest::Approx(54.f));
+  CHECK(centeredRow->children()[1]->position.y == doctest::Approx(32.f));
+  CHECK(centeredRow->children()[2]->position.y == doctest::Approx(46.f));
+}
+
 TEST_CASE("SceneBuilder: grid rows follow wrapped content height after parent-assigned rebuild slots") {
   VariableTextSystem textSystem{};
   EnvironmentLayer env{};
@@ -804,6 +1020,46 @@ TEST_CASE("SceneBuilder: centered ZStack overlay shrink-wraps intrinsic children
   CHECK(overlayColumn->children()[1]->position.y == doctest::Approx(18.f));
 }
 
+TEST_CASE("SceneBuilder: centered ZStack centers an HStack using its shrink-wrapped width") {
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 260.f;
+  constraints.maxHeight = 104.f;
+
+  Element overlay = ZStack{
+      .horizontalAlignment = Alignment::Center,
+      .verticalAlignment = Alignment::Center,
+      .children = {
+          Element{Rectangle{}}.size(260.f, 104.f),
+          HStack{
+              .spacing = 8.f,
+              .alignment = Alignment::Center,
+              .children = {
+                  Element{Rectangle{}}.size(22.f, 20.f),
+                  Element{Rectangle{}}.size(22.f, 36.f),
+                  Element{Rectangle{}}.size(22.f, 28.f),
+              },
+          },
+      },
+  };
+
+  std::unique_ptr<SceneNode> tree = builder.build(overlay, NodeId{1ull}, constraints);
+  REQUIRE(tree != nullptr);
+  REQUIRE(tree->children().size() == 2);
+
+  SceneNode const* row = tree->children()[1].get();
+  REQUIRE(row != nullptr);
+  CHECK(row->bounds.width == doctest::Approx(82.f));
+  CHECK(row->bounds.height == doctest::Approx(36.f));
+  CHECK(row->position.x == doctest::Approx(89.f));
+  CHECK(row->position.y == doctest::Approx(34.f));
+}
+
 TEST_CASE("SceneBuilder: ZStack preserves child-local position modifiers") {
   NullTextSystem textSystem{};
   EnvironmentLayer env{};
@@ -901,9 +1157,9 @@ TEST_CASE("SceneBuilder: HStack flexed explicit leaves stay collapsed when resiz
   REQUIRE(tree != nullptr);
   std::vector<RectSceneNode const*> rects = findLeafRects(*tree);
   REQUIRE(rects.size() == 4);
-  CHECK(rects[0]->size.width == doctest::Approx(1.5f));
+  CHECK(rects[0]->size.width == doctest::Approx(2.f));
   CHECK(rects[1]->size.width == doctest::Approx(56.f));
-  CHECK(rects[2]->size.width == doctest::Approx(1.5f));
+  CHECK(rects[2]->size.width == doctest::Approx(1.f));
   CHECK(rects[3]->size.width == doctest::Approx(56.f));
 
   tree = builder.build(makeRow(), NodeId{1ull}, narrower, std::move(tree));
@@ -1036,14 +1292,16 @@ TEST_CASE("SceneBuilder: layout demo overlay text column stays centered after na
   SceneNode const* overlayStack = findOverlayStack(tree.get());
   REQUIRE(overlayStack != nullptr);
   SceneNode const* overlayColumn = overlayStack->children()[2].get();
-  CHECK(overlayColumn->position.x == doctest::Approx(14.f));
-  CHECK(overlayColumn->position.y == doctest::Approx(74.f));
-  CHECK(overlayColumn->bounds.width == doctest::Approx(210.f));
-  CHECK(overlayColumn->bounds.height == doctest::Approx(32.f));
+  CHECK(overlayColumn->position.x == doctest::Approx(0.f));
+  CHECK(overlayColumn->position.y == doctest::Approx(0.f));
+  CHECK(overlayColumn->bounds.width == doctest::Approx(238.f));
+  CHECK(overlayColumn->bounds.height == doctest::Approx(180.f));
   REQUIRE(overlayColumn->children().size() == 2);
-  CHECK(overlayColumn->children()[0]->position.x == doctest::Approx(52.5f));
+  CHECK(overlayColumn->children()[0]->position.x == doctest::Approx(66.5f));
+  CHECK(overlayColumn->children()[0]->position.y == doctest::Approx(74.f));
   CHECK(overlayColumn->children()[0]->bounds.width == doctest::Approx(105.f));
-  CHECK(overlayColumn->children()[1]->position.x == doctest::Approx(0.f));
+  CHECK(overlayColumn->children()[1]->position.x == doctest::Approx(14.f));
+  CHECK(overlayColumn->children()[1]->position.y == doctest::Approx(92.f));
   CHECK(overlayColumn->children()[1]->bounds.width == doctest::Approx(210.f));
 }
 

@@ -13,4 +13,16 @@ namespace flux {
 /// \ref HorizontalAlignment / \ref VerticalAlignment.
 enum class Alignment : std::uint8_t { Start, Center, End, Stretch };
 
+/// Main-axis content distribution for single-axis stacks (`VStack`, `HStack`), similar to CSS
+/// `justify-content`. `spacing` remains the minimum gap between adjacent children; distributed values
+/// add any remaining free space on top of that base gap.
+enum class JustifyContent : std::uint8_t {
+  Start,
+  Center,
+  End,
+  SpaceBetween,
+  SpaceAround,
+  SpaceEvenly,
+};
+
 } // namespace flux

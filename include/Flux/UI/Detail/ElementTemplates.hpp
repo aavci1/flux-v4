@@ -131,6 +131,7 @@ struct Element::Model : Concept {
                TextSystem& textSystem) const override;
   float flexGrow() const override { return detail::flexGrowOf(value); }
   float flexShrink() const override { return detail::flexShrinkOf(value); }
+  std::optional<float> flexBasis() const override { return detail::flexBasisOf(value); }
   float minMainSize() const override { return detail::minMainSizeOf(value); }
   bool leafDrawsFillStrokeShadowFromModifiers() const override {
     if constexpr (std::is_same_v<C, Rectangle> || std::is_same_v<C, PathShape>) {

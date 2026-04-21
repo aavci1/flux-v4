@@ -160,8 +160,18 @@ Element ViewModifiers<Derived>::cursor(Cursor c) && {
 }
 
 template<typename Derived>
-Element ViewModifiers<Derived>::flex(float grow, float shrink, float minMain) && {
-  return Element{std::move(static_cast<Derived&>(*this))}.flex(grow, shrink, minMain);
+Element ViewModifiers<Derived>::flex(float grow) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.flex(grow);
+}
+
+template<typename Derived>
+Element ViewModifiers<Derived>::flex(float grow, float shrink) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.flex(grow, shrink);
+}
+
+template<typename Derived>
+Element ViewModifiers<Derived>::flex(float grow, float shrink, float basis) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.flex(grow, shrink, basis);
 }
 
 template<typename Derived>

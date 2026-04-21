@@ -614,7 +614,7 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
             .spacing = theme.space1,
             .alignment = Alignment::Center,
             .children = children(
-                std::move(triggerTextBlock).flex(triggerMode == SelectTriggerMode::Field ? 1.f : 0.f, 1.f, 0.f),
+                std::move(triggerTextBlock).flex(triggerMode == SelectTriggerMode::Field ? 1.f : 0.f, 1.f),
                 Icon {
                     .name = open ? IconName::KeyboardArrowUp : IconName::KeyboardArrowDown,
                     .size = 18.f,

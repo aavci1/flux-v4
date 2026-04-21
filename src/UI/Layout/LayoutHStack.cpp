@@ -14,11 +14,21 @@
 namespace flux {
 using namespace flux::layout;
 
-Size HStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints, LayoutHints const&,
+namespace {
+
+bool zStackAxisStretches(std::optional<Alignment> alignment) {
+  return !alignment || *alignment == Alignment::Stretch;
+}
+
+} // namespace
+
+Size HStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
                      TextSystem& ts) const {
   ContainerMeasureScope scope(ctx);
-  float const assignedHCross = stackMainAxisSpan(0.f, constraints.maxHeight);
-  bool const heightConstrained = std::isfinite(assignedHCross) && assignedHCross > 0.f;
+  float const availableHeight = stackMainAxisSpan(0.f, constraints.maxHeight);
+  bool const heightAssigned = zStackAxisStretches(hints.zStackVerticalAlign);
+  float const assignedHCross = heightAssigned ? availableHeight : 0.f;
+  bool const heightConstrained = heightAssigned && std::isfinite(assignedHCross) && assignedHCross > 0.f;
   bool const stretchCrossAxis = alignment == Alignment::Stretch && heightConstrained;
   LayoutConstraints childCs = constraints;
   childCs.maxWidth = std::numeric_limits<float>::infinity();
@@ -43,19 +53,22 @@ Size HStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints, 
     sizes.push_back(s);
     stackChildren.push_back(StackMainAxisChild{
         .naturalMainSize = s.width,
+        .flexBasis = ch.flexBasis(),
         .minMainSize = ch.minMainSize(),
         .flexGrow = ch.flexGrow(),
         .flexShrink = ch.flexShrink(),
     });
   }
 
-  float const assignedW = stackMainAxisSpan(0.f, constraints.maxWidth);
-  bool const widthConstrained = std::isfinite(assignedW) && assignedW > 0.f;
+  float const availableWidth = stackMainAxisSpan(0.f, constraints.maxWidth);
+  bool const widthAssigned = zStackAxisStretches(hints.zStackHorizontalAlign);
+  float const assignedW = widthAssigned ? availableWidth : 0.f;
+  bool const widthConstrained = widthAssigned && std::isfinite(assignedW) && assignedW > 0.f;
   if (!widthConstrained && n > 0) {
     warnFlexGrowIfParentMainAxisUnconstrained(children, widthConstrained);
   }
   StackMainAxisLayout const mainLayout =
-      layoutStackMainAxis(stackChildren, spacing, assignedW, widthConstrained);
+      layoutStackMainAxis(stackChildren, spacing, assignedW, widthConstrained, justifyContent);
 
   if (StateStore* store = StateStore::current()) {
     store->resetSlotCursors();
@@ -81,7 +94,7 @@ Size HStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints, 
 
   StackLayoutResult const layoutResult =
       layoutStack(StackAxis::Horizontal, alignment, sizes, mainLayout.mainSizes,
-                  spacing, mainLayout.containerMainSize, mainLayout.startOffset, assignedHCross,
+                  mainLayout.itemSpacing, mainLayout.containerMainSize, mainLayout.startOffset, assignedHCross,
                   heightConstrained);
   return layoutResult.containerSize;
 }

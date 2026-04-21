@@ -43,25 +43,30 @@ Rect resolveLeafLayoutBounds(Rect const& explicitBox, Rect const& childFrame,
   if (childFrame.width <= 0.f && childFrame.height <= 0.f) {
     return resolveLeafBounds(explicitBox, childFrame, constraints);
   }
-  // Explicit width and height from modifiers: align within stack-assigned childFrame using hints.
-  if (hints.hStackCrossAlign && childFrame.height > explicitBox.height + 1e-4f) {
+  // In an HStack, the assigned slot width should win over an explicit width so flex-grow and
+  // flex-shrink can expand or collapse leaves across the main axis while still using the explicit
+  // height on the cross axis.
+  if (hints.hStackCrossAlign) {
     float const x = childFrame.x;
     float const w = childFrame.width;
     float y = childFrame.y;
-    switch (*hints.hStackCrossAlign) {
-    case Alignment::Start:
-    case Alignment::Stretch:
-      y = childFrame.y;
-      break;
-    case Alignment::Center:
-      y = childFrame.y + (childFrame.height - explicitBox.height) * 0.5f;
-      break;
-    case Alignment::End:
-      y = childFrame.y + childFrame.height - explicitBox.height;
-      break;
+    if (childFrame.height > explicitBox.height + 1e-4f) {
+      switch (*hints.hStackCrossAlign) {
+      case Alignment::Start:
+      case Alignment::Stretch:
+        y = childFrame.y;
+        break;
+      case Alignment::Center:
+        y = childFrame.y + (childFrame.height - explicitBox.height) * 0.5f;
+        break;
+      case Alignment::End:
+        y = childFrame.y + childFrame.height - explicitBox.height;
+        break;
+      }
     }
-    float const outH = *hints.hStackCrossAlign == Alignment::Stretch ? childFrame.height
-                                                                     : explicitBox.height;
+    float const outH = *hints.hStackCrossAlign == Alignment::Stretch && childFrame.height > 0.f
+                           ? childFrame.height
+                           : explicitBox.height;
     return Rect{x, y, w, outH};
   }
   // When vStackCrossAlign is set, center (or lead/trail) the explicit box horizontally in the slot.

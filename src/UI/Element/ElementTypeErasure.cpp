@@ -22,6 +22,7 @@ Element::Element(Element const& other)
     : impl_(other.impl_ ? other.impl_->clone() : nullptr)
     , flexGrowOverride_(other.flexGrowOverride_)
     , flexShrinkOverride_(other.flexShrinkOverride_)
+    , flexBasisOverride_(other.flexBasisOverride_)
     , minMainSizeOverride_(other.minMainSizeOverride_)
     , envLayer_(other.envLayer_)
     , modifiers_(other.modifiers_)
@@ -33,6 +34,7 @@ Element& Element::operator=(Element const& other) {
     impl_ = other.impl_ ? other.impl_->clone() : nullptr;
     flexGrowOverride_ = other.flexGrowOverride_;
     flexShrinkOverride_ = other.flexShrinkOverride_;
+    flexBasisOverride_ = other.flexBasisOverride_;
     minMainSizeOverride_ = other.minMainSizeOverride_;
     envLayer_ = other.envLayer_;
     modifiers_ = other.modifiers_;
@@ -50,14 +52,38 @@ float Element::flexShrink() const {
   return flexShrinkOverride_.value_or(impl_->flexShrink());
 }
 
+std::optional<float> Element::flexBasis() const {
+  if (flexBasisOverride_.has_value()) {
+    return flexBasisOverride_;
+  }
+  return impl_->flexBasis();
+}
+
 float Element::minMainSize() const {
   return minMainSizeOverride_.value_or(impl_->minMainSize());
 }
 
-Element Element::flex(float grow, float shrink, float minMain) && {
+Element Element::flex(float grow) && {
+  flexGrowOverride_ = grow;
+  flexShrinkOverride_ = 1.f;
+  flexBasisOverride_.reset();
+  minMainSizeOverride_.reset();
+  return std::move(*this);
+}
+
+Element Element::flex(float grow, float shrink) && {
   flexGrowOverride_ = grow;
   flexShrinkOverride_ = shrink;
-  minMainSizeOverride_ = minMain;
+  flexBasisOverride_.reset();
+  minMainSizeOverride_.reset();
+  return std::move(*this);
+}
+
+Element Element::flex(float grow, float shrink, float basis) && {
+  flexGrowOverride_ = grow;
+  flexShrinkOverride_ = shrink;
+  flexBasisOverride_ = std::max(0.f, basis);
+  minMainSizeOverride_.reset();
   return std::move(*this);
 }
 

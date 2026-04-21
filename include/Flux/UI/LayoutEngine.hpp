@@ -22,6 +22,14 @@ struct LayoutHints {
   /// Set by `VStack` / `ForEach` for each row (`VStack::alignment`). `Text` maps to
   /// \ref TextLayoutOptions in `Element.cpp`. Cleared by `HStack`, `Grid`, `OffsetView`, `ZStack`.
   std::optional<Alignment> vStackCrossAlign;
+  /// Set by `ZStack` for direct children. `Stretch` means the child owns the full shared slot on
+  /// the horizontal axis; the other alignments mean the child should shrink-wrap first and be
+  /// offset afterward.
+  std::optional<Alignment> zStackHorizontalAlign;
+  /// Set by `ZStack` for direct children. `Stretch` means the child owns the full shared slot on
+  /// the vertical axis; the other alignments mean the child should shrink-wrap first and be offset
+  /// afterward.
+  std::optional<Alignment> zStackVerticalAlign;
 };
 
 struct LayoutConstraints {
