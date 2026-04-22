@@ -1482,7 +1482,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     }
     LayoutConstraints const childConstraints = layout::scrollChildConstraints(ax, innerConstraints, viewport);
 
-    std::vector<Element> contentChildren = scrollView.children;
+    std::vector<Element> const& contentChildren = scrollView.children;
     std::vector<Size> sizes{};
     sizes.reserve(contentChildren.size());
     for (std::size_t i = 0; i < contentChildren.size(); ++i) {

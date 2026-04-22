@@ -101,6 +101,72 @@ TEST_CASE("SceneBuilder: scroll rebuild reuses descendants without repaint dirti
   CHECK_FALSE(firstB->paintDirty());
 }
 
+TEST_CASE("SceneBuilder: scroll offset changes retain stable composite children") {
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  StoreScope scope{};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 80.f;
+  constraints.maxHeight = 40.f;
+  int childCalls = 0;
+
+  struct CompositeRootScrollViewWithRetainedChild {
+    int* childCalls = nullptr;
+
+    Element body() const {
+      return ScrollView{
+          .axis = ScrollAxis::Vertical,
+          .children = {
+              Element{RetainedTextChild{childCalls}}.key("child"),
+              keyedRect("tail", 60.f, 60.f),
+          },
+      };
+    }
+  };
+
+  Element root = Element{CompositeRootScrollViewWithRetainedChild{&childCalls}};
+
+  scope.store.beginRebuild(true);
+  std::unique_ptr<SceneNode> tree = builder.build(root, NodeId{1ull}, constraints);
+  scope.store.endRebuild();
+
+  REQUIRE(tree);
+  auto* scrollRoot = dynamic_cast<ModifierSceneNode*>(tree.get());
+  REQUIRE(scrollRoot != nullptr);
+  REQUIRE(scrollRoot->children().size() == 1);
+  SceneNode* viewportGroup = scrollRoot->children()[0].get();
+  REQUIRE(viewportGroup->children().size() >= 1);
+  SceneNode* contentGroup = viewportGroup->children()[0].get();
+  REQUIRE(contentGroup->children().size() == 2);
+  SceneNode* retainedChild = contentGroup->children()[0].get();
+  REQUIRE(dynamic_cast<TextSceneNode*>(retainedChild) != nullptr);
+  int const initialChildCalls = childCalls;
+  REQUIRE(initialChildCalls > 0);
+
+  REQUIRE(scrollRoot->interaction() != nullptr);
+  REQUIRE(scrollRoot->interaction()->onScroll);
+  scrollRoot->interaction()->onScroll(Vec2{0.f, -12.f});
+  scope.store.markCompositeDirty(ComponentKey{LocalId::fromString("$scroll-state")});
+
+  scope.store.beginRebuild(false);
+  tree = builder.build(root, NodeId{1ull}, constraints, std::move(tree));
+  scope.store.endRebuild();
+
+  REQUIRE(tree);
+  scrollRoot = dynamic_cast<ModifierSceneNode*>(tree.get());
+  REQUIRE(scrollRoot != nullptr);
+  viewportGroup = scrollRoot->children()[0].get();
+  REQUIRE(viewportGroup->children().size() >= 1);
+  contentGroup = viewportGroup->children()[0].get();
+  REQUIRE(contentGroup->children().size() == 2);
+  CHECK(contentGroup->children()[0].get() == retainedChild);
+  CHECK(contentGroup->children()[0]->position.y == doctest::Approx(-12.f));
+  CHECK(childCalls == initialChildCalls);
+}
+
 TEST_CASE("SceneBuilder: scroll view local wheel state moves content and shows indicators") {
   NullTextSystem textSystem{};
   EnvironmentLayer env{};

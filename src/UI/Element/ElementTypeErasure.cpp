@@ -27,7 +27,7 @@ Element::Element(Element const& other)
     , envLayer_(other.envLayer_)
     , modifiers_(other.modifiers_)
     , key_(other.key_)
-    , measureId_(detail::nextElementMeasureId()) {}
+    , measureId_(other.measureId_) {}
 
 Element& Element::operator=(Element const& other) {
   if (this != &other) {
@@ -39,7 +39,7 @@ Element& Element::operator=(Element const& other) {
     envLayer_ = other.envLayer_;
     modifiers_ = other.modifiers_;
     key_ = other.key_;
-    measureId_ = detail::nextElementMeasureId();
+    measureId_ = other.measureId_;
   }
   return *this;
 }
