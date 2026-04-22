@@ -32,6 +32,8 @@ struct Button : ViewModifiers<Button> {
         float cornerRadius = kFloatFromTheme;
         Color accentColor = Color::theme();
         Color destructiveColor = Color::theme();
+
+        bool operator==(Style const& other) const = default;
     };
 
     std::string label;
@@ -39,6 +41,13 @@ struct Button : ViewModifiers<Button> {
     bool disabled = false;
     Style style {};
     std::function<void()> onTap;
+
+    bool operator==(Button const& other) const {
+        return label == other.label && variant == other.variant && disabled == other.disabled &&
+               style == other.style;
+    }
+
+    void updateRetainedInputs() const;
     Element body() const;
 };
 
@@ -46,6 +55,8 @@ struct LinkButton : ViewModifiers<LinkButton> {
     struct Style {
         Font font = Font::theme();
         Color color = Color::theme();
+
+        bool operator==(Style const& other) const = default;
     };
 
     std::string label;
@@ -53,6 +64,11 @@ struct LinkButton : ViewModifiers<LinkButton> {
     Style style {};
     std::function<void()> onTap;
 
+    bool operator==(LinkButton const& other) const {
+        return label == other.label && disabled == other.disabled && style == other.style;
+    }
+
+    void updateRetainedInputs() const;
     Element body() const;
 };
 
@@ -61,6 +77,8 @@ struct IconButton : ViewModifiers<IconButton> {
         float size = kFloatFromTheme;
         float weight = kFloatFromTheme;
         Color color = Color::theme();
+
+        bool operator==(Style const& other) const = default;
     };
 
     IconName icon {};
@@ -68,6 +86,11 @@ struct IconButton : ViewModifiers<IconButton> {
     Style style {};
     std::function<void()> onTap;
 
+    bool operator==(IconButton const& other) const {
+        return icon == other.icon && disabled == other.disabled && style == other.style;
+    }
+
+    void updateRetainedInputs() const;
     Element body() const;
 };
 

@@ -53,6 +53,7 @@
 #include "UI/Layout/Algorithms/ScrollLayout.hpp"
 #include "UI/Layout/Algorithms/StackLayout.hpp"
 #include "UI/Layout/LayoutHelpers.hpp"
+#include "UI/SceneBuilder/MeasureLayoutCache.hpp"
 #include "UI/SceneBuilder/NodeReuse.hpp"
 
 namespace flux {
@@ -511,6 +512,43 @@ Size assignedOuterSizeForFrame(Size measuredSize, LayoutConstraints const& const
   return size;
 }
 
+Size measuredOuterSizeFromContent(Size contentSize, detail::ElementModifiers const* mods) {
+  if (!mods) {
+    return contentSize;
+  }
+  Size size{
+      std::max(0.f, contentSize.width + std::max(0.f, mods->padding.left) + std::max(0.f, mods->padding.right)),
+      std::max(0.f, contentSize.height + std::max(0.f, mods->padding.top) + std::max(0.f, mods->padding.bottom)),
+  };
+  if (mods->sizeWidth > 0.f) {
+    size.width = mods->sizeWidth;
+  }
+  if (mods->sizeHeight > 0.f) {
+    size.height = mods->sizeHeight;
+  }
+  return size;
+}
+
+bool canDeferOuterMeasurement(ElementType typeTag, detail::ElementModifiers const* mods,
+                              detail::ElementModifiers const* outerMods) {
+  if (outerMods || hasOverlay(mods)) {
+    return false;
+  }
+  switch (typeTag) {
+  case ElementType::VStack:
+  case ElementType::HStack:
+  case ElementType::ZStack:
+  case ElementType::Grid:
+  case ElementType::OffsetView:
+  case ElementType::ScrollView:
+  case ElementType::ScaleAroundCenter:
+  case ElementType::PopoverCalloutShape:
+    return true;
+  default:
+    return false;
+  }
+}
+
 bool textUsesContentBox(detail::ElementModifiers const* mods) {
   if (!mods) {
     return false;
@@ -590,7 +628,10 @@ SceneBuilder::SceneBuilder(TextSystem& textSystem, EnvironmentStack& environment
                            SceneGeometryIndex* geometryIndex)
     : textSystem_(textSystem)
     , environment_(environment)
-    , geometryIndex_(geometryIndex) {}
+    , geometryIndex_(geometryIndex)
+    , measureLayoutCache_(std::make_unique<detail::MeasureLayoutCache>()) {}
+
+SceneBuilder::~SceneBuilder() = default;
 
 SceneBuilder::FrameState const& SceneBuilder::frame() const {
   return frames_.back();
@@ -681,7 +722,18 @@ void SceneBuilder::stampRetainedBuild(SceneNode& node, Element const& el, Elemen
 
 Size SceneBuilder::measureElement(Element const& el, LayoutConstraints const& constraints,
                                   LayoutHints const& hints, ComponentKey const& key) const {
-  MeasureContext measureContext{textSystem_};
+  detail::MeasureLayoutKey const cacheKey{
+      .measureId = el.measureId(),
+      .componentKey = key,
+      .constraints = constraints,
+      .hints = hints,
+  };
+  if (measureLayoutCache_) {
+    if (Size const* cached = measureLayoutCache_->findElementSize(cacheKey)) {
+      return *cached;
+    }
+  }
+  MeasureContext measureContext{textSystem_, measureLayoutCache_.get()};
   measureContext.pushConstraints(constraints, hints);
   measureContext.resetTraversalState(key);
   if (el.isComposite() && el.typeTag() == ElementType::Unknown) {
@@ -690,7 +742,11 @@ Size SceneBuilder::measureElement(Element const& el, LayoutConstraints const& co
     measureContext.clearMeasurementRootKey();
   }
   measureContext.setCurrentElement(&el);
-  return el.measure(measureContext, constraints, hints, textSystem_);
+  Size const measured = el.measure(measureContext, constraints, hints, textSystem_);
+  if (measureLayoutCache_) {
+    measureLayoutCache_->recordElementSize(cacheKey, measured);
+  }
+  return measured;
 }
 
 std::unique_ptr<SceneNode>
@@ -797,6 +853,7 @@ std::unique_ptr<SceneNode> SceneBuilder::build(Element const& el, NodeId id,
                                                LayoutConstraints const& constraints,
                                                std::unique_ptr<SceneNode> existing,
                                                ComponentKey rootKey) {
+  measureLayoutCache_->clear();
   if (geometryIndex_) {
     geometryIndex_->beginBuild();
   }
@@ -919,22 +976,40 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
   // keep a local copy of the resolved body while this call runs. Element copies now preserve
   // measure ids, so this no longer breaks subtree identity.
   Element stableSceneEl = sceneEl;
+  ElementType const typeTag = stableSceneEl.typeTag();
 
   detail::ElementModifiers const* mods = stableSceneEl.modifiers();
   detail::ElementModifiers const* outerMods = resolvedFromComposite ? el.modifiers() : nullptr;
   Point const subtreeOffset = modifierOffset(mods);
-  Size const outerSize = measureElement(el, current.constraints, current.hints, current.key);
-  Size layoutOuterSize = outerSize;
-  if (stableSceneEl.typeTag() == ElementType::Text && textUsesContentBox(mods)) {
-    layoutOuterSize = assignedOuterSizeForFrame(outerSize, current.constraints, current.assignedSize,
-                                                current.hasAssignedWidth, current.hasAssignedHeight, mods);
+  bool const deferOuterMeasurement = canDeferOuterMeasurement(typeTag, mods, outerMods);
+  Size outerSize{};
+  bool hasOuterSize = false;
+  if (!deferOuterMeasurement) {
+    outerSize = measureElement(el, current.constraints, current.hints, current.key);
+    hasOuterSize = true;
   }
+  Size layoutOuterSize{};
+  bool hasLayoutOuterSize = false;
+  auto ensureOuterSize = [&]() -> Size const& {
+    if (!hasOuterSize) {
+      outerSize = measureElement(el, current.constraints, current.hints, current.key);
+      hasOuterSize = true;
+    }
+    return outerSize;
+  };
+  auto ensureLayoutOuterSize = [&]() -> Size const& {
+    if (!hasLayoutOuterSize) {
+      layoutOuterSize = ensureOuterSize();
+      if (typeTag == ElementType::Text && textUsesContentBox(mods)) {
+        layoutOuterSize = assignedOuterSizeForFrame(layoutOuterSize, current.constraints, current.assignedSize,
+                                                    current.hasAssignedWidth, current.hasAssignedHeight, mods);
+      }
+      hasLayoutOuterSize = true;
+    }
+    return layoutOuterSize;
+  };
   EdgeInsets const padding = mods ? mods->padding : EdgeInsets{};
   LayoutConstraints innerConstraints = insetConstraints(current.constraints, padding);
-  Size const paddedContentSize{
-      std::max(0.f, layoutOuterSize.width - std::max(0.f, padding.left) - std::max(0.f, padding.right)),
-      std::max(0.f, layoutOuterSize.height - std::max(0.f, padding.top) - std::max(0.f, padding.bottom)),
-  };
   Size contentAssignedSize = current.assignedSize;
   if (current.hasAssignedWidth) {
     contentAssignedSize.width = std::max(0.f, current.assignedSize.width - std::max(0.f, padding.left) -
@@ -944,12 +1019,34 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     contentAssignedSize.height = std::max(0.f, current.assignedSize.height - std::max(0.f, padding.top) -
                                                    std::max(0.f, padding.bottom));
   }
-  LayoutConstraints contentBoxConstraints = innerConstraints;
-  contentBoxConstraints.maxWidth = paddedContentSize.width;
-  contentBoxConstraints.maxHeight = paddedContentSize.height;
-  contentBoxConstraints.minWidth = std::min(contentBoxConstraints.minWidth, contentBoxConstraints.maxWidth);
-  contentBoxConstraints.minHeight = std::min(contentBoxConstraints.minHeight, contentBoxConstraints.maxHeight);
-  clampLayoutMinToMax(contentBoxConstraints);
+  Size paddedContentSize{};
+  bool hasPaddedContentSize = false;
+  auto ensurePaddedContentSize = [&]() -> Size const& {
+    if (!hasPaddedContentSize) {
+      Size const& resolvedLayoutOuterSize = ensureLayoutOuterSize();
+      paddedContentSize = Size{
+          std::max(0.f, resolvedLayoutOuterSize.width - std::max(0.f, padding.left) - std::max(0.f, padding.right)),
+          std::max(0.f, resolvedLayoutOuterSize.height - std::max(0.f, padding.top) - std::max(0.f, padding.bottom)),
+      };
+      hasPaddedContentSize = true;
+    }
+    return paddedContentSize;
+  };
+  LayoutConstraints contentBoxConstraints{};
+  bool hasContentBoxConstraints = false;
+  auto ensureContentBoxConstraints = [&]() -> LayoutConstraints const& {
+    if (!hasContentBoxConstraints) {
+      Size const& resolvedPaddedContentSize = ensurePaddedContentSize();
+      contentBoxConstraints = innerConstraints;
+      contentBoxConstraints.maxWidth = resolvedPaddedContentSize.width;
+      contentBoxConstraints.maxHeight = resolvedPaddedContentSize.height;
+      contentBoxConstraints.minWidth = std::min(contentBoxConstraints.minWidth, contentBoxConstraints.maxWidth);
+      contentBoxConstraints.minHeight = std::min(contentBoxConstraints.minHeight, contentBoxConstraints.maxHeight);
+      clampLayoutMinToMax(contentBoxConstraints);
+      hasContentBoxConstraints = true;
+    }
+    return contentBoxConstraints;
+  };
   Point const contentOrigin{
       current.origin.x + subtreeOffset.x + std::max(0.f, padding.left),
       current.origin.y + subtreeOffset.y + std::max(0.f, padding.top),
@@ -978,7 +1075,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     }
   }
 
-  if (stableSceneEl.typeTag() == ElementType::Unknown && stableSceneEl.isComposite()) {
+  if (typeTag == ElementType::Unknown && stableSceneEl.isComposite()) {
     ComponentKey nestedKey = directCompositeBodyKey(current.key);
     pushFrame(current.constraints, current.hints, current.origin, std::move(nestedKey), current.assignedSize,
               current.hasAssignedWidth, current.hasAssignedHeight);
@@ -1008,16 +1105,42 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
 
   std::unique_ptr<SceneNode> core{};
   std::unique_ptr<InteractionData> resolvedInteraction{};
-  Size geometrySize = outerSize;
-  switch (stableSceneEl.typeTag()) {
+  Size geometrySize{};
+  bool hasGeometrySize = false;
+  auto makeMeasureLayoutKey = [&](LayoutConstraints const& constraints,
+                                  LayoutHints const& hints) -> detail::MeasureLayoutKey {
+    return detail::MeasureLayoutKey{
+        .measureId = stableSceneEl.measureId(),
+        .componentKey = current.key,
+        .constraints = constraints,
+        .hints = hints,
+    };
+  };
+  auto recordChildMeasure = [&](Element const& child, ComponentKey const& childKey,
+                                LayoutConstraints const& constraints, LayoutHints const& hints,
+                                Size size) {
+    if (!measureLayoutCache_) {
+      return;
+    }
+    measureLayoutCache_->recordElementSize(
+        detail::MeasureLayoutKey{
+            .measureId = child.measureId(),
+            .componentKey = childKey,
+            .constraints = constraints,
+            .hints = hints,
+        },
+        size);
+  };
+  switch (typeTag) {
   case ElementType::Rectangle: {
+    Size const& resolvedPaddedContentSize = ensurePaddedContentSize();
     std::unique_ptr<RectSceneNode> rectNode = releaseAs<RectSceneNode>(std::move(innerExisting));
     if (!rectNode) {
       rectNode = std::make_unique<RectSceneNode>(id);
     }
     Theme const& theme = activeTheme(environment_);
     Size const resolvedRectSize =
-        rectSize(assignedFrameForLeaf(paddedContentSize, innerConstraints, contentAssignedSize,
+        rectSize(assignedFrameForLeaf(resolvedPaddedContentSize, innerConstraints, contentAssignedSize,
                                      current.hasAssignedWidth, current.hasAssignedHeight, mods, current.hints));
     bool dirty = false;
     dirty |= updateIfChanged(rectNode->size, resolvedRectSize);
@@ -1032,6 +1155,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     rectNode->position = {};
     rectNode->recomputeBounds();
     geometrySize = resolvedRectSize;
+    hasGeometrySize = true;
     core = std::move(rectNode);
     break;
   }
@@ -1041,9 +1165,11 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     Font const resolvedFont = resolveFont(text.font, theme.bodyFont, theme);
     Color const resolvedColor = resolveColor(text.color, theme.labelColor, theme);
     Color const resolvedSelectionColor = resolveColor(text.selectionColor, theme.selectedContentBackgroundColor, theme);
-    LayoutConstraints const& textFrameConstraints = textUsesContentBox(mods) ? contentBoxConstraints : innerConstraints;
+    LayoutConstraints const& textFrameConstraints =
+        textUsesContentBox(mods) ? ensureContentBoxConstraints() : innerConstraints;
+    Size const& resolvedPaddedContentSize = ensurePaddedContentSize();
     Rect const frameRect =
-        assignedFrameForLeaf(paddedContentSize, textFrameConstraints, contentAssignedSize,
+        assignedFrameForLeaf(resolvedPaddedContentSize, textFrameConstraints, contentAssignedSize,
                              current.hasAssignedWidth, current.hasAssignedHeight, mods, current.hints);
     TextLayoutOptions const options = text_detail::makeTextLayoutOptions(text);
     std::string const displayText =
@@ -1116,17 +1242,19 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
                              textLayout);
       core = std::move(textNode);
     }
-    geometrySize = layoutOuterSize;
+    geometrySize = ensureLayoutOuterSize();
+    hasGeometrySize = true;
     break;
   }
   case ElementType::Render: {
     Render const& renderView = stableSceneEl.as<Render>();
+    Size const& resolvedPaddedContentSize = ensurePaddedContentSize();
     std::unique_ptr<RenderSceneNode> renderNode = releaseAs<RenderSceneNode>(std::move(innerExisting));
     if (!renderNode) {
       renderNode = std::make_unique<RenderSceneNode>(id);
     }
     Rect const frameRect =
-        assignedFrameForLeaf(paddedContentSize, innerConstraints, contentAssignedSize,
+        assignedFrameForLeaf(resolvedPaddedContentSize, innerConstraints, contentAssignedSize,
                              current.hasAssignedWidth, current.hasAssignedHeight, mods, current.hints);
     bool dirty = false;
     dirty |= updateIfChanged(renderNode->frame, frameRect);
@@ -1144,18 +1272,20 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     }
     renderNode->position = {};
     renderNode->recomputeBounds();
-    geometrySize = layoutOuterSize;
+    geometrySize = ensureLayoutOuterSize();
+    hasGeometrySize = true;
     core = std::move(renderNode);
     break;
   }
   case ElementType::Image: {
     views::Image const& image = stableSceneEl.as<views::Image>();
+    Size const& resolvedPaddedContentSize = ensurePaddedContentSize();
     std::unique_ptr<ImageSceneNode> imageNode = releaseAs<ImageSceneNode>(std::move(innerExisting));
     if (!imageNode) {
       imageNode = std::make_unique<ImageSceneNode>(id);
     }
     Rect const frameRect =
-        assignedFrameForLeaf(paddedContentSize, innerConstraints, contentAssignedSize,
+        assignedFrameForLeaf(resolvedPaddedContentSize, innerConstraints, contentAssignedSize,
                              current.hasAssignedWidth, current.hasAssignedHeight, mods, current.hints);
     bool dirty = false;
     dirty |= updateIfChanged(imageNode->image, image.source);
@@ -1169,7 +1299,8 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     }
     imageNode->position = {};
     imageNode->recomputeBounds();
-    geometrySize = layoutOuterSize;
+    geometrySize = ensureLayoutOuterSize();
+    hasGeometrySize = true;
     core = std::move(imageNode);
     break;
   }
@@ -1191,6 +1322,8 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     }
     pathNode->position = {};
     pathNode->recomputeBounds();
+    geometrySize = rectSize(pathNode->bounds);
+    hasGeometrySize = true;
     core = std::move(pathNode);
     break;
   }
@@ -1211,6 +1344,8 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     }
     lineNode->position = {};
     lineNode->recomputeBounds();
+    geometrySize = rectSize(lineNode->bounds);
+    hasGeometrySize = true;
     core = std::move(lineNode);
     break;
   }
@@ -1234,37 +1369,45 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     LayoutHints childHints{};
     childHints.vStackCrossAlign = stack.alignment;
 
-    std::vector<Size> sizes{};
-    sizes.reserve(stack.children.size());
-    std::vector<layout::StackMainAxisChild> stackChildren{};
-    stackChildren.reserve(stack.children.size());
-    for (std::size_t i = 0; i < stack.children.size(); ++i) {
-      Element const& child = stack.children[i];
-      ComponentKey childKey = current.key;
-      childKey.push_back(childLocalId(child, i));
-      Size const size = measureElement(child, childConstraints, childHints, childKey);
-      sizes.push_back(size);
-      stackChildren.push_back(layout::StackMainAxisChild{
-          .naturalMainSize = size.height,
-          .flexBasis = child.flexBasis(),
-          .minMainSize = child.minMainSize(),
-          .flexGrow = child.flexGrow(),
-          .flexShrink = child.flexShrink(),
-      });
+    layout::StackLayoutResult stackLayout{};
+    std::vector<Size> measuredChildSizes{};
+    if (layout::StackLayoutResult const* cached =
+            measureLayoutCache_->findStackLayout(makeMeasureLayoutKey(innerConstraints, current.hints))) {
+      stackLayout = *cached;
+    } else {
+      std::vector<Size> sizes{};
+      sizes.reserve(stack.children.size());
+      std::vector<layout::StackMainAxisChild> stackChildren{};
+      stackChildren.reserve(stack.children.size());
+      for (std::size_t i = 0; i < stack.children.size(); ++i) {
+        Element const& child = stack.children[i];
+        ComponentKey childKey = current.key;
+        childKey.push_back(childLocalId(child, i));
+        Size const size = measureElement(child, childConstraints, childHints, childKey);
+        sizes.push_back(size);
+        stackChildren.push_back(layout::StackMainAxisChild{
+            .naturalMainSize = size.height,
+            .flexBasis = child.flexBasis(),
+            .minMainSize = child.minMainSize(),
+            .flexGrow = child.flexGrow(),
+            .flexShrink = child.flexShrink(),
+        });
+      }
+      bool const heightConstrained = heightAssigned;
+      if (!heightConstrained) {
+        warnFlexGrowIfParentMainAxisUnconstrained(stack.children, heightConstrained);
+      }
+      layout::StackMainAxisLayout const mainLayout =
+          layout::layoutStackMainAxis(stackChildren, stack.spacing,
+                                      heightAssigned ? std::max(0.f, contentAssignedSize.height) : 0.f,
+                                      heightConstrained,
+                                      stack.justifyContent);
+      stackLayout =
+          layout::layoutStack(layout::StackAxis::Vertical, stack.alignment, sizes, mainLayout.mainSizes,
+                              mainLayout.itemSpacing, mainLayout.containerMainSize, mainLayout.startOffset,
+                              assignedW, widthAssigned);
+      measuredChildSizes = sizes;
     }
-    bool const heightConstrained = heightAssigned;
-    if (!heightConstrained) {
-      warnFlexGrowIfParentMainAxisUnconstrained(stack.children, heightConstrained);
-    }
-    layout::StackMainAxisLayout const mainLayout =
-        layout::layoutStackMainAxis(stackChildren, stack.spacing,
-                                    heightAssigned ? std::max(0.f, contentAssignedSize.height) : 0.f,
-                                    heightConstrained,
-                                    stack.justifyContent);
-    layout::StackLayoutResult const stackLayout =
-        layout::layoutStack(layout::StackAxis::Vertical, stack.alignment, sizes, mainLayout.mainSizes,
-                            mainLayout.itemSpacing, mainLayout.containerMainSize, mainLayout.startOffset,
-                            assignedW, widthAssigned);
 
     std::vector<std::unique_ptr<SceneNode>> nextChildren{};
     nextChildren.reserve(stack.children.size());
@@ -1282,6 +1425,9 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
       clampLayoutMinToMax(childBuild);
       ComponentKey childKey = current.key;
       childKey.push_back(local);
+      if (!measuredChildSizes.empty()) {
+        recordChildMeasure(child, childKey, childBuild, childHints, measuredChildSizes[i]);
+      }
       pushFrame(childBuild, childHints,
                 Point{contentOrigin.x + slot.origin.x, contentOrigin.y + slot.origin.y},
                 std::move(childKey), slot.assignedSize, slot.assignedSize.width > 0.f, true);
@@ -1293,6 +1439,8 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     }
     group->replaceChildren(std::move(nextChildren));
     setAssignedGroupBounds(*group, stackLayout.containerSize);
+    geometrySize = stackLayout.containerSize;
+    hasGeometrySize = true;
     core = std::move(group);
     break;
   }
@@ -1324,54 +1472,62 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     }
     clampLayoutMinToMax(childConstraints);
 
-    std::vector<Size> sizes{};
-    sizes.reserve(stack.children.size());
-    std::vector<layout::StackMainAxisChild> stackChildren{};
-    stackChildren.reserve(stack.children.size());
-    for (std::size_t i = 0; i < stack.children.size(); ++i) {
-      Element const& child = stack.children[i];
-      ComponentKey childKey = current.key;
-      childKey.push_back(childLocalId(child, i));
-      Size const size = measureElement(child, childConstraints, LayoutHints{}, childKey);
-      sizes.push_back(size);
-      stackChildren.push_back(layout::StackMainAxisChild{
-          .naturalMainSize = size.width,
-          .flexBasis = child.flexBasis(),
-          .minMainSize = child.minMainSize(),
-          .flexGrow = child.flexGrow(),
-          .flexShrink = child.flexShrink(),
-      });
-    }
+    layout::StackLayoutResult stackLayout{};
+    std::vector<Size> measuredChildSizes{};
+    if (layout::StackLayoutResult const* cached =
+            measureLayoutCache_->findStackLayout(makeMeasureLayoutKey(innerConstraints, current.hints))) {
+      stackLayout = *cached;
+    } else {
+      std::vector<Size> sizes{};
+      sizes.reserve(stack.children.size());
+      std::vector<layout::StackMainAxisChild> stackChildren{};
+      stackChildren.reserve(stack.children.size());
+      for (std::size_t i = 0; i < stack.children.size(); ++i) {
+        Element const& child = stack.children[i];
+        ComponentKey childKey = current.key;
+        childKey.push_back(childLocalId(child, i));
+        Size const size = measureElement(child, childConstraints, LayoutHints{}, childKey);
+        sizes.push_back(size);
+        stackChildren.push_back(layout::StackMainAxisChild{
+            .naturalMainSize = size.width,
+            .flexBasis = child.flexBasis(),
+            .minMainSize = child.minMainSize(),
+            .flexGrow = child.flexGrow(),
+            .flexShrink = child.flexShrink(),
+        });
+      }
 
-    if (!widthConstrained) {
-      warnFlexGrowIfParentMainAxisUnconstrained(stack.children, widthConstrained);
-    }
-    layout::StackMainAxisLayout const mainLayout =
-        layout::layoutStackMainAxis(stackChildren, stack.spacing, assignedW, widthConstrained,
-                                    stack.justifyContent);
+      if (!widthConstrained) {
+        warnFlexGrowIfParentMainAxisUnconstrained(stack.children, widthConstrained);
+      }
+      layout::StackMainAxisLayout const mainLayout =
+          layout::layoutStackMainAxis(stackChildren, stack.spacing, assignedW, widthConstrained,
+                                      stack.justifyContent);
 
-    float rowInnerH = 0.f;
-    std::vector<Size> rowSizes{};
-    rowSizes.reserve(stack.children.size());
-    for (std::size_t i = 0; i < stack.children.size(); ++i) {
-      LayoutConstraints childMeasure = innerConstraints;
-      childMeasure.maxWidth = mainLayout.mainSizes[i];
-      childMeasure.maxHeight =
-          stack.alignment == Alignment::Stretch && heightConstrained ? assignedH : std::numeric_limits<float>::infinity();
-      clampLayoutMinToMax(childMeasure);
-      LayoutHints rowHints{};
-      rowHints.hStackCrossAlign = stack.alignment;
-      ComponentKey childKey = current.key;
-      childKey.push_back(childLocalId(stack.children[i], i));
-      Size const measured = measureElement(stack.children[i], childMeasure, rowHints, childKey);
-      rowSizes.push_back(measured);
-      rowInnerH = std::max(rowInnerH, measured.height);
+      float rowInnerH = 0.f;
+      std::vector<Size> rowSizes{};
+      rowSizes.reserve(stack.children.size());
+      for (std::size_t i = 0; i < stack.children.size(); ++i) {
+        LayoutConstraints childMeasure = innerConstraints;
+        childMeasure.maxWidth = mainLayout.mainSizes[i];
+        childMeasure.maxHeight =
+            stack.alignment == Alignment::Stretch && heightConstrained ? assignedH : std::numeric_limits<float>::infinity();
+        clampLayoutMinToMax(childMeasure);
+        LayoutHints rowHints{};
+        rowHints.hStackCrossAlign = stack.alignment;
+        ComponentKey childKey = current.key;
+        childKey.push_back(childLocalId(stack.children[i], i));
+        Size const measured = measureElement(stack.children[i], childMeasure, rowHints, childKey);
+        rowSizes.push_back(measured);
+        rowInnerH = std::max(rowInnerH, measured.height);
+      }
+      float const rowCrossSize = heightConstrained ? assignedH : rowInnerH;
+      stackLayout =
+          layout::layoutStack(layout::StackAxis::Horizontal, stack.alignment, rowSizes, mainLayout.mainSizes,
+                              mainLayout.itemSpacing, mainLayout.containerMainSize, mainLayout.startOffset,
+                              rowCrossSize, heightConstrained);
+      measuredChildSizes = rowSizes;
     }
-    float const rowCrossSize = heightConstrained ? assignedH : rowInnerH;
-    layout::StackLayoutResult const stackLayout =
-        layout::layoutStack(layout::StackAxis::Horizontal, stack.alignment, rowSizes, mainLayout.mainSizes,
-                            mainLayout.itemSpacing, mainLayout.containerMainSize, mainLayout.startOffset,
-                            rowCrossSize, heightConstrained);
 
     std::vector<std::unique_ptr<SceneNode>> nextChildren{};
     nextChildren.reserve(stack.children.size());
@@ -1390,6 +1546,9 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
       rowHints.hStackCrossAlign = stack.alignment;
       ComponentKey childKey = current.key;
       childKey.push_back(local);
+      if (!measuredChildSizes.empty()) {
+        recordChildMeasure(child, childKey, childBuild, rowHints, measuredChildSizes[i]);
+      }
       pushFrame(childBuild, rowHints,
                 Point{contentOrigin.x + slot.origin.x, contentOrigin.y + slot.origin.y},
                 std::move(childKey), slot.assignedSize, true, slot.assignedSize.height > 0.f);
@@ -1401,6 +1560,8 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     }
     group->replaceChildren(std::move(nextChildren));
     setAssignedGroupBounds(*group, stackLayout.containerSize);
+    geometrySize = stackLayout.containerSize;
+    hasGeometrySize = true;
     core = std::move(group);
     break;
   }
@@ -1422,27 +1583,31 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     LayoutHints childHints{};
     childHints.zStackHorizontalAlign = stack.horizontalAlignment;
     childHints.zStackVerticalAlign = stack.verticalAlignment;
-    float maxW = 0.f;
-    float maxH = 0.f;
-    std::vector<Size> sizes{};
-    sizes.reserve(stack.children.size());
-    for (std::size_t i = 0; i < stack.children.size(); ++i) {
-      Element const& child = stack.children[i];
-      ComponentKey childKey = current.key;
-      childKey.push_back(childLocalId(child, i));
-      Size const size = measureElement(child, childConstraints, childHints, childKey);
-      sizes.push_back(size);
-      maxW = std::max(maxW, size.width);
-      maxH = std::max(maxH, size.height);
+    std::vector<Size> measuredChildSizes{};
+    if (Size const* cached = measureLayoutCache_->findZStackSize(makeMeasureLayoutKey(innerConstraints, current.hints))) {
+      innerW = cached->width;
+      innerH = cached->height;
+    } else {
+      float maxW = 0.f;
+      float maxH = 0.f;
+      for (std::size_t i = 0; i < stack.children.size(); ++i) {
+        Element const& child = stack.children[i];
+        ComponentKey childKey = current.key;
+        childKey.push_back(childLocalId(child, i));
+        Size const size = measureElement(child, childConstraints, childHints, childKey);
+        measuredChildSizes.push_back(size);
+        maxW = std::max(maxW, size.width);
+        maxH = std::max(maxH, size.height);
+      }
+      if (innerW <= 0.f) {
+        innerW = maxW;
+      }
+      if (innerH <= 0.f) {
+        innerH = maxH;
+      }
+      innerW = std::max(innerW, maxW);
+      innerH = std::max(innerH, maxH);
     }
-    if (innerW <= 0.f) {
-      innerW = maxW;
-    }
-    if (innerH <= 0.f) {
-      innerH = maxH;
-    }
-    innerW = std::max(innerW, maxW);
-    innerH = std::max(innerH, maxH);
 
     std::vector<std::unique_ptr<SceneNode>> nextChildren{};
     nextChildren.reserve(stack.children.size());
@@ -1456,6 +1621,9 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
       childBuild.maxHeight = innerH;
       ComponentKey childKey = current.key;
       childKey.push_back(local);
+      if (!measuredChildSizes.empty()) {
+        recordChildMeasure(child, childKey, childBuild, childHints, measuredChildSizes[i]);
+      }
       // ZStack owns the full shared slot. Its children should also see that full available space
       // so nested layouts can expand and resolve against the actual container size.
       pushFrame(childBuild, childHints, contentOrigin, std::move(childKey), Size{innerW, innerH},
@@ -1468,6 +1636,8 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     }
     group->replaceChildren(std::move(nextChildren));
     setGroupBounds(*group, Size{innerW, innerH});
+    geometrySize = Size{innerW, innerH};
+    hasGeometrySize = true;
     core = std::move(group);
     break;
   }
@@ -1492,18 +1662,26 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
         layout::resolveGridTrackMetrics(grid.columns, spans, grid.horizontalSpacing, grid.verticalSpacing,
                                         innerW, innerW > 0.f, innerH, innerH > 0.f);
 
-    std::vector<Size> sizes{};
-    sizes.reserve(n);
-    for (std::size_t i = 0; i < grid.children.size(); ++i) {
-      Element const& child = grid.children[i];
-      ComponentKey childKey = current.key;
-      childKey.push_back(childLocalId(child, i));
-      LayoutConstraints const childConstraints = layout::gridChildConstraints(innerConstraints, metrics, i);
-      sizes.push_back(measureElement(child, childConstraints, LayoutHints{}, childKey));
+    layout::GridLayoutResult gridLayout{};
+    std::vector<Size> measuredChildSizes{};
+    if (layout::GridLayoutResult const* cached =
+            measureLayoutCache_->findGridLayout(makeMeasureLayoutKey(innerConstraints, current.hints))) {
+      gridLayout = *cached;
+    } else {
+      std::vector<Size> sizes{};
+      sizes.reserve(n);
+      for (std::size_t i = 0; i < grid.children.size(); ++i) {
+        Element const& child = grid.children[i];
+        ComponentKey childKey = current.key;
+        childKey.push_back(childLocalId(child, i));
+        LayoutConstraints const childConstraints = layout::gridChildConstraints(innerConstraints, metrics, i);
+        sizes.push_back(measureElement(child, childConstraints, LayoutHints{}, childKey));
+      }
+      gridLayout =
+          layout::layoutGrid(metrics, grid.horizontalSpacing, grid.verticalSpacing,
+                             innerW, innerW > 0.f, innerH, innerH > 0.f, sizes);
+      measuredChildSizes = sizes;
     }
-    layout::GridLayoutResult const gridLayout =
-        layout::layoutGrid(metrics, grid.horizontalSpacing, grid.verticalSpacing,
-                           innerW, innerW > 0.f, innerH, innerH > 0.f, sizes);
 
     std::vector<std::unique_ptr<SceneNode>> nextChildren{};
     nextChildren.reserve(n);
@@ -1519,6 +1697,9 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
       clampLayoutMinToMax(childBuild);
       ComponentKey childKey = current.key;
       childKey.push_back(local);
+      if (!measuredChildSizes.empty()) {
+        recordChildMeasure(child, childKey, childBuild, LayoutHints{}, measuredChildSizes[index]);
+      }
       pushFrame(childBuild, LayoutHints{}, Point{contentOrigin.x + slot.x, contentOrigin.y + slot.y},
                 std::move(childKey), Size{slot.width, slot.height}, true, true);
       std::unique_ptr<SceneNode> childNode = buildOrReuse(child, childId, std::move(reuse));
@@ -1529,6 +1710,8 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     }
     group->replaceChildren(std::move(nextChildren));
     setGroupBounds(*group, gridLayout.containerSize);
+    geometrySize = gridLayout.containerSize;
+    hasGeometrySize = true;
     core = std::move(group);
     break;
   }
@@ -1583,6 +1766,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
       clampLayoutMinToMax(childBuild);
       ComponentKey childKey = current.key;
       childKey.push_back(local);
+      recordChildMeasure(child, childKey, childBuild, LayoutHints{}, sizes[i]);
       pushFrame(childBuild, LayoutHints{},
                 Point{contentOrigin.x + slot.origin.x, contentOrigin.y + slot.origin.y},
                 std::move(childKey), slot.assignedSize, slot.assignedSize.width > 0.f,
@@ -1595,6 +1779,8 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     }
     group->replaceChildren(std::move(nextChildren));
     setGroupBounds(*group, contentSize);
+    geometrySize = contentSize;
+    hasGeometrySize = true;
     core = std::move(group);
     break;
   }
@@ -1640,20 +1826,36 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
 
     ScrollAxis const ax = scrollView.axis;
     Point scrollOffset = offsetState.signal ? *offsetState : Point{};
-    Size const viewport = current.hasAssignedWidth || current.hasAssignedHeight ? contentAssignedSize : outerSize;
+    Size viewport = current.hasAssignedWidth || current.hasAssignedHeight ? contentAssignedSize : Size{};
     if (viewportState.signal && !sizeApproximatelyEqual(*viewportState, viewport)) {
       viewportState.setSilently(viewport);
     }
-    LayoutConstraints const childConstraints = layout::scrollChildConstraints(ax, innerConstraints, viewport);
-
     std::vector<Element> const& contentChildren = scrollView.children;
     std::vector<Size> sizes{};
     sizes.reserve(contentChildren.size());
-    for (std::size_t i = 0; i < contentChildren.size(); ++i) {
-      Element const& child = contentChildren[i];
-      ComponentKey childKey = current.key;
-      childKey.push_back(childLocalId(child, i));
-      sizes.push_back(measureElement(child, childConstraints, LayoutHints{}, childKey));
+    if (viewport.width <= 0.f || viewport.height <= 0.f) {
+      LayoutConstraints const premeasureChildConstraints =
+          layout::scrollChildConstraints(ax, innerConstraints, viewport);
+      for (std::size_t i = 0; i < contentChildren.size(); ++i) {
+        Element const& child = contentChildren[i];
+        ComponentKey childKey = current.key;
+        childKey.push_back(childLocalId(child, i));
+        sizes.push_back(measureElement(child, premeasureChildConstraints, LayoutHints{}, childKey));
+      }
+      viewport = layout::resolveMeasuredScrollViewSize(ax, layout::scrollContentSize(ax, sizes), innerConstraints);
+      if (viewportState.signal && !sizeApproximatelyEqual(*viewportState, viewport)) {
+        viewportState.setSilently(viewport);
+      }
+    }
+    LayoutConstraints const childConstraints = layout::scrollChildConstraints(ax, innerConstraints, viewport);
+
+    if (sizes.empty()) {
+      for (std::size_t i = 0; i < contentChildren.size(); ++i) {
+        Element const& child = contentChildren[i];
+        ComponentKey childKey = current.key;
+        childKey.push_back(childLocalId(child, i));
+        sizes.push_back(measureElement(child, childConstraints, LayoutHints{}, childKey));
+      }
     }
     layout::ScrollContentLayout const scrollLayout =
         layout::layoutScrollContent(ax, viewport, scrollOffset, sizes);
@@ -1716,6 +1918,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
       layout::ScrollChildSlot const& slot = scrollLayout.slots[i];
       ComponentKey childKey = current.key;
       childKey.push_back(local);
+      recordChildMeasure(child, childKey, childConstraints, LayoutHints{}, sizes[i]);
       pushFrame(childConstraints, LayoutHints{},
                 Point{contentOrigin.x + slot.origin.x, contentOrigin.y + slot.origin.y},
                 std::move(childKey), slot.assignedSize, slot.assignedSize.width > 0.f,
@@ -1874,6 +2077,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     modifier->cornerRadius = {};
     modifier->recomputeBounds();
     geometrySize = viewport;
+    hasGeometrySize = true;
     core = std::move(modifier);
     break;
   }
@@ -1900,6 +2104,8 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     std::unique_ptr<SceneNode> childNode =
         buildOrReuse(scaled.child, SceneTree::childId(id, LocalId::fromString("$child")), std::move(existingChild));
     popFrame();
+    geometrySize = rectSize(childNode->bounds);
+    hasGeometrySize = true;
     childNode->position = {};
     transformNode->replaceChildren({});
     transformNode->appendChild(std::move(childNode));
@@ -1946,6 +2152,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
 
     NodeId const contentId = SceneTree::childId(id, LocalId::fromString("$content"));
     std::unique_ptr<SceneNode> reuseContent = detail::takeReusableNode(reusable, contentId);
+    recordChildMeasure(callout.content, contentKey, contentConstraints, LayoutHints{}, contentMeasured);
     pushFrame(contentConstraints, LayoutHints{},
               Point{contentOrigin.x + calloutLayout.contentOrigin.x, contentOrigin.y + calloutLayout.contentOrigin.y},
               std::move(contentKey), contentMeasured, true, true);
@@ -1962,17 +2169,35 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     group->replaceChildren(std::move(nextChildren));
     setGroupBounds(*group, calloutLayout.totalSize);
     geometrySize = calloutLayout.totalSize;
+    hasGeometrySize = true;
     core = std::move(group);
     break;
   }
   case ElementType::Spacer:
     core = std::make_unique<SceneNode>(id);
-    core->bounds = sizeRect(paddedContentSize);
+    core->bounds = sizeRect(ensurePaddedContentSize());
+    geometrySize = rectSize(core->bounds);
+    hasGeometrySize = true;
     break;
   default:
     core = std::make_unique<SceneNode>(id);
-    core->bounds = sizeRect(paddedContentSize);
+    core->bounds = sizeRect(ensurePaddedContentSize());
+    geometrySize = rectSize(core->bounds);
+    hasGeometrySize = true;
     break;
+  }
+
+  if (!hasLayoutOuterSize) {
+    if (!hasOuterSize) {
+      Size const measuredContentSize = hasGeometrySize ? geometrySize : rectSize(core->bounds);
+      outerSize = measuredOuterSizeFromContent(measuredContentSize, mods);
+      hasOuterSize = true;
+    }
+    layoutOuterSize = outerSize;
+    hasLayoutOuterSize = true;
+  } else if (!hasOuterSize) {
+    outerSize = layoutOuterSize;
+    hasOuterSize = true;
   }
 
   std::unique_ptr<InteractionData> interaction = std::move(resolvedInteraction);

@@ -15,6 +15,8 @@ namespace flux {
 
 struct Spacer : ViewModifiers<Spacer> {
   Size measure(MeasureContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
+
+  constexpr bool operator==(Spacer const&) const noexcept { return true; }
 };
 
 /// Default flex grow 1 (expand along stack main axis); override with chained `.flex(...)`.
@@ -26,6 +28,9 @@ struct Element::Model<Spacer> final : Element::Concept {
   ElementType elementType() const noexcept override { return ElementType::Spacer; }
   std::type_index modelType() const noexcept override { return std::type_index(typeid(Spacer)); }
   void const* rawValuePtr() const noexcept override { return &value; }
+  bool valueEquals(Concept const& other) const noexcept override {
+    return other.modelType() == std::type_index(typeid(Spacer));
+  }
   Size measure(MeasureContext& ctx, LayoutConstraints const& c, LayoutHints const& h,
                TextSystem& ts) const override {
     return value.measure(ctx, c, h, ts);

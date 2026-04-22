@@ -43,6 +43,15 @@ struct Grid : ViewModifiers<Grid> {
   std::vector<Element> children;
   /// Optional per-child column spans in row-major order. Missing entries default to `1`.
   std::vector<std::size_t> columnSpans;
+
+  bool operator==(Grid const& other) const {
+    return columns == other.columns && horizontalSpacing == other.horizontalSpacing &&
+           verticalSpacing == other.verticalSpacing &&
+           horizontalAlignment == other.horizontalAlignment &&
+           verticalAlignment == other.verticalAlignment &&
+           columnSpans == other.columnSpans &&
+           elementsStructurallyEqual(children, other.children);
+  }
 };
 
 } // namespace flux

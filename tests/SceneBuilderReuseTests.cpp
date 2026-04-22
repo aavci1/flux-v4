@@ -1,5 +1,7 @@
 #include "SceneBuilderTestSupport.hpp"
 
+#include <Flux/UI/Views/Card.hpp>
+
 TEST_CASE("SceneBuilder: keyed reorder reuses child scene nodes") {
   NullTextSystem textSystem{};
   SceneGeometryIndex geometry{};
@@ -642,4 +644,284 @@ TEST_CASE("SceneBuilder: retained composite body rebuilds when an environment de
   REQUIRE(secondChild->fill.solidColor(&secondFill));
   CHECK(secondFill == Theme::dark().separatorColor);
   CHECK(childCalls == 2);
+}
+
+TEST_CASE("SceneBuilder: retained button body skips rebuild and refreshes callback inputs") {
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  StoreScope scope{};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 260.f;
+  constraints.maxHeight = 140.f;
+
+  Signal<int> tickSignal{0};
+  State<int> tick{&tickSignal};
+  int parentCalls = 0;
+  int oldTaps = 0;
+  int newTaps = 0;
+
+  struct ParentWithRetainedButton {
+    State<int> tick{};
+    int* parentCalls = nullptr;
+    int* oldTaps = nullptr;
+    int* newTaps = nullptr;
+
+    Element body() const {
+      ++*parentCalls;
+      int const generation = *tick;
+      return VStack{
+          .spacing = 6.f + static_cast<float>(*tick),
+          .alignment = Alignment::Start,
+          .children = children(
+              Element{Rectangle{}}.size(24.f + static_cast<float>(*tick), 8.f),
+              Element{Button{
+                  .label = "Play Once",
+                  .variant = ButtonVariant::Primary,
+                  .onTap = [generation, oldTaps = oldTaps, newTaps = newTaps] {
+                    if (generation == 0) {
+                      ++*oldTaps;
+                    } else {
+                      ++*newTaps;
+                    }
+                  },
+              }}.key("button"))};
+    }
+  };
+
+  auto findTapNode = [](SceneNode* node, auto&& self) -> SceneNode* {
+    if (!node) {
+      return nullptr;
+    }
+    if (node->interaction() && static_cast<bool>(node->interaction()->onTap)) {
+      return node;
+    }
+    for (std::unique_ptr<SceneNode> const& child : node->children()) {
+      if (SceneNode* found = self(child.get(), self)) {
+        return found;
+      }
+    }
+    return nullptr;
+  };
+
+  auto makeRoot = [&]() -> Element {
+    return Element{ParentWithRetainedButton{
+        .tick = tick,
+        .parentCalls = &parentCalls,
+        .oldTaps = &oldTaps,
+        .newTaps = &newTaps,
+    }};
+  };
+
+  scope.store.beginRebuild(true);
+  std::unique_ptr<SceneNode> tree = builder.build(makeRoot(), NodeId{1ull}, constraints);
+  scope.store.endRebuild();
+
+  REQUIRE(tree != nullptr);
+  SceneNode* initialTapNode = findTapNode(tree.get(), findTapNode);
+  REQUIRE(initialTapNode != nullptr);
+  ComponentState const* buttonState =
+      scope.store.findComponentState(ComponentKey{LocalId::fromString("button")});
+  REQUIRE(buttonState != nullptr);
+  std::uint64_t const initialButtonBodyEpoch = buttonState->lastBodyEpoch;
+  int const initialParentCalls = parentCalls;
+  REQUIRE(initialButtonBodyEpoch != 0);
+
+  tick = 12;
+
+  scope.store.beginRebuild(false);
+  tree = builder.build(makeRoot(), NodeId{1ull}, constraints, std::move(tree));
+  scope.store.endRebuild();
+
+  REQUIRE(tree != nullptr);
+  SceneNode* rebuiltTapNode = findTapNode(tree.get(), findTapNode);
+  REQUIRE(rebuiltTapNode != nullptr);
+  buttonState = scope.store.findComponentState(ComponentKey{LocalId::fromString("button")});
+  REQUIRE(buttonState != nullptr);
+
+  CHECK(parentCalls > initialParentCalls);
+  CHECK(buttonState->lastBodyEpoch == initialButtonBodyEpoch);
+  CHECK(rebuiltTapNode == initialTapNode);
+
+  REQUIRE(rebuiltTapNode->interaction() != nullptr);
+  REQUIRE(static_cast<bool>(rebuiltTapNode->interaction()->onTap));
+  rebuiltTapNode->interaction()->onTap();
+  CHECK(oldTaps == 0);
+  CHECK(newTaps == 1);
+}
+
+TEST_CASE("SceneBuilder: retained card body skips rebuild for structurally equal stack children") {
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  StoreScope scope{};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 280.f;
+  constraints.maxHeight = 180.f;
+
+  Signal<int> tickSignal{0};
+  State<int> tick{&tickSignal};
+  int parentCalls = 0;
+
+  struct ParentWithRetainedCard {
+    State<int> tick{};
+    int* parentCalls = nullptr;
+
+    Element body() const {
+      ++*parentCalls;
+      return VStack{
+          .spacing = 8.f,
+          .alignment = Alignment::Start,
+          .children = children(
+              Element{Rectangle{}}.size(24.f + static_cast<float>(*tick), 8.f),
+              Element{Card{
+                  .child = VStack{
+                      .spacing = 10.f,
+                      .alignment = Alignment::Start,
+                      .children = children(
+                          Text{.text = "Static title"}.padding(2.f, 4.f, 2.f, 4.f),
+                          HStack{
+                              .spacing = 6.f,
+                              .alignment = Alignment::Center,
+                              .children = children(
+                                  Element{Rectangle{}}
+                                      .size(18.f, 8.f)
+                                      .fill(FillStyle::solid(Color::hex(0x1F6FEB))),
+                                  Text{.text = "Static subtitle"})})},
+                  .style = Card::Style{
+                      .padding = 12.f,
+                      .cornerRadius = 16.f,
+                      .borderWidth = 1.f,
+                  },
+              }}.key("card"))};
+    }
+  };
+
+  auto findTextNode = [](SceneNode* node, std::string const& label, auto&& self) -> TextSceneNode* {
+    if (!node) {
+      return nullptr;
+    }
+    if (auto* text = dynamic_cast<TextSceneNode*>(node)) {
+      if (text->text == label) {
+        return text;
+      }
+    }
+    for (std::unique_ptr<SceneNode> const& child : node->children()) {
+      if (TextSceneNode* found = self(child.get(), label, self)) {
+        return found;
+      }
+    }
+    return nullptr;
+  };
+
+  auto makeRoot = [&]() -> Element {
+    return Element{ParentWithRetainedCard{
+        .tick = tick,
+        .parentCalls = &parentCalls,
+    }};
+  };
+
+  scope.store.beginRebuild(true);
+  std::unique_ptr<SceneNode> tree = builder.build(makeRoot(), NodeId{1ull}, constraints);
+  scope.store.endRebuild();
+
+  REQUIRE(tree != nullptr);
+  ComponentState const* cardState =
+      scope.store.findComponentState(ComponentKey{LocalId::fromString("card")});
+  REQUIRE(cardState != nullptr);
+  std::uint64_t const initialCardBodyEpoch = cardState->lastBodyEpoch;
+  TextSceneNode* initialSubtitleNode = findTextNode(tree.get(), "Static subtitle", findTextNode);
+  REQUIRE(initialSubtitleNode != nullptr);
+  int const initialParentCalls = parentCalls;
+
+  tick = 12;
+
+  scope.store.beginRebuild(false);
+  tree = builder.build(makeRoot(), NodeId{1ull}, constraints, std::move(tree));
+  scope.store.endRebuild();
+
+  REQUIRE(tree != nullptr);
+  cardState = scope.store.findComponentState(ComponentKey{LocalId::fromString("card")});
+  REQUIRE(cardState != nullptr);
+  TextSceneNode* rebuiltSubtitleNode = findTextNode(tree.get(), "Static subtitle", findTextNode);
+  REQUIRE(rebuiltSubtitleNode != nullptr);
+
+  CHECK(parentCalls > initialParentCalls);
+  CHECK(cardState->lastBodyEpoch == initialCardBodyEpoch);
+  CHECK(rebuiltSubtitleNode == initialSubtitleNode);
+}
+
+TEST_CASE("SceneBuilder: dirty stack subtree reuses measure snapshot during build") {
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  StoreScope scope{};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 240.f;
+  constraints.maxHeight = 160.f;
+
+  Signal<int> tickSignal{0};
+  State<int> tick{&tickSignal};
+  int parentCalls = 0;
+  int measureCalls = 0;
+
+  struct ParentWithMeasuredStack {
+    State<int> tick{};
+    int* parentCalls = nullptr;
+    int* measureCalls = nullptr;
+
+    Element body() const {
+      ++*parentCalls;
+      return VStack{
+          .spacing = 6.f,
+          .alignment = Alignment::Start,
+          .children = children(
+              Element{Rectangle{}}.size(20.f + static_cast<float>(*tick), 8.f),
+              CountingMeasureLeaf{
+                  .measureCalls = measureCalls,
+                  .width = 36.f,
+                  .height = 10.f,
+              },
+              CountingMeasureLeaf{
+                  .measureCalls = measureCalls,
+                  .width = 40.f,
+                  .height = 12.f,
+              })};
+    }
+  };
+
+  auto makeRoot = [&]() -> Element {
+    return Element{ParentWithMeasuredStack{
+        .tick = tick,
+        .parentCalls = &parentCalls,
+        .measureCalls = &measureCalls,
+    }};
+  };
+
+  scope.store.beginRebuild(true);
+  std::unique_ptr<SceneNode> tree = builder.build(makeRoot(), NodeId{1ull}, constraints);
+  scope.store.endRebuild();
+
+  REQUIRE(tree != nullptr);
+  CHECK(parentCalls == 1);
+  CHECK(measureCalls == 2);
+
+  tick = 12;
+
+  scope.store.beginRebuild(false);
+  tree = builder.build(makeRoot(), NodeId{1ull}, constraints, std::move(tree));
+  scope.store.endRebuild();
+
+  REQUIRE(tree != nullptr);
+  CHECK(parentCalls == 2);
+  CHECK(measureCalls == 4);
 }

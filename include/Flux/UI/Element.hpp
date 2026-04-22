@@ -104,6 +104,7 @@ public:
   template<typename T>
   [[nodiscard]] T const& as() const;
   [[nodiscard]] bool valueEquals(Element const& other) const noexcept;
+  [[nodiscard]] bool structuralEquals(Element const& other) const noexcept;
 
   float flexGrow() const;
   float flexShrink() const;
@@ -206,6 +207,9 @@ private:
 
 template<typename... Args>
 std::vector<Element> children(Args&&... args);
+
+[[nodiscard]] bool elementsStructurallyEqual(std::vector<Element> const& lhs,
+                                             std::vector<Element> const& rhs) noexcept;
 
 } // namespace flux
 

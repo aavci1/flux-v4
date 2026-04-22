@@ -19,11 +19,15 @@ namespace flux {
 
 class TextSystem;
 class ModifierSceneNode;
+namespace detail {
+class MeasureLayoutCache;
+}
 
 class SceneBuilder {
 public:
   SceneBuilder(TextSystem& textSystem, EnvironmentStack& environment,
                SceneGeometryIndex* geometryIndex = nullptr);
+  ~SceneBuilder();
 
   std::unique_ptr<SceneNode> build(Element const& el, NodeId id, LayoutConstraints const& constraints,
                                    std::unique_ptr<SceneNode> existing = nullptr,
@@ -48,6 +52,7 @@ private:
   TextSystem& textSystem_;
   EnvironmentStack& environment_;
   SceneGeometryIndex* geometryIndex_ = nullptr;
+  mutable std::unique_ptr<detail::MeasureLayoutCache> measureLayoutCache_{};
   std::vector<FrameState> frames_{};
 
   [[nodiscard]] FrameState const& frame() const;

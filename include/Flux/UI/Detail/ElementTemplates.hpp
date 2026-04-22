@@ -80,6 +80,11 @@ CompositeBodyResolution resolveCompositeBody(StateStore* store, ComponentKey con
     return resolution;
   }
   if (store->canReuseBody(key, value, constraints)) {
+    // Cached body reuse skips body(), so allow components to refresh leading retained inputs
+    // such as callback slots before the subtree is kept alive.
+    if constexpr (requires(C const& component) { component.updateRetainedInputs(); }) {
+      value.updateRetainedInputs();
+    }
     resolution.body = store->cachedBody(key);
     resolution.descendantsStable = true;
     return resolution;
@@ -310,6 +315,88 @@ inline bool Element::valueEquals(Element const& other) const noexcept {
     return !impl_ && !other.impl_;
   }
   return impl_->valueEquals(*other.impl_);
+}
+
+namespace detail {
+
+inline bool interactionHandlersComparable(Element const& lhs, Element const& rhs) noexcept {
+  detail::ElementModifiers const* lhsMods = lhs.modifiers();
+  detail::ElementModifiers const* rhsMods = rhs.modifiers();
+  if (!lhsMods || !rhsMods) {
+    return lhsMods == rhsMods;
+  }
+  return !lhsMods->onTap && !rhsMods->onTap &&
+         !lhsMods->onPointerDown && !rhsMods->onPointerDown &&
+         !lhsMods->onPointerUp && !rhsMods->onPointerUp &&
+         !lhsMods->onPointerMove && !rhsMods->onPointerMove &&
+         !lhsMods->onScroll && !rhsMods->onScroll &&
+         !lhsMods->onKeyDown && !rhsMods->onKeyDown &&
+         !lhsMods->onKeyUp && !rhsMods->onKeyUp &&
+         !lhsMods->onTextInput && !rhsMods->onTextInput;
+}
+
+inline bool modifiersStructurallyEqual(Element const& lhs, Element const& rhs) noexcept {
+  detail::ElementModifiers const* lhsMods = lhs.modifiers();
+  detail::ElementModifiers const* rhsMods = rhs.modifiers();
+  if (!lhsMods || !rhsMods) {
+    return lhsMods == rhsMods;
+  }
+  if (!interactionHandlersComparable(lhs, rhs)) {
+    return false;
+  }
+  if (lhsMods->padding != rhsMods->padding || lhsMods->fill != rhsMods->fill ||
+      lhsMods->stroke != rhsMods->stroke || lhsMods->shadow != rhsMods->shadow ||
+      lhsMods->cornerRadius != rhsMods->cornerRadius || lhsMods->opacity != rhsMods->opacity ||
+      lhsMods->translation != rhsMods->translation || lhsMods->clip != rhsMods->clip ||
+      lhsMods->positionX != rhsMods->positionX || lhsMods->positionY != rhsMods->positionY ||
+      lhsMods->sizeWidth != rhsMods->sizeWidth || lhsMods->sizeHeight != rhsMods->sizeHeight ||
+      lhsMods->focusable != rhsMods->focusable || lhsMods->cursor != rhsMods->cursor) {
+    return false;
+  }
+  if (static_cast<bool>(lhsMods->overlay) != static_cast<bool>(rhsMods->overlay)) {
+    return false;
+  }
+  if (lhsMods->overlay && !lhsMods->overlay->structuralEquals(*rhsMods->overlay)) {
+    return false;
+  }
+  return true;
+}
+
+inline bool environmentStructurallyEqual(Element const& lhs, Element const& rhs) noexcept {
+  EnvironmentLayer const* lhsEnv = lhs.environmentLayer();
+  EnvironmentLayer const* rhsEnv = rhs.environmentLayer();
+  if (!lhsEnv || !rhsEnv) {
+    return lhsEnv == rhsEnv;
+  }
+  // Environment layers use erased std::any storage. Until values become comparably snapshottable,
+  // only treat empty layers as structurally equal.
+  return lhsEnv->empty() && rhsEnv->empty();
+}
+
+} // namespace detail
+
+inline bool Element::structuralEquals(Element const& other) const noexcept {
+  return valueEquals(other) &&
+         flexGrowOverride_ == other.flexGrowOverride_ &&
+         flexShrinkOverride_ == other.flexShrinkOverride_ &&
+         flexBasisOverride_ == other.flexBasisOverride_ &&
+         minMainSizeOverride_ == other.minMainSizeOverride_ &&
+         key_ == other.key_ &&
+         detail::environmentStructurallyEqual(*this, other) &&
+         detail::modifiersStructurallyEqual(*this, other);
+}
+
+inline bool elementsStructurallyEqual(std::vector<Element> const& lhs,
+                                      std::vector<Element> const& rhs) noexcept {
+  if (lhs.size() != rhs.size()) {
+    return false;
+  }
+  for (std::size_t i = 0; i < lhs.size(); ++i) {
+    if (!lhs[i].structuralEquals(rhs[i])) {
+      return false;
+    }
+  }
+  return true;
 }
 
 template<typename... Args>

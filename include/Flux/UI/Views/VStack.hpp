@@ -23,6 +23,12 @@ struct VStack : ViewModifiers<VStack> {
   /// Main-axis distribution, similar to CSS `justify-content`.
   JustifyContent justifyContent = JustifyContent::Start;
   std::vector<Element> children;
+
+  bool operator==(VStack const& other) const {
+    return spacing == other.spacing && alignment == other.alignment &&
+           justifyContent == other.justifyContent &&
+           elementsStructurallyEqual(children, other.children);
+  }
 };
 
 } // namespace flux

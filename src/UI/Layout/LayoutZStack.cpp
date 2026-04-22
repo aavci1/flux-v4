@@ -3,6 +3,7 @@
 
 #include "UI/Layout/ContainerScope.hpp"
 #include "UI/Layout/LayoutHelpers.hpp"
+#include "UI/SceneBuilder/MeasureLayoutCache.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -11,8 +12,10 @@
 
 namespace flux {
 
-Size ZStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints, LayoutHints const&,
+Size ZStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
                      TextSystem& ts) const {
+  ComponentKey const layoutKey = ctx.currentElementKey();
+  Element const* const currentElement = ctx.currentElement();
   ContainerMeasureScope scope(ctx);
   float const assignedW = std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;
   float const assignedH = std::isfinite(constraints.maxHeight) ? constraints.maxHeight : 0.f;
@@ -47,6 +50,16 @@ Size ZStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints, 
   }
   if (assignedH > 0.f) {
     innerH = std::min(innerH, assignedH);
+  }
+  if (currentElement && ctx.layoutCache()) {
+    ctx.layoutCache()->recordZStackSize(
+        detail::MeasureLayoutKey{
+            .measureId = currentElement->measureId(),
+            .componentKey = layoutKey,
+            .constraints = constraints,
+            .hints = hints,
+        },
+        Size{innerW, innerH});
   }
   return {innerW, innerH};
 }

@@ -17,11 +17,12 @@ class TextSystem;
 class Element;
 namespace detail {
 struct ElementModifiers;
+class MeasureLayoutCache;
 }
 
 class MeasureContext {
 public:
-  explicit MeasureContext(TextSystem& ts);
+  explicit MeasureContext(TextSystem& ts, detail::MeasureLayoutCache* layoutCache = nullptr);
   ~MeasureContext();
 
   TextSystem& textSystem();
@@ -43,6 +44,7 @@ public:
   ComponentKey peekNextCompositeKey() const;
 
   void advanceChildSlot();
+  ComponentKey currentElementKey() const;
   ComponentKey leafComponentKey() const;
   void rewindChildKeyIndex();
   void resetTraversalState(ComponentKey const& key = {});
@@ -57,6 +59,7 @@ public:
 
   void setCurrentElement(Element const* el) noexcept { currentElement_ = el; }
   [[nodiscard]] Element const* currentElement() const noexcept { return currentElement_; }
+  [[nodiscard]] detail::MeasureLayoutCache* layoutCache() const noexcept { return layoutCache_; }
 
 #ifndef NDEBUG
   std::size_t debugConstraintStackDepth() const noexcept { return layoutStack_.size(); }
@@ -84,6 +87,7 @@ protected:
   bool skipNextLayoutChildAdvance_{false};
   bool useMeasurementRootKey_{false};
   Element const* currentElement_{nullptr};
+  detail::MeasureLayoutCache* layoutCache_ = nullptr;
 
 private:
   [[nodiscard]] LocalId currentChildLocalId() const;

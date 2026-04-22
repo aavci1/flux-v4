@@ -200,6 +200,18 @@ struct ScrollSizedComposite {
   }
 };
 
+struct CountingMeasureLeaf : ViewModifiers<CountingMeasureLeaf> {
+  int* measureCalls = nullptr;
+  float width = 0.f;
+  float height = 0.f;
+
+  Size measure(MeasureContext& ctx, LayoutConstraints const&, LayoutHints const&, TextSystem&) const {
+    ++*measureCalls;
+    ctx.advanceChildSlot();
+    return Size{width, height};
+  }
+};
+
 } // namespace
 
 namespace {

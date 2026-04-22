@@ -21,10 +21,16 @@ struct Card : ViewModifiers<Card> {
     Color backgroundColor = Color::theme();
     Color borderColor = Color::theme();
     ShadowStyle shadow = ShadowStyle::none();
+
+    bool operator==(Style const& other) const = default;
   };
 
   Element child;
   Style style {};
+
+  bool operator==(Card const& other) const {
+    return child.structuralEquals(other.child) && style == other.style;
+  }
 
   Element body() const;
 };

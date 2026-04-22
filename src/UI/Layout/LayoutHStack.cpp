@@ -4,6 +4,7 @@
 #include "UI/Layout/Algorithms/StackLayout.hpp"
 #include "UI/Layout/ContainerScope.hpp"
 #include "UI/Layout/LayoutHelpers.hpp"
+#include "UI/SceneBuilder/MeasureLayoutCache.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -24,6 +25,8 @@ bool zStackAxisStretches(std::optional<Alignment> alignment) {
 
 Size HStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
                      TextSystem& ts) const {
+  ComponentKey const layoutKey = ctx.currentElementKey();
+  Element const* const currentElement = ctx.currentElement();
   ContainerMeasureScope scope(ctx);
   float const availableHeight = stackMainAxisSpan(0.f, constraints.maxHeight);
   bool const heightAssigned = zStackAxisStretches(hints.zStackVerticalAlign);
@@ -96,6 +99,16 @@ Size HStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints, 
       layoutStack(StackAxis::Horizontal, alignment, sizes, mainLayout.mainSizes,
                   mainLayout.itemSpacing, mainLayout.containerMainSize, mainLayout.startOffset, assignedHCross,
                   heightConstrained);
+  if (currentElement && ctx.layoutCache()) {
+    ctx.layoutCache()->recordStackLayout(
+        detail::MeasureLayoutKey{
+            .measureId = currentElement->measureId(),
+            .componentKey = layoutKey,
+            .constraints = constraints,
+            .hints = hints,
+        },
+        layoutResult);
+  }
   return layoutResult.containerSize;
 }
 

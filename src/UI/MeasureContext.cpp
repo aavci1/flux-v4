@@ -7,8 +7,9 @@
 
 namespace flux {
 
-MeasureContext::MeasureContext(TextSystem& ts)
-    : textSystem_(ts) {
+MeasureContext::MeasureContext(TextSystem& ts, detail::MeasureLayoutCache* layoutCache)
+    : textSystem_(ts)
+    , layoutCache_(layoutCache) {
   layoutStack_.push_back(LayoutFrame{});
 }
 
@@ -102,6 +103,15 @@ ComponentKey MeasureContext::peekNextCompositeKey() const {
 }
 
 void MeasureContext::advanceChildSlot() { ++nextChildIndex_; }
+
+ComponentKey MeasureContext::currentElementKey() const {
+  if (skipNextLayoutChildAdvance_) {
+    return keyStack_;
+  }
+  ComponentKey key = keyStack_;
+  key.push_back(currentChildLocalId());
+  return key;
+}
 
 ComponentKey MeasureContext::leafComponentKey() const {
   ComponentKey key = keyStack_;
