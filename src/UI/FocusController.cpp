@@ -8,6 +8,16 @@
 #include <cstddef>
 namespace flux {
 
+namespace {
+
+void scheduleReactiveDirtyFallback() {
+  if (Application::hasInstance()) {
+    Application::instance().markReactiveDirty();
+  }
+}
+
+} // namespace
+
 bool FocusController::hasKeyboardOrigin() const noexcept {
   return lastInputKind_ == FocusInputKind::Keyboard;
 }
@@ -18,6 +28,10 @@ ComponentKey const& FocusController::focusedKey() const noexcept {
 
 std::optional<OverlayId> FocusController::focusInOverlay() const noexcept {
   return focusInOverlay_;
+}
+
+void FocusController::setDirtyMarker(DirtyMarker marker) {
+  dirtyMarker_ = marker;
 }
 
 bool FocusController::isInSubtree(ComponentKey const& key, StateStore const& store) const noexcept {
@@ -34,23 +48,46 @@ bool FocusController::isInSubtree(ComponentKey const& key, StateStore const& sto
   return !focusInOverlay_.has_value();
 }
 
+bool FocusController::markDirty(ComponentKey const& key, std::optional<OverlayId> overlayScope) const {
+  if (key.empty() || !dirtyMarker_) {
+    return false;
+  }
+  return dirtyMarker_(key, overlayScope);
+}
+
+void FocusController::markStateTransition(ComponentKey const& previousKey,
+                                          std::optional<OverlayId> previousOverlayScope,
+                                          ComponentKey const& nextKey,
+                                          std::optional<OverlayId> nextOverlayScope) const {
+  bool dirty = false;
+  dirty |= markDirty(previousKey, previousOverlayScope);
+  dirty |= markDirty(nextKey, nextOverlayScope);
+  if (!dirty) {
+    scheduleReactiveDirtyFallback();
+  }
+}
+
 void FocusController::set(ComponentKey const& key, std::optional<OverlayId> overlayScope, FocusInputKind kind) {
   if (focusedKey_ == key && focusInOverlay_ == overlayScope) {
     return;
   }
+  ComponentKey const previousKey = focusedKey_;
+  std::optional<OverlayId> const previousOverlayScope = focusInOverlay_;
   focusedKey_ = key;
   focusInOverlay_ = overlayScope;
   lastInputKind_ = kind;
-  Application::instance().markReactiveDirty();
+  markStateTransition(previousKey, previousOverlayScope, focusedKey_, focusInOverlay_);
 }
 
 void FocusController::clear() {
   if (focusedKey_.empty() && !focusInOverlay_.has_value()) {
     return;
   }
+  ComponentKey const previousKey = focusedKey_;
+  std::optional<OverlayId> const previousOverlayScope = focusInOverlay_;
   focusedKey_.clear();
   focusInOverlay_.reset();
-  Application::instance().markReactiveDirty();
+  markStateTransition(previousKey, previousOverlayScope, focusedKey_, focusInOverlay_);
 }
 
 void FocusController::cycleInTree(SceneTree const& tree, bool reverse, std::optional<OverlayId> overlayId) {
@@ -167,9 +204,12 @@ void FocusController::onOverlayPushed(OverlayEntry& entry) {
   if (!entry.config.modal) {
     return;
   }
+  ComponentKey const previousKey = focusedKey_;
+  std::optional<OverlayId> const previousOverlayScope = focusInOverlay_;
   entry.preFocusKey = focusedKey_;
   focusInOverlay_ = entry.id;
   focusedKey_.clear();
+  markStateTransition(previousKey, previousOverlayScope, focusedKey_, focusInOverlay_);
 }
 
 void FocusController::onOverlayRemoved(OverlayEntry const& entry, SceneTree const* mainTree) {
@@ -181,6 +221,8 @@ void FocusController::onOverlayRemoved(OverlayEntry const& entry, SceneTree cons
   }
   if (entry.config.modal) {
     if (focusInOverlay_ == entry.id) {
+      ComponentKey const previousKey = focusedKey_;
+      std::optional<OverlayId> const previousOverlayScope = focusInOverlay_;
       focusInOverlay_.reset();
       focusedKey_ = entry.preFocusKey;
       lastInputKind_ = FocusInputKind::Keyboard;
@@ -191,6 +233,7 @@ void FocusController::onOverlayRemoved(OverlayEntry const& entry, SceneTree cons
           focusedKey_.clear();
         }
       }
+      markStateTransition(previousKey, previousOverlayScope, focusedKey_, focusInOverlay_);
     }
   }
 }
@@ -209,8 +252,11 @@ void FocusController::syncAfterOverlayRebuild(OverlayEntry& entry) {
   auto const [id, interaction] = findInteractionByKey(entry.sceneTree, focusedKey_);
   (void)id;
   if (!interaction || !interaction->focusable) {
+    ComponentKey const previousKey = focusedKey_;
+    std::optional<OverlayId> const previousOverlayScope = focusInOverlay_;
     focusedKey_ = order.front();
     lastInputKind_ = FocusInputKind::Keyboard;
+    markStateTransition(previousKey, previousOverlayScope, focusedKey_, focusInOverlay_);
   }
 }
 
@@ -224,7 +270,10 @@ void FocusController::validateAfterRebuild(SceneTree const& mainTree) {
   auto const [id, interaction] = findInteractionByKey(mainTree, focusedKey_);
   (void)id;
   if (!interaction || !interaction->focusable) {
+    ComponentKey const previousKey = focusedKey_;
+    std::optional<OverlayId> const previousOverlayScope = focusInOverlay_;
     focusedKey_.clear();
+    markStateTransition(previousKey, previousOverlayScope, focusedKey_, focusInOverlay_);
   }
 }
 

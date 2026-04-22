@@ -33,6 +33,24 @@ enum class SceneNodeKind : std::uint8_t {
 
 std::string_view sceneNodeKindName(SceneNodeKind kind) noexcept;
 
+/// Layout stamp used to short-circuit rebuilds for unchanged retained subtrees.
+struct RetainedBuildStamp {
+  std::uint64_t measureId = 0;
+  float maxWidth = 0.f;
+  float maxHeight = 0.f;
+  float minWidth = 0.f;
+  float minHeight = 0.f;
+  float assignedWidth = 0.f;
+  float assignedHeight = 0.f;
+  bool hasAssignedWidth = false;
+  bool hasAssignedHeight = false;
+  std::int8_t hStackCrossAlign = -1;
+  std::int8_t vStackCrossAlign = -1;
+  std::int8_t zStackHorizontalAlign = -1;
+  std::int8_t zStackVerticalAlign = -1;
+  Point localPosition{};
+};
+
 class SceneNode {
 public:
   explicit SceneNode(NodeId id);
@@ -74,6 +92,8 @@ public:
   InteractionData* interaction() noexcept { return interaction_.get(); }
   InteractionData const* interaction() const noexcept { return interaction_.get(); }
   void setInteraction(std::unique_ptr<InteractionData> interaction);
+  RetainedBuildStamp const& retainedBuildStamp() const noexcept { return retainedBuildStamp_; }
+  void setRetainedBuildStamp(RetainedBuildStamp stamp) noexcept { retainedBuildStamp_ = stamp; }
 
 protected:
   SceneNode(SceneNodeKind kind, NodeId id);
@@ -95,6 +115,7 @@ protected:
   bool paintDirty_ = true;
   bool boundsDirty_ = true;
   std::vector<PaintCommand> localPaintCache_{};
+  RetainedBuildStamp retainedBuildStamp_{};
 };
 
 } // namespace flux

@@ -1,5 +1,7 @@
 #include "SceneBuilderTestSupport.hpp"
 
+#include <Flux/UI/HoverController.hpp>
+
 TEST_CASE("SceneTree interaction lookup preserves focus order and keyed handler lookup") {
   NullTextSystem textSystem{};
   EnvironmentLayer env{};
@@ -156,4 +158,83 @@ TEST_CASE("FocusController: modal overlay rebuild syncs focus from the retained 
   REQUIRE(focus.focusInOverlay().has_value());
   CHECK(focus.focusInOverlay()->value == overlay.id.value);
   CHECK(focus.focusedKey() == ComponentKey{LocalId::fromString("dialog-primary")});
+}
+
+TEST_CASE("HoverController marks previous and next hovered subtrees dirty") {
+  HoverController hover{};
+  StateStore store;
+  ComponentKey const firstKey{LocalId::fromString("first")};
+  ComponentKey const secondKey{LocalId::fromString("second")};
+
+  hover.setDirtyMarker([&](ComponentKey const& key, std::optional<OverlayId>) {
+    store.markCompositeDirty(key);
+    return true;
+  });
+
+  hover.set(firstKey, std::nullopt);
+  hover.set(secondKey, std::nullopt);
+
+  CHECK(store.hasPendingDirtyComponents());
+  store.beginRebuild(false);
+  CHECK_FALSE(store.shouldForceFullRebuild());
+  CHECK(store.isComponentDirty(firstKey));
+  CHECK(store.isComponentDirty(secondKey));
+  store.endRebuild();
+}
+
+TEST_CASE("FocusController routes dirty focus transitions to overlay-scoped stores") {
+  FocusController focus{};
+  StateStore mainStore;
+  StateStore overlayStore;
+  ComponentKey const mainKey{LocalId::fromString("main-focus")};
+  ComponentKey const overlayKey{LocalId::fromString("overlay-focus")};
+  OverlayId const overlayId{11ull};
+
+  focus.setDirtyMarker([&](ComponentKey const& key, std::optional<OverlayId> overlayScope) {
+    if (overlayScope == overlayId) {
+      overlayStore.markCompositeDirty(key);
+      return true;
+    }
+    if (!overlayScope.has_value()) {
+      mainStore.markCompositeDirty(key);
+      return true;
+    }
+    return false;
+  });
+
+  focus.set(mainKey, std::nullopt, FocusInputKind::Keyboard);
+  focus.set(overlayKey, overlayId, FocusInputKind::Pointer);
+
+  CHECK(mainStore.hasPendingDirtyComponents());
+  CHECK(overlayStore.hasPendingDirtyComponents());
+
+  mainStore.beginRebuild(false);
+  CHECK_FALSE(mainStore.shouldForceFullRebuild());
+  CHECK(mainStore.isComponentDirty(mainKey));
+  mainStore.endRebuild();
+
+  overlayStore.beginRebuild(false);
+  CHECK_FALSE(overlayStore.shouldForceFullRebuild());
+  CHECK(overlayStore.isComponentDirty(overlayKey));
+  overlayStore.endRebuild();
+}
+
+TEST_CASE("GestureTracker marks press enter and exit on the affected subtree") {
+  GestureTracker tracker{};
+  StateStore store;
+  ComponentKey const pressKey{LocalId::fromString("pressed")};
+
+  tracker.setDirtyMarker([&](ComponentKey const& key, std::optional<OverlayId>) {
+    store.markCompositeDirty(key);
+    return true;
+  });
+
+  tracker.recordPress(NodeId{3ull}, pressKey, Point{4.f, 5.f}, true, std::nullopt);
+  tracker.clearPress();
+
+  CHECK(store.hasPendingDirtyComponents());
+  store.beginRebuild(false);
+  CHECK_FALSE(store.shouldForceFullRebuild());
+  CHECK(store.isComponentDirty(pressKey));
+  store.endRebuild();
 }

@@ -122,6 +122,12 @@ Runtime::Runtime(Window& window)
     , cursor_(window)
     , buildOrchestrator_(window, focus_, hover_, gesture_)
     , dispatcher_(window, *this, focus_, hover_, gesture_, cursor_, buildOrchestrator_, windowHasFocus_) {
+  auto dirtyMarker = [this](ComponentKey const& key, std::optional<OverlayId> overlayScope) {
+    return markInteractiveDirty(key, overlayScope);
+  };
+  focus_.setDirtyMarker(dirtyMarker);
+  hover_.setDirtyMarker(dirtyMarker);
+  gesture_.setDirtyMarker(dirtyMarker);
   buildOrchestrator_.subscribeToRebuild([this]() { rebuild(std::nullopt); });
   subscribeInput();
   subscribeWindowEvents();
@@ -199,6 +205,28 @@ void Runtime::rebuild(std::optional<Size> sizeOverride) {
   sCurrent = this;
   buildOrchestrator_.rebuild(sizeOverride, *this);
   sCurrent = nullptr;
+}
+
+bool Runtime::markInteractiveDirty(ComponentKey const& key, std::optional<OverlayId> overlayScope) {
+  if (key.empty()) {
+    if (Application::hasInstance()) {
+      Application::instance().markReactiveDirty();
+    }
+    return false;
+  }
+  if (overlayScope.has_value()) {
+    if (OverlayEntry* entry = window_.overlayManager().find(*overlayScope);
+        entry && entry->stateStore) {
+      entry->stateStore->markCompositeDirty(key);
+      return true;
+    }
+    if (Application::hasInstance()) {
+      Application::instance().markReactiveDirty();
+    }
+    return false;
+  }
+  buildOrchestrator_.stateStore().markCompositeDirty(key);
+  return true;
 }
 
 void Runtime::onOverlayPushed(OverlayEntry& entry) {

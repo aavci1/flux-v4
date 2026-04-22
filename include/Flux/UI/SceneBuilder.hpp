@@ -54,6 +54,8 @@ private:
                  ComponentKey key, Size assignedSize = {}, bool hasAssignedWidth = false,
                  bool hasAssignedHeight = false);
   void popFrame();
+  [[nodiscard]] bool canRetainExistingSubtree(Element const& el, SceneNode const& existing) const;
+  void stampRetainedBuild(SceneNode& node, Element const& el) const;
 
   [[nodiscard]] Size measureElement(Element const& el, LayoutConstraints const& constraints,
                                     LayoutHints const& hints, ComponentKey const& key) const;

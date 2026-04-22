@@ -67,6 +67,7 @@ using layout::vAlignOffset;
 using layout::warnFlexGrowIfParentMainAxisUnconstrained;
 
 constexpr float kApproxEpsilon = 1e-4f;
+constexpr std::int8_t kUnsetAlignmentStamp = -1;
 
 bool nearlyEqual(float lhs, float rhs, float eps = kApproxEpsilon) {
   return std::fabs(lhs - rhs) <= eps;
@@ -458,6 +459,13 @@ bool sizeApproximatelyEqual(Size lhs, Size rhs) {
   return nearlyEqual(lhs.width, rhs.width, 0.5f) && nearlyEqual(lhs.height, rhs.height, 0.5f);
 }
 
+std::int8_t encodeAlignmentStamp(std::optional<Alignment> alignment) {
+  if (!alignment) {
+    return kUnsetAlignmentStamp;
+  }
+  return static_cast<std::int8_t>(static_cast<int>(*alignment));
+}
+
 Color scrollIndicatorColorForTheme(Theme const& theme) {
   return Color{
       theme.secondaryLabelColor.r,
@@ -495,6 +503,51 @@ void SceneBuilder::pushFrame(LayoutConstraints const& constraints, LayoutHints c
 
 void SceneBuilder::popFrame() {
   frames_.pop_back();
+}
+
+bool SceneBuilder::canRetainExistingSubtree(Element const& el, SceneNode const& existing) const {
+  StateStore* const store = StateStore::current();
+  if (!store || !store->currentCompositePathStable() || store->hasDirtyDescendant(frame().key)) {
+    return false;
+  }
+
+  RetainedBuildStamp const& stamp = existing.retainedBuildStamp();
+  FrameState const& current = frame();
+  if (stamp.measureId == 0 || stamp.measureId != el.measureId()) {
+    return false;
+  }
+  if (stamp.maxWidth != current.constraints.maxWidth || stamp.maxHeight != current.constraints.maxHeight ||
+      stamp.minWidth != current.constraints.minWidth || stamp.minHeight != current.constraints.minHeight) {
+    return false;
+  }
+  if (stamp.assignedWidth != current.assignedSize.width || stamp.assignedHeight != current.assignedSize.height ||
+      stamp.hasAssignedWidth != current.hasAssignedWidth || stamp.hasAssignedHeight != current.hasAssignedHeight) {
+    return false;
+  }
+  return stamp.hStackCrossAlign == encodeAlignmentStamp(current.hints.hStackCrossAlign) &&
+         stamp.vStackCrossAlign == encodeAlignmentStamp(current.hints.vStackCrossAlign) &&
+         stamp.zStackHorizontalAlign == encodeAlignmentStamp(current.hints.zStackHorizontalAlign) &&
+         stamp.zStackVerticalAlign == encodeAlignmentStamp(current.hints.zStackVerticalAlign);
+}
+
+void SceneBuilder::stampRetainedBuild(SceneNode& node, Element const& el) const {
+  FrameState const& current = frame();
+  node.setRetainedBuildStamp(RetainedBuildStamp{
+      .measureId = el.measureId(),
+      .maxWidth = current.constraints.maxWidth,
+      .maxHeight = current.constraints.maxHeight,
+      .minWidth = current.constraints.minWidth,
+      .minHeight = current.constraints.minHeight,
+      .assignedWidth = current.assignedSize.width,
+      .assignedHeight = current.assignedSize.height,
+      .hasAssignedWidth = current.hasAssignedWidth,
+      .hasAssignedHeight = current.hasAssignedHeight,
+      .hStackCrossAlign = encodeAlignmentStamp(current.hints.hStackCrossAlign),
+      .vStackCrossAlign = encodeAlignmentStamp(current.hints.vStackCrossAlign),
+      .zStackHorizontalAlign = encodeAlignmentStamp(current.hints.zStackHorizontalAlign),
+      .zStackVerticalAlign = encodeAlignmentStamp(current.hints.zStackVerticalAlign),
+      .localPosition = node.position,
+  });
 }
 
 Size SceneBuilder::measureElement(Element const& el, LayoutConstraints const& constraints,
@@ -636,6 +689,31 @@ std::unique_ptr<SceneNode> SceneBuilder::buildOrReuse(Element const& el, NodeId 
     return build(el, id, LayoutConstraints{}, std::move(existing));
   }
 
+  auto retainExisting = [&](std::unique_ptr<SceneNode> node) -> std::unique_ptr<SceneNode> {
+    StateStore* const store = StateStore::current();
+    if (!node) {
+      return nullptr;
+    }
+    node->position = node->retainedBuildStamp().localPosition;
+    if (store) {
+      store->markRetainedSubtreeVisited(frame().key);
+    }
+    if (geometryIndex_) {
+      Point delta{};
+      if (!frame().key.empty()) {
+        if (std::optional<Rect> previousRect = geometryIndex_->forKey(frame().key)) {
+          delta = Point{frame().origin.x - previousRect->x, frame().origin.y - previousRect->y};
+        }
+      }
+      geometryIndex_->retainSubtree(frame().key, delta);
+    }
+    return node;
+  };
+
+  if (!el.isComposite() && existing && canRetainExistingSubtree(el, *existing)) {
+    return retainExisting(std::move(existing));
+  }
+
   bool pushedEnv = false;
   if (EnvironmentLayer const* envLayer = el.environmentLayer()) {
     environment_.push(*envLayer);
@@ -655,19 +733,8 @@ std::unique_ptr<SceneNode> SceneBuilder::buildOrReuse(Element const& el, NodeId 
     detail::CompositeBodyResolution resolution = el.resolveCompositeBody(frame().key, frame().constraints);
     if (resolution.body) {
       StateStore* const store = StateStore::current();
-      if (store && existing && resolution.descendantsStable && !el.environmentLayer() && !el.modifiers()) {
-        existing->position = modifierOffset(resolution.body ? resolution.body->modifiers() : nullptr);
-        store->markRetainedSubtreeVisited(frame().key);
-        if (geometryIndex_) {
-          Point delta{};
-          if (!frame().key.empty()) {
-            if (std::optional<Rect> previousRect = geometryIndex_->forKey(frame().key)) {
-              delta = Point{frame().origin.x - previousRect->x, frame().origin.y - previousRect->y};
-            }
-          }
-          geometryIndex_->retainSubtree(frame().key, delta);
-        }
-        return existing;
+      if (store && existing && resolution.descendantsStable && canRetainExistingSubtree(el, *existing)) {
+        return retainExisting(std::move(existing));
       }
       if (store) {
         store->pushCompositePathStable(resolution.descendantsStable);
@@ -706,11 +773,9 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
                                                        std::unique_ptr<SceneNode> existing) {
   FrameState const current = frame();
   bool const resolvedFromComposite = (&sceneEl != &el);
-  std::optional<Element> stableSceneStorage{};
-  if (resolvedFromComposite) {
-    stableSceneStorage.emplace(sceneEl);
-  }
-  Element const& stableSceneEl = stableSceneStorage ? *stableSceneStorage : sceneEl;
+  // `sceneEl` already stays alive for the duration of this call (either from cached body storage
+  // or the caller's temporary resolution object), so copying it here only destroys subtree identity.
+  Element const& stableSceneEl = sceneEl;
 
   detail::ElementModifiers const* mods = stableSceneEl.modifiers();
   detail::ElementModifiers const* outerMods = resolvedFromComposite ? el.modifiers() : nullptr;
@@ -772,6 +837,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     if (root->bounds.width <= 0.f && root->bounds.height <= 0.f) {
       root->bounds = sizeRect(outerSize);
     }
+    stampRetainedBuild(*root, el);
     recordGeometry(rectSize(root->bounds));
     return root;
   }
@@ -1761,6 +1827,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
   if (root->bounds.width <= 0.f && root->bounds.height <= 0.f) {
     root->bounds = sizeRect(outerSize);
   }
+  stampRetainedBuild(*root, el);
   recordGeometry(geometrySize.width > 0.f || geometrySize.height > 0.f ? geometrySize : rectSize(root->bounds));
   return root;
 }

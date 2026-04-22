@@ -343,7 +343,6 @@ void InputDispatcher::onPointerDown(InputEvent const& e) {
         ComponentKey const stableTargetKey = interaction->stableTargetKey;
         gesture_.recordPress(hit->nodeId, interaction->stableTargetKey, p,
                              static_cast<bool>(interaction->onTap), oe.id);
-        Application::instance().markReactiveDirty();
         if (interaction->onPointerDown) {
           interaction->onPointerDown(hit->localPoint);
         }
@@ -390,7 +389,6 @@ void InputDispatcher::onPointerDown(InputEvent const& e) {
     if (InteractionData const* interaction = hit->interaction) {
       gesture_.recordPress(hit->nodeId, interaction->stableTargetKey, p,
                            static_cast<bool>(interaction->onTap), std::nullopt);
-      Application::instance().markReactiveDirty();
       if (interaction->onPointerDown) {
         interaction->onPointerDown(hit->localPoint);
       }
@@ -511,9 +509,6 @@ void InputDispatcher::onPointerUp(InputEvent const& e) {
     released = *ps;
   }
   gesture_.clearPress();
-  if (released) {
-    Application::instance().markReactiveDirty();
-  }
 
   HitTester tester{};
   bool overlayHandled = false;

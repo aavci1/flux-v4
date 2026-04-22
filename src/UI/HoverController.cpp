@@ -6,12 +6,26 @@
 
 namespace flux {
 
+namespace {
+
+void scheduleReactiveDirtyFallback() {
+  if (Application::hasInstance()) {
+    Application::instance().markReactiveDirty();
+  }
+}
+
+} // namespace
+
 ComponentKey const& HoverController::hoveredKey() const noexcept {
   return hoveredKey_;
 }
 
 std::optional<OverlayId> HoverController::hoverInOverlay() const noexcept {
   return hoverInOverlay_;
+}
+
+void HoverController::setDirtyMarker(DirtyMarker marker) {
+  dirtyMarker_ = marker;
 }
 
 bool HoverController::isInSubtree(ComponentKey const& key, StateStore const& store) const noexcept {
@@ -28,22 +42,45 @@ bool HoverController::isInSubtree(ComponentKey const& key, StateStore const& sto
   return !hoverInOverlay_.has_value();
 }
 
+bool HoverController::markDirty(ComponentKey const& key, std::optional<OverlayId> overlayScope) const {
+  if (key.empty() || !dirtyMarker_) {
+    return false;
+  }
+  return dirtyMarker_(key, overlayScope);
+}
+
+void HoverController::markStateTransition(ComponentKey const& previousKey,
+                                          std::optional<OverlayId> previousOverlayScope,
+                                          ComponentKey const& nextKey,
+                                          std::optional<OverlayId> nextOverlayScope) const {
+  bool dirty = false;
+  dirty |= markDirty(previousKey, previousOverlayScope);
+  dirty |= markDirty(nextKey, nextOverlayScope);
+  if (!dirty) {
+    scheduleReactiveDirtyFallback();
+  }
+}
+
 void HoverController::set(ComponentKey const& key, std::optional<OverlayId> overlayScope) {
   if (hoveredKey_ == key && hoverInOverlay_ == overlayScope) {
     return;
   }
+  ComponentKey const previousKey = hoveredKey_;
+  std::optional<OverlayId> const previousOverlayScope = hoverInOverlay_;
   hoveredKey_ = key;
   hoverInOverlay_ = overlayScope;
-  Application::instance().markReactiveDirty();
+  markStateTransition(previousKey, previousOverlayScope, hoveredKey_, hoverInOverlay_);
 }
 
 void HoverController::clear() {
   if (hoveredKey_.empty() && !hoverInOverlay_.has_value()) {
     return;
   }
+  ComponentKey const previousKey = hoveredKey_;
+  std::optional<OverlayId> const previousOverlayScope = hoverInOverlay_;
   hoveredKey_.clear();
   hoverInOverlay_.reset();
-  Application::instance().markReactiveDirty();
+  markStateTransition(previousKey, previousOverlayScope, hoveredKey_, hoverInOverlay_);
 }
 
 void HoverController::updateForPoint(Point windowPoint, std::vector<OverlayEntry const*> const& overlayEntries,

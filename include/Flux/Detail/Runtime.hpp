@@ -76,6 +76,7 @@ private:
   void rebuild(std::optional<Size> sizeOverride = std::nullopt);
   void subscribeInput();
   void subscribeWindowEvents();
+  bool markInteractiveDirty(ComponentKey const& key, std::optional<OverlayId> overlayScope);
 
   static thread_local Runtime* sCurrent;
 

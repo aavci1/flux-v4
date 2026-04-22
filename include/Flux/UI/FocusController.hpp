@@ -10,6 +10,7 @@
 #include <Flux/UI/ComponentKey.hpp>
 #include <Flux/UI/Overlay.hpp>
 
+#include <functional>
 #include <optional>
 #include <vector>
 
@@ -22,6 +23,8 @@ class StateStore;
 /// query methods. Never touches the scene graph or input events directly.
 class FocusController {
 public:
+  using DirtyMarker = std::function<bool(ComponentKey const&, std::optional<OverlayId>)>;
+
   /// True when the focused leaf has `key` as a prefix of its stable key,
   /// and the overlay scope of the calling `StateStore` matches `focusInOverlay_`.
   /// Called by `useFocus()` / `useKeyboardFocus()` during `body()`.
@@ -32,6 +35,7 @@ public:
   ComponentKey const& focusedKey() const noexcept;
   std::optional<OverlayId> focusInOverlay() const noexcept;
 
+  void setDirtyMarker(DirtyMarker marker);
   void set(ComponentKey const& key, std::optional<OverlayId> overlayScope, FocusInputKind kind);
   void clear();
 
@@ -64,6 +68,11 @@ public:
   void validateAfterRebuild(SceneTree const& mainTree);
 
 private:
+  bool markDirty(ComponentKey const& key, std::optional<OverlayId> overlayScope) const;
+  void markStateTransition(ComponentKey const& previousKey, std::optional<OverlayId> previousOverlayScope,
+                           ComponentKey const& nextKey, std::optional<OverlayId> nextOverlayScope) const;
+
+  DirtyMarker dirtyMarker_{};
   ComponentKey focusedKey_{};
   std::optional<OverlayId> focusInOverlay_{};
   FocusInputKind lastInputKind_{ FocusInputKind::Keyboard };

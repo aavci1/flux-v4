@@ -11,6 +11,7 @@
 #include <Flux/UI/ComponentKey.hpp>
 #include <Flux/UI/Overlay.hpp>
 
+#include <functional>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -22,6 +23,8 @@ class StateStore;
 /// Owns the active pointer-press state and tap dispatch for one window.
 class GestureTracker {
 public:
+  using DirtyMarker = std::function<bool(ComponentKey const&, std::optional<OverlayId>)>;
+
   struct PressState {
     NodeId nodeId{};
     ComponentKey stableTargetKey{};
@@ -30,6 +33,8 @@ public:
     bool hadOnTapOnDown = false;
     std::optional<OverlayId> overlayScope{};
   };
+
+  void setDirtyMarker(DirtyMarker marker);
 
   void recordPress(NodeId nodeId, ComponentKey stableTargetKey, Point downPoint, bool hadOnTap,
                    std::optional<OverlayId> overlayScope);
@@ -63,6 +68,10 @@ public:
                                      SceneTree const& mainTree) const;
 
 private:
+  bool markDirty(ComponentKey const& key, std::optional<OverlayId> overlayScope) const;
+  void markStateTransition(std::optional<PressState> const& previous, std::optional<PressState> const& next) const;
+
+  DirtyMarker dirtyMarker_{};
   std::optional<PressState> activePress_{};
   ComponentKey pendingTapLeafKey_{};
   std::optional<OverlayId> pendingTapOverlayScope_{};

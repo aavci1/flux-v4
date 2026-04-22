@@ -20,10 +20,42 @@ Point pointInPressTreeRoot(Point windowPoint, OverlayEntry const* overlay) {
   };
 }
 
+void scheduleReactiveDirtyFallback() {
+  if (Application::hasInstance()) {
+    Application::instance().markReactiveDirty();
+  }
+}
+
 } // namespace
+
+void GestureTracker::setDirtyMarker(DirtyMarker marker) {
+  dirtyMarker_ = marker;
+}
+
+bool GestureTracker::markDirty(ComponentKey const& key, std::optional<OverlayId> overlayScope) const {
+  if (key.empty() || !dirtyMarker_) {
+    return false;
+  }
+  return dirtyMarker_(key, overlayScope);
+}
+
+void GestureTracker::markStateTransition(std::optional<PressState> const& previous,
+                                         std::optional<PressState> const& next) const {
+  bool dirty = false;
+  if (previous) {
+    dirty |= markDirty(previous->stableTargetKey, previous->overlayScope);
+  }
+  if (next) {
+    dirty |= markDirty(next->stableTargetKey, next->overlayScope);
+  }
+  if (!dirty) {
+    scheduleReactiveDirtyFallback();
+  }
+}
 
 void GestureTracker::recordPress(NodeId nodeId, ComponentKey stableTargetKey, Point downPoint, bool hadOnTap,
                                  std::optional<OverlayId> overlayScope) {
+  std::optional<PressState> const previous = activePress_;
   PressState ps{};
   ps.nodeId = nodeId;
   ps.stableTargetKey = std::move(stableTargetKey);
@@ -32,6 +64,7 @@ void GestureTracker::recordPress(NodeId nodeId, ComponentKey stableTargetKey, Po
   ps.hadOnTapOnDown = hadOnTap;
   ps.overlayScope = overlayScope;
   activePress_ = std::move(ps);
+  markStateTransition(previous, activePress_);
 }
 
 OverlayEntry const* GestureTracker::overlayForPress(PressState const& ps,
@@ -97,6 +130,7 @@ void GestureTracker::cancelPress(Point windowPoint, std::vector<OverlayEntry con
   if (!activePress_) {
     return;
   }
+  std::optional<PressState> const previous = activePress_;
   OverlayEntry const* overlay = overlayForPress(*activePress_, overlayEntries);
   if (SceneTree const* tree = sceneTreeForPress(*activePress_, overlayEntries, mainTree)) {
     auto const [currentId, interaction] = findPressInteraction(*activePress_, overlayEntries, mainTree);
@@ -111,7 +145,7 @@ void GestureTracker::cancelPress(Point windowPoint, std::vector<OverlayEntry con
     }
   }
   activePress_ = std::nullopt;
-  Application::instance().markReactiveDirty();
+  markStateTransition(previous, activePress_);
 }
 
 bool GestureTracker::dispatchTap(PressState const& released,
@@ -154,7 +188,12 @@ bool GestureTracker::dispatchTap(PressState const& released,
 }
 
 void GestureTracker::clearPress() {
+  if (!activePress_) {
+    return;
+  }
+  std::optional<PressState> const previous = activePress_;
   activePress_ = std::nullopt;
+  markStateTransition(previous, activePress_);
 }
 
 void GestureTracker::markCancelled() {
