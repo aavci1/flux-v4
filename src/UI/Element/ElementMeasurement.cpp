@@ -114,32 +114,4 @@ Size Element::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
   return sz;
 }
 
-Size Rectangle::measure(MeasureContext& ctx, LayoutConstraints const& c, LayoutHints const&, TextSystem&) const {
-  ctx.advanceChildSlot();
-  float const w = std::isfinite(c.maxWidth) ? c.maxWidth : 0.f;
-  return {w, 0.f};
-}
-
-Size views::Image::measure(MeasureContext& ctx, LayoutConstraints const& c, LayoutHints const&, TextSystem&) const {
-  ctx.advanceChildSlot();
-  float const w = std::isfinite(c.maxWidth) ? c.maxWidth : 0.f;
-  float const h = std::isfinite(c.maxHeight) ? c.maxHeight : 0.f;
-  return {w, h};
-}
-
-Size PathShape::measure(MeasureContext& ctx, LayoutConstraints const&, LayoutHints const&, TextSystem&) const {
-  ctx.advanceChildSlot();
-  Rect const b = path.getBounds();
-  return {b.width, b.height};
-}
-
-Size Line::measure(MeasureContext& ctx, LayoutConstraints const&, LayoutHints const&, TextSystem&) const {
-  ctx.advanceChildSlot();
-  float const minX = std::min(from.x, to.x);
-  float const maxX = std::max(from.x, to.x);
-  float const minY = std::min(from.y, to.y);
-  float const maxY = std::max(from.y, to.y);
-  return {maxX - minX, maxY - minY};
-}
-
 } // namespace flux

@@ -36,6 +36,23 @@ struct SortPayload {
   int raw = 0;
 };
 
+ModifierSceneNode* findClippedModifier(SceneNode* node) {
+  if (!node) {
+    return nullptr;
+  }
+  if (auto* modifier = dynamic_cast<ModifierSceneNode*>(node)) {
+    if (modifier->clip.has_value()) {
+      return modifier;
+    }
+  }
+  for (std::unique_ptr<SceneNode> const& child : node->children()) {
+    if (ModifierSceneNode* match = findClippedModifier(child.get())) {
+      return match;
+    }
+  }
+  return nullptr;
+}
+
 } // namespace
 
 TEST_CASE("SceneBuilder: centered text keeps its assigned box for boxed layout") {
@@ -238,6 +255,37 @@ TEST_CASE("SceneBuilder: composite root preserves outer size modifiers around bo
   REQUIRE(inner != nullptr);
   CHECK(inner->chromeRect.width > 0.f);
   CHECK(inner->chromeRect.height > 0.f);
+}
+
+TEST_CASE("SceneBuilder: vertical scroll view with assigned width shrink-wraps to content height") {
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 300.f;
+  constraints.maxHeight = 120.f;
+
+  Element scroll = ScrollView{
+      .axis = ScrollAxis::Vertical,
+      .children = children(
+          Element{Rectangle{}}.size(140.f, 20.f),
+          Element{Rectangle{}}.size(140.f, 20.f)),
+  }
+                       .width(160.f);
+
+  std::unique_ptr<SceneNode> tree = builder.build(scroll, NodeId{1ull}, constraints, nullptr,
+                                                  ComponentKey{}, false, false);
+  REQUIRE(tree != nullptr);
+
+  auto* scrollRoot = findClippedModifier(tree.get());
+  REQUIRE(scrollRoot != nullptr);
+  REQUIRE(scrollRoot->clip.has_value());
+  CHECK(scrollRoot->clip->height == doctest::Approx(40.f));
+  CHECK(tree->bounds.width == doctest::Approx(160.f));
+  CHECK(tree->bounds.height == doctest::Approx(40.f));
 }
 
 TEST_CASE("SceneBuilder: sibling composites with distinct props keep distinct bodies") {

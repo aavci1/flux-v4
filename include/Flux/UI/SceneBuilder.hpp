@@ -6,6 +6,7 @@
 
 #include <Flux/Scene/SceneNode.hpp>
 #include <Flux/UI/ComponentKey.hpp>
+#include <Flux/UI/Detail/TraversalContext.hpp>
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/Environment.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
@@ -21,6 +22,7 @@ class TextSystem;
 class ModifierSceneNode;
 namespace detail {
 class MeasureLayoutCache;
+class ComponentBuildContext;
 }
 
 class SceneBuilder {
@@ -41,6 +43,11 @@ public:
                                    std::unique_ptr<SceneNode> existing = nullptr,
                                    ComponentKey rootKey = {});
 
+  std::unique_ptr<SceneNode> build(Element const& el, NodeId id, LayoutConstraints const& constraints,
+                                   std::unique_ptr<SceneNode> existing, ComponentKey rootKey,
+                                   bool rootUsesMaxWidthAsAssigned,
+                                   bool rootUsesMaxHeightAsAssigned);
+
   std::unique_ptr<SceneNode> buildOrReuse(Element const& el, NodeId id, std::unique_ptr<SceneNode> existing);
 
   void reconcileChildren(SceneNode& parent, std::span<Element const> newChildren,
@@ -48,24 +55,17 @@ public:
   [[nodiscard]] BuildStats const& lastBuildStats() const noexcept { return lastBuildStats_; }
 
 private:
-  struct FrameState {
-    LayoutConstraints constraints{};
-    LayoutHints hints{};
-    Point origin{};
-    Size assignedSize{};
-    bool hasAssignedWidth = false;
-    bool hasAssignedHeight = false;
-    ComponentKey key{};
-  };
+  friend class detail::ComponentBuildContext;
 
   TextSystem& textSystem_;
   EnvironmentStack& environment_;
   SceneGeometryIndex* geometryIndex_ = nullptr;
   mutable std::unique_ptr<detail::MeasureLayoutCache> measureLayoutCache_{};
-  std::vector<FrameState> frames_{};
+  detail::TraversalContext traversal_{};
+  std::size_t buildFrameDepth_ = 0;
   mutable BuildStats lastBuildStats_{};
 
-  [[nodiscard]] FrameState const& frame() const;
+  [[nodiscard]] detail::TraversalContext::Frame const& frame() const;
   void pushFrame(LayoutConstraints const& constraints, LayoutHints const& hints, Point origin,
                  ComponentKey key, Size assignedSize = {}, bool hasAssignedWidth = false,
                  bool hasAssignedHeight = false);

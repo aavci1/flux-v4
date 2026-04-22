@@ -10,7 +10,7 @@
 
 #include <Flux/UI/Detail/LayoutDebugDump.hpp>
 
-#include "UI/BuildSession.hpp"
+#include "UI/Build/BuildPass.hpp"
 #include "UI/DebugFlags.hpp"
 
 #include <cmath>
@@ -76,23 +76,23 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
   Application::instance().textSystem().onFrameBegin(textFrameIndex_);
   layoutDebugBeginPass();
 
-  stateStore_.beginRebuild(sizeOverride.has_value() || !stateStore_.hasPendingDirtyComponents());
   actionRegistryBuild_.beginRebuild();
-  StateStore::setCurrent(&stateStore_);
   buildSlotRect_ = Rect{0.f, 0.f, sz.width, sz.height};
 
   {
     SceneTree& sceneTree = window_.sceneTree();
     std::unique_ptr<SceneNode> existingRoot = sceneTree.takeRoot();
-    ResolvedRootScene const resolvedRoot = rootHolder_ ? rootHolder_->resolveScene(rootCs) : ResolvedRootScene{};
-    BuildSession buildSession{
-        Application::instance().textSystem(),
-        EnvironmentStack::current(),
-        window_.environmentLayer(),
-        &sceneGeometry_,
-    };
-    std::unique_ptr<SceneNode> nextRoot =
-        buildSession.buildRoot(resolvedRoot, NodeId{1ull}, rootCs, std::move(existingRoot));
+    std::unique_ptr<SceneNode> nextRoot = runBuildPass(
+        BuildPassConfig{
+            .stateStore = stateStore_,
+            .forceFullRebuild = sizeOverride.has_value() || !stateStore_.hasPendingDirtyComponents(),
+            .textSystem = Application::instance().textSystem(),
+            .environment = EnvironmentStack::current(),
+            .windowEnvironment = window_.environmentLayer(),
+            .geometryIndex = &sceneGeometry_,
+        },
+        [&]() { return rootHolder_ ? rootHolder_->resolveScene(rootCs) : ResolvedRootScene{}; },
+        NodeId{1ull}, rootCs, std::move(existingRoot));
     if (nextRoot) {
       sceneTree.setRoot(std::move(nextRoot));
       layoutDebugDumpRetained(sceneTree, sceneGeometry_);
@@ -103,9 +103,6 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
     }
   }
   layoutDebugEndPass();
-
-  StateStore::setCurrent(nullptr);
-  stateStore_.endRebuild();
 
   focus_.validateAfterRebuild(window_.sceneTree());
 

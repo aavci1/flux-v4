@@ -94,6 +94,9 @@ detail::ResolvedElement Element::resolve(ComponentKey const& key,
       return resolved;
     }
 
+    if (expandedAnyBody) {
+      resolved.bodyComponentKeys.push_back(currentKey);
+    }
     expandedAnyBody = true;
     detail::CompositeBodyResolution bodyResolution = current->resolveCompositeBody(currentKey, constraints);
     descendantsStable = descendantsStable && bodyResolution.descendantsStable;
@@ -109,7 +112,7 @@ detail::ResolvedElement Element::resolve(ComponentKey const& key,
     } else {
       current = bodyResolution.body;
     }
-    currentKey.push_back(LocalId::fromIndex(0));
+    currentKey.push_back(detail::compositeBodyLocalId());
   }
 
   resolved.sceneElement = std::make_unique<Element>(strippedEnvelopeCopy());

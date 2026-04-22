@@ -2,7 +2,7 @@
 
 /// \file Flux/UI/Detail/PrimitiveForwards.hpp
 ///
-/// Forward declarations for primitive view measurement signatures in public headers.
+/// Forward declarations for measured-view signatures in public headers.
 
 namespace flux {
 

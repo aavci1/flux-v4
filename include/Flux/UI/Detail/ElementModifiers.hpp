@@ -37,12 +37,17 @@ struct CompositeBodyResolution {
   bool descendantsStable = false;
 };
 
+inline LocalId compositeBodyLocalId() {
+  return LocalId::fromString("$flux.body");
+}
+
 struct ElementModifiers;
 
 struct ResolvedElement {
   std::unique_ptr<Element> sceneElement{};
   std::vector<EnvironmentLayer> environmentLayers{};
   std::vector<ElementModifiers> modifierLayers{};
+  std::vector<ComponentKey> bodyComponentKeys{};
   bool descendantsStable = false;
 };
 

@@ -68,6 +68,115 @@ TEST_CASE("SceneBuilder: geometry index tracks centered VStack child cross-axis 
 
 }
 
+namespace {
+
+struct DecoratedBodyComponent {
+  Element body() const {
+    return Text{
+               .text = "decorated",
+               .horizontalAlignment = HorizontalAlignment::Leading,
+           }
+        .padding(5.f, 10.f, 5.f, 10.f)
+        .stroke(StrokeStyle::solid(Color::primary(), 1.f))
+        .cornerRadius(CornerRadius{4.f});
+  }
+};
+
+struct InnerBodyField {
+  Element body() const {
+    return HStack{
+        .spacing = 8.f,
+        .alignment = Alignment::Center,
+        .children = {
+            demoColorBlock(20.f, 10.f),
+            demoColorBlock(12.f, 12.f),
+        },
+    }
+        .padding(10.f, 14.f, 10.f, 14.f)
+        .stroke(StrokeStyle::solid(Color::primary(), 1.f))
+        .cornerRadius(CornerRadius{4.f});
+  }
+};
+
+struct OuterBodyField {
+  Element body() const {
+    return Element{InnerBodyField{}};
+  }
+};
+
+} // namespace
+
+TEST_CASE("SceneBuilder: geometry index records outer layout rect for body-expanded components") {
+  NullTextSystem textSystem{};
+  SceneGeometryIndex geometry{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  SceneBuilder builder{textSystem, EnvironmentStack::current(), &geometry};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 120.f;
+  constraints.maxHeight = 120.f;
+
+  Element root = VStack{
+      .spacing = 8.f,
+      .children = {
+          demoColorBlock(120.f, 20.f),
+          Element{DecoratedBodyComponent{}}.key("field"),
+      },
+  };
+
+  std::unique_ptr<SceneNode> tree = builder.build(root, NodeId{1ull}, constraints);
+  REQUIRE(tree);
+
+  std::optional<Rect> fieldRect = geometry.rectForKey(ComponentKey{LocalId::fromString("field")});
+  REQUIRE(fieldRect.has_value());
+  CHECK(fieldRect->x == doctest::Approx(26.f));
+  CHECK(fieldRect->y == doctest::Approx(28.f));
+  CHECK(fieldRect->width == doctest::Approx(68.f));
+  CHECK(fieldRect->height == doctest::Approx(24.f));
+}
+
+TEST_CASE("SceneBuilder: nested body wrapper geometry does not collide with first scene child") {
+  NullTextSystem textSystem{};
+  SceneGeometryIndex geometry{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  SceneBuilder builder{textSystem, EnvironmentStack::current(), &geometry};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 120.f;
+  constraints.maxHeight = 120.f;
+
+  Element root = VStack{
+      .children = {
+          Element{OuterBodyField{}}.key("field"),
+      },
+  };
+
+  std::unique_ptr<SceneNode> tree = builder.build(root, NodeId{1ull}, constraints);
+  REQUIRE(tree);
+
+  ComponentKey const nestedBodyKey{
+      LocalId::fromString("field"),
+      LocalId::fromString("$flux.body"),
+  };
+  ComponentKey const firstChildKey{
+      LocalId::fromString("field"),
+      LocalId::fromIndex(0),
+  };
+
+  std::optional<Rect> nestedBodyRect = geometry.rectForKey(nestedBodyKey);
+  std::optional<Rect> firstChildRect = geometry.rectForKey(firstChildKey);
+  REQUIRE(nestedBodyRect.has_value());
+  REQUIRE(firstChildRect.has_value());
+  CHECK(nestedBodyRect->width == doctest::Approx(120.f));
+  CHECK(nestedBodyRect->height == doctest::Approx(32.f));
+  CHECK(firstChildRect->width == doctest::Approx(20.f));
+  CHECK(firstChildRect->height == doctest::Approx(10.f));
+}
+
 TEST_CASE("SceneGeometryIndex: committed queries use current frames and previous-frame fallback") {
   SceneGeometryIndex geometry{};
   ComponentKey const parentKey{LocalId::fromString("parent")};

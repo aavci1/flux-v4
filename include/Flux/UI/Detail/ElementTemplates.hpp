@@ -135,17 +135,20 @@ struct Element::Model : Concept {
       return false;
     }
   }
-  bool isComposite() const noexcept override { return BodyComponent<C>; }
   bool expandsBody() const noexcept override { return ExpandsBodyComponent<C>; }
-  std::unique_ptr<Element> buildCompositeBody() const override {
-    if constexpr (ExpandsBodyComponent<C>) {
-      return std::make_unique<Element>(value.body());
-    }
-    return nullptr;
-  }
   detail::CompositeBodyResolution resolveCompositeBody(ComponentKey const& key,
                                                        LayoutConstraints const& constraints,
                                                        detail::ElementModifiers const* modifiers) const override;
+  detail::ComponentBuildResult buildMeasured(detail::ComponentBuildContext& ctx,
+                                             std::unique_ptr<SceneNode> existing) const override {
+    if constexpr (MeasuredComponent<C>) {
+      return detail::buildMeasuredComponent(value, ctx, std::move(existing));
+    } else {
+      (void)ctx;
+      (void)existing;
+      return {};
+    }
+  }
   Size measure(MeasureContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
                TextSystem& textSystem) const override;
   float flexGrow() const override { return detail::flexGrowOf(value); }
@@ -276,15 +279,19 @@ Size Element::Model<C>::measure(MeasureContext& ctx, LayoutConstraints const& co
     Element const& child = store ? *resolution.body : fallbackChild;
     ctx.beginCompositeBodySubtree(key);
     ctx.pushCompositeKeyTail(key);
+    if (child.expandsBody()) {
+      ComponentKey childBodyKey = key;
+      childBodyKey.push_back(detail::compositeBodyLocalId());
+      ctx.setMeasurementRootKey(std::move(childBodyKey));
+    }
     if (store) {
       store->recordBodyConstraints(key, constraints);
-      store->pushCompositePathStable(resolution.descendantsStable);
     }
     Size const sz = child.measure(ctx, constraints, hints, textSystem);
     if (store) {
       store->recordMeasure(key, constraints, sz);
-      store->popCompositePathStable();
     }
+    ctx.clearMeasurementRootKey();
     ctx.popCompositeKeyTail();
     return sz;
   } else {

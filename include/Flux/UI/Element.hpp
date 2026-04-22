@@ -2,11 +2,12 @@
 
 /// \file Flux/UI/Element.hpp
 ///
-/// Type-erased UI component wrapper: holds any view or composite, dispatches `measure`,
+/// Type-erased UI component wrapper: holds any UI component, dispatches `measure`,
 /// optional flex overrides, and per-subtree environment values.
 
 #include <Flux/Graphics/Styles.hpp>
 #include <Flux/UI/Component.hpp>
+#include <Flux/UI/Detail/MeasuredBuild.hpp>
 #include <Flux/UI/Detail/ElementModifiers.hpp>
 #include <Flux/UI/Environment.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
@@ -78,22 +79,17 @@ public:
   Element(Element&&) noexcept = default;
   Element& operator=(Element&&) noexcept = default;
 
-  Size measure(MeasureContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
-               TextSystem& textSystem) const;
+  Size measure(MeasureContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints, TextSystem& textSystem) const;
   [[nodiscard]] std::uint64_t measureId() const noexcept { return measureId_; }
   [[nodiscard]] ElementType typeTag() const noexcept { return impl_ ? impl_->elementType() : ElementType::Unknown; }
-  [[nodiscard]] bool isComposite() const noexcept { return impl_ && impl_->isComposite(); }
   [[nodiscard]] bool expandsBody() const noexcept { return impl_ && impl_->expandsBody(); }
-  [[nodiscard]] std::unique_ptr<Element> buildCompositeBody() const {
-    return impl_ ? impl_->buildCompositeBody() : nullptr;
+  [[nodiscard]] detail::CompositeBodyResolution resolveCompositeBody(ComponentKey const& key, LayoutConstraints const& constraints) const {
+    return impl_ ? impl_->resolveCompositeBody(key, constraints, modifiers()) : detail::CompositeBodyResolution{};
   }
-  [[nodiscard]] detail::CompositeBodyResolution resolveCompositeBody(ComponentKey const& key,
-                                                                     LayoutConstraints const& constraints) const {
-    return impl_ ? impl_->resolveCompositeBody(key, constraints, modifiers())
-                 : detail::CompositeBodyResolution{};
+  [[nodiscard]] detail::ComponentBuildResult buildMeasured(detail::ComponentBuildContext& ctx, std::unique_ptr<SceneNode> existing) const {
+    return impl_ ? impl_->buildMeasured(ctx, std::move(existing)) : detail::ComponentBuildResult{};
   }
-  [[nodiscard]] detail::ResolvedElement resolve(ComponentKey const& key,
-                                                LayoutConstraints const& constraints) const;
+  [[nodiscard]] detail::ResolvedElement resolve(ComponentKey const& key, LayoutConstraints const& constraints) const;
   [[nodiscard]] detail::ElementModifiers const* modifiers() const noexcept {
     return modifiers_ ? &*modifiers_ : nullptr;
   }
@@ -175,14 +171,14 @@ private:
     virtual std::type_index modelType() const noexcept = 0;
     virtual void const* rawValuePtr() const noexcept = 0;
     virtual bool valueEquals(Concept const&) const noexcept { return false; }
-    virtual bool isComposite() const noexcept { return false; }
     virtual bool expandsBody() const noexcept { return false; }
-    virtual std::unique_ptr<Element> buildCompositeBody() const { return nullptr; }
     virtual detail::CompositeBodyResolution resolveCompositeBody(ComponentKey const&,
                                                                  LayoutConstraints const&,
                                                                  detail::ElementModifiers const*) const {
       return {};
     }
+    virtual detail::ComponentBuildResult buildMeasured(detail::ComponentBuildContext& ctx,
+                                                       std::unique_ptr<SceneNode> existing) const = 0;
     virtual Size measure(MeasureContext& ctx, LayoutConstraints const& constraints,
                          LayoutHints const& hints, TextSystem& textSystem) const = 0;
     virtual float flexGrow() const { return 0.f; }

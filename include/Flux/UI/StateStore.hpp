@@ -137,9 +137,6 @@ public:
   /// Marks the component at \p key and every descendant component state as visited for this rebuild.
   void markRetainedSubtreeVisited(ComponentKey const& key);
   void markRetainedSubtreeVisited(ComponentState& state);
-  [[nodiscard]] bool currentCompositePathStable() const noexcept;
-  void pushCompositePathStable(bool stable);
-  void popCompositePathStable();
 
   [[nodiscard]] ComponentState const* findComponentState(ComponentKey const& key) const;
   [[nodiscard]] ComponentState* findComponentState(ComponentKey const& key);
@@ -182,7 +179,6 @@ private:
   // that returns an Element containing further composites — rare but valid).
   std::vector<ComponentKey const*> activeStack_;
   std::vector<ComponentState*> activeStateStack_;
-  std::vector<bool> compositePathStableStack_{};
 
   std::optional<std::uint64_t> overlayScope_{};
 

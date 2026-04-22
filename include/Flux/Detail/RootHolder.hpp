@@ -34,6 +34,8 @@ struct ResolvedRootScene {
   Element const* element = nullptr;
   ComponentKey rootKey{};
   bool descendantsStable = false;
+  bool rootUsesMaxWidthAsAssigned = true;
+  bool rootUsesMaxHeightAsAssigned = true;
 };
 
 struct RootHolder {

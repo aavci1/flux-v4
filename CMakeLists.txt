@@ -103,6 +103,7 @@ add_library(flux STATIC
   src/Core/Window.cpp
   src/Core/WindowRender.cpp
   src/UI/MeasureContext.cpp
+  src/UI/Detail/TraversalContext.cpp
   src/UI/Environment.cpp
   src/UI/Theme.cpp
   src/UI/StateStore.cpp
@@ -110,19 +111,14 @@ add_library(flux STATIC
   src/UI/Element/ElementModifiers.cpp
   src/UI/Element/ElementTypeErasure.cpp
   src/UI/ActionRegistry.cpp
-  src/UI/BuildSession.cpp
+  src/UI/Build/BuildPass.cpp
+  src/UI/Build/ComponentBuildContext.cpp
   src/UI/Layout/Algorithms/StackLayout.cpp
   src/UI/Layout/Algorithms/GridLayout.cpp
   src/UI/Layout/Algorithms/ScrollLayout.cpp
   src/UI/Layout/Algorithms/OverlayLayout.cpp
-  src/UI/Layout/LayoutVStack.cpp
-  src/UI/Layout/LayoutHStack.cpp
-  src/UI/Layout/LayoutZStack.cpp
-  src/UI/Layout/LayoutScaleAroundCenter.cpp
-  src/UI/Layout/LayoutGrid.cpp
-  src/UI/Layout/LayoutSpacer.cpp
-  src/UI/Layout/LayoutOffsetView.cpp
-  src/UI/Layout/LayoutScrollView.cpp
+  src/UI/SceneBuilder/ElementEnvelope.cpp
+  src/UI/SceneBuilder/RetainedReuse.cpp
   src/UI/SceneBuilder.cpp
   src/UI/SceneGeometryIndex.cpp
   src/UI/ComponentKey.cpp
@@ -145,7 +141,12 @@ add_library(flux STATIC
   src/UI/OverlaySurfaceHelpers.cpp
   src/UI/Views/TextEditUtils.cpp
   src/UI/Views/TextEditBehavior.cpp
+  src/UI/Views/Rectangle.cpp
   src/UI/Views/Render.cpp
+  src/UI/Views/Image.cpp
+  src/UI/Views/Line.cpp
+  src/UI/Views/PathShape.cpp
+  src/UI/Views/LayoutContainers.cpp
   src/UI/Views/Text.cpp
   src/UI/Views/TextInput.cpp
   src/UI/Views/Badge.cpp

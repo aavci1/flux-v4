@@ -19,7 +19,7 @@
 #include <utility>
 
 #include "Scene/SceneGeometry.hpp"
-#include "UI/BuildSession.hpp"
+#include "UI/Build/BuildPass.hpp"
 #include "UI/Layout/Algorithms/OverlayLayout.hpp"
 
 namespace flux {
@@ -57,6 +57,17 @@ NodeId overlayBackdropId() {
 
 NodeId overlayCaptureId() {
     return SceneTree::childId(overlayRootId(), LocalId::fromString("$capture"));
+}
+
+ResolvedRootScene resolveOverlayRootScene(std::optional<Element> const& content,
+                                          ComponentKey rootKey = ComponentKey{LocalId::fromIndex(0)}) {
+    return ResolvedRootScene{
+        .element = content ? &*content : nullptr,
+        .rootKey = std::move(rootKey),
+        .descendantsStable = false,
+        .rootUsesMaxWidthAsAssigned = false,
+        .rootUsesMaxHeightAsAssigned = false,
+    };
 }
 
 Size measureOverlayContent(Element const& element, LayoutConstraints const& constraints,
@@ -209,7 +220,6 @@ void OverlayManager::insertOverlayBackdropChrome(SceneNode &root, OverlayEntry &
 
 void OverlayManager::rebuild(Size windowSize, Runtime &runtime) {
     for (std::unique_ptr<OverlayEntry> &up : overlays_) {
-        StateStore *const prevCurrent = StateStore::current();
         OverlayEntry &entry = *up;
         if (entry.config.anchorTrackLeafKey.has_value() && !entry.config.anchorTrackLeafKey->empty()) {
             if (auto r = runtime.layoutRectForLeafKeyPrefix(*entry.config.anchorTrackLeafKey)) {
@@ -228,9 +238,6 @@ void OverlayManager::rebuild(Size windowSize, Runtime &runtime) {
         if (entry.config.anchor.has_value() && !entry.config.anchorOutsets.isZero()) {
             entry.config.anchor = applyAnchorOutsets(*entry.config.anchor, entry.config.anchorOutsets);
         }
-        entry.stateStore->beginRebuild();
-        entry.stateStore->setOverlayScope(entry.id.value);
-        StateStore::setCurrent(entry.stateStore.get());
         LayoutConstraints const cs = resolveConstraints(windowSize, entry.config);
 
         if (entry.config.popoverPreferredPlacement.has_value() && entry.content.has_value() &&
@@ -263,14 +270,17 @@ void OverlayManager::rebuild(Size windowSize, Runtime &runtime) {
         }
 
         std::unique_ptr<SceneNode> existingContent = extractOverlayContentRoot(entry.sceneTree.takeRoot());
-        BuildSession buildSession{
-            Application::instance().textSystem(),
-            EnvironmentStack::current(),
-            runtime.window().environmentLayer(),
-            &entry.sceneGeometry,
-        };
-        std::unique_ptr<SceneNode> contentRoot =
-            buildSession.buildRoot(resolveOverlayRootScene(entry.content), overlayContentId(), cs, std::move(existingContent));
+        std::unique_ptr<SceneNode> contentRoot = runBuildPass(
+            BuildPassConfig{
+                .stateStore = *entry.stateStore,
+                .overlayScope = entry.id.value,
+                .forceFullRebuild = true,
+                .textSystem = Application::instance().textSystem(),
+                .environment = EnvironmentStack::current(),
+                .windowEnvironment = runtime.window().environmentLayer(),
+                .geometryIndex = &entry.sceneGeometry,
+            },
+            resolveOverlayRootScene(entry.content), overlayContentId(), cs, std::move(existingContent));
 
         Rect contentBounds = contentRoot ? scene::offsetRect(contentRoot->bounds, contentRoot->position) : Rect{};
         if (contentBounds.width <= 0.f || !std::isfinite(contentBounds.width)) {
@@ -317,10 +327,6 @@ void OverlayManager::rebuild(Size windowSize, Runtime &runtime) {
         }
         root->recomputeBounds();
         entry.sceneTree.setRoot(std::move(root));
-
-        StateStore::setCurrent(prevCurrent);
-        entry.stateStore->setOverlayScope(std::nullopt);
-        entry.stateStore->endRebuild();
 
         runtime.syncModalOverlayFocusAfterRebuild(entry);
     }

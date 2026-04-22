@@ -32,12 +32,9 @@ struct ScrollView : ViewModifiers<ScrollView> {
     bool dragScrollEnabled = true;
     std::vector<Element> children;
 
-    /// Custom measurement hook (not the generic \ref CompositeComponent path in \ref Element::Model).
+    /// Custom measurement hook used by the measured-component pipeline.
     Size measure(MeasureContext &, LayoutConstraints const &, LayoutHints const &, TextSystem &) const;
 
-    // ── Component protocol ─────────────────────────────────────────────────────
-
-    Element body() const;
 };
 
 } // namespace flux
