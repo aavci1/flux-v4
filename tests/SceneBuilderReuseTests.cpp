@@ -149,7 +149,10 @@ TEST_CASE("SceneBuilder: scroll offset changes retain stable composite children"
   REQUIRE(scrollRoot->interaction() != nullptr);
   REQUIRE(scrollRoot->interaction()->onScroll);
   scrollRoot->interaction()->onScroll(Vec2{0.f, -12.f});
-  scope.store.markCompositeDirty(ComponentKey{LocalId::fromString("$scroll-state")});
+  scope.store.markCompositeDirty(ComponentKey{
+      LocalId::fromIndex(0),
+      LocalId::fromString("$scroll-state"),
+  });
 
   scope.store.beginRebuild(false);
   tree = builder.build(root, NodeId{1ull}, constraints, std::move(tree));
@@ -419,6 +422,88 @@ TEST_CASE("SceneBuilder: clean composite subtree is skipped and geometry is reta
   REQUIRE(afterRect.has_value());
   CHECK(afterRect->x == doctest::Approx(beforeRect->x));
   CHECK(afterRect->y > beforeRect->y);
+}
+
+TEST_CASE("SceneBuilder: clean composite subtree stays retained through outer padding across parent rebuilds") {
+  CountingTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  StoreScope scope{};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 200.f;
+  constraints.maxHeight = 120.f;
+
+  Signal<int> tickSignal{0};
+  State<int> tick{&tickSignal};
+  int parentCalls = 0;
+  int childCalls = 0;
+
+  struct PaddedRetainedParent {
+    State<int> tick{};
+    int* parentCalls = nullptr;
+    int* childCalls = nullptr;
+
+    Element body() const {
+      ++*parentCalls;
+      return VStack{
+          .spacing = static_cast<float>(*tick),
+          .children = {
+              Element{Rectangle{}}.size(24.f + static_cast<float>(*tick), 8.f),
+              Element{RetainedTextChild{childCalls}}.key("child").padding(4.f),
+          },
+      };
+    }
+  };
+
+  auto makeRoot = [&]() -> Element {
+    return Element{PaddedRetainedParent{
+        .tick = tick,
+        .parentCalls = &parentCalls,
+        .childCalls = &childCalls,
+    }};
+  };
+
+  scope.store.beginRebuild(true);
+  std::unique_ptr<SceneNode> tree = builder.build(makeRoot(), NodeId{1ull}, constraints);
+  scope.store.endRebuild();
+
+  REQUIRE(tree != nullptr);
+  auto findTextNode = [](SceneNode* node, auto&& self) -> TextSceneNode* {
+    if (!node) {
+      return nullptr;
+    }
+    if (auto* text = dynamic_cast<TextSceneNode*>(node)) {
+      return text;
+    }
+    for (std::unique_ptr<SceneNode> const& child : node->children()) {
+      if (TextSceneNode* found = self(child.get(), self)) {
+        return found;
+      }
+    }
+    return nullptr;
+  };
+  TextSceneNode* retainedTextNode = findTextNode(tree.get(), findTextNode);
+  REQUIRE(retainedTextNode != nullptr);
+  int const initialChildCalls = childCalls;
+  int const initialParentCalls = parentCalls;
+  REQUIRE(initialChildCalls > 0);
+  REQUIRE(initialParentCalls > 0);
+
+  tick = 12;
+
+  scope.store.beginRebuild(false);
+  tree = builder.build(makeRoot(), NodeId{1ull}, constraints, std::move(tree));
+  scope.store.endRebuild();
+
+  REQUIRE(tree != nullptr);
+  TextSceneNode* rebuiltTextNode = findTextNode(tree.get(), findTextNode);
+  REQUIRE(rebuiltTextNode != nullptr);
+  CHECK(parentCalls > initialParentCalls);
+  CHECK(childCalls == initialChildCalls);
+  CHECK(rebuiltTextNode == retainedTextNode);
 }
 
 TEST_CASE("SceneBuilder: retained composite body rebuilds when an environment dependency changes") {

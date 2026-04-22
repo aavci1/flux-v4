@@ -18,6 +18,7 @@
 namespace flux {
 
 class TextSystem;
+class ModifierSceneNode;
 
 class SceneBuilder {
 public:
@@ -54,15 +55,18 @@ private:
                  ComponentKey key, Size assignedSize = {}, bool hasAssignedWidth = false,
                  bool hasAssignedHeight = false);
   void popFrame();
-  [[nodiscard]] bool canRetainExistingSubtree(Element const& el, SceneNode const& existing) const;
-  void stampRetainedBuild(SceneNode& node, Element const& el) const;
+  [[nodiscard]] bool canRetainExistingSubtree(Element const& el, Element const& sceneEl,
+                                              SceneNode const& existing) const;
+  void stampRetainedBuild(SceneNode& node, Element const& el, Element const& sceneEl) const;
 
   [[nodiscard]] Size measureElement(Element const& el, LayoutConstraints const& constraints,
                                     LayoutHints const& hints, ComponentKey const& key) const;
 
   std::unique_ptr<SceneNode> decorateNode(std::unique_ptr<SceneNode> root, Element const& el,
                                           detail::ElementModifiers const* mods,
-                                          std::unique_ptr<SceneNode> existing,
+                                          std::unique_ptr<ModifierSceneNode> existingModifierWrapper,
+                                          std::unique_ptr<SceneNode> existingLayoutWrapper,
+                                          std::unique_ptr<SceneNode> existingOverlay,
                                           Size layoutOuterSize, Size outerSize, Point subtreeOffset,
                                           EdgeInsets const& padding, std::unique_ptr<InteractionData> interaction);
 

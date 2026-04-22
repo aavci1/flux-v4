@@ -103,6 +103,18 @@ bool isPlainGroup(SceneNode const& node) {
   return node.kind() == SceneNodeKind::Group && typeid(node) == typeid(SceneNode);
 }
 
+bool isTransparentModifierWrapper(SceneNode const& node) {
+  if (node.kind() != SceneNodeKind::Modifier || typeid(node) != typeid(ModifierSceneNode)) {
+    return false;
+  }
+  return node.children().size() == 1 && node.children()[0] && node.children()[0]->id() == node.id();
+}
+
+bool isTransparentLayoutWrapper(SceneNode const& node) {
+  return isPlainGroup(node) && !node.children().empty() && node.children()[0] &&
+         node.children()[0]->id() == node.id();
+}
+
 template<typename T>
 std::unique_ptr<T> releaseAs(std::unique_ptr<SceneNode> node) {
   if (!node) {
@@ -120,6 +132,41 @@ std::unique_ptr<SceneNode> releasePlainGroup(std::unique_ptr<SceneNode> node) {
     return node;
   }
   return nullptr;
+}
+
+std::unique_ptr<ModifierSceneNode> takeTransparentModifierWrapper(std::unique_ptr<SceneNode>& node) {
+  if (!node || !isTransparentModifierWrapper(*node)) {
+    return nullptr;
+  }
+  auto wrapper = std::unique_ptr<ModifierSceneNode>(static_cast<ModifierSceneNode*>(node.release()));
+  std::vector<std::unique_ptr<SceneNode>> children = wrapper->releaseChildren();
+  node = children.empty() ? nullptr : std::move(children[0]);
+  return wrapper;
+}
+
+struct LayoutWrapperReuse {
+  std::unique_ptr<SceneNode> wrapper{};
+  std::unique_ptr<SceneNode> overlay{};
+};
+
+LayoutWrapperReuse takeTransparentLayoutWrapper(std::unique_ptr<SceneNode>& node) {
+  if (!node || !isTransparentLayoutWrapper(*node)) {
+    return {};
+  }
+
+  LayoutWrapperReuse reuse{};
+  reuse.wrapper = std::move(node);
+  std::vector<std::unique_ptr<SceneNode>> children = reuse.wrapper->releaseChildren();
+  node = children.empty() ? nullptr : std::move(children[0]);
+
+  NodeId const overlayId = SceneTree::childId(reuse.wrapper->id(), LocalId::fromString("$overlay"));
+  for (std::size_t i = 1; i < children.size(); ++i) {
+    if (children[i] && children[i]->id() == overlayId) {
+      reuse.overlay = std::move(children[i]);
+      break;
+    }
+  }
+  return reuse;
 }
 
 void setGroupBounds(SceneNode& node, Size minSize = {}) {
@@ -216,6 +263,15 @@ ComponentKey directCompositeBodyKey(ComponentKey const& parentKey) {
 
 bool rectIsMeaningful(Rect rect) {
   return rect.width > 0.f || rect.height > 0.f;
+}
+
+bool canUseResolvedBodyForRetainedStamp(Element const& el, Element const& sceneEl) {
+  return &sceneEl != &el && el.isComposite() && el.typeTag() == ElementType::Unknown &&
+         !el.modifiers() && !el.environmentLayer();
+}
+
+Element const& retainedStampElement(Element const& el, Element const& sceneEl) {
+  return canUseResolvedBodyForRetainedStamp(el, sceneEl) ? sceneEl : el;
 }
 
 std::unique_ptr<InteractionData> makeInteractionData(detail::ElementModifiers const* mods,
@@ -505,15 +561,17 @@ void SceneBuilder::popFrame() {
   frames_.pop_back();
 }
 
-bool SceneBuilder::canRetainExistingSubtree(Element const& el, SceneNode const& existing) const {
+bool SceneBuilder::canRetainExistingSubtree(Element const& el, Element const& sceneEl,
+                                            SceneNode const& existing) const {
   StateStore* const store = StateStore::current();
-  if (!store || !store->currentCompositePathStable() || store->hasDirtyDescendant(frame().key)) {
+  if (!store || store->hasDirtyDescendant(frame().key)) {
     return false;
   }
 
+  Element const& retainedStampEl = retainedStampElement(el, sceneEl);
   RetainedBuildStamp const& stamp = existing.retainedBuildStamp();
   FrameState const& current = frame();
-  if (stamp.measureId == 0 || stamp.measureId != el.measureId()) {
+  if (stamp.measureId == 0 || stamp.measureId != retainedStampEl.measureId()) {
     return false;
   }
   if (stamp.maxWidth != current.constraints.maxWidth || stamp.maxHeight != current.constraints.maxHeight ||
@@ -530,10 +588,11 @@ bool SceneBuilder::canRetainExistingSubtree(Element const& el, SceneNode const& 
          stamp.zStackVerticalAlign == encodeAlignmentStamp(current.hints.zStackVerticalAlign);
 }
 
-void SceneBuilder::stampRetainedBuild(SceneNode& node, Element const& el) const {
+void SceneBuilder::stampRetainedBuild(SceneNode& node, Element const& el, Element const& sceneEl) const {
   FrameState const& current = frame();
+  Element const& retainedStampEl = retainedStampElement(el, sceneEl);
   node.setRetainedBuildStamp(RetainedBuildStamp{
-      .measureId = el.measureId(),
+      .measureId = retainedStampEl.measureId(),
       .maxWidth = current.constraints.maxWidth,
       .maxHeight = current.constraints.maxHeight,
       .minWidth = current.constraints.minWidth,
@@ -567,7 +626,9 @@ Size SceneBuilder::measureElement(Element const& el, LayoutConstraints const& co
 std::unique_ptr<SceneNode>
 SceneBuilder::decorateNode(std::unique_ptr<SceneNode> root, Element const& el,
                            detail::ElementModifiers const* mods,
-                           std::unique_ptr<SceneNode> existing, Size layoutOuterSize, Size outerSize,
+                           std::unique_ptr<ModifierSceneNode> existingModifierWrapper,
+                           std::unique_ptr<SceneNode> existingLayoutWrapper,
+                           std::unique_ptr<SceneNode> existingOverlay, Size layoutOuterSize, Size outerSize,
                            Point subtreeOffset, EdgeInsets const& padding,
                            std::unique_ptr<InteractionData> interaction) {
   if (!root) {
@@ -580,7 +641,10 @@ SceneBuilder::decorateNode(std::unique_ptr<SceneNode> root, Element const& el,
   root->position = {};
 
   if (needsLayoutWrapper(mods, layoutOuterSize, contentSize)) {
-    std::unique_ptr<SceneNode> wrapper = std::make_unique<SceneNode>(root->id());
+    std::unique_ptr<SceneNode> wrapper = releasePlainGroup(std::move(existingLayoutWrapper));
+    if (!wrapper) {
+      wrapper = std::make_unique<SceneNode>(root->id());
+    }
     std::vector<std::unique_ptr<SceneNode>> children{};
     children.reserve(hasOverlay(mods) ? 2 : 1);
     root->position = Point{std::max(0.f, padding.left), std::max(0.f, padding.top)};
@@ -598,7 +662,8 @@ SceneBuilder::decorateNode(std::unique_ptr<SceneNode> root, Element const& el,
                 std::move(overlayKey), layoutOuterSize, layoutOuterSize.width > 0.f,
                 layoutOuterSize.height > 0.f);
       std::unique_ptr<SceneNode> overlayNode =
-          buildOrReuse(*mods->overlay, SceneTree::childId(wrapper->id(), LocalId::fromString("$overlay")), nullptr);
+          buildOrReuse(*mods->overlay, SceneTree::childId(wrapper->id(), LocalId::fromString("$overlay")),
+                       std::move(existingOverlay));
       popFrame();
       children.push_back(std::move(overlayNode));
     }
@@ -608,7 +673,7 @@ SceneBuilder::decorateNode(std::unique_ptr<SceneNode> root, Element const& el,
   }
 
   if (needsModifierWrapper(mods, leafOwnsModifierPaint)) {
-    std::unique_ptr<ModifierSceneNode> wrapper = releaseAs<ModifierSceneNode>(std::move(existing));
+    std::unique_ptr<ModifierSceneNode> wrapper = std::move(existingModifierWrapper);
     if (!wrapper) {
       wrapper = std::make_unique<ModifierSceneNode>(root->id());
     }
@@ -710,7 +775,9 @@ std::unique_ptr<SceneNode> SceneBuilder::buildOrReuse(Element const& el, NodeId 
     return node;
   };
 
-  if (!el.isComposite() && existing && canRetainExistingSubtree(el, *existing)) {
+  StateStore* const store = StateStore::current();
+  if (!el.isComposite() && existing && store && store->currentCompositePathStable() &&
+      canRetainExistingSubtree(el, el, *existing)) {
     return retainExisting(std::move(existing));
   }
 
@@ -732,8 +799,8 @@ std::unique_ptr<SceneNode> SceneBuilder::buildOrReuse(Element const& el, NodeId 
   if (el.typeTag() == ElementType::Unknown && el.isComposite()) {
     detail::CompositeBodyResolution resolution = el.resolveCompositeBody(frame().key, frame().constraints);
     if (resolution.body) {
-      StateStore* const store = StateStore::current();
-      if (store && existing && resolution.descendantsStable && canRetainExistingSubtree(el, *existing)) {
+      if (store && existing && resolution.descendantsStable &&
+          canRetainExistingSubtree(el, *resolution.body, *existing)) {
         return retainExisting(std::move(existing));
       }
       if (store) {
@@ -773,9 +840,10 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
                                                        std::unique_ptr<SceneNode> existing) {
   FrameState const current = frame();
   bool const resolvedFromComposite = (&sceneEl != &el);
-  // `sceneEl` already stays alive for the duration of this call (either from cached body storage
-  // or the caller's temporary resolution object), so copying it here only destroys subtree identity.
-  Element const& stableSceneEl = sceneEl;
+  // `measureElement(el, ...)` may resolve and replace the same cached composite body again, so
+  // keep a local copy of the resolved body while this call runs. Element copies now preserve
+  // measure ids, so this no longer breaks subtree identity.
+  Element stableSceneEl = sceneEl;
 
   detail::ElementModifiers const* mods = stableSceneEl.modifiers();
   detail::ElementModifiers const* outerMods = resolvedFromComposite ? el.modifiers() : nullptr;
@@ -820,34 +888,55 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     }
   };
 
+  std::unique_ptr<SceneNode> innerExisting = std::move(existing);
+  std::unique_ptr<ModifierSceneNode> outerModifierWrapper{};
+  std::unique_ptr<SceneNode> outerLayoutWrapper{};
+  std::unique_ptr<SceneNode> outerOverlay{};
+  if (outerMods) {
+    if (needsModifierWrapper(outerMods, false)) {
+      outerModifierWrapper = takeTransparentModifierWrapper(innerExisting);
+    }
+    if (hasPadding(outerMods) || hasOverlay(outerMods)) {
+      LayoutWrapperReuse reuse = takeTransparentLayoutWrapper(innerExisting);
+      outerLayoutWrapper = std::move(reuse.wrapper);
+      outerOverlay = std::move(reuse.overlay);
+    }
+  }
+
   if (stableSceneEl.typeTag() == ElementType::Unknown && stableSceneEl.isComposite()) {
     ComponentKey nestedKey = directCompositeBodyKey(current.key);
     pushFrame(current.constraints, current.hints, current.origin, std::move(nestedKey), current.assignedSize,
               current.hasAssignedWidth, current.hasAssignedHeight);
-    std::unique_ptr<SceneNode> root = buildOrReuse(stableSceneEl, id, std::move(existing));
+    std::unique_ptr<SceneNode> root = buildOrReuse(stableSceneEl, id, std::move(innerExisting));
     popFrame();
 
     std::unique_ptr<InteractionData> outerInteraction =
         outerMods ? makeInteractionData(outerMods, current.key) : nullptr;
     if (outerMods &&
         needsDecorationPass(outerMods, outerSize, rectSize(root->bounds), false, outerInteraction.get())) {
-      root = decorateNode(std::move(root), el, outerMods, nullptr, outerSize, outerSize,
+      root = decorateNode(std::move(root), el, outerMods, std::move(outerModifierWrapper),
+                          std::move(outerLayoutWrapper), std::move(outerOverlay), outerSize, outerSize,
                           modifierOffset(outerMods), outerMods->padding, std::move(outerInteraction));
     }
     if (root->bounds.width <= 0.f && root->bounds.height <= 0.f) {
       root->bounds = sizeRect(outerSize);
     }
-    stampRetainedBuild(*root, el);
+    stampRetainedBuild(*root, el, stableSceneEl);
     recordGeometry(rectSize(root->bounds));
     return root;
   }
+
+  std::unique_ptr<ModifierSceneNode> modifierWrapper = takeTransparentModifierWrapper(innerExisting);
+  LayoutWrapperReuse layoutReuse = takeTransparentLayoutWrapper(innerExisting);
+  std::unique_ptr<SceneNode> layoutWrapper = std::move(layoutReuse.wrapper);
+  std::unique_ptr<SceneNode> overlayNode = std::move(layoutReuse.overlay);
 
   std::unique_ptr<SceneNode> core{};
   std::unique_ptr<InteractionData> resolvedInteraction{};
   Size geometrySize = outerSize;
   switch (stableSceneEl.typeTag()) {
   case ElementType::Rectangle: {
-    std::unique_ptr<RectSceneNode> rectNode = releaseAs<RectSceneNode>(std::move(existing));
+    std::unique_ptr<RectSceneNode> rectNode = releaseAs<RectSceneNode>(std::move(innerExisting));
     if (!rectNode) {
       rectNode = std::make_unique<RectSceneNode>(id);
     }
@@ -895,7 +984,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
       selectableState = detail::selectableTextState(current.key);
       detail::updateSelectableTextLayout(*selectableState, textLayout, text.text, frameRect.width);
 
-      std::unique_ptr<SceneNode> group = releasePlainGroup(std::move(existing));
+      std::unique_ptr<SceneNode> group = releasePlainGroup(std::move(innerExisting));
       if (!group) {
         group = std::make_unique<SceneNode>(id);
       }
@@ -944,7 +1033,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
       resolvedInteraction = makeSelectableTextInteraction(mods, current.key, selectableState);
       core = std::move(group);
     } else {
-      std::unique_ptr<TextSceneNode> textNode = releaseAs<TextSceneNode>(std::move(existing));
+      std::unique_ptr<TextSceneNode> textNode = releaseAs<TextSceneNode>(std::move(innerExisting));
       if (!textNode) {
         textNode = std::make_unique<TextSceneNode>(id);
       }
@@ -957,7 +1046,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
   }
   case ElementType::Render: {
     Render const& renderView = stableSceneEl.as<Render>();
-    std::unique_ptr<RenderSceneNode> renderNode = releaseAs<RenderSceneNode>(std::move(existing));
+    std::unique_ptr<RenderSceneNode> renderNode = releaseAs<RenderSceneNode>(std::move(innerExisting));
     if (!renderNode) {
       renderNode = std::make_unique<RenderSceneNode>(id);
     }
@@ -986,7 +1075,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
   }
   case ElementType::Image: {
     views::Image const& image = stableSceneEl.as<views::Image>();
-    std::unique_ptr<ImageSceneNode> imageNode = releaseAs<ImageSceneNode>(std::move(existing));
+    std::unique_ptr<ImageSceneNode> imageNode = releaseAs<ImageSceneNode>(std::move(innerExisting));
     if (!imageNode) {
       imageNode = std::make_unique<ImageSceneNode>(id);
     }
@@ -1011,7 +1100,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
   }
   case ElementType::Path: {
     PathShape const& path = stableSceneEl.as<PathShape>();
-    std::unique_ptr<PathSceneNode> pathNode = releaseAs<PathSceneNode>(std::move(existing));
+    std::unique_ptr<PathSceneNode> pathNode = releaseAs<PathSceneNode>(std::move(innerExisting));
     if (!pathNode) {
       pathNode = std::make_unique<PathSceneNode>(id);
     }
@@ -1032,7 +1121,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
   }
   case ElementType::Line: {
     Line const& line = stableSceneEl.as<Line>();
-    std::unique_ptr<LineSceneNode> lineNode = releaseAs<LineSceneNode>(std::move(existing));
+    std::unique_ptr<LineSceneNode> lineNode = releaseAs<LineSceneNode>(std::move(innerExisting));
     if (!lineNode) {
       lineNode = std::make_unique<LineSceneNode>(id);
     }
@@ -1052,7 +1141,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
   }
   case ElementType::VStack: {
     VStack const& stack = stableSceneEl.as<VStack>();
-    std::unique_ptr<SceneNode> group = releasePlainGroup(std::move(existing));
+    std::unique_ptr<SceneNode> group = releasePlainGroup(std::move(innerExisting));
     if (!group) {
       group = std::make_unique<SceneNode>(id);
     }
@@ -1134,7 +1223,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
   }
   case ElementType::HStack: {
     HStack const& stack = stableSceneEl.as<HStack>();
-    std::unique_ptr<SceneNode> group = releasePlainGroup(std::move(existing));
+    std::unique_ptr<SceneNode> group = releasePlainGroup(std::move(innerExisting));
     if (!group) {
       group = std::make_unique<SceneNode>(id);
     }
@@ -1242,7 +1331,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
   }
   case ElementType::ZStack: {
     ZStack const& stack = stableSceneEl.as<ZStack>();
-    std::unique_ptr<SceneNode> group = releasePlainGroup(std::move(existing));
+    std::unique_ptr<SceneNode> group = releasePlainGroup(std::move(innerExisting));
     if (!group) {
       group = std::make_unique<SceneNode>(id);
     }
@@ -1309,7 +1398,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
   }
   case ElementType::Grid: {
     Grid const& grid = stableSceneEl.as<Grid>();
-    std::unique_ptr<SceneNode> group = releasePlainGroup(std::move(existing));
+    std::unique_ptr<SceneNode> group = releasePlainGroup(std::move(innerExisting));
     if (!group) {
       group = std::make_unique<SceneNode>(id);
     }
@@ -1370,7 +1459,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
   }
   case ElementType::OffsetView: {
     OffsetView const& offsetView = stableSceneEl.as<OffsetView>();
-    std::unique_ptr<SceneNode> group = releasePlainGroup(std::move(existing));
+    std::unique_ptr<SceneNode> group = releasePlainGroup(std::move(innerExisting));
     if (!group) {
       group = std::make_unique<SceneNode>(id);
     }
@@ -1517,7 +1606,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     layout::ScrollIndicatorMetrics const horizontalIndicator =
         layout::makeHorizontalIndicator(scrollOffset, viewport, contentSize, showsVerticalIndicator);
 
-    std::unique_ptr<ModifierSceneNode> modifier = releaseAs<ModifierSceneNode>(std::move(existing));
+    std::unique_ptr<ModifierSceneNode> modifier = releaseAs<ModifierSceneNode>(std::move(innerExisting));
     if (!modifier) {
       modifier = std::make_unique<ModifierSceneNode>(id);
     }
@@ -1715,7 +1804,8 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
   }
   case ElementType::ScaleAroundCenter: {
     ScaleAroundCenter const& scaled = stableSceneEl.as<ScaleAroundCenter>();
-    std::unique_ptr<CustomTransformSceneNode> transformNode = releaseAs<CustomTransformSceneNode>(std::move(existing));
+    std::unique_ptr<CustomTransformSceneNode> transformNode =
+        releaseAs<CustomTransformSceneNode>(std::move(innerExisting));
     if (!transformNode) {
       transformNode = std::make_unique<CustomTransformSceneNode>(id);
     }
@@ -1756,7 +1846,7 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     layout::PopoverCalloutLayout const calloutLayout =
         layout::layoutPopoverCallout(callout, contentMeasured, innerConstraints);
 
-    std::unique_ptr<SceneNode> group = releasePlainGroup(std::move(existing));
+    std::unique_ptr<SceneNode> group = releasePlainGroup(std::move(innerExisting));
     if (!group) {
       group = std::make_unique<SceneNode>(id);
     }
@@ -1815,19 +1905,21 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     interaction = makeInteractionData(mods, current.key);
   }
   std::unique_ptr<SceneNode> root =
-      decorateNode(std::move(core), el, mods, std::move(existing), layoutOuterSize, outerSize,
-                   subtreeOffset, padding, std::move(interaction));
+      decorateNode(std::move(core), el, mods, std::move(modifierWrapper), std::move(layoutWrapper),
+                   std::move(overlayNode), layoutOuterSize, outerSize, subtreeOffset, padding,
+                   std::move(interaction));
 
   std::unique_ptr<InteractionData> outerInteraction =
       outerMods ? makeInteractionData(outerMods, current.key) : nullptr;
   if (outerMods && needsDecorationPass(outerMods, outerSize, rectSize(root->bounds), false, outerInteraction.get())) {
-    root = decorateNode(std::move(root), el, outerMods, nullptr, outerSize, outerSize,
+    root = decorateNode(std::move(root), el, outerMods, std::move(outerModifierWrapper),
+                        std::move(outerLayoutWrapper), std::move(outerOverlay), outerSize, outerSize,
                         modifierOffset(outerMods), outerMods->padding, std::move(outerInteraction));
   }
   if (root->bounds.width <= 0.f && root->bounds.height <= 0.f) {
     root->bounds = sizeRect(outerSize);
   }
-  stampRetainedBuild(*root, el);
+  stampRetainedBuild(*root, el, stableSceneEl);
   recordGeometry(geometrySize.width > 0.f || geometrySize.height > 0.f ? geometrySize : rectSize(root->bounds));
   return root;
 }
