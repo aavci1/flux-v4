@@ -360,6 +360,90 @@ TEST_CASE("SceneBuilder: modifier chrome repaints when child bounds change acros
   CHECK(secondRenderer.rects.front().width > firstWidth);
 }
 
+TEST_CASE("SceneBuilder: comparable text leaf scene node stays retained across dirty parent rebuilds") {
+  CountingTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  StoreScope scope{};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 200.f;
+  constraints.maxHeight = 120.f;
+
+  Signal<int> tickSignal{0};
+  State<int> tick{&tickSignal};
+  int parentCalls = 0;
+
+  struct DirtyParentWithStaticLabel {
+    State<int> tick{};
+    int* parentCalls = nullptr;
+
+    Element body() const {
+      ++*parentCalls;
+      return VStack{
+          .spacing = 6.f,
+          .children = {
+              Element{Rectangle{}}.size(24.f + static_cast<float>(*tick), 8.f),
+              Text{
+                  .text = "Retained label",
+                  .horizontalAlignment = HorizontalAlignment::Leading,
+              }
+                  .padding(6.f, 10.f, 6.f, 10.f)
+                  .fill(FillStyle::solid(Color::hex(0xF7F7F7)))
+                  .cornerRadius(CornerRadius{8.f}),
+          },
+      };
+    }
+  };
+
+  auto findTextNode = [](SceneNode* node, auto&& self) -> TextSceneNode* {
+    if (!node) {
+      return nullptr;
+    }
+    if (auto* text = dynamic_cast<TextSceneNode*>(node)) {
+      return text;
+    }
+    for (std::unique_ptr<SceneNode> const& child : node->children()) {
+      if (TextSceneNode* found = self(child.get(), self)) {
+        return found;
+      }
+    }
+    return nullptr;
+  };
+
+  auto makeRoot = [&]() -> Element {
+    return Element{DirtyParentWithStaticLabel{
+        .tick = tick,
+        .parentCalls = &parentCalls,
+    }};
+  };
+
+  scope.store.beginRebuild(true);
+  std::unique_ptr<SceneNode> tree = builder.build(makeRoot(), NodeId{1ull}, constraints);
+  scope.store.endRebuild();
+
+  REQUIRE(tree != nullptr);
+  TextSceneNode* retainedTextNode = findTextNode(tree.get(), findTextNode);
+  REQUIRE(retainedTextNode != nullptr);
+  int const initialLayoutCount = textSystem.layoutCount;
+  int const initialParentCalls = parentCalls;
+  REQUIRE(initialLayoutCount > 0);
+
+  tick = 12;
+
+  scope.store.beginRebuild(false);
+  tree = builder.build(makeRoot(), NodeId{1ull}, constraints, std::move(tree));
+  scope.store.endRebuild();
+
+  REQUIRE(tree != nullptr);
+  TextSceneNode* rebuiltTextNode = findTextNode(tree.get(), findTextNode);
+  REQUIRE(rebuiltTextNode != nullptr);
+  CHECK(parentCalls > initialParentCalls);
+  CHECK(rebuiltTextNode == retainedTextNode);
+}
+
 TEST_CASE("SceneBuilder: clean composite subtree is skipped and geometry is retained across parent rebuilds") {
   CountingTextSystem textSystem{};
   SceneGeometryIndex geometry{};

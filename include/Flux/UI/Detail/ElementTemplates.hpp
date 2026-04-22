@@ -117,6 +117,19 @@ struct Element::Model : Concept {
   ElementType elementType() const noexcept override;
   std::type_index modelType() const noexcept override { return std::type_index(typeid(C)); }
   void const* rawValuePtr() const noexcept override { return &value; }
+  bool valueEquals(Concept const& other) const noexcept override {
+    if (other.modelType() != std::type_index(typeid(C))) {
+      return false;
+    }
+    C const& rhs = *static_cast<C const*>(other.rawValuePtr());
+    if constexpr (detail::equalityComparableV<C>) {
+      return value == rhs;
+    } else if constexpr (std::is_trivially_copyable_v<C>) {
+      return std::memcmp(&value, &rhs, sizeof(C)) == 0;
+    } else {
+      return false;
+    }
+  }
   bool isComposite() const noexcept override { return CompositeComponent<C>; }
   std::unique_ptr<Element> buildCompositeBody() const override {
     if constexpr (CompositeComponent<C>) {
@@ -290,6 +303,13 @@ template<typename T>
 T const& Element::as() const {
   assert(is<T>());
   return *static_cast<T const*>(impl_->rawValuePtr());
+}
+
+inline bool Element::valueEquals(Element const& other) const noexcept {
+  if (!impl_ || !other.impl_) {
+    return !impl_ && !other.impl_;
+  }
+  return impl_->valueEquals(*other.impl_);
 }
 
 template<typename... Args>

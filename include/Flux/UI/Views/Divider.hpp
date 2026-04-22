@@ -19,11 +19,16 @@ struct Divider : ViewModifiers<Divider> {
         float thickness = kFloatFromTheme;
         float cornerRadius = kFloatFromTheme;
         Color color = Color::theme();
+
+        bool operator==(Style const& other) const = default;
     };
 
     Orientation orientation = Orientation::Horizontal;
     Style style {};
 
+    bool operator==(Divider const& other) const {
+        return orientation == other.orientation && style == other.style;
+    }
     Element body() const;
 };
 

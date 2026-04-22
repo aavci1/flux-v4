@@ -15,6 +15,8 @@ namespace flux {
 /// \ref Element / \ref ViewModifiers (e.g. \c size, \c position, \c fill, \c stroke).
 struct Rectangle : ViewModifiers<Rectangle> {
   Size measure(MeasureContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
+
+  constexpr bool operator==(Rectangle const&) const noexcept { return true; }
 };
 
 } // namespace flux

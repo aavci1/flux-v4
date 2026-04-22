@@ -274,6 +274,59 @@ Element const& retainedStampElement(Element const& el, Element const& sceneEl) {
   return canUseResolvedBodyForRetainedStamp(el, sceneEl) ? sceneEl : el;
 }
 
+struct ComparableLeafModifiers {
+  EdgeInsets padding{};
+  FillStyle fill = FillStyle::none();
+  StrokeStyle stroke = StrokeStyle::none();
+  ShadowStyle shadow = ShadowStyle::none();
+  CornerRadius cornerRadius{};
+  float opacity = 1.f;
+  Vec2 translation{};
+  bool clip = false;
+  float positionX = 0.f;
+  float positionY = 0.f;
+  float sizeWidth = 0.f;
+  float sizeHeight = 0.f;
+
+  bool operator==(ComparableLeafModifiers const& other) const = default;
+};
+
+bool modifiersAllowComparableLeafRetain(detail::ElementModifiers const* mods) {
+  return !mods || (!mods->overlay && !mods->hasInteraction());
+}
+
+ComparableLeafModifiers comparableLeafModifiers(detail::ElementModifiers const* mods) {
+  if (!mods) {
+    return {};
+  }
+  return ComparableLeafModifiers{
+      .padding = mods->padding,
+      .fill = mods->fill,
+      .stroke = mods->stroke,
+      .shadow = mods->shadow,
+      .cornerRadius = mods->cornerRadius,
+      .opacity = mods->opacity,
+      .translation = mods->translation,
+      .clip = mods->clip,
+      .positionX = mods->positionX,
+      .positionY = mods->positionY,
+      .sizeWidth = mods->sizeWidth,
+      .sizeHeight = mods->sizeHeight,
+  };
+}
+
+bool canUseComparableLeafRetainedStamp(Element const& el) {
+  return !el.isComposite() && !el.environmentLayer() && modifiersAllowComparableLeafRetain(el.modifiers());
+}
+
+bool comparableLeafElementsEqual(Element const& lhs, Element const& rhs) {
+  if (!canUseComparableLeafRetainedStamp(lhs) || !canUseComparableLeafRetainedStamp(rhs)) {
+    return false;
+  }
+  return lhs.valueEquals(rhs) &&
+         comparableLeafModifiers(lhs.modifiers()) == comparableLeafModifiers(rhs.modifiers());
+}
+
 std::unique_ptr<InteractionData> makeInteractionData(detail::ElementModifiers const* mods,
                                                      ComponentKey const& key) {
   if (!mods) {
@@ -571,7 +624,15 @@ bool SceneBuilder::canRetainExistingSubtree(Element const& el, Element const& sc
   Element const& retainedStampEl = retainedStampElement(el, sceneEl);
   RetainedBuildStamp const& stamp = existing.retainedBuildStamp();
   FrameState const& current = frame();
-  if (stamp.measureId == 0 || stamp.measureId != retainedStampEl.measureId()) {
+  bool const identityMatched = stamp.measureId != 0 && stamp.measureId == retainedStampEl.measureId();
+  Element const* comparableLeafElement =
+      static_cast<Element const*>(stamp.comparableLeafElement.get());
+  Theme const* comparableLeafTheme =
+      static_cast<Theme const*>(stamp.comparableLeafTheme.get());
+  if (!identityMatched &&
+      (!comparableLeafElement || !comparableLeafTheme ||
+       *comparableLeafTheme != activeTheme(environment_) ||
+       !comparableLeafElementsEqual(retainedStampEl, *comparableLeafElement))) {
     return false;
   }
   if (stamp.maxWidth != current.constraints.maxWidth || stamp.maxHeight != current.constraints.maxHeight ||
@@ -591,7 +652,7 @@ bool SceneBuilder::canRetainExistingSubtree(Element const& el, Element const& sc
 void SceneBuilder::stampRetainedBuild(SceneNode& node, Element const& el, Element const& sceneEl) const {
   FrameState const& current = frame();
   Element const& retainedStampEl = retainedStampElement(el, sceneEl);
-  node.setRetainedBuildStamp(RetainedBuildStamp{
+  RetainedBuildStamp stamp{
       .measureId = retainedStampEl.measureId(),
       .maxWidth = current.constraints.maxWidth,
       .maxHeight = current.constraints.maxHeight,
@@ -606,7 +667,16 @@ void SceneBuilder::stampRetainedBuild(SceneNode& node, Element const& el, Elemen
       .zStackHorizontalAlign = encodeAlignmentStamp(current.hints.zStackHorizontalAlign),
       .zStackVerticalAlign = encodeAlignmentStamp(current.hints.zStackVerticalAlign),
       .localPosition = node.position,
-  });
+  };
+  if (canUseComparableLeafRetainedStamp(retainedStampEl)) {
+    stamp.comparableLeafElement = std::unique_ptr<void, void (*)(void*)>(
+        new Element(retainedStampEl),
+        [](void* p) { delete static_cast<Element*>(p); });
+    stamp.comparableLeafTheme = std::unique_ptr<void, void (*)(void*)>(
+        new Theme(activeTheme(environment_)),
+        [](void* p) { delete static_cast<Theme*>(p); });
+  }
+  node.setRetainedBuildStamp(std::move(stamp));
 }
 
 Size SceneBuilder::measureElement(Element const& el, LayoutConstraints const& constraints,
@@ -796,7 +866,12 @@ std::unique_ptr<SceneNode> SceneBuilder::buildOrReuse(Element const& el, NodeId 
     }
   } envPop{pushedEnv ? &environment_ : nullptr};
 
-  if (el.typeTag() == ElementType::Unknown && el.isComposite()) {
+  ElementType const typeTag = el.typeTag();
+  if (typeTag != ElementType::Unknown) {
+    return buildResolved(el, el, id, std::move(existing));
+  }
+
+  if (el.isComposite()) {
     detail::CompositeBodyResolution resolution = el.resolveCompositeBody(frame().key, frame().constraints);
     if (resolution.body) {
       if (store && existing && resolution.descendantsStable &&

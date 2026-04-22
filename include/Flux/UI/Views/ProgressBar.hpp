@@ -14,11 +14,16 @@ struct ProgressBar : ViewModifiers<ProgressBar> {
         Color activeColor = Color::theme();
         Color inactiveColor = Color::theme();
         float trackHeight = kFloatFromTheme;
+
+        bool operator==(Style const& other) const = default;
     };
 
     float progress = 0.f;
     Style style {};
 
+    bool operator==(ProgressBar const& other) const {
+        return progress == other.progress && style == other.style;
+    }
     Element body() const;
 };
 

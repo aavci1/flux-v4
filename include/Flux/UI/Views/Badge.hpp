@@ -20,11 +20,16 @@ struct Badge : ViewModifiers<Badge> {
         float cornerRadius = kFloatFromTheme;
         Color foregroundColor = Color::theme();
         Color backgroundColor = Color::theme();
+
+        bool operator==(Style const& other) const = default;
     };
 
     std::string label;
     Style style {};
 
+    bool operator==(Badge const& other) const {
+        return label == other.label && style == other.style;
+    }
     Element body() const;
 };
 

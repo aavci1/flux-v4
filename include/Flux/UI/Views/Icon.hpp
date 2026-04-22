@@ -26,6 +26,11 @@ struct Icon : ViewModifiers<Icon> {
     /// Icon color. `Color::theme()` → `Theme::labelColor`.
     Color color = Color::theme();
 
+    bool operator==(Icon const& other) const {
+        return name == other.name && size == other.size && weight == other.weight &&
+               color == other.color;
+    }
+
     // ── Component protocol ───────────────────────────────────────────────────
     Element body() const;
 };

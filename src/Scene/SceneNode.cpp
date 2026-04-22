@@ -1,6 +1,8 @@
 #include <Flux/Scene/SceneNode.hpp>
 
 #include <Flux/Scene/Renderer.hpp>
+#include <Flux/UI/Element.hpp>
+#include <Flux/UI/Theme.hpp>
 
 #include "Scene/SceneGeometry.hpp"
 

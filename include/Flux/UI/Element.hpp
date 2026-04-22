@@ -15,6 +15,7 @@
 #include <Flux/UI/StateStore.hpp>
 
 #include <functional>
+#include <cstring>
 #include <memory>
 #include <optional>
 #include <string>
@@ -102,6 +103,7 @@ public:
 
   template<typename T>
   [[nodiscard]] T const& as() const;
+  [[nodiscard]] bool valueEquals(Element const& other) const noexcept;
 
   float flexGrow() const;
   float flexShrink() const;
@@ -168,6 +170,7 @@ private:
     virtual ElementType elementType() const noexcept { return ElementType::Unknown; }
     virtual std::type_index modelType() const noexcept = 0;
     virtual void const* rawValuePtr() const noexcept = 0;
+    virtual bool valueEquals(Concept const&) const noexcept { return false; }
     virtual bool isComposite() const noexcept { return false; }
     virtual std::unique_ptr<Element> buildCompositeBody() const { return nullptr; }
     virtual detail::CompositeBodyResolution resolveCompositeBody(ComponentKey const&,

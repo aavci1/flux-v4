@@ -214,6 +214,8 @@ struct Theme {
     static Theme comfortable();
 
     Theme withDensity(float d) const;
+
+    bool operator==(Theme const& other) const = default;
 };
 
 } // namespace flux

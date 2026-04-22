@@ -13,6 +13,7 @@
 #include <memory>
 #include <span>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace flux {
@@ -49,6 +50,8 @@ struct RetainedBuildStamp {
   std::int8_t zStackHorizontalAlign = -1;
   std::int8_t zStackVerticalAlign = -1;
   Point localPosition{};
+  std::unique_ptr<void, void (*)(void*)> comparableLeafElement{nullptr, nullptr};
+  std::unique_ptr<void, void (*)(void*)> comparableLeafTheme{nullptr, nullptr};
 };
 
 class SceneNode {
@@ -93,7 +96,7 @@ public:
   InteractionData const* interaction() const noexcept { return interaction_.get(); }
   void setInteraction(std::unique_ptr<InteractionData> interaction);
   RetainedBuildStamp const& retainedBuildStamp() const noexcept { return retainedBuildStamp_; }
-  void setRetainedBuildStamp(RetainedBuildStamp stamp) noexcept { retainedBuildStamp_ = stamp; }
+  void setRetainedBuildStamp(RetainedBuildStamp stamp) noexcept { retainedBuildStamp_ = std::move(stamp); }
 
 protected:
   SceneNode(SceneNodeKind kind, NodeId id);
