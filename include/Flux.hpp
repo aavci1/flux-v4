@@ -17,3 +17,5 @@
 #include <Flux/Reactive/Reactive.hpp>
 #include <Flux/Graphics/Canvas.hpp>
 #include <Flux/Graphics/Styles.hpp>
+#include <Flux/SceneGraph/SceneGraph.hpp>
+#include <Flux/SceneGraph/SceneRenderer.hpp>

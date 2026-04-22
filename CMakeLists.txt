@@ -183,6 +183,9 @@ add_library(flux STATIC
   src/Scene/SceneBoundsOverlay.cpp
   src/Scene/TextCacheDebugOverlay.cpp
   src/Scene/SceneTreeHitTester.cpp
+  src/SceneGraph/SceneNode.cpp
+  src/SceneGraph/SceneGraph.cpp
+  src/SceneGraph/SceneRenderer.cpp
   src/Graphics/Styles.cpp
   src/Graphics/AttributedString.cpp
   src/Graphics/Canvas.cpp
@@ -289,6 +292,7 @@ if(FLUX_BUILD_TESTS)
     tests/SceneBuilderLayoutTests.cpp
     tests/SceneGeometryIndexTests.cpp
     tests/SceneTraversalTests.cpp
+    tests/SceneGraphTests.cpp
     tests/ParagraphCacheTests.cpp
     tests/ParagraphCacheIncrementalTests.cpp
     tests/RuntimeTests.cpp
@@ -314,6 +318,14 @@ if(FLUX_BUILD_TESTS)
   endif()
 
   add_test(NAME flux_tests COMMAND flux_tests)
+endif()
+
+option(FLUX_BUILD_EXAMPLES
+  "Build standalone examples under examples/."
+  OFF)
+
+if(FLUX_BUILD_EXAMPLES)
+  add_subdirectory(examples)
 endif()
 
 option(FLUX_BUILD_BENCHMARKS "Build micro-benchmarks in bench/." OFF)
