@@ -68,10 +68,6 @@ option(FLUX_ENABLE_ASAN
   "Build flux and flux_tests with AddressSanitizer instrumentation."
   OFF)
 
-option(FLUX_BUILD_EXAMPLES
-  "Build example executables under examples/ (hello_world, *_demo, …)."
-  OFF)
-
 # Offline Metal: compile CanvasShaders.metal → air → metallib → C header (xxd) embedded in MetalShaderLibrary.mm
 set(FLUX_METAL_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Metal/CanvasShaders.metal)
 set(FLUX_METAL_AIR ${CMAKE_CURRENT_BINARY_DIR}/CanvasShaders.air)
@@ -263,10 +259,6 @@ target_link_libraries(flux PRIVATE
   "-framework CoreText"
 )
 
-if(FLUX_BUILD_EXAMPLES)
-  add_subdirectory(examples)
-endif()
-
 option(FLUX_BUILD_TESTS
   "Build unit and integration tests under tests/."
   OFF)
@@ -297,10 +289,8 @@ if(FLUX_BUILD_TESTS)
     tests/SceneBuilderLayoutTests.cpp
     tests/SceneGeometryIndexTests.cpp
     tests/SceneTraversalTests.cpp
-    tests/LlamaEngineTests.cpp
     tests/ParagraphCacheTests.cpp
     tests/ParagraphCacheIncrementalTests.cpp
-    tests/StoreTests.cpp
     tests/RuntimeTests.cpp
     tests/TextEditUtilsTests.cpp
     tests/SemanticThemeTests.cpp
@@ -309,13 +299,10 @@ if(FLUX_BUILD_TESTS)
   target_include_directories(flux_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${CMAKE_CURRENT_SOURCE_DIR}/vendor/llama.cpp/vendor
   )
 
   target_link_libraries(flux_tests PRIVATE
     flux
-    common
-    sqlite3
     doctest::doctest
   )
 
