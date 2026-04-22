@@ -50,8 +50,7 @@ struct RetainedBuildStamp {
   std::int8_t zStackHorizontalAlign = -1;
   std::int8_t zStackVerticalAlign = -1;
   Point localPosition{};
-  std::unique_ptr<void, void (*)(void*)> comparableLeafElement{nullptr, nullptr};
-  std::unique_ptr<void, void (*)(void*)> comparableLeafTheme{nullptr, nullptr};
+  std::unique_ptr<void, void (*)(void*)> comparableInput{nullptr, nullptr};
 };
 
 class SceneNode {

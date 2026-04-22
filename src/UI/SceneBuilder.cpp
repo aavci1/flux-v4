@@ -150,6 +150,35 @@ struct LayoutWrapperReuse {
   std::unique_ptr<SceneNode> overlay{};
 };
 
+struct DecorationReuse {
+  std::unique_ptr<ModifierSceneNode> modifierWrapper{};
+  std::unique_ptr<SceneNode> layoutWrapper{};
+  std::unique_ptr<SceneNode> overlay{};
+};
+
+class EnvironmentLayerScope {
+public:
+  explicit EnvironmentLayerScope(EnvironmentStack& environment) : environment_(environment) {}
+
+  EnvironmentLayerScope(EnvironmentStack& environment, std::span<EnvironmentLayer const> layers)
+      : environment_(environment) {
+    for (EnvironmentLayer const& layer : layers) {
+      environment_.push(layer);
+      ++count_;
+    }
+  }
+
+  ~EnvironmentLayerScope() {
+    while (count_-- > 0) {
+      environment_.pop();
+    }
+  }
+
+private:
+  EnvironmentStack& environment_;
+  std::size_t count_ = 0;
+};
+
 LayoutWrapperReuse takeTransparentLayoutWrapper(std::unique_ptr<SceneNode>& node) {
   if (!node || !isTransparentLayoutWrapper(*node)) {
     return {};
@@ -256,76 +285,93 @@ Rect chromeRectForSize(Size size) {
   return Rect{0.f, 0.f, std::max(0.f, size.width), std::max(0.f, size.height)};
 }
 
-ComponentKey directCompositeBodyKey(ComponentKey const& parentKey) {
-  ComponentKey key = parentKey;
-  key.push_back(LocalId::fromIndex(0));
-  return key;
-}
-
 bool rectIsMeaningful(Rect rect) {
   return rect.width > 0.f || rect.height > 0.f;
 }
 
-bool canUseResolvedBodyForRetainedStamp(Element const& el, Element const& sceneEl) {
-  return &sceneEl != &el && el.isComposite() && el.typeTag() == ElementType::Unknown &&
-         !el.modifiers() && !el.environmentLayer();
+bool modifierInteractionHandlersComparable(detail::ElementModifiers const& lhs,
+                                           detail::ElementModifiers const& rhs) noexcept {
+  return !lhs.onTap && !rhs.onTap &&
+         !lhs.onPointerDown && !rhs.onPointerDown &&
+         !lhs.onPointerUp && !rhs.onPointerUp &&
+         !lhs.onPointerMove && !rhs.onPointerMove &&
+         !lhs.onScroll && !rhs.onScroll &&
+         !lhs.onKeyDown && !rhs.onKeyDown &&
+         !lhs.onKeyUp && !rhs.onKeyUp &&
+         !lhs.onTextInput && !rhs.onTextInput;
 }
 
-Element const& retainedStampElement(Element const& el, Element const& sceneEl) {
-  return canUseResolvedBodyForRetainedStamp(el, sceneEl) ? sceneEl : el;
-}
-
-struct ComparableLeafModifiers {
-  EdgeInsets padding{};
-  FillStyle fill = FillStyle::none();
-  StrokeStyle stroke = StrokeStyle::none();
-  ShadowStyle shadow = ShadowStyle::none();
-  CornerRadius cornerRadius{};
-  float opacity = 1.f;
-  Vec2 translation{};
-  bool clip = false;
-  float positionX = 0.f;
-  float positionY = 0.f;
-  float sizeWidth = 0.f;
-  float sizeHeight = 0.f;
-
-  bool operator==(ComparableLeafModifiers const& other) const = default;
-};
-
-bool modifiersAllowComparableLeafRetain(detail::ElementModifiers const* mods) {
-  return !mods || (!mods->overlay && !mods->hasInteraction());
-}
-
-ComparableLeafModifiers comparableLeafModifiers(detail::ElementModifiers const* mods) {
-  if (!mods) {
-    return {};
-  }
-  return ComparableLeafModifiers{
-      .padding = mods->padding,
-      .fill = mods->fill,
-      .stroke = mods->stroke,
-      .shadow = mods->shadow,
-      .cornerRadius = mods->cornerRadius,
-      .opacity = mods->opacity,
-      .translation = mods->translation,
-      .clip = mods->clip,
-      .positionX = mods->positionX,
-      .positionY = mods->positionY,
-      .sizeWidth = mods->sizeWidth,
-      .sizeHeight = mods->sizeHeight,
-  };
-}
-
-bool canUseComparableLeafRetainedStamp(Element const& el) {
-  return !el.isComposite() && !el.environmentLayer() && modifiersAllowComparableLeafRetain(el.modifiers());
-}
-
-bool comparableLeafElementsEqual(Element const& lhs, Element const& rhs) {
-  if (!canUseComparableLeafRetainedStamp(lhs) || !canUseComparableLeafRetainedStamp(rhs)) {
+bool modifierLayersStructurallyEqual(std::span<detail::ElementModifiers const> lhs,
+                                     std::span<detail::ElementModifiers const> rhs) noexcept {
+  if (lhs.size() != rhs.size()) {
     return false;
   }
-  return lhs.valueEquals(rhs) &&
-         comparableLeafModifiers(lhs.modifiers()) == comparableLeafModifiers(rhs.modifiers());
+  for (std::size_t i = 0; i < lhs.size(); ++i) {
+    detail::ElementModifiers const& lhsMods = lhs[i];
+    detail::ElementModifiers const& rhsMods = rhs[i];
+    if (!modifierInteractionHandlersComparable(lhsMods, rhsMods)) {
+      return false;
+    }
+    if (lhsMods.padding != rhsMods.padding || lhsMods.fill != rhsMods.fill ||
+        lhsMods.stroke != rhsMods.stroke || lhsMods.shadow != rhsMods.shadow ||
+        lhsMods.cornerRadius != rhsMods.cornerRadius || lhsMods.opacity != rhsMods.opacity ||
+        lhsMods.translation != rhsMods.translation || lhsMods.clip != rhsMods.clip ||
+        lhsMods.positionX != rhsMods.positionX || lhsMods.positionY != rhsMods.positionY ||
+        lhsMods.sizeWidth != rhsMods.sizeWidth || lhsMods.sizeHeight != rhsMods.sizeHeight ||
+        lhsMods.focusable != rhsMods.focusable || lhsMods.cursor != rhsMods.cursor) {
+      return false;
+    }
+    if (static_cast<bool>(lhsMods.overlay) != static_cast<bool>(rhsMods.overlay)) {
+      return false;
+    }
+    if (lhsMods.overlay && !lhsMods.overlay->structuralEquals(*rhsMods.overlay)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool resolvedEnvironmentLayersComparable(std::span<EnvironmentLayer const> layers) {
+  return std::all_of(layers.begin(), layers.end(), [](EnvironmentLayer const& layer) { return layer.empty(); });
+}
+
+struct ComparableResolvedInput {
+  Element sceneElement;
+  std::vector<detail::ElementModifiers> modifierLayers{};
+  Theme theme = Theme::light();
+};
+
+bool canUseComparableResolvedRetainedStamp(detail::ResolvedElement const& resolved) {
+  return resolved.sceneElement &&
+         resolved.sceneElement->structuralEquals(*resolved.sceneElement) &&
+         resolvedEnvironmentLayersComparable(resolved.environmentLayers) &&
+         modifierLayersStructurallyEqual(resolved.modifierLayers, resolved.modifierLayers);
+}
+
+bool comparableResolvedInputsEqual(detail::ResolvedElement const& resolved,
+                                   ComparableResolvedInput const& comparable,
+                                   Theme const& activeTheme) {
+  return resolved.sceneElement &&
+         comparable.theme == activeTheme &&
+         resolved.sceneElement->structuralEquals(comparable.sceneElement) &&
+         modifierLayersStructurallyEqual(resolved.modifierLayers, comparable.modifierLayers);
+}
+
+DecorationReuse takeDecorationReuse(std::unique_ptr<SceneNode>& node, detail::ElementModifiers const* mods,
+                                    bool leafOwnsModifierPaint, bool allowLayoutWrapperReuse) {
+  DecorationReuse reuse{};
+  if (!mods) {
+    return reuse;
+  }
+  if (needsModifierWrapper(mods, leafOwnsModifierPaint)) {
+    reuse.modifierWrapper = takeTransparentModifierWrapper(node);
+  }
+  if (allowLayoutWrapperReuse) {
+    LayoutWrapperReuse layoutReuse = takeTransparentLayoutWrapper(node);
+    reuse.layoutWrapper = std::move(layoutReuse.wrapper);
+    reuse.overlay = std::move(layoutReuse.overlay);
+  }
+  return reuse;
 }
 
 std::unique_ptr<InteractionData> makeInteractionData(detail::ElementModifiers const* mods,
@@ -530,8 +576,8 @@ Size measuredOuterSizeFromContent(Size contentSize, detail::ElementModifiers con
 }
 
 bool canDeferOuterMeasurement(ElementType typeTag, detail::ElementModifiers const* mods,
-                              detail::ElementModifiers const* outerMods) {
-  if (outerMods || hasOverlay(mods)) {
+                              bool hasOuterModifierLayers) {
+  if (hasOuterModifierLayers || hasOverlay(mods)) {
     return false;
   }
   switch (typeTag) {
@@ -655,25 +701,21 @@ void SceneBuilder::popFrame() {
   frames_.pop_back();
 }
 
-bool SceneBuilder::canRetainExistingSubtree(Element const& el, Element const& sceneEl,
+bool SceneBuilder::canRetainExistingSubtree(detail::ResolvedElement const& resolved,
                                             SceneNode const& existing) const {
   StateStore* const store = StateStore::current();
-  if (!store || store->hasDirtyDescendant(frame().key)) {
+  if (!store || !resolved.sceneElement || store->hasDirtyDescendant(frame().key)) {
     return false;
   }
 
-  Element const& retainedStampEl = retainedStampElement(el, sceneEl);
   RetainedBuildStamp const& stamp = existing.retainedBuildStamp();
   FrameState const& current = frame();
-  bool const identityMatched = stamp.measureId != 0 && stamp.measureId == retainedStampEl.measureId();
-  Element const* comparableLeafElement =
-      static_cast<Element const*>(stamp.comparableLeafElement.get());
-  Theme const* comparableLeafTheme =
-      static_cast<Theme const*>(stamp.comparableLeafTheme.get());
+  bool const identityMatched = stamp.measureId != 0 && stamp.measureId == resolved.sceneElement->measureId();
+  ComparableResolvedInput const* comparableInput =
+      static_cast<ComparableResolvedInput const*>(stamp.comparableInput.get());
   if (!identityMatched &&
-      (!comparableLeafElement || !comparableLeafTheme ||
-       *comparableLeafTheme != activeTheme(environment_) ||
-       !comparableLeafElementsEqual(retainedStampEl, *comparableLeafElement))) {
+      (!comparableInput ||
+       !comparableResolvedInputsEqual(resolved, *comparableInput, activeTheme(environment_)))) {
     return false;
   }
   if (stamp.maxWidth != current.constraints.maxWidth || stamp.maxHeight != current.constraints.maxHeight ||
@@ -690,11 +732,10 @@ bool SceneBuilder::canRetainExistingSubtree(Element const& el, Element const& sc
          stamp.zStackVerticalAlign == encodeAlignmentStamp(current.hints.zStackVerticalAlign);
 }
 
-void SceneBuilder::stampRetainedBuild(SceneNode& node, Element const& el, Element const& sceneEl) const {
+void SceneBuilder::stampRetainedBuild(SceneNode& node, detail::ResolvedElement const& resolved) const {
   FrameState const& current = frame();
-  Element const& retainedStampEl = retainedStampElement(el, sceneEl);
   RetainedBuildStamp stamp{
-      .measureId = retainedStampEl.measureId(),
+      .measureId = resolved.sceneElement ? resolved.sceneElement->measureId() : 0,
       .maxWidth = current.constraints.maxWidth,
       .maxHeight = current.constraints.maxHeight,
       .minWidth = current.constraints.minWidth,
@@ -709,19 +750,21 @@ void SceneBuilder::stampRetainedBuild(SceneNode& node, Element const& el, Elemen
       .zStackVerticalAlign = encodeAlignmentStamp(current.hints.zStackVerticalAlign),
       .localPosition = node.position,
   };
-  if (canUseComparableLeafRetainedStamp(retainedStampEl)) {
-    stamp.comparableLeafElement = std::unique_ptr<void, void (*)(void*)>(
-        new Element(retainedStampEl),
-        [](void* p) { delete static_cast<Element*>(p); });
-    stamp.comparableLeafTheme = std::unique_ptr<void, void (*)(void*)>(
-        new Theme(activeTheme(environment_)),
-        [](void* p) { delete static_cast<Theme*>(p); });
+  if (canUseComparableResolvedRetainedStamp(resolved)) {
+    stamp.comparableInput = std::unique_ptr<void, void (*)(void*)>(
+        new ComparableResolvedInput{
+            .sceneElement = *resolved.sceneElement,
+            .modifierLayers = resolved.modifierLayers,
+            .theme = activeTheme(environment_),
+        },
+        [](void* p) { delete static_cast<ComparableResolvedInput*>(p); });
   }
   node.setRetainedBuildStamp(std::move(stamp));
 }
 
 Size SceneBuilder::measureElement(Element const& el, LayoutConstraints const& constraints,
                                   LayoutHints const& hints, ComponentKey const& key) const {
+  ++lastBuildStats_.measuredNodes;
   detail::MeasureLayoutKey const cacheKey{
       .measureId = el.measureId(),
       .componentKey = key,
@@ -736,7 +779,7 @@ Size SceneBuilder::measureElement(Element const& el, LayoutConstraints const& co
   MeasureContext measureContext{textSystem_, measureLayoutCache_.get()};
   measureContext.pushConstraints(constraints, hints);
   measureContext.resetTraversalState(key);
-  if (el.isComposite() && el.typeTag() == ElementType::Unknown) {
+  if (el.expandsBody()) {
     measureContext.setMeasurementRootKey(key);
   } else {
     measureContext.clearMeasurementRootKey();
@@ -750,7 +793,7 @@ Size SceneBuilder::measureElement(Element const& el, LayoutConstraints const& co
 }
 
 std::unique_ptr<SceneNode>
-SceneBuilder::decorateNode(std::unique_ptr<SceneNode> root, Element const& el,
+SceneBuilder::decorateNode(std::unique_ptr<SceneNode> root, bool leafOwnsModifierPaint,
                            detail::ElementModifiers const* mods,
                            std::unique_ptr<ModifierSceneNode> existingModifierWrapper,
                            std::unique_ptr<SceneNode> existingLayoutWrapper,
@@ -763,7 +806,6 @@ SceneBuilder::decorateNode(std::unique_ptr<SceneNode> root, Element const& el,
 
   FrameState const current = frame();
   Size const contentSize = rectSize(root->bounds);
-  bool const leafOwnsModifierPaint = el.leafDrawsFillStrokeShadowFromModifiers();
   root->position = {};
 
   if (needsLayoutWrapper(mods, layoutOuterSize, contentSize)) {
@@ -854,6 +896,7 @@ std::unique_ptr<SceneNode> SceneBuilder::build(Element const& el, NodeId id,
                                                std::unique_ptr<SceneNode> existing,
                                                ComponentKey rootKey) {
   measureLayoutCache_->clear();
+  lastBuildStats_ = {};
   if (geometryIndex_) {
     geometryIndex_->beginBuild();
   }
@@ -881,6 +924,9 @@ std::unique_ptr<SceneNode> SceneBuilder::buildOrReuse(Element const& el, NodeId 
     return build(el, id, LayoutConstraints{}, std::move(existing));
   }
 
+  ++lastBuildStats_.resolvedNodes;
+  detail::ResolvedElement resolved = el.resolve(frame().key, frame().constraints);
+
   auto retainExisting = [&](std::unique_ptr<SceneNode> node) -> std::unique_ptr<SceneNode> {
     StateStore* const store = StateStore::current();
     if (!node) {
@@ -902,55 +948,12 @@ std::unique_ptr<SceneNode> SceneBuilder::buildOrReuse(Element const& el, NodeId 
     return node;
   };
 
-  StateStore* const store = StateStore::current();
-  if (!el.isComposite() && existing && store && store->currentCompositePathStable() &&
-      canRetainExistingSubtree(el, el, *existing)) {
+  if (existing && canRetainExistingSubtree(resolved, *existing)) {
+    ++lastBuildStats_.skippedNodes;
     return retainExisting(std::move(existing));
   }
 
-  bool pushedEnv = false;
-  if (EnvironmentLayer const* envLayer = el.environmentLayer()) {
-    environment_.push(*envLayer);
-    pushedEnv = true;
-  }
-
-  struct EnvPop {
-    EnvironmentStack* env = nullptr;
-    ~EnvPop() {
-      if (env) {
-        env->pop();
-      }
-    }
-  } envPop{pushedEnv ? &environment_ : nullptr};
-
-  ElementType const typeTag = el.typeTag();
-  if (typeTag != ElementType::Unknown) {
-    return buildResolved(el, el, id, std::move(existing));
-  }
-
-  if (el.isComposite()) {
-    detail::CompositeBodyResolution resolution = el.resolveCompositeBody(frame().key, frame().constraints);
-    if (resolution.body) {
-      if (store && existing && resolution.descendantsStable &&
-          canRetainExistingSubtree(el, *resolution.body, *existing)) {
-        return retainExisting(std::move(existing));
-      }
-      if (store) {
-        store->pushCompositePathStable(resolution.descendantsStable);
-      }
-      struct CompositePathStablePop {
-        StateStore* store = nullptr;
-        ~CompositePathStablePop() {
-          if (store) {
-            store->popCompositePathStable();
-          }
-        }
-      } stablePop{store};
-      return buildResolved(el, *resolution.body, id, std::move(existing));
-    }
-  }
-
-  return buildResolved(el, el, id, std::move(existing));
+  return buildResolved(el, resolved, id, std::move(existing));
 }
 
 void SceneBuilder::reconcileChildren(SceneNode& parent, std::span<Element const> newChildren,
@@ -968,20 +971,28 @@ void SceneBuilder::reconcileChildren(SceneNode& parent, std::span<Element const>
   parent.replaceChildren(std::move(next));
 }
 
-std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Element const& sceneEl, NodeId id,
-                                                       std::unique_ptr<SceneNode> existing) {
+std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, detail::ResolvedElement const& resolved,
+                                                       NodeId id, std::unique_ptr<SceneNode> existing) {
   FrameState const current = frame();
-  bool const resolvedFromComposite = (&sceneEl != &el);
-  // `measureElement(el, ...)` may resolve and replace the same cached composite body again, so
-  // keep a local copy of the resolved body while this call runs. Element copies now preserve
-  // measure ids, so this no longer breaks subtree identity.
-  Element stableSceneEl = sceneEl;
+  ++lastBuildStats_.materializedNodes;
+  if (!resolved.sceneElement) {
+    auto root = std::make_unique<SceneNode>(id);
+    root->bounds = sizeRect(measureElement(el, current.constraints, current.hints, current.key));
+    stampRetainedBuild(*root, resolved);
+    ++lastBuildStats_.arrangedNodes;
+    return root;
+  }
+
+  // `measureElement(el, ...)` may resolve and replace the same cached body again, so keep a
+  // local copy of the resolved scene element while this build call runs.
+  Element stableSceneEl = *resolved.sceneElement;
   ElementType const typeTag = stableSceneEl.typeTag();
 
-  detail::ElementModifiers const* mods = stableSceneEl.modifiers();
-  detail::ElementModifiers const* outerMods = resolvedFromComposite ? el.modifiers() : nullptr;
+  std::vector<detail::ElementModifiers> const& modifierLayers = resolved.modifierLayers;
+  detail::ElementModifiers const* mods = modifierLayers.empty() ? nullptr : &modifierLayers.back();
+  bool const leafOwnsModifierPaint = stableSceneEl.leafDrawsFillStrokeShadowFromModifiers();
   Point const subtreeOffset = modifierOffset(mods);
-  bool const deferOuterMeasurement = canDeferOuterMeasurement(typeTag, mods, outerMods);
+  bool const deferOuterMeasurement = canDeferOuterMeasurement(typeTag, mods, modifierLayers.size() > 1);
   Size outerSize{};
   bool hasOuterSize = false;
   if (!deferOuterMeasurement) {
@@ -1061,47 +1072,25 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
   };
 
   std::unique_ptr<SceneNode> innerExisting = std::move(existing);
-  std::unique_ptr<ModifierSceneNode> outerModifierWrapper{};
-  std::unique_ptr<SceneNode> outerLayoutWrapper{};
-  std::unique_ptr<SceneNode> outerOverlay{};
-  if (outerMods) {
-    if (needsModifierWrapper(outerMods, false)) {
-      outerModifierWrapper = takeTransparentModifierWrapper(innerExisting);
-    }
-    if (hasPadding(outerMods) || hasOverlay(outerMods)) {
-      LayoutWrapperReuse reuse = takeTransparentLayoutWrapper(innerExisting);
-      outerLayoutWrapper = std::move(reuse.wrapper);
-      outerOverlay = std::move(reuse.overlay);
-    }
+  std::vector<DecorationReuse> decorationReuse(modifierLayers.size());
+  for (std::size_t i = 0; i < modifierLayers.size(); ++i) {
+    detail::ElementModifiers const& layer = modifierLayers[i];
+    bool const isInnermost = i + 1 == modifierLayers.size();
+    decorationReuse[i] = takeDecorationReuse(innerExisting, &layer,
+                                             isInnermost ? leafOwnsModifierPaint : false,
+                                             isInnermost || hasPadding(&layer) || hasOverlay(&layer));
   }
 
-  if (typeTag == ElementType::Unknown && stableSceneEl.isComposite()) {
-    ComponentKey nestedKey = directCompositeBodyKey(current.key);
-    pushFrame(current.constraints, current.hints, current.origin, std::move(nestedKey), current.assignedSize,
-              current.hasAssignedWidth, current.hasAssignedHeight);
-    std::unique_ptr<SceneNode> root = buildOrReuse(stableSceneEl, id, std::move(innerExisting));
-    popFrame();
-
-    std::unique_ptr<InteractionData> outerInteraction =
-        outerMods ? makeInteractionData(outerMods, current.key) : nullptr;
-    if (outerMods &&
-        needsDecorationPass(outerMods, outerSize, rectSize(root->bounds), false, outerInteraction.get())) {
-      root = decorateNode(std::move(root), el, outerMods, std::move(outerModifierWrapper),
-                          std::move(outerLayoutWrapper), std::move(outerOverlay), outerSize, outerSize,
-                          modifierOffset(outerMods), outerMods->padding, std::move(outerInteraction));
-    }
-    if (root->bounds.width <= 0.f && root->bounds.height <= 0.f) {
-      root->bounds = sizeRect(outerSize);
-    }
-    stampRetainedBuild(*root, el, stableSceneEl);
-    recordGeometry(rectSize(root->bounds));
-    return root;
+  std::unique_ptr<ModifierSceneNode> modifierWrapper{};
+  std::unique_ptr<SceneNode> layoutWrapper{};
+  std::unique_ptr<SceneNode> overlayNode{};
+  if (!decorationReuse.empty()) {
+    modifierWrapper = std::move(decorationReuse.back().modifierWrapper);
+    layoutWrapper = std::move(decorationReuse.back().layoutWrapper);
+    overlayNode = std::move(decorationReuse.back().overlay);
   }
 
-  std::unique_ptr<ModifierSceneNode> modifierWrapper = takeTransparentModifierWrapper(innerExisting);
-  LayoutWrapperReuse layoutReuse = takeTransparentLayoutWrapper(innerExisting);
-  std::unique_ptr<SceneNode> layoutWrapper = std::move(layoutReuse.wrapper);
-  std::unique_ptr<SceneNode> overlayNode = std::move(layoutReuse.overlay);
+  EnvironmentLayerScope resolvedEnvironment{environment_, resolved.environmentLayers};
 
   std::unique_ptr<SceneNode> core{};
   std::unique_ptr<InteractionData> resolvedInteraction{};
@@ -2205,21 +2194,27 @@ std::unique_ptr<SceneNode> SceneBuilder::buildResolved(Element const& el, Elemen
     interaction = makeInteractionData(mods, current.key);
   }
   std::unique_ptr<SceneNode> root =
-      decorateNode(std::move(core), el, mods, std::move(modifierWrapper), std::move(layoutWrapper),
+      decorateNode(std::move(core), leafOwnsModifierPaint, mods, std::move(modifierWrapper),
+                   std::move(layoutWrapper),
                    std::move(overlayNode), layoutOuterSize, outerSize, subtreeOffset, padding,
                    std::move(interaction));
 
-  std::unique_ptr<InteractionData> outerInteraction =
-      outerMods ? makeInteractionData(outerMods, current.key) : nullptr;
-  if (outerMods && needsDecorationPass(outerMods, outerSize, rectSize(root->bounds), false, outerInteraction.get())) {
-    root = decorateNode(std::move(root), el, outerMods, std::move(outerModifierWrapper),
-                        std::move(outerLayoutWrapper), std::move(outerOverlay), outerSize, outerSize,
-                        modifierOffset(outerMods), outerMods->padding, std::move(outerInteraction));
+  for (std::size_t i = modifierLayers.size(); i > 1; --i) {
+    detail::ElementModifiers const& outerLayer = modifierLayers[i - 2];
+    std::unique_ptr<InteractionData> outerInteraction = makeInteractionData(&outerLayer, current.key);
+    if (!needsDecorationPass(&outerLayer, outerSize, rectSize(root->bounds), false, outerInteraction.get())) {
+      continue;
+    }
+    DecorationReuse& reuse = decorationReuse[i - 2];
+    root = decorateNode(std::move(root), false, &outerLayer, std::move(reuse.modifierWrapper),
+                        std::move(reuse.layoutWrapper), std::move(reuse.overlay), outerSize, outerSize,
+                        modifierOffset(&outerLayer), outerLayer.padding, std::move(outerInteraction));
   }
   if (root->bounds.width <= 0.f && root->bounds.height <= 0.f) {
     root->bounds = sizeRect(outerSize);
   }
-  stampRetainedBuild(*root, el, stableSceneEl);
+  stampRetainedBuild(*root, resolved);
+  ++lastBuildStats_.arrangedNodes;
   recordGeometry(geometrySize.width > 0.f || geometrySize.height > 0.f ? geometrySize : rectSize(root->bounds));
   return root;
 }

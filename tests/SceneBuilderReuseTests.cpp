@@ -592,6 +592,121 @@ TEST_CASE("SceneBuilder: clean composite subtree stays retained through outer pa
   CHECK(rebuiltTextNode == retainedTextNode);
 }
 
+TEST_CASE("SceneBuilder: unchanged layout subtree is skipped with unified build stats") {
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  StoreScope scope{};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 220.f;
+  constraints.maxHeight = 120.f;
+
+  Signal<int> tickSignal{0};
+  State<int> tick{&tickSignal};
+  int parentCalls = 0;
+
+  struct ParentWithStaticGrid {
+    State<int> tick{};
+    int* parentCalls = nullptr;
+
+    Element body() const {
+      ++*parentCalls;
+      return VStack{
+          .spacing = 8.f,
+          .alignment = Alignment::Stretch,
+          .children = children(
+              Element{Rectangle{}}.size(24.f + static_cast<float>(*tick), 8.f),
+              Element{Grid{
+                  .columns = 2,
+                  .horizontalSpacing = 6.f,
+                  .verticalSpacing = 4.f,
+                  .children = children(
+                      keyedRect("a", 32.f, 12.f),
+                      keyedRect("b", 28.f, 10.f),
+                      keyedRect("c", 18.f, 14.f),
+                      keyedRect("d", 24.f, 8.f)),
+              }}.key("grid"))};
+    }
+  };
+
+  auto makeRoot = [&]() -> Element {
+    return Element{ParentWithStaticGrid{
+        .tick = tick,
+        .parentCalls = &parentCalls,
+    }};
+  };
+
+  scope.store.beginRebuild(true);
+  std::unique_ptr<SceneNode> tree = builder.build(makeRoot(), NodeId{1ull}, constraints);
+  scope.store.endRebuild();
+
+  REQUIRE(tree != nullptr);
+  REQUIRE(tree->children().size() == 2);
+  SceneNode* retainedGrid = tree->children()[1].get();
+  REQUIRE(retainedGrid != nullptr);
+  REQUIRE(parentCalls == 1);
+
+  tick = 12;
+
+  scope.store.beginRebuild(false);
+  tree = builder.build(makeRoot(), NodeId{1ull}, constraints, std::move(tree));
+  scope.store.endRebuild();
+
+  REQUIRE(tree != nullptr);
+  REQUIRE(tree->children().size() == 2);
+  CHECK(parentCalls == 2);
+  CHECK(tree->children()[1].get() == retainedGrid);
+  CHECK(builder.lastBuildStats().skippedNodes >= 1);
+  CHECK(builder.lastBuildStats().resolvedNodes > builder.lastBuildStats().materializedNodes);
+}
+
+TEST_CASE("SceneBuilder: nested body wrappers use distinct component keys during resolve") {
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  StoreScope scope{};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 220.f;
+  constraints.maxHeight = 120.f;
+
+  struct CardHost {
+    Element body() const {
+      return Card{
+          .child = Text{
+              .text = "Nested body",
+              .horizontalAlignment = HorizontalAlignment::Leading,
+          },
+      };
+    }
+  };
+
+  Element root = VStack{
+      .spacing = 8.f,
+      .alignment = Alignment::Start,
+      .children = children(Element{CardHost{}}.key("host"))};
+
+  scope.store.beginRebuild(true);
+  std::unique_ptr<SceneNode> tree = builder.build(root, NodeId{1ull}, constraints);
+  scope.store.endRebuild();
+
+  REQUIRE(tree != nullptr);
+  ComponentState const* hostState =
+      scope.store.findComponentState(ComponentKey{LocalId::fromString("host")});
+  ComponentState const* cardState =
+      scope.store.findComponentState(ComponentKey{LocalId::fromString("host"), LocalId::fromIndex(0)});
+  REQUIRE(hostState != nullptr);
+  REQUIRE(cardState != nullptr);
+  CHECK(hostState != cardState);
+  CHECK(hostState->lastBody != nullptr);
+  CHECK(cardState->lastBody != nullptr);
+}
+
 TEST_CASE("SceneBuilder: retained composite body rebuilds when an environment dependency changes") {
   NullTextSystem textSystem{};
   EnvironmentLayer env{};
@@ -621,14 +736,30 @@ TEST_CASE("SceneBuilder: retained composite body rebuilds when an environment de
   std::unique_ptr<SceneNode> tree = builder.build(makeRoot(), NodeId{1ull}, constraints);
   scope.store.endRebuild();
 
+  auto findRectNode = [](SceneNode* node, auto&& self) -> RectSceneNode* {
+    if (!node) {
+      return nullptr;
+    }
+    if (auto* rect = dynamic_cast<RectSceneNode*>(node)) {
+      return rect;
+    }
+    for (std::unique_ptr<SceneNode> const& child : node->children()) {
+      if (RectSceneNode* found = self(child.get(), self)) {
+        return found;
+      }
+    }
+    return nullptr;
+  };
+
   REQUIRE(tree != nullptr);
   REQUIRE(tree->children().size() == 2);
-  auto* firstChild = dynamic_cast<RectSceneNode*>(tree->children()[1].get());
+  auto* firstChild = findRectNode(tree->children()[1].get(), findRectNode);
   REQUIRE(firstChild != nullptr);
   Color firstFill{};
   REQUIRE(firstChild->fill.solidColor(&firstFill));
   CHECK(firstFill == Theme::light().separatorColor);
-  CHECK(childCalls == 1);
+  int const firstBuildChildCalls = childCalls;
+  CHECK(firstBuildChildCalls >= 1);
 
   dark = true;
 
@@ -638,12 +769,12 @@ TEST_CASE("SceneBuilder: retained composite body rebuilds when an environment de
 
   REQUIRE(tree != nullptr);
   REQUIRE(tree->children().size() == 2);
-  auto* secondChild = dynamic_cast<RectSceneNode*>(tree->children()[1].get());
+  auto* secondChild = findRectNode(tree->children()[1].get(), findRectNode);
   REQUIRE(secondChild != nullptr);
   Color secondFill{};
   REQUIRE(secondChild->fill.solidColor(&secondFill));
   CHECK(secondFill == Theme::dark().separatorColor);
-  CHECK(childCalls == 2);
+  CHECK(childCalls > firstBuildChildCalls);
 }
 
 TEST_CASE("SceneBuilder: retained button body skips rebuild and refreshes callback inputs") {

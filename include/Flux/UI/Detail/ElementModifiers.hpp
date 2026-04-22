@@ -14,11 +14,15 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <type_traits>
+#include <vector>
 
 namespace flux {
 
 class Element;
+class EnvironmentLayer;
 struct Popover;
+struct Spacer;
 class StateStore;
 
 namespace detail {
@@ -33,6 +37,15 @@ struct CompositeBodyResolution {
   bool descendantsStable = false;
 };
 
+struct ElementModifiers;
+
+struct ResolvedElement {
+  std::unique_ptr<Element> sceneElement{};
+  std::vector<EnvironmentLayer> environmentLayers{};
+  std::vector<ElementModifiers> modifierLayers{};
+  bool descendantsStable = false;
+};
+
 template<typename C, typename BuildFn>
 CompositeBodyResolution resolveCompositeBody(StateStore* store, ComponentKey const& key,
                                              LayoutConstraints const& constraints, C const& value,
@@ -42,6 +55,8 @@ template<typename C>
 float flexGrowOf(C const& v) {
   if constexpr (requires { v.flexGrow; }) {
     return v.flexGrow;
+  } else if constexpr (std::is_same_v<C, Spacer>) {
+    return 1.f;
   }
   return 0.f;
 }

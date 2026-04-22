@@ -40,30 +40,4 @@ struct ScrollView : ViewModifiers<ScrollView> {
     Element body() const;
 };
 
-// `ScrollView` is a composite (`body()`) but uses a dedicated `Element::Model` that matches this
-// subtree protocol instead of the default composite `Model<C>` implementation.
-template <>
-struct Element::Model<ScrollView> final : Element::Concept {
-    ScrollView value;
-    explicit Model(ScrollView c) : value(std::move(c)) {}
-    std::unique_ptr<Concept> clone() const override {
-        return std::make_unique<Model<ScrollView>>(value);
-    }
-    ElementType elementType() const noexcept override { return ElementType::ScrollView; }
-    std::type_index modelType() const noexcept override { return std::type_index(typeid(ScrollView)); }
-    void const* rawValuePtr() const noexcept override { return &value; }
-    bool isComposite() const noexcept override { return true; }
-    std::unique_ptr<Element> buildCompositeBody() const override {
-        return std::make_unique<Element>(value.body());
-    }
-    Size measure(MeasureContext &ctx, LayoutConstraints const &c, LayoutHints const &h,
-                 TextSystem &ts) const override {
-        return value.measure(ctx, c, h, ts);
-    }
-    /// `ScrollView` keeps its measured viewport size by default; opt into fill with `.flex(...)`.
-    float flexGrow() const override { return 0.f; }
-    float flexShrink() const override { return 0.f; }
-    float minMainSize() const override { return 0.f; }
-};
-
 } // namespace flux

@@ -2,6 +2,8 @@
 
 #include <Flux/UI/Views/Popover.hpp>
 
+#include <vector>
+
 namespace flux {
 
 namespace detail {
@@ -17,6 +19,21 @@ Popover* popoverOverlayStateIf(Element& el) {
 }
 
 } // namespace detail
+
+namespace {
+
+struct EnvironmentPushScope {
+  std::size_t count = 0;
+
+  ~EnvironmentPushScope() {
+    EnvironmentStack& environment = EnvironmentStack::current();
+    while (count-- > 0) {
+      environment.pop();
+    }
+  }
+};
+
+} // namespace
 
 Element::Element(Element const& other)
     : impl_(other.impl_ ? other.impl_->clone() : nullptr)
@@ -42,6 +59,62 @@ Element& Element::operator=(Element const& other) {
     measureId_ = other.measureId_;
   }
   return *this;
+}
+
+Element Element::strippedEnvelopeCopy() const {
+  Element copy = *this;
+  copy.envLayer_.reset();
+  copy.modifiers_.reset();
+  copy.key_.reset();
+  return copy;
+}
+
+detail::ResolvedElement Element::resolve(ComponentKey const& key,
+                                         LayoutConstraints const& constraints) const {
+  detail::ResolvedElement resolved{};
+  EnvironmentPushScope pushedEnvironments{};
+  std::vector<std::unique_ptr<Element>> ownedBodies{};
+  Element const* current = this;
+  ComponentKey currentKey = key;
+  bool expandedAnyBody = false;
+  bool descendantsStable = true;
+
+  while (current) {
+    if (EnvironmentLayer const* envLayer = current->environmentLayer()) {
+      resolved.environmentLayers.push_back(*envLayer);
+      EnvironmentStack::current().push(*envLayer);
+      ++pushedEnvironments.count;
+    }
+    if (detail::ElementModifiers const* modifiers = current->modifiers()) {
+      resolved.modifierLayers.push_back(*modifiers);
+    }
+    if (!current->expandsBody()) {
+      resolved.sceneElement = std::make_unique<Element>(current->strippedEnvelopeCopy());
+      resolved.descendantsStable = expandedAnyBody && descendantsStable;
+      return resolved;
+    }
+
+    expandedAnyBody = true;
+    detail::CompositeBodyResolution bodyResolution = current->resolveCompositeBody(currentKey, constraints);
+    descendantsStable = descendantsStable && bodyResolution.descendantsStable;
+    if (!bodyResolution.body) {
+      resolved.sceneElement = std::make_unique<Element>(current->strippedEnvelopeCopy());
+      resolved.descendantsStable = false;
+      return resolved;
+    }
+
+    if (bodyResolution.ownedBody) {
+      ownedBodies.push_back(std::move(bodyResolution.ownedBody));
+      current = ownedBodies.back().get();
+    } else {
+      current = bodyResolution.body;
+    }
+    currentKey.push_back(LocalId::fromIndex(0));
+  }
+
+  resolved.sceneElement = std::make_unique<Element>(strippedEnvelopeCopy());
+  resolved.descendantsStable = false;
+  return resolved;
 }
 
 float Element::flexGrow() const {

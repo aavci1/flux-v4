@@ -65,7 +65,7 @@ Size measureOverlayContent(Element const& element, LayoutConstraints const& cons
     measureContext.pushConstraints(constraints, LayoutHints{});
     ComponentKey const rootKey{LocalId::fromIndex(0)};
     measureContext.resetTraversalState(rootKey);
-    if (element.isComposite() && element.typeTag() == ElementType::Unknown) {
+    if (element.expandsBody()) {
         measureContext.setMeasurementRootKey(rootKey);
     } else {
         measureContext.clearMeasurementRootKey();

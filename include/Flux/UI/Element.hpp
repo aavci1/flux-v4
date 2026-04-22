@@ -83,6 +83,7 @@ public:
   [[nodiscard]] std::uint64_t measureId() const noexcept { return measureId_; }
   [[nodiscard]] ElementType typeTag() const noexcept { return impl_ ? impl_->elementType() : ElementType::Unknown; }
   [[nodiscard]] bool isComposite() const noexcept { return impl_ && impl_->isComposite(); }
+  [[nodiscard]] bool expandsBody() const noexcept { return impl_ && impl_->expandsBody(); }
   [[nodiscard]] std::unique_ptr<Element> buildCompositeBody() const {
     return impl_ ? impl_->buildCompositeBody() : nullptr;
   }
@@ -91,6 +92,8 @@ public:
     return impl_ ? impl_->resolveCompositeBody(key, constraints, modifiers())
                  : detail::CompositeBodyResolution{};
   }
+  [[nodiscard]] detail::ResolvedElement resolve(ComponentKey const& key,
+                                                LayoutConstraints const& constraints) const;
   [[nodiscard]] detail::ElementModifiers const* modifiers() const noexcept {
     return modifiers_ ? &*modifiers_ : nullptr;
   }
@@ -173,6 +176,7 @@ private:
     virtual void const* rawValuePtr() const noexcept = 0;
     virtual bool valueEquals(Concept const&) const noexcept { return false; }
     virtual bool isComposite() const noexcept { return false; }
+    virtual bool expandsBody() const noexcept { return false; }
     virtual std::unique_ptr<Element> buildCompositeBody() const { return nullptr; }
     virtual detail::CompositeBodyResolution resolveCompositeBody(ComponentKey const&,
                                                                  LayoutConstraints const&,
@@ -203,6 +207,7 @@ private:
 
   Size measureWithModifiersImpl(MeasureContext& ctx, LayoutConstraints const& constraints,
                                 LayoutHints const& hints, TextSystem& textSystem) const;
+  [[nodiscard]] Element strippedEnvelopeCopy() const;
 };
 
 template<typename... Args>

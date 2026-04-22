@@ -135,9 +135,10 @@ struct Element::Model : Concept {
       return false;
     }
   }
-  bool isComposite() const noexcept override { return CompositeComponent<C>; }
+  bool isComposite() const noexcept override { return BodyComponent<C>; }
+  bool expandsBody() const noexcept override { return ExpandsBodyComponent<C>; }
   std::unique_ptr<Element> buildCompositeBody() const override {
-    if constexpr (CompositeComponent<C>) {
+    if constexpr (ExpandsBodyComponent<C>) {
       return std::make_unique<Element>(value.body());
     }
     return nullptr;
@@ -163,7 +164,7 @@ template<typename C>
 detail::CompositeBodyResolution Element::Model<C>::resolveCompositeBody(ComponentKey const& key,
                                                                         LayoutConstraints const& constraints,
                                                                         detail::ElementModifiers const* modifiers) const {
-  if constexpr (!CompositeComponent<C>) {
+  if constexpr (!ExpandsBodyComponent<C>) {
     (void)key;
     (void)constraints;
     (void)modifiers;
@@ -246,7 +247,9 @@ ElementType Element::Model<C>::elementType() const noexcept {
 template<typename C>
 Size Element::Model<C>::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
                                 LayoutHints const& hints, TextSystem& textSystem) const {
-  if constexpr (CompositeComponent<C>) {
+  if constexpr (MeasuredComponent<C>) {
+    return value.measure(ctx, constraints, hints, textSystem);
+  } else if constexpr (ExpandsBodyComponent<C>) {
     ComponentKey const key = ctx.nextCompositeKey();
     StateStore* store = StateStore::current();
     detail::CompositeBodyResolution resolution{};
@@ -284,12 +287,10 @@ Size Element::Model<C>::measure(MeasureContext& ctx, LayoutConstraints const& co
     }
     ctx.popCompositeKeyTail();
     return sz;
-  } else if constexpr (PrimitiveComponent<C>) {
-    return value.measure(ctx, constraints, hints, textSystem);
   } else {
     static_assert(alwaysFalse<C>,
-                  "Component must satisfy CompositeComponent (body()) or PrimitiveComponent (measure with "
-                  "MeasureContext).");
+                  "Component must provide either measure(MeasureContext, LayoutConstraints, LayoutHints, "
+                  "TextSystem) or body().");
     return {};
   }
 }
