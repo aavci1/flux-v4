@@ -289,6 +289,18 @@ void Application::requestWindowRedraw(unsigned int handle) {
   }
 }
 
+void Application::processReactiveUpdates() {
+  if (!d->reactiveDirty_) {
+    return;
+  }
+  d->reactiveDirty_ = false;
+  for (auto& e : d->nextFrame_) {
+    if (e.callback) {
+      e.callback();
+    }
+  }
+}
+
 void Application::presentRequestedWindows(bool requireFrameReady, bool keepFramePump) {
   for (auto& w : d->windows_) {
     if (!w) {
@@ -330,6 +342,7 @@ void Application::presentRequestedWindows(bool requireFrameReady, bool keepFrame
 }
 
 void Application::flushRedraw() {
+  processReactiveUpdates();
   presentRequestedWindows(false, AnimationClock::instance().needsFramePump());
 }
 
@@ -374,14 +387,7 @@ int Application::exec() {
       }
     }
 
-    if (d->reactiveDirty_) {
-      d->reactiveDirty_ = false;
-      for (auto& e : d->nextFrame_) {
-        if (e.callback) {
-          e.callback();
-        }
-      }
-    }
+    processReactiveUpdates();
 
     presentRequestedWindows(true, AnimationClock::instance().needsFramePump());
 

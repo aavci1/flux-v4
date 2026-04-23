@@ -63,6 +63,16 @@ char const* inputKindName(InputEvent::Kind k) {
   }
 }
 
+template<typename MarkFn>
+bool markKeyAndAncestors(ComponentKey const& key, MarkFn&& markFn) {
+  bool marked = false;
+  for (std::size_t len = 1; len <= key.size(); ++len) {
+    ComponentKey prefix(key.begin(), key.begin() + static_cast<std::ptrdiff_t>(len));
+    marked = markFn(prefix) || marked;
+  }
+  return marked;
+}
+
 } // namespace
 
 thread_local Runtime* Runtime::sCurrent = nullptr;
@@ -234,16 +244,20 @@ bool Runtime::markInteractiveDirty(ComponentKey const& key, std::optional<Overla
   if (overlayScope.has_value()) {
     if (OverlayEntry* entry = window_.overlayManager().find(*overlayScope);
         entry && entry->stateStore) {
-      entry->stateStore->markCompositeDirty(key);
-      return true;
+      return markKeyAndAncestors(key, [&](ComponentKey const& prefix) {
+        entry->stateStore->markCompositeDirty(prefix);
+        return true;
+      });
     }
     if (Application::hasInstance()) {
       Application::instance().markReactiveDirty();
     }
     return false;
   }
-  buildOrchestrator_.stateStore().markCompositeDirty(key);
-  return true;
+  return markKeyAndAncestors(key, [&](ComponentKey const& prefix) {
+    buildOrchestrator_.stateStore().markCompositeDirty(prefix);
+    return true;
+  });
 }
 
 void Runtime::onOverlayPushed(OverlayEntry& entry) {

@@ -97,6 +97,7 @@ private:
   /// Removes `handle` from the running window list before `Window` is destroyed (synchronous; avoids dangling `Window*`).
   void unregisterWindowHandle(unsigned int handle);
 
+  void processReactiveUpdates();
   void presentRequestedWindows(bool requireFrameReady, bool keepFramePump);
 
   struct Impl;
