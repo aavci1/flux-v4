@@ -32,16 +32,20 @@ float indicatorThumbLength(float viewportExtent, float contentExtent, float trac
 LayoutConstraints scrollChildConstraints(ScrollAxis axis, LayoutConstraints constraints, Size viewport) {
   switch (axis) {
   case ScrollAxis::Vertical:
+    constraints.minHeight = 0.f;
     constraints.maxWidth =
         viewport.width > 0.f ? viewport.width : std::numeric_limits<float>::infinity();
     constraints.maxHeight = std::numeric_limits<float>::infinity();
     break;
   case ScrollAxis::Horizontal:
+    constraints.minWidth = 0.f;
     constraints.maxWidth = std::numeric_limits<float>::infinity();
     constraints.maxHeight =
         viewport.height > 0.f ? viewport.height : std::numeric_limits<float>::infinity();
     break;
   case ScrollAxis::Both:
+    constraints.minWidth = 0.f;
+    constraints.minHeight = 0.f;
     constraints.maxWidth = std::numeric_limits<float>::infinity();
     constraints.maxHeight = std::numeric_limits<float>::infinity();
     break;

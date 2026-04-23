@@ -240,6 +240,26 @@ TEST_CASE("ScrollLayout: clamps offsets and assigns vertical child slots") {
   CHECK(layout.slots[0].assignedSize.width == doctest::Approx(80.f));
 }
 
+TEST_CASE("ScrollLayout: scroll child constraints clear minimum size on the scroll axis") {
+  LayoutConstraints constraints{};
+  constraints.minWidth = 120.f;
+  constraints.minHeight = 300.f;
+  constraints.maxWidth = 120.f;
+  constraints.maxHeight = 300.f;
+
+  LayoutConstraints const vertical =
+      scrollChildConstraints(ScrollAxis::Vertical, constraints, Size{120.f, 300.f});
+  CHECK(vertical.minWidth == doctest::Approx(120.f));
+  CHECK(vertical.minHeight == doctest::Approx(0.f));
+  CHECK(std::isinf(vertical.maxHeight));
+
+  LayoutConstraints const horizontal =
+      scrollChildConstraints(ScrollAxis::Horizontal, constraints, Size{120.f, 300.f});
+  CHECK(horizontal.minWidth == doctest::Approx(0.f));
+  CHECK(horizontal.minHeight == doctest::Approx(300.f));
+  CHECK(std::isinf(horizontal.maxWidth));
+}
+
 TEST_CASE("ScrollLayout: indicator metrics track scroll progress") {
   Size const viewport{120.f, 80.f};
   Size const content{120.f, 240.f};
@@ -266,6 +286,16 @@ TEST_CASE("OverlayLayout: popover callout layout reserves arrow depth in total s
   CHECK(layout.totalSize.height ==
         doctest::Approx(20.f + 24.f + PopoverCalloutShape::kArrowH));
   CHECK(layout.contentOrigin.y == doctest::Approx(PopoverCalloutShape::kArrowH + 12.f));
+}
+
+TEST_CASE("OverlayLayout: anchorless overlays are centered in the window") {
+  OverlayConfig config{};
+  Rect const frame = resolveOverlayFrame(Size{800.f, 600.f}, config, Rect{0.f, 0.f, 320.f, 180.f});
+
+  CHECK(frame.x == doctest::Approx(240.f));
+  CHECK(frame.y == doctest::Approx(210.f));
+  CHECK(frame.width == doctest::Approx(320.f));
+  CHECK(frame.height == doctest::Approx(180.f));
 }
 
 TEST_CASE("PopoverPlacement: measured popover size avoids premature flip from max-size estimate") {
