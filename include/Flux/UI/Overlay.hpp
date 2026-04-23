@@ -7,9 +7,8 @@
 
 #include <Flux/Core/Types.hpp>
 #include <Flux/Core/ComponentKey.hpp>
-#include <Flux/Scene/SceneTree.hpp>
+#include <Flux/SceneGraph/SceneGraph.hpp>
 #include <Flux/UI/Element.hpp>
-#include <Flux/UI/SceneGeometryIndex.hpp>
 #include <Flux/UI/StateStore.hpp>
 #include <Flux/UI/Views/PopoverPlacement.hpp>
 
@@ -94,8 +93,7 @@ struct OverlayEntry {
   std::optional<Element> content;
   OverlayConfig config;
 
-  SceneTree sceneTree;
-  SceneGeometryIndex sceneGeometry;
+  scenegraph::SceneGraph sceneGraph;
   std::unique_ptr<StateStore> stateStore = std::make_unique<StateStore>();
   Rect resolvedFrame{};
 
@@ -130,7 +128,7 @@ private:
   Rect resolveFrame(Size windowSize, OverlayConfig const& config, Rect contentBounds) const;
   LayoutConstraints resolveConstraints(Size windowSize, OverlayConfig const& config) const;
 
-  void insertOverlayBackdropChrome(SceneNode& root, OverlayEntry& entry, Size windowSize,
+  void insertOverlayBackdropChrome(scenegraph::SceneNode& root, OverlayEntry& entry, Size windowSize,
                                    Runtime& runtime, bool dismissOnBackdropTap);
 
   std::vector<std::unique_ptr<OverlayEntry>> overlays_;

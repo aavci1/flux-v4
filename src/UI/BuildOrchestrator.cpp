@@ -4,7 +4,7 @@
 #include <Flux/Core/Window.hpp>
 #include <Flux/Detail/Runtime.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
-#include <Flux/Scene/SceneTree.hpp>
+#include <Flux/SceneGraph/GroupNode.hpp>
 #include <Flux/UI/Environment.hpp>
 #include <Flux/UI/Overlay.hpp>
 
@@ -80,31 +80,29 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
   buildSlotRect_ = Rect{0.f, 0.f, sz.width, sz.height};
 
   {
-    SceneTree& sceneTree = window_.sceneTree();
-    std::unique_ptr<SceneNode> existingRoot = sceneTree.takeRoot();
-    std::unique_ptr<SceneNode> nextRoot = runBuildPass(
+    scenegraph::SceneGraph& sceneGraph = window_.sceneGraph();
+    std::unique_ptr<scenegraph::SceneNode> nextRoot = runBuildPass(
         BuildPassConfig{
             .stateStore = stateStore_,
             .forceFullRebuild = sizeOverride.has_value() || !stateStore_.hasPendingDirtyComponents(),
             .textSystem = Application::instance().textSystem(),
             .environment = EnvironmentStack::current(),
             .windowEnvironment = window_.environmentLayer(),
-            .geometryIndex = &sceneGeometry_,
+            .sceneGraph = &sceneGraph,
         },
-        [&]() { return rootHolder_ ? rootHolder_->resolveScene(rootCs) : ResolvedRootScene{}; },
-        NodeId{1ull}, rootCs, std::move(existingRoot));
+        [&]() { return rootHolder_ ? rootHolder_->resolveScene(rootCs) : ResolvedRootScene{}; }, rootCs);
     if (nextRoot) {
-      sceneTree.setRoot(std::move(nextRoot));
-      layoutDebugDumpRetained(sceneTree, sceneGeometry_);
+      sceneGraph.setRoot(std::move(nextRoot));
+      layoutDebugDumpRetained(sceneGraph);
     } else {
-      sceneGeometry_.clear();
-      sceneTree.clear();
-      layoutDebugDumpRetained(sceneTree, sceneGeometry_);
+      sceneGraph.clearGeometry();
+      sceneGraph.setRoot(std::make_unique<scenegraph::GroupNode>());
+      layoutDebugDumpRetained(sceneGraph);
     }
   }
   layoutDebugEndPass();
 
-  focus_.validateAfterRebuild(window_.sceneTree());
+  focus_.validateAfterRebuild(window_.sceneGraph());
 
   window_.overlayManager().rebuild(sz, runtime);
 
@@ -121,14 +119,6 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
 
 StateStore& BuildOrchestrator::stateStore() noexcept {
   return stateStore_;
-}
-
-SceneGeometryIndex& BuildOrchestrator::sceneGeometry() noexcept {
-  return sceneGeometry_;
-}
-
-SceneGeometryIndex const& BuildOrchestrator::sceneGeometry() const noexcept {
-  return sceneGeometry_;
 }
 
 ActionRegistry& BuildOrchestrator::actionRegistryForBuild() noexcept {

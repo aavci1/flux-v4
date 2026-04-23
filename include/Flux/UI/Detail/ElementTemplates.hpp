@@ -140,7 +140,7 @@ struct Element::Model : Concept {
                                                        LayoutConstraints const& constraints,
                                                        detail::ElementModifiers const* modifiers) const override;
   detail::ComponentBuildResult buildMeasured(detail::ComponentBuildContext& ctx,
-                                             std::unique_ptr<SceneNode> existing) const override {
+                                             std::unique_ptr<scenegraph::SceneNode> existing) const override {
     if constexpr (MeasuredComponent<C>) {
       return detail::buildMeasuredComponent(value, ctx, std::move(existing));
     } else {

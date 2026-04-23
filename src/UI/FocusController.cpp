@@ -1,7 +1,7 @@
 #include <Flux/UI/FocusController.hpp>
 
 #include <Flux/Core/Application.hpp>
-#include <Flux/Scene/SceneTreeInteraction.hpp>
+#include <Flux/SceneGraph/SceneInteraction.hpp>
 #include <Flux/UI/StateStore.hpp>
 
 #include <algorithm>
@@ -90,8 +90,9 @@ void FocusController::clear() {
   markStateTransition(previousKey, previousOverlayScope, focusedKey_, focusInOverlay_);
 }
 
-void FocusController::cycleInTree(SceneTree const& tree, bool reverse, std::optional<OverlayId> overlayId) {
-  std::vector<ComponentKey> const order = collectFocusableKeys(tree);
+void FocusController::cycleInTree(scenegraph::SceneGraph const& graph, bool reverse,
+                                  std::optional<OverlayId> overlayId) {
+  std::vector<ComponentKey> const order = scenegraph::collectFocusableKeys(graph);
   if (order.empty()) {
     return;
   }
@@ -116,15 +117,15 @@ void FocusController::cycleInTree(SceneTree const& tree, bool reverse, std::opti
 }
 
 void FocusController::cycleNonModal(std::vector<OverlayEntry const*> const& overlayEntries,
-                                    SceneTree const& mainTree, bool reverse) {
+                                    scenegraph::SceneGraph const& mainGraph, bool reverse) {
   std::vector<std::pair<ComponentKey, std::optional<OverlayId>>> merged;
   for (OverlayEntry const* p : overlayEntries) {
     OverlayEntry const& e = *p;
-    for (ComponentKey const& k : collectFocusableKeys(e.sceneTree)) {
+    for (ComponentKey const& k : scenegraph::collectFocusableKeys(e.sceneGraph)) {
       merged.push_back({k, e.id});
     }
   }
-  for (ComponentKey const& k : collectFocusableKeys(mainTree)) {
+  for (ComponentKey const& k : scenegraph::collectFocusableKeys(mainGraph)) {
     merged.push_back({k, std::nullopt});
   }
   if (merged.empty()) {
@@ -159,12 +160,13 @@ void FocusController::cycleNonModal(std::vector<OverlayEntry const*> const& over
   }
 }
 
-void FocusController::requestInSubtree(ComponentKey const& subtreeKey, SceneTree const& tree,
+void FocusController::requestInSubtree(ComponentKey const& subtreeKey,
+                                       scenegraph::SceneGraph const& graph,
                                        std::optional<OverlayId> overlayId) {
   if (subtreeKey.empty()) {
     return;
   }
-  for (ComponentKey const& leafKey : collectFocusableKeys(tree)) {
+  for (ComponentKey const& leafKey : scenegraph::collectFocusableKeys(graph)) {
     if (leafKey.size() >= subtreeKey.size() &&
         std::equal(subtreeKey.begin(), subtreeKey.end(), leafKey.begin())) {
       set(leafKey, overlayId, FocusInputKind::Keyboard);
@@ -173,13 +175,14 @@ void FocusController::requestInSubtree(ComponentKey const& subtreeKey, SceneTree
   }
 }
 
-void FocusController::claimFocusForSubtree(ComponentKey const& pressedKey, SceneTree const& tree,
+void FocusController::claimFocusForSubtree(ComponentKey const& pressedKey,
+                                           scenegraph::SceneGraph const& graph,
                                            std::optional<OverlayId> overlayScope) {
   if (pressedKey.empty()) {
     return;
   }
   std::size_t const parentLen = pressedKey.size() - 1;
-  for (ComponentKey const& leafKey : collectFocusableKeys(tree)) {
+  for (ComponentKey const& leafKey : scenegraph::collectFocusableKeys(graph)) {
     if (leafKey.size() <= parentLen) {
       continue;
     }
@@ -212,8 +215,9 @@ void FocusController::onOverlayPushed(OverlayEntry& entry) {
   markStateTransition(previousKey, previousOverlayScope, focusedKey_, focusInOverlay_);
 }
 
-void FocusController::onOverlayRemoved(OverlayEntry const& entry, SceneTree const* mainTree) {
-  if (!mainTree) {
+void FocusController::onOverlayRemoved(OverlayEntry const& entry,
+                                       scenegraph::SceneGraph const* mainGraph) {
+  if (!mainGraph) {
     if (focusInOverlay_ == entry.id) {
       focusInOverlay_.reset();
     }
@@ -227,8 +231,8 @@ void FocusController::onOverlayRemoved(OverlayEntry const& entry, SceneTree cons
       focusedKey_ = entry.preFocusKey;
       lastInputKind_ = FocusInputKind::Keyboard;
       if (!focusedKey_.empty()) {
-        auto const [id, interaction] = findInteractionByKey(*mainTree, focusedKey_);
-        (void)id;
+        auto const [node, interaction] = scenegraph::findInteractionByKey(*mainGraph, focusedKey_);
+        (void)node;
         if (!interaction || !interaction->focusable) {
           focusedKey_.clear();
         }
@@ -245,12 +249,12 @@ void FocusController::syncAfterOverlayRebuild(OverlayEntry& entry) {
   if (focusInOverlay_ != entry.id) {
     return;
   }
-  std::vector<ComponentKey> const order = collectFocusableKeys(entry.sceneTree);
+  std::vector<ComponentKey> const order = scenegraph::collectFocusableKeys(entry.sceneGraph);
   if (order.empty()) {
     return;
   }
-  auto const [id, interaction] = findInteractionByKey(entry.sceneTree, focusedKey_);
-  (void)id;
+  auto const [node, interaction] = scenegraph::findInteractionByKey(entry.sceneGraph, focusedKey_);
+  (void)node;
   if (!interaction || !interaction->focusable) {
     ComponentKey const previousKey = focusedKey_;
     std::optional<OverlayId> const previousOverlayScope = focusInOverlay_;
@@ -260,15 +264,15 @@ void FocusController::syncAfterOverlayRebuild(OverlayEntry& entry) {
   }
 }
 
-void FocusController::validateAfterRebuild(SceneTree const& mainTree) {
+void FocusController::validateAfterRebuild(scenegraph::SceneGraph const& mainGraph) {
   if (focusInOverlay_.has_value()) {
     return;
   }
   if (focusedKey_.empty()) {
     return;
   }
-  auto const [id, interaction] = findInteractionByKey(mainTree, focusedKey_);
-  (void)id;
+  auto const [node, interaction] = scenegraph::findInteractionByKey(mainGraph, focusedKey_);
+  (void)node;
   if (!interaction || !interaction->focusable) {
     ComponentKey const previousKey = focusedKey_;
     std::optional<OverlayId> const previousOverlayScope = focusInOverlay_;

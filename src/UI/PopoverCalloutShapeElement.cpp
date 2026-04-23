@@ -1,13 +1,13 @@
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/Views/PopoverCalloutShape.hpp>
-#include <Flux/Scene/SceneTree.hpp>
+#include <Flux/SceneGraph/GroupNode.hpp>
+#include <Flux/SceneGraph/PathNode.hpp>
 
 #include <Flux/Graphics/TextSystem.hpp>
 
 #include "UI/Build/ComponentBuildContext.hpp"
 #include "UI/Build/ComponentBuildSupport.hpp"
 #include "UI/Layout/Algorithms/OverlayLayout.hpp"
-#include "UI/SceneBuilder/NodeReuse.hpp"
 
 namespace flux {
 
@@ -48,48 +48,37 @@ Size PopoverCalloutShape::measure(MeasureContext& ctx, LayoutConstraints const& 
 namespace detail {
 
 ComponentBuildResult buildMeasuredComponent(PopoverCalloutShape const& callout, ComponentBuildContext& ctx,
-                                            std::unique_ptr<SceneNode> existing) {
+                                            std::unique_ptr<scenegraph::SceneNode> existing) {
+  (void)existing;
   LocalId const contentLocal = LocalId::fromString("$content");
   PopoverCalloutPlan const plan =
       planPopoverCalloutLayout(callout, ctx.innerConstraints(), [&](LayoutConstraints const& contentConstraints) {
         return ctx.measureChild(callout.content, contentLocal, contentConstraints, LayoutHints{});
       });
 
-  std::unique_ptr<SceneNode> group = build::releasePlainGroup(std::move(existing));
-  if (!group) {
-    group = std::make_unique<SceneNode>(ctx.nodeId());
-  }
-  ReusableSceneNodes reusable = releaseReusableChildren(*group);
+  auto group = std::make_unique<scenegraph::GroupNode>(build::sizeRect(plan.calloutLayout.totalSize));
+  auto chromeNode = std::make_unique<scenegraph::PathNode>(
+      Rect {
+          0.f,
+          0.f,
+          plan.calloutLayout.totalSize.width,
+          plan.calloutLayout.totalSize.height,
+      },
+      plan.calloutLayout.chromePath,
+      FillStyle::solid(callout.backgroundColor),
+      StrokeStyle::solid(callout.borderColor, callout.borderWidth),
+      ShadowStyle::none()
+  );
 
-  NodeId const chromeId = SceneTree::childId(ctx.nodeId(), LocalId::fromString("$chrome"));
-  std::unique_ptr<PathSceneNode> chromeNode = takeReusableNodeAs<PathSceneNode>(reusable, chromeId);
-  if (!chromeNode) {
-    chromeNode = std::make_unique<PathSceneNode>(chromeId);
-  }
-  bool chromeDirty = false;
-  chromeDirty |= build::updateIfChanged(chromeNode->path, plan.calloutLayout.chromePath);
-  chromeDirty |= build::updateIfChanged(chromeNode->fill, FillStyle::solid(callout.backgroundColor));
-  chromeDirty |= build::updateIfChanged(
-      chromeNode->stroke, StrokeStyle::solid(callout.borderColor, callout.borderWidth));
-  chromeDirty |= build::updateIfChanged(chromeNode->shadow, ShadowStyle::none());
-  if (chromeDirty) {
-    chromeNode->invalidatePaint();
-    chromeNode->markBoundsDirty();
-  }
-  chromeNode->position = {};
-  chromeNode->recomputeBounds();
-
-  std::unique_ptr<SceneNode> reuseContent = takeReusableNode(reusable, ctx.childId(contentLocal));
   ctx.recordMeasuredSize(callout.content, contentLocal, plan.contentConstraints, LayoutHints{}, plan.contentMeasured);
-  std::unique_ptr<SceneNode> contentNode =
+  std::unique_ptr<scenegraph::SceneNode> contentNode =
       ctx.buildChild(callout.content, contentLocal, plan.contentConstraints, LayoutHints{},
                      Point{ctx.contentOrigin().x + plan.calloutLayout.contentOrigin.x,
                            ctx.contentOrigin().y + plan.calloutLayout.contentOrigin.y},
-                     plan.contentMeasured, true, true, std::move(reuseContent));
-  contentNode->position.x += plan.calloutLayout.contentOrigin.x;
-  contentNode->position.y += plan.calloutLayout.contentOrigin.y;
+                     plan.contentMeasured, true, true);
+  contentNode->setPosition(plan.calloutLayout.contentOrigin);
 
-  std::vector<std::unique_ptr<SceneNode>> nextChildren{};
+  std::vector<std::unique_ptr<scenegraph::SceneNode>> nextChildren{};
   nextChildren.reserve(2);
   nextChildren.push_back(std::move(chromeNode));
   nextChildren.push_back(std::move(contentNode));

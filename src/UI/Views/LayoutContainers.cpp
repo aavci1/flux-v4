@@ -1,5 +1,4 @@
-#include <Flux/Scene/CustomTransformSceneNode.hpp>
-#include <Flux/Scene/SceneTree.hpp>
+#include <Flux/SceneGraph/GroupNode.hpp>
 #include <Flux/UI/MeasureContext.hpp>
 #include <Flux/UI/StateStore.hpp>
 #include <Flux/UI/Views/Grid.hpp>
@@ -17,7 +16,6 @@
 #include "UI/Layout/Algorithms/StackLayout.hpp"
 #include "UI/Layout/ContainerScope.hpp"
 #include "UI/Layout/LayoutHelpers.hpp"
-#include "UI/SceneBuilder/NodeReuse.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -480,12 +478,9 @@ Size Spacer::measure(MeasureContext& ctx, LayoutConstraints const&, LayoutHints 
 namespace detail {
 
 ComponentBuildResult buildMeasuredComponent(VStack const& stack, ComponentBuildContext& ctx,
-                                            std::unique_ptr<SceneNode> existing) {
-  std::unique_ptr<SceneNode> group = build::releasePlainGroup(std::move(existing));
-  if (!group) {
-    group = std::make_unique<SceneNode>(ctx.nodeId());
-  }
-  ReusableSceneNodes reusable = releaseReusableChildren(*group);
+                                            std::unique_ptr<scenegraph::SceneNode> existing) {
+  (void)existing;
+  auto group = std::make_unique<scenegraph::GroupNode>();
 
   bool const widthAssigned = ctx.hasAssignedWidth() && build::zStackAxisStretches(ctx.hints().zStackHorizontalAlign);
   bool const heightAssigned = ctx.hasAssignedHeight() && build::zStackAxisStretches(ctx.hints().zStackVerticalAlign);
@@ -507,12 +502,11 @@ ComponentBuildResult buildMeasuredComponent(VStack const& stack, ComponentBuildC
                        });
   StackLayoutResult const& stackLayout = plan.layout;
 
-  std::vector<std::unique_ptr<SceneNode>> nextChildren{};
+  std::vector<std::unique_ptr<scenegraph::SceneNode>> nextChildren{};
   nextChildren.reserve(stack.children.size());
   for (std::size_t i = 0; i < stack.children.size(); ++i) {
     Element const& child = stack.children[i];
     LocalId const local = build::childLocalId(child, i);
-    std::unique_ptr<SceneNode> reuse = takeReusableNode(reusable, ctx.childId(local));
     StackSlot const& slot = stackLayout.slots[i];
     LayoutConstraints childBuild = ctx.innerConstraints();
     childBuild.maxWidth = slot.assignedSize.width > 0.f ? slot.assignedSize.width
@@ -523,12 +517,14 @@ ComponentBuildResult buildMeasuredComponent(VStack const& stack, ComponentBuildC
     if (!plan.measuredChildSizes.empty()) {
       ctx.recordMeasuredSize(child, local, childBuild, plan.childHints, plan.measuredChildSizes[i]);
     }
-    std::unique_ptr<SceneNode> childNode =
+    std::unique_ptr<scenegraph::SceneNode> childNode =
         ctx.buildChild(child, local, childBuild, plan.childHints,
                        Point{ctx.contentOrigin().x + slot.origin.x, ctx.contentOrigin().y + slot.origin.y},
-                       slot.assignedSize, slot.assignedSize.width > 0.f, true, std::move(reuse));
-    childNode->position.x += slot.origin.x;
-    childNode->position.y += slot.origin.y;
+                       slot.assignedSize, slot.assignedSize.width > 0.f, true);
+    childNode->setPosition(Point {
+        childNode->position().x + slot.origin.x,
+        childNode->position().y + slot.origin.y,
+    });
     nextChildren.push_back(std::move(childNode));
   }
   group->replaceChildren(std::move(nextChildren));
@@ -542,12 +538,9 @@ ComponentBuildResult buildMeasuredComponent(VStack const& stack, ComponentBuildC
 }
 
 ComponentBuildResult buildMeasuredComponent(HStack const& stack, ComponentBuildContext& ctx,
-                                            std::unique_ptr<SceneNode> existing) {
-  std::unique_ptr<SceneNode> group = build::releasePlainGroup(std::move(existing));
-  if (!group) {
-    group = std::make_unique<SceneNode>(ctx.nodeId());
-  }
-  ReusableSceneNodes reusable = releaseReusableChildren(*group);
+                                            std::unique_ptr<scenegraph::SceneNode> existing) {
+  (void)existing;
+  auto group = std::make_unique<scenegraph::GroupNode>();
 
   bool const widthAssigned = ctx.hasAssignedWidth() && build::zStackAxisStretches(ctx.hints().zStackHorizontalAlign);
   bool const heightAssigned = ctx.hasAssignedHeight() && build::zStackAxisStretches(ctx.hints().zStackVerticalAlign);
@@ -581,12 +574,11 @@ ComponentBuildResult buildMeasuredComponent(HStack const& stack, ComponentBuildC
                        [] {});
   StackLayoutResult const& stackLayout = plan.layout;
 
-  std::vector<std::unique_ptr<SceneNode>> nextChildren{};
+  std::vector<std::unique_ptr<scenegraph::SceneNode>> nextChildren{};
   nextChildren.reserve(stack.children.size());
   for (std::size_t i = 0; i < stack.children.size(); ++i) {
     Element const& child = stack.children[i];
     LocalId const local = build::childLocalId(child, i);
-    std::unique_ptr<SceneNode> reuse = takeReusableNode(reusable, ctx.childId(local));
     StackSlot const& slot = stackLayout.slots[i];
     LayoutConstraints childBuild = ctx.innerConstraints();
     childBuild.maxWidth = slot.assignedSize.width;
@@ -596,12 +588,14 @@ ComponentBuildResult buildMeasuredComponent(HStack const& stack, ComponentBuildC
     if (!plan.measuredChildSizes.empty()) {
       ctx.recordMeasuredSize(child, local, childBuild, plan.rowHints, plan.measuredChildSizes[i]);
     }
-    std::unique_ptr<SceneNode> childNode =
+    std::unique_ptr<scenegraph::SceneNode> childNode =
         ctx.buildChild(child, local, childBuild, plan.rowHints,
                        Point{ctx.contentOrigin().x + slot.origin.x, ctx.contentOrigin().y + slot.origin.y},
-                       slot.assignedSize, true, slot.assignedSize.height > 0.f, std::move(reuse));
-    childNode->position.x += slot.origin.x;
-    childNode->position.y += slot.origin.y;
+                       slot.assignedSize, true, slot.assignedSize.height > 0.f);
+    childNode->setPosition(Point {
+        childNode->position().x + slot.origin.x,
+        childNode->position().y + slot.origin.y,
+    });
     nextChildren.push_back(std::move(childNode));
   }
   group->replaceChildren(std::move(nextChildren));
@@ -615,12 +609,9 @@ ComponentBuildResult buildMeasuredComponent(HStack const& stack, ComponentBuildC
 }
 
 ComponentBuildResult buildMeasuredComponent(ZStack const& stack, ComponentBuildContext& ctx,
-                                            std::unique_ptr<SceneNode> existing) {
-  std::unique_ptr<SceneNode> group = build::releasePlainGroup(std::move(existing));
-  if (!group) {
-    group = std::make_unique<SceneNode>(ctx.nodeId());
-  }
-  ReusableSceneNodes reusable = releaseReusableChildren(*group);
+                                            std::unique_ptr<scenegraph::SceneNode> existing) {
+  (void)existing;
+  auto group = std::make_unique<scenegraph::GroupNode>();
 
   float innerWidth =
       build::resolvedAssignedSpan(ctx.contentAssignedSize().width, ctx.hasAssignedWidth(), ctx.innerConstraints().maxWidth);
@@ -641,23 +632,26 @@ ComponentBuildResult buildMeasuredComponent(ZStack const& stack, ComponentBuildC
   innerWidth = plan.containerSize.width;
   innerHeight = plan.containerSize.height;
 
-  std::vector<std::unique_ptr<SceneNode>> nextChildren{};
+  std::vector<std::unique_ptr<scenegraph::SceneNode>> nextChildren{};
   nextChildren.reserve(stack.children.size());
   for (std::size_t i = 0; i < stack.children.size(); ++i) {
     Element const& child = stack.children[i];
     LocalId const local = build::childLocalId(child, i);
-    std::unique_ptr<SceneNode> reuse = takeReusableNode(reusable, ctx.childId(local));
     LayoutConstraints childBuild{};
     childBuild.maxWidth = innerWidth;
     childBuild.maxHeight = innerHeight;
     if (!plan.measuredChildSizes.empty()) {
       ctx.recordMeasuredSize(child, local, childBuild, plan.childHints, plan.measuredChildSizes[i]);
     }
-    std::unique_ptr<SceneNode> childNode =
+    std::unique_ptr<scenegraph::SceneNode> childNode =
         ctx.buildChild(child, local, childBuild, plan.childHints, ctx.contentOrigin(), Size{innerWidth, innerHeight},
-                       innerWidth > 0.f, innerHeight > 0.f, std::move(reuse));
-    childNode->position.x += hAlignOffset(childNode->bounds.width, innerWidth, stack.horizontalAlignment);
-    childNode->position.y += vAlignOffset(childNode->bounds.height, innerHeight, stack.verticalAlignment);
+                       innerWidth > 0.f, innerHeight > 0.f);
+    childNode->setPosition(Point {
+        childNode->position().x +
+            hAlignOffset(childNode->bounds().width, innerWidth, stack.horizontalAlignment),
+        childNode->position().y +
+            vAlignOffset(childNode->bounds().height, innerHeight, stack.verticalAlignment),
+    });
     nextChildren.push_back(std::move(childNode));
   }
   group->replaceChildren(std::move(nextChildren));
@@ -671,12 +665,9 @@ ComponentBuildResult buildMeasuredComponent(ZStack const& stack, ComponentBuildC
 }
 
 ComponentBuildResult buildMeasuredComponent(Grid const& grid, ComponentBuildContext& ctx,
-                                            std::unique_ptr<SceneNode> existing) {
-  std::unique_ptr<SceneNode> group = build::releasePlainGroup(std::move(existing));
-  if (!group) {
-    group = std::make_unique<SceneNode>(ctx.nodeId());
-  }
-  ReusableSceneNodes reusable = releaseReusableChildren(*group);
+                                            std::unique_ptr<scenegraph::SceneNode> existing) {
+  (void)existing;
+  auto group = std::make_unique<scenegraph::GroupNode>();
 
   float const innerWidth =
       build::resolvedAssignedSpan(ctx.contentAssignedSize().width, ctx.hasAssignedWidth(), ctx.innerConstraints().maxWidth);
@@ -696,12 +687,11 @@ ComponentBuildResult buildMeasuredComponent(Grid const& grid, ComponentBuildCont
                      });
   GridLayoutResult const& gridLayout = plan.layout;
 
-  std::vector<std::unique_ptr<SceneNode>> nextChildren{};
+  std::vector<std::unique_ptr<scenegraph::SceneNode>> nextChildren{};
   nextChildren.reserve(grid.children.size());
   for (std::size_t i = 0; i < grid.children.size(); ++i) {
     Element const& child = grid.children[i];
     LocalId const local = build::childLocalId(child, i);
-    std::unique_ptr<SceneNode> reuse = takeReusableNode(reusable, ctx.childId(local));
     Rect const slot = gridLayout.slots[i];
     LayoutConstraints childBuild = gridChildConstraints(ctx.innerConstraints(), plan.metrics, i);
     childBuild.maxWidth = slot.width;
@@ -710,12 +700,16 @@ ComponentBuildResult buildMeasuredComponent(Grid const& grid, ComponentBuildCont
     if (!plan.measuredChildSizes.empty()) {
       ctx.recordMeasuredSize(child, local, childBuild, LayoutHints{}, plan.measuredChildSizes[i]);
     }
-    std::unique_ptr<SceneNode> childNode =
+    std::unique_ptr<scenegraph::SceneNode> childNode =
         ctx.buildChild(child, local, childBuild, LayoutHints{},
                        Point{ctx.contentOrigin().x + slot.x, ctx.contentOrigin().y + slot.y},
-                       Size{slot.width, slot.height}, true, true, std::move(reuse));
-    childNode->position.x += slot.x + hAlignOffset(childNode->bounds.width, slot.width, grid.horizontalAlignment);
-    childNode->position.y += slot.y + vAlignOffset(childNode->bounds.height, slot.height, grid.verticalAlignment);
+                       Size{slot.width, slot.height}, true, true);
+    childNode->setPosition(Point {
+        childNode->position().x + slot.x +
+            hAlignOffset(childNode->bounds().width, slot.width, grid.horizontalAlignment),
+        childNode->position().y + slot.y +
+            vAlignOffset(childNode->bounds().height, slot.height, grid.verticalAlignment),
+    });
     nextChildren.push_back(std::move(childNode));
   }
   group->replaceChildren(std::move(nextChildren));
@@ -729,12 +723,9 @@ ComponentBuildResult buildMeasuredComponent(Grid const& grid, ComponentBuildCont
 }
 
 ComponentBuildResult buildMeasuredComponent(OffsetView const& offsetView, ComponentBuildContext& ctx,
-                                            std::unique_ptr<SceneNode> existing) {
-  std::unique_ptr<SceneNode> group = build::releasePlainGroup(std::move(existing));
-  if (!group) {
-    group = std::make_unique<SceneNode>(ctx.nodeId());
-  }
-  ReusableSceneNodes reusable = releaseReusableChildren(*group);
+                                            std::unique_ptr<scenegraph::SceneNode> existing) {
+  (void)existing;
+  auto group = std::make_unique<scenegraph::GroupNode>();
 
   Size const viewport{
       ctx.hasAssignedWidth() ? std::max(0.f, ctx.contentAssignedSize().width)
@@ -756,12 +747,11 @@ ComponentBuildResult buildMeasuredComponent(OffsetView const& offsetView, Compon
     offsetView.contentSize.setSilently(contentSize);
   }
 
-  std::vector<std::unique_ptr<SceneNode>> nextChildren{};
+  std::vector<std::unique_ptr<scenegraph::SceneNode>> nextChildren{};
   nextChildren.reserve(offsetView.children.size());
   for (std::size_t i = 0; i < offsetView.children.size(); ++i) {
     Element const& child = offsetView.children[i];
     LocalId const local = build::childLocalId(child, i);
-    std::unique_ptr<SceneNode> reuse = takeReusableNode(reusable, ctx.childId(local));
     ScrollChildSlot const& slot = scrollLayout.slots[i];
     LayoutConstraints childBuild = plan.childConstraints;
     if (slot.assignedSize.width > 0.f) {
@@ -772,13 +762,15 @@ ComponentBuildResult buildMeasuredComponent(OffsetView const& offsetView, Compon
     }
     clampLayoutMinToMax(childBuild);
     ctx.recordMeasuredSize(child, local, childBuild, LayoutHints{}, plan.measuredChildSizes[i]);
-    std::unique_ptr<SceneNode> childNode =
+    std::unique_ptr<scenegraph::SceneNode> childNode =
         ctx.buildChild(child, local, childBuild, LayoutHints{},
                        Point{ctx.contentOrigin().x + slot.origin.x, ctx.contentOrigin().y + slot.origin.y},
-                       slot.assignedSize, slot.assignedSize.width > 0.f, slot.assignedSize.height > 0.f,
-                       std::move(reuse));
-    childNode->position.x += slot.origin.x;
-    childNode->position.y += slot.origin.y;
+                       slot.assignedSize, slot.assignedSize.width > 0.f,
+                       slot.assignedSize.height > 0.f);
+    childNode->setPosition(Point {
+        childNode->position().x + slot.origin.x,
+        childNode->position().y + slot.origin.y,
+    });
     nextChildren.push_back(std::move(childNode));
   }
   group->replaceChildren(std::move(nextChildren));
@@ -792,34 +784,24 @@ ComponentBuildResult buildMeasuredComponent(OffsetView const& offsetView, Compon
 }
 
 ComponentBuildResult buildMeasuredComponent(ScaleAroundCenter const& scaled, ComponentBuildContext& ctx,
-                                            std::unique_ptr<SceneNode> existing) {
-  std::unique_ptr<CustomTransformSceneNode> transformNode =
-      build::releaseAs<CustomTransformSceneNode>(std::move(existing));
-  if (!transformNode) {
-    transformNode = std::make_unique<CustomTransformSceneNode>(ctx.nodeId());
-  }
-  std::unique_ptr<SceneNode> existingChild{};
-  if (!transformNode->children().empty()) {
-    std::vector<std::unique_ptr<SceneNode>> children = transformNode->releaseChildren();
-    if (!children.empty()) {
-      existingChild = std::move(children.front());
-    }
-  }
+                                            std::unique_ptr<scenegraph::SceneNode> existing) {
+  (void)existing;
+  auto transformNode = std::make_unique<scenegraph::GroupNode>();
 
   LocalId const childLocal = LocalId::fromString("$child");
-  std::unique_ptr<SceneNode> childNode =
-      ctx.buildChild(scaled.child, childLocal, ctx.innerConstraints(), LayoutHints{}, ctx.contentOrigin(),
-                     ctx.contentAssignedSize(), ctx.hasAssignedWidth(), ctx.hasAssignedHeight(),
-                     std::move(existingChild));
-  Size const geometrySize = build::rectSize(childNode->bounds);
-  childNode->position = {};
-  transformNode->replaceChildren({});
+  std::unique_ptr<scenegraph::SceneNode> childNode =
+      ctx.buildChild(scaled.child, childLocal, ctx.innerConstraints(), LayoutHints {}, ctx.contentOrigin(),
+                     ctx.contentAssignedSize(), ctx.hasAssignedWidth(), ctx.hasAssignedHeight());
+  Size const geometrySize = build::rectSize(childNode->bounds());
+  childNode->setPosition(Point {});
+  Rect const childBounds = childNode->bounds();
+  Point const pivot {childBounds.width * 0.5f, childBounds.height * 0.5f};
   transformNode->appendChild(std::move(childNode));
-  Rect const childBounds = transformNode->children().front()->bounds;
-  Point const pivot{childBounds.width * 0.5f, childBounds.height * 0.5f};
-  transformNode->transform =
-      Mat3::translate(pivot) * Mat3::scale(scaled.scale) * Mat3::translate(Point{-pivot.x, -pivot.y});
-  transformNode->recomputeBounds();
+  transformNode->setTransform(
+      Mat3::translate(pivot) * Mat3::scale(scaled.scale) *
+      Mat3::translate(Point {-pivot.x, -pivot.y})
+  );
+  transformNode->setBounds(build::sizeRect(geometrySize));
 
   ComponentBuildResult result{};
   result.node = std::move(transformNode);
@@ -829,14 +811,11 @@ ComponentBuildResult buildMeasuredComponent(ScaleAroundCenter const& scaled, Com
 }
 
 ComponentBuildResult buildMeasuredComponent(Spacer const&, ComponentBuildContext& ctx,
-                                            std::unique_ptr<SceneNode> existing) {
+                                            std::unique_ptr<scenegraph::SceneNode> existing) {
+  (void)existing;
   ComponentBuildResult result{};
-  result.node = build::releasePlainGroup(std::move(existing));
-  if (!result.node) {
-    result.node = std::make_unique<SceneNode>(ctx.nodeId());
-  }
-  result.node->bounds = build::sizeRect(ctx.paddedContentSize());
-  result.geometrySize = build::rectSize(result.node->bounds);
+  result.node = std::make_unique<scenegraph::GroupNode>(build::sizeRect(ctx.paddedContentSize()));
+  result.geometrySize = build::rectSize(result.node->bounds());
   result.hasGeometrySize = true;
   return result;
 }

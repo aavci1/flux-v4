@@ -1,12 +1,6 @@
 #include <doctest/doctest.h>
 
-#include <Flux/Core/ComponentKey.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
-#include <Flux/Scene/ModifierSceneNode.hpp>
-#include <Flux/Scene/PathSceneNode.hpp>
-#include <Flux/Scene/RectSceneNode.hpp>
-#include <Flux/Scene/TextSceneNode.hpp>
-#include <Flux/UI/SceneBuilder.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/PathShape.hpp>
@@ -15,22 +9,26 @@
 
 #include "SceneBuilderTestSupport.hpp"
 
+#include <algorithm>
 #include <memory>
 #include <string_view>
 
 namespace {
 
-using namespace flux;
-
-class SemanticSelectionTextSystem final : public TextSystem {
+class SemanticRecordingTextSystem final : public TextSystem {
 public:
+  Font lastFont{};
+  Color lastColor{};
+
   std::shared_ptr<TextLayout const> layout(AttributedString const& text, float maxWidth,
                                            TextLayoutOptions const& options) override {
     return layout(std::string_view{text.utf8}, Font{}, Colors::black, maxWidth, options);
   }
 
-  std::shared_ptr<TextLayout const> layout(std::string_view text, Font const& font, Color const& color, float maxWidth,
-                                           TextLayoutOptions const&) override {
+  std::shared_ptr<TextLayout const> layout(std::string_view text, Font const& font, Color const& color,
+                                           float maxWidth, TextLayoutOptions const&) override {
+    lastFont = font;
+    lastColor = color;
     auto layout = std::make_shared<TextLayout>();
     float const width = maxWidth > 0.f ? std::min(maxWidth, 7.f * static_cast<float>(text.size()))
                                        : 7.f * static_cast<float>(text.size());
@@ -81,24 +79,13 @@ public:
 };
 
 template<typename NodeT>
-NodeT* findNode(SceneNode* node) {
-  if (!node) {
-    return nullptr;
-  }
-  if (auto* typed = dynamic_cast<NodeT*>(node)) {
-    return typed;
-  }
-  for (std::unique_ptr<SceneNode> const& child : node->children()) {
-    if (NodeT* found = findNode<NodeT>(child.get())) {
-      return found;
-    }
-  }
-  return nullptr;
+NodeT* findNodeOfType(scenegraph::SceneNode* node) {
+  return findNode<NodeT>(node);
 }
 
 } // namespace
 
-TEST_CASE("Theme: semantic color tokens resolve against light and dark themes") {
+TEST_CASE("Theme semantic color tokens resolve against light and dark themes") {
   Theme const light = Theme::light();
   Theme const dark = Theme::dark();
 
@@ -140,7 +127,7 @@ TEST_CASE("Theme: semantic color tokens resolve against light and dark themes") 
   CHECK(resolveColor(Color::theme(), dark.separatorColor, dark) == dark.separatorColor);
 }
 
-TEST_CASE("Theme: semantic font tokens resolve against light and dark themes") {
+TEST_CASE("Theme semantic font tokens resolve against light and dark themes") {
   Theme const light = Theme::light();
   Theme const dark = Theme::dark();
 
@@ -163,7 +150,7 @@ TEST_CASE("Theme: semantic font tokens resolve against light and dark themes") {
   CHECK(resolveFont(Font::theme(), dark.bodyFont, dark) == dark.bodyFont);
 }
 
-TEST_CASE("Theme: semantic accessors pick up the current environment immediately") {
+TEST_CASE("Theme semantic accessors pick up the current environment immediately") {
   Theme const dark = Theme::dark();
 
   EnvironmentLayer env{};
@@ -185,8 +172,8 @@ TEST_CASE("Theme: semantic accessors pick up the current environment immediately
   CHECK(body.italic == dark.bodyFont.italic);
 }
 
-TEST_CASE("SceneBuilder: semantic text and modifier paint resolve to concrete theme values") {
-  SemanticSelectionTextSystem textSystem{};
+TEST_CASE("SceneBuilder semantic text and modifier paint resolve to concrete theme values") {
+  SemanticRecordingTextSystem textSystem{};
   EnvironmentLayer env{};
   env.set(Theme::light());
   EnvironmentScope envScope{std::move(env)};
@@ -206,25 +193,22 @@ TEST_CASE("SceneBuilder: semantic text and modifier paint resolve to concrete th
                         .stroke(Color::separator(), 1.f)
                         .shadow(ShadowStyle{.radius = 6.f, .offset = {0.f, 2.f}, .color = Color::scrim()});
 
-  std::unique_ptr<SceneNode> tree = builder.build(element, NodeId{1ull}, constraints);
-  auto* wrapper = dynamic_cast<ModifierSceneNode*>(tree.get());
+  std::unique_ptr<scenegraph::SceneNode> tree = builder.build(element, constraints);
+  auto* wrapper = dynamic_cast<scenegraph::RectNode*>(tree.get());
   REQUIRE(wrapper != nullptr);
 
   Theme const theme = Theme::light();
   Color fill{};
-  REQUIRE(wrapper->fill.solidColor(&fill));
+  REQUIRE(wrapper->fill().solidColor(&fill));
   CHECK(fill == theme.accentColor);
-  CHECK(wrapper->stroke.color == theme.separatorColor);
-  CHECK(wrapper->shadow.color == theme.modalScrimColor);
-
-  auto* textNode = findNode<TextSceneNode>(tree.get());
-  REQUIRE(textNode != nullptr);
-  CHECK(textNode->font == theme.headlineFont);
-  CHECK(textNode->color == theme.secondaryLabelColor);
+  CHECK(wrapper->stroke().color == theme.separatorColor);
+  CHECK(wrapper->shadow().color == theme.modalScrimColor);
+  CHECK_FALSE(textSystem.lastFont.isSemantic());
+  CHECK_FALSE(textSystem.lastColor.isSemantic());
 }
 
-TEST_CASE("SceneBuilder: semantic path paint resolves to concrete theme values") {
-  SemanticSelectionTextSystem textSystem{};
+TEST_CASE("SceneBuilder semantic path paint resolves to concrete theme values") {
+  SemanticRecordingTextSystem textSystem{};
   EnvironmentLayer env{};
   env.set(Theme::dark());
   EnvironmentScope envScope{std::move(env)};
@@ -247,21 +231,21 @@ TEST_CASE("SceneBuilder: semantic path paint resolves to concrete theme values")
   }
                         .padding(16.f);
 
-  std::unique_ptr<SceneNode> tree = builder.build(element, NodeId{1ull}, constraints);
+  std::unique_ptr<scenegraph::SceneNode> tree = builder.build(element, constraints);
 
-  auto* pathNode = findNode<PathSceneNode>(tree.get());
+  auto* pathNode = findNodeOfType<scenegraph::PathNode>(tree.get());
   REQUIRE(pathNode != nullptr);
 
   Theme const theme = Theme::dark();
   Color pathFill{};
-  REQUIRE(pathNode->fill.solidColor(&pathFill));
+  REQUIRE(pathNode->fill().solidColor(&pathFill));
   CHECK(pathFill == theme.warningBackgroundColor);
-  CHECK(pathNode->stroke.color == theme.warningColor);
-  CHECK(pathNode->shadow.color == theme.modalScrimColor);
+  CHECK(pathNode->stroke().color == theme.warningColor);
+  CHECK(pathNode->shadow().color == theme.modalScrimColor);
 }
 
-TEST_CASE("SceneBuilder: semantic selection highlights resolve to concrete theme values") {
-  SemanticSelectionTextSystem textSystem{};
+TEST_CASE("SceneBuilder semantic selection highlights resolve to concrete theme values") {
+  SemanticRecordingTextSystem textSystem{};
   EnvironmentLayer env{};
   env.set(Theme::light());
   EnvironmentScope envScope{std::move(env)};
@@ -282,17 +266,17 @@ TEST_CASE("SceneBuilder: semantic selection highlights resolve to concrete theme
       .selectable = true,
   };
 
-  std::unique_ptr<SceneNode> tree = builder.build(element, NodeId{1ull}, constraints, nullptr, rootKey);
-  auto state = detail::selectableTextState(rootKey);
-  state->selection = detail::TextEditSelection{.caretByte = 5, .anchorByte = 0};
+  std::unique_ptr<scenegraph::SceneNode> tree = builder.build(element, constraints, rootKey);
+  auto state = flux::detail::selectableTextState(rootKey);
+  state->selection = flux::detail::TextEditSelection{.caretByte = 5, .anchorByte = 0};
 
-  tree = builder.build(element, NodeId{1ull}, constraints, std::move(tree), rootKey);
+  tree = builder.build(element, constraints, rootKey);
   REQUIRE(tree != nullptr);
   REQUIRE(tree->children().size() == 2);
 
-  auto* highlight = dynamic_cast<RectSceneNode*>(tree->children()[0].get());
+  auto* highlight = dynamic_cast<scenegraph::RectNode*>(tree->children()[0].get());
   REQUIRE(highlight != nullptr);
   Color fill{};
-  REQUIRE(highlight->fill.solidColor(&fill));
+  REQUIRE(highlight->fill().solidColor(&fill));
   CHECK(fill == Theme::light().selectedContentBackgroundColor);
 }

@@ -1,9 +1,8 @@
 #include <Flux/Detail/Runtime.hpp>
 #include <Flux/Reactive/Animation.hpp>
 #include <Flux/Reactive/Transition.hpp>
-#include <Flux/Scene/ModifierSceneNode.hpp>
-#include <Flux/Scene/RectSceneNode.hpp>
-#include <Flux/Scene/SceneTree.hpp>
+#include <Flux/SceneGraph/GroupNode.hpp>
+#include <Flux/SceneGraph/RectNode.hpp>
 #include <Flux/UI/MeasureContext.hpp>
 #include <Flux/UI/StateStore.hpp>
 #include <Flux/UI/Views/ScrollView.hpp>
@@ -12,7 +11,6 @@
 #include "UI/Build/ComponentBuildSupport.hpp"
 #include "UI/Layout/Algorithms/ScrollLayout.hpp"
 #include "UI/Layout/ContainerScope.hpp"
-#include "UI/SceneBuilder/NodeReuse.hpp"
 
 #include <cmath>
 #include <optional>
@@ -117,7 +115,8 @@ Size ScrollView::measure(MeasureContext& ctx, LayoutConstraints const& constrain
 namespace detail {
 
 ComponentBuildResult buildMeasuredComponent(ScrollView const& scrollView, ComponentBuildContext& ctx,
-                                            std::unique_ptr<SceneNode> existing) {
+                                            std::unique_ptr<scenegraph::SceneNode> existing) {
+  (void)existing;
   ComponentKey scrollStateKey = ctx.key();
   scrollStateKey.push_back(LocalId::fromString("$scroll-state"));
   StateStore* const store = StateStore::current();
@@ -212,118 +211,58 @@ ComponentBuildResult buildMeasuredComponent(ScrollView const& scrollView, Compon
   layout::ScrollIndicatorMetrics const horizontalIndicator =
       layout::makeHorizontalIndicator(scrollOffset, viewport, contentSize, showsVerticalIndicator);
 
-  std::unique_ptr<ModifierSceneNode> modifier = build::releaseAs<ModifierSceneNode>(std::move(existing));
-  if (!modifier) {
-    modifier = std::make_unique<ModifierSceneNode>(ctx.nodeId());
-  }
-  std::unique_ptr<SceneNode> existingViewportGroup{};
-  if (!modifier->children().empty()) {
-    std::vector<std::unique_ptr<SceneNode>> children = modifier->releaseChildren();
-    if (!children.empty()) {
-      existingViewportGroup = std::move(children.front());
-    }
-  }
-  std::unique_ptr<SceneNode> viewportGroup = build::releasePlainGroup(std::move(existingViewportGroup));
-  if (!viewportGroup) {
-    viewportGroup = std::make_unique<SceneNode>(ctx.childId(LocalId::fromString("$content")));
-  }
-  ReusableSceneNodes reusableViewport = releaseReusableChildren(*viewportGroup);
+  auto viewportNode =
+      std::make_unique<scenegraph::RectNode>(Rect {0.f, 0.f, viewport.width, viewport.height});
+  viewportNode->setClipsContents(true);
 
-  NodeId const scrolledGroupId = SceneTree::childId(viewportGroup->id(), LocalId::fromString("$scroll"));
-  std::unique_ptr<SceneNode> existingScrolledGroup = takeReusableNode(reusableViewport, scrolledGroupId);
-  std::unique_ptr<SceneNode> scrolledGroup = build::releasePlainGroup(std::move(existingScrolledGroup));
-  if (!scrolledGroup) {
-    scrolledGroup = std::make_unique<SceneNode>(scrolledGroupId);
-  }
-  ReusableSceneNodes reusable = releaseReusableChildren(*scrolledGroup);
+  auto scrolledGroup =
+      std::make_unique<scenegraph::GroupNode>(Rect {0.f, 0.f, contentSize.width, contentSize.height});
+  scrolledGroup->setPosition(Point {-scrollOffset.x, -scrollOffset.y});
 
-  std::vector<std::unique_ptr<SceneNode>> scrolledChildren{};
+  std::vector<std::unique_ptr<scenegraph::SceneNode>> scrolledChildren{};
   scrolledChildren.reserve(contentChildren.size());
   for (std::size_t i = 0; i < contentChildren.size(); ++i) {
     Element const& child = contentChildren[i];
     LocalId const local = build::childLocalId(child, i);
-    NodeId const childId = SceneTree::childId(scrolledGroup->id(), local);
-    std::unique_ptr<SceneNode> reuse = takeReusableNode(reusable, childId);
     layout::ScrollChildSlot const& slot = scrollLayout.slots[i];
     ctx.recordMeasuredSize(child, local, childConstraints, LayoutHints{}, plan.childSizes[i]);
-    std::unique_ptr<SceneNode> childNode =
+    std::unique_ptr<scenegraph::SceneNode> childNode =
         ctx.buildChild(child, local, childConstraints, LayoutHints{},
                        Point{ctx.contentOrigin().x + slot.origin.x, ctx.contentOrigin().y + slot.origin.y},
-                       slot.assignedSize, slot.assignedSize.width > 0.f, slot.assignedSize.height > 0.f,
-                       std::move(reuse));
-    childNode->position.x += slot.origin.x;
-    childNode->position.y += slot.origin.y;
+                       slot.assignedSize, slot.assignedSize.width > 0.f,
+                       slot.assignedSize.height > 0.f);
+    childNode->setPosition(Point {slot.origin.x, slot.origin.y});
     scrolledChildren.push_back(std::move(childNode));
   }
   scrolledGroup->replaceChildren(std::move(scrolledChildren));
   build::setGroupBounds(*scrolledGroup, contentSize);
-
-  auto updateIndicatorNode =
-      [&](ReusableSceneNodes& reusableMap, NodeId indicatorId, layout::ScrollIndicatorMetrics const& metrics,
-          bool vertical) -> std::unique_ptr<SceneNode> {
-    std::unique_ptr<RectSceneNode> rectNode = takeReusableNodeAs<RectSceneNode>(reusableMap, indicatorId);
-    if (!rectNode) {
-      rectNode = std::make_unique<RectSceneNode>(indicatorId);
-    }
-    bool dirty = false;
-    dirty |= build::updateIfChanged(rectNode->size, Size{metrics.width, metrics.height});
-    dirty |= build::updateIfChanged(
-        rectNode->cornerRadius, CornerRadius{vertical ? metrics.width * 0.5f : metrics.height * 0.5f});
-    dirty |= build::updateIfChanged(rectNode->fill, FillStyle::solid(indicatorColor));
-    dirty |= build::updateIfChanged(rectNode->stroke, StrokeStyle::none());
-    dirty |= build::updateIfChanged(rectNode->shadow, ShadowStyle::none());
-    if (dirty) {
-      rectNode->invalidatePaint();
-      rectNode->markBoundsDirty();
-    }
-    rectNode->position = Point{metrics.x, metrics.y};
-    rectNode->recomputeBounds();
-    return rectNode;
-  };
-
-  std::vector<std::unique_ptr<SceneNode>> viewportChildren{};
-  viewportChildren.reserve(2);
-  viewportChildren.push_back(std::move(scrolledGroup));
+  viewportNode->appendChild(std::move(scrolledGroup));
   if (showsAnyIndicator) {
-    NodeId const indicatorOverlayId =
-        SceneTree::childId(viewportGroup->id(), LocalId::fromString("$indicators"));
-    std::unique_ptr<ModifierSceneNode> indicatorOverlay =
-        takeReusableNodeAs<ModifierSceneNode>(reusableViewport, indicatorOverlayId);
-    if (!indicatorOverlay) {
-      indicatorOverlay = std::make_unique<ModifierSceneNode>(indicatorOverlayId);
-    }
-    indicatorOverlay->clip.reset();
-    indicatorOverlay->opacity = indicatorOpacity;
-    indicatorOverlay->blendMode = BlendMode::Normal;
-    indicatorOverlay->fill = FillStyle::none();
-    indicatorOverlay->stroke = StrokeStyle::none();
-    indicatorOverlay->shadow = ShadowStyle::none();
-    indicatorOverlay->cornerRadius = {};
-    indicatorOverlay->position = {};
-
-    std::vector<std::unique_ptr<SceneNode>> indicatorChildren{};
-    indicatorChildren.reserve(2);
+    auto indicatorOverlay =
+        std::make_unique<scenegraph::RectNode>(Rect {0.f, 0.f, viewport.width, viewport.height});
+    indicatorOverlay->setOpacity(indicatorOpacity);
     if (verticalIndicator.visible()) {
-      indicatorChildren.push_back(updateIndicatorNode(
-          reusableViewport, SceneTree::childId(indicatorOverlay->id(), LocalId::fromString("$v-indicator")),
-          verticalIndicator, true));
+      indicatorOverlay->appendChild(std::make_unique<scenegraph::RectNode>(
+          Rect {verticalIndicator.x, verticalIndicator.y, verticalIndicator.width, verticalIndicator.height},
+          FillStyle::solid(indicatorColor),
+          StrokeStyle::none(),
+          CornerRadius {verticalIndicator.width * 0.5f}
+      ));
     }
     if (horizontalIndicator.visible()) {
-      indicatorChildren.push_back(updateIndicatorNode(
-          reusableViewport, SceneTree::childId(indicatorOverlay->id(), LocalId::fromString("$h-indicator")),
-          horizontalIndicator, false));
+      indicatorOverlay->appendChild(std::make_unique<scenegraph::RectNode>(
+          Rect {horizontalIndicator.x, horizontalIndicator.y, horizontalIndicator.width, horizontalIndicator.height},
+          FillStyle::solid(indicatorColor),
+          StrokeStyle::none(),
+          CornerRadius {horizontalIndicator.height * 0.5f}
+      ));
     }
-    indicatorOverlay->replaceChildren(std::move(indicatorChildren));
-    indicatorOverlay->recomputeBounds();
-    viewportChildren.push_back(std::move(indicatorOverlay));
+    viewportNode->appendChild(std::move(indicatorOverlay));
   }
-  viewportGroup->replaceChildren(std::move(viewportChildren));
-  build::setGroupBounds(*viewportGroup, Size{std::max(contentSize.width, viewport.width),
-                                             std::max(contentSize.height, viewport.height)});
 
   auto interaction = ctx.makeInteractionData();
   if (!interaction) {
-    interaction = std::make_unique<InteractionData>();
+    interaction = std::make_unique<scenegraph::InteractionData>();
   }
   interaction->stableTargetKey = ctx.key();
   std::function<void(Point)> priorPointerDown = interaction->onPointerDown;
@@ -392,21 +331,12 @@ ComponentBuildResult buildMeasuredComponent(ScrollView const& scrollView, Compon
         revealIndicators();
       };
 
-  modifier->replaceChildren({});
-  modifier->appendChild(std::move(viewportGroup));
-  modifier->clip = Rect{0.f, 0.f, viewport.width, viewport.height};
-  modifier->opacity = 1.f;
-  modifier->fill = FillStyle::none();
-  modifier->stroke = StrokeStyle::none();
-  modifier->shadow = ShadowStyle::none();
-  modifier->cornerRadius = {};
-  modifier->recomputeBounds();
+  viewportNode->setInteraction(std::move(interaction));
 
   ComponentBuildResult result{};
-  result.node = std::move(modifier);
+  result.node = std::move(viewportNode);
   result.geometrySize = viewport;
   result.hasGeometrySize = true;
-  result.interaction = std::move(interaction);
   return result;
 }
 

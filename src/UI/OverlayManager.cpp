@@ -4,9 +4,9 @@
 #include <Flux/Core/Window.hpp>
 #include <Flux/Detail/Runtime.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
-#include <Flux/Scene/InteractionData.hpp>
-#include <Flux/Scene/RectSceneNode.hpp>
-#include <Flux/Scene/SceneTree.hpp>
+#include <Flux/SceneGraph/GroupNode.hpp>
+#include <Flux/SceneGraph/InteractionData.hpp>
+#include <Flux/SceneGraph/RectNode.hpp>
 #include <Flux/UI/Environment.hpp>
 #include <Flux/UI/MeasureContext.hpp>
 #include <Flux/UI/Views/Popover.hpp>
@@ -18,7 +18,6 @@
 #include <typeinfo>
 #include <utility>
 
-#include "Scene/SceneGeometry.hpp"
 #include "UI/Build/BuildPass.hpp"
 #include "UI/Layout/Algorithms/OverlayLayout.hpp"
 
@@ -37,26 +36,6 @@ Rect applyAnchorOutsets(Rect rect, EdgeInsets const &outsets) {
         rect.width + left + right,
         rect.height + top + bottom,
     };
-}
-
-bool isPlainGroup(SceneNode const& node) {
-    return node.kind() == SceneNodeKind::Group && typeid(node) == typeid(SceneNode);
-}
-
-NodeId overlayRootId() {
-    return NodeId{1ull};
-}
-
-NodeId overlayContentId() {
-    return SceneTree::childId(overlayRootId(), LocalId::fromString("$content"));
-}
-
-NodeId overlayBackdropId() {
-    return SceneTree::childId(overlayRootId(), LocalId::fromString("$backdrop"));
-}
-
-NodeId overlayCaptureId() {
-    return SceneTree::childId(overlayRootId(), LocalId::fromString("$capture"));
 }
 
 ResolvedRootScene resolveOverlayRootScene(std::optional<Element> const& content,
@@ -83,25 +62,6 @@ Size measureOverlayContent(Element const& element, LayoutConstraints const& cons
     }
     measureContext.setCurrentElement(&element);
     return element.measure(measureContext, constraints, LayoutHints{}, textSystem);
-}
-
-std::unique_ptr<SceneNode> extractOverlayContentRoot(std::unique_ptr<SceneNode> root) {
-    if (!root) {
-        return nullptr;
-    }
-    if (root->id() == overlayContentId()) {
-        return root;
-    }
-    if (!isPlainGroup(*root)) {
-        return nullptr;
-    }
-    std::vector<std::unique_ptr<SceneNode>> children = root->releaseChildren();
-    for (std::unique_ptr<SceneNode>& child : children) {
-        if (child && child->id() == overlayContentId()) {
-            return std::move(child);
-        }
-    }
-    return nullptr;
 }
 
 char const *overlayPlacementName(OverlayConfig::Placement placement) {
@@ -181,31 +141,21 @@ Rect OverlayManager::resolveFrame(Size win, OverlayConfig const &cfg, Rect conte
     return layout::resolveOverlayFrame(win, cfg, contentBounds);
 }
 
-void OverlayManager::insertOverlayBackdropChrome(SceneNode &root, OverlayEntry &entry, Size windowSize,
+void OverlayManager::insertOverlayBackdropChrome(scenegraph::SceneNode &root, OverlayEntry &entry, Size windowSize,
                                                  Runtime &runtime, bool dismissOnBackdropTap) {
     float const w = std::max(0.f, windowSize.width);
     float const h = std::max(0.f, windowSize.height);
     float const ox = -entry.resolvedFrame.x;
     float const oy = -entry.resolvedFrame.y;
 
-    auto backdrop = std::make_unique<RectSceneNode>(overlayBackdropId());
-    backdrop->position = Point{ox, oy};
-    backdrop->size = Size{w, h};
-    backdrop->fill = FillStyle::solid(entry.config.backdropColor);
-    backdrop->stroke = StrokeStyle::none();
-    backdrop->shadow = ShadowStyle::none();
-    backdrop->cornerRadius = {};
-    backdrop->recomputeBounds();
+    auto backdrop = std::make_unique<scenegraph::RectNode>(
+        Rect {ox, oy, w, h},
+        FillStyle::solid(entry.config.backdropColor)
+    );
     root.appendChild(std::move(backdrop));
 
-    auto capture = std::make_unique<RectSceneNode>(overlayCaptureId());
-    capture->position = Point{ox, oy};
-    capture->size = Size{w, h};
-    capture->fill = FillStyle::none();
-    capture->stroke = StrokeStyle::none();
-    capture->shadow = ShadowStyle::none();
-    capture->cornerRadius = {};
-    auto interaction = std::make_unique<InteractionData>();
+    auto capture = std::make_unique<scenegraph::RectNode>(Rect {ox, oy, w, h});
+    auto interaction = std::make_unique<scenegraph::InteractionData>();
     if (dismissOnBackdropTap) {
         OverlayId const oid = entry.id;
         Window &wnd = runtime.window();
@@ -214,7 +164,6 @@ void OverlayManager::insertOverlayBackdropChrome(SceneNode &root, OverlayEntry &
         interaction->onPointerDown = [](Point) {};
     }
     capture->setInteraction(std::move(interaction));
-    capture->recomputeBounds();
     root.appendChild(std::move(capture));
 }
 
@@ -269,8 +218,7 @@ void OverlayManager::rebuild(Size windowSize, Runtime &runtime) {
             }
         }
 
-        std::unique_ptr<SceneNode> existingContent = extractOverlayContentRoot(entry.sceneTree.takeRoot());
-        std::unique_ptr<SceneNode> contentRoot = runBuildPass(
+        std::unique_ptr<scenegraph::SceneNode> contentRoot = runBuildPass(
             BuildPassConfig{
                 .stateStore = *entry.stateStore,
                 .overlayScope = entry.id.value,
@@ -278,11 +226,11 @@ void OverlayManager::rebuild(Size windowSize, Runtime &runtime) {
                 .textSystem = Application::instance().textSystem(),
                 .environment = EnvironmentStack::current(),
                 .windowEnvironment = runtime.window().environmentLayer(),
-                .geometryIndex = &entry.sceneGeometry,
+                .sceneGraph = &entry.sceneGraph,
             },
-            resolveOverlayRootScene(entry.content), overlayContentId(), cs, std::move(existingContent));
+            resolveOverlayRootScene(entry.content), cs);
 
-        Rect contentBounds = contentRoot ? scene::offsetRect(contentRoot->bounds, contentRoot->position) : Rect{};
+        Rect contentBounds = contentRoot ? contentRoot->bounds() : Rect{};
         if (contentBounds.width <= 0.f || !std::isfinite(contentBounds.width)) {
             contentBounds.width = 1.f;
         }
@@ -292,7 +240,7 @@ void OverlayManager::rebuild(Size windowSize, Runtime &runtime) {
 
         entry.resolvedFrame = resolveFrame(windowSize, entry.config, contentBounds);
 
-        auto root = std::make_unique<SceneNode>(overlayRootId());
+        auto root = std::make_unique<scenegraph::GroupNode>();
 
         if (!entry.config.debugName.empty()) {
             if (entry.config.anchor.has_value()) {
@@ -325,8 +273,9 @@ void OverlayManager::rebuild(Size windowSize, Runtime &runtime) {
         if (contentRoot) {
             root->appendChild(std::move(contentRoot));
         }
-        root->recomputeBounds();
-        entry.sceneTree.setRoot(std::move(root));
+        root->setBounds(Rect {0.f, 0.f, std::max(windowSize.width, entry.resolvedFrame.width),
+                              std::max(windowSize.height, entry.resolvedFrame.height)});
+        entry.sceneGraph.setRoot(std::move(root));
 
         runtime.syncModalOverlayFocusAfterRebuild(entry);
     }

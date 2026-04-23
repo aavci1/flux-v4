@@ -16,29 +16,19 @@ Size PathShape::measure(MeasureContext& ctx, LayoutConstraints const&, LayoutHin
 namespace detail {
 
 ComponentBuildResult buildMeasuredComponent(PathShape const& path, ComponentBuildContext& ctx,
-                                            std::unique_ptr<SceneNode> existing) {
-  std::unique_ptr<PathSceneNode> pathNode = build::releaseAs<PathSceneNode>(std::move(existing));
-  if (!pathNode) {
-    pathNode = std::make_unique<PathSceneNode>(ctx.nodeId());
-  }
+                                            std::unique_ptr<scenegraph::SceneNode> existing) {
+  (void)existing;
   Theme const& theme = ctx.theme();
-  bool dirty = false;
-  dirty |= build::updateIfChanged(pathNode->path, path.path);
-  dirty |= build::updateIfChanged(
-      pathNode->fill, ctx.modifiers() ? build::resolveFillStyle(ctx.modifiers()->fill, theme) : FillStyle::none());
-  dirty |= build::updateIfChanged(pathNode->stroke,
-                                  ctx.modifiers() ? build::resolveStrokeStyle(ctx.modifiers()->stroke, theme)
-                                                  : StrokeStyle::none());
-  dirty |= build::updateIfChanged(pathNode->shadow,
-                                  ctx.modifiers() ? build::resolveShadowStyle(ctx.modifiers()->shadow, theme)
-                                                  : ShadowStyle::none());
-  if (dirty) {
-    pathNode->invalidatePaint();
-    pathNode->markBoundsDirty();
-  }
-  pathNode->position = {};
-  pathNode->recomputeBounds();
-  Size const geometrySize = build::rectSize(pathNode->bounds);
+  auto pathNode = std::make_unique<scenegraph::PathNode>(
+      Rect {0.f, 0.f, path.path.getBounds().width, path.path.getBounds().height},
+      path.path,
+      ctx.modifiers() ? build::resolveFillStyle(ctx.modifiers()->fill, theme) : FillStyle::none(),
+      ctx.modifiers() ? build::resolveStrokeStyle(ctx.modifiers()->stroke, theme)
+                      : StrokeStyle::none(),
+      ctx.modifiers() ? build::resolveShadowStyle(ctx.modifiers()->shadow, theme)
+                      : ShadowStyle::none()
+  );
+  Size const geometrySize = build::rectSize(pathNode->localBounds());
 
   ComponentBuildResult result{};
   result.node = std::move(pathNode);

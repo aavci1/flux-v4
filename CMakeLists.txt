@@ -115,8 +115,6 @@ add_library(flux STATIC
   src/UI/Layout/Algorithms/GridLayout.cpp
   src/UI/Layout/Algorithms/ScrollLayout.cpp
   src/UI/Layout/Algorithms/OverlayLayout.cpp
-  src/UI/SceneBuilder/ElementEnvelope.cpp
-  src/UI/SceneBuilder/RetainedReuse.cpp
   src/UI/SceneBuilder.cpp
   src/UI/SceneGeometryIndex.cpp
   src/UI/Detail/LeafBounds.cpp

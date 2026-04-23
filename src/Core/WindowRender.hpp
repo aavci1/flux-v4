@@ -10,9 +10,11 @@ namespace flux {
 class Canvas;
 class OverlayManager;
 class Runtime;
-class SceneTree;
+namespace scenegraph {
+class SceneGraph;
+}
 
-void renderWindowFrame(Canvas& canvas, std::optional<SceneTree> const& sceneTree,
+void renderWindowFrame(Canvas& canvas, std::optional<scenegraph::SceneGraph> const& sceneGraph,
                        OverlayManager const& overlays, Runtime const* runtime, Color clearColor,
                        TextCacheRingBuffer& textCacheRing);
 

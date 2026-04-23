@@ -2,7 +2,7 @@
 
 #include <Flux/UI/HoverController.hpp>
 
-TEST_CASE("SceneTree interaction lookup preserves focus order and keyed handler lookup") {
+TEST_CASE("Scenegraph interaction lookup preserves focus order and keyed handler lookup") {
   NullTextSystem textSystem{};
   EnvironmentLayer env{};
   env.set(Theme::light());
@@ -27,75 +27,69 @@ TEST_CASE("SceneTree interaction lookup preserves focus order and keyed handler 
       },
   };
 
-  SceneTree tree{builder.build(root, NodeId{1ull}, constraints)};
+  scenegraph::SceneGraph graph{builder.build(root, constraints)};
 
-  std::vector<ComponentKey> const order = collectFocusableKeys(tree);
+  std::vector<ComponentKey> const order = scenegraph::collectFocusableKeys(graph);
   REQUIRE(order.size() == 2);
   CHECK(order[0] == ComponentKey{LocalId::fromString("a")});
   CHECK(order[1] == ComponentKey{LocalId::fromString("b")});
 
-  auto const [idA, interactionA] = findInteractionByKey(tree, ComponentKey{LocalId::fromString("a")});
-  REQUIRE(idA.isValid());
+  auto const [nodeA, interactionA] =
+      scenegraph::findInteractionByKey(graph, ComponentKey{LocalId::fromString("a")});
+  REQUIRE(nodeA != nullptr);
   REQUIRE(interactionA != nullptr);
   REQUIRE(interactionA->focusable);
   REQUIRE(static_cast<bool>(interactionA->onKeyDown));
   interactionA->onKeyDown(KeyCode{}, Modifiers{});
   CHECK(keyDownA);
 
-  auto const [closestId, closestInteraction] = findClosestInteractionByKey(
-      tree, ComponentKey{LocalId::fromString("b"), LocalId::fromString("child")});
-  REQUIRE(closestId.isValid());
+  auto const [closestNode, closestInteraction] = scenegraph::findClosestInteractionByKey(
+      graph, ComponentKey{LocalId::fromString("b"), LocalId::fromString("child")});
+  REQUIRE(closestNode != nullptr);
   REQUIRE(closestInteraction != nullptr);
   REQUIRE(static_cast<bool>(closestInteraction->onKeyDown));
   closestInteraction->onKeyDown(KeyCode{}, Modifiers{});
   CHECK(keyDownB);
 }
 
-TEST_CASE("SceneTree interaction hit testing respects custom transform local coordinates") {
-  auto root = std::make_unique<SceneNode>(NodeId{1ull});
-  auto transform = std::make_unique<CustomTransformSceneNode>(NodeId{2ull});
-  transform->transform = Mat3::scale(2.f);
-
-  auto rect = std::make_unique<RectSceneNode>(NodeId{3ull});
-  rect->position = Point{4.f, 3.f};
-  rect->size = Size{20.f, 10.f};
-  auto interaction = std::make_unique<InteractionData>();
+TEST_CASE("Scenegraph interaction hit testing respects custom transform local coordinates") {
+  auto root = std::make_unique<scenegraph::GroupNode>(Rect{0.f, 0.f, 80.f, 60.f});
+  auto rect = std::make_unique<scenegraph::RectNode>(Rect{4.f, 3.f, 20.f, 10.f}, FillStyle::solid(Colors::red));
+  auto interaction = std::make_unique<scenegraph::InteractionData>();
   interaction->stableTargetKey = ComponentKey{LocalId::fromString("scaled")};
   rect->setInteraction(std::move(interaction));
-  rect->recomputeBounds();
+  rect->setTransform(Mat3::scale(2.f));
+  scenegraph::SceneNode* rectPtr = rect.get();
+  root->appendChild(std::move(rect));
 
-  RectSceneNode* rectPtr = rect.get();
-  transform->appendChild(std::move(rect));
-  transform->recomputeBounds();
-  root->appendChild(std::move(transform));
-  root->recomputeBounds();
+  scenegraph::SceneGraph graph{std::move(root)};
 
-  SceneTree tree{std::move(root)};
-
-  auto const hit = hitTestInteraction(tree, Point{18.f, 16.f});
+  auto const hit = scenegraph::hitTestInteraction(graph, Point{18.f, 16.f});
   REQUIRE(hit.has_value());
-  CHECK(hit->nodeId == rectPtr->id());
-  CHECK(hit->localPoint.x == doctest::Approx(5.f));
-  CHECK(hit->localPoint.y == doctest::Approx(5.f));
+  CHECK(hit->node == rectPtr);
+  CHECK(hit->localPoint.x == doctest::Approx(7.f));
+  CHECK(hit->localPoint.y == doctest::Approx(6.5f));
   REQUIRE(hit->interaction != nullptr);
   CHECK(hit->interaction->stableTargetKey == ComponentKey{LocalId::fromString("scaled")});
 
-  auto const local = HitTester{}.localPointForNode(tree, Point{18.f, 16.f}, rectPtr->id());
+  auto const local = scenegraph::localPointForNode(graph.root(), Point{18.f, 16.f}, rectPtr);
   REQUIRE(local.has_value());
-  CHECK(local->x == doctest::Approx(5.f));
-  CHECK(local->y == doctest::Approx(5.f));
+  CHECK(local->x == doctest::Approx(7.f));
+  CHECK(local->y == doctest::Approx(6.5f));
 }
 
-TEST_CASE("GestureTracker: overlay-scoped taps resolve through the overlay scene tree") {
+TEST_CASE("GestureTracker overlay-scoped taps resolve through the overlay scenegraph") {
   GestureTracker tracker{};
 
   bool mainTapped = false;
-  InteractiveRectTree main = makeInteractiveRectTree("shared", false, [&] { mainTapped = true; });
+  InteractiveRectScene mainScene = makeInteractiveRectScene("shared", false, [&] { mainTapped = true; });
+  scenegraph::SceneGraph mainGraph;
+  mainGraph.setRoot(std::move(mainScene.root));
 
   bool overlayTapped = false;
   ComponentKey observedTapKey{};
   std::optional<OverlayId> observedOverlayScope{};
-  InteractiveRectTree overlayTree = makeInteractiveRectTree("shared", false, [&] {
+  InteractiveRectScene overlayScene = makeInteractiveRectScene("shared", false, [&] {
     overlayTapped = true;
     observedTapKey = tracker.pendingTapLeafKey();
     observedOverlayScope = tracker.pendingTapOverlayScope();
@@ -103,7 +97,7 @@ TEST_CASE("GestureTracker: overlay-scoped taps resolve through the overlay scene
 
   OverlayEntry overlay{};
   overlay.id = OverlayId{42ull};
-  overlay.sceneTree = std::move(overlayTree.tree);
+  overlay.sceneGraph.setRoot(std::move(overlayScene.root));
   std::vector<OverlayEntry const*> overlays{&overlay};
 
   GestureTracker::PressState released{};
@@ -111,7 +105,7 @@ TEST_CASE("GestureTracker: overlay-scoped taps resolve through the overlay scene
   released.hadOnTapOnDown = true;
   released.overlayScope = overlay.id;
 
-  CHECK(tracker.dispatchTap(released, overlays, main.tree));
+  CHECK(tracker.dispatchTap(released, overlays, mainGraph));
   CHECK(overlayTapped);
   CHECK_FALSE(mainTapped);
   CHECK(observedTapKey == released.stableTargetKey);
@@ -121,36 +115,38 @@ TEST_CASE("GestureTracker: overlay-scoped taps resolve through the overlay scene
   CHECK_FALSE(tracker.pendingTapOverlayScope().has_value());
 }
 
-TEST_CASE("GestureTracker: overlay press lookup falls back by stable key inside the overlay tree") {
+TEST_CASE("GestureTracker overlay press lookup falls back by stable key inside the overlay scenegraph") {
   GestureTracker tracker{};
-  InteractiveRectTree main = makeInteractiveRectTree("shared");
-  InteractiveRectTree overlayTree = makeInteractiveRectTree("shared");
+  InteractiveRectScene mainScene = makeInteractiveRectScene("shared");
+  scenegraph::SceneGraph mainGraph;
+  mainGraph.setRoot(std::move(mainScene.root));
 
+  InteractiveRectScene overlayScene = makeInteractiveRectScene("shared");
   OverlayEntry overlay{};
   overlay.id = OverlayId{7ull};
-  overlay.sceneTree = std::move(overlayTree.tree);
+  SceneNode* overlayLeaf = overlayScene.leaf;
+  overlay.sceneGraph.setRoot(std::move(overlayScene.root));
   std::vector<OverlayEntry const*> overlays{&overlay};
 
   GestureTracker::PressState press{};
-  press.nodeId = NodeId{999ull};
   press.stableTargetKey = ComponentKey{LocalId::fromString("shared")};
   press.overlayScope = overlay.id;
 
-  auto const [resolvedId, interaction] = tracker.findPressInteraction(press, overlays, main.tree);
+  auto const [resolvedNode, interaction] = tracker.findPressInteraction(press, overlays, mainGraph);
   REQUIRE(interaction != nullptr);
-  CHECK(resolvedId == overlayTree.leafId);
+  CHECK(resolvedNode == overlayLeaf);
   CHECK(interaction->stableTargetKey == press.stableTargetKey);
-  CHECK(tracker.sceneTreeForPress(press, overlays, main.tree) == &overlay.sceneTree);
+  CHECK(tracker.sceneGraphForPress(press, overlays, mainGraph) == &overlay.sceneGraph);
 }
 
-TEST_CASE("FocusController: modal overlay rebuild syncs focus from the retained overlay tree") {
+TEST_CASE("FocusController modal overlay rebuild syncs focus from the overlay scenegraph") {
   FocusController focus{};
-  InteractiveRectTree overlayTree = makeInteractiveRectTree("dialog-primary", true);
+  InteractiveRectScene overlayScene = makeInteractiveRectScene("dialog-primary", true);
 
   OverlayEntry overlay{};
   overlay.id = OverlayId{9ull};
   overlay.config.modal = true;
-  overlay.sceneTree = std::move(overlayTree.tree);
+  overlay.sceneGraph.setRoot(std::move(overlayScene.root));
 
   focus.onOverlayPushed(overlay);
   focus.syncAfterOverlayRebuild(overlay);
@@ -229,7 +225,7 @@ TEST_CASE("GestureTracker marks press enter and exit on the affected subtree") {
     return true;
   });
 
-  tracker.recordPress(NodeId{3ull}, pressKey, Point{4.f, 5.f}, true, std::nullopt);
+  tracker.recordPress(pressKey, Point{4.f, 5.f}, true, std::nullopt);
   tracker.clearPress();
 
   CHECK(store.hasPendingDirtyComponents());

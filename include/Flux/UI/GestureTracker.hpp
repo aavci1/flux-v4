@@ -6,8 +6,8 @@
 
 
 #include <Flux/Core/ComponentKey.hpp>
-#include <Flux/Scene/InteractionData.hpp>
-#include <Flux/Scene/SceneTree.hpp>
+#include <Flux/SceneGraph/InteractionData.hpp>
+#include <Flux/SceneGraph/SceneGraph.hpp>
 #include <Flux/Core/Types.hpp>
 #include <Flux/UI/Overlay.hpp>
 
@@ -26,7 +26,6 @@ public:
   using DirtyMarker = std::function<bool(ComponentKey const&, std::optional<OverlayId>)>;
 
   struct PressState {
-    NodeId nodeId{};
     ComponentKey stableTargetKey{};
     Point downPoint{};
     bool cancelled = false;
@@ -36,11 +35,11 @@ public:
 
   void setDirtyMarker(DirtyMarker marker);
 
-  void recordPress(NodeId nodeId, ComponentKey stableTargetKey, Point downPoint, bool hadOnTap,
+  void recordPress(ComponentKey stableTargetKey, Point downPoint, bool hadOnTap,
                    std::optional<OverlayId> overlayScope);
 
   void cancelPress(Point cancelPoint, std::vector<OverlayEntry const*> const& overlayEntries,
-                   SceneTree const& mainTree);
+                   scenegraph::SceneGraph const& mainGraph);
 
   void clearPress();
 
@@ -54,18 +53,19 @@ public:
   bool pressMatchesStoreContext(StateStore const& store) const noexcept;
 
   bool dispatchTap(PressState const& released, std::vector<OverlayEntry const*> const& overlayEntries,
-                   SceneTree const& mainTree);
+                   scenegraph::SceneGraph const& mainGraph);
 
   ComponentKey const& pendingTapLeafKey() const noexcept;
   std::optional<OverlayId> pendingTapOverlayScope() const noexcept;
 
   OverlayEntry const* overlayForPress(PressState const& ps,
                                       std::vector<OverlayEntry const*> const& overlayEntries) const;
-  std::pair<NodeId, InteractionData const*> findPressInteraction(
-      PressState const& ps, std::vector<OverlayEntry const*> const& overlayEntries, SceneTree const& mainTree) const;
-  SceneTree const* sceneTreeForPress(PressState const& ps,
-                                     std::vector<OverlayEntry const*> const& overlayEntries,
-                                     SceneTree const& mainTree) const;
+  std::pair<scenegraph::SceneNode const*, scenegraph::InteractionData const*>
+  findPressInteraction(PressState const& ps, std::vector<OverlayEntry const*> const& overlayEntries,
+                       scenegraph::SceneGraph const& mainGraph) const;
+  scenegraph::SceneGraph const*
+  sceneGraphForPress(PressState const& ps, std::vector<OverlayEntry const*> const& overlayEntries,
+                     scenegraph::SceneGraph const& mainGraph) const;
 
 private:
   bool markDirty(ComponentKey const& key, std::optional<OverlayId> overlayScope) const;

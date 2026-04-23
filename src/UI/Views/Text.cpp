@@ -1,12 +1,13 @@
 #include <Flux/UI/Views/Text.hpp>
 
-#include <Flux/Scene/SceneTree.hpp>
+#include <Flux/SceneGraph/GroupNode.hpp>
+#include <Flux/SceneGraph/RectNode.hpp>
+#include <Flux/SceneGraph/TextNode.hpp>
 #include <Flux/UI/MeasureContext.hpp>
 #include <Flux/UI/Views/TextSupport.hpp>
 
 #include "UI/Build/ComponentBuildContext.hpp"
 #include "UI/Build/ComponentBuildSupport.hpp"
-#include "UI/SceneBuilder/NodeReuse.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -36,7 +37,8 @@ Size Text::measure(MeasureContext& ctx, LayoutConstraints const& constraints, La
 namespace detail {
 
 ComponentBuildResult buildMeasuredComponent(Text const& text, ComponentBuildContext& ctx,
-                                            std::unique_ptr<SceneNode> existing) {
+                                            std::unique_ptr<scenegraph::SceneNode> existing) {
+  (void)existing;
   Theme const& theme = ctx.theme();
   Font const resolvedFont = resolveFont(text.font, theme.bodyFont, theme);
   Color const resolvedColor = resolveColor(text.color, theme.labelColor, theme);
@@ -62,61 +64,40 @@ ComponentBuildResult buildMeasuredComponent(Text const& text, ComponentBuildCont
     selectableState = selectableTextState(ctx.key());
     updateSelectableTextLayout(*selectableState, textLayout, text.text, frameRect.width);
 
-    std::unique_ptr<SceneNode> group = build::releasePlainGroup(std::move(existing));
-    if (!group) {
-      group = std::make_unique<SceneNode>(ctx.nodeId());
-    }
-    ReusableSceneNodes reusable = releaseReusableChildren(*group);
+    auto group = std::make_unique<scenegraph::GroupNode>(
+        Rect {0.f, 0.f, frameRect.width, frameRect.height}
+    );
 
-    std::vector<std::unique_ptr<SceneNode>> nextChildren{};
+    std::vector<std::unique_ptr<scenegraph::SceneNode>> nextChildren{};
     if (selectableState->selection.hasSelection()) {
       std::vector<Rect> const selectionRectsData =
           selectionRects(selectableState->layoutResult, selectableState->selection,
                          &selectableState->text, 0.f, 0.f);
       nextChildren.reserve(selectionRectsData.size() + 1);
       for (std::size_t i = 0; i < selectionRectsData.size(); ++i) {
-        NodeId const rectId = SceneTree::childId(ctx.nodeId(), LocalId::fromIndex(i));
-        std::unique_ptr<RectSceneNode> rectNode = takeReusableNodeAs<RectSceneNode>(reusable, rectId);
-        if (!rectNode) {
-          rectNode = std::make_unique<RectSceneNode>(rectId);
-        }
         Rect const rect = selectionRectsData[i];
-        bool dirty = false;
-        dirty |= build::updateIfChanged(rectNode->size, Size{rect.width, rect.height});
-        dirty |= build::updateIfChanged(rectNode->fill, FillStyle::solid(resolvedSelectionColor));
-        dirty |= build::updateIfChanged(rectNode->stroke, StrokeStyle::none());
-        dirty |= build::updateIfChanged(rectNode->shadow, ShadowStyle::none());
-        dirty |= build::updateIfChanged(rectNode->cornerRadius, CornerRadius{});
-        if (dirty) {
-          rectNode->invalidatePaint();
-          rectNode->markBoundsDirty();
-        }
-        rectNode->position = Point{rect.x, rect.y};
-        rectNode->recomputeBounds();
+        auto rectNode = std::make_unique<scenegraph::RectNode>(
+            Rect {rect.x, rect.y, rect.width, rect.height},
+            FillStyle::solid(resolvedSelectionColor)
+        );
         nextChildren.push_back(std::move(rectNode));
       }
     }
 
-    NodeId const textId = SceneTree::childId(ctx.nodeId(), LocalId::fromString("$text"));
-    std::unique_ptr<TextSceneNode> textNode = takeReusableNodeAs<TextSceneNode>(reusable, textId);
-    if (!textNode) {
-      textNode = std::make_unique<TextSceneNode>(textId);
-    }
-    build::configureTextSceneNode(*textNode, ctx.textSystem(), text, resolvedFont, resolvedColor, frameRect,
-                                  displayText, textLayout);
+    auto textNode =
+        std::make_unique<scenegraph::TextNode>(Rect {0.f, 0.f, frameRect.width, frameRect.height});
+    build::configureTextNode(*textNode, frameRect, textLayout);
     nextChildren.push_back(std::move(textNode));
 
     group->replaceChildren(std::move(nextChildren));
-    build::setGroupBounds(*group, build::rectSize(frameRect));
-    result.interaction = ctx.makeSelectableTextInteraction(selectableState);
+    if (auto interaction = ctx.makeSelectableTextInteraction(selectableState)) {
+      group->setInteraction(std::move(interaction));
+    }
     result.node = std::move(group);
   } else {
-    std::unique_ptr<TextSceneNode> textNode = build::releaseAs<TextSceneNode>(std::move(existing));
-    if (!textNode) {
-      textNode = std::make_unique<TextSceneNode>(ctx.nodeId());
-    }
-    build::configureTextSceneNode(*textNode, ctx.textSystem(), text, resolvedFont, resolvedColor, frameRect,
-                                  displayText, textLayout);
+    auto textNode =
+        std::make_unique<scenegraph::TextNode>(Rect {0.f, 0.f, frameRect.width, frameRect.height});
+    build::configureTextNode(*textNode, frameRect, textLayout);
     result.node = std::move(textNode);
   }
   result.geometrySize = ctx.layoutOuterSize();

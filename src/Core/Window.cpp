@@ -7,7 +7,7 @@
 #include <Flux/Detail/RootHolder.hpp>
 #include <Flux/Detail/Runtime.hpp>
 #include <Flux/Graphics/Canvas.hpp>
-#include <Flux/Scene/SceneTree.hpp>
+#include <Flux/SceneGraph/SceneGraph.hpp>
 #include <Flux/UI/Overlay.hpp>
 #include <Flux/UI/Theme.hpp>
 
@@ -24,7 +24,7 @@ namespace flux {
 struct Window::Impl {
   std::unique_ptr<PlatformWindow> platform_;
   std::unique_ptr<Canvas> canvas_;
-  std::optional<SceneTree> sceneTree_;
+  std::optional<scenegraph::SceneGraph> sceneGraph_;
   Color clearColor_ {Color::hex(0xF2F2F7)};
   /// Declared before `runtime_` so `~Runtime` (and `OverlayHookSlot` teardown calling `removeOverlay`)
   /// runs while `OverlayManager` is still alive. Reverse member destruction order would destroy
@@ -102,16 +102,18 @@ Canvas& Window::canvas() {
   return *d->canvas_;
 }
 
-bool Window::hasSceneTree() const { return d->sceneTree_.has_value(); }
+bool Window::hasSceneGraph() const { return d->sceneGraph_.has_value(); }
 
-SceneTree& Window::sceneTree() {
-  if (!d->sceneTree_) {
-    d->sceneTree_.emplace();
+scenegraph::SceneGraph& Window::sceneGraph() {
+  if (!d->sceneGraph_) {
+    d->sceneGraph_.emplace();
   }
-  return *d->sceneTree_;
+  return *d->sceneGraph_;
 }
 
-SceneTree const& Window::sceneTree() const { return const_cast<Window*>(this)->sceneTree(); }
+scenegraph::SceneGraph const& Window::sceneGraph() const {
+  return const_cast<Window*>(this)->sceneGraph();
+}
 
 void Window::requestRedraw() { postRedraw(handle()); }
 
@@ -201,7 +203,7 @@ EnvironmentLayer const& Window::environmentLayer() const {
 }
 
 void Window::render(Canvas& canvas) {
-  renderWindowFrame(canvas, d->sceneTree_, d->overlayMgr_, d->runtime_.get(), d->clearColor_,
+  renderWindowFrame(canvas, d->sceneGraph_, d->overlayMgr_, d->runtime_.get(), d->clearColor_,
                     d->textCacheRing_);
 }
 

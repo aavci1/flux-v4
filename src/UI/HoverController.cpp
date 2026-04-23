@@ -1,7 +1,7 @@
 #include <Flux/UI/HoverController.hpp>
 
 #include <Flux/Core/Application.hpp>
-#include <Flux/Scene/SceneTreeInteraction.hpp>
+#include <Flux/SceneGraph/SceneInteraction.hpp>
 #include <Flux/UI/StateStore.hpp>
 
 namespace flux {
@@ -84,12 +84,12 @@ void HoverController::clear() {
 }
 
 void HoverController::updateForPoint(Point windowPoint, std::vector<OverlayEntry const*> const& overlayEntries,
-                                     SceneTree const& mainTree) {
+                                     scenegraph::SceneGraph const& mainGraph) {
   // `overlayEntries` is top-to-bottom (front = topmost overlay), matching `entries().rbegin()` order.
   for (OverlayEntry const* p : overlayEntries) {
     OverlayEntry const& oe = *p;
     Point const local{ windowPoint.x - oe.resolvedFrame.x, windowPoint.y - oe.resolvedFrame.y };
-    if (auto hit = hitTestInteraction(oe.sceneTree, local)) {
+    if (auto hit = scenegraph::hitTestInteraction(oe.sceneGraph, local)) {
       if (hit->interaction && !hit->interaction->stableTargetKey.empty()) {
         set(hit->interaction->stableTargetKey, oe.id);
       } else {
@@ -99,7 +99,7 @@ void HoverController::updateForPoint(Point windowPoint, std::vector<OverlayEntry
     }
   }
 
-  auto hit = hitTestInteraction(mainTree, windowPoint);
+  auto hit = scenegraph::hitTestInteraction(mainGraph, windowPoint);
   if (hit) {
     if (hit->interaction && !hit->interaction->stableTargetKey.empty()) {
       set(hit->interaction->stableTargetKey, std::nullopt);

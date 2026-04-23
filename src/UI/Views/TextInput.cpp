@@ -3,7 +3,6 @@
 #include <Flux/Core/Application.hpp>
 #include <Flux/Graphics/TextLayoutOptions.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
-#include <Flux/Scene/TextSceneNode.hpp>
 #include <Flux/UI/InputFieldLayout.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Views/Text.hpp>
@@ -411,29 +410,13 @@ int hitTestMultilineByte(detail::TextEditLayoutResult const &layoutResult, Point
 namespace detail {
 
 ComponentBuildResult buildMeasuredComponent(InternalTextLayoutLeaf const &leaf, ComponentBuildContext &ctx,
-                                            std::unique_ptr<SceneNode> existing) {
-    std::unique_ptr<TextSceneNode> textNode = build::releaseAs<TextSceneNode>(std::move(existing));
-    if (!textNode) {
-        textNode = std::make_unique<TextSceneNode>(ctx.nodeId());
-    }
-
+                                            std::unique_ptr<scenegraph::SceneNode> existing) {
+    (void)existing;
     Rect const frameRect =
         build::assignedFrameForLeaf(ctx.paddedContentSize(), ctx.innerConstraints(), ctx.contentAssignedSize(),
                                     ctx.hasAssignedWidth(), ctx.hasAssignedHeight(), ctx.modifiers(), ctx.hints());
-    bool dirty = false;
-    dirty |= build::updateIfChanged(textNode->layout, leaf.layout);
-    dirty |= build::updateIfChanged(textNode->origin, Point {});
-    dirty |= build::updateIfChanged(textNode->allocation, Rect {0.f, 0.f, frameRect.width, frameRect.height});
-    if (textNode->textSystem != nullptr) {
-        textNode->textSystem = nullptr;
-        dirty = true;
-    }
-    if (dirty) {
-        textNode->invalidatePaint();
-        textNode->markBoundsDirty();
-    }
-    textNode->position = {};
-    textNode->recomputeBounds();
+    auto textNode =
+        std::make_unique<scenegraph::TextNode>(Rect {0.f, 0.f, frameRect.width, frameRect.height}, leaf.layout);
 
     ComponentBuildResult result{};
     result.node = std::move(textNode);

@@ -1,7 +1,6 @@
 #pragma once
 
-#include <Flux/Scene/InteractionData.hpp>
-#include <Flux/Scene/SceneNode.hpp>
+#include <Flux/SceneGraph/SceneNode.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 
 #include <memory>
@@ -30,46 +29,47 @@ namespace detail {
 class ComponentBuildContext;
 
 struct ComponentBuildResult {
-  std::unique_ptr<SceneNode> node{};
+  std::unique_ptr<scenegraph::SceneNode> node{};
   Size geometrySize{};
   bool hasGeometrySize = false;
-  std::unique_ptr<InteractionData> interaction{};
 };
 
-ComponentBuildResult buildMeasuredFallback(ComponentBuildContext& ctx, std::unique_ptr<SceneNode> existing);
+ComponentBuildResult buildMeasuredFallback(ComponentBuildContext& ctx,
+                                           std::unique_ptr<scenegraph::SceneNode> existing);
 
 ComponentBuildResult buildMeasuredComponent(Rectangle const& component, ComponentBuildContext& ctx,
-                                           std::unique_ptr<SceneNode> existing);
+                                           std::unique_ptr<scenegraph::SceneNode> existing);
 ComponentBuildResult buildMeasuredComponent(Text const& component, ComponentBuildContext& ctx,
-                                           std::unique_ptr<SceneNode> existing);
+                                           std::unique_ptr<scenegraph::SceneNode> existing);
 ComponentBuildResult buildMeasuredComponent(InternalTextLayoutLeaf const& component,
-                                           ComponentBuildContext& ctx, std::unique_ptr<SceneNode> existing);
+                                           ComponentBuildContext& ctx,
+                                           std::unique_ptr<scenegraph::SceneNode> existing);
 ComponentBuildResult buildMeasuredComponent(views::Image const& component, ComponentBuildContext& ctx,
-                                           std::unique_ptr<SceneNode> existing);
+                                           std::unique_ptr<scenegraph::SceneNode> existing);
 ComponentBuildResult buildMeasuredComponent(PathShape const& component, ComponentBuildContext& ctx,
-                                           std::unique_ptr<SceneNode> existing);
+                                           std::unique_ptr<scenegraph::SceneNode> existing);
 ComponentBuildResult buildMeasuredComponent(VStack const& component, ComponentBuildContext& ctx,
-                                           std::unique_ptr<SceneNode> existing);
+                                           std::unique_ptr<scenegraph::SceneNode> existing);
 ComponentBuildResult buildMeasuredComponent(HStack const& component, ComponentBuildContext& ctx,
-                                           std::unique_ptr<SceneNode> existing);
+                                           std::unique_ptr<scenegraph::SceneNode> existing);
 ComponentBuildResult buildMeasuredComponent(ZStack const& component, ComponentBuildContext& ctx,
-                                           std::unique_ptr<SceneNode> existing);
+                                           std::unique_ptr<scenegraph::SceneNode> existing);
 ComponentBuildResult buildMeasuredComponent(Grid const& component, ComponentBuildContext& ctx,
-                                           std::unique_ptr<SceneNode> existing);
+                                           std::unique_ptr<scenegraph::SceneNode> existing);
 ComponentBuildResult buildMeasuredComponent(OffsetView const& component, ComponentBuildContext& ctx,
-                                           std::unique_ptr<SceneNode> existing);
+                                           std::unique_ptr<scenegraph::SceneNode> existing);
 ComponentBuildResult buildMeasuredComponent(ScrollView const& component, ComponentBuildContext& ctx,
-                                           std::unique_ptr<SceneNode> existing);
+                                           std::unique_ptr<scenegraph::SceneNode> existing);
 ComponentBuildResult buildMeasuredComponent(ScaleAroundCenter const& component, ComponentBuildContext& ctx,
-                                           std::unique_ptr<SceneNode> existing);
+                                           std::unique_ptr<scenegraph::SceneNode> existing);
 ComponentBuildResult buildMeasuredComponent(Spacer const& component, ComponentBuildContext& ctx,
-                                           std::unique_ptr<SceneNode> existing);
+                                           std::unique_ptr<scenegraph::SceneNode> existing);
 ComponentBuildResult buildMeasuredComponent(PopoverCalloutShape const& component, ComponentBuildContext& ctx,
-                                           std::unique_ptr<SceneNode> existing);
+                                           std::unique_ptr<scenegraph::SceneNode> existing);
 
 template<typename C>
 ComponentBuildResult buildMeasuredComponent(C const&, ComponentBuildContext& ctx,
-                                            std::unique_ptr<SceneNode> existing) {
+                                            std::unique_ptr<scenegraph::SceneNode> existing) {
   return buildMeasuredFallback(ctx, std::move(existing));
 }
 

@@ -82,7 +82,9 @@ public:
   [[nodiscard]] detail::CompositeBodyResolution resolveCompositeBody(ComponentKey const& key, LayoutConstraints const& constraints) const {
     return impl_ ? impl_->resolveCompositeBody(key, constraints, modifiers()) : detail::CompositeBodyResolution{};
   }
-  [[nodiscard]] detail::ComponentBuildResult buildMeasured(detail::ComponentBuildContext& ctx, std::unique_ptr<SceneNode> existing) const {
+  [[nodiscard]] detail::ComponentBuildResult
+  buildMeasured(detail::ComponentBuildContext& ctx,
+                std::unique_ptr<scenegraph::SceneNode> existing) const {
     return impl_ ? impl_->buildMeasured(ctx, std::move(existing)) : detail::ComponentBuildResult{};
   }
   [[nodiscard]] detail::ResolvedElement resolve(ComponentKey const& key, LayoutConstraints const& constraints) const;
@@ -173,8 +175,9 @@ private:
                                                                  detail::ElementModifiers const*) const {
       return {};
     }
-    virtual detail::ComponentBuildResult buildMeasured(detail::ComponentBuildContext& ctx,
-                                                       std::unique_ptr<SceneNode> existing) const = 0;
+    virtual detail::ComponentBuildResult
+    buildMeasured(detail::ComponentBuildContext& ctx,
+                  std::unique_ptr<scenegraph::SceneNode> existing) const = 0;
     virtual Size measure(MeasureContext& ctx, LayoutConstraints const& constraints,
                          LayoutHints const& hints, TextSystem& textSystem) const = 0;
     virtual float flexGrow() const { return 0.f; }
