@@ -75,6 +75,20 @@ bool contentConsumesBoxPaint(ElementType typeTag) {
   return typeTag == ElementType::Rectangle || typeTag == ElementType::Path;
 }
 
+bool compositeKeepsContentGeometry(ElementType typeTag) {
+  switch (typeTag) {
+  case ElementType::VStack:
+  case ElementType::HStack:
+  case ElementType::ZStack:
+  case ElementType::Grid:
+  case ElementType::OffsetView:
+  case ElementType::ScrollView:
+    return true;
+  default:
+    return false;
+  }
+}
+
 } // namespace
 
 SceneBuilder::SceneBuilder(TextSystem& textSystem, EnvironmentStack& environment,
@@ -292,6 +306,7 @@ SceneBuilder::buildResolved(Element const& el, detail::ResolvedElement const& re
   buildContext.finalizeOuterSizes(geometrySize, outerSize, layoutOuterSize);
 
   Point totalOffset {};
+  Point geometryOffset = innerOffset;
   if (mods) {
     totalOffset = modifierOffset(mods);
     if (needsEnvelope(mods, root->interaction())) {
@@ -332,11 +347,28 @@ SceneBuilder::buildResolved(Element const& el, detail::ResolvedElement const& re
   }
 
   if (sceneGraph_) {
-    Rect const rect {current.origin.x + totalOffset.x, current.origin.y + totalOffset.y,
-                     std::max(0.f, currentSize.width), std::max(0.f, currentSize.height)};
-    sceneGraph_->recordGeometry(current.key, rect);
+    Size const recordedSize =
+        geometrySize.width > 0.f || geometrySize.height > 0.f ? geometrySize : build::rectSize(root->bounds());
+    Rect const contentRect {
+        current.origin.x + geometryOffset.x,
+        current.origin.y + geometryOffset.y,
+        std::max(0.f, recordedSize.width),
+        std::max(0.f, recordedSize.height),
+    };
+    Rect compositeRect = contentRect;
+    if (el.expandsBody()) {
+      compositeRect = Rect {
+          current.origin.x + totalOffset.x,
+          current.origin.y + totalOffset.y,
+          std::max(0.f, root->bounds().width),
+          std::max(0.f, root->bounds().height),
+      };
+    }
+    Rect const currentRect =
+        el.expandsBody() && !compositeKeepsContentGeometry(typeTag) ? compositeRect : contentRect;
+    sceneGraph_->recordGeometry(current.key, currentRect);
     for (ComponentKey const& bodyKey : resolved.bodyComponentKeys) {
-      sceneGraph_->recordGeometry(bodyKey, rect);
+      sceneGraph_->recordGeometry(bodyKey, compositeRect);
     }
   }
 

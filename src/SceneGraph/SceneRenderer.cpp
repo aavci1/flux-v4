@@ -202,7 +202,8 @@ struct SceneRenderer::Impl {
         if (clipsContents) {
             RectNode const &rectNode = static_cast<RectNode const &>(node);
             renderer->save();
-            renderer->clipRect(node.localBounds(), rectNode.cornerRadius());
+            renderer->clipRect(Rect::sharp(0.f, 0.f, node.size().width, node.size().height),
+                               rectNode.cornerRadius());
         }
 
         for (std::unique_ptr<SceneNode> const &child : node.children()) {

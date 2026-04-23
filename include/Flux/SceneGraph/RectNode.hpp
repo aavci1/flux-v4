@@ -28,6 +28,7 @@ class RectNode final : public SceneNode {
     void setClipsContents(bool clipsContents) noexcept;
     void setOpacity(float opacity) noexcept;
 
+    Rect localBounds() const noexcept override;
     void render(Renderer &renderer) const override;
 
   private:

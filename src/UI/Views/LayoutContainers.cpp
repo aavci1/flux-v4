@@ -16,6 +16,7 @@
 #include "UI/Layout/Algorithms/StackLayout.hpp"
 #include "UI/Layout/ContainerScope.hpp"
 #include "UI/Layout/LayoutHelpers.hpp"
+#include "SceneGraph/SceneBounds.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -793,6 +794,7 @@ ComponentBuildResult buildMeasuredComponent(ScaleAroundCenter const& scaled, Com
       ctx.buildChild(scaled.child, childLocal, ctx.innerConstraints(), LayoutHints {}, ctx.contentOrigin(),
                      ctx.contentAssignedSize(), ctx.hasAssignedWidth(), ctx.hasAssignedHeight());
   Size const geometrySize = build::rectSize(childNode->bounds());
+  Rect const childVisualBounds = scenegraph::detail::subtreeLocalVisualBounds(*childNode);
   childNode->setPosition(Point {});
   Rect const childBounds = childNode->bounds();
   Point const pivot {childBounds.width * 0.5f, childBounds.height * 0.5f};
@@ -801,7 +803,10 @@ ComponentBuildResult buildMeasuredComponent(ScaleAroundCenter const& scaled, Com
       Mat3::translate(pivot) * Mat3::scale(scaled.scale) *
       Mat3::translate(Point {-pivot.x, -pivot.y})
   );
-  transformNode->setBounds(build::sizeRect(geometrySize));
+  Rect const transformedVisualBounds =
+      scenegraph::detail::transformBounds(transformNode->transform(), childVisualBounds);
+  transformNode->setBounds(Rect::sharp(0.f, 0.f, transformedVisualBounds.width,
+                                       transformedVisualBounds.height));
 
   ComponentBuildResult result{};
   result.node = std::move(transformNode);

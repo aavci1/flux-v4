@@ -101,7 +101,9 @@ std::optional<std::pair<SceneNode const*, Point>> hitTestNode(SceneNode const& n
   if (node.kind() == SceneNodeKind::Rect) {
     RectNode const& rectNode = static_cast<RectNode const&>(node);
     if (rectNode.clipsContents() &&
-        !detail::roundedRectContains(localBounds, rectNode.cornerRadius(), point)) {
+        !detail::roundedRectContains(
+            Rect::sharp(0.f, 0.f, node.size().width, node.size().height),
+            rectNode.cornerRadius(), point)) {
       return std::nullopt;
     }
   }

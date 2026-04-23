@@ -6,6 +6,24 @@
 
 namespace flux::scenegraph {
 
+namespace {
+
+Rect expandForStrokeAndShadow(Rect rect, StrokeStyle const &stroke, ShadowStyle const &shadow) noexcept {
+    float const strokeInset = stroke.isNone() ? 0.f : stroke.width * 0.5f;
+    float const blur = shadow.isNone() ? 0.f : shadow.radius;
+    float const left = std::max(strokeInset, blur - shadow.offset.x);
+    float const right = std::max(strokeInset, blur + shadow.offset.x);
+    float const top = std::max(strokeInset, blur - shadow.offset.y);
+    float const bottom = std::max(strokeInset, blur + shadow.offset.y);
+    rect.x -= left;
+    rect.y -= top;
+    rect.width += left + right;
+    rect.height += top + bottom;
+    return rect;
+}
+
+} // namespace
+
 struct RectNode::Impl {
     FillStyle fill = FillStyle::none();
     StrokeStyle stroke = StrokeStyle::none();
@@ -88,8 +106,14 @@ void RectNode::setOpacity(float opacity) noexcept {
     impl_->opacity = std::clamp(opacity, 0.f, 1.f);
 }
 
+Rect RectNode::localBounds() const noexcept {
+    return expandForStrokeAndShadow(Rect::sharp(0.f, 0.f, size().width, size().height),
+                                    impl_->stroke, impl_->shadow);
+}
+
 void RectNode::render(Renderer &renderer) const {
-    renderer.drawRect(localBounds(), impl_->cornerRadius, impl_->fill, impl_->stroke, impl_->shadow);
+    renderer.drawRect(Rect::sharp(0.f, 0.f, size().width, size().height), impl_->cornerRadius,
+                      impl_->fill, impl_->stroke, impl_->shadow);
 }
 
 } // namespace flux::scenegraph
