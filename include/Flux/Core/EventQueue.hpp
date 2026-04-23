@@ -25,6 +25,7 @@ template<typename T>
 inline constexpr bool isEventAlternativeV =
     std::is_same_v<T, WindowLifecycleEvent> || std::is_same_v<T, WindowEvent> ||
     std::is_same_v<T, InputEvent> || std::is_same_v<T, TimerEvent> ||
+    std::is_same_v<T, FrameEvent> ||
     std::is_same_v<T, CustomEvent>;
 
 template<typename T>

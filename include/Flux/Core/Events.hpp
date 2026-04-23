@@ -74,11 +74,19 @@ struct TimerEvent {
   unsigned int windowHandle = 0;
 };
 
+/// Posted by the platform frame pump when a window reaches a present boundary (typically display vsync).
+struct FrameEvent {
+  /// Monotonic steady-clock instant associated with this frame boundary.
+  std::int64_t deadlineNanos = 0;
+  /// Window handle that should be considered ready for present.
+  unsigned int windowHandle = 0;
+};
+
 struct CustomEvent {
   std::uint32_t type = 0;
   std::any payload;
 };
 
-using Event = std::variant<WindowLifecycleEvent, WindowEvent, InputEvent, TimerEvent, CustomEvent>;
+using Event = std::variant<WindowLifecycleEvent, WindowEvent, InputEvent, TimerEvent, FrameEvent, CustomEvent>;
 
 } // namespace flux

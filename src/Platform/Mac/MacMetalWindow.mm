@@ -1,4 +1,5 @@
 #import <Cocoa/Cocoa.h>
+#import <CoreVideo/CoreVideo.h>
 #import <CoreGraphics/CoreGraphics.h>
 #import <Metal/Metal.h>
 #import <QuartzCore/QuartzCore.h>
@@ -18,6 +19,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cstdio>
 #include <dispatch/dispatch.h>
 #include <memory>
@@ -265,6 +267,11 @@ namespace {
 
 std::atomic<unsigned int> gNextHandle{1};
 
+std::int64_t nowSteadyClockNanos() {
+  using namespace std::chrono;
+  return duration_cast<nanoseconds>(steady_clock::now().time_since_epoch()).count();
+}
+
 } // namespace
 
 class MacMetalPlatformWindow : public PlatformWindow {
@@ -287,10 +294,14 @@ public:
   void processEvents() override;
   void waitForEvents(int timeoutMs) override;
   void wakeEventLoop() override;
+  void requestAnimationFrame() override;
+  void acknowledgeAnimationFrameTick() override;
+  void completeAnimationFrame(bool needsAnotherFrame) override;
 
   void setCursor(Cursor kind) override;
 
   Window* fluxWindow() const;
+  CVReturn onDisplayLinkTick();
 
   /// Enables CAMetalLayer transaction presentation only for resize flushes (paired with MetalCanvas sync present).
   void setMetalLayerPresentsWithTransaction(bool enable);
@@ -300,12 +311,26 @@ private:
   std::unique_ptr<Impl> d;
 };
 
+CVReturn displayLinkOutputCallback(CVDisplayLinkRef /*displayLink*/, CVTimeStamp const* /*now*/,
+                                   CVTimeStamp const* /*outputTime*/, CVOptionFlags /*flagsIn*/,
+                                   CVOptionFlags* /*flagsOut*/, void* userInfo) {
+  auto* platform = static_cast<MacMetalPlatformWindow*>(userInfo);
+  if (!platform) {
+    return kCVReturnSuccess;
+  }
+  return platform->onDisplayLinkTick();
+}
+
 struct MacMetalPlatformWindow::Impl {
   NSWindow* window_{nil};
   FluxMetalView* metalView_{nil};
   FluxWindowDelegate* delegate_{nil};
   Window* fluxWindow_{nullptr};
   unsigned int handle_{0};
+  CVDisplayLinkRef displayLink_{nullptr};
+  std::atomic<bool> frameRequested_{false};
+  std::atomic<bool> frameEventQueued_{false};
+  std::atomic<bool> displayLinkRunning_{false};
 };
 
 namespace detail {
@@ -623,10 +648,19 @@ MacMetalPlatformWindow::MacMetalPlatformWindow(const WindowConfig& config) : d(s
       [w toggleFullScreen:nil];
     });
   }
+  CVDisplayLinkCreateWithActiveCGDisplays(&d->displayLink_);
+  if (d->displayLink_) {
+    CVDisplayLinkSetOutputCallback(d->displayLink_, displayLinkOutputCallback, this);
+  }
   // `makeKeyAndOrderFront` is deferred to `show()` so `windowDidBecomeKey` runs after `setFluxWindow`.
 }
 
 MacMetalPlatformWindow::~MacMetalPlatformWindow() {
+  if (d && d->displayLink_) {
+    CVDisplayLinkStop(d->displayLink_);
+    CVDisplayLinkRelease(d->displayLink_);
+    d->displayLink_ = nullptr;
+  }
   if (d && d->delegate_) {
     d->delegate_.platform = nullptr;
   }
@@ -785,6 +819,49 @@ void MacMetalPlatformWindow::wakeEventLoop() {
     CFRunLoopPerformBlock(CFRunLoopGetMain(), kCFRunLoopCommonModes, postWakeEvent);
   }
   CFRunLoopWakeUp(CFRunLoopGetMain());
+}
+
+void MacMetalPlatformWindow::requestAnimationFrame() {
+  if (!d->displayLink_) {
+    return;
+  }
+  d->frameRequested_.store(true, std::memory_order_release);
+  if (!d->displayLinkRunning_.exchange(true, std::memory_order_acq_rel)) {
+    CVDisplayLinkStart(d->displayLink_);
+  }
+}
+
+void MacMetalPlatformWindow::acknowledgeAnimationFrameTick() {
+  d->frameEventQueued_.store(false, std::memory_order_release);
+}
+
+void MacMetalPlatformWindow::completeAnimationFrame(bool needsAnotherFrame) {
+  d->frameRequested_.store(needsAnotherFrame, std::memory_order_release);
+  if (needsAnotherFrame || !d->displayLink_) {
+    return;
+  }
+  if (d->displayLinkRunning_.exchange(false, std::memory_order_acq_rel)) {
+    CVDisplayLinkStop(d->displayLink_);
+  }
+}
+
+CVReturn MacMetalPlatformWindow::onDisplayLinkTick() {
+  if (!d->frameRequested_.load(std::memory_order_acquire)) {
+    return kCVReturnSuccess;
+  }
+  bool expected = false;
+  if (!d->frameEventQueued_.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
+    return kCVReturnSuccess;
+  }
+  if (!Application::hasInstance()) {
+    d->frameEventQueued_.store(false, std::memory_order_release);
+    return kCVReturnSuccess;
+  }
+  FrameEvent event{};
+  event.deadlineNanos = nowSteadyClockNanos();
+  event.windowHandle = handle();
+  Application::instance().eventQueue().post(event);
+  return kCVReturnSuccess;
 }
 
 void MacMetalPlatformWindow::setCursor(Cursor kind) {

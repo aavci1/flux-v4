@@ -47,6 +47,8 @@ public:
 
   /// Marks all windows for a render pass on the next `exec()` iteration and wakes the platform event wait.
   void requestRedraw();
+  /// Marks a specific window for a render pass on the next platform frame tick.
+  void requestWindowRedraw(unsigned int handle);
 
   /// Presents pending frames immediately. Use when the main loop may not iterate (e.g. live window resize runs
   /// the run loop in `NSEventTrackingRunLoopMode`, so `waitForEvents` in `NSDefaultRunLoopMode` does not return).
@@ -91,7 +93,7 @@ private:
   /// Removes `handle` from the running window list before `Window` is destroyed (synchronous; avoids dangling `Window*`).
   void unregisterWindowHandle(unsigned int handle);
 
-  void presentAllWindows();
+  void presentRequestedWindows(bool requireFrameReady);
 
   struct Impl;
   std::unique_ptr<Impl> d;

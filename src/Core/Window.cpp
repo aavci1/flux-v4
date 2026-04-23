@@ -124,11 +124,10 @@ PlatformWindow* Window::platformWindow() const {
 }
 
 void Window::postRedraw(unsigned int handle) {
-  (void)handle;
   if (!Application::hasInstance()) {
     return;
   }
-  Application::instance().requestRedraw();
+  Application::instance().requestWindowRedraw(handle);
 }
 
 void Window::setClearColor(Color color) { d->clearColor_ = color; }

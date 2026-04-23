@@ -67,7 +67,7 @@ public:
   /// from any code that has a Window reference.
   void setCursor(Cursor kind);
 
-  /// Like `requestRedraw()`; `handle` is reserved for future per-window scheduling.
+  /// Like `requestRedraw()` but addressed to a specific window handle.
   static void postRedraw(unsigned int handle);
 
   /// Drawing only; `Application` wraps each call with `beginFrame` and `present` when handling redraw.
