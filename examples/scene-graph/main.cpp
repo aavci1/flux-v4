@@ -23,7 +23,7 @@ namespace {
 using namespace flux;
 using namespace flux::scenegraph;
 
-constexpr std::string_view kGreeting = "Hello, World!";
+constexpr std::string_view kGreeting = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Aliquam convallis porta pharetra. Cras neque justo, sagittis in magna eu, volutpat tincidunt urna. Nullam faucibus tincidunt tellus eget porttitor. Orci varius natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Suspendisse potenti. Vivamus scelerisque mi ac vulputate tincidunt. Vestibulum feugiat dolor vitae mollis posuere. Sed consectetur quam vel pharetra sodales. Praesent tincidunt viverra libero nec feugiat. Sed in dui eu nisl pharetra viverra at et nulla.";
 constexpr auto kFrameInterval = std::chrono::nanoseconds {16'666'667};
 constexpr Point kInitialVelocity {260.f, 180.f};
 
@@ -102,7 +102,7 @@ class SceneGraphExampleWindow final : public Window {
         m_viewportSize = getSize();
 
         auto root = std::make_unique<GroupNode>(Rect {0.f, 0.f, m_viewportSize.width, m_viewportSize.height});
-        auto layout = textSystem.layout(kGreeting, Font::largeTitle(), Color::primary());
+        auto layout = textSystem.layout(kGreeting, Font::title3(), Color::primary(), 400.f);
 
         m_textSize = layout ? layout->measuredSize : Size {};
 
