@@ -48,6 +48,7 @@ struct ResolvedElement {
   std::vector<EnvironmentLayer> environmentLayers{};
   std::vector<ElementModifiers> modifierLayers{};
   std::vector<ComponentKey> bodyComponentKeys{};
+  bool nestSceneUnderFirstBody = false;
   bool descendantsStable = false;
 };
 

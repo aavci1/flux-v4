@@ -105,6 +105,9 @@ detail::ResolvedElement Element::resolve(ComponentKey const& key,
       resolved.descendantsStable = false;
       return resolved;
     }
+    if (!resolved.nestSceneUnderFirstBody && bodyResolution.body->expandsBody()) {
+      resolved.nestSceneUnderFirstBody = true;
+    }
 
     if (bodyResolution.ownedBody) {
       ownedBodies.push_back(std::move(bodyResolution.ownedBody));

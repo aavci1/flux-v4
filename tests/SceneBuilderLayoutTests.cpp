@@ -52,8 +52,8 @@ TEST_CASE("SceneBuilder wraps padded text in a RectNode envelope and sizes the i
   auto* wrapper = dynamic_cast<scenegraph::RectNode*>(tree.get());
   REQUIRE(wrapper != nullptr);
   REQUIRE(wrapper->children().size() == 1);
-  CHECK(wrapper->bounds().width == doctest::Approx(128.f));
-  CHECK(wrapper->bounds().height == doctest::Approx(30.f));
+  CHECK(wrapper->bounds().width == doctest::Approx(200.f));
+  CHECK(wrapper->bounds().height == doctest::Approx(80.f));
 
   auto* textNode = dynamic_cast<scenegraph::TextNode*>(wrapper->children()[0].get());
   REQUIRE(textNode != nullptr);
@@ -90,8 +90,8 @@ TEST_CASE("SceneBuilder modifier envelope owns the outer hit area and interactio
   REQUIRE(wrapper != nullptr);
   REQUIRE(wrapper->interaction() != nullptr);
   CHECK(wrapper->interaction()->cursor == Cursor::Hand);
-  CHECK(wrapper->bounds().width == doctest::Approx(144.f));
-  CHECK(wrapper->bounds().height == doctest::Approx(46.f));
+  CHECK(wrapper->bounds().width == doctest::Approx(180.f));
+  CHECK(wrapper->bounds().height == doctest::Approx(49.f));
 
   auto hit = scenegraph::hitTestInteraction(
       graph, Point{wrapper->bounds().width - 1.f, wrapper->bounds().height * 0.5f});
@@ -236,8 +236,8 @@ TEST_CASE("SceneBuilder uses per-node transforms for ScaleAroundCenter") {
   CHECK(tree->kind() == scenegraph::SceneNodeKind::Group);
   CHECK_FALSE(tree->transform().isTranslationOnly());
   REQUIRE(tree->children().size() == 1);
-  CHECK(tree->bounds().width == doctest::Approx(40.f));
-  CHECK(tree->bounds().height == doctest::Approx(20.f));
+  CHECK(tree->bounds().width == doctest::Approx(50.f));
+  CHECK(tree->bounds().height == doctest::Approx(25.f));
 }
 
 TEST_CASE("SceneBuilder emits popover chrome as a PathNode with content sibling") {

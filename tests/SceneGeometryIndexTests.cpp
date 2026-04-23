@@ -155,6 +155,7 @@ TEST_CASE("SceneBuilder body wrapper geometry does not collide with first conten
   ComponentKey const firstChildKey{
       LocalId::fromString("field"),
       LocalId::fromIndex(0),
+      LocalId::fromIndex(0),
   };
 
   std::optional<Rect> nestedBodyRect = graph.rectForKey(nestedBodyKey);

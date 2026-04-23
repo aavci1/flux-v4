@@ -16,6 +16,7 @@
 #include "UI/Build/ComponentBuildSupport.hpp"
 #include "UI/Layout/LayoutHelpers.hpp"
 #include "UI/SceneBuilder/MeasureLayoutCache.hpp"
+#include "SceneGraph/SceneBounds.hpp"
 
 namespace flux {
 
@@ -76,6 +77,9 @@ bool contentConsumesBoxPaint(ElementType typeTag) {
 }
 
 bool compositeKeepsContentGeometry(ElementType typeTag) {
+  if (typeTag == ElementType::ScaleAroundCenter) {
+    return true;
+  }
   switch (typeTag) {
   case ElementType::VStack:
   case ElementType::HStack:
@@ -290,8 +294,13 @@ SceneBuilder::buildResolved(Element const& el, detail::ResolvedElement const& re
 
   EnvironmentLayerScope resolvedEnvironment {environment_, resolved.environmentLayers};
 
-  detail::ComponentBuildContext buildContext {*this, traversal_, el, stableSceneEl, typeTag, mods,
-                                              modifierLayers.size() > 1, innerConstraints,
+  ComponentKey sceneKey = current.key;
+  if (resolved.nestSceneUnderFirstBody) {
+    sceneKey.push_back(LocalId::fromIndex(0));
+  }
+
+  detail::ComponentBuildContext buildContext {*this, traversal_, el, stableSceneEl, typeTag,
+                                              std::move(sceneKey), mods, modifierLayers.size() > 1, innerConstraints,
                                               contentOrigin, contentAssignedSize};
 
   detail::ComponentBuildResult built = stableSceneEl.buildMeasured(buildContext, nullptr);
@@ -356,19 +365,39 @@ SceneBuilder::buildResolved(Element const& el, detail::ResolvedElement const& re
         std::max(0.f, recordedSize.height),
     };
     Rect compositeRect = contentRect;
+    Rect logicalCompositeRect = contentRect;
     if (el.expandsBody()) {
+      Rect const compositeVisualBounds = scenegraph::detail::subtreeLocalVisualBounds(*root);
       compositeRect = Rect {
+          current.origin.x + totalOffset.x,
+          current.origin.y + totalOffset.y,
+          std::max(0.f, compositeVisualBounds.width),
+          std::max(0.f, compositeVisualBounds.height),
+      };
+      logicalCompositeRect = Rect {
           current.origin.x + totalOffset.x,
           current.origin.y + totalOffset.y,
           std::max(0.f, root->bounds().width),
           std::max(0.f, root->bounds().height),
       };
     }
-    Rect const currentRect =
-        el.expandsBody() && !compositeKeepsContentGeometry(typeTag) ? compositeRect : contentRect;
+    bool const usesNestedCompositeBody = !resolved.bodyComponentKeys.empty();
+    Rect currentRect = contentRect;
+    if (el.expandsBody()) {
+      if (usesNestedCompositeBody) {
+        currentRect = compositeRect;
+      } else if (!compositeKeepsContentGeometry(typeTag)) {
+        currentRect = logicalCompositeRect;
+      }
+    }
     sceneGraph_->recordGeometry(current.key, currentRect);
+    if (resolved.nestSceneUnderFirstBody) {
+      ComponentKey bodySceneKey = current.key;
+      bodySceneKey.push_back(LocalId::fromIndex(0));
+      sceneGraph_->recordGeometry(bodySceneKey, contentRect);
+    }
     for (ComponentKey const& bodyKey : resolved.bodyComponentKeys) {
-      sceneGraph_->recordGeometry(bodyKey, compositeRect);
+      sceneGraph_->recordGeometry(bodyKey, logicalCompositeRect);
     }
   }
 
