@@ -264,6 +264,7 @@ target_link_libraries(flux PRIVATE
   "-framework MetalKit"
   "-framework Foundation"
   "-framework CoreText"
+  "-framework CoreVideo"
 )
 
 option(FLUX_BUILD_TESTS

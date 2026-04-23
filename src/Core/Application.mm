@@ -199,6 +199,8 @@ void Application::adoptOwnedWindow(std::unique_ptr<Window> window) {
   d->renderStates_[h] = {};
   if (d->pendingAdoptRedraws_.erase(h) > 0) {
     requestWindowRedraw(h);
+  } else if (AnimationClock::instance().needsFramePump()) {
+    raw->platformWindow()->requestAnimationFrame();
   }
 }
 
@@ -255,6 +257,17 @@ void Application::wakeEventLoop() {
   }
 }
 
+void Application::requestAnimationFrames() {
+  for (auto& w : d->windows_) {
+    if (w) {
+      w->platformWindow()->requestAnimationFrame();
+    }
+  }
+  if (!isMainThread()) {
+    wakeEventLoop();
+  }
+}
+
 void Application::requestRedraw() {
   for (auto const& [handle, window] : d->byHandle_) {
     (void)window;
@@ -276,7 +289,7 @@ void Application::requestWindowRedraw(unsigned int handle) {
   }
 }
 
-void Application::presentRequestedWindows(bool requireFrameReady) {
+void Application::presentRequestedWindows(bool requireFrameReady, bool keepFramePump) {
   for (auto& w : d->windows_) {
     if (!w) {
       continue;
@@ -286,24 +299,38 @@ void Application::presentRequestedWindows(bool requireFrameReady) {
       continue;
     }
     Impl::WindowRenderState& state = stateIt->second;
-    if (!state.redrawRequested) {
+    bool const hasFrameReady = state.frameReady;
+    if (!state.redrawRequested && !hasFrameReady) {
       continue;
     }
-    if (requireFrameReady && !state.frameReady) {
+    if (requireFrameReady && state.redrawRequested && !hasFrameReady) {
       continue;
     }
-    state.redrawRequested = false;
-    state.frameReady = false;
-    Canvas& canvas = w->canvas();
-    canvas.beginFrame();
-    w->render(canvas);
-    canvas.present();
-    w->platformWindow()->completeAnimationFrame(state.redrawRequested);
+
+    bool rendered = false;
+    if (state.redrawRequested && (!requireFrameReady || hasFrameReady)) {
+      state.redrawRequested = false;
+      if (hasFrameReady) {
+        state.frameReady = false;
+      }
+      Canvas& canvas = w->canvas();
+      canvas.beginFrame();
+      w->render(canvas);
+      canvas.present();
+      rendered = true;
+    }
+
+    if (hasFrameReady) {
+      state.frameReady = false;
+      w->platformWindow()->completeAnimationFrame(keepFramePump || state.redrawRequested);
+    } else if (rendered && !requireFrameReady) {
+      w->platformWindow()->completeAnimationFrame(keepFramePump || state.redrawRequested);
+    }
   }
 }
 
 void Application::flushRedraw() {
-  presentRequestedWindows(false);
+  presentRequestedWindows(false, AnimationClock::instance().needsFramePump());
 }
 
 std::uint64_t Application::scheduleRepeatingTimer(std::chrono::nanoseconds interval, unsigned int windowHandle) {
@@ -356,7 +383,7 @@ int Application::exec() {
       }
     }
 
-    presentRequestedWindows(true);
+    presentRequestedWindows(true, AnimationClock::instance().needsFramePump());
 
     int timeoutMs = d->nextTimerTimeoutMs();
     if (d->reactiveDirty_) {

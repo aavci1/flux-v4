@@ -29,6 +29,7 @@ namespace flux {
 class MacMetalPlatformWindow;
 class Window;
 Window* fluxWindowForPlatform(MacMetalPlatformWindow* platform);
+CVReturn fluxHandleDisplayLinkTick(MacMetalPlatformWindow* platform);
 } // namespace flux
 
 /// Private AppKit class methods; stable in practice for diagonal window-resize cursors.
@@ -42,6 +43,7 @@ Window* fluxWindowForPlatform(MacMetalPlatformWindow* platform);
 - (CAMetalLayer*)fluxMetalLayer;
 - (void)updateDrawableSize;
 - (BOOL)fluxWantsTextInput;
+- (void)fluxHandleDisplayLink:(CADisplayLink*)displayLink API_AVAILABLE(macos(14.0));
 @end
 
 namespace flux {
@@ -248,6 +250,15 @@ void postTextInput(FluxMetalView* view, std::string text);
   return [super inputContext];
 }
 
+- (void)fluxHandleDisplayLink:(CADisplayLink*)displayLink {
+  (void)displayLink;
+  flux::MacMetalPlatformWindow* platform = self.fluxPlatform;
+  if (!platform) {
+    return;
+  }
+  (void)flux::fluxHandleDisplayLinkTick(platform);
+}
+
 - (NSRect)firstRectForCharacterRange:(NSRange)range actualRange:(NSRangePointer)actualRange {
   (void)range;
   (void)actualRange;
@@ -307,6 +318,8 @@ public:
   void setMetalLayerPresentsWithTransaction(bool enable);
 
 private:
+  void setModernDisplayLinkPaused(bool paused);
+
   struct Impl;
   std::unique_ptr<Impl> d;
 };
@@ -327,10 +340,11 @@ struct MacMetalPlatformWindow::Impl {
   FluxWindowDelegate* delegate_{nil};
   Window* fluxWindow_{nullptr};
   unsigned int handle_{0};
-  CVDisplayLinkRef displayLink_{nullptr};
+  CADisplayLink* displayLink_ = nil;
+  CVDisplayLinkRef legacyDisplayLink_{nullptr};
   std::atomic<bool> frameRequested_{false};
   std::atomic<bool> frameEventQueued_{false};
-  std::atomic<bool> displayLinkRunning_{false};
+  std::atomic<bool> legacyDisplayLinkRunning_{false};
 };
 
 namespace detail {
@@ -596,6 +610,13 @@ Window* fluxWindowForPlatform(MacMetalPlatformWindow* platform) {
   return platform ? platform->fluxWindow() : nullptr;
 }
 
+CVReturn fluxHandleDisplayLinkTick(MacMetalPlatformWindow* platform) {
+  if (!platform) {
+    return kCVReturnSuccess;
+  }
+  return platform->onDisplayLinkTick();
+}
+
 Window* MacMetalPlatformWindow::fluxWindow() const {
   return d ? d->fluxWindow_ : nullptr;
 }
@@ -648,18 +669,38 @@ MacMetalPlatformWindow::MacMetalPlatformWindow(const WindowConfig& config) : d(s
       [w toggleFullScreen:nil];
     });
   }
-  CVDisplayLinkCreateWithActiveCGDisplays(&d->displayLink_);
-  if (d->displayLink_) {
-    CVDisplayLinkSetOutputCallback(d->displayLink_, displayLinkOutputCallback, this);
+  if (@available(macOS 14.0, *)) {
+    d->displayLink_ = [d->metalView_ displayLinkWithTarget:d->metalView_
+                                                  selector:@selector(fluxHandleDisplayLink:)];
+    if (d->displayLink_) {
+      [d->displayLink_ addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
+      d->displayLink_.paused = YES;
+    }
+  }
+  if (!d->displayLink_) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    CVDisplayLinkCreateWithActiveCGDisplays(&d->legacyDisplayLink_);
+    if (d->legacyDisplayLink_) {
+      CVDisplayLinkSetOutputCallback(d->legacyDisplayLink_, displayLinkOutputCallback, this);
+    }
+#pragma clang diagnostic pop
   }
   // `makeKeyAndOrderFront` is deferred to `show()` so `windowDidBecomeKey` runs after `setFluxWindow`.
 }
 
 MacMetalPlatformWindow::~MacMetalPlatformWindow() {
   if (d && d->displayLink_) {
-    CVDisplayLinkStop(d->displayLink_);
-    CVDisplayLinkRelease(d->displayLink_);
-    d->displayLink_ = nullptr;
+    [d->displayLink_ invalidate];
+    d->displayLink_ = nil;
+  }
+  if (d && d->legacyDisplayLink_) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    CVDisplayLinkStop(d->legacyDisplayLink_);
+    CVDisplayLinkRelease(d->legacyDisplayLink_);
+#pragma clang diagnostic pop
+    d->legacyDisplayLink_ = nullptr;
   }
   if (d && d->delegate_) {
     d->delegate_.platform = nullptr;
@@ -668,6 +709,9 @@ MacMetalPlatformWindow::~MacMetalPlatformWindow() {
     [d->window_ setDelegate:nil];
   }
   if (d) {
+    if (d->metalView_) {
+      d->metalView_.fluxPlatform = nullptr;
+    }
     d->delegate_ = nil;
     d->metalView_ = nil;
     d->window_ = nil;
@@ -822,12 +866,19 @@ void MacMetalPlatformWindow::wakeEventLoop() {
 }
 
 void MacMetalPlatformWindow::requestAnimationFrame() {
-  if (!d->displayLink_) {
+  d->frameRequested_.store(true, std::memory_order_release);
+  if (d->displayLink_) {
+    setModernDisplayLinkPaused(false);
     return;
   }
-  d->frameRequested_.store(true, std::memory_order_release);
-  if (!d->displayLinkRunning_.exchange(true, std::memory_order_acq_rel)) {
-    CVDisplayLinkStart(d->displayLink_);
+  if (!d->legacyDisplayLink_) {
+    return;
+  }
+  if (!d->legacyDisplayLinkRunning_.exchange(true, std::memory_order_acq_rel)) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    CVDisplayLinkStart(d->legacyDisplayLink_);
+#pragma clang diagnostic pop
   }
 }
 
@@ -837,11 +888,20 @@ void MacMetalPlatformWindow::acknowledgeAnimationFrameTick() {
 
 void MacMetalPlatformWindow::completeAnimationFrame(bool needsAnotherFrame) {
   d->frameRequested_.store(needsAnotherFrame, std::memory_order_release);
-  if (needsAnotherFrame || !d->displayLink_) {
+  if (d->displayLink_) {
+    if (!needsAnotherFrame) {
+      setModernDisplayLinkPaused(true);
+    }
     return;
   }
-  if (d->displayLinkRunning_.exchange(false, std::memory_order_acq_rel)) {
-    CVDisplayLinkStop(d->displayLink_);
+  if (needsAnotherFrame || !d->legacyDisplayLink_) {
+    return;
+  }
+  if (d->legacyDisplayLinkRunning_.exchange(false, std::memory_order_acq_rel)) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    CVDisplayLinkStop(d->legacyDisplayLink_);
+#pragma clang diagnostic pop
   }
 }
 
@@ -849,19 +909,42 @@ CVReturn MacMetalPlatformWindow::onDisplayLinkTick() {
   if (!d->frameRequested_.load(std::memory_order_acquire)) {
     return kCVReturnSuccess;
   }
-  bool expected = false;
-  if (!d->frameEventQueued_.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
+  if (!Application::hasInstance()) {
     return kCVReturnSuccess;
   }
-  if (!Application::hasInstance()) {
-    d->frameEventQueued_.store(false, std::memory_order_release);
+  bool expected = false;
+  if (!d->frameEventQueued_.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
     return kCVReturnSuccess;
   }
   FrameEvent event{};
   event.deadlineNanos = nowSteadyClockNanos();
   event.windowHandle = handle();
+  if ([NSThread isMainThread]) {
+    Application& app = Application::instance();
+    app.eventQueue().post(event);
+    app.eventQueue().dispatch();
+    app.flushRedraw();
+    return kCVReturnSuccess;
+  }
   Application::instance().eventQueue().post(event);
+  wakeEventLoop();
   return kCVReturnSuccess;
+}
+
+void MacMetalPlatformWindow::setModernDisplayLinkPaused(bool paused) {
+  CADisplayLink* link = d ? d->displayLink_ : nil;
+  if (!link) {
+    return;
+  }
+  void (^updatePausedState)(void) = ^{
+    link.paused = paused ? YES : NO;
+  };
+  if ([NSThread isMainThread]) {
+    updatePausedState();
+    return;
+  }
+  CFRunLoopPerformBlock(CFRunLoopGetMain(), kCFRunLoopCommonModes, updatePausedState);
+  CFRunLoopWakeUp(CFRunLoopGetMain());
 }
 
 void MacMetalPlatformWindow::setCursor(Cursor kind) {

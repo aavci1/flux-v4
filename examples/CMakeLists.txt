@@ -16,8 +16,16 @@ endfunction()
 add_executable(scene-graph scene-graph/main.cpp)
 target_link_libraries(scene-graph PRIVATE flux)
 
+add_executable(scene-graph-refresh scene-graph-refresh/main.cpp)
+target_link_libraries(scene-graph-refresh PRIVATE flux)
+
+add_executable(scene-graph-animation scene-graph-animation/main.cpp)
+target_link_libraries(scene-graph-animation PRIVATE flux)
+
 set(FLUX_EXAMPLE_TARGETS
     scene-graph
+    scene-graph-refresh
+    scene-graph-animation
 )
 
 foreach(t ${FLUX_EXAMPLE_TARGETS})

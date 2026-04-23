@@ -21,6 +21,8 @@ namespace flux::scenegraph {
 
 namespace {
 
+constexpr bool kEnablePreparedRenderCache = true;
+
 MetalRecorderSlice fullRecordedSlice(MetalFrameRecorder const &recorded) {
     return MetalRecorderSlice {
         .orderStart = 0,
@@ -110,18 +112,25 @@ struct SceneRenderer::Impl {
     }
 
     void render(SceneNode const &node) {
-        if (node.kind() == SceneNodeKind::Group && node.isDirty()) {
-            cache.clear();
+        if (kEnablePreparedRenderCache) {
+            if (node.kind() == SceneNodeKind::Group && node.isDirty()) {
+                cache.clear();
+            }
+            prepareNodeCache(node);
         }
-        prepareNodeCache(node);
         ++renderEpoch;
         renderNode(node);
-        std::erase_if(cache, [this](auto const &entry) {
-            return entry.second.lastVisitedEpoch != renderEpoch;
-        });
+        if (kEnablePreparedRenderCache) {
+            std::erase_if(cache, [this](auto const &entry) {
+                return entry.second.lastVisitedEpoch != renderEpoch;
+            });
+        }
     }
 
     void prepareNodeCache(SceneNode const &node) {
+        if (!kEnablePreparedRenderCache) {
+            return;
+        }
         if (node.kind() != SceneNodeKind::Group) {
             CacheEntry &entry = cache[&node];
             if (node.isDirty() || !entry.prepared) {
@@ -138,8 +147,10 @@ struct SceneRenderer::Impl {
     }
 
     void renderNode(SceneNode const &node) {
-        if (auto it = cache.find(&node); it != cache.end()) {
-            it->second.lastVisitedEpoch = renderEpoch;
+        if (kEnablePreparedRenderCache) {
+            if (auto it = cache.find(&node); it != cache.end()) {
+                it->second.lastVisitedEpoch = renderEpoch;
+            }
         }
 
         renderer->save();
@@ -157,10 +168,14 @@ struct SceneRenderer::Impl {
         }
 
         if (node.kind() != SceneNodeKind::Group) {
-            CacheEntry &entry = cache[&node];
-            entry.lastVisitedEpoch = renderEpoch;
-            if (!entry.prepared || !entry.prepared->replay(*renderer)) {
+            if (!kEnablePreparedRenderCache) {
                 node.render(*renderer);
+            } else {
+                CacheEntry &entry = cache[&node];
+                entry.lastVisitedEpoch = renderEpoch;
+                if (!entry.prepared || !entry.prepared->replay(*renderer)) {
+                    node.render(*renderer);
+                }
             }
         }
 
@@ -184,6 +199,9 @@ struct SceneRenderer::Impl {
     }
 
     void markSubtreeVisited(SceneNode const &node) {
+        if (!kEnablePreparedRenderCache) {
+            return;
+        }
         if (auto it = cache.find(&node); it != cache.end()) {
             it->second.lastVisitedEpoch = renderEpoch;
         }

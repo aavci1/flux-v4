@@ -21,6 +21,7 @@ namespace flux {
 
 class EventQueue;
 class TextSystem;
+class AnimationClock;
 
 class Application {
 public:
@@ -82,18 +83,21 @@ public:
 
   friend class Window;
   friend class EventQueue;
+  friend class AnimationClock;
 
 private:
   bool isMainThread() const noexcept;
   /// Wakes any blocking platform event wait without forcing a rebuild/redraw.
   void wakeEventLoop();
+  /// Arms platform frame pumps without marking any window dirty for redraw.
+  void requestAnimationFrames();
   void adoptOwnedWindow(std::unique_ptr<Window> window);
   /// Invoked when `WindowLifecycleEvent::Registered` is dispatched (first `exec()` `dispatch()` drains the ctor post).
   void onWindowRegistered(Window* window);
   /// Removes `handle` from the running window list before `Window` is destroyed (synchronous; avoids dangling `Window*`).
   void unregisterWindowHandle(unsigned int handle);
 
-  void presentRequestedWindows(bool requireFrameReady);
+  void presentRequestedWindows(bool requireFrameReady, bool keepFramePump);
 
   struct Impl;
   std::unique_ptr<Impl> d;
