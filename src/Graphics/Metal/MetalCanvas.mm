@@ -265,9 +265,22 @@ void setEncoderScissorForOp(id<MTLRenderCommandEncoder> enc, T const& op, MTLSci
   }
 }
 
-template <typename T>
-void setEncoderRoundedClipForOp(id<MTLRenderCommandEncoder> enc, T const& op) {
-  [enc setFragmentBytes:&op.roundedClip length:sizeof(MetalRoundedClipStack) atIndex:0];
+inline void setEncoderRoundedClipBuffer(id<MTLRenderCommandEncoder> enc, id<MTLBuffer> clipBuffer,
+                                        MetalRoundedClipStack* clipDst, std::uint32_t* clipIndex,
+                                        MetalRoundedClipStack const& roundedClip) {
+  clipDst[*clipIndex] = roundedClip;
+  NSUInteger const offset = static_cast<NSUInteger>(*clipIndex) * sizeof(MetalRoundedClipStack);
+  [enc setFragmentBuffer:clipBuffer offset:offset atIndex:0];
+  ++(*clipIndex);
+}
+
+inline void setEncoderDrawUniformBuffer(id<MTLRenderCommandEncoder> enc, id<MTLBuffer> uniformBuffer,
+                                        MetalDrawUniforms* uniformDst, std::uint32_t* uniformIndex,
+                                        MetalDrawUniforms const& uniforms, NSUInteger bufferIndex) {
+  uniformDst[*uniformIndex] = uniforms;
+  NSUInteger const offset = static_cast<NSUInteger>(*uniformIndex) * sizeof(MetalDrawUniforms);
+  [enc setVertexBuffer:uniformBuffer offset:offset atIndex:bufferIndex];
+  ++(*uniformIndex);
 }
 
 } // namespace
@@ -349,7 +362,7 @@ public:
     const float vh = frameDrawableH_;
     if (vw < 1.f || vh < 1.f) {
       syncPresent_ = false;
-      [cmdBuf_ commit];
+      frame_.clear();
       cmdBuf_ = nil;
       drawable_ = nil;
       dispatch_semaphore_signal(frameSem_);
@@ -361,6 +374,8 @@ public:
     metal_.uploadImageOps(frame_.imageOps);
     metal_.uploadPathVertices(frame_.pathVerts);
     metal_.uploadGlyphVertices(frame_.glyphVerts);
+    metal_.reserveDrawStateBuffers(static_cast<std::uint32_t>(frame_.opOrder.size()),
+                                   static_cast<std::uint32_t>(frame_.opOrder.size()));
 
     drawable_ = [metal_.layer() nextDrawable];
     cmdBuf_ = [metal_.queue() commandBuffer];
@@ -393,6 +408,12 @@ public:
     bool haveScissor = false;
 
     id<MTLBuffer> pathBuf = metal_.pathVertexArenaBuffer();
+    id<MTLBuffer> uniformBuf = metal_.drawUniformArenaBuffer();
+    id<MTLBuffer> clipBuf = metal_.roundedClipArenaBuffer();
+    auto* uniformDst = uniformBuf ? static_cast<MetalDrawUniforms*>([uniformBuf contents]) : nullptr;
+    auto* clipDst = clipBuf ? static_cast<MetalRoundedClipStack*>([clipBuf contents]) : nullptr;
+    std::uint32_t uniformIndex = 0;
+    std::uint32_t clipIndex = 0;
     std::size_t const opCount = frame_.opOrder.size();
     std::size_t i = 0;
     while (i < opCount) {
@@ -416,9 +437,9 @@ public:
         }
         std::size_t const runLen = j - i;
         setEncoderScissorForOp(enc, op, fullScissor, &lastScissor, &haveScissor);
-        setEncoderRoundedClipForOp(enc, op);
         MetalDrawUniforms const uniforms = makeDrawUniforms(vw, vh, op.translation);
-        [enc setVertexBytes:&uniforms length:sizeof(uniforms) atIndex:2];
+        setEncoderRoundedClipBuffer(enc, clipBuf, clipDst, &clipIndex, op.roundedClip);
+        setEncoderDrawUniformBuffer(enc, uniformBuf, uniformDst, &uniformIndex, uniforms, 2);
         if (!op.isLine) {
           [enc setRenderPipelineState:metal_.rectPSO(op.blendMode)];
           [enc setVertexBuffer:metal_.quadBuffer() offset:0 atIndex:0];
@@ -457,13 +478,13 @@ public:
           ++j;
         }
         setEncoderScissorForOp(enc, op, fullScissor, &lastScissor, &haveScissor);
-        setEncoderRoundedClipForOp(enc, op);
+        setEncoderRoundedClipBuffer(enc, clipBuf, clipDst, &clipIndex, op.roundedClip);
         [enc setRenderPipelineState:metal_.glyphPSO(op.blendMode)];
         id<MTLBuffer> gbuf = metal_.glyphVertexArenaBuffer();
         const NSUInteger goff = static_cast<NSUInteger>(runStart) * sizeof(MetalGlyphVertex);
         [enc setVertexBuffer:gbuf offset:goff atIndex:0];
         MetalDrawUniforms const uniforms = makeDrawUniforms(vw, vh, op.translation);
-        [enc setVertexBytes:&uniforms length:sizeof(uniforms) atIndex:1];
+        setEncoderDrawUniformBuffer(enc, uniformBuf, uniformDst, &uniformIndex, uniforms, 1);
         [enc setFragmentTexture:glyphAtlas_->texture() atIndex:0];
         [enc setFragmentSamplerState:metal_.linearSampler() atIndex:0];
         [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:static_cast<NSUInteger>(runVerts)];
@@ -474,17 +495,17 @@ public:
       if (ref.kind == MetalOpRef::Image) {
         MetalImageOp const& op = frame_.imageOps[ref.index];
         setEncoderScissorForOp(enc, op, fullScissor, &lastScissor, &haveScissor);
-        setEncoderRoundedClipForOp(enc, op);
         if (!op.texture) {
           ++i;
           continue;
         }
+        setEncoderRoundedClipBuffer(enc, clipBuf, clipDst, &clipIndex, op.roundedClip);
         [enc setRenderPipelineState:metal_.imagePSO(op.blendMode)];
         [enc setVertexBuffer:metal_.quadBuffer() offset:0 atIndex:0];
         const NSUInteger off = static_cast<NSUInteger>(ref.index) * sizeof(MetalImageInstance);
         [enc setVertexBuffer:metal_.imageInstanceArenaBuffer() offset:off atIndex:1];
         MetalDrawUniforms const uniforms = makeDrawUniforms(vw, vh, op.translation);
-        [enc setVertexBytes:&uniforms length:sizeof(uniforms) atIndex:2];
+        setEncoderDrawUniformBuffer(enc, uniformBuf, uniformDst, &uniformIndex, uniforms, 2);
         [enc setFragmentTexture:(__bridge id<MTLTexture>)op.texture atIndex:0];
         [enc setFragmentSamplerState:op.repeatSampler ? metal_.repeatSampler() : metal_.linearSampler() atIndex:0];
         [enc drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:kQuadStripCount
@@ -495,16 +516,16 @@ public:
       if (ref.kind == MetalOpRef::Path) {
         MetalPathOp const& op = frame_.pathOps[ref.index];
         setEncoderScissorForOp(enc, op, fullScissor, &lastScissor, &haveScissor);
-        setEncoderRoundedClipForOp(enc, op);
         if (op.pathCount == 0) {
           ++i;
           continue;
         }
+        setEncoderRoundedClipBuffer(enc, clipBuf, clipDst, &clipIndex, op.roundedClip);
         [enc setRenderPipelineState:metal_.pathPSO(op.blendMode)];
         const NSUInteger off = static_cast<NSUInteger>(op.pathStart) * sizeof(PathVertex);
         [enc setVertexBuffer:pathBuf offset:off atIndex:0];
         MetalDrawUniforms const uniforms = makeDrawUniforms(vw, vh, op.translation);
-        [enc setVertexBytes:&uniforms length:sizeof(uniforms) atIndex:1];
+        setEncoderDrawUniformBuffer(enc, uniformBuf, uniformDst, &uniformIndex, uniforms, 1);
         [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:static_cast<NSUInteger>(op.pathCount)];
         ++i;
         continue;

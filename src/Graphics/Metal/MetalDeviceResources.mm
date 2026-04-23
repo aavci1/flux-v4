@@ -420,6 +420,38 @@ void MetalDeviceResources::ensureGlyphVertexArenaCapacity(std::uint32_t byteCoun
   glyphVertexArenaCapacityBytes_[currentFrameIndex_] = newCap;
 }
 
+void MetalDeviceResources::ensureDrawUniformArenaCapacity(std::uint32_t uniformCount) {
+  if (uniformCount == 0) {
+    return;
+  }
+  if (uniformCount <= drawUniformArenaCapacities_[currentFrameIndex_]) {
+    return;
+  }
+  const std::uint32_t newCap =
+      drawUniformArenaCapacities_[currentFrameIndex_] == 0
+          ? uniformCount
+          : std::max(uniformCount, drawUniformArenaCapacities_[currentFrameIndex_] * 2);
+  drawUniformArenas_[currentFrameIndex_] =
+      [device_ newBufferWithLength:newCap * sizeof(MetalDrawUniforms) options:MTLResourceStorageModeShared];
+  drawUniformArenaCapacities_[currentFrameIndex_] = newCap;
+}
+
+void MetalDeviceResources::ensureRoundedClipArenaCapacity(std::uint32_t roundedClipCount) {
+  if (roundedClipCount == 0) {
+    return;
+  }
+  if (roundedClipCount <= roundedClipArenaCapacities_[currentFrameIndex_]) {
+    return;
+  }
+  const std::uint32_t newCap =
+      roundedClipArenaCapacities_[currentFrameIndex_] == 0
+          ? roundedClipCount
+          : std::max(roundedClipCount, roundedClipArenaCapacities_[currentFrameIndex_] * 2);
+  roundedClipArenas_[currentFrameIndex_] =
+      [device_ newBufferWithLength:newCap * sizeof(MetalRoundedClipStack) options:MTLResourceStorageModeShared];
+  roundedClipArenaCapacities_[currentFrameIndex_] = newCap;
+}
+
 void MetalDeviceResources::uploadRectOps(const std::vector<MetalRectOp>& ops) {
   ensureInstanceArenaCapacity(static_cast<std::uint32_t>(ops.size()));
   if (ops.empty()) {
@@ -458,6 +490,11 @@ void MetalDeviceResources::uploadImageOps(const std::vector<MetalImageOp>& ops) 
   for (std::size_t i = 0; i < ops.size(); ++i) {
     dst[i] = ops[i].inst;
   }
+}
+
+void MetalDeviceResources::reserveDrawStateBuffers(std::uint32_t uniformCount, std::uint32_t roundedClipCount) {
+  ensureDrawUniformArenaCapacity(uniformCount);
+  ensureRoundedClipArenaCapacity(roundedClipCount);
 }
 
 } // namespace flux
