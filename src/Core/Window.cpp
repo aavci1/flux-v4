@@ -135,6 +135,10 @@ void Window::setClearColor(Color color) { d->clearColor_ = color; }
 
 Color Window::clearColor() const { return d->clearColor_; }
 
+bool Window::wantsTextInput() const {
+  return d->runtime_ && d->runtime_->wantsTextInput();
+}
+
 OverlayId Window::pushOverlay(Element content, OverlayConfig config) {
   if (!d) {
     return kInvalidOverlayId;

@@ -4,6 +4,7 @@
 #include <Flux/Core/EventQueue.hpp>
 #include <Flux/Core/Window.hpp>
 #include <Flux/Core/Events.hpp>
+#include <Flux/Scene/SceneTreeInteraction.hpp>
 #include <Flux/Scene/SceneTree.hpp>
 #include <Flux/UI/StateStore.hpp>
 
@@ -149,6 +150,23 @@ void Runtime::handleInput(InputEvent const& e) {
 bool Runtime::isActionCurrentlyEnabled(std::string const& name) const {
   return buildOrchestrator_.actionRegistryCommitted().isHandlerEnabled(focus_.focusedKey(), name,
                                                                        window_.actionDescriptors());
+}
+
+bool Runtime::wantsTextInput() const {
+  if (!windowHasFocus_ || focus_.focusedKey().empty()) {
+    return false;
+  }
+
+  InteractionData const* interaction = nullptr;
+  if (std::optional<OverlayId> overlayScope = focus_.focusInOverlay()) {
+    if (OverlayEntry const* entry = window_.overlayManager().find(*overlayScope)) {
+      interaction = findInteractionByKey(entry->sceneTree, focus_.focusedKey()).second;
+    }
+  } else if (window_.hasSceneTree()) {
+    interaction = findInteractionByKey(window_.sceneTree(), focus_.focusedKey()).second;
+  }
+
+  return interaction && static_cast<bool>(interaction->onTextInput);
 }
 
 std::optional<Rect> Runtime::layoutRectForCurrentComponent() const {

@@ -25,6 +25,8 @@
 
 namespace flux {
 class MacMetalPlatformWindow;
+class Window;
+Window* fluxWindowForPlatform(MacMetalPlatformWindow* platform);
 } // namespace flux
 
 /// Private AppKit class methods; stable in practice for diagonal window-resize cursors.
@@ -37,6 +39,7 @@ class MacMetalPlatformWindow;
 @property(nonatomic, assign) flux::MacMetalPlatformWindow* fluxPlatform;
 - (CAMetalLayer*)fluxMetalLayer;
 - (void)updateDrawableSize;
+- (BOOL)fluxWantsTextInput;
 @end
 
 namespace flux {
@@ -166,7 +169,9 @@ void postTextInput(FluxMetalView* view, std::string text);
 
 - (void)keyDown:(NSEvent*)event {
   flux::detail::postInputFromView(self, flux::InputEvent::Kind::KeyDown, event);
-  [self interpretKeyEvents:@[event]];
+  if ([self fluxWantsTextInput]) {
+    [self interpretKeyEvents:@[event]];
+  }
 }
 
 - (void)keyUp:(NSEvent*)event {
@@ -226,6 +231,19 @@ void postTextInput(FluxMetalView* view, std::string text);
 - (NSUInteger)characterIndexForPoint:(NSPoint)point {
   (void)point;
   return NSNotFound;
+}
+
+- (BOOL)fluxWantsTextInput {
+  flux::MacMetalPlatformWindow* platform = self.fluxPlatform;
+  flux::Window* window = flux::fluxWindowForPlatform(platform);
+  return window && window->wantsTextInput();
+}
+
+- (NSTextInputContext*)inputContext {
+  if (![self fluxWantsTextInput]) {
+    return nil;
+  }
+  return [super inputContext];
 }
 
 - (NSRect)firstRectForCharacterRange:(NSRange)range actualRange:(NSRangePointer)actualRange {
@@ -548,6 +566,10 @@ void postTextInput(FluxMetalView* view, std::string text) {
 @end
 
 namespace flux {
+
+Window* fluxWindowForPlatform(MacMetalPlatformWindow* platform) {
+  return platform ? platform->fluxWindow() : nullptr;
+}
 
 Window* MacMetalPlatformWindow::fluxWindow() const {
   return d ? d->fluxWindow_ : nullptr;

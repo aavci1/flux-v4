@@ -43,6 +43,7 @@ public:
   ActionRegistry& actionRegistryForBuild() noexcept;
 
   bool isActionCurrentlyEnabled(std::string const& name) const;
+  bool wantsTextInput() const;
 
   void requestFocusInSubtree(ComponentKey const& subtreeKey, std::optional<OverlayId> overlayScope = std::nullopt);
 
