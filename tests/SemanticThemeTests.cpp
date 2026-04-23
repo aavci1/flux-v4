@@ -165,6 +165,28 @@ TEST_CASE("Theme: semantic font tokens resolve against light and dark themes") {
   CHECK(resolveFont(Font::theme(), dark.bodyFont, dark) == dark.bodyFont);
 }
 
+TEST_CASE("Theme: semantic accessors pick up the current environment immediately") {
+  Theme const dark = Theme::dark();
+
+  EnvironmentLayer env{};
+  env.set(dark);
+  EnvironmentScope envScope{std::move(env)};
+
+  Color const background = Color::windowBackground();
+  CHECK(background.semanticToken() == 10);
+  CHECK(background.r == doctest::Approx(dark.windowBackgroundColor.r));
+  CHECK(background.g == doctest::Approx(dark.windowBackgroundColor.g));
+  CHECK(background.b == doctest::Approx(dark.windowBackgroundColor.b));
+  CHECK(background.a == doctest::Approx(dark.windowBackgroundColor.a));
+
+  Font const body = Font::body();
+  CHECK(body.semanticToken() == 8);
+  CHECK(body.family == dark.bodyFont.family);
+  CHECK(body.size == doctest::Approx(dark.bodyFont.size));
+  CHECK(body.weight == doctest::Approx(dark.bodyFont.weight));
+  CHECK(body.italic == dark.bodyFont.italic);
+}
+
 TEST_CASE("SceneBuilder: semantic text and modifier paint resolve to concrete theme values") {
   SemanticSelectionTextSystem textSystem{};
   EnvironmentLayer env{};

@@ -38,10 +38,11 @@ ComponentBuildResult buildMeasuredComponent(PathShape const& path, ComponentBuil
   }
   pathNode->position = {};
   pathNode->recomputeBounds();
+  Size const geometrySize = build::rectSize(pathNode->bounds);
 
   ComponentBuildResult result{};
   result.node = std::move(pathNode);
-  result.geometrySize = build::rectSize(pathNode->bounds);
+  result.geometrySize = geometrySize;
   result.hasGeometrySize = true;
   return result;
 }

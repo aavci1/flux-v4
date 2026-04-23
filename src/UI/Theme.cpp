@@ -1,4 +1,5 @@
 #include <Flux/UI/Theme.hpp>
+#include <Flux/UI/Environment.hpp>
 
 #include <algorithm>
 
@@ -12,6 +13,14 @@ Font resolveFont(Font const& override, Font const& themeValue) {
 }
 
 namespace {
+
+Theme const& activeTheme() {
+  if (Theme const* theme = EnvironmentStack::current().find<Theme>()) {
+    return *theme;
+  }
+  static Theme const fallback = Theme::light();
+  return fallback;
+}
 
 Color resolveSemanticColorToken(int token, Theme const& theme) {
   switch (token) {
@@ -108,6 +117,252 @@ Font resolveSemanticFontToken(int token, Theme const& theme) {
 }
 
 } // namespace
+
+Color Color::theme() {
+  Color color = resolveSemanticColorToken(1, activeTheme());
+  color.semantic = 1;
+  return color;
+}
+
+Color Color::primary() {
+  Color color = resolveSemanticColorToken(2, activeTheme());
+  color.semantic = 2;
+  return color;
+}
+
+Color Color::secondary() {
+  Color color = resolveSemanticColorToken(3, activeTheme());
+  color.semantic = 3;
+  return color;
+}
+
+Color Color::tertiary() {
+  Color color = resolveSemanticColorToken(4, activeTheme());
+  color.semantic = 4;
+  return color;
+}
+
+Color Color::quaternary() {
+  Color color = resolveSemanticColorToken(5, activeTheme());
+  color.semantic = 5;
+  return color;
+}
+
+Color Color::placeholder() {
+  Color color = resolveSemanticColorToken(6, activeTheme());
+  color.semantic = 6;
+  return color;
+}
+
+Color Color::disabled() {
+  Color color = resolveSemanticColorToken(7, activeTheme());
+  color.semantic = 7;
+  return color;
+}
+
+Color Color::accent() {
+  Color color = resolveSemanticColorToken(8, activeTheme());
+  color.semantic = 8;
+  return color;
+}
+
+Color Color::accentForeground() {
+  Color color = resolveSemanticColorToken(9, activeTheme());
+  color.semantic = 9;
+  return color;
+}
+
+Color Color::windowBackground() {
+  Color color = resolveSemanticColorToken(10, activeTheme());
+  color.semantic = 10;
+  return color;
+}
+
+Color Color::controlBackground() {
+  Color color = resolveSemanticColorToken(11, activeTheme());
+  color.semantic = 11;
+  return color;
+}
+
+Color Color::elevatedBackground() {
+  Color color = resolveSemanticColorToken(12, activeTheme());
+  color.semantic = 12;
+  return color;
+}
+
+Color Color::textBackground() {
+  Color color = resolveSemanticColorToken(13, activeTheme());
+  color.semantic = 13;
+  return color;
+}
+
+Color Color::separator() {
+  Color color = resolveSemanticColorToken(14, activeTheme());
+  color.semantic = 14;
+  return color;
+}
+
+Color Color::opaqueSeparator() {
+  Color color = resolveSemanticColorToken(15, activeTheme());
+  color.semantic = 15;
+  return color;
+}
+
+Color Color::selectedContentBackground() {
+  Color color = resolveSemanticColorToken(16, activeTheme());
+  color.semantic = 16;
+  return color;
+}
+
+Color Color::focusRing() {
+  Color color = resolveSemanticColorToken(17, activeTheme());
+  color.semantic = 17;
+  return color;
+}
+
+Color Color::scrim() {
+  Color color = resolveSemanticColorToken(18, activeTheme());
+  color.semantic = 18;
+  return color;
+}
+
+Color Color::popoverScrim() {
+  Color color = resolveSemanticColorToken(19, activeTheme());
+  color.semantic = 19;
+  return color;
+}
+
+Color Color::success() {
+  Color color = resolveSemanticColorToken(20, activeTheme());
+  color.semantic = 20;
+  return color;
+}
+
+Color Color::successForeground() {
+  Color color = resolveSemanticColorToken(21, activeTheme());
+  color.semantic = 21;
+  return color;
+}
+
+Color Color::successBackground() {
+  Color color = resolveSemanticColorToken(22, activeTheme());
+  color.semantic = 22;
+  return color;
+}
+
+Color Color::warning() {
+  Color color = resolveSemanticColorToken(23, activeTheme());
+  color.semantic = 23;
+  return color;
+}
+
+Color Color::warningForeground() {
+  Color color = resolveSemanticColorToken(24, activeTheme());
+  color.semantic = 24;
+  return color;
+}
+
+Color Color::warningBackground() {
+  Color color = resolveSemanticColorToken(25, activeTheme());
+  color.semantic = 25;
+  return color;
+}
+
+Color Color::danger() {
+  Color color = resolveSemanticColorToken(26, activeTheme());
+  color.semantic = 26;
+  return color;
+}
+
+Color Color::dangerForeground() {
+  Color color = resolveSemanticColorToken(27, activeTheme());
+  color.semantic = 27;
+  return color;
+}
+
+Color Color::dangerBackground() {
+  Color color = resolveSemanticColorToken(28, activeTheme());
+  color.semantic = 28;
+  return color;
+}
+
+Font Font::theme() {
+  Font font = resolveSemanticFontToken(1, activeTheme());
+  font.semantic = 1;
+  return font;
+}
+
+Font Font::largeTitle() {
+  Font font = resolveSemanticFontToken(2, activeTheme());
+  font.semantic = 2;
+  return font;
+}
+
+Font Font::title() {
+  Font font = resolveSemanticFontToken(3, activeTheme());
+  font.semantic = 3;
+  return font;
+}
+
+Font Font::title2() {
+  Font font = resolveSemanticFontToken(4, activeTheme());
+  font.semantic = 4;
+  return font;
+}
+
+Font Font::title3() {
+  Font font = resolveSemanticFontToken(5, activeTheme());
+  font.semantic = 5;
+  return font;
+}
+
+Font Font::headline() {
+  Font font = resolveSemanticFontToken(6, activeTheme());
+  font.semantic = 6;
+  return font;
+}
+
+Font Font::subheadline() {
+  Font font = resolveSemanticFontToken(7, activeTheme());
+  font.semantic = 7;
+  return font;
+}
+
+Font Font::body() {
+  Font font = resolveSemanticFontToken(8, activeTheme());
+  font.semantic = 8;
+  return font;
+}
+
+Font Font::callout() {
+  Font font = resolveSemanticFontToken(9, activeTheme());
+  font.semantic = 9;
+  return font;
+}
+
+Font Font::footnote() {
+  Font font = resolveSemanticFontToken(10, activeTheme());
+  font.semantic = 10;
+  return font;
+}
+
+Font Font::caption() {
+  Font font = resolveSemanticFontToken(11, activeTheme());
+  font.semantic = 11;
+  return font;
+}
+
+Font Font::caption2() {
+  Font font = resolveSemanticFontToken(12, activeTheme());
+  font.semantic = 12;
+  return font;
+}
+
+Font Font::monospacedBody() {
+  Font font = resolveSemanticFontToken(13, activeTheme());
+  font.semantic = 13;
+  return font;
+}
 
 Color resolveColor(Color value, Theme const& theme) {
   if (!value.isSemantic()) {

@@ -37,10 +37,11 @@ ComponentBuildResult buildMeasuredComponent(Line const& line, ComponentBuildCont
   }
   lineNode->position = {};
   lineNode->recomputeBounds();
+  Size const geometrySize = build::rectSize(lineNode->bounds);
 
   ComponentBuildResult result{};
   result.node = std::move(lineNode);
-  result.geometrySize = build::rectSize(lineNode->bounds);
+  result.geometrySize = geometrySize;
   result.hasGeometrySize = true;
   return result;
 }

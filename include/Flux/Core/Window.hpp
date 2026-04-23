@@ -6,6 +6,7 @@
 
 
 #include <Flux/Core/Action.hpp>
+#include <Flux/UI/Environment.hpp>
 
 #include <memory>
 #include <string>
@@ -18,7 +19,6 @@ namespace flux {
 
 struct RootHolder;
 class Element;
-class EnvironmentLayer;
 struct OverlayConfig;
 struct OverlayId;
 
@@ -144,5 +144,15 @@ private:
   struct Impl;
   std::unique_ptr<Impl> d;
 };
+
+template<typename T>
+void Window::setEnvironmentValue(T value) {
+  environmentLayerMut().set(std::move(value));
+}
+
+template<typename T>
+T const* Window::environmentValue() const {
+  return environmentLayer().get<T>();
+}
 
 } // namespace flux
