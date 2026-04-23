@@ -2,7 +2,6 @@
 
 #include <Flux/Graphics/Canvas.hpp>
 #include <Flux/Scene/Renderer.hpp>
-#include <Flux/Scene/RenderSceneNode.hpp>
 #include <Flux/Scene/SceneTree.hpp>
 
 namespace flux {
@@ -28,7 +27,6 @@ public:
                 StrokeStyle const& stroke, ShadowStyle const& shadow) override {
     canvas_.drawRect(rect, cornerRadius, fill, stroke, shadow);
   }
-  void drawLine(Point from, Point to, StrokeStyle const& stroke) override { canvas_.drawLine(from, to, stroke); }
   void drawPath(Path const& path, FillStyle const& fill, StrokeStyle const& stroke,
                 ShadowStyle const& shadow) override {
     canvas_.drawPath(path, fill, stroke, shadow);
@@ -56,13 +54,7 @@ void renderNode(SceneNode& node, Renderer& renderer) {
     if (node.paintDirty()) {
       node.rebuildLocalPaint();
     }
-    if (auto* renderNodePtr = dynamic_cast<RenderSceneNode*>(&node)) {
-      if (Canvas* canvas = renderer.canvas(); canvas && renderNodePtr->draw) {
-        renderNodePtr->draw(*canvas, renderNodePtr->frame);
-      }
-    } else {
-      node.replayLocalPaint(renderer);
-    }
+    node.replayLocalPaint(renderer);
   }
   for (std::unique_ptr<SceneNode> const& child : node.children()) {
     renderNode(*child, renderer);

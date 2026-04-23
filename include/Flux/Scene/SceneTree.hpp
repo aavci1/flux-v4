@@ -4,7 +4,7 @@
 ///
 /// Part of the Flux public API.
 
-#include <Flux/Scene/LocalId.hpp>
+#include <Flux/Core/LocalId.hpp>
 #include <Flux/Scene/SceneNode.hpp>
 
 #include <memory>

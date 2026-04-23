@@ -31,9 +31,7 @@ class TextSystem;
 struct Popover;
 struct Rectangle;
 struct Text;
-struct Render;
 struct PathShape;
-struct Line;
 struct VStack;
 struct HStack;
 struct ZStack;
@@ -54,10 +52,8 @@ enum class ElementType : std::uint8_t {
   Unknown,
   Rectangle,
   Text,
-  Render,
   Image,
   Path,
-  Line,
   VStack,
   HStack,
   ZStack,

@@ -1,11 +1,10 @@
 #pragma once
 
-/// \file Flux/UI/ComponentKeyUtil.hpp
+/// \file Flux/Core/ComponentKeyUtil.hpp
 ///
 /// Part of the Flux public API.
 
-
-#include <Flux/UI/ComponentKey.hpp>
+#include <Flux/Core/ComponentKey.hpp>
 
 #include <cstddef>
 

@@ -1,16 +1,14 @@
 #include <doctest/doctest.h>
 
+#include <Flux/Core/ComponentKey.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
-#include <Flux/Scene/LineSceneNode.hpp>
 #include <Flux/Scene/ModifierSceneNode.hpp>
 #include <Flux/Scene/PathSceneNode.hpp>
 #include <Flux/Scene/RectSceneNode.hpp>
 #include <Flux/Scene/TextSceneNode.hpp>
-#include <Flux/UI/ComponentKey.hpp>
 #include <Flux/UI/SceneBuilder.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Views/HStack.hpp>
-#include <Flux/UI/Views/Line.hpp>
 #include <Flux/UI/Views/PathShape.hpp>
 #include <Flux/UI/Views/SelectableTextSupport.hpp>
 #include <Flux/UI/Views/Text.hpp>
@@ -225,7 +223,7 @@ TEST_CASE("SceneBuilder: semantic text and modifier paint resolve to concrete th
   CHECK(textNode->color == theme.secondaryLabelColor);
 }
 
-TEST_CASE("SceneBuilder: semantic path and line paint resolve to concrete theme values") {
+TEST_CASE("SceneBuilder: semantic path paint resolves to concrete theme values") {
   SemanticSelectionTextSystem textSystem{};
   EnvironmentLayer env{};
   env.set(Theme::dark());
@@ -245,12 +243,7 @@ TEST_CASE("SceneBuilder: semantic path and line paint resolve to concrete theme 
           PathShape{.path = std::move(path)}
               .fill(Color::warningBackground())
               .stroke(Color::warning(), 2.f)
-              .shadow(ShadowStyle{.radius = 4.f, .offset = {0.f, 1.f}, .color = Color::scrim()}),
-          Line{
-              .from = {0.f, 0.f},
-              .to = {60.f, 0.f},
-              .stroke = StrokeStyle::solid(Color::danger(), 3.f),
-          })
+              .shadow(ShadowStyle{.radius = 4.f, .offset = {0.f, 1.f}, .color = Color::scrim()}))
   }
                         .padding(16.f);
 
@@ -258,8 +251,6 @@ TEST_CASE("SceneBuilder: semantic path and line paint resolve to concrete theme 
 
   auto* pathNode = findNode<PathSceneNode>(tree.get());
   REQUIRE(pathNode != nullptr);
-  auto* lineNode = findNode<LineSceneNode>(tree.get());
-  REQUIRE(lineNode != nullptr);
 
   Theme const theme = Theme::dark();
   Color pathFill{};
@@ -267,7 +258,6 @@ TEST_CASE("SceneBuilder: semantic path and line paint resolve to concrete theme 
   CHECK(pathFill == theme.warningBackgroundColor);
   CHECK(pathNode->stroke.color == theme.warningColor);
   CHECK(pathNode->shadow.color == theme.modalScrimColor);
-  CHECK(lineNode->stroke.color == theme.dangerColor);
 }
 
 TEST_CASE("SceneBuilder: semantic selection highlights resolve to concrete theme values") {

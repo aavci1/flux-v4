@@ -1,4 +1,4 @@
-#include <Flux/UI/ComponentKeyUtil.hpp>
+#include <Flux/Core/ComponentKeyUtil.hpp>
 
 #include <algorithm>
 

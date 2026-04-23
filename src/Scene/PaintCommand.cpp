@@ -21,8 +21,6 @@ void replayPaintCommand(PaintCommand const& cmd, Renderer& renderer) {
           }
         } else if constexpr (std::is_same_v<T, DrawPathPaintCommand>) {
           renderer.drawPath(op.path, op.fill, op.stroke, op.shadow);
-        } else if constexpr (std::is_same_v<T, DrawLinePaintCommand>) {
-          renderer.drawLine(op.from, op.to, op.stroke);
         }
       },
       cmd);

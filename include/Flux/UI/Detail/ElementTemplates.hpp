@@ -216,14 +216,10 @@ ElementType Element::Model<C>::elementType() const noexcept {
     return ElementType::Rectangle;
   } else if constexpr (std::is_same_v<C, Text>) {
     return ElementType::Text;
-  } else if constexpr (std::is_same_v<C, Render>) {
-    return ElementType::Render;
   } else if constexpr (std::is_same_v<C, views::Image>) {
     return ElementType::Image;
   } else if constexpr (std::is_same_v<C, PathShape>) {
     return ElementType::Path;
-  } else if constexpr (std::is_same_v<C, Line>) {
-    return ElementType::Line;
   } else if constexpr (std::is_same_v<C, VStack>) {
     return ElementType::VStack;
   } else if constexpr (std::is_same_v<C, HStack>) {

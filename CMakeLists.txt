@@ -96,6 +96,8 @@ add_library(flux STATIC
   src/Reactive/Transition.cpp
   src/Reactive/AnimationRebuild.cpp
   src/Reactive/AnimationClock.cpp
+  src/Core/ComponentKey.cpp
+  src/Core/ComponentKeyUtil.cpp
   src/Core/Window.cpp
   src/Core/WindowRender.cpp
   src/UI/MeasureContext.cpp
@@ -117,8 +119,6 @@ add_library(flux STATIC
   src/UI/SceneBuilder/RetainedReuse.cpp
   src/UI/SceneBuilder.cpp
   src/UI/SceneGeometryIndex.cpp
-  src/UI/ComponentKey.cpp
-  src/UI/ComponentKeyUtil.cpp
   src/UI/Detail/LeafBounds.cpp
   src/UI/FocusController.cpp
   src/UI/HoverController.cpp
@@ -138,9 +138,7 @@ add_library(flux STATIC
   src/UI/Views/TextEditUtils.cpp
   src/UI/Views/TextEditBehavior.cpp
   src/UI/Views/Rectangle.cpp
-  src/UI/Views/Render.cpp
   src/UI/Views/Image.cpp
-  src/UI/Views/Line.cpp
   src/UI/Views/PathShape.cpp
   src/UI/Views/LayoutContainers.cpp
   src/UI/Views/Text.cpp
@@ -172,8 +170,6 @@ add_library(flux STATIC
   src/Scene/TextSceneNode.cpp
   src/Scene/ImageSceneNode.cpp
   src/Scene/PathSceneNode.cpp
-  src/Scene/LineSceneNode.cpp
-  src/Scene/RenderSceneNode.cpp
   src/Scene/CustomTransformSceneNode.cpp
   src/Scene/SceneGeometry.cpp
   src/Scene/SceneRender.cpp

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Flux/UI/ComponentKey.hpp>
+#include <Flux/Core/ComponentKey.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 
 #include "UI/Layout/Algorithms/GridLayout.hpp"

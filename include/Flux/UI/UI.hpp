@@ -6,7 +6,7 @@
 
 
 #include <Flux/UI/Component.hpp>
-#include <Flux/UI/ComponentKey.hpp>
+#include <Flux/Core/ComponentKey.hpp>
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/LayoutEngine.hpp>

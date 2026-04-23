@@ -27,8 +27,6 @@ enum class SceneNodeKind : std::uint8_t {
   Text,
   Image,
   Path,
-  Line,
-  Render,
   Custom,
 };
 

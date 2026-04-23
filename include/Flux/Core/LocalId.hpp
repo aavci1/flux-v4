@@ -1,6 +1,6 @@
 #pragma once
 
-/// \file Flux/Scene/LocalId.hpp
+/// \file Flux/Core/LocalId.hpp
 ///
 /// Part of the Flux public API.
 
@@ -43,7 +43,6 @@ struct LocalId {
 
 private:
   static std::uint64_t hashKeyString(std::string_view key) {
-    // 64-bit FNV-1a. Stable across platforms and good enough for UI identity hashing.
     std::uint64_t h = 14695981039346656037ull;
     for (unsigned char ch : key) {
       h ^= static_cast<std::uint64_t>(ch);

@@ -5,10 +5,10 @@
 /// Part of the Flux public API.
 
 
+#include <Flux/Core/ComponentKey.hpp>
 #include <Flux/Scene/InteractionData.hpp>
 #include <Flux/Scene/SceneTree.hpp>
 #include <Flux/Core/Types.hpp>
-#include <Flux/UI/ComponentKey.hpp>
 #include <Flux/UI/Overlay.hpp>
 
 #include <functional>

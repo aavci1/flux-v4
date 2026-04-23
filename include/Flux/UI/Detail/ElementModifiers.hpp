@@ -5,9 +5,9 @@
 /// Internal retained-UI state used by `Element` measurement/build plumbing.
 
 #include <Flux/Core/Cursor.hpp>
+#include <Flux/Core/ComponentKey.hpp>
 #include <Flux/Core/Types.hpp>
 #include <Flux/Graphics/Styles.hpp>
-#include <Flux/UI/ComponentKey.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 
 #include <cmath>

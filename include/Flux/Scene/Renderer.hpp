@@ -35,7 +35,6 @@ public:
 
   virtual void drawRect(Rect const& rect, CornerRadius const& cornerRadius, FillStyle const& fill,
                         StrokeStyle const& stroke, ShadowStyle const& shadow) = 0;
-  virtual void drawLine(Point from, Point to, StrokeStyle const& stroke) = 0;
   virtual void drawPath(Path const& path, FillStyle const& fill, StrokeStyle const& stroke,
                         ShadowStyle const& shadow) = 0;
   virtual void drawTextLayout(TextLayout const& layout, Point origin) = 0;

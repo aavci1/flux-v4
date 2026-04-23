@@ -160,7 +160,6 @@ public:
     ++rectCount;
     rects.push_back(rect);
   }
-  void drawLine(Point, Point, StrokeStyle const&) override {}
   void drawPath(Path const&, FillStyle const&, StrokeStyle const&, ShadowStyle const&) override { ++pathCount; }
   void drawTextLayout(TextLayout const&, Point origin) override {
     ++textCount;

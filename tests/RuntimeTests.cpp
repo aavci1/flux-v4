@@ -1,9 +1,9 @@
 #include <doctest/doctest.h>
 
 #include <Flux/Core/Application.hpp>
+#include <Flux/Core/ComponentKey.hpp>
+#include <Flux/Core/LocalId.hpp>
 #include <Flux/Reactive/Signal.hpp>
-#include <Flux/Scene/LocalId.hpp>
-#include <Flux/UI/ComponentKey.hpp>
 #include <Flux/UI/StateStore.hpp>
 
 #include <atomic>

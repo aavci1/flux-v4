@@ -6,8 +6,8 @@
 
 
 #include <Flux/Core/Action.hpp>
+#include <Flux/Core/ComponentKey.hpp>
 #include <Flux/Core/Types.hpp>
-#include <Flux/UI/ComponentKey.hpp>
 
 #include <functional>
 #include <string>

@@ -11,10 +11,10 @@
 #include <Flux/UI/GestureTracker.hpp>
 #include <Flux/UI/HoverController.hpp>
 #include <Flux/UI/InputDispatcher.hpp>
+#include <Flux/Core/ComponentKey.hpp>
 #include <Flux/Core/Events.hpp>
 #include <Flux/Core/Types.hpp>
 #include <Flux/Detail/RootHolder.hpp>
-#include <Flux/UI/ComponentKey.hpp>
 #include <Flux/UI/Overlay.hpp>
 
 #include <memory>

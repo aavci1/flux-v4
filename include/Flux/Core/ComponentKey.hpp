@@ -1,10 +1,10 @@
 #pragma once
 
-/// \file Flux/UI/ComponentKey.hpp
+/// \file Flux/Core/ComponentKey.hpp
 ///
 /// Part of the Flux public API.
 
-#include <Flux/Scene/LocalId.hpp>
+#include <Flux/Core/LocalId.hpp>
 
 #include <algorithm>
 #include <array>

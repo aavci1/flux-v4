@@ -4,7 +4,7 @@
 ///
 /// Context for \ref Element::measure during retained-scene rebuilds.
 
-#include <Flux/UI/ComponentKey.hpp>
+#include <Flux/Core/ComponentKey.hpp>
 #include <Flux/UI/Detail/TraversalContext.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 

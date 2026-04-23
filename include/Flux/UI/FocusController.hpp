@@ -6,8 +6,8 @@
 
 
 #include <Flux/Core/Types.hpp>
+#include <Flux/Core/ComponentKey.hpp>
 #include <Flux/Scene/SceneTree.hpp>
-#include <Flux/UI/ComponentKey.hpp>
 #include <Flux/UI/Overlay.hpp>
 
 #include <functional>

@@ -46,15 +46,8 @@ struct DrawPathPaintCommand {
   ShadowStyle shadow = ShadowStyle::none();
 };
 
-struct DrawLinePaintCommand {
-  Point from{};
-  Point to{};
-  StrokeStyle stroke = StrokeStyle::none();
-};
-
 using PaintCommand =
-    std::variant<DrawRectPaintCommand, DrawTextPaintCommand, DrawImagePaintCommand, DrawPathPaintCommand,
-                 DrawLinePaintCommand>;
+    std::variant<DrawRectPaintCommand, DrawTextPaintCommand, DrawImagePaintCommand, DrawPathPaintCommand>;
 
 void replayPaintCommand(PaintCommand const& cmd, Renderer& renderer);
 

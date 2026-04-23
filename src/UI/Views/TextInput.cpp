@@ -3,9 +3,9 @@
 #include <Flux/Core/Application.hpp>
 #include <Flux/Graphics/TextLayoutOptions.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
+#include <Flux/Scene/TextSceneNode.hpp>
 #include <Flux/UI/InputFieldLayout.hpp>
 #include <Flux/UI/Theme.hpp>
-#include <Flux/UI/Views/Render.hpp>
 #include <Flux/UI/Views/Text.hpp>
 #include <Flux/UI/Views/TextEditBehavior.hpp>
 #include <Flux/UI/Views/TextEditUtils.hpp>
@@ -27,6 +27,10 @@
 #include <optional>
 #include <string>
 #include <vector>
+
+#include "UI/Build/ComponentBuildContext.hpp"
+#include "UI/Build/ComponentBuildSupport.hpp"
+#include "UI/Views/InternalTextLayoutLeaf.hpp"
 
 namespace flux {
 
@@ -331,16 +335,8 @@ Element buildTextInputContent(detail::TextEditLayoutResult const &layoutResult, 
             makeSelectionAndCaretElements(layoutResult, selection, caretByte, showCaret, text, origin, rs, blinkPhase);
         layers.insert(layers.end(), std::make_move_iterator(overlayChildren.begin()),
                       std::make_move_iterator(overlayChildren.end()));
-        layers.push_back(Element {Render {
-                             .measureFn = [textLayout](LayoutConstraints const &, LayoutHints const &) {
-                                 return textLayout ? textLayout->measuredSize : Size {};
-                             },
-                             .draw = [textLayout](Canvas &canvas, Rect) {
-                                 if (textLayout) {
-                                     canvas.drawTextLayout(*textLayout, Point {});
-                                 }
-                             },
-                             .pure = true,
+        layers.push_back(Element {InternalTextLayoutLeaf {
+                             .layout = textLayout,
                          }}
                              .size(contentWidth, layoutResult.layout->measuredSize.height)
                              .position(origin.x, origin.y));
@@ -409,6 +405,46 @@ int hitTestMultilineByte(detail::TextEditLayoutResult const &layoutResult, Point
     }
     return detail::caretByteAtViewportPoint(layoutResult, local, contentOrigin, Point {0.f, scrollY}, text);
 }
+
+} // namespace
+
+namespace detail {
+
+ComponentBuildResult buildMeasuredComponent(InternalTextLayoutLeaf const &leaf, ComponentBuildContext &ctx,
+                                            std::unique_ptr<SceneNode> existing) {
+    std::unique_ptr<TextSceneNode> textNode = build::releaseAs<TextSceneNode>(std::move(existing));
+    if (!textNode) {
+        textNode = std::make_unique<TextSceneNode>(ctx.nodeId());
+    }
+
+    Rect const frameRect =
+        build::assignedFrameForLeaf(ctx.paddedContentSize(), ctx.innerConstraints(), ctx.contentAssignedSize(),
+                                    ctx.hasAssignedWidth(), ctx.hasAssignedHeight(), ctx.modifiers(), ctx.hints());
+    bool dirty = false;
+    dirty |= build::updateIfChanged(textNode->layout, leaf.layout);
+    dirty |= build::updateIfChanged(textNode->origin, Point {});
+    dirty |= build::updateIfChanged(textNode->allocation, Rect {0.f, 0.f, frameRect.width, frameRect.height});
+    if (textNode->textSystem != nullptr) {
+        textNode->textSystem = nullptr;
+        dirty = true;
+    }
+    if (dirty) {
+        textNode->invalidatePaint();
+        textNode->markBoundsDirty();
+    }
+    textNode->position = {};
+    textNode->recomputeBounds();
+
+    ComponentBuildResult result{};
+    result.node = std::move(textNode);
+    result.geometrySize = ctx.layoutOuterSize();
+    result.hasGeometrySize = true;
+    return result;
+}
+
+} // namespace detail
+
+namespace {
 
 Element buildMultilineTextInput(TextInput const &input) {
     Theme const &theme = useEnvironment<Theme>();

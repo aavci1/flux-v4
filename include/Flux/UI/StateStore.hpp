@@ -5,7 +5,7 @@
 /// Part of the Flux public API.
 
 
-#include <Flux/UI/ComponentKey.hpp>
+#include <Flux/Core/ComponentKey.hpp>
 #include <Flux/UI/Environment.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 #include <Flux/Reactive/Observer.hpp>

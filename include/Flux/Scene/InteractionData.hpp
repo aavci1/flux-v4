@@ -5,8 +5,8 @@
 /// Part of the Flux public API.
 
 #include <Flux/Core/Cursor.hpp>
+#include <Flux/Core/ComponentKey.hpp>
 #include <Flux/Core/Types.hpp>
-#include <Flux/UI/ComponentKey.hpp>
 
 #include <functional>
 #include <string>

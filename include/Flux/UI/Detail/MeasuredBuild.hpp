@@ -10,9 +10,8 @@ namespace flux {
 
 struct Rectangle;
 struct Text;
-struct Render;
+struct InternalTextLayoutLeaf;
 struct PathShape;
-struct Line;
 struct VStack;
 struct HStack;
 struct ZStack;
@@ -43,13 +42,11 @@ ComponentBuildResult buildMeasuredComponent(Rectangle const& component, Componen
                                            std::unique_ptr<SceneNode> existing);
 ComponentBuildResult buildMeasuredComponent(Text const& component, ComponentBuildContext& ctx,
                                            std::unique_ptr<SceneNode> existing);
-ComponentBuildResult buildMeasuredComponent(Render const& component, ComponentBuildContext& ctx,
-                                           std::unique_ptr<SceneNode> existing);
+ComponentBuildResult buildMeasuredComponent(InternalTextLayoutLeaf const& component,
+                                           ComponentBuildContext& ctx, std::unique_ptr<SceneNode> existing);
 ComponentBuildResult buildMeasuredComponent(views::Image const& component, ComponentBuildContext& ctx,
                                            std::unique_ptr<SceneNode> existing);
 ComponentBuildResult buildMeasuredComponent(PathShape const& component, ComponentBuildContext& ctx,
-                                           std::unique_ptr<SceneNode> existing);
-ComponentBuildResult buildMeasuredComponent(Line const& component, ComponentBuildContext& ctx,
                                            std::unique_ptr<SceneNode> existing);
 ComponentBuildResult buildMeasuredComponent(VStack const& component, ComponentBuildContext& ctx,
                                            std::unique_ptr<SceneNode> existing);

@@ -25,10 +25,6 @@ std::string_view sceneNodeKindName(SceneNodeKind kind) noexcept {
     return "Image";
   case SceneNodeKind::Path:
     return "Path";
-  case SceneNodeKind::Line:
-    return "Line";
-  case SceneNodeKind::Render:
-    return "Render";
   case SceneNodeKind::Custom:
     return "Custom";
   }

@@ -1,4 +1,4 @@
-#include <Flux/UI/ComponentKey.hpp>
+#include <Flux/Core/ComponentKey.hpp>
 
 namespace flux {
 
