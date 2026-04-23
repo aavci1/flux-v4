@@ -338,7 +338,7 @@ inline std::unique_ptr<SceneNode> buildHeroAccent(Theme const &theme, float cont
     constexpr float badgeSize = 74.f;
     constexpr float glyphSize = 30.f;
 
-    auto accent = std::make_unique<GroupNode>(Rect {contentWidth - badgeSize, 0.f, badgeSize, badgeSize});
+    auto accent = std::make_unique<GroupNode>(Rect {0.f, 0.f, badgeSize, badgeSize});
 
     auto *badge = appendRectNode(
         *accent,
@@ -519,7 +519,7 @@ inline std::unique_ptr<SceneNode> buildToggleDemoScene(TextSystem &textSystem, T
     float cursorY = outerPadding;
     appendTextNode(*content, Point {outerPadding, cursorY}, std::move(heroTitle));
     auto heroAccent = buildHeroAccent(theme, contentWidth);
-    heroAccent->setPosition(Point {outerPadding, cursorY - 4.f});
+    heroAccent->setPosition(Point {outerPadding + contentWidth - 74.f, cursorY - 4.f});
     content->appendChild(std::move(heroAccent));
     cursorY += heroTitle.size.height + theme.space3;
 
