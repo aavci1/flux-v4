@@ -1,9 +1,9 @@
 #pragma once
 
-/// \file Flux/Scene/TextCacheDebugOverlay.hpp
+/// \file Flux/Graphics/TextCacheDebugOverlay.hpp
 ///
-/// Text-cache stats panel (enable via \ref Runtime::setTextCacheOverlayEnabled). Rolling window state is
-/// stored per \ref Window (see \ref TextCacheRingBuffer).
+/// Text-cache stats panel (enable via \ref Runtime::setTextCacheOverlayEnabled). Rolling window
+/// state is stored per \ref Window (see \ref TextCacheRingBuffer).
 
 #include <Flux/Core/Types.hpp>
 #include <Flux/Graphics/TextCacheStats.hpp>

@@ -1,4 +1,4 @@
-#include <Flux/Scene/TextCacheDebugOverlay.hpp>
+#include <Flux/Graphics/TextCacheDebugOverlay.hpp>
 
 #include <Flux/Core/Application.hpp>
 #include <Flux/Graphics/Canvas.hpp>
@@ -29,7 +29,8 @@ std::string formatLayer(char const* label, float pct, TextCacheStats::LayerStats
   std::ostringstream o;
   o.setf(std::ios::fixed);
   o.precision(1);
-  o << label << ": " << pct << "%  (ev " << snap.evictions << "  ~" << (snap.currentBytes / 1024u) << " KiB)";
+  o << label << ": " << pct << "%  (ev " << snap.evictions << "  ~" << (snap.currentBytes / 1024u)
+    << " KiB)";
   return o.str();
 }
 
@@ -37,11 +38,16 @@ std::string buildOverlayText(TextCacheStats const& oldest, TextCacheStats const&
                              std::size_t windowFrames) {
   std::ostringstream o;
   o << "TEXT CACHE (rolling " << windowFrames << " frames)\n";
-  o << formatLayer("L0 sizedFont", hitRateWindow(oldest.l0_sizedFont, newest.l0_sizedFont), newest.l0_sizedFont)
+  o << formatLayer("L0 sizedFont", hitRateWindow(oldest.l0_sizedFont, newest.l0_sizedFont),
+                   newest.l0_sizedFont)
     << "\n";
-  o << formatLayer("L1 color", hitRateWindow(oldest.l1_color, newest.l1_color), newest.l1_color) << "\n";
-  o << formatLayer("L1 runAttr", hitRateWindow(oldest.l1_runAttr, newest.l1_runAttr), newest.l1_runAttr) << "\n";
-  o << formatLayer("L1 para", hitRateWindow(oldest.l1_paraStyle, newest.l1_paraStyle), newest.l1_paraStyle)
+  o << formatLayer("L1 color", hitRateWindow(oldest.l1_color, newest.l1_color), newest.l1_color)
+    << "\n";
+  o << formatLayer("L1 runAttr", hitRateWindow(oldest.l1_runAttr, newest.l1_runAttr),
+                   newest.l1_runAttr)
+    << "\n";
+  o << formatLayer("L1 para", hitRateWindow(oldest.l1_paraStyle, newest.l1_paraStyle),
+                   newest.l1_paraStyle)
     << "\n";
   o << formatLayer("L2 framesetter", hitRateWindow(oldest.l2_framesetter, newest.l2_framesetter),
                    newest.l2_framesetter)
@@ -52,10 +58,14 @@ std::string buildOverlayText(TextCacheStats const& oldest, TextCacheStats const&
   o << formatLayer("L2.5 variant", hitRateWindow(oldest.l2_5_variant, newest.l2_5_variant),
                    newest.l2_5_variant)
     << "\n";
-  o << formatLayer("L2.5 memo", hitRateWindow(oldest.l2_5_memo, newest.l2_5_memo), newest.l2_5_memo)
+  o << formatLayer("L2.5 memo", hitRateWindow(oldest.l2_5_memo, newest.l2_5_memo),
+                   newest.l2_5_memo)
     << "\n";
-  o << formatLayer("L3 layout", hitRateWindow(oldest.l3_layout, newest.l3_layout), newest.l3_layout) << "\n";
-  o << formatLayer("L4 box", hitRateWindow(oldest.l4_boxLayout, newest.l4_boxLayout), newest.l4_boxLayout) << "\n";
+  o << formatLayer("L3 layout", hitRateWindow(oldest.l3_layout, newest.l3_layout), newest.l3_layout)
+    << "\n";
+  o << formatLayer("L4 box", hitRateWindow(oldest.l4_boxLayout, newest.l4_boxLayout),
+                   newest.l4_boxLayout)
+    << "\n";
   o << "collisions: " << newest.contentHashCollisions;
   return o.str();
 }

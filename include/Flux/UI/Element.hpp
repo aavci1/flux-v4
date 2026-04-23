@@ -108,10 +108,6 @@ public:
   std::optional<float> flexBasis() const;
   float minMainSize() const;
 
-  bool leafDrawsFillStrokeShadowFromModifiers() const {
-    return impl_ && impl_->leafDrawsFillStrokeShadowFromModifiers();
-  }
-
   Element flex(float grow) &&;
   Element flex(float grow, float shrink) &&;
   Element flex(float grow, float shrink, float basis) &&;
@@ -184,7 +180,6 @@ private:
     virtual float flexShrink() const { return 0.f; }
     virtual std::optional<float> flexBasis() const { return std::nullopt; }
     virtual float minMainSize() const { return 0.f; }
-    virtual bool leafDrawsFillStrokeShadowFromModifiers() const { return false; }
   };
 
   template<typename C>

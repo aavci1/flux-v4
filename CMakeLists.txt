@@ -116,7 +116,6 @@ add_library(flux STATIC
   src/UI/Layout/Algorithms/ScrollLayout.cpp
   src/UI/Layout/Algorithms/OverlayLayout.cpp
   src/UI/SceneBuilder.cpp
-  src/UI/SceneGeometryIndex.cpp
   src/UI/Detail/LeafBounds.cpp
   src/UI/FocusController.cpp
   src/UI/HoverController.cpp
@@ -161,22 +160,6 @@ add_library(flux STATIC
   src/UI/Views/Tooltip.cpp
   src/UI/Views/PopoverCalloutPath.cpp
   src/UI/PopoverCalloutShapeElement.cpp
-  src/Scene/PaintCommand.cpp
-  src/Scene/SceneNode.cpp
-  src/Scene/ModifierSceneNode.cpp
-  src/Scene/RectSceneNode.cpp
-  src/Scene/TextSceneNode.cpp
-  src/Scene/ImageSceneNode.cpp
-  src/Scene/PathSceneNode.cpp
-  src/Scene/CustomTransformSceneNode.cpp
-  src/Scene/SceneGeometry.cpp
-  src/Scene/SceneRender.cpp
-  src/Scene/SceneTree.cpp
-  src/Scene/SceneTreeDump.cpp
-  src/Scene/SceneTreeInteraction.cpp
-  src/Scene/SceneBoundsOverlay.cpp
-  src/Scene/TextCacheDebugOverlay.cpp
-  src/Scene/SceneTreeHitTester.cpp
   src/SceneGraph/SceneNode.cpp
   src/SceneGraph/GroupNode.cpp
   src/SceneGraph/RectNode.cpp
@@ -189,6 +172,7 @@ add_library(flux STATIC
   src/Graphics/Styles.cpp
   src/Graphics/AttributedString.cpp
   src/Graphics/Canvas.cpp
+  src/Graphics/TextCacheDebugOverlay.cpp
   src/Graphics/Metal/MetalFrameRecorder.mm
   src/Graphics/TextSystem.cpp
   src/Graphics/xxhash_impl.c

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <Flux/Core/Types.hpp>
-#include <Flux/Scene/TextCacheDebugOverlay.hpp>
+#include <Flux/Graphics/TextCacheDebugOverlay.hpp>
 
 #include <optional>
 
