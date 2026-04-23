@@ -65,9 +65,15 @@ IconButton::Style resolveStyle(IconButton::Style const &style, Theme const &them
 
 template<typename Signature>
 State<std::function<Signature>> retainCallback(std::function<Signature> const& callback) {
-    State<std::function<Signature>> retained = useState(callback);
-    retained.setSilently(callback);
-    return retained;
+    StateStore* store = StateStore::current();
+    if (!store) {
+        thread_local Signal<std::function<Signature>> fallback {};
+        fallback.setSilently(callback);
+        return State<std::function<Signature>>{&fallback};
+    }
+    auto& signal = store->claimSlot<Signal<std::function<Signature>>>(callback);
+    signal.setSilently(callback);
+    return State<std::function<Signature>>{&signal};
 }
 
 ButtonColors deriveColors(ButtonVariant variant, Color accent, Color destructive, Color onAccent,
