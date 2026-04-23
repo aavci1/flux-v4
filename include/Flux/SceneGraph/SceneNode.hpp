@@ -33,6 +33,7 @@ enum class SceneNodeKind : std::uint8_t {
   Text,
   Image,
   Path,
+  Render,
 };
 
 std::string_view sceneNodeKindName(SceneNodeKind kind) noexcept;
@@ -82,6 +83,7 @@ class SceneNode {
 
     virtual Rect localBounds() const noexcept;
     virtual void render(Renderer &renderer) const;
+    virtual bool canPrepareRenderOps() const noexcept;
 
   protected:
     void markDirty() noexcept;

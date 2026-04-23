@@ -32,6 +32,7 @@ struct Popover;
 struct Rectangle;
 struct Text;
 struct PathShape;
+struct Render;
 struct VStack;
 struct HStack;
 struct ZStack;
@@ -54,6 +55,7 @@ enum class ElementType : std::uint8_t {
   Text,
   Image,
   Path,
+  Render,
   VStack,
   HStack,
   ZStack,

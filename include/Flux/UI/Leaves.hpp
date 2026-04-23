@@ -10,3 +10,4 @@
 #include <Flux/UI/Views/Text.hpp>
 #include <Flux/UI/Views/Image.hpp>
 #include <Flux/UI/Views/PathShape.hpp>
+#include <Flux/UI/Views/Render.hpp>

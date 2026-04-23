@@ -3,6 +3,7 @@
 #include <Flux/Graphics/Canvas.hpp>
 #include <Flux/SceneGraph/PathNode.hpp>
 #include <Flux/SceneGraph/RectNode.hpp>
+#include <Flux/SceneGraph/RenderNode.hpp>
 #include <Flux/SceneGraph/Renderer.hpp>
 #include <Flux/SceneGraph/SceneGraph.hpp>
 #include <Flux/SceneGraph/SceneNode.hpp>
@@ -135,10 +136,15 @@ struct SceneRenderer::Impl {
         if (!kEnablePreparedRenderCache) {
             return;
         }
-        if (node.kind() != SceneNodeKind::Group) {
+        if (node.kind() != SceneNodeKind::Group && node.canPrepareRenderOps()) {
             CacheEntry &entry = cache[&node];
             if (node.isDirty() || !entry.prepared) {
                 entry.prepared = renderer->prepare(node);
+                detail::SceneNodeAccess::clearDirty(node);
+            }
+        } else if (node.kind() != SceneNodeKind::Group) {
+            cache.erase(&node);
+            if (node.isDirty()) {
                 detail::SceneNodeAccess::clearDirty(node);
             }
         } else if (node.isDirty()) {
@@ -179,7 +185,7 @@ struct SceneRenderer::Impl {
         }
 
         if (node.kind() != SceneNodeKind::Group) {
-            if (!kEnablePreparedRenderCache) {
+            if (!kEnablePreparedRenderCache || !node.canPrepareRenderOps()) {
                 node.render(*renderer);
             } else {
                 CacheEntry &entry = cache[&node];

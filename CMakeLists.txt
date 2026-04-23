@@ -137,6 +137,7 @@ add_library(flux STATIC
   src/UI/Views/Rectangle.cpp
   src/UI/Views/Image.cpp
   src/UI/Views/PathShape.cpp
+  src/UI/Views/Render.cpp
   src/UI/Views/LayoutContainers.cpp
   src/UI/Views/Text.cpp
   src/UI/Views/TextInput.cpp
@@ -166,6 +167,7 @@ add_library(flux STATIC
   src/SceneGraph/TextNode.cpp
   src/SceneGraph/ImageNode.cpp
   src/SceneGraph/PathNode.cpp
+  src/SceneGraph/RenderNode.cpp
   src/SceneGraph/SceneGraph.cpp
   src/SceneGraph/SceneInteraction.cpp
   src/SceneGraph/SceneRenderer.cpp

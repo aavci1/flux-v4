@@ -11,6 +11,7 @@ struct Rectangle;
 struct Text;
 struct InternalTextLayoutLeaf;
 struct PathShape;
+struct Render;
 struct VStack;
 struct HStack;
 struct ZStack;
@@ -47,6 +48,8 @@ ComponentBuildResult buildMeasuredComponent(InternalTextLayoutLeaf const& compon
 ComponentBuildResult buildMeasuredComponent(views::Image const& component, ComponentBuildContext& ctx,
                                            std::unique_ptr<scenegraph::SceneNode> existing);
 ComponentBuildResult buildMeasuredComponent(PathShape const& component, ComponentBuildContext& ctx,
+                                           std::unique_ptr<scenegraph::SceneNode> existing);
+ComponentBuildResult buildMeasuredComponent(Render const& component, ComponentBuildContext& ctx,
                                            std::unique_ptr<scenegraph::SceneNode> existing);
 ComponentBuildResult buildMeasuredComponent(VStack const& component, ComponentBuildContext& ctx,
                                            std::unique_ptr<scenegraph::SceneNode> existing);

@@ -33,8 +33,10 @@ std::string_view sceneNodeKindName(SceneNodeKind kind) noexcept {
     return "Text";
   case SceneNodeKind::Image:
     return "Image";
-  case SceneNodeKind::Path:
+    case SceneNodeKind::Path:
     return "Path";
+  case SceneNodeKind::Render:
+    return "Render";
   }
     return "Unknown";
 }
@@ -209,6 +211,10 @@ Rect SceneNode::localBounds() const noexcept {
 }
 
 void SceneNode::render(Renderer &) const {}
+
+bool SceneNode::canPrepareRenderOps() const noexcept {
+    return true;
+}
 
 void SceneNode::markDirty() noexcept {
     impl_->dirty = true;
