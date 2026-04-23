@@ -4,24 +4,31 @@
 ///
 /// Pure scene-graph container. Owns a single root node.
 
-#include <Flux/SceneGraph/SceneNode.hpp>
-
 #include <memory>
 
 namespace flux::scenegraph {
 
+class SceneNode;
+
 class SceneGraph {
-public:
-  SceneGraph();
-  explicit SceneGraph(std::unique_ptr<SceneNode> root);
+  public:
+    SceneGraph();
+    ~SceneGraph();
+    explicit SceneGraph(std::unique_ptr<SceneNode> root);
 
-  SceneNode& root() noexcept { return *root_; }
-  SceneNode const& root() const noexcept { return *root_; }
+    SceneGraph(SceneGraph const &) = delete;
+    SceneGraph &operator=(SceneGraph const &) = delete;
+    SceneGraph(SceneGraph &&) = delete;
+    SceneGraph &operator=(SceneGraph &&) = delete;
 
-  void setRoot(std::unique_ptr<SceneNode> root);
+    SceneNode &root() noexcept;
+    SceneNode const &root() const noexcept;
 
-private:
-  std::unique_ptr<SceneNode> root_;
+    void setRoot(std::unique_ptr<SceneNode> root);
+
+  private:
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
 };
 
 } // namespace flux::scenegraph

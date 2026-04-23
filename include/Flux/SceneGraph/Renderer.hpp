@@ -5,10 +5,10 @@
 /// Pure scene-graph rendering interface used by `SceneNode` and `SceneRenderer`.
 
 #include <Flux/Core/Types.hpp>
-#include <Flux/Graphics/ImageFillMode.hpp>
-#include <Flux/Graphics/Path.hpp>
 #include <Flux/Graphics/Styles.hpp>
 #include <Flux/Graphics/TextLayout.hpp>
+
+#include <memory>
 
 namespace flux {
 
@@ -16,6 +16,15 @@ class Canvas;
 class Image;
 
 namespace scenegraph {
+
+class SceneNode;
+class Renderer;
+
+class PreparedRenderOps {
+  public:
+    virtual ~PreparedRenderOps() = default;
+    virtual bool replay(Renderer &renderer) const = 0;
+};
 
 class Renderer {
   public:
@@ -34,11 +43,13 @@ class Renderer {
     virtual void setBlendMode(BlendMode mode) = 0;
 
     virtual void drawRect(Rect const &rect, CornerRadius const &cornerRadius, FillStyle const &fill, StrokeStyle const &stroke, ShadowStyle const &shadow) = 0;
-    virtual void drawLine(Point from, Point to, StrokeStyle const &stroke) = 0;
-    virtual void drawPath(Path const &path, FillStyle const &fill, StrokeStyle const &stroke, ShadowStyle const &shadow) = 0;
-    virtual void drawTextLayout(TextLayout const &layout, Point origin) = 0;
-    virtual void drawImage(Image const &image, Rect const &bounds, ImageFillMode fillMode, CornerRadius const &cornerRadius, float opacity) = 0;
+    virtual void drawTextLayout(TextLayout const &layout) = 0;
+    virtual void drawImage(Image const &image, Rect const &bounds) = 0;
 
+    virtual std::unique_ptr<PreparedRenderOps> prepare(SceneNode const &node) {
+        (void)node;
+        return nullptr;
+    }
     virtual Canvas *canvas() noexcept { return nullptr; }
 };
 

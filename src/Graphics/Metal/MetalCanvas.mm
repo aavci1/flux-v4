@@ -1324,68 +1324,69 @@ public:
   void endRecordedOpsCapture() { captureRecorder_ = nullptr; }
 
   void replayRecordedOps(MetalFrameRecorder const& recorded, MetalRecorderSlice const& slice) {
-    std::uint32_t const framePathVertexBase = static_cast<std::uint32_t>(frame_.pathVerts.size());
-    std::uint32_t const frameGlyphVertexBase = static_cast<std::uint32_t>(frame_.glyphVerts.size());
-    std::uint32_t const frameRectBase = static_cast<std::uint32_t>(frame_.rectOps.size());
-    std::uint32_t const frameImageBase = static_cast<std::uint32_t>(frame_.imageOps.size());
-    std::uint32_t const framePathOpBase = static_cast<std::uint32_t>(frame_.pathOps.size());
-    std::uint32_t const frameGlyphOpBase = static_cast<std::uint32_t>(frame_.glyphOps.size());
+    MetalFrameRecorder& frame = frame_;
+    std::uint32_t const framePathVertexBase = static_cast<std::uint32_t>(frame.pathVerts.size());
+    std::uint32_t const frameGlyphVertexBase = static_cast<std::uint32_t>(frame.glyphVerts.size());
+    std::uint32_t const frameRectBase = static_cast<std::uint32_t>(frame.rectOps.size());
+    std::uint32_t const frameImageBase = static_cast<std::uint32_t>(frame.imageOps.size());
+    std::uint32_t const framePathOpBase = static_cast<std::uint32_t>(frame.pathOps.size());
+    std::uint32_t const frameGlyphOpBase = static_cast<std::uint32_t>(frame.glyphOps.size());
 
     if (slice.pathVertexCount > 0) {
-      frame_.pathVerts.insert(frame_.pathVerts.end(),
+      frame.pathVerts.insert(frame.pathVerts.end(),
                               recorded.pathVerts.begin() + static_cast<std::ptrdiff_t>(slice.pathVertexStart),
                               recorded.pathVerts.begin() +
                                   static_cast<std::ptrdiff_t>(slice.pathVertexStart + slice.pathVertexCount));
     }
     if (slice.glyphVertexCount > 0) {
-      frame_.glyphVerts.insert(frame_.glyphVerts.end(),
+      frame.glyphVerts.insert(frame.glyphVerts.end(),
                                recorded.glyphVerts.begin() + static_cast<std::ptrdiff_t>(slice.glyphVertexStart),
                                recorded.glyphVerts.begin() +
                                    static_cast<std::ptrdiff_t>(slice.glyphVertexStart + slice.glyphVertexCount));
     }
     if (slice.rectCount > 0) {
-      frame_.rectOps.insert(frame_.rectOps.end(),
+      frame.rectOps.insert(frame.rectOps.end(),
                             recorded.rectOps.begin() + static_cast<std::ptrdiff_t>(slice.rectStart),
                             recorded.rectOps.begin() + static_cast<std::ptrdiff_t>(slice.rectStart + slice.rectCount));
     }
     if (slice.imageCount > 0) {
-      frame_.imageOps.insert(frame_.imageOps.end(),
+      frame.imageOps.insert(frame.imageOps.end(),
                              recorded.imageOps.begin() + static_cast<std::ptrdiff_t>(slice.imageStart),
                              recorded.imageOps.begin() +
                                  static_cast<std::ptrdiff_t>(slice.imageStart + slice.imageCount));
       for (std::uint32_t i = 0; i < slice.imageCount; ++i) {
-        MetalImageOp& op = frame_.imageOps[frameImageBase + static_cast<std::size_t>(i)];
+        MetalImageOp& op = frame.imageOps[frameImageBase + static_cast<std::size_t>(i)];
         if (op.texture) {
           op.texture = retainTexturePointer(op.texture);
         }
       }
     }
     if (slice.pathOpCount > 0) {
-      frame_.pathOps.insert(frame_.pathOps.end(),
+      frame.pathOps.insert(frame.pathOps.end(),
                             recorded.pathOps.begin() + static_cast<std::ptrdiff_t>(slice.pathOpStart),
                             recorded.pathOps.begin() +
                                 static_cast<std::ptrdiff_t>(slice.pathOpStart + slice.pathOpCount));
       for (std::uint32_t i = 0; i < slice.pathOpCount; ++i) {
-        MetalPathOp& op = frame_.pathOps[framePathOpBase + static_cast<std::size_t>(i)];
+        MetalPathOp& op = frame.pathOps[framePathOpBase + static_cast<std::size_t>(i)];
         op.pathStart = framePathVertexBase + (op.pathStart - slice.pathVertexStart);
       }
     }
     if (slice.glyphOpCount > 0) {
-      frame_.glyphOps.insert(frame_.glyphOps.end(),
+      frame.glyphOps.insert(frame.glyphOps.end(),
                              recorded.glyphOps.begin() + static_cast<std::ptrdiff_t>(slice.glyphOpStart),
                              recorded.glyphOps.begin() +
                                  static_cast<std::ptrdiff_t>(slice.glyphOpStart + slice.glyphOpCount));
       for (std::uint32_t i = 0; i < slice.glyphOpCount; ++i) {
-        MetalGlyphOp& op = frame_.glyphOps[frameGlyphOpBase + static_cast<std::size_t>(i)];
+        MetalGlyphOp& op = frame.glyphOps[frameGlyphOpBase + static_cast<std::size_t>(i)];
         op.glyphStart = frameGlyphVertexBase + (op.glyphStart - slice.glyphVertexStart);
       }
     }
     if (slice.orderCount > 0) {
-      frame_.opOrder.insert(frame_.opOrder.end(),
+      frame.opOrder.insert(frame.opOrder.end(),
                             recorded.opOrder.begin() + static_cast<std::ptrdiff_t>(slice.orderStart),
                             recorded.opOrder.begin() + static_cast<std::ptrdiff_t>(slice.orderStart + slice.orderCount));
       for (std::uint32_t i = 0; i < slice.orderCount; ++i) {
-        MetalOpRef& ref = frame_.opOrder[frame_.opOrder.size() - slice.orderCount + i];
+        MetalOpRef& ref = frame.opOrder[frame.opOrder.size() - slice.orderCount + i];
         switch (ref.kind) {
         case MetalOpRef::Rect:
           ref.index = frameRectBase + (ref.index - slice.rectStart);
@@ -1402,6 +1403,155 @@ public:
         }
       }
     }
+  }
+
+  bool replayRecordedLocalOps(MetalFrameRecorder const& recorded, MetalRecorderSlice const& slice) {
+    if (!inFrame_) {
+      return false;
+    }
+    if (!currentState().transform.isTranslationOnly()) {
+      return false;
+    }
+
+    float const dx = currentState().transform.m[6] * dpiScaleX_;
+    float const dy = currentState().transform.m[7] * dpiScaleY_;
+    MetalFrameRecorder& frame = frame_;
+    std::uint32_t const framePathVertexBase = static_cast<std::uint32_t>(frame.pathVerts.size());
+    std::uint32_t const frameGlyphVertexBase = static_cast<std::uint32_t>(frame.glyphVerts.size());
+    std::uint32_t const frameRectBase = static_cast<std::uint32_t>(frame.rectOps.size());
+    std::uint32_t const frameImageBase = static_cast<std::uint32_t>(frame.imageOps.size());
+    std::uint32_t const framePathOpBase = static_cast<std::uint32_t>(frame.pathOps.size());
+    std::uint32_t const frameGlyphOpBase = static_cast<std::uint32_t>(frame.glyphOps.size());
+
+    if (slice.pathVertexCount > 0) {
+      frame.pathVerts.reserve(frame.pathVerts.size() + slice.pathVertexCount);
+    }
+    if (slice.glyphVertexCount > 0) {
+      frame.glyphVerts.reserve(frame.glyphVerts.size() + slice.glyphVertexCount);
+    }
+    if (slice.rectCount > 0) {
+      frame.rectOps.reserve(frame.rectOps.size() + slice.rectCount);
+    }
+    if (slice.imageCount > 0) {
+      frame.imageOps.reserve(frame.imageOps.size() + slice.imageCount);
+    }
+    if (slice.pathOpCount > 0) {
+      frame.pathOps.reserve(frame.pathOps.size() + slice.pathOpCount);
+    }
+    if (slice.glyphOpCount > 0) {
+      frame.glyphOps.reserve(frame.glyphOps.size() + slice.glyphOpCount);
+    }
+    if (slice.orderCount > 0) {
+      frame.opOrder.reserve(frame.opOrder.size() + slice.orderCount);
+    }
+
+    if (slice.pathVertexCount > 0) {
+      std::size_t const start = static_cast<std::size_t>(slice.pathVertexStart);
+      std::size_t const count = static_cast<std::size_t>(slice.pathVertexCount);
+      frame.pathVerts.insert(frame.pathVerts.end(), recorded.pathVerts.begin() + static_cast<std::ptrdiff_t>(start),
+                             recorded.pathVerts.begin() + static_cast<std::ptrdiff_t>(start + count));
+      for (std::size_t i = 0; i < count; ++i) {
+        PathVertex& vertex = frame.pathVerts[static_cast<std::size_t>(framePathVertexBase) + i];
+        vertex.x += dx;
+        vertex.y += dy;
+        vertex.viewport[0] = frameDrawableW_;
+        vertex.viewport[1] = frameDrawableH_;
+      }
+    }
+
+    if (slice.glyphVertexCount > 0) {
+      std::size_t const start = static_cast<std::size_t>(slice.glyphVertexStart);
+      std::size_t const count = static_cast<std::size_t>(slice.glyphVertexCount);
+      frame.glyphVerts.insert(frame.glyphVerts.end(),
+                              recorded.glyphVerts.begin() + static_cast<std::ptrdiff_t>(start),
+                              recorded.glyphVerts.begin() + static_cast<std::ptrdiff_t>(start + count));
+      for (std::size_t i = 0; i < count; ++i) {
+        MetalGlyphVertex& vertex = frame.glyphVerts[static_cast<std::size_t>(frameGlyphVertexBase) + i];
+        vertex.pos.x += dx;
+        vertex.pos.y += dy;
+      }
+    }
+
+    if (slice.rectCount > 0) {
+      std::size_t const start = static_cast<std::size_t>(slice.rectStart);
+      std::size_t const count = static_cast<std::size_t>(slice.rectCount);
+      frame.rectOps.insert(frame.rectOps.end(), recorded.rectOps.begin() + static_cast<std::ptrdiff_t>(start),
+                           recorded.rectOps.begin() + static_cast<std::ptrdiff_t>(start + count));
+      for (std::size_t i = 0; i < count; ++i) {
+        MetalRectOp& op = frame.rectOps[static_cast<std::size_t>(frameRectBase) + i];
+        op.inst.rect.x += dx;
+        op.inst.rect.y += dy;
+        op.inst.viewport = simd_make_float2(frameDrawableW_, frameDrawableH_);
+        tagOpWithClip(op, clipScissorValid_, clipScissor_, clipRoundedStack_);
+      }
+    }
+
+    if (slice.imageCount > 0) {
+      std::size_t const start = static_cast<std::size_t>(slice.imageStart);
+      std::size_t const count = static_cast<std::size_t>(slice.imageCount);
+      frame.imageOps.insert(frame.imageOps.end(), recorded.imageOps.begin() + static_cast<std::ptrdiff_t>(start),
+                            recorded.imageOps.begin() + static_cast<std::ptrdiff_t>(start + count));
+      for (std::size_t i = 0; i < count; ++i) {
+        MetalImageOp& op = frame.imageOps[static_cast<std::size_t>(frameImageBase) + i];
+        op.inst.sdf.rect.x += dx;
+        op.inst.sdf.rect.y += dy;
+        op.inst.sdf.viewport = simd_make_float2(frameDrawableW_, frameDrawableH_);
+        if (op.texture) {
+          op.texture = retainTexturePointer(op.texture);
+        }
+        tagOpWithClip(op, clipScissorValid_, clipScissor_, clipRoundedStack_);
+      }
+    }
+
+    if (slice.pathOpCount > 0) {
+      std::size_t const start = static_cast<std::size_t>(slice.pathOpStart);
+      std::size_t const count = static_cast<std::size_t>(slice.pathOpCount);
+      frame.pathOps.insert(frame.pathOps.end(), recorded.pathOps.begin() + static_cast<std::ptrdiff_t>(start),
+                           recorded.pathOps.begin() + static_cast<std::ptrdiff_t>(start + count));
+      for (std::size_t i = 0; i < count; ++i) {
+        MetalPathOp& op = frame.pathOps[static_cast<std::size_t>(framePathOpBase) + i];
+        op.pathStart = framePathVertexBase + (op.pathStart - slice.pathVertexStart);
+        tagOpWithClip(op, clipScissorValid_, clipScissor_, clipRoundedStack_);
+      }
+    }
+
+    if (slice.glyphOpCount > 0) {
+      std::size_t const start = static_cast<std::size_t>(slice.glyphOpStart);
+      std::size_t const count = static_cast<std::size_t>(slice.glyphOpCount);
+      frame.glyphOps.insert(frame.glyphOps.end(), recorded.glyphOps.begin() + static_cast<std::ptrdiff_t>(start),
+                            recorded.glyphOps.begin() + static_cast<std::ptrdiff_t>(start + count));
+      for (std::size_t i = 0; i < count; ++i) {
+        MetalGlyphOp& op = frame.glyphOps[static_cast<std::size_t>(frameGlyphOpBase) + i];
+        op.glyphStart = frameGlyphVertexBase + (op.glyphStart - slice.glyphVertexStart);
+        tagOpWithClip(op, clipScissorValid_, clipScissor_, clipRoundedStack_);
+      }
+    }
+
+    if (slice.orderCount > 0) {
+      std::size_t const start = static_cast<std::size_t>(slice.orderStart);
+      std::size_t const count = static_cast<std::size_t>(slice.orderCount);
+      frame.opOrder.insert(frame.opOrder.end(), recorded.opOrder.begin() + static_cast<std::ptrdiff_t>(start),
+                           recorded.opOrder.begin() + static_cast<std::ptrdiff_t>(start + count));
+      for (std::size_t i = 0; i < count; ++i) {
+        MetalOpRef& ref = frame.opOrder[frame.opOrder.size() - count + i];
+        switch (ref.kind) {
+        case MetalOpRef::Rect:
+          ref.index = frameRectBase + (ref.index - slice.rectStart);
+          break;
+        case MetalOpRef::Image:
+          ref.index = frameImageBase + (ref.index - slice.imageStart);
+          break;
+        case MetalOpRef::Path:
+          ref.index = framePathOpBase + (ref.index - slice.pathOpStart);
+          break;
+        case MetalOpRef::Glyph:
+          ref.index = frameGlyphOpBase + (ref.index - slice.glyphOpStart);
+          break;
+        }
+      }
+    }
+
+    return true;
   }
 
   void waitForLastPresentComplete() {
@@ -1480,6 +1630,16 @@ void replayRecordedOpsForCanvas(Canvas* canvas, MetalFrameRecorder const& record
   if (auto* mc = dynamic_cast<MetalCanvas*>(canvas)) {
     mc->replayRecordedOps(recorded, slice);
   }
+}
+
+bool replayRecordedLocalOpsForCanvas(Canvas* canvas, MetalFrameRecorder const& recorded, MetalRecorderSlice const& slice) {
+  if (!canvas) {
+    return false;
+  }
+  if (auto* mc = dynamic_cast<MetalCanvas*>(canvas)) {
+    return mc->replayRecordedLocalOps(recorded, slice);
+  }
+  return false;
 }
 
 bool requestNextFrameCaptureForCanvas(Canvas* canvas) {

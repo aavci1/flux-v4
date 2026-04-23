@@ -34,6 +34,10 @@ void endRecordedOpsCaptureForCanvas(Canvas* canvas);
 /// Replays a slice of cached Metal draw data into the current live frame.
 void replayRecordedOpsForCanvas(Canvas* canvas, MetalFrameRecorder const& recorded, MetalRecorderSlice const& slice);
 
+/// Replays a slice of cached local-space Metal draw data using the canvas's current translation and clip state.
+/// Returns false when the canvas cannot replay the slice in the current state.
+bool replayRecordedLocalOpsForCanvas(Canvas* canvas, MetalFrameRecorder const& recorded, MetalRecorderSlice const& slice);
+
 /// Requests a CPU readback of the next presented Metal frame.
 bool requestNextFrameCaptureForCanvas(Canvas* canvas);
 

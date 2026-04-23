@@ -1,0 +1,33 @@
+#pragma once
+
+/// \file Flux/SceneGraph/ImageNode.hpp
+///
+/// Scene-graph image node.
+
+#include <Flux/SceneGraph/SceneNode.hpp>
+
+#include <memory>
+
+namespace flux {
+class Image;
+}
+
+namespace flux::scenegraph {
+
+class ImageNode final : public SceneNode {
+  public:
+    explicit ImageNode(Rect bounds = {}, std::shared_ptr<Image const> image = {});
+    ~ImageNode() override;
+
+    std::shared_ptr<Image const> const &image() const noexcept;
+
+    void setImage(std::shared_ptr<Image const> image);
+
+    void render(Renderer &renderer) const override;
+
+  private:
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
+};
+
+} // namespace flux::scenegraph

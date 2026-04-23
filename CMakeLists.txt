@@ -184,6 +184,10 @@ add_library(flux STATIC
   src/Scene/TextCacheDebugOverlay.cpp
   src/Scene/SceneTreeHitTester.cpp
   src/SceneGraph/SceneNode.cpp
+  src/SceneGraph/GroupNode.cpp
+  src/SceneGraph/RectNode.cpp
+  src/SceneGraph/TextNode.cpp
+  src/SceneGraph/ImageNode.cpp
   src/SceneGraph/SceneGraph.cpp
   src/SceneGraph/SceneRenderer.cpp
   src/Graphics/Styles.cpp
