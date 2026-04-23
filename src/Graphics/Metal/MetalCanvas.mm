@@ -237,6 +237,18 @@ bool sameRoundedClipForBatch(T const& a, T const& b) {
 }
 
 template <typename T>
+bool sameTranslationForBatch(T const& a, T const& b) {
+  return a.translation.x == b.translation.x && a.translation.y == b.translation.y;
+}
+
+MetalDrawUniforms makeDrawUniforms(float viewportW, float viewportH, vector_float2 translation) {
+  MetalDrawUniforms uniforms{};
+  uniforms.viewport = simd_make_float2(viewportW, viewportH);
+  uniforms.translation = translation;
+  return uniforms;
+}
+
+template <typename T>
 void setEncoderScissorForOp(id<MTLRenderCommandEncoder> enc, T const& op, MTLScissorRect fullScissor,
                             MTLScissorRect* last, bool* haveLast) {
   MTLScissorRect sc = fullScissor;
@@ -305,16 +317,9 @@ public:
     dispatch_semaphore_wait(frameSem_, DISPATCH_TIME_FOREVER);
     metal_.advanceFrame();
     refreshFrameDrawableMetrics();
-    drawable_ = [metal_.layer() nextDrawable];
-    cmdBuf_ = [metal_.queue() commandBuffer];
-    if (!drawable_) {
-      dispatch_semaphore_signal(frameSem_);
-      cmdBuf_ = nil;
-      if (Application::hasInstance()) {
-        Application::instance().requestRedraw();
-      }
-    }
-    inFrame_ = (drawable_ != nil && cmdBuf_ != nil);
+    drawable_ = nil;
+    cmdBuf_ = nil;
+    inFrame_ = true;
     const CGSize ds = frameDrawableSize_;
     CGFloat cs = metal_.layer().contentsScale;
     if (cs < 0.01) {
@@ -327,9 +332,7 @@ public:
       logicalW_ = static_cast<int>(std::lround(static_cast<double>(ds.width) / static_cast<double>(cs)));
       logicalH_ = static_cast<int>(std::lround(static_cast<double>(ds.height) / static_cast<double>(cs)));
     }
-    if (inFrame_) {
-      glyphAtlas_->prepareForFrameBegin();
-    }
+    glyphAtlas_->prepareForFrameBegin();
   }
 
   void clear(Color color) override { clearColor_ = color; }
@@ -337,7 +340,7 @@ public:
   void setSyncPresent(bool sync) noexcept { syncPresent_ = sync; }
 
   void present() override {
-    if (!inFrame_ || !cmdBuf_ || !drawable_) {
+    if (!inFrame_) {
       syncPresent_ = false;
       return;
     }
@@ -358,6 +361,21 @@ public:
     metal_.uploadImageOps(frame_.imageOps);
     metal_.uploadPathVertices(frame_.pathVerts);
     metal_.uploadGlyphVertices(frame_.glyphVerts);
+
+    drawable_ = [metal_.layer() nextDrawable];
+    cmdBuf_ = [metal_.queue() commandBuffer];
+    if (!drawable_ || !cmdBuf_) {
+      dispatch_semaphore_signal(frameSem_);
+      cmdBuf_ = nil;
+      drawable_ = nil;
+      inFrame_ = false;
+      syncPresent_ = false;
+      frame_.clear();
+      if (Application::hasInstance()) {
+        Application::instance().requestRedraw();
+      }
+      return;
+    }
 
     MTLRenderPassDescriptor* pass = [MTLRenderPassDescriptor renderPassDescriptor];
     pass.colorAttachments[0].texture = drawable_.texture;
@@ -390,7 +408,8 @@ public:
           MetalRectOp const& o2 = frame_.rectOps[nextRef.index];
           MetalOpRef const prevRef = frame_.opOrder[j - 1];
           if (o2.isLine != op.isLine || o2.blendMode != op.blendMode || !sameScissorForBatch(op, o2) ||
-              !sameRoundedClipForBatch(op, o2) || nextRef.index != prevRef.index + 1) {
+              !sameRoundedClipForBatch(op, o2) || !sameTranslationForBatch(op, o2) ||
+              nextRef.index != prevRef.index + 1) {
             break;
           }
           ++j;
@@ -398,6 +417,8 @@ public:
         std::size_t const runLen = j - i;
         setEncoderScissorForOp(enc, op, fullScissor, &lastScissor, &haveScissor);
         setEncoderRoundedClipForOp(enc, op);
+        MetalDrawUniforms const uniforms = makeDrawUniforms(vw, vh, op.translation);
+        [enc setVertexBytes:&uniforms length:sizeof(uniforms) atIndex:2];
         if (!op.isLine) {
           [enc setRenderPipelineState:metal_.rectPSO(op.blendMode)];
           [enc setVertexBuffer:metal_.quadBuffer() offset:0 atIndex:0];
@@ -428,7 +449,7 @@ public:
           }
           MetalGlyphOp const& o2 = frame_.glyphOps[nextRef.index];
           if (o2.blendMode != op.blendMode || !sameScissorForBatch(op, o2) ||
-              !sameRoundedClipForBatch(op, o2) ||
+              !sameRoundedClipForBatch(op, o2) || !sameTranslationForBatch(op, o2) ||
               o2.glyphStart != runStart + runVerts || nextRef.index != frame_.opOrder[j - 1].index + 1) {
             break;
           }
@@ -441,8 +462,8 @@ public:
         id<MTLBuffer> gbuf = metal_.glyphVertexArenaBuffer();
         const NSUInteger goff = static_cast<NSUInteger>(runStart) * sizeof(MetalGlyphVertex);
         [enc setVertexBuffer:gbuf offset:goff atIndex:0];
-        float vp2[2] = {vw, vh};
-        [enc setVertexBytes:vp2 length:sizeof(vp2) atIndex:1];
+        MetalDrawUniforms const uniforms = makeDrawUniforms(vw, vh, op.translation);
+        [enc setVertexBytes:&uniforms length:sizeof(uniforms) atIndex:1];
         [enc setFragmentTexture:glyphAtlas_->texture() atIndex:0];
         [enc setFragmentSamplerState:metal_.linearSampler() atIndex:0];
         [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:static_cast<NSUInteger>(runVerts)];
@@ -462,6 +483,8 @@ public:
         [enc setVertexBuffer:metal_.quadBuffer() offset:0 atIndex:0];
         const NSUInteger off = static_cast<NSUInteger>(ref.index) * sizeof(MetalImageInstance);
         [enc setVertexBuffer:metal_.imageInstanceArenaBuffer() offset:off atIndex:1];
+        MetalDrawUniforms const uniforms = makeDrawUniforms(vw, vh, op.translation);
+        [enc setVertexBytes:&uniforms length:sizeof(uniforms) atIndex:2];
         [enc setFragmentTexture:(__bridge id<MTLTexture>)op.texture atIndex:0];
         [enc setFragmentSamplerState:op.repeatSampler ? metal_.repeatSampler() : metal_.linearSampler() atIndex:0];
         [enc drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:kQuadStripCount
@@ -480,6 +503,8 @@ public:
         [enc setRenderPipelineState:metal_.pathPSO(op.blendMode)];
         const NSUInteger off = static_cast<NSUInteger>(op.pathStart) * sizeof(PathVertex);
         [enc setVertexBuffer:pathBuf offset:off atIndex:0];
+        MetalDrawUniforms const uniforms = makeDrawUniforms(vw, vh, op.translation);
+        [enc setVertexBytes:&uniforms length:sizeof(uniforms) atIndex:1];
         [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:static_cast<NSUInteger>(op.pathCount)];
         ++i;
         continue;
@@ -1415,6 +1440,7 @@ public:
 
     float const dx = currentState().transform.m[6] * dpiScaleX_;
     float const dy = currentState().transform.m[7] * dpiScaleY_;
+    vector_float2 const translation = simd_make_float2(dx, dy);
     MetalFrameRecorder& frame = frame_;
     std::uint32_t const framePathVertexBase = static_cast<std::uint32_t>(frame.pathVerts.size());
     std::uint32_t const frameGlyphVertexBase = static_cast<std::uint32_t>(frame.glyphVerts.size());
@@ -1450,13 +1476,6 @@ public:
       std::size_t const count = static_cast<std::size_t>(slice.pathVertexCount);
       frame.pathVerts.insert(frame.pathVerts.end(), recorded.pathVerts.begin() + static_cast<std::ptrdiff_t>(start),
                              recorded.pathVerts.begin() + static_cast<std::ptrdiff_t>(start + count));
-      for (std::size_t i = 0; i < count; ++i) {
-        PathVertex& vertex = frame.pathVerts[static_cast<std::size_t>(framePathVertexBase) + i];
-        vertex.x += dx;
-        vertex.y += dy;
-        vertex.viewport[0] = frameDrawableW_;
-        vertex.viewport[1] = frameDrawableH_;
-      }
     }
 
     if (slice.glyphVertexCount > 0) {
@@ -1465,11 +1484,6 @@ public:
       frame.glyphVerts.insert(frame.glyphVerts.end(),
                               recorded.glyphVerts.begin() + static_cast<std::ptrdiff_t>(start),
                               recorded.glyphVerts.begin() + static_cast<std::ptrdiff_t>(start + count));
-      for (std::size_t i = 0; i < count; ++i) {
-        MetalGlyphVertex& vertex = frame.glyphVerts[static_cast<std::size_t>(frameGlyphVertexBase) + i];
-        vertex.pos.x += dx;
-        vertex.pos.y += dy;
-      }
     }
 
     if (slice.rectCount > 0) {
@@ -1479,9 +1493,7 @@ public:
                            recorded.rectOps.begin() + static_cast<std::ptrdiff_t>(start + count));
       for (std::size_t i = 0; i < count; ++i) {
         MetalRectOp& op = frame.rectOps[static_cast<std::size_t>(frameRectBase) + i];
-        op.inst.rect.x += dx;
-        op.inst.rect.y += dy;
-        op.inst.viewport = simd_make_float2(frameDrawableW_, frameDrawableH_);
+        op.translation = translation;
         tagOpWithClip(op, clipScissorValid_, clipScissor_, clipRoundedStack_);
       }
     }
@@ -1493,9 +1505,7 @@ public:
                             recorded.imageOps.begin() + static_cast<std::ptrdiff_t>(start + count));
       for (std::size_t i = 0; i < count; ++i) {
         MetalImageOp& op = frame.imageOps[static_cast<std::size_t>(frameImageBase) + i];
-        op.inst.sdf.rect.x += dx;
-        op.inst.sdf.rect.y += dy;
-        op.inst.sdf.viewport = simd_make_float2(frameDrawableW_, frameDrawableH_);
+        op.translation = translation;
         if (op.texture) {
           op.texture = retainTexturePointer(op.texture);
         }
@@ -1511,6 +1521,7 @@ public:
       for (std::size_t i = 0; i < count; ++i) {
         MetalPathOp& op = frame.pathOps[static_cast<std::size_t>(framePathOpBase) + i];
         op.pathStart = framePathVertexBase + (op.pathStart - slice.pathVertexStart);
+        op.translation = translation;
         tagOpWithClip(op, clipScissorValid_, clipScissor_, clipRoundedStack_);
       }
     }
@@ -1523,6 +1534,7 @@ public:
       for (std::size_t i = 0; i < count; ++i) {
         MetalGlyphOp& op = frame.glyphOps[static_cast<std::size_t>(frameGlyphOpBase) + i];
         op.glyphStart = frameGlyphVertexBase + (op.glyphStart - slice.glyphVertexStart);
+        op.translation = translation;
         tagOpWithClip(op, clipScissorValid_, clipScissor_, clipRoundedStack_);
       }
     }

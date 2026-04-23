@@ -26,6 +26,11 @@ struct RoundedClipStack {
   float4 entries[kMaxRoundedClipMasks * 2];
 };
 
+struct DrawUniforms {
+  float2 viewport;
+  float2 translation;
+};
+
 struct RectVertexOut {
   /// Clip-space output (NDC in xy).
   float4 clip [[position]];
@@ -62,10 +67,11 @@ struct RectFragmentIn {
 
 vertex RectVertexOut rect_sdf_vert(uint vid [[vertex_id]], uint iid [[instance_id]],
                                    constant float2* quad [[buffer(0)]],
-                                   constant RectInstance* instances [[buffer(1)]]) {
+                                   constant RectInstance* instances [[buffer(1)]],
+                                   constant DrawUniforms* uniforms [[buffer(2)]]) {
   RectInstance inst = instances[iid];
   float2 halfSize = inst.rect.zw * 0.5f;
-  float2 center = inst.rect.xy + halfSize;
+  float2 center = inst.rect.xy + halfSize + uniforms[0].translation;
   float shadowPad = 0.0f;
   if (inst.shadowColor.a > 0.0001f && inst.shadowGeom.z > 0.0f) {
     shadowPad = inst.shadowGeom.z + length(inst.shadowGeom.xy);
@@ -78,7 +84,7 @@ vertex RectVertexOut rect_sdf_vert(uint vid [[vertex_id]], uint iid [[instance_i
   float2 worldOffset =
       float2(localOffset.x * cr - localOffset.y * sr, localOffset.x * sr + localOffset.y * cr);
   float2 screenPos = center + worldOffset;
-  float2 ndc = (screenPos / inst.viewport) * 2.0f - 1.0f;
+  float2 ndc = (screenPos / uniforms[0].viewport) * 2.0f - 1.0f;
   ndc.y = -ndc.y;
 
   RectVertexOut out;
@@ -92,7 +98,7 @@ vertex RectVertexOut rect_sdf_vert(uint vid [[vertex_id]], uint iid [[instance_i
   out.fragOpacity = inst.strokeWidthOpacity.y;
   out.fragCenter = center;
   out.fragAngle = inst.rotationPad.x;
-  out.fragViewport = inst.viewport;
+  out.fragViewport = uniforms[0].viewport;
   out.fragShadowColor = inst.shadowColor;
   out.fragShadowGeom = inst.shadowGeom;
   return out;
@@ -224,10 +230,11 @@ struct ImageFragmentIn {
 };
 
 vertex ImageVertexOut image_sdf_vert(uint vid [[vertex_id]], uint iid [[instance_id]], constant float2* quad [[buffer(0)]],
-                                     constant ImageInstance* instances [[buffer(1)]]) {
+                                     constant ImageInstance* instances [[buffer(1)]],
+                                     constant DrawUniforms* uniforms [[buffer(2)]]) {
   ImageInstance inst = instances[iid];
   float2 halfSize = inst.rect.zw * 0.5f;
-  float2 center = inst.rect.xy + halfSize;
+  float2 center = inst.rect.xy + halfSize + uniforms[0].translation;
   float shadowPad = 0.0f;
   if (inst.shadowColor.a > 0.0001f && inst.shadowGeom.z > 0.0f) {
     shadowPad = inst.shadowGeom.z + length(inst.shadowGeom.xy);
@@ -240,7 +247,7 @@ vertex ImageVertexOut image_sdf_vert(uint vid [[vertex_id]], uint iid [[instance
   float2 worldOffset =
       float2(localOffset.x * cr - localOffset.y * sr, localOffset.x * sr + localOffset.y * cr);
   float2 screenPos = center + worldOffset;
-  float2 ndc = (screenPos / inst.viewport) * 2.0f - 1.0f;
+  float2 ndc = (screenPos / uniforms[0].viewport) * 2.0f - 1.0f;
   ndc.y = -ndc.y;
 
   ImageVertexOut out;
@@ -254,7 +261,7 @@ vertex ImageVertexOut image_sdf_vert(uint vid [[vertex_id]], uint iid [[instance
   out.fragOpacity = inst.strokeWidthOpacity.y;
   out.fragCenter = center;
   out.fragAngle = inst.rotationPad.x;
-  out.fragViewport = inst.viewport;
+  out.fragViewport = uniforms[0].viewport;
   out.fragUvBounds = inst.uvBounds;
   out.fragTexSizeInv = inst.texSizeInv;
   out.fragImageMode = inst.imageModePad.x;
@@ -297,10 +304,11 @@ fragment float4 image_sdf_frag(ImageFragmentIn in [[stage_in]], float4 fragCoord
 
 vertex RectVertexOut line_sdf_vert(uint vid [[vertex_id]], uint iid [[instance_id]],
                                    constant float2* quad [[buffer(0)]],
-                                   constant RectInstance* instances [[buffer(1)]]) {
+                                   constant RectInstance* instances [[buffer(1)]],
+                                   constant DrawUniforms* uniforms [[buffer(2)]]) {
   RectInstance inst = instances[iid];
   float2 halfSize = inst.rect.zw * 0.5f;
-  float2 center = inst.rect.xy + halfSize;
+  float2 center = inst.rect.xy + halfSize + uniforms[0].translation;
   float pad = max(inst.strokeWidthOpacity.x, 1.0f);
   float2 paddedHalf = halfSize + pad;
   float2 localOffset = quad[vid] * paddedHalf;
@@ -313,7 +321,7 @@ vertex RectVertexOut line_sdf_vert(uint vid [[vertex_id]], uint iid [[instance_i
   float2 rotatedOffset =
       float2(lineRotated.x * cr - lineRotated.y * sr, lineRotated.x * sr + lineRotated.y * cr);
   float2 screenPos = center + rotatedOffset;
-  float2 ndc = (screenPos / inst.viewport) * 2.0f - 1.0f;
+  float2 ndc = (screenPos / uniforms[0].viewport) * 2.0f - 1.0f;
   ndc.y = -ndc.y;
 
   RectVertexOut out;
@@ -327,7 +335,7 @@ vertex RectVertexOut line_sdf_vert(uint vid [[vertex_id]], uint iid [[instance_i
   out.fragOpacity = inst.strokeWidthOpacity.y;
   out.fragCenter = center;
   out.fragAngle = inst.rotationPad.x;
-  out.fragViewport = inst.viewport;
+  out.fragViewport = uniforms[0].viewport;
   out.fragShadowColor = float4(0.0f);
   out.fragShadowGeom = float4(0.0f);
   return out;
@@ -380,12 +388,13 @@ struct PathVertexOut {
   float4 color;
 };
 
-vertex PathVertexOut path_vert(PathVertexIn in [[stage_in]]) {
+vertex PathVertexOut path_vert(PathVertexIn in [[stage_in]], constant DrawUniforms* uniforms [[buffer(1)]]) {
   PathVertexOut out;
-  float2 ndc = (in.pos / in.viewport) * 2.0f - 1.0f;
+  float2 pixelPos = in.pos + uniforms[0].translation;
+  float2 ndc = (pixelPos / uniforms[0].viewport) * 2.0f - 1.0f;
   ndc.y = -ndc.y;
   out.clip = float4(ndc, 0.0f, 1.0f);
-  out.fragPixelPos = in.pos;
+  out.fragPixelPos = pixelPos;
   out.color = in.color;
   return out;
 }
@@ -415,12 +424,13 @@ struct GlyphVertexOut {
   float4 color;
 };
 
-vertex GlyphVertexOut glyph_vert(GlyphVertexIn in [[stage_in]], constant float2* viewport [[buffer(1)]]) {
-  float2 ndc = (in.pos / viewport[0]) * 2.0f - 1.0f;
+vertex GlyphVertexOut glyph_vert(GlyphVertexIn in [[stage_in]], constant DrawUniforms* uniforms [[buffer(1)]]) {
+  float2 pixelPos = in.pos + uniforms[0].translation;
+  float2 ndc = (pixelPos / uniforms[0].viewport) * 2.0f - 1.0f;
   ndc.y = -ndc.y;
   GlyphVertexOut out;
   out.clip = float4(ndc, 0.0f, 1.0f);
-  out.fragPixelPos = in.pos;
+  out.fragPixelPos = pixelPos;
   out.uv = in.uv;
   out.color = in.color;
   return out;
