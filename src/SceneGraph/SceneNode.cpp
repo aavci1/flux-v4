@@ -1,5 +1,7 @@
 #include <Flux/SceneGraph/SceneNode.hpp>
 
+#include <Flux/SceneGraph/InteractionData.hpp>
+
 #include "SceneGraph/SceneNodeInternal.hpp"
 
 #include <algorithm>
@@ -14,8 +16,10 @@ struct SceneNode::Impl {
 
     SceneNodeKind kind;
     Rect bounds {};
+    Mat3 transform = Mat3::identity();
     SceneNode *parent = nullptr;
     std::vector<std::unique_ptr<SceneNode>> children;
+    std::unique_ptr<InteractionData> interaction;
     bool dirty = true;
 };
 
@@ -29,6 +33,8 @@ std::string_view sceneNodeKindName(SceneNodeKind kind) noexcept {
     return "Text";
   case SceneNodeKind::Image:
     return "Image";
+  case SceneNodeKind::Path:
+    return "Path";
   }
     return "Unknown";
 }
@@ -51,6 +57,10 @@ Point SceneNode::position() const noexcept {
 
 Size SceneNode::size() const noexcept {
     return Size {impl_->bounds.width, impl_->bounds.height};
+}
+
+Mat3 const &SceneNode::transform() const noexcept {
+    return impl_->transform;
 }
 
 bool SceneNode::isDirty() const noexcept {
@@ -86,6 +96,14 @@ void SceneNode::setSize(Size size) {
     markDirty();
 }
 
+void SceneNode::setTransform(Mat3 const &transformValue) {
+    if (std::equal(std::begin(impl_->transform.m), std::end(impl_->transform.m),
+                   std::begin(transformValue.m))) {
+        return;
+    }
+    impl_->transform = transformValue;
+}
+
 SceneNode *SceneNode::parent() const noexcept {
     return impl_->parent;
 }
@@ -96,6 +114,18 @@ std::span<std::unique_ptr<SceneNode> const> SceneNode::children() const noexcept
 
 std::span<std::unique_ptr<SceneNode>> SceneNode::children() noexcept {
     return impl_->children;
+}
+
+InteractionData *SceneNode::interaction() noexcept {
+    return impl_->interaction.get();
+}
+
+InteractionData const *SceneNode::interaction() const noexcept {
+    return impl_->interaction.get();
+}
+
+void SceneNode::setInteraction(std::unique_ptr<InteractionData> interactionValue) {
+    impl_->interaction = std::move(interactionValue);
 }
 
 void SceneNode::appendChild(std::unique_ptr<SceneNode> child) {

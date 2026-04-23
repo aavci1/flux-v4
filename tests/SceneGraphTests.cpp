@@ -1,8 +1,14 @@
+#include <Flux/Core/ComponentKey.hpp>
+#include <Flux/Core/Cursor.hpp>
+#include <Flux/Graphics/Path.hpp>
 #include <doctest/doctest.h>
 
 #include <Flux/SceneGraph/GroupNode.hpp>
+#include <Flux/SceneGraph/InteractionData.hpp>
+#include <Flux/SceneGraph/PathNode.hpp>
 #include <Flux/SceneGraph/RectNode.hpp>
 #include <Flux/SceneGraph/Renderer.hpp>
+#include <Flux/SceneGraph/SceneInteraction.hpp>
 #include <Flux/SceneGraph/SceneGraph.hpp>
 #include <Flux/SceneGraph/SceneRenderer.hpp>
 #include <Flux/SceneGraph/TextNode.hpp>
@@ -20,6 +26,7 @@ class RecordingRenderer final : public Renderer {
     struct RectDraw {
         Rect rect {};
         Point translation {};
+        float opacity = 1.f;
     };
 
     struct ClipDraw {
@@ -28,36 +35,51 @@ class RecordingRenderer final : public Renderer {
         Point translation {};
     };
 
+    struct PathDraw {
+        Point translation {};
+        float opacity = 1.f;
+    };
+
     std::vector<RectDraw> rectDraws;
     std::vector<Point> textTranslations;
     std::vector<ClipDraw> clipDraws;
+    std::vector<PathDraw> pathDraws;
 
-    void save() override { translations_.push_back(translations_.back()); }
+    void save() override {
+        transforms_.push_back(transforms_.back());
+        opacities_.push_back(opacities_.back());
+    }
     void restore() override {
-        if (translations_.size() > 1) {
-            translations_.pop_back();
+        if (transforms_.size() > 1) {
+            transforms_.pop_back();
+            opacities_.pop_back();
         }
     }
 
-    void translate(Point offset) override { translations_.back() = translations_.back() + offset; }
-    void transform(Mat3 const &) override {}
+    void translate(Point offset) override { transforms_.back() = transforms_.back() * Mat3::translate(offset); }
+    void transform(Mat3 const &matrix) override { transforms_.back() = transforms_.back() * matrix; }
     void clipRect(Rect rect, CornerRadius const &cornerRadius, bool) override {
-        clipDraws.push_back({rect, cornerRadius, translations_.back()});
+        clipDraws.push_back({rect, cornerRadius, transforms_.back().apply(Point {})});
     }
     bool quickReject(Rect) const override { return false; }
-    void setOpacity(float) override {}
+    void setOpacity(float opacity) override { opacities_.back() = opacity; }
     void setBlendMode(BlendMode) override {}
 
     void drawRect(Rect const &rect, CornerRadius const &, FillStyle const &, StrokeStyle const &, ShadowStyle const &) override {
-        rectDraws.push_back({rect, translations_.back()});
+        rectDraws.push_back({rect, transforms_.back().apply(Point {}), opacities_.back()});
     }
 
-    void drawTextLayout(TextLayout const &) override { textTranslations.push_back(translations_.back()); }
+    void drawPath(Path const &, FillStyle const &, StrokeStyle const &, ShadowStyle const &) override {
+        pathDraws.push_back({transforms_.back().apply(Point {}), opacities_.back()});
+    }
+
+    void drawTextLayout(TextLayout const &) override { textTranslations.push_back(transforms_.back().apply(Point {})); }
 
     void drawImage(Image const &, Rect const &) override {}
 
   private:
-    std::vector<Point> translations_ {Point {}};
+    std::vector<Mat3> transforms_ {Mat3::identity()};
+    std::vector<float> opacities_ {1.f};
 };
 
 class PreparedCountingRenderer final : public Renderer {
@@ -92,6 +114,7 @@ class PreparedCountingRenderer final : public Renderer {
         ++fallbackRectDraws;
     }
 
+    void drawPath(Path const &, FillStyle const &, StrokeStyle const &, ShadowStyle const &) override {}
     void drawTextLayout(TextLayout const &) override {}
     void drawImage(Image const &, Rect const &) override {}
 
@@ -162,6 +185,144 @@ TEST_CASE("RectNode clipping scopes child traversal to the node bounds") {
     CHECK(renderer.clipDraws[0].cornerRadius == CornerRadius {6.f});
     REQUIRE(renderer.textTranslations.size() == 1);
     CHECK(renderer.textTranslations[0] == Point {15.f, 27.f});
+}
+
+TEST_CASE("PathNode renders through the scenegraph renderer") {
+    Path path;
+    path.rect(Rect {0.f, 0.f, 24.f, 12.f}, CornerRadius {4.f});
+
+    auto root = std::make_unique<GroupNode>(Rect {8.f, 6.f, 100.f, 80.f});
+    root->appendChild(std::make_unique<PathNode>(
+        Rect {10.f, 14.f, 24.f, 12.f},
+        path,
+        FillStyle::solid(Colors::green),
+        StrokeStyle::solid(Colors::black, 1.f),
+        ShadowStyle::none()));
+
+    SceneGraph graph {std::move(root)};
+    RecordingRenderer renderer;
+    SceneRenderer sceneRenderer {renderer};
+
+    sceneRenderer.render(graph);
+
+    REQUIRE(renderer.pathDraws.size() == 1);
+    CHECK(renderer.pathDraws[0].translation == Point {18.f, 20.f});
+}
+
+TEST_CASE("RectNode subtree opacity multiplies through descendants") {
+    auto root = std::make_unique<GroupNode>(Rect {0.f, 0.f, 200.f, 100.f});
+    auto parent = std::make_unique<RectNode>(Rect {10.f, 12.f, 80.f, 40.f}, FillStyle::solid(Colors::red));
+    parent->setOpacity(0.5f);
+    auto child = std::make_unique<RectNode>(Rect {4.f, 6.f, 20.f, 10.f}, FillStyle::solid(Colors::blue));
+    child->setOpacity(0.25f);
+    parent->appendChild(std::move(child));
+    root->appendChild(std::move(parent));
+
+    SceneGraph graph {std::move(root)};
+    RecordingRenderer renderer;
+    SceneRenderer sceneRenderer {renderer};
+
+    sceneRenderer.render(graph);
+
+    REQUIRE(renderer.rectDraws.size() == 2);
+    CHECK(renderer.rectDraws[0].opacity == doctest::Approx(0.5f));
+    CHECK(renderer.rectDraws[1].opacity == doctest::Approx(0.125f));
+}
+
+TEST_CASE("Scenegraph hit testing honors node transforms") {
+    auto root = std::make_unique<GroupNode>(Rect {0.f, 0.f, 200.f, 120.f});
+    auto rect = std::make_unique<RectNode>(Rect {20.f, 30.f, 40.f, 20.f}, FillStyle::solid(Colors::red));
+    auto interaction = std::make_unique<InteractionData>();
+    interaction->stableTargetKey = ComponentKey {LocalId::fromString("scaled")};
+    interaction->cursor = Cursor::Hand;
+    rect->setInteraction(std::move(interaction));
+    rect->setTransform(Mat3::scale(2.f, 2.f));
+    root->appendChild(std::move(rect));
+
+    SceneGraph graph {std::move(root)};
+
+    auto hit = hitTestInteraction(graph, Point {80.f, 40.f});
+    REQUIRE(hit.has_value());
+    CHECK(hit->interaction->stableTargetKey == ComponentKey {LocalId::fromString("scaled")});
+    CHECK(hit->localPoint == Point {30.f, 5.f});
+
+    CHECK_FALSE(hitTestInteraction(graph, Point {110.f, 40.f}).has_value());
+}
+
+TEST_CASE("Scenegraph hit testing respects clipped rounded rect subtrees") {
+    auto root = std::make_unique<GroupNode>(Rect {0.f, 0.f, 160.f, 160.f});
+    auto container = std::make_unique<RectNode>(Rect {20.f, 20.f, 100.f, 100.f}, FillStyle::none(),
+                                                StrokeStyle::none(), CornerRadius {40.f});
+    container->setClipsContents(true);
+    auto child = std::make_unique<RectNode>(Rect {0.f, 0.f, 100.f, 100.f}, FillStyle::solid(Colors::blue));
+    auto interaction = std::make_unique<InteractionData>();
+    interaction->stableTargetKey = ComponentKey {LocalId::fromString("clipped")};
+    child->setInteraction(std::move(interaction));
+    container->appendChild(std::move(child));
+    root->appendChild(std::move(container));
+
+    SceneGraph graph {std::move(root)};
+
+    CHECK_FALSE(hitTestInteraction(graph, Point {22.f, 22.f}).has_value());
+    auto hit = hitTestInteraction(graph, Point {70.f, 70.f});
+    REQUIRE(hit.has_value());
+    CHECK(hit->interaction->stableTargetKey == ComponentKey {LocalId::fromString("clipped")});
+}
+
+TEST_CASE("Scenegraph interaction lookup collects focusable keys and closest matches") {
+    auto root = std::make_unique<GroupNode>(Rect {0.f, 0.f, 200.f, 120.f});
+
+    auto panel = std::make_unique<RectNode>(Rect {10.f, 10.f, 80.f, 40.f}, FillStyle::none());
+    auto panelInteraction = std::make_unique<InteractionData>();
+    panelInteraction->stableTargetKey =
+        ComponentKey {LocalId::fromString("panel"), LocalId::fromString("button")};
+    panelInteraction->focusable = true;
+    panel->setInteraction(std::move(panelInteraction));
+    root->appendChild(std::move(panel));
+
+    auto label = std::make_unique<TextNode>(Rect {20.f, 60.f, 40.f, 16.f});
+    auto labelInteraction = std::make_unique<InteractionData>();
+    labelInteraction->stableTargetKey = ComponentKey {LocalId::fromString("label")};
+    label->setInteraction(std::move(labelInteraction));
+    root->appendChild(std::move(label));
+
+    SceneGraph graph {std::move(root)};
+
+    std::vector<ComponentKey> const focusable = collectFocusableKeys(graph);
+    REQUIRE(focusable.size() == 1);
+    CHECK(focusable[0] == ComponentKey {LocalId::fromString("panel"), LocalId::fromString("button")});
+
+    auto const [node, interaction] = findClosestInteractionByKey(
+        graph, ComponentKey {LocalId::fromString("panel"), LocalId::fromString("button"),
+                             LocalId::fromString("icon")});
+    REQUIRE(node != nullptr);
+    REQUIRE(interaction != nullptr);
+    CHECK(interaction->stableTargetKey ==
+          ComponentKey {LocalId::fromString("panel"), LocalId::fromString("button")});
+}
+
+TEST_CASE("SceneGraph stores geometry keyed by component key") {
+    SceneGraph graph;
+    ComponentKey const keyA {LocalId::fromString("a")};
+    ComponentKey const keyB {LocalId::fromString("a"), LocalId::fromString("b")};
+
+    graph.beginGeometryBuild();
+    graph.recordGeometry(keyA, Rect {10.f, 20.f, 30.f, 40.f});
+    graph.recordGeometry(keyB, Rect {12.f, 24.f, 16.f, 8.f});
+    graph.finishGeometryBuild();
+
+    REQUIRE(graph.rectForKey(keyA).has_value());
+    CHECK(*graph.rectForKey(keyA) == Rect {10.f, 20.f, 30.f, 40.f});
+    REQUIRE(graph.rectForLeafKeyPrefix(keyB).has_value());
+    CHECK(*graph.rectForLeafKeyPrefix(keyB) == Rect {12.f, 24.f, 16.f, 8.f});
+    CHECK(*graph.rectForTapAnchor(keyB) == Rect {12.f, 24.f, 16.f, 8.f});
+
+    graph.beginGeometryBuild();
+    graph.recordGeometry(keyA, Rect {14.f, 18.f, 20.f, 10.f});
+    graph.finishGeometryBuild();
+
+    REQUIRE(graph.rectForKey(keyB).has_value());
+    CHECK(*graph.rectForKey(keyB) == Rect {12.f, 24.f, 16.f, 8.f});
 }
 
 TEST_CASE("SceneRenderer reuses prepared ops for position-only changes and rebuilds on content changes") {

@@ -5,6 +5,7 @@
 /// Pure scene-graph rendering interface used by `SceneNode` and `SceneRenderer`.
 
 #include <Flux/Core/Types.hpp>
+#include <Flux/Graphics/Path.hpp>
 #include <Flux/Graphics/Styles.hpp>
 #include <Flux/Graphics/TextLayout.hpp>
 
@@ -43,6 +44,7 @@ class Renderer {
     virtual void setBlendMode(BlendMode mode) = 0;
 
     virtual void drawRect(Rect const &rect, CornerRadius const &cornerRadius, FillStyle const &fill, StrokeStyle const &stroke, ShadowStyle const &shadow) = 0;
+    virtual void drawPath(Path const &path, FillStyle const &fill, StrokeStyle const &stroke, ShadowStyle const &shadow) = 0;
     virtual void drawTextLayout(TextLayout const &layout) = 0;
     virtual void drawImage(Image const &image, Rect const &bounds) = 0;
 

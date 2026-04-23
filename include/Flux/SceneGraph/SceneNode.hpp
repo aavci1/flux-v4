@@ -21,6 +21,7 @@ namespace flux {
 namespace scenegraph {
 
 class Renderer;
+struct InteractionData;
 
 namespace detail {
 struct SceneNodeAccess;
@@ -31,6 +32,7 @@ enum class SceneNodeKind : std::uint8_t {
   Rect,
   Text,
   Image,
+  Path,
 };
 
 std::string_view sceneNodeKindName(SceneNodeKind kind) noexcept;
@@ -49,15 +51,20 @@ class SceneNode {
     Rect bounds() const noexcept;
     Point position() const noexcept;
     Size size() const noexcept;
+    Mat3 const& transform() const noexcept;
     bool isDirty() const noexcept;
 
     void setBounds(Rect bounds);
     void setPosition(Point position);
     void setSize(Size size);
+    void setTransform(Mat3 const& transform);
 
     SceneNode *parent() const noexcept;
     std::span<std::unique_ptr<SceneNode> const> children() const noexcept;
     std::span<std::unique_ptr<SceneNode>> children() noexcept;
+    InteractionData *interaction() noexcept;
+    InteractionData const *interaction() const noexcept;
+    void setInteraction(std::unique_ptr<InteractionData> interaction);
 
     void appendChild(std::unique_ptr<SceneNode> child);
     void insertChild(std::size_t index, std::unique_ptr<SceneNode> child);

@@ -19,8 +19,11 @@
 #include <Flux/Graphics/Styles.hpp>
 #include <Flux/SceneGraph/GroupNode.hpp>
 #include <Flux/SceneGraph/ImageNode.hpp>
+#include <Flux/SceneGraph/PathNode.hpp>
 #include <Flux/SceneGraph/RectNode.hpp>
 #include <Flux/SceneGraph/SceneNode.hpp>
 #include <Flux/SceneGraph/SceneGraph.hpp>
+#include <Flux/SceneGraph/SceneInteraction.hpp>
 #include <Flux/SceneGraph/SceneRenderer.hpp>
+#include <Flux/SceneGraph/SceneTraversal.hpp>
 #include <Flux/SceneGraph/TextNode.hpp>

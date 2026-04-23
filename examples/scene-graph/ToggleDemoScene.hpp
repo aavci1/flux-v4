@@ -1,9 +1,11 @@
 #pragma once
 
 #include <Flux/Core/Types.hpp>
+#include <Flux/Graphics/Path.hpp>
 #include <Flux/Graphics/TextLayoutOptions.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/SceneGraph/GroupNode.hpp>
+#include <Flux/SceneGraph/PathNode.hpp>
 #include <Flux/SceneGraph/RectNode.hpp>
 #include <Flux/SceneGraph/SceneNode.hpp>
 #include <Flux/SceneGraph/TextNode.hpp>
@@ -19,6 +21,7 @@
 namespace flux::examples::scenegraphdemo {
 
 using scenegraph::GroupNode;
+using scenegraph::PathNode;
 using scenegraph::RectNode;
 using scenegraph::SceneNode;
 using scenegraph::TextNode;
@@ -82,6 +85,17 @@ inline RectNode *appendRectNode(SceneNode &parent, Rect bounds, FillStyle fill =
                                 ShadowStyle shadow = ShadowStyle::none()) {
     auto node = std::make_unique<RectNode>(bounds, fill, stroke, cornerRadius, shadow);
     RectNode *raw = node.get();
+    parent.appendChild(std::move(node));
+    return raw;
+}
+
+inline PathNode *appendPathNode(SceneNode &parent, Rect bounds, Path path,
+                                FillStyle fill = FillStyle::none(),
+                                StrokeStyle stroke = StrokeStyle::none(),
+                                ShadowStyle shadow = ShadowStyle::none()) {
+    auto node =
+        std::make_unique<PathNode>(bounds, std::move(path), fill, stroke, shadow);
+    PathNode *raw = node.get();
     parent.appendChild(std::move(node));
     return raw;
 }
@@ -320,6 +334,52 @@ inline BuiltNode buildSectionCard(TextSystem &textSystem, Theme const &theme, fl
     };
 }
 
+inline std::unique_ptr<SceneNode> buildHeroAccent(Theme const &theme, float contentWidth) {
+    constexpr float badgeSize = 74.f;
+    constexpr float glyphSize = 30.f;
+
+    auto accent = std::make_unique<GroupNode>(Rect {contentWidth - badgeSize, 0.f, badgeSize, badgeSize});
+
+    auto *badge = appendRectNode(
+        *accent,
+        Rect {0.f, 0.f, badgeSize, badgeSize},
+        FillStyle::solid(withAlpha(theme.successColor, 0.14f)),
+        StrokeStyle::solid(withAlpha(theme.successColor, 0.42f), 1.f),
+        CornerRadius {22.f}
+    );
+    badge->setOpacity(0.88f);
+    badge->setTransform(Mat3::rotate(0.2f, Point {badgeSize * 0.5f, badgeSize * 0.5f}));
+
+    appendRectNode(
+        *badge,
+        Rect {11.f, 11.f, badgeSize - 22.f, badgeSize - 22.f},
+        FillStyle::solid(withAlpha(theme.successColor, 0.08f)),
+        StrokeStyle::none(),
+        CornerRadius {18.f}
+    );
+
+    Path glyph;
+    glyph.moveTo(Point {4.f, 17.f});
+    glyph.lineTo(Point {12.f, 25.f});
+    glyph.lineTo(Point {26.f, 8.f});
+
+    auto *check = appendPathNode(
+        *badge,
+        Rect {
+            (badgeSize - glyphSize) * 0.5f,
+            (badgeSize - glyphSize) * 0.5f,
+            glyphSize,
+            glyphSize,
+        },
+        std::move(glyph),
+        FillStyle::none(),
+        StrokeStyle::solid(theme.successColor, 4.f)
+    );
+    check->setTransform(Mat3::rotate(-0.12f, Point {glyphSize * 0.5f, glyphSize * 0.5f}));
+
+    return accent;
+}
+
 inline std::unique_ptr<SceneNode> buildToggleDemoScene(TextSystem &textSystem, Theme const &theme) {
     float const viewportWidth = kWindowSize.width;
     float const viewportHeight = kWindowSize.height;
@@ -458,6 +518,9 @@ inline std::unique_ptr<SceneNode> buildToggleDemoScene(TextSystem &textSystem, T
 
     float cursorY = outerPadding;
     appendTextNode(*content, Point {outerPadding, cursorY}, std::move(heroTitle));
+    auto heroAccent = buildHeroAccent(theme, contentWidth);
+    heroAccent->setPosition(Point {outerPadding, cursorY - 4.f});
+    content->appendChild(std::move(heroAccent));
     cursorY += heroTitle.size.height + theme.space3;
 
     appendTextNode(*content, Point {outerPadding, cursorY}, std::move(heroCaption));

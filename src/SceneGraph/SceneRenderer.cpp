@@ -1,6 +1,7 @@
 #include <Flux/SceneGraph/SceneRenderer.hpp>
 
 #include <Flux/Graphics/Canvas.hpp>
+#include <Flux/SceneGraph/PathNode.hpp>
 #include <Flux/SceneGraph/RectNode.hpp>
 #include <Flux/SceneGraph/Renderer.hpp>
 #include <Flux/SceneGraph/SceneGraph.hpp>
@@ -58,6 +59,9 @@ class CanvasRenderer final : public Renderer {
     void setBlendMode(BlendMode mode) override { canvas_.setBlendMode(mode); }
     void drawRect(Rect const &rect, CornerRadius const &cornerRadius, FillStyle const &fill, StrokeStyle const &stroke, ShadowStyle const &shadow) override {
         canvas_.drawRect(rect, cornerRadius, fill, stroke, shadow);
+    }
+    void drawPath(Path const &path, FillStyle const &fill, StrokeStyle const &stroke, ShadowStyle const &shadow) override {
+        canvas_.drawPath(path, fill, stroke, shadow);
     }
     void drawTextLayout(TextLayout const &layout) override { canvas_.drawTextLayout(layout, Point {}); }
     void drawImage(Image const &image, Rect const &bounds) override {
@@ -119,7 +123,7 @@ struct SceneRenderer::Impl {
             prepareNodeCache(node);
         }
         ++renderEpoch;
-        renderNode(node);
+        renderNode(node, 1.f);
         if (kEnablePreparedRenderCache) {
             std::erase_if(cache, [this](auto const &entry) {
                 return entry.second.lastVisitedEpoch != renderEpoch;
@@ -146,7 +150,7 @@ struct SceneRenderer::Impl {
         }
     }
 
-    void renderNode(SceneNode const &node) {
+    void renderNode(SceneNode const &node, float inheritedOpacity) {
         if (kEnablePreparedRenderCache) {
             if (auto it = cache.find(&node); it != cache.end()) {
                 it->second.lastVisitedEpoch = renderEpoch;
@@ -156,6 +160,13 @@ struct SceneRenderer::Impl {
         renderer->save();
         Rect const bounds = node.bounds();
         renderer->translate(Point {bounds.x, bounds.y});
+        renderer->transform(node.transform());
+
+        float nodeOpacity = inheritedOpacity;
+        if (node.kind() == SceneNodeKind::Rect) {
+            nodeOpacity *= static_cast<RectNode const &>(node).opacity();
+        }
+        renderer->setOpacity(nodeOpacity);
 
         Rect const localBounds = node.localBounds();
         if (localBounds.width > 0.f && localBounds.height > 0.f &&
@@ -189,7 +200,7 @@ struct SceneRenderer::Impl {
         }
 
         for (std::unique_ptr<SceneNode> const &child : node.children()) {
-            renderNode(*child);
+            renderNode(*child, nodeOpacity);
         }
 
         if (clipsContents) {

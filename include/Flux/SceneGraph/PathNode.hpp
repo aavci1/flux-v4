@@ -1,0 +1,38 @@
+#pragma once
+
+/// \file Flux/SceneGraph/PathNode.hpp
+///
+/// Scene-graph path node.
+
+#include <Flux/Graphics/Path.hpp>
+#include <Flux/Graphics/Styles.hpp>
+#include <Flux/SceneGraph/SceneNode.hpp>
+
+namespace flux::scenegraph {
+
+class PathNode final : public SceneNode {
+  public:
+    explicit PathNode(Rect bounds = {}, Path path = {}, FillStyle fill = FillStyle::none(),
+                      StrokeStyle stroke = StrokeStyle::none(),
+                      ShadowStyle shadow = ShadowStyle::none());
+    ~PathNode() override;
+
+    Path const& path() const noexcept;
+    FillStyle const& fill() const noexcept;
+    StrokeStyle const& stroke() const noexcept;
+    ShadowStyle const& shadow() const noexcept;
+
+    void setPath(Path path);
+    void setFill(FillStyle fill);
+    void setStroke(StrokeStyle stroke);
+    void setShadow(ShadowStyle shadow);
+
+    Rect localBounds() const noexcept override;
+    void render(Renderer& renderer) const override;
+
+  private:
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
+};
+
+} // namespace flux::scenegraph

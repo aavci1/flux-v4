@@ -1,6 +1,7 @@
 #include <Flux/SceneGraph/RectNode.hpp>
 #include <Flux/SceneGraph/Renderer.hpp>
 
+#include <algorithm>
 #include <utility>
 
 namespace flux::scenegraph {
@@ -11,6 +12,7 @@ struct RectNode::Impl {
     CornerRadius cornerRadius {};
     ShadowStyle shadow = ShadowStyle::none();
     bool clipsContents = false;
+    float opacity = 1.f;
 };
 
 RectNode::RectNode(Rect bounds, FillStyle fill, StrokeStyle stroke, CornerRadius cornerRadius, ShadowStyle shadow) : SceneNode(SceneNodeKind::Rect, bounds), impl_(std::make_unique<Impl>()) {
@@ -40,6 +42,10 @@ ShadowStyle const &RectNode::shadow() const noexcept {
 
 bool RectNode::clipsContents() const noexcept {
     return impl_->clipsContents;
+}
+
+float RectNode::opacity() const noexcept {
+    return impl_->opacity;
 }
 
 void RectNode::setFill(FillStyle fill) {
@@ -76,6 +82,10 @@ void RectNode::setShadow(ShadowStyle shadow) {
 
 void RectNode::setClipsContents(bool clipsContents) noexcept {
     impl_->clipsContents = clipsContents;
+}
+
+void RectNode::setOpacity(float opacity) noexcept {
+    impl_->opacity = std::clamp(opacity, 0.f, 1.f);
 }
 
 void RectNode::render(Renderer &renderer) const {

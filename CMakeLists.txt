@@ -184,7 +184,9 @@ add_library(flux STATIC
   src/SceneGraph/RectNode.cpp
   src/SceneGraph/TextNode.cpp
   src/SceneGraph/ImageNode.cpp
+  src/SceneGraph/PathNode.cpp
   src/SceneGraph/SceneGraph.cpp
+  src/SceneGraph/SceneInteraction.cpp
   src/SceneGraph/SceneRenderer.cpp
   src/Graphics/Styles.cpp
   src/Graphics/AttributedString.cpp
