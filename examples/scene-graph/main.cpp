@@ -32,10 +32,12 @@ class SceneGraphExampleWindow final : public Window {
   public:
     explicit SceneGraphExampleWindow(WindowConfig const &config) : Window(config) {
         setEnvironmentValue<Theme>(Theme::light());
+        EnvironmentScope envScope {environmentLayer()};
+        this->m_sceneGraph = this->buildSceneGraph(this->getSize(), Application::instance().textSystem());
         requestRedraw();
     }
 
-    SceneGraph sceneGraph(Size size, TextSystem &textSystem) {
+    SceneGraph buildSceneGraph(Size size, TextSystem &textSystem) {
         auto const theme = environmentValue<Theme>();
 
         auto root = std::make_unique<GroupNode>(Rect {0.f, 0.f, size.width, size.height});
@@ -63,12 +65,13 @@ class SceneGraphExampleWindow final : public Window {
     }
 
     void render(Canvas &canvas) override {
-        EnvironmentScope envScope {environmentLayer()};
-        auto sceneGraph = this->sceneGraph(this->getSize(), Application::instance().textSystem());
         canvas.clear(Color::windowBackground());
         SceneRenderer renderer {canvas};
-        renderer.render(sceneGraph);
+        renderer.render(this->m_sceneGraph);
     }
+
+private:
+    SceneGraph m_sceneGraph;
 };
 
 } // namespace
