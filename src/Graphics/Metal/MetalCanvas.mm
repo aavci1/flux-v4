@@ -47,6 +47,10 @@ vector_float4 cornersToSimd(const CornerRadius& cr) {
   return simd_make_float4(cr.topLeft, cr.topRight, cr.bottomRight, cr.bottomLeft);
 }
 
+CornerRadius cornersFromSimd(vector_float4 const& corners) {
+  return CornerRadius{corners.x, corners.y, corners.z, corners.w};
+}
+
 Rect boundsOfTransformedRect(Rect const& r, Mat3 const& m) {
   Point p0 = m.apply({r.x, r.y});
   Point p1 = m.apply({r.x + r.width, r.y});
@@ -1462,6 +1466,8 @@ public:
     float const dx = currentState().transform.m[6] * dpiScaleX_;
     float const dy = currentState().transform.m[7] * dpiScaleY_;
     vector_float2 const translation = simd_make_float2(dx, dy);
+    float const opacityScale = currentState().opacity;
+    std::optional<Rect> const clipRect = currentState().clip;
     MetalFrameRecorder& frame = frame_;
     std::uint32_t const framePathVertexBase = static_cast<std::uint32_t>(frame.pathVerts.size());
     std::uint32_t const frameGlyphVertexBase = static_cast<std::uint32_t>(frame.glyphVerts.size());
@@ -1497,6 +1503,12 @@ public:
       std::size_t const count = static_cast<std::size_t>(slice.pathVertexCount);
       frame.pathVerts.insert(frame.pathVerts.end(), recorded.pathVerts.begin() + static_cast<std::ptrdiff_t>(start),
                              recorded.pathVerts.begin() + static_cast<std::ptrdiff_t>(start + count));
+      if (opacityScale < 0.9999f) {
+        for (std::size_t i = 0; i < count; ++i) {
+          PathVertex& vertex = frame.pathVerts[static_cast<std::size_t>(framePathVertexBase) + i];
+          vertex.color[3] *= opacityScale;
+        }
+      }
     }
 
     if (slice.glyphVertexCount > 0) {
@@ -1505,6 +1517,12 @@ public:
       frame.glyphVerts.insert(frame.glyphVerts.end(),
                               recorded.glyphVerts.begin() + static_cast<std::ptrdiff_t>(start),
                               recorded.glyphVerts.begin() + static_cast<std::ptrdiff_t>(start + count));
+      if (opacityScale < 0.9999f) {
+        for (std::size_t i = 0; i < count; ++i) {
+          MetalGlyphVertex& vertex = frame.glyphVerts[static_cast<std::size_t>(frameGlyphVertexBase) + i];
+          vertex.color *= opacityScale;
+        }
+      }
     }
 
     if (slice.rectCount > 0) {
@@ -1514,7 +1532,31 @@ public:
                            recorded.rectOps.begin() + static_cast<std::ptrdiff_t>(start + count));
       for (std::size_t i = 0; i < count; ++i) {
         MetalRectOp& op = frame.rectOps[static_cast<std::size_t>(frameRectBase) + i];
+        if (clipRect.has_value()) {
+          Rect const fullLocal{
+              op.inst.rect.x / dpiScaleX_,
+              op.inst.rect.y / dpiScaleY_,
+              op.inst.rect.z / dpiScaleX_,
+              op.inst.rect.w / dpiScaleY_,
+          };
+          Rect const clippedLocal = intersectRects(fullLocal, *clipRect);
+          if (clippedLocal.width > 0.f && clippedLocal.height > 0.f) {
+            CornerRadius clippedCorners =
+                cornerRadiiAfterAxisAlignedClip(fullLocal, clippedLocal, cornersFromSimd(op.inst.corners));
+            clampRoundRectCornerRadii(clippedLocal.width * dpiScale_, clippedLocal.height * dpiScale_,
+                                      clippedCorners);
+            op.inst.rect = simd_make_float4(
+                clippedLocal.x * dpiScaleX_,
+                clippedLocal.y * dpiScaleY_,
+                clippedLocal.width * dpiScaleX_,
+                clippedLocal.height * dpiScaleY_);
+            op.inst.corners = cornersToSimd(clippedCorners);
+          } else {
+            op.inst.rect = simd_make_float4(0.f, 0.f, 0.f, 0.f);
+          }
+        }
         op.translation = translation;
+        op.inst.strokeWidthOpacity.y *= opacityScale;
         tagOpWithClip(op, clipScissorValid_, clipScissor_, clipRoundedStack_);
       }
     }
@@ -1526,7 +1568,31 @@ public:
                             recorded.imageOps.begin() + static_cast<std::ptrdiff_t>(start + count));
       for (std::size_t i = 0; i < count; ++i) {
         MetalImageOp& op = frame.imageOps[static_cast<std::size_t>(frameImageBase) + i];
+        if (clipRect.has_value()) {
+          Rect const fullLocal{
+              op.inst.sdf.rect.x / dpiScaleX_,
+              op.inst.sdf.rect.y / dpiScaleY_,
+              op.inst.sdf.rect.z / dpiScaleX_,
+              op.inst.sdf.rect.w / dpiScaleY_,
+          };
+          Rect const clippedLocal = intersectRects(fullLocal, *clipRect);
+          if (clippedLocal.width > 0.f && clippedLocal.height > 0.f) {
+            CornerRadius clippedCorners =
+                cornerRadiiAfterAxisAlignedClip(fullLocal, clippedLocal, cornersFromSimd(op.inst.sdf.corners));
+            clampRoundRectCornerRadii(clippedLocal.width * dpiScale_, clippedLocal.height * dpiScale_,
+                                      clippedCorners);
+            op.inst.sdf.rect = simd_make_float4(
+                clippedLocal.x * dpiScaleX_,
+                clippedLocal.y * dpiScaleY_,
+                clippedLocal.width * dpiScaleX_,
+                clippedLocal.height * dpiScaleY_);
+            op.inst.sdf.corners = cornersToSimd(clippedCorners);
+          } else {
+            op.inst.sdf.rect = simd_make_float4(0.f, 0.f, 0.f, 0.f);
+          }
+        }
         op.translation = translation;
+        op.inst.sdf.strokeWidthOpacity.y *= opacityScale;
         if (op.texture) {
           op.texture = retainTexturePointer(op.texture);
         }
