@@ -101,6 +101,10 @@ ComponentBuildResult buildMeasuredComponent(Text const& text, ComponentBuildCont
     result.node = std::move(textNode);
   }
   result.geometrySize = ctx.layoutOuterSize();
+  if (build::textUsesContentBox(ctx.modifiers())) {
+    result.geometrySize =
+        build::measuredOuterSizeFromContent(build::rectSize(frameRect), ctx.modifiers());
+  }
   result.hasGeometrySize = true;
   return result;
 }
