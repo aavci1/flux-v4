@@ -55,7 +55,11 @@ Mat3 const &SceneNode::transform() const noexcept {
 }
 
 bool SceneNode::isDirty() const noexcept {
-    return dirty_;
+    return ownPaintingDirty_;
+}
+
+bool SceneNode::isSubtreeDirty() const noexcept {
+    return subtreeDirty_;
 }
 
 void SceneNode::setBounds(Rect bounds) {
@@ -128,7 +132,7 @@ void SceneNode::appendChild(std::unique_ptr<SceneNode> child) {
     }
     child->parent_ = this;
     children_.push_back(std::move(child));
-    markDirty();
+    markSubtreeDirty();
 }
 
 void SceneNode::insertChild(std::size_t index, std::unique_ptr<SceneNode> child) {
@@ -144,7 +148,7 @@ void SceneNode::insertChild(std::size_t index, std::unique_ptr<SceneNode> child)
     child->parent_ = this;
     children_.insert(children_.begin() + static_cast<std::ptrdiff_t>(index),
                            std::move(child));
-    markDirty();
+    markSubtreeDirty();
 }
 
 std::unique_ptr<SceneNode> SceneNode::removeChild(SceneNode &child) {
@@ -159,7 +163,7 @@ std::unique_ptr<SceneNode> SceneNode::removeChild(SceneNode &child) {
     std::unique_ptr<SceneNode> removed = std::move(*it);
     children_.erase(it);
     removed->parent_ = nullptr;
-    markDirty();
+    markSubtreeDirty();
     return removed;
 }
 
@@ -169,7 +173,7 @@ std::vector<std::unique_ptr<SceneNode>> SceneNode::releaseChildren() {
         child->parent_ = nullptr;
     }
     children_.clear();
-    markDirty();
+    markSubtreeDirty();
     return released;
 }
 
@@ -192,7 +196,7 @@ void SceneNode::replaceChildren(std::vector<std::unique_ptr<SceneNode>> children
         child->parent_ = this;
         children_.push_back(std::move(child));
     }
-    markDirty();
+    markSubtreeDirty();
 }
 
 Rect SceneNode::localBounds() const noexcept {
@@ -206,7 +210,11 @@ bool SceneNode::canPrepareRenderOps() const noexcept {
 }
 
 void SceneNode::markDirty() noexcept {
-    dirty_ = true;
+    ownPaintingDirty_ = true;
+    markSubtreeDirty();
+}
+
+void SceneNode::markSubtreeDirty() noexcept {
     for (SceneNode *node = this; node; node = node->parent_) {
         if (node->subtreeDirty_) {
             if (node != this) {
@@ -219,7 +227,11 @@ void SceneNode::markDirty() noexcept {
 }
 
 void detail::SceneNodeAccess::clearDirty(SceneNode const &node) noexcept {
-    node.dirty_ = false;
+    node.ownPaintingDirty_ = false;
+}
+
+bool detail::SceneNodeAccess::ownPaintingDirty(SceneNode const &node) noexcept {
+    return node.ownPaintingDirty_;
 }
 
 bool detail::SceneNodeAccess::subtreeDirty(SceneNode const &node) noexcept {

@@ -55,6 +55,7 @@ class SceneNode {
     Size size() const noexcept;
     Mat3 const& transform() const noexcept;
     bool isDirty() const noexcept;
+    bool isSubtreeDirty() const noexcept;
 
     void setBounds(Rect bounds);
     void setPosition(Point position);
@@ -88,6 +89,7 @@ class SceneNode {
 
   protected:
     void markDirty() noexcept;
+    void markSubtreeDirty() noexcept;
 
   private:
     SceneNodeKind kind_;
@@ -96,7 +98,7 @@ class SceneNode {
     SceneNode* parent_ = nullptr;
     std::vector<std::unique_ptr<SceneNode>> children_{};
     std::unique_ptr<InteractionData> interaction_{};
-    mutable bool dirty_ = true;
+    mutable bool ownPaintingDirty_ = true;
     mutable bool subtreeDirty_ = true;
     mutable std::unique_ptr<PreparedRenderOps> preparedRenderOps_{};
 

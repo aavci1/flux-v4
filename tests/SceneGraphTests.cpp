@@ -442,4 +442,28 @@ TEST_CASE("SceneRenderer reuses prepared ops for position-only changes and rebui
     CHECK(renderer.fallbackRectDraws == 0);
 }
 
+TEST_CASE("SceneRenderer does not reprepare parent paint for child-only content changes") {
+    auto root = std::make_unique<GroupNode>(Rect {0.f, 0.f, 240.f, 160.f});
+    auto panel = std::make_unique<RectNode>(Rect {10.f, 12.f, 120.f, 80.f}, FillStyle::solid(Colors::red));
+    auto child = std::make_unique<RectNode>(Rect {8.f, 10.f, 32.f, 20.f}, FillStyle::solid(Colors::green));
+    RectNode *childNode = child.get();
+    panel->appendChild(std::move(child));
+    root->appendChild(std::move(panel));
+
+    SceneGraph graph {std::move(root)};
+    PreparedCountingRenderer renderer;
+    SceneRenderer sceneRenderer {renderer};
+
+    sceneRenderer.render(graph);
+    CHECK(renderer.prepareCalls == 2);
+    CHECK(renderer.replayCalls == 2);
+    CHECK(renderer.fallbackRectDraws == 0);
+
+    childNode->setFill(FillStyle::solid(Colors::blue));
+    sceneRenderer.render(graph);
+    CHECK(renderer.prepareCalls == 3);
+    CHECK(renderer.replayCalls == 4);
+    CHECK(renderer.fallbackRectDraws == 0);
+}
+
 } // namespace

@@ -148,17 +148,17 @@ struct SceneRenderer::Impl {
         if (node.kind() != SceneNodeKind::Group && node.canPrepareRenderOps()) {
             std::unique_ptr<PreparedRenderOps> &prepared =
                 detail::SceneNodeAccess::preparedRenderOps(node);
-            if (node.isDirty() || !prepared) {
+            if (detail::SceneNodeAccess::ownPaintingDirty(node) || !prepared) {
                 debug::perf::recordPreparedPrepareCall();
                 prepared = renderer->prepare(node);
                 detail::SceneNodeAccess::clearDirty(node);
             }
         } else if (node.kind() != SceneNodeKind::Group) {
             detail::SceneNodeAccess::preparedRenderOps(node).reset();
-            if (node.isDirty()) {
+            if (detail::SceneNodeAccess::ownPaintingDirty(node)) {
                 detail::SceneNodeAccess::clearDirty(node);
             }
-        } else if (node.isDirty()) {
+        } else if (detail::SceneNodeAccess::ownPaintingDirty(node)) {
             detail::SceneNodeAccess::clearDirty(node);
         }
 

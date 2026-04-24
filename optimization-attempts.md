@@ -227,6 +227,25 @@
   - `ResolvedElement` now points at the already-resolved scene element and only owns composite bodies when it has to, which removes the extra `Element` clone from the hot incremental rebuild path.
   - With the demo still driven by `useAnimation`, the rebuilt binary now lands below the `10%` CPU target on the original foreground `ps` averaging method without changing the demo behavior.
 
+## Attempt 14
+
+- Item: Split scene-node paint dirtiness from subtree dirtiness so child-only changes do not force parent prepared-op re-recording.
+- Type: framework
+- Status: Worked, kept.
+- Before:
+  - Prepared-op `prepare()` rate: `12.58/f` in a steady-state `FLUX_DEBUG_PERF=1` sample
+  - Scene render time: `0.33 ms/f`
+  - Display-link-to-present budget: `1.71 ms/f`
+- After:
+  - Prepared-op `prepare()` rate: `6.18/f` (run 1), `6.21/f` (run 2)
+  - Scene render time: `0.25 ms/f` (run 1), `0.39 ms/f` (run 2)
+  - Display-link-to-present budget: `1.37 ms/f` (run 1), `2.12 ms/f` (run 2)
+  - Delta: about `-6.4 prepares/frame`
+- Outcome:
+  - `SceneNode` now keeps `ownPaintingDirty_` separate from `subtreeDirty_`, so descendant mutations only trigger traversal into the subtree instead of forcing parent `prepare()` calls.
+  - This directly addresses the hot counter regression signal: steady-state `prepare()` dropped from the low-12s per frame to about `6.2/f`, matching the expected range for the demo.
+  - A regression test now verifies that a child paint change re-prepares the child but not the cached parent node.
+
 ## Result
 
 - Accepted framework changes still in place:
