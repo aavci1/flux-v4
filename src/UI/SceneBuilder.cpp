@@ -382,11 +382,16 @@ SceneBuilder::buildResolved(Element const& el, detail::ResolvedElement const& re
       };
     }
     bool const usesNestedCompositeBody = !resolved.bodyComponentKeys.empty();
+    bool const hasDistinctOuterGeometry =
+        !build::nearlyEqual(logicalCompositeRect.x, contentRect.x) ||
+        !build::nearlyEqual(logicalCompositeRect.y, contentRect.y) ||
+        !build::nearlyEqual(logicalCompositeRect.width, contentRect.width) ||
+        !build::nearlyEqual(logicalCompositeRect.height, contentRect.height);
     Rect currentRect = contentRect;
     if (el.expandsBody()) {
       if (usesNestedCompositeBody) {
         currentRect = compositeRect;
-      } else if (!compositeKeepsContentGeometry(typeTag)) {
+      } else if (hasDistinctOuterGeometry || !compositeKeepsContentGeometry(typeTag)) {
         currentRect = logicalCompositeRect;
       }
     }

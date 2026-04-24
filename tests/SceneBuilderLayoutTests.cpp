@@ -160,6 +160,34 @@ TEST_CASE("SceneBuilder preserves outer explicit size around composite body chro
   CHECK(inner->bounds().height > 0.f);
 }
 
+TEST_CASE("SceneBuilder records composite geometry from the outer modifier shell when it differs from body content") {
+  NullTextSystem textSystem{};
+  scenegraph::SceneGraph graph{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  SceneBuilder builder{textSystem, EnvironmentStack::current(), &graph};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 240.f;
+  constraints.maxHeight = 80.f;
+
+  Element el = VStack{
+      .alignment = Alignment::Start,
+      .children = children(
+          Element{CompositeRootModifierShell{}}.key("shell").size(240.f, 64.f)
+      ),
+  };
+
+  graph.setRoot(builder.build(el, constraints));
+  std::optional<Rect> shellRect = graph.rectForKey(ComponentKey{LocalId::fromString("shell")});
+  REQUIRE(shellRect.has_value());
+  CHECK(shellRect->x == doctest::Approx(0.f));
+  CHECK(shellRect->y == doctest::Approx(0.f));
+  CHECK(shellRect->width == doctest::Approx(240.f));
+  CHECK(shellRect->height == doctest::Approx(64.f));
+}
+
 TEST_CASE("SceneBuilder emits clipped scroll viewport and translated content group") {
   NullTextSystem textSystem{};
   EnvironmentLayer env{};
