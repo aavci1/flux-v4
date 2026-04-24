@@ -39,6 +39,8 @@ void resetComponentStateStorage(ComponentState& state) {
   state.valueSnapshot = {};
   state.environmentDependencies.clear();
   state.pendingEnvironmentDependencies.clear();
+  state.lastSceneElement.reset();
+  state.lastBuildSnapshot.reset();
 }
 
 void scrubObservableSubscriptions(std::unordered_map<ComponentKey, ComponentState, ComponentKeyHash>& states,
@@ -235,6 +237,15 @@ bool StateStore::hasPendingDirtyComponents() const noexcept {
   return !pendingDirtyComposites_.empty();
 }
 
+std::vector<ComponentKey> StateStore::pendingDirtyComponents() const {
+  std::vector<ComponentKey> keys;
+  keys.reserve(pendingDirtyComposites_.size());
+  for (ComponentKey const& key : pendingDirtyComposites_) {
+    keys.push_back(key);
+  }
+  return keys;
+}
+
 bool StateStore::isComponentDirty(ComponentKey const& key) const {
   return forceFullRebuild_ || activeDirtyComposites_.count(key) != 0;
 }
@@ -252,6 +263,14 @@ bool StateStore::hasDirtyDescendant(ComponentKey const& key) const {
     }
   }
   return false;
+}
+
+void StateStore::markComponentsOutsideSubtreeVisited(ComponentKey const& key) {
+  for (auto& [candidateKey, state] : states_) {
+    if (!keyHasPrefix(candidateKey, key)) {
+      state.lastVisitedEpoch = buildEpoch_;
+    }
+  }
 }
 
 void StateStore::markRetainedSubtreeVisited(ComponentKey const& key) {
@@ -290,6 +309,14 @@ Element const* StateStore::cachedBody(ComponentKey const& key) const {
   return static_cast<Element const*>(it->second.lastBody.get());
 }
 
+Element const* StateStore::sceneElement(ComponentKey const& key) const {
+  auto it = states_.find(key);
+  if (it == states_.end() || !it->second.lastSceneElement) {
+    return nullptr;
+  }
+  return static_cast<Element const*>(it->second.lastSceneElement.get());
+}
+
 void StateStore::discardCurrentRebuildBody(ComponentKey const& key) {
   auto it = states_.find(key);
   if (it == states_.end() || it->second.lastBodyEpoch != buildEpoch_) {
@@ -312,6 +339,43 @@ void StateStore::recordBodyConstraints(ComponentKey const& key, LayoutConstraint
     }
   }
   state.reusableConstraints.push_back(constraints);
+}
+
+std::optional<ComponentBuildSnapshot> StateStore::buildSnapshot(ComponentKey const& key) const {
+  auto it = states_.find(key);
+  if (it == states_.end()) {
+    return std::nullopt;
+  }
+  return it->second.lastBuildSnapshot;
+}
+
+void StateStore::recordBuildSnapshot(ComponentKey const& key,
+                                     LayoutConstraints const& constraints,
+                                     LayoutHints const& hints, Point origin,
+                                     Size assignedSize, bool hasAssignedWidth,
+                                     bool hasAssignedHeight) {
+  auto it = states_.find(key);
+  if (it == states_.end()) {
+    return;
+  }
+  it->second.lastBuildSnapshot = ComponentBuildSnapshot{
+      .constraints = constraints,
+      .hints = hints,
+      .origin = origin,
+      .assignedSize = assignedSize,
+      .hasAssignedWidth = hasAssignedWidth,
+      .hasAssignedHeight = hasAssignedHeight,
+  };
+}
+
+void StateStore::recordSceneElement(ComponentKey const& key, Element const& element) {
+  auto it = states_.find(key);
+  if (it == states_.end()) {
+    return;
+  }
+  Element* raw = new Element(element);
+  it->second.lastSceneElement = std::unique_ptr<void, void (*)(void*)>(
+      raw, [](void* p) { delete static_cast<Element*>(p); });
 }
 
 ComponentState const* StateStore::findComponentState(ComponentKey const& key) const {

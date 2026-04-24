@@ -35,8 +35,12 @@ class SceneGraph {
     void finishGeometryBuild();
     void clearGeometry();
     void recordGeometry(ComponentKey const& key, Rect rect);
+    void recordNode(ComponentKey const& key, SceneNode* node);
+    std::unique_ptr<SceneNode> replaceNodeForKey(ComponentKey const& key, std::unique_ptr<SceneNode> node);
+    void replaceSubtreeData(ComponentKey const& key, SceneGraph const& patch);
 
     [[nodiscard]] std::optional<Rect> rectForKey(ComponentKey const& key) const;
+    [[nodiscard]] SceneNode* nodeForKey(ComponentKey const& key) const noexcept;
     [[nodiscard]] std::optional<Rect> rectForLeafKeyPrefix(ComponentKey const& key) const;
     [[nodiscard]] std::optional<Rect> rectForTapAnchor(ComponentKey const& key) const;
     [[nodiscard]] std::vector<std::pair<ComponentKey, Rect>> snapshotGeometry() const;

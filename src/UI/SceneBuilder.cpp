@@ -241,6 +241,32 @@ SceneBuilder::build(Element const& el, LayoutConstraints const& constraints, Com
 }
 
 std::unique_ptr<scenegraph::SceneNode>
+SceneBuilder::buildSubtree(Element const& el, LayoutConstraints const& constraints,
+                           LayoutHints const& hints, Point origin, ComponentKey key,
+                           Size assignedSize, bool hasAssignedWidth,
+                           bool hasAssignedHeight) {
+  measureLayoutCache_->clear();
+  lastBuildStats_ = {};
+  if (sceneGraph_) {
+    sceneGraph_->beginGeometryBuild();
+  }
+
+  pushFrame(constraints, hints, origin, std::move(key), assignedSize, hasAssignedWidth,
+            hasAssignedHeight);
+  std::unique_ptr<scenegraph::SceneNode> node = buildOrReuse(el, nullptr);
+  popFrame();
+
+  if (sceneGraph_) {
+    if (node) {
+      sceneGraph_->finishGeometryBuild();
+    } else {
+      sceneGraph_->clearGeometry();
+    }
+  }
+  return node;
+}
+
+std::unique_ptr<scenegraph::SceneNode>
 SceneBuilder::buildOrReuse(Element const& el, std::unique_ptr<scenegraph::SceneNode> existing) {
   (void)existing;
   if (buildFrameDepth_ == 0) {
@@ -264,6 +290,14 @@ SceneBuilder::buildResolved(Element const& el, detail::ResolvedElement const& re
       sceneGraph_->recordGeometry(current.key,
                                   Rect {current.origin.x, current.origin.y, measured.width,
                                         measured.height});
+      sceneGraph_->recordNode(current.key, root.get());
+    }
+    if (StateStore* store = StateStore::current();
+        store && store->findComponentState(current.key)) {
+      store->recordSceneElement(current.key, el);
+      store->recordBuildSnapshot(current.key, current.constraints, current.hints, current.origin,
+                                 current.assignedSize, current.hasAssignedWidth,
+                                 current.hasAssignedHeight);
     }
     ++lastBuildStats_.arrangedNodes;
     return root;
@@ -401,14 +435,25 @@ SceneBuilder::buildResolved(Element const& el, detail::ResolvedElement const& re
       }
     }
     sceneGraph_->recordGeometry(current.key, currentRect);
+    sceneGraph_->recordNode(current.key, root.get());
     if (resolved.nestSceneUnderFirstBody) {
       ComponentKey bodySceneKey = current.key;
       bodySceneKey.push_back(LocalId::fromIndex(0));
       sceneGraph_->recordGeometry(bodySceneKey, contentRect);
+      sceneGraph_->recordNode(bodySceneKey, root.get());
     }
     for (ComponentKey const& bodyKey : resolved.bodyComponentKeys) {
       sceneGraph_->recordGeometry(bodyKey, logicalCompositeRect);
+      sceneGraph_->recordNode(bodyKey, root.get());
     }
+  }
+
+  if (StateStore* store = StateStore::current();
+      store && store->findComponentState(current.key)) {
+    store->recordSceneElement(current.key, el);
+    store->recordBuildSnapshot(current.key, current.constraints, current.hints, current.origin,
+                               current.assignedSize, current.hasAssignedWidth,
+                               current.hasAssignedHeight);
   }
 
   ++lastBuildStats_.arrangedNodes;

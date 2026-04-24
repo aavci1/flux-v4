@@ -7,6 +7,7 @@
 #include <Flux/SceneGraph/GroupNode.hpp>
 #include <Flux/UI/Environment.hpp>
 #include <Flux/UI/Overlay.hpp>
+#include <Flux/UI/SceneBuilder.hpp>
 
 #include <Flux/UI/Detail/LayoutDebugDump.hpp>
 
@@ -28,6 +29,22 @@ Size snapRootLayoutSize(Size s) {
 bool inputDebugEnabled() {
   return debug::inputEnabled();
 }
+
+struct WindowEnvironmentScope {
+  EnvironmentStack& environment;
+  bool active = false;
+
+  WindowEnvironmentScope(EnvironmentStack& environment, EnvironmentLayer const& windowEnvironment)
+      : environment(environment), active(true) {
+    environment.push(windowEnvironment);
+  }
+
+  ~WindowEnvironmentScope() {
+    if (active) {
+      environment.pop();
+    }
+  }
+};
 
 } // namespace
 
@@ -57,6 +74,86 @@ void BuildOrchestrator::subscribeToRebuild(std::function<void()> onFrameNeeded) 
   rebuildHandle_ = Application::instance().onNextFrameNeeded(std::move(onFrameNeeded));
 }
 
+bool BuildOrchestrator::tryIncrementalComponentRebuild(LayoutConstraints const& rootConstraints) {
+  (void)rootConstraints;
+  if (!rootHolder_) {
+    return false;
+  }
+
+  scenegraph::SceneGraph& sceneGraph = window_.sceneGraph();
+  struct IncrementalCandidate {
+    ComponentKey key{};
+    ComponentBuildSnapshot snapshot{};
+    Element const* sceneElement = nullptr;
+  };
+
+  std::vector<IncrementalCandidate> candidates{};
+  for (ComponentKey const& dirtyKey : stateStore_.pendingDirtyComponents()) {
+    std::optional<ComponentBuildSnapshot> const snapshot = stateStore_.buildSnapshot(dirtyKey);
+    Element const* const sceneElement = stateStore_.sceneElement(dirtyKey);
+    if (!snapshot.has_value() || !sceneElement || !sceneGraph.nodeForKey(dirtyKey)) {
+      continue;
+    }
+    candidates.push_back(IncrementalCandidate{
+        .key = dirtyKey,
+        .snapshot = *snapshot,
+        .sceneElement = sceneElement,
+    });
+  }
+
+  if (candidates.size() != 1) {
+    return false;
+  }
+
+  IncrementalCandidate const& candidate = candidates.front();
+  ComponentKey const& dirtyKey = candidate.key;
+  ComponentBuildSnapshot const& snapshot = candidate.snapshot;
+  Element const& sceneElement = *candidate.sceneElement;
+
+  StateStore* previousStore = StateStore::current();
+  stateStore_.beginRebuild(false);
+  stateStore_.setOverlayScope(std::nullopt);
+  StateStore::setCurrent(&stateStore_);
+
+  auto finishRebuild = [&]() {
+    stateStore_.markComponentsOutsideSubtreeVisited(dirtyKey);
+    StateStore::setCurrent(previousStore);
+    stateStore_.setOverlayScope(std::nullopt);
+    stateStore_.endRebuild();
+  };
+
+  bool success = false;
+  {
+    EnvironmentStack& environment = EnvironmentStack::current();
+    WindowEnvironmentScope environmentScope{environment, window_.environmentLayer()};
+    scenegraph::SceneGraph patchGraph;
+    SceneBuilder sceneBuilder{Application::instance().textSystem(), environment, &patchGraph};
+    std::unique_ptr<scenegraph::SceneNode> replacement =
+        sceneBuilder.buildSubtree(sceneElement, snapshot.constraints, snapshot.hints, snapshot.origin,
+                                  dirtyKey, snapshot.assignedSize, snapshot.hasAssignedWidth,
+                                  snapshot.hasAssignedHeight);
+    if (replacement) {
+      std::optional<Rect> const previousRect = sceneGraph.rectForKey(dirtyKey);
+      std::optional<Rect> const nextRect = patchGraph.rectForKey(dirtyKey);
+      std::unique_ptr<scenegraph::SceneNode> removed =
+          sceneGraph.replaceNodeForKey(dirtyKey, std::move(replacement));
+      if (removed) {
+        sceneGraph.replaceSubtreeData(dirtyKey, patchGraph);
+        if (previousRect && nextRect &&
+            (std::abs(previousRect->width - nextRect->width) > 0.001f ||
+             std::abs(previousRect->height - nextRect->height) > 0.001f)) {
+          Application::instance().markReactiveDirty();
+        }
+        layoutDebugDumpRetained(sceneGraph);
+        success = true;
+      }
+    }
+  }
+
+  finishRebuild();
+  return success;
+}
+
 void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runtime) {
   if (sizeOverride.has_value()) {
     gesture_.clearPress();
@@ -75,38 +172,41 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
   ++textFrameIndex_;
   Application::instance().textSystem().onFrameBegin(textFrameIndex_);
   layoutDebugBeginPass();
-
-  actionRegistryBuild_.beginRebuild();
   buildSlotRect_ = Rect{0.f, 0.f, sz.width, sz.height};
 
-  {
-    scenegraph::SceneGraph& sceneGraph = window_.sceneGraph();
-    std::unique_ptr<scenegraph::SceneNode> nextRoot = runBuildPass(
-        BuildPassConfig{
-            .stateStore = stateStore_,
-            .forceFullRebuild = sizeOverride.has_value() || !stateStore_.hasPendingDirtyComponents(),
-            .textSystem = Application::instance().textSystem(),
-            .environment = EnvironmentStack::current(),
-            .windowEnvironment = window_.environmentLayer(),
-            .sceneGraph = &sceneGraph,
-        },
-        [&]() { return rootHolder_ ? rootHolder_->resolveScene(rootCs) : ResolvedRootScene{}; }, rootCs);
-    if (nextRoot) {
-      sceneGraph.setRoot(std::move(nextRoot));
-      layoutDebugDumpRetained(sceneGraph);
-    } else {
-      sceneGraph.clearGeometry();
-      sceneGraph.setRoot(std::make_unique<scenegraph::GroupNode>());
-      layoutDebugDumpRetained(sceneGraph);
+  bool const usedIncremental = !sizeOverride.has_value() && tryIncrementalComponentRebuild(rootCs);
+  if (!usedIncremental) {
+    actionRegistryBuild_.beginRebuild();
+    {
+      scenegraph::SceneGraph& sceneGraph = window_.sceneGraph();
+      std::unique_ptr<scenegraph::SceneNode> nextRoot = runBuildPass(
+          BuildPassConfig{
+              .stateStore = stateStore_,
+              .forceFullRebuild = sizeOverride.has_value() || !stateStore_.hasPendingDirtyComponents(),
+              .textSystem = Application::instance().textSystem(),
+              .environment = EnvironmentStack::current(),
+              .windowEnvironment = window_.environmentLayer(),
+              .sceneGraph = &sceneGraph,
+          },
+          [&]() { return rootHolder_ ? rootHolder_->resolveScene(rootCs) : ResolvedRootScene{}; }, rootCs);
+      if (nextRoot) {
+        sceneGraph.setRoot(std::move(nextRoot));
+        layoutDebugDumpRetained(sceneGraph);
+      } else {
+        sceneGraph.clearGeometry();
+        sceneGraph.setRoot(std::make_unique<scenegraph::GroupNode>());
+        layoutDebugDumpRetained(sceneGraph);
+      }
     }
   }
   layoutDebugEndPass();
 
   focus_.validateAfterRebuild(window_.sceneGraph());
 
-  window_.overlayManager().rebuild(sz, runtime);
-
-  std::swap(actionRegistryBuild_, actionRegistryCommitted_);
+  if (!usedIncremental) {
+    window_.overlayManager().rebuild(sz, runtime);
+    std::swap(actionRegistryBuild_, actionRegistryCommitted_);
+  }
 
   if (inputDebugEnabled()) {
     std::fprintf(stderr,

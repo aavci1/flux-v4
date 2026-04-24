@@ -2,16 +2,33 @@
 
 #include <Flux/SceneGraph/GroupNode.hpp>
 
+#include <algorithm>
 #include <stdexcept>
 #include <unordered_map>
 
 namespace flux::scenegraph {
+
+namespace {
+
+bool keyHasPrefix(ComponentKey const& key, ComponentKey const& prefix) {
+    if (prefix.empty()) {
+        return true;
+    }
+    if (key.size() < prefix.size()) {
+        return false;
+    }
+    return std::equal(prefix.begin(), prefix.end(), key.begin());
+}
+
+} // namespace
 
 struct SceneGraph::Impl {
     std::unique_ptr<SceneNode> root;
     std::unordered_map<ComponentKey, Rect, ComponentKeyHash> currentGeometry;
     std::unordered_map<ComponentKey, Rect, ComponentKeyHash> previousGeometry;
     std::unordered_map<ComponentKey, Rect, ComponentKeyHash> buildingGeometry;
+    std::unordered_map<ComponentKey, SceneNode*, ComponentKeyHash> currentNodes;
+    std::unordered_map<ComponentKey, SceneNode*, ComponentKeyHash> buildingNodes;
 };
 
 SceneGraph::SceneGraph() : impl_(std::make_unique<Impl>()) {
@@ -41,18 +58,23 @@ void SceneGraph::setRoot(std::unique_ptr<SceneNode> root) {
 
 void SceneGraph::beginGeometryBuild() {
     impl_->buildingGeometry.clear();
+    impl_->buildingNodes.clear();
 }
 
 void SceneGraph::finishGeometryBuild() {
     impl_->previousGeometry.swap(impl_->currentGeometry);
     impl_->currentGeometry = std::move(impl_->buildingGeometry);
     impl_->buildingGeometry.clear();
+    impl_->currentNodes = std::move(impl_->buildingNodes);
+    impl_->buildingNodes.clear();
 }
 
 void SceneGraph::clearGeometry() {
     impl_->currentGeometry.clear();
     impl_->previousGeometry.clear();
     impl_->buildingGeometry.clear();
+    impl_->currentNodes.clear();
+    impl_->buildingNodes.clear();
 }
 
 void SceneGraph::recordGeometry(ComponentKey const& key, Rect rect) {
@@ -60,6 +82,59 @@ void SceneGraph::recordGeometry(ComponentKey const& key, Rect rect) {
         return;
     }
     impl_->buildingGeometry[key] = rect;
+}
+
+void SceneGraph::recordNode(ComponentKey const& key, SceneNode* node) {
+    if (key.empty() || !node) {
+        return;
+    }
+    impl_->buildingNodes[key] = node;
+}
+
+std::unique_ptr<SceneNode> SceneGraph::replaceNodeForKey(ComponentKey const& key,
+                                                         std::unique_ptr<SceneNode> node) {
+    if (!node) {
+        return nullptr;
+    }
+    auto it = impl_->currentNodes.find(key);
+    if (it == impl_->currentNodes.end()) {
+        return nullptr;
+    }
+    SceneNode* existing = it->second;
+    if (!existing) {
+        return nullptr;
+    }
+    if (SceneNode* parent = existing->parent()) {
+        std::vector<std::unique_ptr<SceneNode>> children = parent->releaseChildren();
+        for (std::unique_ptr<SceneNode>& child : children) {
+            if (child.get() == existing) {
+                std::unique_ptr<SceneNode> removed = std::move(child);
+                child = std::move(node);
+                parent->replaceChildren(std::move(children));
+                return removed;
+            }
+        }
+        parent->replaceChildren(std::move(children));
+        return nullptr;
+    }
+    std::unique_ptr<SceneNode> removed = std::move(impl_->root);
+    impl_->root = std::move(node);
+    return removed;
+}
+
+void SceneGraph::replaceSubtreeData(ComponentKey const& key, SceneGraph const& patch) {
+    std::erase_if(impl_->currentGeometry, [&](auto const& entry) {
+        return keyHasPrefix(entry.first, key);
+    });
+    std::erase_if(impl_->currentNodes, [&](auto const& entry) {
+        return keyHasPrefix(entry.first, key);
+    });
+    for (auto const& [patchKey, rect] : patch.impl_->currentGeometry) {
+        impl_->currentGeometry[patchKey] = rect;
+    }
+    for (auto const& [patchKey, node] : patch.impl_->currentNodes) {
+        impl_->currentNodes[patchKey] = node;
+    }
 }
 
 std::optional<Rect> SceneGraph::rectForKey(ComponentKey const& key) const {
@@ -70,6 +145,11 @@ std::optional<Rect> SceneGraph::rectForKey(ComponentKey const& key) const {
         return it->second;
     }
     return std::nullopt;
+}
+
+SceneNode* SceneGraph::nodeForKey(ComponentKey const& key) const noexcept {
+    auto it = impl_->currentNodes.find(key);
+    return it == impl_->currentNodes.end() ? nullptr : it->second;
 }
 
 std::optional<Rect> SceneGraph::rectForLeafKeyPrefix(ComponentKey const& key) const {

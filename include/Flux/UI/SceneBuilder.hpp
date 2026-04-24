@@ -42,6 +42,12 @@ public:
                                                ComponentKey rootKey = {},
                                                bool rootUsesMaxWidthAsAssigned = true,
                                                bool rootUsesMaxHeightAsAssigned = true);
+  std::unique_ptr<scenegraph::SceneNode> buildSubtree(Element const& el,
+                                                      LayoutConstraints const& constraints,
+                                                      LayoutHints const& hints, Point origin,
+                                                      ComponentKey key, Size assignedSize,
+                                                      bool hasAssignedWidth,
+                                                      bool hasAssignedHeight);
 
   std::unique_ptr<scenegraph::SceneNode>
   buildOrReuse(Element const& el, std::unique_ptr<scenegraph::SceneNode> existing = nullptr);
