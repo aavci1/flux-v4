@@ -6,50 +6,42 @@
 
 namespace flux::scenegraph {
 
-struct RenderNode::Impl {
-    DrawFunction draw {};
-    bool pure = false;
-};
-
 RenderNode::RenderNode(Rect bounds, DrawFunction draw, bool pure)
-    : SceneNode(SceneNodeKind::Render, bounds), impl_(std::make_unique<Impl>()) {
-    impl_->draw = std::move(draw);
-    impl_->pure = pure;
-}
+    : SceneNode(SceneNodeKind::Render, bounds), draw_(std::move(draw)), pure_(pure) {}
 
 RenderNode::~RenderNode() = default;
 
 RenderNode::DrawFunction const &RenderNode::draw() const noexcept {
-    return impl_->draw;
+    return draw_;
 }
 
 bool RenderNode::pure() const noexcept {
-    return impl_->pure;
+    return pure_;
 }
 
 void RenderNode::setDraw(DrawFunction drawValue) {
-    impl_->draw = std::move(drawValue);
+    draw_ = std::move(drawValue);
     markDirty();
 }
 
 void RenderNode::setPure(bool pureValue) {
-    if (impl_->pure == pureValue) {
+    if (pure_ == pureValue) {
         return;
     }
-    impl_->pure = pureValue;
+    pure_ = pureValue;
     markDirty();
 }
 
 void RenderNode::render(Renderer &renderer) const {
     Canvas *canvas = renderer.canvas();
-    if (!canvas || !impl_->draw) {
+    if (!canvas || !draw_) {
         return;
     }
-    impl_->draw(*canvas, localBounds());
+    draw_(*canvas, localBounds());
 }
 
 bool RenderNode::canPrepareRenderOps() const noexcept {
-    return impl_->pure;
+    return pure_;
 }
 
 } // namespace flux::scenegraph

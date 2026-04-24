@@ -31,6 +31,28 @@ namespace build = detail::build;
 
 namespace {
 
+std::unique_ptr<scenegraph::GroupNode>
+reuseGroupNode(std::unique_ptr<scenegraph::SceneNode> existing,
+               std::vector<std::unique_ptr<scenegraph::SceneNode>>& existingChildren) {
+  existingChildren.clear();
+  if (existing && existing->kind() == scenegraph::SceneNodeKind::Group) {
+    auto group = std::unique_ptr<scenegraph::GroupNode>(
+        static_cast<scenegraph::GroupNode*>(existing.release()));
+    existingChildren = group->releaseChildren();
+    return group;
+  }
+  return std::make_unique<scenegraph::GroupNode>();
+}
+
+std::unique_ptr<scenegraph::SceneNode>
+takeExistingChild(std::vector<std::unique_ptr<scenegraph::SceneNode>>& existingChildren,
+                  std::size_t index) {
+  if (index >= existingChildren.size()) {
+    return nullptr;
+  }
+  return std::move(existingChildren[index]);
+}
+
 struct VStackPlan {
   LayoutConstraints childConstraints{};
   LayoutHints childHints{};
@@ -480,8 +502,8 @@ namespace detail {
 
 ComponentBuildResult buildMeasuredComponent(VStack const& stack, ComponentBuildContext& ctx,
                                             std::unique_ptr<scenegraph::SceneNode> existing) {
-  (void)existing;
-  auto group = std::make_unique<scenegraph::GroupNode>();
+  std::vector<std::unique_ptr<scenegraph::SceneNode>> existingChildren{};
+  auto group = reuseGroupNode(std::move(existing), existingChildren);
 
   bool const widthAssigned = ctx.hasAssignedWidth() && build::zStackAxisStretches(ctx.hints().zStackHorizontalAlign);
   bool const heightAssigned = ctx.hasAssignedHeight() && build::zStackAxisStretches(ctx.hints().zStackVerticalAlign);
@@ -521,7 +543,8 @@ ComponentBuildResult buildMeasuredComponent(VStack const& stack, ComponentBuildC
     std::unique_ptr<scenegraph::SceneNode> childNode =
         ctx.buildChild(child, local, childBuild, plan.childHints,
                        Point{ctx.contentOrigin().x + slot.origin.x, ctx.contentOrigin().y + slot.origin.y},
-                       slot.assignedSize, slot.assignedSize.width > 0.f, true);
+                       slot.assignedSize, slot.assignedSize.width > 0.f, true,
+                       takeExistingChild(existingChildren, i));
     childNode->setPosition(Point {
         childNode->position().x + slot.origin.x,
         childNode->position().y + slot.origin.y,
@@ -540,8 +563,8 @@ ComponentBuildResult buildMeasuredComponent(VStack const& stack, ComponentBuildC
 
 ComponentBuildResult buildMeasuredComponent(HStack const& stack, ComponentBuildContext& ctx,
                                             std::unique_ptr<scenegraph::SceneNode> existing) {
-  (void)existing;
-  auto group = std::make_unique<scenegraph::GroupNode>();
+  std::vector<std::unique_ptr<scenegraph::SceneNode>> existingChildren{};
+  auto group = reuseGroupNode(std::move(existing), existingChildren);
 
   bool const widthAssigned = ctx.hasAssignedWidth() && build::zStackAxisStretches(ctx.hints().zStackHorizontalAlign);
   bool const heightAssigned = ctx.hasAssignedHeight() && build::zStackAxisStretches(ctx.hints().zStackVerticalAlign);
@@ -592,7 +615,8 @@ ComponentBuildResult buildMeasuredComponent(HStack const& stack, ComponentBuildC
     std::unique_ptr<scenegraph::SceneNode> childNode =
         ctx.buildChild(child, local, childBuild, plan.rowHints,
                        Point{ctx.contentOrigin().x + slot.origin.x, ctx.contentOrigin().y + slot.origin.y},
-                       slot.assignedSize, true, slot.assignedSize.height > 0.f);
+                       slot.assignedSize, true, slot.assignedSize.height > 0.f,
+                       takeExistingChild(existingChildren, i));
     childNode->setPosition(Point {
         childNode->position().x + slot.origin.x,
         childNode->position().y + slot.origin.y,
@@ -611,8 +635,8 @@ ComponentBuildResult buildMeasuredComponent(HStack const& stack, ComponentBuildC
 
 ComponentBuildResult buildMeasuredComponent(ZStack const& stack, ComponentBuildContext& ctx,
                                             std::unique_ptr<scenegraph::SceneNode> existing) {
-  (void)existing;
-  auto group = std::make_unique<scenegraph::GroupNode>();
+  std::vector<std::unique_ptr<scenegraph::SceneNode>> existingChildren{};
+  auto group = reuseGroupNode(std::move(existing), existingChildren);
 
   float innerWidth =
       build::resolvedAssignedSpan(ctx.contentAssignedSize().width, ctx.hasAssignedWidth(), ctx.innerConstraints().maxWidth);
@@ -646,7 +670,8 @@ ComponentBuildResult buildMeasuredComponent(ZStack const& stack, ComponentBuildC
     }
     std::unique_ptr<scenegraph::SceneNode> childNode =
         ctx.buildChild(child, local, childBuild, plan.childHints, ctx.contentOrigin(), Size{innerWidth, innerHeight},
-                       innerWidth > 0.f, innerHeight > 0.f);
+                       innerWidth > 0.f, innerHeight > 0.f,
+                       takeExistingChild(existingChildren, i));
     childNode->setPosition(Point {
         childNode->position().x +
             hAlignOffset(childNode->bounds().width, innerWidth, stack.horizontalAlignment),

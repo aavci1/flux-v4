@@ -100,7 +100,8 @@ SceneBuilder::SceneBuilder(TextSystem& textSystem, EnvironmentStack& environment
     : textSystem_(textSystem)
     , environment_(environment)
     , sceneGraph_(sceneGraph)
-    , measureLayoutCache_(std::make_unique<detail::MeasureLayoutCache>()) {}
+    , measureLayoutCache_(std::make_unique<detail::MeasureLayoutCache>())
+    , measureContext_(std::make_unique<MeasureContext>(textSystem_, measureLayoutCache_.get())) {}
 
 SceneBuilder::~SceneBuilder() = default;
 
@@ -137,7 +138,7 @@ Size SceneBuilder::measureElement(Element const& el, LayoutConstraints const& co
       return *cached;
     }
   }
-  MeasureContext measureContext {textSystem_, measureLayoutCache_.get()};
+  MeasureContext& measureContext = *measureContext_;
   measureContext.pushConstraints(constraints, hints);
   measureContext.resetTraversalState(key);
   if (el.expandsBody()) {
@@ -147,6 +148,8 @@ Size SceneBuilder::measureElement(Element const& el, LayoutConstraints const& co
   }
   measureContext.setCurrentElement(&el);
   Size const measured = el.measure(measureContext, constraints, hints, textSystem_);
+  measureContext.setCurrentElement(nullptr);
+  measureContext.popConstraints();
   if (measureLayoutCache_) {
     measureLayoutCache_->recordElementSize(cacheKey, measured);
   }
@@ -159,8 +162,16 @@ SceneBuilder::wrapModifierLayer(std::unique_ptr<scenegraph::SceneNode> root,
                                 ComponentKey const& interactionKey,
                                 LayoutConstraints const& constraints, LayoutHints const& hints,
                                 Point origin, Size innerSize, Size outerSize,
-                                bool applyBoxPaint) {
-  auto wrapper = std::make_unique<scenegraph::RectNode>(build::sizeRect(outerSize));
+                                bool applyBoxPaint,
+                                std::unique_ptr<scenegraph::SceneNode> existingWrapper) {
+  (void)innerSize;
+  std::unique_ptr<scenegraph::RectNode> wrapper{};
+  if (existingWrapper && existingWrapper->kind() == scenegraph::SceneNodeKind::Rect) {
+    wrapper = std::unique_ptr<scenegraph::RectNode>(
+        static_cast<scenegraph::RectNode*>(existingWrapper.release()));
+  } else {
+    wrapper = std::make_unique<scenegraph::RectNode>();
+  }
   Theme const& theme = build::activeTheme(environment_);
 
   if (applyBoxPaint) {
@@ -168,17 +179,21 @@ SceneBuilder::wrapModifierLayer(std::unique_ptr<scenegraph::SceneNode> root,
     wrapper->setStroke(build::resolveStrokeStyle(layer.stroke, theme));
     wrapper->setShadow(build::resolveShadowStyle(layer.shadow, theme));
     wrapper->setCornerRadius(layer.cornerRadius);
+  } else {
+    wrapper->setFill(FillStyle::none());
+    wrapper->setStroke(StrokeStyle::none());
+    wrapper->setShadow(ShadowStyle::none());
+    wrapper->setCornerRadius(CornerRadius{});
   }
   wrapper->setClipsContents(layer.clip);
   wrapper->setOpacity(layer.opacity);
+  wrapper->setBounds(build::sizeRect(outerSize));
 
-  if (std::unique_ptr<scenegraph::InteractionData> interaction =
-          build::makeInteractionData(&layer, interactionKey)) {
-    wrapper->setInteraction(std::move(interaction));
-  }
-
+  wrapper->setInteraction(build::makeInteractionData(&layer, interactionKey));
   root->setPosition(Point {std::max(0.f, layer.padding.left), std::max(0.f, layer.padding.top)});
-  wrapper->appendChild(std::move(root));
+
+  std::vector<std::unique_ptr<scenegraph::SceneNode>> children{};
+  children.push_back(std::move(root));
 
   if (layer.overlay) {
     LayoutConstraints overlayConstraints = constraints;
@@ -188,21 +203,18 @@ SceneBuilder::wrapModifierLayer(std::unique_ptr<scenegraph::SceneNode> root,
         outerSize.width > 0.f ? outerSize.width : std::numeric_limits<float>::infinity();
     overlayConstraints.maxHeight =
         outerSize.height > 0.f ? outerSize.height : std::numeric_limits<float>::infinity();
-    ComponentKey overlayKey = componentKey;
-    overlayKey.push_back(LocalId::fromString("$overlay"));
+    ComponentKey overlayKey {componentKey, LocalId::fromString("$overlay")};
     pushFrame(overlayConstraints, hints, origin, std::move(overlayKey), outerSize,
               outerSize.width > 0.f, outerSize.height > 0.f);
     std::unique_ptr<scenegraph::SceneNode> overlayNode = buildOrReuse(*layer.overlay, nullptr);
     popFrame();
     if (overlayNode) {
-      wrapper->appendChild(std::move(overlayNode));
+      children.push_back(std::move(overlayNode));
     }
   }
 
+  wrapper->replaceChildren(std::move(children));
   wrapper->setPosition(modifierOffset(&layer));
-  if (innerSize.width <= 0.f && innerSize.height <= 0.f) {
-    wrapper->setBounds(build::sizeRect(outerSize));
-  }
   return wrapper;
 }
 
@@ -241,19 +253,46 @@ SceneBuilder::build(Element const& el, LayoutConstraints const& constraints, Com
 }
 
 std::unique_ptr<scenegraph::SceneNode>
+SceneBuilder::buildSubtree(Element const& el, LayoutConstraints const& constraints,
+                           LayoutHints const& hints, Point origin, ComponentKey key,
+                           Size assignedSize, bool hasAssignedWidth,
+                           bool hasAssignedHeight,
+                           std::unique_ptr<scenegraph::SceneNode> existing) {
+  measureLayoutCache_->clear();
+  lastBuildStats_ = {};
+  if (sceneGraph_) {
+    sceneGraph_->beginGeometryBuild();
+  }
+
+  pushFrame(constraints, hints, origin, std::move(key), assignedSize, hasAssignedWidth,
+            hasAssignedHeight);
+  std::unique_ptr<scenegraph::SceneNode> node = buildOrReuse(el, std::move(existing));
+  popFrame();
+
+  if (sceneGraph_) {
+    if (node) {
+      sceneGraph_->finishGeometryBuild();
+    } else {
+      sceneGraph_->clearGeometry();
+    }
+  }
+  return node;
+}
+
+std::unique_ptr<scenegraph::SceneNode>
 SceneBuilder::buildOrReuse(Element const& el, std::unique_ptr<scenegraph::SceneNode> existing) {
-  (void)existing;
   if (buildFrameDepth_ == 0) {
     return build(el, LayoutConstraints {});
   }
 
   ++lastBuildStats_.resolvedNodes;
   detail::ResolvedElement resolved = el.resolve(frame().key, frame().constraints);
-  return buildResolved(el, resolved);
+  return buildResolved(el, resolved, std::move(existing));
 }
 
 std::unique_ptr<scenegraph::SceneNode>
-SceneBuilder::buildResolved(Element const& el, detail::ResolvedElement const& resolved) {
+SceneBuilder::buildResolved(Element const& el, detail::ResolvedElement const& resolved,
+                            std::unique_ptr<scenegraph::SceneNode> existing) {
   auto const current = frame();
   ++lastBuildStats_.materializedNodes;
 
@@ -264,12 +303,37 @@ SceneBuilder::buildResolved(Element const& el, detail::ResolvedElement const& re
       sceneGraph_->recordGeometry(current.key,
                                   Rect {current.origin.x, current.origin.y, measured.width,
                                         measured.height});
+      sceneGraph_->recordNode(current.key, root.get());
+    }
+    if (StateStore* store = StateStore::current();
+        store && store->findComponentState(current.key)) {
+      store->recordSceneElement(current.key, el);
+      store->recordBuildSnapshot(current.key, current.constraints, current.hints, current.origin,
+                                 current.assignedSize, current.hasAssignedWidth,
+                                 current.hasAssignedHeight);
     }
     ++lastBuildStats_.arrangedNodes;
     return root;
   }
 
-  Element stableSceneEl = *resolved.sceneElement;
+  std::vector<std::unique_ptr<scenegraph::SceneNode>> reusableWrappers{};
+  while (existing && existing->kind() == scenegraph::SceneNodeKind::Rect &&
+         existing->children().size() == 1) {
+    std::vector<std::unique_ptr<scenegraph::SceneNode>> children = existing->releaseChildren();
+    std::unique_ptr<scenegraph::SceneNode> inner = std::move(children.front());
+    reusableWrappers.push_back(std::move(existing));
+    existing = std::move(inner);
+  }
+  auto takeReusableWrapper = [&]() -> std::unique_ptr<scenegraph::SceneNode> {
+    if (reusableWrappers.empty()) {
+      return nullptr;
+    }
+    std::unique_ptr<scenegraph::SceneNode> wrapper = std::move(reusableWrappers.back());
+    reusableWrappers.pop_back();
+    return wrapper;
+  };
+
+  Element const& stableSceneEl = *resolved.sceneElement;
   ElementType const typeTag = stableSceneEl.typeTag();
   std::vector<detail::ElementModifiers> const& modifierLayers = resolved.modifierLayers;
   detail::ElementModifiers const* mods = modifierLayers.empty() ? nullptr : &modifierLayers.back();
@@ -307,7 +371,8 @@ SceneBuilder::buildResolved(Element const& el, detail::ResolvedElement const& re
                                               modifierLayers.size() > 1, innerConstraints, contentOrigin,
                                               contentAssignedSize};
 
-  detail::ComponentBuildResult built = stableSceneEl.buildMeasured(buildContext, nullptr);
+  detail::ComponentBuildResult built =
+      stableSceneEl.buildMeasured(buildContext, std::move(existing));
   std::unique_ptr<scenegraph::SceneNode> root = std::move(built.node);
   if (!root) {
     root = std::make_unique<scenegraph::GroupNode>();
@@ -325,7 +390,8 @@ SceneBuilder::buildResolved(Element const& el, detail::ResolvedElement const& re
     if (needsEnvelope(mods, root->interaction())) {
       root = wrapModifierLayer(std::move(root), *mods, current.key, buildContext.interactionKey(),
                                current.constraints, current.hints, current.origin + totalOffset,
-                               geometrySize, outerSize, !contentConsumesBoxPaint(typeTag));
+                               geometrySize, outerSize, !contentConsumesBoxPaint(typeTag),
+                               takeReusableWrapper());
     } else {
       if (!root->interaction()) {
         root->setInteraction(build::makeInteractionData(mods, buildContext.interactionKey()));
@@ -348,7 +414,7 @@ SceneBuilder::buildResolved(Element const& el, detail::ResolvedElement const& re
       root = wrapModifierLayer(std::move(root), outerLayer, current.key,
                                buildContext.interactionKey(), current.constraints, current.hints,
                                current.origin + totalOffset, currentSize,
-                               nextOuterSize, true);
+                               nextOuterSize, true, takeReusableWrapper());
     } else {
       root->setPosition(Point {root->position().x + layerOffset.x,
                                root->position().y + layerOffset.y});
@@ -401,14 +467,25 @@ SceneBuilder::buildResolved(Element const& el, detail::ResolvedElement const& re
       }
     }
     sceneGraph_->recordGeometry(current.key, currentRect);
+    sceneGraph_->recordNode(current.key, root.get());
     if (resolved.nestSceneUnderFirstBody) {
       ComponentKey bodySceneKey = current.key;
       bodySceneKey.push_back(LocalId::fromIndex(0));
       sceneGraph_->recordGeometry(bodySceneKey, contentRect);
+      sceneGraph_->recordNode(bodySceneKey, root.get());
     }
     for (ComponentKey const& bodyKey : resolved.bodyComponentKeys) {
       sceneGraph_->recordGeometry(bodyKey, logicalCompositeRect);
+      sceneGraph_->recordNode(bodyKey, root.get());
     }
+  }
+
+  if (StateStore* store = StateStore::current();
+      store && store->findComponentState(current.key)) {
+    store->recordSceneElement(current.key, el);
+    store->recordBuildSnapshot(current.key, current.constraints, current.hints, current.origin,
+                               current.assignedSize, current.hasAssignedWidth,
+                               current.hasAssignedHeight);
   }
 
   ++lastBuildStats_.arrangedNodes;

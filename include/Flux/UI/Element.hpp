@@ -199,7 +199,6 @@ private:
 
   Size measureWithModifiersImpl(MeasureContext& ctx, LayoutConstraints const& constraints,
                                 LayoutHints const& hints, TextSystem& textSystem) const;
-  [[nodiscard]] Element strippedEnvelopeCopy() const;
 };
 
 template<typename... Args>

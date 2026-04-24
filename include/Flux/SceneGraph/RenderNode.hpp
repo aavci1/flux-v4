@@ -29,8 +29,8 @@ class RenderNode final : public SceneNode {
     bool canPrepareRenderOps() const noexcept override;
 
   private:
-    struct Impl;
-    std::unique_ptr<Impl> impl_;
+    DrawFunction draw_{};
+    bool pure_ = false;
 };
 
 } // namespace flux::scenegraph

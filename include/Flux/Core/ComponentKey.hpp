@@ -10,6 +10,7 @@
 #include <array>
 #include <cstddef>
 #include <initializer_list>
+#include <iterator>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -29,11 +30,18 @@ public:
   ComponentKey() = default;
 
   ComponentKey(std::initializer_list<value_type> init) {
-    assign(init.begin(), init.end());
+    copyFrom(init.begin(), init.size());
   }
 
   ComponentKey(std::vector<value_type> const& values) {
-    assign(values.begin(), values.end());
+    copyFrom(values.data(), values.size());
+  }
+
+  ComponentKey(std::vector<value_type> const& prefix, value_type tail) {
+    reserve(prefix.size() + 1U);
+    std::copy_n(prefix.data(), prefix.size(), storage());
+    size_ = prefix.size();
+    storage()[size_++] = tail;
   }
 
   template<typename It>
@@ -42,7 +50,14 @@ public:
   }
 
   ComponentKey(ComponentKey const& other) {
-    assign(other.begin(), other.end());
+    copyFrom(other.data(), other.size());
+  }
+
+  ComponentKey(ComponentKey const& prefix, value_type tail) {
+    reserve(prefix.size() + 1U);
+    std::copy_n(prefix.data(), prefix.size(), storage());
+    size_ = prefix.size();
+    storage()[size_++] = tail;
   }
 
   ComponentKey(ComponentKey&& other) noexcept {
@@ -51,8 +66,7 @@ public:
 
   ComponentKey& operator=(ComponentKey const& other) {
     if (this != &other) {
-      clear();
-      assign(other.begin(), other.end());
+      copyFrom(other.data(), other.size());
     }
     return *this;
   }
@@ -124,9 +138,24 @@ public:
 private:
   template<typename It>
   void assign(It first, It last) {
-    for (; first != last; ++first) {
-      push_back(*first);
+    std::size_t const count = static_cast<std::size_t>(std::distance(first, last));
+    reserve(count);
+    std::copy(first, last, storage());
+    size_ = count;
+  }
+
+  void copyFrom(value_type const* values, std::size_t count) {
+    if (count <= kInlineCapacity) {
+      resetHeap();
+    } else if (count > capacity_) {
+      resetHeap();
+      heap_ = new value_type[count];
+      capacity_ = count;
     }
+    if (count > 0) {
+      std::copy_n(values, count, storage());
+    }
+    size_ = count;
   }
 
   value_type* storage() noexcept {
@@ -158,7 +187,7 @@ private:
     other.size_ = 0;
   }
 
-  static constexpr std::size_t kInlineCapacity = 8;
+  static constexpr std::size_t kInlineCapacity = 12;
 
   std::size_t size_ = 0;
   std::size_t capacity_ = kInlineCapacity;

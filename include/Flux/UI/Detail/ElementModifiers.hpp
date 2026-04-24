@@ -44,7 +44,8 @@ inline LocalId compositeBodyLocalId() {
 struct ElementModifiers;
 
 struct ResolvedElement {
-  std::unique_ptr<Element> sceneElement{};
+  Element const* sceneElement = nullptr;
+  std::vector<std::unique_ptr<Element>> ownedBodies{};
   std::vector<EnvironmentLayer> environmentLayers{};
   std::vector<ElementModifiers> modifierLayers{};
   std::vector<ComponentKey> bodyComponentKeys{};

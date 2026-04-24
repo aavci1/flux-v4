@@ -61,19 +61,10 @@ Element& Element::operator=(Element const& other) {
   return *this;
 }
 
-Element Element::strippedEnvelopeCopy() const {
-  Element copy = *this;
-  copy.envLayer_.reset();
-  copy.modifiers_.reset();
-  copy.key_.reset();
-  return copy;
-}
-
 detail::ResolvedElement Element::resolve(ComponentKey const& key,
                                          LayoutConstraints const& constraints) const {
   detail::ResolvedElement resolved{};
   EnvironmentPushScope pushedEnvironments{};
-  std::vector<std::unique_ptr<Element>> ownedBodies{};
   Element const* current = this;
   ComponentKey currentKey = key;
   bool expandedAnyBody = false;
@@ -95,7 +86,7 @@ detail::ResolvedElement Element::resolve(ComponentKey const& key,
       resolved.modifierLayers.push_back(*modifiers);
     }
     if (!current->expandsBody()) {
-      resolved.sceneElement = std::make_unique<Element>(current->strippedEnvelopeCopy());
+      resolved.sceneElement = current;
       resolved.stableInteractionKey = stableInteractionKey();
       resolved.descendantsStable = expandedAnyBody && descendantsStable;
       return resolved;
@@ -108,7 +99,7 @@ detail::ResolvedElement Element::resolve(ComponentKey const& key,
     detail::CompositeBodyResolution bodyResolution = current->resolveCompositeBody(currentKey, constraints);
     descendantsStable = descendantsStable && bodyResolution.descendantsStable;
     if (!bodyResolution.body) {
-      resolved.sceneElement = std::make_unique<Element>(current->strippedEnvelopeCopy());
+      resolved.sceneElement = current;
       resolved.stableInteractionKey = stableInteractionKey();
       resolved.descendantsStable = false;
       return resolved;
@@ -118,15 +109,15 @@ detail::ResolvedElement Element::resolve(ComponentKey const& key,
     }
 
     if (bodyResolution.ownedBody) {
-      ownedBodies.push_back(std::move(bodyResolution.ownedBody));
-      current = ownedBodies.back().get();
+      resolved.ownedBodies.push_back(std::move(bodyResolution.ownedBody));
+      current = resolved.ownedBodies.back().get();
     } else {
       current = bodyResolution.body;
     }
-    currentKey.push_back(detail::compositeBodyLocalId());
+    currentKey = ComponentKey{currentKey, detail::compositeBodyLocalId()};
   }
 
-  resolved.sceneElement = std::make_unique<Element>(strippedEnvelopeCopy());
+  resolved.sceneElement = this;
   resolved.stableInteractionKey = stableInteractionKey();
   resolved.descendantsStable = false;
   return resolved;

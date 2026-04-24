@@ -56,6 +56,8 @@ private:
   ActionRegistry actionRegistryCommitted_{};
   Rect buildSlotRect_{};
   std::uint64_t textFrameIndex_{0};
+
+  bool tryIncrementalComponentRebuild(LayoutConstraints const& rootConstraints);
 };
 
 } // namespace flux

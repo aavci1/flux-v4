@@ -1,7 +1,9 @@
 # Build
-build/
-out/
-cmake-build-*/
+/build/
+/build-debug/
+/build-release/
+/out/
+/cmake-build-*/
 
 # CMake
 CMakeCache.txt

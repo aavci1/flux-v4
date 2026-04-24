@@ -5,77 +5,69 @@
 
 namespace flux::scenegraph {
 
-struct PathNode::Impl {
-    Path path{};
-    FillStyle fill = FillStyle::none();
-    StrokeStyle stroke = StrokeStyle::none();
-    ShadowStyle shadow = ShadowStyle::none();
-};
-
 PathNode::PathNode(Rect bounds, Path path, FillStyle fill, StrokeStyle stroke, ShadowStyle shadow)
-    : SceneNode(SceneNodeKind::Path, bounds), impl_(std::make_unique<Impl>()) {
-    impl_->path = std::move(path);
-    impl_->fill = std::move(fill);
-    impl_->stroke = std::move(stroke);
-    impl_->shadow = std::move(shadow);
-}
+    : SceneNode(SceneNodeKind::Path, bounds)
+    , path_(std::move(path))
+    , fill_(std::move(fill))
+    , stroke_(std::move(stroke))
+    , shadow_(std::move(shadow)) {}
 
 PathNode::~PathNode() = default;
 
 Path const& PathNode::path() const noexcept {
-    return impl_->path;
+    return path_;
 }
 
 FillStyle const& PathNode::fill() const noexcept {
-    return impl_->fill;
+    return fill_;
 }
 
 StrokeStyle const& PathNode::stroke() const noexcept {
-    return impl_->stroke;
+    return stroke_;
 }
 
 ShadowStyle const& PathNode::shadow() const noexcept {
-    return impl_->shadow;
+    return shadow_;
 }
 
 void PathNode::setPath(Path pathValue) {
-    if (impl_->path.contentHash() == pathValue.contentHash()) {
+    if (path_.contentHash() == pathValue.contentHash()) {
         return;
     }
-    impl_->path = std::move(pathValue);
+    path_ = std::move(pathValue);
     markDirty();
 }
 
 void PathNode::setFill(FillStyle fillValue) {
-    if (impl_->fill == fillValue) {
+    if (fill_ == fillValue) {
         return;
     }
-    impl_->fill = std::move(fillValue);
+    fill_ = std::move(fillValue);
     markDirty();
 }
 
 void PathNode::setStroke(StrokeStyle strokeValue) {
-    if (impl_->stroke == strokeValue) {
+    if (stroke_ == strokeValue) {
         return;
     }
-    impl_->stroke = std::move(strokeValue);
+    stroke_ = std::move(strokeValue);
     markDirty();
 }
 
 void PathNode::setShadow(ShadowStyle shadowValue) {
-    if (impl_->shadow == shadowValue) {
+    if (shadow_ == shadowValue) {
         return;
     }
-    impl_->shadow = std::move(shadowValue);
+    shadow_ = std::move(shadowValue);
     markDirty();
 }
 
 Rect PathNode::localBounds() const noexcept {
-    return impl_->path.getBounds();
+    return path_.getBounds();
 }
 
 void PathNode::render(Renderer& renderer) const {
-    renderer.drawPath(impl_->path, impl_->fill, impl_->stroke, impl_->shadow);
+    renderer.drawPath(path_, fill_, stroke_, shadow_);
 }
 
 } // namespace flux::scenegraph

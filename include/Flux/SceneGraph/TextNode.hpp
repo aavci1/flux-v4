@@ -23,8 +23,7 @@ class TextNode final : public SceneNode {
     void render(Renderer &renderer) const override;
 
   private:
-    struct Impl;
-    std::unique_ptr<Impl> impl_;
+    std::shared_ptr<TextLayout const> layout_{};
 };
 
 } // namespace flux::scenegraph

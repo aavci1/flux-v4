@@ -16,6 +16,7 @@
 namespace flux {
 
 class TextSystem;
+class MeasureContext;
 namespace scenegraph {
 class SceneGraph;
 }
@@ -42,6 +43,13 @@ public:
                                                ComponentKey rootKey = {},
                                                bool rootUsesMaxWidthAsAssigned = true,
                                                bool rootUsesMaxHeightAsAssigned = true);
+  std::unique_ptr<scenegraph::SceneNode> buildSubtree(Element const& el,
+                                                      LayoutConstraints const& constraints,
+                                                      LayoutHints const& hints, Point origin,
+                                                      ComponentKey key, Size assignedSize,
+                                                      bool hasAssignedWidth,
+                                                      bool hasAssignedHeight,
+                                                      std::unique_ptr<scenegraph::SceneNode> existing = nullptr);
 
   std::unique_ptr<scenegraph::SceneNode>
   buildOrReuse(Element const& el, std::unique_ptr<scenegraph::SceneNode> existing = nullptr);
@@ -55,6 +63,7 @@ private:
   EnvironmentStack& environment_;
   scenegraph::SceneGraph* sceneGraph_ = nullptr;
   mutable std::unique_ptr<detail::MeasureLayoutCache> measureLayoutCache_{};
+  mutable std::unique_ptr<MeasureContext> measureContext_{};
   detail::TraversalContext traversal_{};
   std::size_t buildFrameDepth_ = 0;
   mutable BuildStats lastBuildStats_{};
@@ -72,10 +81,12 @@ private:
                     detail::ElementModifiers const& layer, ComponentKey const& componentKey,
                     ComponentKey const& interactionKey,
                     LayoutConstraints const& constraints, LayoutHints const& hints, Point origin,
-                    Size innerSize, Size outerSize, bool applyBoxPaint);
+                    Size innerSize, Size outerSize, bool applyBoxPaint,
+                    std::unique_ptr<scenegraph::SceneNode> existingWrapper = nullptr);
 
   std::unique_ptr<scenegraph::SceneNode> buildResolved(Element const& el,
-                                                       detail::ResolvedElement const& resolved);
+                                                       detail::ResolvedElement const& resolved,
+                                                       std::unique_ptr<scenegraph::SceneNode> existing);
 };
 
 } // namespace flux

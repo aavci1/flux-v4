@@ -5,34 +5,28 @@
 
 namespace flux::scenegraph {
 
-struct TextNode::Impl {
-    std::shared_ptr<TextLayout const> layout;
-};
-
 TextNode::TextNode(Rect bounds, std::shared_ptr<TextLayout const> layout)
-    : SceneNode(SceneNodeKind::Text, bounds), impl_(std::make_unique<Impl>()) {
-    impl_->layout = std::move(layout);
-}
+    : SceneNode(SceneNodeKind::Text, bounds), layout_(std::move(layout)) {}
 
 TextNode::~TextNode() = default;
 
 std::shared_ptr<TextLayout const> const &TextNode::layout() const noexcept {
-    return impl_->layout;
+    return layout_;
 }
 
 void TextNode::setLayout(std::shared_ptr<TextLayout const> layout) {
-    if (impl_->layout == layout) {
+    if (layout_ == layout) {
         return;
     }
-    impl_->layout = std::move(layout);
+    layout_ = std::move(layout);
     markDirty();
 }
 
 void TextNode::render(Renderer &renderer) const {
-    if (!impl_->layout) {
+    if (!layout_) {
         return;
     }
-    renderer.drawTextLayout(*impl_->layout);
+    renderer.drawTextLayout(*layout_);
 }
 
 } // namespace flux::scenegraph

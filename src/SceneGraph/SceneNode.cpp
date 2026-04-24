@@ -1,6 +1,7 @@
 #include <Flux/SceneGraph/SceneNode.hpp>
 
 #include <Flux/SceneGraph/InteractionData.hpp>
+#include <Flux/SceneGraph/Renderer.hpp>
 
 #include "SceneGraph/SceneNodeInternal.hpp"
 
@@ -10,18 +11,6 @@
 #include <utility>
 
 namespace flux::scenegraph {
-
-struct SceneNode::Impl {
-    explicit Impl(SceneNodeKind kindValue, Rect boundsValue) : kind(kindValue), bounds(boundsValue) {}
-
-    SceneNodeKind kind;
-    Rect bounds {};
-    Mat3 transform = Mat3::identity();
-    SceneNode *parent = nullptr;
-    std::vector<std::unique_ptr<SceneNode>> children;
-    std::unique_ptr<InteractionData> interaction;
-    bool dirty = true;
-};
 
 std::string_view sceneNodeKindName(SceneNodeKind kind) noexcept {
     switch (kind) {
@@ -41,145 +30,145 @@ std::string_view sceneNodeKindName(SceneNodeKind kind) noexcept {
     return "Unknown";
 }
 
-SceneNode::SceneNode(SceneNodeKind kind, Rect bounds) : impl_(std::make_unique<Impl>(kind, bounds)) {}
+SceneNode::SceneNode(SceneNodeKind kind, Rect bounds) : kind_(kind), bounds_(bounds) {}
 
 SceneNode::~SceneNode() = default;
 
 SceneNodeKind SceneNode::kind() const noexcept {
-    return impl_->kind;
+    return kind_;
 }
 
 Rect SceneNode::bounds() const noexcept {
-    return impl_->bounds;
+    return bounds_;
 }
 
 Point SceneNode::position() const noexcept {
-    return Point {impl_->bounds.x, impl_->bounds.y};
+    return Point {bounds_.x, bounds_.y};
 }
 
 Size SceneNode::size() const noexcept {
-    return Size {impl_->bounds.width, impl_->bounds.height};
+    return Size {bounds_.width, bounds_.height};
 }
 
 Mat3 const &SceneNode::transform() const noexcept {
-    return impl_->transform;
+    return transform_;
 }
 
 bool SceneNode::isDirty() const noexcept {
-    return impl_->dirty;
+    return dirty_;
 }
 
 void SceneNode::setBounds(Rect bounds) {
-    if (impl_->bounds == bounds) {
+    if (bounds_ == bounds) {
         return;
     }
-    bool const sizeChanged = bounds.width != impl_->bounds.width ||
-                             bounds.height != impl_->bounds.height;
-    impl_->bounds = bounds;
+    bool const sizeChanged = bounds.width != bounds_.width ||
+                             bounds.height != bounds_.height;
+    bounds_ = bounds;
     if (sizeChanged) {
         markDirty();
     }
 }
 
 void SceneNode::setPosition(Point position) {
-    if (impl_->bounds.x == position.x && impl_->bounds.y == position.y) {
+    if (bounds_.x == position.x && bounds_.y == position.y) {
         return;
     }
-    impl_->bounds.x = position.x;
-    impl_->bounds.y = position.y;
+    bounds_.x = position.x;
+    bounds_.y = position.y;
 }
 
 void SceneNode::setSize(Size size) {
-    if (impl_->bounds.width == size.width && impl_->bounds.height == size.height) {
+    if (bounds_.width == size.width && bounds_.height == size.height) {
         return;
     }
-    impl_->bounds.width = size.width;
-    impl_->bounds.height = size.height;
+    bounds_.width = size.width;
+    bounds_.height = size.height;
     markDirty();
 }
 
 void SceneNode::setTransform(Mat3 const &transformValue) {
-    if (std::equal(std::begin(impl_->transform.m), std::end(impl_->transform.m),
+    if (std::equal(std::begin(transform_.m), std::end(transform_.m),
                    std::begin(transformValue.m))) {
         return;
     }
-    impl_->transform = transformValue;
+    transform_ = transformValue;
 }
 
 SceneNode *SceneNode::parent() const noexcept {
-    return impl_->parent;
+    return parent_;
 }
 
 std::span<std::unique_ptr<SceneNode> const> SceneNode::children() const noexcept {
-    return impl_->children;
+    return children_;
 }
 
 std::span<std::unique_ptr<SceneNode>> SceneNode::children() noexcept {
-    return impl_->children;
+    return children_;
 }
 
 InteractionData *SceneNode::interaction() noexcept {
-    return impl_->interaction.get();
+    return interaction_.get();
 }
 
 InteractionData const *SceneNode::interaction() const noexcept {
-    return impl_->interaction.get();
+    return interaction_.get();
 }
 
 void SceneNode::setInteraction(std::unique_ptr<InteractionData> interactionValue) {
-    impl_->interaction = std::move(interactionValue);
+    interaction_ = std::move(interactionValue);
 }
 
 void SceneNode::appendChild(std::unique_ptr<SceneNode> child) {
     if (!child) {
         throw std::invalid_argument("SceneNode child must not be null");
     }
-    if (child->impl_->parent) {
+    if (child->parent_) {
         throw std::invalid_argument("SceneNode child already has a parent");
     }
-    child->impl_->parent = this;
-    impl_->children.push_back(std::move(child));
+    child->parent_ = this;
+    children_.push_back(std::move(child));
     markDirty();
 }
 
 void SceneNode::insertChild(std::size_t index, std::unique_ptr<SceneNode> child) {
-    if (index > impl_->children.size()) {
+    if (index > children_.size()) {
         throw std::out_of_range("SceneNode::insertChild index out of range");
     }
     if (!child) {
         throw std::invalid_argument("SceneNode child must not be null");
     }
-    if (child->impl_->parent) {
+    if (child->parent_) {
         throw std::invalid_argument("SceneNode child already has a parent");
     }
-    child->impl_->parent = this;
-    impl_->children.insert(impl_->children.begin() + static_cast<std::ptrdiff_t>(index),
+    child->parent_ = this;
+    children_.insert(children_.begin() + static_cast<std::ptrdiff_t>(index),
                            std::move(child));
     markDirty();
 }
 
 std::unique_ptr<SceneNode> SceneNode::removeChild(SceneNode &child) {
-    auto it = std::find_if(impl_->children.begin(), impl_->children.end(),
+    auto it = std::find_if(children_.begin(), children_.end(),
                            [&](std::unique_ptr<SceneNode> const &current) {
                                return current.get() == &child;
                            });
-    if (it == impl_->children.end()) {
+    if (it == children_.end()) {
         return nullptr;
     }
 
     std::unique_ptr<SceneNode> removed = std::move(*it);
-    impl_->children.erase(it);
-    removed->impl_->parent = nullptr;
+    children_.erase(it);
+    removed->parent_ = nullptr;
     markDirty();
     return removed;
 }
 
 std::vector<std::unique_ptr<SceneNode>> SceneNode::releaseChildren() {
-    std::vector<std::unique_ptr<SceneNode>> released = std::move(impl_->children);
+    std::vector<std::unique_ptr<SceneNode>> released = std::move(children_);
     for (std::unique_ptr<SceneNode> &child : released) {
-        child->impl_->parent = nullptr;
+        child->parent_ = nullptr;
     }
-    impl_->children.clear();
+    children_.clear();
     markDirty();
     return released;
 }
@@ -189,25 +178,25 @@ void SceneNode::replaceChildren(std::vector<std::unique_ptr<SceneNode>> children
         if (!child) {
             throw std::invalid_argument("SceneNode child must not be null");
         }
-        if (child->impl_->parent) {
+        if (child->parent_) {
             throw std::invalid_argument("SceneNode child already has a parent");
         }
     }
 
-    for (std::unique_ptr<SceneNode> &child : impl_->children) {
-        child->impl_->parent = nullptr;
+    for (std::unique_ptr<SceneNode> &child : children_) {
+        child->parent_ = nullptr;
     }
-    impl_->children.clear();
-    impl_->children.reserve(children.size());
+    children_.clear();
+    children_.reserve(children.size());
     for (std::unique_ptr<SceneNode> &child : children) {
-        child->impl_->parent = this;
-        impl_->children.push_back(std::move(child));
+        child->parent_ = this;
+        children_.push_back(std::move(child));
     }
     markDirty();
 }
 
 Rect SceneNode::localBounds() const noexcept {
-    return Rect::sharp(0.f, 0.f, impl_->bounds.width, impl_->bounds.height);
+    return Rect::sharp(0.f, 0.f, bounds_.width, bounds_.height);
 }
 
 void SceneNode::render(Renderer &) const {}
@@ -217,11 +206,33 @@ bool SceneNode::canPrepareRenderOps() const noexcept {
 }
 
 void SceneNode::markDirty() noexcept {
-    impl_->dirty = true;
+    dirty_ = true;
+    for (SceneNode *node = this; node; node = node->parent_) {
+        if (node->subtreeDirty_) {
+            if (node != this) {
+                break;
+            }
+        } else {
+            node->subtreeDirty_ = true;
+        }
+    }
 }
 
 void detail::SceneNodeAccess::clearDirty(SceneNode const &node) noexcept {
-    node.impl_->dirty = false;
+    node.dirty_ = false;
+}
+
+bool detail::SceneNodeAccess::subtreeDirty(SceneNode const &node) noexcept {
+    return node.subtreeDirty_;
+}
+
+void detail::SceneNodeAccess::clearSubtreeDirty(SceneNode const &node) noexcept {
+    node.subtreeDirty_ = false;
+}
+
+std::unique_ptr<PreparedRenderOps>& detail::SceneNodeAccess::preparedRenderOps(
+    SceneNode const &node) noexcept {
+    return node.preparedRenderOps_;
 }
 
 } // namespace flux::scenegraph

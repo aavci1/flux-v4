@@ -95,8 +95,15 @@ ComponentBuildResult buildMeasuredComponent(Text const& text, ComponentBuildCont
     }
     result.node = std::move(group);
   } else {
-    auto textNode =
-        std::make_unique<scenegraph::TextNode>(Rect {0.f, 0.f, frameRect.width, frameRect.height});
+    std::unique_ptr<scenegraph::TextNode> textNode{};
+    if (existing && existing->kind() == scenegraph::SceneNodeKind::Text) {
+      textNode = std::unique_ptr<scenegraph::TextNode>(
+          static_cast<scenegraph::TextNode*>(existing.release()));
+      textNode->setBounds(Rect {0.f, 0.f, frameRect.width, frameRect.height});
+    } else {
+      textNode =
+          std::make_unique<scenegraph::TextNode>(Rect {0.f, 0.f, frameRect.width, frameRect.height});
+    }
     build::configureTextNode(*textNode, frameRect, textLayout);
     result.node = std::move(textNode);
   }

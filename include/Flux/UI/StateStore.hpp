@@ -56,6 +56,15 @@ struct EnvironmentValueSnapshot {
   std::type_index type{typeid(void)};
 };
 
+struct ComponentBuildSnapshot {
+  LayoutConstraints constraints{};
+  LayoutHints hints{};
+  Point origin{};
+  Size assignedSize{};
+  bool hasAssignedWidth = false;
+  bool hasAssignedHeight = false;
+};
+
 /// State bucket for one component instance.
 struct ComponentState {
   std::deque<StateSlot> slots;
@@ -71,6 +80,8 @@ struct ComponentState {
   std::vector<EnvironmentValueSnapshot> environmentDependencies;
   std::vector<EnvironmentValueSnapshot> pendingEnvironmentDependencies;
   std::vector<ComponentSubscription> subscriptions;
+  std::unique_ptr<void, void (*)(void*)> lastSceneElement{nullptr, nullptr};
+  std::optional<ComponentBuildSnapshot> lastBuildSnapshot;
 };
 
 /// Owns all component state for the lifetime of the window.
@@ -131,9 +142,11 @@ public:
   void markCompositeDirty(ComponentKey const& key);
 
   [[nodiscard]] bool hasPendingDirtyComponents() const noexcept;
+  [[nodiscard]] std::vector<ComponentKey> pendingDirtyComponents() const;
   [[nodiscard]] bool shouldForceFullRebuild() const noexcept { return forceFullRebuild_; }
   [[nodiscard]] bool isComponentDirty(ComponentKey const& key) const;
   [[nodiscard]] bool hasDirtyDescendant(ComponentKey const& key) const;
+  void markComponentsOutsideSubtreeVisited(ComponentKey const& key);
   /// Marks the component at \p key and every descendant component state as visited for this rebuild.
   void markRetainedSubtreeVisited(ComponentKey const& key);
   void markRetainedSubtreeVisited(ComponentState& state);
@@ -151,8 +164,14 @@ public:
                                               LayoutConstraints const& constraints) const;
   Element* cachedBody(ComponentKey const& key);
   Element const* cachedBody(ComponentKey const& key) const;
+  Element const* sceneElement(ComponentKey const& key) const;
   void discardCurrentRebuildBody(ComponentKey const& key);
   void recordBodyConstraints(ComponentKey const& key, LayoutConstraints const& constraints);
+  std::optional<ComponentBuildSnapshot> buildSnapshot(ComponentKey const& key) const;
+  void recordBuildSnapshot(ComponentKey const& key, LayoutConstraints const& constraints,
+                           LayoutHints const& hints, Point origin, Size assignedSize,
+                           bool hasAssignedWidth, bool hasAssignedHeight);
+  void recordSceneElement(ComponentKey const& key, Element const& element);
   std::optional<Size> cachedMeasure(ComponentKey const& key, LayoutConstraints const& constraints) const;
   void recordMeasure(ComponentKey const& key, LayoutConstraints const& constraints, Size size);
 

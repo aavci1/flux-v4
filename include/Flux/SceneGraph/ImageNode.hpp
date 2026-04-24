@@ -30,8 +30,8 @@ class ImageNode final : public SceneNode {
     void render(Renderer &renderer) const override;
 
   private:
-    struct Impl;
-    std::unique_ptr<Impl> impl_;
+    std::shared_ptr<Image const> image_{};
+    ImageFillMode fillMode_ = ImageFillMode::Cover;
 };
 
 } // namespace flux::scenegraph

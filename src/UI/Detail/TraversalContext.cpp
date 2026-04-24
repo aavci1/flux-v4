@@ -1,5 +1,6 @@
 #include <Flux/UI/Detail/TraversalContext.hpp>
 
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 
@@ -7,6 +8,11 @@ namespace flux::detail {
 
 TraversalContext::TraversalContext() {
   frames_.push_back(Frame{});
+  keyStack_.reserve(16);
+  explicitChildLocalIdStack_.reserve(4);
+  savedChildIndices_.reserve(16);
+  pushedChildIndexKeyStack_.reserve(16);
+  pushedCompositeKeyTailStack_.reserve(8);
 }
 
 TraversalContext::Frame const& TraversalContext::frame() const {
@@ -91,8 +97,7 @@ ComponentKey TraversalContext::nextCompositeKey() {
     useMeasurementRootKey_ = false;
     return measurementRootKey_;
   }
-  ComponentKey key = keyStack_;
-  key.push_back(currentChildLocalId());
+  ComponentKey key{keyStack_, currentChildLocalId()};
   ++nextChildIndex_;
   return key;
 }
@@ -105,9 +110,7 @@ ComponentKey TraversalContext::currentElementKey() const {
   if (skipNextLayoutChildAdvance_) {
     return keyStack_;
   }
-  ComponentKey key = keyStack_;
-  key.push_back(currentChildLocalId());
-  return key;
+  return ComponentKey{keyStack_, currentChildLocalId()};
 }
 
 void TraversalContext::rewindChildKeyIndex() {
@@ -125,13 +128,14 @@ void TraversalContext::resetTraversalState(ComponentKey const& key) {
   nextChildIndex_ = 0;
   frames_.back().key = key;
   if (!key.empty()) {
-    for (std::size_t i = 0; i + 1 < key.size(); ++i) {
-      keyStack_.push_back(key[i]);
-    }
+    std::size_t const prefixSize = key.size() - 1;
+    keyStack_.reserve(std::max(keyStack_.capacity(), prefixSize));
+    keyStack_.insert(keyStack_.end(), key.begin(), key.begin() + static_cast<std::ptrdiff_t>(prefixSize));
     LocalId const local = key.back();
     if (local.kind == LocalId::Kind::Positional) {
       nextChildIndex_ = local.value == 0 ? 0u : static_cast<std::size_t>(local.value - 1ull);
     } else {
+      explicitChildLocalIdStack_.reserve(std::max(explicitChildLocalIdStack_.capacity(), std::size_t{1}));
       explicitChildLocalIdStack_.push_back(local);
     }
   }

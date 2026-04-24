@@ -17,7 +17,6 @@ namespace detail {
 
 ComponentBuildResult buildMeasuredComponent(Rectangle const &, ComponentBuildContext &ctx,
                                             std::unique_ptr<scenegraph::SceneNode> existing) {
-    (void)existing;
     Size const resolvedRectSize = build::rectSize(build::assignedFrameForLeaf(
         ctx.paddedContentSize(),
         ctx.innerConstraints(),
@@ -28,15 +27,22 @@ ComponentBuildResult buildMeasuredComponent(Rectangle const &, ComponentBuildCon
         ctx.hints()
     ));
     Theme const &theme = ctx.theme();
-    auto rectNode = std::make_unique<scenegraph::RectNode>(
-        build::sizeRect(resolvedRectSize),
-        ctx.modifiers() ? build::resolveFillStyle(ctx.modifiers()->fill, theme) : FillStyle::none(),
-        ctx.modifiers() ? build::resolveStrokeStyle(ctx.modifiers()->stroke, theme)
-                        : StrokeStyle::none(),
-        ctx.modifiers() ? ctx.modifiers()->cornerRadius : CornerRadius {},
-        ctx.modifiers() ? build::resolveShadowStyle(ctx.modifiers()->shadow, theme)
-                        : ShadowStyle::none()
-    );
+    std::unique_ptr<scenegraph::RectNode> rectNode{};
+    if (existing && existing->kind() == scenegraph::SceneNodeKind::Rect) {
+        rectNode = std::unique_ptr<scenegraph::RectNode>(
+            static_cast<scenegraph::RectNode*>(existing.release())
+        );
+    } else {
+        rectNode = std::make_unique<scenegraph::RectNode>();
+    }
+    rectNode->setBounds(build::sizeRect(resolvedRectSize));
+    rectNode->setFill(ctx.modifiers() ? build::resolveFillStyle(ctx.modifiers()->fill, theme)
+                                      : FillStyle::none());
+    rectNode->setStroke(ctx.modifiers() ? build::resolveStrokeStyle(ctx.modifiers()->stroke, theme)
+                                        : StrokeStyle::none());
+    rectNode->setCornerRadius(ctx.modifiers() ? ctx.modifiers()->cornerRadius : CornerRadius {});
+    rectNode->setShadow(ctx.modifiers() ? build::resolveShadowStyle(ctx.modifiers()->shadow, theme)
+                                        : ShadowStyle::none());
 
     ComponentBuildResult result {};
     result.node = std::move(rectNode);

@@ -272,8 +272,7 @@ Size Element::Model<C>::measure(MeasureContext& ctx, LayoutConstraints const& co
     ctx.beginCompositeBodySubtree(key);
     ctx.pushCompositeKeyTail(key);
     if (child.expandsBody()) {
-      ComponentKey childBodyKey = key;
-      childBodyKey.push_back(detail::compositeBodyLocalId());
+      ComponentKey childBodyKey {key, detail::compositeBodyLocalId()};
       ctx.setMeasurementRootKey(std::move(childBodyKey));
     }
     if (store) {

@@ -5,48 +5,40 @@
 
 namespace flux::scenegraph {
 
-struct ImageNode::Impl {
-    std::shared_ptr<Image const> image;
-    ImageFillMode fillMode = ImageFillMode::Cover;
-};
-
 ImageNode::ImageNode(Rect bounds, std::shared_ptr<Image const> image, ImageFillMode fillMode)
-    : SceneNode(SceneNodeKind::Image, bounds), impl_(std::make_unique<Impl>()) {
-    impl_->image = std::move(image);
-    impl_->fillMode = fillMode;
-}
+    : SceneNode(SceneNodeKind::Image, bounds), image_(std::move(image)), fillMode_(fillMode) {}
 
 ImageNode::~ImageNode() = default;
 
 std::shared_ptr<Image const> const &ImageNode::image() const noexcept {
-    return impl_->image;
+    return image_;
 }
 
 ImageFillMode ImageNode::fillMode() const noexcept {
-    return impl_->fillMode;
+    return fillMode_;
 }
 
 void ImageNode::setImage(std::shared_ptr<Image const> image) {
-    if (impl_->image == image) {
+    if (image_ == image) {
         return;
     }
-    impl_->image = std::move(image);
+    image_ = std::move(image);
     markDirty();
 }
 
 void ImageNode::setFillMode(ImageFillMode fillMode) {
-    if (impl_->fillMode == fillMode) {
+    if (fillMode_ == fillMode) {
         return;
     }
-    impl_->fillMode = fillMode;
+    fillMode_ = fillMode;
     markDirty();
 }
 
 void ImageNode::render(Renderer &renderer) const {
-    if (!impl_->image) {
+    if (!image_) {
         return;
     }
-    renderer.drawImage(*impl_->image, localBounds(), impl_->fillMode);
+    renderer.drawImage(*image_, localBounds(), fillMode_);
 }
 
 } // namespace flux::scenegraph

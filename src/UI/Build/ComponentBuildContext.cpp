@@ -55,10 +55,7 @@ MeasureLayoutKey ComponentBuildContext::makeMeasureLayoutKey(LayoutConstraints c
 }
 
 ComponentKey ComponentBuildContext::childKey(LocalId local) const {
-  ComponentKey const& currentKey = key();
-  ComponentKey childKeyValue = currentKey;
-  childKeyValue.push_back(local);
-  return childKeyValue;
+  return ComponentKey{key(), local};
 }
 
 Size ComponentBuildContext::measureElement(Element const& element, ComponentKey const& key,
@@ -100,11 +97,10 @@ ComponentBuildContext::buildChild(Element const& child, LocalId local, LayoutCon
                                   LayoutHints const& hints, Point origin, Size assignedSize,
                                   bool hasAssignedWidth, bool hasAssignedHeight,
                                   std::unique_ptr<scenegraph::SceneNode> existing) const {
-  (void)existing;
   ComponentKey childKeyValue = childKey(local);
   builder_.pushFrame(constraints, hints, origin, std::move(childKeyValue), assignedSize, hasAssignedWidth,
                      hasAssignedHeight);
-  std::unique_ptr<scenegraph::SceneNode> childNode = builder_.buildOrReuse(child, nullptr);
+  std::unique_ptr<scenegraph::SceneNode> childNode = builder_.buildOrReuse(child, std::move(existing));
   builder_.popFrame();
   return childNode;
 }

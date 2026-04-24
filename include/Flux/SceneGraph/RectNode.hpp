@@ -32,8 +32,12 @@ class RectNode final : public SceneNode {
     void render(Renderer &renderer) const override;
 
   private:
-    struct Impl;
-    std::unique_ptr<Impl> impl_;
+    FillStyle fill_ = FillStyle::none();
+    StrokeStyle stroke_ = StrokeStyle::none();
+    CornerRadius cornerRadius_{};
+    ShadowStyle shadow_ = ShadowStyle::none();
+    bool clipsContents_ = false;
+    float opacity_ = 1.f;
 };
 
 } // namespace flux::scenegraph

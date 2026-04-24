@@ -11,6 +11,7 @@
 #include "Graphics/Metal/MetalCanvas.hpp"
 #include "Graphics/Metal/MetalCanvasTypes.hpp"
 #include "Graphics/Metal/MetalFrameRecorder.hpp"
+#include "SceneGraph/SceneBounds.hpp"
 #include "SceneGraph/SceneNodeInternal.hpp"
 
 #include <algorithm>
@@ -24,6 +25,14 @@ namespace flux::scenegraph {
 namespace {
 
 constexpr bool kEnablePreparedRenderCache = true;
+
+bool canReplayPreparedInParentSpace(SceneNode const& node) {
+    if (node.kind() == SceneNodeKind::Group || !node.canPrepareRenderOps() || !node.children().empty()) {
+        return false;
+    }
+    return node.kind() != SceneNodeKind::Rect ||
+           !static_cast<RectNode const&>(node).clipsContents();
+}
 
 MetalRecorderSlice fullRecordedSlice(MetalFrameRecorder const &recorded) {
     return MetalRecorderSlice {
@@ -93,7 +102,16 @@ std::unique_ptr<PreparedRenderOps> CanvasRenderer::prepare(SceneNode const &node
     if (!beginRecordedOpsCaptureForCanvas(&canvas_, &recorded)) {
         return nullptr;
     }
+    bool const parentSpaceReplay = canReplayPreparedInParentSpace(node);
+    if (parentSpaceReplay) {
+        canvas_.save();
+        canvas_.translate(node.position());
+        canvas_.transform(node.transform());
+    }
     node.render(*this);
+    if (parentSpaceReplay) {
+        canvas_.restore();
+    }
     endRecordedOpsCaptureForCanvas(&canvas_);
     return std::make_unique<CanvasPreparedRenderOps>(std::move(recorded));
 }
@@ -101,11 +119,6 @@ std::unique_ptr<PreparedRenderOps> CanvasRenderer::prepare(SceneNode const &node
 } // namespace
 
 struct SceneRenderer::Impl {
-    struct CacheEntry {
-        std::unique_ptr<PreparedRenderOps> prepared;
-        std::uint64_t lastVisitedEpoch = 0;
-    };
-
     explicit Impl(Canvas &canvas) : renderer(nullptr), ownedRenderer(std::make_unique<CanvasRenderer>(canvas)) {
         renderer = ownedRenderer.get();
     }
@@ -118,32 +131,27 @@ struct SceneRenderer::Impl {
 
     void render(SceneNode const &node) {
         if (kEnablePreparedRenderCache) {
-            if (node.kind() == SceneNodeKind::Group && node.isDirty()) {
-                cache.clear();
-            }
             prepareNodeCache(node);
         }
-        ++renderEpoch;
         renderNode(node, 1.f);
-        if (kEnablePreparedRenderCache) {
-            std::erase_if(cache, [this](auto const &entry) {
-                return entry.second.lastVisitedEpoch != renderEpoch;
-            });
-        }
     }
 
     void prepareNodeCache(SceneNode const &node) {
         if (!kEnablePreparedRenderCache) {
             return;
         }
+        if (!detail::SceneNodeAccess::subtreeDirty(node)) {
+            return;
+        }
         if (node.kind() != SceneNodeKind::Group && node.canPrepareRenderOps()) {
-            CacheEntry &entry = cache[&node];
-            if (node.isDirty() || !entry.prepared) {
-                entry.prepared = renderer->prepare(node);
+            std::unique_ptr<PreparedRenderOps> &prepared =
+                detail::SceneNodeAccess::preparedRenderOps(node);
+            if (node.isDirty() || !prepared) {
+                prepared = renderer->prepare(node);
                 detail::SceneNodeAccess::clearDirty(node);
             }
         } else if (node.kind() != SceneNodeKind::Group) {
-            cache.erase(&node);
+            detail::SceneNodeAccess::preparedRenderOps(node).reset();
             if (node.isDirty()) {
                 detail::SceneNodeAccess::clearDirty(node);
             }
@@ -154,12 +162,44 @@ struct SceneRenderer::Impl {
         for (std::unique_ptr<SceneNode> const &child : node.children()) {
             prepareNodeCache(*child);
         }
+
+        detail::SceneNodeAccess::clearSubtreeDirty(node);
     }
 
     void renderNode(SceneNode const &node, float inheritedOpacity) {
-        if (kEnablePreparedRenderCache) {
-            if (auto it = cache.find(&node); it != cache.end()) {
-                it->second.lastVisitedEpoch = renderEpoch;
+        float nodeOpacity = inheritedOpacity;
+        if (node.kind() == SceneNodeKind::Rect) {
+            nodeOpacity *= static_cast<RectNode const &>(node).opacity();
+        }
+
+        if (node.kind() != SceneNodeKind::Group && kEnablePreparedRenderCache &&
+            canReplayPreparedInParentSpace(node)) {
+            Rect const localBounds = node.localBounds();
+            if (localBounds.width > 0.f && localBounds.height > 0.f) {
+                Rect const worldBounds = detail::transformBounds(
+                    Mat3::translate(node.position()) * node.transform(), localBounds);
+                if (renderer->quickReject(worldBounds)) {
+                    return;
+                }
+            }
+
+            std::unique_ptr<PreparedRenderOps> &prepared =
+                detail::SceneNodeAccess::preparedRenderOps(node);
+            auto replayPrepared = [&]() {
+                if (!prepared) {
+                    return false;
+                }
+                if (nodeOpacity == 1.f) {
+                    return prepared->replay(*renderer);
+                }
+                renderer->save();
+                renderer->setOpacity(nodeOpacity);
+                bool const replayed = prepared->replay(*renderer);
+                renderer->restore();
+                return replayed;
+            };
+            if (replayPrepared()) {
+                return;
             }
         }
 
@@ -168,18 +208,11 @@ struct SceneRenderer::Impl {
         renderer->translate(Point {bounds.x, bounds.y});
         renderer->transform(node.transform());
 
-        float nodeOpacity = inheritedOpacity;
-        if (node.kind() == SceneNodeKind::Rect) {
-            nodeOpacity *= static_cast<RectNode const &>(node).opacity();
-        }
         renderer->setOpacity(nodeOpacity);
 
         Rect const localBounds = node.localBounds();
         if (localBounds.width > 0.f && localBounds.height > 0.f &&
             renderer->quickReject(localBounds)) {
-            for (std::unique_ptr<SceneNode> const &child : node.children()) {
-                markSubtreeVisited(*child);
-            }
             renderer->restore();
             return;
         }
@@ -188,9 +221,9 @@ struct SceneRenderer::Impl {
             if (!kEnablePreparedRenderCache || !node.canPrepareRenderOps()) {
                 node.render(*renderer);
             } else {
-                CacheEntry &entry = cache[&node];
-                entry.lastVisitedEpoch = renderEpoch;
-                if (!entry.prepared || !entry.prepared->replay(*renderer)) {
+                std::unique_ptr<PreparedRenderOps> &prepared =
+                    detail::SceneNodeAccess::preparedRenderOps(node);
+                if (!prepared || !prepared->replay(*renderer)) {
                     node.render(*renderer);
                 }
             }
@@ -216,22 +249,8 @@ struct SceneRenderer::Impl {
         renderer->restore();
     }
 
-    void markSubtreeVisited(SceneNode const &node) {
-        if (!kEnablePreparedRenderCache) {
-            return;
-        }
-        if (auto it = cache.find(&node); it != cache.end()) {
-            it->second.lastVisitedEpoch = renderEpoch;
-        }
-        for (std::unique_ptr<SceneNode> const &child : node.children()) {
-            markSubtreeVisited(*child);
-        }
-    }
-
     Renderer *renderer = nullptr;
     std::unique_ptr<Renderer> ownedRenderer;
-    std::unordered_map<SceneNode const *, CacheEntry> cache;
-    std::uint64_t renderEpoch = 0;
 };
 
 SceneRenderer::SceneRenderer(Canvas &canvas) : impl_(std::make_unique<Impl>(canvas)) {}

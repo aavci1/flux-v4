@@ -31,8 +31,10 @@ class PathNode final : public SceneNode {
     void render(Renderer& renderer) const override;
 
   private:
-    struct Impl;
-    std::unique_ptr<Impl> impl_;
+    Path path_{};
+    FillStyle fill_ = FillStyle::none();
+    StrokeStyle stroke_ = StrokeStyle::none();
+    ShadowStyle shadow_ = ShadowStyle::none();
 };
 
 } // namespace flux::scenegraph

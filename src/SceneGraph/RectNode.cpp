@@ -24,96 +24,88 @@ Rect expandForStrokeAndShadow(Rect rect, StrokeStyle const &stroke, ShadowStyle 
 
 } // namespace
 
-struct RectNode::Impl {
-    FillStyle fill = FillStyle::none();
-    StrokeStyle stroke = StrokeStyle::none();
-    CornerRadius cornerRadius {};
-    ShadowStyle shadow = ShadowStyle::none();
-    bool clipsContents = false;
-    float opacity = 1.f;
-};
-
-RectNode::RectNode(Rect bounds, FillStyle fill, StrokeStyle stroke, CornerRadius cornerRadius, ShadowStyle shadow) : SceneNode(SceneNodeKind::Rect, bounds), impl_(std::make_unique<Impl>()) {
-    impl_->fill = std::move(fill);
-    impl_->stroke = std::move(stroke);
-    impl_->cornerRadius = cornerRadius;
-    impl_->shadow = shadow;
-}
+RectNode::RectNode(Rect bounds, FillStyle fill, StrokeStyle stroke, CornerRadius cornerRadius,
+                   ShadowStyle shadow)
+    : SceneNode(SceneNodeKind::Rect, bounds)
+    , fill_(std::move(fill))
+    , stroke_(std::move(stroke))
+    , cornerRadius_(cornerRadius)
+    , shadow_(shadow) {}
 
 RectNode::~RectNode() = default;
 
 FillStyle const &RectNode::fill() const noexcept {
-    return impl_->fill;
+    return fill_;
 }
 
 StrokeStyle const &RectNode::stroke() const noexcept {
-    return impl_->stroke;
+    return stroke_;
 }
 
 CornerRadius RectNode::cornerRadius() const noexcept {
-    return impl_->cornerRadius;
+    return cornerRadius_;
 }
 
 ShadowStyle const &RectNode::shadow() const noexcept {
-    return impl_->shadow;
+    return shadow_;
 }
 
 bool RectNode::clipsContents() const noexcept {
-    return impl_->clipsContents;
+    return clipsContents_;
 }
 
 float RectNode::opacity() const noexcept {
-    return impl_->opacity;
+    return opacity_;
 }
 
 void RectNode::setFill(FillStyle fill) {
-    if (impl_->fill == fill) {
+    if (fill_ == fill) {
         return;
     }
-    impl_->fill = std::move(fill);
+    fill_ = std::move(fill);
     markDirty();
 }
 
 void RectNode::setStroke(StrokeStyle stroke) {
-    if (impl_->stroke == stroke) {
+    if (stroke_ == stroke) {
         return;
     }
-    impl_->stroke = std::move(stroke);
+    stroke_ = std::move(stroke);
     markDirty();
 }
 
 void RectNode::setCornerRadius(CornerRadius cornerRadius) {
-    if (impl_->cornerRadius == cornerRadius) {
+    if (cornerRadius_ == cornerRadius) {
         return;
     }
-    impl_->cornerRadius = cornerRadius;
+    cornerRadius_ = cornerRadius;
     markDirty();
 }
 
 void RectNode::setShadow(ShadowStyle shadow) {
-    if (impl_->shadow == shadow) {
+    if (shadow_ == shadow) {
         return;
     }
-    impl_->shadow = shadow;
+    shadow_ = shadow;
     markDirty();
 }
 
 void RectNode::setClipsContents(bool clipsContents) noexcept {
-    impl_->clipsContents = clipsContents;
+    clipsContents_ = clipsContents;
 }
 
 void RectNode::setOpacity(float opacity) noexcept {
-    impl_->opacity = std::clamp(opacity, 0.f, 1.f);
+    opacity_ = std::clamp(opacity, 0.f, 1.f);
 }
 
 Rect RectNode::localBounds() const noexcept {
     return expandForStrokeAndShadow(Rect::sharp(0.f, 0.f, size().width, size().height),
-                                    impl_->stroke, impl_->shadow);
+                                    stroke_, shadow_);
 }
 
 void RectNode::render(Renderer &renderer) const {
-    renderer.drawRect(Rect::sharp(0.f, 0.f, size().width, size().height), impl_->cornerRadius,
-                      impl_->fill, impl_->stroke, impl_->shadow);
+    renderer.drawRect(Rect::sharp(0.f, 0.f, size().width, size().height), cornerRadius_,
+                      fill_, stroke_, shadow_);
 }
 
 } // namespace flux::scenegraph

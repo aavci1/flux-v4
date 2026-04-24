@@ -12,9 +12,11 @@ class OverlayManager;
 class Runtime;
 namespace scenegraph {
 class SceneGraph;
+class SceneRenderer;
 }
 
-void renderWindowFrame(Canvas& canvas, std::optional<scenegraph::SceneGraph> const& sceneGraph,
+void renderWindowFrame(scenegraph::SceneRenderer& renderer, Canvas& canvas,
+                       std::optional<scenegraph::SceneGraph> const& sceneGraph,
                        OverlayManager const& overlays, Runtime const* runtime, Color clearColor,
                        TextCacheRingBuffer& textCacheRing);
 
