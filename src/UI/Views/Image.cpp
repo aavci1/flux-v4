@@ -27,7 +27,8 @@ ComponentBuildResult buildMeasuredComponent(views::Image const& image, Component
                                   ctx.hasAssignedWidth(), ctx.hasAssignedHeight(), ctx.modifiers(), ctx.hints());
   auto imageNode = std::make_unique<scenegraph::ImageNode>(
       Rect {0.f, 0.f, frameRect.width, frameRect.height},
-      image.source
+      image.source,
+      image.fillMode
   );
 
   ComponentBuildResult result{};

@@ -1,9 +1,11 @@
 #include <Flux/Core/ComponentKey.hpp>
 #include <Flux/Core/Cursor.hpp>
+#include <Flux/Graphics/Image.hpp>
 #include <Flux/Graphics/Path.hpp>
 #include <doctest/doctest.h>
 
 #include <Flux/SceneGraph/GroupNode.hpp>
+#include <Flux/SceneGraph/ImageNode.hpp>
 #include <Flux/SceneGraph/InteractionData.hpp>
 #include <Flux/SceneGraph/PathNode.hpp>
 #include <Flux/SceneGraph/RectNode.hpp>
@@ -20,6 +22,16 @@ namespace {
 
 using namespace flux;
 using namespace flux::scenegraph;
+
+class DummyImage final : public Image {
+  public:
+    explicit DummyImage(Size size) : size_(size) {}
+
+    Size size() const override { return size_; }
+
+  private:
+    Size size_{};
+};
 
 class RecordingRenderer final : public Renderer {
   public:
@@ -40,10 +52,17 @@ class RecordingRenderer final : public Renderer {
         float opacity = 1.f;
     };
 
+    struct ImageDraw {
+        Rect rect {};
+        ImageFillMode fillMode = ImageFillMode::Cover;
+        Point translation {};
+    };
+
     std::vector<RectDraw> rectDraws;
     std::vector<Point> textTranslations;
     std::vector<ClipDraw> clipDraws;
     std::vector<PathDraw> pathDraws;
+    std::vector<ImageDraw> imageDraws;
 
     void save() override {
         transforms_.push_back(transforms_.back());
@@ -75,7 +94,9 @@ class RecordingRenderer final : public Renderer {
 
     void drawTextLayout(TextLayout const &) override { textTranslations.push_back(transforms_.back().apply(Point {})); }
 
-    void drawImage(Image const &, Rect const &) override {}
+    void drawImage(Image const &, Rect const &rect, ImageFillMode fillMode) override {
+        imageDraws.push_back({rect, fillMode, transforms_.back().apply(Point {})});
+    }
 
   private:
     std::vector<Mat3> transforms_ {Mat3::identity()};
@@ -116,7 +137,7 @@ class PreparedCountingRenderer final : public Renderer {
 
     void drawPath(Path const &, FillStyle const &, StrokeStyle const &, ShadowStyle const &) override {}
     void drawTextLayout(TextLayout const &) override {}
-    void drawImage(Image const &, Rect const &) override {}
+    void drawImage(Image const &, Rect const &, ImageFillMode) override {}
 
     std::unique_ptr<PreparedRenderOps> prepare(SceneNode const &) override {
         ++prepareCalls;
@@ -207,6 +228,23 @@ TEST_CASE("PathNode renders through the scenegraph renderer") {
 
     REQUIRE(renderer.pathDraws.size() == 1);
     CHECK(renderer.pathDraws[0].translation == Point {18.f, 20.f});
+}
+
+TEST_CASE("ImageNode renders through the scenegraph renderer with its fill mode") {
+    auto source = std::make_shared<DummyImage>(Size {320.f, 180.f});
+    auto root = std::make_unique<GroupNode>(Rect {8.f, 6.f, 120.f, 90.f});
+    root->appendChild(std::make_unique<ImageNode>(Rect {10.f, 14.f, 64.f, 40.f}, source, ImageFillMode::Fit));
+
+    SceneGraph graph {std::move(root)};
+    RecordingRenderer renderer;
+    SceneRenderer sceneRenderer {renderer};
+
+    sceneRenderer.render(graph);
+
+    REQUIRE(renderer.imageDraws.size() == 1);
+    CHECK(renderer.imageDraws[0].translation == Point {18.f, 20.f});
+    CHECK(renderer.imageDraws[0].rect == Rect::sharp(0.f, 0.f, 64.f, 40.f));
+    CHECK(renderer.imageDraws[0].fillMode == ImageFillMode::Fit);
 }
 
 TEST_CASE("RectNode subtree opacity multiplies through descendants") {

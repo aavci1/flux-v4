@@ -65,8 +65,8 @@ class CanvasRenderer final : public Renderer {
         canvas_.drawPath(path, fill, stroke, shadow);
     }
     void drawTextLayout(TextLayout const &layout) override { canvas_.drawTextLayout(layout, Point {}); }
-    void drawImage(Image const &image, Rect const &bounds) override {
-        canvas_.drawImage(image, bounds, ImageFillMode::Cover, CornerRadius {}, 1.f);
+    void drawImage(Image const &image, Rect const &bounds, ImageFillMode fillMode) override {
+        canvas_.drawImage(image, bounds, fillMode, CornerRadius {}, 1.f);
     }
     std::unique_ptr<PreparedRenderOps> prepare(SceneNode const &node) override;
     Canvas *canvas() noexcept override { return &canvas_; }
