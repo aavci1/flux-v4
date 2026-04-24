@@ -8,6 +8,7 @@
 #include <Flux/Detail/Runtime.hpp>
 #include <Flux/Graphics/Canvas.hpp>
 #include <Flux/SceneGraph/SceneGraph.hpp>
+#include <Flux/SceneGraph/SceneRenderer.hpp>
 #include <Flux/UI/Overlay.hpp>
 #include <Flux/UI/Theme.hpp>
 
@@ -24,6 +25,7 @@ namespace flux {
 struct Window::Impl {
   std::unique_ptr<PlatformWindow> platform_;
   std::unique_ptr<Canvas> canvas_;
+  std::unique_ptr<scenegraph::SceneRenderer> sceneRenderer_;
   std::optional<scenegraph::SceneGraph> sceneGraph_;
   Color clearColor_ {Color::hex(0xF2F2F7)};
   /// Declared before `runtime_` so `~Runtime` (and `OverlayHookSlot` teardown calling `removeOverlay`)
@@ -203,7 +205,10 @@ EnvironmentLayer const& Window::environmentLayer() const {
 }
 
 void Window::render(Canvas& canvas) {
-  renderWindowFrame(canvas, d->sceneGraph_, d->overlayMgr_, d->runtime_.get(), d->clearColor_,
+  if (!d->sceneRenderer_) {
+    d->sceneRenderer_ = std::make_unique<scenegraph::SceneRenderer>(canvas);
+  }
+  renderWindowFrame(*d->sceneRenderer_, canvas, d->sceneGraph_, d->overlayMgr_, d->runtime_.get(), d->clearColor_,
                     d->textCacheRing_);
 }
 

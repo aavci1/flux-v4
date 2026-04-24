@@ -41,9 +41,24 @@
 ## Attempt 2
 
 - Item: Persist `SceneRenderer` across frames so prepared render ops survive between presents.
-- Status: In progress.
+- Status: Worked and met the CPU target.
 - Before:
   - CPU: `16.71%`
   - Hot path: `WindowRender` constructs a new `SceneRenderer` every frame, which discards the prepared-op cache and forces static scene nodes through `prepareNodeCache()` again on the next frame.
-- Expected effect:
-  - Reduce render-side CPU by reusing prepared node caches for the static parts of the demo while the ambient panel redraws.
+- After:
+  - CPU: `9.41%` average CPU on the first run with the same `ps` sampling loop.
+  - CPU confirmation run: `9.75%` average CPU.
+  - CPU delta versus attempt 1: `-7.30` percentage points on the first run.
+  - CPU delta versus original baseline: `-26.66` percentage points on the first run, about `73.9%` lower than baseline.
+  - FPS: the render path still runs off the display link and the app now stays well under the 16.67 ms/frame CPU budget; the ambient-loop benchmark logger did not emit because the animated panel is below the default initial fold during automated runs.
+- Outcome:
+  - Goal met: CPU is now below `10%`.
+  - Post-change sampling still shows render work in `presentRequestedWindows()`, but the repeated `SceneRenderer` teardown/rebuild churn is gone and `prepareNodeCache()` is no longer the dominant cost it was after attempt 1.
+
+## Final state
+
+- Baseline CPU: `36.07%`
+- Final CPU: `9.41%` average, confirmed with a second run at `9.75%`
+- Effective optimization sequence:
+  1. Remove per-frame reactive rebuilds from the decorative ambient loop.
+  2. Preserve `SceneRenderer` between presents so prepared render caches can actually persist.
