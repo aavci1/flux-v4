@@ -64,7 +64,7 @@ static TestSurface makeSurface() {
 
 static std::filesystem::path imageFixturePath() {
   std::filesystem::path path = std::filesystem::path(__FILE__).parent_path();
-  path /= "../examples/image-demo/test.png";
+  path /= "../examples/image-demo/test.webp";
   return std::filesystem::weakly_canonical(path);
 }
 
@@ -163,6 +163,16 @@ static std::uint8_t capturedChannel(std::vector<std::uint8_t> const& pixels, std
   return pixels[idx];
 }
 
+static int colorDelta(std::vector<std::uint8_t> const& pixels, std::uint32_t width,
+                      std::uint32_t ax, std::uint32_t ay, std::uint32_t bx, std::uint32_t by) {
+  int delta = 0;
+  for (int channel = 0; channel < 3; ++channel) {
+    delta += std::abs(static_cast<int>(capturedChannel(pixels, width, ax, ay, channel)) -
+                      static_cast<int>(capturedChannel(pixels, width, bx, by, channel)));
+  }
+  return delta;
+}
+
 } // namespace
 
 TEST_CASE("MetalCanvas can render multiple queued frames without arena aliasing regressions") {
@@ -255,6 +265,133 @@ TEST_CASE("MetalCanvas applies rounded clip masks to child content") {
     CHECK(capturedChannel(pixels, width, insideX, insideY, 2) >= 180);
     CHECK(capturedChannel(pixels, width, insideX, insideY, 1) <= 80);
     CHECK(capturedChannel(pixels, width, insideX, insideY, 0) <= 80);
+  }
+#endif
+}
+
+TEST_CASE("MetalCanvas preserves rounded rect geometry when clipped by the viewport") {
+#if !defined(__APPLE__)
+  SUCCEED();
+#else
+  @autoreleasepool {
+    CoreTextSystem textSystem;
+    TestSurface surface = makeSurface();
+    auto canvas = createMetalCanvas(nullptr, (__bridge void*)surface.layer, 0, textSystem);
+    REQUIRE(canvas);
+    canvas->resize(640, 480);
+    canvas->updateDpiScale(2.f, 2.f);
+
+    auto root = std::make_unique<GroupNode>(flux::Rect{0.f, 0.f, 640.f, 480.f});
+    root->appendChild(std::make_unique<RectNode>(
+        flux::Rect{0.f, 0.f, 640.f, 480.f},
+        FillStyle::solid(Colors::white)
+    ));
+
+    auto clip = std::make_unique<RectNode>(
+        flux::Rect{20.f, 30.f, 140.f, 120.f},
+        FillStyle::none(),
+        StrokeStyle::none(),
+        CornerRadius{}
+    );
+    clip->setClipsContents(true);
+    clip->appendChild(std::make_unique<RectNode>(
+        flux::Rect{0.f, -10.f, 100.f, 80.f},
+        FillStyle::solid(Colors::red),
+        StrokeStyle::none(),
+        CornerRadius{28.f, 28.f, 28.f, 28.f}
+    ));
+    root->appendChild(std::move(clip));
+
+    SceneGraph graph{std::move(root)};
+    SceneRenderer renderer{*canvas};
+
+    requestNextFrameCaptureForCanvas(canvas.get());
+    canvas->beginFrame();
+    canvas->clear(Colors::white);
+    renderer.render(graph);
+    canvas->present();
+    waitForCanvasLastPresentComplete(canvas.get());
+
+    std::vector<std::uint8_t> pixels;
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+    REQUIRE(takeCapturedFrameForCanvas(canvas.get(), pixels, width, height));
+
+    std::uint32_t const curvedX = 42;
+    std::uint32_t const curvedY = 68;
+    CHECK(capturedChannel(pixels, width, curvedX, curvedY, 0) >= 240);
+    CHECK(capturedChannel(pixels, width, curvedX, curvedY, 1) >= 240);
+    CHECK(capturedChannel(pixels, width, curvedX, curvedY, 2) >= 240);
+
+    std::uint32_t const interiorX = 56;
+    std::uint32_t const interiorY = 76;
+    CHECK(capturedChannel(pixels, width, interiorX, interiorY, 2) >= 180);
+    CHECK(capturedChannel(pixels, width, interiorX, interiorY, 1) <= 80);
+    CHECK(capturedChannel(pixels, width, interiorX, interiorY, 0) <= 80);
+  }
+#endif
+}
+
+TEST_CASE("MetalCanvas preserves image sampling when clipped by the viewport") {
+#if !defined(__APPLE__)
+  SUCCEED();
+#else
+  @autoreleasepool {
+    CoreTextSystem textSystem;
+    TestSurface surface = makeSurface();
+    auto canvas = createMetalCanvas(nullptr, (__bridge void*)surface.layer, 0, textSystem);
+    REQUIRE(canvas);
+    canvas->resize(640, 480);
+    canvas->updateDpiScale(2.f, 2.f);
+
+    std::shared_ptr<Image> image = loadImageFromFile(imageFixturePath().string(), canvas->gpuDevice());
+    REQUIRE(image);
+
+    auto root = std::make_unique<GroupNode>(flux::Rect{0.f, 0.f, 640.f, 480.f});
+    root->appendChild(std::make_unique<RectNode>(
+        flux::Rect{0.f, 0.f, 640.f, 480.f},
+        FillStyle::solid(Colors::white)
+    ));
+    root->appendChild(std::make_unique<ImageNode>(
+        flux::Rect{20.f, 20.f, 120.f, 160.f},
+        image,
+        ImageFillMode::Stretch
+    ));
+
+    auto clip = std::make_unique<RectNode>(
+        flux::Rect{180.f, 40.f, 120.f, 140.f},
+        FillStyle::none(),
+        StrokeStyle::none(),
+        CornerRadius{}
+    );
+    clip->setClipsContents(true);
+    clip->appendChild(std::make_unique<ImageNode>(
+        flux::Rect{0.f, -20.f, 120.f, 160.f},
+        image,
+        ImageFillMode::Stretch
+    ));
+    root->appendChild(std::move(clip));
+
+    SceneGraph graph{std::move(root)};
+    SceneRenderer renderer{*canvas};
+
+    requestNextFrameCaptureForCanvas(canvas.get());
+    canvas->beginFrame();
+    canvas->clear(Colors::white);
+    renderer.render(graph);
+    canvas->present();
+    waitForCanvasLastPresentComplete(canvas.get());
+
+    std::vector<std::uint8_t> pixels;
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+    REQUIRE(takeCapturedFrameForCanvas(canvas.get(), pixels, width, height));
+
+    std::uint32_t const leftX = 100;
+    std::uint32_t const leftY = 120;
+    std::uint32_t const rightX = 420;
+    std::uint32_t const rightY = 120;
+    CHECK(colorDelta(pixels, width, leftX, leftY, rightX, rightY) <= 18);
   }
 #endif
 }

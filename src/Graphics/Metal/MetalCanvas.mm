@@ -47,10 +47,6 @@ vector_float4 cornersToSimd(const CornerRadius& cr) {
   return simd_make_float4(cr.topLeft, cr.topRight, cr.bottomRight, cr.bottomLeft);
 }
 
-CornerRadius cornersFromSimd(vector_float4 const& corners) {
-  return CornerRadius{corners.x, corners.y, corners.z, corners.w};
-}
-
 Rect boundsOfTransformedRect(Rect const& r, Mat3 const& m) {
   Point p0 = m.apply({r.x, r.y});
   Point p1 = m.apply({r.x + r.width, r.y});
@@ -730,37 +726,19 @@ public:
     }
     const float op = effectiveOpacity();
     Mat3 const& M = currentState().transform;
-    Rect drawR = rect;
-    if (currentState().clip.has_value()) {
-      Rect const inter = intersectRects(rect, *currentState().clip);
-      if (inter.width <= 0.f || inter.height <= 0.f) {
-        return;
-      }
-      drawR = inter;
-    }
-
     CornerRadius crEffective = cornerRadius;
-    {
-      constexpr float eps = 1e-3f;
-      bool const clipped =
-          std::abs(drawR.x - rect.x) > eps || std::abs(drawR.y - rect.y) > eps ||
-          std::abs(drawR.width - rect.width) > eps || std::abs(drawR.height - rect.height) > eps;
-      if (clipped) {
-        crEffective = cornerRadiiAfterAxisAlignedClip(rect, drawR, cornerRadius);
-      }
-      clampRoundRectCornerRadii(drawR.width, drawR.height, crEffective);
-    }
+    clampRoundRectCornerRadii(rect.width, rect.height, crEffective);
 
     float rotationRad = 0.f;
     Rect mapped{};
     if (M.isTranslationOnly()) {
-      mapped = Rect::sharp(drawR.x + M.m[6], drawR.y + M.m[7], drawR.width, drawR.height);
+      mapped = Rect::sharp(rect.x + M.m[6], rect.y + M.m[7], rect.width, rect.height);
       rotationRad = 0.f;
     } else {
       float tx = 0.f;
       float ty = 0.f;
       bool const decomposed = tryDecomposeRotationTranslation(M, &rotationRad, &tx, &ty);
-      mapped = boundsOfTransformedRect(drawR, M);
+      mapped = boundsOfTransformedRect(rect, M);
       if (decomposed) {
         rotationRad = 0.f;
       }
@@ -962,7 +940,6 @@ public:
       return;
     }
     Mat3 const& M = currentState().transform;
-    Rect const mappedClip = boundsOfTransformedRect(dst, M);
     if (currentState().clip.has_value()) {
       Rect const inter = intersectRects(dst, *currentState().clip);
       if (inter.width <= 0.f || inter.height <= 0.f) {
@@ -975,15 +952,7 @@ public:
     if (M.isTranslationOnly()) {
       mapped = Rect::sharp(dst.x + M.m[6], dst.y + M.m[7], dst.width, dst.height);
     } else {
-      if (currentState().clip.has_value()) {
-        Rect const clipped = intersectRects(dst, *currentState().clip);
-        if (clipped.width <= 0.f || clipped.height <= 0.f) {
-          return;
-        }
-        mapped = boundsOfTransformedRect(clipped, M);
-      } else {
-        mapped = mappedClip;
-      }
+      mapped = boundsOfTransformedRect(dst, M);
     }
 
     const float s = dpiScale_;
@@ -1026,7 +995,6 @@ public:
       return;
     }
     Mat3 const& M = currentState().transform;
-    Rect const mappedClip = boundsOfTransformedRect(dst, M);
     if (currentState().clip.has_value()) {
       Rect const inter = intersectRects(dst, *currentState().clip);
       if (inter.width <= 0.f || inter.height <= 0.f) {
@@ -1039,15 +1007,7 @@ public:
     if (M.isTranslationOnly()) {
       mapped = Rect::sharp(dst.x + M.m[6], dst.y + M.m[7], dst.width, dst.height);
     } else {
-      if (currentState().clip.has_value()) {
-        Rect const clipped = intersectRects(dst, *currentState().clip);
-        if (clipped.width <= 0.f || clipped.height <= 0.f) {
-          return;
-        }
-        mapped = boundsOfTransformedRect(clipped, M);
-      } else {
-        mapped = mappedClip;
-      }
+      mapped = boundsOfTransformedRect(dst, M);
     }
 
     const float s = dpiScale_;
@@ -1546,29 +1506,7 @@ public:
                            recorded.rectOps.begin() + static_cast<std::ptrdiff_t>(start + count));
       for (std::size_t i = 0; i < count; ++i) {
         MetalRectOp& op = frame.rectOps[static_cast<std::size_t>(frameRectBase) + i];
-        if (clipRect.has_value()) {
-          Rect const fullLocal{
-              op.inst.rect.x / dpiScaleX_,
-              op.inst.rect.y / dpiScaleY_,
-              op.inst.rect.z / dpiScaleX_,
-              op.inst.rect.w / dpiScaleY_,
-          };
-          Rect const clippedLocal = intersectRects(fullLocal, *clipRect);
-          if (clippedLocal.width > 0.f && clippedLocal.height > 0.f) {
-            CornerRadius clippedCorners =
-                cornerRadiiAfterAxisAlignedClip(fullLocal, clippedLocal, cornersFromSimd(op.inst.corners));
-            clampRoundRectCornerRadii(clippedLocal.width * dpiScale_, clippedLocal.height * dpiScale_,
-                                      clippedCorners);
-            op.inst.rect = simd_make_float4(
-                clippedLocal.x * dpiScaleX_,
-                clippedLocal.y * dpiScaleY_,
-                clippedLocal.width * dpiScaleX_,
-                clippedLocal.height * dpiScaleY_);
-            op.inst.corners = cornersToSimd(clippedCorners);
-          } else {
-            op.inst.rect = simd_make_float4(0.f, 0.f, 0.f, 0.f);
-          }
-        }
+        (void)clipRect;
         op.translation = translation;
         op.inst.strokeWidthOpacity.y *= opacityScale;
         tagOpWithClip(op, clipScissorValid_, clipScissor_, clipRoundedStack_);
@@ -1582,29 +1520,6 @@ public:
                             recorded.imageOps.begin() + static_cast<std::ptrdiff_t>(start + count));
       for (std::size_t i = 0; i < count; ++i) {
         MetalImageOp& op = frame.imageOps[static_cast<std::size_t>(frameImageBase) + i];
-        if (clipRect.has_value()) {
-          Rect const fullLocal{
-              op.inst.sdf.rect.x / dpiScaleX_,
-              op.inst.sdf.rect.y / dpiScaleY_,
-              op.inst.sdf.rect.z / dpiScaleX_,
-              op.inst.sdf.rect.w / dpiScaleY_,
-          };
-          Rect const clippedLocal = intersectRects(fullLocal, *clipRect);
-          if (clippedLocal.width > 0.f && clippedLocal.height > 0.f) {
-            CornerRadius clippedCorners =
-                cornerRadiiAfterAxisAlignedClip(fullLocal, clippedLocal, cornersFromSimd(op.inst.sdf.corners));
-            clampRoundRectCornerRadii(clippedLocal.width * dpiScale_, clippedLocal.height * dpiScale_,
-                                      clippedCorners);
-            op.inst.sdf.rect = simd_make_float4(
-                clippedLocal.x * dpiScaleX_,
-                clippedLocal.y * dpiScaleY_,
-                clippedLocal.width * dpiScaleX_,
-                clippedLocal.height * dpiScaleY_);
-            op.inst.sdf.corners = cornersToSimd(clippedCorners);
-          } else {
-            op.inst.sdf.rect = simd_make_float4(0.f, 0.f, 0.f, 0.f);
-          }
-        }
         op.translation = translation;
         op.inst.sdf.strokeWidthOpacity.y *= opacityScale;
         if (op.texture) {
