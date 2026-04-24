@@ -24,6 +24,21 @@ struct BuildCounters {
   std::uint64_t reusedNodes = 0;
 };
 
+struct ComponentKeyCounters {
+  std::uint64_t copies = 0;
+  std::uint64_t copiedIds = 0;
+  std::uint64_t appends = 0;
+  std::uint64_t appendedIds = 0;
+  std::uint64_t hashCalls = 0;
+  std::uint64_t hashedIds = 0;
+  std::uint64_t equalityCalls = 0;
+  std::uint64_t equalityIds = 0;
+  std::uint64_t prefixCalls = 0;
+  std::uint64_t prefixIds = 0;
+  std::uint64_t heapGrowths = 0;
+  std::uint64_t heapCapacity = 0;
+};
+
 namespace detail {
 
 struct IntervalCounters {
@@ -31,6 +46,7 @@ struct IntervalCounters {
   std::uint64_t frames = 0;
   std::uint64_t builds = 0;
   BuildCounters build{};
+  ComponentKeyCounters componentKeys{};
   std::uint64_t preparedPrepareCalls = 0;
   std::uint64_t preparedReplayCalls = 0;
   std::array<std::uint64_t, static_cast<std::size_t>(TimedMetric::Count)> durationsNs{};
@@ -40,6 +56,7 @@ struct IntervalCounters {
     frames = 0;
     builds = 0;
     build = {};
+    componentKeys = {};
     preparedPrepareCalls = 0;
     preparedReplayCalls = 0;
     durationsNs.fill(0);
@@ -75,6 +92,7 @@ inline void logIfReady() {
       stderr,
       "[flux:perf] %.2fs frames=%llu builds=%llu "
       "resolved=%llu(%.1f/f) materialized=%llu(%.1f/f) arranged=%llu(%.1f/f) reused=%llu(%.1f/f) "
+      "ck copy=%llu/%lluid append=%llu/%lluid hash=%llu/%lluid eq=%llu/%lluid prefix=%llu/%lluid grow=%llu "
       "prepare=%llu(%.2f/f) replay=%llu(%.2f/f) "
       "ms reactive=%.2f(%.2f/f) incremental=%.2f(%.2f/f) render=%.2f(%.2f/f) present=%.2f(%.2f/f)\n",
       seconds,
@@ -88,6 +106,17 @@ inline void logIfReady() {
       perFrame(interval.build.arrangedNodes, interval.frames),
       static_cast<unsigned long long>(interval.build.reusedNodes),
       perFrame(interval.build.reusedNodes, interval.frames),
+      static_cast<unsigned long long>(interval.componentKeys.copies),
+      static_cast<unsigned long long>(interval.componentKeys.copiedIds),
+      static_cast<unsigned long long>(interval.componentKeys.appends),
+      static_cast<unsigned long long>(interval.componentKeys.appendedIds),
+      static_cast<unsigned long long>(interval.componentKeys.hashCalls),
+      static_cast<unsigned long long>(interval.componentKeys.hashedIds),
+      static_cast<unsigned long long>(interval.componentKeys.equalityCalls),
+      static_cast<unsigned long long>(interval.componentKeys.equalityIds),
+      static_cast<unsigned long long>(interval.componentKeys.prefixCalls),
+      static_cast<unsigned long long>(interval.componentKeys.prefixIds),
+      static_cast<unsigned long long>(interval.componentKeys.heapGrowths),
       static_cast<unsigned long long>(interval.preparedPrepareCalls),
       perFrame(interval.preparedPrepareCalls, interval.frames),
       static_cast<unsigned long long>(interval.preparedReplayCalls),
@@ -146,6 +175,60 @@ inline void recordDuration(TimedMetric metric, std::chrono::nanoseconds elapsed)
   }
   detail::counters().durationsNs[static_cast<std::size_t>(metric)] +=
       static_cast<std::uint64_t>(elapsed.count());
+}
+
+inline void recordComponentKeyCopy(std::uint64_t copiedIds) {
+  if (!enabled()) {
+    return;
+  }
+  auto& counters = detail::counters().componentKeys;
+  ++counters.copies;
+  counters.copiedIds += copiedIds;
+}
+
+inline void recordComponentKeyAppend(std::uint64_t resultingIds) {
+  if (!enabled()) {
+    return;
+  }
+  auto& counters = detail::counters().componentKeys;
+  ++counters.appends;
+  counters.appendedIds += resultingIds;
+}
+
+inline void recordComponentKeyHash(std::uint64_t hashedIds) {
+  if (!enabled()) {
+    return;
+  }
+  auto& counters = detail::counters().componentKeys;
+  ++counters.hashCalls;
+  counters.hashedIds += hashedIds;
+}
+
+inline void recordComponentKeyEquality(std::uint64_t comparedIds) {
+  if (!enabled()) {
+    return;
+  }
+  auto& counters = detail::counters().componentKeys;
+  ++counters.equalityCalls;
+  counters.equalityIds += comparedIds;
+}
+
+inline void recordComponentKeyPrefixCompare(std::uint64_t comparedIds) {
+  if (!enabled()) {
+    return;
+  }
+  auto& counters = detail::counters().componentKeys;
+  ++counters.prefixCalls;
+  counters.prefixIds += comparedIds;
+}
+
+inline void recordComponentKeyHeapGrowth(std::uint64_t capacity) {
+  if (!enabled()) {
+    return;
+  }
+  auto& counters = detail::counters().componentKeys;
+  ++counters.heapGrowths;
+  counters.heapCapacity += capacity;
 }
 
 inline void recordPresentedFrame() {

@@ -2,6 +2,8 @@
 
 #include <Flux/SceneGraph/GroupNode.hpp>
 
+#include "Debug/PerfCounters.hpp"
+
 #include <algorithm>
 #include <stdexcept>
 #include <unordered_map>
@@ -17,6 +19,7 @@ bool keyHasPrefix(ComponentKey const& key, ComponentKey const& prefix) {
     if (key.size() < prefix.size()) {
         return false;
     }
+    debug::perf::recordComponentKeyPrefixCompare(prefix.size());
     return std::equal(prefix.begin(), prefix.end(), key.begin());
 }
 

@@ -2,6 +2,8 @@
 #include <Flux/Core/Application.hpp>
 #include <Flux/UI/Element.hpp>
 
+#include "Debug/PerfCounters.hpp"
+
 namespace flux {
 
 namespace {
@@ -13,6 +15,7 @@ bool keyHasPrefix(ComponentKey const& key, ComponentKey const& prefix) {
   if (key.size() < prefix.size()) {
     return false;
   }
+  debug::perf::recordComponentKeyPrefixCompare(prefix.size());
   return std::equal(prefix.begin(), prefix.end(), key.begin());
 }
 
@@ -258,6 +261,7 @@ bool StateStore::hasDirtyDescendant(ComponentKey const& key) const {
     if (candidate.size() <= key.size()) {
       continue;
     }
+    debug::perf::recordComponentKeyPrefixCompare(key.size());
     if (std::equal(key.begin(), key.end(), candidate.begin())) {
       return true;
     }

@@ -4,6 +4,8 @@
 #include <Flux/SceneGraph/SceneNode.hpp>
 #include <Flux/SceneGraph/SceneTraversal.hpp>
 
+#include "Debug/PerfCounters.hpp"
+
 #include <algorithm>
 #include <cstddef>
 
@@ -12,6 +14,7 @@ namespace flux::scenegraph {
 namespace {
 
 bool isPrefix(ComponentKey const& prefix, ComponentKey const& key) {
+    debug::perf::recordComponentKeyPrefixCompare(prefix.size());
     return prefix.size() <= key.size() && std::equal(prefix.begin(), prefix.end(), key.begin());
 }
 

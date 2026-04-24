@@ -3,6 +3,8 @@
 #include <Flux/UI/LayoutEngine.hpp>
 #include <Flux/UI/StateStore.hpp>
 
+#include "Debug/PerfCounters.hpp"
+
 #include <algorithm>
 #include <cassert>
 #include <functional>
@@ -47,6 +49,7 @@ bool usePress() {
   if (pressKey.empty() || key.size() > pressKey.size()) {
     return false;
   }
+  debug::perf::recordComponentKeyPrefixCompare(key.size());
   if (!std::equal(key.begin(), key.end(), pressKey.begin())) {
     return false;
   }

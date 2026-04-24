@@ -4,6 +4,8 @@
 #include <Flux/SceneGraph/SceneInteraction.hpp>
 #include <Flux/UI/StateStore.hpp>
 
+#include "Debug/PerfCounters.hpp"
+
 #include <algorithm>
 #include <cstddef>
 namespace flux {
@@ -38,6 +40,7 @@ bool FocusController::isInSubtree(ComponentKey const& key, StateStore const& sto
   if (focusedKey_.empty() || key.size() > focusedKey_.size()) {
     return false;
   }
+  debug::perf::recordComponentKeyPrefixCompare(key.size());
   if (!std::equal(key.begin(), key.end(), focusedKey_.begin())) {
     return false;
   }

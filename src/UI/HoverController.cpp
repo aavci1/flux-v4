@@ -4,6 +4,8 @@
 #include <Flux/SceneGraph/SceneInteraction.hpp>
 #include <Flux/UI/StateStore.hpp>
 
+#include "Debug/PerfCounters.hpp"
+
 namespace flux {
 
 namespace {
@@ -32,6 +34,7 @@ bool HoverController::isInSubtree(ComponentKey const& key, StateStore const& sto
   if (hoveredKey_.empty() || key.size() > hoveredKey_.size()) {
     return false;
   }
+  debug::perf::recordComponentKeyPrefixCompare(key.size());
   if (!std::equal(key.begin(), key.end(), hoveredKey_.begin())) {
     return false;
   }
