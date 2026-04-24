@@ -14,6 +14,7 @@ enum class TimedMetric : std::uint8_t {
   IncrementalRebuild,
   SceneRender,
   CanvasPresent,
+  DisplayLinkToPresent,
   Count,
 };
 
@@ -94,7 +95,7 @@ inline void logIfReady() {
       "resolved=%llu(%.1f/f) materialized=%llu(%.1f/f) arranged=%llu(%.1f/f) reused=%llu(%.1f/f) "
       "ck copy=%llu/%lluid append=%llu/%lluid hash=%llu/%lluid eq=%llu/%lluid prefix=%llu/%lluid grow=%llu "
       "prepare=%llu(%.2f/f) replay=%llu(%.2f/f) "
-      "ms reactive=%.2f(%.2f/f) incremental=%.2f(%.2f/f) render=%.2f(%.2f/f) present=%.2f(%.2f/f)\n",
+      "ms reactive=%.2f(%.2f/f) incremental=%.2f(%.2f/f) render=%.2f(%.2f/f) present=%.2f(%.2f/f) frameBudget=%.2f(%.2f/f)\n",
       seconds,
       static_cast<unsigned long long>(interval.frames),
       static_cast<unsigned long long>(interval.builds),
@@ -132,6 +133,9 @@ inline void logIfReady() {
           (interval.frames == 0 ? 1.0 : static_cast<double>(interval.frames)),
       nanosToMillis(interval.durationsNs[static_cast<std::size_t>(TimedMetric::CanvasPresent)]),
       nanosToMillis(interval.durationsNs[static_cast<std::size_t>(TimedMetric::CanvasPresent)]) /
+          (interval.frames == 0 ? 1.0 : static_cast<double>(interval.frames)),
+      nanosToMillis(interval.durationsNs[static_cast<std::size_t>(TimedMetric::DisplayLinkToPresent)]),
+      nanosToMillis(interval.durationsNs[static_cast<std::size_t>(TimedMetric::DisplayLinkToPresent)]) /
           (interval.frames == 0 ? 1.0 : static_cast<double>(interval.frames)));
 
   interval.reset(now);

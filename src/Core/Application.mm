@@ -51,6 +51,8 @@ struct Application::Impl {
   struct WindowRenderState {
     bool redrawRequested = false;
     bool frameReady = false;
+    bool frameBudgetPending = false;
+    std::chrono::steady_clock::time_point frameBudgetStartedAt{};
   };
 
   EventQueue eventQueue_;
@@ -171,6 +173,11 @@ Application::Application(int /*argc*/, char** /*argv*/) {
       return;
     }
     it->second.frameReady = true;
+    if (debug::perf::enabled() && !it->second.frameBudgetPending) {
+      it->second.frameBudgetPending = true;
+      it->second.frameBudgetStartedAt = std::chrono::steady_clock::time_point{
+          std::chrono::nanoseconds{ev.deadlineNanos}};
+    }
     windowIt->second->platformWindow()->acknowledgeAnimationFrameTick();
   });
 
@@ -331,11 +338,17 @@ void Application::presentRequestedWindows(bool requireFrameReady, bool keepFrame
       canvas.beginFrame();
       w->render(canvas);
       canvas.present();
+      if (hasFrameReady && state.frameBudgetPending) {
+        debug::perf::recordDuration(debug::perf::TimedMetric::DisplayLinkToPresent,
+                                    std::chrono::steady_clock::now() - state.frameBudgetStartedAt);
+        state.frameBudgetPending = false;
+      }
       rendered = true;
     }
 
     if (hasFrameReady) {
       state.frameReady = false;
+      state.frameBudgetPending = false;
       w->platformWindow()->completeAnimationFrame(keepFramePump || state.redrawRequested);
     } else if (rendered && !requireFrameReady) {
       w->platformWindow()->completeAnimationFrame(keepFramePump || state.redrawRequested);
