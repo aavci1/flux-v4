@@ -20,6 +20,19 @@ bool keyHasPrefix(ComponentKey const& key, ComponentKey const& prefix) {
     return std::equal(prefix.begin(), prefix.end(), key.begin());
 }
 
+void rebindNodeMappings(std::unordered_map<ComponentKey, SceneNode*, ComponentKeyHash>& nodes,
+                        SceneNode* from, SceneNode* to) {
+    if (!from || !to || from == to) {
+        return;
+    }
+    for (auto& [key, node] : nodes) {
+        (void)key;
+        if (node == from) {
+            node = to;
+        }
+    }
+}
+
 } // namespace
 
 struct SceneGraph::Impl {
@@ -110,7 +123,9 @@ std::unique_ptr<SceneNode> SceneGraph::replaceNodeForKey(ComponentKey const& key
             if (child.get() == existing) {
                 std::unique_ptr<SceneNode> removed = std::move(child);
                 child = std::move(node);
+                SceneNode* replacement = child.get();
                 parent->replaceChildren(std::move(children));
+                rebindNodeMappings(impl_->currentNodes, existing, replacement);
                 return removed;
             }
         }
@@ -119,6 +134,7 @@ std::unique_ptr<SceneNode> SceneGraph::replaceNodeForKey(ComponentKey const& key
     }
     std::unique_ptr<SceneNode> removed = std::move(impl_->root);
     impl_->root = std::move(node);
+    rebindNodeMappings(impl_->currentNodes, existing, impl_->root.get());
     return removed;
 }
 

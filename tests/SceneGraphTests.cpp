@@ -363,6 +363,45 @@ TEST_CASE("SceneGraph stores geometry keyed by component key") {
     CHECK(*graph.rectForKey(keyB) == Rect {12.f, 24.f, 16.f, 8.f});
 }
 
+TEST_CASE("SceneGraph replaceNodeForKey updates node mappings for repeated replacements") {
+    auto root = std::make_unique<GroupNode>(Rect {0.f, 0.f, 120.f, 80.f});
+    auto container = std::make_unique<GroupNode>(Rect {0.f, 0.f, 120.f, 80.f});
+    auto leaf = std::make_unique<RectNode>(Rect {10.f, 12.f, 40.f, 20.f}, FillStyle::solid(Colors::red));
+    SceneNode* originalLeaf = leaf.get();
+    GroupNode* containerNode = container.get();
+    root->appendChild(std::move(container));
+    containerNode->appendChild(std::move(leaf));
+
+    SceneGraph graph {std::move(root)};
+    ComponentKey const key {LocalId::fromString("ambient")};
+    ComponentKey const alias {LocalId::fromString("ambient"), LocalId::fromString("body")};
+
+    graph.beginGeometryBuild();
+    graph.recordNode(key, originalLeaf);
+    graph.recordNode(alias, originalLeaf);
+    graph.finishGeometryBuild();
+
+    auto placeholder = std::make_unique<GroupNode>(Rect {0.f, 0.f, 40.f, 20.f});
+    SceneNode* placeholderNode = placeholder.get();
+    std::unique_ptr<SceneNode> removed = graph.replaceNodeForKey(key, std::move(placeholder));
+    REQUIRE(removed.get() == originalLeaf);
+    CHECK(graph.nodeForKey(key) == placeholderNode);
+    CHECK(graph.nodeForKey(alias) == placeholderNode);
+    REQUIRE(containerNode->children().size() == 1);
+    CHECK(containerNode->children().front().get() == placeholderNode);
+
+    auto replacement = std::make_unique<RectNode>(Rect {10.f, 12.f, 40.f, 20.f}, FillStyle::solid(Colors::blue));
+    SceneNode* replacementNode = replacement.get();
+    std::unique_ptr<SceneNode> removedPlaceholder =
+        graph.replaceNodeForKey(key, std::move(replacement));
+    REQUIRE(removedPlaceholder.get() == placeholderNode);
+    CHECK(graph.nodeForKey(key) == replacementNode);
+    CHECK(graph.nodeForKey(alias) == replacementNode);
+    REQUIRE(containerNode->children().size() == 1);
+    CHECK(containerNode->children().front().get() == replacementNode);
+    CHECK(&graph.root() != replacementNode);
+}
+
 TEST_CASE("SceneRenderer reuses prepared ops for position-only changes and rebuilds on content changes") {
     auto root = std::make_unique<GroupNode>(Rect {0.f, 0.f, 200.f, 100.f});
     auto rect = std::make_unique<RectNode>(Rect {10.f, 12.f, 50.f, 30.f}, FillStyle::solid(Colors::red));
