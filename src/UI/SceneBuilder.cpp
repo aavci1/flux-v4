@@ -256,7 +256,7 @@ std::unique_ptr<scenegraph::SceneNode>
 SceneBuilder::buildSubtree(Element const& el, LayoutConstraints const& constraints,
                            LayoutHints const& hints, Point origin, ComponentKey key,
                            Size assignedSize, bool hasAssignedWidth,
-                           bool hasAssignedHeight,
+                           bool hasAssignedHeight, Point retainedRootOffset,
                            std::unique_ptr<scenegraph::SceneNode> existing) {
   measureLayoutCache_->clear();
   lastBuildStats_ = {};
@@ -264,10 +264,24 @@ SceneBuilder::buildSubtree(Element const& el, LayoutConstraints const& constrain
     sceneGraph_->beginGeometryBuild();
   }
 
+  if (existing) {
+    existing->setPosition(Point{
+        existing->position().x - retainedRootOffset.x,
+        existing->position().y - retainedRootOffset.y,
+    });
+  }
+
   pushFrame(constraints, hints, origin, std::move(key), assignedSize, hasAssignedWidth,
             hasAssignedHeight);
   std::unique_ptr<scenegraph::SceneNode> node = buildOrReuse(el, std::move(existing));
   popFrame();
+
+  if (node) {
+    node->setPosition(Point{
+        node->position().x + retainedRootOffset.x,
+        node->position().y + retainedRootOffset.y,
+    });
+  }
 
   if (sceneGraph_) {
     if (node) {

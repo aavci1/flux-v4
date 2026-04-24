@@ -49,6 +49,7 @@ public:
                                                       ComponentKey key, Size assignedSize,
                                                       bool hasAssignedWidth,
                                                       bool hasAssignedHeight,
+                                                      Point retainedRootOffset = {},
                                                       std::unique_ptr<scenegraph::SceneNode> existing = nullptr);
 
   std::unique_ptr<scenegraph::SceneNode>

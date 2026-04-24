@@ -26,6 +26,31 @@ Size snapRootLayoutSize(Size s) {
   return { std::max(1.f, std::round(s.width)), std::max(1.f, std::round(s.height)) };
 }
 
+Point retainedSubtreeRootOffset(scenegraph::SceneGraph const& sceneGraph, StateStore const& store,
+                                ComponentKey const& key, ComponentBuildSnapshot const& snapshot) {
+  if (scenegraph::SceneNode* existingNode = sceneGraph.nodeForKey(key)) {
+    Point retainedOffset = existingNode->position();
+    if (std::optional<Rect> const currentRect = sceneGraph.rectForKey(key)) {
+      retainedOffset.x -= currentRect->x - snapshot.origin.x;
+      retainedOffset.y -= currentRect->y - snapshot.origin.y;
+    }
+    return retainedOffset;
+  }
+
+  if (!key.empty()) {
+    ComponentKey parentKey = key;
+    parentKey.pop_back();
+    if (std::optional<ComponentBuildSnapshot> const parentSnapshot = store.buildSnapshot(parentKey)) {
+      return Point{
+          snapshot.origin.x - parentSnapshot->origin.x,
+          snapshot.origin.y - parentSnapshot->origin.y,
+      };
+    }
+  }
+
+  return {};
+}
+
 bool inputDebugEnabled() {
   return debug::inputEnabled();
 }
@@ -109,6 +134,8 @@ bool BuildOrchestrator::tryIncrementalComponentRebuild(LayoutConstraints const& 
   ComponentKey const& dirtyKey = candidate.key;
   ComponentBuildSnapshot const& snapshot = candidate.snapshot;
   Element const& sceneElement = *candidate.sceneElement;
+  Point const retainedRootOffset =
+      retainedSubtreeRootOffset(sceneGraph, stateStore_, dirtyKey, snapshot);
 
   StateStore* previousStore = StateStore::current();
   stateStore_.beginRebuild(false);
@@ -133,7 +160,8 @@ bool BuildOrchestrator::tryIncrementalComponentRebuild(LayoutConstraints const& 
     std::unique_ptr<scenegraph::SceneNode> replacement =
         sceneBuilder.buildSubtree(sceneElement, snapshot.constraints, snapshot.hints, snapshot.origin,
                                   dirtyKey, snapshot.assignedSize, snapshot.hasAssignedWidth,
-                                  snapshot.hasAssignedHeight, std::move(existingSubtree));
+                                  snapshot.hasAssignedHeight, retainedRootOffset,
+                                  std::move(existingSubtree));
     if (replacement) {
       std::optional<Rect> const previousRect = sceneGraph.rectForKey(dirtyKey);
       std::optional<Rect> const nextRect = patchGraph.rectForKey(dirtyKey);

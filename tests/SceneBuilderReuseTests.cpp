@@ -2,6 +2,20 @@
 
 using namespace std::chrono_literals;
 
+namespace {
+
+struct StatefulIncrementalCard {
+  float width = 60.f;
+
+  Element body() const {
+    auto state = useState(0);
+    (void)state;
+    return Element{Rectangle{}}.size(width, 30.f);
+  }
+};
+
+} // namespace
+
 TEST_CASE("SceneBuilder preserves scroll offset through stateful rebuilds without node reuse") {
   NullTextSystem textSystem{};
   EnvironmentLayer env{};
@@ -115,4 +129,75 @@ TEST_CASE("SceneBuilder geometry survives rebuilt trees because it lives on Scen
   graph.setRoot(builder.build(root, constraints));
   REQUIRE(graph.rectForKey(ComponentKey{LocalId::fromString("left")}).has_value());
   REQUIRE(graph.rectForKey(ComponentKey{LocalId::fromString("right")}).has_value());
+}
+
+TEST_CASE("SceneBuilder subtree rebuild preserves retained parent slot offset") {
+  NullTextSystem textSystem{};
+  scenegraph::SceneGraph graph{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  StoreScope scope{};
+  SceneBuilder builder{textSystem, EnvironmentStack::current(), &graph};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 160.f;
+  constraints.maxHeight = 120.f;
+
+  ComponentKey const childKey{LocalId::fromString("bottom")};
+  Element root = VStack{
+      .spacing = 8.f,
+      .children = {
+          keyedRect("top", 72.f, 20.f),
+          Element{StatefulIncrementalCard{72.f}}.key("bottom"),
+      },
+  };
+
+  scope.store.beginRebuild(true);
+  graph.setRoot(builder.build(root, constraints));
+  scope.store.endRebuild();
+
+  std::optional<ComponentBuildSnapshot> const childSnapshot = scope.store.buildSnapshot(childKey);
+  Element const* sceneElement = scope.store.sceneElement(childKey);
+  std::optional<Rect> const previousRect = graph.rectForKey(childKey);
+  scenegraph::SceneNode* originalNode = graph.nodeForKey(childKey);
+  REQUIRE(childSnapshot.has_value());
+  REQUIRE(sceneElement != nullptr);
+  REQUIRE(previousRect.has_value());
+  REQUIRE(originalNode != nullptr);
+
+  Point const retainedRootOffset{
+      originalNode->position().x - (previousRect->x - childSnapshot->origin.x),
+      originalNode->position().y - (previousRect->y - childSnapshot->origin.y),
+  };
+  Point const originalPosition = originalNode->position();
+  CHECK(originalPosition == retainedRootOffset);
+
+  scope.store.markCompositeDirty(childKey);
+  scope.store.beginRebuild(false);
+
+  scenegraph::SceneGraph patchGraph{};
+  SceneBuilder patchBuilder{textSystem, EnvironmentStack::current(), &patchGraph};
+  std::unique_ptr<scenegraph::SceneNode> existing =
+      graph.replaceNodeForKey(childKey, std::make_unique<scenegraph::GroupNode>());
+  REQUIRE(existing != nullptr);
+
+  std::unique_ptr<scenegraph::SceneNode> replacement =
+      patchBuilder.buildSubtree(*sceneElement, childSnapshot->constraints, childSnapshot->hints,
+                                childSnapshot->origin, childKey, childSnapshot->assignedSize,
+                                childSnapshot->hasAssignedWidth, childSnapshot->hasAssignedHeight,
+                                retainedRootOffset, std::move(existing));
+  REQUIRE(replacement != nullptr);
+  CHECK(replacement->position() == originalPosition);
+
+  std::unique_ptr<scenegraph::SceneNode> removed =
+      graph.replaceNodeForKey(childKey, std::move(replacement));
+  REQUIRE(removed != nullptr);
+  graph.replaceSubtreeData(childKey, patchGraph);
+  scope.store.markComponentsOutsideSubtreeVisited(childKey);
+  scope.store.endRebuild();
+
+  scenegraph::SceneNode* rebuiltNode = graph.nodeForKey(childKey);
+  REQUIRE(rebuiltNode != nullptr);
+  CHECK(rebuiltNode->position() == originalPosition);
 }
