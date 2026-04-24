@@ -144,7 +144,11 @@ PopoverCalloutLayout layoutPopoverCallout(PopoverCalloutShape const& value, Size
 
 Rect resolveOverlayFrame(Size win, OverlayConfig const& cfg, Rect contentBounds) {
   if (!cfg.anchor.has_value()) {
-    return {0.f, 0.f, win.width, win.height};
+    float const x = std::clamp((win.width - contentBounds.width) * 0.5f, 0.f,
+                               std::max(0.f, win.width - contentBounds.width));
+    float const y = std::clamp((win.height - contentBounds.height) * 0.5f, 0.f,
+                               std::max(0.f, win.height - contentBounds.height));
+    return Rect{x, y, contentBounds.width, contentBounds.height};
   }
 
   Rect const& anchor = *cfg.anchor;

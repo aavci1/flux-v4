@@ -22,9 +22,10 @@ constexpr std::size_t kLifecycle = 0;
 constexpr std::size_t kWindow = 1;
 constexpr std::size_t kInput = 2;
 constexpr std::size_t kTimer = 3;
-constexpr std::size_t kCustom = 4;
+constexpr std::size_t kFrame = 4;
+constexpr std::size_t kCustom = 5;
 constexpr std::size_t kBucketCount = kCustom + 1;
-static_assert(kBucketCount == 5);
+static_assert(kBucketCount == 6);
 
 template<typename T>
 constexpr std::size_t bucketFor() {
@@ -36,6 +37,8 @@ constexpr std::size_t bucketFor() {
     return kInput;
   } else if constexpr (std::is_same_v<T, TimerEvent>) {
     return kTimer;
+  } else if constexpr (std::is_same_v<T, FrameEvent>) {
+    return kFrame;
   } else if constexpr (std::is_same_v<T, CustomEvent>) {
     return kCustom;
   } else {

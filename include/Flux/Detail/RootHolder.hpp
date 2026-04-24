@@ -19,7 +19,7 @@ namespace detail {
 
 template<typename C>
 auto makeCachedLeaf(C const& value) {
-  if constexpr (CompositeComponent<C>) {
+  if constexpr (ExpandsBodyComponent<C>) {
     return std::monostate{};
   } else {
     return Element{value};
@@ -34,6 +34,8 @@ struct ResolvedRootScene {
   Element const* element = nullptr;
   ComponentKey rootKey{};
   bool descendantsStable = false;
+  bool rootUsesMaxWidthAsAssigned = true;
+  bool rootUsesMaxHeightAsAssigned = true;
 };
 
 struct RootHolder {
@@ -44,7 +46,7 @@ struct RootHolder {
 template<typename C>
 struct TypedRootHolder final : RootHolder {
   C value;
-  [[no_unique_address]] std::conditional_t<CompositeComponent<C>, std::monostate, Element> cachedLeaf_;
+  [[no_unique_address]] std::conditional_t<ExpandsBodyComponent<C>, std::monostate, Element> cachedLeaf_;
   mutable bool sceneDescendantsStable_ = false;
 
   explicit TypedRootHolder(std::in_place_t)
@@ -59,7 +61,7 @@ struct TypedRootHolder final : RootHolder {
 
   [[nodiscard]] ResolvedRootScene resolveScene(LayoutConstraints const& constraints) const override {
     ComponentKey const key = sceneRootKey();
-    if constexpr (CompositeComponent<C>) {
+    if constexpr (ExpandsBodyComponent<C>) {
       StateStore* store = StateStore::current();
       detail::CompositeBodyResolution resolution{};
       if (store) {
@@ -103,7 +105,7 @@ struct TypedRootHolder final : RootHolder {
 
 private:
   [[nodiscard]] ComponentKey sceneRootKey() const noexcept {
-    if constexpr (CompositeComponent<C>) {
+    if constexpr (ExpandsBodyComponent<C>) {
       return ComponentKey{LocalId::fromIndex(0), LocalId::fromIndex(0)};
     } else {
       return ComponentKey{LocalId::fromIndex(0)};

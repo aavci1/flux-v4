@@ -2,11 +2,12 @@
 
 /// \file Flux/UI/Element.hpp
 ///
-/// Type-erased UI component wrapper: holds any view or composite, dispatches `measure`,
+/// Type-erased UI component wrapper: holds any UI component, dispatches `measure`,
 /// optional flex overrides, and per-subtree environment values.
 
 #include <Flux/Graphics/Styles.hpp>
 #include <Flux/UI/Component.hpp>
+#include <Flux/UI/Detail/MeasuredBuild.hpp>
 #include <Flux/UI/Detail/ElementModifiers.hpp>
 #include <Flux/UI/Environment.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
@@ -15,6 +16,7 @@
 #include <Flux/UI/StateStore.hpp>
 
 #include <functional>
+#include <cstring>
 #include <memory>
 #include <optional>
 #include <string>
@@ -29,9 +31,8 @@ class TextSystem;
 struct Popover;
 struct Rectangle;
 struct Text;
-struct Render;
 struct PathShape;
-struct Line;
+struct Render;
 struct VStack;
 struct HStack;
 struct ZStack;
@@ -52,10 +53,9 @@ enum class ElementType : std::uint8_t {
   Unknown,
   Rectangle,
   Text,
-  Render,
   Image,
   Path,
-  Line,
+  Render,
   VStack,
   HStack,
   ZStack,
@@ -77,19 +77,19 @@ public:
   Element(Element&&) noexcept = default;
   Element& operator=(Element&&) noexcept = default;
 
-  Size measure(MeasureContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
-               TextSystem& textSystem) const;
+  Size measure(MeasureContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints, TextSystem& textSystem) const;
   [[nodiscard]] std::uint64_t measureId() const noexcept { return measureId_; }
   [[nodiscard]] ElementType typeTag() const noexcept { return impl_ ? impl_->elementType() : ElementType::Unknown; }
-  [[nodiscard]] bool isComposite() const noexcept { return impl_ && impl_->isComposite(); }
-  [[nodiscard]] std::unique_ptr<Element> buildCompositeBody() const {
-    return impl_ ? impl_->buildCompositeBody() : nullptr;
+  [[nodiscard]] bool expandsBody() const noexcept { return impl_ && impl_->expandsBody(); }
+  [[nodiscard]] detail::CompositeBodyResolution resolveCompositeBody(ComponentKey const& key, LayoutConstraints const& constraints) const {
+    return impl_ ? impl_->resolveCompositeBody(key, constraints, modifiers()) : detail::CompositeBodyResolution{};
   }
-  [[nodiscard]] detail::CompositeBodyResolution resolveCompositeBody(ComponentKey const& key,
-                                                                     LayoutConstraints const& constraints) const {
-    return impl_ ? impl_->resolveCompositeBody(key, constraints, modifiers())
-                 : detail::CompositeBodyResolution{};
+  [[nodiscard]] detail::ComponentBuildResult
+  buildMeasured(detail::ComponentBuildContext& ctx,
+                std::unique_ptr<scenegraph::SceneNode> existing) const {
+    return impl_ ? impl_->buildMeasured(ctx, std::move(existing)) : detail::ComponentBuildResult{};
   }
+  [[nodiscard]] detail::ResolvedElement resolve(ComponentKey const& key, LayoutConstraints const& constraints) const;
   [[nodiscard]] detail::ElementModifiers const* modifiers() const noexcept {
     return modifiers_ ? &*modifiers_ : nullptr;
   }
@@ -102,15 +102,13 @@ public:
 
   template<typename T>
   [[nodiscard]] T const& as() const;
+  [[nodiscard]] bool valueEquals(Element const& other) const noexcept;
+  [[nodiscard]] bool structuralEquals(Element const& other) const noexcept;
 
   float flexGrow() const;
   float flexShrink() const;
   std::optional<float> flexBasis() const;
   float minMainSize() const;
-
-  bool leafDrawsFillStrokeShadowFromModifiers() const {
-    return impl_ && impl_->leafDrawsFillStrokeShadowFromModifiers();
-  }
 
   Element flex(float grow) &&;
   Element flex(float grow, float shrink) &&;
@@ -168,20 +166,22 @@ private:
     virtual ElementType elementType() const noexcept { return ElementType::Unknown; }
     virtual std::type_index modelType() const noexcept = 0;
     virtual void const* rawValuePtr() const noexcept = 0;
-    virtual bool isComposite() const noexcept { return false; }
-    virtual std::unique_ptr<Element> buildCompositeBody() const { return nullptr; }
+    virtual bool valueEquals(Concept const&) const noexcept { return false; }
+    virtual bool expandsBody() const noexcept { return false; }
     virtual detail::CompositeBodyResolution resolveCompositeBody(ComponentKey const&,
                                                                  LayoutConstraints const&,
                                                                  detail::ElementModifiers const*) const {
       return {};
     }
+    virtual detail::ComponentBuildResult
+    buildMeasured(detail::ComponentBuildContext& ctx,
+                  std::unique_ptr<scenegraph::SceneNode> existing) const = 0;
     virtual Size measure(MeasureContext& ctx, LayoutConstraints const& constraints,
                          LayoutHints const& hints, TextSystem& textSystem) const = 0;
     virtual float flexGrow() const { return 0.f; }
     virtual float flexShrink() const { return 0.f; }
     virtual std::optional<float> flexBasis() const { return std::nullopt; }
     virtual float minMainSize() const { return 0.f; }
-    virtual bool leafDrawsFillStrokeShadowFromModifiers() const { return false; }
   };
 
   template<typename C>
@@ -199,10 +199,14 @@ private:
 
   Size measureWithModifiersImpl(MeasureContext& ctx, LayoutConstraints const& constraints,
                                 LayoutHints const& hints, TextSystem& textSystem) const;
+  [[nodiscard]] Element strippedEnvelopeCopy() const;
 };
 
 template<typename... Args>
 std::vector<Element> children(Args&&... args);
+
+[[nodiscard]] bool elementsStructurallyEqual(std::vector<Element> const& lhs,
+                                             std::vector<Element> const& rhs) noexcept;
 
 } // namespace flux
 

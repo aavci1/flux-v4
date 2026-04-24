@@ -1,189 +1,354 @@
-#include <Flux/UI/Element.hpp>
-#include <Flux/UI/Theme.hpp>
+#include <Flux/Detail/Runtime.hpp>
+#include <Flux/Reactive/Animation.hpp>
+#include <Flux/Reactive/Transition.hpp>
+#include <Flux/SceneGraph/GroupNode.hpp>
+#include <Flux/SceneGraph/RectNode.hpp>
+#include <Flux/UI/MeasureContext.hpp>
+#include <Flux/UI/StateStore.hpp>
 #include <Flux/UI/Views/ScrollView.hpp>
 
-#include <Flux/Detail/Runtime.hpp>
-#include <Flux/UI/StateStore.hpp>
+#include "UI/Build/ComponentBuildContext.hpp"
+#include "UI/Build/ComponentBuildSupport.hpp"
+#include "UI/Layout/Algorithms/ScrollLayout.hpp"
+#include "UI/Layout/ContainerScope.hpp"
 
-#include <Flux/Reactive/Transition.hpp>
-
-#include <algorithm>
 #include <cmath>
 #include <optional>
+#include <typeindex>
 #include <utility>
-
-#include "UI/Layout/Algorithms/ScrollLayout.hpp"
+#include <vector>
 
 namespace flux {
 
+namespace build = detail::build;
+
+Point clampScrollOffset(ScrollAxis axis, Point offset, Size const& viewport, Size const& content) {
+  return layout::clampScrollOffset(axis, offset, viewport, content);
+}
+
 namespace {
 
-[[nodiscard]] Size resolveViewportSize(Size viewport, Rect const &bounds) {
-    if (viewport.width <= 0.f && bounds.width > 0.f) {
-        viewport.width = bounds.width;
+struct ScrollViewPlan {
+  Size viewport{};
+  LayoutConstraints childConstraints{};
+  std::vector<Size> childSizes{};
+  layout::ScrollContentLayout contentLayout{};
+};
+
+Size scrollViewportHintForConstraints(ScrollAxis axis, LayoutConstraints const& constraints, Size viewportHint) {
+  switch (axis) {
+  case ScrollAxis::Vertical:
+    if (viewportHint.width <= 0.f && std::isfinite(constraints.maxWidth) && constraints.maxWidth > 0.f) {
+      viewportHint.width = constraints.maxWidth;
     }
-    if (viewport.height <= 0.f && bounds.height > 0.f) {
-        viewport.height = bounds.height;
+    break;
+  case ScrollAxis::Horizontal:
+    if (viewportHint.height <= 0.f && std::isfinite(constraints.maxHeight) && constraints.maxHeight > 0.f) {
+      viewportHint.height = constraints.maxHeight;
     }
-    return viewport;
+    break;
+  case ScrollAxis::Both:
+    break;
+  }
+  return viewportHint;
 }
 
-[[nodiscard]] Color indicatorColorForTheme(Theme const &theme) {
-    return Color {
-        theme.secondaryLabelColor.r,
-        theme.secondaryLabelColor.g,
-        theme.secondaryLabelColor.b,
-        0.55f,
-    };
+Size scrollViewportHintForMeasure(LayoutConstraints const& constraints, LayoutHints const& hints) {
+  Size viewportHint{};
+  if (build::zStackAxisStretches(hints.zStackHorizontalAlign) && std::isfinite(constraints.maxWidth) &&
+      constraints.maxWidth > 0.f) {
+    viewportHint.width = constraints.maxWidth;
+  }
+  if (build::zStackAxisStretches(hints.zStackVerticalAlign) && std::isfinite(constraints.maxHeight) &&
+      constraints.maxHeight > 0.f) {
+    viewportHint.height = constraints.maxHeight;
+  }
+  return viewportHint;
 }
 
-[[nodiscard]] Element makeIndicatorOverlay(layout::ScrollIndicatorMetrics const &verticalIndicator,
-                                           layout::ScrollIndicatorMetrics const &horizontalIndicator,
-                                           Color const &indicatorColor,
-                                           float indicatorOpacity) {
-    std::vector<Element> indicatorChildren;
-    indicatorChildren.reserve(2);
+template<typename MeasureChildFn>
+ScrollViewPlan planScrollViewLayout(ScrollView const& scrollView, LayoutConstraints const& constraints,
+                                    Size viewportHint, Point scrollOffset, MeasureChildFn&& measureChild) {
+  ScrollViewPlan plan{};
+  plan.viewport = scrollViewportHintForConstraints(scrollView.axis, constraints, viewportHint);
 
-    if (verticalIndicator.visible()) {
-        indicatorChildren.emplace_back(
-            Rectangle {}
-                .fill(FillStyle::solid(indicatorColor))
-                .position(verticalIndicator.x, verticalIndicator.y)
-                .size(verticalIndicator.width, verticalIndicator.height)
-                .cornerRadius(CornerRadius {verticalIndicator.width * 0.5f})
-                .opacity(indicatorOpacity)
-        );
+  if (plan.viewport.width <= 0.f || plan.viewport.height <= 0.f) {
+    LayoutConstraints const premeasureChildConstraints =
+        layout::scrollChildConstraints(scrollView.axis, constraints, plan.viewport);
+    plan.childSizes.reserve(scrollView.children.size());
+    for (std::size_t i = 0; i < scrollView.children.size(); ++i) {
+      Element const& child = scrollView.children[i];
+      LocalId const local = build::childLocalId(child, i);
+      plan.childSizes.push_back(measureChild(child, local, premeasureChildConstraints));
     }
-    if (horizontalIndicator.visible()) {
-        indicatorChildren.emplace_back(
-            Rectangle {}
-                .fill(FillStyle::solid(indicatorColor))
-                .position(horizontalIndicator.x, horizontalIndicator.y)
-                .size(horizontalIndicator.width, horizontalIndicator.height)
-                .cornerRadius(CornerRadius {horizontalIndicator.height * 0.5f})
-                .opacity(indicatorOpacity)
-        );
-    }
+    plan.viewport = layout::resolveMeasuredScrollViewSize(
+        scrollView.axis, layout::scrollContentSize(scrollView.axis, plan.childSizes), constraints);
+  }
 
-    return Element {ZStack {
-        .horizontalAlignment = Alignment::Start,
-        .verticalAlignment = Alignment::Start,
-        .children = std::move(indicatorChildren),
-    }};
+  plan.childConstraints = layout::scrollChildConstraints(scrollView.axis, constraints, plan.viewport);
+  if (plan.childSizes.empty()) {
+    plan.childSizes.reserve(scrollView.children.size());
+    for (std::size_t i = 0; i < scrollView.children.size(); ++i) {
+      Element const& child = scrollView.children[i];
+      LocalId const local = build::childLocalId(child, i);
+      plan.childSizes.push_back(measureChild(child, local, plan.childConstraints));
+    }
+  }
+  plan.contentLayout =
+      layout::layoutScrollContent(scrollView.axis, plan.viewport, scrollOffset, plan.childSizes);
+  return plan;
 }
 
 } // namespace
 
-Point clampScrollOffset(ScrollAxis axis, Point o, Size const &viewport, Size const &content) {
-    return layout::clampScrollOffset(axis, o, viewport, content);
+Size ScrollView::measure(MeasureContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
+                         TextSystem& textSystem) const {
+  ContainerMeasureScope scope(ctx);
+  ScrollViewPlan const plan =
+      planScrollViewLayout(*this, constraints, scrollViewportHintForMeasure(constraints, hints), Point{},
+                           [&](Element const& child, LocalId, LayoutConstraints const& childConstraints) {
+                             return child.measure(ctx, childConstraints, LayoutHints{}, textSystem);
+                           });
+  return plan.viewport;
 }
 
-Element ScrollView::body() const {
-    Theme const &theme = useEnvironment<Theme>();
-    State<Point> const offset = scrollOffset.signal ? scrollOffset : useState<Point>({0.f, 0.f});
-    auto downPoint = useState<Point>({0.f, 0.f});
-    auto dragging = useState(false);
-    State<Size> const viewport = viewportSize.signal ? viewportSize : useState<Size>({0.f, 0.f});
-    State<Size> const content = contentSize.signal ? contentSize : useState<Size>({0.f, 0.f});
-    auto indicatorOpacity = useAnimation<float>(0.f);
-    Rect const bounds = useBounds();
-    Size const effectiveViewport = resolveViewportSize(*viewport, bounds);
-    ScrollAxis const ax = axis;
-    bool const dragScroll = dragScrollEnabled;
-    Size const contentSize = *content;
-    Point const scrollRange = layout::maxScrollOffset(ax, effectiveViewport, contentSize);
-    Point const clampedOffset = clampScrollOffset(ax, *offset, effectiveViewport, contentSize);
-    bool const showsVerticalIndicator = scrollRange.y > 0.f;
-    bool const showsHorizontalIndicator = scrollRange.x > 0.f;
-    layout::ScrollIndicatorMetrics const verticalIndicator =
-        layout::makeVerticalIndicator(clampedOffset, effectiveViewport, contentSize, showsHorizontalIndicator);
-    layout::ScrollIndicatorMetrics const horizontalIndicator =
-        layout::makeHorizontalIndicator(clampedOffset, effectiveViewport, contentSize, showsVerticalIndicator);
-    bool const showsAnyIndicator = verticalIndicator.visible() || horizontalIndicator.visible();
-    Transition const indicatorShow = Transition::instant();
-    Transition const indicatorHide = Transition::linear(theme.durationMedium).delayed(0.85f);
-    Color const indicatorColor = indicatorColorForTheme(theme);
-    Element scrollContent = OffsetView {
-        .offset = clampedOffset,
-        .axis = ax,
-        .viewportSize = viewport,
-        .contentSize = content,
-        .children = children,
-    };
-    std::vector<Element> layers;
-    layers.reserve(2);
-    layers.push_back(std::move(scrollContent));
-    if (showsAnyIndicator) {
-        layers.push_back(makeIndicatorOverlay(verticalIndicator, horizontalIndicator, indicatorColor, *indicatorOpacity));
+namespace detail {
+
+ComponentBuildResult buildMeasuredComponent(ScrollView const& scrollView, ComponentBuildContext& ctx,
+                                            std::unique_ptr<scenegraph::SceneNode> existing) {
+  (void)existing;
+  ComponentKey scrollStateKey = ctx.key();
+  scrollStateKey.push_back(LocalId::fromString("$scroll-state"));
+  StateStore* const store = StateStore::current();
+  if (store) {
+    store->pushComponent(scrollStateKey, std::type_index(typeid(ScrollView)));
+  }
+  struct ScrollComponentPop {
+    StateStore* store = nullptr;
+    ~ScrollComponentPop() {
+      if (store) {
+        store->popComponent();
+      }
     }
-    Element root = Element {ZStack {
-        .horizontalAlignment = Alignment::Start,
-        .verticalAlignment = Alignment::Start,
-        .children = std::move(layers),
-    }};
-    auto revealIndicators = [indicatorOpacity, indicatorShow, indicatorHide, showsAnyIndicator]() {
-        if (!showsAnyIndicator) {
-            return;
-        }
-        indicatorOpacity.set(1.f, indicatorShow);
-        indicatorOpacity.set(0.f, indicatorHide);
-    };
-    auto commitOffset = [offset](Point clamped) {
-        offset = clamped;
-        return true;
-    };
+  } scrollComponentPop{store};
 
-    return std::move(root)
-        .clipContent(true)
-        .onPointerDown(
-            [dragging, downPoint, clampedOffset, dragScroll](Point p) {
-                if (!dragScroll) {
-                    return;
-                }
-                dragging = true;
-                downPoint = Point {p.x + clampedOffset.x, p.y + clampedOffset.y};
-            }
-        )
-        .onPointerUp(
-            [dragging, dragScroll](Point) {
-                if (!dragScroll) {
-                    return;
-                }
-                dragging = false;
-            }
-        )
-        .onPointerMove(
-            [commitOffset, downPoint, ax, content, dragging, effectiveViewport, revealIndicators, dragScroll](Point p) {
-                if (!dragScroll) {
-                    return;
-                }
-                if (!*dragging) {
-                    return;
-                }
-                Point const next {(*downPoint).x - p.x, (*downPoint).y - p.y};
-                Point const clamped = clampScrollOffset(ax, next, effectiveViewport, *content);
-                commitOffset(clamped);
-                revealIndicators();
-            }
-        )
-        .onScroll(
-            [offset, commitOffset, ax, content, effectiveViewport, revealIndicators](Vec2 d) {
-                Point next = *offset;
-                // scrollingDelta* is expressed for non-flipped NSView coords (y up). Flux uses
-                // a flipped space (y down), so negate to align. Natural Scrolling is already in
-                // the delta sign from AppKit; this is only the coordinate-system fix.
-                if (ax == ScrollAxis::Vertical || ax == ScrollAxis::Both) {
-                    next.y -= d.y;
-                }
-                if (ax == ScrollAxis::Horizontal || ax == ScrollAxis::Both) {
-                    next.x -= d.x;
-                }
-                Point const clamped =
-                    clampScrollOffset(ax, next, effectiveViewport, *content);
-                commitOffset(clamped);
-                revealIndicators();
-            }
-        );
+  State<Point> offsetState = scrollView.scrollOffset;
+  if (!offsetState.signal && store) {
+    offsetState = State<Point>{&store->claimSlot<Signal<Point>>(Point{})};
+  }
+  State<Size> viewportState = scrollView.viewportSize;
+  if (!viewportState.signal && store) {
+    viewportState = State<Size>{&store->claimSlot<Signal<Size>>(Size{})};
+  }
+  State<Size> contentState = scrollView.contentSize;
+  if (!contentState.signal && store) {
+    contentState = State<Size>{&store->claimSlot<Signal<Size>>(Size{})};
+  }
+  Animation<float>* indicatorOpacityAnimation = nullptr;
+  if (store) {
+    indicatorOpacityAnimation = &store->claimSlot<Animation<float>>(0.f);
+  }
+  State<Point> downPointState{};
+  State<bool> draggingState{};
+  if (store) {
+    downPointState = State<Point>{&store->claimSlot<Signal<Point>>(Point{})};
+    draggingState = State<bool>{&store->claimSlot<Signal<bool>>(false)};
+  }
+
+  ScrollAxis const axis = scrollView.axis;
+  Point scrollOffset = offsetState.signal ? *offsetState : Point{};
+  std::vector<Element> const& contentChildren = scrollView.children;
+  Size viewportHint{};
+  if (ctx.hasAssignedWidth()) {
+    viewportHint.width = std::max(0.f, ctx.contentAssignedSize().width);
+  }
+  if (ctx.hasAssignedHeight()) {
+    viewportHint.height = std::max(0.f, ctx.contentAssignedSize().height);
+  }
+  if (detail::ElementModifiers const* mods = ctx.modifiers()) {
+    float const horizontalPadding =
+        std::max(0.f, mods->padding.left) + std::max(0.f, mods->padding.right);
+    float const verticalPadding =
+        std::max(0.f, mods->padding.top) + std::max(0.f, mods->padding.bottom);
+    if (mods->sizeWidth > 0.f) {
+      viewportHint.width = std::max(0.f, mods->sizeWidth - horizontalPadding);
+    }
+    if (mods->sizeHeight > 0.f) {
+      viewportHint.height = std::max(0.f, mods->sizeHeight - verticalPadding);
+    }
+  }
+  ScrollViewPlan const plan =
+      planScrollViewLayout(scrollView, ctx.innerConstraints(), viewportHint, scrollOffset,
+                           [&](Element const& child, LocalId local, LayoutConstraints const& childConstraints) {
+                             return ctx.measureChild(child, local, childConstraints, LayoutHints{});
+                           });
+  Size const viewport = plan.viewport;
+  if (viewportState.signal && !build::sizeApproximatelyEqual(*viewportState, viewport)) {
+    viewportState.setSilently(viewport);
+  }
+  LayoutConstraints const& childConstraints = plan.childConstraints;
+  layout::ScrollContentLayout const& scrollLayout = plan.contentLayout;
+  Size const contentSize = scrollLayout.contentSize;
+  if (contentState.signal && !build::sizeApproximatelyEqual(*contentState, contentSize)) {
+    contentState.setSilently(contentSize);
+  }
+  scrollOffset = scrollLayout.clampedOffset;
+  if (offsetState.signal && scrollOffset != *offsetState) {
+    offsetState.setSilently(scrollOffset);
+  }
+
+  Point const scrollRange = layout::maxScrollOffset(axis, viewport, contentSize);
+  bool const showsVerticalIndicator = scrollRange.y > 0.f;
+  bool const showsHorizontalIndicator = scrollRange.x > 0.f;
+  bool const showsAnyIndicator = showsVerticalIndicator || showsHorizontalIndicator;
+  Theme const& theme = ctx.theme();
+  Color const indicatorColor = build::scrollIndicatorColorForTheme(theme);
+  Transition const indicatorShow = Transition::instant();
+  Transition const indicatorHide = Transition::linear(theme.durationMedium).delayed(0.85f);
+  float const indicatorOpacity = indicatorOpacityAnimation ? indicatorOpacityAnimation->get() : 0.f;
+  layout::ScrollIndicatorMetrics const verticalIndicator =
+      layout::makeVerticalIndicator(scrollOffset, viewport, contentSize, showsHorizontalIndicator);
+  layout::ScrollIndicatorMetrics const horizontalIndicator =
+      layout::makeHorizontalIndicator(scrollOffset, viewport, contentSize, showsVerticalIndicator);
+
+  auto viewportNode =
+      std::make_unique<scenegraph::RectNode>(Rect {0.f, 0.f, viewport.width, viewport.height});
+  viewportNode->setClipsContents(true);
+
+  auto scrolledGroup = std::make_unique<scenegraph::GroupNode>();
+
+  std::vector<std::unique_ptr<scenegraph::SceneNode>> scrolledChildren{};
+  scrolledChildren.reserve(contentChildren.size());
+  for (std::size_t i = 0; i < contentChildren.size(); ++i) {
+    Element const& child = contentChildren[i];
+    LocalId const local = build::childLocalId(child, i);
+    layout::ScrollChildSlot const& slot = scrollLayout.slots[i];
+    ctx.recordMeasuredSize(child, local, childConstraints, LayoutHints{}, plan.childSizes[i]);
+    std::unique_ptr<scenegraph::SceneNode> childNode =
+        ctx.buildChild(child, local, childConstraints, LayoutHints{},
+                       Point{ctx.contentOrigin().x + slot.origin.x, ctx.contentOrigin().y + slot.origin.y},
+                       slot.assignedSize, slot.assignedSize.width > 0.f,
+                       slot.assignedSize.height > 0.f);
+    Point childOrigin = slot.origin;
+    if (axis == ScrollAxis::Vertical || axis == ScrollAxis::Both) {
+      childOrigin.y += scrollOffset.y;
+    }
+    if (axis == ScrollAxis::Horizontal || axis == ScrollAxis::Both) {
+      childOrigin.x += scrollOffset.x;
+    }
+    childNode->setPosition(Point {
+        childNode->position().x + childOrigin.x,
+        childNode->position().y + childOrigin.y,
+    });
+    scrolledChildren.push_back(std::move(childNode));
+  }
+  scrolledGroup->replaceChildren(std::move(scrolledChildren));
+  build::setAssignedGroupBounds(*scrolledGroup, contentSize);
+  scrolledGroup->setPosition(Point {-scrollOffset.x, -scrollOffset.y});
+  viewportNode->appendChild(std::move(scrolledGroup));
+  if (showsAnyIndicator) {
+    auto indicatorOverlay =
+        std::make_unique<scenegraph::RectNode>(Rect {0.f, 0.f, viewport.width, viewport.height});
+    indicatorOverlay->setOpacity(indicatorOpacity);
+    if (verticalIndicator.visible()) {
+      indicatorOverlay->appendChild(std::make_unique<scenegraph::RectNode>(
+          Rect {verticalIndicator.x, verticalIndicator.y, verticalIndicator.width, verticalIndicator.height},
+          FillStyle::solid(indicatorColor),
+          StrokeStyle::none(),
+          CornerRadius {verticalIndicator.width * 0.5f}
+      ));
+    }
+    if (horizontalIndicator.visible()) {
+      indicatorOverlay->appendChild(std::make_unique<scenegraph::RectNode>(
+          Rect {horizontalIndicator.x, horizontalIndicator.y, horizontalIndicator.width, horizontalIndicator.height},
+          FillStyle::solid(indicatorColor),
+          StrokeStyle::none(),
+          CornerRadius {horizontalIndicator.height * 0.5f}
+      ));
+    }
+    viewportNode->appendChild(std::move(indicatorOverlay));
+  }
+
+  auto interaction = ctx.makeInteractionData();
+  if (!interaction) {
+    interaction = std::make_unique<scenegraph::InteractionData>();
+  }
+  interaction->stableTargetKey = ctx.interactionKey();
+  std::function<void(Point)> priorPointerDown = interaction->onPointerDown;
+  std::function<void(Point)> priorPointerMove = interaction->onPointerMove;
+  std::function<void(Point)> priorPointerUp = interaction->onPointerUp;
+  std::function<void(Vec2)> priorScroll = interaction->onScroll;
+
+  bool const dragScroll = scrollView.dragScrollEnabled;
+  auto revealIndicators = [indicatorOpacityAnimation, indicatorShow, indicatorHide, showsAnyIndicator]() {
+    if (!indicatorOpacityAnimation || !showsAnyIndicator) {
+      return;
+    }
+    indicatorOpacityAnimation->set(1.f, indicatorShow);
+    indicatorOpacityAnimation->set(0.f, indicatorHide);
+  };
+  interaction->onPointerDown =
+      [priorPointerDown, dragScroll, draggingState, downPointState, offsetState](Point point) {
+        if (priorPointerDown) {
+          priorPointerDown(point);
+        }
+        if (!dragScroll || !draggingState.signal || !downPointState.signal || !offsetState.signal) {
+          return;
+        }
+        draggingState = true;
+        downPointState = Point{point.x + (*offsetState).x, point.y + (*offsetState).y};
+      };
+  interaction->onPointerUp = [priorPointerUp, dragScroll, draggingState](Point point) {
+    if (priorPointerUp) {
+      priorPointerUp(point);
+    }
+    if (!dragScroll || !draggingState.signal) {
+      return;
+    }
+    draggingState = false;
+  };
+  interaction->onPointerMove =
+      [priorPointerMove, dragScroll, draggingState, downPointState, axis, contentState, viewport, offsetState,
+       revealIndicators](Point point) {
+        if (priorPointerMove) {
+          priorPointerMove(point);
+        }
+        if (!dragScroll || !draggingState.signal || !downPointState.signal || !offsetState.signal ||
+            !contentState.signal || !*draggingState) {
+          return;
+        }
+        Point const next{(*downPointState).x - point.x, (*downPointState).y - point.y};
+        offsetState = layout::clampScrollOffset(axis, next, viewport, *contentState);
+        revealIndicators();
+      };
+  interaction->onScroll =
+      [priorScroll, axis, offsetState, contentState, viewport, revealIndicators](Vec2 delta) {
+        if (priorScroll) {
+          priorScroll(delta);
+        }
+        if (!offsetState.signal || !contentState.signal) {
+          return;
+        }
+        Point next = *offsetState;
+        if (axis == ScrollAxis::Vertical || axis == ScrollAxis::Both) {
+          next.y -= delta.y;
+        }
+        if (axis == ScrollAxis::Horizontal || axis == ScrollAxis::Both) {
+          next.x -= delta.x;
+        }
+        offsetState = layout::clampScrollOffset(axis, next, viewport, *contentState);
+        revealIndicators();
+      };
+
+  viewportNode->setInteraction(std::move(interaction));
+
+  ComponentBuildResult result{};
+  result.node = std::move(viewportNode);
+  result.geometrySize = viewport;
+  result.hasGeometrySize = true;
+  return result;
 }
+
+} // namespace detail
 
 } // namespace flux

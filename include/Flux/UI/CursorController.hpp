@@ -7,7 +7,7 @@
 
 #include <Flux/Core/Cursor.hpp>
 #include <Flux/Core/Types.hpp>
-#include <Flux/Scene/SceneTree.hpp>
+#include <Flux/SceneGraph/SceneGraph.hpp>
 #include <Flux/UI/Overlay.hpp>
 
 #include <vector>
@@ -23,7 +23,8 @@ public:
   explicit CursorController(Window& window);
 
   void updateForPoint(Point windowPoint, GestureTracker const& gesture,
-                      std::vector<OverlayEntry const*> const& overlayEntries, SceneTree const& mainTree);
+                      std::vector<OverlayEntry const*> const& overlayEntries,
+                      scenegraph::SceneGraph const& mainGraph);
 
   void reset();
 

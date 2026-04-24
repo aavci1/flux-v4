@@ -93,9 +93,10 @@ struct Color {
   float g = 0;
   float b = 0;
   float a = 1;
+  std::uint8_t semantic = 0;
 
   constexpr Color() = default;
-  constexpr Color(float r, float g, float b, float a = 1.f) : r(r), g(g), b(b), a(a) {}
+  constexpr Color(float r, float g, float b, float a = 1.f) : r(r), g(g), b(b), a(a), semantic(0) {}
 
   static constexpr Color rgb(std::uint8_t r, std::uint8_t g, std::uint8_t b) {
     const float s = 1.f / 255.f;
@@ -107,42 +108,39 @@ struct Color {
                static_cast<std::uint8_t>(h & 0xFF));
   }
 
-  static constexpr Color theme() { return semantic(1); }
-  static constexpr Color primary() { return semantic(2); }
-  static constexpr Color secondary() { return semantic(3); }
-  static constexpr Color tertiary() { return semantic(4); }
-  static constexpr Color quaternary() { return semantic(5); }
-  static constexpr Color placeholder() { return semantic(6); }
-  static constexpr Color disabled() { return semantic(7); }
-  static constexpr Color accent() { return semantic(8); }
-  static constexpr Color accentForeground() { return semantic(9); }
-  static constexpr Color windowBackground() { return semantic(10); }
-  static constexpr Color controlBackground() { return semantic(11); }
-  static constexpr Color elevatedBackground() { return semantic(12); }
-  static constexpr Color textBackground() { return semantic(13); }
-  static constexpr Color separator() { return semantic(14); }
-  static constexpr Color opaqueSeparator() { return semantic(15); }
-  static constexpr Color selectedContentBackground() { return semantic(16); }
-  static constexpr Color focusRing() { return semantic(17); }
-  static constexpr Color scrim() { return semantic(18); }
-  static constexpr Color popoverScrim() { return semantic(19); }
-  static constexpr Color success() { return semantic(20); }
-  static constexpr Color successForeground() { return semantic(21); }
-  static constexpr Color successBackground() { return semantic(22); }
-  static constexpr Color warning() { return semantic(23); }
-  static constexpr Color warningForeground() { return semantic(24); }
-  static constexpr Color warningBackground() { return semantic(25); }
-  static constexpr Color danger() { return semantic(26); }
-  static constexpr Color dangerForeground() { return semantic(27); }
-  static constexpr Color dangerBackground() { return semantic(28); }
+  static Color theme();
+  static Color primary();
+  static Color secondary();
+  static Color tertiary();
+  static Color quaternary();
+  static Color placeholder();
+  static Color disabled();
+  static Color accent();
+  static Color accentForeground();
+  static Color windowBackground();
+  static Color controlBackground();
+  static Color elevatedBackground();
+  static Color textBackground();
+  static Color separator();
+  static Color opaqueSeparator();
+  static Color selectedContentBackground();
+  static Color focusRing();
+  static Color scrim();
+  static Color popoverScrim();
+  static Color success();
+  static Color successForeground();
+  static Color successBackground();
+  static Color warning();
+  static Color warningForeground();
+  static Color warningBackground();
+  static Color danger();
+  static Color dangerForeground();
+  static Color dangerBackground();
 
-  constexpr int semanticToken() const { return a < 0.f ? static_cast<int>(-a) : 0; }
+  constexpr int semanticToken() const { return static_cast<int>(semantic); }
   constexpr bool isSemantic() const { return semanticToken() != 0; }
 
   constexpr bool operator==(const Color& o) const = default;
-
-private:
-  static constexpr Color semantic(int token) { return Color(0.f, 0.f, 0.f, -static_cast<float>(token)); }
 };
 
 constexpr inline Color resolveColor(Color override, Color themeValue) {

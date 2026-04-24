@@ -8,7 +8,6 @@
 #include <Flux/Detail/RootHolder.hpp>
 #include <Flux/Reactive/Observer.hpp>
 #include <Flux/UI/ActionRegistry.hpp>
-#include <Flux/UI/SceneGeometryIndex.hpp>
 #include <Flux/UI/StateStore.hpp>
 
 #include <functional>
@@ -39,8 +38,6 @@ public:
   void rebuild(std::optional<Size> sizeOverride, Runtime& runtime);
 
   StateStore& stateStore() noexcept;
-  SceneGeometryIndex& sceneGeometry() noexcept;
-  SceneGeometryIndex const& sceneGeometry() const noexcept;
   ActionRegistry& actionRegistryForBuild() noexcept;
   ActionRegistry const& actionRegistryCommitted() const noexcept;
 
@@ -57,7 +54,6 @@ private:
   ObserverHandle rebuildHandle_{};
   ActionRegistry actionRegistryBuild_{};
   ActionRegistry actionRegistryCommitted_{};
-  SceneGeometryIndex sceneGeometry_{};
   Rect buildSlotRect_{};
   std::uint64_t textFrameIndex_{0};
 };

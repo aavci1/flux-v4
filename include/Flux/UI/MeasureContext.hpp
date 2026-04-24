@@ -4,12 +4,12 @@
 ///
 /// Context for \ref Element::measure during retained-scene rebuilds.
 
-#include <Flux/UI/ComponentKey.hpp>
+#include <Flux/Core/ComponentKey.hpp>
+#include <Flux/UI/Detail/TraversalContext.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 
 #include <cstddef>
 #include <optional>
-#include <vector>
 
 namespace flux {
 
@@ -17,11 +17,12 @@ class TextSystem;
 class Element;
 namespace detail {
 struct ElementModifiers;
+class MeasureLayoutCache;
 }
 
 class MeasureContext {
 public:
-  explicit MeasureContext(TextSystem& ts);
+  explicit MeasureContext(TextSystem& ts, detail::MeasureLayoutCache* layoutCache = nullptr);
   ~MeasureContext();
 
   TextSystem& textSystem();
@@ -40,10 +41,9 @@ public:
   void popExplicitChildLocalId();
 
   ComponentKey nextCompositeKey();
-  ComponentKey peekNextCompositeKey() const;
 
   void advanceChildSlot();
-  ComponentKey leafComponentKey() const;
+  ComponentKey currentElementKey() const;
   void rewindChildKeyIndex();
   void resetTraversalState(ComponentKey const& key = {});
   void setMeasurementRootKey(ComponentKey key);
@@ -57,36 +57,20 @@ public:
 
   void setCurrentElement(Element const* el) noexcept { currentElement_ = el; }
   [[nodiscard]] Element const* currentElement() const noexcept { return currentElement_; }
+  [[nodiscard]] detail::MeasureLayoutCache* layoutCache() const noexcept { return layoutCache_; }
 
 #ifndef NDEBUG
-  std::size_t debugConstraintStackDepth() const noexcept { return layoutStack_.size(); }
-  std::size_t debugKeyPathDepth() const noexcept { return keyStack_.size(); }
-  std::size_t debugSavedChildDepth() const noexcept { return savedChildIndices_.size(); }
+  std::size_t debugConstraintStackDepth() const noexcept { return traversal_.debugFrameDepth(); }
+  std::size_t debugKeyPathDepth() const noexcept { return traversal_.debugKeyPathDepth(); }
+  std::size_t debugSavedChildDepth() const noexcept { return traversal_.debugSavedChildDepth(); }
 #endif
-  LocalId peekCurrentChildLocalId() const { return currentChildLocalId(); }
+  LocalId peekCurrentChildLocalId() const { return currentElementKey().empty() ? LocalId::fromIndex(0) : currentElementKey().back(); }
 
 protected:
-  struct LayoutFrame {
-    LayoutConstraints constraints{};
-    LayoutHints hints{};
-  };
-
   TextSystem& textSystem_;
-  std::vector<LayoutFrame> layoutStack_;
-
-  std::vector<LocalId> keyStack_;
-  std::vector<std::optional<LocalId>> explicitChildLocalIdStack_;
-  std::vector<std::size_t> savedChildIndices_;
-  std::vector<bool> pushedChildIndexKeyStack_;
-  std::vector<bool> pushedCompositeKeyTailStack_;
-  ComponentKey measurementRootKey_{};
-  std::size_t nextChildIndex_{0};
-  bool skipNextLayoutChildAdvance_{false};
-  bool useMeasurementRootKey_{false};
+  detail::TraversalContext traversal_{};
   Element const* currentElement_{nullptr};
-
-private:
-  [[nodiscard]] LocalId currentChildLocalId() const;
+  detail::MeasureLayoutCache* layoutCache_ = nullptr;
 };
 
 } // namespace flux

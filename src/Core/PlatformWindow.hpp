@@ -44,6 +44,15 @@ public:
   /// Wake `waitForEvents` (e.g. after `requestRedraw`).
   virtual void wakeEventLoop() {}
 
+  /// Arm the platform frame pump for the next display boundary.
+  virtual void requestAnimationFrame() {}
+
+  /// Marks the most recent frame boundary event as handled by the application loop.
+  virtual void acknowledgeAnimationFrameTick() {}
+
+  /// Called after a frame has been presented. `needsAnotherFrame` keeps the frame pump running.
+  virtual void completeAnimationFrame(bool /*needsAnotherFrame*/) {}
+
   virtual void setCursor(Cursor /*kind*/) {}
 };
 

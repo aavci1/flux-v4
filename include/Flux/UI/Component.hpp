@@ -17,20 +17,21 @@ class MeasureContext;
 class TextSystem;
 
 template<typename T>
-concept CompositeComponent = requires(T const& t) {
+concept BodyComponent = requires(T const& t) {
   { t.body() };
 };
 
 template<typename T>
-concept LeafComponent = !CompositeComponent<T>;
+concept MeasuredComponent =
+    requires(T const& t, MeasureContext& mctx, LayoutConstraints const& c, LayoutHints const& h, TextSystem& ts) {
+      { t.measure(mctx, c, h, ts) } -> std::convertible_to<Size>;
+    };
+
+/// Components that resolve by expanding `body()` instead of providing a direct measured build hook.
+template<typename T>
+concept ExpandsBodyComponent = BodyComponent<T> && !MeasuredComponent<T>;
 
 template<typename T>
 concept Component = true;
-
-template<typename T>
-concept PrimitiveComponent =
-    requires(T const& t, MeasureContext& mctx, LayoutConstraints const& c, LayoutHints const& h, TextSystem& ts) {
-      { t.measure(mctx, c, h, ts) } -> std::convertible_to<Size>;
-    } && !CompositeComponent<T>;
 
 } // namespace flux

@@ -63,6 +63,19 @@ IconButton::Style resolveStyle(IconButton::Style const &style, Theme const &them
     };
 }
 
+template<typename Signature>
+State<std::function<Signature>> retainCallback(std::function<Signature> const& callback) {
+    StateStore* store = StateStore::current();
+    if (!store) {
+        thread_local Signal<std::function<Signature>> fallback {};
+        fallback.setSilently(callback);
+        return State<std::function<Signature>>{&fallback};
+    }
+    auto& signal = store->claimSlot<Signal<std::function<Signature>>>(callback);
+    signal.setSilently(callback);
+    return State<std::function<Signature>>{&signal};
+}
+
 ButtonColors deriveColors(ButtonVariant variant, Color accent, Color destructive, Color onAccent,
                           Color onDanger, Theme const &theme) {
     switch (variant) {
@@ -112,11 +125,16 @@ ButtonColors deriveColors(ButtonVariant variant, Color accent, Color destructive
 
 } // namespace
 
+void Button::updateRetainedInputs() const {
+    retainCallback(onTap);
+}
+
 Element Button::body() const {
     Theme const &theme = useEnvironment<Theme>();
     auto [fontResolved, paddingH, paddingV, radiusResolved, accent, destructive] = resolveStyle(style, theme);
     bool const isDisabled = disabled;
     ButtonColors const colors = deriveColors(variant, accent, destructive, theme.accentForegroundColor, theme.dangerForegroundColor, theme);
+    State<std::function<void()>> const retainedOnTap = retainCallback(onTap);
 
     bool const hovered = useHover();
     bool const pressed = usePress();
@@ -140,12 +158,12 @@ Element Button::body() const {
         }
     }
 
-    auto handleTap = [onTap = onTap, isDisabled]() {
+    auto handleTap = [onTap = retainedOnTap, isDisabled]() {
         if (isDisabled) {
             return;
         }
-        if (onTap) {
-            onTap();
+        if (*onTap) {
+            (*onTap)();
         }
     };
     auto handleKey = [handleTap](KeyCode k, Modifiers) {
@@ -182,10 +200,15 @@ Element Button::body() const {
     };
 }
 
+void LinkButton::updateRetainedInputs() const {
+    retainCallback(onTap);
+}
+
 Element LinkButton::body() const {
     Theme const &theme = useEnvironment<Theme>();
     auto [fontResolved, accentResolved] = resolveStyle(style, theme);
     bool const isDisabled = disabled;
+    State<std::function<void()>> const retainedOnTap = retainCallback(onTap);
     bool const hovered = useHover();
     bool const pressed = usePress();
     bool const focused = useFocus();
@@ -196,12 +219,12 @@ Element LinkButton::body() const {
                                            hovered     ? lighten(accentResolved, 0.12f) :
                                                          accentResolved;
 
-    auto handleTap = [onTap = onTap, isDisabled]() {
+    auto handleTap = [onTap = retainedOnTap, isDisabled]() {
         if (isDisabled) {
             return;
         }
-        if (onTap) {
-            onTap();
+        if (*onTap) {
+            (*onTap)();
         }
     };
     auto handleKey = [handleTap](KeyCode k, Modifiers) {
@@ -232,10 +255,15 @@ Element LinkButton::body() const {
         .onTap(isDisabled ? std::function<void()> {} : std::function<void()> {handleTap});
 }
 
+void IconButton::updateRetainedInputs() const {
+    retainCallback(onTap);
+}
+
 Element IconButton::body() const {
     Theme const &theme = useEnvironment<Theme>();
     auto [sizeResolved, weightResolved, accentResolved] = resolveStyle(style, theme);
     bool const isDisabled = disabled;
+    State<std::function<void()>> const retainedOnTap = retainCallback(onTap);
     bool const hovered = useHover();
     bool const pressed = usePress();
     bool const focused = useFocus();
@@ -246,12 +274,12 @@ Element IconButton::body() const {
                                            hovered     ? lighten(accentResolved, 0.12f) :
                                                          accentResolved;
 
-    auto handleTap = [onTap = onTap, isDisabled]() {
+    auto handleTap = [onTap = retainedOnTap, isDisabled]() {
         if (isDisabled) {
             return;
         }
-        if (onTap) {
-            onTap();
+        if (*onTap) {
+            (*onTap)();
         }
     };
     auto handleKey = [handleTap](KeyCode k, Modifiers) {

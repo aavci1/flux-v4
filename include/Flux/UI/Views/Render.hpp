@@ -2,7 +2,7 @@
 
 /// \file Flux/UI/Views/Render.hpp
 ///
-/// Part of the Flux public API.
+/// Custom draw leaf for the UI tree. Painting runs through the active Canvas renderer.
 
 #include <Flux/Graphics/Canvas.hpp>
 #include <Flux/UI/Detail/PrimitiveForwards.hpp>
@@ -13,9 +13,6 @@
 
 namespace flux {
 
-/// Built-in custom draw leaf for the retained scene builder and legacy render-component path.
-/// Layout uses `measure`; painting uses `draw`. Set `pure=true` when drawing is deterministic for the
-/// same inputs so node-local paint retention can persist across frames.
 struct Render : ViewModifiers<Render> {
   std::function<Size(LayoutConstraints const&, LayoutHints const&)> measureFn{};
   std::function<void(Canvas&, Rect)> draw{};

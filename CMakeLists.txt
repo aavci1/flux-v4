@@ -68,10 +68,6 @@ option(FLUX_ENABLE_ASAN
   "Build flux and flux_tests with AddressSanitizer instrumentation."
   OFF)
 
-option(FLUX_BUILD_EXAMPLES
-  "Build example executables under examples/ (hello_world, *_demo, …)."
-  OFF)
-
 # Offline Metal: compile CanvasShaders.metal → air → metallib → C header (xxd) embedded in MetalShaderLibrary.mm
 set(FLUX_METAL_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Metal/CanvasShaders.metal)
 set(FLUX_METAL_AIR ${CMAKE_CURRENT_BINARY_DIR}/CanvasShaders.air)
@@ -100,9 +96,12 @@ add_library(flux STATIC
   src/Reactive/Transition.cpp
   src/Reactive/AnimationRebuild.cpp
   src/Reactive/AnimationClock.cpp
+  src/Core/ComponentKey.cpp
+  src/Core/ComponentKeyUtil.cpp
   src/Core/Window.cpp
   src/Core/WindowRender.cpp
   src/UI/MeasureContext.cpp
+  src/UI/Detail/TraversalContext.cpp
   src/UI/Environment.cpp
   src/UI/Theme.cpp
   src/UI/StateStore.cpp
@@ -110,23 +109,13 @@ add_library(flux STATIC
   src/UI/Element/ElementModifiers.cpp
   src/UI/Element/ElementTypeErasure.cpp
   src/UI/ActionRegistry.cpp
-  src/UI/BuildSession.cpp
+  src/UI/Build/BuildPass.cpp
+  src/UI/Build/ComponentBuildContext.cpp
   src/UI/Layout/Algorithms/StackLayout.cpp
   src/UI/Layout/Algorithms/GridLayout.cpp
   src/UI/Layout/Algorithms/ScrollLayout.cpp
   src/UI/Layout/Algorithms/OverlayLayout.cpp
-  src/UI/Layout/LayoutVStack.cpp
-  src/UI/Layout/LayoutHStack.cpp
-  src/UI/Layout/LayoutZStack.cpp
-  src/UI/Layout/LayoutScaleAroundCenter.cpp
-  src/UI/Layout/LayoutGrid.cpp
-  src/UI/Layout/LayoutSpacer.cpp
-  src/UI/Layout/LayoutOffsetView.cpp
-  src/UI/Layout/LayoutScrollView.cpp
   src/UI/SceneBuilder.cpp
-  src/UI/SceneGeometryIndex.cpp
-  src/UI/ComponentKey.cpp
-  src/UI/ComponentKeyUtil.cpp
   src/UI/Detail/LeafBounds.cpp
   src/UI/FocusController.cpp
   src/UI/HoverController.cpp
@@ -145,7 +134,11 @@ add_library(flux STATIC
   src/UI/OverlaySurfaceHelpers.cpp
   src/UI/Views/TextEditUtils.cpp
   src/UI/Views/TextEditBehavior.cpp
+  src/UI/Views/Rectangle.cpp
+  src/UI/Views/Image.cpp
+  src/UI/Views/PathShape.cpp
   src/UI/Views/Render.cpp
+  src/UI/Views/LayoutContainers.cpp
   src/UI/Views/Text.cpp
   src/UI/Views/TextInput.cpp
   src/UI/Views/Badge.cpp
@@ -168,27 +161,20 @@ add_library(flux STATIC
   src/UI/Views/Tooltip.cpp
   src/UI/Views/PopoverCalloutPath.cpp
   src/UI/PopoverCalloutShapeElement.cpp
-  src/Scene/PaintCommand.cpp
-  src/Scene/SceneNode.cpp
-  src/Scene/ModifierSceneNode.cpp
-  src/Scene/RectSceneNode.cpp
-  src/Scene/TextSceneNode.cpp
-  src/Scene/ImageSceneNode.cpp
-  src/Scene/PathSceneNode.cpp
-  src/Scene/LineSceneNode.cpp
-  src/Scene/RenderSceneNode.cpp
-  src/Scene/CustomTransformSceneNode.cpp
-  src/Scene/SceneGeometry.cpp
-  src/Scene/SceneRender.cpp
-  src/Scene/SceneTree.cpp
-  src/Scene/SceneTreeDump.cpp
-  src/Scene/SceneTreeInteraction.cpp
-  src/Scene/SceneBoundsOverlay.cpp
-  src/Scene/TextCacheDebugOverlay.cpp
-  src/Scene/SceneTreeHitTester.cpp
+  src/SceneGraph/SceneNode.cpp
+  src/SceneGraph/GroupNode.cpp
+  src/SceneGraph/RectNode.cpp
+  src/SceneGraph/TextNode.cpp
+  src/SceneGraph/ImageNode.cpp
+  src/SceneGraph/PathNode.cpp
+  src/SceneGraph/RenderNode.cpp
+  src/SceneGraph/SceneGraph.cpp
+  src/SceneGraph/SceneInteraction.cpp
+  src/SceneGraph/SceneRenderer.cpp
   src/Graphics/Styles.cpp
   src/Graphics/AttributedString.cpp
   src/Graphics/Canvas.cpp
+  src/Graphics/TextCacheDebugOverlay.cpp
   src/Graphics/Metal/MetalFrameRecorder.mm
   src/Graphics/TextSystem.cpp
   src/Graphics/xxhash_impl.c
@@ -260,11 +246,8 @@ target_link_libraries(flux PRIVATE
   "-framework MetalKit"
   "-framework Foundation"
   "-framework CoreText"
+  "-framework CoreVideo"
 )
-
-if(FLUX_BUILD_EXAMPLES)
-  add_subdirectory(examples)
-endif()
 
 option(FLUX_BUILD_TESTS
   "Build unit and integration tests under tests/."
@@ -296,10 +279,9 @@ if(FLUX_BUILD_TESTS)
     tests/SceneBuilderLayoutTests.cpp
     tests/SceneGeometryIndexTests.cpp
     tests/SceneTraversalTests.cpp
-    tests/LlamaEngineTests.cpp
+    tests/SceneGraphTests.cpp
     tests/ParagraphCacheTests.cpp
     tests/ParagraphCacheIncrementalTests.cpp
-    tests/StoreTests.cpp
     tests/RuntimeTests.cpp
     tests/TextEditUtilsTests.cpp
     tests/SemanticThemeTests.cpp
@@ -308,13 +290,10 @@ if(FLUX_BUILD_TESTS)
   target_include_directories(flux_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${CMAKE_CURRENT_SOURCE_DIR}/vendor/llama.cpp/vendor
   )
 
   target_link_libraries(flux_tests PRIVATE
     flux
-    common
-    sqlite3
     doctest::doctest
   )
 
@@ -326,6 +305,14 @@ if(FLUX_BUILD_TESTS)
   endif()
 
   add_test(NAME flux_tests COMMAND flux_tests)
+endif()
+
+option(FLUX_BUILD_EXAMPLES
+  "Build standalone examples under examples/."
+  OFF)
+
+if(FLUX_BUILD_EXAMPLES)
+  add_subdirectory(examples)
 endif()
 
 option(FLUX_BUILD_BENCHMARKS "Build micro-benchmarks in bench/." OFF)

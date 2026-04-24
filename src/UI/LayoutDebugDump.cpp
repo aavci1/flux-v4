@@ -1,8 +1,7 @@
 #include <Flux/UI/Detail/LayoutDebugDump.hpp>
 
-#include <Flux/Scene/SceneTree.hpp>
-#include <Flux/Scene/TextSceneNode.hpp>
-#include <Flux/UI/SceneGeometryIndex.hpp>
+#include <Flux/SceneGraph/SceneGraph.hpp>
+#include <Flux/SceneGraph/TextNode.hpp>
 
 #include "UI/Layout/LayoutHelpers.hpp"
 
@@ -49,35 +48,32 @@ std::string formatComponentKey(ComponentKey const& key) {
   return out;
 }
 
-void dumpSceneNode(SceneNode const& node, int depth) {
+void dumpSceneNode(scenegraph::SceneNode const& node, int depth) {
   std::string extra;
-  if (node.kind() == SceneNodeKind::Text) {
-    auto const& textNode = static_cast<TextSceneNode const&>(node);
-    std::string preview = textNode.text;
-    constexpr std::size_t kMaxPreview = 40;
-    if (preview.size() > kMaxPreview) {
-      preview.resize(kMaxPreview - 3);
-      preview += "...";
-    }
-    for (char& ch : preview) {
-      if (ch == '\n' || ch == '\r' || ch == '\t') {
-        ch = ' ';
+  if (node.kind() == scenegraph::SceneNodeKind::Text) {
+    auto const& textNode = static_cast<scenegraph::TextNode const&>(node);
+    if (textNode.layout()) {
+      extra = " textLayout";
+      if (textNode.layout()->measuredSize.width > 0.f || textNode.layout()->measuredSize.height > 0.f) {
+        char buffer[96];
+        std::snprintf(buffer, sizeof(buffer), " layout=(%.1f, %.1f)",
+                      static_cast<double>(textNode.layout()->measuredSize.width),
+                      static_cast<double>(textNode.layout()->measuredSize.height));
+        extra += buffer;
       }
     }
-    extra = " text=\"";
-    extra += preview;
-    extra += "\"";
   }
   printIndent(depth);
   std::fprintf(stderr,
-               "[flux:layout] node kind=%.*s id=0x%016llx pos=(%.1f, %.1f) bounds=(%.1f, %.1f, %.1f, %.1f)%s%s\n",
-               static_cast<int>(sceneNodeKindName(node.kind()).size()), sceneNodeKindName(node.kind()).data(),
-               static_cast<unsigned long long>(node.id().value), static_cast<double>(node.position.x),
-               static_cast<double>(node.position.y), static_cast<double>(node.bounds.x),
-               static_cast<double>(node.bounds.y), static_cast<double>(node.bounds.width),
-               static_cast<double>(node.bounds.height), node.interaction() ? " interactive" : "",
+               "[flux:layout] node kind=%.*s pos=(%.1f, %.1f) bounds=(%.1f, %.1f, %.1f, %.1f)%s%s\n",
+               static_cast<int>(scenegraph::sceneNodeKindName(node.kind()).size()),
+               scenegraph::sceneNodeKindName(node.kind()).data(),
+               static_cast<double>(node.position().x), static_cast<double>(node.position().y),
+               static_cast<double>(node.bounds().x), static_cast<double>(node.bounds().y),
+               static_cast<double>(node.bounds().width), static_cast<double>(node.bounds().height),
+               node.interaction() ? " interactive" : "",
                extra.c_str());
-  for (std::unique_ptr<SceneNode> const& child : node.children()) {
+  for (std::unique_ptr<scenegraph::SceneNode> const& child : node.children()) {
     dumpSceneNode(*child, depth + 1);
   }
 }
@@ -106,15 +102,15 @@ void layoutDebugRecordMeasure(std::uint64_t measureId, LayoutConstraints const&,
   gMeasureSize[measureId] = sz;
 }
 
-void layoutDebugDumpRetained(SceneTree const& tree, SceneGeometryIndex const& geometry) {
+void layoutDebugDumpRetained(scenegraph::SceneGraph const& graph) {
   if (!flux::layout::layoutDebugLayoutEnabled()) {
     return;
   }
 
-  std::fprintf(stderr, "[flux:layout] scene tree:\n");
-  dumpSceneNode(tree.root(), 0);
+  std::fprintf(stderr, "[flux:layout] scene graph:\n");
+  dumpSceneNode(graph.root(), 0);
 
-  std::vector<std::pair<ComponentKey, Rect>> entries = geometry.snapshotCurrent();
+  std::vector<std::pair<ComponentKey, Rect>> entries = graph.snapshotGeometry();
   std::sort(entries.begin(), entries.end(), [](auto const& lhs, auto const& rhs) {
     ComponentKey const& a = lhs.first;
     ComponentKey const& b = rhs.first;

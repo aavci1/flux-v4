@@ -6,6 +6,7 @@
 
 
 #include <Flux/Core/Action.hpp>
+#include <Flux/UI/Environment.hpp>
 
 #include <memory>
 #include <string>
@@ -18,14 +19,15 @@ namespace flux {
 
 struct RootHolder;
 class Element;
-class EnvironmentLayer;
 struct OverlayConfig;
 struct OverlayId;
 
 class Application;
 class Canvas;
 class PlatformWindow;
-class SceneTree;
+namespace scenegraph {
+class SceneGraph;
+}
 
 class OverlayManager;
 
@@ -54,11 +56,11 @@ public:
   Canvas& canvas();
 
   /// True after the retained scene tree has been created (first `sceneTree()` call).
-  bool hasSceneTree() const;
+  bool hasSceneGraph() const;
 
-  /// Lazily creates the retained scene tree on first access. Does not create the canvas.
-  SceneTree& sceneTree();
-  SceneTree const& sceneTree() const;
+  /// Lazily creates the retained scene graph on first access. Does not create the canvas.
+  scenegraph::SceneGraph& sceneGraph();
+  scenegraph::SceneGraph const& sceneGraph() const;
 
   /// Request a frame; `Application::exec()` renders all windows when the event pump runs.
   void requestRedraw();
@@ -67,7 +69,7 @@ public:
   /// from any code that has a Window reference.
   void setCursor(Cursor kind);
 
-  /// Like `requestRedraw()`; `handle` is reserved for future per-window scheduling.
+  /// Like `requestRedraw()` but addressed to a specific window handle.
   static void postRedraw(unsigned int handle);
 
   /// Drawing only; `Application` wraps each call with `beginFrame` and `present` when handling redraw.
@@ -78,6 +80,7 @@ public:
   /// use an opaque color if the scene has no full-window background rect.
   void setClearColor(Color color);
   Color clearColor() const;
+  bool wantsTextInput() const;
 
   /// Pushes content onto the overlay stack. Safe from event handlers and outside build passes.
   /// Returns a handle for `removeOverlay`.
@@ -144,5 +147,15 @@ private:
   struct Impl;
   std::unique_ptr<Impl> d;
 };
+
+template<typename T>
+void Window::setEnvironmentValue(T value) {
+  environmentLayerMut().set(std::move(value));
+}
+
+template<typename T>
+T const* Window::environmentValue() const {
+  return environmentLayer().get<T>();
+}
 
 } // namespace flux

@@ -5,7 +5,7 @@
 /// Part of the Flux public API.
 
 
-#include <Flux/UI/ComponentKey.hpp>
+#include <Flux/Core/ComponentKey.hpp>
 
 #include <cstdint>
 #include <functional>

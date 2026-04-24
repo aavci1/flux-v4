@@ -6,10 +6,8 @@
 
 /// Built-in leaf views (no `Element` dependency).
 #include <Flux/UI/Views/Image.hpp>
-#include <Flux/UI/Views/Line.hpp>
 #include <Flux/UI/Views/PathShape.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
-#include <Flux/UI/Views/Render.hpp>
 #include <Flux/UI/Views/Text.hpp>
 
 /// Layout containers (`#include <Flux/UI/Element.hpp>`).

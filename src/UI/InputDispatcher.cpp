@@ -4,8 +4,8 @@
 #include <Flux/Core/KeyCodes.hpp>
 #include <Flux/Detail/Runtime.hpp>
 #include <Flux/Core/Window.hpp>
-#include <Flux/Scene/HitTester.hpp>
-#include <Flux/Scene/SceneTreeInteraction.hpp>
+#include <Flux/SceneGraph/SceneInteraction.hpp>
+#include <Flux/SceneGraph/SceneTraversal.hpp>
 #include <Flux/UI/BuildOrchestrator.hpp>
 #include <Flux/UI/CursorController.hpp>
 #include <Flux/UI/FocusController.hpp>
@@ -32,16 +32,7 @@ bool inputDebugVerbose() {
   return debug::inputVerbose();
 }
 
-void logNodeId(char const* label, NodeId id) {
-  if (!id.isValid()) {
-    std::fprintf(stderr, "[flux:input] %s: (invalid id)\n", label);
-  } else {
-    std::fprintf(stderr, "[flux:input] %s: value=0x%016llx\n", label,
-                 static_cast<unsigned long long>(id.value));
-  }
-}
-
-bool shouldClaimFocus(InteractionData const& h) { return h.focusable; }
+bool shouldClaimFocus(scenegraph::InteractionData const& h) { return h.focusable; }
 
 } // namespace
 
@@ -127,12 +118,12 @@ void InputDispatcher::onKeyDown(InputEvent const& e) {
       }
       if (e.key == keys::Tab && windowHasFocus_) {
         bool const reverse = any(e.modifiers & Modifiers::Shift);
-        focus_.cycleInTree(top->sceneTree, reverse, top->id);
+        focus_.cycleInTree(top->sceneGraph, reverse, top->id);
         return;
       }
       if (!focus_.focusedKey().empty() && windowHasFocus_) {
-        auto const [id, interaction] = findInteractionByKey(top->sceneTree, focus_.focusedKey());
-        (void)id;
+        auto const [node, interaction] = scenegraph::findInteractionByKey(top->sceneGraph, focus_.focusedKey());
+        (void)node;
         if (interaction && interaction->onKeyDown) {
           interaction->onKeyDown(e.key, e.modifiers);
         }
@@ -145,13 +136,13 @@ void InputDispatcher::onKeyDown(InputEvent const& e) {
     }
     if (e.key == keys::Tab && windowHasFocus_) {
       bool const reverse = any(e.modifiers & Modifiers::Shift);
-      focus_.cycleNonModal(overlayEntriesBottomFirst(), window_.sceneTree(), reverse);
+      focus_.cycleNonModal(overlayEntriesBottomFirst(), window_.sceneGraph(), reverse);
       return;
     }
   }
   if (e.key == keys::Tab && windowHasFocus_) {
     bool const reverse = any(e.modifiers & Modifiers::Shift);
-    focus_.cycleInTree(window_.sceneTree(), reverse, std::nullopt);
+    focus_.cycleInTree(window_.sceneGraph(), reverse, std::nullopt);
     return;
   }
   bool shortcutConsumed = false;
@@ -165,16 +156,18 @@ void InputDispatcher::onKeyDown(InputEvent const& e) {
   if (!focus_.focusedKey().empty() && windowHasFocus_) {
     if (std::optional<OverlayId> overlayScope = focus_.focusInOverlay()) {
       if (OverlayEntry const* entry = window_.overlayManager().find(*overlayScope)) {
-        auto const [id, interaction] = findInteractionByKey(entry->sceneTree, focus_.focusedKey());
-        (void)id;
+        auto const [node, interaction] =
+            scenegraph::findInteractionByKey(entry->sceneGraph, focus_.focusedKey());
+        (void)node;
         if (interaction && interaction->onKeyDown) {
           interaction->onKeyDown(e.key, e.modifiers);
         }
         return;
       }
     }
-    auto const [id, interaction] = findInteractionByKey(window_.sceneTree(), focus_.focusedKey());
-    (void)id;
+    auto const [node, interaction] =
+        scenegraph::findInteractionByKey(window_.sceneGraph(), focus_.focusedKey());
+    (void)node;
     if (interaction && interaction->onKeyDown) {
       interaction->onKeyDown(e.key, e.modifiers);
     }
@@ -192,8 +185,9 @@ void InputDispatcher::onKeyUp(InputEvent const& e) {
     OverlayEntry const* top = window_.overlayManager().top();
     if (top->config.modal) {
       if (!focus_.focusedKey().empty() && windowHasFocus_) {
-        auto const [id, interaction] = findInteractionByKey(top->sceneTree, focus_.focusedKey());
-        (void)id;
+        auto const [node, interaction] =
+            scenegraph::findInteractionByKey(top->sceneGraph, focus_.focusedKey());
+        (void)node;
         if (interaction && interaction->onKeyUp) {
           interaction->onKeyUp(e.key, e.modifiers);
         }
@@ -204,16 +198,18 @@ void InputDispatcher::onKeyUp(InputEvent const& e) {
   if (!focus_.focusedKey().empty() && windowHasFocus_) {
     if (std::optional<OverlayId> overlayScope = focus_.focusInOverlay()) {
       if (OverlayEntry const* entry = window_.overlayManager().find(*overlayScope)) {
-        auto const [id, interaction] = findInteractionByKey(entry->sceneTree, focus_.focusedKey());
-        (void)id;
+        auto const [node, interaction] =
+            scenegraph::findInteractionByKey(entry->sceneGraph, focus_.focusedKey());
+        (void)node;
         if (interaction && interaction->onKeyUp) {
           interaction->onKeyUp(e.key, e.modifiers);
         }
         return;
       }
     }
-    auto const [id, interaction] = findInteractionByKey(window_.sceneTree(), focus_.focusedKey());
-    (void)id;
+    auto const [node, interaction] =
+        scenegraph::findInteractionByKey(window_.sceneGraph(), focus_.focusedKey());
+    (void)node;
     if (interaction && interaction->onKeyUp) {
       interaction->onKeyUp(e.key, e.modifiers);
     }
@@ -230,8 +226,9 @@ void InputDispatcher::onTextInput(InputEvent const& e) {
     OverlayEntry const* top = window_.overlayManager().top();
     if (top->config.modal) {
       if (!focus_.focusedKey().empty() && windowHasFocus_) {
-        auto const [id, interaction] = findInteractionByKey(top->sceneTree, focus_.focusedKey());
-        (void)id;
+        auto const [node, interaction] =
+            scenegraph::findInteractionByKey(top->sceneGraph, focus_.focusedKey());
+        (void)node;
         if (interaction && interaction->onTextInput) {
           interaction->onTextInput(e.text);
         }
@@ -242,16 +239,18 @@ void InputDispatcher::onTextInput(InputEvent const& e) {
   if (!focus_.focusedKey().empty() && windowHasFocus_) {
     if (std::optional<OverlayId> overlayScope = focus_.focusInOverlay()) {
       if (OverlayEntry const* entry = window_.overlayManager().find(*overlayScope)) {
-        auto const [id, interaction] = findInteractionByKey(entry->sceneTree, focus_.focusedKey());
-        (void)id;
+        auto const [node, interaction] =
+            scenegraph::findInteractionByKey(entry->sceneGraph, focus_.focusedKey());
+        (void)node;
         if (interaction && interaction->onTextInput) {
           interaction->onTextInput(e.text);
         }
         return;
       }
     }
-    auto const [id, interaction] = findInteractionByKey(window_.sceneTree(), focus_.focusedKey());
-    (void)id;
+    auto const [node, interaction] =
+        scenegraph::findInteractionByKey(window_.sceneGraph(), focus_.focusedKey());
+    (void)node;
     if (interaction && interaction->onTextInput) {
       interaction->onTextInput(e.text);
     }
@@ -259,7 +258,7 @@ void InputDispatcher::onTextInput(InputEvent const& e) {
 }
 
 void InputDispatcher::onScroll(InputEvent const& e) {
-  SceneTree const& tree = window_.sceneTree();
+  scenegraph::SceneGraph const& graph = window_.sceneGraph();
   bool const dbg = inputDebugEnabled();
 
   Point const p{ e.position.x, e.position.y };
@@ -273,9 +272,10 @@ void InputDispatcher::onScroll(InputEvent const& e) {
   for (auto it = oentries.rbegin(); it != oentries.rend(); ++it) {
     OverlayEntry const& oe = **it;
     Point const pl{ p.x - oe.resolvedFrame.x, p.y - oe.resolvedFrame.y };
-    if (auto hit = hitTestInteraction(oe.sceneTree, pl, [](InteractionData const& interaction) {
-          return static_cast<bool>(interaction.onScroll);
-        })) {
+    if (auto hit = scenegraph::hitTestInteraction(
+            oe.sceneGraph, pl, [](scenegraph::InteractionData const& interaction) {
+              return static_cast<bool>(interaction.onScroll);
+            })) {
       if (hit->interaction && hit->interaction->onScroll) {
         hit->interaction->onScroll(delta);
       }
@@ -283,27 +283,18 @@ void InputDispatcher::onScroll(InputEvent const& e) {
     }
   }
   if (dbg) {
-    if (auto front = HitTester{}.hitTest(tree, p)) {
-      std::fprintf(stderr,
-                   "[flux:input] Scroll pos=(%.1f,%.1f) delta=(%.2f,%.2f) frontmost geom: local=(%.1f,%.1f) ",
-                   static_cast<double>(p.x), static_cast<double>(p.y), static_cast<double>(delta.x),
-                   static_cast<double>(delta.y), static_cast<double>(front->localPoint.x),
-                   static_cast<double>(front->localPoint.y));
-      logNodeId("frontmost (any)", front->nodeId);
-    } else {
-      std::fprintf(stderr,
-                   "[flux:input] Scroll pos=(%.1f,%.1f) delta=(%.2f,%.2f) frontmost geom: (no hit)\n",
-                   static_cast<double>(p.x), static_cast<double>(p.y), static_cast<double>(delta.x),
-                   static_cast<double>(delta.y));
-    }
+    std::fprintf(stderr,
+                 "[flux:input] Scroll pos=(%.1f,%.1f) delta=(%.2f,%.2f)\n",
+                 static_cast<double>(p.x), static_cast<double>(p.y), static_cast<double>(delta.x),
+                 static_cast<double>(delta.y));
   }
-  if (auto hit = hitTestInteraction(tree, p, [](InteractionData const& interaction) {
-        return static_cast<bool>(interaction.onScroll);
-      })) {
+  if (auto hit = scenegraph::hitTestInteraction(
+          graph, p, [](scenegraph::InteractionData const& interaction) {
+            return static_cast<bool>(interaction.onScroll);
+          })) {
     if (dbg) {
-      std::fprintf(stderr, "[flux:input] Scroll filtered (has onScroll): local=(%.1f,%.1f) ",
+      std::fprintf(stderr, "[flux:input] Scroll filtered (has onScroll): local=(%.1f,%.1f)\n",
                    static_cast<double>(hit->localPoint.x), static_cast<double>(hit->localPoint.y));
-      logNodeId("scroll target", hit->nodeId);
     }
     if (hit->interaction && hit->interaction->onScroll) {
       hit->interaction->onScroll(delta);
@@ -320,7 +311,7 @@ void InputDispatcher::onPointerDown(InputEvent const& e) {
   Point const p{ e.position.x, e.position.y };
   bool const dbg = inputDebugEnabled();
   auto const overlays = overlayEntriesTopFirst();
-  SceneTree const& tree = window_.sceneTree();
+  scenegraph::SceneGraph const& graph = window_.sceneGraph();
 
   if (dbg) {
     std::fprintf(stderr, "[flux:input] PointerDown pos=(%.1f,%.1f)\n", static_cast<double>(p.x),
@@ -331,19 +322,16 @@ void InputDispatcher::onPointerDown(InputEvent const& e) {
   for (OverlayEntry const* poe : overlays) {
     OverlayEntry const& oe = *poe;
     Point const pl{ p.x - oe.resolvedFrame.x, p.y - oe.resolvedFrame.y };
-    if (auto hit = hitTestInteraction(oe.sceneTree, pl)) {
+    if (auto hit = scenegraph::hitTestInteraction(oe.sceneGraph, pl)) {
       if (dbg) {
-        std::fprintf(stderr, "[flux:input] PointerDown hit local=(%.1f,%.1f) ",
+        std::fprintf(stderr, "[flux:input] PointerDown hit local=(%.1f,%.1f)\n",
                      static_cast<double>(hit->localPoint.x), static_cast<double>(hit->localPoint.y));
-        logNodeId("press target", hit->nodeId);
       }
-      if (InteractionData const* interaction = hit->interaction) {
+      if (scenegraph::InteractionData const* interaction = hit->interaction) {
         bool const modalOverlay = oe.config.modal;
         OverlayId const overlayId = oe.id;
         ComponentKey const stableTargetKey = interaction->stableTargetKey;
-        gesture_.recordPress(hit->nodeId, interaction->stableTargetKey, p,
-                             static_cast<bool>(interaction->onTap), oe.id);
-        Application::instance().markReactiveDirty();
+        gesture_.recordPress(interaction->stableTargetKey, p, static_cast<bool>(interaction->onTap), oe.id);
         if (interaction->onPointerDown) {
           interaction->onPointerDown(hit->localPoint);
         }
@@ -352,20 +340,20 @@ void InputDispatcher::onPointerDown(InputEvent const& e) {
             focus_.set(stableTargetKey, overlayId, FocusInputKind::Pointer);
           } else if (!stableTargetKey.empty()) {
             if (OverlayEntry const* refreshedOverlay = window_.overlayManager().find(overlayId)) {
-              focus_.claimFocusForSubtree(stableTargetKey, refreshedOverlay->sceneTree, overlayId);
+              focus_.claimFocusForSubtree(stableTargetKey, refreshedOverlay->sceneGraph, overlayId);
             }
           }
         }
       }
       auto freshOverlays = overlayEntriesTopFirst();
-      cursor_.updateForPoint(p, gesture_, freshOverlays, tree);
-      hover_.updateForPoint(p, freshOverlays, tree);
+      cursor_.updateForPoint(p, gesture_, freshOverlays, graph);
+      hover_.updateForPoint(p, freshOverlays, graph);
       return;
     }
     if (oe.config.modal) {
       auto freshOverlays = overlayEntriesTopFirst();
-      cursor_.updateForPoint(p, gesture_, freshOverlays, tree);
-      hover_.updateForPoint(p, freshOverlays, tree);
+      cursor_.updateForPoint(p, gesture_, freshOverlays, graph);
+      hover_.updateForPoint(p, freshOverlays, graph);
       return;
     }
   }
@@ -376,41 +364,39 @@ void InputDispatcher::onPointerDown(InputEvent const& e) {
       // `overlays` was built before removal; the dismissed entry is freed — no overlays left for
       // hit-testing in this path (same as resolving only the main tree).
       std::vector<OverlayEntry const*> const noOverlays{};
-      cursor_.updateForPoint(p, gesture_, noOverlays, tree);
-      hover_.updateForPoint(p, noOverlays, tree);
+      cursor_.updateForPoint(p, gesture_, noOverlays, graph);
+      hover_.updateForPoint(p, noOverlays, graph);
       return;
     }
   }
-  if (auto hit = hitTestInteraction(tree, p)) {
+  if (auto hit = scenegraph::hitTestInteraction(graph, p)) {
     if (dbg) {
-      std::fprintf(stderr, "[flux:input] PointerDown hit local=(%.1f,%.1f) ",
+      std::fprintf(stderr, "[flux:input] PointerDown hit local=(%.1f,%.1f)\n",
                    static_cast<double>(hit->localPoint.x), static_cast<double>(hit->localPoint.y));
-      logNodeId("press target", hit->nodeId);
     }
-    if (InteractionData const* interaction = hit->interaction) {
-      gesture_.recordPress(hit->nodeId, interaction->stableTargetKey, p,
-                           static_cast<bool>(interaction->onTap), std::nullopt);
-      Application::instance().markReactiveDirty();
+    if (scenegraph::InteractionData const* interaction = hit->interaction) {
+      gesture_.recordPress(interaction->stableTargetKey, p, static_cast<bool>(interaction->onTap),
+                           std::nullopt);
       if (interaction->onPointerDown) {
         interaction->onPointerDown(hit->localPoint);
       }
       if (shouldClaimFocus(*interaction)) {
         focus_.set(interaction->stableTargetKey, std::nullopt, FocusInputKind::Pointer);
       } else if (!interaction->stableTargetKey.empty()) {
-        focus_.claimFocusForSubtree(interaction->stableTargetKey, tree, std::nullopt);
+        focus_.claimFocusForSubtree(interaction->stableTargetKey, graph, std::nullopt);
       }
     }
   } else if (dbg) {
     std::fprintf(stderr, "[flux:input] PointerDown: no interactive node under cursor\n");
   }
   auto freshOverlays = overlayEntriesTopFirst();
-  cursor_.updateForPoint(p, gesture_, freshOverlays, tree);
-  hover_.updateForPoint(p, freshOverlays, tree);
+  cursor_.updateForPoint(p, gesture_, freshOverlays, graph);
+  hover_.updateForPoint(p, freshOverlays, graph);
 }
 
 void InputDispatcher::onPointerMove(InputEvent const& e) {
   Point const p{ e.position.x, e.position.y };
-  SceneTree const& tree = window_.sceneTree();
+  scenegraph::SceneGraph const& graph = window_.sceneGraph();
   auto const overlays = overlayEntriesTopFirst();
   bool const dbg = inputDebugEnabled();
   bool const dbgMove = dbg && inputDebugVerbose();
@@ -421,9 +407,6 @@ void InputDispatcher::onPointerMove(InputEvent const& e) {
   if (logThisMove) {
     std::fprintf(stderr, "[flux:input] PointerMove pos=(%.1f,%.1f) activePress=%s\n",
                  static_cast<double>(p.x), static_cast<double>(p.y), gesture_.press() ? "yes" : "no");
-    if (gesture_.press()) {
-      logNodeId("  active node", gesture_.press()->nodeId);
-    }
   }
   if (gesture_.press()) {
     float const dx = p.x - gesture_.press()->downPoint.x;
@@ -432,25 +415,25 @@ void InputDispatcher::onPointerMove(InputEvent const& e) {
       gesture_.markCancelled();
     }
   }
-  HitTester tester{};
   if (gesture_.press()) {
-    auto const [pressId, pressed] = gesture_.findPressInteraction(*gesture_.press(), overlays, tree);
-    if (pressed && pressed->onPointerMove && pressId.isValid()) {
-      if (SceneTree const* pressTree = gesture_.sceneTreeForPress(*gesture_.press(), overlays, tree)) {
+    auto const [pressNode, pressed] = gesture_.findPressInteraction(*gesture_.press(), overlays, graph);
+    if (pressed && pressed->onPointerMove && pressNode) {
+      if (scenegraph::SceneGraph const* pressGraph =
+              gesture_.sceneGraphForPress(*gesture_.press(), overlays, graph)) {
         Point rootPoint = p;
         if (OverlayEntry const* overlay = gesture_.overlayForPress(*gesture_.press(), overlays)) {
           rootPoint.x -= overlay->resolvedFrame.x;
           rootPoint.y -= overlay->resolvedFrame.y;
         }
-        if (auto local = tester.localPointForNode(*pressTree, rootPoint, pressId)) {
+        if (auto local = scenegraph::localPointForNode(pressGraph->root(), rootPoint, pressNode)) {
           if (logThisMove) {
             std::fprintf(stderr, "[flux:input] PointerMove routed to press target local=(%.1f,%.1f)\n",
                          static_cast<double>(local->x), static_cast<double>(local->y));
           }
           pressed->onPointerMove(*local);
           auto freshOverlays = overlayEntriesTopFirst();
-          cursor_.updateForPoint(p, gesture_, freshOverlays, tree);
-          hover_.updateForPoint(p, freshOverlays, tree);
+          cursor_.updateForPoint(p, gesture_, freshOverlays, graph);
+          hover_.updateForPoint(p, freshOverlays, graph);
           return;
         }
       }
@@ -463,26 +446,24 @@ void InputDispatcher::onPointerMove(InputEvent const& e) {
   for (OverlayEntry const* poe : overlays) {
     OverlayEntry const& oe = *poe;
     Point const pl{ p.x - oe.resolvedFrame.x, p.y - oe.resolvedFrame.y };
-    if (auto hit = hitTestInteraction(oe.sceneTree, pl)) {
+    if (auto hit = scenegraph::hitTestInteraction(oe.sceneGraph, pl)) {
       if (logThisMove) {
-        std::fprintf(stderr, "[flux:input] PointerMove hit-test path local=(%.1f,%.1f) ",
+        std::fprintf(stderr, "[flux:input] PointerMove hit-test path local=(%.1f,%.1f)\n",
                      static_cast<double>(hit->localPoint.x), static_cast<double>(hit->localPoint.y));
-        logNodeId("under cursor", hit->nodeId);
       }
       if (hit->interaction && hit->interaction->onPointerMove) {
         hit->interaction->onPointerMove(hit->localPoint);
       }
       auto freshOverlays = overlayEntriesTopFirst();
-      cursor_.updateForPoint(p, gesture_, freshOverlays, tree);
-      hover_.updateForPoint(p, freshOverlays, tree);
+      cursor_.updateForPoint(p, gesture_, freshOverlays, graph);
+      hover_.updateForPoint(p, freshOverlays, graph);
       return;
     }
   }
-  if (auto hit = hitTestInteraction(tree, p)) {
+  if (auto hit = scenegraph::hitTestInteraction(graph, p)) {
     if (logThisMove) {
-      std::fprintf(stderr, "[flux:input] PointerMove hit-test path local=(%.1f,%.1f) ",
+      std::fprintf(stderr, "[flux:input] PointerMove hit-test path local=(%.1f,%.1f)\n",
                    static_cast<double>(hit->localPoint.x), static_cast<double>(hit->localPoint.y));
-      logNodeId("under cursor", hit->nodeId);
     }
     if (hit->interaction && hit->interaction->onPointerMove) {
       hit->interaction->onPointerMove(hit->localPoint);
@@ -491,13 +472,13 @@ void InputDispatcher::onPointerMove(InputEvent const& e) {
     std::fprintf(stderr, "[flux:input] PointerMove: no interactive node under cursor\n");
   }
   auto freshOverlays = overlayEntriesTopFirst();
-  cursor_.updateForPoint(p, gesture_, freshOverlays, tree);
-  hover_.updateForPoint(p, freshOverlays, tree);
+  cursor_.updateForPoint(p, gesture_, freshOverlays, graph);
+  hover_.updateForPoint(p, freshOverlays, graph);
 }
 
 void InputDispatcher::onPointerUp(InputEvent const& e) {
   Point const p{ e.position.x, e.position.y };
-  SceneTree const& tree = window_.sceneTree();
+  scenegraph::SceneGraph const& graph = window_.sceneGraph();
   auto const overlays = overlayEntriesTopFirst();
   bool const dbg = inputDebugEnabled();
 
@@ -511,21 +492,16 @@ void InputDispatcher::onPointerUp(InputEvent const& e) {
     released = *ps;
   }
   gesture_.clearPress();
-  if (released) {
-    Application::instance().markReactiveDirty();
-  }
 
-  HitTester tester{};
   bool overlayHandled = false;
   for (OverlayEntry const* poe : overlays) {
     OverlayEntry const& oe = *poe;
     Point const pl{ p.x - oe.resolvedFrame.x, p.y - oe.resolvedFrame.y };
-    if (auto hit = hitTestInteraction(oe.sceneTree, pl)) {
+    if (auto hit = scenegraph::hitTestInteraction(oe.sceneGraph, pl)) {
       if (dbg) {
         std::fprintf(stderr,
-                     "[flux:input] PointerUp release on interactive node local=(%.1f,%.1f) ",
+                     "[flux:input] PointerUp release on interactive node local=(%.1f,%.1f)\n",
                      static_cast<double>(hit->localPoint.x), static_cast<double>(hit->localPoint.y));
-        logNodeId("release hit", hit->nodeId);
       }
       if (hit->interaction && hit->interaction->onPointerUp) {
         hit->interaction->onPointerUp(hit->localPoint);
@@ -536,13 +512,12 @@ void InputDispatcher::onPointerUp(InputEvent const& e) {
   }
 
   if (!overlayHandled) {
-    auto hit = hitTestInteraction(tree, p);
+    auto hit = scenegraph::hitTestInteraction(graph, p);
     if (hit) {
       if (dbg) {
         std::fprintf(stderr,
-                     "[flux:input] PointerUp release on interactive node local=(%.1f,%.1f) ",
+                     "[flux:input] PointerUp release on interactive node local=(%.1f,%.1f)\n",
                      static_cast<double>(hit->localPoint.x), static_cast<double>(hit->localPoint.y));
-        logNodeId("release hit", hit->nodeId);
       }
       if (hit->interaction && hit->interaction->onPointerUp) {
         hit->interaction->onPointerUp(hit->localPoint);
@@ -550,17 +525,18 @@ void InputDispatcher::onPointerUp(InputEvent const& e) {
     } else if (released) {
       if (dbg) {
         std::fprintf(stderr, "[flux:input] PointerUp: no interactive hit; trying press-target up\n");
-        logNodeId("  released press", released->nodeId);
       }
-      auto const [currentId, pressed] = gesture_.findPressInteraction(*released, overlays, tree);
-      if (SceneTree const* pressTree = gesture_.sceneTreeForPress(*released, overlays, tree)) {
+      auto const [currentNode, pressed] = gesture_.findPressInteraction(*released, overlays, graph);
+      if (scenegraph::SceneGraph const* pressGraph =
+              gesture_.sceneGraphForPress(*released, overlays, graph)) {
         Point rootPoint = p;
         if (OverlayEntry const* overlay = gesture_.overlayForPress(*released, overlays)) {
           rootPoint.x -= overlay->resolvedFrame.x;
           rootPoint.y -= overlay->resolvedFrame.y;
         }
-        if (pressed && pressed->onPointerUp && currentId.isValid()) {
-          std::optional<Point> local = tester.localPointForNode(*pressTree, rootPoint, currentId);
+        if (pressed && pressed->onPointerUp && currentNode) {
+          std::optional<Point> local =
+              scenegraph::localPointForNode(pressGraph->root(), rootPoint, currentNode);
           if (local) {
             if (dbg) {
               std::fprintf(stderr, "[flux:input] PointerUp fallback local=(%.1f,%.1f)\n",
@@ -583,11 +559,11 @@ void InputDispatcher::onPointerUp(InputEvent const& e) {
 
   auto freshOverlays = overlayEntriesTopFirst();
   if (released) {
-    gesture_.dispatchTap(*released, freshOverlays, tree);
+    gesture_.dispatchTap(*released, freshOverlays, graph);
     freshOverlays = overlayEntriesTopFirst();
   }
-  cursor_.updateForPoint(p, gesture_, freshOverlays, tree);
-  hover_.updateForPoint(p, freshOverlays, tree);
+  cursor_.updateForPoint(p, gesture_, freshOverlays, graph);
+  hover_.updateForPoint(p, freshOverlays, graph);
 }
 
 } // namespace flux

@@ -39,6 +39,12 @@ struct ZStack : ViewModifiers<ZStack> {
   Alignment horizontalAlignment = Alignment::Start;
   Alignment verticalAlignment = Alignment::Start;
   std::vector<Element> children;
+
+  bool operator==(ZStack const& other) const {
+    return horizontalAlignment == other.horizontalAlignment &&
+           verticalAlignment == other.verticalAlignment &&
+           elementsStructurallyEqual(children, other.children);
+  }
 };
 
 } // namespace flux

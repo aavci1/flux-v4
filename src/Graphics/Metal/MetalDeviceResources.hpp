@@ -52,11 +52,14 @@ public:
   void uploadPathVertices(const std::vector<PathVertex>& pathVerts);
 
   void uploadGlyphVertices(const std::vector<MetalGlyphVertex>& verts);
+  void reserveDrawStateBuffers(std::uint32_t uniformCount, std::uint32_t roundedClipCount);
 
   id<MTLBuffer> instanceArenaBuffer() const { return instanceArenas_[currentFrameIndex_]; }
   id<MTLBuffer> imageInstanceArenaBuffer() const { return imageInstanceArenas_[currentFrameIndex_]; }
   id<MTLBuffer> pathVertexArenaBuffer() const { return pathVertexArenas_[currentFrameIndex_]; }
   id<MTLBuffer> glyphVertexArenaBuffer() const { return glyphVertexArenas_[currentFrameIndex_]; }
+  id<MTLBuffer> drawUniformArenaBuffer() const { return drawUniformArenas_[currentFrameIndex_]; }
+  id<MTLBuffer> roundedClipArenaBuffer() const { return roundedClipArenas_[currentFrameIndex_]; }
 
 private:
   CAMetalLayer* layer_{nil};
@@ -80,12 +83,18 @@ private:
   std::array<std::uint32_t, kFramesInFlight> pathVertexArenaCapacityBytes_{};
   std::array<id<MTLBuffer>, kFramesInFlight> glyphVertexArenas_{};
   std::array<std::uint32_t, kFramesInFlight> glyphVertexArenaCapacityBytes_{};
+  std::array<id<MTLBuffer>, kFramesInFlight> drawUniformArenas_{};
+  std::array<std::uint32_t, kFramesInFlight> drawUniformArenaCapacities_{};
+  std::array<id<MTLBuffer>, kFramesInFlight> roundedClipArenas_{};
+  std::array<std::uint32_t, kFramesInFlight> roundedClipArenaCapacities_{};
   std::size_t currentFrameIndex_ = kFramesInFlight - 1;
 
   void ensureInstanceArenaCapacity(std::uint32_t instanceCount);
   void ensureImageInstanceArenaCapacity(std::uint32_t instanceCount);
   void ensurePathVertexArenaCapacity(std::uint32_t byteCount);
   void ensureGlyphVertexArenaCapacity(std::uint32_t byteCount);
+  void ensureDrawUniformArenaCapacity(std::uint32_t uniformCount);
+  void ensureRoundedClipArenaCapacity(std::uint32_t roundedClipCount);
 };
 
 } // namespace flux

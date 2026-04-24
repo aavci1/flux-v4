@@ -2,9 +2,9 @@
 
 #include <Flux/Core/Application.hpp>
 #include <Flux/Core/Clipboard.hpp>
+#include <Flux/Core/ComponentKey.hpp>
 #include <Flux/Core/KeyCodes.hpp>
 #include <Flux/Graphics/TextLayout.hpp>
-#include <Flux/UI/ComponentKey.hpp>
 #include <Flux/UI/Views/TextEditUtils.hpp>
 
 #include <algorithm>

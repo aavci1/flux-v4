@@ -104,7 +104,6 @@ void StateStore::beginRebuild(bool forceFullRebuild) {
   pendingDirtyComposites_.clear();
   activeStack_.clear();
   activeStateStack_.clear();
-  compositePathStableStack_.clear();
   compositeConstraintStack_.clear();
   compositeElementModifierStack_.clear();
   for (auto& [key, cs] : states_) {
@@ -138,7 +137,6 @@ void StateStore::endRebuild() {
     states_.erase(it);
   }
   activeDirtyComposites_.clear();
-  compositePathStableStack_.clear();
 }
 
 void StateStore::shutdown() {
@@ -154,7 +152,6 @@ void StateStore::shutdown() {
   states_.clear();
   activeStack_.clear();
   activeStateStack_.clear();
-  compositePathStableStack_.clear();
   compositeElementModifierStack_.clear();
   compositeConstraintStack_.clear();
   pendingDirtyComposites_.clear();
@@ -267,22 +264,6 @@ void StateStore::markRetainedSubtreeVisited(ComponentKey const& key) {
 
 void StateStore::markRetainedSubtreeVisited(ComponentState& state) {
   state.lastVisitedEpoch = buildEpoch_;
-}
-
-bool StateStore::currentCompositePathStable() const noexcept {
-  if (compositePathStableStack_.empty()) {
-    return true;
-  }
-  return compositePathStableStack_.back();
-}
-
-void StateStore::pushCompositePathStable(bool stable) {
-  compositePathStableStack_.push_back(stable);
-}
-
-void StateStore::popCompositePathStable() {
-  assert(!compositePathStableStack_.empty());
-  compositePathStableStack_.pop_back();
 }
 
 bool StateStore::hasBodyForCurrentRebuild(ComponentKey const& key,

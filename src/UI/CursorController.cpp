@@ -1,7 +1,7 @@
 #include <Flux/UI/CursorController.hpp>
 
 #include <Flux/Core/Window.hpp>
-#include <Flux/Scene/SceneTreeInteraction.hpp>
+#include <Flux/SceneGraph/SceneInteraction.hpp>
 #include <Flux/UI/GestureTracker.hpp>
 
 namespace flux {
@@ -22,10 +22,10 @@ void CursorController::apply(Cursor kind) {
 
 void CursorController::updateForPoint(Point windowPoint, GestureTracker const& gesture,
                                       std::vector<OverlayEntry const*> const& overlayEntries,
-                                      SceneTree const& mainTree) {
+                                      scenegraph::SceneGraph const& mainGraph) {
   if (auto const* ps = gesture.press()) {
-    auto const [pressId, pressed] = gesture.findPressInteraction(*ps, overlayEntries, mainTree);
-    (void)pressId;
+    auto const [node, pressed] = gesture.findPressInteraction(*ps, overlayEntries, mainGraph);
+    (void)node;
     if (pressed && pressed->cursor != Cursor::Inherit) {
       apply(pressed->cursor);
       return;
@@ -35,7 +35,8 @@ void CursorController::updateForPoint(Point windowPoint, GestureTracker const& g
   for (OverlayEntry const* p : overlayEntries) {
     OverlayEntry const& oe = *p;
     Point const local{ windowPoint.x - oe.resolvedFrame.x, windowPoint.y - oe.resolvedFrame.y };
-    if (auto hit = hitTestInteraction(oe.sceneTree, local, [](InteractionData const& interaction) {
+    if (auto hit = scenegraph::hitTestInteraction(
+            oe.sceneGraph, local, [](scenegraph::InteractionData const& interaction) {
           return interaction.cursor != Cursor::Inherit;
         })) {
       apply(hit->interaction->cursor);
@@ -43,7 +44,8 @@ void CursorController::updateForPoint(Point windowPoint, GestureTracker const& g
     }
   }
 
-  auto hit = hitTestInteraction(mainTree, windowPoint, [](InteractionData const& interaction) {
+  auto hit = scenegraph::hitTestInteraction(
+      mainGraph, windowPoint, [](scenegraph::InteractionData const& interaction) {
     return interaction.cursor != Cursor::Inherit;
   });
   if (hit) {

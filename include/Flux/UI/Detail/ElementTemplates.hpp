@@ -80,6 +80,11 @@ CompositeBodyResolution resolveCompositeBody(StateStore* store, ComponentKey con
     return resolution;
   }
   if (store->canReuseBody(key, value, constraints)) {
+    // Cached body reuse skips body(), so allow components to refresh leading retained inputs
+    // such as callback slots before the subtree is kept alive.
+    if constexpr (requires(C const& component) { component.updateRetainedInputs(); }) {
+      value.updateRetainedInputs();
+    }
     resolution.body = store->cachedBody(key);
     resolution.descendantsStable = true;
     return resolution;
@@ -117,35 +122,46 @@ struct Element::Model : Concept {
   ElementType elementType() const noexcept override;
   std::type_index modelType() const noexcept override { return std::type_index(typeid(C)); }
   void const* rawValuePtr() const noexcept override { return &value; }
-  bool isComposite() const noexcept override { return CompositeComponent<C>; }
-  std::unique_ptr<Element> buildCompositeBody() const override {
-    if constexpr (CompositeComponent<C>) {
-      return std::make_unique<Element>(value.body());
+  bool valueEquals(Concept const& other) const noexcept override {
+    if (other.modelType() != std::type_index(typeid(C))) {
+      return false;
     }
-    return nullptr;
+    C const& rhs = *static_cast<C const*>(other.rawValuePtr());
+    if constexpr (detail::equalityComparableV<C>) {
+      return value == rhs;
+    } else if constexpr (std::is_trivially_copyable_v<C>) {
+      return std::memcmp(&value, &rhs, sizeof(C)) == 0;
+    } else {
+      return false;
+    }
   }
+  bool expandsBody() const noexcept override { return ExpandsBodyComponent<C>; }
   detail::CompositeBodyResolution resolveCompositeBody(ComponentKey const& key,
                                                        LayoutConstraints const& constraints,
                                                        detail::ElementModifiers const* modifiers) const override;
+  detail::ComponentBuildResult buildMeasured(detail::ComponentBuildContext& ctx,
+                                             std::unique_ptr<scenegraph::SceneNode> existing) const override {
+    if constexpr (MeasuredComponent<C>) {
+      return detail::buildMeasuredComponent(value, ctx, std::move(existing));
+    } else {
+      (void)ctx;
+      (void)existing;
+      return {};
+    }
+  }
   Size measure(MeasureContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
                TextSystem& textSystem) const override;
   float flexGrow() const override { return detail::flexGrowOf(value); }
   float flexShrink() const override { return detail::flexShrinkOf(value); }
   std::optional<float> flexBasis() const override { return detail::flexBasisOf(value); }
   float minMainSize() const override { return detail::minMainSizeOf(value); }
-  bool leafDrawsFillStrokeShadowFromModifiers() const override {
-    if constexpr (std::is_same_v<C, Rectangle> || std::is_same_v<C, PathShape>) {
-      return true;
-    }
-    return false;
-  }
 };
 
 template<typename C>
 detail::CompositeBodyResolution Element::Model<C>::resolveCompositeBody(ComponentKey const& key,
                                                                         LayoutConstraints const& constraints,
                                                                         detail::ElementModifiers const* modifiers) const {
-  if constexpr (!CompositeComponent<C>) {
+  if constexpr (!ExpandsBodyComponent<C>) {
     (void)key;
     (void)constraints;
     (void)modifiers;
@@ -194,14 +210,12 @@ ElementType Element::Model<C>::elementType() const noexcept {
     return ElementType::Rectangle;
   } else if constexpr (std::is_same_v<C, Text>) {
     return ElementType::Text;
-  } else if constexpr (std::is_same_v<C, Render>) {
-    return ElementType::Render;
   } else if constexpr (std::is_same_v<C, views::Image>) {
     return ElementType::Image;
   } else if constexpr (std::is_same_v<C, PathShape>) {
     return ElementType::Path;
-  } else if constexpr (std::is_same_v<C, Line>) {
-    return ElementType::Line;
+  } else if constexpr (std::is_same_v<C, Render>) {
+    return ElementType::Render;
   } else if constexpr (std::is_same_v<C, VStack>) {
     return ElementType::VStack;
   } else if constexpr (std::is_same_v<C, HStack>) {
@@ -228,7 +242,9 @@ ElementType Element::Model<C>::elementType() const noexcept {
 template<typename C>
 Size Element::Model<C>::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
                                 LayoutHints const& hints, TextSystem& textSystem) const {
-  if constexpr (CompositeComponent<C>) {
+  if constexpr (MeasuredComponent<C>) {
+    return value.measure(ctx, constraints, hints, textSystem);
+  } else if constexpr (ExpandsBodyComponent<C>) {
     ComponentKey const key = ctx.nextCompositeKey();
     StateStore* store = StateStore::current();
     detail::CompositeBodyResolution resolution{};
@@ -255,23 +271,25 @@ Size Element::Model<C>::measure(MeasureContext& ctx, LayoutConstraints const& co
     Element const& child = store ? *resolution.body : fallbackChild;
     ctx.beginCompositeBodySubtree(key);
     ctx.pushCompositeKeyTail(key);
+    if (child.expandsBody()) {
+      ComponentKey childBodyKey = key;
+      childBodyKey.push_back(detail::compositeBodyLocalId());
+      ctx.setMeasurementRootKey(std::move(childBodyKey));
+    }
     if (store) {
       store->recordBodyConstraints(key, constraints);
-      store->pushCompositePathStable(resolution.descendantsStable);
     }
     Size const sz = child.measure(ctx, constraints, hints, textSystem);
     if (store) {
       store->recordMeasure(key, constraints, sz);
-      store->popCompositePathStable();
     }
+    ctx.clearMeasurementRootKey();
     ctx.popCompositeKeyTail();
     return sz;
-  } else if constexpr (PrimitiveComponent<C>) {
-    return value.measure(ctx, constraints, hints, textSystem);
   } else {
     static_assert(alwaysFalse<C>,
-                  "Component must satisfy CompositeComponent (body()) or PrimitiveComponent (measure with "
-                  "MeasureContext).");
+                  "Component must provide either measure(MeasureContext, LayoutConstraints, LayoutHints, "
+                  "TextSystem) or body().");
     return {};
   }
 }
@@ -290,6 +308,95 @@ template<typename T>
 T const& Element::as() const {
   assert(is<T>());
   return *static_cast<T const*>(impl_->rawValuePtr());
+}
+
+inline bool Element::valueEquals(Element const& other) const noexcept {
+  if (!impl_ || !other.impl_) {
+    return !impl_ && !other.impl_;
+  }
+  return impl_->valueEquals(*other.impl_);
+}
+
+namespace detail {
+
+inline bool interactionHandlersComparable(Element const& lhs, Element const& rhs) noexcept {
+  detail::ElementModifiers const* lhsMods = lhs.modifiers();
+  detail::ElementModifiers const* rhsMods = rhs.modifiers();
+  if (!lhsMods || !rhsMods) {
+    return lhsMods == rhsMods;
+  }
+  return !lhsMods->onTap && !rhsMods->onTap &&
+         !lhsMods->onPointerDown && !rhsMods->onPointerDown &&
+         !lhsMods->onPointerUp && !rhsMods->onPointerUp &&
+         !lhsMods->onPointerMove && !rhsMods->onPointerMove &&
+         !lhsMods->onScroll && !rhsMods->onScroll &&
+         !lhsMods->onKeyDown && !rhsMods->onKeyDown &&
+         !lhsMods->onKeyUp && !rhsMods->onKeyUp &&
+         !lhsMods->onTextInput && !rhsMods->onTextInput;
+}
+
+inline bool modifiersStructurallyEqual(Element const& lhs, Element const& rhs) noexcept {
+  detail::ElementModifiers const* lhsMods = lhs.modifiers();
+  detail::ElementModifiers const* rhsMods = rhs.modifiers();
+  if (!lhsMods || !rhsMods) {
+    return lhsMods == rhsMods;
+  }
+  if (!interactionHandlersComparable(lhs, rhs)) {
+    return false;
+  }
+  if (lhsMods->padding != rhsMods->padding || lhsMods->fill != rhsMods->fill ||
+      lhsMods->stroke != rhsMods->stroke || lhsMods->shadow != rhsMods->shadow ||
+      lhsMods->cornerRadius != rhsMods->cornerRadius || lhsMods->opacity != rhsMods->opacity ||
+      lhsMods->translation != rhsMods->translation || lhsMods->clip != rhsMods->clip ||
+      lhsMods->positionX != rhsMods->positionX || lhsMods->positionY != rhsMods->positionY ||
+      lhsMods->sizeWidth != rhsMods->sizeWidth || lhsMods->sizeHeight != rhsMods->sizeHeight ||
+      lhsMods->focusable != rhsMods->focusable || lhsMods->cursor != rhsMods->cursor) {
+    return false;
+  }
+  if (static_cast<bool>(lhsMods->overlay) != static_cast<bool>(rhsMods->overlay)) {
+    return false;
+  }
+  if (lhsMods->overlay && !lhsMods->overlay->structuralEquals(*rhsMods->overlay)) {
+    return false;
+  }
+  return true;
+}
+
+inline bool environmentStructurallyEqual(Element const& lhs, Element const& rhs) noexcept {
+  EnvironmentLayer const* lhsEnv = lhs.environmentLayer();
+  EnvironmentLayer const* rhsEnv = rhs.environmentLayer();
+  if (!lhsEnv || !rhsEnv) {
+    return lhsEnv == rhsEnv;
+  }
+  // Environment layers use erased std::any storage. Until values become comparably snapshottable,
+  // only treat empty layers as structurally equal.
+  return lhsEnv->empty() && rhsEnv->empty();
+}
+
+} // namespace detail
+
+inline bool Element::structuralEquals(Element const& other) const noexcept {
+  return valueEquals(other) &&
+         flexGrowOverride_ == other.flexGrowOverride_ &&
+         flexShrinkOverride_ == other.flexShrinkOverride_ &&
+         flexBasisOverride_ == other.flexBasisOverride_ &&
+         minMainSizeOverride_ == other.minMainSizeOverride_ &&
+         key_ == other.key_ &&
+         detail::environmentStructurallyEqual(*this, other) &&
+         detail::modifiersStructurallyEqual(*this, other);
+}
+
+inline bool elementsStructurallyEqual(std::vector<Element> const& lhs,
+                                      std::vector<Element> const& rhs) noexcept {
+  if (lhs.size() != rhs.size()) {
+    return false;
+  }
+  for (std::size_t i = 0; i < lhs.size(); ++i) {
+    if (!lhs[i].structuralEquals(rhs[i])) {
+      return false;
+    }
+  }
+  return true;
 }
 
 template<typename... Args>

@@ -11,10 +11,10 @@
 #include <Flux/UI/GestureTracker.hpp>
 #include <Flux/UI/HoverController.hpp>
 #include <Flux/UI/InputDispatcher.hpp>
+#include <Flux/Core/ComponentKey.hpp>
 #include <Flux/Core/Events.hpp>
 #include <Flux/Core/Types.hpp>
 #include <Flux/Detail/RootHolder.hpp>
-#include <Flux/UI/ComponentKey.hpp>
 #include <Flux/UI/Overlay.hpp>
 
 #include <memory>
@@ -43,6 +43,7 @@ public:
   ActionRegistry& actionRegistryForBuild() noexcept;
 
   bool isActionCurrentlyEnabled(std::string const& name) const;
+  bool wantsTextInput() const;
 
   void requestFocusInSubtree(ComponentKey const& subtreeKey, std::optional<OverlayId> overlayScope = std::nullopt);
 
@@ -76,6 +77,7 @@ private:
   void rebuild(std::optional<Size> sizeOverride = std::nullopt);
   void subscribeInput();
   void subscribeWindowEvents();
+  bool markInteractiveDirty(ComponentKey const& key, std::optional<OverlayId> overlayScope);
 
   static thread_local Runtime* sCurrent;
 

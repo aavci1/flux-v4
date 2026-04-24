@@ -14,11 +14,12 @@
 namespace flux {
 
 class AnimationBase;
+class Application;
 class EventQueue;
 
-/// One tick from the shared ~60 Hz animation timer (`steady_clock` domain, same as `TimerEvent::deadlineNanos`).
+/// One tick from the shared frame pump (`steady_clock` domain, same as `FrameEvent::deadlineNanos`).
 struct AnimationTick {
-  /// `steady_clock` time since epoch in nanoseconds (matches `TimerEvent::deadlineNanos`).
+  /// `steady_clock` time since epoch in nanoseconds (matches `FrameEvent::deadlineNanos`).
   std::int64_t deadlineNanos = 0;
   /// Monotonic time in seconds (same domain as `AnimationBase::tick`).
   double nowSeconds = 0.;
@@ -40,12 +41,14 @@ public:
   void unsubscribe(ObserverHandle handle);
 
 private:
+  friend class Application;
+
   AnimationClock();
 
-  bool needsTimer() const;
+  bool needsFramePump() const;
   void onTick(std::int64_t deadlineNanos);
-  void startTimer();
-  void stopTimer();
+  void startFramePump();
+  void stopFramePump();
 
   struct Subscriber {
     std::uint64_t id = 0;
@@ -56,9 +59,9 @@ private:
   std::vector<Subscriber> subscribers_;
   std::uint64_t nextSubscriberId_ = 1;
 
-  std::uint64_t timerId_ = 0;
   bool running_ = false;
   bool installed_ = false;
+  bool framePulseQueued_ = false;
 };
 
 } // namespace flux

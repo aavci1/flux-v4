@@ -237,6 +237,18 @@ bool sameRoundedClipForBatch(T const& a, T const& b) {
 }
 
 template <typename T>
+bool sameTranslationForBatch(T const& a, T const& b) {
+  return a.translation.x == b.translation.x && a.translation.y == b.translation.y;
+}
+
+MetalDrawUniforms makeDrawUniforms(float viewportW, float viewportH, vector_float2 translation) {
+  MetalDrawUniforms uniforms{};
+  uniforms.viewport = simd_make_float2(viewportW, viewportH);
+  uniforms.translation = translation;
+  return uniforms;
+}
+
+template <typename T>
 void setEncoderScissorForOp(id<MTLRenderCommandEncoder> enc, T const& op, MTLScissorRect fullScissor,
                             MTLScissorRect* last, bool* haveLast) {
   MTLScissorRect sc = fullScissor;
@@ -253,9 +265,22 @@ void setEncoderScissorForOp(id<MTLRenderCommandEncoder> enc, T const& op, MTLSci
   }
 }
 
-template <typename T>
-void setEncoderRoundedClipForOp(id<MTLRenderCommandEncoder> enc, T const& op) {
-  [enc setFragmentBytes:&op.roundedClip length:sizeof(MetalRoundedClipStack) atIndex:0];
+inline void setEncoderRoundedClipBuffer(id<MTLRenderCommandEncoder> enc, id<MTLBuffer> clipBuffer,
+                                        MetalRoundedClipStack* clipDst, std::uint32_t* clipIndex,
+                                        MetalRoundedClipStack const& roundedClip) {
+  clipDst[*clipIndex] = roundedClip;
+  NSUInteger const offset = static_cast<NSUInteger>(*clipIndex) * sizeof(MetalRoundedClipStack);
+  [enc setFragmentBuffer:clipBuffer offset:offset atIndex:0];
+  ++(*clipIndex);
+}
+
+inline void setEncoderDrawUniformBuffer(id<MTLRenderCommandEncoder> enc, id<MTLBuffer> uniformBuffer,
+                                        MetalDrawUniforms* uniformDst, std::uint32_t* uniformIndex,
+                                        MetalDrawUniforms const& uniforms, NSUInteger bufferIndex) {
+  uniformDst[*uniformIndex] = uniforms;
+  NSUInteger const offset = static_cast<NSUInteger>(*uniformIndex) * sizeof(MetalDrawUniforms);
+  [enc setVertexBuffer:uniformBuffer offset:offset atIndex:bufferIndex];
+  ++(*uniformIndex);
 }
 
 } // namespace
@@ -305,16 +330,9 @@ public:
     dispatch_semaphore_wait(frameSem_, DISPATCH_TIME_FOREVER);
     metal_.advanceFrame();
     refreshFrameDrawableMetrics();
-    drawable_ = [metal_.layer() nextDrawable];
-    cmdBuf_ = [metal_.queue() commandBuffer];
-    if (!drawable_) {
-      dispatch_semaphore_signal(frameSem_);
-      cmdBuf_ = nil;
-      if (Application::hasInstance()) {
-        Application::instance().requestRedraw();
-      }
-    }
-    inFrame_ = (drawable_ != nil && cmdBuf_ != nil);
+    drawable_ = nil;
+    cmdBuf_ = nil;
+    inFrame_ = true;
     const CGSize ds = frameDrawableSize_;
     CGFloat cs = metal_.layer().contentsScale;
     if (cs < 0.01) {
@@ -327,9 +345,7 @@ public:
       logicalW_ = static_cast<int>(std::lround(static_cast<double>(ds.width) / static_cast<double>(cs)));
       logicalH_ = static_cast<int>(std::lround(static_cast<double>(ds.height) / static_cast<double>(cs)));
     }
-    if (inFrame_) {
-      glyphAtlas_->prepareForFrameBegin();
-    }
+    glyphAtlas_->prepareForFrameBegin();
   }
 
   void clear(Color color) override { clearColor_ = color; }
@@ -337,7 +353,7 @@ public:
   void setSyncPresent(bool sync) noexcept { syncPresent_ = sync; }
 
   void present() override {
-    if (!inFrame_ || !cmdBuf_ || !drawable_) {
+    if (!inFrame_) {
       syncPresent_ = false;
       return;
     }
@@ -346,7 +362,7 @@ public:
     const float vh = frameDrawableH_;
     if (vw < 1.f || vh < 1.f) {
       syncPresent_ = false;
-      [cmdBuf_ commit];
+      frame_.clear();
       cmdBuf_ = nil;
       drawable_ = nil;
       dispatch_semaphore_signal(frameSem_);
@@ -358,6 +374,23 @@ public:
     metal_.uploadImageOps(frame_.imageOps);
     metal_.uploadPathVertices(frame_.pathVerts);
     metal_.uploadGlyphVertices(frame_.glyphVerts);
+    metal_.reserveDrawStateBuffers(static_cast<std::uint32_t>(frame_.opOrder.size()),
+                                   static_cast<std::uint32_t>(frame_.opOrder.size()));
+
+    drawable_ = [metal_.layer() nextDrawable];
+    cmdBuf_ = [metal_.queue() commandBuffer];
+    if (!drawable_ || !cmdBuf_) {
+      dispatch_semaphore_signal(frameSem_);
+      cmdBuf_ = nil;
+      drawable_ = nil;
+      inFrame_ = false;
+      syncPresent_ = false;
+      frame_.clear();
+      if (Application::hasInstance()) {
+        Application::instance().requestRedraw();
+      }
+      return;
+    }
 
     MTLRenderPassDescriptor* pass = [MTLRenderPassDescriptor renderPassDescriptor];
     pass.colorAttachments[0].texture = drawable_.texture;
@@ -375,6 +408,12 @@ public:
     bool haveScissor = false;
 
     id<MTLBuffer> pathBuf = metal_.pathVertexArenaBuffer();
+    id<MTLBuffer> uniformBuf = metal_.drawUniformArenaBuffer();
+    id<MTLBuffer> clipBuf = metal_.roundedClipArenaBuffer();
+    auto* uniformDst = uniformBuf ? static_cast<MetalDrawUniforms*>([uniformBuf contents]) : nullptr;
+    auto* clipDst = clipBuf ? static_cast<MetalRoundedClipStack*>([clipBuf contents]) : nullptr;
+    std::uint32_t uniformIndex = 0;
+    std::uint32_t clipIndex = 0;
     std::size_t const opCount = frame_.opOrder.size();
     std::size_t i = 0;
     while (i < opCount) {
@@ -390,14 +429,17 @@ public:
           MetalRectOp const& o2 = frame_.rectOps[nextRef.index];
           MetalOpRef const prevRef = frame_.opOrder[j - 1];
           if (o2.isLine != op.isLine || o2.blendMode != op.blendMode || !sameScissorForBatch(op, o2) ||
-              !sameRoundedClipForBatch(op, o2) || nextRef.index != prevRef.index + 1) {
+              !sameRoundedClipForBatch(op, o2) || !sameTranslationForBatch(op, o2) ||
+              nextRef.index != prevRef.index + 1) {
             break;
           }
           ++j;
         }
         std::size_t const runLen = j - i;
         setEncoderScissorForOp(enc, op, fullScissor, &lastScissor, &haveScissor);
-        setEncoderRoundedClipForOp(enc, op);
+        MetalDrawUniforms const uniforms = makeDrawUniforms(vw, vh, op.translation);
+        setEncoderRoundedClipBuffer(enc, clipBuf, clipDst, &clipIndex, op.roundedClip);
+        setEncoderDrawUniformBuffer(enc, uniformBuf, uniformDst, &uniformIndex, uniforms, 2);
         if (!op.isLine) {
           [enc setRenderPipelineState:metal_.rectPSO(op.blendMode)];
           [enc setVertexBuffer:metal_.quadBuffer() offset:0 atIndex:0];
@@ -428,7 +470,7 @@ public:
           }
           MetalGlyphOp const& o2 = frame_.glyphOps[nextRef.index];
           if (o2.blendMode != op.blendMode || !sameScissorForBatch(op, o2) ||
-              !sameRoundedClipForBatch(op, o2) ||
+              !sameRoundedClipForBatch(op, o2) || !sameTranslationForBatch(op, o2) ||
               o2.glyphStart != runStart + runVerts || nextRef.index != frame_.opOrder[j - 1].index + 1) {
             break;
           }
@@ -436,13 +478,13 @@ public:
           ++j;
         }
         setEncoderScissorForOp(enc, op, fullScissor, &lastScissor, &haveScissor);
-        setEncoderRoundedClipForOp(enc, op);
+        setEncoderRoundedClipBuffer(enc, clipBuf, clipDst, &clipIndex, op.roundedClip);
         [enc setRenderPipelineState:metal_.glyphPSO(op.blendMode)];
         id<MTLBuffer> gbuf = metal_.glyphVertexArenaBuffer();
         const NSUInteger goff = static_cast<NSUInteger>(runStart) * sizeof(MetalGlyphVertex);
         [enc setVertexBuffer:gbuf offset:goff atIndex:0];
-        float vp2[2] = {vw, vh};
-        [enc setVertexBytes:vp2 length:sizeof(vp2) atIndex:1];
+        MetalDrawUniforms const uniforms = makeDrawUniforms(vw, vh, op.translation);
+        setEncoderDrawUniformBuffer(enc, uniformBuf, uniformDst, &uniformIndex, uniforms, 1);
         [enc setFragmentTexture:glyphAtlas_->texture() atIndex:0];
         [enc setFragmentSamplerState:metal_.linearSampler() atIndex:0];
         [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:static_cast<NSUInteger>(runVerts)];
@@ -453,15 +495,17 @@ public:
       if (ref.kind == MetalOpRef::Image) {
         MetalImageOp const& op = frame_.imageOps[ref.index];
         setEncoderScissorForOp(enc, op, fullScissor, &lastScissor, &haveScissor);
-        setEncoderRoundedClipForOp(enc, op);
         if (!op.texture) {
           ++i;
           continue;
         }
+        setEncoderRoundedClipBuffer(enc, clipBuf, clipDst, &clipIndex, op.roundedClip);
         [enc setRenderPipelineState:metal_.imagePSO(op.blendMode)];
         [enc setVertexBuffer:metal_.quadBuffer() offset:0 atIndex:0];
         const NSUInteger off = static_cast<NSUInteger>(ref.index) * sizeof(MetalImageInstance);
         [enc setVertexBuffer:metal_.imageInstanceArenaBuffer() offset:off atIndex:1];
+        MetalDrawUniforms const uniforms = makeDrawUniforms(vw, vh, op.translation);
+        setEncoderDrawUniformBuffer(enc, uniformBuf, uniformDst, &uniformIndex, uniforms, 2);
         [enc setFragmentTexture:(__bridge id<MTLTexture>)op.texture atIndex:0];
         [enc setFragmentSamplerState:op.repeatSampler ? metal_.repeatSampler() : metal_.linearSampler() atIndex:0];
         [enc drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:kQuadStripCount
@@ -472,14 +516,16 @@ public:
       if (ref.kind == MetalOpRef::Path) {
         MetalPathOp const& op = frame_.pathOps[ref.index];
         setEncoderScissorForOp(enc, op, fullScissor, &lastScissor, &haveScissor);
-        setEncoderRoundedClipForOp(enc, op);
         if (op.pathCount == 0) {
           ++i;
           continue;
         }
+        setEncoderRoundedClipBuffer(enc, clipBuf, clipDst, &clipIndex, op.roundedClip);
         [enc setRenderPipelineState:metal_.pathPSO(op.blendMode)];
         const NSUInteger off = static_cast<NSUInteger>(op.pathStart) * sizeof(PathVertex);
         [enc setVertexBuffer:pathBuf offset:off atIndex:0];
+        MetalDrawUniforms const uniforms = makeDrawUniforms(vw, vh, op.translation);
+        setEncoderDrawUniformBuffer(enc, uniformBuf, uniformDst, &uniformIndex, uniforms, 1);
         [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:static_cast<NSUInteger>(op.pathCount)];
         ++i;
         continue;
@@ -680,37 +726,19 @@ public:
     }
     const float op = effectiveOpacity();
     Mat3 const& M = currentState().transform;
-    Rect drawR = rect;
-    if (currentState().clip.has_value()) {
-      Rect const inter = intersectRects(rect, *currentState().clip);
-      if (inter.width <= 0.f || inter.height <= 0.f) {
-        return;
-      }
-      drawR = inter;
-    }
-
     CornerRadius crEffective = cornerRadius;
-    {
-      constexpr float eps = 1e-3f;
-      bool const clipped =
-          std::abs(drawR.x - rect.x) > eps || std::abs(drawR.y - rect.y) > eps ||
-          std::abs(drawR.width - rect.width) > eps || std::abs(drawR.height - rect.height) > eps;
-      if (clipped) {
-        crEffective = cornerRadiiAfterAxisAlignedClip(rect, drawR, cornerRadius);
-      }
-      clampRoundRectCornerRadii(drawR.width, drawR.height, crEffective);
-    }
+    clampRoundRectCornerRadii(rect.width, rect.height, crEffective);
 
     float rotationRad = 0.f;
     Rect mapped{};
     if (M.isTranslationOnly()) {
-      mapped = Rect::sharp(drawR.x + M.m[6], drawR.y + M.m[7], drawR.width, drawR.height);
+      mapped = Rect::sharp(rect.x + M.m[6], rect.y + M.m[7], rect.width, rect.height);
       rotationRad = 0.f;
     } else {
       float tx = 0.f;
       float ty = 0.f;
       bool const decomposed = tryDecomposeRotationTranslation(M, &rotationRad, &tx, &ty);
-      mapped = boundsOfTransformedRect(drawR, M);
+      mapped = boundsOfTransformedRect(rect, M);
       if (decomposed) {
         rotationRad = 0.f;
       }
@@ -912,7 +940,6 @@ public:
       return;
     }
     Mat3 const& M = currentState().transform;
-    Rect const mappedClip = boundsOfTransformedRect(dst, M);
     if (currentState().clip.has_value()) {
       Rect const inter = intersectRects(dst, *currentState().clip);
       if (inter.width <= 0.f || inter.height <= 0.f) {
@@ -925,15 +952,7 @@ public:
     if (M.isTranslationOnly()) {
       mapped = Rect::sharp(dst.x + M.m[6], dst.y + M.m[7], dst.width, dst.height);
     } else {
-      if (currentState().clip.has_value()) {
-        Rect const clipped = intersectRects(dst, *currentState().clip);
-        if (clipped.width <= 0.f || clipped.height <= 0.f) {
-          return;
-        }
-        mapped = boundsOfTransformedRect(clipped, M);
-      } else {
-        mapped = mappedClip;
-      }
+      mapped = boundsOfTransformedRect(dst, M);
     }
 
     const float s = dpiScale_;
@@ -976,7 +995,6 @@ public:
       return;
     }
     Mat3 const& M = currentState().transform;
-    Rect const mappedClip = boundsOfTransformedRect(dst, M);
     if (currentState().clip.has_value()) {
       Rect const inter = intersectRects(dst, *currentState().clip);
       if (inter.width <= 0.f || inter.height <= 0.f) {
@@ -989,15 +1007,7 @@ public:
     if (M.isTranslationOnly()) {
       mapped = Rect::sharp(dst.x + M.m[6], dst.y + M.m[7], dst.width, dst.height);
     } else {
-      if (currentState().clip.has_value()) {
-        Rect const clipped = intersectRects(dst, *currentState().clip);
-        if (clipped.width <= 0.f || clipped.height <= 0.f) {
-          return;
-        }
-        mapped = boundsOfTransformedRect(clipped, M);
-      } else {
-        mapped = mappedClip;
-      }
+      mapped = boundsOfTransformedRect(dst, M);
     }
 
     const float s = dpiScale_;
@@ -1319,73 +1329,88 @@ private:
   }
 
 public:
-  void beginRecordedOpsCapture(MetalFrameRecorder* target) { captureRecorder_ = target; }
+  void beginRecordedOpsCapture(MetalFrameRecorder* target) {
+    if (!target) {
+      return;
+    }
+    target->clear();
+    captureRecorder_ = target;
+    stateStack_.push_back(GpuState{});
+    updateClipScissor();
+  }
 
-  void endRecordedOpsCapture() { captureRecorder_ = nullptr; }
+  void endRecordedOpsCapture() {
+    captureRecorder_ = nullptr;
+    if (!stateStack_.empty()) {
+      stateStack_.pop_back();
+    }
+    updateClipScissor();
+  }
 
   void replayRecordedOps(MetalFrameRecorder const& recorded, MetalRecorderSlice const& slice) {
-    std::uint32_t const framePathVertexBase = static_cast<std::uint32_t>(frame_.pathVerts.size());
-    std::uint32_t const frameGlyphVertexBase = static_cast<std::uint32_t>(frame_.glyphVerts.size());
-    std::uint32_t const frameRectBase = static_cast<std::uint32_t>(frame_.rectOps.size());
-    std::uint32_t const frameImageBase = static_cast<std::uint32_t>(frame_.imageOps.size());
-    std::uint32_t const framePathOpBase = static_cast<std::uint32_t>(frame_.pathOps.size());
-    std::uint32_t const frameGlyphOpBase = static_cast<std::uint32_t>(frame_.glyphOps.size());
+    MetalFrameRecorder& frame = frame_;
+    std::uint32_t const framePathVertexBase = static_cast<std::uint32_t>(frame.pathVerts.size());
+    std::uint32_t const frameGlyphVertexBase = static_cast<std::uint32_t>(frame.glyphVerts.size());
+    std::uint32_t const frameRectBase = static_cast<std::uint32_t>(frame.rectOps.size());
+    std::uint32_t const frameImageBase = static_cast<std::uint32_t>(frame.imageOps.size());
+    std::uint32_t const framePathOpBase = static_cast<std::uint32_t>(frame.pathOps.size());
+    std::uint32_t const frameGlyphOpBase = static_cast<std::uint32_t>(frame.glyphOps.size());
 
     if (slice.pathVertexCount > 0) {
-      frame_.pathVerts.insert(frame_.pathVerts.end(),
+      frame.pathVerts.insert(frame.pathVerts.end(),
                               recorded.pathVerts.begin() + static_cast<std::ptrdiff_t>(slice.pathVertexStart),
                               recorded.pathVerts.begin() +
                                   static_cast<std::ptrdiff_t>(slice.pathVertexStart + slice.pathVertexCount));
     }
     if (slice.glyphVertexCount > 0) {
-      frame_.glyphVerts.insert(frame_.glyphVerts.end(),
+      frame.glyphVerts.insert(frame.glyphVerts.end(),
                                recorded.glyphVerts.begin() + static_cast<std::ptrdiff_t>(slice.glyphVertexStart),
                                recorded.glyphVerts.begin() +
                                    static_cast<std::ptrdiff_t>(slice.glyphVertexStart + slice.glyphVertexCount));
     }
     if (slice.rectCount > 0) {
-      frame_.rectOps.insert(frame_.rectOps.end(),
+      frame.rectOps.insert(frame.rectOps.end(),
                             recorded.rectOps.begin() + static_cast<std::ptrdiff_t>(slice.rectStart),
                             recorded.rectOps.begin() + static_cast<std::ptrdiff_t>(slice.rectStart + slice.rectCount));
     }
     if (slice.imageCount > 0) {
-      frame_.imageOps.insert(frame_.imageOps.end(),
+      frame.imageOps.insert(frame.imageOps.end(),
                              recorded.imageOps.begin() + static_cast<std::ptrdiff_t>(slice.imageStart),
                              recorded.imageOps.begin() +
                                  static_cast<std::ptrdiff_t>(slice.imageStart + slice.imageCount));
       for (std::uint32_t i = 0; i < slice.imageCount; ++i) {
-        MetalImageOp& op = frame_.imageOps[frameImageBase + static_cast<std::size_t>(i)];
+        MetalImageOp& op = frame.imageOps[frameImageBase + static_cast<std::size_t>(i)];
         if (op.texture) {
           op.texture = retainTexturePointer(op.texture);
         }
       }
     }
     if (slice.pathOpCount > 0) {
-      frame_.pathOps.insert(frame_.pathOps.end(),
+      frame.pathOps.insert(frame.pathOps.end(),
                             recorded.pathOps.begin() + static_cast<std::ptrdiff_t>(slice.pathOpStart),
                             recorded.pathOps.begin() +
                                 static_cast<std::ptrdiff_t>(slice.pathOpStart + slice.pathOpCount));
       for (std::uint32_t i = 0; i < slice.pathOpCount; ++i) {
-        MetalPathOp& op = frame_.pathOps[framePathOpBase + static_cast<std::size_t>(i)];
+        MetalPathOp& op = frame.pathOps[framePathOpBase + static_cast<std::size_t>(i)];
         op.pathStart = framePathVertexBase + (op.pathStart - slice.pathVertexStart);
       }
     }
     if (slice.glyphOpCount > 0) {
-      frame_.glyphOps.insert(frame_.glyphOps.end(),
+      frame.glyphOps.insert(frame.glyphOps.end(),
                              recorded.glyphOps.begin() + static_cast<std::ptrdiff_t>(slice.glyphOpStart),
                              recorded.glyphOps.begin() +
                                  static_cast<std::ptrdiff_t>(slice.glyphOpStart + slice.glyphOpCount));
       for (std::uint32_t i = 0; i < slice.glyphOpCount; ++i) {
-        MetalGlyphOp& op = frame_.glyphOps[frameGlyphOpBase + static_cast<std::size_t>(i)];
+        MetalGlyphOp& op = frame.glyphOps[frameGlyphOpBase + static_cast<std::size_t>(i)];
         op.glyphStart = frameGlyphVertexBase + (op.glyphStart - slice.glyphVertexStart);
       }
     }
     if (slice.orderCount > 0) {
-      frame_.opOrder.insert(frame_.opOrder.end(),
+      frame.opOrder.insert(frame.opOrder.end(),
                             recorded.opOrder.begin() + static_cast<std::ptrdiff_t>(slice.orderStart),
                             recorded.opOrder.begin() + static_cast<std::ptrdiff_t>(slice.orderStart + slice.orderCount));
       for (std::uint32_t i = 0; i < slice.orderCount; ++i) {
-        MetalOpRef& ref = frame_.opOrder[frame_.opOrder.size() - slice.orderCount + i];
+        MetalOpRef& ref = frame.opOrder[frame.opOrder.size() - slice.orderCount + i];
         switch (ref.kind) {
         case MetalOpRef::Rect:
           ref.index = frameRectBase + (ref.index - slice.rectStart);
@@ -1402,6 +1427,159 @@ public:
         }
       }
     }
+  }
+
+  bool replayRecordedLocalOps(MetalFrameRecorder const& recorded, MetalRecorderSlice const& slice) {
+    if (!inFrame_) {
+      return false;
+    }
+    if (!currentState().transform.isTranslationOnly()) {
+      return false;
+    }
+
+    float const dx = currentState().transform.m[6] * dpiScaleX_;
+    float const dy = currentState().transform.m[7] * dpiScaleY_;
+    vector_float2 const translation = simd_make_float2(dx, dy);
+    float const opacityScale = currentState().opacity;
+    std::optional<Rect> const clipRect = currentState().clip;
+    MetalFrameRecorder& frame = frame_;
+    std::uint32_t const framePathVertexBase = static_cast<std::uint32_t>(frame.pathVerts.size());
+    std::uint32_t const frameGlyphVertexBase = static_cast<std::uint32_t>(frame.glyphVerts.size());
+    std::uint32_t const frameRectBase = static_cast<std::uint32_t>(frame.rectOps.size());
+    std::uint32_t const frameImageBase = static_cast<std::uint32_t>(frame.imageOps.size());
+    std::uint32_t const framePathOpBase = static_cast<std::uint32_t>(frame.pathOps.size());
+    std::uint32_t const frameGlyphOpBase = static_cast<std::uint32_t>(frame.glyphOps.size());
+
+    if (slice.pathVertexCount > 0) {
+      frame.pathVerts.reserve(frame.pathVerts.size() + slice.pathVertexCount);
+    }
+    if (slice.glyphVertexCount > 0) {
+      frame.glyphVerts.reserve(frame.glyphVerts.size() + slice.glyphVertexCount);
+    }
+    if (slice.rectCount > 0) {
+      frame.rectOps.reserve(frame.rectOps.size() + slice.rectCount);
+    }
+    if (slice.imageCount > 0) {
+      frame.imageOps.reserve(frame.imageOps.size() + slice.imageCount);
+    }
+    if (slice.pathOpCount > 0) {
+      frame.pathOps.reserve(frame.pathOps.size() + slice.pathOpCount);
+    }
+    if (slice.glyphOpCount > 0) {
+      frame.glyphOps.reserve(frame.glyphOps.size() + slice.glyphOpCount);
+    }
+    if (slice.orderCount > 0) {
+      frame.opOrder.reserve(frame.opOrder.size() + slice.orderCount);
+    }
+
+    if (slice.pathVertexCount > 0) {
+      std::size_t const start = static_cast<std::size_t>(slice.pathVertexStart);
+      std::size_t const count = static_cast<std::size_t>(slice.pathVertexCount);
+      frame.pathVerts.insert(frame.pathVerts.end(), recorded.pathVerts.begin() + static_cast<std::ptrdiff_t>(start),
+                             recorded.pathVerts.begin() + static_cast<std::ptrdiff_t>(start + count));
+      if (opacityScale < 0.9999f) {
+        for (std::size_t i = 0; i < count; ++i) {
+          PathVertex& vertex = frame.pathVerts[static_cast<std::size_t>(framePathVertexBase) + i];
+          vertex.color[3] *= opacityScale;
+        }
+      }
+    }
+
+    if (slice.glyphVertexCount > 0) {
+      std::size_t const start = static_cast<std::size_t>(slice.glyphVertexStart);
+      std::size_t const count = static_cast<std::size_t>(slice.glyphVertexCount);
+      frame.glyphVerts.insert(frame.glyphVerts.end(),
+                              recorded.glyphVerts.begin() + static_cast<std::ptrdiff_t>(start),
+                              recorded.glyphVerts.begin() + static_cast<std::ptrdiff_t>(start + count));
+      if (opacityScale < 0.9999f) {
+        for (std::size_t i = 0; i < count; ++i) {
+          MetalGlyphVertex& vertex = frame.glyphVerts[static_cast<std::size_t>(frameGlyphVertexBase) + i];
+          vertex.color *= opacityScale;
+        }
+      }
+    }
+
+    if (slice.rectCount > 0) {
+      std::size_t const start = static_cast<std::size_t>(slice.rectStart);
+      std::size_t const count = static_cast<std::size_t>(slice.rectCount);
+      frame.rectOps.insert(frame.rectOps.end(), recorded.rectOps.begin() + static_cast<std::ptrdiff_t>(start),
+                           recorded.rectOps.begin() + static_cast<std::ptrdiff_t>(start + count));
+      for (std::size_t i = 0; i < count; ++i) {
+        MetalRectOp& op = frame.rectOps[static_cast<std::size_t>(frameRectBase) + i];
+        (void)clipRect;
+        op.translation = translation;
+        op.inst.strokeWidthOpacity.y *= opacityScale;
+        tagOpWithClip(op, clipScissorValid_, clipScissor_, clipRoundedStack_);
+      }
+    }
+
+    if (slice.imageCount > 0) {
+      std::size_t const start = static_cast<std::size_t>(slice.imageStart);
+      std::size_t const count = static_cast<std::size_t>(slice.imageCount);
+      frame.imageOps.insert(frame.imageOps.end(), recorded.imageOps.begin() + static_cast<std::ptrdiff_t>(start),
+                            recorded.imageOps.begin() + static_cast<std::ptrdiff_t>(start + count));
+      for (std::size_t i = 0; i < count; ++i) {
+        MetalImageOp& op = frame.imageOps[static_cast<std::size_t>(frameImageBase) + i];
+        op.translation = translation;
+        op.inst.sdf.strokeWidthOpacity.y *= opacityScale;
+        if (op.texture) {
+          op.texture = retainTexturePointer(op.texture);
+        }
+        tagOpWithClip(op, clipScissorValid_, clipScissor_, clipRoundedStack_);
+      }
+    }
+
+    if (slice.pathOpCount > 0) {
+      std::size_t const start = static_cast<std::size_t>(slice.pathOpStart);
+      std::size_t const count = static_cast<std::size_t>(slice.pathOpCount);
+      frame.pathOps.insert(frame.pathOps.end(), recorded.pathOps.begin() + static_cast<std::ptrdiff_t>(start),
+                           recorded.pathOps.begin() + static_cast<std::ptrdiff_t>(start + count));
+      for (std::size_t i = 0; i < count; ++i) {
+        MetalPathOp& op = frame.pathOps[static_cast<std::size_t>(framePathOpBase) + i];
+        op.pathStart = framePathVertexBase + (op.pathStart - slice.pathVertexStart);
+        op.translation = translation;
+        tagOpWithClip(op, clipScissorValid_, clipScissor_, clipRoundedStack_);
+      }
+    }
+
+    if (slice.glyphOpCount > 0) {
+      std::size_t const start = static_cast<std::size_t>(slice.glyphOpStart);
+      std::size_t const count = static_cast<std::size_t>(slice.glyphOpCount);
+      frame.glyphOps.insert(frame.glyphOps.end(), recorded.glyphOps.begin() + static_cast<std::ptrdiff_t>(start),
+                            recorded.glyphOps.begin() + static_cast<std::ptrdiff_t>(start + count));
+      for (std::size_t i = 0; i < count; ++i) {
+        MetalGlyphOp& op = frame.glyphOps[static_cast<std::size_t>(frameGlyphOpBase) + i];
+        op.glyphStart = frameGlyphVertexBase + (op.glyphStart - slice.glyphVertexStart);
+        op.translation = translation;
+        tagOpWithClip(op, clipScissorValid_, clipScissor_, clipRoundedStack_);
+      }
+    }
+
+    if (slice.orderCount > 0) {
+      std::size_t const start = static_cast<std::size_t>(slice.orderStart);
+      std::size_t const count = static_cast<std::size_t>(slice.orderCount);
+      frame.opOrder.insert(frame.opOrder.end(), recorded.opOrder.begin() + static_cast<std::ptrdiff_t>(start),
+                           recorded.opOrder.begin() + static_cast<std::ptrdiff_t>(start + count));
+      for (std::size_t i = 0; i < count; ++i) {
+        MetalOpRef& ref = frame.opOrder[frame.opOrder.size() - count + i];
+        switch (ref.kind) {
+        case MetalOpRef::Rect:
+          ref.index = frameRectBase + (ref.index - slice.rectStart);
+          break;
+        case MetalOpRef::Image:
+          ref.index = frameImageBase + (ref.index - slice.imageStart);
+          break;
+        case MetalOpRef::Path:
+          ref.index = framePathOpBase + (ref.index - slice.pathOpStart);
+          break;
+        case MetalOpRef::Glyph:
+          ref.index = frameGlyphOpBase + (ref.index - slice.glyphOpStart);
+          break;
+        }
+      }
+    }
+
+    return true;
   }
 
   void waitForLastPresentComplete() {
@@ -1480,6 +1658,16 @@ void replayRecordedOpsForCanvas(Canvas* canvas, MetalFrameRecorder const& record
   if (auto* mc = dynamic_cast<MetalCanvas*>(canvas)) {
     mc->replayRecordedOps(recorded, slice);
   }
+}
+
+bool replayRecordedLocalOpsForCanvas(Canvas* canvas, MetalFrameRecorder const& recorded, MetalRecorderSlice const& slice) {
+  if (!canvas) {
+    return false;
+  }
+  if (auto* mc = dynamic_cast<MetalCanvas*>(canvas)) {
+    return mc->replayRecordedLocalOps(recorded, slice);
+  }
+  return false;
 }
 
 bool requestNextFrameCaptureForCanvas(Canvas* canvas) {

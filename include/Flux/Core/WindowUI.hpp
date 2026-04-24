@@ -27,14 +27,4 @@ void Window::setView() {
   setViewRoot(std::make_unique<TypedRootHolder<C>>(std::in_place));
 }
 
-template<typename T>
-void Window::setEnvironmentValue(T value) {
-  environmentLayerMut().set(std::move(value));
-}
-
-template<typename T>
-T const* Window::environmentValue() const {
-  return environmentLayer().get<T>();
-}
-
 } // namespace flux

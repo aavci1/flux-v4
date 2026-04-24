@@ -6,7 +6,6 @@
 #include <Flux/Core/Events.hpp>
 
 #include <algorithm>
-#include <chrono>
 #include <cstdint>
 #include <vector>
 
@@ -14,7 +13,9 @@ namespace flux {
 
 namespace {
 
-constexpr auto kAnimationInterval = std::chrono::nanoseconds(1'000'000'000 / 60);
+struct AnimationFramePulse {
+  std::int64_t deadlineNanos = 0;
+};
 
 } // namespace
 
@@ -30,26 +31,38 @@ void AnimationClock::install(EventQueue& q) {
     return;
   }
   installed_ = true;
-  q.on<TimerEvent>([this](TimerEvent const& e) {
-    if (e.timerId != timerId_) {
+  q.on<FrameEvent>([this, &q](FrameEvent const& e) {
+    if (!running_ || framePulseQueued_) {
       return;
     }
-    onTick(e.deadlineNanos);
+    framePulseQueued_ = true;
+    q.post(AnimationFramePulse{.deadlineNanos = e.deadlineNanos});
   });
-  if (needsTimer() && !running_) {
-    startTimer();
+  q.on<AnimationFramePulse>([this](AnimationFramePulse const& pulse) {
+    framePulseQueued_ = false;
+    if (!running_) {
+      return;
+    }
+    onTick(pulse.deadlineNanos);
+    if (needsFramePump()) {
+      startFramePump();
+    }
+  });
+  if (needsFramePump() && !running_) {
+    startFramePump();
   }
 }
 
 void AnimationClock::shutdown() {
-  stopTimer();
+  stopFramePump();
   active_.clear();
   subscribers_.clear();
   nextSubscriberId_ = 1;
+  framePulseQueued_ = false;
   installed_ = false;
 }
 
-bool AnimationClock::needsTimer() const {
+bool AnimationClock::needsFramePump() const {
   return !active_.empty() || !subscribers_.empty();
 }
 
@@ -62,7 +75,7 @@ void AnimationClock::registerAnimation(AnimationBase* animation) {
   }
   active_.push_back(animation);
   if (!running_) {
-    startTimer();
+    startFramePump();
   }
 }
 
@@ -71,8 +84,8 @@ void AnimationClock::unregisterAnimation(AnimationBase* animation) {
     return;
   }
   std::erase(active_, animation);
-  if (!needsTimer()) {
-    stopTimer();
+  if (!needsFramePump()) {
+    stopFramePump();
   }
 }
 
@@ -83,7 +96,7 @@ ObserverHandle AnimationClock::subscribe(std::function<void(AnimationTick const&
   std::uint64_t const id = nextSubscriberId_++;
   subscribers_.push_back(Subscriber{id, std::move(callback)});
   if (!running_) {
-    startTimer();
+    startFramePump();
   }
   return ObserverHandle{id};
 }
@@ -93,8 +106,8 @@ void AnimationClock::unsubscribe(ObserverHandle handle) {
     return;
   }
   std::erase_if(subscribers_, [&](Subscriber const& s) { return s.id == handle.id; });
-  if (!needsTimer()) {
-    stopTimer();
+  if (!needsFramePump()) {
+    stopFramePump();
   }
 }
 
@@ -119,31 +132,27 @@ void AnimationClock::onTick(std::int64_t deadlineNanos) {
     }
   }
 
-  if (!needsTimer()) {
-    stopTimer();
+  if (!needsFramePump()) {
+    stopFramePump();
   }
 }
 
-void AnimationClock::startTimer() {
-  if (running_) {
-    return;
-  }
+void AnimationClock::startFramePump() {
   if (!Application::hasInstance()) {
     return;
   }
-  timerId_ = Application::instance().scheduleRepeatingTimer(kAnimationInterval, 0);
-  running_ = true;
+  if (!running_) {
+    running_ = true;
+  }
+  Application::instance().requestAnimationFrames();
 }
 
-void AnimationClock::stopTimer() {
+void AnimationClock::stopFramePump() {
   if (!running_) {
     return;
   }
-  if (timerId_ != 0) {
-    Application::instance().cancelTimer(timerId_);
-  }
-  timerId_ = 0;
   running_ = false;
+  framePulseQueued_ = false;
 }
 
 } // namespace flux

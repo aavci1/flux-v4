@@ -15,6 +15,10 @@ struct ScaleAroundCenter : ViewModifiers<ScaleAroundCenter> {
 
   float scale = 1.f;
   Element child;
+
+  bool operator==(ScaleAroundCenter const& other) const {
+    return scale == other.scale && child.structuralEquals(other.child);
+  }
 };
 
 } // namespace flux

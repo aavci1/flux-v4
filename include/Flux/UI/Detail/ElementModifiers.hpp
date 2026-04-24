@@ -5,20 +5,24 @@
 /// Internal retained-UI state used by `Element` measurement/build plumbing.
 
 #include <Flux/Core/Cursor.hpp>
+#include <Flux/Core/ComponentKey.hpp>
 #include <Flux/Core/Types.hpp>
 #include <Flux/Graphics/Styles.hpp>
-#include <Flux/UI/ComponentKey.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 
 #include <cmath>
 #include <functional>
 #include <memory>
 #include <optional>
+#include <type_traits>
+#include <vector>
 
 namespace flux {
 
 class Element;
+class EnvironmentLayer;
 struct Popover;
+struct Spacer;
 class StateStore;
 
 namespace detail {
@@ -33,6 +37,22 @@ struct CompositeBodyResolution {
   bool descendantsStable = false;
 };
 
+inline LocalId compositeBodyLocalId() {
+  return LocalId::fromString("$flux.body");
+}
+
+struct ElementModifiers;
+
+struct ResolvedElement {
+  std::unique_ptr<Element> sceneElement{};
+  std::vector<EnvironmentLayer> environmentLayers{};
+  std::vector<ElementModifiers> modifierLayers{};
+  std::vector<ComponentKey> bodyComponentKeys{};
+  ComponentKey stableInteractionKey{};
+  bool nestSceneUnderFirstBody = false;
+  bool descendantsStable = false;
+};
+
 template<typename C, typename BuildFn>
 CompositeBodyResolution resolveCompositeBody(StateStore* store, ComponentKey const& key,
                                              LayoutConstraints const& constraints, C const& value,
@@ -42,6 +62,8 @@ template<typename C>
 float flexGrowOf(C const& v) {
   if constexpr (requires { v.flexGrow; }) {
     return v.flexGrow;
+  } else if constexpr (std::is_same_v<C, Spacer>) {
+    return 1.f;
   }
   return 0.f;
 }

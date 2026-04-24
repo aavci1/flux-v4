@@ -18,6 +18,7 @@
 #include <memory>
 #include <stdexcept>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -46,9 +47,16 @@ Application* gCurrent = nullptr;
 } // namespace
 
 struct Application::Impl {
+  struct WindowRenderState {
+    bool redrawRequested = false;
+    bool frameReady = false;
+  };
+
   EventQueue eventQueue_;
   std::vector<std::unique_ptr<Window>> windows_;
   std::unordered_map<unsigned int, Window*> byHandle_;
+  std::unordered_map<unsigned int, WindowRenderState> renderStates_;
+  std::unordered_set<unsigned int> pendingAdoptRedraws_;
 
   std::unique_ptr<CoreTextSystem> textSystem_;
   std::unique_ptr<Clipboard> clipboard_;
@@ -58,7 +66,6 @@ struct Application::Impl {
   void* iconFont_ = nullptr;
 
   bool quit_ = false;
-  bool redraw_ = false;
   bool reactiveDirty_ = false;
 
   struct NextFrameEntry {
@@ -145,11 +152,25 @@ Application::Application(int /*argc*/, char** /*argv*/) {
         return;
       }
       app->d->byHandle_.erase(closeHandle);
+      app->d->renderStates_.erase(closeHandle);
       app->d->windows_.erase(it);
       if (app->d->windows_.empty()) {
         app->quit();
       }
     });
+  });
+
+  d->eventQueue_.on<FrameEvent>([this](FrameEvent const& ev) {
+    if (ev.windowHandle == 0) {
+      return;
+    }
+    auto it = d->renderStates_.find(ev.windowHandle);
+    auto windowIt = d->byHandle_.find(ev.windowHandle);
+    if (it == d->renderStates_.end() || windowIt == d->byHandle_.end() || !windowIt->second) {
+      return;
+    }
+    it->second.frameReady = true;
+    windowIt->second->platformWindow()->acknowledgeAnimationFrameTick();
   });
 
   [NSApplication sharedApplication];
@@ -175,6 +196,12 @@ void Application::adoptOwnedWindow(std::unique_ptr<Window> window) {
   unsigned int const h = raw->handle();
   d->windows_.push_back(std::move(window));
   d->byHandle_[h] = raw;
+  d->renderStates_[h] = {};
+  if (d->pendingAdoptRedraws_.erase(h) > 0) {
+    requestWindowRedraw(h);
+  } else if (AnimationClock::instance().needsFramePump()) {
+    raw->platformWindow()->requestAnimationFrame();
+  }
 }
 
 void Application::onWindowRegistered(Window* window) {
@@ -184,7 +211,11 @@ void Application::onWindowRegistered(Window* window) {
   window->platformWindow()->show();
 }
 
-void Application::unregisterWindowHandle(unsigned int handle) { d->byHandle_.erase(handle); }
+void Application::unregisterWindowHandle(unsigned int handle) {
+  d->byHandle_.erase(handle);
+  d->renderStates_.erase(handle);
+  d->pendingAdoptRedraws_.erase(handle);
+}
 
 EventQueue& Application::eventQueue() { return d->eventQueue_; }
 
@@ -226,31 +257,93 @@ void Application::wakeEventLoop() {
   }
 }
 
-void Application::requestRedraw() {
-  d->redraw_ = true;
+void Application::requestAnimationFrames() {
+  for (auto& w : d->windows_) {
+    if (w) {
+      w->platformWindow()->requestAnimationFrame();
+    }
+  }
   if (!isMainThread()) {
     wakeEventLoop();
   }
 }
 
-void Application::presentAllWindows() {
+void Application::requestRedraw() {
+  for (auto const& [handle, window] : d->byHandle_) {
+    (void)window;
+    requestWindowRedraw(handle);
+  }
+}
+
+void Application::requestWindowRedraw(unsigned int handle) {
+  auto stateIt = d->renderStates_.find(handle);
+  auto windowIt = d->byHandle_.find(handle);
+  if (stateIt == d->renderStates_.end() || windowIt == d->byHandle_.end() || !windowIt->second) {
+    d->pendingAdoptRedraws_.insert(handle);
+    return;
+  }
+  stateIt->second.redrawRequested = true;
+  windowIt->second->platformWindow()->requestAnimationFrame();
+  if (!isMainThread()) {
+    wakeEventLoop();
+  }
+}
+
+void Application::processReactiveUpdates() {
+  if (!d->reactiveDirty_) {
+    return;
+  }
+  d->reactiveDirty_ = false;
+  for (auto& e : d->nextFrame_) {
+    if (e.callback) {
+      e.callback();
+    }
+  }
+}
+
+void Application::presentRequestedWindows(bool requireFrameReady, bool keepFramePump) {
   for (auto& w : d->windows_) {
     if (!w) {
       continue;
     }
-    Canvas& canvas = w->canvas();
-    canvas.beginFrame();
-    w->render(canvas);
-    canvas.present();
+    auto stateIt = d->renderStates_.find(w->handle());
+    if (stateIt == d->renderStates_.end()) {
+      continue;
+    }
+    Impl::WindowRenderState& state = stateIt->second;
+    bool const hasFrameReady = state.frameReady;
+    if (!state.redrawRequested && !hasFrameReady) {
+      continue;
+    }
+    if (requireFrameReady && state.redrawRequested && !hasFrameReady) {
+      continue;
+    }
+
+    bool rendered = false;
+    if (state.redrawRequested && (!requireFrameReady || hasFrameReady)) {
+      state.redrawRequested = false;
+      if (hasFrameReady) {
+        state.frameReady = false;
+      }
+      Canvas& canvas = w->canvas();
+      canvas.beginFrame();
+      w->render(canvas);
+      canvas.present();
+      rendered = true;
+    }
+
+    if (hasFrameReady) {
+      state.frameReady = false;
+      w->platformWindow()->completeAnimationFrame(keepFramePump || state.redrawRequested);
+    } else if (rendered && !requireFrameReady) {
+      w->platformWindow()->completeAnimationFrame(keepFramePump || state.redrawRequested);
+    }
   }
 }
 
 void Application::flushRedraw() {
-  if (!d->redraw_) {
-    return;
-  }
-  d->redraw_ = false;
-  presentAllWindows();
+  processReactiveUpdates();
+  presentRequestedWindows(false, AnimationClock::instance().needsFramePump());
 }
 
 std::uint64_t Application::scheduleRepeatingTimer(std::chrono::nanoseconds interval, unsigned int windowHandle) {
@@ -294,22 +387,12 @@ int Application::exec() {
       }
     }
 
-    if (d->reactiveDirty_) {
-      d->reactiveDirty_ = false;
-      for (auto& e : d->nextFrame_) {
-        if (e.callback) {
-          e.callback();
-        }
-      }
-    }
+    processReactiveUpdates();
 
-    if (d->redraw_) {
-      d->redraw_ = false;
-      presentAllWindows();
-    }
+    presentRequestedWindows(true, AnimationClock::instance().needsFramePump());
 
     int timeoutMs = d->nextTimerTimeoutMs();
-    if (d->redraw_ || d->reactiveDirty_) {
+    if (d->reactiveDirty_) {
       timeoutMs = 0;
     }
     if (!d->windows_.empty()) {

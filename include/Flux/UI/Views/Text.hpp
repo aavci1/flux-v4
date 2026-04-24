@@ -33,6 +33,15 @@ struct Text : ViewModifiers<Text> {
   TextWrapping wrapping = TextWrapping::NoWrap;
   int maxLines = 0;
   float firstBaselineOffset = 0.f;
+
+  bool operator==(Text const& other) const {
+    return text == other.text && font == other.font && color == other.color &&
+           selectionColor == other.selectionColor && selectable == other.selectable &&
+           horizontalAlignment == other.horizontalAlignment &&
+           verticalAlignment == other.verticalAlignment && wrapping == other.wrapping &&
+           maxLines == other.maxLines &&
+           firstBaselineOffset == other.firstBaselineOffset;
+  }
 };
 
 } // namespace flux
