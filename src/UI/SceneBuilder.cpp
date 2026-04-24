@@ -12,6 +12,7 @@
 #include <limits>
 #include <utility>
 
+#include "Debug/PerfCounters.hpp"
 #include "UI/Build/ComponentBuildContext.hpp"
 #include "UI/Build/ComponentBuildSupport.hpp"
 #include "UI/Layout/LayoutHelpers.hpp"
@@ -167,6 +168,7 @@ SceneBuilder::wrapModifierLayer(std::unique_ptr<scenegraph::SceneNode> root,
   (void)innerSize;
   std::unique_ptr<scenegraph::RectNode> wrapper{};
   if (existingWrapper && existingWrapper->kind() == scenegraph::SceneNodeKind::Rect) {
+    recordNodeReuse();
     wrapper = std::unique_ptr<scenegraph::RectNode>(
         static_cast<scenegraph::RectNode*>(existingWrapper.release()));
   } else {
@@ -249,6 +251,12 @@ SceneBuilder::build(Element const& el, LayoutConstraints const& constraints, Com
       sceneGraph_->clearGeometry();
     }
   }
+  debug::perf::recordBuildCounters(debug::perf::BuildCounters{
+      .resolvedNodes = lastBuildStats_.resolvedNodes,
+      .materializedNodes = lastBuildStats_.materializedNodes,
+      .arrangedNodes = lastBuildStats_.arrangedNodes,
+      .reusedNodes = lastBuildStats_.reusedNodes,
+  });
   return node;
 }
 
@@ -290,6 +298,12 @@ SceneBuilder::buildSubtree(Element const& el, LayoutConstraints const& constrain
       sceneGraph_->clearGeometry();
     }
   }
+  debug::perf::recordBuildCounters(debug::perf::BuildCounters{
+      .resolvedNodes = lastBuildStats_.resolvedNodes,
+      .materializedNodes = lastBuildStats_.materializedNodes,
+      .arrangedNodes = lastBuildStats_.arrangedNodes,
+      .reusedNodes = lastBuildStats_.reusedNodes,
+  });
   return node;
 }
 

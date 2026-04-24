@@ -20,6 +20,8 @@
 #include <unordered_map>
 #include <utility>
 
+#include "Debug/PerfCounters.hpp"
+
 namespace flux::scenegraph {
 
 namespace {
@@ -147,6 +149,7 @@ struct SceneRenderer::Impl {
             std::unique_ptr<PreparedRenderOps> &prepared =
                 detail::SceneNodeAccess::preparedRenderOps(node);
             if (node.isDirty() || !prepared) {
+                debug::perf::recordPreparedPrepareCall();
                 prepared = renderer->prepare(node);
                 detail::SceneNodeAccess::clearDirty(node);
             }
@@ -190,10 +193,12 @@ struct SceneRenderer::Impl {
                     return false;
                 }
                 if (nodeOpacity == 1.f) {
+                    debug::perf::recordPreparedReplayCall();
                     return prepared->replay(*renderer);
                 }
                 renderer->save();
                 renderer->setOpacity(nodeOpacity);
+                debug::perf::recordPreparedReplayCall();
                 bool const replayed = prepared->replay(*renderer);
                 renderer->restore();
                 return replayed;
@@ -223,8 +228,13 @@ struct SceneRenderer::Impl {
             } else {
                 std::unique_ptr<PreparedRenderOps> &prepared =
                     detail::SceneNodeAccess::preparedRenderOps(node);
-                if (!prepared || !prepared->replay(*renderer)) {
+                if (!prepared) {
                     node.render(*renderer);
+                } else {
+                    debug::perf::recordPreparedReplayCall();
+                    if (!prepared->replay(*renderer)) {
+                        node.render(*renderer);
+                    }
                 }
             }
         }
@@ -260,10 +270,12 @@ SceneRenderer::SceneRenderer(Renderer &renderer) : impl_(std::make_unique<Impl>(
 SceneRenderer::~SceneRenderer() = default;
 
 void SceneRenderer::render(SceneGraph const &graph) {
+    debug::perf::ScopedTimer perfTimer(debug::perf::TimedMetric::SceneRender);
     impl_->render(graph);
 }
 
 void SceneRenderer::render(SceneNode const &node) {
+    debug::perf::ScopedTimer perfTimer(debug::perf::TimedMetric::SceneRender);
     impl_->render(node);
 }
 

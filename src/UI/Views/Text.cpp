@@ -97,6 +97,7 @@ ComponentBuildResult buildMeasuredComponent(Text const& text, ComponentBuildCont
   } else {
     std::unique_ptr<scenegraph::TextNode> textNode{};
     if (existing && existing->kind() == scenegraph::SceneNodeKind::Text) {
+      ctx.recordNodeReuse();
       textNode = std::unique_ptr<scenegraph::TextNode>(
           static_cast<scenegraph::TextNode*>(existing.release()));
       textNode->setBounds(Rect {0.f, 0.f, frameRect.width, frameRect.height});

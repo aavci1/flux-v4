@@ -34,4 +34,12 @@ inline bool layoutEnabled() {
   return cached != 0;
 }
 
+inline bool perfEnabled() {
+  static int cached = -1;
+  if (cached < 0) {
+    cached = envTruthy(std::getenv("FLUX_DEBUG_PERF")) ? 1 : 0;
+  }
+  return cached != 0;
+}
+
 } // namespace flux::debug

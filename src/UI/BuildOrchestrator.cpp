@@ -11,6 +11,7 @@
 
 #include <Flux/UI/Detail/LayoutDebugDump.hpp>
 
+#include "Debug/PerfCounters.hpp"
 #include "UI/Build/BuildPass.hpp"
 #include "UI/DebugFlags.hpp"
 
@@ -100,6 +101,7 @@ void BuildOrchestrator::subscribeToRebuild(std::function<void()> onFrameNeeded) 
 }
 
 bool BuildOrchestrator::tryIncrementalComponentRebuild(LayoutConstraints const& rootConstraints) {
+  debug::perf::ScopedTimer perfTimer(debug::perf::TimedMetric::IncrementalRebuild);
   (void)rootConstraints;
   if (!rootHolder_) {
     return false;

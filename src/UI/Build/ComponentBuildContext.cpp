@@ -92,6 +92,10 @@ void ComponentBuildContext::recordMeasuredSize(Element const& child, LocalId loc
   recordChildMeasure(child, childKey(local), constraints, hints, size);
 }
 
+void ComponentBuildContext::recordNodeReuse() const noexcept {
+  builder_.recordNodeReuse();
+}
+
 std::unique_ptr<scenegraph::SceneNode>
 ComponentBuildContext::buildChild(Element const& child, LocalId local, LayoutConstraints const& constraints,
                                   LayoutHints const& hints, Point origin, Size assignedSize,

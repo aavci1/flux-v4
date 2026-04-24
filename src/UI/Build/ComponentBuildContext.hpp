@@ -59,6 +59,7 @@ public:
                           LayoutConstraints const& constraints, LayoutHints const& hints, Size size) const;
   void recordMeasuredSize(Element const& child, LocalId local, LayoutConstraints const& constraints,
                           LayoutHints const& hints, Size size) const;
+  void recordNodeReuse() const noexcept;
   [[nodiscard]] std::unique_ptr<scenegraph::SceneNode>
   buildChild(Element const& child, LocalId local, LayoutConstraints const& constraints,
              LayoutHints const& hints, Point origin, Size assignedSize, bool hasAssignedWidth,

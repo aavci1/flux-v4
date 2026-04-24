@@ -29,6 +29,7 @@ ComponentBuildResult buildMeasuredComponent(Rectangle const &, ComponentBuildCon
     Theme const &theme = ctx.theme();
     std::unique_ptr<scenegraph::RectNode> rectNode{};
     if (existing && existing->kind() == scenegraph::SceneNodeKind::Rect) {
+        ctx.recordNodeReuse();
         rectNode = std::unique_ptr<scenegraph::RectNode>(
             static_cast<scenegraph::RectNode*>(existing.release())
         );

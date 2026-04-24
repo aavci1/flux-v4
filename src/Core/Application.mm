@@ -7,6 +7,7 @@
 #include <Flux/Reactive/AnimationClock.hpp>
 
 #include "Core/PlatformWindow.hpp"
+#include "Debug/PerfCounters.hpp"
 #include "Graphics/CoreTextSystem.hpp"
 #include "Platform/Mac/MacClipboard.hpp"
 
@@ -290,6 +291,7 @@ void Application::requestWindowRedraw(unsigned int handle) {
 }
 
 void Application::processReactiveUpdates() {
+  debug::perf::ScopedTimer perfTimer(debug::perf::TimedMetric::ProcessReactiveUpdates);
   if (!d->reactiveDirty_) {
     return;
   }

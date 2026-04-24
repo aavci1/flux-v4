@@ -32,10 +32,11 @@ namespace build = detail::build;
 namespace {
 
 std::unique_ptr<scenegraph::GroupNode>
-reuseGroupNode(std::unique_ptr<scenegraph::SceneNode> existing,
+reuseGroupNode(detail::ComponentBuildContext const& ctx, std::unique_ptr<scenegraph::SceneNode> existing,
                std::vector<std::unique_ptr<scenegraph::SceneNode>>& existingChildren) {
   existingChildren.clear();
   if (existing && existing->kind() == scenegraph::SceneNodeKind::Group) {
+    ctx.recordNodeReuse();
     auto group = std::unique_ptr<scenegraph::GroupNode>(
         static_cast<scenegraph::GroupNode*>(existing.release()));
     existingChildren = group->releaseChildren();
@@ -503,7 +504,7 @@ namespace detail {
 ComponentBuildResult buildMeasuredComponent(VStack const& stack, ComponentBuildContext& ctx,
                                             std::unique_ptr<scenegraph::SceneNode> existing) {
   std::vector<std::unique_ptr<scenegraph::SceneNode>> existingChildren{};
-  auto group = reuseGroupNode(std::move(existing), existingChildren);
+  auto group = reuseGroupNode(ctx, std::move(existing), existingChildren);
 
   bool const widthAssigned = ctx.hasAssignedWidth() && build::zStackAxisStretches(ctx.hints().zStackHorizontalAlign);
   bool const heightAssigned = ctx.hasAssignedHeight() && build::zStackAxisStretches(ctx.hints().zStackVerticalAlign);
@@ -564,7 +565,7 @@ ComponentBuildResult buildMeasuredComponent(VStack const& stack, ComponentBuildC
 ComponentBuildResult buildMeasuredComponent(HStack const& stack, ComponentBuildContext& ctx,
                                             std::unique_ptr<scenegraph::SceneNode> existing) {
   std::vector<std::unique_ptr<scenegraph::SceneNode>> existingChildren{};
-  auto group = reuseGroupNode(std::move(existing), existingChildren);
+  auto group = reuseGroupNode(ctx, std::move(existing), existingChildren);
 
   bool const widthAssigned = ctx.hasAssignedWidth() && build::zStackAxisStretches(ctx.hints().zStackHorizontalAlign);
   bool const heightAssigned = ctx.hasAssignedHeight() && build::zStackAxisStretches(ctx.hints().zStackVerticalAlign);
@@ -636,7 +637,7 @@ ComponentBuildResult buildMeasuredComponent(HStack const& stack, ComponentBuildC
 ComponentBuildResult buildMeasuredComponent(ZStack const& stack, ComponentBuildContext& ctx,
                                             std::unique_ptr<scenegraph::SceneNode> existing) {
   std::vector<std::unique_ptr<scenegraph::SceneNode>> existingChildren{};
-  auto group = reuseGroupNode(std::move(existing), existingChildren);
+  auto group = reuseGroupNode(ctx, std::move(existing), existingChildren);
 
   float innerWidth =
       build::resolvedAssignedSpan(ctx.contentAssignedSize().width, ctx.hasAssignedWidth(), ctx.innerConstraints().maxWidth);

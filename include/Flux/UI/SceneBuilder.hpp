@@ -32,6 +32,7 @@ public:
     std::size_t measuredNodes = 0;
     std::size_t arrangedNodes = 0;
     std::size_t materializedNodes = 0;
+    std::size_t reusedNodes = 0;
     std::size_t skippedNodes = 0;
   };
 
@@ -74,6 +75,7 @@ private:
                  ComponentKey key, Size assignedSize = {}, bool hasAssignedWidth = false,
                  bool hasAssignedHeight = false);
   void popFrame();
+  void recordNodeReuse() noexcept { ++lastBuildStats_.reusedNodes; }
 
   [[nodiscard]] Size measureElement(Element const& el, LayoutConstraints const& constraints,
                                     LayoutHints const& hints, ComponentKey const& key) const;

@@ -15,6 +15,7 @@
 #include "Graphics/Metal/MetalDeviceResources.hpp"
 #include "Graphics/Metal/MetalFrameRecorder.hpp"
 #include "Graphics/Metal/MetalPathRasterizer.hpp"
+#include "Debug/PerfCounters.hpp"
 
 namespace flux {
 class Window;
@@ -357,6 +358,11 @@ public:
       syncPresent_ = false;
       return;
     }
+
+    debug::perf::ScopedTimer perfTimer(debug::perf::TimedMetric::CanvasPresent);
+    struct FrameCounter {
+      ~FrameCounter() { debug::perf::recordPresentedFrame(); }
+    } frameCounter{};
 
     const float vw = frameDrawableW_;
     const float vh = frameDrawableH_;
