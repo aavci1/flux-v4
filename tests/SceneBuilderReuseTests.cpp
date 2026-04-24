@@ -43,9 +43,10 @@ TEST_CASE("SceneBuilder preserves scroll offset through stateful rebuilds withou
   viewport = dynamic_cast<scenegraph::RectNode*>(tree.get());
   REQUIRE(viewport != nullptr);
   auto* contentGroup = viewport->children()[0].get();
+  CHECK(contentGroup->position().y == doctest::Approx(-12.f));
   REQUIRE(contentGroup->children().size() == 2);
-  CHECK(contentGroup->children()[0]->position().y == doctest::Approx(-12.f));
-  CHECK(contentGroup->children()[1]->position().y == doctest::Approx(18.f));
+  CHECK(contentGroup->children()[0]->position().y == doctest::Approx(0.f));
+  CHECK(contentGroup->children()[1]->position().y == doctest::Approx(30.f));
 
   indicatorOverlay = dynamic_cast<scenegraph::RectNode*>(viewport->children()[1].get());
   REQUIRE(indicatorOverlay != nullptr);
@@ -79,9 +80,10 @@ TEST_CASE("SceneBuilder composite root scroll view keeps local state separate fr
   viewport = dynamic_cast<scenegraph::RectNode*>(tree.get());
   REQUIRE(viewport != nullptr);
   auto* contentGroup = viewport->children()[0].get();
+  CHECK(contentGroup->position().y == doctest::Approx(-12.f));
   REQUIRE(contentGroup->children().size() == 2);
-  CHECK(contentGroup->children()[0]->position().y == doctest::Approx(-12.f));
-  CHECK(contentGroup->children()[1]->position().y == doctest::Approx(18.f));
+  CHECK(contentGroup->children()[0]->position().y == doctest::Approx(0.f));
+  CHECK(contentGroup->children()[1]->position().y == doctest::Approx(30.f));
 }
 
 TEST_CASE("SceneBuilder geometry survives rebuilt trees because it lives on SceneGraph") {

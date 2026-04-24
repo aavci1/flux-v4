@@ -215,9 +215,7 @@ ComponentBuildResult buildMeasuredComponent(ScrollView const& scrollView, Compon
       std::make_unique<scenegraph::RectNode>(Rect {0.f, 0.f, viewport.width, viewport.height});
   viewportNode->setClipsContents(true);
 
-  auto scrolledGroup =
-      std::make_unique<scenegraph::GroupNode>(Rect {0.f, 0.f, contentSize.width, contentSize.height});
-  scrolledGroup->setPosition(Point {-scrollOffset.x, -scrollOffset.y});
+  auto scrolledGroup = std::make_unique<scenegraph::GroupNode>();
 
   std::vector<std::unique_ptr<scenegraph::SceneNode>> scrolledChildren{};
   scrolledChildren.reserve(contentChildren.size());
@@ -231,11 +229,22 @@ ComponentBuildResult buildMeasuredComponent(ScrollView const& scrollView, Compon
                        Point{ctx.contentOrigin().x + slot.origin.x, ctx.contentOrigin().y + slot.origin.y},
                        slot.assignedSize, slot.assignedSize.width > 0.f,
                        slot.assignedSize.height > 0.f);
-    childNode->setPosition(Point {slot.origin.x, slot.origin.y});
+    Point childOrigin = slot.origin;
+    if (axis == ScrollAxis::Vertical || axis == ScrollAxis::Both) {
+      childOrigin.y += scrollOffset.y;
+    }
+    if (axis == ScrollAxis::Horizontal || axis == ScrollAxis::Both) {
+      childOrigin.x += scrollOffset.x;
+    }
+    childNode->setPosition(Point {
+        childNode->position().x + childOrigin.x,
+        childNode->position().y + childOrigin.y,
+    });
     scrolledChildren.push_back(std::move(childNode));
   }
   scrolledGroup->replaceChildren(std::move(scrolledChildren));
-  build::setGroupBounds(*scrolledGroup, contentSize);
+  build::setAssignedGroupBounds(*scrolledGroup, contentSize);
+  scrolledGroup->setPosition(Point {-scrollOffset.x, -scrollOffset.y});
   viewportNode->appendChild(std::move(scrolledGroup));
   if (showsAnyIndicator) {
     auto indicatorOverlay =

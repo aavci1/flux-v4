@@ -192,6 +192,7 @@ TEST_CASE("SceneBuilder emits clipped scroll viewport and translated content gro
 
   auto* contentGroup = dynamic_cast<scenegraph::SceneNode*>(viewport->children()[0].get());
   REQUIRE(contentGroup != nullptr);
+  CHECK(contentGroup->position().y == doctest::Approx(0.f));
   REQUIRE(contentGroup->children().size() == 2);
   CHECK(contentGroup->children()[0]->position().y == doctest::Approx(0.f));
   CHECK(contentGroup->children()[1]->position().y == doctest::Approx(30.f));
@@ -206,9 +207,10 @@ TEST_CASE("SceneBuilder emits clipped scroll viewport and translated content gro
   viewport = dynamic_cast<scenegraph::RectNode*>(tree.get());
   REQUIRE(viewport != nullptr);
   auto* scrolledContent = viewport->children()[0].get();
+  CHECK(scrolledContent->position().y == doctest::Approx(-12.f));
   REQUIRE(scrolledContent->children().size() == 2);
-  CHECK(scrolledContent->children()[0]->position().y == doctest::Approx(-12.f));
-  CHECK(scrolledContent->children()[1]->position().y == doctest::Approx(18.f));
+  CHECK(scrolledContent->children()[0]->position().y == doctest::Approx(0.f));
+  CHECK(scrolledContent->children()[1]->position().y == doctest::Approx(30.f));
 
   auto* indicatorOverlay = dynamic_cast<scenegraph::RectNode*>(viewport->children()[1].get());
   REQUIRE(indicatorOverlay != nullptr);
