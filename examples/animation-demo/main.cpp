@@ -6,6 +6,7 @@
 #include <Flux/UI/Views/Card.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
+#include <Flux/UI/Views/Render.hpp>
 #include <Flux/UI/Views/ScrollView.hpp>
 #include <Flux/UI/Views/Slider.hpp>
 #include <Flux/UI/Views/Text.hpp>
@@ -14,8 +15,11 @@
 #include <Flux/UI/Views/ZStack.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <cstdlib>
 #include <cstdio>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -273,73 +277,173 @@ struct MorphLab : ViewModifiers<MorphLab> {
     }
 };
 
+struct AmbientLoopDriver {
+    static constexpr float kPreviewWidth = 260.f;
+    static constexpr float kPreviewHeight = 104.f;
+    static constexpr float kBarWidth = 22.f;
+    static constexpr float kBarBaseHeight = 18.f;
+    static constexpr float kBarTravel = 34.f;
+    static constexpr float kBarCornerRadius = 11.f;
+    static constexpr int kBarCount = 5;
+    static constexpr double kLegDurationSeconds = 1.4;
+
+    AmbientLoopDriver()
+        : benchmarkEnabled_(std::getenv("FLUX_ANIMATION_DEMO_BENCH") != nullptr)
+        , benchmarkWindowStart_(std::chrono::steady_clock::now()) {}
+
+    ~AmbientLoopDriver() {
+        stop();
+    }
+
+    void syncReducedMotion(bool reducedMotion) {
+        if (reducedMotion_ == reducedMotion) {
+            return;
+        }
+        reducedMotion_ = reducedMotion;
+        if (reducedMotion_) {
+            stop();
+        } else {
+            start();
+        }
+        requestRedraw();
+    }
+
+    void ensureStarted() {
+        if (!reducedMotion_) {
+            start();
+        }
+    }
+
+    [[nodiscard]] float phase() const {
+        if (reducedMotion_) {
+            return 1.f;
+        }
+        double const elapsed =
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - startTime_).count();
+        double cycle = std::fmod(elapsed / kLegDurationSeconds, 2.0);
+        if (cycle < 0.0) {
+            cycle += 2.0;
+        }
+        return static_cast<float>(cycle <= 1.0 ? cycle : 2.0 - cycle);
+    }
+
+    void recordDraw() {
+        if (!benchmarkEnabled_) {
+            return;
+        }
+        ++drawCount_;
+        auto const now = std::chrono::steady_clock::now();
+        double const elapsed = std::chrono::duration<double>(now - benchmarkWindowStart_).count();
+        if (elapsed < 1.0) {
+            return;
+        }
+        std::fprintf(stderr, "[animation-demo bench] ambient-loop fps=%.1f draws=%zu window=%.2fs\n",
+                     static_cast<double>(drawCount_) / elapsed, drawCount_, elapsed);
+        std::fflush(stderr);
+        benchmarkWindowStart_ = now;
+        drawCount_ = 0;
+    }
+
+private:
+    void start() {
+        if (tickHandle_.isValid()) {
+            return;
+        }
+        startTime_ = std::chrono::steady_clock::now();
+        tickHandle_ = AnimationClock::instance().subscribe([](AnimationTick const&) {
+            requestRedraw();
+        });
+    }
+
+    void stop() {
+        if (!tickHandle_.isValid()) {
+            return;
+        }
+        AnimationClock::instance().unsubscribe(tickHandle_);
+        tickHandle_ = {};
+    }
+
+    static void requestRedraw() {
+        if (Application::hasInstance()) {
+            Application::instance().requestRedraw();
+        }
+    }
+
+    bool reducedMotion_ = false;
+    bool benchmarkEnabled_ = false;
+    ObserverHandle tickHandle_{};
+    std::chrono::steady_clock::time_point startTime_ = std::chrono::steady_clock::now();
+    std::chrono::steady_clock::time_point benchmarkWindowStart_;
+    std::size_t drawCount_ = 0;
+};
+
 struct AmbientLoopLab : ViewModifiers<AmbientLoopLab> {
     auto body() const {
         Theme const &theme = useEnvironment<Theme>();
-
-        auto phase = useAnimation<float>(
-            0.f,
-            AnimationOptions {
-                .transition = Transition::linear(1.4f),
-                .repeat = AnimationOptions::kRepeatForever,
-                .autoreverse = true,
-            }
-        );
-        if (theme.reducedMotion) {
-            if (phase.isRunning() || std::abs(*phase - 1.f) > 0.001f) {
-                phase.set(1.f, Transition::instant());
-            }
-        } else if (!phase.isRunning()) {
-            if (*phase >= 0.999f) {
-                phase.set(0.f, Transition::instant());
-            }
-            phase.play(1.f);
-        }
-
-        std::vector<Element> bars;
-        bars.reserve(5);
-        for (int i = 0; i < 5; ++i) {
-            float const anchor = static_cast<float>(i) / 4.f;
-            float const emphasis = std::clamp(1.f - std::abs(*phase - anchor) * 2.8f, 0.f, 1.f);
-            float const barHeight = 18.f + emphasis * 34.f;
-            bars.push_back(
-                Rectangle {}
-                    .size(22.f, barHeight)
-                    .cornerRadius(11.f)
-                    .fill(alpha(Color::accent(), 0.30f + emphasis * 0.70f))
-            );
-        }
+        std::shared_ptr<AmbientLoopDriver> loop =
+            useMemo([] { return std::make_shared<AmbientLoopDriver>(); });
+        loop->syncReducedMotion(theme.reducedMotion);
+        loop->ensureStarted();
 
         return makeSectionCard(
             theme, "Auto-Running Loop",
-            "This panel starts a repeating autoreversing animation from body(). When reduced motion is turned on, the loop collapses to its final frame and resumes when motion is re-enabled.",
+            "This panel keeps its decorative loop on the frame clock and redraw path so the rest of the demo does not rebuild on every display-link tick. Reduced motion still settles it on the final frame.",
             VStack {
                 .spacing = theme.space3,
                 .children = children(
-                    ZStack {
-                        .horizontalAlignment = Alignment::Center,
-                        .verticalAlignment = Alignment::Center,
-                        .children = children(
-                            Rectangle {}
-                                .size(260.f, 104.f)
-                                .cornerRadius(theme.radiusLarge)
-                                .fill(Color::windowBackground())
-                                .stroke(Color::separator(), 1.f),
-                            HStack {
-                                .spacing = theme.space2,
-                                .alignment = Alignment::Center,
-                                .children = std::move(bars),
+                    Render {
+                        .measureFn = [](LayoutConstraints const&, LayoutHints const&) {
+                            return Size {AmbientLoopDriver::kPreviewWidth, AmbientLoopDriver::kPreviewHeight};
+                        },
+                        .draw = [loop, theme](Canvas& canvas, Rect frame) {
+                            loop->recordDraw();
+                            float const phase = loop->phase();
+                            Rect const preview {
+                                frame.x,
+                                frame.y,
+                                AmbientLoopDriver::kPreviewWidth,
+                                AmbientLoopDriver::kPreviewHeight,
+                            };
+                            canvas.drawRect(preview, CornerRadius {theme.radiusLarge},
+                                            FillStyle::solid(theme.windowBackgroundColor),
+                                            StrokeStyle::solid(theme.separatorColor, 1.f));
+
+                            float const totalWidth =
+                                AmbientLoopDriver::kBarWidth * static_cast<float>(AmbientLoopDriver::kBarCount) +
+                                theme.space2 * static_cast<float>(AmbientLoopDriver::kBarCount - 1);
+                            float const startX = preview.x + (preview.width - totalWidth) * 0.5f;
+                            for (int i = 0; i < AmbientLoopDriver::kBarCount; ++i) {
+                                float const anchor = static_cast<float>(i) /
+                                                     static_cast<float>(AmbientLoopDriver::kBarCount - 1);
+                                float const emphasis =
+                                    std::clamp(1.f - std::abs(phase - anchor) * 2.8f, 0.f, 1.f);
+                                float const barHeight =
+                                    AmbientLoopDriver::kBarBaseHeight +
+                                    emphasis * AmbientLoopDriver::kBarTravel;
+                                Rect const bar {
+                                    startX + static_cast<float>(i) *
+                                                 (AmbientLoopDriver::kBarWidth + theme.space2),
+                                    preview.y + (preview.height - barHeight) * 0.5f,
+                                    AmbientLoopDriver::kBarWidth,
+                                    barHeight,
+                                };
+                                canvas.drawRect(bar, CornerRadius {AmbientLoopDriver::kBarCornerRadius},
+                                                FillStyle::solid(alpha(theme.accentColor,
+                                                                       0.30f + emphasis * 0.70f)),
+                                                StrokeStyle::none());
                             }
-                        )
-                    }
-,
+                        },
+                        .pure = false,
+                    },
                     HStack {
                         .spacing = theme.space3,
                         .alignment = Alignment::Stretch,
                         .children = children(
-                            metricTile(theme, formatFloat(*phase), "Phase", Color::accent()),
-                            metricTile(theme, phase.isRunning() ? "Looping" : "Settled", "Runtime state",
-                                       phase.isRunning() ? Color::success() : Color::warning())
+                            metricTile(theme, theme.reducedMotion ? "Settled" : "Looping", "Runtime state",
+                                       theme.reducedMotion ? Color::warning() : Color::success()),
+                            metricTile(theme, "Render", "Update path", Color::accent()),
+                            metricTile(theme, theme.reducedMotion ? "On" : "Off", "Reduced motion",
+                                       theme.reducedMotion ? Color::warning() : Color::secondary())
                         )
                     }
                 )
