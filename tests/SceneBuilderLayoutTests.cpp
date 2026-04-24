@@ -160,6 +160,58 @@ TEST_CASE("SceneBuilder preserves outer explicit size around composite body chro
   CHECK(inner->bounds().height > 0.f);
 }
 
+namespace {
+
+struct NestedFocusableInnerBody {
+  Element body() const {
+    return Text{.text = "Focusable"}
+        .padding(8.f, 12.f, 8.f, 12.f)
+        .fill(FillStyle::solid(Colors::black))
+        .focusable(true)
+        .onTap([] {});
+  }
+};
+
+struct NestedFocusableOuterBody {
+  Element body() const { return Element{NestedFocusableInnerBody{}}; }
+};
+
+} // namespace
+
+TEST_CASE("SceneBuilder keeps nested body focus targets inside the inner component subtree") {
+  NullTextSystem textSystem{};
+  EnvironmentLayer env{};
+  env.set(Theme::light());
+  EnvironmentScope envScope{std::move(env)};
+  SceneBuilder builder{textSystem, EnvironmentStack::current()};
+
+  LayoutConstraints constraints{};
+  constraints.maxWidth = 240.f;
+  constraints.maxHeight = 64.f;
+
+  Element rootElement = Element{NestedFocusableOuterBody{}}.key("field");
+  scenegraph::SceneGraph graph{
+      builder.build(rootElement, constraints, ComponentKey{LocalId::fromString("field")})};
+  ComponentKey const expectedKey{
+      LocalId::fromString("field"),
+      LocalId::fromString("$flux.body"),
+  };
+  auto isPrefix = [](ComponentKey const& prefix, ComponentKey const& key) {
+    return prefix.size() <= key.size() && std::equal(prefix.begin(), prefix.end(), key.begin());
+  };
+  ComponentKey const outerKey{LocalId::fromString("field")};
+
+  std::vector<ComponentKey> const focusable = scenegraph::collectFocusableKeys(graph);
+  REQUIRE(focusable.size() == 1);
+  CHECK(isPrefix(expectedKey, focusable.front()));
+  CHECK(focusable.front() != outerKey);
+
+  auto hit = scenegraph::hitTestInteraction(graph, Point{16.f, 16.f});
+  REQUIRE(hit.has_value());
+  CHECK(isPrefix(expectedKey, hit->interaction->stableTargetKey));
+  CHECK(hit->interaction->stableTargetKey != outerKey);
+}
+
 TEST_CASE("SceneBuilder records composite geometry from the outer modifier shell when it differs from body content") {
   NullTextSystem textSystem{};
   scenegraph::SceneGraph graph{};

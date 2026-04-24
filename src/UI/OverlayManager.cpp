@@ -242,11 +242,11 @@ void OverlayManager::rebuild(Size windowSize, Runtime &runtime) {
             },
             resolveOverlayRootScene(entry.content), cs);
 
-        Rect contentBounds = contentRoot ? overlayPaintBounds(*contentRoot) : Rect{};
+        Rect contentBounds = contentRoot ? contentRoot->bounds() : Rect{};
         if ((contentBounds.width <= 0.f || !std::isfinite(contentBounds.width) ||
              contentBounds.height <= 0.f || !std::isfinite(contentBounds.height)) &&
             contentRoot) {
-            contentBounds = contentRoot->bounds();
+            contentBounds = overlayPaintBounds(*contentRoot);
         }
         if (contentBounds.width <= 0.f || !std::isfinite(contentBounds.width)) {
             contentBounds.width = 1.f;

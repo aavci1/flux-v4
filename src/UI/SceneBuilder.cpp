@@ -155,7 +155,8 @@ Size SceneBuilder::measureElement(Element const& el, LayoutConstraints const& co
 
 std::unique_ptr<scenegraph::SceneNode>
 SceneBuilder::wrapModifierLayer(std::unique_ptr<scenegraph::SceneNode> root,
-                                detail::ElementModifiers const& layer, ComponentKey const& key,
+                                detail::ElementModifiers const& layer, ComponentKey const& componentKey,
+                                ComponentKey const& interactionKey,
                                 LayoutConstraints const& constraints, LayoutHints const& hints,
                                 Point origin, Size innerSize, Size outerSize,
                                 bool applyBoxPaint) {
@@ -172,7 +173,7 @@ SceneBuilder::wrapModifierLayer(std::unique_ptr<scenegraph::SceneNode> root,
   wrapper->setOpacity(layer.opacity);
 
   if (std::unique_ptr<scenegraph::InteractionData> interaction =
-          build::makeInteractionData(&layer, key)) {
+          build::makeInteractionData(&layer, interactionKey)) {
     wrapper->setInteraction(std::move(interaction));
   }
 
@@ -187,7 +188,7 @@ SceneBuilder::wrapModifierLayer(std::unique_ptr<scenegraph::SceneNode> root,
         outerSize.width > 0.f ? outerSize.width : std::numeric_limits<float>::infinity();
     overlayConstraints.maxHeight =
         outerSize.height > 0.f ? outerSize.height : std::numeric_limits<float>::infinity();
-    ComponentKey overlayKey = key;
+    ComponentKey overlayKey = componentKey;
     overlayKey.push_back(LocalId::fromString("$overlay"));
     pushFrame(overlayConstraints, hints, origin, std::move(overlayKey), outerSize,
               outerSize.width > 0.f, outerSize.height > 0.f);
@@ -298,10 +299,13 @@ SceneBuilder::buildResolved(Element const& el, detail::ResolvedElement const& re
   if (resolved.nestSceneUnderFirstBody) {
     sceneKey.push_back(LocalId::fromIndex(0));
   }
+  ComponentKey interactionKey =
+      resolved.stableInteractionKey.empty() ? current.key : resolved.stableInteractionKey;
 
   detail::ComponentBuildContext buildContext {*this, traversal_, el, stableSceneEl, typeTag,
-                                              std::move(sceneKey), mods, modifierLayers.size() > 1, innerConstraints,
-                                              contentOrigin, contentAssignedSize};
+                                              std::move(sceneKey), std::move(interactionKey), mods,
+                                              modifierLayers.size() > 1, innerConstraints, contentOrigin,
+                                              contentAssignedSize};
 
   detail::ComponentBuildResult built = stableSceneEl.buildMeasured(buildContext, nullptr);
   std::unique_ptr<scenegraph::SceneNode> root = std::move(built.node);
@@ -319,12 +323,12 @@ SceneBuilder::buildResolved(Element const& el, detail::ResolvedElement const& re
   if (mods) {
     totalOffset = modifierOffset(mods);
     if (needsEnvelope(mods, root->interaction())) {
-      root = wrapModifierLayer(std::move(root), *mods, current.key, current.constraints,
-                               current.hints, current.origin + totalOffset, geometrySize, outerSize,
-                               !contentConsumesBoxPaint(typeTag));
+      root = wrapModifierLayer(std::move(root), *mods, current.key, buildContext.interactionKey(),
+                               current.constraints, current.hints, current.origin + totalOffset,
+                               geometrySize, outerSize, !contentConsumesBoxPaint(typeTag));
     } else {
       if (!root->interaction()) {
-        root->setInteraction(build::makeInteractionData(mods, current.key));
+        root->setInteraction(build::makeInteractionData(mods, buildContext.interactionKey()));
       }
       root->setPosition(totalOffset);
     }
@@ -341,8 +345,9 @@ SceneBuilder::buildResolved(Element const& el, detail::ResolvedElement const& re
     totalOffset = Point {totalOffset.x + layerOffset.x, totalOffset.y + layerOffset.y};
     Size const nextOuterSize = build::measuredOuterSizeFromContent(currentSize, &outerLayer);
     if (needsEnvelope(&outerLayer, root->interaction())) {
-      root = wrapModifierLayer(std::move(root), outerLayer, current.key, current.constraints,
-                               current.hints, current.origin + totalOffset, currentSize,
+      root = wrapModifierLayer(std::move(root), outerLayer, current.key,
+                               buildContext.interactionKey(), current.constraints, current.hints,
+                               current.origin + totalOffset, currentSize,
                                nextOuterSize, true);
     } else {
       root->setPosition(Point {root->position().x + layerOffset.x,

@@ -23,7 +23,7 @@ class ComponentBuildContext {
 public:
   ComponentBuildContext(SceneBuilder& builder, TraversalContext const& traversal,
                         Element const& sourceElement, Element const& sceneElement, ElementType typeTag,
-                        ComponentKey sceneKey,
+                        ComponentKey sceneKey, ComponentKey interactionKey,
                         ElementModifiers const* mods, bool hasOuterModifierLayers,
                         LayoutConstraints innerConstraints, Point contentOrigin, Size contentAssignedSize);
 
@@ -31,6 +31,7 @@ public:
   [[nodiscard]] Element const& sceneElement() const noexcept { return sceneElement_; }
   [[nodiscard]] ElementType typeTag() const noexcept { return typeTag_; }
   [[nodiscard]] ComponentKey const& key() const noexcept { return sceneKey_; }
+  [[nodiscard]] ComponentKey const& interactionKey() const noexcept { return interactionKey_; }
   [[nodiscard]] LayoutConstraints const& constraints() const noexcept { return traversal_.frame().constraints; }
   [[nodiscard]] LayoutHints const& hints() const noexcept { return traversal_.frame().hints; }
   [[nodiscard]] Point origin() const noexcept { return traversal_.frame().origin; }
@@ -83,6 +84,7 @@ private:
   Element const& sceneElement_;
   ElementType typeTag_ = ElementType::Unknown;
   ComponentKey sceneKey_{};
+  ComponentKey interactionKey_{};
   ElementModifiers const* mods_ = nullptr;
   bool hasOuterModifierLayers_ = false;
   LayoutConstraints innerConstraints_{};

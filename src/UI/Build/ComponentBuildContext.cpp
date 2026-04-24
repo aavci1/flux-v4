@@ -11,6 +11,7 @@ namespace flux::detail {
 ComponentBuildContext::ComponentBuildContext(SceneBuilder& builder, TraversalContext const& traversal,
                                              Element const& sourceElement, Element const& sceneElement,
                                              ElementType typeTag, ComponentKey sceneKey,
+                                             ComponentKey interactionKey,
                                              ElementModifiers const* mods,
                                              bool hasOuterModifierLayers, LayoutConstraints innerConstraints,
                                              Point contentOrigin, Size contentAssignedSize)
@@ -20,6 +21,7 @@ ComponentBuildContext::ComponentBuildContext(SceneBuilder& builder, TraversalCon
     , sceneElement_(sceneElement)
     , typeTag_(typeTag)
     , sceneKey_(std::move(sceneKey))
+    , interactionKey_(std::move(interactionKey))
     , mods_(mods)
     , hasOuterModifierLayers_(hasOuterModifierLayers)
     , innerConstraints_(innerConstraints)
@@ -172,12 +174,12 @@ void ComponentBuildContext::finalizeOuterSizes(Size contentSize, Size& outerSize
 }
 
 std::unique_ptr<scenegraph::InteractionData> ComponentBuildContext::makeInteractionData() const {
-  return build::makeInteractionData(mods_, key());
+  return build::makeInteractionData(mods_, interactionKey());
 }
 
 std::unique_ptr<scenegraph::InteractionData>
 ComponentBuildContext::makeSelectableTextInteraction(std::shared_ptr<SelectableTextState> const& state) const {
-  return build::makeSelectableTextInteraction(mods_, key(), state);
+  return build::makeSelectableTextInteraction(mods_, interactionKey(), state);
 }
 
 ComponentBuildResult

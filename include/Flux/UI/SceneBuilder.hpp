@@ -69,7 +69,8 @@ private:
                                     LayoutHints const& hints, ComponentKey const& key) const;
   std::unique_ptr<scenegraph::SceneNode>
   wrapModifierLayer(std::unique_ptr<scenegraph::SceneNode> root,
-                    detail::ElementModifiers const& layer, ComponentKey const& key,
+                    detail::ElementModifiers const& layer, ComponentKey const& componentKey,
+                    ComponentKey const& interactionKey,
                     LayoutConstraints const& constraints, LayoutHints const& hints, Point origin,
                     Size innerSize, Size outerSize, bool applyBoxPaint);
 

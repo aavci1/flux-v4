@@ -273,7 +273,7 @@ ComponentBuildResult buildMeasuredComponent(ScrollView const& scrollView, Compon
   if (!interaction) {
     interaction = std::make_unique<scenegraph::InteractionData>();
   }
-  interaction->stableTargetKey = ctx.key();
+  interaction->stableTargetKey = ctx.interactionKey();
   std::function<void(Point)> priorPointerDown = interaction->onPointerDown;
   std::function<void(Point)> priorPointerMove = interaction->onPointerMove;
   std::function<void(Point)> priorPointerUp = interaction->onPointerUp;

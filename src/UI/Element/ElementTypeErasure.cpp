@@ -78,6 +78,12 @@ detail::ResolvedElement Element::resolve(ComponentKey const& key,
   ComponentKey currentKey = key;
   bool expandedAnyBody = false;
   bool descendantsStable = true;
+  auto stableInteractionKey = [&resolved, &key]() -> ComponentKey {
+    if (!resolved.bodyComponentKeys.empty()) {
+      return resolved.bodyComponentKeys.back();
+    }
+    return key;
+  };
 
   while (current) {
     if (EnvironmentLayer const* envLayer = current->environmentLayer()) {
@@ -90,6 +96,7 @@ detail::ResolvedElement Element::resolve(ComponentKey const& key,
     }
     if (!current->expandsBody()) {
       resolved.sceneElement = std::make_unique<Element>(current->strippedEnvelopeCopy());
+      resolved.stableInteractionKey = stableInteractionKey();
       resolved.descendantsStable = expandedAnyBody && descendantsStable;
       return resolved;
     }
@@ -102,6 +109,7 @@ detail::ResolvedElement Element::resolve(ComponentKey const& key,
     descendantsStable = descendantsStable && bodyResolution.descendantsStable;
     if (!bodyResolution.body) {
       resolved.sceneElement = std::make_unique<Element>(current->strippedEnvelopeCopy());
+      resolved.stableInteractionKey = stableInteractionKey();
       resolved.descendantsStable = false;
       return resolved;
     }
@@ -119,6 +127,7 @@ detail::ResolvedElement Element::resolve(ComponentKey const& key,
   }
 
   resolved.sceneElement = std::make_unique<Element>(strippedEnvelopeCopy());
+  resolved.stableInteractionKey = stableInteractionKey();
   resolved.descendantsStable = false;
   return resolved;
 }
