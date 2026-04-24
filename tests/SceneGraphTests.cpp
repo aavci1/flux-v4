@@ -63,12 +63,16 @@ class RecordingRenderer final : public Renderer {
     std::vector<ClipDraw> clipDraws;
     std::vector<PathDraw> pathDraws;
     std::vector<ImageDraw> imageDraws;
+    int saveCalls = 0;
+    int restoreCalls = 0;
 
     void save() override {
+        ++saveCalls;
         transforms_.push_back(transforms_.back());
         opacities_.push_back(opacities_.back());
     }
     void restore() override {
+        ++restoreCalls;
         if (transforms_.size() > 1) {
             transforms_.pop_back();
             opacities_.pop_back();
@@ -160,6 +164,24 @@ TEST_CASE("SceneRenderer accumulates parent-space bounds as local translations")
     REQUIRE(renderer.rectDraws.size() == 1);
     CHECK(renderer.rectDraws[0].translation == Point {30.f, 51.f});
     CHECK(renderer.rectDraws[0].rect == Rect::sharp(0.f, 0.f, 100.f, 50.f));
+}
+
+TEST_CASE("SceneRenderer skips stack pushes for identity group nodes") {
+    auto root = std::make_unique<GroupNode>(Rect {10.f, 20.f, 300.f, 200.f});
+    auto panel = std::make_unique<GroupNode>(Rect {15.f, 25.f, 120.f, 80.f});
+    panel->appendChild(std::make_unique<RectNode>(Rect {5.f, 6.f, 100.f, 50.f}, FillStyle::solid(Colors::red)));
+    root->appendChild(std::move(panel));
+
+    SceneGraph graph {std::move(root)};
+    RecordingRenderer renderer;
+    SceneRenderer sceneRenderer {renderer};
+
+    sceneRenderer.render(graph);
+
+    CHECK(renderer.saveCalls == 1);
+    CHECK(renderer.restoreCalls == 1);
+    REQUIRE(renderer.rectDraws.size() == 1);
+    CHECK(renderer.rectDraws[0].translation == Point {30.f, 51.f});
 }
 
 TEST_CASE("TextNode renders its stored layout in node-local space") {

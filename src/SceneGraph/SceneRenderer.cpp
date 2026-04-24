@@ -15,6 +15,7 @@
 #include "SceneGraph/SceneNodeInternal.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <memory>
 #include <unordered_map>
@@ -27,6 +28,28 @@ namespace flux::scenegraph {
 namespace {
 
 constexpr bool kEnablePreparedRenderCache = true;
+
+bool isZeroOffset(Point offset) noexcept {
+    return offset.x == 0.f && offset.y == 0.f;
+}
+
+bool isIdentityTransform(Mat3 const& matrix, float eps = 1e-6f) noexcept {
+    return std::abs(matrix.m[0] - 1.f) <= eps &&
+           std::abs(matrix.m[1]) <= eps &&
+           std::abs(matrix.m[2]) <= eps &&
+           std::abs(matrix.m[3]) <= eps &&
+           std::abs(matrix.m[4] - 1.f) <= eps &&
+           std::abs(matrix.m[5]) <= eps &&
+           std::abs(matrix.m[6]) <= eps &&
+           std::abs(matrix.m[7]) <= eps &&
+           std::abs(matrix.m[8] - 1.f) <= eps;
+}
+
+Rect offsetRect(Rect rect, Point offset) noexcept {
+    rect.x += offset.x;
+    rect.y += offset.y;
+    return rect;
+}
 
 bool canReplayPreparedInParentSpace(SceneNode const& node) {
     if (node.kind() == SceneNodeKind::Group || !node.canPrepareRenderOps() || !node.children().empty()) {
@@ -135,7 +158,7 @@ struct SceneRenderer::Impl {
         if (kEnablePreparedRenderCache) {
             prepareNodeCache(node);
         }
-        renderNode(node, 1.f);
+        renderNode(node, 1.f, Point {});
     }
 
     void prepareNodeCache(SceneNode const &node) {
@@ -169,19 +192,39 @@ struct SceneRenderer::Impl {
         detail::SceneNodeAccess::clearSubtreeDirty(node);
     }
 
-    void renderNode(SceneNode const &node, float inheritedOpacity) {
+    void renderNode(SceneNode const &node, float inheritedOpacity, Point inheritedTranslation) {
         float nodeOpacity = inheritedOpacity;
         if (node.kind() == SceneNodeKind::Rect) {
             nodeOpacity *= static_cast<RectNode const &>(node).opacity();
         }
 
+        Rect const bounds = node.bounds();
+        Point const nodePosition {bounds.x, bounds.y};
+        Point const accumulatedTranslation = inheritedTranslation + nodePosition;
+        Rect const localBounds = node.localBounds();
+        bool const clipsContents =
+            node.kind() == SceneNodeKind::Rect &&
+            static_cast<RectNode const &>(node).clipsContents();
+
+        if (node.kind() == SceneNodeKind::Group &&
+            !clipsContents &&
+            isIdentityTransform(node.transform())) {
+            if (localBounds.width > 0.f && localBounds.height > 0.f &&
+                renderer->quickReject(offsetRect(localBounds, accumulatedTranslation))) {
+                return;
+            }
+            for (std::unique_ptr<SceneNode> const &child : node.children()) {
+                renderNode(*child, nodeOpacity, accumulatedTranslation);
+            }
+            return;
+        }
+
         if (node.kind() != SceneNodeKind::Group && kEnablePreparedRenderCache &&
             canReplayPreparedInParentSpace(node)) {
-            Rect const localBounds = node.localBounds();
             if (localBounds.width > 0.f && localBounds.height > 0.f) {
-                Rect const worldBounds = detail::transformBounds(
-                    Mat3::translate(node.position()) * node.transform(), localBounds);
-                if (renderer->quickReject(worldBounds)) {
+                Rect const translatedBounds = detail::transformBounds(
+                    Mat3::translate(accumulatedTranslation) * node.transform(), localBounds);
+                if (renderer->quickReject(translatedBounds)) {
                     return;
                 }
             }
@@ -192,15 +235,21 @@ struct SceneRenderer::Impl {
                 if (!prepared) {
                     return false;
                 }
-                if (nodeOpacity == 1.f) {
-                    debug::perf::recordPreparedReplayCall();
-                    return prepared->replay(*renderer);
+                bool const needsState = !isZeroOffset(inheritedTranslation) || nodeOpacity != 1.f;
+                if (needsState) {
+                    renderer->save();
+                    if (!isZeroOffset(inheritedTranslation)) {
+                        renderer->translate(inheritedTranslation);
+                    }
+                    if (nodeOpacity != 1.f) {
+                        renderer->setOpacity(nodeOpacity);
+                    }
                 }
-                renderer->save();
-                renderer->setOpacity(nodeOpacity);
                 debug::perf::recordPreparedReplayCall();
                 bool const replayed = prepared->replay(*renderer);
-                renderer->restore();
+                if (needsState) {
+                    renderer->restore();
+                }
                 return replayed;
             };
             if (replayPrepared()) {
@@ -209,13 +258,11 @@ struct SceneRenderer::Impl {
         }
 
         renderer->save();
-        Rect const bounds = node.bounds();
-        renderer->translate(Point {bounds.x, bounds.y});
+        renderer->translate(accumulatedTranslation);
         renderer->transform(node.transform());
 
         renderer->setOpacity(nodeOpacity);
 
-        Rect const localBounds = node.localBounds();
         if (localBounds.width > 0.f && localBounds.height > 0.f &&
             renderer->quickReject(localBounds)) {
             renderer->restore();
@@ -239,9 +286,6 @@ struct SceneRenderer::Impl {
             }
         }
 
-        bool const clipsContents =
-            node.kind() == SceneNodeKind::Rect &&
-            static_cast<RectNode const &>(node).clipsContents();
         if (clipsContents) {
             RectNode const &rectNode = static_cast<RectNode const &>(node);
             renderer->save();
@@ -250,7 +294,7 @@ struct SceneRenderer::Impl {
         }
 
         for (std::unique_ptr<SceneNode> const &child : node.children()) {
-            renderNode(*child, nodeOpacity);
+            renderNode(*child, nodeOpacity, Point {});
         }
 
         if (clipsContents) {

@@ -246,6 +246,23 @@
   - This directly addresses the hot counter regression signal: steady-state `prepare()` dropped from the low-12s per frame to about `6.2/f`, matching the expected range for the demo.
   - A regression test now verifies that a child paint change re-prepares the child but not the cached parent node.
 
+## Attempt 15
+
+- Item: Skip canvas stack pushes for identity `GroupNode` traversal and carry their translation down until a leaf or clipped/transformed subtree needs it.
+- Type: framework
+- Status: Worked, kept.
+- Before:
+  - `render`: `25.80 ms/s (0.42/f)` (run 1), `18.49 ms/s (0.31/f)` (run 2)
+  - `frameBudget`: `155.14 ms/s (2.54/f)` (run 1), `104.85 ms/s (1.75/f)` (run 2)
+- After:
+  - `render`: `14.51 ms/s (0.24/f)` (run 1), `15.39 ms/s (0.26/f)` (run 2)
+  - `frameBudget`: `90.55 ms/s (1.48/f)` (run 1), `93.98 ms/s (1.57/f)` (run 2)
+  - Delta: about `-0.12` to `-0.18 ms/frame` on `SceneRenderer::render`
+- Outcome:
+  - `SceneRenderer` now threads translation through identity group subtrees instead of doing `save() / translate() / transform() / restore()` for every intermediate group node.
+  - Leaves and clipped/transformed subtrees still pay the normal state push when they actually need canvas mutation, so the change preserves translation and clip semantics while reducing stack churn on the hot layout path.
+  - A regression test now verifies that nested identity groups collapse to a single renderer `save()` / `restore()` pair for the leaf draw.
+
 ## Result
 
 - Accepted framework changes still in place:
@@ -255,6 +272,7 @@
   - Hot-path churn is reduced via reusable traversal/measurement state, faster `ComponentKey` handling, and inline scene-node storage.
   - Incremental subtree rebuild now reuses compatible scene nodes for the common animated layout path, and prepared leaf replay skips redundant outer transforms.
   - `SceneBuilder` no longer clones the resolved scene element on every incremental animation rebuild.
+  - Identity group traversal no longer mutates the canvas stack unless a descendant actually needs a transformed/clipped local space.
 - Final status:
   - `animation-demo` stays at `59-61 fps`.
   - External foreground CPU confirmation is below the `10%` target.
