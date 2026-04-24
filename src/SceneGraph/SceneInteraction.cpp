@@ -15,7 +15,7 @@ namespace {
 
 bool isPrefix(ComponentKey const& prefix, ComponentKey const& key) {
     debug::perf::recordComponentKeyPrefixCompare(prefix.size());
-    return prefix.size() <= key.size() && std::equal(prefix.begin(), prefix.end(), key.begin());
+    return key.hasPrefix(prefix);
 }
 
 void findClosestInteractionImpl(SceneNode const& node, ComponentKey const& key,

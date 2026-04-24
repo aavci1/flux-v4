@@ -35,7 +35,7 @@ bool HoverController::isInSubtree(ComponentKey const& key, StateStore const& sto
     return false;
   }
   debug::perf::recordComponentKeyPrefixCompare(key.size());
-  if (!std::equal(key.begin(), key.end(), hoveredKey_.begin())) {
+  if (!hoveredKey_.hasPrefix(key)) {
     return false;
   }
   std::optional<std::uint64_t> const os = store.overlayScope();

@@ -45,3 +45,27 @@ TEST_CASE("Composite-observed signals schedule the next reactive frame") {
     CHECK(exitCode == 0);
     CHECK(frameCount.load() == 1);
 }
+
+TEST_CASE("ComponentKey interned handles preserve hash and prefix semantics") {
+    using flux::ComponentKey;
+    using flux::ComponentKeyHash;
+    using flux::LocalId;
+
+    ComponentKey key {LocalId::fromString("panel")};
+    key.push_back(LocalId::fromString("button"));
+
+    ComponentKey const expected {LocalId::fromString("panel"), LocalId::fromString("button")};
+    ComponentKey const prefix {LocalId::fromString("panel")};
+
+    CHECK(key == expected);
+    CHECK(key.hasPrefix(prefix));
+    CHECK(prefix.sharesPrefix(key));
+    CHECK(key.prefix(1) == prefix);
+
+    std::unordered_map<ComponentKey, int, ComponentKeyHash> values;
+    values.emplace(key, 42);
+
+    auto const it = values.find(expected);
+    REQUIRE(it != values.end());
+    CHECK(it->second == 42);
+}

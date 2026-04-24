@@ -6,7 +6,6 @@
 
 #include "Debug/PerfCounters.hpp"
 
-#include <algorithm>
 #include <cstddef>
 namespace flux {
 
@@ -41,7 +40,7 @@ bool FocusController::isInSubtree(ComponentKey const& key, StateStore const& sto
     return false;
   }
   debug::perf::recordComponentKeyPrefixCompare(key.size());
-  if (!std::equal(key.begin(), key.end(), focusedKey_.begin())) {
+  if (!focusedKey_.hasPrefix(key)) {
     return false;
   }
   std::optional<std::uint64_t> const os = store.overlayScope();

@@ -67,8 +67,7 @@ template<typename MarkFn>
 bool markKeyAndAncestors(ComponentKey const& key, MarkFn&& markFn) {
   bool marked = false;
   for (std::size_t len = 1; len <= key.size(); ++len) {
-    ComponentKey prefix(key.begin(), key.begin() + static_cast<std::ptrdiff_t>(len));
-    marked = markFn(prefix) || marked;
+    marked = markFn(key.prefix(len)) || marked;
   }
   return marked;
 }

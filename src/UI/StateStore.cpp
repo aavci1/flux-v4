@@ -16,7 +16,7 @@ bool keyHasPrefix(ComponentKey const& key, ComponentKey const& prefix) {
     return false;
   }
   debug::perf::recordComponentKeyPrefixCompare(prefix.size());
-  return std::equal(prefix.begin(), prefix.end(), key.begin());
+  return key.hasPrefix(prefix);
 }
 
 void unsubscribeComponentState(ComponentState& state) {
@@ -262,7 +262,7 @@ bool StateStore::hasDirtyDescendant(ComponentKey const& key) const {
       continue;
     }
     debug::perf::recordComponentKeyPrefixCompare(key.size());
-    if (std::equal(key.begin(), key.end(), candidate.begin())) {
+    if (candidate.hasPrefix(key)) {
       return true;
     }
   }

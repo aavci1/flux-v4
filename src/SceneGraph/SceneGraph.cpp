@@ -20,7 +20,7 @@ bool keyHasPrefix(ComponentKey const& key, ComponentKey const& prefix) {
         return false;
     }
     debug::perf::recordComponentKeyPrefixCompare(prefix.size());
-    return std::equal(prefix.begin(), prefix.end(), key.begin());
+    return key.hasPrefix(prefix);
 }
 
 void rebindNodeMappings(std::unordered_map<ComponentKey, SceneNode*, ComponentKeyHash>& nodes,
@@ -173,8 +173,7 @@ SceneNode* SceneGraph::nodeForKey(ComponentKey const& key) const noexcept {
 
 std::optional<Rect> SceneGraph::rectForLeafKeyPrefix(ComponentKey const& key) const {
     for (std::size_t len = key.size(); len > 0; --len) {
-        ComponentKey prefix(key.begin(), key.begin() + static_cast<std::ptrdiff_t>(len));
-        if (std::optional<Rect> rect = rectForKey(prefix)) {
+        if (std::optional<Rect> rect = rectForKey(key.prefix(len))) {
             return rect;
         }
     }

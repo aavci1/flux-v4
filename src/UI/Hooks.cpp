@@ -5,7 +5,6 @@
 
 #include "Debug/PerfCounters.hpp"
 
-#include <algorithm>
 #include <cassert>
 #include <functional>
 
@@ -50,7 +49,7 @@ bool usePress() {
     return false;
   }
   debug::perf::recordComponentKeyPrefixCompare(key.size());
-  if (!std::equal(key.begin(), key.end(), pressKey.begin())) {
+  if (!pressKey.hasPrefix(key)) {
     return false;
   }
   return rt->gesture().pressMatchesStoreContext(*store);
