@@ -1369,9 +1369,23 @@ private:
   }
 
 public:
-  void beginRecordedOpsCapture(MetalFrameRecorder* target) { captureRecorder_ = target; }
+  void beginRecordedOpsCapture(MetalFrameRecorder* target) {
+    if (!target) {
+      return;
+    }
+    target->clear();
+    captureRecorder_ = target;
+    stateStack_.push_back(GpuState{});
+    updateClipScissor();
+  }
 
-  void endRecordedOpsCapture() { captureRecorder_ = nullptr; }
+  void endRecordedOpsCapture() {
+    captureRecorder_ = nullptr;
+    if (!stateStack_.empty()) {
+      stateStack_.pop_back();
+    }
+    updateClipScissor();
+  }
 
   void replayRecordedOps(MetalFrameRecorder const& recorded, MetalRecorderSlice const& slice) {
     MetalFrameRecorder& frame = frame_;
