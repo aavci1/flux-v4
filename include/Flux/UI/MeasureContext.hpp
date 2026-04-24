@@ -64,7 +64,9 @@ public:
   std::size_t debugKeyPathDepth() const noexcept { return traversal_.debugKeyPathDepth(); }
   std::size_t debugSavedChildDepth() const noexcept { return traversal_.debugSavedChildDepth(); }
 #endif
-  LocalId peekCurrentChildLocalId() const { return currentElementKey().empty() ? LocalId::fromIndex(0) : currentElementKey().back(); }
+  LocalId peekCurrentChildLocalId() const {
+    return currentElementKey().empty() ? LocalId::fromIndex(0) : currentElementKey().tail();
+  }
 
 protected:
   TextSystem& textSystem_;

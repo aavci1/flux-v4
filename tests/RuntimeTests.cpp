@@ -61,6 +61,9 @@ TEST_CASE("ComponentKey interned handles preserve hash and prefix semantics") {
     CHECK(key.hasPrefix(prefix));
     CHECK(prefix.sharesPrefix(key));
     CHECK(key.prefix(1) == prefix);
+    CHECK(key.tail() == LocalId::fromString("button"));
+    CHECK(key.materialize() == std::vector<LocalId>{LocalId::fromString("panel"),
+                                                    LocalId::fromString("button")});
 
     std::unordered_map<ComponentKey, int, ComponentKeyHash> values;
     values.emplace(key, 42);

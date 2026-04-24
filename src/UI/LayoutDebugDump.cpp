@@ -39,11 +39,12 @@ std::string formatComponentKey(ComponentKey const& key) {
     return "<root>";
   }
   std::string out;
-  for (std::size_t i = 0; i < key.size(); ++i) {
+  std::vector<LocalId> const ids = key.materialize();
+  for (std::size_t i = 0; i < ids.size(); ++i) {
     if (i != 0) {
       out += '/';
     }
-    out += formatLocalId(key[i]);
+    out += formatLocalId(ids[i]);
   }
   return out;
 }
@@ -114,16 +115,18 @@ void layoutDebugDumpRetained(scenegraph::SceneGraph const& graph) {
   std::sort(entries.begin(), entries.end(), [](auto const& lhs, auto const& rhs) {
     ComponentKey const& a = lhs.first;
     ComponentKey const& b = rhs.first;
-    std::size_t const common = std::min(a.size(), b.size());
+    std::vector<LocalId> const aIds = a.materialize();
+    std::vector<LocalId> const bIds = b.materialize();
+    std::size_t const common = std::min(aIds.size(), bIds.size());
     for (std::size_t i = 0; i < common; ++i) {
-      if (a[i].kind != b[i].kind) {
-        return static_cast<int>(a[i].kind) < static_cast<int>(b[i].kind);
+      if (aIds[i].kind != bIds[i].kind) {
+        return static_cast<int>(aIds[i].kind) < static_cast<int>(bIds[i].kind);
       }
-      if (a[i].value != b[i].value) {
-        return a[i].value < b[i].value;
+      if (aIds[i].value != bIds[i].value) {
+        return aIds[i].value < bIds[i].value;
       }
     }
-    return a.size() < b.size();
+    return aIds.size() < bIds.size();
   });
 
   std::fprintf(stderr, "[flux:layout] geometry entries=%zu\n", entries.size());

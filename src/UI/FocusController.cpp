@@ -169,8 +169,7 @@ void FocusController::requestInSubtree(ComponentKey const& subtreeKey,
     return;
   }
   for (ComponentKey const& leafKey : scenegraph::collectFocusableKeys(graph)) {
-    if (leafKey.size() >= subtreeKey.size() &&
-        std::equal(subtreeKey.begin(), subtreeKey.end(), leafKey.begin())) {
+    if (leafKey.hasPrefix(subtreeKey)) {
       set(leafKey, overlayId, FocusInputKind::Keyboard);
       return;
     }
@@ -184,21 +183,12 @@ void FocusController::claimFocusForSubtree(ComponentKey const& pressedKey,
     return;
   }
   std::size_t const parentLen = pressedKey.size() - 1;
+  ComponentKey const parentKey = pressedKey.prefix(parentLen == 0 ? 1 : parentLen);
   for (ComponentKey const& leafKey : scenegraph::collectFocusableKeys(graph)) {
     if (leafKey.size() <= parentLen) {
       continue;
     }
-    bool sameParent = false;
-    if (parentLen == 0) {
-      std::size_t const len = std::min(leafKey.size(), pressedKey.size());
-      sameParent = len > 0 &&
-                   std::equal(pressedKey.begin(), pressedKey.begin() + static_cast<std::ptrdiff_t>(len),
-                              leafKey.begin());
-    } else {
-      sameParent = std::equal(pressedKey.begin(),
-                              pressedKey.begin() + static_cast<std::ptrdiff_t>(parentLen), leafKey.begin());
-    }
-    if (sameParent) {
+    if (leafKey.hasPrefix(parentKey)) {
       set(leafKey, overlayScope, FocusInputKind::Pointer);
       return;
     }

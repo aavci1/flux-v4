@@ -130,8 +130,8 @@ void TraversalContext::resetTraversalState(ComponentKey const& key) {
   if (!key.empty()) {
     std::size_t const prefixSize = key.size() - 1;
     keyStack_.reserve(std::max(keyStack_.capacity(), prefixSize));
-    keyStack_.insert(keyStack_.end(), key.begin(), key.begin() + static_cast<std::ptrdiff_t>(prefixSize));
-    LocalId const local = key.back();
+    key.appendPrefixTo(keyStack_, prefixSize);
+    LocalId const local = key.tail();
     if (local.kind == LocalId::Kind::Positional) {
       nextChildIndex_ = local.value == 0 ? 0u : static_cast<std::size_t>(local.value - 1ull);
     } else {
@@ -168,7 +168,7 @@ void TraversalContext::pushCompositeKeyTail(ComponentKey const& compositeKey) {
   bool const pushedKeyTail = !compositeKey.empty();
   pushedCompositeKeyTailStack_.push_back(pushedKeyTail);
   if (pushedKeyTail) {
-    keyStack_.push_back(compositeKey.back());
+    keyStack_.push_back(compositeKey.tail());
   }
   nextChildIndex_ = 0;
 }

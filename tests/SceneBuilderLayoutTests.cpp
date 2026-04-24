@@ -197,7 +197,7 @@ TEST_CASE("SceneBuilder keeps nested body focus targets inside the inner compone
       LocalId::fromString("$flux.body"),
   };
   auto isPrefix = [](ComponentKey const& prefix, ComponentKey const& key) {
-    return prefix.size() <= key.size() && std::equal(prefix.begin(), prefix.end(), key.begin());
+    return key.hasPrefix(prefix);
   };
   ComponentKey const outerKey{LocalId::fromString("field")};
 
