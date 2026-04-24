@@ -20,6 +20,7 @@
 
 #include "UI/Build/BuildPass.hpp"
 #include "UI/Layout/Algorithms/OverlayLayout.hpp"
+#include "SceneGraph/SceneBounds.hpp"
 
 namespace flux {
 
@@ -75,7 +76,18 @@ char const *overlayPlacementName(OverlayConfig::Placement placement) {
     case OverlayConfig::Placement::Start:
         return "start";
     }
-    return "unknown";
+  return "unknown";
+}
+
+Rect overlayPaintBounds(scenegraph::SceneNode const& node) {
+    Rect bounds = node.kind() == scenegraph::SceneNodeKind::Group ? Rect{} : node.localBounds();
+    for (std::unique_ptr<scenegraph::SceneNode> const& child : node.children()) {
+        Rect const childBounds =
+            scenegraph::detail::transformBounds(Mat3::translate(child->position()) * child->transform(),
+                                                overlayPaintBounds(*child));
+        bounds = scenegraph::detail::unionRect(bounds, childBounds);
+    }
+    return bounds;
 }
 
 } // namespace
@@ -230,7 +242,12 @@ void OverlayManager::rebuild(Size windowSize, Runtime &runtime) {
             },
             resolveOverlayRootScene(entry.content), cs);
 
-        Rect contentBounds = contentRoot ? contentRoot->bounds() : Rect{};
+        Rect contentBounds = contentRoot ? overlayPaintBounds(*contentRoot) : Rect{};
+        if ((contentBounds.width <= 0.f || !std::isfinite(contentBounds.width) ||
+             contentBounds.height <= 0.f || !std::isfinite(contentBounds.height)) &&
+            contentRoot) {
+            contentBounds = contentRoot->bounds();
+        }
         if (contentBounds.width <= 0.f || !std::isfinite(contentBounds.width)) {
             contentBounds.width = 1.f;
         }
