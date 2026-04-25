@@ -303,6 +303,27 @@
   - `MeasureContext::peekCurrentChildLocalId()` no longer constructs `currentElementKey()` twice just to read the tail.
   - This cut `ComponentKey` append traffic by about a third and materially reduced `processReactiveUpdates()` / incremental rebuild time.
 
+## Attempt 18
+
+- Item: Avoid copying replayed glyph vertices into `frame.glyphVerts` during prepared-op replay; keep borrowed glyph vertex slices in the frame recorder and copy them directly into the Metal glyph arena during present.
+- Type: framework
+- Status: Worked, kept.
+- Before:
+  - Sample hotspot: `std::__uninitialized_allocator_copy_impl<..., MetalGlyphVertex const*, ...>` at `413.91 M cycles` / `3.3%`
+  - `render`: `34.43 ms/s (0.29/f)` (run 1), `37.37 ms/s (0.31/f)` (run 2)
+  - `present`: `28.64 ms/s (0.24/f)` (run 1), `30.62 ms/s (0.25/f)` (run 2)
+  - `frameBudget`: `194.47 ms/s (1.62/f)` (run 1), `203.69 ms/s (1.68/f)` (run 2)
+- After:
+  - Sample: the `MetalGlyphVertex` `uninitialized_allocator_copy` frame no longer appears; glyph work moves to `MetalDeviceResources::uploadGlyphVertices(...)`
+  - `render`: `30.25 ms/s (0.25/f)` (run 1), `31.45 ms/s (0.26/f)` (run 2)
+  - `present`: `17.50 ms/s (0.14/f)` (run 1), `17.46 ms/s (0.15/f)` (run 2)
+  - `frameBudget`: `170.83 ms/s (1.41/f)` (run 1), `172.17 ms/s (1.43/f)` (run 2)
+  - Confirmation spread: one follow-up present window hit `329.45 ms/s (2.75/f)`, consistent with the existing present/scheduler noise seen in earlier attempts
+- Outcome:
+  - `MetalFrameRecorder` now tracks logical glyph vertex offsets separately from owned glyph vertex storage.
+  - Live text draws still own their generated vertices; prepared-op replay borrows the immutable recorded glyph slice when opacity is unchanged and only falls back to copying when opacity scaling requires vertex-color mutation.
+  - Upload now scatters owned and borrowed slices into the final contiguous Metal glyph buffer, preserving the existing draw offsets while removing the CPU-to-CPU glyph vertex copy from the hot replay path.
+
 ## Result
 
 - Accepted framework changes still in place:
@@ -315,6 +336,7 @@
   - Identity group traversal no longer mutates the canvas stack unless a descendant actually needs a transformed/clipped local space.
   - `ComponentKey` interning now uses parent-local child tables instead of a global `InternedEdge` hash table.
   - `TraversalContext` carries an interned prefix key instead of reconstructing child keys from `std::vector<LocalId>` on every measure step.
+  - Prepared Metal glyph replay borrows recorded glyph vertex slices and uploads them directly instead of copying them into the frame recorder first.
 - Final status:
   - `animation-demo` stays at `59-61 fps`.
   - External foreground CPU confirmation is below the `10%` target.

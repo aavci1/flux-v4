@@ -4,9 +4,11 @@
 #import <simd/simd.h>
 
 #include "Graphics/Metal/MetalDeviceResources.hpp"
+#include "Graphics/Metal/MetalFrameRecorder.hpp"
 #include "Graphics/Metal/MetalShaderLibrary.hpp"
 
 #include <algorithm>
+#include <cassert>
 #include <cstring>
 #include <stdexcept>
 
@@ -472,13 +474,27 @@ void MetalDeviceResources::uploadPathVertices(const std::vector<PathVertex>& pat
   std::memcpy([pathVertexArenas_[currentFrameIndex_] contents], pathVerts.data(), pathVertBytes);
 }
 
-void MetalDeviceResources::uploadGlyphVertices(const std::vector<MetalGlyphVertex>& verts) {
-  const NSUInteger bytes = static_cast<NSUInteger>(verts.size() * sizeof(MetalGlyphVertex));
+void MetalDeviceResources::uploadGlyphVertices(MetalFrameRecorder const& recorder) {
+  const NSUInteger bytes = static_cast<NSUInteger>(recorder.glyphVertexCount * sizeof(MetalGlyphVertex));
   ensureGlyphVertexArenaCapacity(static_cast<std::uint32_t>(bytes));
   if (bytes == 0) {
     return;
   }
-  std::memcpy([glyphVertexArenas_[currentFrameIndex_] contents], verts.data(), bytes);
+  auto* dst = static_cast<MetalGlyphVertex*>([glyphVertexArenas_[currentFrameIndex_] contents]);
+  std::uint32_t cursor = 0;
+  for (MetalGlyphVertexSource const& source : recorder.glyphVertexSources) {
+    if (source.count == 0) {
+      continue;
+    }
+    MetalGlyphVertex const* src = source.borrowed;
+    if (source.kind == MetalGlyphVertexSource::Owned) {
+      src = recorder.glyphVerts.data() + source.start;
+    }
+    assert(src != nullptr);
+    std::memcpy(dst + cursor, src, static_cast<std::size_t>(source.count) * sizeof(MetalGlyphVertex));
+    cursor += source.count;
+  }
+  assert(cursor == recorder.glyphVertexCount);
 }
 
 void MetalDeviceResources::uploadImageOps(const std::vector<MetalImageOp>& ops) {

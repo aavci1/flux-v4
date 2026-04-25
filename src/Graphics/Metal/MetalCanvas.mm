@@ -199,6 +199,33 @@ void appendGlyphQuad(std::vector<MetalGlyphVertex>& out, Mat3 const& M, float dp
   push(p2, uv2);
 }
 
+void appendOwnedGlyphSource(MetalFrameRecorder& recorder, std::uint32_t start, std::uint32_t count) {
+  if (count == 0) {
+    return;
+  }
+  recorder.glyphVertexSources.push_back(MetalGlyphVertexSource{
+      .kind = MetalGlyphVertexSource::Owned,
+      .start = start,
+      .count = count,
+      .borrowed = nullptr,
+  });
+  recorder.glyphVertexCount += count;
+}
+
+void appendBorrowedGlyphSource(MetalFrameRecorder& recorder, MetalGlyphVertex const* vertices,
+                               std::uint32_t count) {
+  if (count == 0) {
+    return;
+  }
+  recorder.glyphVertexSources.push_back(MetalGlyphVertexSource{
+      .kind = MetalGlyphVertexSource::Borrowed,
+      .start = 0,
+      .count = count,
+      .borrowed = vertices,
+  });
+  recorder.glyphVertexCount += count;
+}
+
 template <typename T>
 void tagOpWithClip(T& op, bool clipValid, MTLScissorRect const& clip, MetalRoundedClipStack const& roundedClip) {
   if (clipValid) {
@@ -292,7 +319,7 @@ public:
       : textSystem_(textSystem), metal_(layer), windowHandle_(handle) {
     glyphAtlas_ = std::make_unique<GlyphAtlas>(metal_.device(), textSystem_);
     glyphAtlas_->setBeforeGrowCallback([this]() {
-      assert(frame_.glyphVerts.empty() &&
+      assert(frame_.glyphVerts.empty() && frame_.glyphVertexSources.empty() && frame_.glyphVertexCount == 0 &&
              "GlyphAtlas::grow() repacks UVs; cannot run while the frame still holds glyph vertices");
     });
     frameSem_ = dispatch_semaphore_create(static_cast<int>(kFramesInFlight));
@@ -379,7 +406,7 @@ public:
     metal_.uploadRectOps(frame_.rectOps);
     metal_.uploadImageOps(frame_.imageOps);
     metal_.uploadPathVertices(frame_.pathVerts);
-    metal_.uploadGlyphVertices(frame_.glyphVerts);
+    metal_.uploadGlyphVertices(frame_);
     metal_.reserveDrawStateBuffers(static_cast<std::uint32_t>(frame_.opOrder.size()),
                                    static_cast<std::uint32_t>(frame_.opOrder.size()));
 
@@ -1050,7 +1077,8 @@ public:
     float const invDpiX = 1.f / dpiScaleX_;
     float const invDpiY = 1.f / dpiScaleY_;
 
-    std::uint32_t const glyphStart = static_cast<std::uint32_t>(recorder.glyphVerts.size());
+    std::uint32_t const glyphStart = recorder.glyphVertexCount;
+    std::uint32_t const ownedGlyphStart = static_cast<std::uint32_t>(recorder.glyphVerts.size());
     for (auto const& placed : layout.runs) {
       TextRun const& text = placed.run;
       float const baselineY = origin.y + placed.origin.y;
@@ -1099,8 +1127,9 @@ public:
       }
     }
 
-    std::uint32_t const vertCount = static_cast<std::uint32_t>(recorder.glyphVerts.size()) - glyphStart;
+    std::uint32_t const vertCount = static_cast<std::uint32_t>(recorder.glyphVerts.size()) - ownedGlyphStart;
     if (vertCount > 0) {
+      appendOwnedGlyphSource(recorder, ownedGlyphStart, vertCount);
       MetalGlyphOp op{};
       op.glyphStart = glyphStart;
       op.glyphVertexCount = vertCount;
@@ -1356,7 +1385,7 @@ public:
   void replayRecordedOps(MetalFrameRecorder const& recorded, MetalRecorderSlice const& slice) {
     MetalFrameRecorder& frame = frame_;
     std::uint32_t const framePathVertexBase = static_cast<std::uint32_t>(frame.pathVerts.size());
-    std::uint32_t const frameGlyphVertexBase = static_cast<std::uint32_t>(frame.glyphVerts.size());
+    std::uint32_t const frameGlyphVertexBase = frame.glyphVertexCount;
     std::uint32_t const frameRectBase = static_cast<std::uint32_t>(frame.rectOps.size());
     std::uint32_t const frameImageBase = static_cast<std::uint32_t>(frame.imageOps.size());
     std::uint32_t const framePathOpBase = static_cast<std::uint32_t>(frame.pathOps.size());
@@ -1369,10 +1398,9 @@ public:
                                   static_cast<std::ptrdiff_t>(slice.pathVertexStart + slice.pathVertexCount));
     }
     if (slice.glyphVertexCount > 0) {
-      frame.glyphVerts.insert(frame.glyphVerts.end(),
-                               recorded.glyphVerts.begin() + static_cast<std::ptrdiff_t>(slice.glyphVertexStart),
-                               recorded.glyphVerts.begin() +
-                                   static_cast<std::ptrdiff_t>(slice.glyphVertexStart + slice.glyphVertexCount));
+      appendBorrowedGlyphSource(frame,
+                                recorded.glyphVerts.data() + static_cast<std::size_t>(slice.glyphVertexStart),
+                                slice.glyphVertexCount);
     }
     if (slice.rectCount > 0) {
       frame.rectOps.insert(frame.rectOps.end(),
@@ -1450,7 +1478,7 @@ public:
     std::optional<Rect> const clipRect = currentState().clip;
     MetalFrameRecorder& frame = frame_;
     std::uint32_t const framePathVertexBase = static_cast<std::uint32_t>(frame.pathVerts.size());
-    std::uint32_t const frameGlyphVertexBase = static_cast<std::uint32_t>(frame.glyphVerts.size());
+    std::uint32_t const frameGlyphVertexBase = frame.glyphVertexCount;
     std::uint32_t const frameRectBase = static_cast<std::uint32_t>(frame.rectOps.size());
     std::uint32_t const frameImageBase = static_cast<std::uint32_t>(frame.imageOps.size());
     std::uint32_t const framePathOpBase = static_cast<std::uint32_t>(frame.pathOps.size());
@@ -1459,7 +1487,7 @@ public:
     if (slice.pathVertexCount > 0) {
       frame.pathVerts.reserve(frame.pathVerts.size() + slice.pathVertexCount);
     }
-    if (slice.glyphVertexCount > 0) {
+    if (slice.glyphVertexCount > 0 && opacityScale < 0.9999f) {
       frame.glyphVerts.reserve(frame.glyphVerts.size() + slice.glyphVertexCount);
     }
     if (slice.rectCount > 0) {
@@ -1494,14 +1522,18 @@ public:
     if (slice.glyphVertexCount > 0) {
       std::size_t const start = static_cast<std::size_t>(slice.glyphVertexStart);
       std::size_t const count = static_cast<std::size_t>(slice.glyphVertexCount);
-      frame.glyphVerts.insert(frame.glyphVerts.end(),
-                              recorded.glyphVerts.begin() + static_cast<std::ptrdiff_t>(start),
-                              recorded.glyphVerts.begin() + static_cast<std::ptrdiff_t>(start + count));
       if (opacityScale < 0.9999f) {
+        std::uint32_t const ownedGlyphStart = static_cast<std::uint32_t>(frame.glyphVerts.size());
+        frame.glyphVerts.insert(frame.glyphVerts.end(),
+                                recorded.glyphVerts.begin() + static_cast<std::ptrdiff_t>(start),
+                                recorded.glyphVerts.begin() + static_cast<std::ptrdiff_t>(start + count));
+        appendOwnedGlyphSource(frame, ownedGlyphStart, slice.glyphVertexCount);
         for (std::size_t i = 0; i < count; ++i) {
-          MetalGlyphVertex& vertex = frame.glyphVerts[static_cast<std::size_t>(frameGlyphVertexBase) + i];
+          MetalGlyphVertex& vertex = frame.glyphVerts[static_cast<std::size_t>(ownedGlyphStart) + i];
           vertex.color *= opacityScale;
         }
+      } else {
+        appendBorrowedGlyphSource(frame, recorded.glyphVerts.data() + start, slice.glyphVertexCount);
       }
     }
 

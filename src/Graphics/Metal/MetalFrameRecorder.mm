@@ -15,7 +15,9 @@ MetalFrameRecorder::MetalFrameRecorder(MetalFrameRecorder&& other) noexcept
       glyphOps(std::move(other.glyphOps)),
       opOrder(std::move(other.opOrder)),
       pathVerts(std::move(other.pathVerts)),
-      glyphVerts(std::move(other.glyphVerts)) {
+      glyphVerts(std::move(other.glyphVerts)),
+      glyphVertexSources(std::move(other.glyphVertexSources)),
+      glyphVertexCount(other.glyphVertexCount) {
   other.rectOps.clear();
   other.imageOps.clear();
   other.pathOps.clear();
@@ -23,6 +25,8 @@ MetalFrameRecorder::MetalFrameRecorder(MetalFrameRecorder&& other) noexcept
   other.opOrder.clear();
   other.pathVerts.clear();
   other.glyphVerts.clear();
+  other.glyphVertexSources.clear();
+  other.glyphVertexCount = 0;
 }
 
 MetalFrameRecorder& MetalFrameRecorder::operator=(MetalFrameRecorder&& other) noexcept {
@@ -37,6 +41,8 @@ MetalFrameRecorder& MetalFrameRecorder::operator=(MetalFrameRecorder&& other) no
   opOrder = std::move(other.opOrder);
   pathVerts = std::move(other.pathVerts);
   glyphVerts = std::move(other.glyphVerts);
+  glyphVertexSources = std::move(other.glyphVertexSources);
+  glyphVertexCount = other.glyphVertexCount;
   other.rectOps.clear();
   other.imageOps.clear();
   other.pathOps.clear();
@@ -44,6 +50,8 @@ MetalFrameRecorder& MetalFrameRecorder::operator=(MetalFrameRecorder&& other) no
   other.opOrder.clear();
   other.pathVerts.clear();
   other.glyphVerts.clear();
+  other.glyphVertexSources.clear();
+  other.glyphVertexCount = 0;
   return *this;
 }
 
@@ -61,6 +69,8 @@ void MetalFrameRecorder::clear() {
   opOrder.clear();
   pathVerts.clear();
   glyphVerts.clear();
+  glyphVertexSources.clear();
+  glyphVertexCount = 0;
 }
 
 } // namespace flux

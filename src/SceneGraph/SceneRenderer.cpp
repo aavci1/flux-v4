@@ -74,7 +74,7 @@ MetalRecorderSlice fullRecordedSlice(MetalFrameRecorder const &recorded) {
         .pathVertexStart = 0,
         .pathVertexCount = static_cast<std::uint32_t>(recorded.pathVerts.size()),
         .glyphVertexStart = 0,
-        .glyphVertexCount = static_cast<std::uint32_t>(recorded.glyphVerts.size()),
+        .glyphVertexCount = recorded.glyphVertexCount,
     };
 }
 

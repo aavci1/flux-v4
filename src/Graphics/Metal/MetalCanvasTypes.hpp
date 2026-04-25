@@ -35,6 +35,16 @@ struct MetalGlyphVertex {
   vector_float4 color{};
 };
 
+struct MetalGlyphVertexSource {
+  enum Kind : std::uint8_t {
+    Owned,
+    Borrowed,
+  } kind = Owned;
+  std::uint32_t start = 0;
+  std::uint32_t count = 0;
+  MetalGlyphVertex const* borrowed = nullptr;
+};
+
 /// GPU instance for `image_sdf_vert` / `image_sdf_frag` (matches `ImageInstance` in `CanvasShaders.metal`).
 struct MetalImageInstance {
   MetalRectInstance sdf;

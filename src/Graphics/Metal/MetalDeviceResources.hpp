@@ -17,6 +17,8 @@
 
 namespace flux {
 
+struct MetalFrameRecorder;
+
 /**
  * Metal device, pipelines, static geometry, and per-frame GPU arenas for instance/path data.
  * Owned by `MetalCanvas`; keeps buffer pools co-located with the PSOs that consume them.
@@ -51,7 +53,7 @@ public:
   /// Copy path vertices into the path arena (no-op if empty).
   void uploadPathVertices(const std::vector<PathVertex>& pathVerts);
 
-  void uploadGlyphVertices(const std::vector<MetalGlyphVertex>& verts);
+  void uploadGlyphVertices(MetalFrameRecorder const& recorder);
   void reserveDrawStateBuffers(std::uint32_t uniformCount, std::uint32_t roundedClipCount);
 
   id<MTLBuffer> instanceArenaBuffer() const { return instanceArenas_[currentFrameIndex_]; }

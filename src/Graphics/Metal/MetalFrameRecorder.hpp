@@ -16,6 +16,8 @@ struct MetalFrameRecorder {
   std::vector<MetalOpRef> opOrder;
   std::vector<PathVertex> pathVerts;
   std::vector<MetalGlyphVertex> glyphVerts;
+  std::vector<MetalGlyphVertexSource> glyphVertexSources;
+  std::uint32_t glyphVertexCount = 0;
 
   MetalFrameRecorder() = default;
   ~MetalFrameRecorder();
