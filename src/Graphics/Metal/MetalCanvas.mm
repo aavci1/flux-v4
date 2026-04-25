@@ -26,6 +26,7 @@ class Window;
 #include <algorithm>
 #include <array>
 #include <cassert>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -311,6 +312,44 @@ inline void setEncoderDrawUniformBuffer(id<MTLRenderCommandEncoder> enc, id<MTLB
   ++(*uniformIndex);
 }
 
+class ScopedCanvasPresentTimer {
+public:
+  ScopedCanvasPresentTimer()
+      : enabled_(debug::perf::enabled()),
+        startedAt_(enabled_ ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{}) {}
+
+  ~ScopedCanvasPresentTimer() {
+    if (!enabled_) {
+      return;
+    }
+    auto elapsed = std::chrono::steady_clock::now() - startedAt_;
+    if (elapsed > drawableWait_) {
+      elapsed -= drawableWait_;
+    } else {
+      elapsed = std::chrono::steady_clock::duration::zero();
+    }
+    debug::perf::recordDuration(debug::perf::TimedMetric::CanvasPresent,
+                                std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed));
+  }
+
+  bool enabled() const { return enabled_; }
+
+  void recordDrawableWaitSince(std::chrono::steady_clock::time_point startedAt) {
+    if (!enabled_) {
+      return;
+    }
+    auto const elapsed = std::chrono::steady_clock::now() - startedAt;
+    drawableWait_ += elapsed;
+    debug::perf::recordDuration(debug::perf::TimedMetric::CanvasDrawableWait,
+                                std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed));
+  }
+
+private:
+  bool enabled_ = false;
+  std::chrono::steady_clock::time_point startedAt_{};
+  std::chrono::steady_clock::duration drawableWait_{};
+};
+
 } // namespace
 
 class MetalCanvas final : public Canvas {
@@ -386,10 +425,10 @@ public:
       return;
     }
 
-    debug::perf::ScopedTimer perfTimer(debug::perf::TimedMetric::CanvasPresent);
     struct FrameCounter {
       ~FrameCounter() { debug::perf::recordPresentedFrame(); }
     } frameCounter{};
+    ScopedCanvasPresentTimer perfTimer;
 
     const float vw = frameDrawableW_;
     const float vh = frameDrawableH_;
@@ -410,7 +449,10 @@ public:
     metal_.reserveDrawStateBuffers(static_cast<std::uint32_t>(frame_.opOrder.size()),
                                    static_cast<std::uint32_t>(frame_.opOrder.size()));
 
+    auto const drawableWaitStartedAt =
+        perfTimer.enabled() ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
     drawable_ = [metal_.layer() nextDrawable];
+    perfTimer.recordDrawableWaitSince(drawableWaitStartedAt);
     cmdBuf_ = [metal_.queue() commandBuffer];
     if (!drawable_ || !cmdBuf_) {
       dispatch_semaphore_signal(frameSem_);
