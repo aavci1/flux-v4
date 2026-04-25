@@ -72,3 +72,28 @@ TEST_CASE("ComponentKey interned handles preserve hash and prefix semantics") {
     REQUIRE(it != values.end());
     CHECK(it->second == 42);
 }
+
+TEST_CASE("ComponentKey interned sibling lookups stay stable across wide parent fanout") {
+    using flux::ComponentKey;
+    using flux::LocalId;
+
+    ComponentKey const parent {LocalId::fromString("stack")};
+    std::vector<ComponentKey> positionalChildren;
+    std::vector<ComponentKey> keyedChildren;
+    positionalChildren.reserve(12);
+    keyedChildren.reserve(6);
+
+    for (std::size_t index = 0; index < 12; ++index) {
+        positionalChildren.emplace_back(parent, LocalId::fromIndex(index));
+    }
+    for (char suffix = 'a'; suffix <= 'f'; ++suffix) {
+        keyedChildren.emplace_back(parent, LocalId::fromString(std::string(1, suffix)));
+    }
+
+    CHECK(positionalChildren.back() == ComponentKey {LocalId::fromString("stack"), LocalId::fromIndex(11)});
+    CHECK(keyedChildren.back() == ComponentKey {LocalId::fromString("stack"), LocalId::fromString("f")});
+    CHECK(positionalChildren[7].hasPrefix(parent));
+    CHECK(keyedChildren[2].hasPrefix(parent));
+    CHECK(positionalChildren[0].tail() == LocalId::fromIndex(0));
+    CHECK(keyedChildren[0].tail() == LocalId::fromString("a"));
+}

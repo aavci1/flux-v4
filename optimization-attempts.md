@@ -263,6 +263,25 @@
   - Leaves and clipped/transformed subtrees still pay the normal state push when they actually need canvas mutation, so the change preserves translation and clip semantics while reducing stack churn on the hot layout path.
   - A regression test now verifies that nested identity groups collapse to a single renderer `save()` / `restore()` pair for the leaf draw.
 
+## Attempt 16
+
+- Item: Replace `ComponentKey` interning's flat `unordered_map<InternedEdge, handle>` with parent-local child tables: direct indexed lookup for positional ids and short inline scans for keyed ids.
+- Type: framework
+- Status: Worked, kept.
+- Before:
+  - 1-second sample hotspot: `std::__hash_table<...InternedEdge...>::find(...)` at `1.42 G cycles` / `49.3%`
+  - `reactive`: `155.60 ms/s (1.29/f)` (run 1), `104.17 ms/s (0.87/f)` (run 2)
+  - `incremental`: `154.22 ms/s (1.27/f)` (run 1), `103.19 ms/s (0.86/f)` (run 2)
+- After:
+  - 1-second sample: the `InternedEdge` hash-table lookup no longer appears; hot `ComponentKey` time moves into `ComponentKeyTable::intern(...)` plus `SmallVector` reads
+  - `reactive`: `134.62 ms/s (1.11/f)` (run 1), `94.11 ms/s (0.78/f)` (run 2)
+  - `incremental`: `133.56 ms/s (1.10/f)` (run 1), `93.06 ms/s (0.78/f)` (run 2)
+  - Delta: about `-0.08` to `-0.19 ms/frame` on the hot rebuild path
+- Outcome:
+  - Positional child ids now hit a parent-local indexed slot instead of hashing `{parent, tail}` through a global edge table.
+  - Keyed child ids now pay a short contiguous scan inside a small inline bucket instead of a heap-backed hash-table lookup.
+  - This removed the exact `InternedEdge` hash hotspot from the sample and shaved measurable time from `processReactiveUpdates()` / incremental rebuild without changing `ComponentKey` semantics.
+
 ## Result
 
 - Accepted framework changes still in place:
@@ -273,6 +292,7 @@
   - Incremental subtree rebuild now reuses compatible scene nodes for the common animated layout path, and prepared leaf replay skips redundant outer transforms.
   - `SceneBuilder` no longer clones the resolved scene element on every incremental animation rebuild.
   - Identity group traversal no longer mutates the canvas stack unless a descendant actually needs a transformed/clipped local space.
+  - `ComponentKey` interning now uses parent-local child tables instead of a global `InternedEdge` hash table.
 - Final status:
   - `animation-demo` stays at `59-61 fps`.
   - External foreground CPU confirmation is below the `10%` target.

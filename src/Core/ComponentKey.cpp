@@ -1,10 +1,10 @@
 #include <Flux/Core/ComponentKey.hpp>
+#include <Flux/Detail/SmallVector.hpp>
 
 #include "Debug/PerfCounters.hpp"
 
 #include <cassert>
 #include <thread>
-#include <unordered_map>
 
 namespace flux {
 
@@ -22,49 +22,75 @@ struct InternedKeyNode {
   std::uint32_t depth = 0;
 };
 
-struct InternedEdge {
-  ComponentKeyHandle parent = kRootHandle;
+struct InternedKeyChild {
   LocalId tail{};
-
-  bool operator==(InternedEdge const&) const = default;
+  ComponentKeyHandle handle = kRootHandle;
 };
 
-struct InternedEdgeHash {
-  std::size_t operator()(InternedEdge const& edge) const noexcept {
-    std::size_t seed = static_cast<std::size_t>(edge.parent);
-    std::size_t const tailHash = LocalIdHash{}(edge.tail);
-    seed ^= tailHash + 0x9e3779b9u + (seed << 6) + (seed >> 2);
-    return seed;
-  }
+struct InternedChildBucket {
+  detail::SmallVector<ComponentKeyHandle, 4> positionalChildren{};
+  detail::SmallVector<InternedKeyChild, 4> keyedChildren{};
 };
 
 std::size_t mixHandle(ComponentKeyHandle handle) noexcept {
   return static_cast<std::size_t>(static_cast<std::uint64_t>(handle) * kHandleHashMultiplier);
 }
 
+bool isIndexedPositional(LocalId tail) noexcept {
+  return tail.kind == LocalId::Kind::Positional && tail.value != 0;
+}
+
 class ComponentKeyTable {
 public:
   ComponentKeyTable() {
     nodes_.reserve(kInitialInternReserve);
-    edges_.reserve(kInitialInternReserve);
+    children_.reserve(kInitialInternReserve);
     nodes_.push_back(InternedKeyNode{});
+    children_.emplace_back();
   }
 
   ComponentKeyHandle intern(ComponentKeyHandle parent, LocalId tail) {
     assertOwnerThread();
-    InternedEdge const edge{.parent = parent, .tail = tail};
-    if (auto const it = edges_.find(edge); it != edges_.end()) {
-      return it->second;
+    assert(parent < nodes_.size());
+
+    InternedChildBucket const& children = children_[parent];
+    if (isIndexedPositional(tail)) {
+      std::size_t const childIndex = static_cast<std::size_t>(tail.value - 1ull);
+      if (childIndex < children.positionalChildren.size()) {
+        ComponentKeyHandle const existing = children.positionalChildren[childIndex];
+        if (existing != kRootHandle) {
+          return existing;
+        }
+      }
+    } else {
+      for (InternedKeyChild const& child : children.keyedChildren) {
+        if (child.tail == tail) {
+          return child.handle;
+        }
+      }
     }
 
-    assert(parent < nodes_.size());
     ComponentKeyHandle const handle = static_cast<ComponentKeyHandle>(nodes_.size());
     nodes_.push_back(InternedKeyNode{
         .parent = parent,
         .tail = tail,
         .depth = static_cast<std::uint32_t>(nodes_[parent].depth + 1U),
     });
-    edges_.emplace(edge, handle);
+    children_.emplace_back();
+
+    InternedChildBucket& parentChildren = children_[parent];
+    if (isIndexedPositional(tail)) {
+      std::size_t const childIndex = static_cast<std::size_t>(tail.value - 1ull);
+      while (parentChildren.positionalChildren.size() <= childIndex) {
+        parentChildren.positionalChildren.emplace_back(kRootHandle);
+      }
+      parentChildren.positionalChildren[childIndex] = handle;
+    } else {
+      parentChildren.keyedChildren.emplace_back(InternedKeyChild{
+          .tail = tail,
+          .handle = handle,
+      });
+    }
     return handle;
   }
 
@@ -153,7 +179,7 @@ private:
   }
 
   std::vector<InternedKeyNode> nodes_{};
-  std::unordered_map<InternedEdge, ComponentKeyHandle, InternedEdgeHash> edges_{};
+  std::vector<InternedChildBucket> children_{};
 #ifndef NDEBUG
   mutable std::thread::id ownerThread_{};
   mutable bool ownerThreadBound_ = false;
