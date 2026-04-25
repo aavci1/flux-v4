@@ -7,6 +7,7 @@
 
 #include <Flux/Core/ComponentKey.hpp>
 #include <Flux/UI/Environment.hpp>
+#include <Flux/UI/Detail/ElementModifiers.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 #include <Flux/Reactive/Observer.hpp>
 #include <Flux/Reactive/Detail/TypeTraits.hpp>
@@ -16,8 +17,11 @@
 #include <cstdint>
 #include <cstring>
 #include <deque>
+#include <functional>
 #include <memory>
 #include <optional>
+#include <span>
+#include <string>
 #include <utility>
 #include <typeindex>
 #include <type_traits>
@@ -28,8 +32,8 @@
 namespace flux {
 
 class Element;
-namespace detail {
-struct ElementModifiers;
+namespace scenegraph {
+struct InteractionData;
 }
 
 /// One heap-allocated state value (a Signal<T>, Animation<T>, or any type).
@@ -37,6 +41,7 @@ struct StateSlot {
   std::unique_ptr<void, void (*)(void*)> value{nullptr, nullptr};
   std::type_index type{typeid(void)};
   Observable* observable = nullptr;
+  ObserverHandle ownerHandle{};
 };
 
 struct ComponentSubscription {
@@ -60,6 +65,7 @@ struct ComponentBuildSnapshot {
   LayoutConstraints constraints{};
   LayoutHints hints{};
   Point origin{};
+  Point rootPosition{};
   Size assignedSize{};
   bool hasAssignedWidth = false;
   bool hasAssignedHeight = false;
@@ -73,6 +79,7 @@ struct ComponentState {
   std::uint64_t lastVisitedEpoch = 0;
   std::unique_ptr<void, void (*)(void*)> lastBody{nullptr, nullptr};
   std::uint64_t lastBodyEpoch = 0;
+  bool lastBodyStructurallyStable = false;
   std::optional<LayoutConstraints> lastBodyConstraints;
   std::vector<LayoutConstraints> reusableConstraints;
   std::vector<std::pair<LayoutConstraints, Size>> reusableMeasures;
@@ -82,6 +89,18 @@ struct ComponentState {
   std::vector<ComponentSubscription> subscriptions;
   std::unique_ptr<void, void (*)(void*)> lastSceneElement{nullptr, nullptr};
   std::optional<ComponentBuildSnapshot> lastBuildSnapshot;
+};
+
+struct InteractionCallbackCells {
+  std::shared_ptr<std::function<void(Point)>> onPointerDown{};
+  std::shared_ptr<std::function<void(Point)>> onPointerUp{};
+  std::shared_ptr<std::function<void(Point)>> onPointerMove{};
+  std::shared_ptr<std::function<void(Vec2)>> onScroll{};
+  std::shared_ptr<std::function<void(KeyCode, Modifiers)>> onKeyDown{};
+  std::shared_ptr<std::function<void(KeyCode, Modifiers)>> onKeyUp{};
+  std::shared_ptr<std::function<void(std::string const&)>> onTextInput{};
+  std::shared_ptr<std::function<void()>> onTap{};
+  std::uint64_t lastVisitedEpoch = 0;
 };
 
 /// Owns all component state for the lifetime of the window.
@@ -162,16 +181,27 @@ public:
 
   [[nodiscard]] bool hasBodyForCurrentRebuild(ComponentKey const& key,
                                               LayoutConstraints const& constraints) const;
+  [[nodiscard]] bool bodyStructurallyStable(ComponentKey const& key) const;
   Element* cachedBody(ComponentKey const& key);
   Element const* cachedBody(ComponentKey const& key) const;
+  void recordBodyStability(ComponentKey const& key, bool stable);
   Element const* sceneElement(ComponentKey const& key) const;
   void discardCurrentRebuildBody(ComponentKey const& key);
   void recordBodyConstraints(ComponentKey const& key, LayoutConstraints const& constraints);
   std::optional<ComponentBuildSnapshot> buildSnapshot(ComponentKey const& key) const;
   void recordBuildSnapshot(ComponentKey const& key, LayoutConstraints const& constraints,
                            LayoutHints const& hints, Point origin, Size assignedSize,
-                           bool hasAssignedWidth, bool hasAssignedHeight);
+                           bool hasAssignedWidth, bool hasAssignedHeight,
+                           Point rootPosition = {});
   void recordSceneElement(ComponentKey const& key, Element const& element);
+  [[nodiscard]] bool modifierLayersStructurallyStable(
+      ComponentKey const& key, std::span<detail::ElementModifiers const> layers) const;
+  void recordModifierLayers(ComponentKey const& key,
+                            std::span<detail::ElementModifiers const> layers);
+  void recordInteraction(ComponentKey const& key, detail::ElementModifiers const& modifiers);
+  [[nodiscard]] std::unique_ptr<scenegraph::InteractionData>
+  makeInteractionData(ComponentKey const& key, detail::ElementModifiers const& modifiers);
+  [[nodiscard]] bool hasInteractionDescendant(ComponentKey const& key) const;
   std::optional<Size> cachedMeasure(ComponentKey const& key, LayoutConstraints const& constraints) const;
   void recordMeasure(ComponentKey const& key, LayoutConstraints const& constraints, Size size);
 
@@ -193,6 +223,9 @@ public:
 
 private:
   std::unordered_map<ComponentKey, ComponentState, ComponentKeyHash> states_;
+  std::unordered_map<ComponentKey, InteractionCallbackCells, ComponentKeyHash> interactions_;
+  std::unordered_map<ComponentKey, std::vector<detail::ElementModifiers>, ComponentKeyHash>
+      modifierLayers_;
 
   // Stack of active component keys (depth > 1 when body() calls a helper
   // that returns an Element containing further composites — rare but valid).
@@ -269,15 +302,18 @@ S& StateStore::claimSlot(Args&&... args) {
   // New slot — construct in place (Signal/Animation are non-movable).
   S* raw = new S(std::forward<Args>(args)...);
   Observable* slotObservable = nullptr;
+  ObserverHandle ownerHandle{};
   if constexpr (std::is_base_of_v<Observable, S>) {
     slotObservable = raw;
+    ownerHandle = raw->observeComposite(*this, *activeStack_.back());
   }
   cs.slots.push_back(StateSlot{
       std::unique_ptr<void, void (*)(void*)>(raw, [](void* p) {
         delete static_cast<S*>(p);
       }),
       std::type_index(typeid(S)),
-      slotObservable});
+      slotObservable,
+      ownerHandle});
   return *raw;
 }
 

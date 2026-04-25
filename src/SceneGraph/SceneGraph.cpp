@@ -72,6 +72,12 @@ void SceneGraph::setRoot(std::unique_ptr<SceneNode> root) {
     impl_->root = std::move(root);
 }
 
+std::unique_ptr<SceneNode> SceneGraph::releaseRoot() {
+    std::unique_ptr<SceneNode> released = std::move(impl_->root);
+    impl_->root = std::make_unique<GroupNode>();
+    return released;
+}
+
 void SceneGraph::beginGeometryBuild() {
     impl_->buildingGeometry.clear();
     impl_->buildingNodes.clear();
@@ -105,6 +111,36 @@ void SceneGraph::recordNode(ComponentKey const& key, SceneNode* node) {
         return;
     }
     impl_->buildingNodes[key] = node;
+}
+
+bool SceneGraph::retainSubtreeGeometry(ComponentKey const& key, Point newOrigin) {
+    if (key.empty()) {
+        return false;
+    }
+    auto const rootIt = impl_->currentGeometry.find(key);
+    if (rootIt == impl_->currentGeometry.end()) {
+        return false;
+    }
+
+    Point const oldOrigin{rootIt->second.x, rootIt->second.y};
+    Vec2 const delta{newOrigin.x - oldOrigin.x, newOrigin.y - oldOrigin.y};
+    bool retainedAny = false;
+    for (auto const& [candidateKey, rect] : impl_->currentGeometry) {
+        if (!keyHasPrefix(candidateKey, key)) {
+            continue;
+        }
+        Rect translated = rect;
+        translated.x += delta.x;
+        translated.y += delta.y;
+        impl_->buildingGeometry[candidateKey] = translated;
+        retainedAny = true;
+    }
+    for (auto const& [candidateKey, node] : impl_->currentNodes) {
+        if (keyHasPrefix(candidateKey, key)) {
+            impl_->buildingNodes[candidateKey] = node;
+        }
+    }
+    return retainedAny;
 }
 
 std::unique_ptr<SceneNode> SceneGraph::replaceNodeForKey(ComponentKey const& key,

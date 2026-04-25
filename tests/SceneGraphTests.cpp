@@ -385,6 +385,36 @@ TEST_CASE("SceneGraph stores geometry keyed by component key") {
     CHECK(*graph.rectForKey(keyB) == Rect {12.f, 24.f, 16.f, 8.f});
 }
 
+TEST_CASE("SceneGraph retains subtree geometry with translated origin") {
+    auto root = std::make_unique<GroupNode>(Rect {0.f, 0.f, 120.f, 80.f});
+    auto child = std::make_unique<RectNode>(Rect {0.f, 0.f, 20.f, 10.f}, FillStyle::solid(Colors::red));
+    SceneNode* rootNode = root.get();
+    SceneNode* childNode = child.get();
+    root->appendChild(std::move(child));
+
+    SceneGraph graph {std::move(root)};
+    ComponentKey const keyA {LocalId::fromString("a")};
+    ComponentKey const keyB {LocalId::fromString("a"), LocalId::fromString("b")};
+    ComponentKey const missing {LocalId::fromString("missing")};
+
+    graph.beginGeometryBuild();
+    graph.recordGeometry(keyA, Rect {10.f, 20.f, 30.f, 40.f});
+    graph.recordGeometry(keyB, Rect {12.f, 24.f, 16.f, 8.f});
+    graph.recordNode(keyA, rootNode);
+    graph.recordNode(keyB, childNode);
+    graph.finishGeometryBuild();
+
+    graph.beginGeometryBuild();
+    CHECK_FALSE(graph.retainSubtreeGeometry(missing, Point {0.f, 0.f}));
+    CHECK(graph.retainSubtreeGeometry(keyA, Point {30.f, 45.f}));
+    graph.finishGeometryBuild();
+
+    CHECK(*graph.rectForKey(keyA) == Rect {30.f, 45.f, 30.f, 40.f});
+    CHECK(*graph.rectForKey(keyB) == Rect {32.f, 49.f, 16.f, 8.f});
+    CHECK(graph.nodeForKey(keyA) == rootNode);
+    CHECK(graph.nodeForKey(keyB) == childNode);
+}
+
 TEST_CASE("SceneGraph replaceNodeForKey updates node mappings for repeated replacements") {
     auto root = std::make_unique<GroupNode>(Rect {0.f, 0.f, 120.f, 80.f});
     auto container = std::make_unique<GroupNode>(Rect {0.f, 0.f, 120.f, 80.f});

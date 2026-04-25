@@ -40,7 +40,8 @@ struct WindowEnvironmentScope {
 
 std::unique_ptr<scenegraph::SceneNode>
 buildResolvedRoot(BuildPassConfig const& config, ResolvedRootScene const& resolved,
-                  LayoutConstraints const& constraints) {
+                  LayoutConstraints const& constraints,
+                  std::unique_ptr<scenegraph::SceneNode> existingRoot) {
   if (!resolved.element) {
     if (config.sceneGraph) {
       config.sceneGraph->clearGeometry();
@@ -52,24 +53,27 @@ buildResolvedRoot(BuildPassConfig const& config, ResolvedRootScene const& resolv
   WindowEnvironmentScope environmentScope{config.environment, config.windowEnvironment};
   return sceneBuilder.build(*resolved.element, constraints, resolved.rootKey,
                             resolved.rootUsesMaxWidthAsAssigned,
-                            resolved.rootUsesMaxHeightAsAssigned);
+                            resolved.rootUsesMaxHeightAsAssigned,
+                            std::move(existingRoot));
 }
 
 } // namespace
 
 std::unique_ptr<scenegraph::SceneNode>
 runBuildPass(BuildPassConfig const& config, ResolvedRootScene const& resolved,
-             LayoutConstraints const& constraints) {
+             LayoutConstraints const& constraints,
+             std::unique_ptr<scenegraph::SceneNode> existingRoot) {
   BuildPassScope scope{config};
-  return buildResolvedRoot(config, resolved, constraints);
+  return buildResolvedRoot(config, resolved, constraints, std::move(existingRoot));
 }
 
 std::unique_ptr<scenegraph::SceneNode>
 runBuildPass(BuildPassConfig const& config, std::function<ResolvedRootScene()> resolveRoot,
-             LayoutConstraints const& constraints) {
+             LayoutConstraints const& constraints,
+             std::unique_ptr<scenegraph::SceneNode> existingRoot) {
   BuildPassScope scope{config};
   ResolvedRootScene const resolved = resolveRoot ? resolveRoot() : ResolvedRootScene{};
-  return buildResolvedRoot(config, resolved, constraints);
+  return buildResolvedRoot(config, resolved, constraints, std::move(existingRoot));
 }
 
 } // namespace flux

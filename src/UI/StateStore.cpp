@@ -1,5 +1,6 @@
 #include <Flux/UI/StateStore.hpp>
 #include <Flux/Core/Application.hpp>
+#include <Flux/SceneGraph/InteractionData.hpp>
 #include <Flux/UI/Element.hpp>
 
 #include "Debug/PerfCounters.hpp"
@@ -19,6 +20,24 @@ bool keyHasPrefix(ComponentKey const& key, ComponentKey const& prefix) {
   return key.hasPrefix(prefix);
 }
 
+template<typename Signature>
+void assignCallbackCell(std::shared_ptr<std::function<Signature>>& cell,
+                        std::function<Signature> const& value) {
+  if (!cell) {
+    cell = std::make_shared<std::function<Signature>>();
+  }
+  *cell = value;
+}
+
+template<typename... Args>
+auto makeCallbackForwarder(std::shared_ptr<std::function<void(Args...)>> cell) {
+  return [cell = std::move(cell)](Args... args) {
+    if (cell && *cell) {
+      (*cell)(std::forward<Args>(args)...);
+    }
+  };
+}
+
 void unsubscribeComponentState(ComponentState& state) {
   std::vector<ComponentSubscription> subscriptions = std::move(state.subscriptions);
   state.subscriptions.clear();
@@ -29,13 +48,24 @@ void unsubscribeComponentState(ComponentState& state) {
   }
 }
 
+void unsubscribeOwnedSlots(ComponentState& state) {
+  for (StateSlot& slot : state.slots) {
+    if (slot.observable && slot.ownerHandle.isValid()) {
+      slot.observable->unobserve(slot.ownerHandle);
+      slot.ownerHandle = {};
+    }
+  }
+}
+
 void resetComponentStateStorage(ComponentState& state) {
+  unsubscribeOwnedSlots(state);
   state.slots.clear();
   state.cursor = 0;
   state.componentType = std::type_index(typeid(void));
   state.lastVisitedEpoch = 0;
   state.lastBody = {nullptr, nullptr};
   state.lastBodyEpoch = 0;
+  state.lastBodyStructurallyStable = false;
   state.lastBodyConstraints.reset();
   state.reusableConstraints.clear();
   state.reusableMeasures.clear();
@@ -90,6 +120,7 @@ bool StateStore::rectEqual(Rect const& a, Rect const& b) noexcept {
 void StateStore::clearComponentState(ComponentState& state) {
   scrubOwnedObservableSubscriptions(states_, state);
   unsubscribeComponentState(state);
+  unsubscribeOwnedSlots(state);
   resetComponentStateStorage(state);
 }
 
@@ -131,6 +162,7 @@ void StateStore::endRebuild() {
     if (it != states_.end()) {
       scrubOwnedObservableSubscriptions(states_, it->second);
       unsubscribeComponentState(it->second);
+      unsubscribeOwnedSlots(it->second);
     }
   }
   for (ComponentKey const& key : staleKeys) {
@@ -141,6 +173,12 @@ void StateStore::endRebuild() {
     resetComponentStateStorage(it->second);
     states_.erase(it);
   }
+  std::erase_if(interactions_, [&](auto const& entry) {
+    return entry.second.lastVisitedEpoch != buildEpoch_;
+  });
+  std::erase_if(modifierLayers_, [&](auto const& entry) {
+    return states_.find(entry.first) == states_.end();
+  });
   activeDirtyComposites_.clear();
 }
 
@@ -149,12 +187,15 @@ void StateStore::shutdown() {
     (void)key;
     scrubOwnedObservableSubscriptions(states_, state);
     unsubscribeComponentState(state);
+    unsubscribeOwnedSlots(state);
   }
   for (auto& [key, state] : states_) {
     (void)key;
     resetComponentStateStorage(state);
   }
   states_.clear();
+  interactions_.clear();
+  modifierLayers_.clear();
   activeStack_.clear();
   activeStateStack_.clear();
   compositeElementModifierStack_.clear();
@@ -275,12 +316,22 @@ void StateStore::markComponentsOutsideSubtreeVisited(ComponentKey const& key) {
       state.lastVisitedEpoch = buildEpoch_;
     }
   }
+  for (auto& [candidateKey, interaction] : interactions_) {
+    if (!keyHasPrefix(candidateKey, key)) {
+      interaction.lastVisitedEpoch = buildEpoch_;
+    }
+  }
 }
 
 void StateStore::markRetainedSubtreeVisited(ComponentKey const& key) {
   for (auto& [candidateKey, state] : states_) {
     if (keyHasPrefix(candidateKey, key)) {
       state.lastVisitedEpoch = buildEpoch_;
+    }
+  }
+  for (auto& [candidateKey, interaction] : interactions_) {
+    if (keyHasPrefix(candidateKey, key)) {
+      interaction.lastVisitedEpoch = buildEpoch_;
     }
   }
 }
@@ -295,6 +346,12 @@ bool StateStore::hasBodyForCurrentRebuild(ComponentKey const& key,
   return it != states_.end() && it->second.lastBody && it->second.lastBodyEpoch == buildEpoch_ &&
          it->second.lastBodyConstraints.has_value() &&
          constraintsEqual(*it->second.lastBodyConstraints, constraints);
+}
+
+bool StateStore::bodyStructurallyStable(ComponentKey const& key) const {
+  auto const it = states_.find(key);
+  return it != states_.end() && it->second.lastBody && it->second.lastBodyEpoch == buildEpoch_ &&
+         it->second.lastBodyStructurallyStable;
 }
 
 Element* StateStore::cachedBody(ComponentKey const& key) {
@@ -313,6 +370,14 @@ Element const* StateStore::cachedBody(ComponentKey const& key) const {
   return static_cast<Element const*>(it->second.lastBody.get());
 }
 
+void StateStore::recordBodyStability(ComponentKey const& key, bool stable) {
+  auto it = states_.find(key);
+  if (it == states_.end()) {
+    return;
+  }
+  it->second.lastBodyStructurallyStable = stable;
+}
+
 Element const* StateStore::sceneElement(ComponentKey const& key) const {
   auto it = states_.find(key);
   if (it == states_.end() || !it->second.lastSceneElement) {
@@ -328,6 +393,7 @@ void StateStore::discardCurrentRebuildBody(ComponentKey const& key) {
   }
   it->second.lastBody = {nullptr, nullptr};
   it->second.lastBodyEpoch = 0;
+  it->second.lastBodyStructurallyStable = false;
   it->second.lastBodyConstraints.reset();
 }
 
@@ -357,7 +423,7 @@ void StateStore::recordBuildSnapshot(ComponentKey const& key,
                                      LayoutConstraints const& constraints,
                                      LayoutHints const& hints, Point origin,
                                      Size assignedSize, bool hasAssignedWidth,
-                                     bool hasAssignedHeight) {
+                                     bool hasAssignedHeight, Point rootPosition) {
   auto it = states_.find(key);
   if (it == states_.end()) {
     return;
@@ -366,6 +432,7 @@ void StateStore::recordBuildSnapshot(ComponentKey const& key,
       .constraints = constraints,
       .hints = hints,
       .origin = origin,
+      .rootPosition = rootPosition,
       .assignedSize = assignedSize,
       .hasAssignedWidth = hasAssignedWidth,
       .hasAssignedHeight = hasAssignedHeight,
@@ -380,6 +447,137 @@ void StateStore::recordSceneElement(ComponentKey const& key, Element const& elem
   Element* raw = new Element(element);
   it->second.lastSceneElement = std::unique_ptr<void, void (*)(void*)>(
       raw, [](void* p) { delete static_cast<Element*>(p); });
+}
+
+bool StateStore::modifierLayersStructurallyStable(
+    ComponentKey const& key, std::span<detail::ElementModifiers const> layers) const {
+  auto const it = modifierLayers_.find(key);
+  if (it == modifierLayers_.end() || it->second.size() != layers.size()) {
+    return false;
+  }
+  for (std::size_t i = 0; i < layers.size(); ++i) {
+    if (!detail::elementModifiersStructurallyEqual(it->second[i], layers[i])) {
+      return false;
+    }
+  }
+  return true;
+}
+
+void StateStore::recordModifierLayers(ComponentKey const& key,
+                                      std::span<detail::ElementModifiers const> layers) {
+  if (key.empty()) {
+    return;
+  }
+  modifierLayers_[key].assign(layers.begin(), layers.end());
+}
+
+void StateStore::recordInteraction(ComponentKey const& key,
+                                   detail::ElementModifiers const& modifiers) {
+  if (key.empty() || !modifiers.hasInteraction()) {
+    return;
+  }
+  InteractionCallbackCells& cells = interactions_[key];
+  cells.lastVisitedEpoch = buildEpoch_;
+  if (modifiers.onPointerDown || cells.onPointerDown) {
+    assignCallbackCell(cells.onPointerDown, modifiers.onPointerDown);
+  }
+  if (modifiers.onPointerUp || cells.onPointerUp) {
+    assignCallbackCell(cells.onPointerUp, modifiers.onPointerUp);
+  }
+  if (modifiers.onPointerMove || cells.onPointerMove) {
+    assignCallbackCell(cells.onPointerMove, modifiers.onPointerMove);
+  }
+  if (modifiers.onScroll || cells.onScroll) {
+    assignCallbackCell(cells.onScroll, modifiers.onScroll);
+  }
+  if (modifiers.onKeyDown || cells.onKeyDown) {
+    assignCallbackCell(cells.onKeyDown, modifiers.onKeyDown);
+  }
+  if (modifiers.onKeyUp || cells.onKeyUp) {
+    assignCallbackCell(cells.onKeyUp, modifiers.onKeyUp);
+  }
+  if (modifiers.onTextInput || cells.onTextInput) {
+    assignCallbackCell(cells.onTextInput, modifiers.onTextInput);
+  }
+  if (modifiers.onTap || cells.onTap) {
+    assignCallbackCell(cells.onTap, modifiers.onTap);
+  }
+}
+
+std::unique_ptr<scenegraph::InteractionData>
+StateStore::makeInteractionData(ComponentKey const& key,
+                                detail::ElementModifiers const& modifiers) {
+  if (!modifiers.hasInteraction()) {
+    return nullptr;
+  }
+  recordInteraction(key, modifiers);
+  InteractionCallbackCells* cells = nullptr;
+  if (auto it = interactions_.find(key); it != interactions_.end()) {
+    cells = &it->second;
+  }
+
+  auto data = std::make_unique<scenegraph::InteractionData>();
+  data->stableTargetKey = key;
+  data->cursor = modifiers.cursor;
+  data->focusable = modifiers.focusable || static_cast<bool>(modifiers.onKeyDown) ||
+                    static_cast<bool>(modifiers.onKeyUp) ||
+                    static_cast<bool>(modifiers.onTextInput);
+
+  if (cells && modifiers.onPointerDown && cells->onPointerDown) {
+    data->onPointerDown = makeCallbackForwarder(cells->onPointerDown);
+  } else {
+    data->onPointerDown = modifiers.onPointerDown;
+  }
+  if (cells && modifiers.onPointerUp && cells->onPointerUp) {
+    data->onPointerUp = makeCallbackForwarder(cells->onPointerUp);
+  } else {
+    data->onPointerUp = modifiers.onPointerUp;
+  }
+  if (cells && modifiers.onPointerMove && cells->onPointerMove) {
+    data->onPointerMove = makeCallbackForwarder(cells->onPointerMove);
+  } else {
+    data->onPointerMove = modifiers.onPointerMove;
+  }
+  if (cells && modifiers.onScroll && cells->onScroll) {
+    data->onScroll = makeCallbackForwarder(cells->onScroll);
+  } else {
+    data->onScroll = modifiers.onScroll;
+  }
+  if (cells && modifiers.onKeyDown && cells->onKeyDown) {
+    data->onKeyDown = makeCallbackForwarder(cells->onKeyDown);
+  } else {
+    data->onKeyDown = modifiers.onKeyDown;
+  }
+  if (cells && modifiers.onKeyUp && cells->onKeyUp) {
+    data->onKeyUp = makeCallbackForwarder(cells->onKeyUp);
+  } else {
+    data->onKeyUp = modifiers.onKeyUp;
+  }
+  if (cells && modifiers.onTextInput && cells->onTextInput) {
+    data->onTextInput = makeCallbackForwarder(cells->onTextInput);
+  } else {
+    data->onTextInput = modifiers.onTextInput;
+  }
+  if (cells && modifiers.onTap && cells->onTap) {
+    data->onTap = makeCallbackForwarder(cells->onTap);
+  } else {
+    data->onTap = modifiers.onTap;
+  }
+
+  if (data->isEmpty()) {
+    return nullptr;
+  }
+  return data;
+}
+
+bool StateStore::hasInteractionDescendant(ComponentKey const& key) const {
+  for (auto const& [candidateKey, cells] : interactions_) {
+    (void)cells;
+    if (keyHasPrefix(candidateKey, key)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 ComponentState const* StateStore::findComponentState(ComponentKey const& key) const {

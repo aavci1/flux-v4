@@ -66,6 +66,15 @@ Size scrollViewportHintForMeasure(LayoutConstraints const& constraints, LayoutHi
   return viewportHint;
 }
 
+std::unique_ptr<scenegraph::SceneNode>
+takeExistingChild(std::vector<std::unique_ptr<scenegraph::SceneNode>>& existingChildren,
+                  std::size_t index) {
+  if (index >= existingChildren.size()) {
+    return nullptr;
+  }
+  return std::move(existingChildren[index]);
+}
+
 template<typename MeasureChildFn>
 ScrollViewPlan planScrollViewLayout(ScrollView const& scrollView, LayoutConstraints const& constraints,
                                     Size viewportHint, Point scrollOffset, MeasureChildFn&& measureChild) {
@@ -116,7 +125,6 @@ namespace detail {
 
 ComponentBuildResult buildMeasuredComponent(ScrollView const& scrollView, ComponentBuildContext& ctx,
                                             std::unique_ptr<scenegraph::SceneNode> existing) {
-  (void)existing;
   ComponentKey scrollStateKey = ctx.key();
   scrollStateKey.push_back(LocalId::fromString("$scroll-state"));
   StateStore* const store = StateStore::current();
@@ -211,11 +219,32 @@ ComponentBuildResult buildMeasuredComponent(ScrollView const& scrollView, Compon
   layout::ScrollIndicatorMetrics const horizontalIndicator =
       layout::makeHorizontalIndicator(scrollOffset, viewport, contentSize, showsVerticalIndicator);
 
-  auto viewportNode =
-      std::make_unique<scenegraph::RectNode>(Rect {0.f, 0.f, viewport.width, viewport.height});
+  std::vector<std::unique_ptr<scenegraph::SceneNode>> existingViewportChildren{};
+  std::unique_ptr<scenegraph::RectNode> viewportNode{};
+  if (existing && existing->kind() == scenegraph::SceneNodeKind::Rect) {
+    ctx.recordNodeReuse();
+    viewportNode = std::unique_ptr<scenegraph::RectNode>(
+        static_cast<scenegraph::RectNode*>(existing.release()));
+    existingViewportChildren = viewportNode->releaseChildren();
+  } else {
+    viewportNode =
+        std::make_unique<scenegraph::RectNode>(Rect {0.f, 0.f, viewport.width, viewport.height});
+  }
+  viewportNode->setBounds(Rect {0.f, 0.f, viewport.width, viewport.height});
   viewportNode->setClipsContents(true);
 
-  auto scrolledGroup = std::make_unique<scenegraph::GroupNode>();
+  std::vector<std::unique_ptr<scenegraph::SceneNode>> existingScrolledChildren{};
+  std::unique_ptr<scenegraph::GroupNode> scrolledGroup{};
+  if (!existingViewportChildren.empty() &&
+      existingViewportChildren.front() &&
+      existingViewportChildren.front()->kind() == scenegraph::SceneNodeKind::Group) {
+    ctx.recordNodeReuse();
+    scrolledGroup = std::unique_ptr<scenegraph::GroupNode>(
+        static_cast<scenegraph::GroupNode*>(existingViewportChildren.front().release()));
+    existingScrolledChildren = scrolledGroup->releaseChildren();
+  } else {
+    scrolledGroup = std::make_unique<scenegraph::GroupNode>();
+  }
 
   std::vector<std::unique_ptr<scenegraph::SceneNode>> scrolledChildren{};
   scrolledChildren.reserve(contentChildren.size());
@@ -228,7 +257,8 @@ ComponentBuildResult buildMeasuredComponent(ScrollView const& scrollView, Compon
         ctx.buildChild(child, local, childConstraints, LayoutHints{},
                        Point{ctx.contentOrigin().x + slot.origin.x, ctx.contentOrigin().y + slot.origin.y},
                        slot.assignedSize, slot.assignedSize.width > 0.f,
-                       slot.assignedSize.height > 0.f);
+                       slot.assignedSize.height > 0.f,
+                       takeExistingChild(existingScrolledChildren, i));
     Point childOrigin = slot.origin;
     if (axis == ScrollAxis::Vertical || axis == ScrollAxis::Both) {
       childOrigin.y += scrollOffset.y;

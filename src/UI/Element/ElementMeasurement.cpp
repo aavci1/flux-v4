@@ -97,6 +97,11 @@ Size Element::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
   ChildLocalIdScope const childIdScope{ctx, key_};
   Element const* const prevEl = ctx.currentElement();
   ctx.setCurrentElement(this);
+  if (modifiers_ && modifiers_->hasInteraction()) {
+    if (StateStore* const store = StateStore::current()) {
+      store->recordInteraction(ctx.currentElementKey(), *modifiers_);
+    }
+  }
   if (envLayer_) {
     EnvironmentStack::current().push(*envLayer_);
   }

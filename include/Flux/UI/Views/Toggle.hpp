@@ -29,6 +29,8 @@ struct Toggle : ViewModifiers<Toggle> {
     Color thumbColor = Color::theme();
     Color thumbBorderColor = Color::theme();
     Color borderColor = Color::theme();
+
+    bool operator==(Style const& other) const = default;
   };
 
   // ── State ──────────────────────────────────────────────────────────────────
@@ -46,6 +48,10 @@ struct Toggle : ViewModifiers<Toggle> {
 
   /// Invoked after the toggle changes \c value (same as mutating \c value from handlers).
   std::function<void(bool)> onChange;
+
+  bool operator==(Toggle const& other) const {
+    return value == other.value && disabled == other.disabled && style == other.style;
+  }
 
 
   // ── Component protocol ─────────────────────────────────────────────────────

@@ -44,6 +44,8 @@ struct Checkbox : ViewModifiers<Checkbox> {
     Color uncheckedColor = Color::theme();
     Color checkColor = Color::theme();
     Color borderColor = Color::theme();
+
+    bool operator==(Style const& other) const = default;
   };
 
   Style style { };
@@ -54,6 +56,10 @@ struct Checkbox : ViewModifiers<Checkbox> {
   /// Fires when the user toggles or activates via keyboard; update \c value and clear indeterminate as needed.
   std::function<void(bool)> onChange;
 
+  bool operator==(Checkbox const& other) const {
+    return value == other.value && indeterminate == other.indeterminate && disabled == other.disabled &&
+           style == other.style;
+  }
 
   // ── Component protocol ───────────────────────────────────────────────────
 

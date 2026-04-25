@@ -89,16 +89,14 @@ Element Toggle::body() const {
     }
 
     auto v = value;
-    auto oc = onChange;
-
-    auto handleToggle = [v, oc, isDisabled]() {
+    auto handleToggle = [v, onChange = onChange, isDisabled]() {
         if (isDisabled) {
             return;
         }
         bool const next = !*v;
         v = next;
-        if (oc) {
-            oc(next);
+        if (onChange) {
+            onChange(next);
         }
     };
 

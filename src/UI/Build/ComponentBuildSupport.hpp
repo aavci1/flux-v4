@@ -174,6 +174,9 @@ makeInteractionData(ElementModifiers const* mods, ComponentKey const& key) {
   if (!mods) {
     return nullptr;
   }
+  if (StateStore* store = StateStore::current()) {
+    return store->makeInteractionData(key, *mods);
+  }
   auto data = std::make_unique<scenegraph::InteractionData>();
   data->stableTargetKey = key;
   data->cursor = mods->cursor;

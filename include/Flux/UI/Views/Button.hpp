@@ -47,7 +47,6 @@ struct Button : ViewModifiers<Button> {
                style == other.style;
     }
 
-    void updateRetainedInputs() const;
     Element body() const;
 };
 
@@ -68,7 +67,6 @@ struct LinkButton : ViewModifiers<LinkButton> {
         return label == other.label && disabled == other.disabled && style == other.style;
     }
 
-    void updateRetainedInputs() const;
     Element body() const;
 };
 
@@ -90,7 +88,6 @@ struct IconButton : ViewModifiers<IconButton> {
         return icon == other.icon && disabled == other.disabled && style == other.style;
     }
 
-    void updateRetainedInputs() const;
     Element body() const;
 };
 

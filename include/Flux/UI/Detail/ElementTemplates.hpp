@@ -77,16 +77,7 @@ CompositeBodyResolution resolveCompositeBody(StateStore* store, ComponentKey con
   }
   if (store->hasBodyForCurrentRebuild(key, constraints)) {
     resolution.body = store->cachedBody(key);
-    return resolution;
-  }
-  if (store->canReuseBody(key, value, constraints)) {
-    // Cached body reuse skips body(), so allow components to refresh leading retained inputs
-    // such as callback slots before the subtree is kept alive.
-    if constexpr (requires(C const& component) { component.updateRetainedInputs(); }) {
-      value.updateRetainedInputs();
-    }
-    resolution.body = store->cachedBody(key);
-    resolution.descendantsStable = true;
+    resolution.descendantsStable = store->bodyStructurallyStable(key);
     return resolution;
   }
 
@@ -101,7 +92,12 @@ CompositeBodyResolution resolveCompositeBody(StateStore* store, ComponentKey con
   }
   detail::DependencyTracker::pop();
 
+  Element const* previousBody = store->cachedBody(key);
+  bool const descendantsStable =
+      previousBody && previousBody->structuralEquals(*body);
   resolution.body = &store->commitBody(key, value, constraints, std::move(body), std::move(tracker.deps));
+  store->recordBodyStability(key, descendantsStable);
+  resolution.descendantsStable = descendantsStable;
   return resolution;
 }
 
@@ -262,7 +258,8 @@ Size Element::Model<C>::measure(MeasureContext& ctx, LayoutConstraints const& co
       store->popCompositeConstraints();
       store->popComponent();
     }
-    if (store && resolution.descendantsStable && !store->hasDirtyDescendant(key)) {
+    if (store && resolution.descendantsStable && !store->hasDirtyDescendant(key) &&
+        !store->hasInteractionDescendant(key)) {
       if (std::optional<Size> const cached = store->cachedMeasure(key, constraints)) {
         return *cached;
       }
@@ -318,20 +315,37 @@ inline bool Element::valueEquals(Element const& other) const noexcept {
 
 namespace detail {
 
-inline bool interactionHandlersComparable(Element const& lhs, Element const& rhs) noexcept {
-  detail::ElementModifiers const* lhsMods = lhs.modifiers();
-  detail::ElementModifiers const* rhsMods = rhs.modifiers();
-  if (!lhsMods || !rhsMods) {
-    return lhsMods == rhsMods;
+inline bool interactionHandlerPresenceEqual(ElementModifiers const& lhs,
+                                            ElementModifiers const& rhs) noexcept {
+  return static_cast<bool>(lhs.onTap) == static_cast<bool>(rhs.onTap) &&
+         static_cast<bool>(lhs.onPointerDown) == static_cast<bool>(rhs.onPointerDown) &&
+         static_cast<bool>(lhs.onPointerUp) == static_cast<bool>(rhs.onPointerUp) &&
+         static_cast<bool>(lhs.onPointerMove) == static_cast<bool>(rhs.onPointerMove) &&
+         static_cast<bool>(lhs.onScroll) == static_cast<bool>(rhs.onScroll) &&
+         static_cast<bool>(lhs.onKeyDown) == static_cast<bool>(rhs.onKeyDown) &&
+         static_cast<bool>(lhs.onKeyUp) == static_cast<bool>(rhs.onKeyUp) &&
+         static_cast<bool>(lhs.onTextInput) == static_cast<bool>(rhs.onTextInput);
+}
+
+inline bool elementModifiersStructurallyEqual(ElementModifiers const& lhsMods,
+                                              ElementModifiers const& rhsMods) noexcept {
+  if (lhsMods.padding != rhsMods.padding || lhsMods.fill != rhsMods.fill ||
+      lhsMods.stroke != rhsMods.stroke || lhsMods.shadow != rhsMods.shadow ||
+      lhsMods.cornerRadius != rhsMods.cornerRadius || lhsMods.opacity != rhsMods.opacity ||
+      lhsMods.translation != rhsMods.translation || lhsMods.clip != rhsMods.clip ||
+      lhsMods.positionX != rhsMods.positionX || lhsMods.positionY != rhsMods.positionY ||
+      lhsMods.sizeWidth != rhsMods.sizeWidth || lhsMods.sizeHeight != rhsMods.sizeHeight ||
+      lhsMods.focusable != rhsMods.focusable || lhsMods.cursor != rhsMods.cursor ||
+      !interactionHandlerPresenceEqual(lhsMods, rhsMods)) {
+    return false;
   }
-  return !lhsMods->onTap && !rhsMods->onTap &&
-         !lhsMods->onPointerDown && !rhsMods->onPointerDown &&
-         !lhsMods->onPointerUp && !rhsMods->onPointerUp &&
-         !lhsMods->onPointerMove && !rhsMods->onPointerMove &&
-         !lhsMods->onScroll && !rhsMods->onScroll &&
-         !lhsMods->onKeyDown && !rhsMods->onKeyDown &&
-         !lhsMods->onKeyUp && !rhsMods->onKeyUp &&
-         !lhsMods->onTextInput && !rhsMods->onTextInput;
+  if (static_cast<bool>(lhsMods.overlay) != static_cast<bool>(rhsMods.overlay)) {
+    return false;
+  }
+  if (lhsMods.overlay && !lhsMods.overlay->structuralEquals(*rhsMods.overlay)) {
+    return false;
+  }
+  return true;
 }
 
 inline bool modifiersStructurallyEqual(Element const& lhs, Element const& rhs) noexcept {
@@ -340,25 +354,7 @@ inline bool modifiersStructurallyEqual(Element const& lhs, Element const& rhs) n
   if (!lhsMods || !rhsMods) {
     return lhsMods == rhsMods;
   }
-  if (!interactionHandlersComparable(lhs, rhs)) {
-    return false;
-  }
-  if (lhsMods->padding != rhsMods->padding || lhsMods->fill != rhsMods->fill ||
-      lhsMods->stroke != rhsMods->stroke || lhsMods->shadow != rhsMods->shadow ||
-      lhsMods->cornerRadius != rhsMods->cornerRadius || lhsMods->opacity != rhsMods->opacity ||
-      lhsMods->translation != rhsMods->translation || lhsMods->clip != rhsMods->clip ||
-      lhsMods->positionX != rhsMods->positionX || lhsMods->positionY != rhsMods->positionY ||
-      lhsMods->sizeWidth != rhsMods->sizeWidth || lhsMods->sizeHeight != rhsMods->sizeHeight ||
-      lhsMods->focusable != rhsMods->focusable || lhsMods->cursor != rhsMods->cursor) {
-    return false;
-  }
-  if (static_cast<bool>(lhsMods->overlay) != static_cast<bool>(rhsMods->overlay)) {
-    return false;
-  }
-  if (lhsMods->overlay && !lhsMods->overlay->structuralEquals(*rhsMods->overlay)) {
-    return false;
-  }
-  return true;
+  return elementModifiersStructurallyEqual(*lhsMods, *rhsMods);
 }
 
 inline bool environmentStructurallyEqual(Element const& lhs, Element const& rhs) noexcept {

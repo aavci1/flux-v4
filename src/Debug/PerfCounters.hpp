@@ -24,6 +24,10 @@ struct BuildCounters {
   std::uint64_t materializedNodes = 0;
   std::uint64_t arrangedNodes = 0;
   std::uint64_t reusedNodes = 0;
+  std::uint64_t skippedSubtrees = 0;
+  std::uint64_t skipBlockedByDirtyDescendant = 0;
+  std::uint64_t skipBlockedByModifierChange = 0;
+  std::uint64_t skipBlockedByMissingGeometry = 0;
 };
 
 struct ComponentKeyCounters {
@@ -93,7 +97,8 @@ inline void logIfReady() {
   std::fprintf(
       stderr,
       "[flux:perf] %.2fs frames=%llu builds=%llu "
-      "resolved=%llu(%.1f/f) materialized=%llu(%.1f/f) arranged=%llu(%.1f/f) reused=%llu(%.1f/f) "
+      "resolved=%llu(%.1f/f) materialized=%llu(%.1f/f) arranged=%llu(%.1f/f) reused=%llu(%.1f/f) skipped=%llu(%.1f/f) "
+      "skipBlocked dirty=%llu modifier=%llu geometry=%llu "
       "ck copy=%llu/%lluid append=%llu/%lluid hash=%llu/%lluid eq=%llu/%lluid prefix=%llu/%lluid grow=%llu "
       "prepare=%llu(%.2f/f) replay=%llu(%.2f/f) "
       "ms reactive=%.2f(%.2f/f) incremental=%.2f(%.2f/f) render=%.2f(%.2f/f) present=%.2f(%.2f/f) drawableWait=%.2f(%.2f/f) frameBudget=%.2f(%.2f/f)\n",
@@ -108,6 +113,11 @@ inline void logIfReady() {
       perFrame(interval.build.arrangedNodes, interval.frames),
       static_cast<unsigned long long>(interval.build.reusedNodes),
       perFrame(interval.build.reusedNodes, interval.frames),
+      static_cast<unsigned long long>(interval.build.skippedSubtrees),
+      perFrame(interval.build.skippedSubtrees, interval.frames),
+      static_cast<unsigned long long>(interval.build.skipBlockedByDirtyDescendant),
+      static_cast<unsigned long long>(interval.build.skipBlockedByModifierChange),
+      static_cast<unsigned long long>(interval.build.skipBlockedByMissingGeometry),
       static_cast<unsigned long long>(interval.componentKeys.copies),
       static_cast<unsigned long long>(interval.componentKeys.copiedIds),
       static_cast<unsigned long long>(interval.componentKeys.appends),
@@ -161,6 +171,10 @@ inline void recordBuildCounters(BuildCounters const& build) {
   interval.build.materializedNodes += build.materializedNodes;
   interval.build.arrangedNodes += build.arrangedNodes;
   interval.build.reusedNodes += build.reusedNodes;
+  interval.build.skippedSubtrees += build.skippedSubtrees;
+  interval.build.skipBlockedByDirtyDescendant += build.skipBlockedByDirtyDescendant;
+  interval.build.skipBlockedByModifierChange += build.skipBlockedByModifierChange;
+  interval.build.skipBlockedByMissingGeometry += build.skipBlockedByMissingGeometry;
 }
 
 inline void recordPreparedPrepareCall() {

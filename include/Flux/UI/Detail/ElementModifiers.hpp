@@ -7,7 +7,9 @@
 #include <Flux/Core/Cursor.hpp>
 #include <Flux/Core/ComponentKey.hpp>
 #include <Flux/Core/Types.hpp>
+#include <Flux/Detail/SmallVector.hpp>
 #include <Flux/Graphics/Styles.hpp>
+#include <Flux/UI/Environment.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 
 #include <cmath>
@@ -20,7 +22,6 @@
 namespace flux {
 
 class Element;
-class EnvironmentLayer;
 struct Popover;
 struct Spacer;
 class StateStore;
@@ -40,19 +41,6 @@ struct CompositeBodyResolution {
 inline LocalId compositeBodyLocalId() {
   return LocalId::fromString("$flux.body");
 }
-
-struct ElementModifiers;
-
-struct ResolvedElement {
-  Element const* sceneElement = nullptr;
-  std::vector<std::unique_ptr<Element>> ownedBodies{};
-  std::vector<EnvironmentLayer> environmentLayers{};
-  std::vector<ElementModifiers> modifierLayers{};
-  std::vector<ComponentKey> bodyComponentKeys{};
-  ComponentKey stableInteractionKey{};
-  bool nestSceneUnderFirstBody = false;
-  bool descendantsStable = false;
-};
 
 template<typename C, typename BuildFn>
 CompositeBodyResolution resolveCompositeBody(StateStore* store, ComponentKey const& key,
@@ -146,6 +134,20 @@ struct ElementModifiers {
   ElementModifiers(ElementModifiers&&) noexcept = default;
   ElementModifiers& operator=(ElementModifiers&&) noexcept = default;
   ~ElementModifiers();
+};
+
+[[nodiscard]] bool elementModifiersStructurallyEqual(ElementModifiers const& lhs,
+                                                     ElementModifiers const& rhs) noexcept;
+
+struct ResolvedElement {
+  Element const* sceneElement = nullptr;
+  std::vector<std::unique_ptr<Element>> ownedBodies{};
+  SmallVector<EnvironmentLayer, 4> environmentLayers{};
+  SmallVector<ElementModifiers, 4> modifierLayers{};
+  SmallVector<ComponentKey, 4> bodyComponentKeys{};
+  ComponentKey stableInteractionKey{};
+  bool nestSceneUnderFirstBody = false;
+  bool descendantsStable = false;
 };
 
 } // namespace detail

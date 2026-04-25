@@ -24,6 +24,8 @@ struct Slider : ViewModifiers<Slider> {
     Color thumbBorderColor = Color::theme();
     float trackHeight = kFloatFromTheme;
     float thumbSize = kFloatFromTheme;
+
+    bool operator==(Style const& other) const = default;
   };
 
   // ── State ──────────────────────────────────────────────────────────────────
@@ -46,6 +48,11 @@ struct Slider : ViewModifiers<Slider> {
 
   /// Called whenever \c value changes from user interaction.
   std::function<void(float)> onChange;
+
+  bool operator==(Slider const& other) const {
+    return value == other.value && min == other.min && max == other.max && step == other.step &&
+           disabled == other.disabled && style == other.style;
+  }
 
   // ── Component protocol ───────────────────────────────────────────────────
 

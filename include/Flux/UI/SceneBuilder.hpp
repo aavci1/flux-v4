@@ -34,6 +34,10 @@ public:
     std::size_t materializedNodes = 0;
     std::size_t reusedNodes = 0;
     std::size_t skippedNodes = 0;
+    std::size_t skippedSubtrees = 0;
+    std::size_t skipBlockedByDirtyDescendant = 0;
+    std::size_t skipBlockedByModifierChange = 0;
+    std::size_t skipBlockedByMissingGeometry = 0;
   };
 
   SceneBuilder(TextSystem& textSystem, EnvironmentStack& environment,
@@ -43,7 +47,8 @@ public:
   std::unique_ptr<scenegraph::SceneNode> build(Element const& el, LayoutConstraints const& constraints,
                                                ComponentKey rootKey = {},
                                                bool rootUsesMaxWidthAsAssigned = true,
-                                               bool rootUsesMaxHeightAsAssigned = true);
+                                               bool rootUsesMaxHeightAsAssigned = true,
+                                               std::unique_ptr<scenegraph::SceneNode> existing = nullptr);
   std::unique_ptr<scenegraph::SceneNode> buildSubtree(Element const& el,
                                                       LayoutConstraints const& constraints,
                                                       LayoutHints const& hints, Point origin,

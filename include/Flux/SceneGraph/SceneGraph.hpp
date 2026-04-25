@@ -31,11 +31,13 @@ class SceneGraph {
     SceneNode const &root() const noexcept;
 
     void setRoot(std::unique_ptr<SceneNode> root);
+    std::unique_ptr<SceneNode> releaseRoot();
     void beginGeometryBuild();
     void finishGeometryBuild();
     void clearGeometry();
     void recordGeometry(ComponentKey const& key, Rect rect);
     void recordNode(ComponentKey const& key, SceneNode* node);
+    bool retainSubtreeGeometry(ComponentKey const& key, Point newOrigin);
     std::unique_ptr<SceneNode> replaceNodeForKey(ComponentKey const& key, std::unique_ptr<SceneNode> node);
     void replaceSubtreeData(ComponentKey const& key, SceneGraph const& patch);
 

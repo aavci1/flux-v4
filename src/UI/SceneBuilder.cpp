@@ -94,6 +94,18 @@ bool compositeKeepsContentGeometry(ElementType typeTag) {
   }
 }
 
+Point retainedGeometryOrigin(scenegraph::SceneGraph const& sceneGraph, StateStore const& store,
+                             ComponentKey const& key, Point currentOrigin) {
+  Point origin = currentOrigin;
+  std::optional<ComponentBuildSnapshot> const snapshot = store.buildSnapshot(key);
+  std::optional<Rect> const previousRect = sceneGraph.rectForKey(key);
+  if (snapshot && previousRect) {
+    origin.x += previousRect->x - snapshot->origin.x;
+    origin.y += previousRect->y - snapshot->origin.y;
+  }
+  return origin;
+}
+
 } // namespace
 
 SceneBuilder::SceneBuilder(TextSystem& textSystem, EnvironmentStack& environment,
@@ -222,7 +234,8 @@ SceneBuilder::wrapModifierLayer(std::unique_ptr<scenegraph::SceneNode> root,
 
 std::unique_ptr<scenegraph::SceneNode>
 SceneBuilder::build(Element const& el, LayoutConstraints const& constraints, ComponentKey rootKey,
-                    bool rootUsesMaxWidthAsAssigned, bool rootUsesMaxHeightAsAssigned) {
+                    bool rootUsesMaxWidthAsAssigned, bool rootUsesMaxHeightAsAssigned,
+                    std::unique_ptr<scenegraph::SceneNode> existing) {
   measureLayoutCache_->clear();
   lastBuildStats_ = {};
   if (sceneGraph_) {
@@ -241,7 +254,7 @@ SceneBuilder::build(Element const& el, LayoutConstraints const& constraints, Com
 
   pushFrame(constraints, LayoutHints {}, Point {}, std::move(rootKey), rootAssigned, hasRootWidth,
             hasRootHeight);
-  std::unique_ptr<scenegraph::SceneNode> node = buildOrReuse(el, nullptr);
+  std::unique_ptr<scenegraph::SceneNode> node = buildOrReuse(el, std::move(existing));
   popFrame();
 
   if (sceneGraph_) {
@@ -256,6 +269,10 @@ SceneBuilder::build(Element const& el, LayoutConstraints const& constraints, Com
       .materializedNodes = lastBuildStats_.materializedNodes,
       .arrangedNodes = lastBuildStats_.arrangedNodes,
       .reusedNodes = lastBuildStats_.reusedNodes,
+      .skippedSubtrees = lastBuildStats_.skippedSubtrees,
+      .skipBlockedByDirtyDescendant = lastBuildStats_.skipBlockedByDirtyDescendant,
+      .skipBlockedByModifierChange = lastBuildStats_.skipBlockedByModifierChange,
+      .skipBlockedByMissingGeometry = lastBuildStats_.skipBlockedByMissingGeometry,
   });
   return node;
 }
@@ -303,6 +320,10 @@ SceneBuilder::buildSubtree(Element const& el, LayoutConstraints const& constrain
       .materializedNodes = lastBuildStats_.materializedNodes,
       .arrangedNodes = lastBuildStats_.arrangedNodes,
       .reusedNodes = lastBuildStats_.reusedNodes,
+      .skippedSubtrees = lastBuildStats_.skippedSubtrees,
+      .skipBlockedByDirtyDescendant = lastBuildStats_.skipBlockedByDirtyDescendant,
+      .skipBlockedByModifierChange = lastBuildStats_.skipBlockedByModifierChange,
+      .skipBlockedByMissingGeometry = lastBuildStats_.skipBlockedByMissingGeometry,
   });
   return node;
 }
@@ -310,7 +331,7 @@ SceneBuilder::buildSubtree(Element const& el, LayoutConstraints const& constrain
 std::unique_ptr<scenegraph::SceneNode>
 SceneBuilder::buildOrReuse(Element const& el, std::unique_ptr<scenegraph::SceneNode> existing) {
   if (buildFrameDepth_ == 0) {
-    return build(el, LayoutConstraints {});
+    return build(el, LayoutConstraints {}, {}, true, true, std::move(existing));
   }
 
   ++lastBuildStats_.resolvedNodes;
@@ -322,9 +343,9 @@ std::unique_ptr<scenegraph::SceneNode>
 SceneBuilder::buildResolved(Element const& el, detail::ResolvedElement const& resolved,
                             std::unique_ptr<scenegraph::SceneNode> existing) {
   auto const current = frame();
-  ++lastBuildStats_.materializedNodes;
 
   if (!resolved.sceneElement) {
+    ++lastBuildStats_.materializedNodes;
     Size const measured = measureElement(el, current.constraints, current.hints, current.key);
     auto root = std::make_unique<scenegraph::GroupNode>(build::sizeRect(measured));
     if (sceneGraph_) {
@@ -338,11 +359,68 @@ SceneBuilder::buildResolved(Element const& el, detail::ResolvedElement const& re
       store->recordSceneElement(current.key, el);
       store->recordBuildSnapshot(current.key, current.constraints, current.hints, current.origin,
                                  current.assignedSize, current.hasAssignedWidth,
-                                 current.hasAssignedHeight);
+                                 current.hasAssignedHeight, root->position());
+      store->recordModifierLayers(current.key, std::span<detail::ElementModifiers const>{});
     }
     ++lastBuildStats_.arrangedNodes;
     return root;
   }
+
+  Element const& stableSceneEl = *resolved.sceneElement;
+  ElementType const typeTag = stableSceneEl.typeTag();
+  auto const& modifierLayers = resolved.modifierLayers;
+  std::span<detail::ElementModifiers const> const modifierLayerSpan{
+      modifierLayers.data(), modifierLayers.size()};
+  detail::ElementModifiers const* mods = modifierLayers.empty() ? nullptr : &modifierLayers.back();
+
+  if (existing && resolved.descendantsStable) {
+    if (StateStore* store = StateStore::current()) {
+      bool const dirtyDescendant = store->hasDirtyDescendant(current.key);
+      bool const modifiersStable =
+          store->modifierLayersStructurallyStable(current.key, modifierLayerSpan);
+      if (!dirtyDescendant && modifiersStable) {
+        ComponentKey interactionKey =
+            resolved.stableInteractionKey.empty() ? current.key : resolved.stableInteractionKey;
+        for (detail::ElementModifiers const& layer : modifierLayers) {
+          if (layer.hasInteraction()) {
+            store->recordInteraction(interactionKey, layer);
+          }
+        }
+
+        bool retainedGeometry = true;
+        if (sceneGraph_) {
+          retainedGeometry = sceneGraph_->retainSubtreeGeometry(
+              current.key, retainedGeometryOrigin(*sceneGraph_, *store, current.key, current.origin));
+        }
+        if (retainedGeometry) {
+          if (std::optional<ComponentBuildSnapshot> const snapshot =
+                  store->buildSnapshot(current.key)) {
+            existing->setPosition(snapshot->rootPosition);
+          }
+          store->markRetainedSubtreeVisited(current.key);
+          store->recordSceneElement(current.key, el);
+          store->recordBuildSnapshot(current.key, current.constraints, current.hints, current.origin,
+                                     current.assignedSize, current.hasAssignedWidth,
+                                     current.hasAssignedHeight, existing->position());
+          store->recordModifierLayers(current.key, modifierLayerSpan);
+          ++lastBuildStats_.reusedNodes;
+          ++lastBuildStats_.skippedNodes;
+          ++lastBuildStats_.skippedSubtrees;
+          return existing;
+        }
+        ++lastBuildStats_.skipBlockedByMissingGeometry;
+      } else {
+        if (dirtyDescendant) {
+          ++lastBuildStats_.skipBlockedByDirtyDescendant;
+        }
+        if (!modifiersStable) {
+          ++lastBuildStats_.skipBlockedByModifierChange;
+        }
+      }
+    }
+  }
+
+  ++lastBuildStats_.materializedNodes;
 
   std::vector<std::unique_ptr<scenegraph::SceneNode>> reusableWrappers{};
   while (existing && existing->kind() == scenegraph::SceneNodeKind::Rect &&
@@ -361,10 +439,6 @@ SceneBuilder::buildResolved(Element const& el, detail::ResolvedElement const& re
     return wrapper;
   };
 
-  Element const& stableSceneEl = *resolved.sceneElement;
-  ElementType const typeTag = stableSceneEl.typeTag();
-  std::vector<detail::ElementModifiers> const& modifierLayers = resolved.modifierLayers;
-  detail::ElementModifiers const* mods = modifierLayers.empty() ? nullptr : &modifierLayers.back();
   EdgeInsets const padding = mods ? mods->padding : EdgeInsets {};
   Point const innerOffset = modifierOffset(mods);
 
@@ -385,7 +459,10 @@ SceneBuilder::buildResolved(Element const& el, detail::ResolvedElement const& re
       current.origin.y + innerOffset.y + std::max(0.f, padding.top),
   };
 
-  EnvironmentLayerScope resolvedEnvironment {environment_, resolved.environmentLayers};
+  EnvironmentLayerScope resolvedEnvironment {
+      environment_,
+      std::span<EnvironmentLayer const>{resolved.environmentLayers.data(),
+                                        resolved.environmentLayers.size()}};
 
   ComponentKey sceneKey = current.key;
   if (resolved.nestSceneUnderFirstBody) {
@@ -513,7 +590,8 @@ SceneBuilder::buildResolved(Element const& el, detail::ResolvedElement const& re
     store->recordSceneElement(current.key, el);
     store->recordBuildSnapshot(current.key, current.constraints, current.hints, current.origin,
                                current.assignedSize, current.hasAssignedWidth,
-                               current.hasAssignedHeight);
+                               current.hasAssignedHeight, root->position());
+    store->recordModifierLayers(current.key, modifierLayerSpan);
   }
 
   ++lastBuildStats_.arrangedNodes;

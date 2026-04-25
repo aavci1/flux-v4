@@ -53,10 +53,16 @@ struct TableCell : ViewModifiers<TableCell> {
     struct Style {
         float width = kFloatFromTheme;
         HorizontalAlignment alignment = HorizontalAlignment::Leading;
+
+        bool operator==(Style const& other) const = default;
     };
 
     Element content;
     Style style {};
+
+    bool operator==(TableCell const& other) const {
+        return content.structuralEquals(other.content) && style == other.style;
+    }
 
     Element body() const;
 };
@@ -69,6 +75,8 @@ struct TableRow : ViewModifiers<TableRow> {
         Color backgroundColor = Color::theme();
         Color hoverBackgroundColor = Color::theme();
         Color selectedBackgroundColor = Color::theme();
+
+        bool operator==(Style const& other) const = default;
     };
 
     std::vector<Element> cells;
@@ -77,6 +85,12 @@ struct TableRow : ViewModifiers<TableRow> {
     bool disabled = false;
     Style style {};
     std::function<void()> onTap;
+
+    bool operator==(TableRow const& other) const {
+        return elementsStructurallyEqual(cells, other.cells) && detail.has_value() == other.detail.has_value() &&
+               (!detail || detail->structuralEquals(*other.detail)) && selected == other.selected &&
+               disabled == other.disabled && style == other.style;
+    }
 
     Element body() const;
 };
@@ -107,6 +121,8 @@ struct TableView : ViewModifiers<TableView> {
         float dividerInsetH = kFloatFromTheme;
         Color backgroundColor = Color::theme();
         Color dividerColor = Color::theme();
+
+        bool operator==(Style const& other) const = default;
     };
 
     std::optional<Element> header {};

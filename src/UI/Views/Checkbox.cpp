@@ -81,15 +81,14 @@ Element Checkbox::body() const {
 
     auto v = value;
     auto i = indeterminate;
-    auto oc = onChange;
-    auto handleToggle = [v, i, oc, isDisabled]() {
+    auto handleToggle = [v, i, onChange = onChange, isDisabled]() {
         if (isDisabled) {
             return;
         }
         bool const next = i ? true : !*v;
         v = next;
-        if (oc) {
-            oc(next);
+        if (onChange) {
+            onChange(next);
         }
     };
 

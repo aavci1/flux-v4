@@ -83,16 +83,14 @@ Element Slider::body() const {
     float const hi = max;
     float const stp = step;
     float const thumbSizeC = thumbSize;
-    std::function<void(float)> onCh = onChange;
-
-    auto applyPointer = [val, lo, hi, stp, thumbSizeC, usableWidth, onCh](float localX) {
+    auto applyPointer = [val, lo, hi, stp, thumbSizeC, usableWidth, onChange = onChange](float localX) {
         float const frac = std::clamp((localX - thumbSizeC * 0.5f) / usableWidth, 0.f, 1.f);
         float const raw = lo + frac * (hi - lo);
         float const snapped = snapToStep(raw, stp, lo, hi);
         if (snapped != *val) {
             val = snapped;
-            if (onCh) {
-                onCh(snapped);
+            if (onChange) {
+                onChange(snapped);
             }
         }
     };
@@ -114,7 +112,7 @@ Element Slider::body() const {
 
     auto handleUp = [dragging](Point) { dragging = false; };
 
-    auto handleKey = [val, lo, hi, stp, onCh, isDisabled](KeyCode k, Modifiers mods) {
+    auto handleKey = [val, lo, hi, stp, onChange = onChange, isDisabled](KeyCode k, Modifiers mods) {
         if (isDisabled) {
             return;
         }
@@ -137,8 +135,8 @@ Element Slider::body() const {
 
         if (next != *val) {
             val = next;
-            if (onCh) {
-                onCh(next);
+            if (onChange) {
+                onChange(next);
             }
         }
     };

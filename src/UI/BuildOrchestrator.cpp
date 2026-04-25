@@ -211,6 +211,7 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
     actionRegistryBuild_.beginRebuild();
     {
       scenegraph::SceneGraph& sceneGraph = window_.sceneGraph();
+      std::unique_ptr<scenegraph::SceneNode> existingRoot = sceneGraph.releaseRoot();
       std::unique_ptr<scenegraph::SceneNode> nextRoot = runBuildPass(
           BuildPassConfig{
               .stateStore = stateStore_,
@@ -220,7 +221,8 @@ void BuildOrchestrator::rebuild(std::optional<Size> sizeOverride, Runtime& runti
               .windowEnvironment = window_.environmentLayer(),
               .sceneGraph = &sceneGraph,
           },
-          [&]() { return rootHolder_ ? rootHolder_->resolveScene(rootCs) : ResolvedRootScene{}; }, rootCs);
+          [&]() { return rootHolder_ ? rootHolder_->resolveScene(rootCs) : ResolvedRootScene{}; },
+          rootCs, std::move(existingRoot));
       if (nextRoot) {
         sceneGraph.setRoot(std::move(nextRoot));
         layoutDebugDumpRetained(sceneGraph);

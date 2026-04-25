@@ -25,10 +25,12 @@ struct BuildPassConfig {
 
 std::unique_ptr<scenegraph::SceneNode>
 runBuildPass(BuildPassConfig const& config, ResolvedRootScene const& resolved,
-             LayoutConstraints const& constraints);
+             LayoutConstraints const& constraints,
+             std::unique_ptr<scenegraph::SceneNode> existingRoot = nullptr);
 
 std::unique_ptr<scenegraph::SceneNode>
 runBuildPass(BuildPassConfig const& config, std::function<ResolvedRootScene()> resolveRoot,
-             LayoutConstraints const& constraints);
+             LayoutConstraints const& constraints,
+             std::unique_ptr<scenegraph::SceneNode> existingRoot = nullptr);
 
 } // namespace flux
