@@ -4,6 +4,7 @@
 #include <Flux/Core/ComponentKey.hpp>
 #include <Flux/Core/LocalId.hpp>
 #include <Flux/Reactive/Signal.hpp>
+#include <Flux/UI/Detail/TraversalContext.hpp>
 #include <Flux/UI/StateStore.hpp>
 
 #include <atomic>
@@ -96,4 +97,31 @@ TEST_CASE("ComponentKey interned sibling lookups stay stable across wide parent 
     CHECK(keyedChildren[2].hasPrefix(parent));
     CHECK(positionalChildren[0].tail() == LocalId::fromIndex(0));
     CHECK(keyedChildren[0].tail() == LocalId::fromString("a"));
+}
+
+TEST_CASE("TraversalContext reuses its interned prefix key for current child keys") {
+    using flux::ComponentKey;
+    using flux::LocalId;
+    using flux::detail::TraversalContext;
+
+    TraversalContext traversal;
+    traversal.pushChildIndexWithLocalId(LocalId::fromString("stack"));
+
+    CHECK(traversal.currentElementLocalId() == LocalId::fromIndex(0));
+    CHECK(traversal.currentElementKey() ==
+          ComponentKey{LocalId::fromString("stack"), LocalId::fromIndex(0)});
+
+    ComponentKey const first = traversal.nextCompositeKey();
+    CHECK(first == ComponentKey{LocalId::fromString("stack"), LocalId::fromIndex(0)});
+    CHECK(traversal.currentElementKey() ==
+          ComponentKey{LocalId::fromString("stack"), LocalId::fromIndex(1)});
+
+    traversal.pushExplicitChildLocalId(LocalId::fromString("leaf"));
+    CHECK(traversal.currentElementLocalId() == LocalId::fromString("leaf"));
+    CHECK(traversal.currentElementKey() ==
+          ComponentKey{LocalId::fromString("stack"), LocalId::fromString("leaf")});
+    traversal.popExplicitChildLocalId();
+
+    traversal.popChildIndex();
+    CHECK(traversal.currentElementLocalId() == LocalId::fromIndex(0));
 }

@@ -41,6 +41,7 @@ public:
 
   void advanceChildSlot();
   [[nodiscard]] ComponentKey currentElementKey() const;
+  [[nodiscard]] LocalId currentElementLocalId() const;
   void rewindChildKeyIndex();
   void resetTraversalState(ComponentKey const& key = {});
   void setMeasurementRootKey(ComponentKey key);
@@ -67,6 +68,7 @@ private:
   std::vector<std::size_t> savedChildIndices_{};
   std::vector<bool> pushedChildIndexKeyStack_{};
   std::vector<bool> pushedCompositeKeyTailStack_{};
+  ComponentKey keyPrefix_{};
   ComponentKey measurementRootKey_{};
   std::size_t nextChildIndex_{0};
   bool skipNextLayoutChildAdvance_{false};

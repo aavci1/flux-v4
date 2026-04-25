@@ -65,7 +65,7 @@ public:
   std::size_t debugSavedChildDepth() const noexcept { return traversal_.debugSavedChildDepth(); }
 #endif
   LocalId peekCurrentChildLocalId() const {
-    return currentElementKey().empty() ? LocalId::fromIndex(0) : currentElementKey().tail();
+    return traversal_.currentElementLocalId();
   }
 
 protected:

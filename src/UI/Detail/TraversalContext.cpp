@@ -46,7 +46,9 @@ void TraversalContext::popFrame() {
 
 void TraversalContext::pushChildIndex(bool pushKeySegment) {
   if (pushKeySegment) {
-    keyStack_.push_back(nextChildIndex_);
+    LocalId const localId = LocalId::fromIndex(nextChildIndex_);
+    keyStack_.push_back(localId);
+    keyPrefix_.push_back(localId);
   }
   savedChildIndices_.push_back(nextChildIndex_);
   pushedChildIndexKeyStack_.push_back(pushKeySegment);
@@ -55,6 +57,7 @@ void TraversalContext::pushChildIndex(bool pushKeySegment) {
 
 void TraversalContext::pushChildIndexWithLocalId(LocalId localId) {
   keyStack_.push_back(localId);
+  keyPrefix_.push_back(localId);
   savedChildIndices_.push_back(nextChildIndex_);
   pushedChildIndexKeyStack_.push_back(true);
   nextChildIndex_ = 0;
@@ -64,6 +67,7 @@ void TraversalContext::popChildIndex() {
   assert(!pushedChildIndexKeyStack_.empty());
   if (pushedChildIndexKeyStack_.back()) {
     keyStack_.pop_back();
+    keyPrefix_.pop_back();
   }
   pushedChildIndexKeyStack_.pop_back();
   nextChildIndex_ = savedChildIndices_.back();
@@ -97,7 +101,7 @@ ComponentKey TraversalContext::nextCompositeKey() {
     useMeasurementRootKey_ = false;
     return measurementRootKey_;
   }
-  ComponentKey key{keyStack_, currentChildLocalId()};
+  ComponentKey key{keyPrefix_, currentChildLocalId()};
   ++nextChildIndex_;
   return key;
 }
@@ -108,9 +112,16 @@ void TraversalContext::advanceChildSlot() {
 
 ComponentKey TraversalContext::currentElementKey() const {
   if (skipNextLayoutChildAdvance_) {
-    return keyStack_;
+    return keyPrefix_;
   }
-  return ComponentKey{keyStack_, currentChildLocalId()};
+  return ComponentKey{keyPrefix_, currentChildLocalId()};
+}
+
+LocalId TraversalContext::currentElementLocalId() const {
+  if (skipNextLayoutChildAdvance_) {
+    return keyPrefix_.empty() ? LocalId::fromIndex(0) : keyPrefix_.tail();
+  }
+  return currentChildLocalId();
 }
 
 void TraversalContext::rewindChildKeyIndex() {
@@ -120,6 +131,7 @@ void TraversalContext::rewindChildKeyIndex() {
 void TraversalContext::resetTraversalState(ComponentKey const& key) {
   measurementRootKey_ = key;
   useMeasurementRootKey_ = false;
+  keyPrefix_.clear();
   keyStack_.clear();
   savedChildIndices_.clear();
   pushedChildIndexKeyStack_.clear();
@@ -129,6 +141,7 @@ void TraversalContext::resetTraversalState(ComponentKey const& key) {
   frames_.back().key = key;
   if (!key.empty()) {
     std::size_t const prefixSize = key.size() - 1;
+    keyPrefix_ = key.prefix(prefixSize);
     keyStack_.reserve(std::max(keyStack_.capacity(), prefixSize));
     key.appendPrefixTo(keyStack_, prefixSize);
     LocalId const local = key.tail();
@@ -168,7 +181,9 @@ void TraversalContext::pushCompositeKeyTail(ComponentKey const& compositeKey) {
   bool const pushedKeyTail = !compositeKey.empty();
   pushedCompositeKeyTailStack_.push_back(pushedKeyTail);
   if (pushedKeyTail) {
-    keyStack_.push_back(compositeKey.tail());
+    LocalId const tail = compositeKey.tail();
+    keyStack_.push_back(tail);
+    keyPrefix_.push_back(tail);
   }
   nextChildIndex_ = 0;
 }
@@ -178,6 +193,7 @@ void TraversalContext::popCompositeKeyTail() {
   if (pushedCompositeKeyTailStack_.back()) {
     assert(!keyStack_.empty());
     keyStack_.pop_back();
+    keyPrefix_.pop_back();
   }
   pushedCompositeKeyTailStack_.pop_back();
   assert(!savedChildIndices_.empty());

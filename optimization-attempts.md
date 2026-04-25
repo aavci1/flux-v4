@@ -282,6 +282,27 @@
   - Keyed child ids now pay a short contiguous scan inside a small inline bucket instead of a heap-backed hash-table lookup.
   - This removed the exact `InternedEdge` hash hotspot from the sample and shaved measurable time from `processReactiveUpdates()` / incremental rebuild without changing `ComponentKey` semantics.
 
+## Attempt 17
+
+- Item: Keep an interned prefix key inside `TraversalContext` so `currentElementKey()` / `nextCompositeKey()` append directly instead of rebuilding from `keyStack_`, and make `peekCurrentChildLocalId()` read the current local id without constructing a key.
+- Type: framework
+- Status: Worked, kept.
+- Before:
+  - Sample hotspot: `flux::(anonymous namespace)::ComponentKeyTable::intern(unsigned int, flux::LocalId)` at `1.07 G cycles` / `7.7%`
+  - `ck append`: `28435 (238975id)` / `235/f` (run 1), `28200 (237000id)` / `235/f` (run 2)
+  - `reactive`: `134.62 ms/s (1.11/f)` (run 1), `94.11 ms/s (0.78/f)` (run 2)
+  - `incremental`: `133.56 ms/s (1.10/f)` (run 1), `93.06 ms/s (0.78/f)` (run 2)
+- After:
+  - Sample: the old `ComponentKeyTable::intern(unsigned int, LocalId)` hotspot no longer dominates; the follow-up sample only shows isolated calls under normal measure traversal
+  - `ck append`: `19360 (160809id)` / `160/f` (run 1), `19200 (159480id)` / `160/f` (run 2)
+  - `reactive`: `77.20 ms/s (0.64/f)` (run 1), `82.20 ms/s (0.69/f)` (run 2)
+  - `incremental`: `76.38 ms/s (0.63/f)` (run 1), `81.42 ms/s (0.68/f)` (run 2)
+  - Delta: about `-0.14` to `-0.47 ms/frame` on the hot rebuild path
+- Outcome:
+  - `TraversalContext` now maintains the current prefix as a `ComponentKey`, so child key generation is one handle append instead of “re-intern the entire prefix, then append”.
+  - `MeasureContext::peekCurrentChildLocalId()` no longer constructs `currentElementKey()` twice just to read the tail.
+  - This cut `ComponentKey` append traffic by about a third and materially reduced `processReactiveUpdates()` / incremental rebuild time.
+
 ## Result
 
 - Accepted framework changes still in place:
@@ -293,6 +314,7 @@
   - `SceneBuilder` no longer clones the resolved scene element on every incremental animation rebuild.
   - Identity group traversal no longer mutates the canvas stack unless a descendant actually needs a transformed/clipped local space.
   - `ComponentKey` interning now uses parent-local child tables instead of a global `InternedEdge` hash table.
+  - `TraversalContext` carries an interned prefix key instead of reconstructing child keys from `std::vector<LocalId>` on every measure step.
 - Final status:
   - `animation-demo` stays at `59-61 fps`.
   - External foreground CPU confirmation is below the `10%` target.
