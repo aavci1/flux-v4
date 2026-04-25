@@ -28,6 +28,12 @@ class StateStore;
 
 namespace detail {
 
+struct ElementDeleter {
+  void operator()(Element* element) const noexcept;
+};
+
+using OwnedElementPtr = std::unique_ptr<Element, ElementDeleter>;
+
 std::uint64_t nextElementMeasureId();
 
 Popover* popoverOverlayStateIf(Element& el);
@@ -141,7 +147,7 @@ struct ElementModifiers {
 
 struct ResolvedElement {
   Element const* sceneElement = nullptr;
-  std::vector<std::unique_ptr<Element>> ownedBodies{};
+  SmallVector<OwnedElementPtr, 2> ownedBodies{};
   SmallVector<EnvironmentLayer, 4> environmentLayers{};
   SmallVector<ElementModifiers, 4> modifierLayers{};
   SmallVector<ComponentKey, 4> bodyComponentKeys{};

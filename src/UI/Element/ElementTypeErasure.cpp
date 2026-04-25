@@ -8,6 +8,10 @@ namespace flux {
 
 namespace detail {
 
+void ElementDeleter::operator()(Element* element) const noexcept {
+  delete element;
+}
+
 std::uint64_t nextElementMeasureId() {
   static std::uint64_t n = 1;
   return n++;
@@ -109,7 +113,7 @@ detail::ResolvedElement Element::resolve(ComponentKey const& key,
     }
 
     if (bodyResolution.ownedBody) {
-      resolved.ownedBodies.push_back(std::move(bodyResolution.ownedBody));
+      resolved.ownedBodies.emplace_back(bodyResolution.ownedBody.release());
       current = resolved.ownedBodies.back().get();
     } else {
       current = bodyResolution.body;

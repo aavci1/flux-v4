@@ -49,12 +49,6 @@ struct ComponentSubscription {
   ObserverHandle handle{};
 };
 
-struct ComponentValueSnapshot {
-  std::unique_ptr<void, void (*)(void*)> value{nullptr, nullptr};
-  bool (*equals)(void const*, void const*) = nullptr;
-  std::type_index type{typeid(void)};
-};
-
 struct EnvironmentValueSnapshot {
   std::unique_ptr<void, void (*)(void*)> value{nullptr, nullptr};
   bool (*equalsCurrent)(void const*, EnvironmentStack const&) = nullptr;
@@ -81,9 +75,7 @@ struct ComponentState {
   std::uint64_t lastBodyEpoch = 0;
   bool lastBodyStructurallyStable = false;
   std::optional<LayoutConstraints> lastBodyConstraints;
-  std::vector<LayoutConstraints> reusableConstraints;
   std::vector<std::pair<LayoutConstraints, Size>> reusableMeasures;
-  ComponentValueSnapshot valueSnapshot{};
   std::vector<EnvironmentValueSnapshot> environmentDependencies;
   std::vector<EnvironmentValueSnapshot> pendingEnvironmentDependencies;
   std::vector<ComponentSubscription> subscriptions;
@@ -173,12 +165,6 @@ public:
   [[nodiscard]] ComponentState const* findComponentState(ComponentKey const& key) const;
   [[nodiscard]] ComponentState* findComponentState(ComponentKey const& key);
 
-  template<typename C>
-  bool canReuseBody(ComponentKey const& key, C const& value, LayoutConstraints const& constraints) const;
-  template<typename C>
-  bool canReuseBody(ComponentKey const& key, ComponentState const* state, C const& value,
-                    LayoutConstraints const& constraints) const;
-
   [[nodiscard]] bool hasBodyForCurrentRebuild(ComponentKey const& key,
                                               LayoutConstraints const& constraints) const;
   [[nodiscard]] bool bodyStructurallyStable(ComponentKey const& key) const;
@@ -187,7 +173,6 @@ public:
   void recordBodyStability(ComponentKey const& key, bool stable);
   Element const* sceneElement(ComponentKey const& key) const;
   void discardCurrentRebuildBody(ComponentKey const& key);
-  void recordBodyConstraints(ComponentKey const& key, LayoutConstraints const& constraints);
   std::optional<ComponentBuildSnapshot> buildSnapshot(ComponentKey const& key) const;
   void recordBuildSnapshot(ComponentKey const& key, LayoutConstraints const& constraints,
                            LayoutHints const& hints, Point origin, Size assignedSize,
@@ -204,6 +189,8 @@ public:
   [[nodiscard]] bool hasInteractionDescendant(ComponentKey const& key) const;
   std::optional<Size> cachedMeasure(ComponentKey const& key, LayoutConstraints const& constraints) const;
   void recordMeasure(ComponentKey const& key, LayoutConstraints const& constraints, Size size);
+  void recordCompositeBodyResolve(bool comparedPreviousBody, bool structurallyStable,
+                                  bool legacyPredicateWouldHaveMatched);
 
   template<typename C>
   Element& commitBody(ComponentKey const& key, C const& value, LayoutConstraints const& constraints,
@@ -248,9 +235,6 @@ private:
   void clearComponentState(ComponentState& state);
   bool environmentDependenciesMatch(ComponentState const& state) const;
 
-  template<typename C>
-  static ComponentValueSnapshot makeValueSnapshot(C const& value);
-
   template<typename T>
   static EnvironmentValueSnapshot makeEnvironmentSnapshot(T const& value);
 };
@@ -260,30 +244,6 @@ private:
 // --- template implementation ---
 
 namespace flux {
-
-template<typename C>
-ComponentValueSnapshot StateStore::makeValueSnapshot(C const& value) {
-  if constexpr (std::is_copy_constructible_v<C>) {
-    ComponentValueSnapshot snapshot{};
-    C* raw = new C(value);
-    snapshot.value = std::unique_ptr<void, void (*)(void*)>(
-        raw, [](void* p) { delete static_cast<C*>(p); });
-    if constexpr (detail::equalityComparableV<C>) {
-      snapshot.equals = [](void const* lhs, void const* rhs) {
-        return *static_cast<C const*>(lhs) == *static_cast<C const*>(rhs);
-      };
-    } else if constexpr (std::is_trivially_copyable_v<C>) {
-      snapshot.equals = [](void const* lhs, void const* rhs) {
-        return std::memcmp(lhs, rhs, sizeof(C)) == 0;
-      };
-    }
-    snapshot.type = std::type_index(typeid(C));
-    return snapshot;
-  } else {
-    (void)value;
-    return {};
-  }
-}
 
 template<typename S, typename... Args>
 S& StateStore::claimSlot(Args&&... args) {
@@ -315,44 +275,6 @@ S& StateStore::claimSlot(Args&&... args) {
       slotObservable,
       ownerHandle});
   return *raw;
-}
-
-template<typename C>
-bool StateStore::canReuseBody(ComponentKey const& key, C const& value,
-                              LayoutConstraints const& constraints) const {
-  return canReuseBody(key, findComponentState(key), value, constraints);
-}
-
-template<typename C>
-bool StateStore::canReuseBody(ComponentKey const& key, ComponentState const* state, C const& value,
-                              LayoutConstraints const& constraints) const {
-  if (forceFullRebuild_ || activeDirtyComposites_.count(key) != 0) {
-    return false;
-  }
-  if (!state) {
-    return false;
-  }
-  if (!state->lastBody || state->lastBodyEpoch == buildEpoch_ || state->reusableConstraints.empty()) {
-    return false;
-  }
-  bool constraintsMatched = false;
-  for (LayoutConstraints const& recorded : state->reusableConstraints) {
-    if (constraintsEqual(recorded, constraints)) {
-      constraintsMatched = true;
-      break;
-    }
-  }
-  if (!constraintsMatched) {
-    return false;
-  }
-  if (!state->valueSnapshot.value || state->valueSnapshot.type != std::type_index(typeid(C)) ||
-      !state->valueSnapshot.equals) {
-    return false;
-  }
-  if (!environmentDependenciesMatch(*state)) {
-    return false;
-  }
-  return state->valueSnapshot.equals(state->valueSnapshot.value.get(), &value);
 }
 
 template<typename T>

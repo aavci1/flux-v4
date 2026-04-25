@@ -26,14 +26,16 @@ public:
 
   SmallVector() = default;
 
-  SmallVector(SmallVector const& other) {
+  SmallVector(SmallVector const& other) requires std::is_copy_constructible_v<T> {
     reserve(other.size_);
     for (std::size_t i = 0; i < other.size_; ++i) {
       push_back(other.data()[i]);
     }
   }
 
-  SmallVector& operator=(SmallVector const& other) {
+  SmallVector(SmallVector const& other) requires (!std::is_copy_constructible_v<T>) = delete;
+
+  SmallVector& operator=(SmallVector const& other) requires std::is_copy_constructible_v<T> {
     if (this == &other) {
       return *this;
     }
@@ -44,6 +46,8 @@ public:
     }
     return *this;
   }
+
+  SmallVector& operator=(SmallVector const& other) requires (!std::is_copy_constructible_v<T>) = delete;
 
   SmallVector(SmallVector&& other) noexcept(std::is_nothrow_move_constructible_v<T>) {
     if (other.size_ <= N) {

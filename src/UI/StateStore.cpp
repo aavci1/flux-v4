@@ -67,9 +67,7 @@ void resetComponentStateStorage(ComponentState& state) {
   state.lastBodyEpoch = 0;
   state.lastBodyStructurallyStable = false;
   state.lastBodyConstraints.reset();
-  state.reusableConstraints.clear();
   state.reusableMeasures.clear();
-  state.valueSnapshot = {};
   state.environmentDependencies.clear();
   state.pendingEnvironmentDependencies.clear();
   state.lastSceneElement.reset();
@@ -397,20 +395,6 @@ void StateStore::discardCurrentRebuildBody(ComponentKey const& key) {
   it->second.lastBodyConstraints.reset();
 }
 
-void StateStore::recordBodyConstraints(ComponentKey const& key, LayoutConstraints const& constraints) {
-  auto it = states_.find(key);
-  if (it == states_.end()) {
-    return;
-  }
-  ComponentState& state = it->second;
-  for (LayoutConstraints const& recorded : state.reusableConstraints) {
-    if (constraintsEqual(recorded, constraints)) {
-      return;
-    }
-  }
-  state.reusableConstraints.push_back(constraints);
-}
-
 std::optional<ComponentBuildSnapshot> StateStore::buildSnapshot(ComponentKey const& key) const {
   auto it = states_.find(key);
   if (it == states_.end()) {
@@ -447,6 +431,12 @@ void StateStore::recordSceneElement(ComponentKey const& key, Element const& elem
   Element* raw = new Element(element);
   it->second.lastSceneElement = std::unique_ptr<void, void (*)(void*)>(
       raw, [](void* p) { delete static_cast<Element*>(p); });
+}
+
+void StateStore::recordCompositeBodyResolve(bool comparedPreviousBody, bool structurallyStable,
+                                            bool legacyPredicateWouldHaveMatched) {
+  debug::perf::recordCompositeBodyResolve(comparedPreviousBody, structurallyStable,
+                                          legacyPredicateWouldHaveMatched);
 }
 
 bool StateStore::modifierLayersStructurallyStable(

@@ -15,12 +15,8 @@ template<typename C>
 Element& StateStore::commitBody(ComponentKey const& key, C const& value,
                                 LayoutConstraints const& constraints, std::unique_ptr<Element> body,
                                 std::vector<Observable*> deps) {
+  (void)value;
   ComponentState& state = states_[key];
-  bool const preserveReusableConstraints =
-      state.valueSnapshot.value != nullptr &&
-      state.valueSnapshot.type == std::type_index(typeid(C)) &&
-      state.valueSnapshot.equals != nullptr &&
-      state.valueSnapshot.equals(state.valueSnapshot.value.get(), &value);
 
   for (ComponentSubscription const& sub : state.subscriptions) {
     if (sub.observable) {
@@ -39,7 +35,6 @@ Element& StateStore::commitBody(ComponentKey const& key, C const& value,
     state.subscriptions.push_back(ComponentSubscription{.observable = dep, .handle = handle});
   }
 
-  state.valueSnapshot = makeValueSnapshot(value);
   state.environmentDependencies = std::move(state.pendingEnvironmentDependencies);
   state.pendingEnvironmentDependencies.clear();
   Element* raw = body.release();
@@ -47,19 +42,6 @@ Element& StateStore::commitBody(ComponentKey const& key, C const& value,
       raw, [](void* p) { delete static_cast<Element*>(p); });
   state.lastBodyEpoch = buildEpoch_;
   state.lastBodyConstraints = constraints;
-  if (!preserveReusableConstraints) {
-    state.reusableConstraints.clear();
-  }
-  bool hasRecordedConstraints = false;
-  for (LayoutConstraints const& recorded : state.reusableConstraints) {
-    if (constraintsEqual(recorded, constraints)) {
-      hasRecordedConstraints = true;
-      break;
-    }
-  }
-  if (!hasRecordedConstraints) {
-    state.reusableConstraints.push_back(constraints);
-  }
   return *raw;
 }
 
@@ -97,6 +79,10 @@ CompositeBodyResolution resolveCompositeBody(StateStore* store, ComponentKey con
       previousBody && previousBody->structuralEquals(*body);
   resolution.body = &store->commitBody(key, value, constraints, std::move(body), std::move(tracker.deps));
   store->recordBodyStability(key, descendantsStable);
+  store->recordCompositeBodyResolve(
+      previousBody != nullptr, descendantsStable,
+      std::is_copy_constructible_v<C> &&
+          (detail::equalityComparableV<C> || std::is_trivially_copyable_v<C>));
   resolution.descendantsStable = descendantsStable;
   return resolution;
 }
@@ -195,7 +181,6 @@ detail::CompositeBodyResolution Element::Model<C>::resolveCompositeBody(Componen
     }
     store->popCompositeConstraints();
     store->popComponent();
-    store->recordBodyConstraints(key, constraints);
     return resolution;
   }
 }
@@ -271,9 +256,6 @@ Size Element::Model<C>::measure(MeasureContext& ctx, LayoutConstraints const& co
     if (child.expandsBody()) {
       ComponentKey childBodyKey {key, detail::compositeBodyLocalId()};
       ctx.setMeasurementRootKey(std::move(childBodyKey));
-    }
-    if (store) {
-      store->recordBodyConstraints(key, constraints);
     }
     Size const sz = child.measure(ctx, constraints, hints, textSystem);
     if (store) {

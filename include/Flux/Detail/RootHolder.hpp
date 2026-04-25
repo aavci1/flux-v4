@@ -79,7 +79,6 @@ struct TypedRootHolder final : RootHolder {
         store->popComponent();
       }
       if (store) {
-        store->recordBodyConstraints(key, constraints);
         sceneDescendantsStable_ = resolution.descendantsStable;
         return ResolvedRootScene{
             .element = store->cachedBody(key),

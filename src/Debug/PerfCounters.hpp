@@ -45,6 +45,13 @@ struct ComponentKeyCounters {
   std::uint64_t heapCapacity = 0;
 };
 
+struct CompositeBodyCounters {
+  std::uint64_t rebuilds = 0;
+  std::uint64_t structuralCompares = 0;
+  std::uint64_t structuralMatches = 0;
+  std::uint64_t legacyPredicateMisses = 0;
+};
+
 namespace detail {
 
 struct IntervalCounters {
@@ -53,6 +60,7 @@ struct IntervalCounters {
   std::uint64_t builds = 0;
   BuildCounters build{};
   ComponentKeyCounters componentKeys{};
+  CompositeBodyCounters compositeBodies{};
   std::uint64_t preparedPrepareCalls = 0;
   std::uint64_t preparedReplayCalls = 0;
   std::array<std::uint64_t, static_cast<std::size_t>(TimedMetric::Count)> durationsNs{};
@@ -63,6 +71,7 @@ struct IntervalCounters {
     builds = 0;
     build = {};
     componentKeys = {};
+    compositeBodies = {};
     preparedPrepareCalls = 0;
     preparedReplayCalls = 0;
     durationsNs.fill(0);
@@ -99,6 +108,7 @@ inline void logIfReady() {
       "[flux:perf] %.2fs frames=%llu builds=%llu "
       "resolved=%llu(%.1f/f) materialized=%llu(%.1f/f) arranged=%llu(%.1f/f) reused=%llu(%.1f/f) skipped=%llu(%.1f/f) "
       "skipBlocked dirty=%llu modifier=%llu geometry=%llu "
+      "body rebuild=%llu(%.1f/f) compare=%llu stable=%llu legacyMiss=%llu "
       "ck copy=%llu/%lluid append=%llu/%lluid hash=%llu/%lluid eq=%llu/%lluid prefix=%llu/%lluid grow=%llu "
       "prepare=%llu(%.2f/f) replay=%llu(%.2f/f) "
       "ms reactive=%.2f(%.2f/f) incremental=%.2f(%.2f/f) render=%.2f(%.2f/f) present=%.2f(%.2f/f) drawableWait=%.2f(%.2f/f) frameBudget=%.2f(%.2f/f)\n",
@@ -118,6 +128,11 @@ inline void logIfReady() {
       static_cast<unsigned long long>(interval.build.skipBlockedByDirtyDescendant),
       static_cast<unsigned long long>(interval.build.skipBlockedByModifierChange),
       static_cast<unsigned long long>(interval.build.skipBlockedByMissingGeometry),
+      static_cast<unsigned long long>(interval.compositeBodies.rebuilds),
+      perFrame(interval.compositeBodies.rebuilds, interval.frames),
+      static_cast<unsigned long long>(interval.compositeBodies.structuralCompares),
+      static_cast<unsigned long long>(interval.compositeBodies.structuralMatches),
+      static_cast<unsigned long long>(interval.compositeBodies.legacyPredicateMisses),
       static_cast<unsigned long long>(interval.componentKeys.copies),
       static_cast<unsigned long long>(interval.componentKeys.copiedIds),
       static_cast<unsigned long long>(interval.componentKeys.appends),
@@ -175,6 +190,24 @@ inline void recordBuildCounters(BuildCounters const& build) {
   interval.build.skipBlockedByDirtyDescendant += build.skipBlockedByDirtyDescendant;
   interval.build.skipBlockedByModifierChange += build.skipBlockedByModifierChange;
   interval.build.skipBlockedByMissingGeometry += build.skipBlockedByMissingGeometry;
+}
+
+inline void recordCompositeBodyResolve(bool comparedPreviousBody, bool structurallyStable,
+                                       bool legacyPredicateWouldHaveMatched) {
+  if (!enabled()) {
+    return;
+  }
+  auto& counters = detail::counters().compositeBodies;
+  ++counters.rebuilds;
+  if (comparedPreviousBody) {
+    ++counters.structuralCompares;
+  }
+  if (structurallyStable) {
+    ++counters.structuralMatches;
+  }
+  if (!legacyPredicateWouldHaveMatched) {
+    ++counters.legacyPredicateMisses;
+  }
 }
 
 inline void recordPreparedPrepareCall() {
