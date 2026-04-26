@@ -1,5 +1,6 @@
 #include <Flux/Reactive/Interpolatable.hpp>
 #include <Flux/Reactive/Transition.hpp>
+#include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Views/Button.hpp>
 #include <Flux/UI/Views/Icon.hpp>
@@ -118,27 +119,34 @@ Element Button::body() const {
     bool const isDisabled = disabled.evaluate();
     Reactive::Bindable<bool> disabledBinding = disabled;
     ButtonColors const colors = deriveColors(variant, accent, destructive, theme.accentForegroundColor, theme.dangerForegroundColor, theme);
-    bool const hovered = useHover();
-    bool const pressed = usePress();
-    bool const focused = useFocus();
+    auto hovered = useState(false);
+    auto pressed = useState(false);
+    auto focused = useState(false);
 
-    Color const fillTarget = isDisabled ? theme.disabledControlBackgroundColor :
-                             pressed    ? colors.fillPress :
-                             hovered    ? colors.fillHover :
-                                          colors.fill;
-    Color const labelTarget = isDisabled ? theme.disabledTextColor : colors.label;
-    float const scaleTarget = (pressed && !isDisabled) ? 0.97f : 1.f;
-
-    ShadowStyle shadow = ShadowStyle::none();
-    if (!isDisabled) {
-        if (pressed) {
-            shadow = ShadowStyle {.radius = theme.shadowRadiusControl + 2.f, .offset = {0.f, theme.shadowOffsetYControl + 1.f}, .color = Color {theme.shadowColor.r, theme.shadowColor.g, theme.shadowColor.b, std::min(theme.shadowColor.a + 0.08f, 1.f)}};
-        } else if (hovered) {
-            shadow = colors.shadow.isNone() ? ShadowStyle {.radius = theme.shadowRadiusControl * 0.8f, .offset = {0.f, theme.shadowOffsetYControl + 0.5f}, .color = Color {theme.shadowColor.r, theme.shadowColor.g, theme.shadowColor.b, theme.shadowColor.a * 0.7f}} : colors.shadow;
-        } else {
-            shadow = colors.shadow;
+    Reactive::Bindable<Color> const fillTarget{[disabledBinding, pressed, hovered, colors, theme] {
+        return disabledBinding.evaluate() ? theme.disabledControlBackgroundColor :
+               pressed.get()             ? colors.fillPress :
+               hovered.get()             ? colors.fillHover :
+                                           colors.fill;
+    }};
+    Reactive::Bindable<Color> const labelTarget{[disabledBinding, colors, theme] {
+        return disabledBinding.evaluate() ? theme.disabledTextColor : colors.label;
+    }};
+    Reactive::Bindable<float> const scaleTarget{[disabledBinding, pressed] {
+        return (pressed.get() && !disabledBinding.evaluate()) ? 0.97f : 1.f;
+    }};
+    Reactive::Bindable<ShadowStyle> const shadow{[disabledBinding, pressed, hovered, colors, theme] {
+        if (disabledBinding.evaluate()) {
+            return ShadowStyle::none();
         }
-    }
+        if (pressed.get()) {
+            return ShadowStyle {.radius = theme.shadowRadiusControl + 2.f, .offset = {0.f, theme.shadowOffsetYControl + 1.f}, .color = Color {theme.shadowColor.r, theme.shadowColor.g, theme.shadowColor.b, std::min(theme.shadowColor.a + 0.08f, 1.f)}};
+        }
+        if (hovered.get()) {
+            return colors.shadow.isNone() ? ShadowStyle {.radius = theme.shadowRadiusControl * 0.8f, .offset = {0.f, theme.shadowOffsetYControl + 0.5f}, .color = Color {theme.shadowColor.r, theme.shadowColor.g, theme.shadowColor.b, theme.shadowColor.a * 0.7f}} : colors.shadow;
+        }
+        return colors.shadow;
+    }};
 
     auto handleTap = [onTap = onTap, disabledBinding]() {
         if (disabledBinding.evaluate()) {
@@ -154,12 +162,29 @@ Element Button::body() const {
         }
     };
 
-    bool const showFocusRing = !isDisabled && focused;
     CornerRadius const cr {radiusResolved};
-
-    StrokeStyle const stroke = showFocusRing                            ? StrokeStyle::solid(colors.focusRing, 2.f) :
-                               (!isDisabled && colors.border.a > 0.01f) ? StrokeStyle::solid(colors.border, 1.f) :
-                                                                          StrokeStyle::none();
+    Reactive::Bindable<StrokeStyle> const stroke{[disabledBinding, focused, colors] {
+        return !disabledBinding.evaluate() && focused.get() ? StrokeStyle::solid(colors.focusRing, 2.f) :
+               (!disabledBinding.evaluate() && colors.border.a > 0.01f) ? StrokeStyle::solid(colors.border, 1.f) :
+                                                                            StrokeStyle::none();
+    }};
+    auto pointerEnter = [hovered, disabledBinding] {
+        if (!disabledBinding.evaluate()) {
+            hovered = true;
+        }
+    };
+    auto pointerExit = [hovered, pressed] {
+        hovered = false;
+        pressed = false;
+    };
+    auto pointerDown = [pressed, disabledBinding](Point) {
+        if (!disabledBinding.evaluate()) {
+            pressed = true;
+        }
+    };
+    auto pointerUp = [pressed](Point) {
+        pressed = false;
+    };
 
     return ScaleAroundCenter {
         .scale = scaleTarget,
@@ -170,13 +195,22 @@ Element Button::body() const {
             .horizontalAlignment = HorizontalAlignment::Center,
             .verticalAlignment = VerticalAlignment::Center,
         }
-                     .fill(FillStyle::solid(fillTarget))
+                     .fill(fillTarget)
                      .stroke(stroke)
                      .cornerRadius(cr)
                      .shadow(shadow)
                      .padding(paddingV, paddingH, paddingV, paddingH)
                      .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
                      .focusable(!isDisabled)
+                     .onPointerEnter(std::function<void()> {pointerEnter})
+                     .onPointerExit(std::function<void()> {pointerExit})
+                     .onPointerDown(std::function<void(Point)> {pointerDown})
+                     .onPointerUp(std::function<void(Point)> {pointerUp})
+                     .onFocus(std::function<void()> {[focused] { focused = true; }})
+                     .onBlur(std::function<void()> {[focused, pressed] {
+                         focused = false;
+                         pressed = false;
+                     }})
                      .onKeyDown(std::function<void(KeyCode, Modifiers)> {handleKey})
         .onTap(std::function<void()> {handleTap})
     };
@@ -187,15 +221,16 @@ Element LinkButton::body() const {
     auto [fontResolved, accentResolved] = resolveStyle(style, theme);
     bool const isDisabled = disabled.evaluate();
     Reactive::Bindable<bool> disabledBinding = disabled;
-    bool const hovered = useHover();
-    bool const pressed = usePress();
-    bool const focused = useFocus();
-    bool const keyboardFocused = useKeyboardFocus();
+    auto hovered = useState(false);
+    auto pressed = useState(false);
+    auto focused = useState(false);
 
-    Color const labelColor =
-        isDisabled ? theme.disabledTextColor : pressed ? darken(accentResolved, 0.12f) :
-                                           hovered     ? lighten(accentResolved, 0.12f) :
-                                                         accentResolved;
+    Reactive::Bindable<Color> const labelColor{[disabledBinding, pressed, hovered, accentResolved, theme] {
+        return disabledBinding.evaluate() ? theme.disabledTextColor :
+               pressed.get()             ? darken(accentResolved, 0.12f) :
+               hovered.get()             ? lighten(accentResolved, 0.12f) :
+                                           accentResolved;
+    }};
 
     auto handleTap = [onTap = onTap, disabledBinding]() {
         if (disabledBinding.evaluate()) {
@@ -211,10 +246,11 @@ Element LinkButton::body() const {
         }
     };
 
-    StrokeStyle focusStroke = StrokeStyle::none();
-    if (!isDisabled && focused && keyboardFocused) {
-        focusStroke = StrokeStyle::solid(theme.keyboardFocusIndicatorColor, 2.f);
-    }
+    Reactive::Bindable<StrokeStyle> const focusStroke{[disabledBinding, focused, theme] {
+        return !disabledBinding.evaluate() && focused.get()
+                   ? StrokeStyle::solid(theme.keyboardFocusIndicatorColor, 2.f)
+                   : StrokeStyle::none();
+    }};
 
     return Text {
         .text = label,
@@ -229,6 +265,26 @@ Element LinkButton::body() const {
         .padding(0.f, 3.f, 0.f, 3.f)
         .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
         .focusable(!isDisabled)
+        .onPointerEnter(std::function<void()> {[hovered, disabledBinding] {
+            if (!disabledBinding.evaluate()) {
+                hovered = true;
+            }
+        }})
+        .onPointerExit(std::function<void()> {[hovered, pressed] {
+            hovered = false;
+            pressed = false;
+        }})
+        .onPointerDown(std::function<void(Point)> {[pressed, disabledBinding](Point) {
+            if (!disabledBinding.evaluate()) {
+                pressed = true;
+            }
+        }})
+        .onPointerUp(std::function<void(Point)> {[pressed](Point) { pressed = false; }})
+        .onFocus(std::function<void()> {[focused] { focused = true; }})
+        .onBlur(std::function<void()> {[focused, pressed] {
+            focused = false;
+            pressed = false;
+        }})
         .onKeyDown(std::function<void(KeyCode, Modifiers)> {handleKey})
         .onTap(std::function<void()> {handleTap});
 }
@@ -238,15 +294,16 @@ Element IconButton::body() const {
     auto [sizeResolved, weightResolved, accentResolved] = resolveStyle(style, theme);
     bool const isDisabled = disabled.evaluate();
     Reactive::Bindable<bool> disabledBinding = disabled;
-    bool const hovered = useHover();
-    bool const pressed = usePress();
-    bool const focused = useFocus();
-    bool const keyboardFocused = useKeyboardFocus();
+    auto hovered = useState(false);
+    auto pressed = useState(false);
+    auto focused = useState(false);
 
-    Color const iconColor =
-        isDisabled ? theme.disabledTextColor : pressed ? darken(accentResolved, 0.12f) :
-                                           hovered     ? lighten(accentResolved, 0.12f) :
-                                                         accentResolved;
+    Reactive::Bindable<Color> const iconColor{[disabledBinding, pressed, hovered, accentResolved, theme] {
+        return disabledBinding.evaluate() ? theme.disabledTextColor :
+               pressed.get()             ? darken(accentResolved, 0.12f) :
+               hovered.get()             ? lighten(accentResolved, 0.12f) :
+                                           accentResolved;
+    }};
 
     auto handleTap = [onTap = onTap, disabledBinding]() {
         if (disabledBinding.evaluate()) {
@@ -262,10 +319,11 @@ Element IconButton::body() const {
         }
     };
 
-    StrokeStyle focusStroke = StrokeStyle::none();
-    if (!isDisabled && focused && keyboardFocused) {
-        focusStroke = StrokeStyle::solid(theme.keyboardFocusIndicatorColor, 2.f);
-    }
+    Reactive::Bindable<StrokeStyle> const focusStroke{[disabledBinding, focused, theme] {
+        return !disabledBinding.evaluate() && focused.get()
+                   ? StrokeStyle::solid(theme.keyboardFocusIndicatorColor, 2.f)
+                   : StrokeStyle::none();
+    }};
 
     return Icon {
         .name = icon,
@@ -278,6 +336,26 @@ Element IconButton::body() const {
         .cornerRadius(CornerRadius {theme.radiusXSmall})
         .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
         .focusable(!isDisabled)
+        .onPointerEnter(std::function<void()> {[hovered, disabledBinding] {
+            if (!disabledBinding.evaluate()) {
+                hovered = true;
+            }
+        }})
+        .onPointerExit(std::function<void()> {[hovered, pressed] {
+            hovered = false;
+            pressed = false;
+        }})
+        .onPointerDown(std::function<void(Point)> {[pressed, disabledBinding](Point) {
+            if (!disabledBinding.evaluate()) {
+                pressed = true;
+            }
+        }})
+        .onPointerUp(std::function<void(Point)> {[pressed](Point) { pressed = false; }})
+        .onFocus(std::function<void()> {[focused] { focused = true; }})
+        .onBlur(std::function<void()> {[focused, pressed] {
+            focused = false;
+            pressed = false;
+        }})
         .onKeyDown(std::function<void(KeyCode, Modifiers)> {handleKey})
         .onTap(std::function<void()> {handleTap});
 }

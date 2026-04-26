@@ -26,6 +26,7 @@ public:
 
   void setRoot(std::unique_ptr<RootHolder> holder);
   void handleInput(InputEvent const& event);
+  void handleWindowEvent(WindowEvent const& event);
   void beginShutdown();
   void beginShutdown(scenegraph::SceneGraph* sceneGraph);
 

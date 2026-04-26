@@ -38,7 +38,7 @@ Element Checkbox::body() const {
 
     float const iconSz = boxSize * 0.6f;
 
-    bool const focused = useFocus();
+    auto focused = useState(false);
     Reactive::Bindable<bool> const indeterminateBinding = indeterminate;
     Reactive::Bindable<bool> const disabledBinding = disabled;
 
@@ -62,10 +62,12 @@ Element Checkbox::body() const {
         }
     };
 
-    StrokeStyle boxStroke = StrokeStyle::solid(borderColor, borderWidth);
-    if (focused && !disabledBinding.evaluate()) {
-        boxStroke = StrokeStyle::solid(focusColor, std::max(borderWidth, 2.f));
-    }
+    Reactive::Bindable<StrokeStyle> const boxStroke{[focused, disabledBinding, focusColor,
+                                                     borderColor, borderWidth] {
+        return focused.get() && !disabledBinding.evaluate()
+                   ? StrokeStyle::solid(focusColor, std::max(borderWidth, 2.f))
+                   : StrokeStyle::solid(borderColor, borderWidth);
+    }};
 
     Reactive::Bindable<Color> const boxFill{[v, indeterminateBinding, disabledBinding, checkedColor,
                                              uncheckedColor, theme] {
@@ -108,6 +110,8 @@ Element Checkbox::body() const {
         }
                      .cursor(disabledBinding.evaluate() ? Cursor::Inherit : Cursor::Hand)
                      .focusable(!disabledBinding.evaluate())
+                     .onFocus(std::function<void()> {[focused] { focused = true; }})
+                     .onBlur(std::function<void()> {[focused] { focused = false; }})
                      .onKeyDown(std::function<void(KeyCode, Modifiers)> {handleKey})
                      .onTap(std::function<void()> {handleToggle}),
     };

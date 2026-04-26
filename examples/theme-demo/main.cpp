@@ -22,17 +22,17 @@ struct ToolbarNavButton : ViewModifiers<ToolbarNavButton> {
 
     Element body() const {
         Theme const &theme = useEnvironment<Theme>();
-        bool const hovered = useHover();
+        auto hovered = useState(false);
 
         Reactive::Bindable<Color> fill {[active = active, hovered, theme] {
             return active.evaluate() ? Color::selectedContentBackground() :
-                   hovered ? theme.rowHoverBackgroundColor :
-                             Colors::transparent;
+                   hovered.get() ? theme.rowHoverBackgroundColor :
+                                   Colors::transparent;
         }};
         Reactive::Bindable<Color> textColor {[active = active, hovered] {
             return active.evaluate() ? Color::accent() :
-                   hovered ? Color::primary() :
-                             Color::secondary();
+                   hovered.get() ? Color::primary() :
+                                   Color::secondary();
         }};
 
         return Text {
@@ -44,6 +44,8 @@ struct ToolbarNavButton : ViewModifiers<ToolbarNavButton> {
             .fill(fill)
             .cornerRadius(CornerRadius {theme.radiusSmall})
             .cursor(Cursor::Hand)
+            .onPointerEnter(std::function<void()> {[hovered] { hovered = true; }})
+            .onPointerExit(std::function<void()> {[hovered] { hovered = false; }})
             .onTap(onTap);
     }
 };
@@ -56,12 +58,12 @@ struct SidebarGlyphButton : ViewModifiers<SidebarGlyphButton> {
 
     Element body() const {
         Theme const &theme = useEnvironment<Theme>();
-        bool const hovered = useHover();
+        auto hovered = useState(false);
 
         Reactive::Bindable<Color> fill {[selected = selected, hovered, theme] {
             return selected.evaluate() ? Color::selectedContentBackground() :
-                   hovered ? theme.hoveredControlBackgroundColor :
-                             Colors::transparent;
+                   hovered.get() ? theme.hoveredControlBackgroundColor :
+                                   Colors::transparent;
         }};
         Reactive::Bindable<Color> foreground {[selected = selected] {
             return selected.evaluate() ? Color::accent() : Color::secondary();
@@ -91,6 +93,8 @@ struct SidebarGlyphButton : ViewModifiers<SidebarGlyphButton> {
             .cornerRadius(CornerRadius {theme.radiusLarge})
             // .width(72.f)
             .cursor(Cursor::Hand)
+            .onPointerEnter(std::function<void()> {[hovered] { hovered = true; }})
+            .onPointerExit(std::function<void()> {[hovered] { hovered = false; }})
             .onTap(onTap);
     }
 };

@@ -136,3 +136,44 @@ TEST_CASE("MountRoot keeps Bindable effects scoped to the mount") {
   CHECK(sceneGraph.root().kind() == flux::scenegraph::SceneNodeKind::Group);
   hot.set(true);
 }
+
+TEST_CASE("nested body component bindings inherit the root redraw callback") {
+  struct Child {
+    flux::Reactive::Signal<bool> hot;
+
+    flux::Element body() const {
+      return flux::Element{flux::Rectangle{}}
+          .size(10.f, 10.f)
+          .fill(flux::Reactive::Bindable<flux::Color>{
+              [hot = hot] {
+                return hot() ? flux::Colors::red : flux::Colors::blue;
+              }});
+    }
+  };
+
+  struct Root {
+    flux::Reactive::Signal<bool> hot;
+
+    flux::Element body() const {
+      return flux::Element{Child{hot}};
+    }
+  };
+
+  FakeTextSystem textSystem;
+  flux::scenegraph::SceneGraph sceneGraph;
+  flux::Reactive::Signal<bool> hot{true};
+  int redraws = 0;
+  flux::MountRoot root{
+      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{hot}),
+      textSystem,
+      testEnvironment(),
+      flux::Size{200.f, 100.f},
+      [&] { ++redraws; },
+  };
+
+  root.mount(sceneGraph);
+  redraws = 0;
+  hot.set(false);
+
+  CHECK(redraws == 1);
+}

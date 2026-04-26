@@ -118,7 +118,7 @@ std::unique_ptr<scenegraph::SceneNode> Element::Model<C>::mount(MountContext& ct
       childScope->dispose();
     });
     MountContext childCtx{*childScope, ctx.environment(), ctx.textSystem(), ctx.measureContext(),
-                          ctx.constraints(), ctx.hints()};
+                          ctx.constraints(), ctx.hints(), ctx.redrawCallback()};
     return Reactive::withOwner(*childScope, [&] {
       Element child{value.body()};
       return child.mount(childCtx);

@@ -5,6 +5,7 @@
 #include <Flux/UI/Views/Button.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Icon.hpp>
+#include <Flux/UI/Views/Popover.hpp>
 #include <Flux/UI/Views/Spacer.hpp>
 #include <Flux/UI/Views/Text.hpp>
 #include <Flux/UI/Views/Toggle.hpp>
@@ -16,6 +17,45 @@
 
 using namespace flux;
 
+namespace {
+
+Element attachTooltip(Element element, TooltipConfig config) {
+    auto [showPopover, hidePopover, presented] = usePopover();
+    (void)presented;
+    auto show = [showPopover, config = std::move(config)] {
+        if (config.text.empty()) {
+            return;
+        }
+        showPopover(Popover {
+            .content = Element {Text {
+                .text = config.text,
+                .font = Font::footnote(),
+                .color = Color::primary(),
+                .wrapping = TextWrapping::Wrap,
+            }},
+            .placement = config.placement,
+            .gap = 6.f,
+            .arrow = false,
+            .backgroundColor = Color::elevatedBackground(),
+            .borderColor = Color::separator(),
+            .borderWidth = 1.f,
+            .cornerRadius = 8.f,
+            .contentPadding = 8.f,
+            .maxSize = Size {240.f, 0.f},
+            .backdropColor = Colors::transparent,
+            .dismissOnEscape = true,
+            .dismissOnOutsideTap = false,
+            .useTapAnchor = false,
+            .debugName = "tooltip",
+        });
+    };
+    return std::move(element)
+        .onPointerEnter(std::function<void()> {show})
+        .onPointerExit(std::function<void()> {hidePopover});
+}
+
+} // namespace
+
 // ── Tooltip on a button ────────────────────────────────────────────────────
 
 struct TooltipButton {
@@ -26,18 +66,17 @@ struct TooltipButton {
     bool operator==(TooltipButton const &) const = default;
 
     auto body() const {
-        useTooltip(TooltipConfig {
-            .text = tooltip,
-            .placement = placement,
-        });
-
-        return Button {
+        Element button = Button {
             .label = label,
             .variant = ButtonVariant::Secondary,
             .onTap = [label = label]() {
                 std::fprintf(stderr, "[tooltip-demo] %s tapped\n", label.c_str());
             },
         };
+        return attachTooltip(std::move(button), TooltipConfig {
+            .text = tooltip,
+            .placement = placement,
+        });
     }
 };
 
@@ -50,15 +89,14 @@ struct TooltipIcon {
     bool operator==(TooltipIcon const &) const = default;
 
     auto body() const {
-        useTooltip(tooltip);
-
-        return Element {Icon {
+        Element icon = Element {Icon {
             .name = name,
             .size = 24.f,
             .color = Color::secondary(),
         }}
             .padding(4.f)
             .cursor(Cursor::Arrow);
+        return attachTooltip(std::move(icon), TooltipConfig {.text = tooltip});
     }
 };
 
@@ -67,11 +105,10 @@ struct TooltipIcon {
 struct TooltipToggle {
     auto body() const {
         auto value = useState(false);
-        useTooltip("Enable or disable notifications");
-
-        return Toggle {
+        Element toggle = Toggle {
             .value = value,
         };
+        return attachTooltip(std::move(toggle), TooltipConfig {.text = "Enable or disable notifications"});
     }
 };
 

@@ -29,6 +29,7 @@ public:
 
   void mount(scenegraph::SceneGraph& sceneGraph);
   void unmount(scenegraph::SceneGraph& sceneGraph);
+  void resize(Size viewportSize, scenegraph::SceneGraph& sceneGraph);
 
   bool mounted() const noexcept { return mounted_; }
 

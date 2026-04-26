@@ -768,8 +768,8 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
         bool const isUser = message.role == ChatRole::User;
         bool const isReasoning = message.role == ChatRole::Reasoning;
         bool const isTool = message.role == ChatRole::Tool;
-        bool const hovered = useHover();
-        bool const pressed = usePress();
+        auto hovered = useState(false);
+        auto pressed = useState(false);
         bool const collapsed = (isReasoning || isTool) && message.collapsed;
         bool const reasoningFinished = message.finishedAtNanos > message.startedAtNanos;
         std::string const thoughtSummary = formatThoughtDuration(message.startedAtNanos, message.finishedAtNanos);
@@ -1118,9 +1118,11 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
 
         Element bubble = [&]() -> Element {
             if (isReasoning && collapsed) {
-                Color const collapsedFill = pressed ? theme.rowHoverBackgroundColor :
-                                            hovered ? theme.hoveredControlBackgroundColor :
-                                                      Color::controlBackground();
+                Reactive::Bindable<Color> const collapsedFill {[pressed, hovered, theme] {
+                    return pressed.get() ? theme.rowHoverBackgroundColor :
+                           hovered.get() ? theme.hoveredControlBackgroundColor :
+                                           Color::controlBackground();
+                }};
                 std::vector<Element> collapsedChildren;
                 collapsedChildren.push_back(
                     reasoningFinished ? Element {
@@ -1152,11 +1154,18 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
                     .children = std::move(collapsedChildren),
                 }
                     .padding(theme.space4)
-                    .fill(FillStyle::solid(collapsedFill))
+                    .fill(collapsedFill)
                     .stroke(StrokeStyle::solid(Color::separator(), 1.f))
                     .cornerRadius(theme.radiusXLarge)
                     .cursor(Cursor::Hand)
                     .focusable(true)
+                    .onPointerEnter(std::function<void()> {[hovered] { hovered = true; }})
+                    .onPointerExit(std::function<void()> {[hovered, pressed] {
+                        hovered = false;
+                        pressed = false;
+                    }})
+                    .onPointerDown(std::function<void(Point)> {[pressed](Point) { pressed = true; }})
+                    .onPointerUp(std::function<void(Point)> {[pressed](Point) { pressed = false; }})
                     .onTap(onToggleReasoning ? onToggleReasoning : std::function<void()> {});
             }
 

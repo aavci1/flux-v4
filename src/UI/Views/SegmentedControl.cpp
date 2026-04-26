@@ -74,10 +74,9 @@ struct SegmentedControlItem : ViewModifiers<SegmentedControlItem> {
 
     Element body() const {
         bool const isDisabled = disabled || option.disabled;
-        bool const hovered = useHover();
-        bool const pressed = usePress();
-        bool const focused = useFocus();
-        bool const keyboardFocused = useKeyboardFocus();
+        auto hovered = useState(false);
+        auto pressed = useState(false);
+        auto focused = useState(false);
         Color const disabledTextColor = theme.disabledTextColor;
         Color const accentForegroundColor = theme.accentForegroundColor;
         Color const secondaryLabelColor = theme.secondaryLabelColor;
@@ -101,8 +100,8 @@ struct SegmentedControlItem : ViewModifiers<SegmentedControlItem> {
                                               idleFill] {
             bool const selected = selectedIndex.get() == index;
             return isDisabled ? Colors::transparent
-                              : selected ? (pressed ? selectedPressFill : hovered ? selectedHoverFill : selectedFill)
-                                         : (pressed ? pressFill : hovered ? hoverFill : idleFill);
+                              : selected ? (pressed.get() ? selectedPressFill : hovered.get() ? selectedHoverFill : selectedFill)
+                                         : (pressed.get() ? pressFill : hovered.get() ? hoverFill : idleFill);
         }};
         Reactive::Bindable<Color> const labelColor{[selectedIndex = selectedIndex,
                                                     index = index,
@@ -114,10 +113,12 @@ struct SegmentedControlItem : ViewModifiers<SegmentedControlItem> {
             return isDisabled ? disabledTextColor
                               : selected ? accentForegroundColor : secondaryLabelColor;
         }};
-        StrokeStyle const stroke =
-            !isDisabled && focused && keyboardFocused
-                ? StrokeStyle::solid(theme.keyboardFocusIndicatorColor, 2.f)
-                : StrokeStyle::none();
+        Reactive::Bindable<StrokeStyle> const stroke{[isDisabled, focused,
+                                                       focusColor = theme.keyboardFocusIndicatorColor] {
+            return !isDisabled && focused.get()
+                       ? StrokeStyle::solid(focusColor, 2.f)
+                       : StrokeStyle::none();
+        }};
 
         auto handleTap = [isDisabled, onTap = onTap]() {
             if (!isDisabled && onTap) {
@@ -143,6 +144,26 @@ struct SegmentedControlItem : ViewModifiers<SegmentedControlItem> {
             .cornerRadius(CornerRadius {std::max(0.f, style.cornerRadius - 2.f)})
             .cursor(isDisabled ? Cursor::Arrow : Cursor::Hand)
             .focusable(!isDisabled)
+            .onPointerEnter(std::function<void()> {[hovered, isDisabled] {
+                if (!isDisabled) {
+                    hovered = true;
+                }
+            }})
+            .onPointerExit(std::function<void()> {[hovered, pressed] {
+                hovered = false;
+                pressed = false;
+            }})
+            .onPointerDown(std::function<void(Point)> {[pressed, isDisabled](Point) {
+                if (!isDisabled) {
+                    pressed = true;
+                }
+            }})
+            .onPointerUp(std::function<void(Point)> {[pressed](Point) { pressed = false; }})
+            .onFocus(std::function<void()> {[focused] { focused = true; }})
+            .onBlur(std::function<void()> {[focused, pressed] {
+                focused = false;
+                pressed = false;
+            }})
             .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} :
                                     std::function<void(KeyCode, Modifiers)> {handleKey})
             .onTap(isDisabled ? std::function<void()> {} : std::function<void()> {handleTap});

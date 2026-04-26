@@ -26,19 +26,18 @@ struct SidebarButton : ViewModifiers<SidebarButton> {
     auto body() const {
         Theme const &theme = useEnvironment<Theme>();
 
-        bool const hovered = useHover();
-        bool const pressed = usePress();
-        bool const focused = useFocus();
+        auto hovered = useState(false);
+        auto pressed = useState(false);
 
-        Color color = Color::secondary();
-
-        if (hovered) {
-            color = Color::selectedContentBackground();
-        }
-
-        if (pressed || selected) {
-            color = Color::accent();
-        }
+        Reactive::Bindable<Color> color {[hovered, pressed, selected = selected] {
+            if (pressed.get() || selected) {
+                return Color::accent();
+            }
+            if (hovered.get()) {
+                return Color::selectedContentBackground();
+            }
+            return Color::secondary();
+        }};
 
         return VStack {
             .spacing = theme.space1,
@@ -61,6 +60,13 @@ struct SidebarButton : ViewModifiers<SidebarButton> {
         }
             .cursor(Cursor::Hand)
             .focusable(true)
+            .onPointerEnter(std::function<void()> {[hovered] { hovered = true; }})
+            .onPointerExit(std::function<void()> {[hovered, pressed] {
+                hovered = false;
+                pressed = false;
+            }})
+            .onPointerDown(std::function<void(Point)> {[pressed](Point) { pressed = true; }})
+            .onPointerUp(std::function<void(Point)> {[pressed](Point) { pressed = false; }})
             .onTap([onTap = onTap] {
                 if (onTap) {
                     onTap();

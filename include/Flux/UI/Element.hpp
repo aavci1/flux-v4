@@ -154,6 +154,10 @@ public:
   Element overlay(Element over) &&;
 
   Element onTap(std::function<void()> handler) &&;
+  Element onPointerEnter(std::function<void()> handler) &&;
+  Element onPointerExit(std::function<void()> handler) &&;
+  Element onFocus(std::function<void()> handler) &&;
+  Element onBlur(std::function<void()> handler) &&;
   Element onPointerDown(std::function<void(Point)> handler) &&;
   Element onPointerUp(std::function<void(Point)> handler) &&;
   Element onPointerMove(std::function<void(Point)> handler) &&;

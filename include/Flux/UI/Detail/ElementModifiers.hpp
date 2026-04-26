@@ -92,6 +92,10 @@ struct ElementModifiers {
   std::unique_ptr<Element> overlay;
 
   std::function<void()> onTap;
+  std::function<void()> onPointerEnter;
+  std::function<void()> onPointerExit;
+  std::function<void()> onFocus;
+  std::function<void()> onBlur;
   std::function<void(Point)> onPointerDown;
   std::function<void(Point)> onPointerUp;
   std::function<void(Point)> onPointerMove;
@@ -103,10 +107,13 @@ struct ElementModifiers {
   Cursor cursor = Cursor::Inherit;
 
   bool hasInteraction() const noexcept {
-    return static_cast<bool>(onTap) || static_cast<bool>(onPointerDown) || static_cast<bool>(onPointerUp) ||
-           static_cast<bool>(onPointerMove) || static_cast<bool>(onScroll) || static_cast<bool>(onKeyDown) ||
-           static_cast<bool>(onKeyUp) || static_cast<bool>(onTextInput) || focusable ||
-           cursor != Cursor::Inherit;
+    return static_cast<bool>(onTap) || static_cast<bool>(onPointerEnter) ||
+           static_cast<bool>(onPointerExit) || static_cast<bool>(onFocus) ||
+           static_cast<bool>(onBlur) || static_cast<bool>(onPointerDown) ||
+           static_cast<bool>(onPointerUp) || static_cast<bool>(onPointerMove) ||
+           static_cast<bool>(onScroll) || static_cast<bool>(onKeyDown) ||
+           static_cast<bool>(onKeyUp) || static_cast<bool>(onTextInput) ||
+           focusable || cursor != Cursor::Inherit;
   }
 
   bool needsModifierPass() const {

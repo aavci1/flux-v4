@@ -17,6 +17,10 @@ struct InteractionData {
   ComponentKey stableTargetKey{};
   Cursor cursor = Cursor::Inherit;
   bool focusable = false;
+  std::function<void()> onPointerEnter;
+  std::function<void()> onPointerExit;
+  std::function<void()> onFocus;
+  std::function<void()> onBlur;
   std::function<void(Point)> onPointerDown;
   std::function<void(Point)> onPointerUp;
   std::function<void(Point)> onPointerMove;
@@ -27,7 +31,8 @@ struct InteractionData {
   std::function<void()> onTap;
 
   [[nodiscard]] bool isEmpty() const noexcept {
-    return !onPointerDown && !onPointerUp && !onPointerMove && !onScroll && !onKeyDown && !onKeyUp &&
+    return !onPointerEnter && !onPointerExit && !onFocus && !onBlur && !onPointerDown &&
+           !onPointerUp && !onPointerMove && !onScroll && !onKeyDown && !onKeyUp &&
            !onTextInput && !onTap && !focusable && cursor == Cursor::Inherit;
   }
 };

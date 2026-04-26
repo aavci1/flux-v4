@@ -58,7 +58,7 @@ Element Slider::body() const {
     auto focusColor = theme.keyboardFocusIndicatorColor;
 
     auto isDisabled = disabled;
-    bool const focused = useFocus();
+    auto focused = useState(false);
     auto dragging = useState(false);
 
     float const componentWidth = std::max(kDefaultSliderWidth, thumbSize);
@@ -127,10 +127,10 @@ Element Slider::body() const {
         }
     };
 
-    StrokeStyle thumbStroke = StrokeStyle::solid(thumbBorderColor, 2.f);
-    if (focused && !isDisabled) {
-        thumbStroke = StrokeStyle::solid(focusColor, 2.f);
-    }
+    Reactive::Bindable<StrokeStyle> const thumbStroke{[focused, isDisabled, focusColor, thumbBorderColor] {
+        return focused.get() && !isDisabled ? StrokeStyle::solid(focusColor, 2.f)
+                                            : StrokeStyle::solid(thumbBorderColor, 2.f);
+    }};
 
     float const componentHeight = std::max(trackHeight, thumbSize * 1.5f);
     float const thumbDiameter = thumbSize;
@@ -170,6 +170,11 @@ Element Slider::body() const {
     }
         .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
         .focusable(!isDisabled)
+        .onFocus(std::function<void()> {[focused] { focused = true; }})
+        .onBlur(std::function<void()> {[focused, dragging] {
+            focused = false;
+            dragging = false;
+        }})
         .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})
         .onPointerDown(isDisabled ? std::function<void(Point)> {} : std::function<void(Point)> {handleDown})
         .onPointerUp(isDisabled ? std::function<void(Point)> {} : std::function<void(Point)> {handleUp})

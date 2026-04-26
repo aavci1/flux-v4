@@ -51,7 +51,7 @@ Element Toggle::body() const {
     float const xOff = thumbInset;
     float const xOn = std::max(xOff, trackWidth - thumbInset - thumbSize);
 
-    bool const focused = useFocus();
+    auto focused = useState(false);
     bool const isDisabled = disabled;
 
     auto v = value;
@@ -82,7 +82,10 @@ Element Toggle::body() const {
                     .fill(Reactive::Bindable<Color> {[v, isDisabled, onColor, offColor, theme] {
                         return isDisabled ? theme.disabledControlBackgroundColor : v.get() ? onColor : offColor;
                     }})
-                    .stroke(StrokeStyle::solid(focused ? focusColor : borderColor, focused ? std::max(borderWidth, 2.f) : borderWidth))
+                    .stroke(Reactive::Bindable<StrokeStyle> {[focused, focusColor, borderColor, borderWidth] {
+                        return StrokeStyle::solid(focused.get() ? focusColor : borderColor,
+                                                  focused.get() ? std::max(borderWidth, 2.f) : borderWidth);
+                    }})
                     .size(trackWidth, trackHeight)
                     .cornerRadius(CornerRadius {trackHeight * 0.5f}),
                 Rectangle {}
@@ -98,6 +101,8 @@ Element Toggle::body() const {
         }
                      .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
                      .focusable(!isDisabled)
+                     .onFocus(std::function<void()> {[focused] { focused = true; }})
+                     .onBlur(std::function<void()> {[focused] { focused = false; }})
                      .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})
                      .onTap(isDisabled ? std::function<void()> {} : std::function<void()> {handleToggle}),
     };

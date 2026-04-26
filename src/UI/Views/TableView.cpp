@@ -310,14 +310,17 @@ Element TableRow::body() const {
     Theme const &theme = useEnvironment<Theme>();
     TableRow::Style const resolved = resolveRowStyle(style, theme);
     TableLayoutContext const &table = useEnvironment<TableLayoutContext>();
-    bool const hovered = useHover();
-    bool const pressed = usePress();
+    auto hovered = useState(false);
+    auto pressed = useState(false);
     bool const interactive = !disabled && static_cast<bool>(onTap);
 
-    Color const fill = selected ? resolved.selectedBackgroundColor :
-                      pressed && interactive ? resolved.hoverBackgroundColor :
-                      hovered ? resolved.hoverBackgroundColor :
-                                resolved.backgroundColor;
+    Reactive::Bindable<Color> const fill{[selected = selected, pressed, hovered,
+                                          interactive, resolved] {
+        return selected                     ? resolved.selectedBackgroundColor :
+               pressed.get() && interactive ? resolved.hoverBackgroundColor :
+               hovered.get()                ? resolved.hoverBackgroundColor :
+                                              resolved.backgroundColor;
+    }};
 
     auto handleTap = [onTap = onTap, disabled = disabled] {
         if (!disabled && onTap) {
@@ -353,7 +356,7 @@ Element TableRow::body() const {
             .children = std::move(rowCells),
         }
             .padding(resolved.paddingV, resolved.paddingH, resolved.paddingV, resolved.paddingH)
-            .fill(FillStyle::solid(fill))
+            .fill(fill)
     );
     if (detail) {
         childrenList.push_back(*detail);
@@ -366,6 +369,21 @@ Element TableRow::body() const {
     }
         .cursor(interactive ? Cursor::Hand : Cursor::Arrow)
         .focusable(interactive)
+        .onPointerEnter(std::function<void()> {[hovered, interactive] {
+            if (interactive) {
+                hovered = true;
+            }
+        }})
+        .onPointerExit(std::function<void()> {[hovered, pressed] {
+            hovered = false;
+            pressed = false;
+        }})
+        .onPointerDown(std::function<void(Point)> {[pressed, interactive](Point) {
+            if (interactive) {
+                pressed = true;
+            }
+        }})
+        .onPointerUp(std::function<void(Point)> {[pressed](Point) { pressed = false; }})
         .onKeyDown(interactive ? std::function<void(KeyCode, Modifiers)> {handleKey}
                                : std::function<void(KeyCode, Modifiers)> {})
         .onTap(interactive ? std::function<void()> {handleTap} : std::function<void()> {});

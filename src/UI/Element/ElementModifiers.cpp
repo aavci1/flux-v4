@@ -17,6 +17,10 @@ detail::ElementModifiers::ElementModifiers(detail::ElementModifiers const& o)
     , sizeHeight(o.sizeHeight)
     , overlay(o.overlay ? std::make_unique<Element>(*o.overlay) : nullptr)
     , onTap(o.onTap)
+    , onPointerEnter(o.onPointerEnter)
+    , onPointerExit(o.onPointerExit)
+    , onFocus(o.onFocus)
+    , onBlur(o.onBlur)
     , onPointerDown(o.onPointerDown)
     , onPointerUp(o.onPointerUp)
     , onPointerMove(o.onPointerMove)
@@ -43,6 +47,10 @@ detail::ElementModifiers& detail::ElementModifiers::operator=(detail::ElementMod
     sizeHeight = o.sizeHeight;
     overlay = o.overlay ? std::make_unique<Element>(*o.overlay) : nullptr;
     onTap = o.onTap;
+    onPointerEnter = o.onPointerEnter;
+    onPointerExit = o.onPointerExit;
+    onFocus = o.onFocus;
+    onBlur = o.onBlur;
     onPointerDown = o.onPointerDown;
     onPointerUp = o.onPointerUp;
     onPointerMove = o.onPointerMove;
@@ -237,6 +245,26 @@ Element Element::overlay(Element over) && {
 
 Element Element::onTap(std::function<void()> handler) && {
   writableModifiers().onTap = std::move(handler);
+  return std::move(*this);
+}
+
+Element Element::onPointerEnter(std::function<void()> handler) && {
+  writableModifiers().onPointerEnter = std::move(handler);
+  return std::move(*this);
+}
+
+Element Element::onPointerExit(std::function<void()> handler) && {
+  writableModifiers().onPointerExit = std::move(handler);
+  return std::move(*this);
+}
+
+Element Element::onFocus(std::function<void()> handler) && {
+  writableModifiers().onFocus = std::move(handler);
+  return std::move(*this);
+}
+
+Element Element::onBlur(std::function<void()> handler) && {
+  writableModifiers().onBlur = std::move(handler);
   return std::move(*this);
 }
 

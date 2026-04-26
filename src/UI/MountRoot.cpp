@@ -87,4 +87,9 @@ void MountRoot::unmount(scenegraph::SceneGraph& sceneGraph) {
   mounted_ = false;
 }
 
+void MountRoot::resize(Size viewportSize, scenegraph::SceneGraph& sceneGraph) {
+  viewportSize_ = viewportSize;
+  mount(sceneGraph);
+}
+
 } // namespace flux

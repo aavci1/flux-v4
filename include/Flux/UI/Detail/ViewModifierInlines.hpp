@@ -137,6 +137,26 @@ Element ViewModifiers<Derived>::onTap(std::function<void()> handler) && {
 }
 
 template<typename Derived>
+Element ViewModifiers<Derived>::onPointerEnter(std::function<void()> handler) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.onPointerEnter(std::move(handler));
+}
+
+template<typename Derived>
+Element ViewModifiers<Derived>::onPointerExit(std::function<void()> handler) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.onPointerExit(std::move(handler));
+}
+
+template<typename Derived>
+Element ViewModifiers<Derived>::onFocus(std::function<void()> handler) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.onFocus(std::move(handler));
+}
+
+template<typename Derived>
+Element ViewModifiers<Derived>::onBlur(std::function<void()> handler) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.onBlur(std::move(handler));
+}
+
+template<typename Derived>
 Element ViewModifiers<Derived>::onPointerDown(std::function<void(Point)> handler) && {
   return Element{std::move(static_cast<Derived&>(*this))}.onPointerDown(std::move(handler));
 }

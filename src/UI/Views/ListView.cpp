@@ -27,13 +27,16 @@ ListView::Style resolveListStyle(ListView::Style const &style, Theme const &them
 Element ListRow::body() const {
     Theme const &theme = useEnvironment<Theme>();
     ListRow::Style const resolved = resolveRowStyle(style, theme);
-    bool const hovered = useHover();
-    bool const pressed = usePress();
+    auto hovered = useState(false);
+    auto pressed = useState(false);
     bool const isDisabled = disabled;
 
-    Color const fill = selected ? theme.selectedContentBackgroundColor : pressed ? theme.rowHoverBackgroundColor :
-                                                        hovered     ? theme.hoveredControlBackgroundColor :
-                                                                      Colors::transparent;
+    Reactive::Bindable<Color> const fill{[selected = selected, pressed, hovered, theme] {
+        return selected      ? theme.selectedContentBackgroundColor :
+               pressed.get() ? theme.rowHoverBackgroundColor :
+               hovered.get() ? theme.hoveredControlBackgroundColor :
+                               Colors::transparent;
+    }};
 
     auto handleTap = [onTap = onTap, isDisabled]() {
         if (!isDisabled && onTap) {
@@ -49,9 +52,24 @@ Element ListRow::body() const {
     Element rowContent = content;
     return std::move(rowContent)
         .padding(resolved.paddingV, resolved.paddingH, resolved.paddingV, resolved.paddingH)
-        .fill(FillStyle::solid(fill))
+        .fill(fill)
         .cursor(isDisabled ? Cursor::Arrow : Cursor::Hand)
         .focusable(!isDisabled)
+        .onPointerEnter(std::function<void()> {[hovered, isDisabled] {
+            if (!isDisabled) {
+                hovered = true;
+            }
+        }})
+        .onPointerExit(std::function<void()> {[hovered, pressed] {
+            hovered = false;
+            pressed = false;
+        }})
+        .onPointerDown(std::function<void(Point)> {[pressed, isDisabled](Point) {
+            if (!isDisabled) {
+                pressed = true;
+            }
+        }})
+        .onPointerUp(std::function<void(Point)> {[pressed](Point) { pressed = false; }})
         .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)>{} : std::function<void(KeyCode, Modifiers)>{handleKey})
         .onTap(isDisabled ? std::function<void()>{} : std::function<void()>{handleTap});
 }

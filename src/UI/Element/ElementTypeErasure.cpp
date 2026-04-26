@@ -240,6 +240,10 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
   if (modifiers.hasInteraction()) {
     auto interaction = std::make_unique<scenegraph::InteractionData>();
     interaction->onTap = modifiers.onTap;
+    interaction->onPointerEnter = modifiers.onPointerEnter;
+    interaction->onPointerExit = modifiers.onPointerExit;
+    interaction->onFocus = modifiers.onFocus;
+    interaction->onBlur = modifiers.onBlur;
     interaction->onPointerDown = modifiers.onPointerDown;
     interaction->onPointerUp = modifiers.onPointerUp;
     interaction->onPointerMove = modifiers.onPointerMove;
