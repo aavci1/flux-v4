@@ -136,6 +136,7 @@ add_library(flux STATIC
   src/UI/Views/PopoverCalloutPath.cpp
   src/UI/Views/ScrollView.cpp
   src/UI/Views/Select.cpp
+  src/UI/Views/SegmentedControl.cpp
   src/UI/Views/Slider.cpp
   src/UI/Views/TransformViews.cpp
   src/UI/Views/Toggle.cpp

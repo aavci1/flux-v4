@@ -59,15 +59,16 @@ int clampIndex(int index, std::size_t count) {
 
 struct SegmentedControlItem : ViewModifiers<SegmentedControlItem> {
     SegmentedControlOption option;
-    bool selected = false;
+    State<int> selectedIndex {};
+    int index = 0;
     bool disabled = false;
     ResolvedStyle style {};
     Theme theme {};
     std::function<void()> onTap;
 
     bool operator==(SegmentedControlItem const &other) const {
-        return option == other.option && selected == other.selected && disabled == other.disabled &&
-               style == other.style && theme == other.theme &&
+        return option == other.option && selectedIndex == other.selectedIndex &&
+               index == other.index && disabled == other.disabled && style == other.style && theme == other.theme &&
                static_cast<bool>(onTap) == static_cast<bool>(other.onTap);
     }
 
@@ -77,6 +78,9 @@ struct SegmentedControlItem : ViewModifiers<SegmentedControlItem> {
         bool const pressed = usePress();
         bool const focused = useFocus();
         bool const keyboardFocused = useKeyboardFocus();
+        Color const disabledTextColor = theme.disabledTextColor;
+        Color const accentForegroundColor = theme.accentForegroundColor;
+        Color const secondaryLabelColor = theme.secondaryLabelColor;
 
         Color const selectedFill = style.accentColor;
         Color const selectedHoverFill = lighten(style.accentColor, 0.08f);
@@ -84,12 +88,32 @@ struct SegmentedControlItem : ViewModifiers<SegmentedControlItem> {
         Color const idleFill = Colors::transparent;
         Color const hoverFill = darken(style.trackColor, 0.04f);
         Color const pressFill = darken(style.trackColor, 0.12f);
-        Color const fill = isDisabled ? Colors::transparent
-                           : selected ? (pressed ? selectedPressFill : hovered ? selectedHoverFill : selectedFill)
-                                      : (pressed ? pressFill : hovered ? hoverFill : idleFill);
-        Color const labelColor = isDisabled ? theme.disabledTextColor
-                                 : selected ? theme.accentForegroundColor
-                                            : theme.secondaryLabelColor;
+        Reactive::Bindable<Color> const fill{[selectedIndex = selectedIndex,
+                                              index = index,
+                                              isDisabled,
+                                              pressed,
+                                              hovered,
+                                              selectedFill,
+                                              selectedHoverFill,
+                                              selectedPressFill,
+                                              pressFill,
+                                              hoverFill,
+                                              idleFill] {
+            bool const selected = selectedIndex.get() == index;
+            return isDisabled ? Colors::transparent
+                              : selected ? (pressed ? selectedPressFill : hovered ? selectedHoverFill : selectedFill)
+                                         : (pressed ? pressFill : hovered ? hoverFill : idleFill);
+        }};
+        Reactive::Bindable<Color> const labelColor{[selectedIndex = selectedIndex,
+                                                    index = index,
+                                                    isDisabled,
+                                                    disabledTextColor,
+                                                    accentForegroundColor,
+                                                    secondaryLabelColor] {
+            bool const selected = selectedIndex.get() == index;
+            return isDisabled ? disabledTextColor
+                              : selected ? accentForegroundColor : secondaryLabelColor;
+        }};
         StrokeStyle const stroke =
             !isDisabled && focused && keyboardFocused
                 ? StrokeStyle::solid(theme.keyboardFocusIndicatorColor, 2.f)
@@ -114,7 +138,7 @@ struct SegmentedControlItem : ViewModifiers<SegmentedControlItem> {
             .verticalAlignment = VerticalAlignment::Center,
         }
             .padding(style.paddingV, style.paddingH, style.paddingV, style.paddingH)
-            .fill(FillStyle::solid(fill))
+            .fill(fill)
             .stroke(stroke)
             .cornerRadius(CornerRadius {std::max(0.f, style.cornerRadius - 2.f)})
             .cursor(isDisabled ? Cursor::Arrow : Cursor::Hand)
@@ -130,9 +154,7 @@ struct SegmentedControlItem : ViewModifiers<SegmentedControlItem> {
 Element SegmentedControl::body() const {
     Theme const &theme = useEnvironment<Theme>();
     ResolvedStyle const resolved = resolveStyle(style, theme);
-    LayoutConstraints const *layoutConstraints = useLayoutConstraints();
-    State<int> const selection = selectedIndex.signal ? selectedIndex : useState<int>(0);
-    int const currentIndex = clampIndex(*selection, options.size());
+    State<int> const selection = selectedIndex;
 
     auto commitSelection = [selection, onChange = onChange](int index) {
         selection = index;
@@ -140,11 +162,12 @@ Element SegmentedControl::body() const {
             onChange(index);
         }
     };
-    auto handleKey = [commitSelection, options = options, currentIndex](KeyCode key, Modifiers) {
+    auto handleKey = [commitSelection, options = options, selection](KeyCode key, Modifiers) {
         if (options.empty()) {
             return;
         }
 
+        int const currentIndex = clampIndex(selection.get(), options.size());
         int nextIndex = currentIndex;
         if (key == keys::LeftArrow) {
             nextIndex = std::max(0, currentIndex - 1);
@@ -168,7 +191,8 @@ Element SegmentedControl::body() const {
     for (std::size_t i = 0; i < options.size(); ++i) {
         items.push_back(SegmentedControlItem {
             .option = options[i],
-            .selected = static_cast<int>(i) == currentIndex,
+            .selectedIndex = selection,
+            .index = static_cast<int>(i),
             .disabled = disabled,
             .style = resolved,
             .theme = theme,
@@ -190,9 +214,6 @@ Element SegmentedControl::body() const {
         .onKeyDown(disabled ? std::function<void(KeyCode, Modifiers)> {} :
                               std::function<void(KeyCode, Modifiers)> {handleKey});
 
-    if (layoutConstraints && std::isfinite(layoutConstraints->maxWidth) && layoutConstraints->maxWidth > 0.f) {
-        root = std::move(root).width(layoutConstraints->maxWidth);
-    }
     return root;
 }
 
