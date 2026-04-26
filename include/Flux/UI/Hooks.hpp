@@ -2,9 +2,7 @@
 
 /// \file Flux/UI/Hooks.hpp
 ///
-/// Stage 4 keeps hooks intentionally narrow: environment reads are available so
-/// static roots can mount, while the state/effect/input hooks are rebuilt in
-/// Stage 5 with Scope-owned v5 semantics.
+/// Scope-owned v5 hooks and environment accessors.
 
 #include <Flux/Reactive/Animation.hpp>
 #include <Flux/Reactive2/Computed.hpp>
@@ -20,21 +18,26 @@
 namespace flux {
 
 template<typename T>
-T const& useEnvironment() {
-  if (T const* value = EnvironmentStack::current().find<T>()) {
-    return *value;
-  }
+T const& environmentFallback() {
   static T fallback{};
   return fallback;
 }
 
 template<>
-inline Theme const& useEnvironment<Theme>() {
-  if (Theme const* theme = EnvironmentStack::current().find<Theme>()) {
-    return *theme;
-  }
+inline Theme const& environmentFallback<Theme>() {
   static Theme const fallback = Theme::light();
   return fallback;
+}
+
+template<typename T>
+EnvironmentValue<T> useEnvironment() {
+  if (auto const* signal = EnvironmentStack::current().findSignal<T>()) {
+    return EnvironmentValue<T>{*signal};
+  }
+  if (T const* value = EnvironmentStack::current().find<T>()) {
+    return EnvironmentValue<T>{*value};
+  }
+  return EnvironmentValue<T>{environmentFallback<T>()};
 }
 
 template<typename T>

@@ -15,6 +15,9 @@ Font resolveFont(Font const& override, Font const& themeValue) {
 namespace {
 
 Theme const& activeTheme() {
+  if (auto const* themeSignal = EnvironmentStack::current().findSignal<Theme>()) {
+    return themeSignal->get();
+  }
   if (Theme const* theme = EnvironmentStack::current().find<Theme>()) {
     return *theme;
   }

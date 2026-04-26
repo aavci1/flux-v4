@@ -155,12 +155,23 @@ Validation:
 
 ## Stage 7 — Theme + Environment Reactivity
 
-- [ ] Window owns and pushes a reactive theme signal.
-- [ ] `themeField` helper exists.
-- [ ] Theme reactivity tests pass.
-- [ ] `theme-demo` dark/light toggle updates without remount.
+- [x] Window owns and pushes a reactive theme signal.
+- [x] `themeField` helper exists.
+- [x] Theme reactivity tests pass.
+- [x] `theme-demo` dark/light toggle updates without remount.
 
-Gate status: pending.
+Gate status: passed on 2026-04-26.
+
+Validation:
+- Normal Stage 7 configure/build: `cmake -S . -B build-stage7 -DFLUX_BUILD_TESTS=ON -DFLUX_BUILD_EXAMPLES=ON -DFLUX_BUILD_BENCHMARKS=OFF -DCMAKE_BUILD_TYPE=RelWithDebInfo` and `cmake --build build-stage7` passed.
+- Normal Stage 7 tests: `ctest --test-dir build-stage7 --output-on-failure` passed (`flux_tests`, `flux_reactive2_tests`).
+- `theme-demo` launch smoke ran for 2 seconds and exited cleanly after termination.
+- `tests/ThemeReactivityTests.cpp` verifies a theme toggle updates retained scene nodes, keeps the root body at one call, avoids scope cleanup before unmount, and completes under the 16.67 ms frame budget.
+- ASAN Stage 7 configure/build: `cmake -S . -B build-stage7-asan -DFLUX_BUILD_TESTS=ON -DFLUX_BUILD_EXAMPLES=ON -DFLUX_BUILD_BENCHMARKS=OFF -DFLUX_ENABLE_ASAN=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo` and `cmake --build build-stage7-asan` passed.
+- ASAN Stage 7 tests: `ctest --test-dir build-stage7-asan --output-on-failure` passed.
+- ASAN `theme-demo` launch smoke ran for 2 seconds and exited cleanly after termination.
+- `git diff --check` passed.
+- `git grep -n -E "StateStore|BuildOrchestrator|MeasuredBuild|markCompositeDirty|buildMeasured|expandsBody|resolveCompositeBody|reactiveDirty|markReactiveDirty|structuralEquals" -- include src tests` returned zero hits.
 
 ## Stage 8 — Examples Migration
 

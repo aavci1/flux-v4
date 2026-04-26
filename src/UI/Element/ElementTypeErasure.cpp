@@ -38,9 +38,37 @@ LayoutConstraints insetConstraints(LayoutConstraints constraints, EdgeInsets pad
   return constraints;
 }
 
+class ScopedEnvironmentSnapshot {
+public:
+  ScopedEnvironmentSnapshot(EnvironmentStack& stack, std::vector<EnvironmentLayer> const& layers)
+      : stack_(stack) {
+    for (EnvironmentLayer const& layer : layers) {
+      stack_.push(layer);
+      ++pushed_;
+    }
+  }
+
+  ScopedEnvironmentSnapshot(ScopedEnvironmentSnapshot const&) = delete;
+  ScopedEnvironmentSnapshot& operator=(ScopedEnvironmentSnapshot const&) = delete;
+
+  ~ScopedEnvironmentSnapshot() {
+    while (pushed_ > 0) {
+      stack_.pop();
+      --pushed_;
+    }
+  }
+
+private:
+  EnvironmentStack& stack_;
+  std::size_t pushed_ = 0;
+};
+
 template<typename T, typename Setter>
 void installBinding(MountContext& ctx, Reactive2::Bindable<T> binding, Setter setter) {
+  EnvironmentStack* environment = &ctx.environment();
+  std::vector<EnvironmentLayer> environmentLayers = environment->snapshot();
   if (!binding.isReactive()) {
+    ScopedEnvironmentSnapshot environmentScope{*environment, environmentLayers};
     setter(binding.evaluate());
     return;
   }
@@ -48,7 +76,9 @@ void installBinding(MountContext& ctx, Reactive2::Bindable<T> binding, Setter se
   std::function<void()> requestRedraw = ctx.redrawCallback();
   Reactive2::withOwner(ctx.owner(), [&] {
     Reactive2::Effect([binding = std::move(binding), setter = std::move(setter),
-                       requestRedraw = std::move(requestRedraw)]() mutable {
+                       requestRedraw = std::move(requestRedraw), environment,
+                       environmentLayers = std::move(environmentLayers)]() mutable {
+      ScopedEnvironmentSnapshot environmentScope{*environment, environmentLayers};
       setter(binding.evaluate());
       if (requestRedraw) {
         requestRedraw();

@@ -6,6 +6,9 @@
 
 #include <Flux/Core/Types.hpp>
 #include <Flux/Graphics/Font.hpp>
+#include <Flux/Reactive2/Computed.hpp>
+#include <Flux/Reactive2/Signal.hpp>
+#include <Flux/UI/Environment.hpp>
 
 #include <string>
 
@@ -217,5 +220,20 @@ struct Theme {
 
     bool operator==(Theme const& other) const = default;
 };
+
+template<typename Field>
+Reactive2::Computed<Field> themeField(Field Theme::* member) {
+    Reactive2::Signal<Theme> theme;
+    if (auto const* signal = EnvironmentStack::current().findSignal<Theme>()) {
+        theme = *signal;
+    } else if (Theme const* value = EnvironmentStack::current().find<Theme>()) {
+        theme = Reactive2::Signal<Theme>(*value);
+    } else {
+        theme = Reactive2::Signal<Theme>(Theme::light());
+    }
+    return Reactive2::makeComputed([theme, member] {
+        return theme.get().*member;
+    });
+}
 
 } // namespace flux

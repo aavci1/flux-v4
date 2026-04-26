@@ -80,6 +80,8 @@ public:
   /// use an opaque color if the scene has no full-window background rect.
   void setClearColor(Color color);
   Color clearColor() const;
+  void setTheme(Theme theme);
+  Theme const& theme() const;
   bool wantsTextInput() const;
 
   /// Pushes content onto the overlay stack. Safe from event handlers and outside build passes.

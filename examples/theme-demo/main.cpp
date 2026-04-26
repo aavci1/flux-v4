@@ -14,16 +14,21 @@ using namespace flux;
 
 namespace {
 
-Element swatch(Theme const& theme, std::string label, Color color) {
+Element swatch(EnvironmentValue<Theme> theme, std::string label, Color Theme::* colorField) {
+  Theme const& current = theme.peek();
   return VStack{
-      .spacing = theme.space2,
+      .spacing = current.space2,
       .alignment = Alignment::Start,
       .children = children(
-          Rectangle{}
+          Element{Rectangle{}}
               .size(132.f, 54.f)
-              .fill(color)
-              .stroke(Color::separator(), 1.f)
-              .cornerRadius(theme.radiusMedium),
+              .fill(Reactive2::Bindable<Color>{[theme, colorField] {
+                return theme().*colorField;
+              }})
+              .stroke(Reactive2::Bindable<Color>{[theme] {
+                return theme().separatorColor;
+              }}, Reactive2::Bindable<float>{1.f})
+              .cornerRadius(current.radiusMedium),
           Text{
               .text = std::move(label),
               .font = Font::footnote(),
@@ -33,7 +38,8 @@ Element swatch(Theme const& theme, std::string label, Color color) {
 
 struct ThemeDemoRoot {
   Element body() const {
-    auto darkMode = useState(false);
+    auto themeSignal = useEnvironment<Theme>();
+    Theme const& theme = themeSignal.peek();
     auto density = useState(1.0f);
     auto selected = useState(0);
     auto accentIndex = useState(0);
@@ -49,14 +55,11 @@ struct ThemeDemoRoot {
     (void)amount;
     (void)hoverPreview;
 
-    Theme theme = *darkMode ? Theme::dark() : Theme::light();
-    theme = theme.withDensity(*density);
-
     std::vector<Element> chips;
-    chips.push_back(swatch(theme, "accentColor", theme.accentColor));
-    chips.push_back(swatch(theme, "labelColor", theme.labelColor));
-    chips.push_back(swatch(theme, "windowBackgroundColor", theme.windowBackgroundColor));
-    chips.push_back(swatch(theme, "controlBackgroundColor", theme.controlBackgroundColor));
+    chips.push_back(swatch(themeSignal, "accentColor", &Theme::accentColor));
+    chips.push_back(swatch(themeSignal, "labelColor", &Theme::labelColor));
+    chips.push_back(swatch(themeSignal, "windowBackgroundColor", &Theme::windowBackgroundColor));
+    chips.push_back(swatch(themeSignal, "controlBackgroundColor", &Theme::controlBackgroundColor));
 
     return VStack{
         .spacing = theme.space6,
@@ -85,14 +88,18 @@ struct ThemeDemoRoot {
                 .alignment = Alignment::Center,
                 .children = children(
                     Text{
-                        .text = *darkMode ? "Dark" : "Light",
+                        .text = "Toggle Theme",
                         .font = Font::headline(),
                         .color = Color::primary(),
                     }.padding(theme.space3)
                      .fill(Color::controlBackground())
                      .stroke(Color::separator(), 1.f)
                      .cornerRadius(theme.radiusFull)
-                     .onTap([darkMode] { darkMode = !*darkMode; }),
+                     .onTap([themeSignal, density] {
+                       bool const isDark = themeSignal.peek().windowBackgroundColor == Theme::dark().windowBackgroundColor;
+                       Theme next = isDark ? Theme::light() : Theme::dark();
+                       themeSignal.set(next.withDensity(*density));
+                     }),
                     Text{
                         .text = "Density " + std::to_string(*density),
                         .font = Font::headline(),
@@ -101,10 +108,14 @@ struct ThemeDemoRoot {
                      .fill(Color::controlBackground())
                      .stroke(Color::separator(), 1.f)
                      .cornerRadius(theme.radiusFull)
-                     .onTap([density] { density = *density > 1.f ? 0.75f : 1.25f; }))})}
+                     .onTap([density, themeSignal] {
+                       density = *density > 1.f ? 0.75f : 1.25f;
+                       themeSignal.set(themeSignal.peek().withDensity(*density));
+                     }))})}
         .padding(theme.space7)
-        .fill(Color::windowBackground())
-        .environment(theme);
+        .fill(Reactive2::Bindable<Color>{[themeSignal] {
+          return themeSignal().windowBackgroundColor;
+        }});
   }
 };
 

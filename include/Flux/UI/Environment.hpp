@@ -5,7 +5,10 @@
 /// Part of the Flux public API.
 
 
+#include <Flux/Reactive2/Signal.hpp>
+
 #include <any>
+#include <cassert>
 #include <concepts>
 #include <cstddef>
 #include <typeinfo>
@@ -16,6 +19,55 @@
 #include <vector>
 
 namespace flux {
+
+template<typename T>
+class EnvironmentValue {
+public:
+  EnvironmentValue(T const& value)
+      : value_(&value) {}
+
+  EnvironmentValue(Reactive2::Signal<T> signal)
+      : signal_(std::move(signal))
+      , reactive_(true) {}
+
+  T const& get() const {
+    return reactive_ ? signal_.get() : *value_;
+  }
+
+  T const& peek() const {
+    return reactive_ ? signal_.peek() : *value_;
+  }
+
+  T const& operator()() const {
+    return get();
+  }
+
+  T const& operator*() const {
+    return get();
+  }
+
+  operator T const&() const {
+    return get();
+  }
+
+  void set(T value) const {
+    assert(reactive_ && "environment value is not backed by a Signal");
+    signal_.set(std::move(value));
+  }
+
+  bool reactive() const noexcept {
+    return reactive_;
+  }
+
+  Reactive2::Signal<T> const* signal() const noexcept {
+    return reactive_ ? &signal_ : nullptr;
+  }
+
+private:
+  T const* value_ = nullptr;
+  Reactive2::Signal<T> signal_{};
+  bool reactive_ = false;
+};
 
 class EnvironmentLayer {
 public:
@@ -32,12 +84,37 @@ public:
   }
 
   template<typename T>
+  void setSignal(Reactive2::Signal<T> signal) {
+    static_assert(std::equality_comparable<T>,
+        "Environment signal values must define operator==.");
+
+    Slot& slot = values_[std::type_index(typeid(T))];
+    slot.value = std::move(signal);
+    slot.equals = &signalSlotEquals<T>;
+  }
+
+  template<typename T>
   T const* get() const {
     auto it = values_.find(std::type_index(typeid(T)));
     if (it == values_.end()) {
       return nullptr;
     }
-    return std::any_cast<T>(&it->second.value);
+    if (T const* value = std::any_cast<T>(&it->second.value)) {
+      return value;
+    }
+    if (auto const* signal = std::any_cast<Reactive2::Signal<T>>(&it->second.value)) {
+      return &signal->peek();
+    }
+    return nullptr;
+  }
+
+  template<typename T>
+  Reactive2::Signal<T> const* signal() const {
+    auto it = values_.find(std::type_index(typeid(T)));
+    if (it == values_.end()) {
+      return nullptr;
+    }
+    return std::any_cast<Reactive2::Signal<T>>(&it->second.value);
   }
 
   bool empty() const { return values_.empty(); }
@@ -75,6 +152,13 @@ private:
     return lhs && rhs && *lhs == *rhs;
   }
 
+  template<typename T>
+  static bool signalSlotEquals(std::any const& a, std::any const& b) {
+    auto const* lhs = std::any_cast<Reactive2::Signal<T>>(&a);
+    auto const* rhs = std::any_cast<Reactive2::Signal<T>>(&b);
+    return lhs && rhs && lhs->peek() == rhs->peek();
+  }
+
   std::unordered_map<std::type_index, Slot> values_;
 };
 
@@ -90,6 +174,16 @@ public:
     for (auto it = layers_.rbegin(); it != layers_.rend(); ++it) {
       if (T const* v = it->get<T>()) {
         return v;
+      }
+    }
+    return nullptr;
+  }
+
+  template<typename T>
+  Reactive2::Signal<T> const* findSignal() const {
+    for (auto it = layers_.rbegin(); it != layers_.rend(); ++it) {
+      if (auto const* signal = it->signal<T>()) {
+        return signal;
       }
     }
     return nullptr;

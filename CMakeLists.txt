@@ -245,6 +245,7 @@ if(FLUX_BUILD_TESTS)
     tests/ParagraphCacheIncrementalTests.cpp
     tests/RuntimeTests.cpp
     tests/ShowTests.cpp
+    tests/ThemeReactivityTests.cpp
   )
 
   target_include_directories(flux_tests PRIVATE
