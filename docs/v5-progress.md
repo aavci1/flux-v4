@@ -56,14 +56,22 @@ Validation:
 
 ## Stage 2 — New Reactive Core In Tree
 
-- [ ] Prototype core lifted into `include/Flux/Reactive2/` and `src/Reactive2/`.
-- [ ] `Bindable<T>` added.
-- [ ] `tests/Reactive2/` pass under ASAN.
-- [ ] `tests/Reactive2/` pass under UBSAN.
-- [ ] `tests/Reactive2/` pass under TSAN.
-- [ ] Existing v4 tests still pass.
+- [x] Prototype core lifted into `include/Flux/Reactive2/` and `src/Reactive2/`.
+- [x] `Bindable<T>` added.
+- [x] `tests/Reactive2/` pass under ASAN.
+- [x] `tests/Reactive2/` pass under UBSAN.
+- [x] `tests/Reactive2/` pass under TSAN.
+- [x] Existing v4 tests still pass.
 
-Gate status: pending.
+Gate status: passed on 2026-04-26.
+
+Validation:
+- Normal build: `cmake --build build` passed.
+- Normal tests: `ctest --test-dir build --output-on-failure` passed (`flux_tests`, `flux_reactive2_tests`).
+- ASAN Reactive2 tests: `ctest --test-dir build-reactive2-asan -R flux_reactive2_tests --output-on-failure` passed.
+- UBSAN Reactive2 tests: `ctest --test-dir build-reactive2-ubsan -R flux_reactive2_tests --output-on-failure` passed.
+- TSAN Reactive2 tests: `ctest --test-dir build-reactive2-tsan -R flux_reactive2_tests --output-on-failure` passed.
+- `git diff --check` passed.
 
 ## Stage 3 — Element + Bindable Refactor
 

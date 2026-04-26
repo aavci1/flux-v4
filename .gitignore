@@ -2,6 +2,7 @@
 /build/
 /build-debug/
 /build-release/
+/build-reactive2-*/
 /build-v5-prototype*/
 /out/
 /cmake-build-*/

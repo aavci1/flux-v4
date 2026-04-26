@@ -1,0 +1,63 @@
+#include <Flux/Reactive2/Effect.hpp>
+#include <Flux/Reactive2/Signal.hpp>
+#include <Flux/Reactive2/SmallFn.hpp>
+#include <Flux/Reactive2/Untrack.hpp>
+
+#include <array>
+#include <doctest/doctest.h>
+
+using namespace flux::Reactive2;
+
+TEST_CASE("Reactive2 Signal reads writes and skips equal writes") {
+  Signal<int> count(1);
+  CHECK(count.get() == 1);
+  count.set(2);
+  CHECK(count.get() == 2);
+
+  int effectRuns = 0;
+  int observed = 0;
+  Effect effect([&] {
+    ++effectRuns;
+    observed = count.get();
+  });
+
+  CHECK(effectRuns == 1);
+  CHECK(observed == 2);
+
+  count.set(2);
+  CHECK(effectRuns == 1);
+
+  count.set(3);
+  CHECK(effectRuns == 2);
+  CHECK(observed == 3);
+}
+
+TEST_CASE("Reactive2 untrack reads without subscribing") {
+  Signal<int> count(3);
+  int untracked = 0;
+  Effect effect([&] {
+    untracked = untrack([&] {
+      return count.get();
+    });
+  });
+
+  CHECK(untracked == 3);
+  count.set(4);
+  CHECK(untracked == 3);
+}
+
+TEST_CASE("Reactive2 SmallFn uses inline storage for small closures") {
+  int captured = 7;
+  SmallFn<int(int)> small([captured](int value) {
+    return captured + value;
+  });
+  CHECK(small(5) == 12);
+  CHECK_FALSE(small.usesHeapStorage());
+
+  auto largeCapture = [payload = std::array<int, 16>{}](int value) {
+    return payload[0] + value;
+  };
+  SmallFn<int(int)> large(largeCapture);
+  CHECK(large(9) == 9);
+  CHECK(large.usesHeapStorage());
+}

@@ -105,6 +105,11 @@ add_library(flux STATIC
   src/Reactive/Transition.cpp
   src/Reactive/AnimationRebuild.cpp
   src/Reactive/AnimationClock.cpp
+  src/Reactive2/Signal.cpp
+  src/Reactive2/Computed.cpp
+  src/Reactive2/Effect.cpp
+  src/Reactive2/Scope.cpp
+  src/Reactive2/ObserverStack.cpp
   src/Core/ComponentKey.cpp
   src/Core/ComponentKeyUtil.cpp
   src/Core/Window.cpp
@@ -314,6 +319,35 @@ if(FLUX_BUILD_TESTS)
   endif()
 
   add_test(NAME flux_tests COMMAND flux_tests)
+
+  add_executable(flux_reactive2_tests
+    tests/Reactive2/main.cpp
+    tests/Reactive2/SignalTests.cpp
+    tests/Reactive2/ComputedTests.cpp
+    tests/Reactive2/EffectTests.cpp
+    tests/Reactive2/ScopeTests.cpp
+    tests/Reactive2/DiamondTests.cpp
+    tests/Reactive2/BindableTests.cpp
+  )
+
+  target_include_directories(flux_reactive2_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+  )
+
+  target_link_libraries(flux_reactive2_tests PRIVATE
+    flux
+    doctest::doctest
+  )
+
+  set_target_properties(flux_reactive2_tests PROPERTIES CXX_STANDARD 23)
+
+  if(FLUX_ENABLE_ASAN)
+    target_compile_options(flux_reactive2_tests PRIVATE -fsanitize=address -fno-omit-frame-pointer)
+    target_link_options(flux_reactive2_tests PRIVATE -fsanitize=address)
+  endif()
+
+  add_test(NAME flux_reactive2_tests COMMAND flux_reactive2_tests)
 endif()
 
 option(FLUX_BUILD_EXAMPLES
