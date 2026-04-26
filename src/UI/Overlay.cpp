@@ -1,42 +1,212 @@
 #include <Flux/UI/Overlay.hpp>
 
+#include <Flux/Core/Application.hpp>
+#include <Flux/Core/Window.hpp>
+#include <Flux/Detail/Runtime.hpp>
 #include <Flux/UI/Element.hpp>
+#include <Flux/UI/MeasureContext.hpp>
+#include <Flux/UI/MountContext.hpp>
+#include <Flux/SceneGraph/GroupNode.hpp>
+#include <Flux/SceneGraph/InteractionData.hpp>
+#include <Flux/SceneGraph/RectNode.hpp>
+
+#include "UI/Layout/Algorithms/OverlayLayout.hpp"
 
 #include <algorithm>
+#include <cassert>
 #include <tuple>
 #include <utility>
 
 namespace flux {
 
+namespace {
+
+struct EnvironmentScope {
+  EnvironmentStack& stack;
+  bool pushed = false;
+
+  EnvironmentScope(EnvironmentStack& environment, EnvironmentLayer layer)
+      : stack(environment) {
+    stack.push(std::move(layer));
+    pushed = true;
+  }
+
+  ~EnvironmentScope() {
+    if (pushed) {
+      stack.pop();
+    }
+  }
+};
+
+LayoutConstraints overlayConstraints(Size windowSize, OverlayConfig const& config) {
+  LayoutConstraints constraints{};
+  constraints.minWidth = 0.f;
+  constraints.minHeight = 0.f;
+  constraints.maxWidth = windowSize.width;
+  constraints.maxHeight = windowSize.height;
+  if (config.maxSize) {
+    if (config.maxSize->width > 0.f) {
+      constraints.maxWidth = std::min(constraints.maxWidth, config.maxSize->width);
+    }
+    if (config.maxSize->height > 0.f) {
+      constraints.maxHeight = std::min(constraints.maxHeight, config.maxSize->height);
+    }
+  }
+  return constraints;
+}
+
+void insertBackdrop(scenegraph::GroupNode& root, OverlayEntry& entry, Size windowSize,
+                    Window& window, bool dismissOnTap) {
+  float const ox = -entry.resolvedFrame.x;
+  float const oy = -entry.resolvedFrame.y;
+  auto backdrop = std::make_unique<scenegraph::RectNode>(
+      Rect{ox, oy, windowSize.width, windowSize.height},
+      FillStyle::solid(entry.config.backdropColor));
+  root.appendChild(std::move(backdrop));
+
+  auto capture = std::make_unique<scenegraph::RectNode>(Rect{ox, oy, windowSize.width, windowSize.height});
+  auto interaction = std::make_unique<scenegraph::InteractionData>();
+  if (dismissOnTap) {
+    OverlayId const id = entry.id;
+    interaction->onTap = [&window, id] {
+      window.removeOverlay(id);
+    };
+  } else {
+    interaction->onTap = [] {};
+  }
+  capture->setInteraction(std::move(interaction));
+  root.appendChild(std::move(capture));
+}
+
+} // namespace
+
 std::tuple<std::function<void(Element, OverlayConfig)>, std::function<void()>, bool> useOverlay() {
+  Runtime* runtime = Runtime::current();
+  assert(runtime && "useOverlay must be called while mounting a Flux view");
+
+  auto id = std::make_shared<OverlayId>(kInvalidOverlayId);
+  Window* window = &runtime->window();
+
+  Reactive::onCleanup([id, window] {
+    if (id->isValid()) {
+      OverlayId const removeId = *id;
+      *id = kInvalidOverlayId;
+      window->removeOverlay(removeId);
+    }
+  });
+
+  auto hide = [id, window] {
+    if (!id->isValid()) {
+      return;
+    }
+    OverlayId const removeId = *id;
+    *id = kInvalidOverlayId;
+    window->removeOverlay(removeId);
+  };
+
+  auto show = [id, window](Element element, OverlayConfig config) {
+    if (id->isValid()) {
+      OverlayId const removeId = *id;
+      *id = kInvalidOverlayId;
+      window->removeOverlay(removeId);
+    }
+    *id = window->pushOverlay(std::move(element), std::move(config));
+  };
+
   return {
-      [](Element, OverlayConfig) {},
-      [] {},
-      false,
+      std::move(show),
+      std::move(hide),
+      id->isValid(),
   };
 }
 
 void OverlayManager::rebuild(Size windowSize, Runtime& runtime) {
-  (void)windowSize;
-  (void)runtime;
+  for (auto& entryPtr : overlays_) {
+    OverlayEntry& entry = *entryPtr;
+    entry.scope.dispose();
+    entry.scope = Reactive::Scope{};
+    entry.sceneGraph.releaseRoot();
+
+    std::unique_ptr<scenegraph::SceneNode> contentNode;
+    Rect contentBounds{};
+    if (entry.content) {
+      LayoutConstraints const constraints = overlayConstraints(windowSize, entry.config);
+      MeasureContext measureContext{Application::instance().textSystem()};
+      EnvironmentStack& environment = EnvironmentStack::current();
+      EnvironmentScope const environmentScope{environment, runtime.window().environmentLayer()};
+      MountContext context{entry.scope, environment, Application::instance().textSystem(),
+                           measureContext, constraints, LayoutHints{}, [handle = runtime.window().handle()] {
+                             Window::postRedraw(handle);
+                           }};
+
+      contentNode = Reactive::withOwner(entry.scope, [&] {
+        return entry.content->mount(context);
+      });
+      if (contentNode) {
+        contentBounds = contentNode->bounds();
+        if (contentBounds.width <= 0.f || contentBounds.height <= 0.f) {
+          contentBounds = Rect{0.f, 0.f, std::max(1.f, contentNode->size().width),
+                               std::max(1.f, contentNode->size().height)};
+        }
+      }
+    }
+
+    if (contentBounds.width <= 0.f) {
+      contentBounds.width = 1.f;
+    }
+    if (contentBounds.height <= 0.f) {
+      contentBounds.height = 1.f;
+    }
+    entry.resolvedFrame = layout::resolveOverlayFrame(windowSize, entry.config, contentBounds);
+
+    auto root = std::make_unique<scenegraph::GroupNode>(
+        Rect{0.f, 0.f, std::max(windowSize.width, entry.resolvedFrame.width),
+             std::max(windowSize.height, entry.resolvedFrame.height)});
+    if (entry.config.modal) {
+      insertBackdrop(*root, entry, windowSize, runtime.window(), false);
+    } else if (entry.config.backdropColor.a > 0.001f) {
+      insertBackdrop(*root, entry, windowSize, runtime.window(), entry.config.dismissOnOutsideTap);
+    }
+    if (contentNode) {
+      root->appendChild(std::move(contentNode));
+    }
+    entry.sceneGraph.setRoot(std::move(root));
+  }
 }
 
 OverlayId OverlayManager::push(Element content, OverlayConfig config, Runtime* runtime) {
-  (void)content;
-  (void)runtime;
   auto entry = std::make_unique<OverlayEntry>();
   entry->id = OverlayId{nextId_++};
+  entry->content.emplace(std::move(content));
   entry->config = std::move(config);
   OverlayId id = entry->id;
   overlays_.push_back(std::move(entry));
+  if (runtime) {
+    rebuild(runtime->window().getSize(), *runtime);
+    runtime->window().requestRedraw();
+  } else if (Application::hasInstance()) {
+    Application::instance().requestRedraw();
+  }
   return id;
 }
 
 void OverlayManager::remove(OverlayId id, Runtime* runtime) {
-  (void)runtime;
+  std::function<void()> onDismiss;
   std::erase_if(overlays_, [&](std::unique_ptr<OverlayEntry> const& entry) {
-    return entry && entry->id == id;
+    if (entry && entry->id == id) {
+      onDismiss = entry->config.onDismiss;
+      return true;
+    }
+    return false;
   });
+  if (runtime) {
+    runtime->window().requestRedraw();
+  } else if (Application::hasInstance()) {
+    Application::instance().requestRedraw();
+  }
+  if (onDismiss) {
+    onDismiss();
+  }
 }
 
 void OverlayManager::clear(Runtime* runtime, bool invokeDismissCallbacks) {
@@ -49,6 +219,11 @@ void OverlayManager::clear(Runtime* runtime, bool invokeDismissCallbacks) {
     }
   }
   overlays_.clear();
+  if (runtime) {
+    runtime->window().requestRedraw();
+  } else if (Application::hasInstance()) {
+    Application::instance().requestRedraw();
+  }
 }
 
 OverlayEntry const* OverlayManager::top() const {

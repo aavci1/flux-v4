@@ -8,6 +8,7 @@
 #include <Flux/Core/Types.hpp>
 #include <Flux/Graphics/Font.hpp>
 #include <Flux/Graphics/TextLayoutOptions.hpp>
+#include <Flux/Reactive/Bindable.hpp>
 #include <Flux/UI/Detail/PrimitiveForwards.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/ViewModifiers.hpp>
@@ -22,7 +23,7 @@ namespace flux {
 struct Text : ViewModifiers<Text> {
   Size measure(MeasureContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
 
-  std::string text;
+  Reactive::Bindable<std::string> text{std::string{}};
   Font font = Font::theme();
   Color color = Color::theme();
   Color selectionColor = Color::theme();
@@ -35,7 +36,8 @@ struct Text : ViewModifiers<Text> {
   float firstBaselineOffset = 0.f;
 
   bool operator==(Text const& other) const {
-    return text == other.text && font == other.font && color == other.color &&
+    bool const sameText = text.isValue() && other.text.isValue() && text.value() == other.text.value();
+    return sameText && font == other.font && color == other.color &&
            selectionColor == other.selectionColor && selectable == other.selectable &&
            horizontalAlignment == other.horizontalAlignment &&
            verticalAlignment == other.verticalAlignment && wrapping == other.wrapping &&

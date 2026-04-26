@@ -34,6 +34,7 @@ struct ScrollView : ViewModifiers<ScrollView> {
 
     /// Custom measurement hook used by the measured-component pipeline.
     Size measure(MeasureContext &, LayoutConstraints const &, LayoutHints const &, TextSystem &) const;
+    std::unique_ptr<scenegraph::SceneNode> mount(MountContext &) const;
 
     bool operator==(ScrollView const& other) const {
         return axis == other.axis && scrollOffset == other.scrollOffset &&

@@ -2,6 +2,7 @@
 
 #include <Flux/Core/ComponentKey.hpp>
 #include <Flux/Core/Types.hpp>
+#include <Flux/Reactive/Scope.hpp>
 #include <Flux/SceneGraph/SceneGraph.hpp>
 #include <Flux/UI/Element.hpp>
 
@@ -62,7 +63,9 @@ std::tuple<std::function<void(Element, OverlayConfig)>, std::function<void()>, b
 
 struct OverlayEntry {
   OverlayId id{};
+  std::optional<Element> content;
   OverlayConfig config;
+  Reactive::Scope scope;
   scenegraph::SceneGraph sceneGraph;
   Rect resolvedFrame{};
 };

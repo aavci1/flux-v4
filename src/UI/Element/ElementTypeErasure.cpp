@@ -1,6 +1,7 @@
 #include <Flux/UI/Element.hpp>
 
 #include <Flux/Reactive/Effect.hpp>
+#include <Flux/SceneGraph/InteractionData.hpp>
 #include <Flux/SceneGraph/RectNode.hpp>
 #include <Flux/SceneGraph/SceneNode.hpp>
 #include <Flux/UI/MountContext.hpp>
@@ -208,6 +209,20 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
       Rect{0.f, 0.f, positive(outerSize.width), positive(outerSize.height)});
 
   auto* rawWrapper = wrapper.get();
+  if (modifiers.hasInteraction()) {
+    auto interaction = std::make_unique<scenegraph::InteractionData>();
+    interaction->onTap = modifiers.onTap;
+    interaction->onPointerDown = modifiers.onPointerDown;
+    interaction->onPointerUp = modifiers.onPointerUp;
+    interaction->onPointerMove = modifiers.onPointerMove;
+    interaction->onScroll = modifiers.onScroll;
+    interaction->onKeyDown = modifiers.onKeyDown;
+    interaction->onKeyUp = modifiers.onKeyUp;
+    interaction->onTextInput = modifiers.onTextInput;
+    interaction->focusable = modifiers.focusable;
+    interaction->cursor = modifiers.cursor;
+    rawWrapper->setInteraction(std::move(interaction));
+  }
   installBinding<FillStyle>(ctx, modifiers.fill, [rawWrapper](FillStyle fill) {
     rawWrapper->setFill(std::move(fill));
   });

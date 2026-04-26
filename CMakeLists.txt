@@ -116,9 +116,18 @@ add_library(flux STATIC
   src/UI/MountRoot.cpp
   src/UI/Runtime.cpp
   src/UI/Overlay.cpp
+  src/UI/OverlaySurfaceHelpers.cpp
+  src/UI/Views/Alert.cpp
+  src/UI/Views/Button.cpp
+  src/UI/Views/Icon.cpp
   src/UI/Views/Rectangle.cpp
   src/UI/Views/Text.cpp
   src/UI/Views/LayoutContainers.cpp
+  src/UI/Views/PopoverCalloutPath.cpp
+  src/UI/Views/ScrollView.cpp
+  src/UI/Views/TransformViews.cpp
+  src/UI/Layout/Algorithms/ScrollLayout.cpp
+  src/UI/Layout/Algorithms/OverlayLayout.cpp
   src/UI/LayoutDebugDump.cpp
   src/SceneGraph/SceneNode.cpp
   src/SceneGraph/GroupNode.cpp

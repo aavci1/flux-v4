@@ -14,6 +14,8 @@
 #include <Flux/UI/Views/VStack.hpp>
 #include <Flux/UI/Views/ZStack.hpp>
 
+#include <Flux/Reactive/Effect.hpp>
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -116,6 +118,7 @@ std::unique_ptr<scenegraph::SceneNode> mountText(Text const& text, MountContext&
   Font const font = resolveFont(text.font, theme.bodyFont, theme);
   Color const color = resolveColor(text.color, theme.labelColor, theme);
   TextLayoutOptions const options = textLayoutOptions(text);
+  std::string const initialText = text.text.evaluate();
 
   Size frameSize = assignedSize(ctx.constraints());
   if (frameSize.width <= 0.f || frameSize.height <= 0.f) {
@@ -123,14 +126,49 @@ std::unique_ptr<scenegraph::SceneNode> mountText(Text const& text, MountContext&
     if (text.wrapping == TextWrapping::NoWrap) {
       maxWidth = 0.f;
     }
-    Size measured = ctx.textSystem().measure(text.text, font, color, maxWidth, options);
+    Size measured = ctx.textSystem().measure(initialText, font, color, maxWidth, options);
     frameSize.width = frameSize.width > 0.f ? frameSize.width : measured.width;
     frameSize.height = frameSize.height > 0.f ? frameSize.height : measured.height;
   }
 
   Rect const box{0.f, 0.f, finiteOrZero(frameSize.width), finiteOrZero(frameSize.height)};
-  auto layout = ctx.textSystem().layout(text.text, font, color, box, options);
-  return std::make_unique<scenegraph::TextNode>(box, std::move(layout));
+  auto layout = ctx.textSystem().layout(initialText, font, color, box, options);
+  auto node = std::make_unique<scenegraph::TextNode>(box, std::move(layout));
+
+  if (text.text.isReactive()) {
+    auto* rawNode = node.get();
+    Reactive::Bindable<std::string> textBinding = text.text;
+    TextSystem* textSystem = &ctx.textSystem();
+    LayoutConstraints constraints = ctx.constraints();
+    TextWrapping wrapping = text.wrapping;
+    std::function<void()> requestRedraw = ctx.redrawCallback();
+    Reactive::withOwner(ctx.owner(), [rawNode, textBinding = std::move(textBinding), textSystem,
+                                      font, color, options, constraints, wrapping,
+                                      requestRedraw = std::move(requestRedraw)]() mutable {
+      Reactive::Effect([rawNode, textBinding, textSystem, font, color, options, constraints,
+                        wrapping, requestRedraw]() mutable {
+        std::string const currentText = textBinding.evaluate();
+        Size currentSize = rawNode->size();
+        if (currentSize.width <= 0.f || currentSize.height <= 0.f) {
+          float maxWidth = std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;
+          if (wrapping == TextWrapping::NoWrap) {
+            maxWidth = 0.f;
+          }
+          Size const measured = textSystem->measure(currentText, font, color, maxWidth, options);
+          currentSize.width = currentSize.width > 0.f ? currentSize.width : measured.width;
+          currentSize.height = currentSize.height > 0.f ? currentSize.height : measured.height;
+          rawNode->setSize(currentSize);
+        }
+        Rect const currentBox{0.f, 0.f, finiteOrZero(currentSize.width), finiteOrZero(currentSize.height)};
+        rawNode->setLayout(textSystem->layout(currentText, font, color, currentBox, options));
+        if (requestRedraw) {
+          requestRedraw();
+        }
+      });
+    });
+  }
+
+  return node;
 }
 
 std::unique_ptr<scenegraph::SceneNode> mountVStack(VStack const& stack, MountContext& ctx) {

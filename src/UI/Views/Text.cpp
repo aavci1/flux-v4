@@ -36,7 +36,7 @@ Size Text::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
   if (wrapping == TextWrapping::NoWrap) {
     maxWidth = 0.f;
   }
-  Size size = textSystem.measure(text, resolvedFont, resolvedColor, maxWidth, options);
+  Size size = textSystem.measure(text.evaluate(), resolvedFont, resolvedColor, maxWidth, options);
   if (std::isfinite(constraints.maxWidth) && constraints.maxWidth > 0.f) {
     size.width = std::min(size.width, constraints.maxWidth);
   }

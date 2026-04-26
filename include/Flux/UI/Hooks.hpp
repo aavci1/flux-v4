@@ -94,6 +94,7 @@ Animation<T> useAnimation(T initial, AnimationOptions options) {
 }
 
 inline bool useFocus() { return false; }
+inline bool useKeyboardFocus() { return false; }
 inline bool useHover() { return false; }
 inline bool usePress() { return false; }
 

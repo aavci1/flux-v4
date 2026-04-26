@@ -6,18 +6,21 @@
 
 
 #include <Flux/UI/Element.hpp>
+#include <Flux/Reactive/Bindable.hpp>
 
 namespace flux {
 
 /// Scales a single child around the center of the layout slot (used for press feedback).
 struct ScaleAroundCenter : ViewModifiers<ScaleAroundCenter> {
   Size measure(MeasureContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
+  std::unique_ptr<scenegraph::SceneNode> mount(MountContext&) const;
 
-  float scale = 1.f;
+  Reactive::Bindable<float> scale{1.f};
   Element child;
 
   bool operator==(ScaleAroundCenter const& other) const {
-    return scale == other.scale && child.typeTag() == other.child.typeTag();
+    return scale.isValue() && other.scale.isValue() && scale.value() == other.scale.value() &&
+           child.typeTag() == other.child.typeTag();
   }
 };
 
