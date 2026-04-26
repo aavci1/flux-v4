@@ -88,11 +88,12 @@ AttributedString attributedText(TextInput const& input,
     attributed.runs = input.styler(attributed.utf8);
   }
   if (attributed.runs.empty()) {
+    Color const textColor = input.validationColor ? input.validationColor(attributed.utf8) : style.textColor;
     attributed.runs.push_back(AttributedRun{
         .start = 0,
         .end = static_cast<std::uint32_t>(attributed.utf8.size()),
         .font = style.font,
-        .color = style.textColor,
+        .color = textColor,
     });
   }
   return attributed;
