@@ -115,7 +115,8 @@ ButtonColors deriveColors(ButtonVariant variant, Color accent, Color destructive
 Element Button::body() const {
     Theme const &theme = useEnvironment<Theme>();
     auto [fontResolved, paddingH, paddingV, radiusResolved, accent, destructive] = resolveStyle(style, theme);
-    bool const isDisabled = disabled;
+    bool const isDisabled = disabled.evaluate();
+    Reactive::Bindable<bool> disabledBinding = disabled;
     ButtonColors const colors = deriveColors(variant, accent, destructive, theme.accentForegroundColor, theme.dangerForegroundColor, theme);
     bool const hovered = useHover();
     bool const pressed = usePress();
@@ -139,8 +140,8 @@ Element Button::body() const {
         }
     }
 
-    auto handleTap = [onTap = onTap, isDisabled]() {
-        if (isDisabled) {
+    auto handleTap = [onTap = onTap, disabledBinding]() {
+        if (disabledBinding.evaluate()) {
             return;
         }
         if (onTap) {
@@ -176,15 +177,16 @@ Element Button::body() const {
                      .padding(paddingV, paddingH, paddingV, paddingH)
                      .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
                      .focusable(!isDisabled)
-                     .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})
-        .onTap(isDisabled ? std::function<void()> {} : std::function<void()> {handleTap})
+                     .onKeyDown(std::function<void(KeyCode, Modifiers)> {handleKey})
+        .onTap(std::function<void()> {handleTap})
     };
 }
 
 Element LinkButton::body() const {
     Theme const &theme = useEnvironment<Theme>();
     auto [fontResolved, accentResolved] = resolveStyle(style, theme);
-    bool const isDisabled = disabled;
+    bool const isDisabled = disabled.evaluate();
+    Reactive::Bindable<bool> disabledBinding = disabled;
     bool const hovered = useHover();
     bool const pressed = usePress();
     bool const focused = useFocus();
@@ -195,8 +197,8 @@ Element LinkButton::body() const {
                                            hovered     ? lighten(accentResolved, 0.12f) :
                                                          accentResolved;
 
-    auto handleTap = [onTap = onTap, isDisabled]() {
-        if (isDisabled) {
+    auto handleTap = [onTap = onTap, disabledBinding]() {
+        if (disabledBinding.evaluate()) {
             return;
         }
         if (onTap) {
@@ -227,14 +229,15 @@ Element LinkButton::body() const {
         .padding(0.f, 3.f, 0.f, 3.f)
         .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
         .focusable(!isDisabled)
-        .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})
-        .onTap(isDisabled ? std::function<void()> {} : std::function<void()> {handleTap});
+        .onKeyDown(std::function<void(KeyCode, Modifiers)> {handleKey})
+        .onTap(std::function<void()> {handleTap});
 }
 
 Element IconButton::body() const {
     Theme const &theme = useEnvironment<Theme>();
     auto [sizeResolved, weightResolved, accentResolved] = resolveStyle(style, theme);
-    bool const isDisabled = disabled;
+    bool const isDisabled = disabled.evaluate();
+    Reactive::Bindable<bool> disabledBinding = disabled;
     bool const hovered = useHover();
     bool const pressed = usePress();
     bool const focused = useFocus();
@@ -245,8 +248,8 @@ Element IconButton::body() const {
                                            hovered     ? lighten(accentResolved, 0.12f) :
                                                          accentResolved;
 
-    auto handleTap = [onTap = onTap, isDisabled]() {
-        if (isDisabled) {
+    auto handleTap = [onTap = onTap, disabledBinding]() {
+        if (disabledBinding.evaluate()) {
             return;
         }
         if (onTap) {
@@ -275,8 +278,8 @@ Element IconButton::body() const {
         .cornerRadius(CornerRadius {theme.radiusXSmall})
         .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
         .focusable(!isDisabled)
-        .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})
-        .onTap(isDisabled ? std::function<void()> {} : std::function<void()> {handleTap});
+        .onKeyDown(std::function<void(KeyCode, Modifiers)> {handleKey})
+        .onTap(std::function<void()> {handleTap});
 }
 
 } // namespace flux
