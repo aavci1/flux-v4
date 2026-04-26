@@ -95,6 +95,7 @@ struct AnimationHandle {
   bool isAnimating() const { return animation->isAnimating(); }
   bool isPaused() const { return animation->isPaused(); }
   bool isRunning() const { return animation->isRunning(); }
+  bool operator==(AnimationHandle const& other) const noexcept { return animation == other.animation; }
 };
 
 /// Returns a persistent `Signal<T>` for the current component instance.

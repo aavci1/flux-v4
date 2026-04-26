@@ -9,6 +9,7 @@
 #include <Flux/UI/LayoutEngine.hpp>
 
 #include <concepts>
+#include <type_traits>
 
 namespace flux {
 
@@ -33,5 +34,9 @@ concept ExpandsBodyComponent = BodyComponent<T> && !MeasuredComponent<T>;
 
 template<typename T>
 concept Component = true;
+
+template<typename T>
+concept StructurallyComparableComponent =
+    std::equality_comparable<T> || std::is_trivially_copyable_v<T>;
 
 } // namespace flux

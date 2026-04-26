@@ -35,6 +35,13 @@ struct ScrollView : ViewModifiers<ScrollView> {
     /// Custom measurement hook used by the measured-component pipeline.
     Size measure(MeasureContext &, LayoutConstraints const &, LayoutHints const &, TextSystem &) const;
 
+    bool operator==(ScrollView const& other) const {
+        return axis == other.axis && scrollOffset == other.scrollOffset &&
+               viewportSize == other.viewportSize && contentSize == other.contentSize &&
+               dragScrollEnabled == other.dragScrollEnabled &&
+               elementsStructurallyEqual(children, other.children);
+    }
+
 };
 
 } // namespace flux

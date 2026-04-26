@@ -69,6 +69,8 @@ public:
     PathWinding winding = PathWinding::CounterClockwise;
     uint32_t dataOffset = 0;
     uint8_t dataCount = 0;
+
+    bool operator==(Command const& other) const = default;
   };
 
   struct CommandView {
@@ -81,6 +83,8 @@ public:
   size_t commandCount() const;
 
   CommandView command(size_t idx) const;
+
+  bool operator==(Path const& other) const;
 
 private:
   std::vector<Command> commands_;

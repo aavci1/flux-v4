@@ -22,6 +22,8 @@ struct TextInputHeight {
     float fixed = 0.f;
     float minIntrinsic = 80.f;
     float maxIntrinsic = 0.f;
+
+    bool operator==(TextInputHeight const& other) const = default;
 };
 
 struct TextInput : ViewModifiers<TextInput> {
@@ -46,6 +48,8 @@ struct TextInput : ViewModifiers<TextInput> {
         static Style plain() {
             return Style {.backgroundColor = Colors::transparent, .borderColor = Colors::transparent, .borderFocusColor = Colors::transparent, .borderWidth = 0.f, .borderFocusWidth = 0.f, .cornerRadius = 0.f, .paddingH = 0.f, .paddingV = 0.f};
         }
+
+        bool operator==(Style const& other) const = default;
     };
 
     State<std::string> value {};
@@ -64,6 +68,18 @@ struct TextInput : ViewModifiers<TextInput> {
     std::function<void(std::string const &)> onChange;
     std::function<void(std::string const &)> onSubmit;
     std::function<void(std::string const &)> onEscape;
+
+    bool operator==(TextInput const& other) const {
+        return value == other.value && placeholder == other.placeholder &&
+               static_cast<bool>(styler) == static_cast<bool>(other.styler) &&
+               static_cast<bool>(validationColor) == static_cast<bool>(other.validationColor) &&
+               style == other.style && multiline == other.multiline &&
+               disabled == other.disabled && maxLength == other.maxLength &&
+               multilineHeight == other.multilineHeight &&
+               static_cast<bool>(onChange) == static_cast<bool>(other.onChange) &&
+               static_cast<bool>(onSubmit) == static_cast<bool>(other.onSubmit) &&
+               static_cast<bool>(onEscape) == static_cast<bool>(other.onEscape);
+    }
 
     Element body() const;
 };

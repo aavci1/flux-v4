@@ -29,6 +29,13 @@ struct PopoverCalloutShape : ViewModifiers<PopoverCalloutShape> {
   std::optional<Size> maxSize{};
   Element content{Rectangle{}};
 
+  bool operator==(PopoverCalloutShape const& other) const {
+    return placement == other.placement && arrow == other.arrow && padding == other.padding &&
+           cornerRadius == other.cornerRadius && backgroundColor == other.backgroundColor &&
+           borderColor == other.borderColor && borderWidth == other.borderWidth &&
+           maxSize == other.maxSize && content.structuralEquals(other.content);
+  }
+
   static constexpr float kArrowW = 16.f;
   static constexpr float kArrowH = 8.f;
 };

@@ -25,6 +25,11 @@ struct AlertButton {
   /// Called when this button is tapped or activated by keyboard.
   /// The alert is dismissed automatically before this is called.
   std::function<void()> action;
+
+  bool operator==(AlertButton const& other) const {
+    return label == other.label && variant == other.variant && disabled == other.disabled &&
+           static_cast<bool>(action) == static_cast<bool>(other.action);
+  }
 };
 
 struct Alert : ViewModifiers<Alert> {
@@ -62,6 +67,14 @@ struct Alert : ViewModifiers<Alert> {
 
   /// body() is not the primary API. Use show() / hide() / useAlert() instead.
   Element body() const;
+
+  bool operator==(Alert const& other) const {
+    return title == other.title && message == other.message && buttons == other.buttons &&
+           cardWidth == other.cardWidth && cardColor == other.cardColor &&
+           cardStrokeColor == other.cardStrokeColor && titleColor == other.titleColor &&
+           messageColor == other.messageColor && backdropColor == other.backdropColor &&
+           cornerRadius == other.cornerRadius && dismissOnEscape == other.dismissOnEscape;
+  }
 
 private:
   std::vector<Element> buildContent(Color titleC, Color msgC, Theme const& theme) const;

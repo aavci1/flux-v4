@@ -22,6 +22,8 @@ class Element;
 /// Each method constructs an \ref Element from the derived view and delegates to Element's modifier.
 template<typename Derived>
 struct ViewModifiers {
+  bool operator==(ViewModifiers const&) const noexcept = default;
+
   Element padding(float all) &&;
   Element padding(EdgeInsets insets) &&;
   Element padding(float top, float right, float bottom, float left) &&;

@@ -24,6 +24,10 @@ struct Image : ViewModifiers<Image> {
 
   std::shared_ptr<flux::Image> source;
   ImageFillMode fillMode = ImageFillMode::Cover;
+
+  bool operator==(Image const& other) const {
+    return source == other.source && fillMode == other.fillMode;
+  }
 };
 
 } // namespace flux::views

@@ -74,6 +74,8 @@ struct IconCell {
     IconName name;
     std::string label;
 
+    bool operator==(IconCell const &) const = default;
+
     auto body() const {
         Theme const &theme = useEnvironment<Theme>();
 

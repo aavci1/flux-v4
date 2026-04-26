@@ -2,6 +2,8 @@
 
 #include <Flux/Reactive/Detail/DependencyTracker.hpp>
 
+#include <Flux/Debug/PerfCounters.hpp>
+
 #include <algorithm>
 #include <cassert>
 #include <cstdlib>
@@ -91,6 +93,12 @@ CompositeBodyResolution resolveCompositeBody(StateStore* store, ComponentKey con
 
 template<typename C>
 struct Element::Model : Concept {
+  static_assert(StructurallyComparableComponent<C>,
+      "Component types used as Element values must define operator== or be trivially copyable. "
+      "Without this, structural-equals always returns false and subtree reuse cannot fire above this Element. "
+      "For types with std::vector<Element> fields, use elementsStructurallyEqual. "
+      "For types with std::function fields, compare by static_cast<bool> presence rather than value.");
+
   C value;
   explicit Model(C c) : value(std::move(c)) {}
   std::unique_ptr<Concept> clone() const override {
@@ -110,10 +118,13 @@ struct Element::Model : Concept {
     }
     C const& rhs = *static_cast<C const*>(other.rawValuePtr());
     if constexpr (detail::equalityComparableV<C>) {
+      debug::perf::recordValueEqualsHit(debug::perf::ValueEqualsBranch::Equality);
       return value == rhs;
     } else if constexpr (std::is_trivially_copyable_v<C>) {
+      debug::perf::recordValueEqualsHit(debug::perf::ValueEqualsBranch::Memcmp);
       return std::memcmp(&value, &rhs, sizeof(C)) == 0;
     } else {
+      debug::perf::recordValueEqualsHit(debug::perf::ValueEqualsBranch::Fallthrough);
       return false;
     }
   }

@@ -23,6 +23,11 @@ struct TableColumn {
         bool initialAscending = true;
         std::function<bool(std::any const &, std::any const &)> less;
 
+        bool operator==(Sort const& other) const {
+            return initialAscending == other.initialAscending &&
+                   static_cast<bool>(less) == static_cast<bool>(other.less);
+        }
+
         template<typename T, typename Compare = std::less<>>
         static Sort by(Compare compare = Compare {}, bool initialAscending = true) {
             return Sort {
@@ -47,6 +52,8 @@ struct TableColumn {
     float width = kFloatFromTheme;
     float flexGrow = 0.f;
     std::optional<Sort> sort {};
+
+    bool operator==(TableColumn const& other) const = default;
 };
 
 struct TableCell : ViewModifiers<TableCell> {
@@ -110,11 +117,21 @@ struct TableView : ViewModifiers<TableView> {
         SortValue(std::size_t columnIndex, T &&sortValue)
             : column(columnIndex)
             , value(std::forward<T>(sortValue)) {}
+
+        bool operator==(SortValue const& other) const {
+            // std::any is not structurally comparable. Column identity and value presence are enough
+            // for retained subtree safety; actual sorting is recomputed inside TableView::body().
+            return column == other.column && value.has_value() == other.value.has_value();
+        }
     };
 
     struct Item {
         Element row;
         std::vector<SortValue> sortValues;
+
+        bool operator==(Item const& other) const {
+            return row.structuralEquals(other.row) && sortValues == other.sortValues;
+        }
     };
 
     struct Style {
@@ -132,6 +149,15 @@ struct TableView : ViewModifiers<TableView> {
     bool showDividers = true;
     bool scrollBody = true;
     Style style {};
+
+    bool operator==(TableView const& other) const {
+        return header.has_value() == other.header.has_value() &&
+               (!header || header->structuralEquals(*other.header)) &&
+               items == other.items &&
+               elementsStructurallyEqual(rows, other.rows) &&
+               columns == other.columns && showDividers == other.showDividers &&
+               scrollBody == other.scrollBody && style == other.style;
+    }
 
     Element body() const;
 };

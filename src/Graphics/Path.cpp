@@ -45,6 +45,10 @@ Path& Path::operator=(Path&& other) noexcept {
   return *this;
 }
 
+bool Path::operator==(Path const& other) const {
+  return commands_ == other.commands_ && data_ == other.data_;
+}
+
 void Path::pushCommand(CommandType type, PathWinding w, std::initializer_list<float> params) {
   Command cmd;
   cmd.type = type;

@@ -27,6 +27,8 @@ struct SelectOption {
     std::string label;
     std::string detail;
     bool disabled = false;
+
+    bool operator==(SelectOption const& other) const = default;
 };
 
 /// Single-select dropdown backed by a popover menu.
@@ -46,6 +48,8 @@ struct Select : ViewModifiers<Select> {
         Color fieldHoverColor = Color::theme();
         Color borderColor = Color::theme();
         Color rowHoverColor = Color::theme();
+
+        bool operator==(Style const& other) const = default;
     };
 
     /// Controlled selection state. When omitted, the control manages its own local selection.
@@ -70,6 +74,17 @@ struct Select : ViewModifiers<Select> {
 
     /// Called after user selection changes. Receives the selected option index.
     std::function<void(int)> onChange;
+
+    bool operator==(Select const& other) const {
+        return selectedIndex == other.selectedIndex && options == other.options &&
+               placeholder == other.placeholder && helperText == other.helperText &&
+               emptyText == other.emptyText && disabled == other.disabled &&
+               showCheckmark == other.showCheckmark && dismissOnSelect == other.dismissOnSelect &&
+               showDetailInTrigger == other.showDetailInTrigger &&
+               matchTriggerWidth == other.matchTriggerWidth && triggerMode == other.triggerMode &&
+               placement == other.placement && style == other.style &&
+               static_cast<bool>(onChange) == static_cast<bool>(other.onChange);
+    }
 
     Element body() const;
 };

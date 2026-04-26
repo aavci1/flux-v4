@@ -17,6 +17,10 @@ struct PathShape : ViewModifiers<PathShape> {
   Size measure(MeasureContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
 
   Path path{};
+
+  bool operator==(PathShape const& other) const {
+    return path == other.path;
+  }
 };
 
 } // namespace flux

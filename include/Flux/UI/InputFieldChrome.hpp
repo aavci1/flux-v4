@@ -31,6 +31,8 @@ struct InputFieldChromeSpec {
   float cornerRadius = kFloatFromTheme;
   float paddingH = kFloatFromTheme;
   float paddingV = kFloatFromTheme;
+
+  bool operator==(InputFieldChromeSpec const& other) const = default;
 };
 
 /// Resolved field chrome (uniform corner radius; use \c CornerRadius{cornerRadius} when a struct is needed).
@@ -48,6 +50,8 @@ struct ResolvedInputFieldChrome {
   float cornerRadius;
   float paddingH;
   float paddingV;
+
+  bool operator==(ResolvedInputFieldChrome const& other) const = default;
 };
 
 ResolvedInputFieldChrome resolveInputFieldChrome(InputFieldChromeSpec const& spec, Theme const& theme);

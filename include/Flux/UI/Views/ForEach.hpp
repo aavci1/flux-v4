@@ -9,6 +9,7 @@
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/Views/VStack.hpp>
 
+#include <concepts>
 #include <functional>
 #include <vector>
 
@@ -20,6 +21,9 @@ namespace flux {
 /// comes from explicit child keys returned by `factory`.
 template<typename T>
 struct ForEach {
+  static_assert(std::equality_comparable<T>,
+      "ForEach item values must define operator== so retained subtree comparison can detect stable lists.");
+
   std::vector<T> items;
   std::function<Element(T const&)> factory;
   float spacing = 0.f;
@@ -27,6 +31,11 @@ struct ForEach {
 
   ForEach(std::vector<T> itemsIn, std::function<Element(T const&)> factoryIn, float spacingIn = 0.f)
       : items(std::move(itemsIn)), factory(std::move(factoryIn)), spacing(spacingIn) {}
+
+  bool operator==(ForEach const& other) const {
+    return items == other.items && static_cast<bool>(factory) == static_cast<bool>(other.factory) &&
+           spacing == other.spacing && alignment == other.alignment;
+  }
 
   Element body() const {
     std::vector<Element> children;

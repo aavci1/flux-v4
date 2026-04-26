@@ -116,6 +116,8 @@ struct SelectResolvedStyle {
     Color accentColor {};
     Color fieldHoverColor {};
     Color rowHoverColor {};
+
+    bool operator==(SelectResolvedStyle const& other) const = default;
 };
 
 SelectResolvedStyle resolveStyle(Select::Style const &style, Theme const &theme) {
@@ -179,6 +181,12 @@ struct SelectMenuRow : ViewModifiers<SelectMenuRow> {
     SelectResolvedStyle style {};
     Theme theme {};
     std::function<void()> onTap;
+
+    bool operator==(SelectMenuRow const& other) const {
+        return option == other.option && selected == other.selected &&
+               showCheckmark == other.showCheckmark && style == other.style &&
+               theme == other.theme && static_cast<bool>(onTap) == static_cast<bool>(other.onTap);
+    }
 
     Element body() const {
         bool const disabled = option.disabled;
@@ -290,6 +298,13 @@ struct SelectMenuContent {
     Theme theme {};
     std::function<void(int)> onSelect;
 
+    bool operator==(SelectMenuContent const& other) const {
+        return selectedIndex == other.selectedIndex && options == other.options &&
+               emptyText == other.emptyText && showCheckmark == other.showCheckmark &&
+               menuWidth == other.menuWidth && style == other.style && theme == other.theme &&
+               static_cast<bool>(onSelect) == static_cast<bool>(other.onSelect);
+    }
+
     Element body() const {
         if (options.empty()) {
             return Text {
@@ -354,6 +369,18 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
     PopoverPlacement placement = PopoverPlacement::Below;
     SelectResolvedStyle style {};
     std::function<void(int)> onChange;
+
+    bool operator==(SelectTrigger const& other) const {
+        return selectedIndex == other.selectedIndex && options == other.options &&
+               placeholder == other.placeholder && emptyText == other.emptyText &&
+               disabled == other.disabled && showCheckmark == other.showCheckmark &&
+               dismissOnSelect == other.dismissOnSelect &&
+               showDetailInTrigger == other.showDetailInTrigger &&
+               matchTriggerWidth == other.matchTriggerWidth &&
+               triggerMode == other.triggerMode && placement == other.placement &&
+               style == other.style &&
+               static_cast<bool>(onChange) == static_cast<bool>(other.onChange);
+    }
 
     Element body() const {
         Theme const &theme = useEnvironment<Theme>();

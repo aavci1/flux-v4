@@ -18,6 +18,11 @@ struct Render : ViewModifiers<Render> {
   std::function<void(Canvas&, Rect)> draw{};
   bool pure = false;
 
+  bool operator==(Render const& other) const {
+    return static_cast<bool>(measureFn) == static_cast<bool>(other.measureFn) &&
+           static_cast<bool>(draw) == static_cast<bool>(other.draw) && pure == other.pure;
+  }
+
   Size measure(MeasureContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
                TextSystem& textSystem) const;
 

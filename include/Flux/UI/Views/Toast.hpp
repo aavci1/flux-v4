@@ -39,6 +39,11 @@ struct ToastAction {
   ButtonVariant variant = ButtonVariant::Ghost;
   bool dismissOnTap = true;
   std::function<void()> action;
+
+  bool operator==(ToastAction const& other) const {
+    return label == other.label && variant == other.variant && dismissOnTap == other.dismissOnTap &&
+           static_cast<bool>(action) == static_cast<bool>(other.action);
+  }
 };
 
 struct Toast {
@@ -58,11 +63,25 @@ struct Toast {
   float maxWidth = 420.f;
 
   std::function<void()> onDismiss;
+
+  bool operator==(Toast const& other) const {
+    return id == other.id && title == other.title && message == other.message &&
+           tone == other.tone && placement == other.placement && icon == other.icon &&
+           action == other.action && showCloseButton == other.showCloseButton &&
+           autoDismissMs == other.autoDismissMs && minWidth == other.minWidth &&
+           maxWidth == other.maxWidth &&
+           static_cast<bool>(onDismiss) == static_cast<bool>(other.onDismiss);
+  }
 };
 
 struct ToastOverlay : ViewModifiers<ToastOverlay> {
   std::vector<Toast> toasts;
   std::function<void(std::uint64_t)> onDismiss;
+
+  bool operator==(ToastOverlay const& other) const {
+    return toasts == other.toasts &&
+           static_cast<bool>(onDismiss) == static_cast<bool>(other.onDismiss);
+  }
 
   Element body() const;
 };

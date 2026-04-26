@@ -34,6 +34,8 @@ struct ResolvedStyle {
     Color accentColor {};
     Color trackColor {};
     Color borderColor {};
+
+    bool operator==(ResolvedStyle const &) const = default;
 };
 
 ResolvedStyle resolveStyle(SegmentedControl::Style const &style, Theme const &theme) {
@@ -62,6 +64,12 @@ struct SegmentedControlItem : ViewModifiers<SegmentedControlItem> {
     ResolvedStyle style {};
     Theme theme {};
     std::function<void()> onTap;
+
+    bool operator==(SegmentedControlItem const &other) const {
+        return option == other.option && selected == other.selected && disabled == other.disabled &&
+               style == other.style && theme == other.theme &&
+               static_cast<bool>(onTap) == static_cast<bool>(other.onTap);
+    }
 
     Element body() const {
         bool const isDisabled = disabled || option.disabled;

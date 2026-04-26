@@ -26,6 +26,8 @@ struct TooltipButton {
     std::string tooltip;
     PopoverPlacement placement = PopoverPlacement::Above;
 
+    bool operator==(TooltipButton const &) const = default;
+
     auto body() const {
         useTooltip(TooltipConfig {
             .text = tooltip,
@@ -47,6 +49,8 @@ struct TooltipButton {
 struct TooltipIcon {
     IconName name = IconName::Info;
     std::string tooltip;
+
+    bool operator==(TooltipIcon const &) const = default;
 
     auto body() const {
         Theme const &theme = useEnvironment<Theme>();

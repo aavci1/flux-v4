@@ -19,6 +19,8 @@ namespace flux {
 struct SegmentedControlOption {
     std::string label;
     bool disabled = false;
+
+    bool operator==(SegmentedControlOption const& other) const = default;
 };
 
 struct SegmentedControl : ViewModifiers<SegmentedControl> {
@@ -30,6 +32,8 @@ struct SegmentedControl : ViewModifiers<SegmentedControl> {
         Color accentColor = Color::theme();
         Color trackColor = Color::theme();
         Color borderColor = Color::theme();
+
+        bool operator==(Style const& other) const = default;
     };
 
     State<int> selectedIndex {};
@@ -37,6 +41,12 @@ struct SegmentedControl : ViewModifiers<SegmentedControl> {
     bool disabled = false;
     Style style {};
     std::function<void(int)> onChange;
+
+    bool operator==(SegmentedControl const& other) const {
+        return selectedIndex == other.selectedIndex && options == other.options &&
+               disabled == other.disabled && style == other.style &&
+               static_cast<bool>(onChange) == static_cast<bool>(other.onChange);
+    }
 
     Element body() const;
 };

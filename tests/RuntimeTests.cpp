@@ -31,6 +31,9 @@ struct CopyCountingLeaf {
         ++copies;
         return *this;
     }
+    bool operator==(CopyCountingLeaf const&) const noexcept {
+        return true;
+    }
 
     flux::Size measure(flux::MeasureContext&, flux::LayoutConstraints const&,
                        flux::LayoutHints const&, flux::TextSystem&) const {

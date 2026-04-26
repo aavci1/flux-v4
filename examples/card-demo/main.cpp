@@ -27,6 +27,8 @@ struct ExpandableCard : ViewModifiers<ExpandableCard> {
     std::string summary;
     std::string detail;
 
+    bool operator==(ExpandableCard const &) const = default;
+
     Element body() const {
         Theme const &theme = useEnvironment<Theme>();
         auto expanded = useState(false);
