@@ -107,6 +107,8 @@ add_library(flux STATIC
   src/Core/Window.cpp
   src/Core/WindowRender.cpp
   src/UI/MeasureContext.cpp
+  src/UI/InputFieldChrome.cpp
+  src/UI/InputFieldLayout.cpp
   src/UI/Detail/TraversalContext.cpp
   src/UI/Environment.cpp
   src/UI/Theme.cpp
@@ -129,8 +131,10 @@ add_library(flux STATIC
   src/UI/Views/Render.cpp
   src/UI/Views/Text.cpp
   src/UI/Views/LayoutContainers.cpp
+  src/UI/Views/Popover.cpp
   src/UI/Views/PopoverCalloutPath.cpp
   src/UI/Views/ScrollView.cpp
+  src/UI/Views/Select.cpp
   src/UI/Views/Slider.cpp
   src/UI/Views/TransformViews.cpp
   src/UI/Views/Toggle.cpp

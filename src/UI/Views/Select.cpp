@@ -596,7 +596,14 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
 
         bool const hasDetail = showDetailInTrigger && currentOption && !currentOption->detail.empty();
         Element triggerLabel = Text {
-            .text = currentOption ? currentOption->label : placeholder,
+            .text = Reactive::Bindable<std::string> {[selectedIndex = selectedIndex,
+                                                       options = options,
+                                                       placeholder = placeholder] {
+                int const index = selectedIndex.get();
+                return isValidIndex(index, options.size())
+                           ? options[static_cast<std::size_t>(index)].label
+                           : placeholder;
+            }},
             .font = style.labelFont,
             .color = *labelAnim,
             .horizontalAlignment = HorizontalAlignment::Leading,
@@ -614,7 +621,14 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
             std::vector<Element> triggerTextChildren;
             triggerTextChildren.reserve(2);
             triggerTextChildren.emplace_back(Text {
-                .text = currentOption ? currentOption->label : placeholder,
+                .text = Reactive::Bindable<std::string> {[selectedIndex = selectedIndex,
+                                                           options = options,
+                                                           placeholder = placeholder] {
+                    int const index = selectedIndex.get();
+                    return isValidIndex(index, options.size())
+                               ? options[static_cast<std::size_t>(index)].label
+                               : placeholder;
+                }},
                 .font = style.labelFont,
                 .color = *labelAnim,
                 .horizontalAlignment = HorizontalAlignment::Leading,
@@ -622,7 +636,13 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
                 .wrapping = TextWrapping::Wrap,
             });
             triggerTextChildren.emplace_back(Text {
-                .text = currentOption->detail,
+                .text = Reactive::Bindable<std::string> {[selectedIndex = selectedIndex,
+                                                           options = options] {
+                    int const index = selectedIndex.get();
+                    return isValidIndex(index, options.size())
+                               ? options[static_cast<std::size_t>(index)].detail
+                               : std::string {};
+                }},
                 .font = style.detailFont,
                 .color = *detailAnim,
                 .horizontalAlignment = HorizontalAlignment::Leading,
@@ -692,7 +712,7 @@ Element Select::body() const {
     Theme const &theme = useEnvironment<Theme>();
     SelectResolvedStyle const resolved = resolveStyle(style, theme);
 
-    State<int> const selection = selectedIndex.signal ? selectedIndex : useState<int>(-1);
+    State<int> const selection = selectedIndex;
     Element field = SelectTrigger {
         .selectedIndex = selection,
         .options = options,
