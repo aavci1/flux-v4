@@ -125,12 +125,15 @@ add_library(flux STATIC
   src/UI/Views/Button.cpp
   src/UI/Views/Card.cpp
   src/UI/Views/Checkbox.cpp
+  src/UI/Views/Divider.cpp
   src/UI/Views/Grid.cpp
   src/UI/Views/Icon.cpp
   src/UI/Views/Image.cpp
+  src/UI/Views/ListView.cpp
   src/UI/Views/Rectangle.cpp
   src/UI/Views/Render.cpp
   src/UI/Views/Text.cpp
+  src/UI/Views/TextEditUtils.cpp
   src/UI/Views/TextInput.cpp
   src/UI/Views/LayoutContainers.cpp
   src/UI/Views/Popover.cpp
