@@ -12,6 +12,9 @@ namespace flux {
 
 struct RootHolder;
 class Window;
+namespace scenegraph {
+class SceneGraph;
+}
 
 class Runtime {
 public:
@@ -24,6 +27,7 @@ public:
   void setRoot(std::unique_ptr<RootHolder> holder);
   void handleInput(InputEvent const& event);
   void beginShutdown();
+  void beginShutdown(scenegraph::SceneGraph* sceneGraph);
 
   bool wantsTextInput() const noexcept { return true; }
   bool textCacheOverlayEnabled() const noexcept { return false; }

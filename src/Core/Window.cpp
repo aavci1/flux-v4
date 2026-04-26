@@ -39,6 +39,7 @@ struct Window::Impl {
   std::unordered_map<std::string, ActionDescriptor> actions_;
   Reactive::Signal<Theme> themeSignal_{Theme::light()};
   EnvironmentLayer windowEnvironment_{};
+  bool shutdown_ = false;
 
   explicit Impl(Window&) {
     windowEnvironment_.setSignal(themeSignal_);
@@ -47,6 +48,7 @@ struct Window::Impl {
 
   PlatformWindow* platformWindow() const { return platform_.get(); }
   void setViewRoot(Window& window, std::unique_ptr<RootHolder> holder);
+  void shutdown();
 };
 
 void Window::Impl::setViewRoot(Window& window, std::unique_ptr<RootHolder> holder) {
@@ -57,9 +59,20 @@ void Window::Impl::setViewRoot(Window& window, std::unique_ptr<RootHolder> holde
 }
 
 Window::Impl::~Impl() {
+  shutdown();
+}
+
+void Window::Impl::shutdown() {
+  if (shutdown_) {
+    return;
+  }
+  shutdown_ = true;
   if (runtime_) {
-    runtime_->beginShutdown();
-    overlayMgr_.clear(runtime_.get(), false);
+    runtime_->beginShutdown(sceneGraph_ ? &*sceneGraph_ : nullptr);
+    overlayMgr_.clear(nullptr, false);
+    runtime_.reset();
+  } else {
+    overlayMgr_.clear(nullptr, false);
   }
 }
 
@@ -75,6 +88,9 @@ Window::Window(const WindowConfig& config) {
 }
 
 Window::~Window() {
+  if (d) {
+    d->shutdown();
+  }
   const unsigned int id = handle();
   if (Application::hasInstance()) {
     Application::instance().unregisterWindowHandle(id);

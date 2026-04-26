@@ -53,8 +53,12 @@ void Runtime::setRoot(std::unique_ptr<RootHolder> holder) {
 }
 
 void Runtime::beginShutdown() {
-  if (d->root && d->window.hasSceneGraph()) {
-    d->root->unmount(d->window.sceneGraph());
+  beginShutdown(d->window.hasSceneGraph() ? &d->window.sceneGraph() : nullptr);
+}
+
+void Runtime::beginShutdown(scenegraph::SceneGraph* sceneGraph) {
+  if (d->root && sceneGraph) {
+    d->root->unmount(*sceneGraph);
   }
   d->root.reset();
 }

@@ -210,7 +210,6 @@ void OverlayManager::remove(OverlayId id, Runtime* runtime) {
 }
 
 void OverlayManager::clear(Runtime* runtime, bool invokeDismissCallbacks) {
-  (void)runtime;
   if (invokeDismissCallbacks) {
     for (auto const& entry : overlays_) {
       if (entry && entry->config.onDismiss) {
@@ -219,6 +218,9 @@ void OverlayManager::clear(Runtime* runtime, bool invokeDismissCallbacks) {
     }
   }
   overlays_.clear();
+  if (!runtime && !invokeDismissCallbacks) {
+    return;
+  }
   if (runtime) {
     runtime->window().requestRedraw();
   } else if (Application::hasInstance()) {
