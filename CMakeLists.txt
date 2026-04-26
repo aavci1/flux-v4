@@ -130,6 +130,7 @@ add_library(flux STATIC
   src/UI/Views/Rectangle.cpp
   src/UI/Views/Render.cpp
   src/UI/Views/Text.cpp
+  src/UI/Views/TextInput.cpp
   src/UI/Views/LayoutContainers.cpp
   src/UI/Views/Popover.cpp
   src/UI/Views/PopoverCalloutPath.cpp

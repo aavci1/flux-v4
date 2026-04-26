@@ -25,7 +25,7 @@ public:
   void handleInput(InputEvent const& event);
   void beginShutdown();
 
-  bool wantsTextInput() const noexcept { return false; }
+  bool wantsTextInput() const noexcept { return true; }
   bool textCacheOverlayEnabled() const noexcept { return false; }
   bool isActionCurrentlyEnabled(std::string const& name) const;
   Window& window() noexcept;
