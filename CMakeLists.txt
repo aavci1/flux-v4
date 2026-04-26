@@ -121,6 +121,7 @@ add_library(flux STATIC
   src/UI/Overlay.cpp
   src/UI/OverlaySurfaceHelpers.cpp
   src/UI/Views/Alert.cpp
+  src/UI/Views/Badge.cpp
   src/UI/Views/Button.cpp
   src/UI/Views/Card.cpp
   src/UI/Views/Checkbox.cpp
@@ -134,10 +135,12 @@ add_library(flux STATIC
   src/UI/Views/LayoutContainers.cpp
   src/UI/Views/Popover.cpp
   src/UI/Views/PopoverCalloutPath.cpp
+  src/UI/Views/ProgressBar.cpp
   src/UI/Views/ScrollView.cpp
   src/UI/Views/Select.cpp
   src/UI/Views/SegmentedControl.cpp
   src/UI/Views/Slider.cpp
+  src/UI/Views/TableView.cpp
   src/UI/Views/TransformViews.cpp
   src/UI/Views/Toggle.cpp
   src/UI/Layout/Algorithms/ScrollLayout.cpp
