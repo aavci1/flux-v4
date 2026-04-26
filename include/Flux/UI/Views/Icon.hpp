@@ -6,6 +6,7 @@
 
 
 #include <Flux/Core/Types.hpp>
+#include <Flux/Reactive/Bindable.hpp>
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/IconName.hpp>
 
@@ -14,7 +15,7 @@ namespace flux {
 struct Icon : ViewModifiers<Icon> {
 
     // ── Properties ───────────────────────────────────────────────────────────
-    IconName name {};
+    Reactive::Bindable<IconName> name {};
 
     /// Icon size in points. Drives both the font size and the component's intrinsic frame.
     /// `kFloatFromTheme` → `Theme::bodyFont.size`.
@@ -27,7 +28,8 @@ struct Icon : ViewModifiers<Icon> {
     Color color = Color::theme();
 
     bool operator==(Icon const& other) const {
-        return name == other.name && size == other.size && weight == other.weight &&
+        bool const sameName = name.isValue() && other.name.isValue() && name.value() == other.name.value();
+        return sameName && size == other.size && weight == other.weight &&
                color == other.color;
     }
 

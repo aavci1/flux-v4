@@ -5,6 +5,7 @@
 /// Part of the Flux public API.
 
 #include <Flux/Graphics/Styles.hpp>
+#include <Flux/Reactive/Bindable.hpp>
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/Theme.hpp>
 
@@ -18,11 +19,21 @@ struct Card : ViewModifiers<Card> {
     float paddingV = kFloatFromTheme;
     float cornerRadius = kFloatFromTheme;
     float borderWidth = kFloatFromTheme;
-    Color backgroundColor = Color::theme();
-    Color borderColor = Color::theme();
-    ShadowStyle shadow = ShadowStyle::none();
+    Reactive::Bindable<Color> backgroundColor{Color::theme()};
+    Reactive::Bindable<Color> borderColor{Color::theme()};
+    Reactive::Bindable<ShadowStyle> shadow{ShadowStyle::none()};
 
-    bool operator==(Style const& other) const = default;
+    bool operator==(Style const& other) const {
+      bool const sameBackground = backgroundColor.isValue() && other.backgroundColor.isValue() &&
+                                  backgroundColor.value() == other.backgroundColor.value();
+      bool const sameBorder = borderColor.isValue() && other.borderColor.isValue() &&
+                              borderColor.value() == other.borderColor.value();
+      bool const sameShadow = shadow.isValue() && other.shadow.isValue() &&
+                              shadow.value() == other.shadow.value();
+      return padding == other.padding && paddingH == other.paddingH && paddingV == other.paddingV &&
+             cornerRadius == other.cornerRadius && borderWidth == other.borderWidth &&
+             sameBackground && sameBorder && sameShadow;
+    }
   };
 
   Element child;

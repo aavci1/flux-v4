@@ -39,12 +39,15 @@ std::string encodeUtf8(char32_t cp) {
 Element Icon::body() const {
     Theme const& theme = useEnvironment<Theme>();
 
+    Reactive::Bindable<IconName> nameBinding = name;
     float const s = resolveFloat(size, theme.bodyFont.size);
     float const w = resolveFloat(weight, theme.bodyFont.weight);
     Color const c = resolveColor(color, theme.labelColor, theme);
 
     return Text {
-        .text = encodeUtf8(static_cast<char32_t>(name)),
+        .text = Reactive::Bindable<std::string> {[nameBinding] {
+            return encodeUtf8(static_cast<char32_t>(nameBinding.evaluate()));
+        }},
         .font = Font {
             .family = theme.iconFontFamily,
             .size = s,
