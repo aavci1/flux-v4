@@ -141,6 +141,7 @@ add_library(flux STATIC
   src/UI/Views/SegmentedControl.cpp
   src/UI/Views/Slider.cpp
   src/UI/Views/TableView.cpp
+  src/UI/Views/Toast.cpp
   src/UI/Views/TransformViews.cpp
   src/UI/Views/Toggle.cpp
   src/UI/Layout/Algorithms/ScrollLayout.cpp
