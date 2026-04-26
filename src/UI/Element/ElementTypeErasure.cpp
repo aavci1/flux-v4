@@ -104,6 +104,11 @@ void ElementDeleter::operator()(Element* element) const noexcept {
   delete element;
 }
 
+std::uint64_t nextElementMeasureId() {
+  static std::uint64_t next = 1;
+  return next++;
+}
+
 Popover* popoverOverlayStateIf(Element& el) {
   (void)el;
   return nullptr;
@@ -198,33 +203,6 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
   detail::ElementModifiers const& modifiers = *modifiers_;
   EdgeInsets const padding = modifiers.padding.evaluate();
   LayoutConstraints innerConstraints = insetConstraints(ctx.constraints(), padding);
-  float const explicitWidth = modifiers.sizeWidth.evaluate();
-  float const explicitHeight = modifiers.sizeHeight.evaluate();
-  float const horizontalPadding = std::max(0.f, padding.left) + std::max(0.f, padding.right);
-  float const verticalPadding = std::max(0.f, padding.top) + std::max(0.f, padding.bottom);
-  auto stretches = [](std::optional<Alignment> const& alignment) {
-    return alignment.has_value() && *alignment == Alignment::Stretch;
-  };
-  bool const hStackMainAxis = ctx.hints().hStackCrossAlign.has_value();
-  bool const vStackHorizontalStretch = stretches(ctx.hints().vStackCrossAlign);
-  bool const zStackHorizontalStretch = stretches(ctx.hints().zStackHorizontalAlign);
-  bool const explicitWidthConstrainsContent =
-      !hStackMainAxis && !vStackHorizontalStretch && !zStackHorizontalStretch;
-  if (explicitWidth > 0.f && explicitWidthConstrainsContent) {
-    float const contentWidth = std::max(0.f, explicitWidth - horizontalPadding);
-    innerConstraints.maxWidth = contentWidth;
-    innerConstraints.minWidth = contentWidth;
-  }
-  bool const vStackMainAxis = ctx.hints().vStackCrossAlign.has_value();
-  bool const hStackVerticalStretch = stretches(ctx.hints().hStackCrossAlign);
-  bool const zStackVerticalStretch = stretches(ctx.hints().zStackVerticalAlign);
-  bool const explicitHeightConstrainsContent =
-      !vStackMainAxis && !hStackVerticalStretch && !zStackVerticalStretch;
-  if (explicitHeight > 0.f && explicitHeightConstrainsContent) {
-    float const contentHeight = std::max(0.f, explicitHeight - verticalPadding);
-    innerConstraints.maxHeight = contentHeight;
-    innerConstraints.minHeight = contentHeight;
-  }
   MountContext innerCtx = ctx.child(innerConstraints, ctx.hints());
   std::unique_ptr<scenegraph::SceneNode> content = impl_->mount(innerCtx);
   if (!content) {

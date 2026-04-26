@@ -701,23 +701,19 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
                 .cornerRadius(CornerRadius {theme.radiusXSmall})
                 .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
                 .focusable(!isDisabled)
-                .onPointerEnter(std::function<void()> {[hovered, isDisabled] {
-                    if (!isDisabled) {
-                        hovered = true;
-                    }
+                .onPointerEnter(isDisabled ? std::function<void()> {} : std::function<void()> {[hovered] {
+                    hovered = true;
                 }})
-                .onPointerExit(std::function<void()> {[hovered, pressed] {
+                .onPointerExit(isDisabled ? std::function<void()> {} : std::function<void()> {[hovered, pressed] {
                     hovered = false;
                     pressed = false;
                 }})
-                .onPointerDown(std::function<void(Point)> {[pressed, isDisabled](Point) {
-                    if (!isDisabled) {
-                        pressed = true;
-                    }
+                .onPointerDown(isDisabled ? std::function<void(Point)> {} : std::function<void(Point)> {[pressed](Point) {
+                    pressed = true;
                 }})
-                .onPointerUp(std::function<void(Point)> {[pressed](Point) { pressed = false; }})
-                .onFocus(std::function<void()> {[focused] { focused = true; }})
-                .onBlur(std::function<void()> {[focused, pressed] {
+                .onPointerUp(isDisabled ? std::function<void(Point)> {} : std::function<void(Point)> {[pressed](Point) { pressed = false; }})
+                .onFocus(isDisabled ? std::function<void()> {} : std::function<void()> {[focused] { focused = true; }})
+                .onBlur(isDisabled ? std::function<void()> {} : std::function<void()> {[focused, pressed] {
                     focused = false;
                     pressed = false;
                 }})
@@ -736,23 +732,19 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
             .cornerRadius(CornerRadius {fieldChrome.cornerRadius})
             .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
             .focusable(!isDisabled)
-            .onPointerEnter(std::function<void()> {[hovered, isDisabled] {
-                if (!isDisabled) {
-                    hovered = true;
-                }
+            .onPointerEnter(isDisabled ? std::function<void()> {} : std::function<void()> {[hovered] {
+                hovered = true;
             }})
-            .onPointerExit(std::function<void()> {[hovered, pressed] {
+            .onPointerExit(isDisabled ? std::function<void()> {} : std::function<void()> {[hovered, pressed] {
                 hovered = false;
                 pressed = false;
             }})
-            .onPointerDown(std::function<void(Point)> {[pressed, isDisabled](Point) {
-                if (!isDisabled) {
-                    pressed = true;
-                }
+            .onPointerDown(isDisabled ? std::function<void(Point)> {} : std::function<void(Point)> {[pressed](Point) {
+                pressed = true;
             }})
-            .onPointerUp(std::function<void(Point)> {[pressed](Point) { pressed = false; }})
-            .onFocus(std::function<void()> {[focused] { focused = true; }})
-            .onBlur(std::function<void()> {[focused, pressed] {
+            .onPointerUp(isDisabled ? std::function<void(Point)> {} : std::function<void(Point)> {[pressed](Point) { pressed = false; }})
+            .onFocus(isDisabled ? std::function<void()> {} : std::function<void()> {[focused] { focused = true; }})
+            .onBlur(isDisabled ? std::function<void()> {} : std::function<void()> {[focused, pressed] {
                 focused = false;
                 pressed = false;
             }})

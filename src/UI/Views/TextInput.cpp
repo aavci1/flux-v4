@@ -87,7 +87,33 @@ AttributedString attributedText(TextInput const& input,
   if (input.styler) {
     attributed.runs = input.styler(attributed.utf8);
   }
-  if (attributed.runs.empty()) {
+  auto runsCoverText = [](std::vector<AttributedRun> const& runs, std::uint32_t length) {
+    if (length == 0) {
+      return runs.empty();
+    }
+    if (runs.empty()) {
+      return false;
+    }
+    std::vector<std::pair<std::uint32_t, std::uint32_t>> spans;
+    spans.reserve(runs.size());
+    for (AttributedRun const& run : runs) {
+      if (run.start >= run.end || run.end > length) {
+        return false;
+      }
+      spans.push_back({run.start, run.end});
+    }
+    std::sort(spans.begin(), spans.end());
+    std::uint32_t covered = 0;
+    for (auto const& [start, end] : spans) {
+      if (start > covered) {
+        return false;
+      }
+      covered = std::max(covered, end);
+    }
+    return covered >= length;
+  };
+  if (!runsCoverText(attributed.runs, static_cast<std::uint32_t>(attributed.utf8.size()))) {
+    attributed.runs.clear();
     Color const textColor = input.validationColor ? input.validationColor(attributed.utf8) : style.textColor;
     attributed.runs.push_back(AttributedRun{
         .start = 0,
@@ -131,8 +157,8 @@ Size textInputFrameSize(TextInput const& input, ResolvedTextInputStyle const& st
                                                style.height);
   }
 
-  if (std::isfinite(constraints.maxWidth)) {
-    measured.width = std::min(measured.width, constraints.maxWidth);
+  if (std::isfinite(constraints.maxWidth) && constraints.maxWidth > 0.f) {
+    measured.width = constraints.maxWidth;
   }
   if (std::isfinite(constraints.maxHeight)) {
     measured.height = std::min(measured.height, constraints.maxHeight);

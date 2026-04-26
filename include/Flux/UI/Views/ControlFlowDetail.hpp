@@ -151,6 +151,11 @@ bool readCondition(Condition& condition) {
   }
 }
 
+template<typename Condition>
+bool readConditionCopy(Condition condition) {
+  return readCondition(condition);
+}
+
 template<typename Selector>
 auto readSelector(Selector& selector) {
   if constexpr (std::is_invocable_v<Selector&>) {
@@ -158,6 +163,11 @@ auto readSelector(Selector& selector) {
   } else {
     return selector;
   }
+}
+
+template<typename Selector>
+auto readSelectorCopy(Selector selector) {
+  return readSelector(selector);
 }
 
 } // namespace flux::detail

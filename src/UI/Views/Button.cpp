@@ -202,17 +202,17 @@ Element Button::body() const {
                      .padding(paddingV, paddingH, paddingV, paddingH)
                      .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
                      .focusable(!isDisabled)
-                     .onPointerEnter(std::function<void()> {pointerEnter})
-                     .onPointerExit(std::function<void()> {pointerExit})
-                     .onPointerDown(std::function<void(Point)> {pointerDown})
-                     .onPointerUp(std::function<void(Point)> {pointerUp})
-                     .onFocus(std::function<void()> {[focused] { focused = true; }})
-                     .onBlur(std::function<void()> {[focused, pressed] {
+                     .onPointerEnter(isDisabled ? std::function<void()> {} : std::function<void()> {pointerEnter})
+                     .onPointerExit(isDisabled ? std::function<void()> {} : std::function<void()> {pointerExit})
+                     .onPointerDown(isDisabled ? std::function<void(Point)> {} : std::function<void(Point)> {pointerDown})
+                     .onPointerUp(isDisabled ? std::function<void(Point)> {} : std::function<void(Point)> {pointerUp})
+                     .onFocus(isDisabled ? std::function<void()> {} : std::function<void()> {[focused] { focused = true; }})
+                     .onBlur(isDisabled ? std::function<void()> {} : std::function<void()> {[focused, pressed] {
                          focused = false;
                          pressed = false;
                      }})
-                     .onKeyDown(std::function<void(KeyCode, Modifiers)> {handleKey})
-        .onTap(std::function<void()> {handleTap})
+                     .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})
+        .onTap(isDisabled ? std::function<void()> {} : std::function<void()> {handleTap})
     };
 }
 
@@ -265,28 +265,28 @@ Element LinkButton::body() const {
         .padding(0.f, 3.f, 0.f, 3.f)
         .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
         .focusable(!isDisabled)
-        .onPointerEnter(std::function<void()> {[hovered, disabledBinding] {
+        .onPointerEnter(isDisabled ? std::function<void()> {} : std::function<void()> {[hovered, disabledBinding] {
             if (!disabledBinding.evaluate()) {
                 hovered = true;
             }
         }})
-        .onPointerExit(std::function<void()> {[hovered, pressed] {
+        .onPointerExit(isDisabled ? std::function<void()> {} : std::function<void()> {[hovered, pressed] {
             hovered = false;
             pressed = false;
         }})
-        .onPointerDown(std::function<void(Point)> {[pressed, disabledBinding](Point) {
+        .onPointerDown(isDisabled ? std::function<void(Point)> {} : std::function<void(Point)> {[pressed, disabledBinding](Point) {
             if (!disabledBinding.evaluate()) {
                 pressed = true;
             }
         }})
-        .onPointerUp(std::function<void(Point)> {[pressed](Point) { pressed = false; }})
-        .onFocus(std::function<void()> {[focused] { focused = true; }})
-        .onBlur(std::function<void()> {[focused, pressed] {
+        .onPointerUp(isDisabled ? std::function<void(Point)> {} : std::function<void(Point)> {[pressed](Point) { pressed = false; }})
+        .onFocus(isDisabled ? std::function<void()> {} : std::function<void()> {[focused] { focused = true; }})
+        .onBlur(isDisabled ? std::function<void()> {} : std::function<void()> {[focused, pressed] {
             focused = false;
             pressed = false;
         }})
-        .onKeyDown(std::function<void(KeyCode, Modifiers)> {handleKey})
-        .onTap(std::function<void()> {handleTap});
+        .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})
+        .onTap(isDisabled ? std::function<void()> {} : std::function<void()> {handleTap});
 }
 
 Element IconButton::body() const {
@@ -336,28 +336,28 @@ Element IconButton::body() const {
         .cornerRadius(CornerRadius {theme.radiusXSmall})
         .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
         .focusable(!isDisabled)
-        .onPointerEnter(std::function<void()> {[hovered, disabledBinding] {
+        .onPointerEnter(isDisabled ? std::function<void()> {} : std::function<void()> {[hovered, disabledBinding] {
             if (!disabledBinding.evaluate()) {
                 hovered = true;
             }
         }})
-        .onPointerExit(std::function<void()> {[hovered, pressed] {
+        .onPointerExit(isDisabled ? std::function<void()> {} : std::function<void()> {[hovered, pressed] {
             hovered = false;
             pressed = false;
         }})
-        .onPointerDown(std::function<void(Point)> {[pressed, disabledBinding](Point) {
+        .onPointerDown(isDisabled ? std::function<void(Point)> {} : std::function<void(Point)> {[pressed, disabledBinding](Point) {
             if (!disabledBinding.evaluate()) {
                 pressed = true;
             }
         }})
-        .onPointerUp(std::function<void(Point)> {[pressed](Point) { pressed = false; }})
-        .onFocus(std::function<void()> {[focused] { focused = true; }})
-        .onBlur(std::function<void()> {[focused, pressed] {
+        .onPointerUp(isDisabled ? std::function<void(Point)> {} : std::function<void(Point)> {[pressed](Point) { pressed = false; }})
+        .onFocus(isDisabled ? std::function<void()> {} : std::function<void()> {[focused] { focused = true; }})
+        .onBlur(isDisabled ? std::function<void()> {} : std::function<void()> {[focused, pressed] {
             focused = false;
             pressed = false;
         }})
-        .onKeyDown(std::function<void(KeyCode, Modifiers)> {handleKey})
-        .onTap(std::function<void()> {handleTap});
+        .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})
+        .onTap(isDisabled ? std::function<void()> {} : std::function<void()> {handleTap});
 }
 
 } // namespace flux

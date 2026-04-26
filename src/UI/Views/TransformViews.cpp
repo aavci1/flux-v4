@@ -4,6 +4,8 @@
 #include <Flux/SceneGraph/GroupNode.hpp>
 #include <Flux/UI/MeasureContext.hpp>
 
+#include "SceneGraph/SceneBounds.hpp"
+
 #include <algorithm>
 #include <cmath>
 
@@ -18,6 +20,14 @@ LayoutConstraints fixedConstraints(Size size) {
       .minWidth = std::max(0.f, size.width),
       .minHeight = std::max(0.f, size.height),
   };
+}
+
+void includeVisualBounds(scenegraph::GroupNode& group) {
+  Rect const visual = scenegraph::detail::subtreeLocalVisualBounds(group);
+  Size size = group.size();
+  size.width = std::max(size.width, visual.width);
+  size.height = std::max(size.height, visual.height);
+  group.setSize(size);
 }
 
 } // namespace
@@ -63,6 +73,7 @@ std::unique_ptr<scenegraph::SceneNode> ScaleAroundCenter::mount(MountContext& ct
   }
 
   group->appendChild(std::move(childNode));
+  includeVisualBounds(*group);
   return group;
 }
 

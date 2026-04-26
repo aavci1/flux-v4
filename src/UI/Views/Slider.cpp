@@ -61,7 +61,11 @@ Element Slider::body() const {
     auto focused = useState(false);
     auto dragging = useState(false);
 
-    float const componentWidth = std::max(kDefaultSliderWidth, thumbSize);
+    LayoutConstraints const* layoutConstraints = useLayoutConstraints();
+    float componentWidth = std::max(kDefaultSliderWidth, thumbSize);
+    if (layoutConstraints && std::isfinite(layoutConstraints->maxWidth) && layoutConstraints->maxWidth > 0.f) {
+        componentWidth = std::max(layoutConstraints->maxWidth, thumbSize);
+    }
     float const usableWidth = std::max(componentWidth - thumbSize, 1.f);
 
     State<float> val = value;

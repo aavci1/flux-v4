@@ -622,8 +622,7 @@ struct JustifyPlaygroundSection {
             [axisIndex, alignmentIndex, justifyIndex] {
                 return justifyPreviewKey(axisIndex.get(), alignmentIndex.get(), justifyIndex.get());
             },
-            std::move(previewCases))}
-                              .height(188.f);
+            std::move(previewCases))};
 
         return makeSectionCard(
             theme, "Justify Content",

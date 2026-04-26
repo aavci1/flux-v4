@@ -6,6 +6,7 @@
 #include <Flux/SceneGraph/RectNode.hpp>
 #include <Flux/UI/Detail/MountPosition.hpp>
 #include <Flux/UI/MeasureContext.hpp>
+#include <Flux/UI/Theme.hpp>
 
 #include "UI/Layout/Algorithms/ScrollLayout.hpp"
 #include "UI/Layout/ContainerScope.hpp"
@@ -13,6 +14,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <memory>
 #include <utility>
 #include <vector>
 
@@ -57,6 +59,20 @@ Size measureChild(Element const& child, MeasureContext& ctx, LayoutConstraints c
   Size size = child.measure(ctx, constraints, LayoutHints{}, textSystem);
   ctx.popConstraints();
   return size;
+}
+
+Color scrollIndicatorColor(EnvironmentStack& environment) {
+  Theme const& theme = environment.find<Theme>() ? *environment.find<Theme>() : Theme::light();
+  return Color{
+      theme.secondaryLabelColor.r,
+      theme.secondaryLabelColor.g,
+      theme.secondaryLabelColor.b,
+      0.55f,
+  };
+}
+
+void setIndicatorBounds(scenegraph::RectNode& node, layout::ScrollIndicatorMetrics const& metrics) {
+  node.setBounds(Rect{metrics.x, metrics.y, metrics.width, metrics.height});
 }
 
 struct ScrollViewPlan {
@@ -183,7 +199,54 @@ std::unique_ptr<scenegraph::SceneNode> ScrollView::mount(MountContext& ctx) cons
   }
 
   auto* rawContentGroup = contentGroup.get();
+  rawContentGroup->setPosition(Point{-plan.contentLayout.clampedOffset.x,
+                                     -plan.contentLayout.clampedOffset.y});
   viewportNode->appendChild(std::move(contentGroup));
+
+  Point const scrollRange = layout::maxScrollOffset(axis, viewport, content);
+  bool const showsVerticalIndicator = scrollRange.y > 0.f;
+  bool const showsHorizontalIndicator = scrollRange.x > 0.f;
+  bool const showsAnyIndicator = showsVerticalIndicator || showsHorizontalIndicator;
+  scenegraph::RectNode* rawIndicatorOverlay = nullptr;
+  scenegraph::RectNode* rawVerticalIndicator = nullptr;
+  scenegraph::RectNode* rawHorizontalIndicator = nullptr;
+  if (showsAnyIndicator) {
+    Color const indicatorColor = scrollIndicatorColor(ctx.environment());
+    auto indicatorOverlay =
+        std::make_unique<scenegraph::RectNode>(Rect{0.f, 0.f, viewport.width, viewport.height});
+    indicatorOverlay->setOpacity(0.f);
+
+    layout::ScrollIndicatorMetrics const verticalIndicator =
+        layout::makeVerticalIndicator(plan.contentLayout.clampedOffset, viewport, content,
+                                      showsHorizontalIndicator);
+    if (verticalIndicator.visible()) {
+      auto indicator = std::make_unique<scenegraph::RectNode>(
+          Rect{verticalIndicator.x, verticalIndicator.y, verticalIndicator.width,
+               verticalIndicator.height},
+          FillStyle::solid(indicatorColor),
+          StrokeStyle::none(),
+          CornerRadius{verticalIndicator.width * 0.5f});
+      rawVerticalIndicator = indicator.get();
+      indicatorOverlay->appendChild(std::move(indicator));
+    }
+
+    layout::ScrollIndicatorMetrics const horizontalIndicator =
+        layout::makeHorizontalIndicator(plan.contentLayout.clampedOffset, viewport, content,
+                                        showsVerticalIndicator);
+    if (horizontalIndicator.visible()) {
+      auto indicator = std::make_unique<scenegraph::RectNode>(
+          Rect{horizontalIndicator.x, horizontalIndicator.y, horizontalIndicator.width,
+               horizontalIndicator.height},
+          FillStyle::solid(indicatorColor),
+          StrokeStyle::none(),
+          CornerRadius{horizontalIndicator.height * 0.5f});
+      rawHorizontalIndicator = indicator.get();
+      indicatorOverlay->appendChild(std::move(indicator));
+    }
+
+    rawIndicatorOverlay = indicatorOverlay.get();
+    viewportNode->appendChild(std::move(indicatorOverlay));
+  }
 
   State<Point> offsetState = scrollOffset;
   State<Size> viewportState = viewportSize;
@@ -191,14 +254,30 @@ std::unique_ptr<scenegraph::SceneNode> ScrollView::mount(MountContext& ctx) cons
   ScrollAxis const scrollAxis = axis;
   std::vector<Size> sizes = plan.childSizes;
   std::function<void()> requestRedraw = ctx.redrawCallback();
-  Reactive::withOwner(ctx.owner(), [rawContentGroup, offsetState, viewportState,
+  Reactive::withOwner(ctx.owner(), [rawContentGroup, rawVerticalIndicator, rawHorizontalIndicator,
+                                    offsetState, viewportState, contentState,
                                     scrollAxis, sizes = std::move(sizes),
                                     requestRedraw = std::move(requestRedraw)]() mutable {
-    Reactive::Effect([rawContentGroup, offsetState, viewportState, scrollAxis,
+    Reactive::Effect([rawContentGroup, rawVerticalIndicator, rawHorizontalIndicator,
+                      offsetState, viewportState, contentState, scrollAxis,
                       sizes, requestRedraw]() mutable {
       layout::ScrollContentLayout plan = layout::layoutScrollContent(
           scrollAxis, viewportState.get(), offsetState.get(), sizes);
       rawContentGroup->setPosition(Point{-plan.clampedOffset.x, -plan.clampedOffset.y});
+      if (rawVerticalIndicator) {
+        setIndicatorBounds(*rawVerticalIndicator,
+                           layout::makeVerticalIndicator(plan.clampedOffset,
+                                                         viewportState.get(),
+                                                         contentState.get(),
+                                                         rawHorizontalIndicator != nullptr));
+      }
+      if (rawHorizontalIndicator) {
+        setIndicatorBounds(*rawHorizontalIndicator,
+                           layout::makeHorizontalIndicator(plan.clampedOffset,
+                                                           viewportState.get(),
+                                                           contentState.get(),
+                                                           rawVerticalIndicator != nullptr));
+      }
       if (plan.clampedOffset != offsetState.peek()) {
         offsetState = plan.clampedOffset;
       }
@@ -209,7 +288,41 @@ std::unique_ptr<scenegraph::SceneNode> ScrollView::mount(MountContext& ctx) cons
   });
 
   auto interaction = std::make_unique<scenegraph::InteractionData>();
-  interaction->onScroll = [offsetState, viewportState, contentState, scrollAxis](Vec2 delta) {
+  std::function<void()> const scrollRedraw = ctx.redrawCallback();
+  auto revealIndicators = [rawIndicatorOverlay, scrollRedraw] {
+    if (rawIndicatorOverlay) {
+      rawIndicatorOverlay->setOpacity(1.f);
+      if (scrollRedraw) {
+        scrollRedraw();
+      }
+    }
+  };
+
+  auto dragging = std::make_shared<bool>(false);
+  auto downPoint = std::make_shared<Point>();
+  bool const dragScroll = dragScrollEnabled;
+  interaction->onPointerDown = [dragScroll, dragging, downPoint, offsetState](Point point) {
+    if (!dragScroll) {
+      return;
+    }
+    *dragging = true;
+    *downPoint = Point{point.x + offsetState.peek().x, point.y + offsetState.peek().y};
+  };
+  interaction->onPointerUp = [dragging](Point) {
+    *dragging = false;
+  };
+  interaction->onPointerMove =
+      [dragScroll, dragging, downPoint, offsetState, viewportState, contentState,
+       scrollAxis, revealIndicators](Point point) {
+        if (!dragScroll || !*dragging) {
+          return;
+        }
+        Point const next{downPoint->x - point.x, downPoint->y - point.y};
+        offsetState = layout::clampScrollOffset(scrollAxis, next, viewportState.get(), contentState.get());
+        revealIndicators();
+      };
+  interaction->onScroll = [offsetState, viewportState, contentState, scrollAxis,
+                           revealIndicators](Vec2 delta) {
     Point next = offsetState.get();
     if (scrollAxis == ScrollAxis::Vertical || scrollAxis == ScrollAxis::Both) {
       next.y -= delta.y;
@@ -218,6 +331,7 @@ std::unique_ptr<scenegraph::SceneNode> ScrollView::mount(MountContext& ctx) cons
       next.x -= delta.x;
     }
     offsetState = layout::clampScrollOffset(scrollAxis, next, viewportState.get(), contentState.get());
+    revealIndicators();
   };
   viewportNode->setInteraction(std::move(interaction));
 

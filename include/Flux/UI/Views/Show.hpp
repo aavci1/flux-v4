@@ -25,13 +25,25 @@ public:
       , thenFactory_(std::move(thenFactory))
       , elseFactory_(std::move(elseFactory)) {}
 
-  Size measure(MeasureContext&, LayoutConstraints const& constraints,
-               LayoutHints const&, TextSystem&) const {
-    return detail::controlAssignedSize(constraints);
+  Size measure(MeasureContext& ctx, LayoutConstraints const& constraints,
+               LayoutHints const& hints, TextSystem& textSystem) const {
+    ctx.advanceChildSlot();
+    EnvironmentStack& environment = EnvironmentStack::current();
+    std::vector<EnvironmentLayer> const environmentLayers = environment.snapshot();
+    if (detail::readConditionCopy(condition_)) {
+      auto factory = thenFactory_;
+      Element element = detail::invokeElementFactory(factory);
+      return detail::controlMeasureElement(
+          element, environment, environmentLayers, textSystem, constraints, hints);
+    }
+    auto factory = elseFactory_;
+    Element element = detail::invokeElementFactory(factory);
+    return detail::controlMeasureElement(
+        element, environment, environmentLayers, textSystem, constraints, hints);
   }
 
   std::unique_ptr<scenegraph::SceneNode> mount(MountContext& ctx) const {
-    Size const frameSize = detail::controlAssignedSize(ctx.constraints());
+    Size const frameSize{};
     auto group = std::make_unique<scenegraph::GroupNode>(
         Rect{0.f, 0.f, detail::controlFiniteOrZero(frameSize.width),
              detail::controlFiniteOrZero(frameSize.height)});

@@ -41,6 +41,7 @@ Element Checkbox::body() const {
     auto focused = useState(false);
     Reactive::Bindable<bool> const indeterminateBinding = indeterminate;
     Reactive::Bindable<bool> const disabledBinding = disabled;
+    bool const isDisabled = disabledBinding.evaluate();
 
     Color const iconTransparent = Color {checkColor.r, checkColor.g, checkColor.b, 0.f};
 
@@ -109,11 +110,11 @@ Element Checkbox::body() const {
             ),
         }
                      .cursor(disabledBinding.evaluate() ? Cursor::Inherit : Cursor::Hand)
-                     .focusable(!disabledBinding.evaluate())
-                     .onFocus(std::function<void()> {[focused] { focused = true; }})
-                     .onBlur(std::function<void()> {[focused] { focused = false; }})
-                     .onKeyDown(std::function<void(KeyCode, Modifiers)> {handleKey})
-                     .onTap(std::function<void()> {handleToggle}),
+                     .focusable(!isDisabled)
+                     .onFocus(isDisabled ? std::function<void()> {} : std::function<void()> {[focused] { focused = true; }})
+                     .onBlur(isDisabled ? std::function<void()> {} : std::function<void()> {[focused] { focused = false; }})
+                     .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})
+                     .onTap(isDisabled ? std::function<void()> {} : std::function<void()> {handleToggle}),
     };
 }
 

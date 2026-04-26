@@ -4,12 +4,14 @@
 
 #include <Flux/Core/KeyCodes.hpp>
 #include <Flux/UI/Views/TableView.hpp>
+#include <Flux/UI/Views/Badge.hpp>
 #include <Flux/UI/Views/For.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Icon.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/ScrollView.hpp>
 #include <Flux/UI/Views/VStack.hpp>
+#include <Flux/UI/Views/Text.hpp>
 #include <Flux/UI/Views/ZStack.hpp>
 
 namespace flux {
@@ -295,8 +297,15 @@ Element TableCell::body() const {
         return cellContent;
     }
 
+    bool const stretchesContent = cellContent.is<Text>() || cellContent.is<Badge>();
+    if (cellContent.is<Text>()) {
+        Text text = cellContent.as<Text>();
+        text.horizontalAlignment = style.alignment;
+        cellContent = Element {std::move(text)};
+    }
+
     Element aligned = ZStack {
-        .horizontalAlignment = resolveHorizontalAlignment(style.alignment),
+        .horizontalAlignment = stretchesContent ? Alignment::Stretch : resolveHorizontalAlignment(style.alignment),
         .verticalAlignment = Alignment::Center,
         .children = children(std::move(cellContent)),
     };

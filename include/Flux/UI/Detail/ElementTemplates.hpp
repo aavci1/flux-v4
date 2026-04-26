@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Flux/SceneGraph/SceneNode.hpp>
+#include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/MountContext.hpp>
 
 #include <cassert>
@@ -84,6 +85,7 @@ Size Element::Model<C>::measure(MeasureContext& ctx, LayoutConstraints const& co
                 }) {
     return value.measure(ctx, constraints, hints, textSystem);
   } else if constexpr (BodyComponent<C>) {
+    detail::HookLayoutScope const hookScope{constraints};
     Element child{value.body()};
     return child.measure(ctx, constraints, hints, textSystem);
   } else {
@@ -120,6 +122,7 @@ std::unique_ptr<scenegraph::SceneNode> Element::Model<C>::mount(MountContext& ct
     MountContext childCtx{*childScope, ctx.environment(), ctx.textSystem(), ctx.measureContext(),
                           ctx.constraints(), ctx.hints(), ctx.redrawCallback()};
     return Reactive::withOwner(*childScope, [&] {
+      detail::HookLayoutScope const hookScope{ctx.constraints()};
       Element child{value.body()};
       return child.mount(childCtx);
     });
@@ -131,7 +134,8 @@ std::unique_ptr<scenegraph::SceneNode> Element::Model<C>::mount(MountContext& ct
 
 template<typename C>
 Element::Element(C component)
-    : impl_(std::make_shared<Model<C>>(std::move(component))) {}
+    : impl_(std::make_shared<Model<C>>(std::move(component)))
+    , measureId_(detail::nextElementMeasureId()) {}
 
 template<typename T>
 bool Element::is() const noexcept {

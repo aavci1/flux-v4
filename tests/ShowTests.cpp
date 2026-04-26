@@ -11,6 +11,7 @@
 #include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/Show.hpp>
 #include <Flux/UI/Views/Switch.hpp>
+#include <Flux/UI/Views/VStack.hpp>
 
 #include <memory>
 #include <string_view>
@@ -144,6 +145,39 @@ TEST_CASE("Show replaces branches and disposes the inactive scope") {
 
   root.unmount(sceneGraph);
   CHECK(thenDisposed == 2);
+}
+
+TEST_CASE("Show false branch collapses out of stack spacing") {
+  struct Root {
+    flux::Element body() const {
+      return flux::VStack{
+          .spacing = 12.f,
+          .children = flux::children(
+              flux::Element{flux::Rectangle{}}
+                  .size(20.f, 10.f)
+                  .fill(flux::Colors::red),
+              flux::Show(false, [] {
+                return flux::Element{flux::Rectangle{}}
+                    .size(20.f, 10.f)
+                    .fill(flux::Colors::blue);
+              })),
+      };
+    }
+  };
+
+  FakeTextSystem textSystem;
+  flux::scenegraph::SceneGraph sceneGraph;
+  flux::MountRoot root{
+      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{}),
+      textSystem,
+      testEnvironment(),
+      flux::Size{100.f, 100.f},
+  };
+
+  root.mount(sceneGraph);
+
+  auto const& group = rootGroup(sceneGraph);
+  REQUIRE(group.children().size() == 1);
 }
 
 TEST_CASE("Switch replaces scopes when the selected case changes") {

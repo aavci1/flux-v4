@@ -260,6 +260,24 @@ TEST_CASE("ScrollLayout: scroll child constraints clear minimum size on the scro
   CHECK(std::isinf(horizontal.maxWidth));
 }
 
+TEST_CASE("ScrollLayout: measured viewport honors fixed minimum constraints") {
+  LayoutConstraints constraints{};
+  constraints.minWidth = 120.f;
+  constraints.minHeight = 300.f;
+  constraints.maxWidth = 120.f;
+  constraints.maxHeight = 300.f;
+
+  Size const vertical = resolveMeasuredScrollViewSize(
+      ScrollAxis::Vertical, Size{80.f, 90.f}, constraints);
+  CHECK(vertical.width == doctest::Approx(120.f));
+  CHECK(vertical.height == doctest::Approx(300.f));
+
+  Size const both = resolveMeasuredScrollViewSize(
+      ScrollAxis::Both, Size{80.f, 90.f}, constraints);
+  CHECK(both.width == doctest::Approx(120.f));
+  CHECK(both.height == doctest::Approx(300.f));
+}
+
 TEST_CASE("ScrollLayout: indicator metrics track scroll progress") {
   Size const viewport{120.f, 80.f};
   Size const content{120.f, 240.f};

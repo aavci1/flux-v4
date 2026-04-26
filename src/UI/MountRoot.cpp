@@ -5,6 +5,7 @@
 #include <Flux/SceneGraph/SceneGraph.hpp>
 #include <Flux/UI/Detail/LayoutDebugDump.hpp>
 #include <Flux/UI/Element.hpp>
+#include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/MeasureContext.hpp>
 #include <Flux/UI/MountContext.hpp>
 
@@ -69,6 +70,7 @@ void MountRoot::mount(scenegraph::SceneGraph& sceneGraph) {
                        rootConstraints(viewportSize_), LayoutHints{}, requestRedraw_};
 
   auto node = Reactive::withOwner(rootScope_, [&] {
+    detail::HookLayoutScope const hookScope{rootConstraints(viewportSize_)};
     Element rootElement = root_->makeElement();
     return rootElement.mount(context);
   });

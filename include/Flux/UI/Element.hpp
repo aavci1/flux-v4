@@ -15,6 +15,7 @@
 #include <Flux/UI/MeasureContext.hpp>
 
 #include <functional>
+#include <cstdint>
 #include <cstring>
 #include <memory>
 #include <optional>
@@ -48,6 +49,9 @@ struct Image;
 namespace scenegraph {
 class SceneNode;
 }
+namespace detail {
+std::uint64_t nextElementMeasureId();
+} // namespace detail
 
 template<typename>
 inline constexpr bool alwaysFalse = false;
@@ -81,6 +85,7 @@ public:
   Element& operator=(Element&&) noexcept = default;
 
   Size measure(MeasureContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints, TextSystem& textSystem) const;
+  [[nodiscard]] std::uint64_t measureId() const noexcept { return measureId_; }
   std::unique_ptr<scenegraph::SceneNode> mount(MountContext& ctx) const;
   [[nodiscard]] ElementType typeTag() const noexcept { return impl_ ? impl_->elementType() : ElementType::Unknown; }
   [[nodiscard]] detail::ElementModifiers const* modifiers() const noexcept {
@@ -197,6 +202,7 @@ private:
   std::optional<EnvironmentLayer> envLayer_;
   std::shared_ptr<detail::ElementModifiers> modifiers_;
   std::optional<std::string> key_{};
+  std::uint64_t measureId_{};
 
   void ensureUniqueImpl();
   detail::ElementModifiers& writableModifiers();

@@ -55,10 +55,11 @@ bool finiteHeightIsConstrained(LayoutConstraints const& constraints, LayoutHints
 
 std::vector<layout::StackMainAxisChild> stackChildrenForAxis(std::vector<Element> const& children,
                                                              std::vector<Size> const& sizes,
+                                                             std::vector<std::size_t> const& indices,
                                                              layout::StackAxis axis) {
   std::vector<layout::StackMainAxisChild> stackChildren;
-  stackChildren.reserve(children.size());
-  for (std::size_t i = 0; i < children.size(); ++i) {
+  stackChildren.reserve(indices.size());
+  for (std::size_t const i : indices) {
     float const naturalMainSize = axis == layout::StackAxis::Vertical ? sizes[i].height : sizes[i].width;
     stackChildren.push_back(layout::StackMainAxisChild{
         .naturalMainSize = naturalMainSize,
@@ -69,6 +70,36 @@ std::vector<layout::StackMainAxisChild> stackChildrenForAxis(std::vector<Element
     });
   }
   return stackChildren;
+}
+
+bool collapsedStackChild(Element const& child, Size size) {
+  return size.width <= layout::kFlexEpsilon &&
+         size.height <= layout::kFlexEpsilon &&
+         child.flexGrow() <= layout::kFlexEpsilon &&
+         !child.flexBasis().has_value() &&
+         child.minMainSize() <= layout::kFlexEpsilon;
+}
+
+std::vector<std::size_t> activeStackIndices(std::vector<Element> const& children,
+                                            std::vector<Size> const& sizes) {
+  std::vector<std::size_t> indices;
+  indices.reserve(children.size());
+  for (std::size_t i = 0; i < children.size(); ++i) {
+    if (!collapsedStackChild(children[i], sizes[i])) {
+      indices.push_back(i);
+    }
+  }
+  return indices;
+}
+
+std::vector<Size> sizesForIndices(std::vector<Size> const& sizes,
+                                  std::vector<std::size_t> const& indices) {
+  std::vector<Size> active;
+  active.reserve(indices.size());
+  for (std::size_t const index : indices) {
+    active.push_back(sizes[index]);
+  }
+  return active;
 }
 
 void rewindMeasuredChildren(MeasureContext& ctx) {
@@ -113,10 +144,12 @@ Size VStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
   for (std::size_t i = 0; i < children.size(); ++i) {
     sizes.push_back(measureChild(children[i], ctx, childConstraints, childHints, textSystem));
   }
+  std::vector<std::size_t> const activeIndices = activeStackIndices(children, sizes);
+  std::vector<Size> const activeSizes = sizesForIndices(sizes, activeIndices);
 
   std::vector<layout::StackMainAxisChild> stackChildren =
-      stackChildrenForAxis(children, sizes, layout::StackAxis::Vertical);
-  if (!heightConstrained && !children.empty()) {
+      stackChildrenForAxis(children, sizes, activeIndices, layout::StackAxis::Vertical);
+  if (!heightConstrained && !activeIndices.empty()) {
     layout::warnFlexGrowIfParentMainAxisUnconstrained(children, heightConstrained);
   }
 
@@ -124,7 +157,7 @@ Size VStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
       layout::layoutStackMainAxis(stackChildren, spacing, assignedHeight, heightConstrained,
                                   justifyContent);
   layout::StackLayoutResult layoutResult =
-      layout::layoutStack(layout::StackAxis::Vertical, alignment, sizes, mainLayout.mainSizes,
+      layout::layoutStack(layout::StackAxis::Vertical, alignment, activeSizes, mainLayout.mainSizes,
                           mainLayout.itemSpacing, mainLayout.containerMainSize,
                           mainLayout.startOffset, assignedWidth, widthAssigned);
   layoutResult.containerSize.width = std::max(layoutResult.containerSize.width, constraints.minWidth);
@@ -166,8 +199,10 @@ Size HStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
   }
 
   std::vector<layout::StackMainAxisChild> stackChildren =
-      stackChildrenForAxis(children, initialSizes, layout::StackAxis::Horizontal);
-  if (!widthConstrained && !children.empty()) {
+      stackChildrenForAxis(children, initialSizes, activeStackIndices(children, initialSizes),
+                           layout::StackAxis::Horizontal);
+  std::vector<std::size_t> const activeIndices = activeStackIndices(children, initialSizes);
+  if (!widthConstrained && !activeIndices.empty()) {
     layout::warnFlexGrowIfParentMainAxisUnconstrained(children, widthConstrained);
   }
 
@@ -180,19 +215,20 @@ Size HStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
   LayoutHints rowHints{};
   rowHints.hStackCrossAlign = alignment;
   std::vector<Size> rowSizes;
-  rowSizes.reserve(children.size());
+  rowSizes.reserve(activeIndices.size());
   float rowInnerHeight = 0.f;
-  for (std::size_t i = 0; i < children.size(); ++i) {
+  for (std::size_t layoutIndex = 0; layoutIndex < activeIndices.size(); ++layoutIndex) {
+    std::size_t const childIndex = activeIndices[layoutIndex];
     LayoutConstraints childMeasure = constraints;
     childMeasure.minWidth = 0.f;
     childMeasure.minHeight = 0.f;
-    childMeasure.maxWidth = i < mainLayout.mainSizes.size()
-                                ? mainLayout.mainSizes[i]
+    childMeasure.maxWidth = layoutIndex < mainLayout.mainSizes.size()
+                                ? mainLayout.mainSizes[layoutIndex]
                                 : std::numeric_limits<float>::infinity();
     childMeasure.maxHeight = stretchCrossAxis ? assignedHeight
                                               : std::numeric_limits<float>::infinity();
     layout::clampLayoutMinToMax(childMeasure);
-    Size const size = measureChild(children[i], ctx, childMeasure, rowHints, textSystem);
+    Size const size = measureChild(children[childIndex], ctx, childMeasure, rowHints, textSystem);
     rowSizes.push_back(size);
     rowInnerHeight = std::max(rowInnerHeight, size.height);
   }

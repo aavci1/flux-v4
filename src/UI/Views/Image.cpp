@@ -34,6 +34,10 @@ Size resolveFrame(Size natural, LayoutConstraints const& constraints) {
   if (size.height <= 0.f && std::isfinite(constraints.maxHeight)) {
     size.height = constraints.maxHeight;
   }
+  if (std::isfinite(constraints.maxWidth) && constraints.maxWidth > 0.f &&
+      std::isfinite(constraints.maxHeight) && constraints.maxHeight > 0.f) {
+    size.width = constraints.maxWidth;
+  }
 
   if (std::isfinite(constraints.maxWidth)) {
     size.width = std::min(size.width, constraints.maxWidth);

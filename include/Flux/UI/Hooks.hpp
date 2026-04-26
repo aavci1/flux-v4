@@ -9,13 +9,48 @@
 #include <Flux/Reactive/Effect.hpp>
 #include <Flux/Reactive/Signal.hpp>
 #include <Flux/UI/Environment.hpp>
+#include <Flux/UI/LayoutEngine.hpp>
 #include <Flux/UI/Theme.hpp>
 
+#include <cmath>
 #include <utility>
 #include <functional>
+#include <optional>
 #include <string>
+#include <vector>
 
 namespace flux {
+
+namespace detail {
+
+inline std::vector<LayoutConstraints>& hookLayoutConstraintStack() {
+  static thread_local std::vector<LayoutConstraints> stack;
+  return stack;
+}
+
+class HookLayoutScope {
+public:
+  explicit HookLayoutScope(LayoutConstraints constraints) {
+    hookLayoutConstraintStack().push_back(constraints);
+  }
+
+  HookLayoutScope(HookLayoutScope const&) = delete;
+  HookLayoutScope& operator=(HookLayoutScope const&) = delete;
+
+  ~HookLayoutScope() {
+    auto& stack = hookLayoutConstraintStack();
+    if (!stack.empty()) {
+      stack.pop_back();
+    }
+  }
+};
+
+inline LayoutConstraints const* currentHookLayoutConstraints() {
+  auto& stack = hookLayoutConstraintStack();
+  return stack.empty() ? nullptr : &stack.back();
+}
+
+} // namespace detail
 
 template<typename T>
 T const& environmentFallback() {
@@ -98,8 +133,24 @@ inline bool useKeyboardFocus() { return false; }
 inline bool useHover() { return false; }
 inline bool usePress() { return false; }
 
+inline LayoutConstraints const* useLayoutConstraints() {
+  return detail::currentHookLayoutConstraints();
+}
+
 inline Rect useBounds() {
-  return Rect{0.f, 0.f, 1280.f, 980.f};
+  LayoutConstraints const* constraints = useLayoutConstraints();
+  if (!constraints) {
+    return {};
+  }
+
+  Rect bounds{};
+  if (std::isfinite(constraints->maxWidth) && constraints->maxWidth > 0.f) {
+    bounds.width = constraints->maxWidth;
+  }
+  if (std::isfinite(constraints->maxHeight) && constraints->maxHeight > 0.f) {
+    bounds.height = constraints->maxHeight;
+  }
+  return bounds;
 }
 
 inline void useViewAction(std::string const& name, std::function<void()> handler,

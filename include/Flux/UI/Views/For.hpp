@@ -38,13 +38,47 @@ public:
       , spacing_(spacing)
       , alignment_(alignment) {}
 
-  Size measure(MeasureContext&, LayoutConstraints const& constraints,
-               LayoutHints const&, TextSystem&) const {
-    return detail::controlAssignedSize(constraints);
+  Size measure(MeasureContext& ctx, LayoutConstraints const& constraints,
+               LayoutHints const&, TextSystem& textSystem) const {
+    ctx.advanceChildSlot();
+    EnvironmentStack& environment = EnvironmentStack::current();
+    std::vector<EnvironmentLayer> const environmentLayers = environment.snapshot();
+    Items const items = items_.get();
+    LayoutConstraints childConstraints = constraints;
+    childConstraints.minWidth = 0.f;
+    childConstraints.minHeight = 0.f;
+    childConstraints.maxHeight = std::numeric_limits<float>::infinity();
+    LayoutHints childHints{};
+    childHints.vStackCrossAlign = alignment_;
+
+    float width = 0.f;
+    float height = 0.f;
+    for (std::size_t index = 0; index < items.size(); ++index) {
+      Reactive::Signal<std::size_t> indexSignal{index};
+      auto factory = factory_;
+      Element element = detail::invokeForFactory(factory, items[index], indexSignal);
+      Size const measured = detail::controlMeasureElement(
+          element, environment, environmentLayers, textSystem, childConstraints, childHints);
+      width = std::max(width, measured.width);
+      height += measured.height;
+      if (index + 1 < items.size()) {
+        height += spacing_;
+      }
+    }
+
+    width = std::max(width, constraints.minWidth);
+    height = std::max(height, constraints.minHeight);
+    if (std::isfinite(constraints.maxWidth)) {
+      width = std::min(width, constraints.maxWidth);
+    }
+    if (std::isfinite(constraints.maxHeight)) {
+      height = std::min(height, constraints.maxHeight);
+    }
+    return Size{width, height};
   }
 
   std::unique_ptr<scenegraph::SceneNode> mount(MountContext& ctx) const {
-    Size const frameSize = detail::controlAssignedSize(ctx.constraints());
+    Size const frameSize{};
     auto group = std::make_unique<scenegraph::GroupNode>(
         Rect{0.f, 0.f, detail::controlFiniteOrZero(frameSize.width),
              detail::controlFiniteOrZero(frameSize.height)});

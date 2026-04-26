@@ -90,6 +90,18 @@ Size Element::measureWithModifiersImpl(MeasureContext& ctx, LayoutConstraints co
   if (height > 0.f) {
     sz.height = height;
   }
+  if (width <= 0.f) {
+    sz.width = std::max(sz.width, constraints.minWidth);
+  }
+  if (height <= 0.f) {
+    sz.height = std::max(sz.height, constraints.minHeight);
+  }
+  if (width <= 0.f && std::isfinite(constraints.maxWidth)) {
+    sz.width = std::min(sz.width, constraints.maxWidth);
+  }
+  if (height <= 0.f && std::isfinite(constraints.maxHeight)) {
+    sz.height = std::min(sz.height, constraints.maxHeight);
+  }
   return sz;
 }
 
@@ -107,6 +119,7 @@ Size Element::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
     EnvironmentStack::current().pop();
   }
   ctx.setCurrentElement(prevEl);
+  layoutDebugRecordMeasure(measureId_, constraints, sz);
 #ifndef NDEBUG
   assert(std::isfinite(sz.width) && std::isfinite(sz.height));
   assert(sz.width >= 0.f && sz.height >= 0.f);

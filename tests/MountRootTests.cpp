@@ -4,11 +4,17 @@
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Reactive/Signal.hpp>
 #include <Flux/SceneGraph/GroupNode.hpp>
+#include <Flux/SceneGraph/InteractionData.hpp>
 #include <Flux/SceneGraph/RectNode.hpp>
 #include <Flux/SceneGraph/SceneGraph.hpp>
+#include <Flux/UI/MeasureContext.hpp>
 #include <Flux/UI/MountRoot.hpp>
+#include <Flux/UI/MountContext.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
+#include <Flux/UI/Views/ScrollView.hpp>
+#include <Flux/UI/Views/TextInput.hpp>
+#include <Flux/UI/Views/VStack.hpp>
 #include <Flux/UI/Views/ZStack.hpp>
 
 #include <memory>
@@ -65,6 +71,19 @@ flux::Color solidColor(flux::scenegraph::RectNode const& rect) {
   return color;
 }
 
+struct IntrinsicBox {
+  flux::Size measure(flux::MeasureContext& ctx, flux::LayoutConstraints const&,
+                     flux::LayoutHints const&, flux::TextSystem&) const {
+    ctx.advanceChildSlot();
+    return {24.f, 12.f};
+  }
+
+  std::unique_ptr<flux::scenegraph::SceneNode> mount(flux::MountContext&) const {
+    return std::make_unique<flux::scenegraph::RectNode>(
+        flux::Rect{0.f, 0.f, 24.f, 12.f});
+  }
+};
+
 } // namespace
 
 TEST_CASE("MountRoot mounts a static root once") {
@@ -98,6 +117,105 @@ TEST_CASE("MountRoot mounts a static root once") {
   auto const& rect = static_cast<flux::scenegraph::RectNode const&>(sceneGraph.root());
   CHECK(rect.size() == flux::Size{20.f, 30.f});
   CHECK(solidColor(rect) == flux::Colors::red);
+}
+
+TEST_CASE("modifier envelopes honor fixed viewport constraints") {
+  struct Root {
+    flux::Element body() const {
+      return flux::Element{IntrinsicBox{}}
+          .onTap([] {});
+    }
+  };
+
+  FakeTextSystem textSystem;
+  flux::scenegraph::SceneGraph sceneGraph;
+  flux::MountRoot root{
+      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{}),
+      textSystem,
+      testEnvironment(),
+      flux::Size{200.f, 100.f},
+  };
+
+  root.mount(sceneGraph);
+
+  REQUIRE(sceneGraph.root().kind() == flux::scenegraph::SceneNodeKind::Rect);
+  CHECK(sceneGraph.root().size() == flux::Size{200.f, 100.f});
+  REQUIRE(sceneGraph.root().children().size() == 1);
+  CHECK(sceneGraph.root().children()[0]->size() == flux::Size{24.f, 12.f});
+}
+
+TEST_CASE("TextInput fills finite assigned stack width") {
+  struct Root {
+    flux::Element body() const {
+      auto value = flux::useState(std::string{"hello"});
+      return flux::VStack{
+          .alignment = flux::Alignment::Start,
+          .children = flux::children(flux::TextInput{
+              .value = value,
+              .multiline = true,
+              .multilineHeight = {.fixed = 40.f},
+          }),
+      };
+    }
+  };
+
+  FakeTextSystem textSystem;
+  flux::scenegraph::SceneGraph sceneGraph;
+  flux::MountRoot root{
+      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{}),
+      textSystem,
+      testEnvironment(),
+      flux::Size{180.f, 100.f},
+  };
+
+  root.mount(sceneGraph);
+
+  REQUIRE(sceneGraph.root().kind() == flux::scenegraph::SceneNodeKind::Group);
+  REQUIRE(sceneGraph.root().children().size() == 1);
+  CHECK(sceneGraph.root().children()[0]->size().width == doctest::Approx(180.f));
+}
+
+TEST_CASE("ScrollView mount emits overlay indicators for overflowing content") {
+  struct Root {
+    flux::Element body() const {
+      return flux::ScrollView{
+          .axis = flux::ScrollAxis::Vertical,
+          .children = flux::children(
+              flux::Rectangle{}.size(60.f, 30.f),
+              flux::Rectangle{}.size(60.f, 30.f)),
+      };
+    }
+  };
+
+  FakeTextSystem textSystem;
+  flux::scenegraph::SceneGraph sceneGraph;
+  flux::MountRoot root{
+      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{}),
+      textSystem,
+      testEnvironment(),
+      flux::Size{80.f, 40.f},
+  };
+
+  root.mount(sceneGraph);
+
+  REQUIRE(sceneGraph.root().kind() == flux::scenegraph::SceneNodeKind::Rect);
+  auto const& viewport = static_cast<flux::scenegraph::RectNode const&>(sceneGraph.root());
+  CHECK(viewport.clipsContents());
+  REQUIRE(viewport.children().size() == 2);
+  REQUIRE(viewport.children()[0]->kind() == flux::scenegraph::SceneNodeKind::Group);
+  REQUIRE(viewport.children()[1]->kind() == flux::scenegraph::SceneNodeKind::Rect);
+
+  auto const& overlay = static_cast<flux::scenegraph::RectNode const&>(*viewport.children()[1]);
+  CHECK(overlay.opacity() == doctest::Approx(0.f));
+  REQUIRE(overlay.children().size() == 1);
+  CHECK(overlay.children()[0]->bounds().x == doctest::Approx(73.f));
+
+  REQUIRE(viewport.interaction() != nullptr);
+  REQUIRE(viewport.interaction()->onScroll);
+  viewport.interaction()->onScroll(flux::Vec2{0.f, -12.f});
+
+  CHECK(viewport.children()[0]->position().y == doctest::Approx(-12.f));
+  CHECK(overlay.opacity() == doctest::Approx(1.f));
 }
 
 TEST_CASE("MountRoot keeps Bindable effects scoped to the mount") {

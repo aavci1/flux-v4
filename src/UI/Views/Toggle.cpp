@@ -101,8 +101,8 @@ Element Toggle::body() const {
         }
                      .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
                      .focusable(!isDisabled)
-                     .onFocus(std::function<void()> {[focused] { focused = true; }})
-                     .onBlur(std::function<void()> {[focused] { focused = false; }})
+                     .onFocus(isDisabled ? std::function<void()> {} : std::function<void()> {[focused] { focused = true; }})
+                     .onBlur(isDisabled ? std::function<void()> {} : std::function<void()> {[focused] { focused = false; }})
                      .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})
                      .onTap(isDisabled ? std::function<void()> {} : std::function<void()> {handleToggle}),
     };
