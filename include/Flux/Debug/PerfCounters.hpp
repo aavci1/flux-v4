@@ -25,6 +25,17 @@ enum class ValueEqualsBranch : std::uint8_t {
   Fallthrough,
 };
 
+enum class StructuralFailReason : std::uint8_t {
+  Value,
+  FlexGrow,
+  FlexShrink,
+  FlexBasis,
+  MinMainSize,
+  Key,
+  Environment,
+  Modifiers,
+};
+
 struct BuildCounters {
   std::uint64_t resolvedNodes = 0;
   std::uint64_t materializedNodes = 0;
@@ -64,6 +75,18 @@ struct ValueEqualsCounters {
   std::uint64_t fallthrough = 0;
 };
 
+struct StructuralFailCounters {
+  std::uint64_t value = 0;
+  std::uint64_t flexGrow = 0;
+  std::uint64_t flexShrink = 0;
+  std::uint64_t flexBasis = 0;
+  std::uint64_t minMainSize = 0;
+  std::uint64_t key = 0;
+  std::uint64_t environment = 0;
+  std::uint64_t modifiers = 0;
+  std::uint64_t pass = 0;
+};
+
 namespace detail {
 
 struct IntervalCounters {
@@ -74,6 +97,7 @@ struct IntervalCounters {
   ComponentKeyCounters componentKeys{};
   CompositeBodyCounters compositeBodies{};
   ValueEqualsCounters valueEquals{};
+  StructuralFailCounters structuralFail{};
   std::uint64_t preparedPrepareCalls = 0;
   std::uint64_t preparedReplayCalls = 0;
   std::array<std::uint64_t, static_cast<std::size_t>(TimedMetric::Count)> durationsNs{};
@@ -86,6 +110,7 @@ struct IntervalCounters {
     componentKeys = {};
     compositeBodies = {};
     valueEquals = {};
+    structuralFail = {};
     preparedPrepareCalls = 0;
     preparedReplayCalls = 0;
     durationsNs.fill(0);
@@ -124,6 +149,7 @@ inline void logIfReady() {
       "skipBlocked dirty=%llu modifier=%llu geometry=%llu "
       "body rebuild=%llu(%.1f/f) compare=%llu stable=%llu legacyMiss=%llu "
       "valueEquals eq=%llu memcmp=%llu fallthrough=%llu "
+      "structuralFail value=%llu flexGrow=%llu flexShrink=%llu flexBasis=%llu minMainSize=%llu key=%llu environment=%llu modifiers=%llu pass=%llu "
       "ck copy=%llu/%lluid append=%llu/%lluid hash=%llu/%lluid eq=%llu/%lluid prefix=%llu/%lluid grow=%llu "
       "prepare=%llu(%.2f/f) replay=%llu(%.2f/f) "
       "ms reactive=%.2f(%.2f/f) incremental=%.2f(%.2f/f) render=%.2f(%.2f/f) present=%.2f(%.2f/f) drawableWait=%.2f(%.2f/f) frameBudget=%.2f(%.2f/f)\n",
@@ -151,6 +177,15 @@ inline void logIfReady() {
       static_cast<unsigned long long>(interval.valueEquals.equalityComparable),
       static_cast<unsigned long long>(interval.valueEquals.triviallyCopyable),
       static_cast<unsigned long long>(interval.valueEquals.fallthrough),
+      static_cast<unsigned long long>(interval.structuralFail.value),
+      static_cast<unsigned long long>(interval.structuralFail.flexGrow),
+      static_cast<unsigned long long>(interval.structuralFail.flexShrink),
+      static_cast<unsigned long long>(interval.structuralFail.flexBasis),
+      static_cast<unsigned long long>(interval.structuralFail.minMainSize),
+      static_cast<unsigned long long>(interval.structuralFail.key),
+      static_cast<unsigned long long>(interval.structuralFail.environment),
+      static_cast<unsigned long long>(interval.structuralFail.modifiers),
+      static_cast<unsigned long long>(interval.structuralFail.pass),
       static_cast<unsigned long long>(interval.componentKeys.copies),
       static_cast<unsigned long long>(interval.componentKeys.copiedIds),
       static_cast<unsigned long long>(interval.componentKeys.appends),
@@ -244,6 +279,46 @@ inline void recordValueEqualsHit(ValueEqualsBranch branch) {
     ++counters.fallthrough;
     break;
   }
+}
+
+inline void recordStructuralFail(StructuralFailReason reason) {
+  if (!enabled()) {
+    return;
+  }
+  auto& counters = detail::counters().structuralFail;
+  switch (reason) {
+  case StructuralFailReason::Value:
+    ++counters.value;
+    break;
+  case StructuralFailReason::FlexGrow:
+    ++counters.flexGrow;
+    break;
+  case StructuralFailReason::FlexShrink:
+    ++counters.flexShrink;
+    break;
+  case StructuralFailReason::FlexBasis:
+    ++counters.flexBasis;
+    break;
+  case StructuralFailReason::MinMainSize:
+    ++counters.minMainSize;
+    break;
+  case StructuralFailReason::Key:
+    ++counters.key;
+    break;
+  case StructuralFailReason::Environment:
+    ++counters.environment;
+    break;
+  case StructuralFailReason::Modifiers:
+    ++counters.modifiers;
+    break;
+  }
+}
+
+inline void recordStructuralPass() {
+  if (!enabled()) {
+    return;
+  }
+  ++detail::counters().structuralFail.pass;
 }
 
 inline void recordPreparedPrepareCall() {

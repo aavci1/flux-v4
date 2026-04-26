@@ -370,14 +370,40 @@ inline bool environmentStructurallyEqual(Element const& lhs, Element const& rhs)
 } // namespace detail
 
 inline bool Element::structuralEquals(Element const& other) const noexcept {
-  return valueEquals(other) &&
-         flexGrowOverride_ == other.flexGrowOverride_ &&
-         flexShrinkOverride_ == other.flexShrinkOverride_ &&
-         flexBasisOverride_ == other.flexBasisOverride_ &&
-         minMainSizeOverride_ == other.minMainSizeOverride_ &&
-         key_ == other.key_ &&
-         detail::environmentStructurallyEqual(*this, other) &&
-         detail::modifiersStructurallyEqual(*this, other);
+  if (!valueEquals(other)) {
+    debug::perf::recordStructuralFail(debug::perf::StructuralFailReason::Value);
+    return false;
+  }
+  if (flexGrowOverride_ != other.flexGrowOverride_) {
+    debug::perf::recordStructuralFail(debug::perf::StructuralFailReason::FlexGrow);
+    return false;
+  }
+  if (flexShrinkOverride_ != other.flexShrinkOverride_) {
+    debug::perf::recordStructuralFail(debug::perf::StructuralFailReason::FlexShrink);
+    return false;
+  }
+  if (flexBasisOverride_ != other.flexBasisOverride_) {
+    debug::perf::recordStructuralFail(debug::perf::StructuralFailReason::FlexBasis);
+    return false;
+  }
+  if (minMainSizeOverride_ != other.minMainSizeOverride_) {
+    debug::perf::recordStructuralFail(debug::perf::StructuralFailReason::MinMainSize);
+    return false;
+  }
+  if (key_ != other.key_) {
+    debug::perf::recordStructuralFail(debug::perf::StructuralFailReason::Key);
+    return false;
+  }
+  if (!detail::environmentStructurallyEqual(*this, other)) {
+    debug::perf::recordStructuralFail(debug::perf::StructuralFailReason::Environment);
+    return false;
+  }
+  if (!detail::modifiersStructurallyEqual(*this, other)) {
+    debug::perf::recordStructuralFail(debug::perf::StructuralFailReason::Modifiers);
+    return false;
+  }
+  debug::perf::recordStructuralPass();
+  return true;
 }
 
 inline bool elementsStructurallyEqual(std::vector<Element> const& lhs,
