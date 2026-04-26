@@ -175,12 +175,24 @@ Validation:
 
 ## Stage 8 — Examples Migration
 
-- [ ] All examples build.
-- [ ] All examples launch and pass visual smoke tests.
-- [ ] Per-example idle CPU is below target and recorded.
-- [ ] ASAN example checks pass.
+- [x] All examples build.
+- [x] All examples launch and pass visual smoke tests.
+- [x] Per-example idle CPU is below target and recorded.
+- [x] ASAN example checks pass.
 
-Gate status: pending.
+Gate status: passed on 2026-04-26.
+
+Validation:
+- Current repository example count: 28 `examples/*/main.cpp` entry points.
+- Normal Stage 8 configure/build: `cmake -S . -B build-stage8 -DFLUX_BUILD_TESTS=ON -DFLUX_BUILD_EXAMPLES=ON -DFLUX_BUILD_BENCHMARKS=OFF -DCMAKE_BUILD_TYPE=RelWithDebInfo` and `cmake --build build-stage8` passed.
+- Normal Stage 8 tests: `ctest --test-dir build-stage8 --output-on-failure` passed (`flux_tests`, `flux_reactive2_tests`).
+- All 28 example binaries launched, ran through a smoke window, and exited cleanly after termination.
+- Warm idle CPU sampling for all 28 examples averaged `0.00%` after startup warm-up; per-example values are recorded in `optimization-attempts.md`.
+- ASAN Stage 8 configure/build: `cmake -S . -B build-stage8-asan -DFLUX_BUILD_TESTS=ON -DFLUX_BUILD_EXAMPLES=ON -DFLUX_BUILD_BENCHMARKS=OFF -DFLUX_ENABLE_ASAN=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo` and `cmake --build build-stage8-asan` passed.
+- ASAN Stage 8 tests: `ctest --test-dir build-stage8-asan --output-on-failure` passed.
+- All 28 ASAN example binaries launched and exited cleanly after termination.
+- `git diff --check` passed.
+- `git grep -n -E "StateStore|BuildOrchestrator|MeasuredBuild|markCompositeDirty|buildMeasured|expandsBody|resolveCompositeBody|reactiveDirty|markReactiveDirty|structuralEquals" -- include src tests` returned zero hits.
 
 ## Stage 9 — Cleanup, Perf Validation, Release
 
