@@ -2,8 +2,8 @@
 
 #include <Flux/Detail/RootHolder.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
-#include <Flux/Reactive2/Scope.hpp>
-#include <Flux/Reactive2/Signal.hpp>
+#include <Flux/Reactive/Scope.hpp>
+#include <Flux/Reactive/Signal.hpp>
 #include <Flux/SceneGraph/GroupNode.hpp>
 #include <Flux/SceneGraph/RectNode.hpp>
 #include <Flux/SceneGraph/SceneGraph.hpp>
@@ -70,7 +70,7 @@ flux::scenegraph::GroupNode const& rootGroup(flux::scenegraph::SceneGraph const&
 
 TEST_CASE("For preserves row scopes and scene nodes across reorder") {
   struct Root {
-    flux::Reactive2::Signal<std::vector<int>> items;
+    flux::Reactive::Signal<std::vector<int>> items;
     int* created = nullptr;
     int* disposed = nullptr;
 
@@ -79,19 +79,19 @@ TEST_CASE("For preserves row scopes and scene nodes across reorder") {
           items,
           [](int value) { return value; },
           [created = created, disposed = disposed](int value,
-                                                   flux::Reactive2::Signal<std::size_t> index) {
+                                                   flux::Reactive::Signal<std::size_t> index) {
             auto local = flux::useState(value * 10);
             (void)local;
             ++*created;
-            flux::Reactive2::onCleanup([disposed] {
+            flux::Reactive::onCleanup([disposed] {
               ++*disposed;
             });
 
-            flux::Reactive2::Bindable<float> width{[index] {
+            flux::Reactive::Bindable<float> width{[index] {
               return 20.f + static_cast<float>(index.get());
             }};
             return flux::Element{flux::Rectangle{}}
-                .size(std::move(width), flux::Reactive2::Bindable<float>{8.f})
+                .size(std::move(width), flux::Reactive::Bindable<float>{8.f})
                 .fill(flux::Colors::blue);
           },
           2.f);
@@ -100,7 +100,7 @@ TEST_CASE("For preserves row scopes and scene nodes across reorder") {
 
   int created = 0;
   int disposed = 0;
-  flux::Reactive2::Signal<std::vector<int>> items{{1, 2, 3}};
+  flux::Reactive::Signal<std::vector<int>> items{{1, 2, 3}};
   FakeTextSystem textSystem;
   flux::scenegraph::SceneGraph sceneGraph;
   flux::MountRoot root{

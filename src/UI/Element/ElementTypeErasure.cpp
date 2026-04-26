@@ -1,6 +1,6 @@
 #include <Flux/UI/Element.hpp>
 
-#include <Flux/Reactive2/Effect.hpp>
+#include <Flux/Reactive/Effect.hpp>
 #include <Flux/SceneGraph/RectNode.hpp>
 #include <Flux/SceneGraph/SceneNode.hpp>
 #include <Flux/UI/MountContext.hpp>
@@ -64,7 +64,7 @@ private:
 };
 
 template<typename T, typename Setter>
-void installBinding(MountContext& ctx, Reactive2::Bindable<T> binding, Setter setter) {
+void installBinding(MountContext& ctx, Reactive::Bindable<T> binding, Setter setter) {
   EnvironmentStack* environment = &ctx.environment();
   std::vector<EnvironmentLayer> environmentLayers = environment->snapshot();
   if (!binding.isReactive()) {
@@ -74,8 +74,8 @@ void installBinding(MountContext& ctx, Reactive2::Bindable<T> binding, Setter se
   }
 
   std::function<void()> requestRedraw = ctx.redrawCallback();
-  Reactive2::withOwner(ctx.owner(), [&] {
-    Reactive2::Effect([binding = std::move(binding), setter = std::move(setter),
+  Reactive::withOwner(ctx.owner(), [&] {
+    Reactive::Effect([binding = std::move(binding), setter = std::move(setter),
                        requestRedraw = std::move(requestRedraw), environment,
                        environmentLayers = std::move(environmentLayers)]() mutable {
       ScopedEnvironmentSnapshot environmentScope{*environment, environmentLayers};

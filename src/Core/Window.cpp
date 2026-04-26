@@ -7,7 +7,7 @@
 #include <Flux/Detail/RootHolder.hpp>
 #include <Flux/Detail/Runtime.hpp>
 #include <Flux/Graphics/Canvas.hpp>
-#include <Flux/Reactive2/Signal.hpp>
+#include <Flux/Reactive/Signal.hpp>
 #include <Flux/SceneGraph/SceneGraph.hpp>
 #include <Flux/SceneGraph/SceneRenderer.hpp>
 #include <Flux/UI/Overlay.hpp>
@@ -37,7 +37,7 @@ struct Window::Impl {
   TextCacheRingBuffer textCacheRing_{};
   std::unique_ptr<Runtime> runtime_;
   std::unordered_map<std::string, ActionDescriptor> actions_;
-  Reactive2::Signal<Theme> themeSignal_{Theme::light()};
+  Reactive::Signal<Theme> themeSignal_{Theme::light()};
   EnvironmentLayer windowEnvironment_{};
 
   explicit Impl(Window&) {

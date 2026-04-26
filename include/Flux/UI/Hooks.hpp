@@ -5,9 +5,9 @@
 /// Scope-owned v5 hooks and environment accessors.
 
 #include <Flux/Reactive/Animation.hpp>
-#include <Flux/Reactive2/Computed.hpp>
-#include <Flux/Reactive2/Effect.hpp>
-#include <Flux/Reactive2/Signal.hpp>
+#include <Flux/Reactive/Computed.hpp>
+#include <Flux/Reactive/Effect.hpp>
+#include <Flux/Reactive/Signal.hpp>
 #include <Flux/UI/Environment.hpp>
 #include <Flux/UI/Theme.hpp>
 
@@ -42,7 +42,7 @@ EnvironmentValue<T> useEnvironment() {
 
 template<typename T>
 struct State {
-  Reactive2::Signal<T> signal{};
+  Reactive::Signal<T> signal{};
 
   State() : signal(T{}) {}
   explicit State(T initial) : signal(std::move(initial)) {}
@@ -73,12 +73,12 @@ State<T> useState(T initial = T{}) {
 
 template<typename Fn>
 auto useComputed(Fn&& fn) {
-  return Reactive2::makeComputed(std::forward<Fn>(fn));
+  return Reactive::makeComputed(std::forward<Fn>(fn));
 }
 
 template<typename Fn>
 void useEffect(Fn&& fn) {
-  Reactive2::Effect{std::forward<Fn>(fn)};
+  Reactive::Effect{std::forward<Fn>(fn)};
 }
 
 template<Interpolatable T>

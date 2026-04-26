@@ -2,7 +2,7 @@
 
 /// \file Flux/UI/MeasureContext.hpp
 ///
-/// Context for \ref Element::measure during retained-scene rebuilds.
+/// Context for \ref Element::measure during retained-scene layout.
 
 #include <Flux/Core/ComponentKey.hpp>
 #include <Flux/UI/Detail/TraversalContext.hpp>
@@ -48,9 +48,6 @@ public:
   void resetTraversalState(ComponentKey const& key = {});
   void setMeasurementRootKey(ComponentKey key);
   void clearMeasurementRootKey() noexcept;
-
-  void beginCompositeBodySubtree(ComponentKey compositeKey);
-  bool consumeCompositeBodySubtreeRootSkip();
 
   void pushCompositeKeyTail(ComponentKey const& compositeKey);
   void popCompositeKeyTail();

@@ -6,7 +6,7 @@
 /// optional flex overrides, and per-subtree environment values.
 
 #include <Flux/Graphics/Styles.hpp>
-#include <Flux/Reactive2/Bindable.hpp>
+#include <Flux/Reactive/Bindable.hpp>
 #include <Flux/UI/Component.hpp>
 #include <Flux/UI/Detail/ElementModifiers.hpp>
 #include <Flux/UI/Environment.hpp>
@@ -117,38 +117,38 @@ public:
   }
 
   Element padding(float all) &&;
-  Element padding(Reactive2::Bindable<EdgeInsets> insets) &&;
+  Element padding(Reactive::Bindable<EdgeInsets> insets) &&;
   Element padding(EdgeInsets insets) &&;
   Element padding(float top, float right, float bottom, float left) &&;
-  Element fill(Reactive2::Bindable<FillStyle> style) &&;
+  Element fill(Reactive::Bindable<FillStyle> style) &&;
   Element fill(FillStyle style) &&;
-  Element fill(Reactive2::Bindable<Color> color) &&;
+  Element fill(Reactive::Bindable<Color> color) &&;
   Element fill(Color color) &&;
-  Element shadow(Reactive2::Bindable<ShadowStyle> style) &&;
+  Element shadow(Reactive::Bindable<ShadowStyle> style) &&;
   Element shadow(ShadowStyle style) &&;
-  Element size(Reactive2::Bindable<float> width, Reactive2::Bindable<float> height) &&;
+  Element size(Reactive::Bindable<float> width, Reactive::Bindable<float> height) &&;
   Element size(float width, float height) &&;
-  Element width(Reactive2::Bindable<float> w) &&;
+  Element width(Reactive::Bindable<float> w) &&;
   Element width(float w) &&;
-  Element height(Reactive2::Bindable<float> h) &&;
+  Element height(Reactive::Bindable<float> h) &&;
   Element height(float h) &&;
-  Element stroke(Reactive2::Bindable<StrokeStyle> style) &&;
+  Element stroke(Reactive::Bindable<StrokeStyle> style) &&;
   Element stroke(StrokeStyle style) &&;
-  Element stroke(Reactive2::Bindable<Color> c, Reactive2::Bindable<float> width) &&;
+  Element stroke(Reactive::Bindable<Color> c, Reactive::Bindable<float> width) &&;
   Element stroke(Color c, float width) &&;
-  Element cornerRadius(Reactive2::Bindable<CornerRadius> radius) &&;
+  Element cornerRadius(Reactive::Bindable<CornerRadius> radius) &&;
   Element cornerRadius(CornerRadius radius) &&;
-  Element cornerRadius(Reactive2::Bindable<float> radius) &&;
+  Element cornerRadius(Reactive::Bindable<float> radius) &&;
   Element cornerRadius(float radius) &&;
-  Element opacity(Reactive2::Bindable<float> opacity) &&;
+  Element opacity(Reactive::Bindable<float> opacity) &&;
   Element opacity(float opacity) &&;
-  Element position(Reactive2::Bindable<Vec2> p) &&;
+  Element position(Reactive::Bindable<Vec2> p) &&;
   Element position(Vec2 p) &&;
-  Element position(Reactive2::Bindable<float> x, Reactive2::Bindable<float> y) &&;
+  Element position(Reactive::Bindable<float> x, Reactive::Bindable<float> y) &&;
   Element position(float x, float y) &&;
-  Element translate(Reactive2::Bindable<Vec2> delta) &&;
+  Element translate(Reactive::Bindable<Vec2> delta) &&;
   Element translate(Vec2 delta) &&;
-  Element translate(Reactive2::Bindable<float> dx, Reactive2::Bindable<float> dy) &&;
+  Element translate(Reactive::Bindable<float> dx, Reactive::Bindable<float> dy) &&;
   Element translate(float dx, float dy) &&;
   Element clipContent(bool clip) &&;
   Element overlay(Element over) &&;

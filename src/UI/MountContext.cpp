@@ -80,7 +80,7 @@ Size measureChild(Element const& child, MountContext& ctx, LayoutConstraints con
 
 } // namespace
 
-MountContext::MountContext(Reactive2::Scope& owner, EnvironmentStack& environment,
+MountContext::MountContext(Reactive::Scope& owner, EnvironmentStack& environment,
                            TextSystem& textSystem, MeasureContext& measureContext,
                            LayoutConstraints constraints, LayoutHints hints,
                            std::function<void()> requestRedraw)

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Flux/Reactive2/Scope.hpp>
+#include <Flux/Reactive/Scope.hpp>
 #include <Flux/SceneGraph/GroupNode.hpp>
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/MeasureContext.hpp>
@@ -80,7 +80,7 @@ inline Size controlMeasureElement(Element const& element, EnvironmentStack& envi
 }
 
 inline std::unique_ptr<scenegraph::SceneNode>
-controlMountElement(Element const& element, Reactive2::Scope& owner,
+controlMountElement(Element const& element, Reactive::Scope& owner,
                     EnvironmentStack& environment,
                     std::vector<EnvironmentLayer> const& environmentLayers,
                     TextSystem& textSystem, LayoutConstraints const& constraints,
@@ -129,8 +129,8 @@ Element invokeElementFactory(Factory& factory) {
 
 template<typename Factory, typename T>
 Element invokeForFactory(Factory& factory, T const& item,
-                         Reactive2::Signal<std::size_t> const& index) {
-  if constexpr (std::is_invocable_v<Factory&, T const&, Reactive2::Signal<std::size_t>>) {
+                         Reactive::Signal<std::size_t> const& index) {
+  if constexpr (std::is_invocable_v<Factory&, T const&, Reactive::Signal<std::size_t>>) {
     auto result = std::invoke(factory, item, index);
     return Element{std::move(result)};
   } else {

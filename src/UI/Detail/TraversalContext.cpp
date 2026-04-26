@@ -111,16 +111,10 @@ void TraversalContext::advanceChildSlot() {
 }
 
 ComponentKey TraversalContext::currentElementKey() const {
-  if (skipNextLayoutChildAdvance_) {
-    return keyPrefix_;
-  }
   return ComponentKey{keyPrefix_, currentChildLocalId()};
 }
 
 LocalId TraversalContext::currentElementLocalId() const {
-  if (skipNextLayoutChildAdvance_) {
-    return keyPrefix_.empty() ? LocalId::fromIndex(0) : keyPrefix_.tail();
-  }
   return currentChildLocalId();
 }
 
@@ -161,19 +155,6 @@ void TraversalContext::setMeasurementRootKey(ComponentKey key) {
 
 void TraversalContext::clearMeasurementRootKey() noexcept {
   useMeasurementRootKey_ = false;
-}
-
-void TraversalContext::beginCompositeBodySubtree(ComponentKey compositeKey) {
-  (void)compositeKey;
-  skipNextLayoutChildAdvance_ = true;
-}
-
-bool TraversalContext::consumeCompositeBodySubtreeRootSkip() {
-  if (skipNextLayoutChildAdvance_) {
-    skipNextLayoutChildAdvance_ = false;
-    return true;
-  }
-  return false;
 }
 
 void TraversalContext::pushCompositeKeyTail(ComponentKey const& compositeKey) {

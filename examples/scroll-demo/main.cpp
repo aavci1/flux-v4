@@ -73,8 +73,8 @@ struct ScrollDemoRoot {
             Element{For(
                 rows.signal,
                 [](Row const& row) { return row.id; },
-                [theme](Row const& row, Reactive2::Signal<std::size_t> index) {
-                  Reactive2::Bindable<float> width{[index] {
+                [theme](Row const& row, Reactive::Signal<std::size_t> index) {
+                  Reactive::Bindable<float> width{[index] {
                     return 280.f + static_cast<float>(index.get()) * 18.f;
                   }};
                   return HStack{

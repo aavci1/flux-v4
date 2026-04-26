@@ -639,7 +639,7 @@ public:
       dispatch_semaphore_signal(frameSem_);
       syncPresent_ = false;
     } else {
-      __block dispatch_semaphore_t sem = frameSem_;
+      dispatch_semaphore_t sem = frameSem_;
       [cmdBuf_ addCompletedHandler:^(id<MTLCommandBuffer> /*cb*/) { dispatch_semaphore_signal(sem); }];
       [cmdBuf_ presentDrawable:drawable_];
       lastSubmittedCmdBuf_ = cmdBuf_;

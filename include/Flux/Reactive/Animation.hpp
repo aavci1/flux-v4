@@ -2,7 +2,7 @@
 
 #include <Flux/Reactive/Interpolatable.hpp>
 #include <Flux/Reactive/Transition.hpp>
-#include <Flux/Reactive2/Signal.hpp>
+#include <Flux/Reactive/Signal.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -154,7 +154,7 @@ private:
     return target_;
   }
 
-  Reactive2::Signal<T> value_{T{}};
+  Reactive::Signal<T> value_{T{}};
   T start_{};
   T target_{};
   AnimationOptions options_{};

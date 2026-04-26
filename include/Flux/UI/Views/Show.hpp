@@ -4,7 +4,7 @@
 ///
 /// Reactive conditional primitive for v5 build-once view trees.
 
-#include <Flux/Reactive2/Effect.hpp>
+#include <Flux/Reactive/Effect.hpp>
 #include <Flux/UI/Views/ControlFlowDetail.hpp>
 #include <Flux/UI/Views/Spacer.hpp>
 
@@ -36,7 +36,7 @@ public:
         Rect{0.f, 0.f, detail::controlFiniteOrZero(frameSize.width),
              detail::controlFiniteOrZero(frameSize.height)});
 
-    auto controlScope = std::make_shared<Reactive2::Scope>();
+    auto controlScope = std::make_shared<Reactive::Scope>();
     ctx.owner().onCleanup([controlScope] {
       controlScope->dispose();
     });
@@ -47,8 +47,8 @@ public:
         ctx.redrawCallback());
 
     scenegraph::GroupNode* rawGroup = group.get();
-    Reactive2::withOwner(*controlScope, [state, rawGroup] {
-      Reactive2::Effect([state, rawGroup] {
+    Reactive::withOwner(*controlScope, [state, rawGroup] {
+      Reactive::Effect([state, rawGroup] {
         state->reconcile(*rawGroup);
       });
     });
@@ -69,7 +69,7 @@ private:
     LayoutHints hints;
     std::function<void()> requestRedraw;
     std::optional<bool> activeBranch;
-    std::shared_ptr<Reactive2::Scope> branchScope;
+    std::shared_ptr<Reactive::Scope> branchScope;
 
     State(Condition conditionIn, ThenFactory thenFactoryIn, ElseFactory elseFactoryIn,
           Size frameSizeIn, EnvironmentStack& environmentIn,
@@ -122,9 +122,9 @@ private:
     }
 
     std::unique_ptr<scenegraph::SceneNode> mountBranch(bool thenBranch) {
-      return Reactive2::untrack([&] {
-        branchScope = std::make_shared<Reactive2::Scope>();
-        return Reactive2::withOwner(*branchScope, [&] {
+      return Reactive::untrack([&] {
+        branchScope = std::make_shared<Reactive::Scope>();
+        return Reactive::withOwner(*branchScope, [&] {
           Element element = thenBranch
               ? detail::invokeElementFactory(thenFactory)
               : detail::invokeElementFactory(elseFactory);

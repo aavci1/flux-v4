@@ -2,9 +2,9 @@
 
 #include <Flux/Detail/RootHolder.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
-#include <Flux/Reactive2/Bindable.hpp>
-#include <Flux/Reactive2/Scope.hpp>
-#include <Flux/Reactive2/Signal.hpp>
+#include <Flux/Reactive/Bindable.hpp>
+#include <Flux/Reactive/Scope.hpp>
+#include <Flux/Reactive/Signal.hpp>
 #include <Flux/SceneGraph/RectNode.hpp>
 #include <Flux/SceneGraph/SceneGraph.hpp>
 #include <Flux/UI/Hooks.hpp>
@@ -55,7 +55,7 @@ public:
   }
 };
 
-flux::EnvironmentLayer themeEnvironment(flux::Reactive2::Signal<flux::Theme> theme) {
+flux::EnvironmentLayer themeEnvironment(flux::Reactive::Signal<flux::Theme> theme) {
   flux::EnvironmentLayer environment;
   environment.setSignal(std::move(theme));
   return environment;
@@ -84,24 +84,24 @@ TEST_CASE("theme signal updates retained leaf bindings without remounting") {
     flux::Element body() const {
       ++*bodyCalls;
       auto theme = flux::useEnvironment<flux::Theme>();
-      flux::Reactive2::onCleanup([cleanups = cleanups] {
+      flux::Reactive::onCleanup([cleanups = cleanups] {
         ++*cleanups;
       });
 
       return flux::Element{flux::Rectangle{}}
           .size(32.f, 18.f)
-          .fill(flux::Reactive2::Bindable<flux::Color>{[theme] {
+          .fill(flux::Reactive::Bindable<flux::Color>{[theme] {
             return flux::Color::windowBackground();
           }})
-          .stroke(flux::Reactive2::Bindable<flux::Color>{[theme] {
+          .stroke(flux::Reactive::Bindable<flux::Color>{[theme] {
             return theme().separatorColor;
-          }}, flux::Reactive2::Bindable<float>{1.f});
+          }}, flux::Reactive::Bindable<float>{1.f});
     }
   };
 
   int bodyCalls = 0;
   int cleanups = 0;
-  flux::Reactive2::Signal<flux::Theme> theme{flux::Theme::light()};
+  flux::Reactive::Signal<flux::Theme> theme{flux::Theme::light()};
   FakeTextSystem textSystem;
   flux::scenegraph::SceneGraph sceneGraph;
   flux::MountRoot root{
@@ -144,16 +144,16 @@ TEST_CASE("themeField exposes a computed theme member to bindable leaves") {
       ++*bodyCalls;
       auto space3 = flux::themeField(&flux::Theme::space3);
       return flux::Element{flux::Rectangle{}}
-          .size(flux::Reactive2::Bindable<float>{[space3] {
+          .size(flux::Reactive::Bindable<float>{[space3] {
                   return space3.get();
                 }},
-                flux::Reactive2::Bindable<float>{10.f})
+                flux::Reactive::Bindable<float>{10.f})
           .fill(flux::Colors::blue);
     }
   };
 
   int bodyCalls = 0;
-  flux::Reactive2::Signal<flux::Theme> theme{flux::Theme::light()};
+  flux::Reactive::Signal<flux::Theme> theme{flux::Theme::light()};
   FakeTextSystem textSystem;
   flux::scenegraph::SceneGraph sceneGraph;
   flux::MountRoot root{

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(flux VERSION 4.0.0 LANGUAGES CXX C)
+project(flux VERSION 5.0.0 LANGUAGES CXX C)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -101,11 +101,6 @@ add_library(flux STATIC
   src/Reactive/Observer.cpp
   src/Reactive/Easing.cpp
   src/Reactive/Transition.cpp
-  src/Reactive2/Signal.cpp
-  src/Reactive2/Computed.cpp
-  src/Reactive2/Effect.cpp
-  src/Reactive2/Scope.cpp
-  src/Reactive2/ObserverStack.cpp
   src/Core/ComponentKey.cpp
   src/Core/ComponentKeyUtil.cpp
   src/Core/Window.cpp
@@ -267,34 +262,34 @@ if(FLUX_BUILD_TESTS)
 
   add_test(NAME flux_tests COMMAND flux_tests)
 
-  add_executable(flux_reactive2_tests
-    tests/Reactive2/main.cpp
-    tests/Reactive2/SignalTests.cpp
-    tests/Reactive2/ComputedTests.cpp
-    tests/Reactive2/EffectTests.cpp
-    tests/Reactive2/ScopeTests.cpp
-    tests/Reactive2/DiamondTests.cpp
-    tests/Reactive2/BindableTests.cpp
+  add_executable(flux_reactive_tests
+    tests/Reactive/main.cpp
+    tests/Reactive/SignalTests.cpp
+    tests/Reactive/ComputedTests.cpp
+    tests/Reactive/EffectTests.cpp
+    tests/Reactive/ScopeTests.cpp
+    tests/Reactive/DiamondTests.cpp
+    tests/Reactive/BindableTests.cpp
   )
 
-  target_include_directories(flux_reactive2_tests PRIVATE
+  target_include_directories(flux_reactive_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src
   )
 
-  target_link_libraries(flux_reactive2_tests PRIVATE
+  target_link_libraries(flux_reactive_tests PRIVATE
     flux
     doctest::doctest
   )
 
-  set_target_properties(flux_reactive2_tests PROPERTIES CXX_STANDARD 23)
+  set_target_properties(flux_reactive_tests PROPERTIES CXX_STANDARD 23)
 
   if(FLUX_ENABLE_ASAN)
-    target_compile_options(flux_reactive2_tests PRIVATE -fsanitize=address -fno-omit-frame-pointer)
-    target_link_options(flux_reactive2_tests PRIVATE -fsanitize=address)
+    target_compile_options(flux_reactive_tests PRIVATE -fsanitize=address -fno-omit-frame-pointer)
+    target_link_options(flux_reactive_tests PRIVATE -fsanitize=address)
   endif()
 
-  add_test(NAME flux_reactive2_tests COMMAND flux_reactive2_tests)
+  add_test(NAME flux_reactive_tests COMMAND flux_reactive_tests)
 endif()
 
 option(FLUX_BUILD_EXAMPLES

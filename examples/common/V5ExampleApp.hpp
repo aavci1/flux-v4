@@ -65,8 +65,8 @@ struct V5ExampleRoot {
             Element{For(
                 rows.signal,
                 [](std::string const& row) { return row; },
-                [theme](std::string const& row, Reactive2::Signal<std::size_t> index) {
-                  Reactive2::Bindable<float> width{[index] {
+                [theme](std::string const& row, Reactive::Signal<std::size_t> index) {
+                  Reactive::Bindable<float> width{[index] {
                     return 320.f + static_cast<float>(index.get()) * 20.f;
                   }};
                   return HStack{

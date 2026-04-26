@@ -9,7 +9,7 @@
 #include <Flux/Core/Types.hpp>
 #include <Flux/Detail/SmallVector.hpp>
 #include <Flux/Graphics/Styles.hpp>
-#include <Flux/Reactive2/Bindable.hpp>
+#include <Flux/Reactive/Bindable.hpp>
 #include <Flux/UI/Environment.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 
@@ -77,18 +77,18 @@ float minMainSizeOf(C const& v) {
 }
 
 struct ElementModifiers {
-  Reactive2::Bindable<EdgeInsets> padding{EdgeInsets{}};
-  Reactive2::Bindable<FillStyle> fill{FillStyle::none()};
-  Reactive2::Bindable<StrokeStyle> stroke{StrokeStyle::none()};
-  Reactive2::Bindable<ShadowStyle> shadow{ShadowStyle::none()};
-  Reactive2::Bindable<CornerRadius> cornerRadius{CornerRadius{}};
-  Reactive2::Bindable<float> opacity{1.f};
-  Reactive2::Bindable<Vec2> translation{Vec2{}};
+  Reactive::Bindable<EdgeInsets> padding{EdgeInsets{}};
+  Reactive::Bindable<FillStyle> fill{FillStyle::none()};
+  Reactive::Bindable<StrokeStyle> stroke{StrokeStyle::none()};
+  Reactive::Bindable<ShadowStyle> shadow{ShadowStyle::none()};
+  Reactive::Bindable<CornerRadius> cornerRadius{CornerRadius{}};
+  Reactive::Bindable<float> opacity{1.f};
+  Reactive::Bindable<Vec2> translation{Vec2{}};
   bool clip = false;
-  Reactive2::Bindable<float> positionX{0.f};
-  Reactive2::Bindable<float> positionY{0.f};
-  Reactive2::Bindable<float> sizeWidth{0.f};
-  Reactive2::Bindable<float> sizeHeight{0.f};
+  Reactive::Bindable<float> positionX{0.f};
+  Reactive::Bindable<float> positionY{0.f};
+  Reactive::Bindable<float> sizeWidth{0.f};
+  Reactive::Bindable<float> sizeHeight{0.f};
   std::unique_ptr<Element> overlay;
 
   std::function<void()> onTap;

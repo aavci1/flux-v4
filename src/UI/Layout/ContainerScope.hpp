@@ -2,7 +2,7 @@
 
 /// \file ContainerScope.hpp
 ///
-/// RAII helpers for retained-scene measurement passes.
+/// RAII helpers for retained-scene layout measurement.
 
 #include <Flux/UI/MeasureContext.hpp>
 
@@ -18,13 +18,9 @@ public:
     keyPathDepth0_ = ctx_.debugKeyPathDepth();
     savedDepth0_ = ctx_.debugSavedChildDepth();
 #endif
-    if (ctx_.consumeCompositeBodySubtreeRootSkip()) {
-      ctx_.pushChildIndex(false);
-    } else {
-      LocalId const containerLocalId = ctx_.peekCurrentChildLocalId();
-      ctx_.advanceChildSlot();
-      ctx_.pushChildIndexWithLocalId(containerLocalId);
-    }
+    LocalId const containerLocalId = ctx_.peekCurrentChildLocalId();
+    ctx_.advanceChildSlot();
+    ctx_.pushChildIndexWithLocalId(containerLocalId);
     pushedChildIndex_ = true;
   }
 

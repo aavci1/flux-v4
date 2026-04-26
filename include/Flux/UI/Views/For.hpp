@@ -4,8 +4,8 @@
 ///
 /// Reactive keyed list primitive for v5 build-once view trees.
 
-#include <Flux/Reactive2/Effect.hpp>
-#include <Flux/Reactive2/Signal.hpp>
+#include <Flux/Reactive/Effect.hpp>
+#include <Flux/Reactive/Signal.hpp>
 #include <Flux/UI/Alignment.hpp>
 #include <Flux/UI/Views/ControlFlowDetail.hpp>
 
@@ -30,7 +30,7 @@ public:
   static_assert(std::equality_comparable<Key>,
                 "For keys must be equality-comparable so rows can be reconciled.");
 
-  ForView(Reactive2::Signal<Items> items, KeyFn keyFn, Factory factory,
+  ForView(Reactive::Signal<Items> items, KeyFn keyFn, Factory factory,
           float spacing = 0.f, Alignment alignment = Alignment::Start)
       : items_(std::move(items))
       , keyFn_(std::move(keyFn))
@@ -49,7 +49,7 @@ public:
         Rect{0.f, 0.f, detail::controlFiniteOrZero(frameSize.width),
              detail::controlFiniteOrZero(frameSize.height)});
 
-    auto controlScope = std::make_shared<Reactive2::Scope>();
+    auto controlScope = std::make_shared<Reactive::Scope>();
     ctx.owner().onCleanup([controlScope] {
       controlScope->dispose();
     });
@@ -59,8 +59,8 @@ public:
         ctx.environment().snapshot(), ctx.textSystem(), ctx.constraints(), ctx.redrawCallback());
 
     scenegraph::GroupNode* rawGroup = group.get();
-    Reactive2::withOwner(*controlScope, [state, rawGroup] {
-      Reactive2::Effect([state, rawGroup] {
+    Reactive::withOwner(*controlScope, [state, rawGroup] {
+      Reactive::Effect([state, rawGroup] {
         state->reconcile(*rawGroup);
       });
     });
@@ -71,12 +71,12 @@ public:
 private:
   struct Row {
     Key key;
-    Reactive2::Signal<std::size_t> index;
-    std::shared_ptr<Reactive2::Scope> scope;
+    Reactive::Signal<std::size_t> index;
+    std::shared_ptr<Reactive::Scope> scope;
   };
 
   struct State {
-    Reactive2::Signal<Items> items;
+    Reactive::Signal<Items> items;
     KeyFn keyFn;
     Factory factory;
     float spacing = 0.f;
@@ -89,7 +89,7 @@ private:
     std::function<void()> requestRedraw;
     std::vector<Row> rows;
 
-    State(Reactive2::Signal<Items> itemsIn, KeyFn keyFnIn, Factory factoryIn,
+    State(Reactive::Signal<Items> itemsIn, KeyFn keyFnIn, Factory factoryIn,
           float spacingIn, Alignment alignmentIn, Size frameSizeIn,
           EnvironmentStack& environmentIn,
           std::vector<EnvironmentLayer> environmentLayersIn,
@@ -179,13 +179,13 @@ private:
     };
 
     MountedRow mountRow(T const& item, std::size_t index, Key key) {
-      return Reactive2::untrack([&] {
-        auto rowScope = std::make_shared<Reactive2::Scope>();
-        Reactive2::Signal<std::size_t> indexSignal = Reactive2::withOwner(*rowScope, [&] {
-          return Reactive2::Signal<std::size_t>(index);
+      return Reactive::untrack([&] {
+        auto rowScope = std::make_shared<Reactive::Scope>();
+        Reactive::Signal<std::size_t> indexSignal = Reactive::withOwner(*rowScope, [&] {
+          return Reactive::Signal<std::size_t>(index);
         });
 
-        auto node = Reactive2::withOwner(*rowScope, [&] {
+        auto node = Reactive::withOwner(*rowScope, [&] {
           Element element = detail::invokeForFactory(factory, item, indexSignal);
           LayoutConstraints childConstraints = constraints;
           childConstraints.minWidth = 0.f;
@@ -208,7 +208,7 @@ private:
     }
   };
 
-  Reactive2::Signal<Items> items_;
+  Reactive::Signal<Items> items_;
   KeyFn keyFn_;
   Factory factory_;
   float spacing_ = 0.f;
@@ -217,7 +217,7 @@ private:
 
 template<typename T, typename KeyFn, typename Factory>
 ForView<T, std::decay_t<KeyFn>, std::decay_t<Factory>>
-For(Reactive2::Signal<std::vector<T>> items, KeyFn&& keyFn, Factory&& factory,
+For(Reactive::Signal<std::vector<T>> items, KeyFn&& keyFn, Factory&& factory,
     float spacing = 0.f, Alignment alignment = Alignment::Start) {
   return ForView<T, std::decay_t<KeyFn>, std::decay_t<Factory>>{
       std::move(items), std::forward<KeyFn>(keyFn), std::forward<Factory>(factory),

@@ -71,14 +71,6 @@ void MeasureContext::clearMeasurementRootKey() noexcept {
   traversal_.clearMeasurementRootKey();
 }
 
-void MeasureContext::beginCompositeBodySubtree(ComponentKey compositeKey) {
-  traversal_.beginCompositeBodySubtree(compositeKey);
-}
-
-bool MeasureContext::consumeCompositeBodySubtreeRootSkip() {
-  return traversal_.consumeCompositeBodySubtreeRootSkip();
-}
-
 void MeasureContext::pushCompositeKeyTail(ComponentKey const& compositeKey) {
   traversal_.pushCompositeKeyTail(compositeKey);
 }

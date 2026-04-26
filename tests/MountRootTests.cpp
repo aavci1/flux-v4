@@ -2,7 +2,7 @@
 
 #include <Flux/Detail/RootHolder.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
-#include <Flux/Reactive2/Signal.hpp>
+#include <Flux/Reactive/Signal.hpp>
 #include <Flux/SceneGraph/RectNode.hpp>
 #include <Flux/SceneGraph/SceneGraph.hpp>
 #include <Flux/UI/MountRoot.hpp>
@@ -100,12 +100,12 @@ TEST_CASE("MountRoot mounts a static root once") {
 
 TEST_CASE("MountRoot keeps Bindable effects scoped to the mount") {
   struct Root {
-    flux::Reactive2::Signal<bool> hot;
+    flux::Reactive::Signal<bool> hot;
 
     flux::Element body() const {
       return flux::Element{flux::Rectangle{}}
           .size(10.f, 10.f)
-          .fill(flux::Reactive2::Bindable<flux::Color>{
+          .fill(flux::Reactive::Bindable<flux::Color>{
               [hot = hot] {
                 return hot() ? flux::Colors::red : flux::Colors::blue;
               }});
@@ -114,7 +114,7 @@ TEST_CASE("MountRoot keeps Bindable effects scoped to the mount") {
 
   FakeTextSystem textSystem;
   flux::scenegraph::SceneGraph sceneGraph;
-  flux::Reactive2::Signal<bool> hot{true};
+  flux::Reactive::Signal<bool> hot{true};
   flux::MountRoot root{
       std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{hot}),
       textSystem,

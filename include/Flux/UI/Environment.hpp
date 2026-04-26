@@ -5,7 +5,7 @@
 /// Part of the Flux public API.
 
 
-#include <Flux/Reactive2/Signal.hpp>
+#include <Flux/Reactive/Signal.hpp>
 
 #include <any>
 #include <cassert>
@@ -26,7 +26,7 @@ public:
   EnvironmentValue(T const& value)
       : value_(&value) {}
 
-  EnvironmentValue(Reactive2::Signal<T> signal)
+  EnvironmentValue(Reactive::Signal<T> signal)
       : signal_(std::move(signal))
       , reactive_(true) {}
 
@@ -59,13 +59,13 @@ public:
     return reactive_;
   }
 
-  Reactive2::Signal<T> const* signal() const noexcept {
+  Reactive::Signal<T> const* signal() const noexcept {
     return reactive_ ? &signal_ : nullptr;
   }
 
 private:
   T const* value_ = nullptr;
-  Reactive2::Signal<T> signal_{};
+  Reactive::Signal<T> signal_{};
   bool reactive_ = false;
 };
 
@@ -84,7 +84,7 @@ public:
   }
 
   template<typename T>
-  void setSignal(Reactive2::Signal<T> signal) {
+  void setSignal(Reactive::Signal<T> signal) {
     static_assert(std::equality_comparable<T>,
         "Environment signal values must define operator==.");
 
@@ -102,19 +102,19 @@ public:
     if (T const* value = std::any_cast<T>(&it->second.value)) {
       return value;
     }
-    if (auto const* signal = std::any_cast<Reactive2::Signal<T>>(&it->second.value)) {
+    if (auto const* signal = std::any_cast<Reactive::Signal<T>>(&it->second.value)) {
       return &signal->peek();
     }
     return nullptr;
   }
 
   template<typename T>
-  Reactive2::Signal<T> const* signal() const {
+  Reactive::Signal<T> const* signal() const {
     auto it = values_.find(std::type_index(typeid(T)));
     if (it == values_.end()) {
       return nullptr;
     }
-    return std::any_cast<Reactive2::Signal<T>>(&it->second.value);
+    return std::any_cast<Reactive::Signal<T>>(&it->second.value);
   }
 
   bool empty() const { return values_.empty(); }
@@ -154,8 +154,8 @@ private:
 
   template<typename T>
   static bool signalSlotEquals(std::any const& a, std::any const& b) {
-    auto const* lhs = std::any_cast<Reactive2::Signal<T>>(&a);
-    auto const* rhs = std::any_cast<Reactive2::Signal<T>>(&b);
+    auto const* lhs = std::any_cast<Reactive::Signal<T>>(&a);
+    auto const* rhs = std::any_cast<Reactive::Signal<T>>(&b);
     return lhs && rhs && lhs->peek() == rhs->peek();
   }
 
@@ -180,7 +180,7 @@ public:
   }
 
   template<typename T>
-  Reactive2::Signal<T> const* findSignal() const {
+  Reactive::Signal<T> const* findSignal() const {
     for (auto it = layers_.rbegin(); it != layers_.rend(); ++it) {
       if (auto const* signal = it->signal<T>()) {
         return signal;

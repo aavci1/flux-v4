@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Flux/Reactive2/Scope.hpp>
+#include <Flux/Reactive/Scope.hpp>
 #include <Flux/UI/Environment.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 
@@ -24,11 +24,11 @@ class SceneNode;
 
 class MountContext {
 public:
-  MountContext(Reactive2::Scope& owner, EnvironmentStack& environment, TextSystem& textSystem,
+  MountContext(Reactive::Scope& owner, EnvironmentStack& environment, TextSystem& textSystem,
                MeasureContext& measureContext, LayoutConstraints constraints,
                LayoutHints hints = {}, std::function<void()> requestRedraw = {});
 
-  Reactive2::Scope& owner() const noexcept { return owner_; }
+  Reactive::Scope& owner() const noexcept { return owner_; }
   EnvironmentStack& environment() const noexcept { return environment_; }
   TextSystem& textSystem() const noexcept { return textSystem_; }
   MeasureContext& measureContext() const noexcept { return measureContext_; }
@@ -40,7 +40,7 @@ public:
   void requestRedraw() const;
 
 private:
-  Reactive2::Scope& owner_;
+  Reactive::Scope& owner_;
   EnvironmentStack& environment_;
   TextSystem& textSystem_;
   MeasureContext& measureContext_;

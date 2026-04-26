@@ -66,7 +66,7 @@ void MountRoot::mount(scenegraph::SceneGraph& sceneGraph) {
   MountContext context{rootScope_, environment, textSystem_, measureContext,
                        rootConstraints(viewportSize_), LayoutHints{}, requestRedraw_};
 
-  auto node = Reactive2::withOwner(rootScope_, [&] {
+  auto node = Reactive::withOwner(rootScope_, [&] {
     Element rootElement = root_->makeElement();
     return rootElement.mount(context);
   });
@@ -79,7 +79,7 @@ void MountRoot::mount(scenegraph::SceneGraph& sceneGraph) {
 void MountRoot::unmount(scenegraph::SceneGraph& sceneGraph) {
   rootScope_.dispose();
   sceneGraph.releaseRoot();
-  rootScope_ = Reactive2::Scope{};
+  rootScope_ = Reactive::Scope{};
   mounted_ = false;
 }
 

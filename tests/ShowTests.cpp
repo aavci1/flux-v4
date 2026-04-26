@@ -2,8 +2,8 @@
 
 #include <Flux/Detail/RootHolder.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
-#include <Flux/Reactive2/Scope.hpp>
-#include <Flux/Reactive2/Signal.hpp>
+#include <Flux/Reactive/Scope.hpp>
+#include <Flux/Reactive/Signal.hpp>
 #include <Flux/SceneGraph/GroupNode.hpp>
 #include <Flux/SceneGraph/SceneGraph.hpp>
 #include <Flux/UI/MountRoot.hpp>
@@ -69,7 +69,7 @@ flux::scenegraph::GroupNode const& rootGroup(flux::scenegraph::SceneGraph const&
 
 TEST_CASE("Show replaces branches and disposes the inactive scope") {
   struct Root {
-    flux::Reactive2::Signal<bool> visible;
+    flux::Reactive::Signal<bool> visible;
     int* thenCreated = nullptr;
     int* thenDisposed = nullptr;
     int* elseCreated = nullptr;
@@ -80,7 +80,7 @@ TEST_CASE("Show replaces branches and disposes the inactive scope") {
           visible,
           [thenCreated = thenCreated, thenDisposed = thenDisposed] {
             ++*thenCreated;
-            flux::Reactive2::onCleanup([thenDisposed] {
+            flux::Reactive::onCleanup([thenDisposed] {
               ++*thenDisposed;
             });
             return flux::Element{flux::Rectangle{}}
@@ -89,7 +89,7 @@ TEST_CASE("Show replaces branches and disposes the inactive scope") {
           },
           [elseCreated = elseCreated, elseDisposed = elseDisposed] {
             ++*elseCreated;
-            flux::Reactive2::onCleanup([elseDisposed] {
+            flux::Reactive::onCleanup([elseDisposed] {
               ++*elseDisposed;
             });
             return flux::Element{flux::Rectangle{}}
@@ -103,7 +103,7 @@ TEST_CASE("Show replaces branches and disposes the inactive scope") {
   int thenDisposed = 0;
   int elseCreated = 0;
   int elseDisposed = 0;
-  flux::Reactive2::Signal<bool> visible{true};
+  flux::Reactive::Signal<bool> visible{true};
   FakeTextSystem textSystem;
   flux::scenegraph::SceneGraph sceneGraph;
   flux::MountRoot root{
@@ -148,7 +148,7 @@ TEST_CASE("Show replaces branches and disposes the inactive scope") {
 
 TEST_CASE("Switch replaces scopes when the selected case changes") {
   struct Root {
-    flux::Reactive2::Signal<int> mode;
+    flux::Reactive::Signal<int> mode;
     int* created = nullptr;
     int* disposed = nullptr;
 
@@ -156,7 +156,7 @@ TEST_CASE("Switch replaces scopes when the selected case changes") {
       auto branch = [created = created, disposed = disposed](flux::Color color) {
         return [created, disposed, color] {
           ++*created;
-          flux::Reactive2::onCleanup([disposed] {
+          flux::Reactive::onCleanup([disposed] {
             ++*disposed;
           });
           return flux::Element{flux::Rectangle{}}
@@ -177,7 +177,7 @@ TEST_CASE("Switch replaces scopes when the selected case changes") {
 
   int created = 0;
   int disposed = 0;
-  flux::Reactive2::Signal<int> mode{0};
+  flux::Reactive::Signal<int> mode{0};
   FakeTextSystem textSystem;
   flux::scenegraph::SceneGraph sceneGraph;
   flux::MountRoot root{

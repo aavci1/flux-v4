@@ -22,12 +22,12 @@ Element swatch(EnvironmentValue<Theme> theme, std::string label, Color Theme::* 
       .children = children(
           Element{Rectangle{}}
               .size(132.f, 54.f)
-              .fill(Reactive2::Bindable<Color>{[theme, colorField] {
+              .fill(Reactive::Bindable<Color>{[theme, colorField] {
                 return theme().*colorField;
               }})
-              .stroke(Reactive2::Bindable<Color>{[theme] {
+              .stroke(Reactive::Bindable<Color>{[theme] {
                 return theme().separatorColor;
-              }}, Reactive2::Bindable<float>{1.f})
+              }}, Reactive::Bindable<float>{1.f})
               .cornerRadius(current.radiusMedium),
           Text{
               .text = std::move(label),
@@ -113,7 +113,7 @@ struct ThemeDemoRoot {
                        themeSignal.set(themeSignal.peek().withDensity(*density));
                      }))})}
         .padding(theme.space7)
-        .fill(Reactive2::Bindable<Color>{[themeSignal] {
+        .fill(Reactive::Bindable<Color>{[themeSignal] {
           return themeSignal().windowBackgroundColor;
         }});
   }

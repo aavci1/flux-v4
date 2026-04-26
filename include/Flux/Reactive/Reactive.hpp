@@ -11,26 +11,26 @@
 #include <Flux/Reactive/Transition.hpp>
 #include <Flux/Reactive/AnimationClock.hpp>
 #include <Flux/Reactive/Animation.hpp>
-#include <Flux/Reactive2/Computed.hpp>
-#include <Flux/Reactive2/Effect.hpp>
-#include <Flux/Reactive2/Scope.hpp>
-#include <Flux/Reactive2/Signal.hpp>
-#include <Flux/Reactive2/Untrack.hpp>
+#include <Flux/Reactive/Computed.hpp>
+#include <Flux/Reactive/Effect.hpp>
+#include <Flux/Reactive/Scope.hpp>
+#include <Flux/Reactive/Signal.hpp>
+#include <Flux/Reactive/Untrack.hpp>
 
 namespace flux {
 
 template<typename T>
-using Signal = Reactive2::Signal<T>;
+using Signal = Reactive::Signal<T>;
 
 template<typename T>
-using Computed = Reactive2::Computed<T>;
+using Computed = Reactive::Computed<T>;
 
-using Effect = Reactive2::Effect;
-using Scope = Reactive2::Scope;
+using Effect = Reactive::Effect;
+using Scope = Reactive::Scope;
 
-using Reactive2::makeComputed;
-using Reactive2::onCleanup;
-using Reactive2::untrack;
-using Reactive2::withOwner;
+using Reactive::makeComputed;
+using Reactive::onCleanup;
+using Reactive::untrack;
+using Reactive::withOwner;
 
 } // namespace flux

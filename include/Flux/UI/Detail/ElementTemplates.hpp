@@ -113,13 +113,13 @@ std::unique_ptr<scenegraph::SceneNode> Element::Model<C>::mount(MountContext& ct
                        }) {
     return value.mount(ctx);
   } else if constexpr (BodyComponent<C>) {
-    auto childScope = std::make_shared<Reactive2::Scope>();
+    auto childScope = std::make_shared<Reactive::Scope>();
     ctx.owner().onCleanup([childScope] {
       childScope->dispose();
     });
     MountContext childCtx{*childScope, ctx.environment(), ctx.textSystem(), ctx.measureContext(),
                           ctx.constraints(), ctx.hints()};
-    return Reactive2::withOwner(*childScope, [&] {
+    return Reactive::withOwner(*childScope, [&] {
       Element child{value.body()};
       return child.mount(childCtx);
     });

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <Flux/Core/Types.hpp>
-#include <Flux/Reactive2/Scope.hpp>
+#include <Flux/Reactive/Scope.hpp>
 #include <Flux/UI/Environment.hpp>
 
 #include <functional>
@@ -38,7 +38,7 @@ private:
   EnvironmentLayer environment_;
   Size viewportSize_{};
   std::function<void()> requestRedraw_;
-  Reactive2::Scope rootScope_{};
+  Reactive::Scope rootScope_{};
   bool mounted_ = false;
 };
 
