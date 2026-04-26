@@ -3,6 +3,7 @@
 #include <Flux/Detail/RootHolder.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/SceneGraph/SceneGraph.hpp>
+#include <Flux/UI/Detail/LayoutDebugDump.hpp>
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/MeasureContext.hpp>
 #include <Flux/UI/MountContext.hpp>
@@ -56,6 +57,7 @@ void MountRoot::mount(scenegraph::SceneGraph& sceneGraph) {
   if (!root_) {
     return;
   }
+  layoutDebugBeginPass();
   if (mounted_) {
     unmount(sceneGraph);
   }
@@ -72,8 +74,10 @@ void MountRoot::mount(scenegraph::SceneGraph& sceneGraph) {
   });
   if (node) {
     sceneGraph.setRoot(std::move(node));
+    layoutDebugDumpRetained(sceneGraph);
     mounted_ = true;
   }
+  layoutDebugEndPass();
 }
 
 void MountRoot::unmount(scenegraph::SceneGraph& sceneGraph) {
