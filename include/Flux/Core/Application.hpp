@@ -21,7 +21,6 @@ namespace flux {
 
 class EventQueue;
 class TextSystem;
-class AnimationClock;
 
 class Application {
 public:
@@ -78,13 +77,8 @@ public:
   ObserverHandle onNextFrameNeeded(std::function<void()> callback);
   void unobserveNextFrame(ObserverHandle handle);
 
-  /// Marks that reactive state changed; wakes the event loop. Used internally by the reactive layer.
-  void markReactiveDirty();
-
   friend class Window;
   friend class EventQueue;
-  friend class AnimationClock;
-
 private:
   bool isMainThread() const noexcept;
   /// Wakes any blocking platform event wait without forcing a rebuild/redraw.
@@ -97,7 +91,7 @@ private:
   /// Removes `handle` from the running window list before `Window` is destroyed (synchronous; avoids dangling `Window*`).
   void unregisterWindowHandle(unsigned int handle);
 
-  void processReactiveUpdates();
+  void processFrameCallbacks();
   void presentRequestedWindows(bool requireFrameReady, bool keepFramePump);
 
   struct Impl;

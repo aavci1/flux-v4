@@ -4,7 +4,6 @@
 #include <Flux/Core/Events.hpp>
 #include <Flux/Core/Window.hpp>
 #include <Flux/Graphics/Canvas.hpp>
-#include <Flux/Reactive/AnimationClock.hpp>
 
 #include "Core/PlatformWindow.hpp"
 #include "Debug/PerfCounters.hpp"
@@ -33,10 +32,6 @@ namespace detail {
 
 bool signalBridgeApplicationHasInstance() {
   return Application::hasInstance();
-}
-
-void signalBridgeMarkReactiveDirty() {
-  Application::instance().markReactiveDirty();
 }
 
 } // namespace detail
@@ -69,8 +64,6 @@ struct Application::Impl {
   void* iconFont_ = nullptr;
 
   bool quit_ = false;
-  bool reactiveDirty_ = false;
-
   struct NextFrameEntry {
     std::uint64_t id = 0;
     std::function<void()> callback;
@@ -184,11 +177,9 @@ Application::Application(int /*argc*/, char** /*argv*/) {
   [NSApplication sharedApplication];
   [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
 
-  AnimationClock::instance().install(d->eventQueue_);
 }
 
 Application::~Application() {
-  AnimationClock::instance().shutdown();
   if (d->iconFont_) {
     CFRelease(reinterpret_cast<CTFontRef>(reinterpret_cast<std::uintptr_t>(d->iconFont_)));
     d->iconFont_ = nullptr;
@@ -207,8 +198,6 @@ void Application::adoptOwnedWindow(std::unique_ptr<Window> window) {
   d->renderStates_[h] = {};
   if (d->pendingAdoptRedraws_.erase(h) > 0) {
     requestWindowRedraw(h);
-  } else if (AnimationClock::instance().needsFramePump()) {
-    raw->platformWindow()->requestAnimationFrame();
   }
 }
 
@@ -244,13 +233,6 @@ void Application::unobserveNextFrame(ObserverHandle handle) {
     return;
   }
   std::erase_if(d->nextFrame_, [&](Impl::NextFrameEntry const& e) { return e.id == handle.id; });
-}
-
-void Application::markReactiveDirty() {
-  d->reactiveDirty_ = true;
-  if (!isMainThread()) {
-    wakeEventLoop();
-  }
 }
 
 bool Application::isMainThread() const noexcept {
@@ -297,12 +279,8 @@ void Application::requestWindowRedraw(unsigned int handle) {
   }
 }
 
-void Application::processReactiveUpdates() {
+void Application::processFrameCallbacks() {
   debug::perf::ScopedTimer perfTimer(debug::perf::TimedMetric::ProcessReactiveUpdates);
-  if (!d->reactiveDirty_) {
-    return;
-  }
-  d->reactiveDirty_ = false;
   for (auto& e : d->nextFrame_) {
     if (e.callback) {
       e.callback();
@@ -357,8 +335,8 @@ void Application::presentRequestedWindows(bool requireFrameReady, bool keepFrame
 }
 
 void Application::flushRedraw() {
-  processReactiveUpdates();
-  presentRequestedWindows(false, AnimationClock::instance().needsFramePump());
+  processFrameCallbacks();
+  presentRequestedWindows(false, false);
 }
 
 std::uint64_t Application::scheduleRepeatingTimer(std::chrono::nanoseconds interval, unsigned int windowHandle) {
@@ -402,14 +380,11 @@ int Application::exec() {
       }
     }
 
-    processReactiveUpdates();
+    processFrameCallbacks();
 
-    presentRequestedWindows(true, AnimationClock::instance().needsFramePump());
+    presentRequestedWindows(true, false);
 
     int timeoutMs = d->nextTimerTimeoutMs();
-    if (d->reactiveDirty_) {
-      timeoutMs = 0;
-    }
     if (!d->windows_.empty()) {
       d->windows_[0]->platformWindow()->waitForEvents(timeoutMs);
     } else {

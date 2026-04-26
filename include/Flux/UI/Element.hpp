@@ -6,14 +6,13 @@
 /// optional flex overrides, and per-subtree environment values.
 
 #include <Flux/Graphics/Styles.hpp>
+#include <Flux/Reactive2/Bindable.hpp>
 #include <Flux/UI/Component.hpp>
-#include <Flux/UI/Detail/MeasuredBuild.hpp>
 #include <Flux/UI/Detail/ElementModifiers.hpp>
 #include <Flux/UI/Environment.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 #include <Flux/UI/Leaves.hpp>
 #include <Flux/UI/MeasureContext.hpp>
-#include <Flux/UI/StateStore.hpp>
 
 #include <functional>
 #include <cstring>
@@ -78,18 +77,7 @@ public:
   Element& operator=(Element&&) noexcept = default;
 
   Size measure(MeasureContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints, TextSystem& textSystem) const;
-  [[nodiscard]] std::uint64_t measureId() const noexcept { return measureId_; }
   [[nodiscard]] ElementType typeTag() const noexcept { return impl_ ? impl_->elementType() : ElementType::Unknown; }
-  [[nodiscard]] bool expandsBody() const noexcept { return impl_ && impl_->expandsBody(); }
-  [[nodiscard]] detail::CompositeBodyResolution resolveCompositeBody(ComponentKey const& key, LayoutConstraints const& constraints) const {
-    return impl_ ? impl_->resolveCompositeBody(key, constraints, modifiers()) : detail::CompositeBodyResolution{};
-  }
-  [[nodiscard]] detail::ComponentBuildResult
-  buildMeasured(detail::ComponentBuildContext& ctx,
-                std::unique_ptr<scenegraph::SceneNode> existing) const {
-    return impl_ ? impl_->buildMeasured(ctx, std::move(existing)) : detail::ComponentBuildResult{};
-  }
-  [[nodiscard]] detail::ResolvedElement resolve(ComponentKey const& key, LayoutConstraints const& constraints) const;
   [[nodiscard]] detail::ElementModifiers const* modifiers() const noexcept {
     return modifiers_.get();
   }
@@ -102,8 +90,6 @@ public:
 
   template<typename T>
   [[nodiscard]] T const& as() const;
-  [[nodiscard]] bool valueEquals(Element const& other) const noexcept;
-  [[nodiscard]] bool structuralEquals(Element const& other) const noexcept;
 
   float flexGrow() const;
   float flexShrink() const;
@@ -126,22 +112,38 @@ public:
   }
 
   Element padding(float all) &&;
+  Element padding(Reactive2::Bindable<EdgeInsets> insets) &&;
   Element padding(EdgeInsets insets) &&;
   Element padding(float top, float right, float bottom, float left) &&;
+  Element fill(Reactive2::Bindable<FillStyle> style) &&;
   Element fill(FillStyle style) &&;
+  Element fill(Reactive2::Bindable<Color> color) &&;
   Element fill(Color color) &&;
+  Element shadow(Reactive2::Bindable<ShadowStyle> style) &&;
   Element shadow(ShadowStyle style) &&;
+  Element size(Reactive2::Bindable<float> width, Reactive2::Bindable<float> height) &&;
   Element size(float width, float height) &&;
+  Element width(Reactive2::Bindable<float> w) &&;
   Element width(float w) &&;
+  Element height(Reactive2::Bindable<float> h) &&;
   Element height(float h) &&;
+  Element stroke(Reactive2::Bindable<StrokeStyle> style) &&;
   Element stroke(StrokeStyle style) &&;
+  Element stroke(Reactive2::Bindable<Color> c, Reactive2::Bindable<float> width) &&;
   Element stroke(Color c, float width) &&;
+  Element cornerRadius(Reactive2::Bindable<CornerRadius> radius) &&;
   Element cornerRadius(CornerRadius radius) &&;
+  Element cornerRadius(Reactive2::Bindable<float> radius) &&;
   Element cornerRadius(float radius) &&;
+  Element opacity(Reactive2::Bindable<float> opacity) &&;
   Element opacity(float opacity) &&;
+  Element position(Reactive2::Bindable<Vec2> p) &&;
   Element position(Vec2 p) &&;
+  Element position(Reactive2::Bindable<float> x, Reactive2::Bindable<float> y) &&;
   Element position(float x, float y) &&;
+  Element translate(Reactive2::Bindable<Vec2> delta) &&;
   Element translate(Vec2 delta) &&;
+  Element translate(Reactive2::Bindable<float> dx, Reactive2::Bindable<float> dy) &&;
   Element translate(float dx, float dy) &&;
   Element clipContent(bool clip) &&;
   Element overlay(Element over) &&;
@@ -166,16 +168,6 @@ private:
     virtual ElementType elementType() const noexcept { return ElementType::Unknown; }
     virtual std::type_index modelType() const noexcept = 0;
     virtual void const* rawValuePtr() const noexcept = 0;
-    virtual bool valueEquals(Concept const&) const noexcept { return false; }
-    virtual bool expandsBody() const noexcept { return false; }
-    virtual detail::CompositeBodyResolution resolveCompositeBody(ComponentKey const&,
-                                                                 LayoutConstraints const&,
-                                                                 detail::ElementModifiers const*) const {
-      return {};
-    }
-    virtual detail::ComponentBuildResult
-    buildMeasured(detail::ComponentBuildContext& ctx,
-                  std::unique_ptr<scenegraph::SceneNode> existing) const = 0;
     virtual Size measure(MeasureContext& ctx, LayoutConstraints const& constraints,
                          LayoutHints const& hints, TextSystem& textSystem) const = 0;
     virtual float flexGrow() const { return 0.f; }
@@ -195,7 +187,6 @@ private:
   std::optional<EnvironmentLayer> envLayer_;
   std::shared_ptr<detail::ElementModifiers> modifiers_;
   std::optional<std::string> key_{};
-  std::uint64_t measureId_{};
 
   void ensureUniqueImpl();
   detail::ElementModifiers& writableModifiers();
@@ -205,9 +196,6 @@ private:
 
 template<typename... Args>
 std::vector<Element> children(Args&&... args);
-
-[[nodiscard]] bool elementsStructurallyEqual(std::vector<Element> const& lhs,
-                                             std::vector<Element> const& rhs) noexcept;
 
 } // namespace flux
 

@@ -36,7 +36,7 @@ public:
   void unregisterAnimation(AnimationBase* animation);
 
   /// Subscribe to the shared animation tick. The callback must not assume a full frame will be presented — only call
-  /// `Window::requestRedraw()` or `Application::markReactiveDirty()` when output actually changes.
+  /// `Window::requestRedraw()` when output actually changes.
   ObserverHandle subscribe(std::function<void(AnimationTick const&)> callback);
   void unsubscribe(ObserverHandle handle);
 

@@ -96,15 +96,11 @@ add_custom_command(
 add_custom_target(flux_shaders DEPENDS ${FLUX_METALLIB_EMBED_H})
 
 add_library(flux STATIC
-  src/Core/Application.mm
+  src/Core/ApplicationStage3Stub.cpp
   src/Core/EventQueue.cpp
-  src/Reactive/Signal.cpp
   src/Reactive/Observer.cpp
-  src/Reactive/Computed.cpp
   src/Reactive/Easing.cpp
   src/Reactive/Transition.cpp
-  src/Reactive/AnimationRebuild.cpp
-  src/Reactive/AnimationClock.cpp
   src/Reactive2/Signal.cpp
   src/Reactive2/Computed.cpp
   src/Reactive2/Effect.cpp
@@ -112,69 +108,13 @@ add_library(flux STATIC
   src/Reactive2/ObserverStack.cpp
   src/Core/ComponentKey.cpp
   src/Core/ComponentKeyUtil.cpp
-  src/Core/Window.cpp
-  src/Core/WindowRender.cpp
   src/UI/MeasureContext.cpp
-  src/UI/Detail/TraversalContext.cpp
   src/UI/Environment.cpp
   src/UI/Theme.cpp
-  src/UI/StateStore.cpp
   src/UI/Element/ElementMeasurement.cpp
   src/UI/Element/ElementModifiers.cpp
   src/UI/Element/ElementTypeErasure.cpp
-  src/UI/ActionRegistry.cpp
-  src/UI/Build/BuildPass.cpp
-  src/UI/Build/ComponentBuildContext.cpp
-  src/UI/Layout/Algorithms/StackLayout.cpp
-  src/UI/Layout/Algorithms/GridLayout.cpp
-  src/UI/Layout/Algorithms/ScrollLayout.cpp
-  src/UI/Layout/Algorithms/OverlayLayout.cpp
-  src/UI/SceneBuilder.cpp
-  src/UI/Detail/LeafBounds.cpp
-  src/UI/FocusController.cpp
-  src/UI/HoverController.cpp
-  src/UI/GestureTracker.cpp
-  src/UI/CursorController.cpp
-  src/UI/BuildOrchestrator.cpp
   src/UI/LayoutDebugDump.cpp
-  src/UI/InputDispatcher.cpp
-  src/UI/Hooks.cpp
-  src/UI/ActionHooks.cpp
-  src/UI/OverlayHooks.cpp
-  src/UI/Runtime.cpp
-  src/UI/OverlayManager.cpp
-  src/UI/InputFieldLayout.cpp
-  src/UI/InputFieldChrome.cpp
-  src/UI/OverlaySurfaceHelpers.cpp
-  src/UI/Views/TextEditUtils.cpp
-  src/UI/Views/TextEditBehavior.cpp
-  src/UI/Views/Rectangle.cpp
-  src/UI/Views/Image.cpp
-  src/UI/Views/PathShape.cpp
-  src/UI/Views/Render.cpp
-  src/UI/Views/LayoutContainers.cpp
-  src/UI/Views/Text.cpp
-  src/UI/Views/TextInput.cpp
-  src/UI/Views/Badge.cpp
-  src/UI/Views/Button.cpp
-  src/UI/Views/Card.cpp
-  src/UI/Views/Divider.cpp
-  src/UI/Views/Toggle.cpp
-  src/UI/Views/Slider.cpp
-  src/UI/Views/Checkbox.cpp
-  src/UI/Views/Select.cpp
-  src/UI/Views/ScrollView.cpp
-  src/UI/Views/SegmentedControl.cpp
-  src/UI/Views/Icon.cpp
-  src/UI/Views/ListView.cpp
-  src/UI/Views/ProgressBar.cpp
-  src/UI/Views/TableView.cpp
-  src/UI/Views/Alert.cpp
-  src/UI/Views/Popover.cpp
-  src/UI/Views/Toast.cpp
-  src/UI/Views/Tooltip.cpp
-  src/UI/Views/PopoverCalloutPath.cpp
-  src/UI/PopoverCalloutShapeElement.cpp
   src/SceneGraph/SceneNode.cpp
   src/SceneGraph/GroupNode.cpp
   src/SceneGraph/RectNode.cpp
@@ -201,8 +141,6 @@ add_library(flux STATIC
   src/Graphics/Metal/MetalShaderLibrary.mm
   src/Graphics/Metal/MetalDeviceResources.mm
   src/Graphics/Metal/MetalCanvas.mm
-  src/Platform/Mac/MacMetalWindow.mm
-  src/Platform/Mac/MacClipboard.mm
 )
 add_dependencies(flux flux_shaders)
 
@@ -284,21 +222,11 @@ if(FLUX_BUILD_TESTS)
   enable_testing()
 
   add_executable(flux_tests
-    tests/AnimationTests.cpp
-    tests/AlertTests.cpp
     tests/MetalCanvasTests.mm
     tests/main.cpp
-    tests/LayoutAlgorithmTests.cpp
-    tests/SceneBuilderReuseTests.cpp
-    tests/SceneBuilderLayoutTests.cpp
-    tests/SceneGeometryIndexTests.cpp
-    tests/SceneTraversalTests.cpp
     tests/SceneGraphTests.cpp
     tests/ParagraphCacheTests.cpp
     tests/ParagraphCacheIncrementalTests.cpp
-    tests/RuntimeTests.cpp
-    tests/TextEditUtilsTests.cpp
-    tests/SemanticThemeTests.cpp
   )
 
   target_include_directories(flux_tests PRIVATE

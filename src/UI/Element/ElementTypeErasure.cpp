@@ -1,7 +1,5 @@
 #include <Flux/UI/Element.hpp>
 
-#include <Flux/UI/Views/Popover.hpp>
-
 #include <vector>
 
 namespace flux {
@@ -12,33 +10,12 @@ void ElementDeleter::operator()(Element* element) const noexcept {
   delete element;
 }
 
-std::uint64_t nextElementMeasureId() {
-  static std::uint64_t n = 1;
-  return n++;
-}
-
 Popover* popoverOverlayStateIf(Element& el) {
-  el.ensureUniqueImpl();
-  auto* m = dynamic_cast<Element::Model<Popover>*>(el.impl_.get());
-  return m ? &m->value : nullptr;
+  (void)el;
+  return nullptr;
 }
 
 } // namespace detail
-
-namespace {
-
-struct EnvironmentPushScope {
-  std::size_t count = 0;
-
-  ~EnvironmentPushScope() {
-    EnvironmentStack& environment = EnvironmentStack::current();
-    while (count-- > 0) {
-      environment.pop();
-    }
-  }
-};
-
-} // namespace
 
 Element::Element(Element const& other) = default;
 
@@ -57,68 +34,6 @@ detail::ElementModifiers& Element::writableModifiers() {
     modifiers_ = std::make_shared<detail::ElementModifiers>(*modifiers_);
   }
   return *modifiers_;
-}
-
-detail::ResolvedElement Element::resolve(ComponentKey const& key,
-                                         LayoutConstraints const& constraints) const {
-  detail::ResolvedElement resolved{};
-  EnvironmentPushScope pushedEnvironments{};
-  Element const* current = this;
-  ComponentKey currentKey = key;
-  bool expandedAnyBody = false;
-  bool descendantsStable = true;
-  auto stableInteractionKey = [&resolved, &key]() -> ComponentKey {
-    if (!resolved.bodyComponentKeys.empty()) {
-      return resolved.bodyComponentKeys.back();
-    }
-    return key;
-  };
-
-  while (current) {
-    if (EnvironmentLayer const* envLayer = current->environmentLayer()) {
-      resolved.environmentLayers.push_back(*envLayer);
-      EnvironmentStack::current().push(*envLayer);
-      ++pushedEnvironments.count;
-    }
-    if (detail::ElementModifiers const* modifiers = current->modifiers()) {
-      resolved.modifierLayers.push_back(*modifiers);
-    }
-    if (!current->expandsBody()) {
-      resolved.sceneElement = current;
-      resolved.stableInteractionKey = stableInteractionKey();
-      resolved.descendantsStable = expandedAnyBody && descendantsStable;
-      return resolved;
-    }
-
-    if (expandedAnyBody) {
-      resolved.bodyComponentKeys.push_back(currentKey);
-    }
-    expandedAnyBody = true;
-    detail::CompositeBodyResolution bodyResolution = current->resolveCompositeBody(currentKey, constraints);
-    descendantsStable = descendantsStable && bodyResolution.descendantsStable;
-    if (!bodyResolution.body) {
-      resolved.sceneElement = current;
-      resolved.stableInteractionKey = stableInteractionKey();
-      resolved.descendantsStable = false;
-      return resolved;
-    }
-    if (!resolved.nestSceneUnderFirstBody && bodyResolution.body->expandsBody()) {
-      resolved.nestSceneUnderFirstBody = true;
-    }
-
-    if (bodyResolution.ownedBody) {
-      resolved.ownedBodies.emplace_back(bodyResolution.ownedBody.release());
-      current = resolved.ownedBodies.back().get();
-    } else {
-      current = bodyResolution.body;
-    }
-    currentKey = ComponentKey{currentKey, detail::compositeBodyLocalId()};
-  }
-
-  resolved.sceneElement = this;
-  resolved.stableInteractionKey = stableInteractionKey();
-  resolved.descendantsStable = false;
-  return resolved;
 }
 
 float Element::flexGrow() const {

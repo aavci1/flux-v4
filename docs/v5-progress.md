@@ -75,14 +75,22 @@ Validation:
 
 ## Stage 3 — Element + Bindable Refactor
 
-- [ ] `Element` concept interface slimmed.
-- [ ] Reactive `Bindable<T>` modifier storage and overloads added.
-- [ ] Body-rerun infrastructure removed or parked as specified.
-- [ ] Surviving library/tests compile.
-- [ ] Surviving tests pass.
-- [ ] Forbidden body-rerun symbols are absent from `src/`, `include/`, and surviving tests.
+- [x] `Element` concept interface slimmed.
+- [x] Reactive `Bindable<T>` modifier storage and overloads added.
+- [x] Body-rerun infrastructure removed or parked as specified.
+- [x] Surviving library/tests compile.
+- [x] Surviving tests pass.
+- [x] Forbidden body-rerun symbols are absent from `src/`, `include/`, and surviving tests.
 
-Gate status: pending.
+Gate status: passed on 2026-04-26.
+
+Validation:
+- Normal Stage 3 build: `cmake -S . -B build-stage3 -DFLUX_BUILD_TESTS=ON -DFLUX_BUILD_EXAMPLES=OFF -DFLUX_BUILD_BENCHMARKS=ON -DCMAKE_BUILD_TYPE=ReleaseWithDebInfo` passed.
+- Normal Stage 3 tests: `ctest --test-dir build-stage3 --output-on-failure` passed (`flux_tests`, `flux_reactive2_tests`).
+- ASAN surviving tests: `cmake --build build-stage3-asan --target flux_tests flux_reactive2_tests` and `ctest --test-dir build-stage3-asan --output-on-failure` passed.
+- `git diff --check` passed.
+- `git grep -n -E "StateStore|BuildOrchestrator|MeasuredBuild|markCompositeDirty|buildMeasured|expandsBody|resolveCompositeBody|reactiveDirty|markReactiveDirty" -- include src` returned zero hits.
+- Examples are intentionally disabled at this stage because `Hooks.hpp` is a Stage 5 stub.
 
 ## Stage 4 — Mount Root + Scope Tree
 
