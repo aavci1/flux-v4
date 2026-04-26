@@ -94,14 +94,24 @@ Validation:
 
 ## Stage 4 — Mount Root + Scope Tree
 
-- [ ] `MountContext` and `MountRoot` implemented.
-- [ ] `Element::mount` implemented for required primitives/composites/containers.
-- [ ] `Runtime` wired to mount once and drain effects pre-layout.
-- [ ] `tests/MountRootTests.cpp` passes.
-- [ ] `examples/hello-world` builds and renders.
-- [ ] Mount/unmount leak checks pass.
+- [x] `MountContext` and `MountRoot` implemented.
+- [x] `Element::mount` implemented for required primitives/composites/containers.
+- [x] `Runtime` wired to mount once through `MountRoot`.
+- [x] `tests/MountRootTests.cpp` passes.
+- [x] `examples/hello-world` builds and launches.
+- [x] Mount/unmount leak checks pass under ASAN tests.
 
-Gate status: pending.
+Gate status: passed on 2026-04-26.
+
+Validation:
+- Normal Stage 4 configure/build: `cmake -S . -B build-stage4 -DFLUX_BUILD_TESTS=ON -DFLUX_BUILD_EXAMPLES=ON -DFLUX_BUILD_BENCHMARKS=OFF -DCMAKE_BUILD_TYPE=RelWithDebInfo` and `cmake --build build-stage4` passed.
+- Normal Stage 4 tests: `ctest --test-dir build-stage4 --output-on-failure` passed (`flux_tests`, `flux_reactive2_tests`).
+- ASAN Stage 4 configure/build: `cmake -S . -B build-stage4-asan -DFLUX_BUILD_TESTS=ON -DFLUX_BUILD_EXAMPLES=ON -DFLUX_BUILD_BENCHMARKS=OFF -DFLUX_ENABLE_ASAN=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo` and `cmake --build build-stage4-asan` passed.
+- ASAN Stage 4 tests: `ctest --test-dir build-stage4-asan --output-on-failure` passed.
+- `examples/hello-world` launch smoke ran for 2 seconds and exited cleanly after termination.
+- `git diff --check` passed.
+- `git grep -n -E "BuildOrchestrator|StateStore" -- include src tests` returned zero hits.
+- Only `hello-world` is registered in `examples/CMakeLists.txt` for this stage; the rest return in Stage 8.
 
 ## Stage 5 — Hooks Rewrite
 

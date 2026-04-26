@@ -1,8 +1,70 @@
 #include <Flux/UI/Element.hpp>
 
+#include <Flux/Reactive2/Effect.hpp>
+#include <Flux/SceneGraph/RectNode.hpp>
+#include <Flux/SceneGraph/SceneNode.hpp>
+#include <Flux/UI/MountContext.hpp>
+
+#include <algorithm>
+#include <cmath>
+#include <limits>
 #include <vector>
 
 namespace flux {
+
+namespace {
+
+float positive(float value) {
+  return std::isfinite(value) ? std::max(0.f, value) : 0.f;
+}
+
+LayoutConstraints insetConstraints(LayoutConstraints constraints, EdgeInsets padding) {
+  float const dx = std::max(0.f, padding.left) + std::max(0.f, padding.right);
+  float const dy = std::max(0.f, padding.top) + std::max(0.f, padding.bottom);
+  if (std::isfinite(constraints.maxWidth)) {
+    constraints.maxWidth = std::max(0.f, constraints.maxWidth - dx);
+  }
+  if (std::isfinite(constraints.maxHeight)) {
+    constraints.maxHeight = std::max(0.f, constraints.maxHeight - dy);
+  }
+  constraints.minWidth = std::max(0.f, constraints.minWidth - dx);
+  constraints.minHeight = std::max(0.f, constraints.minHeight - dy);
+  if (std::isfinite(constraints.maxWidth)) {
+    constraints.minWidth = std::min(constraints.minWidth, constraints.maxWidth);
+  }
+  if (std::isfinite(constraints.maxHeight)) {
+    constraints.minHeight = std::min(constraints.minHeight, constraints.maxHeight);
+  }
+  return constraints;
+}
+
+template<typename T, typename Setter>
+void installBinding(MountContext& ctx, Reactive2::Bindable<T> binding, Setter setter) {
+  if (!binding.isReactive()) {
+    setter(binding.evaluate());
+    return;
+  }
+
+  std::function<void()> requestRedraw = ctx.redrawCallback();
+  Reactive2::withOwner(ctx.owner(), [&] {
+    Reactive2::Effect([binding = std::move(binding), setter = std::move(setter),
+                       requestRedraw = std::move(requestRedraw)]() mutable {
+      setter(binding.evaluate());
+      if (requestRedraw) {
+        requestRedraw();
+      }
+    });
+  });
+}
+
+Size measuredOuterSize(Element const& element, MountContext& ctx) {
+  ctx.measureContext().pushConstraints(ctx.constraints(), ctx.hints());
+  Size size = element.measure(ctx.measureContext(), ctx.constraints(), ctx.hints(), ctx.textSystem());
+  ctx.measureContext().popConstraints();
+  return Size{positive(size.width), positive(size.height)};
+}
+
+} // namespace
 
 namespace detail {
 
@@ -82,6 +144,103 @@ Element Element::flex(float grow, float shrink, float basis) && {
 Element Element::key(std::string key) && {
   key_ = std::move(key);
   return std::move(*this);
+}
+
+std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
+  if (envLayer_) {
+    ctx.environment().push(*envLayer_);
+  }
+
+  auto popEnvironment = [&] {
+    if (envLayer_) {
+      ctx.environment().pop();
+    }
+  };
+
+  if (!modifiers_ || !modifiers_->needsModifierPass()) {
+    auto node = impl_->mount(ctx);
+    popEnvironment();
+    return node;
+  }
+
+  detail::ElementModifiers const& modifiers = *modifiers_;
+  EdgeInsets const padding = modifiers.padding.evaluate();
+  LayoutConstraints innerConstraints = insetConstraints(ctx.constraints(), padding);
+  MountContext innerCtx = ctx.child(innerConstraints, ctx.hints());
+  std::unique_ptr<scenegraph::SceneNode> content = impl_->mount(innerCtx);
+  if (!content) {
+    popEnvironment();
+    return nullptr;
+  }
+
+  Size outerSize = measuredOuterSize(*this, ctx);
+  auto wrapper = std::make_unique<scenegraph::RectNode>(
+      Rect{0.f, 0.f, positive(outerSize.width), positive(outerSize.height)});
+
+  auto* rawWrapper = wrapper.get();
+  installBinding<FillStyle>(ctx, modifiers.fill, [rawWrapper](FillStyle fill) {
+    rawWrapper->setFill(std::move(fill));
+  });
+  installBinding<StrokeStyle>(ctx, modifiers.stroke, [rawWrapper](StrokeStyle stroke) {
+    rawWrapper->setStroke(std::move(stroke));
+  });
+  installBinding<ShadowStyle>(ctx, modifiers.shadow, [rawWrapper](ShadowStyle shadow) {
+    rawWrapper->setShadow(shadow);
+  });
+  installBinding<CornerRadius>(ctx, modifiers.cornerRadius, [rawWrapper](CornerRadius radius) {
+    rawWrapper->setCornerRadius(radius);
+  });
+  installBinding<float>(ctx, modifiers.opacity, [rawWrapper](float opacity) {
+    rawWrapper->setOpacity(opacity);
+  });
+  rawWrapper->setClipsContents(modifiers.clip);
+
+  content->setPosition(Point{std::max(0.f, padding.left), std::max(0.f, padding.top)});
+  wrapper->appendChild(std::move(content));
+
+  installBinding<float>(ctx, modifiers.sizeWidth, [rawWrapper](float width) {
+    if (width > 0.f) {
+      Size size = rawWrapper->size();
+      size.width = width;
+      rawWrapper->setSize(size);
+    }
+  });
+  installBinding<float>(ctx, modifiers.sizeHeight, [rawWrapper](float height) {
+    if (height > 0.f) {
+      Size size = rawWrapper->size();
+      size.height = height;
+      rawWrapper->setSize(size);
+    }
+  });
+  installBinding<Vec2>(ctx, modifiers.translation, [rawWrapper, px = modifiers.positionX,
+                                                    py = modifiers.positionY](Vec2 translation) mutable {
+    rawWrapper->setPosition(Point{px.evaluate() + translation.x, py.evaluate() + translation.y});
+  });
+  installBinding<float>(ctx, modifiers.positionX, [rawWrapper, tr = modifiers.translation,
+                                                   py = modifiers.positionY](float x) mutable {
+    Vec2 const translation = tr.evaluate();
+    rawWrapper->setPosition(Point{x + translation.x, py.evaluate() + translation.y});
+  });
+  installBinding<float>(ctx, modifiers.positionY, [rawWrapper, tr = modifiers.translation,
+                                                   px = modifiers.positionX](float y) mutable {
+    Vec2 const translation = tr.evaluate();
+    rawWrapper->setPosition(Point{px.evaluate() + translation.x, y + translation.y});
+  });
+
+  if (modifiers.overlay) {
+    MountContext overlayCtx = ctx.child(LayoutConstraints{
+        .maxWidth = outerSize.width,
+        .maxHeight = outerSize.height,
+        .minWidth = 0.f,
+        .minHeight = 0.f,
+    }, ctx.hints());
+    if (auto overlayNode = modifiers.overlay->mount(overlayCtx)) {
+      wrapper->appendChild(std::move(overlayNode));
+    }
+  }
+
+  popEnvironment();
+  return wrapper;
 }
 
 } // namespace flux

@@ -1,5 +1,8 @@
 #pragma once
 
+#include <Flux/SceneGraph/SceneNode.hpp>
+#include <Flux/UI/MountContext.hpp>
+
 #include <cassert>
 #include <cstdlib>
 #include <type_traits>
@@ -29,6 +32,7 @@ struct Element::Model : Concept {
 
   Size measure(MeasureContext& ctx, LayoutConstraints const& constraints,
                LayoutHints const& hints, TextSystem& textSystem) const override;
+  std::unique_ptr<scenegraph::SceneNode> mount(MountContext& ctx) const override;
   float flexGrow() const override { return detail::flexGrowOf(value); }
   float flexShrink() const override { return detail::flexShrinkOf(value); }
   std::optional<float> flexBasis() const override { return detail::flexBasisOf(value); }
@@ -91,6 +95,37 @@ Size Element::Model<C>::measure(MeasureContext& ctx, LayoutConstraints const& co
 }
 
 template<typename C>
+std::unique_ptr<scenegraph::SceneNode> Element::Model<C>::mount(MountContext& ctx) const {
+  if constexpr (std::is_same_v<C, Rectangle>) {
+    return detail::mountRectangle(value, ctx);
+  } else if constexpr (std::is_same_v<C, Text>) {
+    return detail::mountText(value, ctx);
+  } else if constexpr (std::is_same_v<C, VStack>) {
+    return detail::mountVStack(value, ctx);
+  } else if constexpr (std::is_same_v<C, HStack>) {
+    return detail::mountHStack(value, ctx);
+  } else if constexpr (std::is_same_v<C, ZStack>) {
+    return detail::mountZStack(value, ctx);
+  } else if constexpr (std::is_same_v<C, Spacer>) {
+    return detail::mountSpacer(value, ctx);
+  } else if constexpr (BodyComponent<C>) {
+    auto childScope = std::make_shared<Reactive2::Scope>();
+    ctx.owner().onCleanup([childScope] {
+      childScope->dispose();
+    });
+    MountContext childCtx{*childScope, ctx.environment(), ctx.textSystem(), ctx.measureContext(),
+                          ctx.constraints(), ctx.hints()};
+    return Reactive2::withOwner(*childScope, [&] {
+      Element child{value.body()};
+      return child.mount(childCtx);
+    });
+  } else {
+    static_assert(alwaysFalse<C>, "Component is not mountable in v5 Stage 4.");
+    return nullptr;
+  }
+}
+
+template<typename C>
 Element::Element(C component)
     : impl_(std::make_shared<Model<C>>(std::move(component))) {}
 
@@ -111,6 +146,19 @@ std::vector<Element> children(Args&&... args) {
   v.reserve(sizeof...(args));
   (v.emplace_back(std::forward<Args>(args)), ...);
   return v;
+}
+
+inline bool elementsStructurallyEqual(std::vector<Element> const& lhs,
+                                      std::vector<Element> const& rhs) noexcept {
+  if (lhs.size() != rhs.size()) {
+    return false;
+  }
+  for (std::size_t i = 0; i < lhs.size(); ++i) {
+    if (lhs[i].typeTag() != rhs[i].typeTag()) {
+      return false;
+    }
+  }
+  return true;
 }
 
 } // namespace flux

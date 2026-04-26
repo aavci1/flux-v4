@@ -26,6 +26,7 @@
 namespace flux {
 
 class Element;
+class MountContext;
 class TextSystem;
 struct Popover;
 struct Rectangle;
@@ -44,6 +45,9 @@ struct PopoverCalloutShape;
 namespace views {
 struct Image;
 } // namespace views
+namespace scenegraph {
+class SceneNode;
+}
 
 template<typename>
 inline constexpr bool alwaysFalse = false;
@@ -77,6 +81,7 @@ public:
   Element& operator=(Element&&) noexcept = default;
 
   Size measure(MeasureContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints, TextSystem& textSystem) const;
+  std::unique_ptr<scenegraph::SceneNode> mount(MountContext& ctx) const;
   [[nodiscard]] ElementType typeTag() const noexcept { return impl_ ? impl_->elementType() : ElementType::Unknown; }
   [[nodiscard]] detail::ElementModifiers const* modifiers() const noexcept {
     return modifiers_.get();
@@ -170,6 +175,7 @@ private:
     virtual void const* rawValuePtr() const noexcept = 0;
     virtual Size measure(MeasureContext& ctx, LayoutConstraints const& constraints,
                          LayoutHints const& hints, TextSystem& textSystem) const = 0;
+    virtual std::unique_ptr<scenegraph::SceneNode> mount(MountContext& ctx) const = 0;
     virtual float flexGrow() const { return 0.f; }
     virtual float flexShrink() const { return 0.f; }
     virtual std::optional<float> flexBasis() const { return std::nullopt; }
@@ -196,6 +202,8 @@ private:
 
 template<typename... Args>
 std::vector<Element> children(Args&&... args);
+
+bool elementsStructurallyEqual(std::vector<Element> const& lhs, std::vector<Element> const& rhs) noexcept;
 
 } // namespace flux
 

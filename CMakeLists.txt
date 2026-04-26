@@ -96,7 +96,7 @@ add_custom_command(
 add_custom_target(flux_shaders DEPENDS ${FLUX_METALLIB_EMBED_H})
 
 add_library(flux STATIC
-  src/Core/ApplicationStage3Stub.cpp
+  src/Core/Application.mm
   src/Core/EventQueue.cpp
   src/Reactive/Observer.cpp
   src/Reactive/Easing.cpp
@@ -108,12 +108,22 @@ add_library(flux STATIC
   src/Reactive2/ObserverStack.cpp
   src/Core/ComponentKey.cpp
   src/Core/ComponentKeyUtil.cpp
+  src/Core/Window.cpp
+  src/Core/WindowRender.cpp
   src/UI/MeasureContext.cpp
+  src/UI/Detail/TraversalContext.cpp
   src/UI/Environment.cpp
   src/UI/Theme.cpp
   src/UI/Element/ElementMeasurement.cpp
   src/UI/Element/ElementModifiers.cpp
   src/UI/Element/ElementTypeErasure.cpp
+  src/UI/MountContext.cpp
+  src/UI/MountRoot.cpp
+  src/UI/Runtime.cpp
+  src/UI/Overlay.cpp
+  src/UI/Views/Rectangle.cpp
+  src/UI/Views/Text.cpp
+  src/UI/Views/LayoutContainers.cpp
   src/UI/LayoutDebugDump.cpp
   src/SceneGraph/SceneNode.cpp
   src/SceneGraph/GroupNode.cpp
@@ -141,6 +151,8 @@ add_library(flux STATIC
   src/Graphics/Metal/MetalShaderLibrary.mm
   src/Graphics/Metal/MetalDeviceResources.mm
   src/Graphics/Metal/MetalCanvas.mm
+  src/Platform/Mac/MacMetalWindow.mm
+  src/Platform/Mac/MacClipboard.mm
 )
 add_dependencies(flux flux_shaders)
 
@@ -223,6 +235,7 @@ if(FLUX_BUILD_TESTS)
 
   add_executable(flux_tests
     tests/MetalCanvasTests.mm
+    tests/MountRootTests.cpp
     tests/main.cpp
     tests/SceneGraphTests.cpp
     tests/ParagraphCacheTests.cpp

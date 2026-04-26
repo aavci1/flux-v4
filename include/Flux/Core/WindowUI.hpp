@@ -7,10 +7,6 @@
 
 #include <Flux/Core/Window.hpp>
 #include <Flux/Detail/RootHolder.hpp>
-#include <Flux/UI/Element.hpp>
-#include <Flux/UI/Environment.hpp>
-#include <Flux/UI/Layout.hpp>
-#include <Flux/UI/Overlay.hpp>
 
 #include <type_traits>
 
