@@ -139,7 +139,7 @@ Element swatchGrid(Theme const &theme, std::vector<Element> tiles) {
     };
 }
 
-Element previewWindow(std::string name, std::string note) {
+Element previewWindow(Theme previewTheme, std::string name, std::string note) {
     Theme const &theme = useEnvironment<Theme>();
 
     Element content = VStack {
@@ -224,7 +224,8 @@ Element previewWindow(std::string name, std::string note) {
         .padding(theme.space4)
         .fill(Color::controlBackground())
         .stroke(Color::separator(), 1.f)
-        .cornerRadius(theme.radiusXLarge);
+        .cornerRadius(theme.radiusXLarge)
+        .environment(previewTheme);
 
     return std::move(content).flex(1.f);
 }
@@ -239,8 +240,8 @@ struct TypographyDemoRoot {
             .spacing = theme.space3,
             .alignment = Alignment::Start,
             .children = children(
-                previewWindow("Light Appearance", "Primary and secondary content should feel calm and legible."),
-                previewWindow("Dark Appearance", "The same semantic tokens should keep hierarchy intact at night.")
+                previewWindow(Theme::light(), "Light Appearance", "Primary and secondary content should feel calm and legible."),
+                previewWindow(Theme::dark(), "Dark Appearance", "The same semantic tokens should keep hierarchy intact at night.")
             )
         };
 
