@@ -91,7 +91,7 @@ public:
   }
   [[nodiscard]] detail::ResolvedElement resolve(ComponentKey const& key, LayoutConstraints const& constraints) const;
   [[nodiscard]] detail::ElementModifiers const* modifiers() const noexcept {
-    return modifiers_ ? &*modifiers_ : nullptr;
+    return modifiers_.get();
   }
   [[nodiscard]] EnvironmentLayer const* environmentLayer() const noexcept {
     return envLayer_ ? &*envLayer_ : nullptr;
@@ -187,16 +187,18 @@ private:
   template<typename C>
   struct Model;
 
-  std::unique_ptr<Concept> impl_;
+  std::shared_ptr<Concept> impl_;
   std::optional<float> flexGrowOverride_;
   std::optional<float> flexShrinkOverride_;
   std::optional<float> flexBasisOverride_;
   std::optional<float> minMainSizeOverride_;
   std::optional<EnvironmentLayer> envLayer_;
-  std::optional<detail::ElementModifiers> modifiers_;
+  std::shared_ptr<detail::ElementModifiers> modifiers_;
   std::optional<std::string> key_{};
   std::uint64_t measureId_{};
 
+  void ensureUniqueImpl();
+  detail::ElementModifiers& writableModifiers();
   Size measureWithModifiersImpl(MeasureContext& ctx, LayoutConstraints const& constraints,
                                 LayoutHints const& hints, TextSystem& textSystem) const;
 };

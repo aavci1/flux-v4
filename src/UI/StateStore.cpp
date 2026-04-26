@@ -135,6 +135,16 @@ void StateStore::beginRebuild(bool forceFullRebuild) {
   ++buildEpoch_;
   forceFullRebuild_ = forceFullRebuild || pendingDirtyComposites_.empty();
   activeDirtyComposites_ = std::move(pendingDirtyComposites_);
+  activeDirtyAncestorKeys_.clear();
+  if (!forceFullRebuild_) {
+    for (ComponentKey const& dirtyKey : activeDirtyComposites_) {
+      ComponentKey ancestor = dirtyKey;
+      while (!ancestor.empty()) {
+        ancestor.pop_back();
+        activeDirtyAncestorKeys_.insert(ancestor);
+      }
+    }
+  }
   pendingDirtyComposites_.clear();
   activeStack_.clear();
   activeStateStack_.clear();
@@ -178,6 +188,7 @@ void StateStore::endRebuild() {
     return states_.find(entry.first) == states_.end();
   });
   activeDirtyComposites_.clear();
+  activeDirtyAncestorKeys_.clear();
 }
 
 void StateStore::shutdown() {
@@ -200,6 +211,7 @@ void StateStore::shutdown() {
   compositeConstraintStack_.clear();
   pendingDirtyComposites_.clear();
   activeDirtyComposites_.clear();
+  activeDirtyAncestorKeys_.clear();
 }
 
 void StateStore::resetSlotCursors() {
@@ -296,16 +308,7 @@ bool StateStore::hasDirtyDescendant(ComponentKey const& key) const {
   if (forceFullRebuild_) {
     return true;
   }
-  for (ComponentKey const& candidate : activeDirtyComposites_) {
-    if (candidate.size() <= key.size()) {
-      continue;
-    }
-    debug::perf::recordComponentKeyPrefixCompare(key.size());
-    if (candidate.hasPrefix(key)) {
-      return true;
-    }
-  }
-  return false;
+  return activeDirtyAncestorKeys_.count(key) != 0;
 }
 
 void StateStore::markComponentsOutsideSubtreeVisited(ComponentKey const& key) {

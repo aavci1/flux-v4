@@ -274,7 +274,7 @@ Size Element::Model<C>::measure(MeasureContext& ctx, LayoutConstraints const& co
 
 template<typename C>
 Element::Element(C component)
-    : impl_(std::make_unique<Model<C>>(std::move(component)))
+    : impl_(std::make_shared<Model<C>>(std::move(component)))
     , measureId_(detail::nextElementMeasureId()) {}
 
 template<typename T>
@@ -291,6 +291,9 @@ T const& Element::as() const {
 inline bool Element::valueEquals(Element const& other) const noexcept {
   if (!impl_ || !other.impl_) {
     return !impl_ && !other.impl_;
+  }
+  if (impl_.get() == other.impl_.get()) {
+    return true;
   }
   return impl_->valueEquals(*other.impl_);
 }
@@ -333,6 +336,9 @@ inline bool elementModifiersStructurallyEqual(ElementModifiers const& lhsMods,
 inline bool modifiersStructurallyEqual(Element const& lhs, Element const& rhs) noexcept {
   detail::ElementModifiers const* lhsMods = lhs.modifiers();
   detail::ElementModifiers const* rhsMods = rhs.modifiers();
+  if (lhsMods == rhsMods) {
+    return true;
+  }
   if (!lhsMods || !rhsMods) {
     return lhsMods == rhsMods;
   }

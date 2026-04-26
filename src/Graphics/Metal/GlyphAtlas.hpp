@@ -44,7 +44,7 @@ public:
 
   id<MTLTexture> texture() const { return texture_; }
 
-  void grow();
+  bool grow();
 
   /// Tier A: grow before drawing when shelf usage is high so `grow()` rarely runs mid-frame (which would
   /// invalidate UVs already written to the frame). Call from `Canvas::beginFrame` after clearing frame data.
@@ -54,8 +54,8 @@ public:
   /// Tier B: grow after a presented frame when utilization is still high, giving headroom for the next frame.
   void afterPresent();
 
-  /// Debug: assert if `grow()` runs while the Metal canvas still holds glyph verts for the current frame.
-  void setBeforeGrowCallback(std::function<void()> cb) { beforeGrow_ = std::move(cb); }
+  /// Return false to defer a grow that would invalidate already-emitted glyph UVs in the current frame.
+  void setBeforeGrowCallback(std::function<bool()> cb) { beforeGrow_ = std::move(cb); }
 
   std::uint32_t atlasPixelWidth() const { return atlasWidth_; }
   std::uint32_t atlasPixelHeight() const { return atlasHeight_; }
@@ -78,7 +78,8 @@ private:
 
   std::unordered_map<GlyphKey, AtlasEntry, GlyphKeyHash> entries_;
 
-  std::function<void()> beforeGrow_{};
+  bool pendingGrow_ = false;
+  std::function<bool()> beforeGrow_{};
 };
 
 } // namespace flux

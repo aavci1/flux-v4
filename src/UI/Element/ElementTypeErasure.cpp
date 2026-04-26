@@ -18,6 +18,7 @@ std::uint64_t nextElementMeasureId() {
 }
 
 Popover* popoverOverlayStateIf(Element& el) {
+  el.ensureUniqueImpl();
   auto* m = dynamic_cast<Element::Model<Popover>*>(el.impl_.get());
   return m ? &m->value : nullptr;
 }
@@ -39,30 +40,23 @@ struct EnvironmentPushScope {
 
 } // namespace
 
-Element::Element(Element const& other)
-    : impl_(other.impl_ ? other.impl_->clone() : nullptr)
-    , flexGrowOverride_(other.flexGrowOverride_)
-    , flexShrinkOverride_(other.flexShrinkOverride_)
-    , flexBasisOverride_(other.flexBasisOverride_)
-    , minMainSizeOverride_(other.minMainSizeOverride_)
-    , envLayer_(other.envLayer_)
-    , modifiers_(other.modifiers_)
-    , key_(other.key_)
-    , measureId_(other.measureId_) {}
+Element::Element(Element const& other) = default;
 
-Element& Element::operator=(Element const& other) {
-  if (this != &other) {
-    impl_ = other.impl_ ? other.impl_->clone() : nullptr;
-    flexGrowOverride_ = other.flexGrowOverride_;
-    flexShrinkOverride_ = other.flexShrinkOverride_;
-    flexBasisOverride_ = other.flexBasisOverride_;
-    minMainSizeOverride_ = other.minMainSizeOverride_;
-    envLayer_ = other.envLayer_;
-    modifiers_ = other.modifiers_;
-    key_ = other.key_;
-    measureId_ = other.measureId_;
+Element& Element::operator=(Element const& other) = default;
+
+void Element::ensureUniqueImpl() {
+  if (impl_ && impl_.use_count() != 1) {
+    impl_ = std::shared_ptr<Concept>(impl_->clone());
   }
-  return *this;
+}
+
+detail::ElementModifiers& Element::writableModifiers() {
+  if (!modifiers_) {
+    modifiers_ = std::make_shared<detail::ElementModifiers>();
+  } else if (modifiers_.use_count() != 1) {
+    modifiers_ = std::make_shared<detail::ElementModifiers>(*modifiers_);
+  }
+  return *modifiers_;
 }
 
 detail::ResolvedElement Element::resolve(ComponentKey const& key,

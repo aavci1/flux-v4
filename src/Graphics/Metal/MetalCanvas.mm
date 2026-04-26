@@ -358,8 +358,7 @@ public:
       : textSystem_(textSystem), metal_(layer), windowHandle_(handle) {
     glyphAtlas_ = std::make_unique<GlyphAtlas>(metal_.device(), textSystem_);
     glyphAtlas_->setBeforeGrowCallback([this]() {
-      assert(frame_.glyphVerts.empty() && frame_.glyphVertexSources.empty() && frame_.glyphVertexCount == 0 &&
-             "GlyphAtlas::grow() repacks UVs; cannot run while the frame still holds glyph vertices");
+      return frame_.glyphVerts.empty() && frame_.glyphVertexSources.empty() && frame_.glyphVertexCount == 0;
     });
     frameSem_ = dispatch_semaphore_create(static_cast<int>(kFramesInFlight));
     pushState();
@@ -1099,10 +1098,30 @@ public:
     emitImage(mh->texture(), device, cr, simd_make_float4(0.f, 0.f, 0.f, 0.f), texInv, 1.f, op, rotationRad, true);
   }
 
+  void preflightTextGlyphs(TextLayout const& layout) {
+    for (auto const& placed : layout.runs) {
+      TextRun const& text = placed.run;
+      if (text.glyphIds.empty()) {
+        continue;
+      }
+      float const physicalFontSize = text.fontSize * dpiScaleX_;
+      std::size_t const glyphCount = std::min(text.glyphIds.size(), text.positions.size());
+      for (std::size_t i = 0; i < glyphCount; ++i) {
+        GlyphKey key{};
+        key.fontId = text.fontId;
+        key.glyphId = text.glyphIds[i];
+        unsigned const q = static_cast<unsigned>(physicalFontSize * 4.f);
+        key.sizeQ8 = static_cast<std::uint16_t>(std::min(65535u, q));
+        (void)glyphAtlas_->getOrUpload(key);
+      }
+    }
+  }
+
   void drawTextLayout(TextLayout const& layout, Point origin) override {
     if (!inFrame_) {
       return;
     }
+    preflightTextGlyphs(layout);
     MetalFrameRecorder& recorder = activeRecorder();
 
     Mat3 const& M = currentState().transform;
@@ -1118,7 +1137,6 @@ public:
     float const invAh = 1.f / ah;
     float const invDpiX = 1.f / dpiScaleX_;
     float const invDpiY = 1.f / dpiScaleY_;
-
     std::uint32_t const glyphStart = recorder.glyphVertexCount;
     std::uint32_t const ownedGlyphStart = static_cast<std::uint32_t>(recorder.glyphVerts.size());
     for (auto const& placed : layout.runs) {

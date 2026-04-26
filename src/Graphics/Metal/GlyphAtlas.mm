@@ -54,23 +54,22 @@ bool GlyphAtlas::pressureHighForHeadroom() const {
 }
 
 void GlyphAtlas::prepareForFrameBegin() {
-  if (pressureHighForHeadroom()) {
-    grow();
+  if (pendingGrow_ || pressureHighForHeadroom()) {
+    (void)grow();
   }
 }
 
 void GlyphAtlas::afterPresent() {
-  if (pressureHighForHeadroom()) {
-    grow();
+  if (pendingGrow_ || pressureHighForHeadroom()) {
+    (void)grow();
   }
 }
 
-void GlyphAtlas::grow() {
-#ifndef NDEBUG
-  if (beforeGrow_) {
-    beforeGrow_();
+bool GlyphAtlas::grow() {
+  if (beforeGrow_ && !beforeGrow_()) {
+    pendingGrow_ = true;
+    return false;
   }
-#endif
   if (atlasWidth_ >= kMaxAtlasDim || atlasHeight_ >= kMaxAtlasDim) {
     throw std::runtime_error("GlyphAtlas: atlas exceeds maximum size");
   }
@@ -103,6 +102,8 @@ void GlyphAtlas::grow() {
   for (GlyphKey const& k : keys) {
     (void)getOrUpload(k);
   }
+  pendingGrow_ = false;
+  return true;
 }
 
 AtlasEntry GlyphAtlas::allocateAndUpload(GlyphKey const& key) {
@@ -129,7 +130,9 @@ AtlasEntry GlyphAtlas::allocateAndUpload(GlyphKey const& key) {
   };
 
   while (!ensureSpace()) {
-    grow();
+    if (!grow()) {
+      return AtlasEntry{};
+    }
   }
 
   shelfH_ = std::max(shelfH_, cellH);

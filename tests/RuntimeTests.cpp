@@ -5,7 +5,9 @@
 #include <Flux/Core/LocalId.hpp>
 #include <Flux/Reactive/Signal.hpp>
 #include <Flux/UI/Detail/TraversalContext.hpp>
+#include <Flux/UI/Element.hpp>
 #include <Flux/UI/StateStore.hpp>
+#include <Flux/UI/Views/Rectangle.hpp>
 
 #include <atomic>
 #include <chrono>
@@ -17,6 +19,26 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+
+namespace {
+
+struct CopyCountingLeaf {
+    inline static int copies = 0;
+
+    CopyCountingLeaf() = default;
+    CopyCountingLeaf(CopyCountingLeaf const&) { ++copies; }
+    CopyCountingLeaf& operator=(CopyCountingLeaf const&) {
+        ++copies;
+        return *this;
+    }
+
+    flux::Size measure(flux::MeasureContext&, flux::LayoutConstraints const&,
+                       flux::LayoutHints const&, flux::TextSystem&) const {
+        return flux::Size{1.f, 1.f};
+    }
+};
+
+} // namespace
 
 TEST_CASE("Composite-observed signals schedule the next reactive frame") {
     using namespace std::chrono_literals;
@@ -97,6 +119,53 @@ TEST_CASE("ComponentKey interned sibling lookups stay stable across wide parent 
     CHECK(keyedChildren[2].hasPrefix(parent));
     CHECK(positionalChildren[0].tail() == LocalId::fromIndex(0));
     CHECK(keyedChildren[0].tail() == LocalId::fromString("a"));
+}
+
+TEST_CASE("StateStore dirty descendant queries use strict active ancestor keys") {
+    using flux::ComponentKey;
+    using flux::LocalId;
+    using flux::StateStore;
+
+    StateStore store;
+    ComponentKey const root {LocalId::fromString("root")};
+    ComponentKey const child {root, LocalId::fromString("child")};
+    ComponentKey const grandchild {child, LocalId::fromString("grandchild")};
+    ComponentKey const sibling {LocalId::fromString("sibling")};
+
+    store.markCompositeDirty(grandchild);
+    store.beginRebuild(false);
+
+    CHECK(store.hasDirtyDescendant(ComponentKey{}));
+    CHECK(store.hasDirtyDescendant(root));
+    CHECK(store.hasDirtyDescendant(child));
+    CHECK(!store.hasDirtyDescendant(grandchild));
+    CHECK(!store.hasDirtyDescendant(sibling));
+    CHECK(!store.isComponentDirty(child));
+    CHECK(store.isComponentDirty(grandchild));
+
+    store.endRebuild();
+}
+
+TEST_CASE("Element copies share model storage and detach modifiers on write") {
+    using flux::Element;
+    using flux::Rectangle;
+
+    CopyCountingLeaf::copies = 0;
+    Element first {CopyCountingLeaf{}};
+    CopyCountingLeaf::copies = 0;
+    Element second = first;
+
+    CHECK(CopyCountingLeaf::copies == 0);
+    CHECK(first.structuralEquals(second));
+
+    Element base = Element{Rectangle{}}.padding(1.f);
+    Element shared = base;
+    Element changed = std::move(shared).padding(2.f);
+
+    REQUIRE(base.modifiers() != nullptr);
+    REQUIRE(changed.modifiers() != nullptr);
+    CHECK(base.modifiers()->padding.top == doctest::Approx(1.f));
+    CHECK(changed.modifiers()->padding.top == doctest::Approx(2.f));
 }
 
 TEST_CASE("TraversalContext reuses its interned prefix key for current child keys") {

@@ -63,10 +63,7 @@ Element Element::padding(float all) && {
 }
 
 Element Element::padding(EdgeInsets insets) && {
-  if (!modifiers_) {
-    modifiers_.emplace();
-  }
-  modifiers_->padding = std::move(insets);
+  writableModifiers().padding = std::move(insets);
   return std::move(*this);
 }
 
@@ -75,75 +72,49 @@ Element Element::padding(float top, float right, float bottom, float left) && {
 }
 
 Element Element::fill(FillStyle style) && {
-  if (!modifiers_) {
-    modifiers_.emplace();
-  }
-  modifiers_->fill = std::move(style);
+  writableModifiers().fill = std::move(style);
   return std::move(*this);
 }
 
 Element Element::fill(Color color) && {
-  if (!modifiers_) {
-      modifiers_.emplace();
-  }
-  modifiers_->fill = FillStyle::solid(std::move(color));
+  writableModifiers().fill = FillStyle::solid(std::move(color));
   return std::move(*this);
 }
 
 Element Element::shadow(ShadowStyle style) && {
-  if (!modifiers_) {
-    modifiers_.emplace();
-  }
-  modifiers_->shadow = std::move(style);
+  writableModifiers().shadow = std::move(style);
   return std::move(*this);
 }
 
 Element Element::size(float width, float height) && {
-  if (!modifiers_) {
-    modifiers_.emplace();
-  }
-  modifiers_->sizeWidth = width;
-  modifiers_->sizeHeight = height;
+  detail::ElementModifiers& modifiers = writableModifiers();
+  modifiers.sizeWidth = width;
+  modifiers.sizeHeight = height;
   return std::move(*this);
 }
 
 Element Element::width(float w) && {
-  if (!modifiers_) {
-    modifiers_.emplace();
-  }
-  modifiers_->sizeWidth = w;
+  writableModifiers().sizeWidth = w;
   return std::move(*this);
 }
 
 Element Element::height(float h) && {
-  if (!modifiers_) {
-    modifiers_.emplace();
-  }
-  modifiers_->sizeHeight = h;
+  writableModifiers().sizeHeight = h;
   return std::move(*this);
 }
 
 Element Element::stroke(StrokeStyle style) && {
-  if (!modifiers_) {
-    modifiers_.emplace();
-  }
-  modifiers_->stroke = std::move(style);
+  writableModifiers().stroke = std::move(style);
   return std::move(*this);
 }
 
 Element Element::stroke(Color color, float width) && {
-  if (!modifiers_) {
-      modifiers_.emplace();
-  }
-  modifiers_->stroke = StrokeStyle::solid(std::move(color), width);
+  writableModifiers().stroke = StrokeStyle::solid(std::move(color), width);
   return std::move(*this);
 }
 
 Element Element::cornerRadius(CornerRadius radius) && {
-  if (!modifiers_) {
-    modifiers_.emplace();
-  }
-  modifiers_->cornerRadius = radius;
+  writableModifiers().cornerRadius = radius;
   return std::move(*this);
 }
 
@@ -152,140 +123,91 @@ Element Element::cornerRadius(float radius) && {
 }
 
 Element Element::opacity(float opacity) && {
-  if (!modifiers_) {
-    modifiers_.emplace();
-  }
-  modifiers_->opacity = opacity;
+  writableModifiers().opacity = opacity;
   return std::move(*this);
 }
 
 Element Element::position(Vec2 p) && {
-  if (!modifiers_) {
-    modifiers_.emplace();
-  }
-  modifiers_->positionX = p.x;
-  modifiers_->positionY = p.y;
+  detail::ElementModifiers& modifiers = writableModifiers();
+  modifiers.positionX = p.x;
+  modifiers.positionY = p.y;
   return std::move(*this);
 }
 
 Element Element::position(float x, float y) && {
-  if (!modifiers_) {
-    modifiers_.emplace();
-  }
-  modifiers_->positionX = x;
-  modifiers_->positionY = y;
+  detail::ElementModifiers& modifiers = writableModifiers();
+  modifiers.positionX = x;
+  modifiers.positionY = y;
   return std::move(*this);
 }
 
 Element Element::translate(Vec2 delta) && {
-  if (!modifiers_) {
-    modifiers_.emplace();
-  }
-  modifiers_->translation = delta;
+  writableModifiers().translation = delta;
   return std::move(*this);
 }
 
 Element Element::translate(float dx, float dy) && {
-  if (!modifiers_) {
-    modifiers_.emplace();
-  }
-  modifiers_->translation = {dx, dy};
+  writableModifiers().translation = {dx, dy};
   return std::move(*this);
 }
 
 Element Element::clipContent(bool clip) && {
-  if (!modifiers_) {
-    modifiers_.emplace();
-  }
-  modifiers_->clip = clip;
+  writableModifiers().clip = clip;
   return std::move(*this);
 }
 
 Element Element::overlay(Element over) && {
-  if (!modifiers_) {
-    modifiers_.emplace();
-  }
-  modifiers_->overlay = std::make_unique<Element>(std::move(over));
+  writableModifiers().overlay = std::make_unique<Element>(std::move(over));
   return std::move(*this);
 }
 
 Element Element::onTap(std::function<void()> handler) && {
-  if (!modifiers_) {
-    modifiers_.emplace();
-  }
-  modifiers_->onTap = std::move(handler);
+  writableModifiers().onTap = std::move(handler);
   return std::move(*this);
 }
 
 Element Element::onPointerDown(std::function<void(Point)> handler) && {
-  if (!modifiers_) {
-    modifiers_.emplace();
-  }
-  modifiers_->onPointerDown = std::move(handler);
+  writableModifiers().onPointerDown = std::move(handler);
   return std::move(*this);
 }
 
 Element Element::onPointerUp(std::function<void(Point)> handler) && {
-  if (!modifiers_) {
-    modifiers_.emplace();
-  }
-  modifiers_->onPointerUp = std::move(handler);
+  writableModifiers().onPointerUp = std::move(handler);
   return std::move(*this);
 }
 
 Element Element::onPointerMove(std::function<void(Point)> handler) && {
-  if (!modifiers_) {
-    modifiers_.emplace();
-  }
-  modifiers_->onPointerMove = std::move(handler);
+  writableModifiers().onPointerMove = std::move(handler);
   return std::move(*this);
 }
 
 Element Element::onScroll(std::function<void(Vec2)> handler) && {
-  if (!modifiers_) {
-    modifiers_.emplace();
-  }
-  modifiers_->onScroll = std::move(handler);
+  writableModifiers().onScroll = std::move(handler);
   return std::move(*this);
 }
 
 Element Element::onKeyDown(std::function<void(KeyCode, Modifiers)> handler) && {
-  if (!modifiers_) {
-    modifiers_.emplace();
-  }
-  modifiers_->onKeyDown = std::move(handler);
+  writableModifiers().onKeyDown = std::move(handler);
   return std::move(*this);
 }
 
 Element Element::onKeyUp(std::function<void(KeyCode, Modifiers)> handler) && {
-  if (!modifiers_) {
-    modifiers_.emplace();
-  }
-  modifiers_->onKeyUp = std::move(handler);
+  writableModifiers().onKeyUp = std::move(handler);
   return std::move(*this);
 }
 
 Element Element::onTextInput(std::function<void(std::string const&)> handler) && {
-  if (!modifiers_) {
-    modifiers_.emplace();
-  }
-  modifiers_->onTextInput = std::move(handler);
+  writableModifiers().onTextInput = std::move(handler);
   return std::move(*this);
 }
 
 Element Element::focusable(bool enabled) && {
-  if (!modifiers_) {
-    modifiers_.emplace();
-  }
-  modifiers_->focusable = enabled;
+  writableModifiers().focusable = enabled;
   return std::move(*this);
 }
 
 Element Element::cursor(Cursor c) && {
-  if (!modifiers_) {
-    modifiers_.emplace();
-  }
-  modifiers_->cursor = c;
+  writableModifiers().cursor = c;
   return std::move(*this);
 }
 

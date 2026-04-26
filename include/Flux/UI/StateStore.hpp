@@ -225,6 +225,7 @@ private:
   std::vector<detail::ElementModifiers const*> compositeElementModifierStack_{};
   std::unordered_set<ComponentKey, ComponentKeyHash> pendingDirtyComposites_{};
   std::unordered_set<ComponentKey, ComponentKeyHash> activeDirtyComposites_{};
+  std::unordered_set<ComponentKey, ComponentKeyHash> activeDirtyAncestorKeys_{};
   bool forceFullRebuild_ = true;
   std::uint64_t buildEpoch_ = 0;
 
