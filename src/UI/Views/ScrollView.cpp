@@ -7,6 +7,7 @@
 #include <Flux/UI/MeasureContext.hpp>
 
 #include "UI/Layout/Algorithms/ScrollLayout.hpp"
+#include "UI/Layout/ContainerScope.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -31,12 +32,66 @@ Size viewportFromConstraints(ScrollAxis axis, Size contentSize, LayoutConstraint
   return layout::resolveMeasuredScrollViewSize(axis, contentSize, constraints);
 }
 
+Size scrollViewportHintForConstraints(ScrollAxis axis, LayoutConstraints const& constraints, Size viewportHint) {
+  switch (axis) {
+  case ScrollAxis::Vertical:
+    if (viewportHint.width <= 0.f && std::isfinite(constraints.maxWidth) && constraints.maxWidth > 0.f) {
+      viewportHint.width = constraints.maxWidth;
+    }
+    break;
+  case ScrollAxis::Horizontal:
+    if (viewportHint.height <= 0.f && std::isfinite(constraints.maxHeight) && constraints.maxHeight > 0.f) {
+      viewportHint.height = constraints.maxHeight;
+    }
+    break;
+  case ScrollAxis::Both:
+    break;
+  }
+  return viewportHint;
+}
+
 Size measureChild(Element const& child, MeasureContext& ctx, LayoutConstraints const& constraints,
                   TextSystem& textSystem) {
   ctx.pushConstraints(constraints, LayoutHints{});
   Size size = child.measure(ctx, constraints, LayoutHints{}, textSystem);
   ctx.popConstraints();
   return size;
+}
+
+struct ScrollViewPlan {
+  Size viewport{};
+  LayoutConstraints childConstraints{};
+  std::vector<Size> childSizes{};
+  layout::ScrollContentLayout contentLayout{};
+};
+
+template<typename MeasureChildFn>
+ScrollViewPlan planScrollViewLayout(ScrollView const& scrollView, LayoutConstraints const& constraints,
+                                    Size viewportHint, Point scrollOffset, MeasureChildFn&& measureChild) {
+  ScrollViewPlan plan{};
+  plan.viewport = scrollViewportHintForConstraints(scrollView.axis, constraints, viewportHint);
+
+  if (plan.viewport.width <= 0.f || plan.viewport.height <= 0.f) {
+    LayoutConstraints const premeasureConstraints =
+        layout::scrollChildConstraints(scrollView.axis, constraints, plan.viewport);
+    plan.childSizes.reserve(scrollView.children.size());
+    for (Element const& child : scrollView.children) {
+      plan.childSizes.push_back(measureChild(child, premeasureConstraints));
+    }
+    plan.viewport = viewportFromConstraints(
+        scrollView.axis, layout::scrollContentSize(scrollView.axis, plan.childSizes), constraints);
+  }
+
+  plan.childConstraints = layout::scrollChildConstraints(scrollView.axis, constraints, plan.viewport);
+  if (plan.childSizes.empty()) {
+    plan.childSizes.reserve(scrollView.children.size());
+    for (Element const& child : scrollView.children) {
+      plan.childSizes.push_back(measureChild(child, plan.childConstraints));
+    }
+  }
+  plan.contentLayout =
+      layout::layoutScrollContent(scrollView.axis, plan.viewport, scrollOffset, plan.childSizes);
+  return plan;
 }
 
 } // namespace
@@ -83,15 +138,14 @@ std::unique_ptr<scenegraph::SceneNode> OffsetView::mount(MountContext& ctx) cons
 
 Size ScrollView::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
                          LayoutHints const&, TextSystem& textSystem) const {
-  LayoutConstraints childConstraints = layout::scrollChildConstraints(axis, constraints, Size{});
-  std::vector<Size> childSizes;
-  childSizes.reserve(children.size());
-  for (Element const& child : children) {
-    childSizes.push_back(measureChild(child, ctx, childConstraints, textSystem));
-  }
-
-  Size const content = layout::scrollContentSize(axis, childSizes);
-  Size const viewport = viewportFromConstraints(axis, content, constraints);
+  ContainerMeasureScope scope(ctx);
+  ScrollViewPlan const plan =
+      planScrollViewLayout(*this, constraints, Size{}, Point{},
+                           [&](Element const& child, LayoutConstraints const& childConstraints) {
+                             return measureChild(child, ctx, childConstraints, textSystem);
+                           });
+  Size const viewport = plan.viewport;
+  Size const content = plan.contentLayout.contentSize;
   viewportSize = viewport;
   contentSize = content;
   scrollOffset = layout::clampScrollOffset(axis, *scrollOffset, viewport, content);
@@ -99,18 +153,16 @@ Size ScrollView::measure(MeasureContext& ctx, LayoutConstraints const& constrain
 }
 
 std::unique_ptr<scenegraph::SceneNode> ScrollView::mount(MountContext& ctx) const {
-  LayoutConstraints premeasureConstraints = layout::scrollChildConstraints(axis, ctx.constraints(), Size{});
-  std::vector<Size> childSizes;
-  childSizes.reserve(children.size());
-  for (Element const& child : children) {
-    childSizes.push_back(measureChild(child, ctx.measureContext(), premeasureConstraints, ctx.textSystem()));
-  }
-
-  Size const content = layout::scrollContentSize(axis, childSizes);
-  Size const viewport = viewportFromConstraints(axis, content, ctx.constraints());
+  ScrollViewPlan const plan =
+      planScrollViewLayout(*this, ctx.constraints(), Size{}, *scrollOffset,
+                           [&](Element const& child, LayoutConstraints const& childConstraints) {
+                             return measureChild(child, ctx.measureContext(), childConstraints, ctx.textSystem());
+                           });
+  Size const viewport = plan.viewport;
+  Size const content = plan.contentLayout.contentSize;
   viewportSize = viewport;
   contentSize = content;
-  scrollOffset = layout::clampScrollOffset(axis, *scrollOffset, viewport, content);
+  scrollOffset = plan.contentLayout.clampedOffset;
 
   auto viewportNode = std::make_unique<scenegraph::RectNode>(Rect{0.f, 0.f, viewport.width, viewport.height});
   viewportNode->setClipsContents(true);
@@ -119,7 +171,7 @@ std::unique_ptr<scenegraph::SceneNode> ScrollView::mount(MountContext& ctx) cons
       Rect{0.f, 0.f, std::max(0.f, content.width), std::max(0.f, content.height)});
 
   layout::ScrollContentLayout initialLayout =
-      layout::layoutScrollContent(axis, viewport, Point{}, childSizes);
+      layout::layoutScrollContent(axis, viewport, Point{}, plan.childSizes);
   for (std::size_t index = 0; index < children.size(); ++index) {
     MountContext childCtx = ctx.child(fixedConstraints(initialLayout.slots[index].assignedSize), {});
     auto childNode = children[index].mount(childCtx);
@@ -136,7 +188,7 @@ std::unique_ptr<scenegraph::SceneNode> ScrollView::mount(MountContext& ctx) cons
   State<Size> viewportState = viewportSize;
   State<Size> contentState = contentSize;
   ScrollAxis const scrollAxis = axis;
-  std::vector<Size> sizes = childSizes;
+  std::vector<Size> sizes = plan.childSizes;
   std::function<void()> requestRedraw = ctx.redrawCallback();
   Reactive::withOwner(ctx.owner(), [rawContentGroup, offsetState, viewportState,
                                     scrollAxis, sizes = std::move(sizes),

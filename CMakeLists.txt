@@ -150,6 +150,7 @@ add_library(flux STATIC
   src/UI/Views/Toggle.cpp
   src/UI/Layout/Algorithms/ScrollLayout.cpp
   src/UI/Layout/Algorithms/OverlayLayout.cpp
+  src/UI/Layout/Algorithms/StackLayout.cpp
   src/UI/LayoutDebugDump.cpp
   src/SceneGraph/SceneNode.cpp
   src/SceneGraph/GroupNode.cpp

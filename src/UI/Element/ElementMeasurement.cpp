@@ -41,6 +41,8 @@ Size Element::measureWithModifiersImpl(MeasureContext& ctx, LayoutConstraints co
   float const padB = std::max(0.f, padding.bottom);
   float const padW = padL + padR;
   float const padH = padT + padB;
+  float const width = m.sizeWidth.evaluate();
+  float const height = m.sizeHeight.evaluate();
   LayoutConstraints innerCs = constraints;
   if (padW > 0.f || padH > 0.f) {
     if (std::isfinite(innerCs.maxWidth)) {
@@ -51,6 +53,16 @@ Size Element::measureWithModifiersImpl(MeasureContext& ctx, LayoutConstraints co
     }
     innerCs.minWidth = std::max(0.f, innerCs.minWidth - padW);
     innerCs.minHeight = std::max(0.f, innerCs.minHeight - padH);
+  }
+  if (width > 0.f) {
+    float const innerWidth = std::max(0.f, width - padW);
+    innerCs.maxWidth = innerWidth;
+    innerCs.minWidth = innerWidth;
+  }
+  if (height > 0.f) {
+    float const innerHeight = std::max(0.f, height - padH);
+    innerCs.maxHeight = innerHeight;
+    innerCs.minHeight = innerHeight;
   }
   if (std::isfinite(innerCs.maxWidth)) {
     innerCs.minWidth = std::min(innerCs.minWidth, innerCs.maxWidth);
@@ -72,8 +84,6 @@ Size Element::measureWithModifiersImpl(MeasureContext& ctx, LayoutConstraints co
     sz.width += padW;
     sz.height += padH;
   }
-  float const width = m.sizeWidth.evaluate();
-  float const height = m.sizeHeight.evaluate();
   if (width > 0.f) {
     sz.width = width;
   }

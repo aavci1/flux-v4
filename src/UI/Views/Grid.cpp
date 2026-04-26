@@ -168,19 +168,13 @@ std::unique_ptr<scenegraph::SceneNode> Grid::mount(MountContext& ctx) const {
   auto group = std::make_unique<scenegraph::GroupNode>(Rect{0.f, 0.f, plan.size.width, plan.size.height});
   for (std::size_t i = 0; i < children.size(); ++i) {
     Rect const slot = plan.slots[i];
-    Size childSize = measured[i];
-    if (horizontalAlignment == Alignment::Stretch) {
-      childSize.width = slot.width;
-    }
-    if (verticalAlignment == Alignment::Stretch) {
-      childSize.height = slot.height;
-    }
-    MountContext childCtx = ctx.child(fixedConstraints(childSize), {});
+    MountContext childCtx = ctx.child(fixedConstraints(Size{slot.width, slot.height}), {});
     auto childNode = children[i].mount(childCtx);
     if (childNode) {
+      Rect const bounds = childNode->bounds();
       childNode->setPosition(Point{
-          slot.x + alignedOffset(slot.width, childSize.width, horizontalAlignment),
-          slot.y + alignedOffset(slot.height, childSize.height, verticalAlignment),
+          slot.x + alignedOffset(slot.width, bounds.width, horizontalAlignment),
+          slot.y + alignedOffset(slot.height, bounds.height, verticalAlignment),
       });
       group->appendChild(std::move(childNode));
     }
