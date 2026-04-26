@@ -72,6 +72,11 @@ option(FLUX_V5_PROTOTYPE
   "Build the standalone Flux v5 reactive prototype."
   OFF)
 
+if(FLUX_V5_PROTOTYPE)
+  enable_testing()
+  add_subdirectory(prototype/reactive)
+endif()
+
 # Offline Metal: compile CanvasShaders.metal → air → metallib → C header (xxd) embedded in MetalShaderLibrary.mm
 set(FLUX_METAL_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Metal/CanvasShaders.metal)
 set(FLUX_METAL_AIR ${CMAKE_CURRENT_BINARY_DIR}/CanvasShaders.air)

@@ -26,22 +26,33 @@ Validation:
 
 ## Stage 1 — Standalone Reactive Prototype
 
-- [ ] Prototype directory `prototype/reactive/` exists and is gated by `FLUX_V5_PROTOTYPE=ON`.
-- [ ] `SmallFn` implemented and tested.
-- [ ] `Signal`, `Computed`, and `Effect` implemented and tested.
-- [ ] `Scope` ownership implemented and tested.
-- [ ] `For` and `Show` prototype primitives implemented and tested.
-- [ ] `ToyScene` implemented.
-- [ ] `AmbientLoopPort` benchmark implemented.
-- [ ] Prototype tests pass under ASAN.
-- [ ] Prototype tests pass under UBSAN.
-- [ ] Prototype tests pass under TSAN.
-- [ ] `EffectFireBench` mean effect-fire latency is below 500 ns.
-- [ ] `MemoryBench` steady-state bytes per reactive leaf is below 64 B.
-- [ ] `AmbientLoopPort` shows no memory growth over the documented run.
-- [ ] Diamond test fires downstream effect exactly once.
+- [x] Prototype directory `prototype/reactive/` exists and is gated by `FLUX_V5_PROTOTYPE=ON`.
+- [x] `SmallFn` implemented and tested.
+- [x] `Signal`, `Computed`, and `Effect` implemented and tested.
+- [x] `Scope` ownership implemented and tested.
+- [x] `For` and `Show` prototype primitives implemented and tested.
+- [x] `ToyScene` implemented.
+- [x] `AmbientLoopPort` benchmark implemented.
+- [x] Prototype tests pass under ASAN.
+- [x] Prototype tests pass under UBSAN.
+- [x] Prototype tests pass under TSAN.
+- [x] `EffectFireBench` mean effect-fire latency is below 500 ns.
+- [x] `MemoryBench` steady-state bytes per reactive leaf is below 64 B.
+- [x] `AmbientLoopPort` shows no memory growth over the documented run.
+- [x] Diamond test fires downstream effect exactly once.
 
-Gate status: pending.
+Gate status: passed on 2026-04-26.
+
+Validation:
+- Unsanitized prototype tests: `ctest --test-dir build-v5-prototype -R v5_proto --output-on-failure` passed.
+- ASAN prototype tests: `ctest --test-dir build-v5-prototype-asan -R v5_proto --output-on-failure` passed.
+- UBSAN prototype tests: `ctest --test-dir build-v5-prototype-ubsan -R v5_proto --output-on-failure` passed.
+- TSAN prototype tests: `ctest --test-dir build-v5-prototype-tsan -R v5_proto --output-on-failure` passed.
+- `EffectFireBench`: `effect_fire_ns=365.153`.
+- `MemoryBench`: `reactive_leaf_link_bytes=48`, `steady_state_link_allocations_per_leaf=0`.
+- `AmbientLoopPort`: `ambient_loop_us_per_frame=1.19111`, `ambient_loop_new_links_after_warmup=0`, `ambient_loop_live_links_before=6`, `ambient_loop_live_links_after=6`, `ambient_loop_rss_delta=49152`.
+- ASAN `AmbientLoopPort` completed without sanitizer failures.
+- Existing v4 build remained green with `FLUX_V5_PROTOTYPE=OFF`: `cmake --build build` and `ctest --test-dir build --output-on-failure` passed.
 
 ## Stage 2 — New Reactive Core In Tree
 
