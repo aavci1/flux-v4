@@ -14,6 +14,13 @@
 
 #include <memory>
 
+namespace flux {
+class MountContext;
+namespace scenegraph {
+class SceneNode;
+}
+} // namespace flux
+
 namespace flux::views {
 
 /// Image view component. `source` references `flux::Image` (bitmap); distinct from this `Image` view type.
@@ -21,6 +28,7 @@ namespace flux::views {
 struct Image : ViewModifiers<Image> {
   ::flux::Size measure(::flux::MeasureContext&, ::flux::LayoutConstraints const&, ::flux::LayoutHints const&,
                        ::flux::TextSystem&) const;
+  std::unique_ptr<::flux::scenegraph::SceneNode> mount(::flux::MountContext&) const;
 
   std::shared_ptr<flux::Image> source;
   ImageFillMode fillMode = ImageFillMode::Cover;
