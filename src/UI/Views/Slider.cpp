@@ -58,25 +58,11 @@ Element Slider::body() const {
     auto focusColor = theme.keyboardFocusIndicatorColor;
 
     auto isDisabled = disabled;
-    auto focused = useFocus();
+    bool const focused = useFocus();
     auto dragging = useState(false);
 
-    Transition const trPress = Transition::ease(theme.durationFast);
-
-    auto thumbScaleAnim = useAnimation<float>(1.f);
-    {
-        float const target = (*dragging && !isDisabled) ? 1.2f : 1.f;
-        if (std::abs(*thumbScaleAnim - target) > 0.001f) {
-            thumbScaleAnim.set(target, trPress);
-        }
-    }
-
-    Rect const bounds = useBounds();
-    float const componentWidth = bounds.width > 0.f ? std::max(bounds.width, thumbSize) : std::max(kDefaultSliderWidth, thumbSize);
+    float const componentWidth = std::max(kDefaultSliderWidth, thumbSize);
     float const usableWidth = std::max(componentWidth - thumbSize, 1.f);
-
-    float const fraction = fractionForValue(*value, min, max);
-    float const thumbX = fraction * usableWidth;
 
     State<float> val = value;
     float const lo = min;
@@ -147,10 +133,9 @@ Element Slider::body() const {
     }
 
     float const componentHeight = std::max(trackHeight, thumbSize * 1.5f);
-    float const thumbDiameter = thumbSize * *thumbScaleAnim;
+    float const thumbDiameter = thumbSize;
     float const thumbOffset = (thumbSize - thumbDiameter) * 0.5f;
 
-    float const filledWidth = std::max(componentWidth * fraction, trackHeight);
     float const trackY = (componentHeight - trackHeight) * 0.5f;
     float const thumbY = (componentHeight - thumbDiameter) * 0.5f;
 
@@ -168,13 +153,17 @@ Element Slider::body() const {
             Rectangle {}
                 .fill(FillStyle::solid(isDisabled ? theme.disabledControlBackgroundColor : activeColor))
                 .position(0.f, trackY)
-                .size(filledWidth, trackHeight)
+                .size(Reactive::Bindable<float> {[val, lo, hi, componentWidth, trackHeight] {
+                    return std::max(componentWidth * fractionForValue(val.get(), lo, hi), trackHeight);
+                }}, Reactive::Bindable<float> {trackHeight})
                 .cornerRadius(CornerRadius {trackHeight * 0.5f}),
             Rectangle {}
                 .fill(FillStyle::solid(isDisabled ? theme.disabledTextColor : thumbColor))
                 .stroke(isDisabled ? StrokeStyle::solid(theme.disabledTextColor, 1.f) : thumbStroke)
                 .shadow(isDisabled ? ShadowStyle::none() : ShadowStyle {.radius = theme.shadowRadiusControl, .offset = {0.f, theme.shadowOffsetYControl}, .color = theme.shadowColor})
-                .position(thumbX + thumbOffset, thumbY)
+                .position(Reactive::Bindable<float> {[val, lo, hi, usableWidth, thumbOffset] {
+                    return fractionForValue(val.get(), lo, hi) * usableWidth + thumbOffset;
+                }}, Reactive::Bindable<float> {thumbY})
                 .size(thumbDiameter, thumbDiameter)
                 .cornerRadius(CornerRadius {thumbDiameter * 0.5f})
         ),

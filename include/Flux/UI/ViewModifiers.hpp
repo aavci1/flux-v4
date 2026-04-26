@@ -10,6 +10,7 @@
 #include <Flux/Core/Cursor.hpp>
 #include <Flux/Core/Types.hpp>
 #include <Flux/Graphics/Styles.hpp>
+#include <Flux/Reactive/Bindable.hpp>
 
 #include <functional>
 #include <string>
@@ -29,18 +30,22 @@ struct ViewModifiers {
   Element padding(float top, float right, float bottom, float left) &&;
   Element fill(FillStyle style) &&;
   Element fill(Color color) &&;
+  Element fill(Reactive::Bindable<Color> color) &&;
   Element shadow(ShadowStyle style) &&;
   Element size(float width, float height) &&;
+  Element size(Reactive::Bindable<float> width, Reactive::Bindable<float> height) &&;
   Element width(float w) &&;
   Element height(float h) &&;
   Element stroke(StrokeStyle style) &&;
   Element stroke(Color color, float width) &&;
   Element cornerRadius(CornerRadius radius) &&;
+  Element cornerRadius(Reactive::Bindable<float> radius) &&;
   /// Uniform radius on all corners (same as \c cornerRadius(CornerRadius{all})).
   Element cornerRadius(float radius) &&;
   Element opacity(float opacity) &&;
   Element position(Vec2 p) &&;
   Element position(float x, float y) &&;
+  Element position(Reactive::Bindable<float> x, Reactive::Bindable<float> y) &&;
   Element translate(Vec2 delta) &&;
   Element translate(float dx, float dy) &&;
   Element clipContent(bool clip) &&;

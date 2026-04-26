@@ -29,6 +29,11 @@ Element ViewModifiers<Derived>::fill(Color color) && {
   return Element {std::move(static_cast<Derived &>(*this))}.fill(FillStyle::solid(std::move(color)));
 }
 
+template <typename Derived>
+Element ViewModifiers<Derived>::fill(Reactive::Bindable<Color> color) && {
+  return Element {std::move(static_cast<Derived &>(*this))}.fill(std::move(color));
+}
+
 template<typename Derived>
 Element ViewModifiers<Derived>::shadow(ShadowStyle style) && {
   return Element{std::move(static_cast<Derived&>(*this))}.shadow(std::move(style));
@@ -37,6 +42,12 @@ Element ViewModifiers<Derived>::shadow(ShadowStyle style) && {
 template<typename Derived>
 Element ViewModifiers<Derived>::size(float width, float height) && {
   return Element{std::move(static_cast<Derived&>(*this))}.size(width, height);
+}
+
+template<typename Derived>
+Element ViewModifiers<Derived>::size(Reactive::Bindable<float> width,
+                                     Reactive::Bindable<float> height) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.size(std::move(width), std::move(height));
 }
 
 template<typename Derived>
@@ -65,6 +76,11 @@ Element ViewModifiers<Derived>::cornerRadius(CornerRadius radius) && {
 }
 
 template<typename Derived>
+Element ViewModifiers<Derived>::cornerRadius(Reactive::Bindable<float> radius) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.cornerRadius(std::move(radius));
+}
+
+template<typename Derived>
 Element ViewModifiers<Derived>::cornerRadius(float radius) && {
   return Element{std::move(static_cast<Derived&>(*this))}.cornerRadius(radius);
 }
@@ -82,6 +98,12 @@ Element ViewModifiers<Derived>::position(Vec2 p) && {
 template<typename Derived>
 Element ViewModifiers<Derived>::position(float x, float y) && {
   return Element{std::move(static_cast<Derived&>(*this))}.position(x, y);
+}
+
+template<typename Derived>
+Element ViewModifiers<Derived>::position(Reactive::Bindable<float> x,
+                                         Reactive::Bindable<float> y) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.position(std::move(x), std::move(y));
 }
 
 template<typename Derived>

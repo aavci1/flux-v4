@@ -4,6 +4,7 @@
 #include <Flux/Core/Events.hpp>
 #include <Flux/Core/Window.hpp>
 #include <Flux/Graphics/Canvas.hpp>
+#include <Flux/Reactive/AnimationClock.hpp>
 
 #include "Core/PlatformWindow.hpp"
 #include "Debug/PerfCounters.hpp"
@@ -176,10 +177,12 @@ Application::Application(int /*argc*/, char** /*argv*/) {
 
   [NSApplication sharedApplication];
   [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+  AnimationClock::instance().install(d->eventQueue_);
 
 }
 
 Application::~Application() {
+  AnimationClock::instance().shutdown();
   if (d->iconFont_) {
     CFRelease(reinterpret_cast<CTFontRef>(reinterpret_cast<std::uintptr_t>(d->iconFont_)));
     d->iconFont_ = nullptr;
@@ -198,6 +201,8 @@ void Application::adoptOwnedWindow(std::unique_ptr<Window> window) {
   d->renderStates_[h] = {};
   if (d->pendingAdoptRedraws_.erase(h) > 0) {
     requestWindowRedraw(h);
+  } else if (AnimationClock::instance().needsFramePump()) {
+    raw->platformWindow()->requestAnimationFrame();
   }
 }
 
@@ -336,7 +341,7 @@ void Application::presentRequestedWindows(bool requireFrameReady, bool keepFrame
 
 void Application::flushRedraw() {
   processFrameCallbacks();
-  presentRequestedWindows(false, false);
+  presentRequestedWindows(false, AnimationClock::instance().needsFramePump());
 }
 
 std::uint64_t Application::scheduleRepeatingTimer(std::chrono::nanoseconds interval, unsigned int windowHandle) {
@@ -382,7 +387,7 @@ int Application::exec() {
 
     processFrameCallbacks();
 
-    presentRequestedWindows(true, false);
+    presentRequestedWindows(true, AnimationClock::instance().needsFramePump());
 
     int timeoutMs = d->nextTimerTimeoutMs();
     if (!d->windows_.empty()) {

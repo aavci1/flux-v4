@@ -20,6 +20,7 @@
 namespace flux {
 
 class EventQueue;
+class AnimationClock;
 class TextSystem;
 
 class Application {
@@ -79,6 +80,7 @@ public:
 
   friend class Window;
   friend class EventQueue;
+  friend class AnimationClock;
 private:
   bool isMainThread() const noexcept;
   /// Wakes any blocking platform event wait without forcing a rebuild/redraw.

@@ -101,6 +101,7 @@ add_library(flux STATIC
   src/Reactive/Observer.cpp
   src/Reactive/Easing.cpp
   src/Reactive/Transition.cpp
+  src/Reactive/AnimationClock.cpp
   src/Core/ComponentKey.cpp
   src/Core/ComponentKeyUtil.cpp
   src/Core/Window.cpp
@@ -119,13 +120,16 @@ add_library(flux STATIC
   src/UI/OverlaySurfaceHelpers.cpp
   src/UI/Views/Alert.cpp
   src/UI/Views/Button.cpp
+  src/UI/Views/Card.cpp
   src/UI/Views/Icon.cpp
   src/UI/Views/Rectangle.cpp
   src/UI/Views/Text.cpp
   src/UI/Views/LayoutContainers.cpp
   src/UI/Views/PopoverCalloutPath.cpp
   src/UI/Views/ScrollView.cpp
+  src/UI/Views/Slider.cpp
   src/UI/Views/TransformViews.cpp
+  src/UI/Views/Toggle.cpp
   src/UI/Layout/Algorithms/ScrollLayout.cpp
   src/UI/Layout/Algorithms/OverlayLayout.cpp
   src/UI/LayoutDebugDump.cpp

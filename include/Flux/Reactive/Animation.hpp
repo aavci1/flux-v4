@@ -1,10 +1,12 @@
 #pragma once
 
 #include <Flux/Reactive/Interpolatable.hpp>
+#include <Flux/Reactive/AnimationClock.hpp>
 #include <Flux/Reactive/Transition.hpp>
 #include <Flux/Reactive/Signal.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 
 namespace flux {
@@ -23,6 +25,16 @@ public:
   virtual bool tick(double nowSeconds) = 0;
 };
 
+namespace detail {
+
+inline double steadyNowSeconds() {
+  auto const ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+      std::chrono::steady_clock::now().time_since_epoch());
+  return static_cast<double>(ns.count()) * 1e-9;
+}
+
+} // namespace detail
+
 template<Interpolatable T>
 class Animation : public AnimationBase {
 public:
@@ -39,15 +51,20 @@ public:
 
   void set(T value, Transition transition = Transition::instant()) const {
     Animation* self = const_cast<Animation*>(this);
-    self->running_ = false;
+    AnimationClock::instance().unregisterAnimation(self);
     self->paused_ = false;
     self->start_ = self->value_.peek();
-    self->target_ = value;
-    if (self->reducedMotion_ || transition.duration <= 0.f) {
-      self->value_.set(std::move(value));
+    self->target_ = std::move(value);
+    float const duration = transition.duration;
+    self->options_ = AnimationOptions{.transition = std::move(transition)};
+    if (self->reducedMotion_ || duration <= 0.f) {
+      self->running_ = false;
+      self->value_.set(self->target_);
       return;
     }
-    self->value_.set(std::move(value));
+    self->running_ = true;
+    self->startTime_ = detail::steadyNowSeconds();
+    AnimationClock::instance().registerAnimation(self);
   }
 
   Animation const& operator=(T value) const {
@@ -62,6 +79,7 @@ public:
 
   void play(T target, AnimationOptions options = {}) const {
     Animation* self = const_cast<Animation*>(this);
+    AnimationClock::instance().unregisterAnimation(self);
     self->start_ = self->value_.peek();
     self->target_ = std::move(target);
     self->options_ = std::move(options);
@@ -72,22 +90,33 @@ public:
       return;
     }
     self->running_ = true;
-    self->startTime_ = 0.0;
+    self->startTime_ = detail::steadyNowSeconds();
+    AnimationClock::instance().registerAnimation(self);
   }
 
   void pause() const {
-    const_cast<Animation*>(this)->paused_ = true;
+    Animation* self = const_cast<Animation*>(this);
+    if (!self->running_) {
+      return;
+    }
+    self->paused_ = true;
+    self->running_ = false;
+    AnimationClock::instance().unregisterAnimation(self);
   }
 
   void resume() const {
     Animation* self = const_cast<Animation*>(this);
-    if (self->running_) {
-      self->paused_ = false;
+    if (!self->paused_) {
+      return;
     }
+    self->paused_ = false;
+    self->running_ = true;
+    AnimationClock::instance().registerAnimation(self);
   }
 
   void stop() const {
     Animation* self = const_cast<Animation*>(this);
+    AnimationClock::instance().unregisterAnimation(self);
     self->running_ = false;
     self->paused_ = false;
   }
@@ -98,6 +127,7 @@ public:
   void setReducedMotion(bool enabled) {
     reducedMotion_ = enabled;
     if (enabled) {
+      AnimationClock::instance().unregisterAnimation(this);
       running_ = false;
       paused_ = false;
       value_.set(finalValueForOptions());
