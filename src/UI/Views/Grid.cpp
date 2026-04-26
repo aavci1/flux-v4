@@ -3,6 +3,7 @@
 #include <Flux/SceneGraph/GroupNode.hpp>
 #include <Flux/UI/MeasureContext.hpp>
 #include <Flux/UI/MountContext.hpp>
+#include <Flux/UI/Detail/MountPosition.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -172,7 +173,7 @@ std::unique_ptr<scenegraph::SceneNode> Grid::mount(MountContext& ctx) const {
     auto childNode = children[i].mount(childCtx);
     if (childNode) {
       Rect const bounds = childNode->bounds();
-      childNode->setPosition(Point{
+      detail::setLayoutPosition(*childNode, Point{
           slot.x + alignedOffset(slot.width, bounds.width, horizontalAlignment),
           slot.y + alignedOffset(slot.height, bounds.height, verticalAlignment),
       });

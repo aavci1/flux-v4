@@ -7,6 +7,7 @@
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/MeasureContext.hpp>
 #include <Flux/UI/Theme.hpp>
+#include <Flux/UI/Detail/MountPosition.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/Spacer.hpp>
@@ -272,7 +273,7 @@ std::unique_ptr<scenegraph::SceneNode> mountVStack(VStack const& stack, MountCon
     MountContext childCtx = ctx.child(fixedConstraints(slot.assignedSize), childHints);
     auto node = child.mount(childCtx);
     if (node) {
-      node->setPosition(slot.origin);
+      detail::setLayoutPosition(*node, slot.origin);
       group->appendChild(std::move(node));
     }
   }
@@ -345,7 +346,7 @@ std::unique_ptr<scenegraph::SceneNode> mountHStack(HStack const& stack, MountCon
     MountContext childCtx = ctx.child(fixedConstraints(slot.assignedSize), rowHints);
     auto node = child.mount(childCtx);
     if (node) {
-      node->setPosition(slot.origin);
+      detail::setLayoutPosition(*node, slot.origin);
       group->appendChild(std::move(node));
     }
   }
@@ -396,7 +397,7 @@ std::unique_ptr<scenegraph::SceneNode> mountZStack(ZStack const& stack, MountCon
     MountContext childCtx = ctx.child(fixedConstraints(childFrame), childHints);
     auto node = child.mount(childCtx);
     if (node) {
-      node->setPosition(Point{
+      detail::setLayoutPosition(*node, Point{
           layout::hAlignOffset(childFrame.width, width, stack.horizontalAlignment),
           layout::vAlignOffset(childFrame.height, height, stack.verticalAlignment),
       });

@@ -3,11 +3,13 @@
 #include <Flux/Detail/RootHolder.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Reactive/Signal.hpp>
+#include <Flux/SceneGraph/GroupNode.hpp>
 #include <Flux/SceneGraph/RectNode.hpp>
 #include <Flux/SceneGraph/SceneGraph.hpp>
 #include <Flux/UI/MountRoot.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
+#include <Flux/UI/Views/ZStack.hpp>
 
 #include <memory>
 #include <string_view>
@@ -176,4 +178,40 @@ TEST_CASE("nested body component bindings inherit the root redraw callback") {
   hot.set(false);
 
   CHECK(redraws == 1);
+}
+
+TEST_CASE("container mounting composes slot origin with explicit child position") {
+  struct Root {
+    flux::Element body() const {
+      return flux::ZStack{
+          .horizontalAlignment = flux::Alignment::Start,
+          .verticalAlignment = flux::Alignment::Start,
+          .children = flux::children(
+              flux::Rectangle{}
+                  .size(44.f, 26.f)
+                  .fill(flux::Colors::blue),
+              flux::Rectangle{}
+                  .size(18.f, 18.f)
+                  .position(22.f, 4.f)
+                  .fill(flux::Colors::red)),
+      };
+    }
+  };
+
+  FakeTextSystem textSystem;
+  flux::scenegraph::SceneGraph sceneGraph;
+  flux::MountRoot root{
+      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{}),
+      textSystem,
+      testEnvironment(),
+      flux::Size{44.f, 26.f},
+  };
+
+  root.mount(sceneGraph);
+
+  REQUIRE(sceneGraph.root().kind() == flux::scenegraph::SceneNodeKind::Group);
+  auto const& group = static_cast<flux::scenegraph::GroupNode const&>(sceneGraph.root());
+  REQUIRE(group.children().size() == 2);
+  CHECK(group.children()[0]->position() == flux::Point{0.f, 0.f});
+  CHECK(group.children()[1]->position() == flux::Point{22.f, 4.f});
 }

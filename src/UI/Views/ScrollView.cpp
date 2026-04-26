@@ -4,6 +4,7 @@
 #include <Flux/SceneGraph/GroupNode.hpp>
 #include <Flux/SceneGraph/InteractionData.hpp>
 #include <Flux/SceneGraph/RectNode.hpp>
+#include <Flux/UI/Detail/MountPosition.hpp>
 #include <Flux/UI/MeasureContext.hpp>
 
 #include "UI/Layout/Algorithms/ScrollLayout.hpp"
@@ -129,7 +130,7 @@ std::unique_ptr<scenegraph::SceneNode> OffsetView::mount(MountContext& ctx) cons
     MountContext childCtx = ctx.child(fixedConstraints(layoutPlan.slots[index].assignedSize), {});
     auto childNode = children[index].mount(childCtx);
     if (childNode) {
-      childNode->setPosition(layoutPlan.slots[index].origin);
+      detail::setLayoutPosition(*childNode, layoutPlan.slots[index].origin);
       group->appendChild(std::move(childNode));
     }
   }
@@ -176,7 +177,7 @@ std::unique_ptr<scenegraph::SceneNode> ScrollView::mount(MountContext& ctx) cons
     MountContext childCtx = ctx.child(fixedConstraints(initialLayout.slots[index].assignedSize), {});
     auto childNode = children[index].mount(childCtx);
     if (childNode) {
-      childNode->setPosition(initialLayout.slots[index].origin);
+      detail::setLayoutPosition(*childNode, initialLayout.slots[index].origin);
       contentGroup->appendChild(std::move(childNode));
     }
   }

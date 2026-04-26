@@ -5,6 +5,7 @@
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/MeasureContext.hpp>
 #include <Flux/UI/MountContext.hpp>
+#include <Flux/UI/Detail/MountPosition.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -99,7 +100,7 @@ inline void controlLayoutVertical(scenegraph::GroupNode& group, Size frameSize, 
   auto children = group.children();
   for (std::size_t i = 0; i < children.size(); ++i) {
     auto& child = children[i];
-    child->setPosition(Point{0.f, y});
+    detail::setLayoutPosition(*child, Point{0.f, y});
     Size const childSize = child->size();
     width = std::max(width, childSize.width);
     y += childSize.height;
