@@ -96,7 +96,7 @@ struct Popover : ViewModifiers<Popover> {
   /// body() wraps content in the card container. Not the primary API —
   /// use usePopover() instead.
   bool operator==(Popover const& other) const {
-    return content.structuralEquals(other.content) && placement == other.placement &&
+    return content.typeTag() == other.content.typeTag() && placement == other.placement &&
            crossAlignment == other.crossAlignment && gap == other.gap && arrow == other.arrow &&
            backgroundColor == other.backgroundColor && borderColor == other.borderColor &&
            borderWidth == other.borderWidth && cornerRadius == other.cornerRadius &&

@@ -29,7 +29,7 @@ struct ListRow : ViewModifiers<ListRow> {
     std::function<void()> onTap;
 
     bool operator==(ListRow const& other) const {
-        return content.structuralEquals(other.content) && selected == other.selected &&
+        return content.typeTag() == other.content.typeTag() && selected == other.selected &&
                disabled == other.disabled && style == other.style;
     }
 

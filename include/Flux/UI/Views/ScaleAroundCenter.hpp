@@ -17,7 +17,7 @@ struct ScaleAroundCenter : ViewModifiers<ScaleAroundCenter> {
   Element child;
 
   bool operator==(ScaleAroundCenter const& other) const {
-    return scale == other.scale && child.structuralEquals(other.child);
+    return scale == other.scale && child.typeTag() == other.child.typeTag();
   }
 };
 

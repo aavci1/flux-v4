@@ -234,12 +234,15 @@ if(FLUX_BUILD_TESTS)
   enable_testing()
 
   add_executable(flux_tests
+    tests/AlertTests.cpp
+    tests/AnimationTests.cpp
     tests/MetalCanvasTests.mm
     tests/MountRootTests.cpp
     tests/main.cpp
     tests/SceneGraphTests.cpp
     tests/ParagraphCacheTests.cpp
     tests/ParagraphCacheIncrementalTests.cpp
+    tests/RuntimeTests.cpp
   )
 
   target_include_directories(flux_tests PRIVATE

@@ -33,7 +33,7 @@ struct PopoverCalloutShape : ViewModifiers<PopoverCalloutShape> {
     return placement == other.placement && arrow == other.arrow && padding == other.padding &&
            cornerRadius == other.cornerRadius && backgroundColor == other.backgroundColor &&
            borderColor == other.borderColor && borderWidth == other.borderWidth &&
-           maxSize == other.maxSize && content.structuralEquals(other.content);
+           maxSize == other.maxSize && content.typeTag() == other.content.typeTag();
   }
 
   static constexpr float kArrowW = 16.f;

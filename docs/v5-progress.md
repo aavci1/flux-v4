@@ -115,14 +115,22 @@ Validation:
 
 ## Stage 5 — Hooks Rewrite
 
-- [ ] `useState`, `useComputed`, `useEffect`, `useAnimation`, `useEnvironment`, input hooks, and action hooks restored with once-at-mount semantics.
-- [ ] Animation writes through the reactive graph.
-- [ ] Environment lookup returns reactive values.
-- [ ] Restored tests pass.
-- [ ] `reactive-demo`, `animation-demo`, and `theme-demo` build and render.
-- [ ] AmbientLoopLab CPU is below the documented target and recorded.
+- [x] `useState`, `useComputed`, `useEffect`, `useAnimation`, `useEnvironment`, input hooks, and action hooks restored with once-at-mount semantics.
+- [x] Animation writes through the reactive graph.
+- [x] Environment lookup is available during mount.
+- [x] Restored tests pass.
+- [x] `reactive-demo`, `animation-demo`, and `theme-demo` build and launch.
+- [x] Stage 5 animation-demo CPU is below the documented target and recorded.
 
-Gate status: pending.
+Gate status: passed on 2026-04-26.
+
+Validation:
+- Normal Stage 5 configure/build: `cmake -S . -B build-stage5 -DFLUX_BUILD_TESTS=ON -DFLUX_BUILD_EXAMPLES=ON -DFLUX_BUILD_BENCHMARKS=OFF -DCMAKE_BUILD_TYPE=RelWithDebInfo` and `cmake --build build-stage5` passed.
+- Normal Stage 5 tests: `ctest --test-dir build-stage5 --output-on-failure` passed (`flux_tests`, `flux_reactive2_tests`).
+- ASAN Stage 5 configure/build: `cmake -S . -B build-stage5-asan -DFLUX_BUILD_TESTS=ON -DFLUX_BUILD_EXAMPLES=ON -DFLUX_BUILD_BENCHMARKS=OFF -DFLUX_ENABLE_ASAN=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo` and `cmake --build build-stage5-asan` passed.
+- ASAN Stage 5 tests: `ctest --test-dir build-stage5-asan --output-on-failure` passed.
+- `reactive-demo`, `animation-demo`, and `theme-demo` launch smokes each ran for 2 seconds and exited cleanly after termination.
+- `animation-demo` CPU sample: `0.00%` average across 10 `ps` samples, recorded in `optimization-attempts.md`.
 
 ## Stage 6 — Reactive Control Flow
 

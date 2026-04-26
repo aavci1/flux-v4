@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Flux/Reactive/Observer.hpp>
 #include <Flux/Reactive2/SmallFn.hpp>
 
 #include <algorithm>
@@ -8,6 +9,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <functional>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -198,6 +200,11 @@ struct Computation : Observable {
   void retireLink(Link* link);
   virtual void run() = 0;
   virtual void onPending() = 0;
+};
+
+struct CallbackObserverStore {
+  std::uint64_t nextId = 1;
+  std::vector<std::pair<std::uint64_t, std::shared_ptr<Disposable>>> effects;
 };
 
 inline void unlinkFromSourceList(Link* link) {
@@ -517,12 +524,17 @@ public:
     state_->set(std::move(next));
   }
 
+  ObserverHandle observe(std::function<void()> callback) const;
+  void unobserve(ObserverHandle handle) const;
+
   bool disposed() const {
     return !state_ || state_->disposed();
   }
 
 private:
   std::shared_ptr<SignalState<T>> state_;
+  std::shared_ptr<detail::CallbackObserverStore> observers_ =
+      std::make_shared<detail::CallbackObserverStore>();
 };
 
 template <typename T>
@@ -563,6 +575,7 @@ public:
   Computed() = default;
 
   template <typename Fn>
+    requires(!std::is_same_v<std::decay_t<Fn>, Computed>)
   explicit Computed(Fn&& fn)
       : state_(std::make_shared<ComputedState<T>>(std::forward<Fn>(fn))) {
     detail::ownNode(state_);
@@ -592,8 +605,13 @@ public:
     return !state_ || state_->disposed();
   }
 
+  ObserverHandle observe(std::function<void()> callback) const;
+  void unobserve(ObserverHandle handle) const;
+
 private:
   std::shared_ptr<ComputedState<T>> state_;
+  std::shared_ptr<detail::CallbackObserverStore> observers_ =
+      std::make_shared<detail::CallbackObserverStore>();
 };
 
 template <typename Fn>
@@ -645,6 +663,86 @@ public:
 private:
   std::shared_ptr<EffectState> state_;
 };
+
+template <typename T>
+ObserverHandle Signal<T>::observe(std::function<void()> callback) const {
+  assert(state_ && "observing an empty Signal handle");
+  std::uint64_t const id = observers_->nextId++;
+  auto firstRun = std::make_shared<bool>(true);
+  Signal<T> self = *this;
+  auto effect = std::make_shared<EffectState>(
+      [self, callback = std::move(callback), firstRun] {
+        (void)self.get();
+        if (*firstRun) {
+          *firstRun = false;
+          return;
+        }
+        if (callback) {
+          callback();
+        }
+      });
+  effect->run();
+  observers_->effects.push_back({id, std::move(effect)});
+  return ObserverHandle{id};
+}
+
+template <typename T>
+void Signal<T>::unobserve(ObserverHandle handle) const {
+  if (!handle.isValid() || !observers_) {
+    return;
+  }
+  auto& effects = observers_->effects;
+  auto it = std::find_if(effects.begin(), effects.end(), [&](auto const& entry) {
+    return entry.first == handle.id;
+  });
+  if (it == effects.end()) {
+    return;
+  }
+  if (it->second) {
+    it->second->dispose();
+  }
+  effects.erase(it);
+}
+
+template <typename T>
+ObserverHandle Computed<T>::observe(std::function<void()> callback) const {
+  assert(state_ && "observing an empty Computed handle");
+  std::uint64_t const id = observers_->nextId++;
+  auto firstRun = std::make_shared<bool>(true);
+  Computed<T> self = *this;
+  auto effect = std::make_shared<EffectState>(
+      [self, callback = std::move(callback), firstRun] {
+        (void)self.get();
+        if (*firstRun) {
+          *firstRun = false;
+          return;
+        }
+        if (callback) {
+          callback();
+        }
+      });
+  effect->run();
+  observers_->effects.push_back({id, std::move(effect)});
+  return ObserverHandle{id};
+}
+
+template <typename T>
+void Computed<T>::unobserve(ObserverHandle handle) const {
+  if (!handle.isValid() || !observers_) {
+    return;
+  }
+  auto& effects = observers_->effects;
+  auto it = std::find_if(effects.begin(), effects.end(), [&](auto const& entry) {
+    return entry.first == handle.id;
+  });
+  if (it == effects.end()) {
+    return;
+  }
+  if (it->second) {
+    it->second->dispose();
+  }
+  effects.erase(it);
+}
 
 template <typename Fn>
 auto makeComputed(Fn&& fn) {

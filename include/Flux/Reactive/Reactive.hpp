@@ -10,6 +10,7 @@
 #include <Flux/Reactive/Easing.hpp>
 #include <Flux/Reactive/Transition.hpp>
 #include <Flux/Reactive/AnimationClock.hpp>
+#include <Flux/Reactive/Animation.hpp>
 #include <Flux/Reactive2/Computed.hpp>
 #include <Flux/Reactive2/Effect.hpp>
 #include <Flux/Reactive2/Scope.hpp>

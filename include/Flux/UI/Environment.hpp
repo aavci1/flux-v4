@@ -22,8 +22,7 @@ public:
   template<typename T>
   void set(T value) {
     static_assert(std::equality_comparable<T>,
-        "Environment values must define operator==. EnvironmentLayer compares values for retained-subtree reuse. "
-        "For Element fields, implement operator== using Element::structuralEquals.");
+        "Environment values must define operator==.");
     static_assert(std::is_copy_constructible_v<T>,
         "Environment values must be copy-constructible. EnvironmentLayer copies values during stack push/pop.");
 

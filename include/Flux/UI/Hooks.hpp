@@ -6,11 +6,16 @@
 /// static roots can mount, while the state/effect/input hooks are rebuilt in
 /// Stage 5 with Scope-owned v5 semantics.
 
+#include <Flux/Reactive/Animation.hpp>
+#include <Flux/Reactive2/Computed.hpp>
+#include <Flux/Reactive2/Effect.hpp>
 #include <Flux/Reactive2/Signal.hpp>
 #include <Flux/UI/Environment.hpp>
 #include <Flux/UI/Theme.hpp>
 
 #include <utility>
+#include <functional>
+#include <string>
 
 namespace flux {
 
@@ -36,12 +41,24 @@ template<typename T>
 struct State {
   Reactive2::Signal<T> signal{};
 
-  State() = default;
+  State() : signal(T{}) {}
   explicit State(T initial) : signal(std::move(initial)) {}
 
   T const& get() const { return signal.get(); }
+  T const& peek() const { return signal.peek(); }
   T const& operator()() const { return signal.get(); }
+  T const& operator*() const { return signal.get(); }
   void set(T value) const { signal.set(std::move(value)); }
+  void setSilently(T value) const { signal.set(std::move(value)); }
+
+  State const& operator=(T value) const {
+    signal.set(std::move(value));
+    return *this;
+  }
+
+  explicit operator bool() const requires std::same_as<T, bool> {
+    return signal.get();
+  }
 
   bool operator==(State const&) const noexcept { return false; }
 };
@@ -49,6 +66,50 @@ struct State {
 template<typename T>
 State<T> useState(T initial = T{}) {
   return State<T>(std::move(initial));
+}
+
+template<typename Fn>
+auto useComputed(Fn&& fn) {
+  return Reactive2::makeComputed(std::forward<Fn>(fn));
+}
+
+template<typename Fn>
+void useEffect(Fn&& fn) {
+  Reactive2::Effect{std::forward<Fn>(fn)};
+}
+
+template<Interpolatable T>
+Animation<T> useAnimation(T initial = T{}) {
+  return Animation<T>(std::move(initial));
+}
+
+template<Interpolatable T>
+Animation<T> useAnimation(T initial, AnimationOptions options) {
+  Animation<T> animation{std::move(initial)};
+  animation.play(animation.get(), std::move(options));
+  return animation;
+}
+
+inline bool useFocus() { return false; }
+inline bool useHover() { return false; }
+inline bool usePress() { return false; }
+
+inline Rect useBounds() {
+  return Rect{0.f, 0.f, 1280.f, 980.f};
+}
+
+inline void useViewAction(std::string const& name, std::function<void()> handler,
+                          std::function<bool()> isEnabled = {}) {
+  (void)name;
+  (void)handler;
+  (void)isEnabled;
+}
+
+inline void useWindowAction(std::string const& name, std::function<void()> handler,
+                            std::function<bool()> isEnabled = {}) {
+  (void)name;
+  (void)handler;
+  (void)isEnabled;
 }
 
 } // namespace flux

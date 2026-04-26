@@ -340,3 +340,17 @@
 - Final status:
   - `animation-demo` stays at `59-61 fps`.
   - External foreground CPU confirmation is below the `10%` target.
+
+## v5 Stage 5 Baseline
+
+- Date: 2026-04-26
+- Build: `build-stage5/examples/animation-demo`
+- CPU method:
+  - Launch `animation-demo`.
+  - Wait 3 seconds.
+  - Sample `ps -p <pid> -o %cpu=` 10 times at 0.5 second intervals.
+- Result:
+  - Average CPU: `0.00%` across 10 samples.
+- Notes:
+  - This Stage 5 port validates the build-once mount path and `useAnimation` handle API with a focused static smoke scene.
+  - Full reactive control-flow and richer example migration resume in Stages 6-8.

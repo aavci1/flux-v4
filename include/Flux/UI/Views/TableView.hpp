@@ -68,7 +68,7 @@ struct TableCell : ViewModifiers<TableCell> {
     Style style {};
 
     bool operator==(TableCell const& other) const {
-        return content.structuralEquals(other.content) && style == other.style;
+        return content.typeTag() == other.content.typeTag() && style == other.style;
     }
 
     Element body() const;
@@ -95,7 +95,7 @@ struct TableRow : ViewModifiers<TableRow> {
 
     bool operator==(TableRow const& other) const {
         return elementsStructurallyEqual(cells, other.cells) && detail.has_value() == other.detail.has_value() &&
-               (!detail || detail->structuralEquals(*other.detail)) && selected == other.selected &&
+               (!detail || detail->typeTag() == other.detail->typeTag()) && selected == other.selected &&
                disabled == other.disabled && style == other.style;
     }
 
@@ -130,7 +130,7 @@ struct TableView : ViewModifiers<TableView> {
         std::vector<SortValue> sortValues;
 
         bool operator==(Item const& other) const {
-            return row.structuralEquals(other.row) && sortValues == other.sortValues;
+            return row.typeTag() == other.row.typeTag() && sortValues == other.sortValues;
         }
     };
 
@@ -152,7 +152,7 @@ struct TableView : ViewModifiers<TableView> {
 
     bool operator==(TableView const& other) const {
         return header.has_value() == other.header.has_value() &&
-               (!header || header->structuralEquals(*other.header)) &&
+               (!header || header->typeTag() == other.header->typeTag()) &&
                items == other.items &&
                elementsStructurallyEqual(rows, other.rows) &&
                columns == other.columns && showDividers == other.showDividers &&

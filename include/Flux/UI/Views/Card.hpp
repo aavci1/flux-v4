@@ -29,7 +29,7 @@ struct Card : ViewModifiers<Card> {
   Style style {};
 
   bool operator==(Card const& other) const {
-    return child.structuralEquals(other.child) && style == other.style;
+    return child.typeTag() == other.child.typeTag() && style == other.style;
   }
 
   Element body() const;
