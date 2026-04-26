@@ -121,6 +121,7 @@ add_library(flux STATIC
   src/UI/Views/Alert.cpp
   src/UI/Views/Button.cpp
   src/UI/Views/Card.cpp
+  src/UI/Views/Checkbox.cpp
   src/UI/Views/Grid.cpp
   src/UI/Views/Icon.cpp
   src/UI/Views/Rectangle.cpp

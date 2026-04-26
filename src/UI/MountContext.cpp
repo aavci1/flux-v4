@@ -116,7 +116,7 @@ std::unique_ptr<scenegraph::SceneNode> mountRectangle(Rectangle const&, MountCon
 std::unique_ptr<scenegraph::SceneNode> mountText(Text const& text, MountContext& ctx) {
   Theme const& theme = activeTheme(ctx.environment());
   Font const font = resolveFont(text.font, theme.bodyFont, theme);
-  Color const color = resolveColor(text.color, theme.labelColor, theme);
+  Color const color = resolveColor(text.color.evaluate(), theme.labelColor, theme);
   TextLayoutOptions const options = textLayoutOptions(text);
   std::string const initialText = text.text.evaluate();
 
@@ -135,32 +135,34 @@ std::unique_ptr<scenegraph::SceneNode> mountText(Text const& text, MountContext&
   auto layout = ctx.textSystem().layout(initialText, font, color, box, options);
   auto node = std::make_unique<scenegraph::TextNode>(box, std::move(layout));
 
-  if (text.text.isReactive()) {
+  if (text.text.isReactive() || text.color.isReactive()) {
     auto* rawNode = node.get();
     Reactive::Bindable<std::string> textBinding = text.text;
+    Reactive::Bindable<Color> colorBinding = text.color;
     TextSystem* textSystem = &ctx.textSystem();
     LayoutConstraints constraints = ctx.constraints();
     TextWrapping wrapping = text.wrapping;
     std::function<void()> requestRedraw = ctx.redrawCallback();
     Reactive::withOwner(ctx.owner(), [rawNode, textBinding = std::move(textBinding), textSystem,
-                                      font, color, options, constraints, wrapping,
+                                      colorBinding = std::move(colorBinding), font, theme, options, constraints, wrapping,
                                       requestRedraw = std::move(requestRedraw)]() mutable {
-      Reactive::Effect([rawNode, textBinding, textSystem, font, color, options, constraints,
+      Reactive::Effect([rawNode, textBinding, colorBinding, textSystem, font, theme, options, constraints,
                         wrapping, requestRedraw]() mutable {
         std::string const currentText = textBinding.evaluate();
+        Color const currentColor = resolveColor(colorBinding.evaluate(), theme.labelColor, theme);
         Size currentSize = rawNode->size();
         if (currentSize.width <= 0.f || currentSize.height <= 0.f) {
           float maxWidth = std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;
           if (wrapping == TextWrapping::NoWrap) {
             maxWidth = 0.f;
           }
-          Size const measured = textSystem->measure(currentText, font, color, maxWidth, options);
+          Size const measured = textSystem->measure(currentText, font, currentColor, maxWidth, options);
           currentSize.width = currentSize.width > 0.f ? currentSize.width : measured.width;
           currentSize.height = currentSize.height > 0.f ? currentSize.height : measured.height;
           rawNode->setSize(currentSize);
         }
         Rect const currentBox{0.f, 0.f, finiteOrZero(currentSize.width), finiteOrZero(currentSize.height)};
-        rawNode->setLayout(textSystem->layout(currentText, font, color, currentBox, options));
+        rawNode->setLayout(textSystem->layout(currentText, font, currentColor, currentBox, options));
         if (requestRedraw) {
           requestRedraw();
         }

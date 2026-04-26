@@ -42,7 +42,6 @@ Element Icon::body() const {
     Reactive::Bindable<IconName> nameBinding = name;
     float const s = resolveFloat(size, theme.bodyFont.size);
     float const w = resolveFloat(weight, theme.bodyFont.weight);
-    Color const c = resolveColor(color, theme.labelColor, theme);
 
     return Text {
         .text = Reactive::Bindable<std::string> {[nameBinding] {
@@ -53,7 +52,7 @@ Element Icon::body() const {
             .size = s,
             .weight = w,
         },
-        .color = c,
+        .color = color,
         .horizontalAlignment = HorizontalAlignment::Center,
         .verticalAlignment = VerticalAlignment::Center,
     }

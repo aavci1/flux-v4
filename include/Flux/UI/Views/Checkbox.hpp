@@ -6,6 +6,7 @@
 
 
 #include <Flux/Core/Types.hpp>
+#include <Flux/Reactive/Bindable.hpp>
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/Theme.hpp>
@@ -25,14 +26,14 @@ struct Checkbox : ViewModifiers<Checkbox> {
   // ── Indeterminate ────────────────────────────────────────────────────────
 
   /// Dash when true; tap sets value true — clear indeterminate in onChange.
-  bool indeterminate = false;
+  Reactive::Bindable<bool> indeterminate{false};
 
   // ── Layout ───────────────────────────────────────────────────────────────
   // Flex: use chained `.flex(...)` on the `Element` from `body()`.
 
   // ── Behaviour ────────────────────────────────────────────────────────────
 
-  bool disabled = false;
+  Reactive::Bindable<bool> disabled{false};
 
   // ── Style ────────────────────────────────────────────────────────────────
 
@@ -57,8 +58,11 @@ struct Checkbox : ViewModifiers<Checkbox> {
   std::function<void(bool)> onChange;
 
   bool operator==(Checkbox const& other) const {
-    return value == other.value && indeterminate == other.indeterminate && disabled == other.disabled &&
-           style == other.style;
+    bool const sameIndeterminate = indeterminate.isValue() && other.indeterminate.isValue() &&
+                                   indeterminate.value() == other.indeterminate.value();
+    bool const sameDisabled = disabled.isValue() && other.disabled.isValue() &&
+                              disabled.value() == other.disabled.value();
+    return value == other.value && sameIndeterminate && sameDisabled && style == other.style;
   }
 
   // ── Component protocol ───────────────────────────────────────────────────

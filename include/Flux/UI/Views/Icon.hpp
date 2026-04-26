@@ -25,12 +25,13 @@ struct Icon : ViewModifiers<Icon> {
     float weight = kFloatFromTheme;
 
     /// Icon color. `Color::theme()` → `Theme::labelColor`.
-    Color color = Color::theme();
+    Reactive::Bindable<Color> color{Color::theme()};
 
     bool operator==(Icon const& other) const {
         bool const sameName = name.isValue() && other.name.isValue() && name.value() == other.name.value();
+        bool const sameColor = color.isValue() && other.color.isValue() && color.value() == other.color.value();
         return sameName && size == other.size && weight == other.weight &&
-               color == other.color;
+               sameColor;
     }
 
     // ── Component protocol ───────────────────────────────────────────────────

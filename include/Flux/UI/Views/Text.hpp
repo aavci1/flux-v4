@@ -25,7 +25,7 @@ struct Text : ViewModifiers<Text> {
 
   Reactive::Bindable<std::string> text{std::string{}};
   Font font = Font::theme();
-  Color color = Color::theme();
+  Reactive::Bindable<Color> color{Color::theme()};
   Color selectionColor = Color::theme();
   bool selectable = false;
 
@@ -37,7 +37,8 @@ struct Text : ViewModifiers<Text> {
 
   bool operator==(Text const& other) const {
     bool const sameText = text.isValue() && other.text.isValue() && text.value() == other.text.value();
-    return sameText && font == other.font && color == other.color &&
+    bool const sameColor = color.isValue() && other.color.isValue() && color.value() == other.color.value();
+    return sameText && font == other.font && sameColor &&
            selectionColor == other.selectionColor && selectable == other.selectable &&
            horizontalAlignment == other.horizontalAlignment &&
            verticalAlignment == other.verticalAlignment && wrapping == other.wrapping &&
