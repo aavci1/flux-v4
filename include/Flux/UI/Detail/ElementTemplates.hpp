@@ -108,6 +108,10 @@ std::unique_ptr<scenegraph::SceneNode> Element::Model<C>::mount(MountContext& ct
     return detail::mountZStack(value, ctx);
   } else if constexpr (std::is_same_v<C, Spacer>) {
     return detail::mountSpacer(value, ctx);
+  } else if constexpr (requires(C const& component, MountContext& mountContext) {
+                         { component.mount(mountContext) } -> std::same_as<std::unique_ptr<scenegraph::SceneNode>>;
+                       }) {
+    return value.mount(ctx);
   } else if constexpr (BodyComponent<C>) {
     auto childScope = std::make_shared<Reactive2::Scope>();
     ctx.owner().onCleanup([childScope] {

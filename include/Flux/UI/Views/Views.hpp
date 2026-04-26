@@ -17,6 +17,7 @@
 #include <Flux/UI/Views/Card.hpp>
 #include <Flux/UI/Views/Checkbox.hpp>
 #include <Flux/UI/Views/Divider.hpp>
+#include <Flux/UI/Views/For.hpp>
 #include <Flux/UI/Views/ForEach.hpp>
 #include <Flux/UI/Views/Grid.hpp>
 #include <Flux/UI/Views/HStack.hpp>
@@ -29,6 +30,8 @@
 #include <Flux/UI/Views/Select.hpp>
 #include <Flux/UI/Views/Slider.hpp>
 #include <Flux/UI/Views/Spacer.hpp>
+#include <Flux/UI/Views/Show.hpp>
+#include <Flux/UI/Views/Switch.hpp>
 #include <Flux/UI/Views/TableView.hpp>
 #include <Flux/UI/Views/TextInput.hpp>
 #include <Flux/UI/Views/Toast.hpp>

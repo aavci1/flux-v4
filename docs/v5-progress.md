@@ -134,14 +134,24 @@ Validation:
 
 ## Stage 6 — Reactive Control Flow
 
-- [ ] `For` implemented.
-- [ ] `Show` implemented.
-- [ ] `Switch` implemented.
-- [ ] Control-flow tests pass.
-- [ ] `scroll-demo` and `lambda-studio` build and run.
-- [ ] `For` preserves row scope state across reorder and disposes removed scopes.
+- [x] `For` implemented.
+- [x] `Show` implemented.
+- [x] `Switch` implemented.
+- [x] Control-flow tests pass.
+- [x] `scroll-demo` and `lambda-studio` build and run.
+- [x] `For` preserves row scope state across reorder and disposes removed scopes.
 
-Gate status: pending.
+Gate status: passed on 2026-04-26.
+
+Validation:
+- Normal Stage 6 configure/build: `cmake -S . -B build-stage6 -DFLUX_BUILD_TESTS=ON -DFLUX_BUILD_EXAMPLES=ON -DFLUX_BUILD_BENCHMARKS=OFF -DCMAKE_BUILD_TYPE=RelWithDebInfo` and `cmake --build build-stage6` passed.
+- Normal Stage 6 tests: `ctest --test-dir build-stage6 --output-on-failure` passed (`flux_tests`, `flux_reactive2_tests`).
+- `scroll-demo` and `lambda-studio` launch smokes each ran for 2 seconds and exited cleanly after termination.
+- ASAN Stage 6 configure/build: `cmake -S . -B build-stage6-asan -DFLUX_BUILD_TESTS=ON -DFLUX_BUILD_EXAMPLES=ON -DFLUX_BUILD_BENCHMARKS=OFF -DFLUX_ENABLE_ASAN=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo` and `cmake --build build-stage6-asan` passed.
+- ASAN Stage 6 tests: `ctest --test-dir build-stage6-asan --output-on-failure` passed.
+- ASAN `scroll-demo` and `lambda-studio` launch smokes each ran for 2 seconds and exited cleanly after termination.
+- `git diff --check` passed.
+- `git grep -n -E "StateStore|BuildOrchestrator|MeasuredBuild|markCompositeDirty|buildMeasured|expandsBody|resolveCompositeBody|reactiveDirty|markReactiveDirty|structuralEquals" -- include src tests` returned zero hits.
 
 ## Stage 7 — Theme + Environment Reactivity
 

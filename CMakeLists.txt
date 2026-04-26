@@ -236,6 +236,7 @@ if(FLUX_BUILD_TESTS)
   add_executable(flux_tests
     tests/AlertTests.cpp
     tests/AnimationTests.cpp
+    tests/ForTests.cpp
     tests/MetalCanvasTests.mm
     tests/MountRootTests.cpp
     tests/main.cpp
@@ -243,6 +244,7 @@ if(FLUX_BUILD_TESTS)
     tests/ParagraphCacheTests.cpp
     tests/ParagraphCacheIncrementalTests.cpp
     tests/RuntimeTests.cpp
+    tests/ShowTests.cpp
   )
 
   target_include_directories(flux_tests PRIVATE

@@ -96,6 +96,7 @@ public:
   }
 
   bool empty() const { return layers_.empty(); }
+  std::vector<EnvironmentLayer> snapshot() const { return layers_; }
 
 private:
   std::vector<EnvironmentLayer> layers_;
