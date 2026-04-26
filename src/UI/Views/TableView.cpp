@@ -17,14 +17,20 @@ namespace {
 struct TableColumnLayout {
     float width = 0.f;
     float flexGrow = 0.f;
+
+    bool operator==(TableColumnLayout const &) const = default;
 };
 
 struct TableLayoutContext {
     std::vector<TableColumnLayout> columns;
+
+    bool operator==(TableLayoutContext const &) const = default;
 };
 
 struct TableColumnIndex {
     std::size_t value = 0;
+
+    bool operator==(TableColumnIndex const &) const = default;
 };
 
 TableRow::Style resolveRowStyle(TableRow::Style const &style, Theme const &theme) {

@@ -11,6 +11,8 @@ Any component, view, or measured leaf used as an `Element` value must either:
 - Be trivially copyable.
 - Define `operator==`.
 
+Values pushed with `.environment(value)` must also define `operator==` and be copy-constructible.
+
 The framework enforces this with a compile-time error in `Element::Model<C>`. This is intentional:
 without a real comparison, `Element::structuralEquals` would return false for that value on every
 frame and prevent subtree reuse above it.

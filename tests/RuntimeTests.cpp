@@ -6,6 +6,7 @@
 #include <Flux/Reactive/Signal.hpp>
 #include <Flux/UI/Detail/TraversalContext.hpp>
 #include <Flux/UI/Element.hpp>
+#include <Flux/UI/Environment.hpp>
 #include <Flux/UI/StateStore.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
 
@@ -39,6 +40,12 @@ struct CopyCountingLeaf {
                        flux::LayoutHints const&, flux::TextSystem&) const {
         return flux::Size{1.f, 1.f};
     }
+};
+
+struct EnvironmentTestValue {
+    int value = 0;
+
+    bool operator==(EnvironmentTestValue const&) const = default;
 };
 
 } // namespace
@@ -169,6 +176,26 @@ TEST_CASE("Element copies share model storage and detach modifiers on write") {
     REQUIRE(changed.modifiers() != nullptr);
     CHECK(base.modifiers()->padding.top == doctest::Approx(1.f));
     CHECK(changed.modifiers()->padding.top == doctest::Approx(2.f));
+}
+
+TEST_CASE("EnvironmentLayer compares stored values by type and equality") {
+    flux::EnvironmentLayer emptyA;
+    flux::EnvironmentLayer emptyB;
+    CHECK(emptyA == emptyB);
+
+    flux::EnvironmentLayer first;
+    flux::EnvironmentLayer same;
+    flux::EnvironmentLayer differentValue;
+    flux::EnvironmentLayer differentType;
+
+    first.set(EnvironmentTestValue{7});
+    same.set(EnvironmentTestValue{7});
+    differentValue.set(EnvironmentTestValue{9});
+    differentType.set(7);
+
+    CHECK(first == same);
+    CHECK_FALSE(first == differentValue);
+    CHECK_FALSE(first == differentType);
 }
 
 TEST_CASE("TraversalContext reuses its interned prefix key for current child keys") {

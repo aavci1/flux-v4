@@ -362,9 +362,7 @@ inline bool environmentStructurallyEqual(Element const& lhs, Element const& rhs)
   if (!lhsEnv || !rhsEnv) {
     return lhsEnv == rhsEnv;
   }
-  // Environment layers use erased std::any storage. Until values become comparably snapshottable,
-  // only treat empty layers as structurally equal.
-  return lhsEnv->empty() && rhsEnv->empty();
+  return *lhsEnv == *rhsEnv;
 }
 
 } // namespace detail
