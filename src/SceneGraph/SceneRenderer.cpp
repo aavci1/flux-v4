@@ -51,7 +51,7 @@ Rect offsetRect(Rect rect, Point offset) noexcept {
     return rect;
 }
 
-bool canReplayPreparedInParentSpace(SceneNode const& node) {
+bool canReplayPreparedLeaf(SceneNode const& node) {
     if (node.kind() == SceneNodeKind::Group || !node.canPrepareRenderOps() || !node.children().empty()) {
         return false;
     }
@@ -127,16 +127,7 @@ std::unique_ptr<PreparedRenderOps> CanvasRenderer::prepare(SceneNode const &node
     if (!beginRecordedOpsCaptureForCanvas(&canvas_, &recorded)) {
         return nullptr;
     }
-    bool const parentSpaceReplay = canReplayPreparedInParentSpace(node);
-    if (parentSpaceReplay) {
-        canvas_.save();
-        canvas_.translate(node.position());
-        canvas_.transform(node.transform());
-    }
     node.render(*this);
-    if (parentSpaceReplay) {
-        canvas_.restore();
-    }
     endRecordedOpsCaptureForCanvas(&canvas_);
     return std::make_unique<CanvasPreparedRenderOps>(std::move(recorded));
 }
@@ -220,7 +211,7 @@ struct SceneRenderer::Impl {
         }
 
         if (node.kind() != SceneNodeKind::Group && kEnablePreparedRenderCache &&
-            canReplayPreparedInParentSpace(node)) {
+            canReplayPreparedLeaf(node)) {
             if (localBounds.width > 0.f && localBounds.height > 0.f) {
                 Rect const translatedBounds = detail::transformBounds(
                     Mat3::translate(accumulatedTranslation) * node.transform(), localBounds);
@@ -235,11 +226,16 @@ struct SceneRenderer::Impl {
                 if (!prepared) {
                     return false;
                 }
-                bool const needsState = !isZeroOffset(inheritedTranslation) || nodeOpacity != 1.f;
+                bool const needsState = !isZeroOffset(accumulatedTranslation) ||
+                                        !isIdentityTransform(node.transform()) ||
+                                        nodeOpacity != 1.f;
                 if (needsState) {
                     renderer->save();
-                    if (!isZeroOffset(inheritedTranslation)) {
-                        renderer->translate(inheritedTranslation);
+                    if (!isZeroOffset(accumulatedTranslation)) {
+                        renderer->translate(accumulatedTranslation);
+                    }
+                    if (!isIdentityTransform(node.transform())) {
+                        renderer->transform(node.transform());
                     }
                     if (nodeOpacity != 1.f) {
                         renderer->setOpacity(nodeOpacity);

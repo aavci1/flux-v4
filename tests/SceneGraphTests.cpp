@@ -115,6 +115,7 @@ class PreparedCountingRenderer final : public Renderer {
 
         bool replay(Renderer &) const override {
             ++owner_.replayCalls;
+            owner_.replayTranslations.push_back(owner_.transforms_.back().apply(Point {}));
             return true;
         }
 
@@ -125,11 +126,16 @@ class PreparedCountingRenderer final : public Renderer {
     int prepareCalls = 0;
     int replayCalls = 0;
     int fallbackRectDraws = 0;
+    std::vector<Point> replayTranslations;
 
-    void save() override {}
-    void restore() override {}
-    void translate(Point) override {}
-    void transform(Mat3 const &) override {}
+    void save() override { transforms_.push_back(transforms_.back()); }
+    void restore() override {
+        if (transforms_.size() > 1) {
+            transforms_.pop_back();
+        }
+    }
+    void translate(Point offset) override { transforms_.back() = transforms_.back() * Mat3::translate(offset); }
+    void transform(Mat3 const &matrix) override { transforms_.back() = transforms_.back() * matrix; }
     void clipRect(Rect, CornerRadius const &, bool) override {}
     bool quickReject(Rect) const override { return false; }
     void setOpacity(float) override {}
@@ -147,6 +153,9 @@ class PreparedCountingRenderer final : public Renderer {
         ++prepareCalls;
         return std::make_unique<PreparedMarker>(*this);
     }
+
+  private:
+    std::vector<Mat3> transforms_ {Mat3::identity()};
 };
 
 TEST_CASE("SceneRenderer accumulates parent-space bounds as local translations") {
@@ -468,12 +477,16 @@ TEST_CASE("SceneRenderer reuses prepared ops for position-only changes and rebui
     CHECK(renderer.prepareCalls == 1);
     CHECK(renderer.replayCalls == 1);
     CHECK(renderer.fallbackRectDraws == 0);
+    REQUIRE(renderer.replayTranslations.size() == 1);
+    CHECK(renderer.replayTranslations.back() == Point {10.f, 12.f});
 
     rectNode->setPosition(Point {40.f, 24.f});
     sceneRenderer.render(graph);
     CHECK(renderer.prepareCalls == 1);
     CHECK(renderer.replayCalls == 2);
     CHECK(renderer.fallbackRectDraws == 0);
+    REQUIRE(renderer.replayTranslations.size() == 2);
+    CHECK(renderer.replayTranslations.back() == Point {40.f, 24.f});
 
     rectNode->setClipsContents(true);
     sceneRenderer.render(graph);

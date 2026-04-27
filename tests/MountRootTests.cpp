@@ -618,6 +618,7 @@ TEST_CASE("ScrollView mount emits overlay indicators for overflowing content") {
   CHECK(overlay.opacity() == doctest::Approx(0.f));
   REQUIRE(overlay.children().size() == 1);
   CHECK(overlay.children()[0]->bounds().x == doctest::Approx(73.f));
+  float const initialIndicatorY = overlay.children()[0]->bounds().y;
 
   REQUIRE(viewport.interaction() != nullptr);
   REQUIRE(viewport.interaction()->onScroll);
@@ -625,6 +626,7 @@ TEST_CASE("ScrollView mount emits overlay indicators for overflowing content") {
 
   CHECK(viewport.children()[0]->position().y == doctest::Approx(-12.f));
   CHECK(overlay.opacity() == doctest::Approx(1.f));
+  CHECK(overlay.children()[0]->bounds().y > initialIndicatorY);
 }
 
 TEST_CASE("MountRoot keeps Bindable effects scoped to the mount") {
