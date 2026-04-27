@@ -40,6 +40,30 @@ LayoutConstraints insetConstraints(LayoutConstraints constraints, EdgeInsets pad
   return constraints;
 }
 
+LayoutConstraints modifierInnerConstraints(LayoutConstraints constraints, EdgeInsets padding,
+                                           float width, float height) {
+  float const dx = std::max(0.f, padding.left) + std::max(0.f, padding.right);
+  float const dy = std::max(0.f, padding.top) + std::max(0.f, padding.bottom);
+  constraints = insetConstraints(constraints, padding);
+  if (width > 0.f) {
+    float const innerWidth = std::max(0.f, width - dx);
+    constraints.maxWidth = innerWidth;
+    constraints.minWidth = innerWidth;
+  }
+  if (height > 0.f) {
+    float const innerHeight = std::max(0.f, height - dy);
+    constraints.maxHeight = innerHeight;
+    constraints.minHeight = innerHeight;
+  }
+  if (std::isfinite(constraints.maxWidth)) {
+    constraints.minWidth = std::min(constraints.minWidth, constraints.maxWidth);
+  }
+  if (std::isfinite(constraints.maxHeight)) {
+    constraints.minHeight = std::min(constraints.minHeight, constraints.maxHeight);
+  }
+  return constraints;
+}
+
 class ScopedEnvironmentSnapshot {
 public:
   ScopedEnvironmentSnapshot(EnvironmentStack& stack, std::vector<EnvironmentLayer> const& layers)
@@ -202,7 +226,10 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
 
   detail::ElementModifiers const& modifiers = *modifiers_;
   EdgeInsets const padding = modifiers.padding.evaluate();
-  LayoutConstraints innerConstraints = insetConstraints(ctx.constraints(), padding);
+  float const width = modifiers.sizeWidth.evaluate();
+  float const height = modifiers.sizeHeight.evaluate();
+  LayoutConstraints innerConstraints =
+      modifierInnerConstraints(ctx.constraints(), padding, width, height);
   MountContext innerCtx = ctx.child(innerConstraints, ctx.hints());
   std::unique_ptr<scenegraph::SceneNode> content = impl_->mount(innerCtx);
   if (!content) {

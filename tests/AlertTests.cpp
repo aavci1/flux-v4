@@ -75,7 +75,8 @@ TEST_CASE("Alert mounts as an intrinsic card for overlay centering") {
   flux::MeasureContext measureContext{textSystem};
   flux::Reactive::Scope scope;
   flux::EnvironmentLayer layer;
-  layer.set(flux::Theme::light());
+  flux::Theme const theme = flux::Theme::light();
+  layer.set(theme);
   flux::EnvironmentStack& environment = flux::EnvironmentStack::current();
   environment.push(layer);
 
@@ -99,6 +100,23 @@ TEST_CASE("Alert mounts as an intrinsic card for overlay centering") {
 
   REQUIRE(node);
   CHECK(node->bounds().width == doctest::Approx(360.f));
+  REQUIRE(node->children().size() == 1);
+
+  flux::scenegraph::SceneNode const& cardContent = *node->children()[0];
+  float const contentWidth = 360.f - 2.f * theme.space6;
+  CHECK(cardContent.bounds().width == doctest::Approx(contentWidth));
+  REQUIRE(cardContent.children().size() == 3);
+
+  flux::scenegraph::SceneNode const& buttonRow = *cardContent.children()[2];
+  CHECK(buttonRow.bounds().width == doctest::Approx(contentWidth));
+  REQUIRE(buttonRow.children().size() == 2);
+  float const firstButtonWidth = buttonRow.children()[0]->bounds().width;
+  float const secondButtonWidth = buttonRow.children()[1]->bounds().width;
+  CHECK(firstButtonWidth > 0.f);
+  CHECK(secondButtonWidth > 0.f);
+  CHECK(buttonRow.children()[0]->position().x == doctest::Approx(0.f));
+  CHECK(buttonRow.children()[1]->position().x > firstButtonWidth);
+  CHECK(buttonRow.children()[1]->position().x + secondButtonWidth <= contentWidth + 2.f);
 
   flux::OverlayConfig config{};
   flux::Rect const frame =
