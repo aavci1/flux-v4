@@ -3,6 +3,7 @@
 #include <Flux/Core/ComponentKey.hpp>
 #include <Flux/Core/Events.hpp>
 #include <Flux/Core/Types.hpp>
+#include <Flux/UI/ActionRegistry.hpp>
 
 #include <memory>
 #include <optional>
@@ -33,6 +34,8 @@ public:
   bool wantsTextInput() const noexcept { return true; }
   bool textCacheOverlayEnabled() const noexcept { return false; }
   bool isActionCurrentlyEnabled(std::string const& name) const;
+  ActionRegistry& actionRegistry() noexcept;
+  ActionRegistry const& actionRegistry() const noexcept;
   Window& window() noexcept;
   Window const& window() const noexcept;
 

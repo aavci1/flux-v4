@@ -8,6 +8,7 @@
 #include <Flux/Reactive/Computed.hpp>
 #include <Flux/Reactive/Effect.hpp>
 #include <Flux/Reactive/Signal.hpp>
+#include <Flux/Detail/Runtime.hpp>
 #include <Flux/UI/Environment.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 #include <Flux/UI/Theme.hpp>
@@ -259,16 +260,28 @@ inline Rect useBounds() {
 
 inline void useViewAction(std::string const& name, std::function<void()> handler,
                           std::function<bool()> isEnabled = {}) {
-  (void)name;
-  (void)handler;
-  (void)isEnabled;
+  Runtime* runtime = Runtime::current();
+  if (!runtime) {
+    return;
+  }
+  ActionId const id = runtime->actionRegistry().registerViewClaim(
+      ComponentKey{}, name, std::move(handler), std::move(isEnabled));
+  Reactive::onCleanup([runtime, id] {
+    runtime->actionRegistry().unregister(id);
+  });
 }
 
 inline void useWindowAction(std::string const& name, std::function<void()> handler,
                             std::function<bool()> isEnabled = {}) {
-  (void)name;
-  (void)handler;
-  (void)isEnabled;
+  Runtime* runtime = Runtime::current();
+  if (!runtime) {
+    return;
+  }
+  ActionId const id = runtime->actionRegistry().registerWindowAction(
+      name, std::move(handler), std::move(isEnabled));
+  Reactive::onCleanup([runtime, id] {
+    runtime->actionRegistry().unregister(id);
+  });
 }
 
 } // namespace flux

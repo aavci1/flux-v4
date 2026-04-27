@@ -107,6 +107,7 @@ add_library(flux STATIC
   src/Core/Window.cpp
   src/Core/WindowRender.cpp
   src/UI/MeasureContext.cpp
+  src/UI/ActionRegistry.cpp
   src/UI/InputFieldChrome.cpp
   src/UI/InputFieldLayout.cpp
   src/UI/Detail/TraversalContext.cpp

@@ -25,6 +25,7 @@ namespace {
 struct RuntimeTargetSnapshot {
   scenegraph::SceneNode const* node = nullptr;
   scenegraph::InteractionData const* interaction = nullptr;
+  ComponentKey stableTargetKey{};
   OverlayId overlay{};
   bool inOverlay = false;
   Cursor cursor = Cursor::Inherit;
@@ -61,6 +62,7 @@ struct RuntimeInputState {
 struct Runtime::Impl {
   Window& window;
   std::unique_ptr<MountRoot> root;
+  ActionRegistry actions;
   RuntimeInputState input;
   std::shared_ptr<bool> alive = std::make_shared<bool>(true);
 
@@ -96,6 +98,7 @@ Runtime::~Runtime() {
 }
 
 void Runtime::setRoot(std::unique_ptr<RootHolder> holder) {
+  d->actions.beginRebuild();
   d->root = std::make_unique<MountRoot>(
       std::move(holder), Application::instance().textSystem(), d->window.environmentLayer(),
       d->window.getSize(), [handle = d->window.handle()] {
@@ -120,8 +123,18 @@ void Runtime::beginShutdown(scenegraph::SceneGraph* sceneGraph) {
 }
 
 bool Runtime::isActionCurrentlyEnabled(std::string const& name) const {
-  (void)name;
-  return true;
+  ComponentKey const focusedKey = d->input.focusTarget
+      ? d->input.focusTarget->stableTargetKey
+      : ComponentKey{};
+  return d->actions.isHandlerEnabled(focusedKey, name, d->window.actionDescriptors());
+}
+
+ActionRegistry& Runtime::actionRegistry() noexcept {
+  return d->actions;
+}
+
+ActionRegistry const& Runtime::actionRegistry() const noexcept {
+  return d->actions;
 }
 
 Window& Runtime::window() noexcept {
@@ -246,6 +259,7 @@ RuntimeTargetSnapshot snapshot(scenegraph::SceneNode const* node,
   target.overlay = overlay;
   target.inOverlay = overlay.isValid();
   if (interaction) {
+    target.stableTargetKey = interaction->stableTargetKey;
     target.cursor = interaction->cursor;
     target.focusable = interaction->focusable;
     target.onPointerEnter = interaction->onPointerEnter;
@@ -442,6 +456,10 @@ void cycleKeyboardFocus(RuntimeInputState& input, Window& window, bool reverse) 
   setFocus(input, targets[nextIndex], true, FocusInputKind::Keyboard);
 }
 
+ComponentKey focusedActionKey(RuntimeInputState const& input) {
+  return input.focusTarget ? input.focusTarget->stableTargetKey : ComponentKey{};
+}
+
 void resetTransientTargets(RuntimeInputState& input, Window& window) {
   for (RuntimeTargetSnapshot const& target : input.hoverChain) {
     setHoverActive(target, false);
@@ -471,6 +489,12 @@ void Runtime::handleInput(InputEvent const& event) {
 
   if (event.kind == InputEvent::Kind::KeyDown && event.key == keys::Tab) {
     cycleKeyboardFocus(d->input, d->window, any(event.modifiers & Modifiers::Shift));
+    return;
+  }
+
+  if (event.kind == InputEvent::Kind::KeyDown &&
+      d->actions.dispatchShortcut(focusedActionKey(d->input), event.key, event.modifiers,
+                                  d->window.actionDescriptors())) {
     return;
   }
 
