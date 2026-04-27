@@ -5,7 +5,6 @@
 /// Part of the Flux public API.
 
 
-#include <Flux/Reactive/Observer.hpp>
 #include <Flux/Reactive/Interpolatable.hpp>
 #include <Flux/Reactive/Easing.hpp>
 #include <Flux/Reactive/Transition.hpp>

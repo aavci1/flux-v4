@@ -1,6 +1,7 @@
 #include <Flux.hpp>
 #include <Flux/Core/Events.hpp>
-#include <Flux/Reactive/Observer.hpp>
+#include <Flux/Reactive/Effect.hpp>
+#include <Flux/Reactive/Scope.hpp>
 #include <Flux/Reactive/Transition.hpp>
 #include <Flux/Graphics/Canvas.hpp>
 #include <Flux/Graphics/Styles.hpp>
@@ -36,22 +37,21 @@ struct DemoState {
 
 class ReactiveDemoWindow : public Window {
   DemoState s_;
-  ObserverHandle hClicks_{};
-  ObserverHandle hFill_{};
-  ObserverHandle hCircle_{};
-  ObserverHandle hPointer_{};
-  ObserverHandle hDistance_{};
+  Reactive::Scope reactiveScope_;
   /// Previous window content size; used to scale pointer/circle when the window is resized.
   Size lastLayout_{};
 
 public:
   explicit ReactiveDemoWindow(WindowConfig const& c) : Window(c), lastLayout_{c.size} {
-    auto redraw = [this]() { Window::requestRedraw(); };
-    hClicks_ = s_.clicks.observe(redraw);
-    hFill_ = s_.fillColor.observe(redraw);
-    hCircle_ = s_.circleCenter.observe(redraw);
-    hPointer_ = s_.pointerPos.observe(redraw);
-    hDistance_ = s_.distanceToPointer.observe(redraw);
+    Reactive::withOwner(reactiveScope_, [this] {
+      Reactive::Effect([this] {
+        (void)s_.clicks.get();
+        (void)s_.fillColor.get();
+        (void)s_.circleCenter.get();
+        (void)s_.distanceToPointer.get();
+        Window::requestRedraw();
+      });
+    });
 
     Application::instance().eventQueue().on<WindowEvent>([this](WindowEvent const& ev) {
       if (ev.handle != handle() || ev.kind != WindowEvent::Kind::Resize) {
@@ -98,14 +98,6 @@ public:
         s_.circleCenter.set(p);
       }
     });
-  }
-
-  ~ReactiveDemoWindow() {
-    s_.clicks.unobserve(hClicks_);
-    s_.fillColor.unobserve(hFill_);
-    s_.circleCenter.unobserve(hCircle_);
-    s_.pointerPos.unobserve(hPointer_);
-    s_.distanceToPointer.unobserve(hDistance_);
   }
 
   void render(Canvas& c) override {

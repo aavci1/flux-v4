@@ -137,14 +137,6 @@ public:
     }
   }
 
-  ObserverHandle observe(std::function<void()> callback) const {
-    return state().value.observe(std::move(callback));
-  }
-
-  void unobserve(ObserverHandle handle) const {
-    state().value.unobserve(handle);
-  }
-
 private:
   struct State final : AnimationBase {
     explicit State(T initial)
