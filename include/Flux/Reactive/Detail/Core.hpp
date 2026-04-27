@@ -4,6 +4,7 @@
 
 #include <atomic>
 #include <cassert>
+#include <concepts>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -48,6 +49,7 @@ struct Computation;
 struct Link {
   Observable* source = nullptr;
   Computation* observer = nullptr;
+  std::uint64_t sourceVersion = 0;
   Link* nextSource = nullptr;
   Link* prevSource = nullptr;
   Link* nextSubscriber = nullptr;
@@ -161,6 +163,7 @@ struct OwnerContext {
 
 struct Observable : Disposable {
   Link* subscribers = nullptr;
+  std::uint64_t version = 0;
   std::uint16_t flags = 0;
 
   ~Observable() override {
@@ -172,9 +175,11 @@ struct Observable : Disposable {
   }
 
   void dispose() override;
+  virtual bool updateIfNeeded();
   void reportRead();
   void subscribe(Computation& observer);
   void propagatePending();
+  void propagateDirty();
   void detachSubscribers();
 };
 
@@ -189,6 +194,9 @@ struct Computation : Observable {
   }
 
   void dispose() override;
+  bool pollSourcesChanged();
+  bool updateIfNeeded() override = 0;
+  void markDirty();
   void markPending();
   void clearSourcesForReuse();
   void deleteSpareLinks();
@@ -196,6 +204,7 @@ struct Computation : Observable {
   Link* acquireLink();
   void retireLink(Link* link);
   virtual void run() = 0;
+  virtual void onDirty() = 0;
   virtual void onPending() = 0;
 };
 
@@ -241,6 +250,10 @@ inline void Observable::dispose() {
   detachSubscribers();
 }
 
+inline bool Observable::updateIfNeeded() {
+  return false;
+}
+
 inline void Observable::reportRead() {
   if (!sCurrentObserver || disposed()) {
     return;
@@ -249,13 +262,15 @@ inline void Observable::reportRead() {
 }
 
 inline void Observable::subscribe(Computation& observer) {
-  if (observer.findSource(this)) {
+  if (auto* existing = observer.findSource(this)) {
+    existing->sourceVersion = version;
     return;
   }
 
   auto* link = observer.acquireLink();
   link->source = this;
   link->observer = &observer;
+  link->sourceVersion = version;
 
   link->nextSubscriber = subscribers;
   if (subscribers) {
@@ -276,6 +291,17 @@ inline void Observable::propagatePending() {
     auto* next = link->nextSubscriber;
     if (link->observer) {
       link->observer->markPending();
+    }
+    link = next;
+  }
+}
+
+inline void Observable::propagateDirty() {
+  auto* link = subscribers;
+  while (link) {
+    auto* next = link->nextSubscriber;
+    if (link->observer) {
+      link->observer->markDirty();
     }
     link = next;
   }
@@ -307,8 +333,35 @@ inline void Computation::dispose() {
   clearSourcesForReuse();
 }
 
+inline bool Computation::pollSourcesChanged() {
+  bool changed = false;
+  auto* link = sources;
+  while (link) {
+    auto* next = link->nextSource;
+    Observable* source = link->source;
+    if (source) {
+      bool const sourceChanged = source->updateIfNeeded();
+      if (sourceChanged || link->sourceVersion != source->version) {
+        changed = true;
+      }
+      link->sourceVersion = source->version;
+    }
+    link = next;
+  }
+  return changed;
+}
+
+inline void Computation::markDirty() {
+  if (disposed() || hasFlag(flags, Dirty)) {
+    return;
+  }
+  clearFlag(flags, Pending);
+  setFlag(flags, Dirty);
+  onDirty();
+}
+
 inline void Computation::markPending() {
-  if (disposed() || hasFlag(flags, Pending)) {
+  if (disposed() || hasFlag(flags, Dirty) || hasFlag(flags, Pending)) {
     return;
   }
   setFlag(flags, Pending);
@@ -391,8 +444,10 @@ inline void flushEffects() {
     sEffectQueue.clear();
     for (auto* effect : pending) {
       effect->scheduled = false;
-      if (!effect->disposed() && hasFlag(effect->flags, Pending)) {
-        effect->run();
+      if (!effect->disposed() &&
+          (hasFlag(effect->flags, Dirty) ||
+           hasFlag(effect->flags, Pending))) {
+        (void)effect->updateIfNeeded();
       }
     }
   }
@@ -476,7 +531,8 @@ struct SignalState final : detail::Observable {
     }
     detail::BatchGuard batch;
     value = std::move(next);
-    propagatePending();
+    ++version;
+    propagateDirty();
   }
 
   T value;
@@ -533,21 +589,57 @@ struct ComputedState final : detail::Computation {
   }
 
   void run() override {
-    recompute();
+    (void)recompute();
+  }
+
+  bool updateIfNeeded() override {
+    if (disposed()) {
+      return false;
+    }
+    if (!value) {
+      return recompute();
+    }
+    if (detail::hasFlag(flags, detail::Dirty)) {
+      return recompute();
+    }
+    if (detail::hasFlag(flags, detail::Pending)) {
+      if (!pollSourcesChanged()) {
+        detail::clearFlag(flags, detail::Pending);
+        return false;
+      }
+      return recompute();
+    }
+    return false;
+  }
+
+  void onDirty() override {
+    propagatePending();
   }
 
   void onPending() override {
     propagatePending();
   }
 
-  void recompute() {
+  bool recompute() {
     assert(!disposed() && "recomputing a disposed Computed");
     clearSourcesForReuse();
     detail::ObserverContext context(this);
     auto next = fn();
+    bool changed = !value.has_value();
+    if (!changed) {
+      if constexpr (detail::EqualityComparable<T>) {
+        changed = !(*value == next);
+      } else {
+        changed = true;
+      }
+    }
     value = std::move(next);
+    if (changed) {
+      ++version;
+    }
     detail::clearFlag(flags, detail::Pending);
     detail::clearFlag(flags, detail::Dirty);
+    return changed;
   }
 
   SmallFn<T()> fn;
@@ -571,10 +663,11 @@ public:
   T const& get() const {
     assert(state_ && "reading an empty Computed handle");
     assert(!state_->disposed() && "reading a disposed Computed");
-    state_->reportRead();
-    if (detail::hasFlag(state_->flags, detail::Pending) || !state_->value) {
-      state_->recompute();
+    if (detail::hasFlag(state_->flags, detail::Dirty) ||
+        detail::hasFlag(state_->flags, detail::Pending) || !state_->value) {
+      (void)state_->updateIfNeeded();
     }
+    state_->reportRead();
     return *state_->value;
   }
 
@@ -585,6 +678,10 @@ public:
   T const& peek() const {
     assert(state_ && "peeking an empty Computed handle");
     assert(!state_->disposed() && "peeking a disposed Computed");
+    if (detail::hasFlag(state_->flags, detail::Dirty) ||
+        detail::hasFlag(state_->flags, detail::Pending) || !state_->value) {
+      (void)state_->updateIfNeeded();
+    }
     return *state_->value;
   }
 
@@ -610,8 +707,31 @@ struct EffectState final : detail::Computation {
     }
     clearSourcesForReuse();
     detail::clearFlag(flags, detail::Pending);
+    detail::clearFlag(flags, detail::Dirty);
     detail::ObserverContext context(this);
     fn();
+  }
+
+  bool updateIfNeeded() override {
+    if (disposed()) {
+      return false;
+    }
+    if (detail::hasFlag(flags, detail::Dirty)) {
+      run();
+      return true;
+    }
+    if (detail::hasFlag(flags, detail::Pending)) {
+      if (pollSourcesChanged()) {
+        run();
+        return true;
+      }
+      detail::clearFlag(flags, detail::Pending);
+    }
+    return false;
+  }
+
+  void onDirty() override {
+    detail::scheduleEffect(this);
   }
 
   void onPending() override {

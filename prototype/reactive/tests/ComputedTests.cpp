@@ -1,4 +1,5 @@
 #include "Computed.hpp"
+#include "Effect.hpp"
 #include "Signal.hpp"
 #include "Test.hpp"
 
@@ -50,6 +51,42 @@ static void runComputedTests() {
   left.set(11);
   V5_CHECK(selected.get() == 21);
   V5_CHECK(dynamicRuns == 2);
+
+  Signal<int> chainSource(1);
+  int bucketRuns = 0;
+  int derivedRuns = 0;
+  int effectRuns = 0;
+  int observed = 0;
+
+  Computed<int> bucket([&] {
+    ++bucketRuns;
+    return chainSource.get() % 2;
+  });
+  Computed<int> derived([&] {
+    ++derivedRuns;
+    return bucket.get() * 10;
+  });
+  Effect effect([&] {
+    ++effectRuns;
+    observed = derived.get();
+  });
+
+  V5_CHECK(observed == 10);
+  V5_CHECK(bucketRuns == 1);
+  V5_CHECK(derivedRuns == 1);
+  V5_CHECK(effectRuns == 1);
+
+  chainSource.set(3);
+  V5_CHECK(observed == 10);
+  V5_CHECK(bucketRuns == 2);
+  V5_CHECK(derivedRuns == 1);
+  V5_CHECK(effectRuns == 1);
+
+  chainSource.set(4);
+  V5_CHECK(observed == 0);
+  V5_CHECK(bucketRuns == 3);
+  V5_CHECK(derivedRuns == 2);
+  V5_CHECK(effectRuns == 2);
 }
 
 V5_TEST_MAIN(runComputedTests)
