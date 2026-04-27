@@ -53,14 +53,56 @@ Element Toggle::body() const {
     float const xOn = std::max(xOff, trackWidth - thumbInset - thumbSize);
 
     Reactive::Signal<bool> focused = useFocus();
+    Reactive::Signal<bool> pressed = usePress();
     bool const isDisabled = disabled;
-
     auto v = value;
+
+    bool const initialOn = v.peek();
+    auto thumbXAnim = useAnimation<float>(initialOn ? xOn : xOff);
+    auto trackFillAnim = useAnimation<Color>(
+        isDisabled ? theme().disabledControlBackgroundColor : initialOn ? onColor : offColor);
+    auto scaleAnim = useAnimation<float>(1.f);
+
+    useEffect([theme, style = style, v, pressed, thumbXAnim, trackFillAnim, scaleAnim,
+               isDisabled, xOn, xOff]() mutable {
+        Theme const &currentTheme = theme();
+        Toggle::Style const currentStyle = resolveStyle(style, currentTheme);
+        bool const reducedMotion = currentTheme.reducedMotion;
+        Transition const motion = (isDisabled || reducedMotion)
+                                      ? Transition::instant()
+                                      : Transition::ease(currentTheme.durationMedium);
+        Transition const pressMotion = reducedMotion
+                                           ? Transition::instant()
+                                           : Transition::ease(currentTheme.durationFast);
+
+        thumbXAnim.setReducedMotion(reducedMotion);
+        trackFillAnim.setReducedMotion(reducedMotion);
+        scaleAnim.setReducedMotion(reducedMotion);
+
+        bool const on = v();
+        float const targetX = on ? xOn : xOff;
+        if (std::abs(thumbXAnim.peek() - targetX) > 0.01f) {
+            thumbXAnim.set(targetX, motion);
+        }
+
+        Color const targetFill = isDisabled ? currentTheme.disabledControlBackgroundColor
+                                            : on ? currentStyle.onColor
+                                                 : currentStyle.offColor;
+        if (trackFillAnim.peek() != targetFill) {
+            trackFillAnim.set(targetFill, motion);
+        }
+
+        float const targetScale = (pressed() && !isDisabled) ? 0.90f : 1.f;
+        if (std::abs(scaleAnim.peek() - targetScale) > 0.001f) {
+            scaleAnim.set(targetScale, pressMotion);
+        }
+    });
+
     auto handleToggle = [v, onChange = onChange, isDisabled]() {
         if (isDisabled) {
             return;
         }
-        bool const next = !*v;
+        bool const next = !v.peek();
         v = next;
         if (onChange) {
             onChange(next);
@@ -74,18 +116,20 @@ Element Toggle::body() const {
     };
 
     return ScaleAroundCenter {
-        .scale = 1.f,
+        .scale = [scaleAnim] {
+            return scaleAnim();
+        },
         .child = ZStack {
             .horizontalAlignment = Alignment::Start,
             .verticalAlignment = Alignment::Start,
             .children = flux::children(
                 Rectangle {}
-                    .fill([v, isDisabled, onColor, offColor, theme] {
-                        return isDisabled ? theme().disabledControlBackgroundColor : v.get() ? onColor : offColor;
+                    .fill([trackFillAnim] {
+                        return trackFillAnim();
                     })
                     .stroke([focused, focusColor, borderColor, borderWidth] {
-                        return StrokeStyle::solid(focused.get() ? focusColor : borderColor,
-                                                  focused.get() ? std::max(borderWidth, 2.f) : borderWidth);
+                        return StrokeStyle::solid(focused() ? focusColor : borderColor,
+                                                  focused() ? std::max(borderWidth, 2.f) : borderWidth);
                     })
                     .size(trackWidth, trackHeight)
                     .cornerRadius(CornerRadius {trackHeight * 0.5f}),
@@ -93,8 +137,8 @@ Element Toggle::body() const {
                     .fill(FillStyle::solid(isDisabled ? disabledColor : thumbColor))
                     .stroke(StrokeStyle::solid(thumbBorderColor, thumbBorderWidth))
                     .shadow(isDisabled ? ShadowStyle::none() : ShadowStyle {.radius = theme().shadowRadiusControl, .offset = {0.f, theme().shadowOffsetYControl}, .color = theme().shadowColor})
-                    .position([v, xOn, xOff] {
-                        return v.get() ? xOn : xOff;
+                    .position([thumbXAnim] {
+                        return thumbXAnim();
                     }, thumbInset)
                     .size(thumbSize, thumbSize)
                     .cornerRadius(CornerRadius {thumbSize * 0.5f})

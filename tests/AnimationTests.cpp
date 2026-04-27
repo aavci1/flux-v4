@@ -4,7 +4,84 @@
 #include <Flux/Reactive/Animation.hpp>
 #undef private
 
+#include <Flux/Detail/RootHolder.hpp>
+#include <Flux/Graphics/TextSystem.hpp>
+#include <Flux/SceneGraph/RectNode.hpp>
+#include <Flux/SceneGraph/SceneGraph.hpp>
+#include <Flux/UI/MountRoot.hpp>
+#include <Flux/UI/Theme.hpp>
+#include <Flux/UI/Views/Toggle.hpp>
+
+#include <memory>
+#include <string_view>
+#include <vector>
+
 using namespace flux;
+
+namespace {
+
+class FakeTextSystem final : public TextSystem {
+public:
+  std::shared_ptr<TextLayout const>
+  layout(AttributedString const&, float, TextLayoutOptions const&) override {
+    return std::make_shared<TextLayout>();
+  }
+
+  std::shared_ptr<TextLayout const>
+  layout(std::string_view, Font const&, Color const&, float, TextLayoutOptions const&) override {
+    return std::make_shared<TextLayout>();
+  }
+
+  Size measure(AttributedString const&, float, TextLayoutOptions const&) override {
+    return {0.f, 0.f};
+  }
+
+  Size measure(std::string_view, Font const&, Color const&, float,
+               TextLayoutOptions const&) override {
+    return {0.f, 0.f};
+  }
+
+  std::uint32_t resolveFontId(std::string_view, float, bool) override { return 0; }
+
+  std::vector<std::uint8_t> rasterizeGlyph(std::uint32_t, std::uint16_t, float,
+                                           std::uint32_t& outWidth,
+                                           std::uint32_t& outHeight,
+                                           Point& outBearing) override {
+    outWidth = 0;
+    outHeight = 0;
+    outBearing = {};
+    return {};
+  }
+};
+
+EnvironmentLayer testEnvironment() {
+  EnvironmentLayer environment;
+  environment.set(Theme::light());
+  return environment;
+}
+
+scenegraph::RectNode const* findMovedThumb(scenegraph::SceneNode const& node) {
+  if (node.kind() == scenegraph::SceneNodeKind::Rect) {
+    auto const& rect = static_cast<scenegraph::RectNode const&>(node);
+    Size const size = rect.size();
+    Point const position = rect.position();
+    if (size.width == doctest::Approx(18.f) &&
+        size.height == doctest::Approx(18.f) &&
+        position.x > 0.f) {
+      return &rect;
+    }
+  }
+  for (auto const& child : node.children()) {
+    if (child) {
+      if (auto const* found = findMovedThumb(*child)) {
+        return found;
+      }
+    }
+  }
+  return nullptr;
+}
+
+} // namespace
 
 TEST_CASE("Animation repeats across finite iterations") {
   Animation<float> value{0.f};
@@ -102,4 +179,37 @@ TEST_CASE("Animation copies share playback state") {
 
   original.stop();
   CHECK_FALSE(copy.isRunning());
+}
+
+TEST_CASE("Toggle state changes drive thumb through animation instead of jumping immediately") {
+  struct Root {
+    Signal<bool> value;
+
+    Element body() const {
+      return Toggle{.value = value};
+    }
+  };
+
+  Signal<bool> value{false};
+  FakeTextSystem textSystem;
+  scenegraph::SceneGraph sceneGraph;
+  MountRoot root{
+      std::make_unique<TypedRootHolder<Root>>(std::in_place, Root{value}),
+      textSystem,
+      testEnvironment(),
+      Size{120.f, 80.f},
+  };
+
+  root.mount(sceneGraph);
+
+  scenegraph::RectNode const* thumb = findMovedThumb(sceneGraph.root());
+  REQUIRE(thumb != nullptr);
+  float const initialX = thumb->position().x;
+  CHECK(initialX == doctest::Approx(4.f));
+
+  value = true;
+
+  thumb = findMovedThumb(sceneGraph.root());
+  REQUIRE(thumb != nullptr);
+  CHECK(thumb->position().x == doctest::Approx(initialX));
 }
