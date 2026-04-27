@@ -15,7 +15,8 @@ This file records the stage-gate status for the v5 cutover.
 | 6 - Reactive control flow | Passed | `19ae410d` |
 | 7 - Theme and environment reactivity | Passed | `62ab68e5` |
 | 8 - Examples migration | Migration passed; sample-based per-example perf pending | `b7d0c20e` |
-| 9 - Cleanup, validation, release prep | Passed through code/doc validation; release promotion awaits approval | pending |
+| 9 - Cleanup, validation, release prep | Code and docs passed; release promotion deferred pending post-cutover hardening | pending |
+| 9.5 - Post-cutover hardening | In progress; see below | multiple |
 
 ## Stage 9 Status
 
@@ -27,6 +28,19 @@ This file records the stage-gate status for the v5 cutover.
 - Final performance data is recorded in [v5-final-perf.md](v5-final-perf.md).
 - The earlier `ps`-based warm-idle example sweep is no longer treated as final perf data; any per-example perf table should use the same `/usr/bin/sample` methodology as the AmbientLoopLab measurement.
 - Main-branch promotion and release tags require explicit approval.
+
+## Stage 9.5 Post-cutover Hardening
+
+Completed so far:
+
+- Relayout architecture: retained-tree resize relayout, prepared render-op replay at current positions, retained stack sizing fixes, text-position preservation, scale binding survival across relayout, and bounded reactive size propagation.
+- Ownership and retained-build correctness: composite body measurement effects scoped, composite bodies materialized once, `useState` body-once invariant documented/asserted, child mount contexts split into shared/owned scope paths.
+- Reactivity cleanup: legacy `observe` callbacks removed, computed dirty propagation restored, transition/effect interaction isolated, and deferred diamond-poll revisit TODO documented with profiling rationale.
+- Control-flow/layout fixes: collapsed control flow remains mounted for layout updates, For row measurement is retained/cached, stale `SceneBuilder` and `MeasureLayoutCache` artifacts removed.
+- Input/action cutover: focus, keyboard-focus, hover, and press hooks wired to runtime interaction signals; view/window action hooks wired to the registry with scope cleanup.
+- Performance hardening: scene-graph plumbing callbacks moved to `SmallFn`, environment replay skipped for independent bindings, environment snapshot replay borrows captured layers, and real `/usr/bin/sample` AmbientLoopLab data recorded.
+
+Remaining release-prep work is tracked by the v5 action items list, including the stricter stale-symbol scan and any follow-up perf target from the latest AmbientLoopLab sample.
 
 ## Latest Validation
 
