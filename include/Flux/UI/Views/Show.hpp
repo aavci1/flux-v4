@@ -20,6 +20,8 @@ namespace flux {
 template<typename Condition, typename ThenFactory, typename ElseFactory>
 class ShowView {
 public:
+  static constexpr bool mountsWhenCollapsed = true;
+
   ShowView(Condition condition, ThenFactory thenFactory, ElseFactory elseFactory)
       : condition_(std::move(condition))
       , thenFactory_(std::move(thenFactory))
@@ -109,6 +111,7 @@ private:
         return;
       }
 
+      Size const oldSize = group.size();
       disposeBranch();
       (void)group.releaseChildren();
       activeBranch = nextBranch;
@@ -120,6 +123,7 @@ private:
         group.replaceChildren(std::move(children));
       }
       detail::controlLayoutSingle(group, frameSize);
+      detail::controlPropagateLayoutChange(group, oldSize);
       if (requestRedraw) {
         requestRedraw();
       }

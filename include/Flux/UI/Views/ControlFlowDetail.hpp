@@ -2,6 +2,7 @@
 
 #include <Flux/Reactive/Scope.hpp>
 #include <Flux/SceneGraph/GroupNode.hpp>
+#include <Flux/SceneGraph/RectNode.hpp>
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/MeasureContext.hpp>
 #include <Flux/UI/MountContext.hpp>
@@ -120,6 +121,143 @@ inline void controlLayoutSingle(scenegraph::GroupNode& group, Size frameSize) {
     size.height = std::max(size.height, childSize.height);
   }
   group.setSize(Size{controlFiniteOrZero(size.width), controlFiniteOrZero(size.height)});
+}
+
+inline bool controlClipsContents(scenegraph::SceneNode const& node) {
+  return node.kind() == scenegraph::SceneNodeKind::Rect &&
+         static_cast<scenegraph::RectNode const&>(node).clipsContents();
+}
+
+inline Size controlChildExtents(scenegraph::SceneNode const& parent) {
+  Size extents{};
+  for (auto const& child : parent.children()) {
+    if (!child) {
+      continue;
+    }
+    Point const position = child->position();
+    Size const size = child->size();
+    extents.width = std::max(extents.width, position.x + size.width);
+    extents.height = std::max(extents.height, position.y + size.height);
+  }
+  return extents;
+}
+
+inline Size controlStackExtents(scenegraph::SceneNode const& parent,
+                                scenegraph::LayoutFlow flow) {
+  constexpr float epsilon = 0.01f;
+  Size extents{};
+  for (auto const& child : parent.children()) {
+    if (!child) {
+      continue;
+    }
+    Point const position = child->position();
+    Size const size = child->size();
+    if (flow == scenegraph::LayoutFlow::VerticalStack) {
+      extents.width = std::max(extents.width, position.x + size.width);
+      if (size.height > epsilon) {
+        extents.height = std::max(extents.height, position.y + size.height);
+      }
+    } else if (flow == scenegraph::LayoutFlow::HorizontalStack) {
+      if (size.width > epsilon) {
+        extents.width = std::max(extents.width, position.x + size.width);
+      }
+      extents.height = std::max(extents.height, position.y + size.height);
+    }
+  }
+  return extents;
+}
+
+inline void controlPropagateLayoutChange(scenegraph::SceneNode& node, Size oldSize) {
+  constexpr float epsilon = 0.01f;
+  scenegraph::SceneNode* child = &node;
+  Size childOldSize = oldSize;
+  Size childNewSize = child->size();
+
+  while (scenegraph::SceneNode* parent = child->parent()) {
+    if (controlClipsContents(*parent)) {
+      break;
+    }
+
+    Size const parentOldSize = parent->size();
+    Point const childPosition = child->position();
+    Size parentNewSize = parentOldSize;
+
+    switch (parent->layoutFlow()) {
+    case scenegraph::LayoutFlow::VerticalStack: {
+      float delta = childNewSize.height - childOldSize.height;
+      if (childOldSize.height <= epsilon && childNewSize.height > epsilon) {
+        delta += parent->layoutSpacing();
+      } else if (childOldSize.height > epsilon && childNewSize.height <= epsilon) {
+        delta -= parent->layoutSpacing();
+      }
+      if (std::abs(delta) > epsilon) {
+        bool afterChild = false;
+        for (auto& sibling : parent->children()) {
+          if (sibling.get() == child) {
+            afterChild = true;
+            continue;
+          }
+          if (afterChild && sibling->position().y >= childPosition.y - epsilon) {
+            Point position = sibling->position();
+            position.y += delta;
+            sibling->setPosition(position);
+          }
+        }
+      }
+      Size const extents = controlStackExtents(*parent, parent->layoutFlow());
+      parentNewSize.width = std::max(parentNewSize.width, extents.width);
+      parentNewSize.height = extents.height;
+      break;
+    }
+    case scenegraph::LayoutFlow::HorizontalStack: {
+      float delta = childNewSize.width - childOldSize.width;
+      if (childOldSize.width <= epsilon && childNewSize.width > epsilon) {
+        delta += parent->layoutSpacing();
+      } else if (childOldSize.width > epsilon && childNewSize.width <= epsilon) {
+        delta -= parent->layoutSpacing();
+      }
+      if (std::abs(delta) > epsilon) {
+        bool afterChild = false;
+        for (auto& sibling : parent->children()) {
+          if (sibling.get() == child) {
+            afterChild = true;
+            continue;
+          }
+          if (afterChild && sibling->position().x >= childPosition.x - epsilon) {
+            Point position = sibling->position();
+            position.x += delta;
+            sibling->setPosition(position);
+          }
+        }
+      }
+      Size const extents = controlStackExtents(*parent, parent->layoutFlow());
+      parentNewSize.width = extents.width;
+      parentNewSize.height = std::max(parentNewSize.height, extents.height);
+      break;
+    }
+    case scenegraph::LayoutFlow::None: {
+      float const trailingRight = std::max(0.f, parentOldSize.width -
+          (childPosition.x + childOldSize.width));
+      float const trailingBottom = std::max(0.f, parentOldSize.height -
+          (childPosition.y + childOldSize.height));
+      Size const extents = controlChildExtents(*parent);
+      parentNewSize.width = std::max(extents.width,
+          childPosition.x + childNewSize.width + trailingRight);
+      parentNewSize.height = std::max(extents.height,
+          childPosition.y + childNewSize.height + trailingBottom);
+      break;
+    }
+    }
+
+    if (!parent->parent()) {
+      break;
+    }
+    parent->setSize(Size{controlFiniteOrZero(parentNewSize.width),
+                         controlFiniteOrZero(parentNewSize.height)});
+    child = parent;
+    childOldSize = parentOldSize;
+    childNewSize = parent->size();
+  }
 }
 
 template<typename Factory>

@@ -174,6 +174,10 @@ std::optional<float> Element::flexBasis() const {
   return impl_->flexBasis();
 }
 
+bool Element::mountsWhenCollapsed() const {
+  return impl_ && impl_->mountsWhenCollapsed();
+}
+
 float Element::minMainSize() const {
   return minMainSizeOverride_.value_or(impl_->minMainSize());
 }

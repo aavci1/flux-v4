@@ -26,6 +26,7 @@ class ForView {
 public:
   using Items = std::vector<T>;
   using Key = std::decay_t<std::invoke_result_t<KeyFn&, T const&>>;
+  static constexpr bool mountsWhenCollapsed = true;
 
   static_assert(std::equality_comparable<Key>,
                 "For keys must be equality-comparable so rows can be reconciled.");
@@ -82,6 +83,8 @@ public:
     auto group = std::make_unique<scenegraph::GroupNode>(
         Rect{0.f, 0.f, detail::controlFiniteOrZero(frameSize.width),
              detail::controlFiniteOrZero(frameSize.height)});
+    group->setLayoutFlow(scenegraph::LayoutFlow::VerticalStack);
+    group->setLayoutSpacing(spacing_);
 
     auto controlScope = std::make_shared<Reactive::Scope>();
     ctx.owner().onCleanup([controlScope] {
@@ -146,6 +149,7 @@ private:
     }
 
     void reconcile(scenegraph::GroupNode& group) {
+      Size const oldSize = group.size();
       Items const nextItems = items.get();
       std::vector<std::unique_ptr<scenegraph::SceneNode>> oldNodes = group.releaseChildren();
       std::vector<Row> oldRows = std::move(rows);
@@ -182,6 +186,7 @@ private:
       rows = std::move(nextRows);
       group.replaceChildren(std::move(nextNodes));
       detail::controlLayoutVertical(group, frameSize, spacing);
+      detail::controlPropagateLayoutChange(group, oldSize);
       if (requestRedraw) {
         requestRedraw();
       }

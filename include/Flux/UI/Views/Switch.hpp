@@ -38,6 +38,7 @@ template<typename T, typename Selector>
 class SwitchView {
 public:
   using Value = std::decay_t<T>;
+  static constexpr bool mountsWhenCollapsed = true;
 
   SwitchView(Selector selector, std::vector<SwitchCase<Value>> cases,
              std::function<Element()> defaultFactory)
@@ -132,6 +133,7 @@ private:
         return;
       }
 
+      Size const oldSize = group.size();
       disposeBranch();
       (void)group.releaseChildren();
       activeBranch = nextBranch;
@@ -143,6 +145,7 @@ private:
         group.replaceChildren(std::move(children));
       }
       detail::controlLayoutSingle(group, frameSize);
+      detail::controlPropagateLayoutChange(group, oldSize);
       if (requestRedraw) {
         requestRedraw();
       }

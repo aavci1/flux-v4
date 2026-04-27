@@ -177,7 +177,124 @@ TEST_CASE("Show false branch collapses out of stack spacing") {
   root.mount(sceneGraph);
 
   auto const& group = rootGroup(sceneGraph);
-  REQUIRE(group.children().size() == 1);
+  REQUIRE(group.children().size() == 2);
+  CHECK(group.children()[1]->size().height == doctest::Approx(0.f));
+  CHECK(group.children()[1]->position().y == doctest::Approx(22.f));
+}
+
+TEST_CASE("Show hidden stack child stays mounted and expands later") {
+  struct Root {
+    flux::Reactive::Signal<bool> visible;
+
+    flux::Element body() const {
+      return flux::VStack{
+          .spacing = 12.f,
+          .children = flux::children(
+              flux::Element{flux::Rectangle{}}
+                  .size(20.f, 10.f)
+                  .fill(flux::Colors::red),
+              flux::Show(visible, [] {
+                return flux::Element{flux::Rectangle{}}
+                    .size(20.f, 10.f)
+                    .fill(flux::Colors::blue);
+              }),
+              flux::Element{flux::Rectangle{}}
+                  .size(20.f, 10.f)
+                  .fill(flux::Colors::green)),
+      };
+    }
+  };
+
+  FakeTextSystem textSystem;
+  flux::scenegraph::SceneGraph sceneGraph;
+  flux::Reactive::Signal<bool> visible{false};
+  flux::MountRoot root{
+      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{visible}),
+      textSystem,
+      testEnvironment(),
+      flux::Size{100.f, 100.f},
+  };
+
+  root.mount(sceneGraph);
+
+  auto const& hidden = rootGroup(sceneGraph);
+  REQUIRE(hidden.children().size() == 3);
+  CHECK(hidden.children()[1]->size().height == doctest::Approx(0.f));
+  CHECK(hidden.children()[2]->position().y == doctest::Approx(22.f));
+
+  visible.set(true);
+
+  auto const& shown = rootGroup(sceneGraph);
+  REQUIRE(shown.children().size() == 3);
+  CHECK(shown.children()[1]->position().y == doctest::Approx(22.f));
+  CHECK(shown.children()[1]->size().height == doctest::Approx(10.f));
+  CHECK(shown.children()[2]->position().y == doctest::Approx(44.f));
+
+  visible.set(false);
+
+  auto const& hiddenAgain = rootGroup(sceneGraph);
+  REQUIRE(hiddenAgain.children().size() == 3);
+  CHECK(hiddenAgain.children()[1]->size().height == doctest::Approx(0.f));
+  CHECK(hiddenAgain.children()[2]->position().y == doctest::Approx(22.f));
+}
+
+TEST_CASE("Show size changes grow wrapper ancestors and move following stack siblings") {
+  struct Root {
+    flux::Reactive::Signal<bool> visible;
+
+    flux::Element body() const {
+      return flux::VStack{
+          .spacing = 12.f,
+          .children = flux::children(
+              flux::Element{flux::VStack{
+                  .spacing = 12.f,
+                  .children = flux::children(
+                      flux::Element{flux::Rectangle{}}
+                          .size(20.f, 10.f)
+                          .fill(flux::Colors::red),
+                      flux::Show(visible, [] {
+                        return flux::Element{flux::Rectangle{}}
+                            .size(20.f, 10.f)
+                            .fill(flux::Colors::blue);
+                      })),
+              }}.padding(16.f),
+              flux::Element{flux::Rectangle{}}
+                  .size(20.f, 10.f)
+                  .fill(flux::Colors::green)),
+      };
+    }
+  };
+
+  FakeTextSystem textSystem;
+  flux::scenegraph::SceneGraph sceneGraph;
+  flux::Reactive::Signal<bool> visible{false};
+  flux::MountRoot root{
+      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{visible}),
+      textSystem,
+      testEnvironment(),
+      flux::Size{120.f, 120.f},
+  };
+
+  root.mount(sceneGraph);
+
+  auto const& hidden = rootGroup(sceneGraph);
+  REQUIRE(hidden.children().size() == 2);
+  CHECK(hidden.children()[0]->size().height == doctest::Approx(42.f));
+  CHECK(hidden.children()[1]->position().y == doctest::Approx(54.f));
+
+  visible.set(true);
+
+  auto const& shown = rootGroup(sceneGraph);
+  REQUIRE(shown.children().size() == 2);
+  CHECK(shown.children()[0]->size().height == doctest::Approx(64.f));
+  CHECK(shown.children()[1]->position().y == doctest::Approx(76.f));
+
+  visible.set(false);
+
+  auto const& hiddenAgain = rootGroup(sceneGraph);
+  REQUIRE(hiddenAgain.children().size() == 2);
+  CHECK(hiddenAgain.children()[0]->size().height == doctest::Approx(42.f));
+  CHECK(hiddenAgain.children()[1]->position().y == doctest::Approx(54.f));
 }
 
 TEST_CASE("Switch replaces scopes when the selected case changes") {

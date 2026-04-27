@@ -88,6 +88,7 @@ public:
   [[nodiscard]] std::uint64_t measureId() const noexcept { return measureId_; }
   std::unique_ptr<scenegraph::SceneNode> mount(MountContext& ctx) const;
   [[nodiscard]] ElementType typeTag() const noexcept { return impl_ ? impl_->elementType() : ElementType::Unknown; }
+  [[nodiscard]] bool mountsWhenCollapsed() const;
   [[nodiscard]] detail::ElementModifiers const* modifiers() const noexcept {
     return modifiers_.get();
   }
@@ -185,6 +186,7 @@ private:
     virtual Size measure(MeasureContext& ctx, LayoutConstraints const& constraints,
                          LayoutHints const& hints, TextSystem& textSystem) const = 0;
     virtual std::unique_ptr<scenegraph::SceneNode> mount(MountContext& ctx) const = 0;
+    virtual bool mountsWhenCollapsed() const { return false; }
     virtual float flexGrow() const { return 0.f; }
     virtual float flexShrink() const { return 0.f; }
     virtual std::optional<float> flexBasis() const { return std::nullopt; }

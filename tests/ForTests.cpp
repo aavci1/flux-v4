@@ -12,6 +12,7 @@
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Views/For.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
+#include <Flux/UI/Views/VStack.hpp>
 
 #include <memory>
 #include <string_view>
@@ -151,4 +152,56 @@ TEST_CASE("For preserves row scopes and scene nodes across reorder") {
 
   root.unmount(sceneGraph);
   CHECK(disposed == 5);
+}
+
+TEST_CASE("For empty stack child stays mounted and lays out inserted rows") {
+  struct Root {
+    flux::Reactive::Signal<std::vector<int>> items;
+
+    flux::Element body() const {
+      return flux::VStack{
+          .spacing = 12.f,
+          .children = flux::children(
+              flux::Element{flux::Rectangle{}}
+                  .size(20.f, 10.f)
+                  .fill(flux::Colors::red),
+              flux::For(
+                  items,
+                  [](int value) { return value; },
+                  [](int) {
+                    return flux::Element{flux::Rectangle{}}
+                        .size(20.f, 8.f)
+                        .fill(flux::Colors::blue);
+                  }),
+              flux::Element{flux::Rectangle{}}
+                  .size(20.f, 10.f)
+                  .fill(flux::Colors::green)),
+      };
+    }
+  };
+
+  flux::Reactive::Signal<std::vector<int>> items{{}};
+  FakeTextSystem textSystem;
+  flux::scenegraph::SceneGraph sceneGraph;
+  flux::MountRoot root{
+      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{items}),
+      textSystem,
+      testEnvironment(),
+      flux::Size{240.f, 160.f},
+  };
+
+  root.mount(sceneGraph);
+
+  auto const& hidden = rootGroup(sceneGraph);
+  REQUIRE(hidden.children().size() == 3);
+  CHECK(hidden.children()[1]->size().height == doctest::Approx(0.f));
+  CHECK(hidden.children()[2]->position().y == doctest::Approx(22.f));
+
+  items.set({7});
+
+  auto const& shown = rootGroup(sceneGraph);
+  REQUIRE(shown.children().size() == 3);
+  CHECK(shown.children()[1]->position().y == doctest::Approx(22.f));
+  CHECK(shown.children()[1]->size().height == doctest::Approx(8.f));
+  CHECK(shown.children()[2]->position().y == doctest::Approx(42.f));
 }

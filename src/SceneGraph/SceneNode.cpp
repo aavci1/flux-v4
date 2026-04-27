@@ -62,6 +62,14 @@ bool SceneNode::isSubtreeDirty() const noexcept {
     return subtreeDirty_;
 }
 
+LayoutFlow SceneNode::layoutFlow() const noexcept {
+    return layoutFlow_;
+}
+
+float SceneNode::layoutSpacing() const noexcept {
+    return layoutSpacing_;
+}
+
 void SceneNode::setBounds(Rect bounds) {
     if (bounds_ == bounds) {
         return;
@@ -97,6 +105,14 @@ void SceneNode::setTransform(Mat3 const &transformValue) {
         return;
     }
     transform_ = transformValue;
+}
+
+void SceneNode::setLayoutFlow(LayoutFlow flow) noexcept {
+    layoutFlow_ = flow;
+}
+
+void SceneNode::setLayoutSpacing(float spacing) noexcept {
+    layoutSpacing_ = std::max(0.f, spacing);
 }
 
 SceneNode *SceneNode::parent() const noexcept {

@@ -34,6 +34,13 @@ struct Element::Model : Concept {
   Size measure(MeasureContext& ctx, LayoutConstraints const& constraints,
                LayoutHints const& hints, TextSystem& textSystem) const override;
   std::unique_ptr<scenegraph::SceneNode> mount(MountContext& ctx) const override;
+  bool mountsWhenCollapsed() const override {
+    if constexpr (requires { C::mountsWhenCollapsed; }) {
+      return C::mountsWhenCollapsed;
+    } else {
+      return false;
+    }
+  }
   float flexGrow() const override { return detail::flexGrowOf(value); }
   float flexShrink() const override { return detail::flexShrinkOf(value); }
   std::optional<float> flexBasis() const override { return detail::flexBasisOf(value); }
