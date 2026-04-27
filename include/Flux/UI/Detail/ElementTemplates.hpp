@@ -6,15 +6,31 @@
 
 #include <cassert>
 #include <cstdlib>
+#include <memory>
+#include <optional>
 #include <type_traits>
 #include <utility>
 #include <vector>
 
 namespace flux {
 
+namespace detail {
+
+struct EmptyBodyElementCache {};
+
+struct BodyElementCache {
+  std::shared_ptr<Reactive::Scope> scope;
+  std::optional<Element> element;
+};
+
+} // namespace detail
+
 template<typename C>
 struct Element::Model : Concept {
   C value;
+  using BodyCache = std::conditional_t<BodyComponent<C>, detail::BodyElementCache,
+                                       detail::EmptyBodyElementCache>;
+  [[no_unique_address]] mutable BodyCache bodyCache_;
 
   explicit Model(C c) : value(std::move(c)) {}
 
@@ -30,6 +46,7 @@ struct Element::Model : Concept {
   ElementType elementType() const noexcept override;
   std::type_index modelType() const noexcept override { return std::type_index(typeid(C)); }
   void const* rawValuePtr() const noexcept override { return &value; }
+  Element const& bodyElement(LayoutConstraints const& constraints) const;
 
   Size measure(MeasureContext& ctx, LayoutConstraints const& constraints,
                LayoutHints const& hints, TextSystem& textSystem) const override;
@@ -83,6 +100,19 @@ ElementType Element::Model<C>::elementType() const noexcept {
 }
 
 template<typename C>
+Element const& Element::Model<C>::bodyElement(LayoutConstraints const& constraints) const {
+  static_assert(BodyComponent<C>, "bodyElement() is only valid for body components");
+  if (!bodyCache_.element) {
+    bodyCache_.scope = std::make_shared<Reactive::Scope>();
+    Reactive::withOwner(*bodyCache_.scope, [&] {
+      detail::HookLayoutScope const hookScope{constraints};
+      bodyCache_.element.emplace(value.body());
+    });
+  }
+  return *bodyCache_.element;
+}
+
+template<typename C>
 Size Element::Model<C>::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
                                 LayoutHints const& hints, TextSystem& textSystem) const {
   if constexpr (requires(C const& component, MeasureContext& measureContext,
@@ -92,12 +122,8 @@ Size Element::Model<C>::measure(MeasureContext& ctx, LayoutConstraints const& co
                 }) {
     return value.measure(ctx, constraints, hints, textSystem);
   } else if constexpr (BodyComponent<C>) {
-    Reactive::Scope measureScope;
-    return Reactive::withOwner(measureScope, [&] {
-      detail::HookLayoutScope const hookScope{constraints};
-      Element child{value.body()};
-      return child.measure(ctx, constraints, hints, textSystem);
-    });
+    Element const& child = bodyElement(constraints);
+    return child.measure(ctx, constraints, hints, textSystem);
   } else {
     static_assert(alwaysFalse<C>,
                   "Component must provide either measure(MeasureContext, LayoutConstraints, LayoutHints, "
@@ -126,9 +152,15 @@ std::unique_ptr<scenegraph::SceneNode> Element::Model<C>::mount(MountContext& ct
     return value.mount(ctx);
   } else if constexpr (BodyComponent<C>) {
     MountContext childCtx = ctx.child(ctx.constraints(), ctx.hints());
+    Element const& child = bodyElement(ctx.constraints());
+    if (bodyCache_.scope) {
+      std::shared_ptr<Reactive::Scope> bodyScope = bodyCache_.scope;
+      childCtx.owner().onCleanup([bodyScope] {
+        bodyScope->dispose();
+      });
+    }
     return Reactive::withOwner(childCtx.owner(), [&] {
       detail::HookLayoutScope const hookScope{ctx.constraints()};
-      Element child{value.body()};
       return child.mount(childCtx);
     });
   } else {

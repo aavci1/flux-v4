@@ -202,6 +202,45 @@ TEST_CASE("MountRoot mounts a static root once") {
   CHECK(solidColor(rect) == flux::Colors::red);
 }
 
+TEST_CASE("composite child body is materialized once across measure and mount") {
+  int bodyCalls = 0;
+
+  struct Probe {
+    int* bodyCalls = nullptr;
+
+    flux::Element body() const {
+      ++*bodyCalls;
+      return flux::Rectangle{}.size(20.f, 10.f);
+    }
+  };
+
+  struct Root {
+    int* bodyCalls = nullptr;
+
+    flux::Element body() const {
+      return flux::VStack{
+          .children = flux::children(Probe{bodyCalls}),
+      };
+    }
+  };
+
+  FakeTextSystem textSystem;
+  flux::scenegraph::SceneGraph sceneGraph;
+  flux::MountRoot root{
+      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{&bodyCalls}),
+      textSystem,
+      testEnvironment(),
+      flux::Size{200.f, 100.f},
+  };
+
+  root.mount(sceneGraph);
+
+  CHECK(bodyCalls == 1);
+  REQUIRE(sceneGraph.root().kind() == flux::scenegraph::SceneNodeKind::Group);
+  REQUIRE(sceneGraph.root().children().size() == 1);
+  CHECK(sceneGraph.root().children()[0]->size() == flux::Size{20.f, 10.f});
+}
+
 TEST_CASE("modifier envelopes honor fixed viewport constraints") {
   struct Root {
     flux::Element body() const {
