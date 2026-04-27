@@ -14,18 +14,18 @@ TEST_CASE("Animation repeats across finite iterations") {
       .autoreverse = false,
   });
 
-  value.startTime_ = 100.0;
+  value.state_->startTime = 100.0;
 
-  CHECK(value.tick(100.50));
+  CHECK(value.state_->tick(100.50));
   CHECK(value.get() == doctest::Approx(5.f));
 
-  CHECK(value.tick(101.00));
+  CHECK(value.state_->tick(101.00));
   CHECK(value.get() == doctest::Approx(0.f));
 
-  CHECK(value.tick(101.50));
+  CHECK(value.state_->tick(101.50));
   CHECK(value.get() == doctest::Approx(5.f));
 
-  CHECK_FALSE(value.tick(103.00));
+  CHECK_FALSE(value.state_->tick(103.00));
   CHECK(value.get() == doctest::Approx(10.f));
   CHECK_FALSE(value.isRunning());
 }
@@ -38,15 +38,15 @@ TEST_CASE("Animation autoreverse returns to its start on even iteration counts")
       .autoreverse = true,
   });
 
-  value.startTime_ = 10.0;
+  value.state_->startTime = 10.0;
 
-  CHECK(value.tick(10.50));
+  CHECK(value.state_->tick(10.50));
   CHECK(value.get() == doctest::Approx(5.f));
 
-  CHECK(value.tick(11.50));
+  CHECK(value.state_->tick(11.50));
   CHECK(value.get() == doctest::Approx(5.f));
 
-  CHECK_FALSE(value.tick(12.00));
+  CHECK_FALSE(value.state_->tick(12.00));
   CHECK(value.get() == doctest::Approx(0.f));
   CHECK_FALSE(value.isRunning());
 }
@@ -72,8 +72,8 @@ TEST_CASE("Animation snaps to target when reduced motion is enabled") {
       .autoreverse = false,
   });
 
-  value.startTime_ = 10.0;
-  REQUIRE(value.tick(10.25));
+  value.state_->startTime = 10.0;
+  REQUIRE(value.state_->tick(10.25));
   CHECK(value.get() == doctest::Approx(2.5f));
   CHECK(value.isRunning());
 
@@ -85,4 +85,21 @@ TEST_CASE("Animation snaps to target when reduced motion is enabled") {
   value.play(20.f, Transition::ease(0.5f).delayed(1.0f));
   CHECK(value.get() == doctest::Approx(20.f));
   CHECK_FALSE(value.isRunning());
+}
+
+TEST_CASE("Animation copies share playback state") {
+  Animation<float> original{0.f};
+  Animation<float> copy = original;
+
+  copy.play(10.f, Transition::linear(1.f));
+
+  CHECK(original.isRunning());
+  CHECK(copy.isRunning());
+
+  original.state_->startTime = 20.0;
+  REQUIRE(copy.state_->tick(20.5));
+  CHECK(original.get() == doctest::Approx(5.f));
+
+  original.stop();
+  CHECK_FALSE(copy.isRunning());
 }
