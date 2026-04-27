@@ -867,7 +867,10 @@ void MacMetalPlatformWindow::wakeEventLoop() {
 }
 
 void MacMetalPlatformWindow::requestAnimationFrame() {
-  d->frameRequested_.store(true, std::memory_order_release);
+  bool const wasRequested = d->frameRequested_.exchange(true, std::memory_order_acq_rel);
+  if (wasRequested) {
+    return;
+  }
   if (d->displayLink_) {
     setModernDisplayLinkPaused(false);
     return;
