@@ -161,12 +161,7 @@ Size ScrollView::measure(MeasureContext& ctx, LayoutConstraints const& constrain
                            [&](Element const& child, LayoutConstraints const& childConstraints) {
                              return measureChild(child, ctx, childConstraints, textSystem);
                            });
-  Size const viewport = plan.viewport;
-  Size const content = plan.contentLayout.contentSize;
-  viewportSize = viewport;
-  contentSize = content;
-  scrollOffset = layout::clampScrollOffset(axis, *scrollOffset, viewport, content);
-  return viewport;
+  return plan.viewport;
 }
 
 std::unique_ptr<scenegraph::SceneNode> ScrollView::mount(MountContext& ctx) const {

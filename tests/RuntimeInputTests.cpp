@@ -13,6 +13,7 @@
 #include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/ScrollView.hpp>
 #include <Flux/UI/Views/Show.hpp>
+#include <Flux/UI/Views/VStack.hpp>
 
 #include <cstdint>
 #include <memory>
@@ -205,6 +206,32 @@ struct ScrollProbeRoot {
   }
 };
 
+struct WrappedScrollProbeRoot {
+  flux::Reactive::Signal<flux::Point> offset;
+  flux::Reactive::Signal<flux::Size> viewport;
+  flux::Reactive::Signal<flux::Size> content;
+
+  flux::Element body() const {
+    return flux::VStack{
+        .spacing = 0.f,
+        .alignment = flux::Alignment::Stretch,
+        .children = flux::children(
+            flux::Rectangle{}.height(20.f),
+            flux::ScrollView{
+                .axis = flux::ScrollAxis::Vertical,
+                .scrollOffset = offset,
+                .viewportSize = viewport,
+                .contentSize = content,
+                .children = flux::children(
+                    flux::Rectangle{}.size(100.f, 100.f),
+                    flux::Rectangle{}.size(100.f, 100.f)),
+            }
+                .flex(1.f, 1.f, 0.f)
+                .fill(flux::Color::windowBackground())),
+    };
+  }
+};
+
 void checkSameColor(flux::Color actual, flux::Color expected) {
   CHECK(actual.r == doctest::Approx(expected.r));
   CHECK(actual.g == doctest::Approx(expected.g));
@@ -351,6 +378,25 @@ TEST_CASE("runtime scroll dispatch reaches scroll view") {
   harness.scroll({10.f, 10.f}, {0.f, -12.f});
 
   CHECK(offset.get().x == doctest::Approx(0.f));
+  CHECK(offset.get().y == doctest::Approx(12.f));
+}
+
+TEST_CASE("scroll view measurement does not overwrite mounted scroll range") {
+  RuntimeHarness harness;
+  flux::Reactive::Signal<flux::Point> offset{flux::Point{0.f, 0.f}};
+  flux::Reactive::Signal<flux::Size> viewport{flux::Size{0.f, 0.f}};
+  flux::Reactive::Signal<flux::Size> content{flux::Size{0.f, 0.f}};
+  harness.setRoot(WrappedScrollProbeRoot{
+      .offset = offset,
+      .viewport = viewport,
+      .content = content,
+  });
+
+  CHECK(content.get().height == doctest::Approx(200.f));
+  CHECK(viewport.get().height < content.get().height);
+
+  harness.scroll({10.f, 40.f}, {0.f, -12.f});
+
   CHECK(offset.get().y == doctest::Approx(12.f));
 }
 
