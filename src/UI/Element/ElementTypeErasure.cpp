@@ -147,7 +147,7 @@ void installBinding(MountContext& ctx, Reactive::Bindable<T> binding, Setter set
     return;
   }
 
-  std::function<void()> requestRedraw = ctx.redrawCallback();
+  Reactive::SmallFn<void()> requestRedraw = ctx.redrawCallback();
   Reactive::withOwner(ctx.owner(), [&] {
     Reactive::Effect([binding = std::move(binding), setter = std::move(setter),
                        requestRedraw = std::move(requestRedraw), environment,

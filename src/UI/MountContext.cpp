@@ -256,7 +256,7 @@ void rewindMeasuredChildren(MountContext& ctx) {
 MountContext::MountContext(Reactive::Scope& owner, EnvironmentStack& environment,
                            TextSystem& textSystem, MeasureContext& measureContext,
                            LayoutConstraints constraints, LayoutHints hints,
-                           std::function<void()> requestRedraw)
+                           Reactive::SmallFn<void()> requestRedraw)
     : owner_(&owner)
     , environment_(environment)
     , textSystem_(textSystem)
@@ -268,7 +268,7 @@ MountContext::MountContext(Reactive::Scope& owner, EnvironmentStack& environment
 MountContext::MountContext(std::shared_ptr<Reactive::Scope> owner, EnvironmentStack& environment,
                            TextSystem& textSystem, MeasureContext& measureContext,
                            LayoutConstraints constraints, LayoutHints hints,
-                           std::function<void()> requestRedraw)
+                           Reactive::SmallFn<void()> requestRedraw)
     : ownedOwner_(std::move(owner))
     , owner_(ownedOwner_.get())
     , environment_(environment)
@@ -362,7 +362,7 @@ std::unique_ptr<scenegraph::SceneNode> mountText(Text const& text, MountContext&
     TextSystem* textSystem = &ctx.textSystem();
     LayoutConstraints constraints = ctx.constraints();
     TextWrapping wrapping = text.wrapping;
-    std::function<void()> requestRedraw = ctx.redrawCallback();
+    Reactive::SmallFn<void()> requestRedraw = ctx.redrawCallback();
     Reactive::withOwner(ctx.owner(), [rawNode, textBinding = std::move(textBinding), textSystem,
                                       colorBinding = std::move(colorBinding), font, theme, options, constraints, wrapping,
                                       requestRedraw = std::move(requestRedraw)]() mutable {

@@ -30,18 +30,18 @@ struct RuntimeTargetSnapshot {
   bool inOverlay = false;
   Cursor cursor = Cursor::Inherit;
   bool focusable = false;
-  std::function<void()> onPointerEnter;
-  std::function<void()> onPointerExit;
-  std::function<void()> onFocus;
-  std::function<void()> onBlur;
-  std::function<void(Point)> onPointerDown;
-  std::function<void(Point)> onPointerUp;
-  std::function<void(Point)> onPointerMove;
-  std::function<void(Vec2)> onScroll;
-  std::function<void(KeyCode, Modifiers)> onKeyDown;
-  std::function<void(KeyCode, Modifiers)> onKeyUp;
-  std::function<void(std::string const&)> onTextInput;
-  std::function<void()> onTap;
+  Reactive::SmallFn<void()> onPointerEnter;
+  Reactive::SmallFn<void()> onPointerExit;
+  Reactive::SmallFn<void()> onFocus;
+  Reactive::SmallFn<void()> onBlur;
+  Reactive::SmallFn<void(Point)> onPointerDown;
+  Reactive::SmallFn<void(Point)> onPointerUp;
+  Reactive::SmallFn<void(Point)> onPointerMove;
+  Reactive::SmallFn<void(Vec2)> onScroll;
+  Reactive::SmallFn<void(KeyCode, Modifiers)> onKeyDown;
+  Reactive::SmallFn<void(KeyCode, Modifiers)> onKeyUp;
+  Reactive::SmallFn<void(std::string const&)> onTextInput;
+  Reactive::SmallFn<void()> onTap;
   Reactive::Signal<bool> hoverSignal;
   Reactive::Signal<bool> pressSignal;
   Reactive::Signal<bool> focusSignal;
@@ -158,7 +158,7 @@ struct HitTarget {
   OverlayId overlay{};
 };
 
-using InteractionFilter = std::function<bool(scenegraph::InteractionData const&)>;
+using InteractionFilter = Reactive::SmallFn<bool(scenegraph::InteractionData const&)>;
 
 bool acceptAnyInteraction(scenegraph::InteractionData const&) {
   return true;
@@ -392,7 +392,7 @@ void updateHoverForPoint(RuntimeInputState& input, Window& window, Point point) 
 
   for (std::size_t i = input.hoverChain.size(); i > common; --i) {
     setHoverActive(input.hoverChain[i - 1], false);
-    std::function<void()> exit = input.hoverChain[i - 1].onPointerExit;
+    Reactive::SmallFn<void()> exit = input.hoverChain[i - 1].onPointerExit;
     if (exit) {
       exit();
     }
@@ -400,7 +400,7 @@ void updateHoverForPoint(RuntimeInputState& input, Window& window, Point point) 
 
   for (std::size_t i = common; i < nextChain.size(); ++i) {
     setHoverActive(nextChain[i], true);
-    std::function<void()> enter = nextChain[i].onPointerEnter;
+    Reactive::SmallFn<void()> enter = nextChain[i].onPointerEnter;
     if (enter) {
       enter();
     }
@@ -415,15 +415,19 @@ void setFocus(RuntimeInputState& input, std::optional<HitTarget> hit, bool notif
     return;
   }
 
-  std::function<void()> blur = notify && input.focusTarget ? input.focusTarget->onBlur
-                                                          : std::function<void()>{};
+  Reactive::SmallFn<void()> blur;
+  if (notify && input.focusTarget) {
+    blur = input.focusTarget->onBlur;
+  }
   if (input.focusTarget) {
     setFocusActive(*input.focusTarget, false);
   }
   input.focusTarget = hit ? std::optional<RuntimeTargetSnapshot>{snapshot(*hit)}
                          : std::nullopt;
-  std::function<void()> focus = notify && input.focusTarget ? input.focusTarget->onFocus
-                                                           : std::function<void()>{};
+  Reactive::SmallFn<void()> focus;
+  if (notify && input.focusTarget) {
+    focus = input.focusTarget->onFocus;
+  }
   if (input.focusTarget) {
     setFocusActive(*input.focusTarget, true, kind);
   }

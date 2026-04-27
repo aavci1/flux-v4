@@ -254,7 +254,7 @@ std::unique_ptr<scenegraph::SceneNode> ScrollView::mount(MountContext& ctx) cons
   State<Size> contentState = contentSize;
   ScrollAxis const scrollAxis = axis;
   auto childSizes = std::make_shared<std::vector<Size>>(plan.childSizes);
-  std::function<void()> requestRedraw = ctx.redrawCallback();
+  Reactive::SmallFn<void()> requestRedraw = ctx.redrawCallback();
   Reactive::withOwner(ctx.owner(), [rawContentGroup, rawVerticalIndicator, rawHorizontalIndicator,
                                     offsetState, viewportState, contentState,
                                     scrollAxis, childSizes,
@@ -289,7 +289,7 @@ std::unique_ptr<scenegraph::SceneNode> ScrollView::mount(MountContext& ctx) cons
   });
 
   auto interaction = std::make_unique<scenegraph::InteractionData>();
-  std::function<void()> const scrollRedraw = ctx.redrawCallback();
+  Reactive::SmallFn<void()> const scrollRedraw = ctx.redrawCallback();
   auto revealIndicators = [rawIndicatorOverlay, scrollRedraw] {
     if (rawIndicatorOverlay) {
       rawIndicatorOverlay->setOpacity(1.f);

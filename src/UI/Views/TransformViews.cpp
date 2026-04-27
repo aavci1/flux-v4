@@ -55,7 +55,7 @@ std::unique_ptr<scenegraph::SceneNode> ScaleAroundCenter::mount(MountContext& ct
   auto* rawChild = childNode.get();
   auto frameSize = std::make_shared<Size>(measured);
   Reactive::Bindable<float> scaleBinding = scale;
-  std::function<void()> requestRedraw = ctx.redrawCallback();
+  Reactive::SmallFn<void()> requestRedraw = ctx.redrawCallback();
   auto applyScale = [rawChild, frameSize](float value) {
     Point const pivot{frameSize->width * 0.5f, frameSize->height * 0.5f};
     rawChild->setTransform(Mat3::translate(pivot) * Mat3::scale(value) *

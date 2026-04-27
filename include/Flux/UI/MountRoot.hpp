@@ -2,9 +2,9 @@
 
 #include <Flux/Core/Types.hpp>
 #include <Flux/Reactive/Scope.hpp>
+#include <Flux/Reactive/SmallFn.hpp>
 #include <Flux/UI/Environment.hpp>
 
-#include <functional>
 #include <memory>
 
 namespace flux {
@@ -21,7 +21,7 @@ class MountRoot {
 public:
   MountRoot(std::unique_ptr<RootHolder> root, TextSystem& textSystem,
             EnvironmentLayer environment, Size viewportSize,
-            std::function<void()> requestRedraw = {});
+            Reactive::SmallFn<void()> requestRedraw = {});
   ~MountRoot();
 
   MountRoot(MountRoot const&) = delete;
@@ -38,7 +38,7 @@ private:
   TextSystem& textSystem_;
   EnvironmentLayer environment_;
   Size viewportSize_{};
-  std::function<void()> requestRedraw_;
+  Reactive::SmallFn<void()> requestRedraw_;
   Reactive::Scope rootScope_{};
   bool mounted_ = false;
 };

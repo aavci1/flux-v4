@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Flux/Reactive/Scope.hpp>
+#include <Flux/Reactive/SmallFn.hpp>
 #include <Flux/SceneGraph/GroupNode.hpp>
 #include <Flux/SceneGraph/RectNode.hpp>
 #include <Flux/UI/Element.hpp>
@@ -88,7 +89,7 @@ controlMountElement(Element const& element, Reactive::Scope& owner,
                     std::vector<EnvironmentLayer> const& environmentLayers,
                     TextSystem& textSystem, LayoutConstraints const& constraints,
                     LayoutHints const& hints,
-                    std::function<void()> const& requestRedraw) {
+                    Reactive::SmallFn<void()> const& requestRedraw) {
   ScopedEnvironmentSnapshot environmentScope{environment, environmentLayers};
   MeasureContext measureContext{textSystem};
   MountContext mountContext{owner, environment, textSystem, measureContext, constraints,

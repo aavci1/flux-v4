@@ -128,7 +128,7 @@ LayoutConstraints SceneNode::layoutConstraints() const noexcept {
     return layoutConstraints_;
 }
 
-void SceneNode::setRelayout(std::function<void(LayoutConstraints const&)> relayout) {
+void SceneNode::setRelayout(Reactive::SmallFn<void(LayoutConstraints const&)> relayout) {
     relayout_ = std::move(relayout);
 }
 

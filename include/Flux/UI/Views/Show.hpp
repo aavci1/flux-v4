@@ -81,7 +81,7 @@ private:
     TextSystem& textSystem;
     LayoutConstraints constraints;
     LayoutHints hints;
-    std::function<void()> requestRedraw;
+    Reactive::SmallFn<void()> requestRedraw;
     std::optional<bool> activeBranch;
     std::shared_ptr<Reactive::Scope> branchScope;
 
@@ -89,7 +89,7 @@ private:
           Size frameSizeIn, EnvironmentStack& environmentIn,
           std::vector<EnvironmentLayer> environmentLayersIn, TextSystem& textSystemIn,
           LayoutConstraints constraintsIn, LayoutHints hintsIn,
-          std::function<void()> requestRedrawIn)
+          Reactive::SmallFn<void()> requestRedrawIn)
         : condition(std::move(conditionIn))
         , thenFactory(std::move(thenFactoryIn))
         , elseFactory(std::move(elseFactoryIn))

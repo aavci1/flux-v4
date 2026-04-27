@@ -101,7 +101,7 @@ private:
     TextSystem& textSystem;
     LayoutConstraints constraints;
     LayoutHints hints;
-    std::function<void()> requestRedraw;
+    Reactive::SmallFn<void()> requestRedraw;
     std::optional<std::size_t> activeBranch;
     std::shared_ptr<Reactive::Scope> branchScope;
 
@@ -110,7 +110,7 @@ private:
           EnvironmentStack& environmentIn,
           std::vector<EnvironmentLayer> environmentLayersIn, TextSystem& textSystemIn,
           LayoutConstraints constraintsIn, LayoutHints hintsIn,
-          std::function<void()> requestRedrawIn)
+          Reactive::SmallFn<void()> requestRedrawIn)
         : selector(std::move(selectorIn))
         , cases(std::move(casesIn))
         , defaultFactory(std::move(defaultFactoryIn))

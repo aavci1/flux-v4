@@ -45,7 +45,7 @@ LayoutConstraints rootConstraints(Size size) {
 
 MountRoot::MountRoot(std::unique_ptr<RootHolder> root, TextSystem& textSystem,
                      EnvironmentLayer environment, Size viewportSize,
-                     std::function<void()> requestRedraw)
+                     Reactive::SmallFn<void()> requestRedraw)
     : root_(std::move(root))
     , textSystem_(textSystem)
     , environment_(std::move(environment))

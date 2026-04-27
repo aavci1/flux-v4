@@ -1,10 +1,10 @@
 #pragma once
 
 #include <Flux/Reactive/Scope.hpp>
+#include <Flux/Reactive/SmallFn.hpp>
 #include <Flux/UI/Environment.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 
-#include <functional>
 #include <memory>
 
 namespace flux {
@@ -26,7 +26,7 @@ class MountContext {
 public:
   MountContext(Reactive::Scope& owner, EnvironmentStack& environment, TextSystem& textSystem,
                MeasureContext& measureContext, LayoutConstraints constraints,
-               LayoutHints hints = {}, std::function<void()> requestRedraw = {});
+               LayoutHints hints = {}, Reactive::SmallFn<void()> requestRedraw = {});
 
   Reactive::Scope& owner() const noexcept { return *owner_; }
   EnvironmentStack& environment() const noexcept { return environment_; }
@@ -34,7 +34,7 @@ public:
   MeasureContext& measureContext() const noexcept { return measureContext_; }
   LayoutConstraints const& constraints() const noexcept { return constraints_; }
   LayoutHints const& hints() const noexcept { return hints_; }
-  std::function<void()> const& redrawCallback() const noexcept { return requestRedraw_; }
+  Reactive::SmallFn<void()> const& redrawCallback() const noexcept { return requestRedraw_; }
 
   MountContext child(LayoutConstraints constraints, LayoutHints hints = {}) const;
   void requestRedraw() const;
@@ -43,7 +43,7 @@ private:
   MountContext(std::shared_ptr<Reactive::Scope> owner, EnvironmentStack& environment,
                TextSystem& textSystem, MeasureContext& measureContext,
                LayoutConstraints constraints, LayoutHints hints,
-               std::function<void()> requestRedraw);
+               Reactive::SmallFn<void()> requestRedraw);
 
   std::shared_ptr<Reactive::Scope> ownedOwner_;
   Reactive::Scope* owner_;
@@ -52,7 +52,7 @@ private:
   MeasureContext& measureContext_;
   LayoutConstraints constraints_;
   LayoutHints hints_;
-  std::function<void()> requestRedraw_;
+  Reactive::SmallFn<void()> requestRedraw_;
 };
 
 namespace detail {

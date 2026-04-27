@@ -6,7 +6,6 @@
 
 #include <Flux/SceneGraph/InteractionData.hpp>
 
-#include <functional>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -24,7 +23,7 @@ std::pair<SceneNode const*, InteractionData const*> findClosestInteractionByKey(
 std::optional<InteractionHitResult> hitTestInteraction(SceneGraph const& graph, Point rootPoint);
 std::optional<InteractionHitResult> hitTestInteraction(
     SceneGraph const& graph, Point rootPoint,
-    std::function<bool(InteractionData const&)> const& acceptTarget);
+    Reactive::SmallFn<bool(InteractionData const&)> const& acceptTarget);
 
 std::vector<ComponentKey> collectFocusableKeys(SceneGraph const& graph);
 

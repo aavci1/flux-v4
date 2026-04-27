@@ -92,7 +92,7 @@ std::optional<InteractionHitResult> hitTestInteraction(SceneGraph const& graph, 
 
 std::optional<InteractionHitResult> hitTestInteraction(
     SceneGraph const& graph, Point rootPoint,
-    std::function<bool(InteractionData const&)> const& acceptTarget) {
+    Reactive::SmallFn<bool(InteractionData const&)> const& acceptTarget) {
     if (auto hit = hitTestNode(graph.root(), rootPoint, [&](SceneNode const& node) {
             if (InteractionData const* interaction = node.interaction()) {
                 return acceptTarget(*interaction);

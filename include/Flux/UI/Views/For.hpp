@@ -115,7 +115,7 @@ private:
     std::vector<EnvironmentLayer> environmentLayers;
     TextSystem* textSystem = nullptr;
     LayoutConstraints constraints;
-    std::function<void()> requestRedraw;
+    Reactive::SmallFn<void()> requestRedraw;
     std::vector<Row> rows;
     bool disposed = false;
 
@@ -142,7 +142,7 @@ private:
     void configureMount(EnvironmentStack& environmentIn,
                         std::vector<EnvironmentLayer> environmentLayersIn,
                         TextSystem& textSystemIn, LayoutConstraints constraintsIn,
-                        std::function<void()> requestRedrawIn) {
+                        Reactive::SmallFn<void()> requestRedrawIn) {
       disposed = false;
       environment = &environmentIn;
       environmentLayers = std::move(environmentLayersIn);

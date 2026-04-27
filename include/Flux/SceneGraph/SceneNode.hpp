@@ -6,12 +6,12 @@
 /// local coordinates.
 
 #include <Flux/Core/Types.hpp>
+#include <Flux/Reactive/SmallFn.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <memory>
 #include <span>
 #include <string_view>
@@ -76,7 +76,7 @@ class SceneNode {
     void setLayoutConstraints(LayoutConstraints constraints) noexcept;
     bool hasLayoutConstraints() const noexcept;
     LayoutConstraints layoutConstraints() const noexcept;
-    void setRelayout(std::function<void(LayoutConstraints const&)> relayout);
+    void setRelayout(Reactive::SmallFn<void(LayoutConstraints const&)> relayout);
     bool relayoutStoredConstraints();
     bool relayout(LayoutConstraints const& constraints);
 
@@ -120,7 +120,7 @@ class SceneNode {
     SceneNode* parent_ = nullptr;
     std::vector<std::unique_ptr<SceneNode>> children_{};
     std::unique_ptr<InteractionData> interaction_{};
-    std::function<void(LayoutConstraints const&)> relayout_{};
+    Reactive::SmallFn<void(LayoutConstraints const&)> relayout_{};
     mutable bool ownPaintingDirty_ = true;
     mutable bool subtreeDirty_ = true;
     mutable std::unique_ptr<PreparedRenderOps> preparedRenderOps_{};
