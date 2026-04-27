@@ -2,8 +2,10 @@
 
 #include <Flux/SceneGraph/InteractionData.hpp>
 #include <Flux/SceneGraph/Renderer.hpp>
+#include <Flux/UI/Detail/LayoutDebugDump.hpp>
 
 #include "SceneGraph/SceneNodeInternal.hpp"
+#include "UI/Layout/LayoutHelpers.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -11,6 +13,10 @@
 #include <utility>
 
 namespace flux::scenegraph {
+
+namespace {
+thread_local int gRelayoutDepth = 0;
+} // namespace
 
 std::string_view sceneNodeKindName(SceneNodeKind kind) noexcept {
     switch (kind) {
@@ -143,8 +149,14 @@ bool SceneNode::relayout(LayoutConstraints const& constraints) {
     if (!relayout_) {
         return false;
     }
+    bool const shouldDump = ::flux::layout::layoutDebugLayoutEnabled() && gRelayoutDepth == 0;
+    ++gRelayoutDepth;
     setLayoutConstraints(constraints);
     relayout_(constraints);
+    --gRelayoutDepth;
+    if (shouldDump && gRelayoutDepth == 0) {
+        layoutDebugDumpAttached("scene-node-relayout");
+    }
     return true;
 }
 
