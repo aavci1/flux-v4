@@ -64,6 +64,15 @@ LayoutConstraints modifierInnerConstraints(LayoutConstraints constraints, EdgeIn
   return constraints;
 }
 
+LayoutConstraints fixedConstraints(Size size) {
+  return LayoutConstraints{
+      .maxWidth = std::max(0.f, size.width),
+      .maxHeight = std::max(0.f, size.height),
+      .minWidth = std::max(0.f, size.width),
+      .minHeight = std::max(0.f, size.height),
+  };
+}
+
 class ScopedEnvironmentSnapshot {
 public:
   ScopedEnvironmentSnapshot(EnvironmentStack& stack, std::vector<EnvironmentLayer> const& layers)
@@ -281,6 +290,7 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
   });
   rawWrapper->setClipsContents(modifiers.clip);
 
+  scenegraph::SceneNode* rawContent = content.get();
   content->setPosition(Point{std::max(0.f, padding.left), std::max(0.f, padding.top)});
   wrapper->appendChild(std::move(content));
 
@@ -324,6 +334,52 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
       wrapper->appendChild(std::move(overlayNode));
     }
   }
+
+  rawWrapper->setRelayout([rawWrapper, rawContent,
+                           modifiers](LayoutConstraints const& constraints) mutable {
+    EdgeInsets const padding = modifiers.padding.evaluate();
+    float const padL = std::max(0.f, padding.left);
+    float const padR = std::max(0.f, padding.right);
+    float const padT = std::max(0.f, padding.top);
+    float const padB = std::max(0.f, padding.bottom);
+    float const width = modifiers.sizeWidth.evaluate();
+    float const height = modifiers.sizeHeight.evaluate();
+    LayoutConstraints innerConstraints =
+        modifierInnerConstraints(constraints, padding, width, height);
+    if (rawContent) {
+      rawContent->relayout(innerConstraints);
+    }
+    Size contentSize = rawContent ? rawContent->size() : Size{};
+    Size nextSize{contentSize.width + padL + padR, contentSize.height + padT + padB};
+    if (width > 0.f) {
+      nextSize.width = width;
+    }
+    if (height > 0.f) {
+      nextSize.height = height;
+    }
+    if (width <= 0.f) {
+      nextSize.width = std::max(nextSize.width, constraints.minWidth);
+    }
+    if (height <= 0.f) {
+      nextSize.height = std::max(nextSize.height, constraints.minHeight);
+    }
+    if (width <= 0.f && std::isfinite(constraints.maxWidth)) {
+      nextSize.width = std::min(nextSize.width, constraints.maxWidth);
+    }
+    if (height <= 0.f && std::isfinite(constraints.maxHeight)) {
+      nextSize.height = std::min(nextSize.height, constraints.maxHeight);
+    }
+    rawWrapper->setSize(Size{positive(nextSize.width), positive(nextSize.height)});
+    if (rawContent) {
+      rawContent->setPosition(Point{padL, padT});
+    }
+    auto children = rawWrapper->children();
+    for (std::size_t i = 1; i < children.size(); ++i) {
+      if (children[i]) {
+        children[i]->relayout(fixedConstraints(rawWrapper->size()));
+      }
+    }
+  });
 
   popEnvironment();
   return wrapper;

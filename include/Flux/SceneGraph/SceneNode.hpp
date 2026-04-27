@@ -6,10 +6,12 @@
 /// local coordinates.
 
 #include <Flux/Core/Types.hpp>
+#include <Flux/UI/LayoutEngine.hpp>
 
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <span>
 #include <string_view>
@@ -71,6 +73,8 @@ class SceneNode {
     void setTransform(Mat3 const& transform);
     void setLayoutFlow(LayoutFlow flow) noexcept;
     void setLayoutSpacing(float spacing) noexcept;
+    void setRelayout(std::function<void(LayoutConstraints const&)> relayout);
+    bool relayout(LayoutConstraints const& constraints);
 
     SceneNode *parent() const noexcept;
     std::span<std::unique_ptr<SceneNode> const> children() const noexcept;
@@ -110,6 +114,7 @@ class SceneNode {
     SceneNode* parent_ = nullptr;
     std::vector<std::unique_ptr<SceneNode>> children_{};
     std::unique_ptr<InteractionData> interaction_{};
+    std::function<void(LayoutConstraints const&)> relayout_{};
     mutable bool ownPaintingDirty_ = true;
     mutable bool subtreeDirty_ = true;
     mutable std::unique_ptr<PreparedRenderOps> preparedRenderOps_{};

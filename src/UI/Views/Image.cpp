@@ -61,8 +61,16 @@ Size Image::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
 
 std::unique_ptr<scenegraph::SceneNode> Image::mount(MountContext& ctx) const {
   Size const frameSize = resolveFrame(naturalSize(source), ctx.constraints());
-  return std::make_unique<scenegraph::ImageNode>(
+  auto node = std::make_unique<scenegraph::ImageNode>(
       Rect{0.f, 0.f, frameSize.width, frameSize.height}, source, fillMode);
+  auto* rawNode = node.get();
+  std::shared_ptr<flux::Image> imageSource = source;
+  rawNode->setRelayout([rawNode, imageSource = std::move(imageSource)](
+                           LayoutConstraints const& constraints) {
+    Size const nextSize = resolveFrame(naturalSize(imageSource), constraints);
+    rawNode->setSize(nextSize);
+  });
+  return node;
 }
 
 } // namespace flux::views

@@ -144,6 +144,77 @@ TEST_CASE("modifier envelopes honor fixed viewport constraints") {
   CHECK(sceneGraph.root().children()[0]->size() == flux::Size{24.f, 12.f});
 }
 
+TEST_CASE("MountRoot resize relayouts without remounting root state") {
+  int bodyCalls = 0;
+
+  struct Root {
+    int* bodyCalls = nullptr;
+
+    flux::Element body() const {
+      ++*bodyCalls;
+      auto width = flux::useState(20.f);
+      return flux::Element{flux::Rectangle{}}
+          .width(flux::Reactive::Bindable<float>{[width] {
+            return width.get();
+          }})
+          .height(10.f)
+          .onTap([width] {
+            width.set(64.f);
+          });
+    }
+  };
+
+  FakeTextSystem textSystem;
+  flux::scenegraph::SceneGraph sceneGraph;
+  flux::MountRoot root{
+      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{&bodyCalls}),
+      textSystem,
+      testEnvironment(),
+      flux::Size{200.f, 100.f},
+  };
+
+  root.mount(sceneGraph);
+  REQUIRE(sceneGraph.root().interaction() != nullptr);
+  REQUIRE(sceneGraph.root().interaction()->onTap);
+  sceneGraph.root().interaction()->onTap();
+  CHECK(sceneGraph.root().size() == flux::Size{64.f, 10.f});
+
+  root.resize(flux::Size{320.f, 180.f}, sceneGraph);
+
+  CHECK(bodyCalls == 1);
+  CHECK(sceneGraph.root().size() == flux::Size{64.f, 10.f});
+}
+
+TEST_CASE("MountRoot resize updates viewport-sized root without remount") {
+  int bodyCalls = 0;
+
+  struct Root {
+    int* bodyCalls = nullptr;
+
+    flux::Element body() const {
+      ++*bodyCalls;
+      return flux::Rectangle{};
+    }
+  };
+
+  FakeTextSystem textSystem;
+  flux::scenegraph::SceneGraph sceneGraph;
+  flux::MountRoot root{
+      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{&bodyCalls}),
+      textSystem,
+      testEnvironment(),
+      flux::Size{200.f, 100.f},
+  };
+
+  root.mount(sceneGraph);
+  CHECK(sceneGraph.root().size() == flux::Size{200.f, 100.f});
+
+  root.resize(flux::Size{320.f, 180.f}, sceneGraph);
+
+  CHECK(bodyCalls == 1);
+  CHECK(sceneGraph.root().size() == flux::Size{320.f, 180.f});
+}
+
 TEST_CASE("TextInput fills finite assigned stack width") {
   struct Root {
     flux::Element body() const {

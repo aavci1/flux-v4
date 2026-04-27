@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <memory>
 
 namespace flux {
 
@@ -52,10 +53,11 @@ std::unique_ptr<scenegraph::SceneNode> ScaleAroundCenter::mount(MountContext& ct
   }
 
   auto* rawChild = childNode.get();
+  auto frameSize = std::make_shared<Size>(measured);
   Reactive::Bindable<float> scaleBinding = scale;
   std::function<void()> requestRedraw = ctx.redrawCallback();
-  auto applyScale = [rawChild, measured](float value) {
-    Point const pivot{measured.width * 0.5f, measured.height * 0.5f};
+  auto applyScale = [rawChild, frameSize](float value) {
+    Point const pivot{frameSize->width * 0.5f, frameSize->height * 0.5f};
     rawChild->setTransform(Mat3::translate(pivot) * Mat3::scale(value) *
                            Mat3::translate(Point{-pivot.x, -pivot.y}));
   };
@@ -74,6 +76,19 @@ std::unique_ptr<scenegraph::SceneNode> ScaleAroundCenter::mount(MountContext& ct
 
   group->appendChild(std::move(childNode));
   includeVisualBounds(*group);
+  auto* rawGroup = group.get();
+  rawGroup->setRelayout([rawGroup, rawChild, frameSize, applyScale, scaleBinding](
+                            LayoutConstraints const& constraints) mutable {
+    if (rawChild) {
+      rawChild->relayout(constraints);
+      *frameSize = rawChild->size();
+      rawChild->relayout(fixedConstraints(*frameSize));
+      rawChild->setPosition(Point{});
+    }
+    rawGroup->setSize(*frameSize);
+    applyScale(scaleBinding.evaluate());
+    includeVisualBounds(*rawGroup);
+  });
   return group;
 }
 

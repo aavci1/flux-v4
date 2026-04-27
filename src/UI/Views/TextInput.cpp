@@ -205,10 +205,11 @@ Size TextInput::measure(MeasureContext& ctx, LayoutConstraints const& constraint
 std::unique_ptr<scenegraph::SceneNode> TextInput::mount(MountContext& ctx) const {
   Theme const& theme = activeTheme(ctx.environment());
   ResolvedTextInputStyle const resolved = resolveTextInputStyle(style, theme);
-  Size const frameSize = textInputFrameSize(*this, resolved, ctx.constraints(), ctx.textSystem());
+  auto frameSize = std::make_shared<Size>(
+      textInputFrameSize(*this, resolved, ctx.constraints(), ctx.textSystem()));
 
   auto wrapper = std::make_unique<scenegraph::RectNode>(
-      Rect{0.f, 0.f, frameSize.width, frameSize.height},
+      Rect{0.f, 0.f, frameSize->width, frameSize->height},
       FillStyle::solid(disabled ? resolved.chrome.disabledColor
                                 : resolved.chrome.backgroundColor),
       StrokeStyle::solid(resolved.chrome.borderColor, resolved.chrome.borderWidth),
@@ -216,7 +217,7 @@ std::unique_ptr<scenegraph::SceneNode> TextInput::mount(MountContext& ctx) const
 
   auto textNode = std::make_unique<scenegraph::TextNode>();
   scenegraph::TextNode* rawText = textNode.get();
-  setTextLayout(*rawText, *this, resolved, ctx.textSystem(), frameSize);
+  setTextLayout(*rawText, *this, resolved, ctx.textSystem(), *frameSize);
   wrapper->appendChild(std::move(textNode));
 
   auto interaction = std::make_unique<scenegraph::InteractionData>();
@@ -273,12 +274,21 @@ std::unique_ptr<scenegraph::SceneNode> TextInput::mount(MountContext& ctx) const
   };
   wrapper->setInteraction(std::move(interaction));
 
+  auto* rawWrapper = wrapper.get();
+  TextSystem* textSystem = &ctx.textSystem();
+  rawWrapper->setRelayout([rawWrapper, rawText, input = *this, resolved,
+                           frameSize, textSystem](LayoutConstraints const& constraints) mutable {
+    *frameSize = textInputFrameSize(input, resolved, constraints, *textSystem);
+    rawWrapper->setSize(*frameSize);
+    setTextLayout(*rawText, input, resolved, *textSystem, *frameSize);
+  });
+
   Reactive::withOwner(ctx.owner(), [rawText, input = *this, resolved, frameSize,
                                     textSystem = &ctx.textSystem(),
                                     requestRedraw = ctx.redrawCallback()] {
     Reactive::Effect([rawText, input, resolved, frameSize, textSystem, requestRedraw] {
       (void)input.value.get();
-      setTextLayout(*rawText, input, resolved, *textSystem, frameSize);
+      setTextLayout(*rawText, input, resolved, *textSystem, *frameSize);
       if (requestRedraw) {
         requestRedraw();
       }

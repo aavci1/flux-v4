@@ -91,7 +91,16 @@ void MountRoot::unmount(scenegraph::SceneGraph& sceneGraph) {
 
 void MountRoot::resize(Size viewportSize, scenegraph::SceneGraph& sceneGraph) {
   viewportSize_ = viewportSize;
-  mount(sceneGraph);
+  if (!mounted_) {
+    mount(sceneGraph);
+    return;
+  }
+  layoutDebugBeginPass();
+  if (!sceneGraph.root().relayout(rootConstraints(viewportSize_))) {
+    sceneGraph.root().setSize(viewportSize_);
+  }
+  layoutDebugDumpRetained(sceneGraph);
+  layoutDebugEndPass();
 }
 
 } // namespace flux

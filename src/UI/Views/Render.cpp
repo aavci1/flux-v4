@@ -35,8 +35,21 @@ Size Render::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
 std::unique_ptr<scenegraph::SceneNode> Render::mount(MountContext& ctx) const {
   Size const measured = measure(ctx.constraints(), ctx.hints());
   Size const size = assignedSize(ctx.constraints(), measured);
-  return std::make_unique<scenegraph::RenderNode>(
+  auto node = std::make_unique<scenegraph::RenderNode>(
       Rect{0.f, 0.f, size.width, size.height}, draw, pure);
+  auto* rawNode = node.get();
+  auto measure = measureFn;
+  LayoutHints hints = ctx.hints();
+  rawNode->setRelayout([rawNode, measure = std::move(measure),
+                        hints](LayoutConstraints const& constraints) mutable {
+    Size measured{};
+    if (measure) {
+      measured = measure(constraints, hints);
+    }
+    Size const nextSize = assignedSize(constraints, measured);
+    rawNode->setSize(nextSize);
+  });
+  return node;
 }
 
 } // namespace flux

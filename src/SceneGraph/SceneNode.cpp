@@ -115,6 +115,18 @@ void SceneNode::setLayoutSpacing(float spacing) noexcept {
     layoutSpacing_ = std::max(0.f, spacing);
 }
 
+void SceneNode::setRelayout(std::function<void(LayoutConstraints const&)> relayout) {
+    relayout_ = std::move(relayout);
+}
+
+bool SceneNode::relayout(LayoutConstraints const& constraints) {
+    if (!relayout_) {
+        return false;
+    }
+    relayout_(constraints);
+    return true;
+}
+
 SceneNode *SceneNode::parent() const noexcept {
     return parent_;
 }

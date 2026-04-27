@@ -148,6 +148,40 @@ bool shouldMountStackChild(Element const& child, Size size) {
   return !collapsedStackChild(child, size) || child.mountsWhenCollapsed();
 }
 
+struct MountedLayoutChild {
+  scenegraph::SceneNode* node = nullptr;
+  Point layoutOrigin{};
+  float flexGrow = 0.f;
+  float flexShrink = 0.f;
+  std::optional<float> flexBasis;
+  float minMainSize = 0.f;
+  bool mountsWhenCollapsed = false;
+  ElementType typeTag = ElementType::Unknown;
+};
+
+void setMountedLayoutPosition(MountedLayoutChild& child, Point origin) {
+  if (!child.node) {
+    return;
+  }
+  Point const current = child.node->position();
+  Vec2 const localOffset{current.x - child.layoutOrigin.x,
+                         current.y - child.layoutOrigin.y};
+  child.node->setPosition(Point{origin.x + localOffset.x, origin.y + localOffset.y});
+  child.layoutOrigin = origin;
+}
+
+bool collapsedMountedChild(MountedLayoutChild const& child, Size size) {
+  return size.width <= layout::kFlexEpsilon &&
+         size.height <= layout::kFlexEpsilon &&
+         child.flexGrow <= layout::kFlexEpsilon &&
+         !child.flexBasis.has_value() &&
+         child.minMainSize <= layout::kFlexEpsilon;
+}
+
+bool shouldRelayoutMountedChild(MountedLayoutChild const& child, Size size) {
+  return !collapsedMountedChild(child, size) || child.mountsWhenCollapsed;
+}
+
 std::vector<std::size_t> activeStackIndices(std::vector<Element> const& children,
                                             std::vector<Size> const& sizes) {
   std::vector<std::size_t> indices;
@@ -168,6 +202,48 @@ std::vector<Size> sizesForIndices(std::vector<Size> const& sizes,
     active.push_back(sizes[index]);
   }
   return active;
+}
+
+std::vector<Size> sizesForMountedIndices(std::vector<Size> const& sizes,
+                                         std::vector<std::size_t> const& indices) {
+  std::vector<Size> active;
+  active.reserve(indices.size());
+  for (std::size_t const index : indices) {
+    active.push_back(sizes[index]);
+  }
+  return active;
+}
+
+std::vector<std::size_t> activeMountedIndices(std::vector<MountedLayoutChild> const& children,
+                                              std::vector<Size> const& sizes) {
+  std::vector<std::size_t> indices;
+  indices.reserve(children.size());
+  for (std::size_t i = 0; i < children.size(); ++i) {
+    if (!collapsedMountedChild(children[i], sizes[i])) {
+      indices.push_back(i);
+    }
+  }
+  return indices;
+}
+
+std::vector<layout::StackMainAxisChild>
+stackMountedChildrenForAxis(std::vector<MountedLayoutChild> const& children,
+                            std::vector<Size> const& sizes,
+                            std::vector<std::size_t> const& indices,
+                            layout::StackAxis axis) {
+  std::vector<layout::StackMainAxisChild> stackChildren;
+  stackChildren.reserve(indices.size());
+  for (std::size_t const i : indices) {
+    float const naturalMainSize = axis == layout::StackAxis::Vertical ? sizes[i].height : sizes[i].width;
+    stackChildren.push_back(layout::StackMainAxisChild{
+        .naturalMainSize = naturalMainSize,
+        .flexBasis = children[i].flexBasis,
+        .minMainSize = children[i].minMainSize,
+        .flexGrow = children[i].flexGrow,
+        .flexShrink = children[i].flexShrink,
+    });
+  }
+  return stackChildren;
 }
 
 void rewindMeasuredChildren(MountContext& ctx) {
@@ -203,8 +279,14 @@ namespace detail {
 
 std::unique_ptr<scenegraph::SceneNode> mountRectangle(Rectangle const&, MountContext& ctx) {
   Size const size = assignedSize(ctx.constraints());
-  return std::make_unique<scenegraph::RectNode>(
+  auto node = std::make_unique<scenegraph::RectNode>(
       Rect{0.f, 0.f, finiteOrZero(size.width), finiteOrZero(size.height)});
+  auto* rawNode = node.get();
+  rawNode->setRelayout([rawNode](LayoutConstraints const& constraints) {
+    Size const nextSize = assignedSize(constraints);
+    rawNode->setSize(Size{finiteOrZero(nextSize.width), finiteOrZero(nextSize.height)});
+  });
+  return node;
 }
 
 std::unique_ptr<scenegraph::SceneNode> mountText(Text const& text, MountContext& ctx) {
@@ -229,8 +311,32 @@ std::unique_ptr<scenegraph::SceneNode> mountText(Text const& text, MountContext&
   auto layout = ctx.textSystem().layout(initialText, font, color, box, options);
   auto node = std::make_unique<scenegraph::TextNode>(box, std::move(layout));
 
+  auto* rawNode = node.get();
+  TextSystem* textSystemForRelayout = &ctx.textSystem();
+  Reactive::Bindable<std::string> relayoutTextBinding = text.text;
+  Reactive::Bindable<Color> relayoutColorBinding = text.color;
+  rawNode->setRelayout([rawNode, relayoutTextBinding = std::move(relayoutTextBinding),
+                        relayoutColorBinding = std::move(relayoutColorBinding),
+                        textSystemForRelayout, font, theme, options,
+                        wrapping = text.wrapping](LayoutConstraints const& constraints) mutable {
+    std::string const currentText = relayoutTextBinding.evaluate();
+    Color const currentColor = resolveColor(relayoutColorBinding.evaluate(), theme.labelColor, theme);
+    Size currentSize = assignedSize(constraints);
+    if (currentSize.width <= 0.f || currentSize.height <= 0.f) {
+      float maxWidth = std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;
+      if (wrapping == TextWrapping::NoWrap) {
+        maxWidth = 0.f;
+      }
+      Size const measured = textSystemForRelayout->measure(currentText, font, currentColor, maxWidth, options);
+      currentSize.width = currentSize.width > 0.f ? currentSize.width : measured.width;
+      currentSize.height = currentSize.height > 0.f ? currentSize.height : measured.height;
+    }
+    Rect const currentBox{0.f, 0.f, finiteOrZero(currentSize.width), finiteOrZero(currentSize.height)};
+    rawNode->setBounds(currentBox);
+    rawNode->setLayout(textSystemForRelayout->layout(currentText, font, currentColor, currentBox, options));
+  });
+
   if (text.text.isReactive() || text.color.isReactive()) {
-    auto* rawNode = node.get();
     Reactive::Bindable<std::string> textBinding = text.text;
     Reactive::Bindable<Color> colorBinding = text.color;
     TextSystem* textSystem = &ctx.textSystem();
@@ -305,6 +411,7 @@ std::unique_ptr<scenegraph::SceneNode> mountVStack(VStack const& stack, MountCon
            finiteOrZero(stackLayout.containerSize.height)});
   group->setLayoutFlow(scenegraph::LayoutFlow::VerticalStack);
   group->setLayoutSpacing(stack.spacing);
+  auto mountedChildren = std::make_shared<std::vector<MountedLayoutChild>>();
 
   std::vector<std::optional<layout::StackSlot>> slotsByChild(stack.children.size());
   for (std::size_t layoutIndex = 0; layoutIndex < activeIndices.size(); ++layoutIndex) {
@@ -330,6 +437,16 @@ std::unique_ptr<scenegraph::SceneNode> mountVStack(VStack const& stack, MountCon
       Point const origin = active ? slot->origin : nextCollapsedOrigin;
       detail::setLayoutPosition(*node, origin);
       mountedSize = active ? slot->assignedSize : node->size();
+      mountedChildren->push_back(MountedLayoutChild{
+          .node = node.get(),
+          .layoutOrigin = origin,
+          .flexGrow = child.flexGrow(),
+          .flexShrink = child.flexShrink(),
+          .flexBasis = child.flexBasis(),
+          .minMainSize = child.minMainSize(),
+          .mountsWhenCollapsed = child.mountsWhenCollapsed(),
+          .typeTag = child.typeTag(),
+      });
       group->appendChild(std::move(node));
     }
     if (active) {
@@ -340,6 +457,75 @@ std::unique_ptr<scenegraph::SceneNode> mountVStack(VStack const& stack, MountCon
                                   nextCollapsedOrigin.y + mountedSize.height + stack.spacing};
     }
   }
+  auto* rawGroup = group.get();
+  float const spacing = stack.spacing;
+  Alignment const alignment = stack.alignment;
+  JustifyContent const justifyContent = stack.justifyContent;
+  LayoutHints const relayoutHints = ctx.hints();
+  rawGroup->setRelayout([rawGroup, mountedChildren, spacing, alignment,
+                         justifyContent, relayoutHints](LayoutConstraints const& constraints) {
+    float const nextAssignedWidth = finiteSpan(constraints.maxWidth);
+    bool const widthAssigned = nextAssignedWidth > 0.f && finiteWidthIsAssigned(relayoutHints);
+    float const nextAssignedHeight = finiteSpan(constraints.maxHeight);
+    bool const heightConstrained = nextAssignedHeight > 0.f &&
+                                   finiteHeightIsConstrained(constraints, relayoutHints);
+
+    LayoutConstraints childConstraints = stackChildConstraints(constraints);
+    childConstraints.maxWidth = nextAssignedWidth > 0.f ? nextAssignedWidth
+                                                        : std::numeric_limits<float>::infinity();
+    childConstraints.maxHeight = std::numeric_limits<float>::infinity();
+    layout::clampLayoutMinToMax(childConstraints);
+
+    std::vector<Size> sizes;
+    sizes.reserve(mountedChildren->size());
+    for (MountedLayoutChild const& child : *mountedChildren) {
+      if (child.node && child.node->relayout(childConstraints)) {
+        sizes.push_back(child.node->size());
+      } else {
+        sizes.push_back(child.node ? child.node->size() : Size{});
+      }
+    }
+
+    std::vector<std::size_t> const activeIndices = activeMountedIndices(*mountedChildren, sizes);
+    std::vector<Size> const activeSizes = sizesForMountedIndices(sizes, activeIndices);
+    std::vector<layout::StackMainAxisChild> stackChildren =
+        stackMountedChildrenForAxis(*mountedChildren, sizes, activeIndices, layout::StackAxis::Vertical);
+    layout::StackMainAxisLayout const mainLayout =
+        layout::layoutStackMainAxis(stackChildren, spacing, nextAssignedHeight,
+                                    heightConstrained, justifyContent);
+    layout::StackLayoutResult stackLayout =
+        layout::layoutStack(layout::StackAxis::Vertical, alignment, activeSizes,
+                            mainLayout.mainSizes, mainLayout.itemSpacing,
+                            mainLayout.containerMainSize, mainLayout.startOffset,
+                            nextAssignedWidth, widthAssigned);
+
+    std::vector<std::optional<layout::StackSlot>> slotsByMounted(mountedChildren->size());
+    for (std::size_t layoutIndex = 0; layoutIndex < activeIndices.size(); ++layoutIndex) {
+      slotsByMounted[activeIndices[layoutIndex]] = stackLayout.slots[layoutIndex];
+    }
+
+    Point nextCollapsedOrigin{};
+    for (std::size_t childIndex = 0; childIndex < mountedChildren->size(); ++childIndex) {
+      MountedLayoutChild& child = (*mountedChildren)[childIndex];
+      std::optional<layout::StackSlot> const& slot = slotsByMounted[childIndex];
+      bool const active = slot.has_value();
+      if (active && child.node) {
+        child.node->relayout(fixedConstraints(slot->assignedSize));
+        setMountedLayoutPosition(child, slot->origin);
+        nextCollapsedOrigin =
+            Point{slot->origin.x, slot->origin.y + slot->assignedSize.height + spacing};
+      } else if (shouldRelayoutMountedChild(child, sizes[childIndex])) {
+        setMountedLayoutPosition(child, nextCollapsedOrigin);
+        Size mountedSize = child.node ? child.node->size() : Size{};
+        if (mountedSize.height > layout::kFlexEpsilon) {
+          nextCollapsedOrigin = Point{nextCollapsedOrigin.x,
+                                      nextCollapsedOrigin.y + mountedSize.height + spacing};
+        }
+      }
+    }
+    rawGroup->setSize(Size{finiteOrZero(stackLayout.containerSize.width),
+                           finiteOrZero(stackLayout.containerSize.height)});
+  });
   return group;
 }
 
@@ -406,6 +592,7 @@ std::unique_ptr<scenegraph::SceneNode> mountHStack(HStack const& stack, MountCon
            finiteOrZero(stackLayout.containerSize.height)});
   group->setLayoutFlow(scenegraph::LayoutFlow::HorizontalStack);
   group->setLayoutSpacing(stack.spacing);
+  auto mountedChildren = std::make_shared<std::vector<MountedLayoutChild>>();
 
   std::vector<std::optional<layout::StackSlot>> slotsByChild(stack.children.size());
   for (std::size_t layoutIndex = 0; layoutIndex < activeIndices.size(); ++layoutIndex) {
@@ -431,6 +618,16 @@ std::unique_ptr<scenegraph::SceneNode> mountHStack(HStack const& stack, MountCon
       Point const origin = active ? slot->origin : nextCollapsedOrigin;
       detail::setLayoutPosition(*node, origin);
       mountedSize = active ? slot->assignedSize : node->size();
+      mountedChildren->push_back(MountedLayoutChild{
+          .node = node.get(),
+          .layoutOrigin = origin,
+          .flexGrow = child.flexGrow(),
+          .flexShrink = child.flexShrink(),
+          .flexBasis = child.flexBasis(),
+          .minMainSize = child.minMainSize(),
+          .mountsWhenCollapsed = child.mountsWhenCollapsed(),
+          .typeTag = child.typeTag(),
+      });
       group->appendChild(std::move(node));
     }
     if (active) {
@@ -441,6 +638,98 @@ std::unique_ptr<scenegraph::SceneNode> mountHStack(HStack const& stack, MountCon
                                   nextCollapsedOrigin.y};
     }
   }
+  auto* rawGroup = group.get();
+  float const spacing = stack.spacing;
+  Alignment const alignment = stack.alignment;
+  JustifyContent const justifyContent = stack.justifyContent;
+  LayoutHints const relayoutHints = ctx.hints();
+  rawGroup->setRelayout([rawGroup, mountedChildren, spacing, alignment,
+                         justifyContent, relayoutHints](LayoutConstraints const& constraints) {
+    float const nextAssignedWidth = finiteSpan(constraints.maxWidth);
+    bool const widthConstrained = nextAssignedWidth > 0.f && finiteWidthIsAssigned(relayoutHints);
+    float const nextAssignedHeight = finiteSpan(constraints.maxHeight);
+    bool const heightConstrained = nextAssignedHeight > 0.f &&
+                                   finiteHeightIsConstrained(constraints, relayoutHints);
+    bool const stretchCrossAxis = alignment == Alignment::Stretch && heightConstrained;
+
+    LayoutConstraints initialConstraints = stackChildConstraints(constraints);
+    initialConstraints.maxWidth = std::numeric_limits<float>::infinity();
+    initialConstraints.maxHeight = stretchCrossAxis ? nextAssignedHeight
+                                                    : std::numeric_limits<float>::infinity();
+    layout::clampLayoutMinToMax(initialConstraints);
+
+    std::vector<Size> initialSizes;
+    initialSizes.reserve(mountedChildren->size());
+    for (MountedLayoutChild const& child : *mountedChildren) {
+      if (child.node && child.node->relayout(initialConstraints)) {
+        initialSizes.push_back(child.node->size());
+      } else {
+        initialSizes.push_back(child.node ? child.node->size() : Size{});
+      }
+    }
+    std::vector<std::size_t> const activeIndices = activeMountedIndices(*mountedChildren, initialSizes);
+    std::vector<layout::StackMainAxisChild> stackChildren =
+        stackMountedChildrenForAxis(*mountedChildren, initialSizes, activeIndices,
+                                    layout::StackAxis::Horizontal);
+    layout::StackMainAxisLayout const mainLayout =
+        layout::layoutStackMainAxis(stackChildren, spacing, nextAssignedWidth,
+                                    widthConstrained, justifyContent);
+
+    std::vector<Size> rowSizes;
+    rowSizes.reserve(activeIndices.size());
+    float rowInnerHeight = 0.f;
+    for (std::size_t layoutIndex = 0; layoutIndex < activeIndices.size(); ++layoutIndex) {
+      std::size_t const childIndex = activeIndices[layoutIndex];
+      LayoutConstraints childMeasure = stackChildConstraints(constraints);
+      childMeasure.maxWidth = layoutIndex < mainLayout.mainSizes.size()
+                                  ? mainLayout.mainSizes[layoutIndex]
+                                  : std::numeric_limits<float>::infinity();
+      childMeasure.maxHeight = stretchCrossAxis ? nextAssignedHeight
+                                                : std::numeric_limits<float>::infinity();
+      layout::clampLayoutMinToMax(childMeasure);
+      MountedLayoutChild const& child = (*mountedChildren)[childIndex];
+      if (child.node && child.node->relayout(childMeasure)) {
+        rowSizes.push_back(child.node->size());
+      } else {
+        rowSizes.push_back(child.node ? child.node->size() : Size{});
+      }
+      rowInnerHeight = std::max(rowInnerHeight, rowSizes.back().height);
+    }
+
+    float const rowCrossSize = heightConstrained ? nextAssignedHeight : rowInnerHeight;
+    layout::StackLayoutResult stackLayout =
+        layout::layoutStack(layout::StackAxis::Horizontal, alignment, rowSizes,
+                            mainLayout.mainSizes, mainLayout.itemSpacing,
+                            mainLayout.containerMainSize, mainLayout.startOffset,
+                            rowCrossSize, heightConstrained);
+
+    std::vector<std::optional<layout::StackSlot>> slotsByMounted(mountedChildren->size());
+    for (std::size_t layoutIndex = 0; layoutIndex < activeIndices.size(); ++layoutIndex) {
+      slotsByMounted[activeIndices[layoutIndex]] = stackLayout.slots[layoutIndex];
+    }
+
+    Point nextCollapsedOrigin{};
+    for (std::size_t childIndex = 0; childIndex < mountedChildren->size(); ++childIndex) {
+      MountedLayoutChild& child = (*mountedChildren)[childIndex];
+      std::optional<layout::StackSlot> const& slot = slotsByMounted[childIndex];
+      bool const active = slot.has_value();
+      if (active && child.node) {
+        child.node->relayout(fixedConstraints(slot->assignedSize));
+        setMountedLayoutPosition(child, slot->origin);
+        nextCollapsedOrigin =
+            Point{slot->origin.x + slot->assignedSize.width + spacing, slot->origin.y};
+      } else if (shouldRelayoutMountedChild(child, initialSizes[childIndex])) {
+        setMountedLayoutPosition(child, nextCollapsedOrigin);
+        Size mountedSize = child.node ? child.node->size() : Size{};
+        if (mountedSize.width > layout::kFlexEpsilon) {
+          nextCollapsedOrigin = Point{nextCollapsedOrigin.x + mountedSize.width + spacing,
+                                      nextCollapsedOrigin.y};
+        }
+      }
+    }
+    rawGroup->setSize(Size{finiteOrZero(stackLayout.containerSize.width),
+                           finiteOrZero(stackLayout.containerSize.height)});
+  });
   return group;
 }
 
@@ -475,6 +764,7 @@ std::unique_ptr<scenegraph::SceneNode> mountZStack(ZStack const& stack, MountCon
 
   auto group = std::make_unique<scenegraph::GroupNode>(
       Rect{0.f, 0.f, finiteOrZero(width), finiteOrZero(height)});
+  auto mountedChildren = std::make_shared<std::vector<MountedLayoutChild>>();
 
   for (std::size_t i = 0; i < stack.children.size(); ++i) {
     Element const& child = stack.children[i];
@@ -489,13 +779,77 @@ std::unique_ptr<scenegraph::SceneNode> mountZStack(ZStack const& stack, MountCon
     MountContext childCtx = ctx.child(fixedConstraints(childFrame), childHints);
     auto node = child.mount(childCtx);
     if (node) {
-      detail::setLayoutPosition(*node, Point{
+      Point const origin{
           layout::hAlignOffset(childFrame.width, width, stack.horizontalAlignment),
           layout::vAlignOffset(childFrame.height, height, stack.verticalAlignment),
+      };
+      detail::setLayoutPosition(*node, origin);
+      mountedChildren->push_back(MountedLayoutChild{
+          .node = node.get(),
+          .layoutOrigin = origin,
+          .flexGrow = child.flexGrow(),
+          .flexShrink = child.flexShrink(),
+          .flexBasis = child.flexBasis(),
+          .minMainSize = child.minMainSize(),
+          .mountsWhenCollapsed = child.mountsWhenCollapsed(),
+          .typeTag = child.typeTag(),
       });
       group->appendChild(std::move(node));
     }
   }
+  auto* rawGroup = group.get();
+  Alignment const horizontalAlignment = stack.horizontalAlignment;
+  Alignment const verticalAlignment = stack.verticalAlignment;
+  rawGroup->setRelayout([rawGroup, mountedChildren, horizontalAlignment,
+                         verticalAlignment](LayoutConstraints const& constraints) {
+    float const assignedWidth = finiteSpan(constraints.maxWidth);
+    float const assignedHeight = finiteSpan(constraints.maxHeight);
+    float width = assignedWidth;
+    float height = assignedHeight;
+
+    LayoutConstraints childMeasure = stackChildConstraints(constraints);
+    childMeasure.maxWidth = assignedWidth > 0.f ? assignedWidth : std::numeric_limits<float>::infinity();
+    childMeasure.maxHeight = assignedHeight > 0.f ? assignedHeight : std::numeric_limits<float>::infinity();
+    layout::clampLayoutMinToMax(childMeasure);
+
+    std::vector<Size> sizes;
+    sizes.reserve(mountedChildren->size());
+    for (MountedLayoutChild const& child : *mountedChildren) {
+      if (child.node && child.node->relayout(childMeasure)) {
+        sizes.push_back(child.node->size());
+      } else {
+        sizes.push_back(child.node ? child.node->size() : Size{});
+      }
+      width = std::max(width, sizes.back().width);
+      height = std::max(height, sizes.back().height);
+    }
+    if (assignedWidth > 0.f) {
+      width = std::min(width, assignedWidth);
+    }
+    if (assignedHeight > 0.f) {
+      height = std::min(height, assignedHeight);
+    }
+
+    for (std::size_t i = 0; i < mountedChildren->size(); ++i) {
+      MountedLayoutChild& child = (*mountedChildren)[i];
+      Size childFrame = i < sizes.size() ? sizes[i] : Size{};
+      bool const fillsStack = child.typeTag == ElementType::Text || child.flexGrow > 0.f;
+      if (horizontalAlignment == Alignment::Stretch || fillsStack) {
+        childFrame.width = width;
+      }
+      if (verticalAlignment == Alignment::Stretch || fillsStack) {
+        childFrame.height = height;
+      }
+      if (child.node) {
+        child.node->relayout(fixedConstraints(childFrame));
+        setMountedLayoutPosition(child, Point{
+            layout::hAlignOffset(childFrame.width, width, horizontalAlignment),
+            layout::vAlignOffset(childFrame.height, height, verticalAlignment),
+        });
+      }
+    }
+    rawGroup->setSize(Size{finiteOrZero(width), finiteOrZero(height)});
+  });
   return group;
 }
 
