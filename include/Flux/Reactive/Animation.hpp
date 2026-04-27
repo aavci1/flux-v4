@@ -62,7 +62,7 @@ public:
     self.target = std::move(value);
     float const duration = transition.duration;
     self.options = AnimationOptions{.transition = std::move(transition)};
-    if (self.reducedMotion || duration <= 0.f) {
+    if (duration <= 0.f) {
       self.running = false;
       self.value.set(self.target);
       return;
@@ -89,7 +89,7 @@ public:
     self.target = std::move(target);
     self.options = std::move(options);
     self.paused = false;
-    if (self.reducedMotion || self.options.transition.duration <= 0.f) {
+    if (self.options.transition.duration <= 0.f) {
       self.running = false;
       self.value.set(self.target);
       return;
@@ -128,17 +128,6 @@ public:
 
   bool isRunning() const { return state().running; }
   bool isPaused() const { return state().paused; }
-
-  void setReducedMotion(bool enabled) {
-    State& self = state();
-    self.reducedMotion = enabled;
-    if (enabled) {
-      AnimationClock::instance().unregisterAnimation(&self);
-      self.running = false;
-      self.paused = false;
-      self.value.set(self.finalValueForOptions());
-    }
-  }
 
 private:
   struct State final : AnimationBase {
@@ -198,7 +187,6 @@ private:
     AnimationOptions options{};
     bool running = false;
     bool paused = false;
-    bool reducedMotion = false;
     double startTime = 0.0;
   };
 

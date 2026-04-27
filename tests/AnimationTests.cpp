@@ -141,29 +141,6 @@ TEST_CASE("Animation options preserve transition and playback configuration") {
   CHECK(options.autoreverse);
 }
 
-TEST_CASE("Animation snaps to target when reduced motion is enabled") {
-  Animation<float> value{0.f};
-  value.play(10.f, AnimationOptions {
-      .transition = Transition::linear(1.f),
-      .repeat = AnimationOptions::kRepeatForever,
-      .autoreverse = false,
-  });
-
-  value.state_->startTime = 10.0;
-  REQUIRE(value.state_->tick(10.25));
-  CHECK(value.get() == doctest::Approx(2.5f));
-  CHECK(value.isRunning());
-
-  value.setReducedMotion(true);
-
-  CHECK(value.get() == doctest::Approx(10.f));
-  CHECK_FALSE(value.isRunning());
-
-  value.play(20.f, Transition::ease(0.5f).delayed(1.0f));
-  CHECK(value.get() == doctest::Approx(20.f));
-  CHECK_FALSE(value.isRunning());
-}
-
 TEST_CASE("Animation copies share playback state") {
   Animation<float> original{0.f};
   Animation<float> copy = original;

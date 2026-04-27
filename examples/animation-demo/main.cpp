@@ -9,7 +9,6 @@
 #include <Flux/UI/Views/ScrollView.hpp>
 #include <Flux/UI/Views/Slider.hpp>
 #include <Flux/UI/Views/Text.hpp>
-#include <Flux/UI/Views/Toggle.hpp>
 #include <Flux/UI/Views/VStack.hpp>
 #include <Flux/UI/Views/ZStack.hpp>
 
@@ -171,9 +170,7 @@ struct PlaybackLab : ViewModifiers<PlaybackLab> {
                             }, "State", Color::accent()),
                             metricTile(theme(), [progress] {
                                 return formatFloat(progress());
-                            }, "Progress", Color::success()),
-                            metricTile(theme(), theme().reducedMotion ? "On" : "Off", "Reduced motion",
-                                       theme().reducedMotion ? Color::warning() : Color::secondary())
+                            }, "Progress", Color::success())
                         )
                     },
                     buttonRow(
@@ -313,13 +310,9 @@ struct AmbientLoopLab : ViewModifiers<AmbientLoopLab> {
     auto body() const {
         auto theme = useEnvironment<Theme>();
 
-        auto phase = useState(theme().reducedMotion ? 1.f : 0.f);
+        auto phase = useState(0.f);
         double const startedAt = nowSeconds();
-        useAnimationFrame([phase, reducedMotion = theme().reducedMotion, startedAt](AnimationTick const& tick) {
-                if (reducedMotion) {
-                    phase = 1.f;
-                    return;
-                }
+        useAnimationFrame([phase, startedAt](AnimationTick const& tick) {
                 double const cycle = 2.8;
                 double local = std::fmod(std::max(0.0, tick.nowSeconds - startedAt), cycle) / 1.4;
                 if (local > 1.0) {
@@ -348,7 +341,7 @@ struct AmbientLoopLab : ViewModifiers<AmbientLoopLab> {
 
         return makeSectionCard(
             theme(), "Auto-Running Loop",
-            "This panel starts a repeating autoreversing animation from body(). When reduced motion is turned on, the loop collapses to its final frame and resumes when motion is re-enabled.",
+            "This panel starts a repeating autoreversing animation from body() and keeps the loop owned by the component scope.",
             VStack {
                 .spacing = theme().space3,
                 .children = children(
@@ -376,10 +369,10 @@ struct AmbientLoopLab : ViewModifiers<AmbientLoopLab> {
                             metricTile(theme(), [phase] {
                                 return formatFloat(phase());
                             }, "Phase", Color::accent()),
-                            metricTile(theme(), [phase, reduced = theme().reducedMotion] {
+                            metricTile(theme(), [phase] {
                                 (void)phase();
-                                return reduced ? std::string {"Settled"} : std::string {"Looping"};
-                            }, "Runtime state", theme().reducedMotion ? Color::warning() : Color::success())
+                                return std::string {"Looping"};
+                            }, "Runtime state", Color::success())
                         )
                     }
                 )
@@ -391,10 +384,8 @@ struct AmbientLoopLab : ViewModifiers<AmbientLoopLab> {
 struct AnimationDemoRoot {
     auto body() const {
         auto windowTheme = useEnvironment<Theme>();
-        auto reducedMotion = useState(false);
 
         Theme demoTheme = windowTheme();
-        demoTheme.reducedMotion = *reducedMotion;
 
         return ScrollView {
             .axis = ScrollAxis::Vertical,
@@ -410,47 +401,12 @@ struct AnimationDemoRoot {
                             .horizontalAlignment = HorizontalAlignment::Leading,
                         },
                         Text {
-                            .text = "Detailed useAnimation walkthrough: explicit play/set controls, repeat and autoreverse, synchronized WithTransition updates, and automatic reduced-motion handling from Theme.",
+                            .text = "Detailed useAnimation walkthrough: explicit play/set controls, repeat and autoreverse, synchronized WithTransition updates, and scoped frame callbacks.",
                             .font = Font::body(),
                             .color = Color::secondary(),
                             .horizontalAlignment = HorizontalAlignment::Leading,
                             .wrapping = TextWrapping::Wrap,
                         },
-                        makeSectionCard(
-                            demoTheme, "Environment",
-                            "The toggle below flips Theme::reducedMotion for the whole demo subtree. Hook-backed animations snap instantly when it is enabled.",
-                            HStack {
-                                .spacing = demoTheme.space3,
-                                .alignment = Alignment::Center,
-                                .children = children(
-                                    VStack {
-                                        .spacing = demoTheme.space1,
-                                        .alignment = Alignment::Start,
-                                        .children = children(
-                                            Text {
-                                                .text = "Reduced motion",
-                                                .font = Font::headline(),
-                                                .color = Color::primary(),
-                                                .horizontalAlignment = HorizontalAlignment::Leading,
-                                            },
-                                            Text {
-                                                .text = [reducedMotion] {
-                                                    return reducedMotion()
-                                                               ? std::string {"Transitions collapse to their final values."}
-                                                               : std::string {"Animations run with their configured timing and repeats."};
-                                                },
-                                                .font = Font::footnote(),
-                                                .color = Color::secondary(),
-                                                .horizontalAlignment = HorizontalAlignment::Leading,
-                                                .wrapping = TextWrapping::Wrap,
-                                            }
-                                        )
-                                    }
-                                        .flex(1.f, 1.f, 0.f),
-                                    Toggle {.value = reducedMotion}
-                                )
-                            }
-                        ),
                         PlaybackLab {},
                         MorphLab {},
                         AmbientLoopLab {},

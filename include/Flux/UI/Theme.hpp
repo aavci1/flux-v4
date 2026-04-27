@@ -172,8 +172,6 @@ struct Theme {
     float durationMedium = 0.18f;
     float durationSlow = 0.30f;
 
-    bool reducedMotion = false;
-
     // Toggle
     float toggleTrackWidth = 44.f;
     float toggleTrackHeight = 26.f;

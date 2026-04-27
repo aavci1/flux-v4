@@ -67,17 +67,9 @@ Element Toggle::body() const {
                isDisabled, xOn, xOff]() mutable {
         Theme const &currentTheme = theme();
         Toggle::Style const currentStyle = resolveStyle(style, currentTheme);
-        bool const reducedMotion = currentTheme.reducedMotion;
-        Transition const motion = (isDisabled || reducedMotion)
-                                      ? Transition::instant()
-                                      : Transition::ease(currentTheme.durationMedium);
-        Transition const pressMotion = reducedMotion
-                                           ? Transition::instant()
-                                           : Transition::ease(currentTheme.durationFast);
-
-        thumbXAnim.setReducedMotion(reducedMotion);
-        trackFillAnim.setReducedMotion(reducedMotion);
-        scaleAnim.setReducedMotion(reducedMotion);
+        Transition const motion = isDisabled ? Transition::instant()
+                                             : Transition::ease(currentTheme.durationMedium);
+        Transition const pressMotion = Transition::ease(currentTheme.durationFast);
 
         bool const on = v();
         float const targetX = on ? xOn : xOff;
