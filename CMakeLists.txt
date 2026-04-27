@@ -68,6 +68,10 @@ option(FLUX_ENABLE_ASAN
   "Build flux and flux_tests with AddressSanitizer instrumentation."
   OFF)
 
+option(FLUX_PROFILE_REACTIVE
+  "Compile deterministic reactive profiling counters and 5-second display-link reports."
+  OFF)
+
 option(FLUX_V5_PROTOTYPE
   "Build the standalone Flux v5 reactive prototype."
   OFF)
@@ -212,6 +216,12 @@ if(FLUX_ENABLE_DEFAULT_EVENT_LOGGING)
   target_compile_definitions(flux PRIVATE FLUX_ENABLE_DEFAULT_EVENT_LOGGING=1)
 else()
   target_compile_definitions(flux PRIVATE FLUX_ENABLE_DEFAULT_EVENT_LOGGING=0)
+endif()
+
+if(FLUX_PROFILE_REACTIVE)
+  target_compile_definitions(flux PUBLIC FLUX_PROFILE_REACTIVE=1)
+else()
+  target_compile_definitions(flux PUBLIC FLUX_PROFILE_REACTIVE=0)
 endif()
 
 option(FLUX_DISABLE_VARIANT_REFS

@@ -9,19 +9,40 @@ Date: 2026-04-27
 | Historical baseline | Ambient animation lab | 36% CPU |
 | Optimized pre-cutover baseline | Ambient animation lab | 10% CPU |
 | v5 Stage 9 | Full tests and examples | Green normal, ASAN, UBSAN, and TSAN validation |
-| v5 Stage 10 | `animation-demo` AmbientLoopLab running | Reactive implementation: 2.7% of active display-link samples |
-| v5 Stage 10b | AmbientLoopLab after environment-snapshot skip | Environment snapshot copying fell below the sample report threshold; inclusive `BatchGuard` path: 16 / 91 active display-link samples (17.6%) |
-| v5 Stage 10c | AmbientLoopLab after binding/redraw/frame-pump cleanup | Reactive implementation remained below the sample threshold; inclusive `BatchGuard` path: 18 samples over a 30s run, with repeated redraw arming and animation-subscriber clone costs removed |
+| v5 final | `animation-demo` AmbientLoopLab @60fps, 55s steady-state | Reactive scheduling/propagation: 0.02% wall-clock; inclusive reactive-triggered effect path: 0.22% wall-clock |
 
 ## Measurement Method
 
-Stage 10 launched `build/examples/animation-demo`, waited 3 seconds for startup work to settle, then sampled the live process for 30 seconds with `/usr/bin/sample <pid> 30 5 -mayDie`. AmbientLoopLab's `AnimationClock::subscribe` loop was active during the run. The active frame denominator was the display-link callback path (`displayLinkDidFire`, 446 samples). Reactive implementation time counted `flux::Reactive::*` propagation and scheduling frames, including allocator time below `EffectState::onDirty`, but excluding user/UI work invoked by effect bodies such as text layout, environment snapshots, and redraw requests. The measured reactive implementation share was `12 / 446 = 2.7%`, which clears the 5% gate.
+The final run uses deterministic instrumentation instead of `/usr/bin/sample`. The profile build was configured with:
 
-For context, the broader reactive-triggered inclusive path under `BatchGuard` was `35 / 446 = 7.8%`. That number includes user/UI effect work; if future perf work targets the inclusive path, the largest visible costs in this sample were text layout and environment snapshot copying during bindable updates.
+```bash
+cmake -S . -B build-profile -DCMAKE_BUILD_TYPE=Release -DFLUX_BUILD_EXAMPLES=ON -DFLUX_BUILD_TESTS=ON -DFLUX_PROFILE_REACTIVE=ON
+cmake --build build-profile --target animation-demo flux_tests -j8
+```
 
-After the environment-snapshot skip optimization, the same command was rerun on `build/examples/animation-demo` at 2026-04-27 12:39 +0300. The active display-link denominator was 91 samples. `ScopedEnvironmentSnapshot` and `EnvironmentStack::push` no longer appeared above the sample report threshold, which confirms the per-fire environment-copy path was removed for bindings that do not read environment and reduced for snapshot replay. The broader reactive-triggered inclusive path under `BatchGuard` was `16 / 91 = 17.6%`; this remains above the 5% inclusive target and is now dominated by effect-body work such as text/layout updates rather than environment snapshot copying.
+`FLUX_PROFILE_REACTIVE=ON` compiles in exclusive `mach_absolute_time` timers at:
 
-Stage 10c reran the same 30-second `sample` command at 2026-04-27 13:13 +0300 after binding effects began skipping unchanged values, text effects began skipping unchanged text/color pairs, `requestWindowRedraw` stopped re-arming an already requested frame, and `AnimationClock` stopped cloning subscriber callbacks on every tick. The sample contained 5,105 sleeping `mach_msg` samples and 80 active display-link samples. The `BatchGuard` inclusive path accounted for 18 samples, dominated by animated-size layout and phase text layout; pure reactive scheduling/propagation frames did not appear above the sample threshold. The previously visible repeated `requestWindowRedraw` and per-tick subscriber `__clone` stacks were removed.
+- `SignalState::set`
+- `EffectState::run`
+- `Computation::pollSourcesChanged`
+- `Observable::propagatePending`
+- `flushEffects`
+- the display-link frame boundary
+
+Each display-link report uses wall-clock time as the denominator, not active sample counts. Nested timers subtract child time before accumulating, so the bucket sum is stable and comparable between runs.
+
+AmbientLoopLab was run for 60 seconds from `build-profile/examples/animation-demo`. The first 5-second report was discarded as warmup. The next eleven reports, from 10s through 60s, each contained 300 frames, confirming a sustained 60fps animation. Their averaged bucket percentages were:
+
+| Bucket | Wall-clock share |
+|--------|------------------|
+| Signal set | 0.01% |
+| Effect runs, including effect-body work | 0.21% |
+| Poll | below 0.005% |
+| Propagation | below 0.005% |
+| Flush | 0.01% |
+| Inclusive total | 0.22% |
+
+The reactive scheduling/propagation subtotal excludes effect-body work and is approximately `signal_set + poll + propagation + flush = 0.02%`. The inclusive reactive-triggered path includes effect-body work and is 0.22%. The previous Stage 10, 10b, and 10c `/usr/bin/sample` rows were removed because their active-sample denominators varied too much to compare directly.
 
 ## Final Validation
 

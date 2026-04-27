@@ -11,6 +11,7 @@
 #include <Flux/Core/Application.hpp>
 #include <Flux/Core/Window.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
+#include <Flux/Reactive/Profile.hpp>
 
 #include "Core/PlatformWindow.hpp"
 #include "Core/PlatformWindowCreate.hpp"
@@ -906,6 +907,7 @@ void MacMetalPlatformWindow::completeAnimationFrame(bool needsAnotherFrame) {
 }
 
 CVReturn MacMetalPlatformWindow::onDisplayLinkTick() {
+  Reactive::detail::profile::frameBoundary();
   if (!d->frameRequested_.load(std::memory_order_acquire)) {
     return kCVReturnSuccess;
   }

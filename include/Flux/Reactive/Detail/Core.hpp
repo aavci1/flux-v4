@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Flux/Reactive/Profile.hpp>
 #include <Flux/Reactive/SmallFn.hpp>
 #include <Flux/Reactive/Transition.hpp>
 
@@ -288,6 +289,7 @@ inline void Observable::subscribe(Computation& observer) {
 }
 
 inline void Observable::propagatePending() {
+  [[maybe_unused]] profile::ScopedTimer timer{profile::Bucket::PropagatePending};
   auto* link = subscribers;
   while (link) {
     auto* next = link->nextSubscriber;
@@ -336,6 +338,7 @@ inline void Computation::dispose() {
 }
 
 inline bool Computation::pollSourcesChanged() {
+  [[maybe_unused]] profile::ScopedTimer timer{profile::Bucket::PollSourcesChanged};
   // TODO(v5-action-items #10): add a transient Checking flag and per-flush poll result
   // cache if profiling shows diamond dependency graphs revisiting the same upstream
   // computeds. AmbientLoopLab's graph is currently shallow/wide and did not surface this
@@ -445,6 +448,7 @@ inline void scheduleEffect(Computation* effect) {
 }
 
 inline void flushEffects() {
+  [[maybe_unused]] profile::ScopedTimer timer{profile::Bucket::FlushEffects};
   while (!sEffectQueue.empty()) {
     sEffectFlushQueue.clear();
     sEffectFlushQueue.insert(sEffectFlushQueue.end(), sEffectQueue.begin(), sEffectQueue.end());
@@ -537,9 +541,12 @@ struct SignalState final : detail::Observable {
       }
     }
     detail::BatchGuard batch;
-    value = std::move(next);
-    ++version;
-    propagateDirty();
+    {
+      [[maybe_unused]] detail::profile::ScopedTimer timer{detail::profile::Bucket::SignalSet};
+      value = std::move(next);
+      ++version;
+      propagateDirty();
+    }
   }
 
   T value;
@@ -712,6 +719,7 @@ struct EffectState final : detail::Computation {
     if (disposed()) {
       return;
     }
+    [[maybe_unused]] detail::profile::ScopedTimer timer{detail::profile::Bucket::EffectRun};
     clearSourcesForReuse();
     detail::clearFlag(flags, detail::Pending);
     detail::clearFlag(flags, detail::Dirty);

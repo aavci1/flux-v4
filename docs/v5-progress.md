@@ -26,7 +26,7 @@ This file records the stage-gate status for the v5 cutover.
 - The project version is `5.0.0`.
 - Public docs have been updated for retained mounting, scopes, bindings, control flow, and reactive environment values.
 - Final performance data is recorded in [v5-final-perf.md](v5-final-perf.md).
-- The earlier `ps`-based warm-idle example sweep is no longer treated as final perf data; any per-example perf table should use the same `/usr/bin/sample` methodology as the AmbientLoopLab measurement.
+- The earlier `ps`-based warm-idle example sweep and `/usr/bin/sample` AmbientLoopLab rows are no longer treated as final perf data; final reactive perf uses `FLUX_PROFILE_REACTIVE=ON` deterministic wall-clock instrumentation.
 - Main-branch promotion and release tags require explicit approval.
 
 ## Stage 9.5 Post-cutover Hardening
@@ -38,7 +38,7 @@ Completed so far:
 - Reactivity cleanup: legacy `observe` callbacks removed, computed dirty propagation restored, transition/effect interaction isolated, and deferred diamond-poll revisit TODO documented with profiling rationale.
 - Control-flow/layout fixes: collapsed control flow remains mounted for layout updates, For row measurement is retained/cached, stale `SceneBuilder`, `MeasureLayoutCache`, cursor-controller, text-edit-behavior, leaf-bounds, and grid-layout artifacts removed.
 - Input/action cutover: focus, keyboard-focus, hover, and press hooks wired to runtime interaction signals; view/window action hooks wired to the registry with scope cleanup.
-- Performance hardening: scene-graph plumbing callbacks moved to `SmallFn`, environment replay skipped for independent bindings, environment snapshot replay borrows captured layers, unchanged binding/text effects short-circuit, redundant redraw arming is coalesced, animation subscribers are no longer cloned per frame, and real `/usr/bin/sample` AmbientLoopLab data is recorded.
+- Performance hardening: scene-graph plumbing callbacks moved to `SmallFn`, environment replay skipped for independent bindings, environment snapshot replay borrows captured layers, unchanged binding/text effects short-circuit, redundant redraw arming is coalesced, animation subscribers are no longer cloned per frame, and deterministic `FLUX_PROFILE_REACTIVE=ON` AmbientLoopLab data is recorded.
 - Release-prep scan: `scripts/check_stale_symbols.sh` now checks removed SceneBuilder artifacts, unlisted implementation sources, declaration-only public headers, and unmatched forward declarations.
 
 Remaining release-prep work is tracked by the v5 action items list, including any follow-up perf target from the latest AmbientLoopLab sample.
