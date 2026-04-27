@@ -145,7 +145,7 @@ void OverlayManager::rebuild(Size windowSize, Runtime& runtime) {
       MountContext context{entry.scope, environment, Application::instance().textSystem(),
                            measureContext, constraints, LayoutHints{}, [handle = runtime.window().handle()] {
                              Window::postRedraw(handle);
-                           }};
+                           }, {}, runtime.window().environmentBinding()};
 
       contentNode = Reactive::withOwner(entry.scope, [&] {
         return entry.content->mount(context);

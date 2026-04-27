@@ -11,6 +11,8 @@
 #include <Flux/SceneGraph/SceneGraph.hpp>
 #include <Flux/SceneGraph/SceneRenderer.hpp>
 #include <Flux/UI/Overlay.hpp>
+#include <Flux/UI/EnvironmentBinding.hpp>
+#include <Flux/UI/EnvironmentKeys.hpp>
 #include <Flux/UI/Theme.hpp>
 
 #include <memory>
@@ -39,10 +41,12 @@ struct Window::Impl {
   std::unordered_map<std::string, ActionDescriptor> actions_;
   Reactive::Signal<Theme> themeSignal_{Theme::light()};
   EnvironmentLayer windowEnvironment_{};
+  EnvironmentBinding windowEnvironmentBinding_{};
   bool shutdown_ = false;
 
   explicit Impl(Window&) {
     windowEnvironment_.setSignal(themeSignal_);
+    windowEnvironmentBinding_ = EnvironmentBinding{}.withSignal<ThemeKey>(themeSignal_);
   }
   ~Impl();
 
@@ -159,6 +163,7 @@ Color Window::clearColor() const { return d->clearColor_; }
 void Window::setTheme(Theme theme) {
   d->themeSignal_.set(std::move(theme));
   d->windowEnvironment_.setSignal(d->themeSignal_);
+  d->windowEnvironmentBinding_ = EnvironmentBinding{}.withSignal<ThemeKey>(d->themeSignal_);
   requestRedraw();
 }
 
@@ -230,6 +235,10 @@ EnvironmentLayer& Window::environmentLayerMut() {
 
 EnvironmentLayer const& Window::environmentLayer() const {
   return d->windowEnvironment_;
+}
+
+EnvironmentBinding const& Window::environmentBinding() const {
+  return d->windowEnvironmentBinding_;
 }
 
 void Window::render(Canvas& canvas) {

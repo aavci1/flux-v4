@@ -103,7 +103,7 @@ void Runtime::setRoot(std::unique_ptr<RootHolder> holder) {
       std::move(holder), Application::instance().textSystem(), d->window.environmentLayer(),
       d->window.getSize(), [handle = d->window.handle()] {
         Window::postRedraw(handle);
-      });
+      }, d->window.environmentBinding());
   Runtime* previous = current_;
   current_ = this;
   d->root->mount(d->window.sceneGraph());

@@ -4,6 +4,7 @@
 #include <Flux/Reactive/Scope.hpp>
 #include <Flux/Reactive/SmallFn.hpp>
 #include <Flux/UI/Environment.hpp>
+#include <Flux/UI/EnvironmentBinding.hpp>
 
 #include <memory>
 
@@ -21,7 +22,8 @@ class MountRoot {
 public:
   MountRoot(std::unique_ptr<RootHolder> root, TextSystem& textSystem,
             EnvironmentLayer environment, Size viewportSize,
-            Reactive::SmallFn<void()> requestRedraw = {});
+            Reactive::SmallFn<void()> requestRedraw = {},
+            EnvironmentBinding environmentBinding = {});
   ~MountRoot();
 
   MountRoot(MountRoot const&) = delete;
@@ -37,6 +39,7 @@ private:
   std::unique_ptr<RootHolder> root_;
   TextSystem& textSystem_;
   EnvironmentLayer environment_;
+  EnvironmentBinding environmentBinding_;
   Size viewportSize_{};
   Reactive::SmallFn<void()> requestRedraw_;
   Reactive::Scope rootScope_{};

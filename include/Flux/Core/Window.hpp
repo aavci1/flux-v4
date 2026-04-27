@@ -25,6 +25,7 @@ struct OverlayId;
 class Application;
 class Canvas;
 class PlatformWindow;
+class EnvironmentBinding;
 namespace scenegraph {
 class SceneGraph;
 }
@@ -121,6 +122,7 @@ public:
   void setView();
 
   EnvironmentLayer const& environmentLayer() const;
+  EnvironmentBinding const& environmentBinding() const;
 
   template<typename T>
   void setEnvironmentValue(T value);

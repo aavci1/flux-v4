@@ -45,10 +45,12 @@ LayoutConstraints rootConstraints(Size size) {
 
 MountRoot::MountRoot(std::unique_ptr<RootHolder> root, TextSystem& textSystem,
                      EnvironmentLayer environment, Size viewportSize,
-                     Reactive::SmallFn<void()> requestRedraw)
+                     Reactive::SmallFn<void()> requestRedraw,
+                     EnvironmentBinding environmentBinding)
     : root_(std::move(root))
     , textSystem_(textSystem)
     , environment_(std::move(environment))
+    , environmentBinding_(std::move(environmentBinding))
     , viewportSize_(viewportSize)
     , requestRedraw_(std::move(requestRedraw)) {}
 
@@ -67,7 +69,8 @@ void MountRoot::mount(scenegraph::SceneGraph& sceneGraph) {
   EnvironmentStack& environment = EnvironmentStack::current();
   EnvironmentScope const environmentScope{environment, environment_};
   MountContext context{rootScope_, environment, textSystem_, measureContext,
-                       rootConstraints(viewportSize_), LayoutHints{}, requestRedraw_};
+                       rootConstraints(viewportSize_), LayoutHints{}, requestRedraw_, {},
+                       environmentBinding_};
 
   auto node = Reactive::withOwner(rootScope_, [&] {
     detail::HookLayoutScope const hookScope{rootConstraints(viewportSize_)};

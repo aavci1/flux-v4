@@ -3,6 +3,7 @@
 #include <Flux/Reactive/Scope.hpp>
 #include <Flux/Reactive/SmallFn.hpp>
 #include <Flux/UI/Environment.hpp>
+#include <Flux/UI/EnvironmentBinding.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 
 #include <memory>
@@ -29,10 +30,12 @@ public:
   MountContext(Reactive::Scope& owner, EnvironmentStack& environment, TextSystem& textSystem,
                MeasureContext& measureContext, LayoutConstraints constraints,
                LayoutHints hints = {}, Reactive::SmallFn<void()> requestRedraw = {},
-               EnvironmentSnapshot environmentSnapshot = {});
+               EnvironmentSnapshot environmentSnapshot = {},
+               EnvironmentBinding environmentBinding = {});
 
   Reactive::Scope& owner() const noexcept { return *owner_; }
   EnvironmentStack& environment() const noexcept { return environment_; }
+  EnvironmentBinding const& environmentBinding() const noexcept { return environmentBinding_; }
   TextSystem& textSystem() const noexcept { return textSystem_; }
   MeasureContext& measureContext() const noexcept { return measureContext_; }
   LayoutConstraints const& constraints() const noexcept { return constraints_; }
@@ -42,6 +45,8 @@ public:
 
   MountContext childWithSharedScope(LayoutConstraints constraints, LayoutHints hints = {}) const;
   MountContext childWithOwnScope(LayoutConstraints constraints, LayoutHints hints = {}) const;
+  MountContext childWithEnvironment(EnvironmentBinding environment, LayoutConstraints constraints,
+                                    LayoutHints hints = {}) const;
   MountContext child(LayoutConstraints constraints, LayoutHints hints = {}) const = delete;
   void requestRedraw() const;
 
@@ -50,11 +55,13 @@ private:
                TextSystem& textSystem, MeasureContext& measureContext,
                LayoutConstraints constraints, LayoutHints hints,
                Reactive::SmallFn<void()> requestRedraw,
-               EnvironmentSnapshot environmentSnapshot);
+               EnvironmentSnapshot environmentSnapshot,
+               EnvironmentBinding environmentBinding);
 
   std::shared_ptr<Reactive::Scope> ownedOwner_;
   Reactive::Scope* owner_;
   EnvironmentStack& environment_;
+  EnvironmentBinding environmentBinding_;
   TextSystem& textSystem_;
   MeasureContext& measureContext_;
   LayoutConstraints constraints_;
