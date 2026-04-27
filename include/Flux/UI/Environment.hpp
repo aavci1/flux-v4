@@ -20,6 +20,47 @@
 
 namespace flux {
 
+namespace detail {
+
+inline std::vector<bool*>& environmentReadTrackingStack() {
+  static thread_local std::vector<bool*> stack;
+  return stack;
+}
+
+inline void noteEnvironmentRead() {
+  for (bool* observed : environmentReadTrackingStack()) {
+    if (observed) {
+      *observed = true;
+    }
+  }
+}
+
+class EnvironmentReadTrackingScope {
+public:
+  EnvironmentReadTrackingScope() {
+    environmentReadTrackingStack().push_back(&observed_);
+  }
+
+  EnvironmentReadTrackingScope(EnvironmentReadTrackingScope const&) = delete;
+  EnvironmentReadTrackingScope& operator=(EnvironmentReadTrackingScope const&) = delete;
+
+  ~EnvironmentReadTrackingScope() {
+    auto& stack = environmentReadTrackingStack();
+    if (!stack.empty()) {
+      stack.pop_back();
+    }
+  }
+
+  bool observed() const noexcept {
+    return observed_;
+  }
+
+private:
+  bool observed_ = false;
+};
+
+} // namespace detail
+
 template<typename T>
 class EnvironmentValue {
 public:
@@ -163,16 +204,28 @@ private:
 };
 
 class EnvironmentStack {
+private:
+  struct Entry {
+    EnvironmentLayer owned{};
+    EnvironmentLayer const* borrowed = nullptr;
+
+    EnvironmentLayer const& layer() const noexcept {
+      return borrowed ? *borrowed : owned;
+    }
+  };
+
 public:
   static EnvironmentStack& current();
 
   void push(EnvironmentLayer layer);
+  void pushBorrowed(EnvironmentLayer const& layer);
   void pop();
 
   template<typename T>
   T const* find() const {
+    detail::noteEnvironmentRead();
     for (auto it = layers_.rbegin(); it != layers_.rend(); ++it) {
-      if (T const* v = it->get<T>()) {
+      if (T const* v = it->layer().get<T>()) {
         return v;
       }
     }
@@ -181,8 +234,9 @@ public:
 
   template<typename T>
   Reactive::Signal<T> const* findSignal() const {
+    detail::noteEnvironmentRead();
     for (auto it = layers_.rbegin(); it != layers_.rend(); ++it) {
-      if (auto const* signal = it->signal<T>()) {
+      if (auto const* signal = it->layer().signal<T>()) {
         return signal;
       }
     }
@@ -190,10 +244,17 @@ public:
   }
 
   bool empty() const { return layers_.empty(); }
-  std::vector<EnvironmentLayer> snapshot() const { return layers_; }
+  std::vector<EnvironmentLayer> snapshot() const {
+    std::vector<EnvironmentLayer> out;
+    out.reserve(layers_.size());
+    for (Entry const& entry : layers_) {
+      out.push_back(entry.layer());
+    }
+    return out;
+  }
 
 private:
-  std::vector<EnvironmentLayer> layers_;
+  std::vector<Entry> layers_;
 };
 
 } // namespace flux

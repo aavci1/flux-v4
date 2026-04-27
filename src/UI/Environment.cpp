@@ -8,7 +8,15 @@ EnvironmentStack& EnvironmentStack::current() {
 }
 
 void EnvironmentStack::push(EnvironmentLayer layer) {
-  layers_.push_back(std::move(layer));
+  Entry entry;
+  entry.owned = std::move(layer);
+  layers_.push_back(std::move(entry));
+}
+
+void EnvironmentStack::pushBorrowed(EnvironmentLayer const& layer) {
+  Entry entry;
+  entry.borrowed = &layer;
+  layers_.push_back(std::move(entry));
 }
 
 void EnvironmentStack::pop() {

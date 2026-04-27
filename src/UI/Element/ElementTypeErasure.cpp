@@ -117,7 +117,7 @@ public:
   ScopedEnvironmentSnapshot(EnvironmentStack& stack, std::vector<EnvironmentLayer> const& layers)
       : stack_(stack) {
     for (EnvironmentLayer const& layer : layers) {
-      stack_.push(layer);
+      stack_.pushBorrowed(layer);
       ++pushed_;
     }
   }
@@ -148,12 +148,35 @@ void installBinding(MountContext& ctx, Reactive::Bindable<T> binding, Setter set
   }
 
   Reactive::SmallFn<void()> requestRedraw = ctx.redrawCallback();
+  bool const initiallyTracksEnvironment = binding.tracksEnvironment();
   Reactive::withOwner(ctx.owner(), [&] {
     Reactive::Effect([binding = std::move(binding), setter = std::move(setter),
                        requestRedraw = std::move(requestRedraw), environment,
-                       environmentLayers = std::move(environmentLayers)]() mutable {
-      ScopedEnvironmentSnapshot environmentScope{*environment, environmentLayers};
-      setter(binding.evaluate());
+                       environmentLayers = std::move(environmentLayers),
+                       firstRun = true,
+                       tracksEnvironment = initiallyTracksEnvironment]() mutable {
+      auto evaluateWithEnvironment = [&] {
+        ScopedEnvironmentSnapshot environmentScope{*environment, environmentLayers};
+        detail::EnvironmentReadTrackingScope environmentReads;
+        setter(binding.evaluate());
+        if (environmentReads.observed()) {
+          tracksEnvironment = true;
+          binding.setTracksEnvironment(true);
+        }
+      };
+
+      if (tracksEnvironment || firstRun) {
+        evaluateWithEnvironment();
+        firstRun = false;
+      } else {
+        detail::EnvironmentReadTrackingScope environmentReads;
+        setter(binding.evaluate());
+        if (environmentReads.observed()) {
+          tracksEnvironment = true;
+          binding.setTracksEnvironment(true);
+          evaluateWithEnvironment();
+        }
+      }
       if (requestRedraw) {
         requestRedraw();
       }

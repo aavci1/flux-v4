@@ -29,6 +29,13 @@ public:
   Bindable(Fn&& fn)
       : storage_(SmallFn<T()>(std::forward<Fn>(fn))) {}
 
+  template <typename Fn>
+    requires(!std::is_same_v<std::decay_t<Fn>, Bindable> &&
+             std::is_invocable_r_v<T, std::decay_t<Fn>&>)
+  Bindable(Fn&& fn, bool tracksEnvironment)
+      : storage_(SmallFn<T()>(std::forward<Fn>(fn)))
+      , tracksEnvironment_(tracksEnvironment) {}
+
   bool isReactive() const {
     return std::holds_alternative<SmallFn<T()>>(storage_);
   }
@@ -48,8 +55,17 @@ public:
     return std::get<SmallFn<T()>>(storage_)();
   }
 
+  bool tracksEnvironment() const noexcept {
+    return tracksEnvironment_;
+  }
+
+  void setTracksEnvironment(bool tracksEnvironment) noexcept {
+    tracksEnvironment_ = tracksEnvironment;
+  }
+
 private:
   std::variant<T, SmallFn<T()>> storage_{T{}};
+  bool tracksEnvironment_ = false;
 };
 
 } // namespace flux::Reactive

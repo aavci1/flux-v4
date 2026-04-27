@@ -51,7 +51,7 @@ public:
                             std::vector<EnvironmentLayer> const& layers)
       : stack_(stack) {
     for (EnvironmentLayer const& layer : layers) {
-      stack_.push(layer);
+      stack_.pushBorrowed(layer);
       ++pushed_;
     }
   }
