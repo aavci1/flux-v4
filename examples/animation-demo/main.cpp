@@ -6,7 +6,6 @@
 #include <Flux/UI/Views/Card.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
-#include <Flux/UI/Views/ScaleAroundCenter.hpp>
 #include <Flux/UI/Views/ScrollView.hpp>
 #include <Flux/UI/Views/Slider.hpp>
 #include <Flux/UI/Views/Text.hpp>
@@ -312,21 +311,14 @@ struct AmbientLoopLab : ViewModifiers<AmbientLoopLab> {
         auto theme = useEnvironment<ThemeKey>();
 
         auto phase = useState(0.f);
-        auto phaseLabel = useState(std::string {"0.00"});
-        auto lastPhaseLabelUpdate = useState(0.0);
         double const startedAt = nowSeconds();
-        useAnimationFrame([phase, phaseLabel, lastPhaseLabelUpdate, startedAt](AnimationTick const& tick) {
+        useAnimationFrame([phase, startedAt](AnimationTick const& tick) {
                 double const cycle = 2.8;
                 double local = std::fmod(std::max(0.0, tick.nowSeconds - startedAt), cycle) / 1.4;
                 if (local > 1.0) {
                     local = 2.0 - local;
                 }
-                float const nextPhase = static_cast<float>(std::clamp(local, 0.0, 1.0));
-                phase = nextPhase;
-                if (tick.nowSeconds - lastPhaseLabelUpdate() >= 0.10) {
-                    lastPhaseLabelUpdate = tick.nowSeconds;
-                    phaseLabel = formatFloat(nextPhase);
-                }
+                phase = static_cast<float>(std::clamp(local, 0.0, 1.0));
             });
 
         std::vector<Element> bars;
@@ -334,20 +326,18 @@ struct AmbientLoopLab : ViewModifiers<AmbientLoopLab> {
         for (int i = 0; i < 5; ++i) {
             float const anchor = static_cast<float>(i) / 4.f;
             bars.push_back(
-                ScaleAroundCenter {
-                    .scaleY = [phase, anchor] {
+                Rectangle {}
+                    .size(22.f, [phase, anchor] {
                         float const emphasis = loopBarEmphasis(phase(), anchor);
-                        return (18.f + emphasis * 34.f) / 52.f;
-                    },
-                    .child = Rectangle {}
-                        .size(22.f, 52.f)
-                        .cornerRadius(11.f)
-                        .fill(Color::accent())
-                        .opacity([phase, anchor] {
-                            float const emphasis = loopBarEmphasis(phase(), anchor);
-                            return 0.30f + emphasis * 0.70f;
-                        }),
-                }
+                        return 18.f + emphasis * 34.f;
+                    })
+                    .cornerRadius(11.f)
+                    .fill([theme, phase, anchor] {
+                        float const emphasis = loopBarEmphasis(phase(), anchor);
+                        Color color = theme().accentColor;
+                        color.a = 0.30f + emphasis * 0.70f;
+                        return color;
+                    })
             );
         }
 
@@ -378,8 +368,8 @@ struct AmbientLoopLab : ViewModifiers<AmbientLoopLab> {
                         .spacing = theme().space3,
                         .alignment = Alignment::Stretch,
                         .children = children(
-                            metricTile(theme(), [phaseLabel] {
-                                return phaseLabel();
+                            metricTile(theme(), [phase] {
+                                return formatFloat(phase());
                             }, "Phase", Color::accent()),
                             metricTile(theme(), [] {
                                 return std::string {"Looping"};
