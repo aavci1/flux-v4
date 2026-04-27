@@ -47,13 +47,18 @@ has_out_of_class_implementation() {
 for stale_path in \
   "include/Flux/UI/SceneBuilder.hpp" \
   "src/UI/SceneBuilder/MeasureLayoutCache.hpp" \
-  "src/UI/SceneBuilder"; do
+  "src/UI/SceneBuilder" \
+  "tests/SceneBuilderLayoutTests.cpp" \
+  "tests/SceneBuilderReuseTests.cpp" \
+  "tests/SceneBuilderTestSupport.hpp" \
+  "tests/SceneGeometryIndexTests.cpp" \
+  "tests/SemanticThemeTests.cpp"; do
   if [[ -e "$stale_path" ]]; then
     add_failure "removed SceneBuilder artifact still exists: $stale_path"
   fi
 done
 
-if rg -n "MeasureLayoutCache|include/Flux/UI/SceneBuilder\\.hpp|src/UI/SceneBuilder" include src tests examples CMakeLists.txt README.md >/tmp/flux-stale-symbols.$$ 2>/dev/null; then
+if rg -n "MeasureLayoutCache|SceneBuilder|SceneBuilderTestSupport|include/Flux/UI/SceneBuilder\\.hpp|src/UI/SceneBuilder" include src tests examples CMakeLists.txt README.md >/tmp/flux-stale-symbols.$$ 2>/dev/null; then
   while IFS= read -r line; do
     add_failure "stale SceneBuilder/MeasureLayoutCache reference: $line"
   done </tmp/flux-stale-symbols.$$
