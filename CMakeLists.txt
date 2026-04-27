@@ -275,6 +275,8 @@ if(FLUX_BUILD_TESTS)
     tests/AlertTests.cpp
     tests/AnimationTests.cpp
     tests/BindableInferenceTests.cpp
+    tests/EnvironmentKeyOtherTU.cpp
+    tests/EnvironmentKeyTests.cpp
     tests/ForTests.cpp
     tests/MetalCanvasTests.mm
     tests/MountRootTests.cpp
