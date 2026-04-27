@@ -63,7 +63,8 @@ std::unique_ptr<scenegraph::SceneNode> ScaleAroundCenter::mount(MountContext& ct
   };
   applyScale(scaleBinding.evaluate());
   if (scaleBinding.isReactive()) {
-    Reactive::withOwner(ctx.owner(), [scaleBinding = std::move(scaleBinding), applyScale,
+    Reactive::Bindable<float> effectScaleBinding = scaleBinding;
+    Reactive::withOwner(ctx.owner(), [scaleBinding = std::move(effectScaleBinding), applyScale,
                                       requestRedraw = std::move(requestRedraw)]() mutable {
       Reactive::Effect([scaleBinding, applyScale, requestRedraw]() mutable {
         applyScale(scaleBinding.evaluate());

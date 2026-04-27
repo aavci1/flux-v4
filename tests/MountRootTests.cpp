@@ -12,6 +12,7 @@
 #include <Flux/UI/MountContext.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
+#include <Flux/UI/Views/ScaleAroundCenter.hpp>
 #include <Flux/UI/Views/ScrollView.hpp>
 #include <Flux/UI/Views/TextInput.hpp>
 #include <Flux/UI/Views/VStack.hpp>
@@ -241,6 +242,41 @@ TEST_CASE("MountRoot resize updates viewport-sized root without remount") {
 
   CHECK(bodyCalls == 1);
   CHECK(sceneGraph.root().size() == flux::Size{320.f, 180.f});
+}
+
+TEST_CASE("ScaleAroundCenter relayout keeps reactive scale binding alive") {
+  struct Root {
+    flux::Reactive::Signal<float> scale;
+
+    flux::Element body() const {
+      return flux::ScaleAroundCenter{
+          .scale = flux::Reactive::Bindable<float>{[scale = scale] {
+            return scale.get();
+          }},
+          .child = flux::Element{flux::Rectangle{}}
+                       .size(20.f, 10.f)
+                       .fill(flux::Colors::red),
+      };
+    }
+  };
+
+  FakeTextSystem textSystem;
+  flux::scenegraph::SceneGraph sceneGraph;
+  flux::Reactive::Signal<float> scale{0.96f};
+  flux::MountRoot root{
+      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{scale}),
+      textSystem,
+      testEnvironment(),
+      flux::Size{200.f, 100.f},
+  };
+
+  root.mount(sceneGraph);
+  scale.set(0.92f);
+
+  root.resize(flux::Size{320.f, 180.f}, sceneGraph);
+
+  CHECK(sceneGraph.root().size().width >= 20.f);
+  CHECK(sceneGraph.root().size().height >= 10.f);
 }
 
 TEST_CASE("TextInput fills finite assigned stack width") {
