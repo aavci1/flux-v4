@@ -92,7 +92,9 @@ controlMountElement(Element const& element, Reactive::Scope& owner,
   MeasureContext measureContext{textSystem};
   MountContext mountContext{owner, environment, textSystem, measureContext, constraints,
                             hints, requestRedraw};
-  return element.mount(mountContext);
+  return Reactive::withOwner(owner, [&] {
+    return element.mount(mountContext);
+  });
 }
 
 inline void controlLayoutVertical(scenegraph::GroupNode& group, Size frameSize, float spacing) {

@@ -92,9 +92,12 @@ Size Element::Model<C>::measure(MeasureContext& ctx, LayoutConstraints const& co
                 }) {
     return value.measure(ctx, constraints, hints, textSystem);
   } else if constexpr (BodyComponent<C>) {
-    detail::HookLayoutScope const hookScope{constraints};
-    Element child{value.body()};
-    return child.measure(ctx, constraints, hints, textSystem);
+    Reactive::Scope measureScope;
+    return Reactive::withOwner(measureScope, [&] {
+      detail::HookLayoutScope const hookScope{constraints};
+      Element child{value.body()};
+      return child.measure(ctx, constraints, hints, textSystem);
+    });
   } else {
     static_assert(alwaysFalse<C>,
                   "Component must provide either measure(MeasureContext, LayoutConstraints, LayoutHints, "

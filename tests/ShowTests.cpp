@@ -6,6 +6,7 @@
 #include <Flux/Reactive/Signal.hpp>
 #include <Flux/SceneGraph/GroupNode.hpp>
 #include <Flux/SceneGraph/SceneGraph.hpp>
+#include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/MountRoot.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
@@ -180,6 +181,70 @@ TEST_CASE("Show false branch collapses out of stack spacing") {
   REQUIRE(group.children().size() == 2);
   CHECK(group.children()[1]->size().height == doctest::Approx(0.f));
   CHECK(group.children()[1]->position().y == doctest::Approx(22.f));
+}
+
+TEST_CASE("Show branch composite effects are scoped once and disposed with branch") {
+  struct EffectfulChild {
+    int* activeEffects = nullptr;
+    int* cleanups = nullptr;
+
+    flux::Element body() const {
+      flux::useEffect([activeEffects = activeEffects, cleanups = cleanups] {
+        ++*activeEffects;
+        flux::Reactive::onCleanup([activeEffects, cleanups] {
+          --*activeEffects;
+          ++*cleanups;
+        });
+      });
+      return flux::Element{flux::Rectangle{}}
+          .size(20.f, 10.f)
+          .fill(flux::Colors::red);
+    }
+  };
+
+  struct Root {
+    flux::Reactive::Signal<bool> visible;
+    int* activeEffects = nullptr;
+    int* cleanups = nullptr;
+
+    flux::Element body() const {
+      return flux::Show(
+          visible,
+          [activeEffects = activeEffects, cleanups = cleanups] {
+            return flux::Element{EffectfulChild{activeEffects, cleanups}};
+          },
+          [] {
+            return flux::Element{flux::Rectangle{}}
+                .size(12.f, 8.f)
+                .fill(flux::Colors::blue);
+          });
+    }
+  };
+
+  int activeEffects = 0;
+  int cleanups = 0;
+  flux::Reactive::Signal<bool> visible{true};
+  FakeTextSystem textSystem;
+  flux::scenegraph::SceneGraph sceneGraph;
+  flux::MountRoot root{
+      std::make_unique<flux::TypedRootHolder<Root>>(
+          std::in_place, Root{visible, &activeEffects, &cleanups}),
+      textSystem,
+      testEnvironment(),
+      flux::Size{200.f, 100.f},
+  };
+
+  root.mount(sceneGraph);
+  CHECK(activeEffects == 1);
+
+  visible.set(false);
+  CHECK(activeEffects == 0);
+
+  visible.set(true);
+  CHECK(activeEffects == 1);
+
+  root.unmount(sceneGraph);
+  CHECK(activeEffects == 0);
 }
 
 TEST_CASE("Show hidden stack child stays mounted and expands later") {
