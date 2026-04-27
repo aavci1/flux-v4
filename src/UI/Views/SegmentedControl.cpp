@@ -28,6 +28,11 @@ Color darken(Color c, float t) {
     return Color {lerp(c.r, b.r, t), lerp(c.g, b.g, t), lerp(c.b, b.b, t), c.a};
 }
 
+Color withAlpha(Color c, float alpha) {
+    c.a = alpha;
+    return c;
+}
+
 struct ResolvedStyle {
     Font font {};
     float paddingH = 0.f;
@@ -86,9 +91,9 @@ struct SegmentedControlItem : ViewModifiers<SegmentedControlItem> {
         Color const selectedFill = style.accentColor;
         Color const selectedHoverFill = lighten(style.accentColor, 0.08f);
         Color const selectedPressFill = darken(style.accentColor, 0.08f);
-        Color const idleFill = Colors::transparent;
         Color const hoverFill = darken(style.trackColor, 0.04f);
         Color const pressFill = darken(style.trackColor, 0.12f);
+        Color const idleFill = withAlpha(hoverFill, 0.f);
         auto motion = [theme = theme] {
             return Transition::ease(theme.durationFast);
         };
