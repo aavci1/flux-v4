@@ -277,9 +277,12 @@ void Application::requestWindowRedraw(unsigned int handle) {
     d->pendingAdoptRedraws_.insert(handle);
     return;
   }
+  bool const alreadyRequested = stateIt->second.redrawRequested;
   stateIt->second.redrawRequested = true;
-  windowIt->second->platformWindow()->requestAnimationFrame();
-  if (!isMainThread()) {
+  if (!alreadyRequested) {
+    windowIt->second->platformWindow()->requestAnimationFrame();
+  }
+  if (!alreadyRequested && !isMainThread()) {
     wakeEventLoop();
   }
 }

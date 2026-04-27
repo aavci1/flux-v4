@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <concepts>
 #include <cmath>
 #include <limits>
 #include <optional>
@@ -158,31 +159,45 @@ void installBinding(MountContext& ctx, Reactive::Bindable<T> binding, Setter set
     Reactive::Effect([binding = std::move(binding), setter = std::move(setter),
                        requestRedraw = std::move(requestRedraw), environment,
                        environmentLayers = std::move(environmentLayers),
+                       lastValue = std::optional<T>{},
                        firstRun = true,
                        tracksEnvironment = initiallyTracksEnvironment]() mutable {
+      auto applyValue = [&](T value) {
+        if constexpr (std::equality_comparable<T>) {
+          if (lastValue && *lastValue == value) {
+            return false;
+          }
+          lastValue = value;
+        }
+        setter(std::move(value));
+        return true;
+      };
+
       auto evaluateWithEnvironment = [&] {
         ScopedEnvironmentSnapshot environmentScope{*environment, environmentLayers};
         detail::EnvironmentReadTrackingScope environmentReads;
-        setter(binding.evaluate());
+        bool const changed = applyValue(binding.evaluate());
         if (environmentReads.observed()) {
           tracksEnvironment = true;
           binding.setTracksEnvironment(true);
         }
+        return changed;
       };
 
+      bool changed = false;
       if (tracksEnvironment || firstRun) {
-        evaluateWithEnvironment();
+        changed = evaluateWithEnvironment();
         firstRun = false;
       } else {
         detail::EnvironmentReadTrackingScope environmentReads;
-        setter(binding.evaluate());
+        changed = applyValue(binding.evaluate());
         if (environmentReads.observed()) {
           tracksEnvironment = true;
           binding.setTracksEnvironment(true);
-          evaluateWithEnvironment();
+          changed = evaluateWithEnvironment() || changed;
         }
       }
-      if (requestRedraw) {
+      if (changed && requestRedraw) {
         requestRedraw();
       }
     });

@@ -38,7 +38,7 @@ Completed so far:
 - Reactivity cleanup: legacy `observe` callbacks removed, computed dirty propagation restored, transition/effect interaction isolated, and deferred diamond-poll revisit TODO documented with profiling rationale.
 - Control-flow/layout fixes: collapsed control flow remains mounted for layout updates, For row measurement is retained/cached, stale `SceneBuilder`, `MeasureLayoutCache`, cursor-controller, text-edit-behavior, leaf-bounds, and grid-layout artifacts removed.
 - Input/action cutover: focus, keyboard-focus, hover, and press hooks wired to runtime interaction signals; view/window action hooks wired to the registry with scope cleanup.
-- Performance hardening: scene-graph plumbing callbacks moved to `SmallFn`, environment replay skipped for independent bindings, environment snapshot replay borrows captured layers, and real `/usr/bin/sample` AmbientLoopLab data recorded.
+- Performance hardening: scene-graph plumbing callbacks moved to `SmallFn`, environment replay skipped for independent bindings, environment snapshot replay borrows captured layers, unchanged binding/text effects short-circuit, redundant redraw arming is coalesced, animation subscribers are no longer cloned per frame, and real `/usr/bin/sample` AmbientLoopLab data is recorded.
 - Release-prep scan: `scripts/check_stale_symbols.sh` now checks removed SceneBuilder artifacts, unlisted implementation sources, declaration-only public headers, and unmatched forward declarations.
 
 Remaining release-prep work is tracked by the v5 action items list, including any follow-up perf target from the latest AmbientLoopLab sample.

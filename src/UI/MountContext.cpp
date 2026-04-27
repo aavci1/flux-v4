@@ -374,9 +374,15 @@ std::unique_ptr<scenegraph::SceneNode> mountText(Text const& text, MountContext&
                                       colorBinding = std::move(colorBinding), font, theme, options, constraints, wrapping,
                                       requestRedraw = std::move(requestRedraw)]() mutable {
       Reactive::Effect([rawNode, textBinding, colorBinding, textSystem, font, theme, options, constraints,
-                        wrapping, requestRedraw]() mutable {
+                        wrapping, requestRedraw, lastText = std::optional<std::string>{},
+                        lastColor = std::optional<Color>{}]() mutable {
         std::string const currentText = textBinding.evaluate();
         Color const currentColor = resolveColor(colorBinding.evaluate(), theme.labelColor, theme);
+        if (lastText && lastColor && *lastText == currentText && *lastColor == currentColor) {
+          return;
+        }
+        lastText = currentText;
+        lastColor = currentColor;
         Size currentSize = rawNode->size();
         if (currentSize.width <= 0.f || currentSize.height <= 0.f) {
           float maxWidth = std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;

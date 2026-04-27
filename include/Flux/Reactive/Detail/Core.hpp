@@ -129,6 +129,7 @@ inline thread_local Computation* sCurrentObserver = nullptr;
 inline thread_local ScopeState* sCurrentOwner = nullptr;
 inline thread_local int sBatchDepth = 0;
 inline thread_local std::vector<Computation*> sEffectQueue;
+inline thread_local std::vector<Computation*> sEffectFlushQueue;
 
 inline void ownNode(std::shared_ptr<Disposable> disposable) {
   if (sCurrentOwner) {
@@ -445,9 +446,10 @@ inline void scheduleEffect(Computation* effect) {
 
 inline void flushEffects() {
   while (!sEffectQueue.empty()) {
-    auto pending = std::move(sEffectQueue);
+    sEffectFlushQueue.clear();
+    sEffectFlushQueue.insert(sEffectFlushQueue.end(), sEffectQueue.begin(), sEffectQueue.end());
     sEffectQueue.clear();
-    for (auto* effect : pending) {
+    for (auto* effect : sEffectFlushQueue) {
       effect->scheduled = false;
       if (!effect->disposed() &&
           (hasFlag(effect->flags, Dirty) ||

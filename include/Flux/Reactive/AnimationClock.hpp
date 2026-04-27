@@ -53,6 +53,7 @@ private:
   struct Subscriber {
     std::uint64_t id = 0;
     std::function<void(AnimationTick const&)> callback;
+    bool active = true;
   };
 
   std::vector<AnimationBase*> active_;
@@ -62,6 +63,8 @@ private:
   bool running_ = false;
   bool installed_ = false;
   bool framePulseQueued_ = false;
+  bool dispatchingSubscribers_ = false;
+  bool subscribersNeedCompaction_ = false;
 };
 
 } // namespace flux

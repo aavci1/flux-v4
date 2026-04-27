@@ -11,6 +11,7 @@ Date: 2026-04-27
 | v5 Stage 9 | Full tests and examples | Green normal, ASAN, UBSAN, and TSAN validation |
 | v5 Stage 10 | `animation-demo` AmbientLoopLab running | Reactive implementation: 2.7% of active display-link samples |
 | v5 Stage 10b | AmbientLoopLab after environment-snapshot skip | Environment snapshot copying fell below the sample report threshold; inclusive `BatchGuard` path: 16 / 91 active display-link samples (17.6%) |
+| v5 Stage 10c | AmbientLoopLab after binding/redraw/frame-pump cleanup | Reactive implementation remained below the sample threshold; inclusive `BatchGuard` path: 18 samples over a 30s run, with repeated redraw arming and animation-subscriber clone costs removed |
 
 ## Measurement Method
 
@@ -19,6 +20,8 @@ Stage 10 launched `build/examples/animation-demo`, waited 3 seconds for startup 
 For context, the broader reactive-triggered inclusive path under `BatchGuard` was `35 / 446 = 7.8%`. That number includes user/UI effect work; if future perf work targets the inclusive path, the largest visible costs in this sample were text layout and environment snapshot copying during bindable updates.
 
 After the environment-snapshot skip optimization, the same command was rerun on `build/examples/animation-demo` at 2026-04-27 12:39 +0300. The active display-link denominator was 91 samples. `ScopedEnvironmentSnapshot` and `EnvironmentStack::push` no longer appeared above the sample report threshold, which confirms the per-fire environment-copy path was removed for bindings that do not read environment and reduced for snapshot replay. The broader reactive-triggered inclusive path under `BatchGuard` was `16 / 91 = 17.6%`; this remains above the 5% inclusive target and is now dominated by effect-body work such as text/layout updates rather than environment snapshot copying.
+
+Stage 10c reran the same 30-second `sample` command at 2026-04-27 13:13 +0300 after binding effects began skipping unchanged values, text effects began skipping unchanged text/color pairs, `requestWindowRedraw` stopped re-arming an already requested frame, and `AnimationClock` stopped cloning subscriber callbacks on every tick. The sample contained 5,105 sleeping `mach_msg` samples and 80 active display-link samples. The `BatchGuard` inclusive path accounted for 18 samples, dominated by animated-size layout and phase text layout; pure reactive scheduling/propagation frames did not appear above the sample threshold. The previously visible repeated `requestWindowRedraw` and per-tick subscriber `__clone` stacks were removed.
 
 ## Final Validation
 
