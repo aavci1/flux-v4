@@ -335,6 +335,10 @@ inline void Computation::dispose() {
 }
 
 inline bool Computation::pollSourcesChanged() {
+  // TODO(v5-action-items #10): add a transient Checking flag and per-flush poll result
+  // cache if profiling shows diamond dependency graphs revisiting the same upstream
+  // computeds. AmbientLoopLab's graph is currently shallow/wide and did not surface this
+  // as a measurable hot path; effect-body work dominates the post-cutover samples.
   bool changed = false;
   auto* link = sources;
   while (link) {
