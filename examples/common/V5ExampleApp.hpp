@@ -28,11 +28,11 @@ struct V5ExampleRoot {
   V5ExampleConfig config;
 
   Element body() const {
-    Theme const& theme = useEnvironment<Theme>();
+    auto theme = useEnvironment<Theme>();
     auto rows = useState(config.rows);
 
     return VStack{
-        .spacing = theme.space5,
+        .spacing = theme().space5,
         .alignment = Alignment::Center,
         .children = children(
             Text{
@@ -53,43 +53,43 @@ struct V5ExampleRoot {
                 .font = Font::headline(),
                 .color = Color::primary(),
                 .horizontalAlignment = HorizontalAlignment::Center,
-            }.padding(theme.space3)
+            }.padding(theme().space3)
              .fill(Color::controlBackground())
              .stroke(Color::separator(), 1.f)
-             .cornerRadius(theme.radiusFull)
+             .cornerRadius(theme().radiusFull)
              .onTap([rows] {
                auto next = rows.peek();
                std::reverse(next.begin(), next.end());
                rows.set(std::move(next));
              }),
             Element{For(
-                rows.signal,
+                rows,
                 [](std::string const& row) { return row; },
-                [theme](std::string const& row, Reactive::Signal<std::size_t> index) {
-                  Reactive::Bindable<float> width{[index] {
-                    return 320.f + static_cast<float>(index.get()) * 20.f;
+                [theme](std::string const& row, Signal<std::size_t> index) {
+                  Bindable<float> width{[index] {
+                    return 320.f + static_cast<float>(index()) * 20.f;
                   }};
                   return HStack{
-                      .spacing = theme.space3,
+                      .spacing = theme().space3,
                       .alignment = Alignment::Center,
                       .children = children(
                           Rectangle{}
                               .size(12.f, 36.f)
                               .fill(Color::accent())
-                              .cornerRadius(theme.radiusSmall),
+                              .cornerRadius(theme().radiusSmall),
                           Text{
                               .text = row,
                               .font = Font::body(),
                               .color = Color::primary(),
-                          })}.padding(theme.space3)
+                          })}.padding(theme().space3)
                          .width(std::move(width))
                          .fill(Color::controlBackground())
                          .stroke(Color::separator(), 1.f)
-                         .cornerRadius(theme.radiusMedium);
+                         .cornerRadius(theme().radiusMedium);
                 },
-                theme.space3)}
+                theme().space3)}
                 .height(280.f))}
-        .padding(theme.space7)
+        .padding(theme().space7)
         .fill(Color::windowBackground());
   }
 };

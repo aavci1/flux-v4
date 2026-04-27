@@ -25,7 +25,7 @@ Checkbox::Style resolveStyle(Checkbox::Style const &style, Theme const &theme) {
 }
 
 Element Checkbox::body() const {
-    Theme const &theme = useEnvironment<Theme>();
+    auto theme = useEnvironment<Theme>();
 
     auto [boxSize,
           cornerRadius,
@@ -33,9 +33,9 @@ Element Checkbox::body() const {
           checkedColor,
           uncheckedColor,
           checkColor,
-          borderColor] = resolveStyle(style, theme);
-    auto disabledColor = theme.disabledTextColor;
-    auto focusColor = theme.keyboardFocusIndicatorColor;
+          borderColor] = resolveStyle(style, theme());
+    auto disabledColor = theme().disabledTextColor;
+    auto focusColor = theme().keyboardFocusIndicatorColor;
 
     float const iconSz = boxSize * 0.6f;
 
@@ -75,7 +75,7 @@ Element Checkbox::body() const {
                                              uncheckedColor, theme] {
         bool const showFilled = v.get() || indeterminateBinding.evaluate();
         return disabledBinding.evaluate()
-                   ? theme.disabledControlBackgroundColor
+                   ? theme().disabledControlBackgroundColor
                    : showFilled ? checkedColor : uncheckedColor;
     }};
 

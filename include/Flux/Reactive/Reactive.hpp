@@ -10,6 +10,7 @@
 #include <Flux/Reactive/Transition.hpp>
 #include <Flux/Reactive/AnimationClock.hpp>
 #include <Flux/Reactive/Animation.hpp>
+#include <Flux/Reactive/Bindable.hpp>
 #include <Flux/Reactive/Computed.hpp>
 #include <Flux/Reactive/Effect.hpp>
 #include <Flux/Reactive/Scope.hpp>
@@ -19,7 +20,7 @@
 namespace flux {
 
 template<typename T>
-using Signal = Reactive::Signal<T>;
+using Bindable = Reactive::Bindable<T>;
 
 template<typename T>
 using Computed = Reactive::Computed<T>;

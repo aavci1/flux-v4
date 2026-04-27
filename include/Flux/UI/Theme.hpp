@@ -232,7 +232,7 @@ Reactive::Computed<Field> themeField(Field Theme::* member) {
         theme = Reactive::Signal<Theme>(Theme::light());
     }
     return Reactive::makeComputed([theme, member] {
-        return theme.get().*member;
+        return theme().*member;
     });
 }
 

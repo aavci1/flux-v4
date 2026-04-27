@@ -31,7 +31,7 @@ struct Slider : ViewModifiers<Slider> {
   // ── State ──────────────────────────────────────────────────────────────────
 
   /// Current value in \c [min, max]; use \c useState<float>() or similar.
-  State<float> value { };
+  Signal<float> value { };
 
   // ── Properties ─────────────────────────────────────────────────────────────
 

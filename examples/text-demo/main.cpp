@@ -143,10 +143,10 @@ Element wrappingExamples(Theme const &theme) {
 
 struct TextDemoRoot {
     auto body() const {
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<Theme>();
 
         Element intro = VStack {
-            .spacing = theme.space3,
+            .spacing = theme().space3,
             .alignment = Alignment::Start,
             .children = children(
                 Text {
@@ -164,28 +164,28 @@ struct TextDemoRoot {
         };
 
         Element alignmentSection = sectionCard(
-            theme, "Alignment", "The same text view can be positioned differently inside its layout box.",
+            theme(), "Alignment", "The same text view can be positioned differently inside its layout box.",
             HStack {
-                .spacing = theme.space3,
+                .spacing = theme().space3,
                 .alignment = Alignment::Start,
                 .children = children(
-                    alignmentBand(theme, "Leading", HorizontalAlignment::Leading),
-                    alignmentBand(theme, "Center", HorizontalAlignment::Center),
-                    alignmentBand(theme, "Trailing", HorizontalAlignment::Trailing)
+                    alignmentBand(theme(), "Leading", HorizontalAlignment::Leading),
+                    alignmentBand(theme(), "Center", HorizontalAlignment::Center),
+                    alignmentBand(theme(), "Trailing", HorizontalAlignment::Trailing)
                 )
             }
         );
 
         Element wrappingSection =
-            sectionCard(theme, "Wrapping Modes",
+            sectionCard(theme(), "Wrapping Modes",
                         "These examples show the three supported wrapping behaviors under the same width.",
-                        wrappingExamples(theme));
+                        wrappingExamples(theme()));
 
         Element maxLinesSection = sectionCard(
-            theme, "Line Limits",
+            theme(), "Line Limits",
             "Use maxLines to keep a layout compact while leaving measurement and line geometry consistent.",
             VStack {
-                .spacing = theme.space3,
+                .spacing = theme().space3,
                 .alignment = Alignment::Start,
                 .children = children(
                     Text {
@@ -199,10 +199,10 @@ struct TextDemoRoot {
                         .color = Color::primary(),
                         .wrapping = TextWrapping::Wrap,
                     }
-                        .padding(theme.space3)
-                        .fill(FillStyle::solid(theme.hoveredControlBackgroundColor))
+                        .padding(theme().space3)
+                        .fill(FillStyle::solid(theme().hoveredControlBackgroundColor))
                         .stroke(StrokeStyle::solid(Color::separator(), 1.f))
-                        .cornerRadius(theme.radiusMedium),
+                        .cornerRadius(theme().radiusMedium),
                     Text {
                         .text = "Same text with maxLines = 2",
                         .font = Font::headline(),
@@ -215,23 +215,23 @@ struct TextDemoRoot {
                         .wrapping = TextWrapping::Wrap,
                         .maxLines = 2,
                     }
-                        .padding(theme.space3)
-                        .fill(FillStyle::solid(theme.hoveredControlBackgroundColor))
+                        .padding(theme().space3)
+                        .fill(FillStyle::solid(theme().hoveredControlBackgroundColor))
                         .stroke(StrokeStyle::solid(Color::separator(), 1.f))
-                        .cornerRadius(theme.radiusMedium)
+                        .cornerRadius(theme().radiusMedium)
                 )
             }
         );
 
         Element emphasisSection = sectionCard(
-            theme, "Semantic Emphasis",
+            theme(), "Semantic Emphasis",
             "Text styles and semantic colors are meant to be mixed deliberately, not just resized mechanically.",
             HStack {
-                .spacing = theme.space3,
+                .spacing = theme().space3,
                 .alignment = Alignment::Start,
                 .children = children(
                     VStack {
-                        .spacing = theme.space2,
+                        .spacing = theme().space2,
                         .alignment = Alignment::Start,
                         .children = children(
                             Text {.text = "Primary", .font = Font::body(), .color = Color::primary()},
@@ -241,7 +241,7 @@ struct TextDemoRoot {
                     }
                         .flex(1.f),
                     VStack {
-                        .spacing = theme.space2,
+                        .spacing = theme().space2,
                         .alignment = Alignment::Start,
                         .children = children(
                             Text {.text = "Accent", .font = Font::body(), .color = Color::accent()},
@@ -255,7 +255,7 @@ struct TextDemoRoot {
         );
 
         Element content = VStack {
-            .spacing = theme.space5,
+            .spacing = theme().space5,
             .alignment = Alignment::Start,
             .children = children(
                 std::move(intro),
@@ -265,7 +265,7 @@ struct TextDemoRoot {
                 std::move(emphasisSection)
             )
         }
-                              .padding(theme.space5);
+                              .padding(theme().space5);
 
         return ScrollView {
             .axis = ScrollAxis::Vertical,

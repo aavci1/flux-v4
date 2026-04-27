@@ -98,20 +98,20 @@ struct DealTableRow : ViewModifiers<DealTableRow> {
     Deal deal;
 
     Element body() const {
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<Theme>();
         auto expanded = useState(false);
 
         std::vector<Element> cells;
         cells.push_back(
             TableCell {
                 .content = HStack {
-                    .spacing = theme.space2,
+                    .spacing = theme().space2,
                     .alignment = Alignment::Center,
                     .children = children(
                         Icon {
                             .name = deal.atRisk ? IconName::Warning : IconName::Circle,
                             .size = 14.f,
-                            .color = deal.atRisk ? theme.warningColor : theme.successColor,
+                            .color = deal.atRisk ? theme().warningColor : theme().successColor,
                         },
                         Text {
                             .text = deal.name,
@@ -139,7 +139,7 @@ struct DealTableRow : ViewModifiers<DealTableRow> {
             });
         cells.push_back(
             TableCell {
-                .content = stageBadge(theme, deal.stage),
+                .content = stageBadge(theme(), deal.stage),
                 .style = TableCell::Style {
                     .width = 120.f,
                     .alignment = HorizontalAlignment::Center,
@@ -148,14 +148,14 @@ struct DealTableRow : ViewModifiers<DealTableRow> {
         cells.push_back(
             TableCell {
                 .content = VStack {
-                    .spacing = theme.space1,
+                    .spacing = theme().space1,
                     .alignment = Alignment::Stretch,
                     .children = children(
                         ProgressBar {
                             .progress = deal.progress,
                             .style = ProgressBar::Style {
-                                .activeColor = deal.atRisk ? theme.warningColor : theme.accentColor,
-                                .inactiveColor = theme.separatorColor,
+                                .activeColor = deal.atRisk ? theme().warningColor : theme().accentColor,
+                                .inactiveColor = theme().separatorColor,
                                 .trackHeight = 6.f,
                             },
                         },
@@ -188,7 +188,7 @@ struct DealTableRow : ViewModifiers<DealTableRow> {
             TableCell {
                 .content = Icon {
                     .name = [expanded] {
-                        return expanded.get() ? IconName::ExpandLess : IconName::ExpandMore;
+                        return expanded() ? IconName::ExpandLess : IconName::ExpandMore;
                     },
                     .size = 18.f,
                     .color = Color::tertiary(),
@@ -201,18 +201,18 @@ struct DealTableRow : ViewModifiers<DealTableRow> {
 
         Element detail = Element {Show(
             [expanded] {
-                return expanded.get();
+                return expanded();
             },
             [deal = deal, theme] {
                 return Text {
                     .text = "Next step: " + deal.nextStep,
                     .font = Font::footnote(),
-                    .color = deal.atRisk ? theme.warningColor : Color::secondary(),
+                    .color = deal.atRisk ? theme().warningColor : Color::secondary(),
                     .horizontalAlignment = HorizontalAlignment::Leading,
                     .wrapping = TextWrapping::Wrap,
                 }
-                    .padding(theme.space3, theme.space4, theme.space3, theme.space4)
-                    .fill(deal.atRisk ? theme.warningBackgroundColor : theme.selectedContentBackgroundColor);
+                    .padding(theme().space3, theme().space4, theme().space3, theme().space4)
+                    .fill(deal.atRisk ? theme().warningBackgroundColor : theme().selectedContentBackgroundColor);
             }
         )};
 
@@ -220,15 +220,15 @@ struct DealTableRow : ViewModifiers<DealTableRow> {
             .cells = std::move(cells),
             .detail = std::move(detail),
             .style = TableRow::Style {
-                .paddingH = theme.space4,
-                .paddingV = theme.space3,
-                .spacing = theme.space3,
-                .backgroundColor = theme.elevatedBackgroundColor,
-                .hoverBackgroundColor = theme.hoveredControlBackgroundColor,
-                .selectedBackgroundColor = theme.selectedContentBackgroundColor,
+                .paddingH = theme().space4,
+                .paddingV = theme().space3,
+                .spacing = theme().space3,
+                .backgroundColor = theme().elevatedBackgroundColor,
+                .hoverBackgroundColor = theme().hoveredControlBackgroundColor,
+                .selectedBackgroundColor = theme().selectedContentBackgroundColor,
             },
             .onTap = [expanded] {
-                expanded = !expanded.get();
+                expanded = !expanded();
             },
         };
     }
@@ -236,7 +236,7 @@ struct DealTableRow : ViewModifiers<DealTableRow> {
 
 struct TableDemoView {
     Element body() const {
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<Theme>();
         std::vector<Deal> deals = sampleDeals();
         double totalValue = 0.0;
         float totalProgress = 0.f;
@@ -260,12 +260,12 @@ struct TableDemoView {
                 Element {TableCell {.content = emptyCell(), .style = TableCell::Style {.width = 32.f, .alignment = HorizontalAlignment::Center}}},
             },
             .style = TableRow::Style {
-                .paddingH = theme.space4,
-                .paddingV = theme.space2,
-                .spacing = theme.space3,
-                .backgroundColor = theme.windowBackgroundColor,
-                .hoverBackgroundColor = theme.windowBackgroundColor,
-                .selectedBackgroundColor = theme.windowBackgroundColor,
+                .paddingH = theme().space4,
+                .paddingV = theme().space2,
+                .spacing = theme().space3,
+                .backgroundColor = theme().windowBackgroundColor,
+                .hoverBackgroundColor = theme().windowBackgroundColor,
+                .selectedBackgroundColor = theme().windowBackgroundColor,
             },
         };
 
@@ -286,19 +286,19 @@ struct TableDemoView {
             TableRow {
                 .cells = {
                     Element {TableCell {.content = Text {.text = "Pipeline total", .font = Font::headline(), .color = Color::secondary()}}},
-                    Element {TableCell {.content = Text {.text = std::to_string(riskCount) + " at risk", .font = Font::footnote(), .color = riskCount > 0 ? theme.warningColor : theme.successColor}}},
+                    Element {TableCell {.content = Text {.text = std::to_string(riskCount) + " at risk", .font = Font::footnote(), .color = riskCount > 0 ? theme().warningColor : theme().successColor}}},
                     Element {TableCell {.content = emptyCell()}},
                     Element {TableCell {.content = emptyCell()}},
                     Element {TableCell {.content = Text {.text = formatCurrency(totalValue), .font = Font::monospacedBody(), .color = Color::primary(), .horizontalAlignment = HorizontalAlignment::Trailing}, .style = TableCell::Style {.alignment = HorizontalAlignment::Trailing}}},
-                    Element {TableCell {.content = Icon {.name = riskCount > 0 ? IconName::Warning : IconName::CheckCircle, .size = 16.f, .color = riskCount > 0 ? theme.warningColor : theme.successColor}, .style = TableCell::Style {.alignment = HorizontalAlignment::Center}}},
+                    Element {TableCell {.content = Icon {.name = riskCount > 0 ? IconName::Warning : IconName::CheckCircle, .size = 16.f, .color = riskCount > 0 ? theme().warningColor : theme().successColor}, .style = TableCell::Style {.alignment = HorizontalAlignment::Center}}},
                 },
                 .style = TableRow::Style {
-                    .paddingH = theme.space4,
-                    .paddingV = theme.space2,
-                    .spacing = theme.space3,
-                    .backgroundColor = theme.windowBackgroundColor,
-                    .hoverBackgroundColor = theme.windowBackgroundColor,
-                    .selectedBackgroundColor = theme.windowBackgroundColor,
+                    .paddingH = theme().space4,
+                    .paddingV = theme().space2,
+                    .spacing = theme().space3,
+                    .backgroundColor = theme().windowBackgroundColor,
+                    .hoverBackgroundColor = theme().windowBackgroundColor,
+                    .selectedBackgroundColor = theme().windowBackgroundColor,
                 },
             });
 
@@ -308,12 +308,12 @@ struct TableDemoView {
                 Element {TableCell {.content = Text {.text = "Value", .font = Font::headline(), .color = Color::tertiary()}, .style = TableCell::Style {.width = 140.f, .alignment = HorizontalAlignment::Trailing}}},
             },
             .style = TableRow::Style {
-                .paddingH = theme.space4,
-                .paddingV = theme.space2,
-                .spacing = theme.space3,
-                .backgroundColor = theme.controlBackgroundColor,
-                .hoverBackgroundColor = theme.controlBackgroundColor,
-                .selectedBackgroundColor = theme.controlBackgroundColor,
+                .paddingH = theme().space4,
+                .paddingV = theme().space2,
+                .spacing = theme().space3,
+                .backgroundColor = theme().controlBackgroundColor,
+                .hoverBackgroundColor = theme().controlBackgroundColor,
+                .selectedBackgroundColor = theme().controlBackgroundColor,
             },
         };
 
@@ -325,9 +325,9 @@ struct TableDemoView {
                     Element {TableCell {.content = Text {.text = std::to_string(deals.size()), .font = Font::headline(), .color = Color::primary(), .horizontalAlignment = HorizontalAlignment::Trailing}, .style = TableCell::Style {.width = 140.f, .alignment = HorizontalAlignment::Trailing}}},
                 },
                 .style = TableRow::Style {
-                    .paddingH = theme.space4,
-                    .paddingV = theme.space3,
-                    .spacing = theme.space3,
+                    .paddingH = theme().space4,
+                    .paddingV = theme().space3,
+                    .spacing = theme().space3,
                     .backgroundColor = Colors::transparent,
                     .hoverBackgroundColor = Colors::transparent,
                     .selectedBackgroundColor = Colors::transparent,
@@ -340,9 +340,9 @@ struct TableDemoView {
                     Element {TableCell {.content = Text {.text = std::to_string(averageProgress) + "%", .font = Font::headline(), .color = Color::accent(), .horizontalAlignment = HorizontalAlignment::Trailing}, .style = TableCell::Style {.width = 140.f, .alignment = HorizontalAlignment::Trailing}}},
                 },
                 .style = TableRow::Style {
-                    .paddingH = theme.space4,
-                    .paddingV = theme.space3,
-                    .spacing = theme.space3,
+                    .paddingH = theme().space4,
+                    .paddingV = theme().space3,
+                    .spacing = theme().space3,
                     .backgroundColor = Colors::transparent,
                     .hoverBackgroundColor = Colors::transparent,
                     .selectedBackgroundColor = Colors::transparent,
@@ -353,7 +353,7 @@ struct TableDemoView {
             .axis = ScrollAxis::Vertical,
             .children = children(
                 VStack {
-                    .spacing = theme.space4,
+                    .spacing = theme().space4,
                     .alignment = Alignment::Stretch,
                     .children = children(
                         Text {
@@ -395,20 +395,20 @@ struct TableDemoView {
                                     TableColumn {.width = 32.f},
                                 },
                                 .style = TableView::Style {
-                                    .dividerInsetH = theme.space4,
-                                    .backgroundColor = theme.windowBackgroundColor,
-                                    .dividerColor = theme.separatorColor,
+                                    .dividerInsetH = theme().space4,
+                                    .backgroundColor = theme().windowBackgroundColor,
+                                    .dividerColor = theme().separatorColor,
                                 },
                             }
                                 .height(380.f),
                             .style = Card::Style {
                                 .padding = 0.f,
-                                .cornerRadius = theme.radiusXLarge,
+                                .cornerRadius = theme().radiusXLarge,
                             },
                         },
                         Card {
                             .child = VStack {
-                                .spacing = theme.space3,
+                                .spacing = theme().space3,
                                 .alignment = Alignment::Stretch,
                                 .children = children(
                                     Text {
@@ -425,15 +425,15 @@ struct TableDemoView {
                                         },
                                         .scrollBody = false,
                                         .style = TableView::Style {
-                                            .dividerInsetH = theme.space4,
-                                            .backgroundColor = theme.controlBackgroundColor,
-                                            .dividerColor = theme.separatorColor,
+                                            .dividerInsetH = theme().space4,
+                                            .backgroundColor = theme().controlBackgroundColor,
+                                            .dividerColor = theme().separatorColor,
                                         },
                                     })
                             },
                         })
                 }
-                    .padding(theme.space6))
+                    .padding(theme().space6))
         };
     }
 };

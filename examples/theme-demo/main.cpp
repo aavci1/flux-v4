@@ -1,7 +1,12 @@
 #include <Flux.hpp>
+#include <Flux/Detail/Runtime.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/UI.hpp>
 #include <Flux/UI/Views/Views.hpp>
+
+// This demo intentionally keeps one mounted tree while toggling light/dark themes.
+// Window::setTheme writes the Theme environment signal; theme-dependent bindings
+// read theme() and update retained nodes without a Switch-driven remount.
 
 #include <algorithm>
 #include <array>
@@ -17,21 +22,21 @@ namespace {
 
 struct ToolbarNavButton : ViewModifiers<ToolbarNavButton> {
     std::string label;
-    Reactive::Bindable<bool> active = false;
+    Bindable<bool> active = false;
     std::function<void()> onTap;
 
     Element body() const {
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<Theme>();
         auto hovered = useState(false);
 
-        Reactive::Bindable<Color> fill {[active = active, hovered, theme] {
+        Bindable<Color> fill {[active = active, hovered, theme] {
             return active.evaluate() ? Color::selectedContentBackground() :
-                   hovered.get() ? theme.rowHoverBackgroundColor :
+                   hovered() ? theme().rowHoverBackgroundColor :
                                    Colors::transparent;
         }};
-        Reactive::Bindable<Color> textColor {[active = active, hovered] {
+        Bindable<Color> textColor {[active = active, hovered] {
             return active.evaluate() ? Color::accent() :
-                   hovered.get() ? Color::primary() :
+                   hovered() ? Color::primary() :
                                    Color::secondary();
         }};
 
@@ -40,9 +45,9 @@ struct ToolbarNavButton : ViewModifiers<ToolbarNavButton> {
             .font = Font::body(),
             .color = textColor,
         }
-            .padding(5.f, theme.space3, 5.f, theme.space3)
+            .padding(5.f, theme().space3, 5.f, theme().space3)
             .fill(fill)
-            .cornerRadius(CornerRadius {theme.radiusSmall})
+            .cornerRadius(CornerRadius {theme().radiusSmall})
             .cursor(Cursor::Hand)
             .onPointerEnter(std::function<void()> {[hovered] { hovered = true; }})
             .onPointerExit(std::function<void()> {[hovered] { hovered = false; }})
@@ -53,19 +58,19 @@ struct ToolbarNavButton : ViewModifiers<ToolbarNavButton> {
 struct SidebarGlyphButton : ViewModifiers<SidebarGlyphButton> {
     IconName icon {};
     std::string label;
-    Reactive::Bindable<bool> selected = false;
+    Bindable<bool> selected = false;
     std::function<void()> onTap;
 
     Element body() const {
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<Theme>();
         auto hovered = useState(false);
 
-        Reactive::Bindable<Color> fill {[selected = selected, hovered, theme] {
+        Bindable<Color> fill {[selected = selected, hovered, theme] {
             return selected.evaluate() ? Color::selectedContentBackground() :
-                   hovered.get() ? theme.hoveredControlBackgroundColor :
+                   hovered() ? theme().hoveredControlBackgroundColor :
                                    Colors::transparent;
         }};
-        Reactive::Bindable<Color> foreground {[selected = selected] {
+        Bindable<Color> foreground {[selected = selected] {
             return selected.evaluate() ? Color::accent() : Color::secondary();
         }};
 
@@ -87,10 +92,10 @@ struct SidebarGlyphButton : ViewModifiers<SidebarGlyphButton> {
                 }
             ),
         }
-            .padding(theme.space2)
+            .padding(theme().space2)
             .flex(0.f, 0.f, 72.f)
             .fill(fill)
-            .cornerRadius(CornerRadius {theme.radiusLarge})
+            .cornerRadius(CornerRadius {theme().radiusLarge})
             // .width(72.f)
             .cursor(Cursor::Hand)
             .onPointerEnter(std::function<void()> {[hovered] { hovered = true; }})
@@ -102,11 +107,11 @@ struct SidebarGlyphButton : ViewModifiers<SidebarGlyphButton> {
 struct DensityPreviewRow : ViewModifiers<DensityPreviewRow> {
     std::string label;
     Theme previewTheme;
-    State<std::string> searchValue {};
+    Signal<std::string> searchValue {};
     bool stacked = false;
 
     Element body() const {
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<Theme>();
 
         Element preview = HStack {
             .spacing = previewTheme.space4,
@@ -131,12 +136,12 @@ struct DensityPreviewRow : ViewModifiers<DensityPreviewRow> {
 
         if (stacked) {
             return VStack {
-                .spacing = theme.space2,
+                .spacing = theme().space2,
                 .alignment = Alignment::Start,
                 .children = children(
                     Text {
                         .text = label,
-                        .font = Font {.family = theme.monospacedBodyFont.family, .size = 10.f, .weight = 500.f},
+                        .font = Font {.family = theme().monospacedBodyFont.family, .size = 10.f, .weight = 500.f},
                         .color = Color::tertiary(),
                     },
                     std::move(preview)
@@ -145,12 +150,12 @@ struct DensityPreviewRow : ViewModifiers<DensityPreviewRow> {
         }
 
         return HStack {
-            .spacing = theme.space5,
+            .spacing = theme().space5,
             .alignment = Alignment::Center,
             .children = children(
                 Text {
                     .text = label,
-                    .font = Font {.family = theme.monospacedBodyFont.family, .size = 10.f, .weight = 500.f},
+                    .font = Font {.family = theme().monospacedBodyFont.family, .size = 10.f, .weight = 500.f},
                     .color = Color::tertiary(),
                 }
                     .width(160.f),
@@ -541,7 +546,7 @@ Element controlRow(Theme const &theme, std::string label, Element control) {
     };
 }
 
-Element sliderMetricRow(Theme const &theme, std::string label, State<float> value, float min, float max, float step) {
+Element sliderMetricRow(Theme const &theme, std::string label, Signal<float> value, float min, float max, float step) {
     return HStack {
         .spacing = theme.space4,
         .alignment = Alignment::Center,
@@ -561,7 +566,7 @@ Element sliderMetricRow(Theme const &theme, std::string label, State<float> valu
                 .flex(1.f, 1.f, 0.f),
             Text {
                 .text = [value] {
-                    return decimalLabel(value.get());
+                    return decimalLabel(value());
                 },
                 .font = monoFont(theme, 12.f, 400.f),
                 .color = Color::secondary(),
@@ -572,8 +577,8 @@ Element sliderMetricRow(Theme const &theme, std::string label, State<float> valu
     };
 }
 
-Element makeToolbar(Theme const &theme, bool showNav, Reactive::Bindable<int> activeNav, State<bool> darkMode,
-                    std::function<void(float)> onJump) {
+Element makeToolbar(Theme const &theme, bool showNav, Bindable<int> activeNav, Signal<bool> darkMode,
+                    std::function<void(float)> onJump, std::function<void(bool)> onDarkModeChange) {
     return VStack {
         .spacing = 0.f,
         .children = children(
@@ -626,7 +631,7 @@ Element makeToolbar(Theme const &theme, bool showNav, Reactive::Bindable<int> ac
                     },
                     Icon {
                         .name = [darkMode] {
-                            return darkMode.get() ? IconName::LightMode : IconName::DarkMode;
+                            return darkMode() ? IconName::LightMode : IconName::DarkMode;
                         },
                         .size = 16.f,
                         .weight = 400.f,
@@ -634,6 +639,7 @@ Element makeToolbar(Theme const &theme, bool showNav, Reactive::Bindable<int> ac
                     },
                     Toggle {
                         .value = darkMode,
+                        .onChange = std::move(onDarkModeChange),
                     }
                 )
             }
@@ -649,23 +655,24 @@ Element makeToolbar(Theme const &theme, bool showNav, Reactive::Bindable<int> ac
 } // namespace
 
 struct ThemeDemoPage {
-    State<bool> darkMode {};
-    State<Point> scrollOffset {};
-    State<Size> viewportSize {};
-    State<Size> contentSize {};
-    State<bool> flashAttention {};
-    State<bool> enableThinking {};
-    State<bool> useMmap {};
-    State<float> temperature {};
-    State<float> topP {};
-    State<std::string> repoSearch {};
-    State<std::string> workspacePath {};
-    State<std::string> disabledField {};
-    State<std::string> compactSearch {};
-    State<std::string> defaultSearch {};
-    State<std::string> comfortableSearch {};
-    State<int> selectedSidebar {};
+    Signal<bool> darkMode {};
+    Signal<Point> scrollOffset {};
+    Signal<Size> viewportSize {};
+    Signal<Size> contentSize {};
+    Signal<bool> flashAttention {};
+    Signal<bool> enableThinking {};
+    Signal<bool> useMmap {};
+    Signal<float> temperature {};
+    Signal<float> topP {};
+    Signal<std::string> repoSearch {};
+    Signal<std::string> workspacePath {};
+    Signal<std::string> disabledField {};
+    Signal<std::string> compactSearch {};
+    Signal<std::string> defaultSearch {};
+    Signal<std::string> comfortableSearch {};
+    Signal<int> selectedSidebar {};
     Theme theme {};
+    std::function<void(bool)> onDarkModeChange;
 
     auto body() const {
         auto scrollOffsetState = scrollOffset;
@@ -685,14 +692,14 @@ struct ThemeDemoPage {
 
         float const horizontalInset = narrow ? theme.space4 : theme.space7;
         float const contentWidth = std::clamp(viewportWidth - horizontalInset * 2.f, 320.f, 1080.f);
-        Reactive::Bindable<int> activeNav {[scrollOffsetState, viewportSizeState, contentSizeState] {
-            float const maxScroll = std::max(0.f, contentSizeState.get().height - viewportSizeState.get().height);
-            float const scrollProgress = maxScroll > 0.f ? scrollOffsetState.get().y / maxScroll : 0.f;
+        Bindable<int> activeNav {[scrollOffsetState, viewportSizeState, contentSizeState] {
+            float const maxScroll = std::max(0.f, contentSizeState().height - viewportSizeState().height);
+            float const scrollProgress = maxScroll > 0.f ? scrollOffsetState().y / maxScroll : 0.f;
             return scrollProgress < 0.24f ? 0 : scrollProgress < 0.53f ? 1 : scrollProgress < 0.73f ? 2 : 3;
         }};
 
         auto jumpToSection = [scrollOffsetState, viewportSizeState, contentSizeState](float ratio) {
-            float const maxY = std::max(0.f, contentSizeState.get().height - viewportSizeState.get().height);
+            float const maxY = std::max(0.f, contentSizeState().height - viewportSizeState().height);
             scrollOffsetState = Point {0.f, std::clamp(maxY * ratio, 0.f, maxY)};
         };
 
@@ -1011,7 +1018,7 @@ struct ThemeDemoPage {
                         .icon = IconName::Chat,
                         .label = "Chats",
                         .selected = [selectedSidebarState] {
-                            return selectedSidebarState.get() == 0;
+                            return selectedSidebarState() == 0;
                         },
                         .onTap = [selectedSidebarState] { selectedSidebarState = 0; },
                     },
@@ -1019,7 +1026,7 @@ struct ThemeDemoPage {
                         .icon = IconName::Hub,
                         .label = "Hub",
                         .selected = [selectedSidebarState] {
-                            return selectedSidebarState.get() == 1;
+                            return selectedSidebarState() == 1;
                         },
                         .onTap = [selectedSidebarState] { selectedSidebarState = 1; },
                     },
@@ -1027,7 +1034,7 @@ struct ThemeDemoPage {
                         .icon = IconName::Folder,
                         .label = "Files",
                         .selected = [selectedSidebarState] {
-                            return selectedSidebarState.get() == 2;
+                            return selectedSidebarState() == 2;
                         },
                         .onTap = [selectedSidebarState] { selectedSidebarState = 2; },
                     },
@@ -1035,7 +1042,7 @@ struct ThemeDemoPage {
                         .icon = IconName::Settings,
                         .label = "Settings",
                         .selected = [selectedSidebarState] {
-                            return selectedSidebarState.get() == 3;
+                            return selectedSidebarState() == 3;
                         },
                         .onTap = [selectedSidebarState] { selectedSidebarState = 3; },
                     }
@@ -1115,7 +1122,7 @@ struct ThemeDemoPage {
             .spacing = 0.f,
             .alignment = Alignment::Stretch,
             .children = children(
-                makeToolbar(theme, showToolbarNav, activeNav, darkMode, jumpToSection),
+                makeToolbar(theme, showToolbarNav, activeNav, darkMode, jumpToSection, onDarkModeChange),
                 ScrollView {
                     .axis = ScrollAxis::Vertical,
                     .scrollOffset = scrollOffset,
@@ -1134,6 +1141,7 @@ struct ThemeDemoPage {
 
 struct ThemeDemoRoot {
     auto body() const {
+        auto theme = useEnvironment<Theme>();
         auto darkMode = useState(false);
         auto scrollOffset = useState(Point {0.f, 0.f});
         auto viewportSize = useState(Size {0.f, 0.f});
@@ -1150,42 +1158,32 @@ struct ThemeDemoRoot {
         auto defaultSearch = useState(std::string {});
         auto comfortableSearch = useState(std::string {});
         auto selectedSidebar = useState(0);
+        Runtime* runtime = Runtime::current();
 
-        auto page = [=](Theme theme) {
-            return ThemeDemoPage {
-                .darkMode = darkMode,
-                .scrollOffset = scrollOffset,
-                .viewportSize = viewportSize,
-                .contentSize = contentSize,
-                .flashAttention = flashAttention,
-                .enableThinking = enableThinking,
-                .useMmap = useMmap,
-                .temperature = temperature,
-                .topP = topP,
-                .repoSearch = repoSearch,
-                .workspacePath = workspacePath,
-                .disabledField = disabledField,
-                .compactSearch = compactSearch,
-                .defaultSearch = defaultSearch,
-                .comfortableSearch = comfortableSearch,
-                .selectedSidebar = selectedSidebar,
-                .theme = std::move(theme),
-            };
-        };
-
-        return Switch(
-            [darkMode] {
-                return darkMode.get();
+        return ThemeDemoPage {
+            .darkMode = darkMode,
+            .scrollOffset = scrollOffset,
+            .viewportSize = viewportSize,
+            .contentSize = contentSize,
+            .flashAttention = flashAttention,
+            .enableThinking = enableThinking,
+            .useMmap = useMmap,
+            .temperature = temperature,
+            .topP = topP,
+            .repoSearch = repoSearch,
+            .workspacePath = workspacePath,
+            .disabledField = disabledField,
+            .compactSearch = compactSearch,
+            .defaultSearch = defaultSearch,
+            .comfortableSearch = comfortableSearch,
+            .selectedSidebar = selectedSidebar,
+            .theme = theme(),
+            .onDarkModeChange = [runtime](bool enabled) {
+                if (runtime) {
+                    runtime->window().setTheme(enabled ? Theme::dark() : Theme::light());
+                }
             },
-            std::vector{
-                Case(false, [page] {
-                    return page(Theme::light());
-                }),
-                Case(true, [page] {
-                    return page(Theme::dark());
-                }),
-            }
-        );
+        };
     }
 };
 

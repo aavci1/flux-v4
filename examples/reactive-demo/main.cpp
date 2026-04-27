@@ -27,8 +27,8 @@ struct DemoState {
   Signal<Point> pointerPos{Point{0.f, 0.f}};
 
   Computed<float> distanceToPointer{[&]() {
-    Point const c = circleCenter.get();
-    Point const p = pointerPos.get();
+    Point const c = circleCenter();
+    Point const p = pointerPos();
     float const dx = c.x - p.x;
     float const dy = c.y - p.y;
     return std::sqrt(dx * dx + dy * dy);
@@ -37,18 +37,18 @@ struct DemoState {
 
 class ReactiveDemoWindow : public Window {
   DemoState s_;
-  Reactive::Scope reactiveScope_;
+  Scope reactiveScope_;
   /// Previous window content size; used to scale pointer/circle when the window is resized.
   Size lastLayout_{};
 
 public:
   explicit ReactiveDemoWindow(WindowConfig const& c) : Window(c), lastLayout_{c.size} {
-    Reactive::withOwner(reactiveScope_, [this] {
-      Reactive::Effect([this] {
-        (void)s_.clicks.get();
-        (void)s_.fillColor.get();
-        (void)s_.circleCenter.get();
-        (void)s_.distanceToPointer.get();
+    withOwner(reactiveScope_, [this] {
+      Effect([this] {
+        (void)s_.clicks();
+        (void)s_.fillColor();
+        (void)s_.circleCenter();
+        (void)s_.distanceToPointer();
         Window::requestRedraw();
       });
     });
@@ -64,9 +64,9 @@ public:
       if (lastLayout_.width >= 1.f && lastLayout_.height >= 1.f) {
         float const sx = newS.width / lastLayout_.width;
         float const sy = newS.height / lastLayout_.height;
-        Point const p = s_.pointerPos.get();
+        Point const p = s_.pointerPos();
         s_.pointerPos.set(Point{p.x * sx, p.y * sy});
-        Point const c = s_.circleCenter.get();
+        Point const c = s_.circleCenter();
         s_.circleCenter.set(Point{c.x * sx, c.y * sy}, Transition::instant());
       }
       lastLayout_ = newS;
@@ -84,11 +84,11 @@ public:
         return;
       }
 
-      s_.clicks.set(s_.clicks.get() + 1);
+      s_.clicks.set(s_.clicks() + 1);
 
       {
         WithTransition spring{Transition::spring(500.f, 25.f, 0.55f)};
-        Color const target = (s_.clicks.get() % 2 == 0) ? kColdFill : kWarmFill;
+        Color const target = (s_.clicks() % 2 == 0) ? kColdFill : kWarmFill;
         s_.fillColor.set(target);
       }
 
@@ -115,11 +115,11 @@ public:
     Rect const panel =
         Rect::sharp(margin, margin, std::max(w - margin * 2.f, 40.f), std::max(h - margin * 2.f, 40.f));
 
-    Color const cardColor = s_.fillColor.get();
+    Color const cardColor = s_.fillColor();
     c.drawRect(panel, CornerRadius(18.f, 18.f, 18.f, 18.f), FillStyle::solid(cardColor),
                StrokeStyle::solid(Color::rgb(255, 255, 255), 1.5f));
 
-    Point const center = s_.circleCenter.get();
+    Point const center = s_.circleCenter();
     const float r = 36.f;
     c.drawCircle(center, r, FillStyle::solid(Color::rgb(255, 255, 255)), StrokeStyle::solid(Color::rgb(40, 44, 55), 2.f));
 
@@ -127,9 +127,9 @@ public:
     Font const bodyFont = theme.bodyFont;
     Font const hintFont = theme.footnoteFont;
 
-    std::string const line = std::string("Signal<int> clicks: ") + std::to_string(s_.clicks.get()) +
+    std::string const line = std::string("Signal<int> clicks: ") + std::to_string(s_.clicks()) +
                              "  |  Computed<float> dist: " +
-                             std::to_string(static_cast<int>(s_.distanceToPointer.get())) +
+                             std::to_string(static_cast<int>(s_.distanceToPointer())) +
                              " px  |  Animation<Color> (spring) + Animation<Point> (ease)";
     auto bodyLayout = ts.layout(line, bodyFont, theme.labelColor, panel.width - 32.f);
     c.drawTextLayout(*bodyLayout, Point{panel.x + 16.f, panel.y + 16.f});

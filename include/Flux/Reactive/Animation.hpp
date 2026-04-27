@@ -47,9 +47,12 @@ public:
       : state_(std::make_shared<State>(std::move(initial))) {}
 
   T const& get() const { return state().value.get(); }
+  T const& operator()() const { return get(); }
   T const& peek() const { return state().value.peek(); }
   T const& operator*() const { return get(); }
   operator T() const { return get(); }
+
+  Reactive::Signal<T> signal() const { return state().value; }
 
   void set(T value, Transition transition = Transition::instant()) const {
     State& self = state();

@@ -249,9 +249,9 @@ std::unique_ptr<scenegraph::SceneNode> ScrollView::mount(MountContext& ctx) cons
     viewportNode->appendChild(std::move(indicatorOverlay));
   }
 
-  State<Point> offsetState = scrollOffset;
-  State<Size> viewportState = viewportSize;
-  State<Size> contentState = contentSize;
+  Signal<Point> offsetState = scrollOffset;
+  Signal<Size> viewportState = viewportSize;
+  Signal<Size> contentState = contentSize;
   ScrollAxis const scrollAxis = axis;
   auto childSizes = std::make_shared<std::vector<Size>>(plan.childSizes);
   Reactive::SmallFn<void()> requestRedraw = ctx.redrawCallback();

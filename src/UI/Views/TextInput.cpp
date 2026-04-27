@@ -198,8 +198,8 @@ std::string appendLimited(std::string value, std::string const& text, int maxLen
 Size TextInput::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
                         LayoutHints const&, TextSystem& textSystem) const {
   ctx.advanceChildSlot();
-  Theme const& theme = useEnvironment<Theme>();
-  return textInputFrameSize(*this, resolveTextInputStyle(style, theme), constraints, textSystem);
+  auto theme = useEnvironment<Theme>();
+  return textInputFrameSize(*this, resolveTextInputStyle(style, theme()), constraints, textSystem);
 }
 
 std::unique_ptr<scenegraph::SceneNode> TextInput::mount(MountContext& ctx) const {
@@ -223,7 +223,7 @@ std::unique_ptr<scenegraph::SceneNode> TextInput::mount(MountContext& ctx) const
   auto interaction = std::make_unique<scenegraph::InteractionData>();
   interaction->cursor = disabled ? Cursor::Inherit : Cursor::IBeam;
   interaction->focusable = !disabled;
-  State<std::string> valueState = value;
+  Signal<std::string> valueState = value;
   int const lengthLimit = maxLength;
   bool const acceptsMultiline = multiline;
   auto onChangeHandler = onChange;

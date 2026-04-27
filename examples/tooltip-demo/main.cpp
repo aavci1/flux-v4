@@ -116,7 +116,7 @@ struct TooltipToggle {
 
 struct TooltipDemoRoot {
     auto body() const {
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<Theme>();
 
         return VStack {
             .spacing = 24.f,

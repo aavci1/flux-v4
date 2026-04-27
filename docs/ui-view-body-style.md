@@ -37,7 +37,7 @@ Text{
  .cornerRadius(theme.radiusMedium);
 ```
 
-Use `Reactive::Bindable<T>` overloads when a mounted scene-node property should update after mount.
+Use `Bindable<T>` overloads when a mounted scene-node property should update after mount.
 
 ## Includes
 

@@ -29,8 +29,8 @@ struct Swatch {
   Element body() const {
     return Rectangle{}
         .size(32.f, 32.f)
-        .fill(Reactive::Bindable<Color>{[active = active] {
-          return active.get() ? Color::accent() : Color::separator();
+        .fill([active = active] {
+          return active() ? Color::accent() : Color::separator();
         }})
         .cornerRadius(8.f);
   }

@@ -29,10 +29,10 @@ float availableEnd(Rect const& anchor, Size window) {
 } // namespace
 
 Element Popover::body() const {
-  Theme const& theme = useEnvironment<Theme>();
+  auto theme = useEnvironment<Theme>();
   ResolvedPopoverCardBody const surface =
       resolvePopoverCardBody(backgroundColor, borderColor, borderWidth, cornerRadius,
-                             contentPadding, theme);
+                             contentPadding, theme());
 
   Element body = content;
   return std::move(body)

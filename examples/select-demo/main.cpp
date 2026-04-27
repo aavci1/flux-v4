@@ -43,7 +43,7 @@ Element makeSectionCard(Theme const &theme, std::string title, std::string capti
   };
 }
 
-Element metricTile(Theme const &theme, Reactive::Bindable<std::string> value, std::string label, Color accent) {
+Element metricTile(Theme const &theme, Bindable<std::string> value, std::string label, Color accent) {
   return VStack{
       .spacing = theme.space1,
       .alignment = Alignment::Start,
@@ -146,7 +146,7 @@ std::string selectedLabel(std::vector<SelectOption> const &options, int index, s
 
 struct SelectDemoRoot {
   Element body() const {
-    Theme const &theme = useEnvironment<Theme>();
+    auto theme = useEnvironment<Theme>();
 
     std::vector<SelectOption> const envOptions = environmentOptions();
     std::vector<SelectOption> const peopleOptions = reviewerOptions();
@@ -159,10 +159,10 @@ struct SelectDemoRoot {
     auto density = useState<int>(1);
     auto lastEvent = useState<std::string>("Open a menu and make a selection to watch the summary update.");
 
-    Reactive::Bindable<std::string> configuredCount{[environment, reviewer, sprint] {
-      int const count = (environment.get() >= 0 ? 1 : 0) +
-                        (reviewer.get() >= 0 ? 1 : 0) +
-                        (sprint.get() >= 0 ? 1 : 0);
+    Bindable<std::string> configuredCount{[environment, reviewer, sprint] {
+      int const count = (environment() >= 0 ? 1 : 0) +
+                        (reviewer() >= 0 ? 1 : 0) +
+                        (sprint() >= 0 ? 1 : 0);
       return std::to_string(count);
     }};
 
@@ -170,7 +170,7 @@ struct SelectDemoRoot {
         .axis = ScrollAxis::Vertical,
         .children = children(
             VStack{
-                .spacing = theme.space4,
+                .spacing = theme().space4,
                 .children = children(
                     Text{
                         .text = "Select Demo",
@@ -186,25 +186,25 @@ struct SelectDemoRoot {
                         .wrapping = TextWrapping::Wrap,
                     },
                     HStack{
-                        .spacing = theme.space3,
+                        .spacing = theme().space3,
                         .alignment = Alignment::Stretch,
                         .children = children(
-                            metricTile(theme, configuredCount, "Configured fields", Color::accent()),
-                            metricTile(theme, [sprint, backlogOptions] {
-                              return selectedLabel(backlogOptions, sprint.get(), "None");
+                            metricTile(theme(), configuredCount, "Configured fields", Color::accent()),
+                            metricTile(theme(), [sprint, backlogOptions] {
+                              return selectedLabel(backlogOptions, sprint(), "None");
                             }, "Active sprint", Color::success()),
-                            metricTile(theme, [density, densityChoices] {
-                              return selectedLabel(densityChoices, density.get(), "Balanced");
+                            metricTile(theme(), [density, densityChoices] {
+                              return selectedLabel(densityChoices, density(), "Balanced");
                             }, "Density preset", Color::warning()))
                     },
                     makeSectionCard(
-                        theme, "Release Setup",
+                        theme(), "Release Setup",
                         "The core control works well as a field in a real form, with placeholder text, helper copy, and richer option details.",
                         VStack{
-                            .spacing = theme.space3,
+                            .spacing = theme().space3,
                             .children = children(
                                 controlBlock(
-                                    theme, "Environment",
+                                    theme(), "Environment",
                                     "Arrow keys cycle between enabled options. Press Space or Return to open the full menu.",
                                     Select{
                                         .selectedIndex = environment,
@@ -218,7 +218,7 @@ struct SelectDemoRoot {
                                             },
                                     }),
                                 controlBlock(
-                                    theme, "Reviewer",
+                                    theme(), "Reviewer",
                                     "Disabled rows remain visible in the menu so availability is still explained instead of silently disappearing.",
                                     Select{
                                         .selectedIndex = reviewer,
@@ -234,10 +234,10 @@ struct SelectDemoRoot {
                                     }))
                         }),
                     makeSectionCard(
-                        theme, "Long Menu",
+                        theme(), "Long Menu",
                         "A longer backlog list is clipped into a scrollable menu instead of expanding past the viewport.",
                         controlBlock(
-                            theme, "Sprint backlog",
+                            theme(), "Sprint backlog",
                             "This list is intentionally long so the menu has to scroll. Home and End jump to the first and last enabled options.",
                             Select{
                                 .selectedIndex = sprint,
@@ -254,13 +254,13 @@ struct SelectDemoRoot {
                                     },
                             })),
                     makeSectionCard(
-                        theme, "Style Variations",
+                        theme(), "Style Variations",
                         "The same component can adapt to denser utility surfaces or upward-opening menus without changing its interaction model.",
                         VStack{
-                            .spacing = theme.space3,
+                            .spacing = theme().space3,
                             .children = children(
                                 controlBlock(
-                                    theme, "Density preset",
+                                    theme(), "Density preset",
                                     "This variation uses a success accent and a tighter menu height to feel more compact.",
                                     Select{
                                         .selectedIndex = density,
@@ -270,7 +270,7 @@ struct SelectDemoRoot {
                                             .menuMaxHeight = 180.f,
                                             .accentColor = Color::success(),
                                             .fieldHoverColor = Color::successBackground(),
-                                            .rowHoverColor = Color{theme.successBackgroundColor.r, theme.successBackgroundColor.g, theme.successBackgroundColor.b, 0.4f},
+                                            .rowHoverColor = Color{theme().successBackgroundColor.r, theme().successBackgroundColor.g, theme().successBackgroundColor.b, 0.4f},
                                         },
                                         .onChange =
                                             [lastEvent, densityChoices](int index) {
@@ -280,7 +280,7 @@ struct SelectDemoRoot {
                                             },
                                     }),
                                 controlBlock(
-                                    theme, "Placement override",
+                                    theme(), "Placement override",
                                     "This select prefers opening upward, which is useful for controls anchored near the bottom edge of a window or sheet.",
                                     Select{
                                         .selectedIndex = environment,
@@ -293,7 +293,7 @@ struct SelectDemoRoot {
                                             },
                                     }),
                                 controlBlock(
-                                    theme, "Disabled state",
+                                    theme(), "Disabled state",
                                     "Disabled selects keep their current value visible without reacting to hover, keyboard, or pointer input.",
                                     Select{
                                         .selectedIndex = density,
@@ -304,7 +304,7 @@ struct SelectDemoRoot {
                         }),
                     Text{
                         .text = [lastEvent] {
-                          return lastEvent.get();
+                          return lastEvent();
                         },
                         .font = Font::footnote(),
                         .color = Color::tertiary(),
@@ -312,7 +312,7 @@ struct SelectDemoRoot {
                         .wrapping = TextWrapping::Wrap,
                     })
             }
-                .padding(theme.space5))
+                .padding(theme().space5))
     }
         .fill(FillStyle::solid(Color::windowBackground()));
   }

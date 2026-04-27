@@ -586,7 +586,7 @@ struct MarkdownText : flux::ViewModifiers<MarkdownText> {
     }
 
     auto body() const {
-        flux::Theme const theme = flux::useEnvironment<flux::Theme>();
+        auto theme = flux::useEnvironment<flux::Theme>();
         auto selectableStateHandle =
             flux::useState<std::shared_ptr<detail::SelectableMarkdownState>>(
                 std::make_shared<detail::SelectableMarkdownState>()
@@ -643,7 +643,7 @@ struct MarkdownText : flux::ViewModifiers<MarkdownText> {
                     updateSelectionLayout(*selectableState, textLayout);
                     if (selectableState->selection.hasSelection()) {
                         flux::Color const resolvedSelectionColor =
-                            flux::resolveColor(selectionColor, theme.selectedContentBackgroundColor, theme);
+                            flux::resolveColor(selectionColor, theme().selectedContentBackgroundColor, theme());
                         for (flux::Rect const &rect : flux::detail::selectionRects(
                                  selectableState->layoutResult,
                                  selectableState->selection,

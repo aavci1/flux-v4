@@ -50,8 +50,8 @@ Element makeSectionCard(Theme const &theme, std::string title, std::string capti
     };
 }
 
-Element makeBadge(Theme const &theme, Reactive::Bindable<std::string> label,
-                  Reactive::Bindable<Color> fill, Color textColor) {
+Element makeBadge(Theme const &theme, Bindable<std::string> label,
+                  Bindable<Color> fill, Color textColor) {
     return Text {
         .text = std::move(label),
         .font = Font::caption(),
@@ -64,7 +64,7 @@ Element makeBadge(Theme const &theme, Reactive::Bindable<std::string> label,
         .padding(6.f, 10.f, 6.f, 10.f);
 }
 
-Element makeMetricTile(Theme const &theme, Reactive::Bindable<std::string> value,
+Element makeMetricTile(Theme const &theme, Bindable<std::string> value,
                        std::string label, Color accent) {
     return VStack {
         .spacing = theme.space1,
@@ -90,8 +90,8 @@ Element makeMetricTile(Theme const &theme, Reactive::Bindable<std::string> value
         .flex(1.f, 1.f, 0.f);
 }
 
-Element makeHeroDemo(Theme const &theme, State<bool> dirty, State<bool> reviewPassed, State<int> saveCount,
-                     State<std::string> lastEvent) {
+Element makeHeroDemo(Theme const &theme, Signal<bool> dirty, Signal<bool> reviewPassed, Signal<int> saveCount,
+                     Signal<std::string> lastEvent) {
     auto saveDraft = [dirty, saveCount, lastEvent] {
         if (!*dirty) {
             return;
@@ -108,7 +108,7 @@ Element makeHeroDemo(Theme const &theme, State<bool> dirty, State<bool> reviewPa
         std::fprintf(stderr, "[button-demo] Mark dirty\n");
     };
     auto heroLinkAction = [dirty, saveDraft, markDirty] {
-        if (dirty.get()) {
+        if (dirty()) {
             saveDraft();
         } else {
             markDirty();
@@ -165,18 +165,18 @@ Element makeHeroDemo(Theme const &theme, State<bool> dirty, State<bool> reviewPa
                             .flex(1.f, 1.f, 0.f),
                         makeBadge(theme,
                                   [dirty] {
-                                      return dirty.get() ? std::string {"Dirty"} : std::string {"Saved"};
+                                      return dirty() ? std::string {"Dirty"} : std::string {"Saved"};
                                   },
                                   [dirty] {
-                                      return dirty.get() ? Color::warningBackground() : Color::successBackground();
+                                      return dirty() ? Color::warningBackground() : Color::successBackground();
                                   },
                                   Color::primary()),
                         makeBadge(theme,
                                   [reviewPassed] {
-                                      return reviewPassed.get() ? std::string {"Approved"} : std::string {"Needs review"};
+                                      return reviewPassed() ? std::string {"Approved"} : std::string {"Needs review"};
                                   },
                                   [reviewPassed] {
-                                      return reviewPassed.get() ? Color::successBackground() : Color::selectedContentBackground();
+                                      return reviewPassed() ? Color::successBackground() : Color::selectedContentBackground();
                                   },
                                   Color::primary())
                     )
@@ -192,7 +192,7 @@ Element makeHeroDemo(Theme const &theme, State<bool> dirty, State<bool> reviewPa
                                     .label = "Save Draft",
                                     .variant = ButtonVariant::Primary,
                                     .disabled = [dirty] {
-                                        return !dirty.get();
+                                        return !dirty();
                                     },
                                     .onTap = saveDraft,
                                 },
@@ -233,7 +233,7 @@ Element makeHeroDemo(Theme const &theme, State<bool> dirty, State<bool> reviewPa
                     .cornerRadius(CornerRadius {theme.radiusMedium}),
                 Text {
                     .text = [lastEvent] {
-                        return lastEvent.get();
+                        return lastEvent();
                     },
                     .font = Font::footnote(),
                     .color = Color::secondary(),
@@ -274,7 +274,7 @@ Element makeVariantTile(Theme const &theme, std::string title, std::string capti
         .flex(1.f, 1.f, 0.f);
 }
 
-Element makeVariantGallery(Theme const &theme, State<std::string> lastEvent) {
+Element makeVariantGallery(Theme const &theme, Signal<std::string> lastEvent) {
     return makeSectionCard(
         theme, "Variants In Context",
         "Each button style gets a believable job: primary commits, secondary supports, ghost stays quiet, and destructive asks for intent.",
@@ -340,8 +340,8 @@ Element makeVariantGallery(Theme const &theme, State<std::string> lastEvent) {
     );
 }
 
-Element makeToolbarDemo(Theme const &theme, State<bool> dirty, State<bool> reviewPassed, State<int> saveCount,
-                        State<int> publishCount, State<std::string> lastEvent) {
+Element makeToolbarDemo(Theme const &theme, Signal<bool> dirty, Signal<bool> reviewPassed, Signal<int> saveCount,
+                        Signal<int> publishCount, Signal<std::string> lastEvent) {
     auto saveDraft = [dirty, saveCount, lastEvent] {
         if (!*dirty) {
             return;
@@ -392,7 +392,7 @@ Element makeToolbarDemo(Theme const &theme, State<bool> dirty, State<bool> revie
                         Spacer {},
                         Button {
                             .label = [reviewPassed] {
-                                return reviewPassed.get() ? std::string {"Reset Review"} : std::string {"Request Review"};
+                                return reviewPassed() ? std::string {"Reset Review"} : std::string {"Request Review"};
                             },
                             .variant = ButtonVariant::Secondary,
                             .onTap =
@@ -406,7 +406,7 @@ Element makeToolbarDemo(Theme const &theme, State<bool> dirty, State<bool> revie
                             .label = "Save",
                             .variant = ButtonVariant::Primary,
                             .disabled = [dirty] {
-                                return !dirty.get();
+                                return !dirty();
                             },
                             .onTap = saveDraft,
                         },
@@ -414,7 +414,7 @@ Element makeToolbarDemo(Theme const &theme, State<bool> dirty, State<bool> revie
                             .label = "Publish",
                             .variant = ButtonVariant::Primary,
                             .disabled = [dirty, reviewPassed] {
-                                return dirty.get() || !reviewPassed.get();
+                                return dirty() || !reviewPassed();
                             },
                             .onTap =
                                 [dirty, reviewPassed, publishCount, lastEvent] {
@@ -436,13 +436,13 @@ Element makeToolbarDemo(Theme const &theme, State<bool> dirty, State<bool> revie
                     .alignment = Alignment::Stretch,
                     .children = children(
                         makeMetricTile(theme, [saveCount] {
-                            return std::to_string(saveCount.get());
+                            return std::to_string(saveCount());
                         }, "Saves", Color::accent()),
                         makeMetricTile(theme, [publishCount] {
-                            return std::to_string(publishCount.get());
+                            return std::to_string(publishCount());
                         }, "Publishes", Color::success()),
                         makeMetricTile(theme, [reviewPassed] {
-                            return reviewPassed.get() ? std::string {"Ready"} : std::string {"Blocked"};
+                            return reviewPassed() ? std::string {"Ready"} : std::string {"Blocked"};
                         }, "Review status", Color::warning())
                     )
                 }
@@ -451,7 +451,7 @@ Element makeToolbarDemo(Theme const &theme, State<bool> dirty, State<bool> revie
     );
 }
 
-Element makeInlineDemo(Theme const &theme, State<bool> reviewPassed, State<std::string> lastEvent) {
+Element makeInlineDemo(Theme const &theme, Signal<bool> reviewPassed, Signal<std::string> lastEvent) {
     return makeSectionCard(
         theme, "Inline Actions",
         "Links should read like part of the sentence, not like disguised boxed buttons. They work well for help, secondary disclosure, and low-friction follow-up actions.",
@@ -486,7 +486,7 @@ Element makeInlineDemo(Theme const &theme, State<bool> reviewPassed, State<std::
                     .children = children(
                         Text {
                             .text = [reviewPassed] {
-                                return reviewPassed.get()
+                                return reviewPassed()
                                            ? std::string {"Review already passed."}
                                            : std::string {"Still waiting on approval?"};
                             },
@@ -495,7 +495,7 @@ Element makeInlineDemo(Theme const &theme, State<bool> reviewPassed, State<std::
                         },
                         LinkButton {
                             .label = [reviewPassed] {
-                                return reviewPassed.get()
+                                return reviewPassed()
                                            ? std::string {"Mark review as pending"}
                                            : std::string {"Mark review as approved"};
                             },
@@ -564,7 +564,7 @@ Element makeIconButtonTile(Theme const &theme, std::string title, std::string ca
         .flex(1.f, 1.f, 0.f);
 }
 
-Element makeIconButtonDemo(Theme const &theme, State<std::string> lastEvent) {
+Element makeIconButtonDemo(Theme const &theme, Signal<std::string> lastEvent) {
     return makeSectionCard(
         theme, "Icon Buttons",
         "Compact icon-only actions fit dense toolbars and utility clusters where a text label would add noise. They should still keep the same hover, focus, and disabled behavior as their text counterparts.",
@@ -623,7 +623,7 @@ Element makeIconButtonDemo(Theme const &theme, State<std::string> lastEvent) {
 
 struct ButtonDemoRoot {
     Element body() const {
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<Theme>();
 
         auto dirty = useState(true);
         auto reviewPassed = useState(false);
@@ -651,7 +651,7 @@ struct ButtonDemoRoot {
             .axis = ScrollAxis::Vertical,
             .children = children(
                 VStack {
-                    .spacing = theme.space4,
+                    .spacing = theme().space4,
                     .alignment = Alignment::Start,
                     .children = children(
                         Text {
@@ -667,14 +667,14 @@ struct ButtonDemoRoot {
                             .horizontalAlignment = HorizontalAlignment::Leading,
                             .wrapping = TextWrapping::Wrap,
                         },
-                        makeHeroDemo(theme, dirty, reviewPassed, saveCount, lastEvent),
-                        makeVariantGallery(theme, lastEvent),
-                        makeIconButtonDemo(theme, lastEvent),
-                        makeToolbarDemo(theme, dirty, reviewPassed, saveCount, publishCount, lastEvent),
-                        makeInlineDemo(theme, reviewPassed, lastEvent)
+                        makeHeroDemo(theme(), dirty, reviewPassed, saveCount, lastEvent),
+                        makeVariantGallery(theme(), lastEvent),
+                        makeIconButtonDemo(theme(), lastEvent),
+                        makeToolbarDemo(theme(), dirty, reviewPassed, saveCount, publishCount, lastEvent),
+                        makeInlineDemo(theme(), reviewPassed, lastEvent)
                     )
                 } //
-                    .padding(theme.space5)
+                    .padding(theme().space5)
             )
         } //
             .fill(FillStyle::solid(Color::windowBackground()));

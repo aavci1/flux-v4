@@ -21,7 +21,7 @@ struct Checkbox : ViewModifiers<Checkbox> {
   // ── Binding ──────────────────────────────────────────────────────────────
 
   /// Checked state; bind with \c useState<bool>() or equivalent.
-  State<bool> value { };
+  Signal<bool> value { };
 
   // ── Indeterminate ────────────────────────────────────────────────────────
 

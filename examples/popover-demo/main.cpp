@@ -20,7 +20,7 @@ struct PopoverDemoRoot {
         auto dismissOutside = useState<bool>(true);
         auto [showPopover, hidePopover, popoverOpen] = usePopover();
 
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<Theme>();
 
         std::vector<Element> scrollChildren;
 
@@ -92,7 +92,7 @@ struct PopoverDemoRoot {
                 Spacer {},
                 Button {
                     .label = [showArrow] {
-                        return showArrow.get() ? std::string {"On"} : std::string {"Off"};
+                        return showArrow() ? std::string {"On"} : std::string {"Off"};
                     },
                     .variant = ButtonVariant::Ghost,
                     .onTap = [=] { showArrow = !*showArrow; },
@@ -107,7 +107,7 @@ struct PopoverDemoRoot {
                 Spacer {},
                 Button {
                     .label = [dismissOutside] {
-                        return dismissOutside.get() ? std::string {"On"} : std::string {"Off"};
+                        return dismissOutside() ? std::string {"On"} : std::string {"Off"};
                     },
                     .variant = ButtonVariant::Ghost,
                     .onTap = [=] { dismissOutside = !*dismissOutside; },
@@ -237,7 +237,7 @@ struct PopoverDemoRoot {
                 }
                     .flex(1.f, 1.f, 0.f)
                     .fill(FillStyle::solid(Color::elevatedBackground()))
-                    .cornerRadius(CornerRadius {theme.radiusLarge})
+                    .cornerRadius(CornerRadius {theme().radiusLarge})
             ),
         }
             .padding(20.f)

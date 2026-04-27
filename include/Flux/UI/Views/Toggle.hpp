@@ -36,7 +36,7 @@ struct Toggle : ViewModifiers<Toggle> {
   // ── State ──────────────────────────────────────────────────────────────────
 
   /// Current on/off state; typically from \c useState<bool>() in a parent or owned by this subtree.
-  State<bool> value { };
+  Signal<bool> value { };
 
   // ── Properties ─────────────────────────────────────────────────────────────
 

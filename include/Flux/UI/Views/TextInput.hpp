@@ -59,7 +59,7 @@ struct TextInput : ViewModifiers<TextInput> {
         bool operator==(Style const& other) const = default;
     };
 
-    State<std::string> value {};
+    Signal<std::string> value {};
     std::string placeholder;
 
     std::function<std::vector<AttributedRun>(std::string_view)> styler;

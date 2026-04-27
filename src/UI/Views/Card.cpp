@@ -26,7 +26,7 @@ Card::Style resolveStyle(Card::Style const &style, Theme const &theme) {
 } // namespace
 
 Element Card::body() const {
-  Card::Style const resolved = resolveStyle(style, useEnvironment<Theme>());
+  Card::Style const resolved = resolveStyle(style, useEnvironment<Theme>()());
 
   Reactive::Bindable<StrokeStyle> const stroke{[borderWidth = resolved.borderWidth,
                                                 borderColor = resolved.borderColor] {

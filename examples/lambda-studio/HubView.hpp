@@ -39,7 +39,7 @@ struct RemoteModelRow : ViewModifiers<RemoteModelRow> {
     std::function<void()> onTap;
 
     auto body() const {
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<Theme>();
 
         std::string meta = model.author.empty() ? model.id : model.author;
         if (!model.pipelineTag.empty()) {
@@ -85,7 +85,7 @@ struct RemoteModelRow : ViewModifiers<RemoteModelRow> {
 
         return ListRow {
             .content = VStack {
-                .spacing = theme.space1,
+                .spacing = theme().space1,
                 .alignment = Alignment::Start,
                 .children = std::move(contentChildren)
             },
@@ -104,7 +104,7 @@ struct RemoteFileRow : ViewModifiers<RemoteFileRow> {
     std::function<void()> onCancel;
 
     auto body() const {
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<Theme>();
         bool const showProgress = downloading && totalBytes > 0;
         std::string meta = formatModelSize(file.sizeBytes) + (file.cached ? "  •  Cached locally" : "");
         if (downloading) {
@@ -136,7 +136,7 @@ struct RemoteFileRow : ViewModifiers<RemoteFileRow> {
                     .progress = static_cast<float>(downloadedBytes) / static_cast<float>(totalBytes),
                     .style = {
                         .activeColor = Color::accent(),
-                        .inactiveColor = theme.hoveredControlBackgroundColor,
+                        .inactiveColor = theme().hoveredControlBackgroundColor,
                         .trackHeight = 6.f,
                     },
                 }.size(112.f, 0.f)
@@ -145,11 +145,11 @@ struct RemoteFileRow : ViewModifiers<RemoteFileRow> {
 
         return ListRow {
             .content = HStack {
-                .spacing = theme.space3,
+                .spacing = theme().space3,
                 .alignment = Alignment::Center,
                 .children = children(
                     VStack {
-                        .spacing = theme.space1,
+                        .spacing = theme().space1,
                         .alignment = Alignment::Start,
                         .children = std::move(fileInfo)
                     }
@@ -178,7 +178,7 @@ struct HubView : ViewModifiers<HubView> {
     std::function<void(std::string const &)> onCancelDownload;
 
     auto body() const {
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<Theme>();
         auto searchQuery = useState<std::string>(state.modelSearchQuery);
         auto sortIndex = useState<int>(state.remoteModelSort == RemoteModelSort::Likes ? 1 :
                                        state.remoteModelSort == RemoteModelSort::Updated ? 2 :
@@ -417,7 +417,7 @@ struct HubView : ViewModifiers<HubView> {
             .alignment = Alignment::Stretch,
             .children = children(
                 HStack {
-                    .spacing = theme.space3,
+                    .spacing = theme().space3,
                     .alignment = Alignment::Center,
                     .children = children(
                         TextInput {
@@ -480,7 +480,7 @@ struct HubView : ViewModifiers<HubView> {
                             .size(132.f, 40.f)
                     )
                 }
-                    .padding(theme.space4),
+                    .padding(theme().space4),
                 Divider { .orientation = Divider::Orientation:: Horizontal },
                 HStack {
                     .spacing = 0.f,
@@ -495,7 +495,7 @@ struct HubView : ViewModifiers<HubView> {
                             .size(420.f, 0.f),
                         Divider { .orientation = Divider::Orientation:: Vertical },
                         VStack {
-                            .spacing = theme.space2,
+                            .spacing = theme().space2,
                             .alignment = Alignment::Stretch,
                             .children = children(
                                 selectedRemoteModel == nullptr ? Element {EmptyStatePanel {
@@ -503,14 +503,14 @@ struct HubView : ViewModifiers<HubView> {
                                                                      .detail = "Pick a search result to inspect its GGUF files.",
                                                                  }}
                                                                : Element {VStack {
-                                                                     .spacing = theme.space1,
+                                                                     .spacing = theme().space1,
                                                                      .alignment = Alignment::Start,
                                                                      .children = std::move(selectedRepoChildren),
                                                                  }},
                                 std::move(remoteFiles)
                             )
                         }
-                            .padding(theme.space4)
+                            .padding(theme().space4)
                             .fill(FillStyle::solid(Color::elevatedBackground()))
                             .flex(1.f, 1.f)
                     )

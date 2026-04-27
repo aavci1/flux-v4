@@ -114,23 +114,23 @@ ButtonColors deriveColors(ButtonVariant variant, Color accent, Color destructive
 } // namespace
 
 Element Button::body() const {
-    Theme const &theme = useEnvironment<Theme>();
-    auto [fontResolved, paddingH, paddingV, radiusResolved, accent, destructive] = resolveStyle(style, theme);
+    auto theme = useEnvironment<Theme>();
+    auto [fontResolved, paddingH, paddingV, radiusResolved, accent, destructive] = resolveStyle(style, theme());
     bool const isDisabled = disabled.evaluate();
     Reactive::Bindable<bool> disabledBinding = disabled;
-    ButtonColors const colors = deriveColors(variant, accent, destructive, theme.accentForegroundColor, theme.dangerForegroundColor, theme);
+    ButtonColors const colors = deriveColors(variant, accent, destructive, theme().accentForegroundColor, theme().dangerForegroundColor, theme());
     Reactive::Signal<bool> hovered = useHover();
     Reactive::Signal<bool> pressed = usePress();
     Reactive::Signal<bool> focused = useFocus();
 
     Reactive::Bindable<Color> const fillTarget{[disabledBinding, pressed, hovered, colors, theme] {
-        return disabledBinding.evaluate() ? theme.disabledControlBackgroundColor :
+        return disabledBinding.evaluate() ? theme().disabledControlBackgroundColor :
                pressed.get()             ? colors.fillPress :
                hovered.get()             ? colors.fillHover :
                                            colors.fill;
     }};
     Reactive::Bindable<Color> const labelTarget{[disabledBinding, colors, theme] {
-        return disabledBinding.evaluate() ? theme.disabledTextColor : colors.label;
+        return disabledBinding.evaluate() ? theme().disabledTextColor : colors.label;
     }};
     Reactive::Bindable<float> const scaleTarget{[disabledBinding, pressed] {
         return (pressed.get() && !disabledBinding.evaluate()) ? 0.97f : 1.f;
@@ -140,10 +140,10 @@ Element Button::body() const {
             return ShadowStyle::none();
         }
         if (pressed.get()) {
-            return ShadowStyle {.radius = theme.shadowRadiusControl + 2.f, .offset = {0.f, theme.shadowOffsetYControl + 1.f}, .color = Color {theme.shadowColor.r, theme.shadowColor.g, theme.shadowColor.b, std::min(theme.shadowColor.a + 0.08f, 1.f)}};
+            return ShadowStyle {.radius = theme().shadowRadiusControl + 2.f, .offset = {0.f, theme().shadowOffsetYControl + 1.f}, .color = Color {theme().shadowColor.r, theme().shadowColor.g, theme().shadowColor.b, std::min(theme().shadowColor.a + 0.08f, 1.f)}};
         }
         if (hovered.get()) {
-            return colors.shadow.isNone() ? ShadowStyle {.radius = theme.shadowRadiusControl * 0.8f, .offset = {0.f, theme.shadowOffsetYControl + 0.5f}, .color = Color {theme.shadowColor.r, theme.shadowColor.g, theme.shadowColor.b, theme.shadowColor.a * 0.7f}} : colors.shadow;
+            return colors.shadow.isNone() ? ShadowStyle {.radius = theme().shadowRadiusControl * 0.8f, .offset = {0.f, theme().shadowOffsetYControl + 0.5f}, .color = Color {theme().shadowColor.r, theme().shadowColor.g, theme().shadowColor.b, theme().shadowColor.a * 0.7f}} : colors.shadow;
         }
         return colors.shadow;
     }};
@@ -191,8 +191,8 @@ Element Button::body() const {
 }
 
 Element LinkButton::body() const {
-    Theme const &theme = useEnvironment<Theme>();
-    auto [fontResolved, accentResolved] = resolveStyle(style, theme);
+    auto theme = useEnvironment<Theme>();
+    auto [fontResolved, accentResolved] = resolveStyle(style, theme());
     bool const isDisabled = disabled.evaluate();
     Reactive::Bindable<bool> disabledBinding = disabled;
     Reactive::Signal<bool> hovered = useHover();
@@ -201,7 +201,7 @@ Element LinkButton::body() const {
     Reactive::Signal<bool> keyboardFocused = useKeyboardFocus();
 
     Reactive::Bindable<Color> const labelColor{[disabledBinding, pressed, hovered, accentResolved, theme] {
-        return disabledBinding.evaluate() ? theme.disabledTextColor :
+        return disabledBinding.evaluate() ? theme().disabledTextColor :
                pressed.get()             ? darken(accentResolved, 0.12f) :
                hovered.get()             ? lighten(accentResolved, 0.12f) :
                                            accentResolved;
@@ -223,7 +223,7 @@ Element LinkButton::body() const {
 
     Reactive::Bindable<StrokeStyle> const focusStroke{[disabledBinding, focused, keyboardFocused, theme] {
         return !disabledBinding.evaluate() && focused.get() && keyboardFocused.get()
-                   ? StrokeStyle::solid(theme.keyboardFocusIndicatorColor, 2.f)
+                   ? StrokeStyle::solid(theme().keyboardFocusIndicatorColor, 2.f)
                    : StrokeStyle::none();
     }};
 
@@ -236,7 +236,7 @@ Element LinkButton::body() const {
     }
         .fill(FillStyle::none())
         .stroke(focusStroke)
-        .cornerRadius(CornerRadius {theme.radiusXSmall})
+        .cornerRadius(CornerRadius {theme().radiusXSmall})
         .padding(0.f, 3.f, 0.f, 3.f)
         .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
         .focusable(!isDisabled)
@@ -245,8 +245,8 @@ Element LinkButton::body() const {
 }
 
 Element IconButton::body() const {
-    Theme const &theme = useEnvironment<Theme>();
-    auto [sizeResolved, weightResolved, accentResolved] = resolveStyle(style, theme);
+    auto theme = useEnvironment<Theme>();
+    auto [sizeResolved, weightResolved, accentResolved] = resolveStyle(style, theme());
     bool const isDisabled = disabled.evaluate();
     Reactive::Bindable<bool> disabledBinding = disabled;
     Reactive::Signal<bool> hovered = useHover();
@@ -255,7 +255,7 @@ Element IconButton::body() const {
     Reactive::Signal<bool> keyboardFocused = useKeyboardFocus();
 
     Reactive::Bindable<Color> const iconColor{[disabledBinding, pressed, hovered, accentResolved, theme] {
-        return disabledBinding.evaluate() ? theme.disabledTextColor :
+        return disabledBinding.evaluate() ? theme().disabledTextColor :
                pressed.get()             ? darken(accentResolved, 0.12f) :
                hovered.get()             ? lighten(accentResolved, 0.12f) :
                                            accentResolved;
@@ -277,7 +277,7 @@ Element IconButton::body() const {
 
     Reactive::Bindable<StrokeStyle> const focusStroke{[disabledBinding, focused, keyboardFocused, theme] {
         return !disabledBinding.evaluate() && focused.get() && keyboardFocused.get()
-                   ? StrokeStyle::solid(theme.keyboardFocusIndicatorColor, 2.f)
+                   ? StrokeStyle::solid(theme().keyboardFocusIndicatorColor, 2.f)
                    : StrokeStyle::none();
     }};
 
@@ -289,7 +289,7 @@ Element IconButton::body() const {
     }
         .fill(FillStyle::none())
         .stroke(focusStroke)
-        .cornerRadius(CornerRadius {theme.radiusXSmall})
+        .cornerRadius(CornerRadius {theme().radiusXSmall})
         .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
         .focusable(!isDisabled)
         .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})

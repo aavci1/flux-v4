@@ -13,11 +13,11 @@ struct ToggleSwatch {
 
     return Rectangle{}
         .size(48.f, 48.f)
-        .fill(Reactive::Bindable<Color>{[active] {
-          return active.get() ? Color::accent() : Color::separator();
+        .fill([active] {
+          return active() ? Color::accent() : Color::separator();
         }})
         .cornerRadius(8.f)
-        .onTap([active] { active = !active.get(); });
+        .onTap([active] { active = !active(); });
   }
 };
 ```
@@ -26,11 +26,12 @@ When text or layout values must keep changing after mount, use a view or modifie
 
 ## State And Effects
 
-- Use `useState(initial)` for local reactive state.
+- Use `useState(initial)` for local reactive state. It returns `Signal<T>`.
 - Use `useComputed(fn)` for derived values.
 - Use `useEffect(fn)` for side effects attached to the current owner scope.
 - Use `onCleanup(fn)` when a branch, row, or component owns an external resource.
 - Use `untrack(fn)` to read without subscribing.
+- Use `signal()` as the canonical read-and-subscribe form. Use `signal.peek()` only for an intentional non-tracking read.
 
 ## Control Flow
 
@@ -45,7 +46,20 @@ Control-flow factories receive their own scopes, so row and branch state persist
 Read the active theme with:
 
 ```cpp
-Theme const& theme = useEnvironment<Theme>();
+auto theme = useEnvironment<Theme>();
 ```
 
-For reactive theme-dependent values, use `themeField(&Theme::space3)` or capture the `EnvironmentValue<Theme>` in a bindable closure.
+Environment values are signals. Read `theme()` inside a `Bindable` closure or `Effect`
+body when the result must update after `Window::setTheme(...)` or another environment
+write. Reads at body time are one-time static reads, which is appropriate for fixed
+mount-time layout seeds.
+
+```cpp
+Text {
+  .text = "Status",
+  .color = [theme] { return theme().labelColor; },
+}
+```
+
+Debug builds warn when a signal-backed environment value is read outside a tracking
+context, because that read does not subscribe to future environment changes.

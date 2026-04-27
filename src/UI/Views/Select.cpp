@@ -295,7 +295,7 @@ struct SelectMenuRow : ViewModifiers<SelectMenuRow> {
 };
 
 struct SelectMenuContent {
-    State<int> selectedIndex {};
+    Signal<int> selectedIndex {};
     std::vector<SelectOption> options;
     std::string emptyText;
     bool showCheckmark = true;
@@ -362,7 +362,7 @@ struct SelectMenuContent {
 };
 
 struct SelectTrigger : ViewModifiers<SelectTrigger> {
-    State<int> selectedIndex {};
+    Signal<int> selectedIndex {};
     std::vector<SelectOption> options;
     std::string placeholder;
     std::string emptyText;
@@ -389,7 +389,7 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
     }
 
     Element body() const {
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<Theme>();
 
         auto [showPopover, hidePopover, isPresented] = usePopover();
 
@@ -426,31 +426,31 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
                                                    hovered, open, accent = style.accentColor,
                                                    hasCurrentOption, theme] {
             if (triggerMode == SelectTriggerMode::Link) {
-                return isDisabled ? theme.disabledTextColor :
+                return isDisabled ? theme().disabledTextColor :
                        pressed.get() ? darken(accent, 0.12f) :
                        (hovered.get() || open) ? lighten(accent, 0.12f) :
                                                  accent;
             }
-            return isDisabled ? theme.disabledTextColor :
-                   hasCurrentOption ? theme.labelColor : theme.placeholderTextColor;
+            return isDisabled ? theme().disabledTextColor :
+                   hasCurrentOption ? theme().labelColor : theme().placeholderTextColor;
         }};
         Reactive::Bindable<Color> const detailAnim{[triggerMode = triggerMode, isDisabled,
                                                     labelAnim, theme] {
             return triggerMode == SelectTriggerMode::Link ? labelAnim.evaluate() :
-                   isDisabled ? theme.disabledTextColor : theme.secondaryLabelColor;
+                   isDisabled ? theme().disabledTextColor : theme().secondaryLabelColor;
         }};
         Reactive::Bindable<Color> const chevronAnim{[triggerMode = triggerMode, isDisabled, open,
                                                      labelAnim, accent = style.accentColor,
                                                      theme] {
             return triggerMode == SelectTriggerMode::Link ? labelAnim.evaluate() :
-                   isDisabled ? theme.disabledTextColor :
-                   open ? accent : theme.secondaryLabelColor;
+                   isDisabled ? theme().disabledTextColor :
+                   open ? accent : theme().secondaryLabelColor;
         }};
 
         float const triggerWidth = bounds.width > 0.f ? bounds.width : style.minMenuWidth;
         EdgeInsets const anchorOutsets = EdgeInsets {};
         std::optional<float> const menuWidth = matchTriggerWidth ? std::optional<float> {triggerWidth} :
-                                                                   std::optional<float> {intrinsicMenuWidth(options, style, theme, showCheckmark, emptyText)};
+                                                                   std::optional<float> {intrinsicMenuWidth(options, style, theme(), showCheckmark, emptyText)};
         std::optional<float> const anchorMaxHeight =
             triggerMode == SelectTriggerMode::Link ? std::nullopt : (bounds.height > 0.f ? std::optional<float> {bounds.height} : std::nullopt);
 
@@ -474,14 +474,14 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
                          showCheckmark = showCheckmark,
                          dismissOnSelect = dismissOnSelect,
                          style = style,
-                         theme,
+                         theme = theme(),
                          menuWidth,
                          matchTriggerWidth = matchTriggerWidth,
                          triggerMode = triggerMode,
                          placement = placement,
                          anchorMaxHeight,
                          anchorOutsets,
-                         popoverGap = triggerMode == SelectTriggerMode::Field ? theme.space1 : kFloatFromTheme,
+                         popoverGap = triggerMode == SelectTriggerMode::Field ? theme().space1 : kFloatFromTheme,
                          onChange = onChange]() {
             auto handleSelect = [selectedIndex, options = options, dismissOnSelect, hidePopover, onChange](int nextIndex) {
                 if (!isValidIndex(nextIndex, options.size()) || options[static_cast<std::size_t>(nextIndex)].disabled) {
@@ -646,14 +646,14 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
                 .maxLines = 2,
             });
             triggerTextBlock = VStack {
-                .spacing = theme.space1 * 0.5f,
+                .spacing = theme().space1 * 0.5f,
                 .alignment = Alignment::Start,
                 .children = std::move(triggerTextChildren),
             };
         }
 
         Element trigger = HStack {
-            .spacing = theme.space1,
+            .spacing = theme().space1,
             .alignment = Alignment::Center,
             .children = children(
                 std::move(triggerTextBlock).flex(triggerMode == SelectTriggerMode::Field ? 1.f : 0.f, 1.f),
@@ -670,10 +670,10 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
                 .padding(0.f, 3.f, 0.f, 3.f)
                 .fill(FillStyle::none())
                 .stroke([focused, isDisabled, theme] {
-                    return !isDisabled && focused.get() ? StrokeStyle::solid(theme.keyboardFocusIndicatorColor, 2.f)
+                    return !isDisabled && focused.get() ? StrokeStyle::solid(theme().keyboardFocusIndicatorColor, 2.f)
                                                         : StrokeStyle::none();
                 })
-                .cornerRadius(CornerRadius {theme.radiusXSmall})
+                .cornerRadius(CornerRadius {theme().radiusXSmall})
                 .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
                 .focusable(!isDisabled)
                 .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})
@@ -707,10 +707,10 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
 } // namespace
 
 Element Select::body() const {
-    Theme const &theme = useEnvironment<Theme>();
-    SelectResolvedStyle const resolved = resolveStyle(style, theme);
+    auto theme = useEnvironment<Theme>();
+    SelectResolvedStyle const resolved = resolveStyle(style, theme());
 
-    State<int> const selection = selectedIndex;
+    Signal<int> const selection = selectedIndex;
     Element field = SelectTrigger {
         .selectedIndex = selection,
         .options = options,
@@ -732,14 +732,14 @@ Element Select::body() const {
     }
 
     return VStack {
-        .spacing = theme.space1,
+        .spacing = theme().space1,
         .alignment = Alignment::Start,
         .children = children(
             std::move(field),
             Text {
                 .text = helperText,
                 .font = resolved.detailFont,
-                .color = disabled ? theme.disabledTextColor : theme.secondaryLabelColor,
+                .color = disabled ? theme().disabledTextColor : theme().secondaryLabelColor,
                 .horizontalAlignment = HorizontalAlignment::Leading,
                 .wrapping = TextWrapping::Wrap,
             }

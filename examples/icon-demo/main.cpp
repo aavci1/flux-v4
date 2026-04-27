@@ -78,10 +78,10 @@ struct IconCell {
     bool operator==(IconCell const &) const = default;
 
     auto body() const {
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<Theme>();
 
         return VStack {
-            .spacing = theme.space2,
+            .spacing = theme().space2,
             .alignment = Alignment::Center,
             .children = children(
                 Icon {
@@ -100,13 +100,13 @@ struct IconCell {
                 }
             ),
         }
-            .padding(theme.space2);
+            .padding(theme().space2);
     }
 };
 
 struct IconDemoRoot {
     auto body() const {
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<Theme>();
 
         std::vector<Element> gridCells;
         gridCells.reserve(sizeof(kIcons) / sizeof(kIcons[0]));
@@ -123,7 +123,7 @@ struct IconDemoRoot {
             .axis = ScrollAxis::Vertical,
             .children = children(
                 VStack {
-                    .spacing = theme.space4,
+                    .spacing = theme().space4,
                     .children = children(
                         Text {
                             .text = "Icon demo",
@@ -142,19 +142,19 @@ struct IconDemoRoot {
 
                         Grid {
                             .columns = 4,
-                            .horizontalSpacing = theme.space2,
-                            .verticalSpacing = theme.space4,
+                            .horizontalSpacing = theme().space2,
+                            .verticalSpacing = theme().space4,
                             .horizontalAlignment = Alignment::Center,
                             .verticalAlignment = Alignment::Center,
                             .children = std::move(gridCells),
                         }
-                            .padding(theme.space4)
+                            .padding(theme().space4)
                             .fill(FillStyle::solid(Color::elevatedBackground()))
                             .stroke(StrokeStyle::solid(Color::separator(), 1.f))
-                            .cornerRadius(CornerRadius {theme.radiusLarge})
+                            .cornerRadius(CornerRadius {theme().radiusLarge})
                     ),
                 }
-                    .padding(theme.space5)
+                    .padding(theme().space5)
             ),
         };
     }

@@ -97,7 +97,7 @@ Element sectionCard(Theme const& theme, std::string title, std::string caption, 
 
 struct ToastDemoRoot {
   Element body() const {
-    Theme const& theme = useEnvironment<Theme>();
+    auto theme = useEnvironment<Theme>();
 
     auto placementIndex = useState<int>(4);
     auto persistent = useState(false);
@@ -113,10 +113,10 @@ struct ToastDemoRoot {
 
     std::vector<SelectOption> const placements = placementOptions();
     auto currentPlacement = [placementIndex] {
-      return placementFromIndex(placementIndex.get());
+      return placementFromIndex(placementIndex());
     };
     auto currentAutoDismissMs = [persistent] {
-      return persistent.get() ? 0 : 4500;
+      return persistent() ? 0 : 4500;
     };
 
     auto nextSequenceLabel = [sequence]() {
@@ -138,16 +138,16 @@ struct ToastDemoRoot {
           .autoDismissMs = currentAutoDismissMs(),
       });
       lastToastId = toastId;
-      visibleCount = visibleCount.get() + 1;
-      status = std::string {"Sent a "} + (persistent.get() ? "persistent" : "timed") + " toast to " +
+      visibleCount = visibleCount() + 1;
+      status = std::string {"Sent a "} + (persistent() ? "persistent" : "timed") + " toast to " +
                placementLabel(placement) + ".";
     };
 
     Element placementSection = sectionCard(
-        theme, "Placement and Lifetime",
+        theme(), "Placement and Lifetime",
         "Choose the target placement and toggle whether new toasts auto-dismiss or stay visible until dismissed.",
         VStack {
-            .spacing = theme.space3,
+            .spacing = theme().space3,
             .alignment = Alignment::Stretch,
             .children = children(
                 Select {
@@ -156,7 +156,7 @@ struct ToastDemoRoot {
                     .helperText = "The queue stacks independently for each placement.",
                 },
                 HStack {
-                    .spacing = theme.space2,
+                    .spacing = theme().space2,
                     .alignment = Alignment::Center,
                     .children = children(
                         Toggle {.value = persistent},
@@ -168,7 +168,7 @@ struct ToastDemoRoot {
                         Spacer {},
                         Text {
                             .text = [persistent] {
-                              return persistent.get() ? "Manual dismissal" : "4.5 second timeout";
+                              return persistent() ? "Manual dismissal" : "4.5 second timeout";
                             },
                             .font = Font::footnote(),
                             .color = Color::secondary(),
@@ -177,14 +177,14 @@ struct ToastDemoRoot {
         });
 
     Element toneSection = sectionCard(
-        theme, "Tone Variants",
+        theme(), "Tone Variants",
         "These buttons emit one toast each using the selected placement and lifetime policy.",
         VStack {
-            .spacing = theme.space2,
+            .spacing = theme().space2,
             .alignment = Alignment::Stretch,
             .children = children(
                 HStack {
-                    .spacing = theme.space2,
+                    .spacing = theme().space2,
                     .alignment = Alignment::Center,
                     .children = children(
                         Button {
@@ -219,7 +219,7 @@ struct ToastDemoRoot {
                             .flex(1.f, 1.f, 0.f))
                 },
                 HStack {
-                    .spacing = theme.space2,
+                    .spacing = theme().space2,
                     .alignment = Alignment::Center,
                     .children = children(
                         Button {
@@ -247,14 +247,14 @@ struct ToastDemoRoot {
         });
 
     Element behaviorSection = sectionCard(
-        theme, "Behavior",
+        theme(), "Behavior",
         "Demonstrates stacking, multiple simultaneous placements, inline actions, and dismiss controls.",
         VStack {
-            .spacing = theme.space2,
+            .spacing = theme().space2,
             .alignment = Alignment::Stretch,
             .children = children(
                 HStack {
-                    .spacing = theme.space2,
+                    .spacing = theme().space2,
                     .alignment = Alignment::Center,
                     .children = children(
                         Button {
@@ -277,7 +277,7 @@ struct ToastDemoRoot {
                                   .autoDismissMs = currentAutoDismissMs() > 0 ? 7000 : 0,
                               });
                               lastToastId = toastId;
-                              visibleCount = visibleCount.get() + 1;
+                              visibleCount = visibleCount() + 1;
                               status = "Sent an actionable toast.";
                             },
                         }
@@ -299,14 +299,14 @@ struct ToastDemoRoot {
                                     .autoDismissMs = 5000,
                                 });
                               }
-                              visibleCount = visibleCount.get() + 3;
+                              visibleCount = visibleCount() + 3;
                               status = "Queued three stacked toasts in the selected placement.";
                             },
                         }
                             .flex(1.f, 1.f, 0.f))
                 },
                 HStack {
-                    .spacing = theme.space2,
+                    .spacing = theme().space2,
                     .alignment = Alignment::Center,
                     .children = children(
                         Button {
@@ -334,7 +334,7 @@ struct ToastDemoRoot {
                                   .placement = ToastPlacement::BottomCenter,
                                   .autoDismissMs = 4500,
                               });
-                              visibleCount = visibleCount.get() + 3;
+                              visibleCount = visibleCount() + 3;
                               status = "Sent toasts to three placements at once.";
                             },
                         }
@@ -345,7 +345,7 @@ struct ToastDemoRoot {
                             .onTap = [dismissToast, lastToastId, visibleCount, status] {
                               if (*lastToastId != 0) {
                                 dismissToast(*lastToastId);
-                                visibleCount = std::max(0, visibleCount.get() - 1);
+                                visibleCount = std::max(0, visibleCount() - 1);
                                 status = "Dismissed the most recently tracked toast.";
                               }
                             },
@@ -365,7 +365,7 @@ struct ToastDemoRoot {
         });
 
     Element content = VStack {
-        .spacing = theme.space4,
+        .spacing = theme().space4,
         .alignment = Alignment::Stretch,
         .children = children(
             Text {
@@ -382,25 +382,25 @@ struct ToastDemoRoot {
             },
             Card {
                 .child = HStack {
-                    .spacing = theme.space3,
+                    .spacing = theme().space3,
                     .alignment = Alignment::Center,
                     .children = children(
                         VStack {
-                            .spacing = theme.space1,
+                            .spacing = theme().space1,
                             .alignment = Alignment::Start,
                             .children = children(
                                 Text {
                                     .text = [visibleCount] {
-                                      return visibleCount.get() > 0 ? "Visible toasts on screen" : "Overlay idle";
+                                      return visibleCount() > 0 ? "Visible toasts on screen" : "Overlay idle";
                                     },
                                     .font = Font::headline(),
                                     .color = [visibleCount, theme] {
-                                      return visibleCount.get() > 0 ? theme.accentColor : theme.secondaryLabelColor;
+                                      return visibleCount() > 0 ? theme().accentColor : theme().secondaryLabelColor;
                                     },
                                 },
                                 Text {
                                     .text = [status] {
-                                      return status.get();
+                                      return status();
                                     },
                                     .font = Font::footnote(),
                                     .color = Color::secondary(),
@@ -411,7 +411,7 @@ struct ToastDemoRoot {
                             .flex(1.f, 1.f, 0.f),
                         Text {
                             .text = [placementIndex] {
-                              return placementLabel(placementFromIndex(placementIndex.get()));
+                              return placementLabel(placementFromIndex(placementIndex()));
                             },
                             .font = Font::headline(),
                             .color = Color::tertiary(),
@@ -422,7 +422,7 @@ struct ToastDemoRoot {
             std::move(toneSection),
             std::move(behaviorSection))
     }
-        .padding(theme.space6)
+        .padding(theme().space6)
         .width(880.f);
 
     return ScrollView {

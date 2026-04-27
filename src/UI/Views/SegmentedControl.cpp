@@ -60,7 +60,7 @@ int clampIndex(int index, std::size_t count) {
 
 struct SegmentedControlItem : ViewModifiers<SegmentedControlItem> {
     SegmentedControlOption option;
-    State<int> selectedIndex {};
+    Signal<int> selectedIndex {};
     int index = 0;
     bool disabled = false;
     ResolvedStyle style {};
@@ -154,9 +154,9 @@ struct SegmentedControlItem : ViewModifiers<SegmentedControlItem> {
 } // namespace
 
 Element SegmentedControl::body() const {
-    Theme const &theme = useEnvironment<Theme>();
-    ResolvedStyle const resolved = resolveStyle(style, theme);
-    State<int> const selection = selectedIndex;
+    auto theme = useEnvironment<Theme>();
+    ResolvedStyle const resolved = resolveStyle(style, theme());
+    Signal<int> const selection = selectedIndex;
 
     auto commitSelection = [selection, onChange = onChange](int index) {
         selection = index;
@@ -197,7 +197,7 @@ Element SegmentedControl::body() const {
             .index = static_cast<int>(i),
             .disabled = disabled,
             .style = resolved,
-            .theme = theme,
+            .theme = theme(),
             .onTap = [commitSelection, index = static_cast<int>(i)] {
                 commitSelection(index);
             },
@@ -209,7 +209,7 @@ Element SegmentedControl::body() const {
         .alignment = Alignment::Stretch,
         .children = std::move(items),
     }
-        .fill(FillStyle::solid(disabled ? theme.windowBackgroundColor : resolved.trackColor))
+        .fill(FillStyle::solid(disabled ? theme().windowBackgroundColor : resolved.trackColor))
         .stroke(StrokeStyle::solid(resolved.borderColor, 1.f))
         .cornerRadius(CornerRadius {resolved.cornerRadius})
         .focusable(!disabled)

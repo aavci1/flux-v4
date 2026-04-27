@@ -30,7 +30,7 @@ Toggle::Style resolveStyle(Toggle::Style const &style, Theme const &theme) {
 }
 
 Element Toggle::body() const {
-    Theme const &theme = useEnvironment<Theme>();
+    auto theme = useEnvironment<Theme>();
 
     auto [trackWidth,
           trackHeight,
@@ -41,9 +41,9 @@ Element Toggle::body() const {
           offColor,
           thumbColor,
           thumbBorderColor,
-          borderColor] = resolveStyle(style, theme);
-    auto disabledColor = theme.disabledTextColor;
-    auto focusColor = theme.keyboardFocusIndicatorColor;
+          borderColor] = resolveStyle(style, theme());
+    auto disabledColor = theme().disabledTextColor;
+    auto focusColor = theme().keyboardFocusIndicatorColor;
 
     float const maxInset = std::max(0.f, trackHeight * 0.5f - 0.5f);
     thumbInset = std::min(thumbInset, maxInset);
@@ -81,7 +81,7 @@ Element Toggle::body() const {
             .children = flux::children(
                 Rectangle {}
                     .fill([v, isDisabled, onColor, offColor, theme] {
-                        return isDisabled ? theme.disabledControlBackgroundColor : v.get() ? onColor : offColor;
+                        return isDisabled ? theme().disabledControlBackgroundColor : v.get() ? onColor : offColor;
                     })
                     .stroke([focused, focusColor, borderColor, borderWidth] {
                         return StrokeStyle::solid(focused.get() ? focusColor : borderColor,
@@ -92,7 +92,7 @@ Element Toggle::body() const {
                 Rectangle {}
                     .fill(FillStyle::solid(isDisabled ? disabledColor : thumbColor))
                     .stroke(StrokeStyle::solid(thumbBorderColor, thumbBorderWidth))
-                    .shadow(isDisabled ? ShadowStyle::none() : ShadowStyle {.radius = theme.shadowRadiusControl, .offset = {0.f, theme.shadowOffsetYControl}, .color = theme.shadowColor})
+                    .shadow(isDisabled ? ShadowStyle::none() : ShadowStyle {.radius = theme().shadowRadiusControl, .offset = {0.f, theme().shadowOffsetYControl}, .color = theme().shadowColor})
                     .position([v, xOn, xOff] {
                         return v.get() ? xOn : xOff;
                     }, thumbInset)

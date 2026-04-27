@@ -18,7 +18,7 @@ using namespace flux;
 
 struct AlertDemoRoot {
     auto body() const {
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<Theme>();
         auto [showAlert, hideAlert, alertOpen] = useAlert();
         (void)alertOpen;
 
@@ -46,7 +46,7 @@ struct AlertDemoRoot {
                         },
                         Text {
                             .text = [status] {
-                                return status.get();
+                                return status();
                             },
                             .font = Font::footnote(),
                             .color = Color::accent(),

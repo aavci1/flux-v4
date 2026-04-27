@@ -79,9 +79,9 @@ Element settingRow(Theme const &theme, std::string title, std::string detail, El
 }
 
 Element metricTile(Theme const &theme,
-                   Reactive::Bindable<std::string> value,
+                   Bindable<std::string> value,
                    std::string label,
-                   Reactive::Bindable<Color> accent) {
+                   Bindable<Color> accent) {
     return VStack {
         .spacing = theme.space1,
         .alignment = Alignment::Start,
@@ -108,7 +108,7 @@ Element metricTile(Theme const &theme,
 
 struct ToggleDemoRoot {
     Element body() const {
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<Theme>();
 
         auto wifiEnabled = useState(true);
         auto bluetoothEnabled = useState(false);
@@ -117,9 +117,9 @@ struct ToggleDemoRoot {
         auto compactEnabled = useState(false);
         auto greenAccent = useState(true);
 
-        Reactive::Bindable<std::string> enabledCount {[wifiEnabled, bluetoothEnabled, syncEnabled, notificationsEnabled] {
-            int const count = static_cast<int>(wifiEnabled.get()) + static_cast<int>(bluetoothEnabled.get()) +
-                              static_cast<int>(syncEnabled.get()) + static_cast<int>(notificationsEnabled.get());
+        Bindable<std::string> enabledCount {[wifiEnabled, bluetoothEnabled, syncEnabled, notificationsEnabled] {
+            int const count = static_cast<int>(wifiEnabled()) + static_cast<int>(bluetoothEnabled()) +
+                              static_cast<int>(syncEnabled()) + static_cast<int>(notificationsEnabled());
             return std::to_string(count);
         }};
 
@@ -127,7 +127,7 @@ struct ToggleDemoRoot {
             .axis = ScrollAxis::Vertical,
             .children = children(
                 VStack {
-                    .spacing = theme.space4,
+                    .spacing = theme().space4,
                     .children = children(
                         Text {
                             .text = "Toggle Demo",
@@ -141,13 +141,13 @@ struct ToggleDemoRoot {
                             .wrapping = TextWrapping::Wrap,
                         },
                         makeSectionCard(
-                            theme, "Preferences",
+                            theme(), "Preferences",
                             "Toggles work best in quiet settings rows where the label carries the meaning and the switch only answers yes or no.",
                             VStack {
-                                .spacing = theme.space2,
+                                .spacing = theme().space2,
                                 .children = children(
                                     settingRow(
-                                        theme, "Wi-Fi", "Keep the workspace online for syncing and collaboration.",
+                                        theme(), "Wi-Fi", "Keep the workspace online for syncing and collaboration.",
                                         Toggle {
                                             .value = wifiEnabled,
                                             .onChange = [](bool v) {
@@ -156,7 +156,7 @@ struct ToggleDemoRoot {
                                         }
                                     ),
                                     settingRow(
-                                        theme,
+                                        theme(),
                                         "Bluetooth",
                                         "Enable accessory pairing for keyboards, trackpads, and audio.",
                                         Toggle {
@@ -167,7 +167,7 @@ struct ToggleDemoRoot {
                                         }
                                     ),
                                     settingRow(
-                                        theme,
+                                        theme(),
                                         "Background sync",
                                         "This row is intentionally disabled to show the non-interactive state.",
                                         Toggle {
@@ -176,7 +176,7 @@ struct ToggleDemoRoot {
                                         }
                                     ),
                                     settingRow(
-                                        theme,
+                                        theme(),
                                         "Notifications",
                                         "Promote status changes without pushing users into a modal flow.",
                                         Toggle {
@@ -190,46 +190,46 @@ struct ToggleDemoRoot {
                             }
                         ),
                         makeSectionCard(
-                            theme,
+                            theme(),
                             "States",
                             "A small summary helps show the control in a real context instead of as an isolated widget.",
                             HStack {
-                                .spacing = theme.space3,
+                                .spacing = theme().space3,
                                 .alignment = Alignment::Stretch,
                                 .children = children(
-                                    metricTile(theme, enabledCount, "Enabled settings", Color::accent()),
+                                    metricTile(theme(), enabledCount, "Enabled settings", Color::accent()),
                                     metricTile(
-                                        theme,
+                                        theme(),
                                         [notificationsEnabled] {
-                                            return notificationsEnabled.get() ? "Live" : "Quiet";
+                                            return notificationsEnabled() ? "Live" : "Quiet";
                                         },
                                         "Notifications",
                                         [notificationsEnabled] {
-                                            return notificationsEnabled.get() ? Color::success() : Color::warning();
+                                            return notificationsEnabled() ? Color::success() : Color::warning();
                                         }
                                     ),
                                     metricTile(
-                                        theme,
+                                        theme(),
                                         [wifiEnabled] {
-                                            return wifiEnabled.get() ? "Online" : "Offline";
+                                            return wifiEnabled() ? "Online" : "Offline";
                                         },
                                         "Connectivity",
                                         [wifiEnabled] {
-                                            return wifiEnabled.get() ? Color::success() : Color::secondary();
+                                            return wifiEnabled() ? Color::success() : Color::secondary();
                                         }
                                     )
                                 )
                             }
                         ),
                         makeSectionCard(
-                            theme,
+                            theme(),
                             "Styling",
                             "Style tokens should support subtle variations without turning the control into a different component.",
                             VStack {
-                                .spacing = theme.space2,
+                                .spacing = theme().space2,
                                 .children = children(
                                     settingRow(
-                                        theme,
+                                        theme(),
                                         "Success accent",
                                         "Useful when a toggle implies a positive enabled state.",
                                         Toggle {
@@ -240,7 +240,7 @@ struct ToggleDemoRoot {
                                         }
                                     ),
                                     settingRow(
-                                        theme,
+                                        theme(),
                                         "Compact density",
                                         "A narrower track works for table rows and denser settings surfaces.",
                                         Toggle {
@@ -264,7 +264,7 @@ struct ToggleDemoRoot {
                         }
                     )
                 } //
-                    .padding(theme.space5)
+                    .padding(theme().space5)
             )
         };
     }

@@ -31,14 +31,14 @@ struct ExpandableCard : ViewModifiers<ExpandableCard> {
     bool operator==(ExpandableCard const &) const = default;
 
     Element body() const {
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<Theme>();
         auto expanded = useState(false);
         Color const accentColor = accent;
 
         std::vector<Element> content;
         content.push_back(
             HStack {
-                .spacing = theme.space3,
+                .spacing = theme().space3,
                 .alignment = Alignment::Center,
                 .children = children(
                     Icon {
@@ -47,7 +47,7 @@ struct ExpandableCard : ViewModifiers<ExpandableCard> {
                         .color = accent,
                     },
                     VStack {
-                        .spacing = theme.space1,
+                        .spacing = theme().space1,
                         .alignment = Alignment::Start,
                         .children = children(
                             Text {
@@ -65,7 +65,7 @@ struct ExpandableCard : ViewModifiers<ExpandableCard> {
                         .flex(1.f, 1.f, 0.f),
                     Icon {
                         .name = [expanded] {
-                            return expanded.get() ? IconName::ExpandLess : IconName::ExpandMore;
+                            return expanded() ? IconName::ExpandLess : IconName::ExpandMore;
                         },
                         .size = 18.f,
                         .color = Color::tertiary(),
@@ -74,7 +74,7 @@ struct ExpandableCard : ViewModifiers<ExpandableCard> {
 
         content.push_back(
             Show([expanded] {
-                return expanded.get();
+                return expanded();
             }, [detailText = detail] {
                 return Element {
                     Text {
@@ -87,21 +87,21 @@ struct ExpandableCard : ViewModifiers<ExpandableCard> {
 
         return Card {
             .child = VStack {
-                .spacing = theme.space3,
+                .spacing = theme().space3,
                 .alignment = Alignment::Stretch,
                 .children = std::move(content),
             },
             .style = Card::Style {
-                .padding = theme.space4,
-                .cornerRadius = theme.radiusXLarge,
+                .padding = theme().space4,
+                .cornerRadius = theme().radiusXLarge,
                 .borderColor = [expanded, accentColor, theme] {
-                    return expanded.get() ? accentColor : theme.separatorColor;
+                    return expanded() ? accentColor : theme().separatorColor;
                 },
                 .shadow = [expanded, theme] {
-                    return expanded.get()
+                    return expanded()
                                ? ShadowStyle {
-                                     .radius = theme.shadowRadiusPopover,
-                                     .offset = {0.f, theme.shadowOffsetYPopover},
+                                     .radius = theme().shadowRadiusPopover,
+                                     .offset = {0.f, theme().shadowOffsetYPopover},
                                      .color = Color {0.f, 0.f, 0.f, 0.12f},
                                  }
                                : ShadowStyle::none();
@@ -117,7 +117,7 @@ struct ExpandableCard : ViewModifiers<ExpandableCard> {
 
 struct CardDemoView {
     Element body() const {
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<Theme>();
 
         auto accentBorder = useState(true);
         auto dropShadow = useState(true);
@@ -126,7 +126,7 @@ struct CardDemoView {
             .axis = ScrollAxis::Vertical,
             .children = children(
                 VStack {
-                    .spacing = theme.space4,
+                    .spacing = theme().space4,
                     .alignment = Alignment::Stretch,
                     .children = children(
                         Text {
@@ -144,11 +144,11 @@ struct CardDemoView {
                         },
                         Card {
                             .child = HStack {
-                                .spacing = theme.space4,
+                                .spacing = theme().space4,
                                 .alignment = Alignment::Center,
                                 .children = children(
                                     VStack {
-                                        .spacing = theme.space1,
+                                        .spacing = theme().space1,
                                         .alignment = Alignment::Start,
                                         .children = children(
                                             Text {
@@ -165,11 +165,11 @@ struct CardDemoView {
                                     }
                                         .flex(1.f, 1.f, 0.f),
                                     VStack {
-                                        .spacing = theme.space2,
+                                        .spacing = theme().space2,
                                         .alignment = Alignment::Start,
                                         .children = children(
                                             HStack {
-                                                .spacing = theme.space2,
+                                                .spacing = theme().space2,
                                                 .alignment = Alignment::Center,
                                                 .children = children(
                                                     Toggle {.value = accentBorder},
@@ -180,7 +180,7 @@ struct CardDemoView {
                                                     })
                                             },
                                             HStack {
-                                                .spacing = theme.space2,
+                                                .spacing = theme().space2,
                                                 .alignment = Alignment::Center,
                                                 .children = children(
                                                     Toggle {.value = dropShadow},
@@ -195,7 +195,7 @@ struct CardDemoView {
                         },
                         Card {
                             .child = VStack {
-                                .spacing = theme.space2,
+                                .spacing = theme().space2,
                                 .alignment = Alignment::Start,
                                 .children = children(
                                     Text {
@@ -213,7 +213,7 @@ struct CardDemoView {
                         },
                         Card {
                             .child = VStack {
-                                .spacing = theme.space3,
+                                .spacing = theme().space3,
                                 .alignment = Alignment::Stretch,
                                 .children = children(
                                     Text {
@@ -228,7 +228,7 @@ struct CardDemoView {
                                         .wrapping = TextWrapping::Wrap,
                                     },
                                     HStack {
-                                        .spacing = theme.space2,
+                                        .spacing = theme().space2,
                                         .alignment = Alignment::Center,
                                         .children = children(
                                             Icon {
@@ -238,7 +238,7 @@ struct CardDemoView {
                                             },
                                             Text {
                                                 .text = [accentBorder] {
-                                                    return accentBorder.get()
+                                                    return accentBorder()
                                                                ? std::string {"Accent border enabled"}
                                                                : std::string {"Neutral border enabled"};
                                                 },
@@ -248,7 +248,7 @@ struct CardDemoView {
                                             Spacer {},
                                             Text {
                                                 .text = [dropShadow] {
-                                                    return dropShadow.get()
+                                                    return dropShadow()
                                                                ? std::string {"Shadow on"}
                                                                : std::string {"Shadow off"};
                                                 },
@@ -258,16 +258,16 @@ struct CardDemoView {
                                     })
                             },
                             .style = Card::Style {
-                                .padding = theme.space4,
-                                .cornerRadius = theme.radiusXLarge,
+                                .padding = theme().space4,
+                                .cornerRadius = theme().radiusXLarge,
                                 .borderColor = [accentBorder, theme] {
-                                    return accentBorder.get() ? theme.accentColor : theme.separatorColor;
+                                    return accentBorder() ? theme().accentColor : theme().separatorColor;
                                 },
                                 .shadow = [dropShadow, theme] {
-                                    return dropShadow.get()
+                                    return dropShadow()
                                                ? ShadowStyle {
-                                                     .radius = theme.shadowRadiusPopover,
-                                                     .offset = {0.f, theme.shadowOffsetYPopover},
+                                                     .radius = theme().shadowRadiusPopover,
+                                                     .offset = {0.f, theme().shadowOffsetYPopover},
                                                      .color = Color {0.f, 0.f, 0.f, 0.12f},
                                                  }
                                                : ShadowStyle::none();
@@ -276,7 +276,7 @@ struct CardDemoView {
                         },
                         Card {
                             .child = VStack {
-                                .spacing = theme.space3,
+                                .spacing = theme().space3,
                                 .alignment = Alignment::Stretch,
                                 .children = children(
                                     Text {
@@ -291,7 +291,7 @@ struct CardDemoView {
                                         .wrapping = TextWrapping::Wrap,
                                     },
                                     HStack {
-                                        .spacing = theme.space2,
+                                        .spacing = theme().space2,
                                         .alignment = Alignment::Center,
                                         .children = children(
                                             Button {
@@ -306,14 +306,14 @@ struct CardDemoView {
                                     })
                             },
                             .style = Card::Style {
-                                .padding = theme.space4,
-                                .cornerRadius = theme.radiusLarge,
-                                .backgroundColor = theme.controlBackgroundColor,
+                                .padding = theme().space4,
+                                .cornerRadius = theme().radiusLarge,
+                                .backgroundColor = theme().controlBackgroundColor,
                             },
                         },
                         ExpandableCard {
                             .icon = IconName::AutoAwesome,
-                            .accent = theme.accentColor,
+                            .accent = theme().accentColor,
                             .title = "Interactive card",
                             .summary = "Hover or tap to emphasize the card surface.",
                             .detail = "The component does not own higher-level behavior. State, hover feedback, "
@@ -321,14 +321,14 @@ struct CardDemoView {
                         },
                         ExpandableCard {
                             .icon = IconName::DashboardCustomize,
-                            .accent = theme.successColor,
+                            .accent = theme().successColor,
                             .title = "Another surface variant",
                             .summary = "Same primitive, different accent and content.",
                             .detail = "This is the intended replacement for demo-local section cards, stat cards, "
                                       "and other repeated panel wrappers that only differed by border or shadow.",
                         })
                 }
-                    .padding(theme.space6))
+                    .padding(theme().space6))
         };
     }
 };

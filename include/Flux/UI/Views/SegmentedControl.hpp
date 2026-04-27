@@ -36,7 +36,7 @@ struct SegmentedControl : ViewModifiers<SegmentedControl> {
         bool operator==(Style const& other) const = default;
     };
 
-    State<int> selectedIndex {};
+    Signal<int> selectedIndex {};
     std::vector<SegmentedControlOption> options;
     bool disabled = false;
     Style style {};

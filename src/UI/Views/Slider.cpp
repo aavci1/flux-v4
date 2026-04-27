@@ -47,15 +47,15 @@ Slider::Style resolveStyle(Slider::Style const &style, Theme const &theme) {
 }
 
 Element Slider::body() const {
-    Theme const &theme = useEnvironment<Theme>();
+    auto theme = useEnvironment<Theme>();
 
     auto [activeColor,
           inactiveColor,
           thumbColor,
           thumbBorderColor,
           trackHeight,
-          thumbSize] = resolveStyle(style, theme);
-    auto focusColor = theme.keyboardFocusIndicatorColor;
+          thumbSize] = resolveStyle(style, theme());
+    auto focusColor = theme().keyboardFocusIndicatorColor;
 
     auto isDisabled = disabled;
     Reactive::Signal<bool> focused = useFocus();
@@ -68,7 +68,7 @@ Element Slider::body() const {
     }
     float const usableWidth = std::max(componentWidth - thumbSize, 1.f);
 
-    State<float> val = value;
+    Signal<float> val = value;
     float const lo = min;
     float const hi = max;
     float const stp = step;
@@ -150,21 +150,21 @@ Element Slider::body() const {
             Rectangle {}
                 .size(componentWidth, componentHeight),
             Rectangle {}
-                .fill(FillStyle::solid(isDisabled ? theme.disabledControlBackgroundColor : inactiveColor))
+                .fill(FillStyle::solid(isDisabled ? theme().disabledControlBackgroundColor : inactiveColor))
                 .position(0.f, trackY)
                 .size(componentWidth, trackHeight)
                 .cornerRadius(CornerRadius {trackHeight * 0.5f}),
             Rectangle {}
-                .fill(FillStyle::solid(isDisabled ? theme.disabledControlBackgroundColor : activeColor))
+                .fill(FillStyle::solid(isDisabled ? theme().disabledControlBackgroundColor : activeColor))
                 .position(0.f, trackY)
                 .size([val, lo, hi, componentWidth, trackHeight] {
                     return std::max(componentWidth * fractionForValue(val.get(), lo, hi), trackHeight);
                 }, trackHeight)
                 .cornerRadius(CornerRadius {trackHeight * 0.5f}),
             Rectangle {}
-                .fill(FillStyle::solid(isDisabled ? theme.disabledTextColor : thumbColor))
-                .stroke(isDisabled ? StrokeStyle::solid(theme.disabledTextColor, 1.f) : thumbStroke)
-                .shadow(isDisabled ? ShadowStyle::none() : ShadowStyle {.radius = theme.shadowRadiusControl, .offset = {0.f, theme.shadowOffsetYControl}, .color = theme.shadowColor})
+                .fill(FillStyle::solid(isDisabled ? theme().disabledTextColor : thumbColor))
+                .stroke(isDisabled ? StrokeStyle::solid(theme().disabledTextColor, 1.f) : thumbStroke)
+                .shadow(isDisabled ? ShadowStyle::none() : ShadowStyle {.radius = theme().shadowRadiusControl, .offset = {0.f, theme().shadowOffsetYControl}, .color = theme().shadowColor})
                 .position([val, lo, hi, usableWidth, thumbOffset] {
                     return fractionForValue(val.get(), lo, hi) * usableWidth + thumbOffset;
                 }, thumbY)

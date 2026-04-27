@@ -66,7 +66,7 @@ Element labeledField(Theme const &theme, std::string label, Element field) {
 
 struct TextInputShowcase {
     auto body() const {
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<Theme>();
 
         auto name = useState(std::string {"Abdurrahman Avci"});
         auto email = useState(std::string {"hello@flux.dev"});
@@ -87,7 +87,7 @@ struct TextInputShowcase {
         Color const badColor = Color::danger();
 
         return VStack {
-            .spacing = theme.space4,
+            .spacing = theme().space4,
             .alignment = Alignment::Start,
             .children = children(
                 Text {
@@ -104,17 +104,17 @@ struct TextInputShowcase {
                     .wrapping = TextWrapping::Wrap,
                 },
                 HStack {
-                    .spacing = theme.space4,
+                    .spacing = theme().space4,
                     .alignment = Alignment::Start,
                     .children = children(
                         sectionCard(
-                            theme, "Single-Line",
+                            theme(), "Single-Line",
                             "Tab between fields, press Return to submit, and use the normal clipboard shortcuts.",
                             VStack {
-                                .spacing = theme.space3,
+                                .spacing = theme().space3,
                                 .children = children(
                                     labeledField(
-                                        theme, "Name",
+                                        theme(), "Name",
                                         TextInput {
                                             .value = name,
                                             .placeholder = "Your name",
@@ -124,7 +124,7 @@ struct TextInputShowcase {
                                         }
                                     ),
                                     labeledField(
-                                        theme,
+                                        theme(),
                                         "Email",
                                         TextInput {
                                             .value = email,
@@ -138,20 +138,20 @@ struct TextInputShowcase {
                                         }
                                     ),
                                     labeledField(
-                                        theme,
+                                        theme(),
                                         "Search",
                                         TextInput {
                                             .value = search,
                                             .placeholder = "Search…",
                                             .style = TextInput::Style::plain(),
                                         }
-                                            .padding(theme.space3)
+                                            .padding(theme().space3)
                                             .fill(FillStyle::solid(Color::controlBackground()))
                                             .stroke(StrokeStyle::solid(Color::opaqueSeparator(), 1.f))
-                                            .cornerRadius(CornerRadius {theme.radiusMedium})
+                                            .cornerRadius(CornerRadius {theme().radiusMedium})
                                     ),
                                     labeledField(
-                                        theme,
+                                        theme(),
                                         "Disabled",
                                         TextInput {
                                             .value = disabled,
@@ -164,14 +164,14 @@ struct TextInputShowcase {
                         )
                             .flex(1.f, 1.f, 0.f),
                         sectionCard(
-                            theme,
+                            theme(),
                             "Multiline",
                             "Multiline mode scrolls inside the field, keeps the caret visible, and uses the same editing model.",
                             VStack {
-                                .spacing = theme.space3,
+                                .spacing = theme().space3,
                                 .children = children(
                                     labeledField(
-                                        theme,
+                                        theme(),
                                         "Profile Bio",
                                         TextInput {
                                             .value = bio,
@@ -181,7 +181,7 @@ struct TextInputShowcase {
                                         }
                                     ),
                                     labeledField(
-                                        theme,
+                                        theme(),
                                         "Working Draft",
                                         TextInput {
                                             .value = draft,
@@ -194,7 +194,7 @@ struct TextInputShowcase {
                                         }
                                     ),
                                     labeledField(
-                                        theme,
+                                        theme(),
                                         "Disabled Multiline",
                                         TextInput {
                                             .value = disabled,

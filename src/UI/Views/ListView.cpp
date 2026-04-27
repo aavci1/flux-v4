@@ -26,16 +26,16 @@ ListView::Style resolveListStyle(ListView::Style const &style, Theme const &them
 } // namespace
 
 Element ListRow::body() const {
-    Theme const &theme = useEnvironment<Theme>();
-    ListRow::Style const resolved = resolveRowStyle(style, theme);
+    auto theme = useEnvironment<Theme>();
+    ListRow::Style const resolved = resolveRowStyle(style, theme());
     Reactive::Signal<bool> hovered = useHover();
     Reactive::Signal<bool> pressed = usePress();
     bool const isDisabled = disabled;
 
     Reactive::Bindable<Color> const fill{[selected = selected, pressed, hovered, theme] {
-        return selected      ? theme.selectedContentBackgroundColor :
-               pressed.get() ? theme.rowHoverBackgroundColor :
-               hovered.get() ? theme.hoveredControlBackgroundColor :
+        return selected      ? theme().selectedContentBackgroundColor :
+               pressed.get() ? theme().rowHoverBackgroundColor :
+               hovered.get() ? theme().hoveredControlBackgroundColor :
                                Colors::transparent;
     }};
 
@@ -61,8 +61,8 @@ Element ListRow::body() const {
 }
 
 Element ListView::body() const {
-    Theme const &theme = useEnvironment<Theme>();
-    ListView::Style const resolved = resolveListStyle(style, theme);
+    auto theme = useEnvironment<Theme>();
+    ListView::Style const resolved = resolveListStyle(style, theme());
 
     std::vector<Element> childrenList;
     childrenList.reserve(showDividers && !rows.empty() ? rows.size() * 2 - 1 : rows.size());

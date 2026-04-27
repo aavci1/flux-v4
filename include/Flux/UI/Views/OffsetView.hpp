@@ -24,8 +24,8 @@ struct OffsetView : ViewModifiers<OffsetView> {
 
   Point offset{};
   ScrollAxis axis = ScrollAxis::Vertical;
-  State<Size> viewportSize{};
-  State<Size> contentSize{};
+  Signal<Size> viewportSize{};
+  Signal<Size> contentSize{};
   std::vector<Element> children;
 
   bool operator==(OffsetView const& other) const {

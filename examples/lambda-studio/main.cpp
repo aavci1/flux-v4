@@ -789,7 +789,7 @@ struct StudioApp : ViewModifiers<StudioApp> {
     std::shared_ptr<AppRuntime> runtime;
 
     Element body() const {
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<Theme>();
         auto appState = useState<AppState>(makeInitialAppState());
         std::shared_ptr<AppRuntime> runtimeInstance = runtime;
         if (!runtimeInstance) {
@@ -1990,7 +1990,7 @@ struct StudioApp : ViewModifiers<StudioApp> {
                     .flex(0.f, 0.f),
                 Divider {.orientation = Divider::Orientation::Vertical},
                 VStack {
-                    .spacing = theme.space3,
+                    .spacing = theme().space3,
                     .alignment = Alignment::Stretch,
                     .children = children(std::move(currentView))
                 }

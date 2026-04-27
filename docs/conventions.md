@@ -84,6 +84,18 @@ Flux v5 mounts UI once and updates retained scene nodes through reactive depende
 - `For`, `Show`, and `Switch` manage dynamic subtree scopes.
 - Environment values can be constants or reactive signals.
 
+## Reactive UI
+
+- Hooks that expose state return `Signal<T>`; read with `signal()` and write with
+  `signal = value` or `signal.set(value)`.
+- `.get()` remains available as an explicit synonym, but examples use `()` for
+  read-and-subscribe sites.
+- Use `.peek()` for intentional non-tracking reads.
+- `useEnvironment<T>()` returns a signal for the active environment value. Read it
+  inside `Bindable` closures or `Effect` bodies when UI should update after
+  environment changes. A body-time read is a static mount-time seed and does not
+  subscribe.
+
 ## Events
 
 - `Event` is a variant of window lifecycle, window, input, timer, and custom events.

@@ -61,55 +61,6 @@ private:
 
 } // namespace detail
 
-template<typename T>
-class EnvironmentValue {
-public:
-  EnvironmentValue(T const& value)
-      : value_(&value) {}
-
-  EnvironmentValue(Reactive::Signal<T> signal)
-      : signal_(std::move(signal))
-      , reactive_(true) {}
-
-  T const& get() const {
-    return reactive_ ? signal_.get() : *value_;
-  }
-
-  T const& peek() const {
-    return reactive_ ? signal_.peek() : *value_;
-  }
-
-  T const& operator()() const {
-    return get();
-  }
-
-  T const& operator*() const {
-    return get();
-  }
-
-  operator T const&() const {
-    return get();
-  }
-
-  void set(T value) const {
-    assert(reactive_ && "environment value is not backed by a Signal");
-    signal_.set(std::move(value));
-  }
-
-  bool reactive() const noexcept {
-    return reactive_;
-  }
-
-  Reactive::Signal<T> const* signal() const noexcept {
-    return reactive_ ? &signal_ : nullptr;
-  }
-
-private:
-  T const* value_ = nullptr;
-  Reactive::Signal<T> signal_{};
-  bool reactive_ = false;
-};
-
 class EnvironmentLayer {
 public:
   template<typename T>
@@ -129,6 +80,10 @@ public:
     static_assert(std::equality_comparable<T>,
         "Environment signal values must define operator==.");
 
+#ifndef NDEBUG
+    signal.setUntrackedReadWarning(
+        "useEnvironment value read outside tracking context - read inside a Bindable closure or Effect body for reactive updates.");
+#endif
     Slot& slot = values_[std::type_index(typeid(T))];
     slot.value = std::move(signal);
     slot.equals = &signalSlotEquals<T>;

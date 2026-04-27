@@ -292,13 +292,13 @@ Element makeBothAxesDemo(Theme const& theme) {
 
 struct ScrollDemoRoot {
     Element body() const {
-        Theme const& theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<Theme>();
 
         return ScrollView{
             .axis = ScrollAxis::Vertical,
             .children = children(
                 VStack{
-                    .spacing = theme.space4,
+                    .spacing = theme().space4,
                     .alignment = Alignment::Stretch,
                     .children = children(
                         Text{
@@ -314,12 +314,12 @@ struct ScrollDemoRoot {
                             .horizontalAlignment = HorizontalAlignment::Leading,
                             .wrapping = TextWrapping::Wrap,
                         },
-                        makeVerticalDemo(theme),
-                        makeHorizontalDemo(theme),
-                        makeBothAxesDemo(theme)
+                        makeVerticalDemo(theme()),
+                        makeHorizontalDemo(theme()),
+                        makeBothAxesDemo(theme())
                     ),
                 }
-                    .padding(theme.space5)
+                    .padding(theme().space5)
             ),
         }
             .fill(FillStyle::solid(Color::windowBackground()));

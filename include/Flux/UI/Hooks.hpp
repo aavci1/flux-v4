@@ -237,55 +237,29 @@ inline Theme const& environmentFallback<Theme>() {
 }
 
 template<typename T>
-EnvironmentValue<T> useEnvironment() {
+Reactive::Signal<T> useEnvironment() {
   if (auto const* signal = EnvironmentStack::current().findSignal<T>()) {
-    return EnvironmentValue<T>{*signal};
+    return *signal;
   }
   if (T const* value = EnvironmentStack::current().find<T>()) {
-    return EnvironmentValue<T>{*value};
+    return Reactive::Signal<T>{*value};
   }
-  return EnvironmentValue<T>{environmentFallback<T>()};
+  return Reactive::Signal<T>{environmentFallback<T>()};
 }
-
-template<typename T>
-struct State {
-  Reactive::Signal<T> signal{};
-
-  State() : signal(T{}) {}
-  explicit State(T initial) : signal(std::move(initial)) {}
-
-  T const& get() const { return signal.get(); }
-  T const& peek() const { return signal.peek(); }
-  T const& operator()() const { return signal.get(); }
-  T const& operator*() const { return signal.get(); }
-  void set(T value) const { signal.set(std::move(value)); }
-  void setSilently(T value) const { signal.set(std::move(value)); }
-
-  State const& operator=(T value) const {
-    signal.set(std::move(value));
-    return *this;
-  }
-
-  explicit operator bool() const requires std::same_as<T, bool> {
-    return signal.get();
-  }
-
-  bool operator==(State const&) const noexcept { return false; }
-};
 
 /// Each `useState` call allocates a fresh `Signal<T>` owned by the current reactive scope.
 /// The v5 retained UI model guarantees `body()` runs exactly once for a mount cycle; therefore
 /// each `useState` call site allocates one signal for that cycle. Re-entering the same body and
 /// evaluating the same call site twice is a framework error and is asserted in debug builds.
 template<typename T>
-State<T> useState(T initial = T{},
-                  std::source_location location = std::source_location::current()) {
+Reactive::Signal<T> useState(T initial = T{},
+                             std::source_location location = std::source_location::current()) {
 #ifndef NDEBUG
   detail::debugRegisterUseState(location);
 #else
   (void)location;
 #endif
-  return State<T>(std::move(initial));
+  return Reactive::Signal<T>(std::move(initial));
 }
 
 template<typename Fn>
@@ -308,6 +282,15 @@ Animation<T> useAnimation(T initial, AnimationOptions options) {
   Animation<T> animation{std::move(initial)};
   animation.play(animation.get(), std::move(options));
   return animation;
+}
+
+template<typename Fn>
+void useAnimationFrame(Fn&& callback) {
+  ObserverHandle const handle =
+      AnimationClock::instance().subscribe(std::function<void(AnimationTick const&)>{std::forward<Fn>(callback)});
+  Reactive::onCleanup([handle] {
+    AnimationClock::instance().unsubscribe(handle);
+  });
 }
 
 inline Reactive::Signal<bool> useFocus() {

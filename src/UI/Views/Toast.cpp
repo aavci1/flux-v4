@@ -77,9 +77,9 @@ struct ToastCard {
   std::function<void(std::uint64_t)> dismiss;
 
   Element body() const {
-    Theme const& theme = useEnvironment<Theme>();
-    Color const toneColor = colorForTone(toast.tone, theme);
-    Color const toneBackground = backgroundForTone(toast.tone, theme);
+    auto theme = useEnvironment<Theme>();
+    Color const toneColor = colorForTone(toast.tone, theme());
+    Color const toneBackground = backgroundForTone(toast.tone, theme());
     std::uint64_t const toastId = toast.id;
 
     std::vector<Element> trailing;
@@ -118,13 +118,13 @@ struct ToastCard {
             .size = 20.f,
             .color = toneColor,
         }
-            .padding(theme.space1)
+            .padding(theme().space1)
             .fill(FillStyle::solid(toneBackground))
-            .cornerRadius(CornerRadius {theme.radiusFull})
+            .cornerRadius(CornerRadius {theme().radiusFull})
     );
     rowChildren.push_back(
         VStack {
-            .spacing = theme.space1,
+            .spacing = theme().space1,
             .alignment = Alignment::Start,
             .children = children(
                 Text {
@@ -147,7 +147,7 @@ struct ToastCard {
     if (!trailing.empty()) {
       rowChildren.push_back(
           VStack {
-              .spacing = theme.space1,
+              .spacing = theme().space1,
               .alignment = Alignment::End,
               .children = std::move(trailing),
           }
@@ -155,17 +155,17 @@ struct ToastCard {
     }
 
     return HStack {
-        .spacing = theme.space3,
+        .spacing = theme().space3,
         .alignment = Alignment::Start,
         .children = std::move(rowChildren),
     }
-        .padding(theme.space3)
+        .padding(theme().space3)
         .fill(FillStyle::solid(Color::elevatedBackground()))
         .stroke(StrokeStyle::solid(Color::separator(), 1.f))
-        .shadow(ShadowStyle {.radius = theme.shadowRadiusPopover,
-                             .offset = {0.f, theme.shadowOffsetYPopover},
-                             .color = theme.shadowColor})
-        .cornerRadius(CornerRadius {theme.radiusLarge})
+        .shadow(ShadowStyle {.radius = theme().shadowRadiusPopover,
+                             .offset = {0.f, theme().shadowOffsetYPopover},
+                             .color = theme().shadowColor})
+        .cornerRadius(CornerRadius {theme().radiusLarge})
         .width(std::clamp(toast.maxWidth, toast.minWidth, toast.maxWidth));
   }
 };
@@ -210,14 +210,14 @@ OverlayConfig overlayConfigForToast(Toast const& toast, Window& window, std::siz
 } // namespace
 
 Element ToastOverlay::body() const {
-  Theme const& theme = useEnvironment<Theme>();
+  auto theme = useEnvironment<Theme>();
   std::vector<Element> cards;
   cards.reserve(toasts.size());
   for (Toast const& toast : toasts) {
     cards.push_back(ToastCard {.toast = toast, .dismiss = onDismiss});
   }
   return VStack {
-      .spacing = theme.space2,
+      .spacing = theme().space2,
       .alignment = Alignment::Stretch,
       .children = std::move(cards),
   };

@@ -299,7 +299,7 @@ struct SettingsView : ViewModifiers<SettingsView> {
     std::function<void(lambda_studio_backend::LoadParamsPatch const &)> onAdjustLoadDefaults;
 
     auto body() const {
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<Theme>();
         using namespace settings_view_detail;
 
         std::string const statusText = primaryStatusText(state);
@@ -311,14 +311,14 @@ struct SettingsView : ViewModifiers<SettingsView> {
         std::vector<Element> overviewStats;
         overviewStats.reserve(3);
         overviewStats.push_back(statCard(
-            theme,
+            theme(),
             "Conversations",
             std::to_string(state.chats.size()),
             state.chats.empty() ? "No chats" : formatCountLabel(static_cast<int>(state.chats.size()), "thread", "threads"),
             Color::selectedContentBackground()
         ));
         overviewStats.push_back(statCard(
-            theme,
+            theme(),
             "Local Library",
             std::to_string(state.localModels.size()),
             state.localModels.empty() ? "No local models discovered" :
@@ -326,7 +326,7 @@ struct SettingsView : ViewModifiers<SettingsView> {
             Color::successBackground()
         ));
         overviewStats.push_back(statCard(
-            theme,
+            theme(),
             "Background Work",
             std::to_string(activeTasks),
             activeTasks == 0 ? "Everything is quiet right now" :
@@ -340,27 +340,27 @@ struct SettingsView : ViewModifiers<SettingsView> {
             .label = "Active model",
             .value = loadedModelSummary(state),
             .labelWidth = 126.f,
-            .spacing = theme.space3,
+            .spacing = theme().space3,
             .emphasize = true,
         });
         runtimeRows.push_back(LabeledValueRow {
             .label = "Pending model",
             .value = pendingModelSummary(state),
             .labelWidth = 126.f,
-            .spacing = theme.space3,
+            .spacing = theme().space3,
         });
         runtimeRows.push_back(LabeledValueRow {
             .label = "Current module",
             .value = moduleTitle(state.currentModule),
             .labelWidth = 126.f,
-            .spacing = theme.space3,
+            .spacing = theme().space3,
             .maxLines = 1,
         });
         runtimeRows.push_back(LabeledValueRow {
             .label = "Status message",
             .value = state.statusText.empty() ? "No background status message." : state.statusText,
             .labelWidth = 126.f,
-            .spacing = theme.space3,
+            .spacing = theme().space3,
             .maxLines = 3,
         });
 
@@ -370,27 +370,27 @@ struct SettingsView : ViewModifiers<SettingsView> {
             .label = "Model path",
             .value = loadedModelDetail(state),
             .labelWidth = 126.f,
-            .spacing = theme.space3,
+            .spacing = theme().space3,
             .maxLines = 4,
         });
         libraryRows.push_back(LabeledValueRow {
             .label = "Downloads running",
             .value = downloadsRunning == 0 ? "None" : formatCountLabel(downloadsRunning, "download", "downloads"),
             .labelWidth = 126.f,
-            .spacing = theme.space3,
+            .spacing = theme().space3,
         });
         libraryRows.push_back(LabeledValueRow {
             .label = "Failed downloads",
             .value = downloadsFailed == 0 ? "No failed downloads" : formatCountLabel(downloadsFailed, "failed job", "failed jobs"),
             .labelWidth = 126.f,
-            .spacing = theme.space3,
+            .spacing = theme().space3,
             .emphasize = downloadsFailed > 0,
         });
         libraryRows.push_back(LabeledValueRow {
             .label = "Recent jobs tracked",
             .value = std::to_string(state.recentDownloadJobs.size()),
             .labelWidth = 126.f,
-            .spacing = theme.space3,
+            .spacing = theme().space3,
             .maxLines = 1,
         });
 
@@ -400,7 +400,7 @@ struct SettingsView : ViewModifiers<SettingsView> {
             .label = "Last error",
             .value = state.errorText.empty() ? "No recent errors." : state.errorText,
             .labelWidth = 126.f,
-            .spacing = theme.space3,
+            .spacing = theme().space3,
             .emphasize = !state.errorText.empty(),
             .maxLines = 4,
         });
@@ -408,7 +408,7 @@ struct SettingsView : ViewModifiers<SettingsView> {
             .label = "Status text",
             .value = state.statusText.empty() ? "No active status text." : state.statusText,
             .labelWidth = 126.f,
-            .spacing = theme.space3,
+            .spacing = theme().space3,
             .emphasize = !state.statusText.empty(),
             .maxLines = 4,
         });
@@ -418,14 +418,14 @@ struct SettingsView : ViewModifiers<SettingsView> {
                 ? "No active GGUF repository search"
                 : "Query: " + state.modelSearchQuery,
             .labelWidth = 126.f,
-            .spacing = theme.space3,
+            .spacing = theme().space3,
             .maxLines = 3,
         });
         diagnosticsRows.push_back(LabeledValueRow {
             .label = "Selected remote repo",
             .value = state.selectedRemoteRepoId.empty() ? "Nothing selected" : state.selectedRemoteRepoId,
             .labelWidth = 126.f,
-            .spacing = theme.space3,
+            .spacing = theme().space3,
         });
         diagnosticsRows.push_back(LabeledValueRow {
             .label = "Tool root",
@@ -433,20 +433,20 @@ struct SettingsView : ViewModifiers<SettingsView> {
                 ? "."
                 : state.sessionDefaults.toolConfig.workspaceRoot,
             .labelWidth = 126.f,
-            .spacing = theme.space3,
+            .spacing = theme().space3,
             .maxLines = 4,
         });
         diagnosticsRows.push_back(LabeledValueRow {
             .label = "Shell approval",
             .value = "Per-call approval",
             .labelWidth = 126.f,
-            .spacing = theme.space3,
+            .spacing = theme().space3,
         });
 
         std::vector<Element> configRows;
         configRows.reserve(8);
         configRows.push_back(adjustmentRow(
-            theme,
+            theme(),
             "Temp",
             std::to_string(state.generationDefaults.temp),
             "Applies now",
@@ -463,7 +463,7 @@ struct SettingsView : ViewModifiers<SettingsView> {
             }
         ));
         configRows.push_back(adjustmentRow(
-            theme,
+            theme(),
             "Top-P",
             std::to_string(state.generationDefaults.topP),
             "Applies now",
@@ -480,7 +480,7 @@ struct SettingsView : ViewModifiers<SettingsView> {
             }
         ));
         configRows.push_back(adjustmentRow(
-            theme,
+            theme(),
             "Top-K",
             std::to_string(state.generationDefaults.topK),
             "Applies now",
@@ -497,7 +497,7 @@ struct SettingsView : ViewModifiers<SettingsView> {
             }
         ));
         configRows.push_back(adjustmentRow(
-            theme,
+            theme(),
             "Max tokens",
             std::to_string(state.generationDefaults.maxTokens),
             "Applies now",
@@ -514,7 +514,7 @@ struct SettingsView : ViewModifiers<SettingsView> {
             }
         ));
         configRows.push_back(adjustmentRow(
-            theme,
+            theme(),
             "Min-P",
             std::to_string(state.generationDefaults.minP),
             "Applies now",
@@ -531,7 +531,7 @@ struct SettingsView : ViewModifiers<SettingsView> {
             }
         ));
         configRows.push_back(adjustmentRow(
-            theme,
+            theme(),
             "Repeat penalty",
             std::to_string(state.generationDefaults.repeatPenalty),
             "Applies now",
@@ -548,7 +548,7 @@ struct SettingsView : ViewModifiers<SettingsView> {
             }
         ));
         configRows.push_back(adjustmentRow(
-            theme,
+            theme(),
             "Freq penalty",
             std::to_string(state.generationDefaults.frequencyPenalty),
             "Applies now",
@@ -565,7 +565,7 @@ struct SettingsView : ViewModifiers<SettingsView> {
             }
         ));
         configRows.push_back(adjustmentRow(
-            theme,
+            theme(),
             "Presence penalty",
             std::to_string(state.generationDefaults.presencePenalty),
             "Applies now",
@@ -582,7 +582,7 @@ struct SettingsView : ViewModifiers<SettingsView> {
             }
         ));
         configRows.push_back(adjustmentRow(
-            theme,
+            theme(),
             "Penalty last N",
             std::to_string(state.generationDefaults.penaltyLastN),
             "Applies now",
@@ -599,7 +599,7 @@ struct SettingsView : ViewModifiers<SettingsView> {
             }
         ));
         configRows.push_back(adjustmentRow(
-            theme,
+            theme(),
             "Mirostat",
             std::to_string(state.generationDefaults.mirostat),
             "Applies now",
@@ -616,7 +616,7 @@ struct SettingsView : ViewModifiers<SettingsView> {
             }
         ));
         configRows.push_back(adjustmentRow(
-            theme,
+            theme(),
             "Mirostat tau",
             std::to_string(state.generationDefaults.mirostatTau),
             "Applies now",
@@ -633,7 +633,7 @@ struct SettingsView : ViewModifiers<SettingsView> {
             }
         ));
         configRows.push_back(adjustmentRow(
-            theme,
+            theme(),
             "Mirostat eta",
             std::to_string(state.generationDefaults.mirostatEta),
             "Applies now",
@@ -650,7 +650,7 @@ struct SettingsView : ViewModifiers<SettingsView> {
             }
         ));
         configRows.push_back(adjustmentRow(
-            theme,
+            theme(),
             "Ignore EOS",
             state.generationDefaults.ignoreEos ? "Enabled" : "Disabled",
             "Applies now",
@@ -667,7 +667,7 @@ struct SettingsView : ViewModifiers<SettingsView> {
             }
         ));
         configRows.push_back(adjustmentRow(
-            theme,
+            theme(),
             "Session n_ctx",
             std::to_string(state.sessionDefaults.nCtx),
             "Requires session reset",
@@ -684,7 +684,7 @@ struct SettingsView : ViewModifiers<SettingsView> {
             }
         ));
         configRows.push_back(adjustmentRow(
-            theme,
+            theme(),
             "Session n_batch",
             std::to_string(state.sessionDefaults.nBatch),
             "Requires session reset",
@@ -701,7 +701,7 @@ struct SettingsView : ViewModifiers<SettingsView> {
             }
         ));
         configRows.push_back(adjustmentRow(
-            theme,
+            theme(),
             "Session n_ubatch",
             std::to_string(state.sessionDefaults.nUBatch),
             "Requires session reset",
@@ -718,7 +718,7 @@ struct SettingsView : ViewModifiers<SettingsView> {
             }
         ));
         configRows.push_back(adjustmentRow(
-            theme,
+            theme(),
             "Session flash attn",
             state.sessionDefaults.flashAttn ? "Enabled" : "Disabled",
             "Requires session reset",
@@ -735,7 +735,7 @@ struct SettingsView : ViewModifiers<SettingsView> {
             }
         ));
         configRows.push_back(adjustmentRow(
-            theme,
+            theme(),
             "Thinking",
             state.sessionDefaults.enableThinking ? "Enabled" : "Disabled",
             "Requires session reset",
@@ -752,7 +752,7 @@ struct SettingsView : ViewModifiers<SettingsView> {
             }
         ));
         configRows.push_back(adjustmentRow(
-            theme,
+            theme(),
             "Tool calling",
             state.sessionDefaults.toolConfig.enabled ? "Enabled" : "Disabled",
             "Requires session reset",
@@ -769,7 +769,7 @@ struct SettingsView : ViewModifiers<SettingsView> {
             }
         ));
         configRows.push_back(adjustmentRow(
-            theme,
+            theme(),
             "Max tool calls",
             std::to_string(state.sessionDefaults.toolConfig.maxToolCalls),
             "Requires session reset",
@@ -786,7 +786,7 @@ struct SettingsView : ViewModifiers<SettingsView> {
             }
         ));
         configRows.push_back(adjustmentRow(
-            theme,
+            theme(),
             "Load n_gpu_layers",
             std::to_string(state.loadDefaults.nGpuLayers),
             "Requires reload",
@@ -803,7 +803,7 @@ struct SettingsView : ViewModifiers<SettingsView> {
             }
         ));
         configRows.push_back(adjustmentRow(
-            theme,
+            theme(),
             "Load n_ctx",
             std::to_string(state.loadDefaults.nCtx),
             "Requires reload",
@@ -820,7 +820,7 @@ struct SettingsView : ViewModifiers<SettingsView> {
             }
         ));
         configRows.push_back(adjustmentRow(
-            theme,
+            theme(),
             "Load n_batch",
             std::to_string(state.loadDefaults.nBatch),
             "Requires reload",
@@ -837,7 +837,7 @@ struct SettingsView : ViewModifiers<SettingsView> {
             }
         ));
         configRows.push_back(adjustmentRow(
-            theme,
+            theme(),
             "Load n_ubatch",
             std::to_string(state.loadDefaults.nUBatch),
             "Requires reload",
@@ -854,7 +854,7 @@ struct SettingsView : ViewModifiers<SettingsView> {
             }
         ));
         configRows.push_back(adjustmentRow(
-            theme,
+            theme(),
             "Load flash attn",
             state.loadDefaults.flashAttn ? "Enabled" : "Disabled",
             "Requires reload",
@@ -875,11 +875,11 @@ struct SettingsView : ViewModifiers<SettingsView> {
             .axis = ScrollAxis::Vertical,
             .children = children(
                 VStack {
-                    .spacing = theme.space5,
+                    .spacing = theme().space5,
                     .alignment = Alignment::Stretch,
                     .children = children(
                         VStack {
-                            .spacing = theme.space2,
+                            .spacing = theme().space2,
                             .alignment = Alignment::Start,
                             .children = children(
                                 Text {
@@ -904,15 +904,15 @@ struct SettingsView : ViewModifiers<SettingsView> {
                             )
                         },
                         VStack {
-                            .spacing = theme.space4,
+                            .spacing = theme().space4,
                             .alignment = Alignment::Stretch,
                             .children = children(
                                 HStack {
-                                    .spacing = theme.space3,
+                                    .spacing = theme().space3,
                                     .alignment = Alignment::Center,
                                     .children = children(
                                         VStack {
-                                            .spacing = theme.space2,
+                                            .spacing = theme().space2,
                                             .alignment = Alignment::Start,
                                             .children = children(
                                                 Text {
@@ -942,46 +942,46 @@ struct SettingsView : ViewModifiers<SettingsView> {
                                             .label = statusText,
                                             .style = {
                                                 .font = Font::caption(),
-                                                .foregroundColor = toneForeground(theme, statusTone),
-                                                .backgroundColor = toneBackground(theme, statusTone),
+                                                .foregroundColor = toneForeground(theme(), statusTone),
+                                                .backgroundColor = toneBackground(theme(), statusTone),
                                             },
                                         }
                                     )
                                 },
                                 HStack {
-                                    .spacing = theme.space3,
+                                    .spacing = theme().space3,
                                     .alignment = Alignment::Stretch,
                                     .children = std::move(overviewStats)
                                 }
                             )
                         }
-                            .padding(theme.space4)
+                            .padding(theme().space4)
                             .fill(FillStyle::solid(Color::elevatedBackground()))
-                            .stroke(StrokeStyle::solid(toneBackground(theme, statusTone), 1.f))
-                            .cornerRadius(theme.radiusXLarge),
+                            .stroke(StrokeStyle::solid(toneBackground(theme(), statusTone), 1.f))
+                            .cornerRadius(theme().radiusXLarge),
                         sectionCard(
-                            theme,
+                            theme(),
                             "Runtime",
                             "Session state",
                             "The current app session, active module, and model lifecycle at a glance.",
                             std::move(runtimeRows)
                         ),
                         sectionCard(
-                            theme,
+                            theme(),
                             "Library",
                             "Models and jobs",
                             "Track the local model library and any background transfers in one place.",
                             std::move(libraryRows)
                         ),
                         sectionCard(
-                            theme,
+                            theme(),
                             "Diagnostics",
                             "Operational context",
                             "Useful context for debugging the current session without digging through raw app state.",
                             std::move(diagnosticsRows)
                         ),
                         sectionCard(
-                            theme,
+                            theme(),
                             "Advanced",
                             "Generation, session, and load parameters",
                             "Use these controls to update defaults. Apply scope is shown per control.",
@@ -989,7 +989,7 @@ struct SettingsView : ViewModifiers<SettingsView> {
                         )
                     )
                 }
-                    .padding(theme.space5)
+                    .padding(theme().space5)
             )
         }
             .fill(FillStyle::solid(Color::windowBackground()));

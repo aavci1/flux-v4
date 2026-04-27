@@ -8,6 +8,7 @@
 #include <cassert>
 #include <concepts>
 #include <cstdint>
+#include <cstdio>
 #include <memory>
 #include <optional>
 #include <type_traits>
@@ -550,6 +551,10 @@ struct SignalState final : detail::Observable {
   }
 
   T value;
+#ifndef NDEBUG
+  char const* untrackedReadWarning = nullptr;
+  bool didWarnUntrackedRead = false;
+#endif
 };
 
 template <typename T>
@@ -557,7 +562,8 @@ class Signal {
 public:
   using Value = T;
 
-  Signal() = default;
+  Signal()
+      : Signal(T{}) {}
 
   explicit Signal(T initial)
       : state_(std::make_shared<SignalState<T>>(std::move(initial))) {
@@ -567,11 +573,21 @@ public:
   T const& get() const {
     assert(state_ && "reading an empty Signal handle");
     assert(!state_->disposed() && "reading a disposed Signal");
+#ifndef NDEBUG
+    if (!detail::sCurrentObserver && state_->untrackedReadWarning && !state_->didWarnUntrackedRead) {
+      std::fprintf(stderr, "%s\n", state_->untrackedReadWarning);
+      state_->didWarnUntrackedRead = true;
+    }
+#endif
     state_->reportRead();
     return state_->value;
   }
 
   T const& operator()() const {
+    return get();
+  }
+
+  T const& operator*() const {
     return get();
   }
 
@@ -586,9 +602,29 @@ public:
     state_->set(std::move(next));
   }
 
+  Signal const& operator=(T value) const {
+    set(std::move(value));
+    return *this;
+  }
+
+  explicit operator bool() const requires std::same_as<T, bool> {
+    return get();
+  }
+
+  bool operator==(Signal const&) const noexcept {
+    return false;
+  }
+
   bool disposed() const {
     return !state_ || state_->disposed();
   }
+
+#ifndef NDEBUG
+  void setUntrackedReadWarning(char const* warning) const {
+    assert(state_ && "marking an empty Signal handle");
+    state_->untrackedReadWarning = warning;
+  }
+#endif
 
 private:
   std::shared_ptr<SignalState<T>> state_;
