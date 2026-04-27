@@ -7,6 +7,7 @@
 #include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/MountContext.hpp>
 #include <Flux/UI/Theme.hpp>
+#include <Flux/UI/Detail/LayoutDebugDump.hpp>
 
 #include "UI/Element/ModifierLayoutHelpers.hpp"
 
@@ -129,15 +130,18 @@ void relayoutStoredAncestors(scenegraph::SceneNode& node) {
   for (int depth = 0; depth < 64; ++depth) {
     scenegraph::SceneNode* parent = current->parent();
     if (!parent) {
+      layoutDebugDumpAttached("runtime-relayout");
       return;
     }
     Size const oldSize = parent->size();
     if (!parent->relayoutStoredConstraints()) {
+      layoutDebugDumpAttached("runtime-relayout");
       return;
     }
     Size const newSize = parent->size();
     if (std::abs(newSize.width - oldSize.width) <= epsilon &&
         std::abs(newSize.height - oldSize.height) <= epsilon) {
+      layoutDebugDumpAttached("runtime-relayout");
       return;
     }
     current = parent;

@@ -20,5 +20,7 @@ void layoutDebugEndPass();
 
 void layoutDebugRecordMeasure(std::uint64_t measureId, LayoutConstraints const& constraints, Size sz);
 void layoutDebugDumpRetained(scenegraph::SceneGraph const& graph);
+void layoutDebugAttachSceneGraph(scenegraph::SceneGraph const* graph);
+void layoutDebugDumpAttached(char const* reason);
 
 } // namespace flux

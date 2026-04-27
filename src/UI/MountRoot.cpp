@@ -41,6 +41,7 @@ void MountRoot::mount(scenegraph::SceneGraph& sceneGraph) {
   if (!root_) {
     return;
   }
+  layoutDebugAttachSceneGraph(&sceneGraph);
   layoutDebugBeginPass();
   if (mounted_) {
     unmount(sceneGraph);
@@ -69,12 +70,14 @@ void MountRoot::mount(scenegraph::SceneGraph& sceneGraph) {
 void MountRoot::unmount(scenegraph::SceneGraph& sceneGraph) {
   rootScope_.dispose();
   sceneGraph.releaseRoot();
+  layoutDebugAttachSceneGraph(&sceneGraph);
   rootScope_ = Reactive::Scope{};
   mounted_ = false;
 }
 
 void MountRoot::resize(Size viewportSize, scenegraph::SceneGraph& sceneGraph) {
   viewportSize_ = viewportSize;
+  layoutDebugAttachSceneGraph(&sceneGraph);
   if (!mounted_) {
     mount(sceneGraph);
     return;

@@ -16,6 +16,7 @@ namespace flux {
 namespace {
 
 thread_local std::unordered_map<std::uint64_t, Size> gMeasureSize;
+thread_local scenegraph::SceneGraph const* gAttachedSceneGraph = nullptr;
 
 void printIndent(int depth) {
   for (int i = 0; i < depth; ++i) {
@@ -138,6 +139,22 @@ void layoutDebugDumpRetained(scenegraph::SceneGraph const& graph) {
   }
 
   std::fprintf(stderr, "[flux:layout] measures=%zu\n", gMeasureSize.size());
+}
+
+void layoutDebugAttachSceneGraph(scenegraph::SceneGraph const* graph) {
+  gAttachedSceneGraph = graph;
+}
+
+void layoutDebugDumpAttached(char const* reason) {
+  if (!flux::layout::layoutDebugLayoutEnabled() || !gAttachedSceneGraph) {
+    return;
+  }
+  layoutDebugBeginPass();
+  if (reason && *reason) {
+    std::fprintf(stderr, "[flux:layout] reason=%s\n", reason);
+  }
+  layoutDebugDumpRetained(*gAttachedSceneGraph);
+  layoutDebugEndPass();
 }
 
 } // namespace flux
