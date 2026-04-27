@@ -1,6 +1,7 @@
 #include <Flux/UI/Views/Checkbox.hpp>
 
 #include <Flux/Core/KeyCodes.hpp>
+#include <Flux/Reactive/Transition.hpp>
 #include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Views/Icon.hpp>
@@ -40,6 +41,7 @@ Element Checkbox::body() const {
     float const iconSz = boxSize * 0.6f;
 
     Reactive::Signal<bool> focused = useFocus();
+    Reactive::Signal<bool> pressed = usePress();
     Reactive::Bindable<bool> const indeterminateBinding = indeterminate;
     Reactive::Bindable<bool> const disabledBinding = disabled;
     bool const isDisabled = disabledBinding.evaluate();
@@ -71,42 +73,57 @@ Element Checkbox::body() const {
                    : StrokeStyle::solid(borderColor, borderWidth);
     }};
 
-    Reactive::Bindable<Color> const boxFill{[v, indeterminateBinding, disabledBinding, checkedColor,
-                                             uncheckedColor, theme] {
-        bool const showFilled = v.get() || indeterminateBinding.evaluate();
+    auto motion = [theme] {
+        return Transition::ease(theme().durationFast);
+    };
+    auto boxFillTarget = [v, indeterminateBinding, disabledBinding, checkedColor,
+                          uncheckedColor, theme] {
+        bool const showFilled = v() || indeterminateBinding.evaluate();
         return disabledBinding.evaluate()
                    ? theme().disabledControlBackgroundColor
                    : showFilled ? checkedColor : uncheckedColor;
-    }};
+    };
 
-    Reactive::Bindable<Color> const iconColor{[v, indeterminateBinding, disabledBinding, disabledColor,
-                                               checkColor, iconTransparent] {
-        bool const showFilled = v.get() || indeterminateBinding.evaluate();
+    auto iconColorTarget = [v, indeterminateBinding, disabledBinding, disabledColor,
+                            checkColor, iconTransparent] {
+        bool const showFilled = v() || indeterminateBinding.evaluate();
         if (!showFilled) {
             return iconTransparent;
         }
         return disabledBinding.evaluate() ? disabledColor : checkColor;
-    }};
+    };
+    auto scaleTarget = [pressed, disabledBinding] {
+        return pressed() && !disabledBinding.evaluate() ? 0.92f : 1.f;
+    };
+    auto boxFillAnim = useAnimatedValue<Color>(boxFillTarget(), boxFillTarget, motion);
+    auto iconColorAnim = useAnimatedValue<Color>(iconColorTarget(), iconColorTarget, motion);
+    auto scaleAnim = useAnimatedValue<float>(1.f, scaleTarget, motion);
 
     Reactive::Bindable<IconName> const iconName{[indeterminateBinding] {
         return indeterminateBinding.evaluate() ? IconName::HorizontalRule : IconName::Check;
     }};
 
     return ScaleAroundCenter {
-        .scale = 1.f,
+        .scale = [scaleAnim] {
+            return scaleAnim();
+        },
         .child = ZStack {
             .horizontalAlignment = Alignment::Center,
             .verticalAlignment = Alignment::Center,
             .children = flux::children(
                 Rectangle {}
-                    .fill(boxFill)
+                    .fill([boxFillAnim] {
+                        return boxFillAnim();
+                    })
                     .stroke(boxStroke)
                     .size(boxSize, boxSize)
                     .cornerRadius(CornerRadius {cornerRadius}),
                 Icon {
                     .name = iconName,
                     .size = iconSz,
-                    .color = iconColor,
+                    .color = [iconColorAnim] {
+                        return iconColorAnim();
+                    },
                 }
             ),
         }

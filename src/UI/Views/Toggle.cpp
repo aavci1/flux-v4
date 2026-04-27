@@ -58,37 +58,31 @@ Element Toggle::body() const {
     auto v = value;
 
     bool const initialOn = v.peek();
-    auto thumbXAnim = useAnimation<float>(initialOn ? xOn : xOff);
-    auto trackFillAnim = useAnimation<Color>(
-        isDisabled ? theme().disabledControlBackgroundColor : initialOn ? onColor : offColor);
-    auto scaleAnim = useAnimation<float>(1.f);
-
-    useEffect([theme, style = style, v, pressed, thumbXAnim, trackFillAnim, scaleAnim,
-               isDisabled, xOn, xOff]() mutable {
+    auto targetMotion = [theme, isDisabled] {
+        return isDisabled ? Transition::instant() : Transition::ease(theme().durationMedium);
+    };
+    auto pressMotion = [theme] {
+        return Transition::ease(theme().durationFast);
+    };
+    auto thumbXTarget = [v, xOn, xOff] {
+        return v() ? xOn : xOff;
+    };
+    auto trackFillTarget = [theme, style = style, v, isDisabled] {
         Theme const &currentTheme = theme();
         Toggle::Style const currentStyle = resolveStyle(style, currentTheme);
-        Transition const motion = isDisabled ? Transition::instant()
-                                             : Transition::ease(currentTheme.durationMedium);
-        Transition const pressMotion = Transition::ease(currentTheme.durationFast);
+        return isDisabled ? currentTheme.disabledControlBackgroundColor
+                          : v() ? currentStyle.onColor : currentStyle.offColor;
+    };
+    auto scaleTarget = [pressed, isDisabled] {
+        return (pressed() && !isDisabled) ? 0.90f : 1.f;
+    };
 
-        bool const on = v();
-        float const targetX = on ? xOn : xOff;
-        if (std::abs(thumbXAnim.peek() - targetX) > 0.01f) {
-            thumbXAnim.set(targetX, motion);
-        }
-
-        Color const targetFill = isDisabled ? currentTheme.disabledControlBackgroundColor
-                                            : on ? currentStyle.onColor
-                                                 : currentStyle.offColor;
-        if (trackFillAnim.peek() != targetFill) {
-            trackFillAnim.set(targetFill, motion);
-        }
-
-        float const targetScale = (pressed() && !isDisabled) ? 0.90f : 1.f;
-        if (std::abs(scaleAnim.peek() - targetScale) > 0.001f) {
-            scaleAnim.set(targetScale, pressMotion);
-        }
-    });
+    auto thumbXAnim = useAnimatedValue<float>(initialOn ? xOn : xOff, thumbXTarget, targetMotion);
+    auto trackFillAnim = useAnimatedValue<Color>(
+        isDisabled ? theme().disabledControlBackgroundColor : initialOn ? onColor : offColor,
+        trackFillTarget,
+        targetMotion);
+    auto scaleAnim = useAnimatedValue<float>(1.f, scaleTarget, pressMotion);
 
     auto handleToggle = [v, onChange = onChange, isDisabled]() {
         if (isDisabled) {

@@ -2,6 +2,7 @@
 
 #include <Flux/Core/KeyCodes.hpp>
 #include <Flux/Reactive/Interpolatable.hpp>
+#include <Flux/Reactive/Transition.hpp>
 #include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Views/HStack.hpp>
@@ -88,32 +89,37 @@ struct SegmentedControlItem : ViewModifiers<SegmentedControlItem> {
         Color const idleFill = Colors::transparent;
         Color const hoverFill = darken(style.trackColor, 0.04f);
         Color const pressFill = darken(style.trackColor, 0.12f);
-        Reactive::Bindable<Color> const fill{[selectedIndex = selectedIndex,
-                                              index = index,
-                                              isDisabled,
-                                              pressed,
-                                              hovered,
-                                              selectedFill,
-                                              selectedHoverFill,
-                                              selectedPressFill,
-                                              pressFill,
-                                              hoverFill,
-                                              idleFill] {
-            bool const selected = selectedIndex.get() == index;
+        auto motion = [theme = theme] {
+            return Transition::ease(theme.durationFast);
+        };
+        auto fillTarget = [selectedIndex = selectedIndex,
+                           index = index,
+                           isDisabled,
+                           pressed,
+                           hovered,
+                           selectedFill,
+                           selectedHoverFill,
+                           selectedPressFill,
+                           pressFill,
+                           hoverFill,
+                           idleFill] {
+            bool const selected = selectedIndex() == index;
             return isDisabled ? Colors::transparent
-                              : selected ? (pressed.get() ? selectedPressFill : hovered.get() ? selectedHoverFill : selectedFill)
-                                         : (pressed.get() ? pressFill : hovered.get() ? hoverFill : idleFill);
-        }};
-        Reactive::Bindable<Color> const labelColor{[selectedIndex = selectedIndex,
-                                                    index = index,
-                                                    isDisabled,
-                                                    disabledTextColor,
-                                                    accentForegroundColor,
-                                                    secondaryLabelColor] {
-            bool const selected = selectedIndex.get() == index;
+                              : selected ? (pressed() ? selectedPressFill : hovered() ? selectedHoverFill : selectedFill)
+                                         : (pressed() ? pressFill : hovered() ? hoverFill : idleFill);
+        };
+        auto labelTarget = [selectedIndex = selectedIndex,
+                            index = index,
+                            isDisabled,
+                            disabledTextColor,
+                            accentForegroundColor,
+                            secondaryLabelColor] {
+            bool const selected = selectedIndex() == index;
             return isDisabled ? disabledTextColor
                               : selected ? accentForegroundColor : secondaryLabelColor;
-        }};
+        };
+        auto fillAnim = useAnimatedValue<Color>(fillTarget(), fillTarget, motion);
+        auto labelAnim = useAnimatedValue<Color>(labelTarget(), labelTarget, motion);
         Reactive::Bindable<StrokeStyle> const stroke{[isDisabled, focused,
                                                        focusColor = theme.keyboardFocusIndicatorColor] {
             return !isDisabled && focused.get()
@@ -135,12 +141,16 @@ struct SegmentedControlItem : ViewModifiers<SegmentedControlItem> {
         return Text {
             .text = option.label,
             .font = style.font,
-            .color = labelColor,
+            .color = [labelAnim] {
+                return labelAnim();
+            },
             .horizontalAlignment = HorizontalAlignment::Center,
             .verticalAlignment = VerticalAlignment::Center,
         }
             .padding(style.paddingV, style.paddingH, style.paddingV, style.paddingH)
-            .fill(fill)
+            .fill([fillAnim] {
+                return fillAnim();
+            })
             .stroke(stroke)
             .cornerRadius(CornerRadius {std::max(0.f, style.cornerRadius - 2.f)})
             .cursor(isDisabled ? Cursor::Arrow : Cursor::Hand)

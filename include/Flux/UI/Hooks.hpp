@@ -284,6 +284,45 @@ Animation<T> useAnimation(T initial, AnimationOptions options) {
   return animation;
 }
 
+namespace detail {
+
+inline bool animationTargetChanged(float current, float next) {
+  return std::abs(current - next) > 0.001f;
+}
+
+template<typename T>
+bool animationTargetChanged(T const& current, T const& next) {
+  return !(current == next);
+}
+
+} // namespace detail
+
+template<Interpolatable T, typename TargetFn, typename TransitionFn>
+Animation<T> useAnimatedValue(T initial, TargetFn&& target, TransitionFn&& transition) {
+  Animation<T> animation = useAnimation<T>(std::move(initial));
+  useEffect([animation,
+             target = std::forward<TargetFn>(target),
+             transition = std::forward<TransitionFn>(transition)]() mutable {
+    T next = target();
+    if (detail::animationTargetChanged(animation.peek(), next)) {
+      animation.set(std::move(next), transition());
+    }
+  });
+  return animation;
+}
+
+template<Interpolatable T, typename TargetFn>
+Animation<T> useAnimatedValue(T initial, TargetFn&& target, Transition transition) {
+  return useAnimatedValue<T>(
+      std::move(initial),
+      std::forward<TargetFn>(target),
+      [transition] {
+        return transition;
+      });
+}
+
+/// Scope-owned frame callback for custom per-frame work that is not a single interpolated value.
+/// Prefer \ref useAnimation / \ref useAnimatedValue for normal control transitions.
 template<typename Fn>
 void useAnimationFrame(Fn&& callback) {
   ObserverHandle const handle =

@@ -123,26 +123,32 @@ Element Button::body() const {
     Reactive::Signal<bool> pressed = usePress();
     Reactive::Signal<bool> focused = useFocus();
 
-    Reactive::Bindable<Color> const fillTarget{[disabledBinding, pressed, hovered, colors, theme] {
+    auto motion = [theme] {
+        return Transition::ease(theme().durationFast);
+    };
+    auto fillTarget = [disabledBinding, pressed, hovered, colors, theme] {
         return disabledBinding.evaluate() ? theme().disabledControlBackgroundColor :
-               pressed.get()             ? colors.fillPress :
-               hovered.get()             ? colors.fillHover :
+               pressed()                 ? colors.fillPress :
+               hovered()                 ? colors.fillHover :
                                            colors.fill;
-    }};
-    Reactive::Bindable<Color> const labelTarget{[disabledBinding, colors, theme] {
+    };
+    auto labelTarget = [disabledBinding, colors, theme] {
         return disabledBinding.evaluate() ? theme().disabledTextColor : colors.label;
-    }};
-    Reactive::Bindable<float> const scaleTarget{[disabledBinding, pressed] {
-        return (pressed.get() && !disabledBinding.evaluate()) ? 0.97f : 1.f;
-    }};
+    };
+    auto scaleTarget = [disabledBinding, pressed] {
+        return (pressed() && !disabledBinding.evaluate()) ? 0.97f : 1.f;
+    };
+    auto fillAnim = useAnimatedValue<Color>(fillTarget(), fillTarget, motion);
+    auto labelAnim = useAnimatedValue<Color>(labelTarget(), labelTarget, motion);
+    auto scaleAnim = useAnimatedValue<float>(1.f, scaleTarget, motion);
     Reactive::Bindable<ShadowStyle> const shadow{[disabledBinding, pressed, hovered, colors, theme] {
         if (disabledBinding.evaluate()) {
             return ShadowStyle::none();
         }
-        if (pressed.get()) {
+        if (pressed()) {
             return ShadowStyle {.radius = theme().shadowRadiusControl + 2.f, .offset = {0.f, theme().shadowOffsetYControl + 1.f}, .color = Color {theme().shadowColor.r, theme().shadowColor.g, theme().shadowColor.b, std::min(theme().shadowColor.a + 0.08f, 1.f)}};
         }
-        if (hovered.get()) {
+        if (hovered()) {
             return colors.shadow.isNone() ? ShadowStyle {.radius = theme().shadowRadiusControl * 0.8f, .offset = {0.f, theme().shadowOffsetYControl + 0.5f}, .color = Color {theme().shadowColor.r, theme().shadowColor.g, theme().shadowColor.b, theme().shadowColor.a * 0.7f}} : colors.shadow;
         }
         return colors.shadow;
@@ -170,15 +176,21 @@ Element Button::body() const {
     }};
 
     return ScaleAroundCenter {
-        .scale = scaleTarget,
+        .scale = [scaleAnim] {
+            return scaleAnim();
+        },
         .child = Text {
             .text = label,
             .font = fontResolved,
-            .color = labelTarget,
+            .color = [labelAnim] {
+                return labelAnim();
+            },
             .horizontalAlignment = HorizontalAlignment::Center,
             .verticalAlignment = VerticalAlignment::Center,
         }
-                     .fill(fillTarget)
+                     .fill([fillAnim] {
+                         return fillAnim();
+                     })
                      .stroke(stroke)
                      .cornerRadius(cr)
                      .shadow(shadow)
@@ -200,12 +212,16 @@ Element LinkButton::body() const {
     Reactive::Signal<bool> focused = useFocus();
     Reactive::Signal<bool> keyboardFocused = useKeyboardFocus();
 
-    Reactive::Bindable<Color> const labelColor{[disabledBinding, pressed, hovered, accentResolved, theme] {
+    auto motion = [theme] {
+        return Transition::ease(theme().durationFast);
+    };
+    auto labelTarget = [disabledBinding, pressed, hovered, accentResolved, theme] {
         return disabledBinding.evaluate() ? theme().disabledTextColor :
-               pressed.get()             ? darken(accentResolved, 0.12f) :
-               hovered.get()             ? lighten(accentResolved, 0.12f) :
+               pressed()                 ? darken(accentResolved, 0.12f) :
+               hovered()                 ? lighten(accentResolved, 0.12f) :
                                            accentResolved;
-    }};
+    };
+    auto labelAnim = useAnimatedValue<Color>(labelTarget(), labelTarget, motion);
 
     auto handleTap = [onTap = onTap, disabledBinding]() {
         if (disabledBinding.evaluate()) {
@@ -230,7 +246,9 @@ Element LinkButton::body() const {
     return Text {
         .text = label,
         .font = fontResolved,
-        .color = labelColor,
+        .color = [labelAnim] {
+            return labelAnim();
+        },
         .horizontalAlignment = HorizontalAlignment::Leading,
         .verticalAlignment = VerticalAlignment::Center,
     }
@@ -254,12 +272,16 @@ Element IconButton::body() const {
     Reactive::Signal<bool> focused = useFocus();
     Reactive::Signal<bool> keyboardFocused = useKeyboardFocus();
 
-    Reactive::Bindable<Color> const iconColor{[disabledBinding, pressed, hovered, accentResolved, theme] {
+    auto motion = [theme] {
+        return Transition::ease(theme().durationFast);
+    };
+    auto iconTarget = [disabledBinding, pressed, hovered, accentResolved, theme] {
         return disabledBinding.evaluate() ? theme().disabledTextColor :
-               pressed.get()             ? darken(accentResolved, 0.12f) :
-               hovered.get()             ? lighten(accentResolved, 0.12f) :
+               pressed()                 ? darken(accentResolved, 0.12f) :
+               hovered()                 ? lighten(accentResolved, 0.12f) :
                                            accentResolved;
-    }};
+    };
+    auto iconAnim = useAnimatedValue<Color>(iconTarget(), iconTarget, motion);
 
     auto handleTap = [onTap = onTap, disabledBinding]() {
         if (disabledBinding.evaluate()) {
@@ -285,7 +307,9 @@ Element IconButton::body() const {
         .name = icon,
         .size = sizeResolved,
         .weight = weightResolved,
-        .color = iconColor,
+        .color = [iconAnim] {
+            return iconAnim();
+        },
     }
         .fill(FillStyle::none())
         .stroke(focusStroke)

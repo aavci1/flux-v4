@@ -142,6 +142,14 @@ Element Slider::body() const {
 
     float const trackY = (componentHeight - trackHeight) * 0.5f;
     float const thumbY = (componentHeight - thumbDiameter) * 0.5f;
+    auto fractionTarget = [val, lo, hi] {
+        return fractionForValue(val(), lo, hi);
+    };
+    auto fractionMotion = [theme, dragging, isDisabled] {
+        return (isDisabled || dragging()) ? Transition::instant()
+                                          : Transition::ease(theme().durationMedium);
+    };
+    auto fractionAnim = useAnimatedValue<float>(fractionTarget(), fractionTarget, fractionMotion);
 
     return ZStack {
         .horizontalAlignment = Alignment::Start,
@@ -157,16 +165,16 @@ Element Slider::body() const {
             Rectangle {}
                 .fill(FillStyle::solid(isDisabled ? theme().disabledControlBackgroundColor : activeColor))
                 .position(0.f, trackY)
-                .size([val, lo, hi, componentWidth, trackHeight] {
-                    return std::max(componentWidth * fractionForValue(val.get(), lo, hi), trackHeight);
+                .size([fractionAnim, componentWidth, trackHeight] {
+                    return std::max(componentWidth * fractionAnim(), trackHeight);
                 }, trackHeight)
                 .cornerRadius(CornerRadius {trackHeight * 0.5f}),
             Rectangle {}
                 .fill(FillStyle::solid(isDisabled ? theme().disabledTextColor : thumbColor))
                 .stroke(isDisabled ? StrokeStyle::solid(theme().disabledTextColor, 1.f) : thumbStroke)
                 .shadow(isDisabled ? ShadowStyle::none() : ShadowStyle {.radius = theme().shadowRadiusControl, .offset = {0.f, theme().shadowOffsetYControl}, .color = theme().shadowColor})
-                .position([val, lo, hi, usableWidth, thumbOffset] {
-                    return fractionForValue(val.get(), lo, hi) * usableWidth + thumbOffset;
+                .position([fractionAnim, usableWidth, thumbOffset] {
+                    return fractionAnim() * usableWidth + thumbOffset;
                 }, thumbY)
                 .size(thumbDiameter, thumbDiameter)
                 .cornerRadius(CornerRadius {thumbDiameter * 0.5f})
