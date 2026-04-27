@@ -166,7 +166,9 @@ private:
       if (options.autoreverse && (iteration % 2) == 1) {
         t = 1.f - t;
       }
-      if (options.transition.easing) {
+      if (options.transition.springFn) {
+        t = (*options.transition.springFn)(t);
+      } else if (options.transition.easing) {
         t = std::clamp(options.transition.easing(t), 0.f, 1.f);
       }
       value.set(lerp(start, target, t));
