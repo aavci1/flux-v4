@@ -1,3 +1,4 @@
+#include <Flux/Reactive/Animation.hpp>
 #include <Flux/Reactive/Computed.hpp>
 #include <Flux/Reactive/Effect.hpp>
 #include <Flux/Reactive/Signal.hpp>
@@ -52,4 +53,52 @@ TEST_CASE("Reactive Effect updates dynamic subscriptions") {
 
   left.set(2);
   CHECK(runs == 2);
+}
+
+TEST_CASE("Reactive Effect reruns do not inherit ambient WithTransition") {
+  Signal<int> trigger(0);
+  flux::Animation<float> readAnimation{0.f};
+  flux::Animation<float> writeAnimation{0.f};
+  int runs = 0;
+  float observed = -1.f;
+
+  Effect effect([&] {
+    ++runs;
+    observed = readAnimation.get();
+    if (trigger.get() > 0) {
+      writeAnimation = 5.f;
+    }
+  });
+
+  CHECK(runs == 1);
+  CHECK(observed == doctest::Approx(0.f));
+  CHECK_FALSE(writeAnimation.isRunning());
+
+  {
+    flux::WithTransition transition{flux::Transition::linear(10.f)};
+    readAnimation = 1.f;
+    CHECK(readAnimation.isRunning());
+    CHECK(readAnimation.get() == doctest::Approx(0.f));
+
+    trigger.set(1);
+  }
+
+  CHECK(runs == 2);
+  CHECK(observed == doctest::Approx(0.f));
+  CHECK_FALSE(writeAnimation.isRunning());
+  CHECK(writeAnimation.get() == doctest::Approx(5.f));
+
+  Signal<int> localTrigger(0);
+  flux::Animation<float> scopedWrite{0.f};
+  Effect scopedEffect([&] {
+    if (localTrigger.get() > 0) {
+      flux::WithTransition transition{flux::Transition::linear(10.f)};
+      scopedWrite = 8.f;
+    }
+  });
+
+  localTrigger.set(1);
+
+  CHECK(scopedWrite.isRunning());
+  CHECK(scopedWrite.get() == doctest::Approx(0.f));
 }

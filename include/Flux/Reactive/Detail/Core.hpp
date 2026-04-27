@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Flux/Reactive/SmallFn.hpp>
+#include <Flux/Reactive/Transition.hpp>
 
 #include <atomic>
 #include <cassert>
@@ -708,6 +709,7 @@ struct EffectState final : detail::Computation {
     clearSourcesForReuse();
     detail::clearFlag(flags, detail::Pending);
     detail::clearFlag(flags, detail::Dirty);
+    ::flux::detail::TransitionScopeSuspension transitionScope;
     detail::ObserverContext context(this);
     fn();
   }
