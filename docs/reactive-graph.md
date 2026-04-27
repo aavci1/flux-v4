@@ -39,6 +39,6 @@ return Rectangle{}
 
 ## Environment
 
-Environment values are explicit compile-time keys. `.environment<Key>(value)` provides a static subtree value, and `.environment<Key>(signal)` provides a signal-backed value. `useEnvironment<Key>()` returns a signal-shaped handle for both static body-time reads and reactive reads inside `Bindable` closures or `Effect` bodies. Use `useEnvironmentValue<Key>()` only when a non-reactive snapshot is required.
+Environment values are explicit compile-time keys. `.environment<Key>(value)` provides a static subtree value, and `.environment<Key>(signal)` provides a signal-backed value. `useEnvironment<Key>()` returns a signal-shaped handle for both static body-time reads and reactive reads inside `Bindable` closures or `Effect` bodies.
 
 `Window` owns a reactive `ThemeKey` signal. Calling `Window::setTheme()` updates retained theme-dependent bindings without remounting the app.

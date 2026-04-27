@@ -312,7 +312,7 @@ struct AmbientLoopLab : ViewModifiers<AmbientLoopLab> {
 
         auto phase = useState(0.f);
         double const startedAt = nowSeconds();
-        useAnimationFrame([phase, startedAt](AnimationTick const& tick) {
+        useFrame([phase, startedAt](AnimationTick const& tick) {
                 double const cycle = 2.8;
                 double local = std::fmod(std::max(0.0, tick.nowSeconds - startedAt), cycle) / 1.4;
                 if (local > 1.0) {

@@ -57,7 +57,6 @@ Element Toggle::body() const {
     bool const isDisabled = disabled;
     auto v = value;
 
-    bool const initialOn = v.peek();
     auto targetMotion = [theme, isDisabled] {
         return isDisabled ? Transition::instant() : Transition::ease(theme().durationMedium);
     };
@@ -77,12 +76,9 @@ Element Toggle::body() const {
         return (pressed() && !isDisabled) ? 0.90f : 1.f;
     };
 
-    auto thumbXAnim = useAnimatedValue<float>(initialOn ? xOn : xOff, thumbXTarget, targetMotion);
-    auto trackFillAnim = useAnimatedValue<Color>(
-        isDisabled ? theme().disabledControlBackgroundColor : initialOn ? onColor : offColor,
-        trackFillTarget,
-        targetMotion);
-    auto scaleAnim = useAnimatedValue<float>(1.f, scaleTarget, pressMotion);
+    auto thumbXAnim = useAnimation(thumbXTarget, targetMotion);
+    auto trackFillAnim = useAnimation(trackFillTarget, targetMotion);
+    auto scaleAnim = useAnimation(scaleTarget, pressMotion);
 
     auto handleToggle = [v, onChange = onChange, isDisabled]() {
         if (isDisabled) {

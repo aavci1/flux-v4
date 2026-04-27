@@ -61,12 +61,6 @@ Text {
 }
 ```
 
-For a single field, use a computed field helper:
-
-```cpp
-auto space = useEnvironmentField<ThemeKey>(&Theme::space3);
-```
-
 Provide a theme to a subtree with a keyed environment modifier:
 
 ```cpp
@@ -84,8 +78,6 @@ FLUX_DEFINE_ENVIRONMENT_KEY(LocaleKey, Locale, Locale{});
 
 Use these APIs:
 
-- `useEnvironmentValue<Key>()` returns the current value by copy. Use it only when a non-reactive snapshot is required.
-- `useEnvironmentSignal<Key>()` returns the upstream signal when the provider is signal-backed.
 - `useEnvironment<Key>()` returns a signal-shaped value, using the upstream signal when present or a constant signal otherwise.
 - `.environment<Key>(value)` and `.environment<Key>(signal)` provide value-backed and signal-backed subtree overrides.
 

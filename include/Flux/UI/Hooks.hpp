@@ -21,9 +21,9 @@
 #include <cassert>
 #include <cstdint>
 #include <functional>
-#include <optional>
 #include <source_location>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -228,42 +228,23 @@ inline void debugRegisterUseState(std::source_location location) {
 } // namespace detail
 
 template<typename Key>
-typename EnvironmentKey<Key>::Value useEnvironmentValue() {
-  if (MountContext* mount = detail::currentMountContext()) {
-    return mount->environmentBinding().value<Key>();
-  }
-  if (MeasureContext* measure = detail::currentMeasureContext()) {
-    return measure->environmentBinding().value<Key>();
-  }
-  return EnvironmentKey<Key>::defaultValue();
-}
-
-template<typename Key>
-std::optional<Reactive::Signal<typename EnvironmentKey<Key>::Value>>
-useEnvironmentSignal() {
-  if (MountContext* mount = detail::currentMountContext()) {
-    return mount->environmentBinding().signal<Key>();
-  }
-  if (MeasureContext* measure = detail::currentMeasureContext()) {
-    return measure->environmentBinding().signal<Key>();
-  }
-  return std::nullopt;
-}
-
-template<typename Key>
 Reactive::Signal<typename EnvironmentKey<Key>::Value> useEnvironment() {
-  if (auto signal = useEnvironmentSignal<Key>()) {
-    return *signal;
+  if (MountContext* mount = detail::currentMountContext()) {
+    if (auto signal = mount->environmentBinding().signal<Key>()) {
+      return *signal;
+    }
+    return Reactive::Signal<typename EnvironmentKey<Key>::Value>{
+        mount->environmentBinding().value<Key>()};
   }
-  return Reactive::Signal<typename EnvironmentKey<Key>::Value>{useEnvironmentValue<Key>()};
-}
-
-template<typename Key, typename Field>
-Reactive::Computed<Field> useEnvironmentField(Field EnvironmentKey<Key>::Value::* member) {
-  Reactive::Signal<typename EnvironmentKey<Key>::Value> value = useEnvironment<Key>();
-  return Reactive::makeComputed([value, member] {
-    return value().*member;
-  });
+  if (MeasureContext* measure = detail::currentMeasureContext()) {
+    if (auto signal = measure->environmentBinding().signal<Key>()) {
+      return *signal;
+    }
+    return Reactive::Signal<typename EnvironmentKey<Key>::Value>{
+        measure->environmentBinding().value<Key>()};
+  }
+  return Reactive::Signal<typename EnvironmentKey<Key>::Value>{
+      EnvironmentKey<Key>::defaultValue()};
 }
 
 /// Each `useState` call allocates a fresh `Signal<T>` owned by the current reactive scope.
@@ -317,7 +298,7 @@ bool animationTargetChanged(T const& current, T const& next) {
 } // namespace detail
 
 template<Interpolatable T, typename TargetFn, typename TransitionFn>
-Animation<T> useAnimatedValue(T initial, TargetFn&& target, TransitionFn&& transition) {
+Animation<T> useAnimation(T initial, TargetFn&& target, TransitionFn&& transition) {
   Animation<T> animation = useAnimation<T>(std::move(initial));
   useEffect([animation,
              target = std::forward<TargetFn>(target),
@@ -331,8 +312,8 @@ Animation<T> useAnimatedValue(T initial, TargetFn&& target, TransitionFn&& trans
 }
 
 template<Interpolatable T, typename TargetFn>
-Animation<T> useAnimatedValue(T initial, TargetFn&& target, Transition transition) {
-  return useAnimatedValue<T>(
+Animation<T> useAnimation(T initial, TargetFn&& target, Transition transition) {
+  return useAnimation<T>(
       std::move(initial),
       std::forward<TargetFn>(target),
       [transition] {
@@ -340,10 +321,39 @@ Animation<T> useAnimatedValue(T initial, TargetFn&& target, Transition transitio
       });
 }
 
+template<typename TargetFn, typename TransitionFn>
+  requires std::is_invocable_v<TargetFn&> &&
+           Interpolatable<std::remove_cvref_t<std::invoke_result_t<TargetFn&>>> &&
+           std::is_invocable_r_v<Transition, TransitionFn&>
+Animation<std::remove_cvref_t<std::invoke_result_t<TargetFn&>>>
+useAnimation(TargetFn&& target, TransitionFn&& transition) {
+  using T = std::remove_cvref_t<std::invoke_result_t<TargetFn&>>;
+  std::decay_t<TargetFn> targetFn{std::forward<TargetFn>(target)};
+  T initial = targetFn();
+  return useAnimation<T>(
+      std::move(initial),
+      std::move(targetFn),
+      std::forward<TransitionFn>(transition));
+}
+
+template<typename TargetFn>
+  requires std::is_invocable_v<TargetFn&> &&
+           Interpolatable<std::remove_cvref_t<std::invoke_result_t<TargetFn&>>>
+Animation<std::remove_cvref_t<std::invoke_result_t<TargetFn&>>>
+useAnimation(TargetFn&& target, Transition transition) {
+  using T = std::remove_cvref_t<std::invoke_result_t<TargetFn&>>;
+  std::decay_t<TargetFn> targetFn{std::forward<TargetFn>(target)};
+  T initial = targetFn();
+  return useAnimation<T>(
+      std::move(initial),
+      std::move(targetFn),
+      std::move(transition));
+}
+
 /// Scope-owned frame callback for custom per-frame work that is not a single interpolated value.
-/// Prefer \ref useAnimation / \ref useAnimatedValue for normal control transitions.
+/// Prefer \ref useAnimation for normal control transitions.
 template<typename Fn>
-void useAnimationFrame(Fn&& callback) {
+void useFrame(Fn&& callback) {
   ObserverHandle const handle =
       AnimationClock::instance().subscribe(Reactive::SmallFn<void(AnimationTick const&)>{std::forward<Fn>(callback)});
   Reactive::onCleanup([handle] {

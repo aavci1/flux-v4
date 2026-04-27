@@ -95,9 +95,9 @@ Element Checkbox::body() const {
     auto scaleTarget = [pressed, disabledBinding] {
         return pressed() && !disabledBinding.evaluate() ? 0.92f : 1.f;
     };
-    auto boxFillAnim = useAnimatedValue<Color>(boxFillTarget(), boxFillTarget, motion);
-    auto iconColorAnim = useAnimatedValue<Color>(iconColorTarget(), iconColorTarget, motion);
-    auto scaleAnim = useAnimatedValue<float>(1.f, scaleTarget, motion);
+    auto boxFillAnim = useAnimation(boxFillTarget, motion);
+    auto iconColorAnim = useAnimation(iconColorTarget, motion);
+    auto scaleAnim = useAnimation(scaleTarget, motion);
 
     Reactive::Bindable<IconName> const iconName{[indeterminateBinding] {
         return indeterminateBinding.evaluate() ? IconName::HorizontalRule : IconName::Check;

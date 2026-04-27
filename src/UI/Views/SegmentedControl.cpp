@@ -123,8 +123,8 @@ struct SegmentedControlItem : ViewModifiers<SegmentedControlItem> {
             return isDisabled ? disabledTextColor
                               : selected ? accentForegroundColor : secondaryLabelColor;
         };
-        auto fillAnim = useAnimatedValue<Color>(fillTarget(), fillTarget, motion);
-        auto labelAnim = useAnimatedValue<Color>(labelTarget(), labelTarget, motion);
+        auto fillAnim = useAnimation(fillTarget, motion);
+        auto labelAnim = useAnimation(labelTarget, motion);
         Reactive::Bindable<StrokeStyle> const stroke{[isDisabled, focused,
                                                        focusColor = theme.keyboardFocusIndicatorColor] {
             return !isDisabled && focused.get()

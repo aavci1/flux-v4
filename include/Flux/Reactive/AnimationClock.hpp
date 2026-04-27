@@ -17,7 +17,7 @@ class AnimationBase;
 class Application;
 class EventQueue;
 template<typename Fn>
-void useAnimationFrame(Fn&& callback);
+void useFrame(Fn&& callback);
 
 /// One tick from the shared frame pump (`steady_clock` domain, same as `FrameEvent::deadlineNanos`).
 struct AnimationTick {
@@ -40,7 +40,7 @@ public:
 private:
   friend class Application;
   template<typename Fn>
-  friend void useAnimationFrame(Fn&& callback);
+  friend void useFrame(Fn&& callback);
 
   AnimationClock();
 
