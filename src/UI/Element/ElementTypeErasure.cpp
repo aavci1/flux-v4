@@ -6,6 +6,7 @@
 #include <Flux/SceneGraph/SceneNode.hpp>
 #include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/MountContext.hpp>
+#include <Flux/UI/Theme.hpp>
 
 #include "UI/Element/ModifierLayoutHelpers.hpp"
 
@@ -14,6 +15,7 @@
 #include <concepts>
 #include <cmath>
 #include <limits>
+#include <memory>
 #include <optional>
 #include <vector>
 
@@ -91,6 +93,38 @@ LayoutConstraints fixedConstraints(Size size) {
       .minWidth = std::max(0.f, size.width),
       .minHeight = std::max(0.f, size.height),
   };
+}
+
+Theme const& activeTheme(EnvironmentStack& environment) {
+  if (auto const* themeSignal = environment.findSignal<Theme>()) {
+    return themeSignal->get();
+  }
+  if (Theme const* theme = environment.find<Theme>()) {
+    return *theme;
+  }
+  static Theme const fallback = Theme::light();
+  return fallback;
+}
+
+FillStyle resolveFillStyle(FillStyle style, Theme const& theme) {
+  Color color{};
+  if (!style.solidColor(&color)) {
+    return style;
+  }
+  style.data = resolveColor(color, theme);
+  return style;
+}
+
+StrokeStyle resolveStrokeStyle(StrokeStyle style, Theme const& theme) {
+  if (style.type == StrokeStyle::Type::Solid) {
+    style.color = resolveColor(style.color, theme);
+  }
+  return style;
+}
+
+ShadowStyle resolveShadowStyle(ShadowStyle style, Theme const& theme) {
+  style.color = resolveColor(style.color, theme);
+  return style;
 }
 
 void relayoutStoredAncestors(scenegraph::SceneNode& node) {
@@ -303,9 +337,16 @@ Element Element::key(std::string key) && {
 }
 
 std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
+  std::unique_ptr<MountContext> scopedEnvironmentContext;
   if (envLayer_) {
     ctx.environment().push(*envLayer_);
+    auto environmentSnapshot =
+        std::make_shared<std::vector<EnvironmentLayer> const>(ctx.environment().snapshot());
+    scopedEnvironmentContext = std::make_unique<MountContext>(
+        ctx.owner(), ctx.environment(), ctx.textSystem(), ctx.measureContext(),
+        ctx.constraints(), ctx.hints(), ctx.redrawCallback(), std::move(environmentSnapshot));
   }
+  MountContext& activeCtx = scopedEnvironmentContext ? *scopedEnvironmentContext : ctx;
 
   auto popEnvironment = [&] {
     if (envLayer_) {
@@ -314,7 +355,7 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
   };
 
   if (!modifiers_ || !modifiers_->needsModifierPass()) {
-    auto node = impl_->mount(ctx);
+    auto node = impl_->mount(activeCtx);
     popEnvironment();
     return node;
   }
@@ -324,8 +365,8 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
   float const width = modifiers.sizeWidth.evaluate();
   float const height = modifiers.sizeHeight.evaluate();
   LayoutConstraints innerConstraints =
-      modifierInnerConstraints(ctx.constraints(), padding, ctx.hints(), width, height);
-  MountContext innerCtx = ctx.childWithSharedScope(innerConstraints, ctx.hints());
+      modifierInnerConstraints(activeCtx.constraints(), padding, activeCtx.hints(), width, height);
+  MountContext innerCtx = activeCtx.childWithSharedScope(innerConstraints, activeCtx.hints());
   std::unique_ptr<scenegraph::SceneNode> content = impl_->mount(innerCtx);
   if (!content) {
     popEnvironment();
@@ -333,7 +374,7 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
   }
 
   Size outerSize = resolveModifierOuterSize(
-      measuredOuterSize(*this, ctx), ctx.constraints(), ctx.hints(), width, height);
+      measuredOuterSize(*this, activeCtx), activeCtx.constraints(), activeCtx.hints(), width, height);
   auto wrapper = std::make_unique<scenegraph::RectNode>(
       Rect{0.f, 0.f, positive(outerSize.width), positive(outerSize.height)});
 
@@ -371,19 +412,20 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
     }
     rawWrapper->setInteraction(std::move(interaction));
   }
-  installBinding<FillStyle>(ctx, modifiers.fill, [rawWrapper](FillStyle fill) {
-    rawWrapper->setFill(std::move(fill));
+  EnvironmentStack* bindingEnvironment = &activeCtx.environment();
+  installBinding<FillStyle>(activeCtx, modifiers.fill, [rawWrapper, bindingEnvironment](FillStyle fill) {
+    rawWrapper->setFill(resolveFillStyle(std::move(fill), activeTheme(*bindingEnvironment)));
   });
-  installBinding<StrokeStyle>(ctx, modifiers.stroke, [rawWrapper](StrokeStyle stroke) {
-    rawWrapper->setStroke(std::move(stroke));
+  installBinding<StrokeStyle>(activeCtx, modifiers.stroke, [rawWrapper, bindingEnvironment](StrokeStyle stroke) {
+    rawWrapper->setStroke(resolveStrokeStyle(std::move(stroke), activeTheme(*bindingEnvironment)));
   });
-  installBinding<ShadowStyle>(ctx, modifiers.shadow, [rawWrapper](ShadowStyle shadow) {
-    rawWrapper->setShadow(shadow);
+  installBinding<ShadowStyle>(activeCtx, modifiers.shadow, [rawWrapper, bindingEnvironment](ShadowStyle shadow) {
+    rawWrapper->setShadow(resolveShadowStyle(shadow, activeTheme(*bindingEnvironment)));
   });
-  installBinding<CornerRadius>(ctx, modifiers.cornerRadius, [rawWrapper](CornerRadius radius) {
+  installBinding<CornerRadius>(activeCtx, modifiers.cornerRadius, [rawWrapper](CornerRadius radius) {
     rawWrapper->setCornerRadius(radius);
   });
-  installBinding<float>(ctx, modifiers.opacity, [rawWrapper](float opacity) {
+  installBinding<float>(activeCtx, modifiers.opacity, [rawWrapper](float opacity) {
     rawWrapper->setOpacity(opacity);
   });
   rawWrapper->setClipsContents(modifiers.clip);
@@ -392,9 +434,9 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
   content->setPosition(Point{std::max(0.f, padding.left), std::max(0.f, padding.top)});
   wrapper->appendChild(std::move(content));
 
-  LayoutConstraints const bindingConstraints = ctx.constraints();
-  LayoutHints const bindingHints = ctx.hints();
-  installBinding<float>(ctx, modifiers.sizeWidth,
+  LayoutConstraints const bindingConstraints = activeCtx.constraints();
+  LayoutHints const bindingHints = activeCtx.hints();
+  installBinding<float>(activeCtx, modifiers.sizeWidth,
                         [rawWrapper, bindingConstraints, bindingHints](float width) {
     float const resolvedWidth = detail::resolvedModifierWidth(bindingConstraints, bindingHints, width);
     if (resolvedWidth > 0.f) {
@@ -407,7 +449,7 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
       }
     }
   });
-  installBinding<float>(ctx, modifiers.sizeHeight,
+  installBinding<float>(activeCtx, modifiers.sizeHeight,
                         [rawWrapper, bindingConstraints, bindingHints](float height) {
     float const resolvedHeight = detail::resolvedModifierHeight(bindingConstraints, bindingHints, height);
     if (resolvedHeight > 0.f) {
@@ -420,35 +462,36 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
       }
     }
   });
-  installBinding<Vec2>(ctx, modifiers.translation, [rawWrapper, px = modifiers.positionX,
-                                                    py = modifiers.positionY](Vec2 translation) mutable {
+  installBinding<Vec2>(activeCtx, modifiers.translation, [rawWrapper, px = modifiers.positionX,
+                                                          py = modifiers.positionY](
+                                                           Vec2 translation) mutable {
     rawWrapper->setPosition(Point{px.evaluate() + translation.x, py.evaluate() + translation.y});
   });
-  installBinding<float>(ctx, modifiers.positionX, [rawWrapper, tr = modifiers.translation,
-                                                   py = modifiers.positionY](float x) mutable {
+  installBinding<float>(activeCtx, modifiers.positionX, [rawWrapper, tr = modifiers.translation,
+                                                         py = modifiers.positionY](float x) mutable {
     Vec2 const translation = tr.evaluate();
     rawWrapper->setPosition(Point{x + translation.x, py.evaluate() + translation.y});
   });
-  installBinding<float>(ctx, modifiers.positionY, [rawWrapper, tr = modifiers.translation,
-                                                   px = modifiers.positionX](float y) mutable {
+  installBinding<float>(activeCtx, modifiers.positionY, [rawWrapper, tr = modifiers.translation,
+                                                         px = modifiers.positionX](float y) mutable {
     Vec2 const translation = tr.evaluate();
     rawWrapper->setPosition(Point{px.evaluate() + translation.x, y + translation.y});
   });
 
   if (modifiers.overlay) {
-    MountContext overlayCtx = ctx.childWithSharedScope(LayoutConstraints{
+    MountContext overlayCtx = activeCtx.childWithSharedScope(LayoutConstraints{
         .maxWidth = outerSize.width,
         .maxHeight = outerSize.height,
         .minWidth = 0.f,
         .minHeight = 0.f,
-    }, ctx.hints());
+    }, activeCtx.hints());
     if (auto overlayNode = modifiers.overlay->mount(overlayCtx)) {
       wrapper->appendChild(std::move(overlayNode));
     }
   }
 
-  LayoutHints const relayoutHints = ctx.hints();
-  rawWrapper->setLayoutConstraints(ctx.constraints());
+  LayoutHints const relayoutHints = activeCtx.hints();
+  rawWrapper->setLayoutConstraints(activeCtx.constraints());
   rawWrapper->setRelayout([rawWrapper, rawContent, relayoutHints,
                            modifiers](LayoutConstraints const& constraints) mutable {
     EdgeInsets const padding = modifiers.padding.evaluate();

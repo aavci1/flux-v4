@@ -44,8 +44,7 @@ public:
 
   Size measure(MeasureContext& ctx, LayoutConstraints const& constraints,
                LayoutHints const&, TextSystem& textSystem) const {
-    (void)textSystem;
-    return state_->measure(ctx, constraints);
+    return state_->measure(ctx, constraints, textSystem);
   }
 
   std::unique_ptr<scenegraph::SceneNode> mount(MountContext& ctx) const {
@@ -134,11 +133,18 @@ private:
       dispose();
     }
 
-    Size measure(MeasureContext& ctx, LayoutConstraints const& nextConstraints) const {
+    Size measure(MeasureContext& ctx, LayoutConstraints const& nextConstraints,
+                 TextSystem& measureTextSystem) {
       ctx.advanceChildSlot();
       if (disposed) {
         return clampSize({}, nextConstraints);
       }
+      EnvironmentStack& currentEnvironment = EnvironmentStack::current();
+      environment = &currentEnvironment;
+      environmentLayers = currentEnvironment.snapshot();
+      textSystem = &measureTextSystem;
+      constraints = nextConstraints;
+      reconcileMeasuredRows(items.peek());
       return measuredStackSize(nextConstraints);
     }
 
@@ -229,6 +235,50 @@ private:
       if (requestRedraw) {
         requestRedraw();
       }
+    }
+
+    void reconcileMeasuredRows(Items const& nextItems) {
+      if (!environment || !textSystem) {
+        return;
+      }
+      std::vector<bool> used(rows.size(), false);
+      std::vector<Row> nextRows;
+      nextRows.reserve(nextItems.size());
+
+      LayoutConstraints const childConstraints = rowConstraints(constraints);
+      LayoutHints const childHints = rowHints();
+
+      for (std::size_t index = 0; index < nextItems.size(); ++index) {
+        T const& item = nextItems[index];
+        Key key = std::invoke(keyFn, item);
+        std::optional<std::size_t> match = findUnused(rows, used, key);
+        if (match) {
+          std::size_t const oldIndex = *match;
+          used[oldIndex] = true;
+          Row row = std::move(rows[oldIndex]);
+          bool const indexChanged = row.index.peek() != index;
+          row.index.set(index);
+          if (indexChanged) {
+            row.hasCachedSize = false;
+          }
+          ensureMeasured(row, *environment, environmentLayers, *textSystem,
+                         childConstraints, childHints);
+          nextRows.push_back(std::move(row));
+        } else {
+          Row row = createRow(item, index, std::move(key), *environment, environmentLayers);
+          ensureMeasured(row, *environment, environmentLayers, *textSystem,
+                         childConstraints, childHints);
+          nextRows.push_back(std::move(row));
+        }
+      }
+
+      for (std::size_t i = 0; i < rows.size(); ++i) {
+        if (!used[i] && rows[i].scope) {
+          rows[i].scope->dispose();
+        }
+      }
+
+      rows = std::move(nextRows);
     }
 
     void relayout(scenegraph::GroupNode& group, LayoutConstraints const& nextConstraints) {

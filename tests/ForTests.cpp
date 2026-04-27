@@ -262,11 +262,13 @@ TEST_CASE("For measures retained rows without rebuilding factory output") {
         .minHeight = 0.f,
     };
     measureContext.pushConstraints(constraints);
-    CHECK(measuredOnly.measure(measureContext, constraints, {}, textSystem).height == doctest::Approx(0.f));
+    CHECK(measuredOnly.measure(measureContext, constraints, {}, textSystem).height == doctest::Approx(18.f));
+    CHECK(measureOnlyFactoryCalls == 2);
+    CHECK(measuredOnly.measure(measureContext, constraints, {}, textSystem).height == doctest::Approx(18.f));
     measureContext.popConstraints();
     environment.pop();
   }
-  CHECK(measureOnlyFactoryCalls == 0);
+  CHECK(measureOnlyFactoryCalls == 2);
 
   flux::scenegraph::SceneGraph sceneGraph;
   flux::MountRoot root{

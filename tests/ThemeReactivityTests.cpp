@@ -136,6 +136,36 @@ TEST_CASE("theme signal updates retained leaf bindings without remounting") {
   CHECK(cleanups == 1);
 }
 
+TEST_CASE("element environment applies to modifier bindings on the same retained subtree") {
+  struct Root {
+    flux::Element body() const {
+      return flux::Element{flux::Rectangle{}}
+          .size(32.f, 18.f)
+          .fill(flux::Color::controlBackground())
+          .stroke(flux::Color::separator(), 1.f)
+          .environment(flux::Theme::dark());
+    }
+  };
+
+  FakeTextSystem textSystem;
+  flux::scenegraph::SceneGraph sceneGraph;
+  flux::EnvironmentLayer environment;
+  environment.set(flux::Theme::light());
+  flux::MountRoot root{
+      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{}),
+      textSystem,
+      std::move(environment),
+      flux::Size{200.f, 120.f},
+  };
+
+  root.mount(sceneGraph);
+
+  REQUIRE(sceneGraph.root().kind() == flux::scenegraph::SceneNodeKind::Rect);
+  auto const& rect = static_cast<flux::scenegraph::RectNode const&>(sceneGraph.root());
+  checkSameChannels(solidColor(rect), flux::Theme::dark().controlBackgroundColor);
+  CHECK(rect.stroke().color == flux::Theme::dark().separatorColor);
+}
+
 TEST_CASE("themeField exposes a computed theme member to bindable leaves") {
   struct Root {
     int* bodyCalls = nullptr;
