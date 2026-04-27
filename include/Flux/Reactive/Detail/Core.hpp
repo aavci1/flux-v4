@@ -586,10 +586,6 @@ struct SignalState final : detail::Observable {
   }
 
   T value;
-#ifndef NDEBUG
-  char const* untrackedReadWarning = nullptr;
-  bool didWarnUntrackedRead = false;
-#endif
 };
 
 template <typename T>
@@ -608,12 +604,6 @@ public:
   T const& get() const {
     assert(state_ && "reading an empty Signal handle");
     assert(!state_->disposed() && "reading a disposed Signal");
-#ifndef NDEBUG
-    if (!detail::sCurrentObserver && state_->untrackedReadWarning && !state_->didWarnUntrackedRead) {
-      std::fprintf(stderr, "%s\n", state_->untrackedReadWarning);
-      state_->didWarnUntrackedRead = true;
-    }
-#endif
     state_->reportRead();
     return state_->value;
   }
@@ -653,13 +643,6 @@ public:
   bool disposed() const {
     return !state_ || state_->disposed();
   }
-
-#ifndef NDEBUG
-  void setUntrackedReadWarning(char const* warning) const {
-    assert(state_ && "marking an empty Signal handle");
-    state_->untrackedReadWarning = warning;
-  }
-#endif
 
 private:
   std::shared_ptr<SignalState<T>> state_;
