@@ -59,6 +59,15 @@ bool canReplayPreparedLeaf(SceneNode const& node) {
            !static_cast<RectNode const&>(node).clipsContents();
 }
 
+bool canReplayPreparedGroup(SceneNode const& node) {
+    Rect const bounds = node.localBounds();
+    return node.kind() == SceneNodeKind::Group &&
+           !node.children().empty() &&
+           bounds.width > 0.f &&
+           bounds.height > 0.f &&
+           isIdentityTransform(node.transform());
+}
+
 MetalRecorderSlice fullRecordedSlice(MetalFrameRecorder const &recorded) {
     return MetalRecorderSlice {
         .orderStart = 0,
@@ -160,6 +169,9 @@ struct SceneRenderer::Impl {
         if (!detail::SceneNodeAccess::subtreeDirty(node)) {
             return;
         }
+        bool const hadPreparedGroup =
+            node.kind() == SceneNodeKind::Group &&
+            static_cast<bool>(detail::SceneNodeAccess::preparedRenderOps(node));
         if (node.kind() != SceneNodeKind::Group && node.canPrepareRenderOps()) {
             std::unique_ptr<PreparedRenderOps> &prepared =
                 detail::SceneNodeAccess::preparedRenderOps(node);
@@ -173,19 +185,56 @@ struct SceneRenderer::Impl {
             if (detail::SceneNodeAccess::ownPaintingDirty(node)) {
                 detail::SceneNodeAccess::clearDirty(node);
             }
-        } else if (detail::SceneNodeAccess::ownPaintingDirty(node)) {
-            detail::SceneNodeAccess::clearDirty(node);
+        } else {
+            std::unique_ptr<PreparedRenderOps> &prepared =
+                detail::SceneNodeAccess::preparedRenderOps(node);
+            if (prepared) {
+                // A previously cached group that becomes dirty is probably on an animated path.
+                // Drop the broad cache and let stable child groups continue replaying independently.
+                prepared.reset();
+                detail::SceneNodeAccess::suppressPreparedGroupCache(node);
+            }
+            if (detail::SceneNodeAccess::ownPaintingDirty(node)) {
+                detail::SceneNodeAccess::clearDirty(node);
+            }
         }
 
         for (std::unique_ptr<SceneNode> const &child : node.children()) {
             prepareNodeCache(*child);
         }
 
+        if (node.kind() == SceneNodeKind::Group && !hadPreparedGroup &&
+            !detail::SceneNodeAccess::preparedGroupCacheSuppressed(node) &&
+            !detail::SceneNodeAccess::preparedRenderOps(node) &&
+            canReplayPreparedGroup(node)) {
+            debug::perf::recordPreparedPrepareCall();
+            detail::SceneNodeAccess::preparedRenderOps(node) = prepareSubtree(node);
+        }
+
         detail::SceneNodeAccess::clearSubtreeDirty(node);
     }
 
-    void renderNode(SceneNode const &node, float inheritedOpacity, Point inheritedTranslation) {
-        debug::perf::recordSceneNodeVisit(node.kind() == SceneNodeKind::Group);
+    std::unique_ptr<PreparedRenderOps> prepareSubtree(SceneNode const &node) {
+        Canvas *canvas = renderer->canvas();
+        if (!canvas) {
+            return nullptr;
+        }
+        MetalFrameRecorder recorded;
+        if (!beginRecordedOpsCaptureForCanvas(canvas, &recorded)) {
+            return nullptr;
+        }
+        for (std::unique_ptr<SceneNode> const &child : node.children()) {
+            renderNode(*child, 1.f, Point {}, false, false);
+        }
+        endRecordedOpsCaptureForCanvas(canvas);
+        return std::make_unique<CanvasPreparedRenderOps>(std::move(recorded));
+    }
+
+    void renderNode(SceneNode const &node, float inheritedOpacity, Point inheritedTranslation,
+                    bool collectCounters = true, bool usePreparedCache = true) {
+        if (collectCounters) {
+            debug::perf::recordSceneNodeVisit(node.kind() == SceneNodeKind::Group);
+        }
         float nodeOpacity = inheritedOpacity;
         if (node.kind() == SceneNodeKind::Rect) {
             nodeOpacity *= static_cast<RectNode const &>(node).opacity();
@@ -199,27 +248,70 @@ struct SceneRenderer::Impl {
             node.kind() == SceneNodeKind::Rect &&
             static_cast<RectNode const &>(node).clipsContents();
 
+        if (node.kind() == SceneNodeKind::Group && usePreparedCache &&
+            kEnablePreparedRenderCache && !detail::SceneNodeAccess::subtreeDirty(node) &&
+            canReplayPreparedGroup(node)) {
+            if (localBounds.width > 0.f && localBounds.height > 0.f &&
+                renderer->quickReject(offsetRect(localBounds, accumulatedTranslation))) {
+                if (collectCounters) {
+                    debug::perf::recordSceneQuickReject();
+                }
+                return;
+            }
+            std::unique_ptr<PreparedRenderOps> &prepared =
+                detail::SceneNodeAccess::preparedRenderOps(node);
+            if (prepared) {
+                bool const needsState = !isZeroOffset(accumulatedTranslation) || nodeOpacity != 1.f;
+                if (needsState) {
+                    renderer->save();
+                    if (!isZeroOffset(accumulatedTranslation)) {
+                        renderer->translate(accumulatedTranslation);
+                    }
+                    if (nodeOpacity != 1.f) {
+                        renderer->setOpacity(nodeOpacity);
+                    }
+                }
+                if (collectCounters) {
+                    debug::perf::recordPreparedReplayCall();
+                }
+                bool const replayed = prepared->replay(*renderer);
+                if (collectCounters) {
+                    debug::perf::recordPreparedReplayResult(replayed);
+                }
+                if (needsState) {
+                    renderer->restore();
+                }
+                if (replayed) {
+                    return;
+                }
+            }
+        }
+
         if (node.kind() == SceneNodeKind::Group &&
             !clipsContents &&
             isIdentityTransform(node.transform())) {
             if (localBounds.width > 0.f && localBounds.height > 0.f &&
                 renderer->quickReject(offsetRect(localBounds, accumulatedTranslation))) {
-                debug::perf::recordSceneQuickReject();
+                if (collectCounters) {
+                    debug::perf::recordSceneQuickReject();
+                }
                 return;
             }
             for (std::unique_ptr<SceneNode> const &child : node.children()) {
-                renderNode(*child, nodeOpacity, accumulatedTranslation);
+                renderNode(*child, nodeOpacity, accumulatedTranslation, collectCounters, usePreparedCache);
             }
             return;
         }
 
-        if (node.kind() != SceneNodeKind::Group && kEnablePreparedRenderCache &&
+        if (node.kind() != SceneNodeKind::Group && usePreparedCache && kEnablePreparedRenderCache &&
             canReplayPreparedLeaf(node)) {
             if (localBounds.width > 0.f && localBounds.height > 0.f) {
                 Rect const translatedBounds = detail::transformBounds(
                     Mat3::translate(accumulatedTranslation) * node.transform(), localBounds);
                 if (renderer->quickReject(translatedBounds)) {
-                    debug::perf::recordSceneQuickReject();
+                    if (collectCounters) {
+                        debug::perf::recordSceneQuickReject();
+                    }
                     return;
                 }
             }
@@ -245,9 +337,13 @@ struct SceneRenderer::Impl {
                         renderer->setOpacity(nodeOpacity);
                     }
                 }
-                debug::perf::recordPreparedReplayCall();
+                if (collectCounters) {
+                    debug::perf::recordPreparedReplayCall();
+                }
                 bool const replayed = prepared->replay(*renderer);
-                debug::perf::recordPreparedReplayResult(replayed);
+                if (collectCounters) {
+                    debug::perf::recordPreparedReplayResult(replayed);
+                }
                 if (needsState) {
                     renderer->restore();
                 }
@@ -266,27 +362,39 @@ struct SceneRenderer::Impl {
 
         if (localBounds.width > 0.f && localBounds.height > 0.f &&
             renderer->quickReject(localBounds)) {
-            debug::perf::recordSceneQuickReject();
+            if (collectCounters) {
+                debug::perf::recordSceneQuickReject();
+            }
             renderer->restore();
             return;
         }
 
         if (node.kind() != SceneNodeKind::Group) {
-            if (!kEnablePreparedRenderCache || !node.canPrepareRenderOps()) {
-                debug::perf::recordLiveLeafRender();
+            if (!usePreparedCache || !kEnablePreparedRenderCache || !node.canPrepareRenderOps()) {
+                if (collectCounters) {
+                    debug::perf::recordLiveLeafRender();
+                }
                 node.render(*renderer);
             } else {
                 std::unique_ptr<PreparedRenderOps> &prepared =
                     detail::SceneNodeAccess::preparedRenderOps(node);
                 if (!prepared) {
-                    debug::perf::recordLiveLeafRender();
+                    if (collectCounters) {
+                        debug::perf::recordLiveLeafRender();
+                    }
                     node.render(*renderer);
                 } else {
-                    debug::perf::recordPreparedReplayCall();
+                    if (collectCounters) {
+                        debug::perf::recordPreparedReplayCall();
+                    }
                     bool const replayed = prepared->replay(*renderer);
-                    debug::perf::recordPreparedReplayResult(replayed);
+                    if (collectCounters) {
+                        debug::perf::recordPreparedReplayResult(replayed);
+                    }
                     if (!replayed) {
-                        debug::perf::recordLiveLeafRender();
+                        if (collectCounters) {
+                            debug::perf::recordLiveLeafRender();
+                        }
                         node.render(*renderer);
                     }
                 }
@@ -301,7 +409,7 @@ struct SceneRenderer::Impl {
         }
 
         for (std::unique_ptr<SceneNode> const &child : node.children()) {
-            renderNode(*child, nodeOpacity, Point {});
+            renderNode(*child, nodeOpacity, Point {}, collectCounters, usePreparedCache);
         }
 
         if (clipsContents) {

@@ -125,6 +125,7 @@ class SceneNode {
     RelayoutFn relayout_{};
     mutable bool ownPaintingDirty_ = true;
     mutable bool subtreeDirty_ = true;
+    mutable bool preparedGroupCacheSuppressed_ = false;
     mutable std::unique_ptr<PreparedRenderOps> preparedRenderOps_{};
 
     friend struct detail::SceneNodeAccess;

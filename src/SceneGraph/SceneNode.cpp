@@ -291,6 +291,14 @@ void detail::SceneNodeAccess::clearSubtreeDirty(SceneNode const &node) noexcept 
     node.subtreeDirty_ = false;
 }
 
+bool detail::SceneNodeAccess::preparedGroupCacheSuppressed(SceneNode const &node) noexcept {
+    return node.preparedGroupCacheSuppressed_;
+}
+
+void detail::SceneNodeAccess::suppressPreparedGroupCache(SceneNode const &node) noexcept {
+    node.preparedGroupCacheSuppressed_ = true;
+}
+
 std::unique_ptr<PreparedRenderOps>& detail::SceneNodeAccess::preparedRenderOps(
     SceneNode const &node) noexcept {
     return node.preparedRenderOps_;
