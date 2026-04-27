@@ -17,12 +17,11 @@ class TextSystem;
 class Element;
 namespace detail {
 struct ElementModifiers;
-class MeasureLayoutCache;
 }
 
 class MeasureContext {
 public:
-  explicit MeasureContext(TextSystem& ts, detail::MeasureLayoutCache* layoutCache = nullptr);
+  explicit MeasureContext(TextSystem& ts);
   ~MeasureContext();
 
   TextSystem& textSystem();
@@ -54,7 +53,6 @@ public:
 
   void setCurrentElement(Element const* el) noexcept { currentElement_ = el; }
   [[nodiscard]] Element const* currentElement() const noexcept { return currentElement_; }
-  [[nodiscard]] detail::MeasureLayoutCache* layoutCache() const noexcept { return layoutCache_; }
 
 #ifndef NDEBUG
   std::size_t debugConstraintStackDepth() const noexcept { return traversal_.debugFrameDepth(); }
@@ -69,7 +67,6 @@ protected:
   TextSystem& textSystem_;
   detail::TraversalContext traversal_{};
   Element const* currentElement_{nullptr};
-  detail::MeasureLayoutCache* layoutCache_ = nullptr;
 };
 
 } // namespace flux

@@ -7,9 +7,8 @@
 
 namespace flux {
 
-MeasureContext::MeasureContext(TextSystem& ts, detail::MeasureLayoutCache* layoutCache)
-    : textSystem_(ts)
-    , layoutCache_(layoutCache) {}
+MeasureContext::MeasureContext(TextSystem& ts)
+    : textSystem_(ts) {}
 
 MeasureContext::~MeasureContext() = default;
 
