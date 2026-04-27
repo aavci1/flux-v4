@@ -14,6 +14,7 @@
 #include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/ScaleAroundCenter.hpp>
 #include <Flux/UI/Views/ScrollView.hpp>
+#include <Flux/UI/Views/Text.hpp>
 #include <Flux/UI/Views/TextInput.hpp>
 #include <Flux/UI/Views/VStack.hpp>
 #include <Flux/UI/Views/ZStack.hpp>
@@ -45,6 +46,42 @@ public:
   flux::Size measure(std::string_view, flux::Font const&, flux::Color const&, float,
                      flux::TextLayoutOptions const&) override {
     return {0.f, 0.f};
+  }
+
+  std::uint32_t resolveFontId(std::string_view, float, bool) override { return 0; }
+
+  std::vector<std::uint8_t> rasterizeGlyph(std::uint32_t, std::uint16_t, float,
+                                           std::uint32_t& outWidth,
+                                           std::uint32_t& outHeight,
+                                           flux::Point& outBearing) override {
+    outWidth = 0;
+    outHeight = 0;
+    outBearing = {};
+    return {};
+  }
+};
+
+class MeasuringTextSystem final : public flux::TextSystem {
+public:
+  std::shared_ptr<flux::TextLayout const>
+  layout(flux::AttributedString const&, float, flux::TextLayoutOptions const&) override {
+    return std::make_shared<flux::TextLayout>();
+  }
+
+  std::shared_ptr<flux::TextLayout const>
+  layout(std::string_view, flux::Font const&, flux::Color const&, float,
+         flux::TextLayoutOptions const&) override {
+    return std::make_shared<flux::TextLayout>();
+  }
+
+  flux::Size measure(flux::AttributedString const&, float,
+                     flux::TextLayoutOptions const&) override {
+    return {80.f, 16.f};
+  }
+
+  flux::Size measure(std::string_view text, flux::Font const&, flux::Color const&, float,
+                     flux::TextLayoutOptions const&) override {
+    return {std::max(24.f, static_cast<float>(text.size()) * 6.f), 16.f};
   }
 
   std::uint32_t resolveFontId(std::string_view, float, bool) override { return 0; }
@@ -242,6 +279,58 @@ TEST_CASE("MountRoot resize updates viewport-sized root without remount") {
 
   CHECK(bodyCalls == 1);
   CHECK(sceneGraph.root().size() == flux::Size{320.f, 180.f});
+}
+
+TEST_CASE("MountRoot resize preserves direct text positions in stacks") {
+  struct Root {
+    flux::Element body() const {
+      return flux::ScrollView{
+          .axis = flux::ScrollAxis::Vertical,
+          .children = flux::children(
+              flux::Element{flux::VStack{
+                  .spacing = 16.f,
+                  .alignment = flux::Alignment::Stretch,
+                  .children = flux::children(
+                      flux::Text{.text = "Alert demo", .font = flux::Font::largeTitle()},
+                      flux::Text{.text = "Modal alerts via useAlert().",
+                                 .font = flux::Font::body(),
+                                 .wrapping = flux::TextWrapping::Wrap},
+                      flux::Text{.text = "Tap a button to open an alert.",
+                                 .font = flux::Font::footnote(),
+                                 .wrapping = flux::TextWrapping::Wrap}),
+              }}.padding(24.f)),
+      };
+    }
+  };
+
+  MeasuringTextSystem textSystem;
+  flux::scenegraph::SceneGraph sceneGraph;
+  flux::MountRoot root{
+      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{}),
+      textSystem,
+      testEnvironment(),
+      flux::Size{800.f, 800.f},
+  };
+
+  root.mount(sceneGraph);
+
+  auto const& viewport = static_cast<flux::scenegraph::RectNode const&>(sceneGraph.root());
+  auto const& content = static_cast<flux::scenegraph::GroupNode const&>(*viewport.children()[0]);
+  auto const& paddedStack = static_cast<flux::scenegraph::RectNode const&>(*content.children()[0]);
+  auto const& stack = static_cast<flux::scenegraph::GroupNode const&>(*paddedStack.children()[0]);
+  REQUIRE(stack.children().size() == 3);
+  float const firstY = stack.children()[0]->position().y;
+  float const secondY = stack.children()[1]->position().y;
+  float const thirdY = stack.children()[2]->position().y;
+  CHECK(firstY == doctest::Approx(0.f));
+  CHECK(secondY > firstY);
+  CHECK(thirdY > secondY);
+
+  root.resize(flux::Size{900.f, 700.f}, sceneGraph);
+
+  CHECK(stack.children()[0]->position().y == doctest::Approx(firstY));
+  CHECK(stack.children()[1]->position().y == doctest::Approx(secondY));
+  CHECK(stack.children()[2]->position().y == doctest::Approx(thirdY));
 }
 
 TEST_CASE("ScaleAroundCenter relayout keeps reactive scale binding alive") {

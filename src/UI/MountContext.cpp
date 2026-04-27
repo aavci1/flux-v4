@@ -350,7 +350,7 @@ std::unique_ptr<scenegraph::SceneNode> mountText(Text const& text, MountContext&
       currentSize.height = currentSize.height > 0.f ? currentSize.height : measured.height;
     }
     Rect const currentBox{0.f, 0.f, finiteOrZero(currentSize.width), finiteOrZero(currentSize.height)};
-    rawNode->setBounds(currentBox);
+    rawNode->setSize(Size{currentBox.width, currentBox.height});
     rawNode->setLayout(textSystemForRelayout->layout(currentText, font, currentColor, currentBox, options));
   });
 
