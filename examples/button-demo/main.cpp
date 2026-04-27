@@ -10,6 +10,7 @@
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/ScrollView.hpp>
+#include <Flux/UI/Views/Show.hpp>
 #include <Flux/UI/Views/Spacer.hpp>
 #include <Flux/UI/Views/Text.hpp>
 #include <Flux/UI/Views/VStack.hpp>
@@ -113,6 +114,24 @@ Element makeHeroDemo(Theme const &theme, State<bool> dirty, State<bool> reviewPa
             markDirty();
         }
     };
+    auto heroStatusRow = [heroLinkAction](std::string prompt, std::string actionLabel) {
+        return HStack {
+            .spacing = 4.f,
+            .alignment = Alignment::Center,
+            .children = children(
+                Text {
+                    .text = std::move(prompt),
+                    .font = Font::footnote(),
+                    .color = Color::secondary(),
+                },
+                LinkButton {
+                    .label = std::move(actionLabel),
+                    .style = LinkButton::Style {.font = Font::footnote()},
+                    .onTap = heroLinkAction,
+                }
+            )
+        };
+    };
 
     return makeSectionCard(
         theme, "Editorial Hero",
@@ -198,30 +217,15 @@ Element makeHeroDemo(Theme const &theme, State<bool> dirty, State<bool> reviewPa
                                 }
                             )
                         },
-                        HStack {
-                            .spacing = 4.f,
-                            .alignment = Alignment::Center,
-                            .children = children(
-                                Text {
-                                    .text = Reactive::Bindable<std::string> {[dirty] {
-                                        return dirty.get()
-                                                   ? std::string {"Need to show the saved state?"}
-                                                   : std::string {"Need to bring the dirty state back?"};
-                                    }},
-                                    .font = Font::footnote(),
-                                    .color = Color::secondary(),
-                                },
-                                LinkButton {
-                                    .label = Reactive::Bindable<std::string> {[dirty] {
-                                        return dirty.get()
-                                                   ? std::string {"Save with Cmd+S"}
-                                                   : std::string {"Mark this draft dirty again"};
-                                    }},
-                                    .style = LinkButton::Style {.font = Font::footnote()},
-                                    .onTap = heroLinkAction,
-                                }
-                            )
-                        }
+                        Show(
+                            dirty,
+                            [heroStatusRow] {
+                                return heroStatusRow("Need to show the saved state?", "Save with Cmd+S");
+                            },
+                            [heroStatusRow] {
+                                return heroStatusRow("Need to bring the dirty state back?",
+                                                     "Mark this draft dirty again");
+                            })
                     )
                 } //
                     .padding(theme.space3)
