@@ -14,10 +14,14 @@
 #include <Flux/UI/Theme.hpp>
 
 #include <cmath>
+#include <cassert>
+#include <cstdint>
 #include <functional>
-#include <unordered_map>
 #include <optional>
+#include <source_location>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -37,11 +41,43 @@ struct OwnerInteractionSignals {
   bool cleanupRegistered = false;
 };
 
+#ifndef NDEBUG
+struct UseStateDebugKey {
+  char const* file = nullptr;
+  std::uint_least32_t line = 0;
+  std::uint_least32_t column = 0;
+
+  bool operator==(UseStateDebugKey const&) const = default;
+};
+
+struct UseStateDebugKeyHash {
+  std::size_t operator()(UseStateDebugKey const& key) const noexcept {
+    std::size_t seed = std::hash<char const*>{}(key.file);
+    seed ^= std::hash<std::uint_least32_t>{}(key.line) + 0x9e3779b9u + (seed << 6) + (seed >> 2);
+    seed ^= std::hash<std::uint_least32_t>{}(key.column) + 0x9e3779b9u + (seed << 6) + (seed >> 2);
+    return seed;
+  }
+};
+
+struct OwnerUseStateDebugInfo {
+  std::unordered_set<UseStateDebugKey, UseStateDebugKeyHash> callSites;
+  bool cleanupRegistered = false;
+};
+#endif
+
 inline std::unordered_map<Reactive::detail::ScopeState*, OwnerInteractionSignals>&
 ownerInteractionSignals() {
   static thread_local std::unordered_map<Reactive::detail::ScopeState*, OwnerInteractionSignals> signals;
   return signals;
 }
+
+#ifndef NDEBUG
+inline std::unordered_map<Reactive::detail::ScopeState*, OwnerUseStateDebugInfo>&
+ownerUseStateDebugInfo() {
+  static thread_local std::unordered_map<Reactive::detail::ScopeState*, OwnerUseStateDebugInfo> info;
+  return info;
+}
+#endif
 
 inline std::vector<InteractionSignalBundle const*>& interactionSignalMountStack() {
   static thread_local std::vector<InteractionSignalBundle const*> stack;
@@ -144,6 +180,30 @@ inline Reactive::Signal<bool> useInteractionSignal(InteractionSignalKind kind) {
   return signal;
 }
 
+#ifndef NDEBUG
+inline void debugRegisterUseState(std::source_location location) {
+  Reactive::detail::ScopeState* owner = Reactive::detail::sCurrentOwner;
+  if (!owner) {
+    return;
+  }
+
+  auto& entry = ownerUseStateDebugInfo()[owner];
+  UseStateDebugKey const key{
+      .file = location.file_name(),
+      .line = location.line(),
+      .column = location.column(),
+  };
+  bool const inserted = entry.callSites.insert(key).second;
+  assert(inserted && "useState call site was evaluated more than once in the same mount scope");
+  if (!entry.cleanupRegistered) {
+    entry.cleanupRegistered = true;
+    Reactive::onCleanup([owner] {
+      ownerUseStateDebugInfo().erase(owner);
+    });
+  }
+}
+#endif
+
 } // namespace detail
 
 template<typename T>
@@ -195,8 +255,18 @@ struct State {
   bool operator==(State const&) const noexcept { return false; }
 };
 
+/// Each `useState` call allocates a fresh `Signal<T>` owned by the current reactive scope.
+/// The v5 retained UI model guarantees `body()` runs exactly once for a mount cycle; therefore
+/// each `useState` call site allocates one signal for that cycle. Re-entering the same body and
+/// evaluating the same call site twice is a framework error and is asserted in debug builds.
 template<typename T>
-State<T> useState(T initial = T{}) {
+State<T> useState(T initial = T{},
+                  std::source_location location = std::source_location::current()) {
+#ifndef NDEBUG
+  detail::debugRegisterUseState(location);
+#else
+  (void)location;
+#endif
   return State<T>(std::move(initial));
 }
 
