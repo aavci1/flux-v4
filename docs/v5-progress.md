@@ -14,7 +14,7 @@ This file records the stage-gate status for the v5 cutover.
 | 5 - Hooks rewrite | Passed | `124b8fcd` |
 | 6 - Reactive control flow | Passed | `19ae410d` |
 | 7 - Theme and environment reactivity | Passed | `62ab68e5` |
-| 8 - Examples migration | Passed | `b7d0c20e` |
+| 8 - Examples migration | Migration passed; sample-based per-example perf pending | `b7d0c20e` |
 | 9 - Cleanup, validation, release prep | Passed through code/doc validation; release promotion awaits approval | pending |
 
 ## Stage 9 Status
@@ -25,6 +25,7 @@ This file records the stage-gate status for the v5 cutover.
 - The project version is `5.0.0`.
 - Public docs have been updated for retained mounting, scopes, bindings, control flow, and reactive environment values.
 - Final performance data is recorded in [v5-final-perf.md](v5-final-perf.md).
+- The earlier `ps`-based warm-idle example sweep is no longer treated as final perf data; any per-example perf table should use the same `/usr/bin/sample` methodology as the AmbientLoopLab measurement.
 - Main-branch promotion and release tags require explicit approval.
 
 ## Latest Validation
