@@ -6,9 +6,9 @@
 
 
 #include <Flux/Reactive/Observer.hpp>
+#include <Flux/Reactive/SmallFn.hpp>
 
 #include <cstdint>
-#include <functional>
 #include <vector>
 
 namespace flux {
@@ -47,7 +47,7 @@ private:
   bool needsFramePump() const;
   /// Subscribe to the shared animation tick. The callback must not assume a full frame will be presented — only call
   /// `Window::requestRedraw()` when output actually changes.
-  ObserverHandle subscribe(std::function<void(AnimationTick const&)> callback);
+  ObserverHandle subscribe(Reactive::SmallFn<void(AnimationTick const&)> callback);
   void unsubscribe(ObserverHandle handle);
   void onTick(std::int64_t deadlineNanos);
   void startFramePump();
@@ -55,7 +55,7 @@ private:
 
   struct Subscriber {
     std::uint64_t id = 0;
-    std::function<void(AnimationTick const&)> callback;
+    Reactive::SmallFn<void(AnimationTick const&)> callback;
     bool active = true;
   };
 

@@ -91,7 +91,7 @@ void AnimationClock::unregisterAnimation(AnimationBase* animation) {
   }
 }
 
-ObserverHandle AnimationClock::subscribe(std::function<void(AnimationTick const&)> callback) {
+ObserverHandle AnimationClock::subscribe(Reactive::SmallFn<void(AnimationTick const&)> callback) {
   if (!callback) {
     return {};
   }
@@ -123,11 +123,13 @@ void AnimationClock::unsubscribe(ObserverHandle handle) {
 }
 
 void AnimationClock::onTick(std::int64_t deadlineNanos) {
+  Reactive::detail::BatchGuard batch;
   const double now = static_cast<double>(deadlineNanos) * 1e-9;
   AnimationTick const tick{deadlineNanos, now};
 
-  std::vector<AnimationBase*> snapshot = active_;
-  for (AnimationBase* p : snapshot) {
+  static thread_local std::vector<AnimationBase*> snapshotBuffer;
+  snapshotBuffer.assign(active_.begin(), active_.end());
+  for (AnimationBase* p : snapshotBuffer) {
     if (!p) {
       continue;
     }
@@ -135,6 +137,7 @@ void AnimationClock::onTick(std::int64_t deadlineNanos) {
       unregisterAnimation(p);
     }
   }
+  snapshotBuffer.clear();
 
   dispatchingSubscribers_ = true;
   std::size_t const subscriberCount = subscribers_.size();

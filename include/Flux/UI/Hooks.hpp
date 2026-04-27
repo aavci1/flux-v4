@@ -287,7 +287,7 @@ Animation<T> useAnimation(T initial, AnimationOptions options) {
 template<typename Fn>
 void useAnimationFrame(Fn&& callback) {
   ObserverHandle const handle =
-      AnimationClock::instance().subscribe(std::function<void(AnimationTick const&)>{std::forward<Fn>(callback)});
+      AnimationClock::instance().subscribe(Reactive::SmallFn<void(AnimationTick const&)>{std::forward<Fn>(callback)});
   Reactive::onCleanup([handle] {
     AnimationClock::instance().unsubscribe(handle);
   });
