@@ -312,14 +312,21 @@ struct AmbientLoopLab : ViewModifiers<AmbientLoopLab> {
         auto theme = useEnvironment<ThemeKey>();
 
         auto phase = useState(0.f);
+        auto phaseLabel = useState(std::string {"0.00"});
+        auto lastPhaseLabelUpdate = useState(0.0);
         double const startedAt = nowSeconds();
-        useAnimationFrame([phase, startedAt](AnimationTick const& tick) {
+        useAnimationFrame([phase, phaseLabel, lastPhaseLabelUpdate, startedAt](AnimationTick const& tick) {
                 double const cycle = 2.8;
                 double local = std::fmod(std::max(0.0, tick.nowSeconds - startedAt), cycle) / 1.4;
                 if (local > 1.0) {
                     local = 2.0 - local;
                 }
-                phase = static_cast<float>(std::clamp(local, 0.0, 1.0));
+                float const nextPhase = static_cast<float>(std::clamp(local, 0.0, 1.0));
+                phase = nextPhase;
+                if (tick.nowSeconds - lastPhaseLabelUpdate() >= 0.10) {
+                    lastPhaseLabelUpdate = tick.nowSeconds;
+                    phaseLabel = formatFloat(nextPhase);
+                }
             });
 
         std::vector<Element> bars;
@@ -371,8 +378,8 @@ struct AmbientLoopLab : ViewModifiers<AmbientLoopLab> {
                         .spacing = theme().space3,
                         .alignment = Alignment::Stretch,
                         .children = children(
-                            metricTile(theme(), [phase] {
-                                return formatFloat(phase());
+                            metricTile(theme(), [phaseLabel] {
+                                return phaseLabel();
                             }, "Phase", Color::accent()),
                             metricTile(theme(), [] {
                                 return std::string {"Looping"};

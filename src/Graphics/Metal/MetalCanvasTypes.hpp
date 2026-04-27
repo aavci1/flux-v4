@@ -116,6 +116,8 @@ struct MetalPathOp {
 struct MetalGlyphOp {
   std::uint32_t glyphStart = 0;
   std::uint32_t glyphVertexCount = 0;
+  /// Non-owning MTLBuffer pointer for prepared static glyph vertices. Null means use the per-frame glyph arena.
+  void* externalVertexBuffer = nullptr;
   BlendMode blendMode = BlendMode::Normal;
   vector_float2 translation{};
   MetalRoundedClipStack roundedClip{};
