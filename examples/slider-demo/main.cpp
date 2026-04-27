@@ -153,9 +153,9 @@ struct SliderDemoRoot {
                                                                 .cornerRadius(CornerRadius {theme.radiusLarge})
                                                                 .flex(1.f, 1.f, 0.f),
                                                             Text {
-                                                                .text = Reactive::Bindable<std::string> {[red, green, blue] {
+                                                                .text = [red, green, blue] {
                                                                     return fmtHex(red.get(), green.get(), blue.get());
-                                                                }},
+                                                                },
                                                                 .font = Font::title2(),
                                                                 .color = previewTextColor,
                                                                 .horizontalAlignment = HorizontalAlignment::Center,
@@ -163,17 +163,17 @@ struct SliderDemoRoot {
                                                             }
                                                         )
                                                     },
-                                                    labeledSlider(theme, "Red", Reactive::Bindable<std::string> {[red] {
+                                                    labeledSlider(theme, "Red", [red] {
                                                         return fmtInt(red.get());
-                                                    }}, red, 0.f, 255.f, 1.f,
+                                                    }, red, 0.f, 255.f, 1.f,
                                                                   Slider::Style {.activeColor = Color::danger()}),
-                                                    labeledSlider(theme, "Green", Reactive::Bindable<std::string> {[green] {
+                                                    labeledSlider(theme, "Green", [green] {
                                                         return fmtInt(green.get());
-                                                    }}, green, 0.f, 255.f, 1.f,
+                                                    }, green, 0.f, 255.f, 1.f,
                                                                   Slider::Style {.activeColor = Color::success()}),
-                                                    labeledSlider(theme, "Blue", Reactive::Bindable<std::string> {[blue] {
+                                                    labeledSlider(theme, "Blue", [blue] {
                                                         return fmtInt(blue.get());
-                                                    }}, blue, 0.f, 255.f, 1.f,
+                                                    }, blue, 0.f, 255.f, 1.f,
                                                                   Slider::Style {.activeColor = Color::accent()})
                                                 )
                                             }
@@ -191,9 +191,9 @@ struct SliderDemoRoot {
                                                             Text {.text = "Playback position", .font = Font::headline(), .color = Color::primary()},
                                                             Spacer {},
                                                             Text {
-                                                                .text = Reactive::Bindable<std::string> {[scrubber] {
+                                                                .text = [scrubber] {
                                                                     return fmtMinutes(scrubber.get());
-                                                                }},
+                                                                },
                                                                 .font = Font::headline(),
                                                                 .color = Color::secondary(),
                                                             }
@@ -229,9 +229,9 @@ struct SliderDemoRoot {
                                                     labeledSlider(
                                                         theme,
                                                         "Volume",
-                                                        Reactive::Bindable<std::string> {[volume] {
+                                                        [volume] {
                                                             return fmtPercent(volume.get());
-                                                        }},
+                                                        },
                                                         volume,
                                                         0.f,
                                                         100.f,

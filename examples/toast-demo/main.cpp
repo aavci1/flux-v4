@@ -167,9 +167,9 @@ struct ToastDemoRoot {
                         },
                         Spacer {},
                         Text {
-                            .text = Reactive::Bindable<std::string> {[persistent] {
+                            .text = [persistent] {
                               return persistent.get() ? "Manual dismissal" : "4.5 second timeout";
-                            }},
+                            },
                             .font = Font::footnote(),
                             .color = Color::secondary(),
                         })
@@ -390,18 +390,18 @@ struct ToastDemoRoot {
                             .alignment = Alignment::Start,
                             .children = children(
                                 Text {
-                                    .text = Reactive::Bindable<std::string> {[visibleCount] {
+                                    .text = [visibleCount] {
                                       return visibleCount.get() > 0 ? "Visible toasts on screen" : "Overlay idle";
-                                    }},
+                                    },
                                     .font = Font::headline(),
-                                    .color = Reactive::Bindable<Color> {[visibleCount, theme] {
+                                    .color = [visibleCount, theme] {
                                       return visibleCount.get() > 0 ? theme.accentColor : theme.secondaryLabelColor;
-                                    }},
+                                    },
                                 },
                                 Text {
-                                    .text = Reactive::Bindable<std::string> {[status] {
+                                    .text = [status] {
                                       return status.get();
-                                    }},
+                                    },
                                     .font = Font::footnote(),
                                     .color = Color::secondary(),
                                     .horizontalAlignment = HorizontalAlignment::Leading,
@@ -410,9 +410,9 @@ struct ToastDemoRoot {
                         }
                             .flex(1.f, 1.f, 0.f),
                         Text {
-                            .text = Reactive::Bindable<std::string> {[placementIndex] {
+                            .text = [placementIndex] {
                               return placementLabel(placementFromIndex(placementIndex.get()));
-                            }},
+                            },
                             .font = Font::headline(),
                             .color = Color::tertiary(),
                         })

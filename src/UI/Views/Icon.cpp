@@ -44,9 +44,9 @@ Element Icon::body() const {
     float const w = resolveFloat(weight, theme.bodyFont.weight);
 
     return Text {
-        .text = Reactive::Bindable<std::string> {[nameBinding] {
+        .text = [nameBinding] {
             return encodeUtf8(static_cast<char32_t>(nameBinding.evaluate()));
-        }},
+        },
         .font = Font {
             .family = theme.iconFontFamily,
             .size = s,

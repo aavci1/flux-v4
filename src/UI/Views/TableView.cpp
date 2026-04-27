@@ -137,18 +137,18 @@ Element sortIndicator(std::size_t columnIndex,
                       State<bool> sortAscending) {
     int const column = static_cast<int>(columnIndex);
     return Icon {
-        .name = Reactive::Bindable<IconName> {[sortColumn, sortAscending, column] {
+        .name = [sortColumn, sortAscending, column] {
             return sortColumn.get() == column
                        ? (sortAscending.get() ? IconName::ArrowUpward : IconName::ArrowDownward)
                        : IconName::Sort;
-        }},
+        },
         .size = 16.f,
-        .color = Reactive::Bindable<Color> {[sortColumn,
-                                              column,
-                                              accent = theme.accentColor,
-                                              tertiary = theme.tertiaryLabelColor] {
+        .color = [sortColumn,
+                  column,
+                  accent = theme.accentColor,
+                  tertiary = theme.tertiaryLabelColor] {
             return sortColumn.get() == column ? accent : tertiary;
-        }},
+        },
     };
 }
 

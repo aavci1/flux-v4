@@ -13,12 +13,12 @@ Card::Style resolveStyle(Card::Style const &style, Theme const &theme) {
       .paddingV = resolveFloat(style.paddingV, padding),
       .cornerRadius = resolveFloat(style.cornerRadius, theme.radiusXLarge),
       .borderWidth = resolveFloat(style.borderWidth, 1.f),
-      .backgroundColor = Reactive::Bindable<Color> {[background = style.backgroundColor, theme] {
+      .backgroundColor = [background = style.backgroundColor, theme] {
         return resolveColor(background.evaluate(), theme.elevatedBackgroundColor, theme);
-      }},
-      .borderColor = Reactive::Bindable<Color> {[border = style.borderColor, theme] {
+      },
+      .borderColor = [border = style.borderColor, theme] {
         return resolveColor(border.evaluate(), theme.separatorColor, theme);
-      }},
+      },
       .shadow = style.shadow,
   };
 }

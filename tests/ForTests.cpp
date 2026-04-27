@@ -93,7 +93,7 @@ TEST_CASE("For preserves row scopes and scene nodes across reorder") {
               return 20.f + static_cast<float>(index.get());
             }};
             return flux::Element{flux::Rectangle{}}
-                .size(std::move(width), flux::Reactive::Bindable<float>{8.f})
+                .size(std::move(width), 8.f)
                 .fill(flux::Colors::blue);
           },
           2.f);

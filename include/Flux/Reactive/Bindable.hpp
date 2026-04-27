@@ -18,7 +18,7 @@ public:
 
   template <typename U>
     requires(!std::is_same_v<std::decay_t<U>, Bindable> &&
-             std::constructible_from<T, U&&> &&
+             std::convertible_to<U&&, T> &&
              !std::is_invocable_r_v<T, std::decay_t<U>&>)
   Bindable(U&& value)
       : storage_(T(std::forward<U>(value))) {}

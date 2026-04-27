@@ -90,12 +90,12 @@ TEST_CASE("theme signal updates retained leaf bindings without remounting") {
 
       return flux::Element{flux::Rectangle{}}
           .size(32.f, 18.f)
-          .fill(flux::Reactive::Bindable<flux::Color>{[theme] {
+          .fill([theme] {
             return flux::Color::windowBackground();
-          }})
-          .stroke(flux::Reactive::Bindable<flux::Color>{[theme] {
+          })
+          .stroke([theme] {
             return theme().separatorColor;
-          }}, flux::Reactive::Bindable<float>{1.f});
+          }, 1.f);
     }
   };
 
@@ -144,10 +144,10 @@ TEST_CASE("themeField exposes a computed theme member to bindable leaves") {
       ++*bodyCalls;
       auto space3 = flux::themeField(&flux::Theme::space3);
       return flux::Element{flux::Rectangle{}}
-          .size(flux::Reactive::Bindable<float>{[space3] {
+          .size([space3] {
                   return space3.get();
-                }},
-                flux::Reactive::Bindable<float>{10.f})
+                },
+                10.f)
           .fill(flux::Colors::blue);
     }
   };

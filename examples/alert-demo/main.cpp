@@ -45,9 +45,9 @@ struct AlertDemoRoot {
                             .wrapping = TextWrapping::Wrap
                         },
                         Text {
-                            .text = Reactive::Bindable<std::string> {[status] {
+                            .text = [status] {
                                 return status.get();
-                            }},
+                            },
                             .font = Font::footnote(),
                             .color = Color::accent(),
                             .wrapping = TextWrapping::Wrap

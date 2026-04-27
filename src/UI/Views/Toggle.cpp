@@ -80,22 +80,22 @@ Element Toggle::body() const {
             .verticalAlignment = Alignment::Start,
             .children = flux::children(
                 Rectangle {}
-                    .fill(Reactive::Bindable<Color> {[v, isDisabled, onColor, offColor, theme] {
+                    .fill([v, isDisabled, onColor, offColor, theme] {
                         return isDisabled ? theme.disabledControlBackgroundColor : v.get() ? onColor : offColor;
-                    }})
-                    .stroke(Reactive::Bindable<StrokeStyle> {[focused, focusColor, borderColor, borderWidth] {
+                    })
+                    .stroke([focused, focusColor, borderColor, borderWidth] {
                         return StrokeStyle::solid(focused.get() ? focusColor : borderColor,
                                                   focused.get() ? std::max(borderWidth, 2.f) : borderWidth);
-                    }})
+                    })
                     .size(trackWidth, trackHeight)
                     .cornerRadius(CornerRadius {trackHeight * 0.5f}),
                 Rectangle {}
                     .fill(FillStyle::solid(isDisabled ? disabledColor : thumbColor))
                     .stroke(StrokeStyle::solid(thumbBorderColor, thumbBorderWidth))
                     .shadow(isDisabled ? ShadowStyle::none() : ShadowStyle {.radius = theme.shadowRadiusControl, .offset = {0.f, theme.shadowOffsetYControl}, .color = theme.shadowColor})
-                    .position(Reactive::Bindable<float> {[v, xOn, xOff] {
+                    .position([v, xOn, xOff] {
                         return v.get() ? xOn : xOff;
-                    }}, Reactive::Bindable<float> {thumbInset})
+                    }, thumbInset)
                     .size(thumbSize, thumbSize)
                     .cornerRadius(CornerRadius {thumbSize * 0.5f})
             ),

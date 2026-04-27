@@ -560,9 +560,9 @@ Element sliderMetricRow(Theme const &theme, std::string label, State<float> valu
             }
                 .flex(1.f, 1.f, 0.f),
             Text {
-                .text = Reactive::Bindable<std::string> {[value] {
+                .text = [value] {
                     return decimalLabel(value.get());
-                }},
+                },
                 .font = monoFont(theme, 12.f, 400.f),
                 .color = Color::secondary(),
                 .horizontalAlignment = HorizontalAlignment::Trailing,
@@ -598,36 +598,36 @@ Element makeToolbar(Theme const &theme, bool showNav, Reactive::Bindable<int> ac
                     Spacer {},
                     ToolbarNavButton {
                         .label = "Colors",
-                        .active = Reactive::Bindable<bool> {[activeNav] {
+                        .active = [activeNav] {
                             return activeNav.evaluate() == 0;
-                        }},
+                        },
                         .onTap = [onJump] { onJump(0.00f); },
                     },
                     ToolbarNavButton {
                         .label = "Type",
-                        .active = Reactive::Bindable<bool> {[activeNav] {
+                        .active = [activeNav] {
                             return activeNav.evaluate() == 1;
-                        }},
+                        },
                         .onTap = [onJump] { onJump(0.34f); },
                     },
                     ToolbarNavButton {
                         .label = "Spacing",
-                        .active = Reactive::Bindable<bool> {[activeNav] {
+                        .active = [activeNav] {
                             return activeNav.evaluate() == 2;
-                        }},
+                        },
                         .onTap = [onJump] { onJump(0.63f); },
                     },
                     ToolbarNavButton {
                         .label = "Components",
-                        .active = Reactive::Bindable<bool> {[activeNav] {
+                        .active = [activeNav] {
                             return activeNav.evaluate() == 3;
-                        }},
+                        },
                         .onTap = [onJump] { onJump(0.83f); },
                     },
                     Icon {
-                        .name = Reactive::Bindable<IconName> {[darkMode] {
+                        .name = [darkMode] {
                             return darkMode.get() ? IconName::LightMode : IconName::DarkMode;
-                        }},
+                        },
                         .size = 16.f,
                         .weight = 400.f,
                         .color = Color::secondary(),
@@ -1010,33 +1010,33 @@ struct ThemeDemoPage {
                     SidebarGlyphButton {
                         .icon = IconName::Chat,
                         .label = "Chats",
-                        .selected = Reactive::Bindable<bool> {[selectedSidebarState] {
+                        .selected = [selectedSidebarState] {
                             return selectedSidebarState.get() == 0;
-                        }},
+                        },
                         .onTap = [selectedSidebarState] { selectedSidebarState = 0; },
                     },
                     SidebarGlyphButton {
                         .icon = IconName::Hub,
                         .label = "Hub",
-                        .selected = Reactive::Bindable<bool> {[selectedSidebarState] {
+                        .selected = [selectedSidebarState] {
                             return selectedSidebarState.get() == 1;
-                        }},
+                        },
                         .onTap = [selectedSidebarState] { selectedSidebarState = 1; },
                     },
                     SidebarGlyphButton {
                         .icon = IconName::Folder,
                         .label = "Files",
-                        .selected = Reactive::Bindable<bool> {[selectedSidebarState] {
+                        .selected = [selectedSidebarState] {
                             return selectedSidebarState.get() == 2;
-                        }},
+                        },
                         .onTap = [selectedSidebarState] { selectedSidebarState = 2; },
                     },
                     SidebarGlyphButton {
                         .icon = IconName::Settings,
                         .label = "Settings",
-                        .selected = Reactive::Bindable<bool> {[selectedSidebarState] {
+                        .selected = [selectedSidebarState] {
                             return selectedSidebarState.get() == 3;
-                        }},
+                        },
                         .onTap = [selectedSidebarState] { selectedSidebarState = 3; },
                     }
                 ),

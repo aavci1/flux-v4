@@ -190,12 +190,12 @@ struct SelectDemoRoot {
                         .alignment = Alignment::Stretch,
                         .children = children(
                             metricTile(theme, configuredCount, "Configured fields", Color::accent()),
-                            metricTile(theme, Reactive::Bindable<std::string>{[sprint, backlogOptions] {
+                            metricTile(theme, [sprint, backlogOptions] {
                               return selectedLabel(backlogOptions, sprint.get(), "None");
-                            }}, "Active sprint", Color::success()),
-                            metricTile(theme, Reactive::Bindable<std::string>{[density, densityChoices] {
+                            }, "Active sprint", Color::success()),
+                            metricTile(theme, [density, densityChoices] {
                               return selectedLabel(densityChoices, density.get(), "Balanced");
-                            }}, "Density preset", Color::warning()))
+                            }, "Density preset", Color::warning()))
                     },
                     makeSectionCard(
                         theme, "Release Setup",
@@ -303,9 +303,9 @@ struct SelectDemoRoot {
                                     }))
                         }),
                     Text{
-                        .text = Reactive::Bindable<std::string>{[lastEvent] {
+                        .text = [lastEvent] {
                           return lastEvent.get();
-                        }},
+                        },
                         .font = Font::footnote(),
                         .color = Color::tertiary(),
                         .horizontalAlignment = HorizontalAlignment::Leading,

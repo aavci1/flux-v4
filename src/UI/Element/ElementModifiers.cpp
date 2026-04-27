@@ -66,30 +66,36 @@ detail::ElementModifiers& detail::ElementModifiers::operator=(detail::ElementMod
 
 detail::ElementModifiers::~ElementModifiers() = default;
 
-Element Element::padding(float all) && {
-  return std::move(*this).padding(EdgeInsets::uniform(all));
-}
-
 Element Element::padding(Reactive::Bindable<EdgeInsets> insets) && {
   writableModifiers().padding = std::move(insets);
   return std::move(*this);
 }
 
-Element Element::padding(EdgeInsets insets) && {
-  return std::move(*this).padding(Reactive::Bindable<EdgeInsets>(std::move(insets)));
+Element Element::padding(Reactive::Bindable<float> all) && {
+  writableModifiers().padding = Reactive::Bindable<EdgeInsets>([all = std::move(all)] {
+    return EdgeInsets::uniform(all.evaluate());
+  });
+  return std::move(*this);
 }
 
-Element Element::padding(float top, float right, float bottom, float left) && {
-  return std::move(*this).padding(EdgeInsets{.top = top, .right = right, .bottom = bottom, .left = left});
+Element Element::padding(Reactive::Bindable<float> top, Reactive::Bindable<float> right,
+                         Reactive::Bindable<float> bottom, Reactive::Bindable<float> left) && {
+  writableModifiers().padding = Reactive::Bindable<EdgeInsets>(
+      [top = std::move(top), right = std::move(right), bottom = std::move(bottom),
+       left = std::move(left)] {
+        return EdgeInsets{
+            .top = top.evaluate(),
+            .right = right.evaluate(),
+            .bottom = bottom.evaluate(),
+            .left = left.evaluate(),
+        };
+      });
+  return std::move(*this);
 }
 
 Element Element::fill(Reactive::Bindable<FillStyle> style) && {
   writableModifiers().fill = std::move(style);
   return std::move(*this);
-}
-
-Element Element::fill(FillStyle style) && {
-  return std::move(*this).fill(Reactive::Bindable<FillStyle>(std::move(style)));
 }
 
 Element Element::fill(Reactive::Bindable<Color> color) && {
@@ -99,17 +105,9 @@ Element Element::fill(Reactive::Bindable<Color> color) && {
   return std::move(*this);
 }
 
-Element Element::fill(Color color) && {
-  return std::move(*this).fill(Reactive::Bindable<Color>(std::move(color)));
-}
-
 Element Element::shadow(Reactive::Bindable<ShadowStyle> style) && {
   writableModifiers().shadow = std::move(style);
   return std::move(*this);
-}
-
-Element Element::shadow(ShadowStyle style) && {
-  return std::move(*this).shadow(Reactive::Bindable<ShadowStyle>(std::move(style)));
 }
 
 Element Element::size(Reactive::Bindable<float> width, Reactive::Bindable<float> height) && {
@@ -119,17 +117,9 @@ Element Element::size(Reactive::Bindable<float> width, Reactive::Bindable<float>
   return std::move(*this);
 }
 
-Element Element::size(float width, float height) && {
-  return std::move(*this).size(Reactive::Bindable<float>(width), Reactive::Bindable<float>(height));
-}
-
 Element Element::width(Reactive::Bindable<float> w) && {
   writableModifiers().sizeWidth = std::move(w);
   return std::move(*this);
-}
-
-Element Element::width(float w) && {
-  return std::move(*this).width(Reactive::Bindable<float>(w));
 }
 
 Element Element::height(Reactive::Bindable<float> h) && {
@@ -137,17 +127,9 @@ Element Element::height(Reactive::Bindable<float> h) && {
   return std::move(*this);
 }
 
-Element Element::height(float h) && {
-  return std::move(*this).height(Reactive::Bindable<float>(h));
-}
-
 Element Element::stroke(Reactive::Bindable<StrokeStyle> style) && {
   writableModifiers().stroke = std::move(style);
   return std::move(*this);
-}
-
-Element Element::stroke(StrokeStyle style) && {
-  return std::move(*this).stroke(Reactive::Bindable<StrokeStyle>(std::move(style)));
 }
 
 Element Element::stroke(Reactive::Bindable<Color> color, Reactive::Bindable<float> width) && {
@@ -158,17 +140,9 @@ Element Element::stroke(Reactive::Bindable<Color> color, Reactive::Bindable<floa
   return std::move(*this);
 }
 
-Element Element::stroke(Color color, float width) && {
-  return std::move(*this).stroke(Reactive::Bindable<Color>(std::move(color)), Reactive::Bindable<float>(width));
-}
-
 Element Element::cornerRadius(Reactive::Bindable<CornerRadius> radius) && {
   writableModifiers().cornerRadius = std::move(radius);
   return std::move(*this);
-}
-
-Element Element::cornerRadius(CornerRadius radius) && {
-  return std::move(*this).cornerRadius(Reactive::Bindable<CornerRadius>(radius));
 }
 
 Element Element::cornerRadius(Reactive::Bindable<float> radius) && {
@@ -178,27 +152,15 @@ Element Element::cornerRadius(Reactive::Bindable<float> radius) && {
   return std::move(*this);
 }
 
-Element Element::cornerRadius(float radius) && {
-  return std::move(*this).cornerRadius(Reactive::Bindable<float>(radius));
-}
-
 Element Element::opacity(Reactive::Bindable<float> opacity) && {
   writableModifiers().opacity = std::move(opacity);
   return std::move(*this);
-}
-
-Element Element::opacity(float opacity) && {
-  return std::move(*this).opacity(Reactive::Bindable<float>(opacity));
 }
 
 Element Element::position(Reactive::Bindable<Vec2> p) && {
   writableModifiers().positionX = Reactive::Bindable<float>([p] { return p.evaluate().x; });
   writableModifiers().positionY = Reactive::Bindable<float>([p] { return p.evaluate().y; });
   return std::move(*this);
-}
-
-Element Element::position(Vec2 p) && {
-  return std::move(*this).position(Reactive::Bindable<Vec2>(p));
 }
 
 Element Element::position(Reactive::Bindable<float> x, Reactive::Bindable<float> y) && {
@@ -208,17 +170,9 @@ Element Element::position(Reactive::Bindable<float> x, Reactive::Bindable<float>
   return std::move(*this);
 }
 
-Element Element::position(float x, float y) && {
-  return std::move(*this).position(Reactive::Bindable<float>(x), Reactive::Bindable<float>(y));
-}
-
 Element Element::translate(Reactive::Bindable<Vec2> delta) && {
   writableModifiers().translation = std::move(delta);
   return std::move(*this);
-}
-
-Element Element::translate(Vec2 delta) && {
-  return std::move(*this).translate(Reactive::Bindable<Vec2>(delta));
 }
 
 Element Element::translate(Reactive::Bindable<float> dx, Reactive::Bindable<float> dy) && {
@@ -227,10 +181,6 @@ Element Element::translate(Reactive::Bindable<float> dx, Reactive::Bindable<floa
         return Vec2{dx.evaluate(), dy.evaluate()};
       });
   return std::move(*this);
-}
-
-Element Element::translate(float dx, float dy) && {
-  return std::move(*this).translate(Reactive::Bindable<float>(dx), Reactive::Bindable<float>(dy));
 }
 
 Element Element::clipContent(bool clip) && {

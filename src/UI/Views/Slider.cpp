@@ -157,17 +157,17 @@ Element Slider::body() const {
             Rectangle {}
                 .fill(FillStyle::solid(isDisabled ? theme.disabledControlBackgroundColor : activeColor))
                 .position(0.f, trackY)
-                .size(Reactive::Bindable<float> {[val, lo, hi, componentWidth, trackHeight] {
+                .size([val, lo, hi, componentWidth, trackHeight] {
                     return std::max(componentWidth * fractionForValue(val.get(), lo, hi), trackHeight);
-                }}, Reactive::Bindable<float> {trackHeight})
+                }, trackHeight)
                 .cornerRadius(CornerRadius {trackHeight * 0.5f}),
             Rectangle {}
                 .fill(FillStyle::solid(isDisabled ? theme.disabledTextColor : thumbColor))
                 .stroke(isDisabled ? StrokeStyle::solid(theme.disabledTextColor, 1.f) : thumbStroke)
                 .shadow(isDisabled ? ShadowStyle::none() : ShadowStyle {.radius = theme.shadowRadiusControl, .offset = {0.f, theme.shadowOffsetYControl}, .color = theme.shadowColor})
-                .position(Reactive::Bindable<float> {[val, lo, hi, usableWidth, thumbOffset] {
+                .position([val, lo, hi, usableWidth, thumbOffset] {
                     return fractionForValue(val.get(), lo, hi) * usableWidth + thumbOffset;
-                }}, Reactive::Bindable<float> {thumbY})
+                }, thumbY)
                 .size(thumbDiameter, thumbDiameter)
                 .cornerRadius(CornerRadius {thumbDiameter * 0.5f})
         ),

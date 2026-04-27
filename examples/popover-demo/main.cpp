@@ -91,9 +91,9 @@ struct PopoverDemoRoot {
                 Text {.text = "Arrow", .font = Font::headline(), .color = Color::primary()},
                 Spacer {},
                 Button {
-                    .label = Reactive::Bindable<std::string> {[showArrow] {
+                    .label = [showArrow] {
                         return showArrow.get() ? std::string {"On"} : std::string {"Off"};
-                    }},
+                    },
                     .variant = ButtonVariant::Ghost,
                     .onTap = [=] { showArrow = !*showArrow; },
                 }
@@ -106,9 +106,9 @@ struct PopoverDemoRoot {
                 Text {.text = "Dismiss outside tap", .font = Font::headline(), .color = Color::primary()},
                 Spacer {},
                 Button {
-                    .label = Reactive::Bindable<std::string> {[dismissOutside] {
+                    .label = [dismissOutside] {
                         return dismissOutside.get() ? std::string {"On"} : std::string {"Off"};
-                    }},
+                    },
                     .variant = ButtonVariant::Ghost,
                     .onTap = [=] { dismissOutside = !*dismissOutside; },
                 }

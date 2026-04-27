@@ -200,23 +200,23 @@ struct ToggleDemoRoot {
                                     metricTile(theme, enabledCount, "Enabled settings", Color::accent()),
                                     metricTile(
                                         theme,
-                                        Reactive::Bindable<std::string> {[notificationsEnabled] {
+                                        [notificationsEnabled] {
                                             return notificationsEnabled.get() ? "Live" : "Quiet";
-                                        }},
+                                        },
                                         "Notifications",
-                                        Reactive::Bindable<Color> {[notificationsEnabled] {
+                                        [notificationsEnabled] {
                                             return notificationsEnabled.get() ? Color::success() : Color::warning();
-                                        }}
+                                        }
                                     ),
                                     metricTile(
                                         theme,
-                                        Reactive::Bindable<std::string> {[wifiEnabled] {
+                                        [wifiEnabled] {
                                             return wifiEnabled.get() ? "Online" : "Offline";
-                                        }},
+                                        },
                                         "Connectivity",
-                                        Reactive::Bindable<Color> {[wifiEnabled] {
+                                        [wifiEnabled] {
                                             return wifiEnabled.get() ? Color::success() : Color::secondary();
-                                        }}
+                                        }
                                     )
                                 )
                             }

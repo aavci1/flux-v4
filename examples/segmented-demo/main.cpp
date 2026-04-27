@@ -273,12 +273,12 @@ Element makeToolbarDemo(Theme const &theme, State<int> channel, State<int> densi
                     .spacing = theme.space3,
                     .alignment = Alignment::Stretch,
                     .children = children(
-                        metricTile(theme, Reactive::Bindable<std::string> {[channel] {
+                        metricTile(theme, [channel] {
                             return channelLabel(channel.get());
-                        }}, "Delivery channel", Color::accent()),
-                        metricTile(theme, Reactive::Bindable<std::string> {[density] {
+                        }, "Delivery channel", Color::accent()),
+                        metricTile(theme, [density] {
                             return densityLabel(density.get());
-                        }}, "Interface density", Color::success()),
+                        }, "Interface density", Color::success()),
                         metricTile(theme, "3", "Choices per group", Color::warning())
                     )
                 }
@@ -477,15 +477,15 @@ struct SegmentedDemoRoot {
                             .spacing = theme.space3,
                             .alignment = Alignment::Stretch,
                             .children = children(
-                                metricTile(theme, Reactive::Bindable<std::string> {[workspace] {
+                                metricTile(theme, [workspace] {
                                     return workspaceLabel(workspace.get());
-                                }}, "Primary workspace", Color::accent()),
-                                metricTile(theme, Reactive::Bindable<std::string> {[channel] {
+                                }, "Primary workspace", Color::accent()),
+                                metricTile(theme, [channel] {
                                     return channelLabel(channel.get());
-                                }}, "Delivery mode", Color::success()),
-                                metricTile(theme, Reactive::Bindable<std::string> {[density] {
+                                }, "Delivery mode", Color::success()),
+                                metricTile(theme, [density] {
                                     return densityLabel(density.get());
-                                }}, "Density preset", Color::warning())
+                                }, "Density preset", Color::warning())
                             )
                         },
                         makeHeroDemo(theme, workspace, lastEvent),
@@ -493,9 +493,9 @@ struct SegmentedDemoRoot {
                         makeStateDemo(theme, branch, lastEvent),
                         makeLayoutDemo(theme, layoutMode, lastEvent),
                         Text {
-                            .text = Reactive::Bindable<std::string> {[lastEvent] {
+                            .text = [lastEvent] {
                                 return lastEvent.get();
-                            }},
+                            },
                             .font = Font::footnote(),
                             .color = Color::tertiary(),
                             .horizontalAlignment = HorizontalAlignment::Leading,

@@ -159,7 +159,7 @@ struct PlaybackLab : ViewModifiers<PlaybackLab> {
                         .spacing = theme.space3,
                         .alignment = Alignment::Stretch,
                         .children = children(
-                            metricTile(theme, Reactive::Bindable<std::string> {[progress] {
+                            metricTile(theme, [progress] {
                                 float const value = progress.get();
                                 if (value <= 0.001f) {
                                     return std::string {"Idle"};
@@ -168,10 +168,10 @@ struct PlaybackLab : ViewModifiers<PlaybackLab> {
                                     return std::string {"Settled"};
                                 }
                                 return std::string {"Running"};
-                            }}, "State", Color::accent()),
-                            metricTile(theme, Reactive::Bindable<std::string> {[progress] {
+                            }, "State", Color::accent()),
+                            metricTile(theme, [progress] {
                                 return formatFloat(progress.get());
-                            }}, "Progress", Color::success()),
+                            }, "Progress", Color::success()),
                             metricTile(theme, theme.reducedMotion ? "On" : "Off", "Reduced motion",
                                        theme.reducedMotion ? Color::warning() : Color::secondary())
                         )
@@ -260,23 +260,23 @@ struct MorphLab : ViewModifiers<MorphLab> {
                                 .fill(Color::separator())
                                 .position(16.f, 58.f),
                             Rectangle {}
-                                .size(Reactive::Bindable<float> {[width] {
+                                .size([width] {
                                     return width.get();
-                                }}, Reactive::Bindable<float> {[height] {
+                                }, [height] {
                                     return height.get();
-                                }})
-                                .cornerRadius(Reactive::Bindable<float> {[radius] {
+                                })
+                                .cornerRadius([radius] {
                                     return radius.get();
-                                }})
-                                .fill(Reactive::Bindable<Color> {[fill] {
+                                })
+                                .fill([fill] {
                                     return fill.get();
-                                }})
-                                .position(Reactive::Bindable<float> {[travel, width, previewWidth] {
+                                })
+                                .position([travel, width, previewWidth] {
                                     return 18.f + (previewWidth - width.get() - 36.f) *
                                                    std::clamp(travel.get(), 0.f, 1.f);
-                                }}, Reactive::Bindable<float> {[lift] {
+                                }, [lift] {
                                     return 32.f + lift.get();
-                                }})
+                                })
                         )
                     }
                         .size(previewWidth, 118.f),
@@ -284,15 +284,15 @@ struct MorphLab : ViewModifiers<MorphLab> {
                         .spacing = theme.space3,
                         .alignment = Alignment::Stretch,
                         .children = children(
-                            metricTile(theme, Reactive::Bindable<std::string> {[travel] {
+                            metricTile(theme, [travel] {
                                 return formatFloat(travel.get());
-                            }}, "Travel", Color::accent()),
-                            metricTile(theme, Reactive::Bindable<std::string> {[width] {
+                            }, "Travel", Color::accent()),
+                            metricTile(theme, [width] {
                                 return formatFloat(width.get());
-                            }}, "Width", Color::warning()),
-                            metricTile(theme, Reactive::Bindable<std::string> {[radius] {
+                            }, "Width", Color::warning()),
+                            metricTile(theme, [radius] {
                                 return formatFloat(radius.get());
-                            }}, "Corner radius", Color::success())
+                            }, "Corner radius", Color::success())
                         )
                     },
                     buttonRow(
@@ -338,15 +338,15 @@ struct AmbientLoopLab : ViewModifiers<AmbientLoopLab> {
             float const anchor = static_cast<float>(i) / 4.f;
             bars.push_back(
                 Rectangle {}
-                    .size(Reactive::Bindable<float> {22.f}, Reactive::Bindable<float> {[phase, anchor] {
+                    .size(22.f, [phase, anchor] {
                         float const emphasis = std::clamp(1.f - std::abs(phase.get() - anchor) * 2.8f, 0.f, 1.f);
                         return 18.f + emphasis * 34.f;
-                    }})
+                    })
                     .cornerRadius(11.f)
-                    .fill(Reactive::Bindable<Color> {[phase, anchor] {
+                    .fill([phase, anchor] {
                         float const emphasis = std::clamp(1.f - std::abs(phase.get() - anchor) * 2.8f, 0.f, 1.f);
                         return alpha(Color::accent(), 0.30f + emphasis * 0.70f);
-                    }})
+                    })
             );
         }
 
@@ -377,13 +377,13 @@ struct AmbientLoopLab : ViewModifiers<AmbientLoopLab> {
                         .spacing = theme.space3,
                         .alignment = Alignment::Stretch,
                         .children = children(
-                            metricTile(theme, Reactive::Bindable<std::string> {[phase] {
+                            metricTile(theme, [phase] {
                                 return formatFloat(phase.get());
-                            }}, "Phase", Color::accent()),
-                            metricTile(theme, Reactive::Bindable<std::string> {[phase, reduced = theme.reducedMotion] {
+                            }, "Phase", Color::accent()),
+                            metricTile(theme, [phase, reduced = theme.reducedMotion] {
                                 (void)phase.get();
                                 return reduced ? std::string {"Settled"} : std::string {"Looping"};
-                            }}, "Runtime state", theme.reducedMotion ? Color::warning() : Color::success())
+                            }, "Runtime state", theme.reducedMotion ? Color::warning() : Color::success())
                         )
                     }
                 )
@@ -438,11 +438,11 @@ struct AnimationDemoRoot {
                                                 .horizontalAlignment = HorizontalAlignment::Leading,
                                             },
                                             Text {
-                                                .text = Reactive::Bindable<std::string> {[reducedMotion] {
+                                                .text = [reducedMotion] {
                                                     return reducedMotion.get()
                                                                ? std::string {"Transitions collapse to their final values."}
                                                                : std::string {"Animations run with their configured timing and repeats."};
-                                                }},
+                                                },
                                                 .font = Font::footnote(),
                                                 .color = Color::secondary(),
                                                 .horizontalAlignment = HorizontalAlignment::Leading,

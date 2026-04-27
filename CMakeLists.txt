@@ -274,6 +274,7 @@ if(FLUX_BUILD_TESTS)
   add_executable(flux_tests
     tests/AlertTests.cpp
     tests/AnimationTests.cpp
+    tests/BindableInferenceTests.cpp
     tests/ForTests.cpp
     tests/MetalCanvasTests.mm
     tests/MountRootTests.cpp

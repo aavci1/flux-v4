@@ -164,20 +164,20 @@ Element makeHeroDemo(Theme const &theme, State<bool> dirty, State<bool> reviewPa
                         } //
                             .flex(1.f, 1.f, 0.f),
                         makeBadge(theme,
-                                  Reactive::Bindable<std::string> {[dirty] {
+                                  [dirty] {
                                       return dirty.get() ? std::string {"Dirty"} : std::string {"Saved"};
-                                  }},
-                                  Reactive::Bindable<Color> {[dirty] {
+                                  },
+                                  [dirty] {
                                       return dirty.get() ? Color::warningBackground() : Color::successBackground();
-                                  }},
+                                  },
                                   Color::primary()),
                         makeBadge(theme,
-                                  Reactive::Bindable<std::string> {[reviewPassed] {
+                                  [reviewPassed] {
                                       return reviewPassed.get() ? std::string {"Approved"} : std::string {"Needs review"};
-                                  }},
-                                  Reactive::Bindable<Color> {[reviewPassed] {
+                                  },
+                                  [reviewPassed] {
                                       return reviewPassed.get() ? Color::successBackground() : Color::selectedContentBackground();
-                                  }},
+                                  },
                                   Color::primary())
                     )
                 },
@@ -191,9 +191,9 @@ Element makeHeroDemo(Theme const &theme, State<bool> dirty, State<bool> reviewPa
                                 Button {
                                     .label = "Save Draft",
                                     .variant = ButtonVariant::Primary,
-                                    .disabled = Reactive::Bindable<bool> {[dirty] {
+                                    .disabled = [dirty] {
                                         return !dirty.get();
-                                    }},
+                                    },
                                     .onTap = saveDraft,
                                 },
                                 Button {
@@ -232,9 +232,9 @@ Element makeHeroDemo(Theme const &theme, State<bool> dirty, State<bool> reviewPa
                     .fill(FillStyle::solid(Color::windowBackground()))
                     .cornerRadius(CornerRadius {theme.radiusMedium}),
                 Text {
-                    .text = Reactive::Bindable<std::string> {[lastEvent] {
+                    .text = [lastEvent] {
                         return lastEvent.get();
-                    }},
+                    },
                     .font = Font::footnote(),
                     .color = Color::secondary(),
                     .horizontalAlignment = HorizontalAlignment::Leading,
@@ -391,9 +391,9 @@ Element makeToolbarDemo(Theme const &theme, State<bool> dirty, State<bool> revie
                         },
                         Spacer {},
                         Button {
-                            .label = Reactive::Bindable<std::string> {[reviewPassed] {
+                            .label = [reviewPassed] {
                                 return reviewPassed.get() ? std::string {"Reset Review"} : std::string {"Request Review"};
-                            }},
+                            },
                             .variant = ButtonVariant::Secondary,
                             .onTap =
                                 [reviewPassed, lastEvent] {
@@ -405,17 +405,17 @@ Element makeToolbarDemo(Theme const &theme, State<bool> dirty, State<bool> revie
                         Button {
                             .label = "Save",
                             .variant = ButtonVariant::Primary,
-                            .disabled = Reactive::Bindable<bool> {[dirty] {
+                            .disabled = [dirty] {
                                 return !dirty.get();
-                            }},
+                            },
                             .onTap = saveDraft,
                         },
                         Button {
                             .label = "Publish",
                             .variant = ButtonVariant::Primary,
-                            .disabled = Reactive::Bindable<bool> {[dirty, reviewPassed] {
+                            .disabled = [dirty, reviewPassed] {
                                 return dirty.get() || !reviewPassed.get();
-                            }},
+                            },
                             .onTap =
                                 [dirty, reviewPassed, publishCount, lastEvent] {
                                     if (*dirty || !*reviewPassed) {
@@ -435,15 +435,15 @@ Element makeToolbarDemo(Theme const &theme, State<bool> dirty, State<bool> revie
                     .spacing = theme.space3,
                     .alignment = Alignment::Stretch,
                     .children = children(
-                        makeMetricTile(theme, Reactive::Bindable<std::string> {[saveCount] {
+                        makeMetricTile(theme, [saveCount] {
                             return std::to_string(saveCount.get());
-                        }}, "Saves", Color::accent()),
-                        makeMetricTile(theme, Reactive::Bindable<std::string> {[publishCount] {
+                        }, "Saves", Color::accent()),
+                        makeMetricTile(theme, [publishCount] {
                             return std::to_string(publishCount.get());
-                        }}, "Publishes", Color::success()),
-                        makeMetricTile(theme, Reactive::Bindable<std::string> {[reviewPassed] {
+                        }, "Publishes", Color::success()),
+                        makeMetricTile(theme, [reviewPassed] {
                             return reviewPassed.get() ? std::string {"Ready"} : std::string {"Blocked"};
-                        }}, "Review status", Color::warning())
+                        }, "Review status", Color::warning())
                     )
                 }
             )
@@ -485,20 +485,20 @@ Element makeInlineDemo(Theme const &theme, State<bool> reviewPassed, State<std::
                     .alignment = Alignment::Center,
                     .children = children(
                         Text {
-                            .text = Reactive::Bindable<std::string> {[reviewPassed] {
+                            .text = [reviewPassed] {
                                 return reviewPassed.get()
                                            ? std::string {"Review already passed."}
                                            : std::string {"Still waiting on approval?"};
-                            }},
+                            },
                             .font = Font::footnote(),
                             .color = Color::secondary(),
                         },
                         LinkButton {
-                            .label = Reactive::Bindable<std::string> {[reviewPassed] {
+                            .label = [reviewPassed] {
                                 return reviewPassed.get()
                                            ? std::string {"Mark review as pending"}
                                            : std::string {"Mark review as approved"};
-                            }},
+                            },
                             .style = LinkButton::Style {.font = Font::footnote()},
                             .onTap =
                                 [reviewPassed, lastEvent] {

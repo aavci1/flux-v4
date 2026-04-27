@@ -187,9 +187,9 @@ struct DealTableRow : ViewModifiers<DealTableRow> {
         cells.push_back(
             TableCell {
                 .content = Icon {
-                    .name = Reactive::Bindable<IconName> {[expanded] {
+                    .name = [expanded] {
                         return expanded.get() ? IconName::ExpandLess : IconName::ExpandMore;
-                    }},
+                    },
                     .size = 18.f,
                     .color = Color::tertiary(),
                 },

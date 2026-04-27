@@ -64,9 +64,9 @@ struct ExpandableCard : ViewModifiers<ExpandableCard> {
                     }
                         .flex(1.f, 1.f, 0.f),
                     Icon {
-                        .name = Reactive::Bindable<IconName> {[expanded] {
+                        .name = [expanded] {
                             return expanded.get() ? IconName::ExpandLess : IconName::ExpandMore;
-                        }},
+                        },
                         .size = 18.f,
                         .color = Color::tertiary(),
                     })
@@ -94,10 +94,10 @@ struct ExpandableCard : ViewModifiers<ExpandableCard> {
             .style = Card::Style {
                 .padding = theme.space4,
                 .cornerRadius = theme.radiusXLarge,
-                .borderColor = Reactive::Bindable<Color> {[expanded, accentColor, theme] {
+                .borderColor = [expanded, accentColor, theme] {
                     return expanded.get() ? accentColor : theme.separatorColor;
-                }},
-                .shadow = Reactive::Bindable<ShadowStyle> {[expanded, theme] {
+                },
+                .shadow = [expanded, theme] {
                     return expanded.get()
                                ? ShadowStyle {
                                      .radius = theme.shadowRadiusPopover,
@@ -105,7 +105,7 @@ struct ExpandableCard : ViewModifiers<ExpandableCard> {
                                      .color = Color {0.f, 0.f, 0.f, 0.12f},
                                  }
                                : ShadowStyle::none();
-                }},
+                },
             },
         }
             .cursor(Cursor::Hand)
@@ -237,21 +237,21 @@ struct CardDemoView {
                                                 .color = Color::accent(),
                                             },
                                             Text {
-                                                .text = Reactive::Bindable<std::string> {[accentBorder] {
+                                                .text = [accentBorder] {
                                                     return accentBorder.get()
                                                                ? std::string {"Accent border enabled"}
                                                                : std::string {"Neutral border enabled"};
-                                                }},
+                                                },
                                                 .font = Font::footnote(),
                                                 .color = Color::secondary(),
                                             },
                                             Spacer {},
                                             Text {
-                                                .text = Reactive::Bindable<std::string> {[dropShadow] {
+                                                .text = [dropShadow] {
                                                     return dropShadow.get()
                                                                ? std::string {"Shadow on"}
                                                                : std::string {"Shadow off"};
-                                                }},
+                                                },
                                                 .font = Font::footnote(),
                                                 .color = Color::tertiary(),
                                             })
@@ -260,10 +260,10 @@ struct CardDemoView {
                             .style = Card::Style {
                                 .padding = theme.space4,
                                 .cornerRadius = theme.radiusXLarge,
-                                .borderColor = Reactive::Bindable<Color> {[accentBorder, theme] {
+                                .borderColor = [accentBorder, theme] {
                                     return accentBorder.get() ? theme.accentColor : theme.separatorColor;
-                                }},
-                                .shadow = Reactive::Bindable<ShadowStyle> {[dropShadow, theme] {
+                                },
+                                .shadow = [dropShadow, theme] {
                                     return dropShadow.get()
                                                ? ShadowStyle {
                                                      .radius = theme.shadowRadiusPopover,
@@ -271,7 +271,7 @@ struct CardDemoView {
                                                      .color = Color {0.f, 0.f, 0.f, 0.12f},
                                                  }
                                                : ShadowStyle::none();
-                                }},
+                                },
                             },
                         },
                         Card {

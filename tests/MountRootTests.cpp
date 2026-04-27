@@ -204,10 +204,10 @@ struct DeepRelayoutNode {
   flux::Element body() const {
     if (depth <= 0) {
       return flux::Element{flux::Rectangle{}}
-          .size(flux::Reactive::Bindable<float>{[width = width] {
+          .size([width = width] {
                   return width.get();
-                }},
-                flux::Reactive::Bindable<float>{10.f});
+                },
+                10.f);
     }
     return flux::Element{RelayoutPassthroughFrame{
         .child = flux::Element{DeepRelayoutNode{depth - 1, width}},
@@ -298,7 +298,7 @@ TEST_CASE("interaction hooks attach reactive signals to mounted interaction data
       flux::Reactive::Signal<bool> keyboardFocused = flux::useKeyboardFocus();
       return flux::Rectangle{}
           .size(20.f, 10.f)
-          .fill(flux::Reactive::Bindable<flux::Color>{[hovered, pressed, focused, keyboardFocused] {
+          .fill([hovered, pressed, focused, keyboardFocused] {
             if (keyboardFocused.get()) {
               return flux::Colors::yellow;
             }
@@ -312,7 +312,7 @@ TEST_CASE("interaction hooks attach reactive signals to mounted interaction data
               return flux::Colors::red;
             }
             return flux::Colors::black;
-          }})
+          })
           .focusable(true)
           .onTap([] {});
     }
@@ -436,10 +436,10 @@ TEST_CASE("reactive size changes relayout ancestor stack alignment") {
                   .alignment = flux::Alignment::Center,
                   .children = flux::children(
                       flux::Rectangle{}.size(
-                          flux::Reactive::Bindable<float>{20.f},
-                          flux::Reactive::Bindable<float>{[barHeight = barHeight] {
+                          20.f,
+                          [barHeight = barHeight] {
                             return barHeight.get();
-                          }}),
+                          }),
                       flux::Rectangle{}.size(20.f, 20.f)),
               }),
       };
@@ -520,10 +520,10 @@ TEST_CASE("reactive size relayout stops at unchanged ancestors") {
                       .alignment = flux::Alignment::Center,
                       .children = flux::children(
                           flux::Rectangle{}.size(
-                              flux::Reactive::Bindable<float>{20.f},
-                              flux::Reactive::Bindable<float>{[barHeight = barHeight] {
+                              20.f,
+                              [barHeight = barHeight] {
                                 return barHeight.get();
-                              }}),
+                              }),
                           flux::Rectangle{}.size(20.f, 20.f)),
                   }),
           }},
@@ -606,9 +606,9 @@ TEST_CASE("MountRoot resize relayouts without remounting root state") {
       ++*bodyCalls;
       auto width = flux::useState(20.f);
       return flux::Element{flux::Rectangle{}}
-          .width(flux::Reactive::Bindable<float>{[width] {
+          .width([width] {
             return width.get();
-          }})
+          })
           .height(10.f)
           .onTap([width] {
             width.set(64.f);
@@ -837,10 +837,9 @@ TEST_CASE("MountRoot keeps Bindable effects scoped to the mount") {
     flux::Element body() const {
       return flux::Element{flux::Rectangle{}}
           .size(10.f, 10.f)
-          .fill(flux::Reactive::Bindable<flux::Color>{
-              [hot = hot] {
-                return hot() ? flux::Colors::red : flux::Colors::blue;
-              }});
+          .fill([hot = hot] {
+            return hot() ? flux::Colors::red : flux::Colors::blue;
+          });
     }
   };
 
@@ -876,10 +875,9 @@ TEST_CASE("nested body component bindings inherit the root redraw callback") {
     flux::Element body() const {
       return flux::Element{flux::Rectangle{}}
           .size(10.f, 10.f)
-          .fill(flux::Reactive::Bindable<flux::Color>{
-              [hot = hot] {
-                return hot() ? flux::Colors::red : flux::Colors::blue;
-              }});
+          .fill([hot = hot] {
+            return hot() ? flux::Colors::red : flux::Colors::blue;
+          });
     }
   };
 

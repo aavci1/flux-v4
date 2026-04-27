@@ -282,11 +282,10 @@ struct SelectMenuRow : ViewModifiers<SelectMenuRow> {
         }
             .padding(theme.space2, theme.space3, theme.space2, theme.space3)
             .fill(fillTarget)
-            .stroke(Reactive::Bindable<StrokeStyle> {[focused, disabled,
-                                                       focusColor = theme.keyboardFocusIndicatorColor] {
+            .stroke([focused, disabled, focusColor = theme.keyboardFocusIndicatorColor] {
                 return focused.get() && !disabled ? StrokeStyle::solid(focusColor, 2.f)
                                                   : StrokeStyle::none();
-            }})
+            })
             .cornerRadius(CornerRadius {style.cornerRadius})
             .cursor(disabled ? Cursor::Inherit : Cursor::Hand)
             .focusable(!disabled)
@@ -597,14 +596,12 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
 
         bool const hasDetail = showDetailInTrigger && currentOption && !currentOption->detail.empty();
         Element triggerLabel = Text {
-            .text = Reactive::Bindable<std::string> {[selectedIndex = selectedIndex,
-                                                       options = options,
-                                                       placeholder = placeholder] {
+            .text = [selectedIndex = selectedIndex, options = options, placeholder = placeholder] {
                 int const index = selectedIndex.get();
                 return isValidIndex(index, options.size())
                            ? options[static_cast<std::size_t>(index)].label
                            : placeholder;
-            }},
+            },
             .font = style.labelFont,
             .color = labelAnim,
             .horizontalAlignment = HorizontalAlignment::Leading,
@@ -622,14 +619,12 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
             std::vector<Element> triggerTextChildren;
             triggerTextChildren.reserve(2);
             triggerTextChildren.emplace_back(Text {
-                .text = Reactive::Bindable<std::string> {[selectedIndex = selectedIndex,
-                                                           options = options,
-                                                           placeholder = placeholder] {
+                .text = [selectedIndex = selectedIndex, options = options, placeholder = placeholder] {
                     int const index = selectedIndex.get();
                     return isValidIndex(index, options.size())
                                ? options[static_cast<std::size_t>(index)].label
                                : placeholder;
-                }},
+                },
                 .font = style.labelFont,
                 .color = labelAnim,
                 .horizontalAlignment = HorizontalAlignment::Leading,
@@ -637,13 +632,12 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
                 .wrapping = TextWrapping::Wrap,
             });
             triggerTextChildren.emplace_back(Text {
-                .text = Reactive::Bindable<std::string> {[selectedIndex = selectedIndex,
-                                                           options = options] {
+                .text = [selectedIndex = selectedIndex, options = options] {
                     int const index = selectedIndex.get();
                     return isValidIndex(index, options.size())
                                ? options[static_cast<std::size_t>(index)].detail
                                : std::string {};
-                }},
+                },
                 .font = style.detailFont,
                 .color = detailAnim,
                 .horizontalAlignment = HorizontalAlignment::Leading,
@@ -675,10 +669,10 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
             return std::move(trigger)
                 .padding(0.f, 3.f, 0.f, 3.f)
                 .fill(FillStyle::none())
-                .stroke(Reactive::Bindable<StrokeStyle> {[focused, isDisabled, theme] {
+                .stroke([focused, isDisabled, theme] {
                     return !isDisabled && focused.get() ? StrokeStyle::solid(theme.keyboardFocusIndicatorColor, 2.f)
                                                         : StrokeStyle::none();
-                }})
+                })
                 .cornerRadius(CornerRadius {theme.radiusXSmall})
                 .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
                 .focusable(!isDisabled)
@@ -689,11 +683,11 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
         Element fieldTrigger = std::move(trigger)
             .padding(fieldVerticalPadding, fieldHorizontalPadding, fieldVerticalPadding, fieldHorizontalPadding)
             .fill(fillAnim)
-            .stroke(Reactive::Bindable<StrokeStyle> {[focused, open, isDisabled, fieldChrome] {
+            .stroke([focused, open, isDisabled, fieldChrome] {
                 return (focused.get() || open) && !isDisabled
                            ? StrokeStyle::solid(fieldChrome.borderFocusColor, fieldChrome.borderFocusWidth)
                            : StrokeStyle::solid(fieldChrome.borderColor, fieldChrome.borderWidth);
-            }})
+            })
             .cornerRadius(CornerRadius {fieldChrome.cornerRadius})
             .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
             .focusable(!isDisabled)

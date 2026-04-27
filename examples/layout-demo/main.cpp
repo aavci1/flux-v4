@@ -639,12 +639,12 @@ struct JustifyPlaygroundSection {
                         .alignment = Alignment::Stretch,
                         .children = children(
                             Text {
-                                .text = Reactive::Bindable<std::string> {[axisIndex, alignmentIndex, justifyIndex] {
+                                .text = [axisIndex, alignmentIndex, justifyIndex] {
                                     return stackAxisLabel(axisIndex.get()) + " using " +
                                            stackAlignmentLabel(alignmentIndex.get()) +
                                            " alignment and " + justifyContentLabel(justifyIndex.get()) +
                                            " distribution.";
-                                }},
+                                },
                                 .font = Font::footnote(),
                                 .color = Color::secondary(),
                                 .horizontalAlignment = HorizontalAlignment::Leading,
