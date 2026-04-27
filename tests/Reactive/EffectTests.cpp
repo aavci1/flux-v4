@@ -5,6 +5,8 @@
 
 #include <doctest/doctest.h>
 
+#include <vector>
+
 using namespace flux::Reactive;
 
 TEST_CASE("Reactive Effect runs once per source write") {
@@ -53,6 +55,103 @@ TEST_CASE("Reactive Effect updates dynamic subscriptions") {
 
   left.set(2);
   CHECK(runs == 2);
+}
+
+TEST_CASE("Reactive Effect sweeps sources dropped between runs") {
+  Signal<bool> useLeft(true);
+  Signal<int> left(1);
+  Signal<int> right(10);
+  int observed = 0;
+  int runs = 0;
+
+  Effect effect([&] {
+    ++runs;
+    observed = useLeft() ? left() : right();
+  });
+
+  CHECK(runs == 1);
+  CHECK(observed == 1);
+
+  right.set(11);
+  CHECK(runs == 1);
+
+  left.set(2);
+  CHECK(runs == 2);
+  CHECK(observed == 2);
+
+  useLeft = false;
+  CHECK(runs == 3);
+  CHECK(observed == 11);
+
+  left.set(3);
+  CHECK(runs == 3);
+
+  right.set(12);
+  CHECK(runs == 4);
+  CHECK(observed == 12);
+
+  useLeft = true;
+  CHECK(runs == 5);
+  CHECK(observed == 3);
+
+  right.set(13);
+  CHECK(runs == 5);
+
+  left.set(4);
+  CHECK(runs == 6);
+  CHECK(observed == 4);
+}
+
+TEST_CASE("Reactive Effect ignores stale source writes during a rerun") {
+  Signal<bool> useLeft(true);
+  Signal<int> left(1);
+  Signal<int> right(10);
+  int runs = 0;
+  int observed = 0;
+
+  Effect effect([&] {
+    ++runs;
+    if (useLeft()) {
+      observed = left();
+      return;
+    }
+    left = left.peek() + 1;
+    observed = right();
+  });
+
+  CHECK(runs == 1);
+  CHECK(observed == 1);
+
+  useLeft = false;
+
+  CHECK(runs == 2);
+  CHECK(observed == 10);
+  CHECK(left.peek() == 2);
+}
+
+TEST_CASE("Reactive Effect flushes shallower graph dependencies first") {
+  Signal<int> source(1);
+  Computed<int> first([&] {
+    return source() + 1;
+  });
+  Computed<int> second([&] {
+    return first() + 1;
+  });
+  std::vector<int> order;
+
+  Effect deeper([&] {
+    (void)second();
+    order.push_back(2);
+  });
+  Effect shallower([&] {
+    (void)first();
+    order.push_back(1);
+  });
+
+  order.clear();
+  source = 2;
+
+  CHECK(order == std::vector<int>{1, 2});
 }
 
 TEST_CASE("Reactive Effect reruns do not inherit ambient WithTransition") {

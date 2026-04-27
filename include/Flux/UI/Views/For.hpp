@@ -74,7 +74,10 @@ public:
 
     Reactive::withOwner(*controlScope, [state, rawGroup] {
       Reactive::Effect([state, rawGroup] {
-        state->reconcile(*rawGroup);
+        Items const nextItems = state->items.get();
+        Reactive::untrack([state, rawGroup, &nextItems] {
+          state->reconcile(*rawGroup, nextItems);
+        });
       });
     });
 
@@ -159,12 +162,11 @@ private:
       disposeRows(rows);
     }
 
-    void reconcile(scenegraph::GroupNode& group) {
+    void reconcile(scenegraph::GroupNode& group, Items const& nextItems) {
       if (disposed || !environment || !textSystem) {
         return;
       }
       Size const oldSize = group.size();
-      Items const nextItems = items.get();
       std::vector<std::unique_ptr<scenegraph::SceneNode>> oldNodes = group.releaseChildren();
       std::vector<Row> oldRows = std::move(rows);
       std::vector<bool> used(oldRows.size(), false);

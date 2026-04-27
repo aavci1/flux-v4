@@ -5,6 +5,7 @@
 #include <Flux/Reactive/Transition.hpp>
 
 #include <atomic>
+#include <algorithm>
 #include <cassert>
 #include <concepts>
 #include <cstdint>
@@ -17,6 +18,8 @@
 
 namespace flux::Reactive {
 
+struct EffectState;
+
 namespace detail {
 
 enum Flag : std::uint16_t {
@@ -26,6 +29,7 @@ enum Flag : std::uint16_t {
   Dirty = 1u << 3u,
   Pending = 1u << 4u,
   Disposed = 1u << 5u,
+  Running = 1u << 6u,
 };
 
 inline bool hasFlag(std::uint16_t flags, Flag flag) {
@@ -53,6 +57,7 @@ struct Link {
   Observable* source = nullptr;
   Computation* observer = nullptr;
   std::uint64_t sourceVersion = 0;
+  std::uint32_t runVersion = 0;
   Link* nextSource = nullptr;
   Link* prevSource = nullptr;
   Link* nextSubscriber = nullptr;
@@ -130,8 +135,8 @@ struct ScopeState {
 inline thread_local Computation* sCurrentObserver = nullptr;
 inline thread_local ScopeState* sCurrentOwner = nullptr;
 inline thread_local int sBatchDepth = 0;
-inline thread_local std::vector<Computation*> sEffectQueue;
-inline thread_local std::vector<Computation*> sEffectFlushQueue;
+inline thread_local std::vector<EffectState*> sEffectQueue;
+inline thread_local std::vector<EffectState*> sEffectFlushQueue;
 
 inline void ownNode(std::shared_ptr<Disposable> disposable) {
   if (sCurrentOwner) {
@@ -180,6 +185,7 @@ struct Observable : Disposable {
 
   void dispose() override;
   virtual bool updateIfNeeded();
+  virtual std::uint16_t observerDepthContribution() const;
   void reportRead();
   void subscribe(Computation& observer);
   void propagatePending();
@@ -191,6 +197,8 @@ struct Computation : Observable {
   Link* sources = nullptr;
   Link* spareLinks = nullptr;
   bool scheduled = false;
+  std::uint32_t runVersion = 0;
+  std::uint16_t depth = 0;
 
   ~Computation() override {
     dispose();
@@ -198,11 +206,14 @@ struct Computation : Observable {
   }
 
   void dispose() override;
+  std::uint16_t observerDepthContribution() const override;
   bool pollSourcesChanged();
   bool updateIfNeeded() override = 0;
   void markDirty();
   void markPending();
   void clearSourcesForReuse();
+  void beginTrackingRun();
+  void sweepStaleSources();
   void deleteSpareLinks();
   Link* findSource(Observable const* source) const;
   Link* acquireLink();
@@ -258,6 +269,10 @@ inline bool Observable::updateIfNeeded() {
   return false;
 }
 
+inline std::uint16_t Observable::observerDepthContribution() const {
+  return 0;
+}
+
 inline void Observable::reportRead() {
   if (!sCurrentObserver || disposed()) {
     return;
@@ -266,8 +281,12 @@ inline void Observable::reportRead() {
 }
 
 inline void Observable::subscribe(Computation& observer) {
+  if (std::uint16_t const sourceDepth = observerDepthContribution()) {
+    observer.depth = std::max(observer.depth, sourceDepth);
+  }
   if (auto* existing = observer.findSource(this)) {
     existing->sourceVersion = version;
+    existing->runVersion = observer.runVersion;
     return;
   }
 
@@ -275,6 +294,7 @@ inline void Observable::subscribe(Computation& observer) {
   link->source = this;
   link->observer = &observer;
   link->sourceVersion = version;
+  link->runVersion = observer.runVersion;
 
   link->nextSubscriber = subscribers;
   if (subscribers) {
@@ -295,7 +315,12 @@ inline void Observable::propagatePending() {
   while (link) {
     auto* next = link->nextSubscriber;
     if (link->observer) {
-      link->observer->markPending();
+      bool const staleDuringRun =
+          hasFlag(link->observer->flags, Running) &&
+          link->runVersion != link->observer->runVersion;
+      if (!staleDuringRun) {
+        link->observer->markPending();
+      }
     }
     link = next;
   }
@@ -306,7 +331,12 @@ inline void Observable::propagateDirty() {
   while (link) {
     auto* next = link->nextSubscriber;
     if (link->observer) {
-      link->observer->markDirty();
+      bool const staleDuringRun =
+          hasFlag(link->observer->flags, Running) &&
+          link->runVersion != link->observer->runVersion;
+      if (!staleDuringRun) {
+        link->observer->markDirty();
+      }
     }
     link = next;
   }
@@ -336,6 +366,10 @@ inline void Computation::dispose() {
   scheduled = false;
   detachSubscribers();
   clearSourcesForReuse();
+}
+
+inline std::uint16_t Computation::observerDepthContribution() const {
+  return static_cast<std::uint16_t>(depth + 1u);
 }
 
 inline bool Computation::pollSourcesChanged() {
@@ -389,6 +423,30 @@ inline void Computation::clearSourcesForReuse() {
   }
 }
 
+inline void Computation::beginTrackingRun() {
+  ++runVersion;
+  if (runVersion == 0) {
+    ++runVersion;
+  }
+  setFlag(flags, Running);
+}
+
+inline void Computation::sweepStaleSources() {
+  auto* link = sources;
+  while (link) {
+    auto* next = link->nextSource;
+    if (link->runVersion != runVersion) {
+      unlinkFromSubscriberList(link);
+      unlinkFromSourceList(link);
+      link->source = nullptr;
+      link->observer = nullptr;
+      retireLink(link);
+    }
+    link = next;
+  }
+  clearFlag(flags, Running);
+}
+
 inline void Computation::deleteSpareLinks() {
   while (spareLinks) {
     auto* link = spareLinks;
@@ -440,30 +498,7 @@ struct BatchGuard {
   }
 };
 
-inline void scheduleEffect(Computation* effect) {
-  if (effect->scheduled || effect->disposed()) {
-    return;
-  }
-  effect->scheduled = true;
-  sEffectQueue.push_back(effect);
-}
-
-inline void flushEffects() {
-  [[maybe_unused]] profile::ScopedTimer timer{profile::Bucket::FlushEffects};
-  while (!sEffectQueue.empty()) {
-    sEffectFlushQueue.clear();
-    sEffectFlushQueue.insert(sEffectFlushQueue.end(), sEffectQueue.begin(), sEffectQueue.end());
-    sEffectQueue.clear();
-    for (auto* effect : sEffectFlushQueue) {
-      effect->scheduled = false;
-      if (!effect->disposed() &&
-          (hasFlag(effect->flags, Dirty) ||
-           hasFlag(effect->flags, Pending))) {
-        (void)effect->updateIfNeeded();
-      }
-    }
-  }
-}
+inline void scheduleEffect(EffectState* effect);
 
 template <typename T>
 concept EqualityComparable = requires(T const& a, T const& b) {
@@ -672,9 +707,12 @@ struct ComputedState final : detail::Computation {
 
   bool recompute() {
     assert(!disposed() && "recomputing a disposed Computed");
-    clearSourcesForReuse();
-    detail::ObserverContext context(this);
-    auto next = fn();
+    beginTrackingRun();
+    auto next = [&] {
+      detail::ObserverContext context(this);
+      return fn();
+    }();
+    sweepStaleSources();
     bool changed = !value.has_value();
     if (!changed) {
       if constexpr (detail::EqualityComparable<T>) {
@@ -756,12 +794,15 @@ struct EffectState final : detail::Computation {
       return;
     }
     [[maybe_unused]] detail::profile::ScopedTimer timer{detail::profile::Bucket::EffectRun};
-    clearSourcesForReuse();
+    beginTrackingRun();
     detail::clearFlag(flags, detail::Pending);
     detail::clearFlag(flags, detail::Dirty);
-    ::flux::detail::TransitionScopeSuspension transitionScope;
-    detail::ObserverContext context(this);
-    fn();
+    {
+      ::flux::detail::TransitionScopeSuspension transitionScope;
+      detail::ObserverContext context(this);
+      fn();
+    }
+    sweepStaleSources();
   }
 
   bool updateIfNeeded() override {
@@ -792,6 +833,40 @@ struct EffectState final : detail::Computation {
 
   SmallFn<void()> fn;
 };
+
+namespace detail {
+
+inline void scheduleEffect(EffectState* effect) {
+  if (effect->scheduled || effect->disposed()) {
+    return;
+  }
+  effect->scheduled = true;
+  auto const it = std::upper_bound(
+      sEffectQueue.begin(), sEffectQueue.end(), effect,
+      [](EffectState const* lhs, EffectState const* rhs) {
+        return lhs->depth < rhs->depth;
+      });
+  sEffectQueue.insert(it, effect);
+}
+
+inline void flushEffects() {
+  [[maybe_unused]] profile::ScopedTimer timer{profile::Bucket::FlushEffects};
+  while (!sEffectQueue.empty()) {
+    sEffectFlushQueue.clear();
+    sEffectFlushQueue.insert(sEffectFlushQueue.end(), sEffectQueue.begin(), sEffectQueue.end());
+    sEffectQueue.clear();
+    for (auto* effect : sEffectFlushQueue) {
+      effect->scheduled = false;
+      if (!effect->disposed() &&
+          (hasFlag(effect->flags, Dirty) ||
+           hasFlag(effect->flags, Pending))) {
+        (void)effect->updateIfNeeded();
+      }
+    }
+  }
+}
+
+} // namespace detail
 
 class Effect {
 public:
