@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <memory>
+#include <utility>
 
 namespace flux {
 
@@ -29,6 +30,20 @@ void includeVisualBounds(scenegraph::GroupNode& group) {
   size.width = std::max(size.width, visual.width);
   size.height = std::max(size.height, visual.height);
   group.setSize(size);
+}
+
+float sanitizedScale(float value) noexcept {
+  if (!std::isfinite(value)) {
+    return 1.f;
+  }
+  return std::max(0.f, value);
+}
+
+std::pair<float, float> resolveScale(Reactive::Bindable<float> const& scale,
+                                     Reactive::Bindable<float> const& scaleX,
+                                     Reactive::Bindable<float> const& scaleY) {
+  float const base = sanitizedScale(scale.evaluate());
+  return {base * sanitizedScale(scaleX.evaluate()), base * sanitizedScale(scaleY.evaluate())};
 }
 
 } // namespace
@@ -55,19 +70,27 @@ std::unique_ptr<scenegraph::SceneNode> ScaleAroundCenter::mount(MountContext& ct
   auto* rawChild = childNode.get();
   auto frameSize = std::make_shared<Size>(measured);
   Reactive::Bindable<float> scaleBinding = scale;
+  Reactive::Bindable<float> scaleXBinding = scaleX;
+  Reactive::Bindable<float> scaleYBinding = scaleY;
   Reactive::SmallFn<void()> requestRedraw = ctx.redrawCallback();
-  auto applyScale = [rawChild, frameSize](float value) {
+  auto applyScale = [rawChild, frameSize](float sx, float sy) {
     Point const pivot{frameSize->width * 0.5f, frameSize->height * 0.5f};
-    rawChild->setTransform(Mat3::translate(pivot) * Mat3::scale(value) *
+    rawChild->setTransform(Mat3::translate(pivot) * Mat3::scale(sx, sy) *
                            Mat3::translate(Point{-pivot.x, -pivot.y}));
   };
-  applyScale(scaleBinding.evaluate());
-  if (scaleBinding.isReactive()) {
+  auto const initialScale = resolveScale(scaleBinding, scaleXBinding, scaleYBinding);
+  applyScale(initialScale.first, initialScale.second);
+  if (scaleBinding.isReactive() || scaleXBinding.isReactive() || scaleYBinding.isReactive()) {
     Reactive::Bindable<float> effectScaleBinding = scaleBinding;
-    Reactive::withOwner(ctx.owner(), [scaleBinding = std::move(effectScaleBinding), applyScale,
+    Reactive::Bindable<float> effectScaleXBinding = scaleXBinding;
+    Reactive::Bindable<float> effectScaleYBinding = scaleYBinding;
+    Reactive::withOwner(ctx.owner(), [scaleBinding = std::move(effectScaleBinding),
+                                      scaleXBinding = std::move(effectScaleXBinding),
+                                      scaleYBinding = std::move(effectScaleYBinding), applyScale,
                                       requestRedraw = std::move(requestRedraw)]() mutable {
-      Reactive::Effect([scaleBinding, applyScale, requestRedraw]() mutable {
-        applyScale(scaleBinding.evaluate());
+      Reactive::Effect([scaleBinding, scaleXBinding, scaleYBinding, applyScale, requestRedraw]() mutable {
+        auto const resolved = resolveScale(scaleBinding, scaleXBinding, scaleYBinding);
+        applyScale(resolved.first, resolved.second);
         if (requestRedraw) {
           requestRedraw();
         }
@@ -79,7 +102,8 @@ std::unique_ptr<scenegraph::SceneNode> ScaleAroundCenter::mount(MountContext& ct
   includeVisualBounds(*group);
   auto* rawGroup = group.get();
   rawGroup->setLayoutConstraints(ctx.constraints());
-  rawGroup->setRelayout([rawGroup, rawChild, frameSize, applyScale, scaleBinding](
+  rawGroup->setRelayout([rawGroup, rawChild, frameSize, applyScale, scaleBinding,
+                         scaleXBinding, scaleYBinding](
                             LayoutConstraints const& constraints) mutable {
     if (rawChild) {
       rawChild->relayout(constraints);
@@ -88,7 +112,8 @@ std::unique_ptr<scenegraph::SceneNode> ScaleAroundCenter::mount(MountContext& ct
       rawChild->setPosition(Point{});
     }
     rawGroup->setSize(*frameSize);
-    applyScale(scaleBinding.evaluate());
+    auto const resolved = resolveScale(scaleBinding, scaleXBinding, scaleYBinding);
+    applyScale(resolved.first, resolved.second);
     includeVisualBounds(*rawGroup);
   });
   return group;

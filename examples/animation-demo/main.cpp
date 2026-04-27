@@ -6,6 +6,7 @@
 #include <Flux/UI/Views/Card.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
+#include <Flux/UI/Views/ScaleAroundCenter.hpp>
 #include <Flux/UI/Views/ScrollView.hpp>
 #include <Flux/UI/Views/Slider.hpp>
 #include <Flux/UI/Views/Text.hpp>
@@ -29,14 +30,14 @@ std::string formatFloat(float value) {
     return buffer;
 }
 
-Color alpha(Color color, float opacity) {
-    return Color {color.r, color.g, color.b, opacity};
-}
-
 double nowSeconds() {
     auto const nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(
         std::chrono::steady_clock::now().time_since_epoch());
     return static_cast<double>(nanos.count()) * 1e-9;
+}
+
+float loopBarEmphasis(float phase, float anchor) {
+    return std::clamp(1.f - std::abs(phase - anchor) * 2.8f, 0.f, 1.f);
 }
 
 Element makeSectionCard(Theme const &theme, std::string title, std::string caption, Element content) {
@@ -326,16 +327,20 @@ struct AmbientLoopLab : ViewModifiers<AmbientLoopLab> {
         for (int i = 0; i < 5; ++i) {
             float const anchor = static_cast<float>(i) / 4.f;
             bars.push_back(
-                Rectangle {}
-                    .size(22.f, [phase, anchor] {
-                        float const emphasis = std::clamp(1.f - std::abs(phase() - anchor) * 2.8f, 0.f, 1.f);
-                        return 18.f + emphasis * 34.f;
-                    })
-                    .cornerRadius(11.f)
-                    .fill([phase, anchor] {
-                        float const emphasis = std::clamp(1.f - std::abs(phase() - anchor) * 2.8f, 0.f, 1.f);
-                        return alpha(Color::accent(), 0.30f + emphasis * 0.70f);
-                    })
+                ScaleAroundCenter {
+                    .scaleY = [phase, anchor] {
+                        float const emphasis = loopBarEmphasis(phase(), anchor);
+                        return (18.f + emphasis * 34.f) / 52.f;
+                    },
+                    .child = Rectangle {}
+                        .size(22.f, 52.f)
+                        .cornerRadius(11.f)
+                        .fill(Color::accent())
+                        .opacity([phase, anchor] {
+                            float const emphasis = loopBarEmphasis(phase(), anchor);
+                            return 0.30f + emphasis * 0.70f;
+                        }),
+                }
             );
         }
 
@@ -369,8 +374,7 @@ struct AmbientLoopLab : ViewModifiers<AmbientLoopLab> {
                             metricTile(theme(), [phase] {
                                 return formatFloat(phase());
                             }, "Phase", Color::accent()),
-                            metricTile(theme(), [phase] {
-                                (void)phase();
+                            metricTile(theme(), [] {
                                 return std::string {"Looping"};
                             }, "Runtime state", Color::success())
                         )
