@@ -22,11 +22,14 @@ public:
   EnvironmentBinding withValue(typename EnvironmentKey<Key>::Value value) const {
     using Value = typename EnvironmentKey<Key>::Value;
     std::uint16_t const index = EnvironmentKey<Key>::slot().index();
+    if (entries_ && index < entries_->size()) {
+      detail::EnvironmentEntry const& existing = (*entries_)[index];
+      if (Value const* current = existing.asValue<Value>(); current && *current == value) {
+        return *this;
+      }
+    }
     detail::EnvironmentEntry nextEntry;
     nextEntry.setValue<Value>(std::move(value));
-    if (entries_ && index < entries_->size() && (*entries_)[index].equals(nextEntry)) {
-      return *this;
-    }
     auto entries = copyEntries(index);
     (*entries)[index] = std::move(nextEntry);
     return EnvironmentBinding{std::move(entries)};
@@ -36,11 +39,14 @@ public:
   EnvironmentBinding withSignal(Reactive::Signal<typename EnvironmentKey<Key>::Value> signal) const {
     using Value = typename EnvironmentKey<Key>::Value;
     std::uint16_t const index = EnvironmentKey<Key>::slot().index();
+    if (entries_ && index < entries_->size()) {
+      detail::EnvironmentEntry const& existing = (*entries_)[index];
+      if (auto const* current = existing.asSignal<Value>(); current && *current == signal) {
+        return *this;
+      }
+    }
     detail::EnvironmentEntry nextEntry;
     nextEntry.setSignal<Value>(std::move(signal));
-    if (entries_ && index < entries_->size() && (*entries_)[index].equals(nextEntry)) {
-      return *this;
-    }
     auto entries = copyEntries(index);
     (*entries)[index] = std::move(nextEntry);
     return EnvironmentBinding{std::move(entries)};
@@ -73,6 +79,10 @@ public:
 
   [[nodiscard]] bool empty() const noexcept {
     return !entries_ || entries_->empty();
+  }
+
+  [[nodiscard]] void const* internalEntriesPointer() const noexcept {
+    return entries_.get();
   }
 
 private:

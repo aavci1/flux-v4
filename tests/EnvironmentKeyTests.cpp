@@ -140,6 +140,27 @@ TEST_CASE("environment binding resolves defaults, values, and signals") {
   CHECK(signalBinding.value<flux::ThemeKey>() == flux::Theme::dark());
 }
 
+TEST_CASE("environment binding reuses entries when rebinding matching values") {
+  flux::EnvironmentBinding original =
+      flux::EnvironmentBinding{}.withValue<flux::ThemeKey>(flux::Theme::light());
+
+  flux::EnvironmentBinding rebound =
+      original.withValue<flux::ThemeKey>(flux::Theme::light());
+
+  CHECK(rebound.internalEntriesPointer() == original.internalEntriesPointer());
+}
+
+TEST_CASE("environment binding reuses entries when rebinding matching signals") {
+  flux::Reactive::Signal<flux::Theme> themeSignal{flux::Theme::light()};
+  flux::EnvironmentBinding original =
+      flux::EnvironmentBinding{}.withSignal<flux::ThemeKey>(themeSignal);
+
+  flux::EnvironmentBinding rebound =
+      original.withSignal<flux::ThemeKey>(themeSignal);
+
+  CHECK(rebound.internalEntriesPointer() == original.internalEntriesPointer());
+}
+
 TEST_CASE("signal-backed environment binding participates in reactive tracking") {
   flux::Reactive::Signal<flux::Theme> theme{flux::Theme::light()};
   flux::EnvironmentBinding binding =
