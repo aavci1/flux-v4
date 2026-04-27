@@ -36,7 +36,9 @@ public:
   LayoutHints const& hints() const noexcept { return hints_; }
   Reactive::SmallFn<void()> const& redrawCallback() const noexcept { return requestRedraw_; }
 
-  MountContext child(LayoutConstraints constraints, LayoutHints hints = {}) const;
+  MountContext childWithSharedScope(LayoutConstraints constraints, LayoutHints hints = {}) const;
+  MountContext childWithOwnScope(LayoutConstraints constraints, LayoutHints hints = {}) const;
+  MountContext child(LayoutConstraints constraints, LayoutHints hints = {}) const = delete;
   void requestRedraw() const;
 
 private:

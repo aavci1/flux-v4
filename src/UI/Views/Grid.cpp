@@ -175,7 +175,7 @@ std::unique_ptr<scenegraph::SceneNode> Grid::mount(MountContext& ctx) const {
   auto mountedChildren = std::make_shared<std::vector<MountedGridChild>>();
   for (std::size_t i = 0; i < children.size(); ++i) {
     Rect const slot = plan.slots[i];
-    MountContext childCtx = ctx.child(fixedConstraints(Size{slot.width, slot.height}), {});
+    MountContext childCtx = ctx.childWithSharedScope(fixedConstraints(Size{slot.width, slot.height}), {});
     auto childNode = children[i].mount(childCtx);
     if (childNode) {
       Rect const bounds = childNode->bounds();

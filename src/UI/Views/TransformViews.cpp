@@ -46,7 +46,7 @@ std::unique_ptr<scenegraph::SceneNode> ScaleAroundCenter::mount(MountContext& ct
   auto group = std::make_unique<scenegraph::GroupNode>(
       Rect{0.f, 0.f, std::max(0.f, measured.width), std::max(0.f, measured.height)});
 
-  MountContext childCtx = ctx.child(fixedConstraints(measured), ctx.hints());
+  MountContext childCtx = ctx.childWithSharedScope(fixedConstraints(measured), ctx.hints());
   auto childNode = child.mount(childCtx);
   if (!childNode) {
     return group;

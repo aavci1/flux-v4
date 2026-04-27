@@ -278,7 +278,14 @@ MountContext::MountContext(std::shared_ptr<Reactive::Scope> owner, EnvironmentSt
     , hints_(hints)
     , requestRedraw_(std::move(requestRedraw)) {}
 
-MountContext MountContext::child(LayoutConstraints constraints, LayoutHints hints) const {
+MountContext MountContext::childWithSharedScope(LayoutConstraints constraints,
+                                                LayoutHints hints) const {
+  return MountContext{owner(), environment_, textSystem_, measureContext_, constraints,
+                      hints, requestRedraw_};
+}
+
+MountContext MountContext::childWithOwnScope(LayoutConstraints constraints,
+                                             LayoutHints hints) const {
   auto childScope = std::make_shared<Reactive::Scope>();
   owner().onCleanup([childScope] {
     childScope->dispose();
@@ -449,8 +456,8 @@ std::unique_ptr<scenegraph::SceneNode> mountVStack(VStack const& stack, MountCon
     }
 
     MountContext childCtx = active
-        ? ctx.child(fixedConstraints(slot->assignedSize), childHints)
-        : ctx.child(childConstraints, childHints);
+        ? ctx.childWithSharedScope(fixedConstraints(slot->assignedSize), childHints)
+        : ctx.childWithSharedScope(childConstraints, childHints);
     auto node = child.mount(childCtx);
     Size mountedSize = active ? slot->assignedSize : Size{};
     Point layoutOrigin = active ? slot->origin : nextCollapsedOrigin;
@@ -638,8 +645,8 @@ std::unique_ptr<scenegraph::SceneNode> mountHStack(HStack const& stack, MountCon
     }
 
     MountContext childCtx = active
-        ? ctx.child(fixedConstraints(slot->assignedSize), rowHints)
-        : ctx.child(initialConstraints, rowHints);
+        ? ctx.childWithSharedScope(fixedConstraints(slot->assignedSize), rowHints)
+        : ctx.childWithSharedScope(initialConstraints, rowHints);
     auto node = child.mount(childCtx);
     Size mountedSize = active ? slot->assignedSize : Size{};
     Point layoutOrigin = active ? slot->origin : nextCollapsedOrigin;
@@ -812,7 +819,7 @@ std::unique_ptr<scenegraph::SceneNode> mountZStack(ZStack const& stack, MountCon
     if (stack.verticalAlignment == Alignment::Stretch || fillsStack) {
       childFrame.height = height;
     }
-    MountContext childCtx = ctx.child(fixedConstraints(childFrame), childHints);
+    MountContext childCtx = ctx.childWithSharedScope(fixedConstraints(childFrame), childHints);
     auto node = child.mount(childCtx);
     if (node) {
       Point const origin{

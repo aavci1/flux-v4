@@ -305,7 +305,7 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
   float const height = modifiers.sizeHeight.evaluate();
   LayoutConstraints innerConstraints =
       modifierInnerConstraints(ctx.constraints(), padding, ctx.hints(), width, height);
-  MountContext innerCtx = ctx.child(innerConstraints, ctx.hints());
+  MountContext innerCtx = ctx.childWithSharedScope(innerConstraints, ctx.hints());
   std::unique_ptr<scenegraph::SceneNode> content = impl_->mount(innerCtx);
   if (!content) {
     popEnvironment();
@@ -408,7 +408,7 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
   });
 
   if (modifiers.overlay) {
-    MountContext overlayCtx = ctx.child(LayoutConstraints{
+    MountContext overlayCtx = ctx.childWithSharedScope(LayoutConstraints{
         .maxWidth = outerSize.width,
         .maxHeight = outerSize.height,
         .minWidth = 0.f,

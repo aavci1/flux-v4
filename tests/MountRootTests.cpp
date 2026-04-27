@@ -145,7 +145,7 @@ struct RelayoutProbeFrame {
   std::unique_ptr<flux::scenegraph::SceneNode> mount(flux::MountContext& ctx) const {
     auto group = std::make_unique<flux::scenegraph::GroupNode>(
         flux::Rect{0.f, 0.f, 100.f, 100.f});
-    flux::MountContext childCtx = ctx.child(fixedConstraints({100.f, 100.f}), ctx.hints());
+    flux::MountContext childCtx = ctx.childWithSharedScope(fixedConstraints({100.f, 100.f}), ctx.hints());
     auto childNode = child.mount(childCtx);
     flux::scenegraph::SceneNode* rawChild = childNode.get();
     if (childNode) {
@@ -472,7 +472,7 @@ TEST_CASE("reactive size relayout stops at unchanged ancestors") {
   CHECK(outerRelayouts == 0);
 }
 
-TEST_CASE("MountContext child creates a scoped owner") {
+TEST_CASE("MountContext childWithOwnScope creates a scoped owner") {
   flux::Reactive::Scope rootScope;
   flux::EnvironmentStack environment;
   FakeTextSystem textSystem;
@@ -488,7 +488,7 @@ TEST_CASE("MountContext child creates a scoped owner") {
   int childCleanups = 0;
   {
     flux::MountContext childContext =
-        rootContext.child(flux::LayoutConstraints{.maxWidth = 40.f, .maxHeight = 20.f});
+        rootContext.childWithOwnScope(flux::LayoutConstraints{.maxWidth = 40.f, .maxHeight = 20.f});
     CHECK(&childContext.owner() != &rootContext.owner());
     childContext.owner().onCleanup([&childCleanups] {
       ++childCleanups;
@@ -498,6 +498,24 @@ TEST_CASE("MountContext child creates a scoped owner") {
   CHECK(childCleanups == 0);
   rootScope.dispose();
   CHECK(childCleanups == 1);
+}
+
+TEST_CASE("MountContext childWithSharedScope reuses parent owner") {
+  flux::Reactive::Scope rootScope;
+  flux::EnvironmentStack environment;
+  FakeTextSystem textSystem;
+  flux::MeasureContext measureContext{textSystem};
+  flux::MountContext rootContext{
+      rootScope,
+      environment,
+      textSystem,
+      measureContext,
+      flux::LayoutConstraints{.maxWidth = 100.f, .maxHeight = 100.f},
+  };
+
+  flux::MountContext childContext =
+      rootContext.childWithSharedScope(flux::LayoutConstraints{.maxWidth = 40.f, .maxHeight = 20.f});
+  CHECK(&childContext.owner() == &rootContext.owner());
 }
 
 TEST_CASE("MountRoot resize relayouts without remounting root state") {

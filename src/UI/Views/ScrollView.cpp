@@ -143,7 +143,7 @@ std::unique_ptr<scenegraph::SceneNode> OffsetView::mount(MountContext& ctx) cons
   layout::ScrollContentLayout const layoutPlan =
       layout::layoutScrollContent(axis, *viewportSize, offset, childSizes);
   for (std::size_t index = 0; index < children.size(); ++index) {
-    MountContext childCtx = ctx.child(fixedConstraints(layoutPlan.slots[index].assignedSize), {});
+    MountContext childCtx = ctx.childWithSharedScope(fixedConstraints(layoutPlan.slots[index].assignedSize), {});
     auto childNode = children[index].mount(childCtx);
     if (childNode) {
       detail::setLayoutPosition(*childNode, layoutPlan.slots[index].origin);
@@ -190,7 +190,7 @@ std::unique_ptr<scenegraph::SceneNode> ScrollView::mount(MountContext& ctx) cons
   layout::ScrollContentLayout initialLayout =
       layout::layoutScrollContent(axis, viewport, Point{}, plan.childSizes);
   for (std::size_t index = 0; index < children.size(); ++index) {
-    MountContext childCtx = ctx.child(fixedConstraints(initialLayout.slots[index].assignedSize), {});
+    MountContext childCtx = ctx.childWithSharedScope(fixedConstraints(initialLayout.slots[index].assignedSize), {});
     auto childNode = children[index].mount(childCtx);
     if (childNode) {
       detail::setLayoutPosition(*childNode, initialLayout.slots[index].origin);
