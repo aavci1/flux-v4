@@ -30,7 +30,8 @@ struct Window::Impl {
   std::unique_ptr<Canvas> canvas_;
   std::unique_ptr<scenegraph::SceneRenderer> sceneRenderer_;
   std::optional<scenegraph::SceneGraph> sceneGraph_;
-  Color clearColor_ {Color::hex(0xF2F2F7)};
+  Color clearColor_ {Theme::light().windowBackgroundColor};
+  bool hasCustomClearColor_ = false;
   /// Declared before `runtime_` so `~Runtime` (and `OverlayHookSlot` teardown calling `removeOverlay`)
   /// runs while `OverlayManager` is still alive. Reverse member destruction order would destroy
   /// `overlayMgr_` first and use-after-free on window close with an open overlay.
@@ -154,13 +155,20 @@ void Window::postRedraw(unsigned int handle) {
   Application::instance().requestWindowRedraw(handle);
 }
 
-void Window::setClearColor(Color color) { d->clearColor_ = color; }
+void Window::setClearColor(Color color) {
+  d->clearColor_ = color;
+  d->hasCustomClearColor_ = true;
+}
 
 Color Window::clearColor() const { return d->clearColor_; }
 
 void Window::setTheme(Theme theme) {
+  Color const clearColor = theme.windowBackgroundColor;
   d->themeSignal_.set(std::move(theme));
   d->windowEnvironmentBinding_ = EnvironmentBinding{}.withSignal<ThemeKey>(d->themeSignal_);
+  if (!d->hasCustomClearColor_) {
+    d->clearColor_ = clearColor;
+  }
   requestRedraw();
 }
 

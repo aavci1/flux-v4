@@ -129,8 +129,8 @@ struct DensityPreviewRow : ViewModifiers<DensityPreviewRow> {
             ),
         }
             .padding(previewTheme.space3)
-            .fill(FillStyle::solid(Color::controlBackground()))
-            .stroke(StrokeStyle::solid(Color::separator(), 1.f))
+            .fill(Color::controlBackground())
+            .stroke(Color::separator(), 1.f)
             .cornerRadius(CornerRadius {previewTheme.radiusXLarge})
             .environment<ThemeKey>(previewTheme);
 
@@ -208,15 +208,15 @@ Element panel(Theme const &theme, Element content, float padding = -1.f) {
     float const resolvedPadding = padding >= 0.f ? padding : theme.space5;
     return std::move(content)
         .padding(resolvedPadding)
-        .fill(FillStyle::solid(Color::controlBackground()))
-        .stroke(StrokeStyle::solid(Color::separator(), 1.f))
+        .fill(Color::controlBackground())
+        .stroke(Color::separator(), 1.f)
         .cornerRadius(CornerRadius {theme.radiusXLarge});
 }
 
 Element divider(Theme const &theme, float width = 0.f) {
     Element line = Rectangle {}
                        .size(width, 1.f)
-                       .fill(FillStyle::solid(Color::separator()));
+                       .fill(Color::separator());
     if (width <= 0.f) {
         return line;
     }
@@ -229,7 +229,7 @@ Element accentDot(Color color, float size = 8.f, bool bordered = false) {
                       .fill(FillStyle::solid(color))
                       .cornerRadius(CornerRadius {size * 0.5f});
     if (bordered) {
-        return std::move(dot).stroke(StrokeStyle::solid(Color::separator(), 1.f));
+        return std::move(dot).stroke(Color::separator(), 1.f);
     }
     return dot;
 }
@@ -269,7 +269,7 @@ Element paletteSwatch(Theme const &theme, Color color, std::string_view step) {
                          );
 
     if (needsBorder) {
-        return std::move(swatch).stroke(StrokeStyle::solid(Color::separator(), 1.f));
+        return std::move(swatch).stroke(Color::separator(), 1.f);
     }
     return swatch;
 }
@@ -318,8 +318,8 @@ Element heroChip(Theme const &theme, std::string label, Color dotColor = Colors:
         .children = std::move(row),
     }
         .padding(5.f, theme.space3, 5.f, theme.space3)
-        .fill(FillStyle::solid(Color::controlBackground()))
-        .stroke(StrokeStyle::solid(Color::separator(), 1.f))
+        .fill(Color::controlBackground())
+        .stroke(Color::separator(), 1.f)
         .cornerRadius(CornerRadius {theme.radiusFull});
 }
 
@@ -330,7 +330,7 @@ Element statusBadge(Theme const &theme, std::string label, Color fill, Color tex
         .color = textColor,
     }
         .padding(4.f, theme.space2, 4.f, theme.space2)
-        .fill(FillStyle::solid(fill))
+        .fill(fill)
         .cornerRadius(CornerRadius {theme.radiusFull});
 }
 
@@ -499,8 +499,8 @@ Element radiusToken(Theme const &theme, std::string label, float radius, std::st
         .children = children(
             Rectangle {}
                 .size(44.f, 44.f)
-                .fill(FillStyle::solid(Color::selectedContentBackground()))
-                .stroke(StrokeStyle::solid(Color::accent(), 1.5f))
+                .fill(Color::selectedContentBackground())
+                .stroke(Color::accent(), 1.5f)
                 .cornerRadius(CornerRadius {radius}),
             Text {
                 .text = std::move(label) + "\n" + std::move(valueLabel),
@@ -597,8 +597,8 @@ Element makeToolbar(Theme const &theme, bool showNav, Bindable<int> activeNav, S
                         .color = Color::secondary(),
                     }
                         .padding(2.f, 7.f, 2.f, 7.f)
-                        .fill(FillStyle::solid(Color::controlBackground()))
-                        .stroke(StrokeStyle::solid(Color::separator(), 1.f))
+                        .fill(Color::controlBackground())
+                        .stroke(Color::separator(), 1.f)
                         .cornerRadius(CornerRadius {theme.radiusFull}),
                     Spacer {},
                     ToolbarNavButton {
@@ -644,10 +644,10 @@ Element makeToolbar(Theme const &theme, bool showNav, Bindable<int> activeNav, S
                 )
             }
                 .padding(theme.space4, theme.space6, theme.space4, theme.space6)
-                .fill(FillStyle::solid(Color::elevatedBackground())),
+                .fill(Color::elevatedBackground()),
             Rectangle {}
                 .size(0.f, 1.f)
-                .fill(FillStyle::solid(Color::separator()))
+                .fill(Color::separator())
         ),
     };
 }
@@ -1131,10 +1131,10 @@ struct ThemeDemoPage {
                     .children = children(std::move(content)),
                 }
                     .flex(1.f, 1.f, 0.f)
-                    .fill(FillStyle::solid(Color::windowBackground()))
+                    .fill(Color::windowBackground())
             ),
         }
-            .fill(FillStyle::solid(Color::windowBackground()));
+            .fill(Color::windowBackground());
     }
 };
 

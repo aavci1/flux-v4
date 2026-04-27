@@ -11,6 +11,7 @@
 #include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
+#include <Flux/UI/Views/ScrollView.hpp>
 #include <Flux/UI/Views/Show.hpp>
 
 #include <cstdint>
@@ -62,6 +63,16 @@ struct RuntimeHarness {
     event.handle = window.handle();
     event.key = key;
     event.modifiers = modifiers;
+    runtime.handleInput(event);
+  }
+
+  void scroll(flux::Point point, flux::Vec2 delta, bool precise = true) {
+    flux::InputEvent event{};
+    event.kind = flux::InputEvent::Kind::Scroll;
+    event.handle = window.handle();
+    event.position = {point.x, point.y};
+    event.scrollDelta = delta;
+    event.preciseScrollDelta = precise;
     runtime.handleInput(event);
   }
 
@@ -179,6 +190,27 @@ struct ConditionalHoverRoot {
     });
   }
 };
+
+struct ScrollProbeRoot {
+  flux::Reactive::Signal<flux::Point> offset;
+
+  flux::Element body() const {
+    return flux::ScrollView{
+        .axis = flux::ScrollAxis::Vertical,
+        .scrollOffset = offset,
+        .children = flux::children(
+            flux::Rectangle{}.size(100.f, 100.f),
+            flux::Rectangle{}.size(100.f, 100.f)),
+    };
+  }
+};
+
+void checkSameColor(flux::Color actual, flux::Color expected) {
+  CHECK(actual.r == doctest::Approx(expected.r));
+  CHECK(actual.g == doctest::Approx(expected.g));
+  CHECK(actual.b == doctest::Approx(expected.b));
+  CHECK(actual.a == doctest::Approx(expected.a));
+}
 
 void registerSaveAction(flux::Window& window) {
   window.registerAction("demo.save", flux::ActionDescriptor{
@@ -309,4 +341,28 @@ TEST_CASE("hover chain disposes signals on subtree unmount") {
 
   harness.pointerMove({100.f, 100.f});
   CHECK(hover.disposed());
+}
+
+TEST_CASE("runtime scroll dispatch reaches scroll view") {
+  RuntimeHarness harness;
+  flux::Reactive::Signal<flux::Point> offset{flux::Point{0.f, 0.f}};
+  harness.setRoot(ScrollProbeRoot{.offset = offset});
+
+  harness.scroll({10.f, 10.f}, {0.f, -12.f});
+
+  CHECK(offset.get().x == doctest::Approx(0.f));
+  CHECK(offset.get().y == doctest::Approx(12.f));
+}
+
+TEST_CASE("window clear color follows theme unless overridden") {
+  RuntimeHarness harness;
+  checkSameColor(harness.window.clearColor(), flux::Theme::light().windowBackgroundColor);
+
+  harness.window.setTheme(flux::Theme::dark());
+  checkSameColor(harness.window.clearColor(), flux::Theme::dark().windowBackgroundColor);
+
+  flux::Color const custom = flux::Color::hex(0x123456);
+  harness.window.setClearColor(custom);
+  harness.window.setTheme(flux::Theme::light());
+  checkSameColor(harness.window.clearColor(), custom);
 }
