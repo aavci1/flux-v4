@@ -18,6 +18,8 @@ struct MetalFrameRecorder {
   std::vector<MetalGlyphVertex> glyphVerts;
   std::vector<MetalGlyphVertexSource> glyphVertexSources;
   std::uint32_t glyphVertexCount = 0;
+  mutable void* preparedRectInstanceBuffer = nullptr;
+  mutable std::uint32_t preparedRectInstanceCapacity = 0;
   mutable void* preparedGlyphVertexBuffer = nullptr;
   mutable std::uint32_t preparedGlyphVertexCapacity = 0;
 

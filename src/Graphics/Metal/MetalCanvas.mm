@@ -504,8 +504,10 @@ public:
     debug::perf::recordFrameOps(frame_.rectOps.size(), frame_.imageOps.size(), frame_.pathOps.size(),
                                 frame_.glyphOps.size(), frame_.opOrder.size(), frame_.pathVerts.size(),
                                 frame_.glyphVertexCount);
+    std::uint32_t const uploadedRectInstances = metal_.uploadRectOps(frame_.rectOps);
     debug::perf::recordUploadBytes(debug::perf::RenderCounterKind::Rect,
-                                   frame_.rectOps.size() * sizeof(MetalRectInstance));
+                                   static_cast<std::uint64_t>(uploadedRectInstances) *
+                                       sizeof(MetalRectInstance));
     debug::perf::recordUploadBytes(debug::perf::RenderCounterKind::Image,
                                    frame_.imageOps.size() * sizeof(MetalImageInstance));
     debug::perf::recordUploadBytes(debug::perf::RenderCounterKind::Path,
@@ -514,7 +516,6 @@ public:
                                    static_cast<std::uint64_t>(frame_.glyphVertexCount) *
                                        sizeof(MetalGlyphVertex));
 
-    metal_.uploadRectOps(frame_.rectOps);
     metal_.uploadImageOps(frame_.imageOps);
     metal_.uploadPathVertices(frame_.pathVerts);
     metal_.uploadGlyphVertices(frame_);
@@ -575,9 +576,15 @@ public:
           }
           MetalRectOp const& o2 = frame_.rectOps[nextRef.index];
           MetalOpRef const prevRef = frame_.opOrder[j - 1];
-          if (o2.isLine != op.isLine || o2.blendMode != op.blendMode || !sameScissorForBatch(op, o2) ||
+          MetalRectOp const& prev = frame_.rectOps[prevRef.index];
+          std::uint32_t const prevInstanceIndex =
+              prev.externalInstanceBuffer ? prev.externalInstanceIndex : prev.arenaInstanceIndex;
+          std::uint32_t const nextInstanceIndex =
+              o2.externalInstanceBuffer ? o2.externalInstanceIndex : o2.arenaInstanceIndex;
+          if (o2.externalInstanceBuffer != op.externalInstanceBuffer ||
+              o2.isLine != op.isLine || o2.blendMode != op.blendMode || !sameScissorForBatch(op, o2) ||
               !sameRoundedClipForBatch(op, o2) || !sameTranslationForBatch(op, o2) ||
-              nextRef.index != prevRef.index + 1) {
+              nextInstanceIndex != prevInstanceIndex + 1) {
             break;
           }
           ++j;
@@ -586,20 +593,25 @@ public:
         setEncoderScissorForOp(enc, op, fullScissor, &lastScissor, &haveScissor);
         MetalDrawUniforms const uniforms = makeDrawUniforms(vw, vh, op.translation);
         setEncoderRoundedClipBuffer(enc, clipBuf, clipDst, &clipIndex, op.roundedClip);
+        id<MTLBuffer> instanceBuf =
+            op.externalInstanceBuffer ? (__bridge id<MTLBuffer>)op.externalInstanceBuffer
+                                      : metal_.instanceArenaBuffer();
+        std::uint32_t const instanceIndex =
+            op.externalInstanceBuffer ? op.externalInstanceIndex : op.arenaInstanceIndex;
         setEncoderDrawUniformBuffer(enc, uniformBuf, uniformDst, &uniformIndex, uniforms, 2);
         if (!op.isLine) {
           [enc setRenderPipelineState:metal_.rectPSO(op.blendMode)];
           [enc setVertexBuffer:metal_.quadBuffer() offset:0 atIndex:0];
-          const NSUInteger off = static_cast<NSUInteger>(ref.index) * sizeof(MetalRectInstance);
-          [enc setVertexBuffer:metal_.instanceArenaBuffer() offset:off atIndex:1];
+          const NSUInteger off = static_cast<NSUInteger>(instanceIndex) * sizeof(MetalRectInstance);
+          [enc setVertexBuffer:instanceBuf offset:off atIndex:1];
           [enc drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:kQuadStripCount
                   instanceCount:static_cast<NSUInteger>(runLen)];
           debug::perf::recordDrawCall(debug::perf::RenderCounterKind::Rect);
         } else {
           [enc setRenderPipelineState:metal_.linePSO(op.blendMode)];
           [enc setVertexBuffer:metal_.quadBuffer() offset:0 atIndex:0];
-          const NSUInteger off = static_cast<NSUInteger>(ref.index) * sizeof(MetalRectInstance);
-          [enc setVertexBuffer:metal_.instanceArenaBuffer() offset:off atIndex:1];
+          const NSUInteger off = static_cast<NSUInteger>(instanceIndex) * sizeof(MetalRectInstance);
+          [enc setVertexBuffer:instanceBuf offset:off atIndex:1];
           [enc drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:kQuadStripCount
                   instanceCount:static_cast<NSUInteger>(runLen)];
           debug::perf::recordDrawCall(debug::perf::RenderCounterKind::Rect);
@@ -1530,6 +1542,33 @@ public:
     updateClipScissor();
   }
 
+  void* preparedRectInstanceBuffer(MetalFrameRecorder const& recorded) {
+    std::uint32_t const instanceCount = static_cast<std::uint32_t>(recorded.rectOps.size());
+    if (instanceCount == 0) {
+      return nullptr;
+    }
+    if (recorded.preparedRectInstanceBuffer && recorded.preparedRectInstanceCapacity >= instanceCount) {
+      return recorded.preparedRectInstanceBuffer;
+    }
+    if (recorded.preparedRectInstanceBuffer) {
+      (void)(__bridge_transfer id<MTLBuffer>)recorded.preparedRectInstanceBuffer;
+      recorded.preparedRectInstanceBuffer = nullptr;
+      recorded.preparedRectInstanceCapacity = 0;
+    }
+    NSUInteger const bytes = static_cast<NSUInteger>(instanceCount * sizeof(MetalRectInstance));
+    id<MTLBuffer> buffer = [metal_.device() newBufferWithLength:bytes options:MTLResourceStorageModeShared];
+    if (!buffer) {
+      return nullptr;
+    }
+    auto* dst = static_cast<MetalRectInstance*>([buffer contents]);
+    for (std::size_t i = 0; i < recorded.rectOps.size(); ++i) {
+      dst[i] = recorded.rectOps[i].inst;
+    }
+    recorded.preparedRectInstanceBuffer = (__bridge_retained void*)buffer;
+    recorded.preparedRectInstanceCapacity = instanceCount;
+    return recorded.preparedRectInstanceBuffer;
+  }
+
   void* preparedGlyphVertexBuffer(MetalFrameRecorder const& recorded) {
     std::uint32_t const vertexCount = static_cast<std::uint32_t>(recorded.glyphVerts.size());
     if (vertexCount == 0) {
@@ -1558,6 +1597,7 @@ public:
   void replayRecordedOps(MetalFrameRecorder const& recorded, MetalRecorderSlice const& slice) {
     MetalFrameRecorder& frame = frame_;
     RecorderCapacitySnapshot const capacityBefore = snapshotRecorderCapacity(frame);
+    void* const externalRectBuffer = slice.rectCount > 0 ? preparedRectInstanceBuffer(recorded) : nullptr;
     std::uint32_t const framePathVertexBase = static_cast<std::uint32_t>(frame.pathVerts.size());
     std::uint32_t const frameGlyphVertexBase = frame.glyphVertexCount;
     std::uint32_t const frameRectBase = static_cast<std::uint32_t>(frame.rectOps.size());
@@ -1582,6 +1622,13 @@ public:
       frame.rectOps.insert(frame.rectOps.end(),
                             recorded.rectOps.begin() + static_cast<std::ptrdiff_t>(slice.rectStart),
                             recorded.rectOps.begin() + static_cast<std::ptrdiff_t>(slice.rectStart + slice.rectCount));
+      if (externalRectBuffer) {
+        for (std::uint32_t i = 0; i < slice.rectCount; ++i) {
+          MetalRectOp& op = frame.rectOps[frameRectBase + static_cast<std::size_t>(i)];
+          op.externalInstanceBuffer = externalRectBuffer;
+          op.externalInstanceIndex = slice.rectStart + i;
+        }
+      }
     }
     if (slice.imageCount > 0) {
       frame.imageOps.insert(frame.imageOps.end(),
@@ -1660,6 +1707,8 @@ public:
     RecorderCapacitySnapshot const capacityBefore = snapshotRecorderCapacity(frame);
     void* const externalGlyphBuffer =
         (slice.glyphVertexCount > 0 && opacityScale >= 0.9999f) ? preparedGlyphVertexBuffer(recorded) : nullptr;
+    void* const externalRectBuffer =
+        (slice.rectCount > 0 && opacityScale >= 0.9999f) ? preparedRectInstanceBuffer(recorded) : nullptr;
     std::uint32_t const framePathVertexBase = static_cast<std::uint32_t>(frame.pathVerts.size());
     std::uint32_t const frameGlyphVertexBase = frame.glyphVertexCount;
     std::uint32_t const frameRectBase = static_cast<std::uint32_t>(frame.rectOps.size());
@@ -1729,7 +1778,12 @@ public:
         MetalRectOp& op = frame.rectOps[static_cast<std::size_t>(frameRectBase) + i];
         (void)clipRect;
         op.translation = translation;
-        op.inst.strokeWidthOpacity.y *= opacityScale;
+        op.externalInstanceBuffer = externalRectBuffer;
+        if (externalRectBuffer) {
+          op.externalInstanceIndex = static_cast<std::uint32_t>(start + i);
+        } else {
+          op.inst.strokeWidthOpacity.y *= opacityScale;
+        }
         tagOpWithClip(op, clipScissorValid_, clipScissor_, clipRoundedStack_);
       }
     }

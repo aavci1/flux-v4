@@ -18,6 +18,8 @@ MetalFrameRecorder::MetalFrameRecorder(MetalFrameRecorder&& other) noexcept
       glyphVerts(std::move(other.glyphVerts)),
       glyphVertexSources(std::move(other.glyphVertexSources)),
       glyphVertexCount(other.glyphVertexCount),
+      preparedRectInstanceBuffer(other.preparedRectInstanceBuffer),
+      preparedRectInstanceCapacity(other.preparedRectInstanceCapacity),
       preparedGlyphVertexBuffer(other.preparedGlyphVertexBuffer),
       preparedGlyphVertexCapacity(other.preparedGlyphVertexCapacity) {
   other.rectOps.clear();
@@ -29,6 +31,8 @@ MetalFrameRecorder::MetalFrameRecorder(MetalFrameRecorder&& other) noexcept
   other.glyphVerts.clear();
   other.glyphVertexSources.clear();
   other.glyphVertexCount = 0;
+  other.preparedRectInstanceBuffer = nullptr;
+  other.preparedRectInstanceCapacity = 0;
   other.preparedGlyphVertexBuffer = nullptr;
   other.preparedGlyphVertexCapacity = 0;
 }
@@ -47,6 +51,8 @@ MetalFrameRecorder& MetalFrameRecorder::operator=(MetalFrameRecorder&& other) no
   glyphVerts = std::move(other.glyphVerts);
   glyphVertexSources = std::move(other.glyphVertexSources);
   glyphVertexCount = other.glyphVertexCount;
+  preparedRectInstanceBuffer = other.preparedRectInstanceBuffer;
+  preparedRectInstanceCapacity = other.preparedRectInstanceCapacity;
   preparedGlyphVertexBuffer = other.preparedGlyphVertexBuffer;
   preparedGlyphVertexCapacity = other.preparedGlyphVertexCapacity;
   other.rectOps.clear();
@@ -58,6 +64,8 @@ MetalFrameRecorder& MetalFrameRecorder::operator=(MetalFrameRecorder&& other) no
   other.glyphVerts.clear();
   other.glyphVertexSources.clear();
   other.glyphVertexCount = 0;
+  other.preparedRectInstanceBuffer = nullptr;
+  other.preparedRectInstanceCapacity = 0;
   other.preparedGlyphVertexBuffer = nullptr;
   other.preparedGlyphVertexCapacity = 0;
   return *this;
@@ -74,6 +82,11 @@ void MetalFrameRecorder::clear() {
     (void)(__bridge_transfer id<MTLBuffer>)preparedGlyphVertexBuffer;
     preparedGlyphVertexBuffer = nullptr;
     preparedGlyphVertexCapacity = 0;
+  }
+  if (preparedRectInstanceBuffer) {
+    (void)(__bridge_transfer id<MTLBuffer>)preparedRectInstanceBuffer;
+    preparedRectInstanceBuffer = nullptr;
+    preparedRectInstanceCapacity = 0;
   }
   rectOps.clear();
   imageOps.clear();

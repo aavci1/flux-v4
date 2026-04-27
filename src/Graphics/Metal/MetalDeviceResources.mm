@@ -454,15 +454,28 @@ void MetalDeviceResources::ensureRoundedClipArenaCapacity(std::uint32_t roundedC
   roundedClipArenaCapacities_[currentFrameIndex_] = newCap;
 }
 
-void MetalDeviceResources::uploadRectOps(const std::vector<MetalRectOp>& ops) {
-  ensureInstanceArenaCapacity(static_cast<std::uint32_t>(ops.size()));
-  if (ops.empty()) {
-    return;
+std::uint32_t MetalDeviceResources::uploadRectOps(std::vector<MetalRectOp>& ops) {
+  std::uint32_t uploadCount = 0;
+  for (MetalRectOp const& op : ops) {
+    if (!op.externalInstanceBuffer) {
+      ++uploadCount;
+    }
+  }
+  ensureInstanceArenaCapacity(uploadCount);
+  if (uploadCount == 0) {
+    return 0;
   }
   auto* dst = static_cast<MetalRectInstance*>([instanceArenas_[currentFrameIndex_] contents]);
+  std::uint32_t cursor = 0;
   for (std::size_t i = 0; i < ops.size(); ++i) {
-    dst[i] = ops[i].inst;
+    if (ops[i].externalInstanceBuffer) {
+      continue;
+    }
+    ops[i].arenaInstanceIndex = cursor;
+    dst[cursor] = ops[i].inst;
+    ++cursor;
   }
+  return uploadCount;
 }
 
 void MetalDeviceResources::uploadPathVertices(const std::vector<PathVertex>& pathVerts) {
