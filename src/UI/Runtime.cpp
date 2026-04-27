@@ -162,6 +162,20 @@ std::optional<HitTarget> hitOverlay(OverlayEntry const& entry, Point windowPoint
         .overlay = entry.id,
     };
   }
+  scenegraph::SceneNode const& root = entry.sceneGraph.root();
+  scenegraph::InteractionData const* rootInteraction = root.interaction();
+  if (rootInteraction && acceptTarget(*rootInteraction)) {
+    Size const rootSize = root.size();
+    if (windowPoint.x >= 0.f && windowPoint.y >= 0.f &&
+        windowPoint.x <= rootSize.width && windowPoint.y <= rootSize.height) {
+      return HitTarget{
+          .node = &root,
+          .interaction = rootInteraction,
+          .localPoint = windowPoint,
+          .overlay = entry.id,
+      };
+    }
+  }
   return std::nullopt;
 }
 

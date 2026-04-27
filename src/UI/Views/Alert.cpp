@@ -26,24 +26,15 @@ Element Alert::body() const {
   Color const msgC = resolveColor(messageColor, Color::secondary(), theme);
 
   return VStack{
-      .spacing = 0.f,
-      .alignment = Alignment::Center,
-      .children = children(
-          HStack{
-              .spacing = 0.f,
-              .children = children(
-                  VStack{
-                      .spacing = theme.space3,
-                      .alignment = Alignment::Start,
-                      .children = buildContent(titleC, msgC, theme),
-                  }
-                      .fill(FillStyle::solid(surface.cardFill))
-                      .stroke(StrokeStyle::solid(surface.cardStroke, 1.f))
-                      .size(cardWidth, 0.f)
-                      .cornerRadius(surface.cornerRadius)
-                      .padding(theme.space6)),
-          }),
-  };
+      .spacing = theme.space3,
+      .alignment = Alignment::Start,
+      .children = buildContent(titleC, msgC, theme),
+  }
+      .fill(FillStyle::solid(surface.cardFill))
+      .stroke(StrokeStyle::solid(surface.cardStroke, 1.f))
+      .size(cardWidth, 0.f)
+      .cornerRadius(surface.cornerRadius)
+      .padding(theme.space6);
 }
 
 std::vector<Element> Alert::buildContent(Color titleC, Color msgC, Theme const& theme) const {

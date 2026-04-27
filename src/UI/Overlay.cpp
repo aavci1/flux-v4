@@ -55,6 +55,23 @@ LayoutConstraints overlayConstraints(Size windowSize, OverlayConfig const& confi
   return constraints;
 }
 
+std::unique_ptr<scenegraph::InteractionData> makeBackdropInteraction(Window& window,
+                                                                     OverlayEntry& entry,
+                                                                     bool dismissOnTap) {
+  auto interaction = std::make_unique<scenegraph::InteractionData>();
+  interaction->cursor = Cursor::Arrow;
+  interaction->onScroll = [](Vec2) {};
+  if (dismissOnTap) {
+    OverlayId const id = entry.id;
+    interaction->onTap = [&window, id] {
+      window.removeOverlay(id);
+    };
+  } else {
+    interaction->onTap = [] {};
+  }
+  return interaction;
+}
+
 void insertBackdrop(scenegraph::GroupNode& root, OverlayEntry& entry, Size windowSize,
                     Window& window, bool dismissOnTap) {
   float const ox = -entry.resolvedFrame.x;
@@ -65,16 +82,7 @@ void insertBackdrop(scenegraph::GroupNode& root, OverlayEntry& entry, Size windo
   root.appendChild(std::move(backdrop));
 
   auto capture = std::make_unique<scenegraph::RectNode>(Rect{ox, oy, windowSize.width, windowSize.height});
-  auto interaction = std::make_unique<scenegraph::InteractionData>();
-  if (dismissOnTap) {
-    OverlayId const id = entry.id;
-    interaction->onTap = [&window, id] {
-      window.removeOverlay(id);
-    };
-  } else {
-    interaction->onTap = [] {};
-  }
-  capture->setInteraction(std::move(interaction));
+  capture->setInteraction(makeBackdropInteraction(window, entry, dismissOnTap));
   root.appendChild(std::move(capture));
 }
 
@@ -162,10 +170,18 @@ void OverlayManager::rebuild(Size windowSize, Runtime& runtime) {
     auto root = std::make_unique<scenegraph::GroupNode>(
         Rect{0.f, 0.f, std::max(windowSize.width, entry.resolvedFrame.width),
              std::max(windowSize.height, entry.resolvedFrame.height)});
+    bool capturesBackdrop = false;
+    bool dismissBackdropTap = false;
     if (entry.config.modal) {
       insertBackdrop(*root, entry, windowSize, runtime.window(), false);
+      capturesBackdrop = true;
     } else if (entry.config.backdropColor.a > 0.001f) {
       insertBackdrop(*root, entry, windowSize, runtime.window(), entry.config.dismissOnOutsideTap);
+      capturesBackdrop = true;
+      dismissBackdropTap = entry.config.dismissOnOutsideTap;
+    }
+    if (capturesBackdrop) {
+      root->setInteraction(makeBackdropInteraction(runtime.window(), entry, dismissBackdropTap));
     }
     if (contentNode) {
       root->appendChild(std::move(contentNode));
