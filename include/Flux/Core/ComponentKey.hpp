@@ -46,6 +46,8 @@ public:
 
   ~ComponentKey();
 
+  [[nodiscard]] static ComponentKey fromScope(void const* scope);
+
   [[nodiscard]] std::size_t size() const noexcept { return size_; }
   [[nodiscard]] bool empty() const noexcept { return size_ == 0; }
 

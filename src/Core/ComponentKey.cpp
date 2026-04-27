@@ -4,6 +4,7 @@
 #include "Debug/PerfCounters.hpp"
 
 #include <cassert>
+#include <cstdint>
 #include <thread>
 
 namespace flux {
@@ -247,6 +248,30 @@ ComponentKey& ComponentKey::operator=(ComponentKey&& other) noexcept {
 }
 
 ComponentKey::~ComponentKey() = default;
+
+ComponentKey ComponentKey::fromScope(void const* scope) {
+  if (!scope) {
+    return {};
+  }
+
+  std::uint64_t bits = static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(scope));
+  bits ^= bits >> 33U;
+  bits *= 0xff51afd7ed558ccdull;
+  bits ^= bits >> 33U;
+  bits *= 0xc4ceb9fe1a85ec53ull;
+  bits ^= bits >> 33U;
+  if (bits == 0) {
+    bits = 1;
+  }
+  LocalId scopeId;
+  scopeId.kind = LocalId::Kind::Keyed;
+  scopeId.value = bits;
+
+  return ComponentKey{
+      LocalId::fromString("__flux_scope__"),
+      scopeId,
+  };
+}
 
 void ComponentKey::clear() noexcept {
   handle_ = kRootHandle;

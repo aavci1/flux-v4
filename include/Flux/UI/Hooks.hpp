@@ -8,6 +8,7 @@
 #include <Flux/Reactive/Computed.hpp>
 #include <Flux/Reactive/Effect.hpp>
 #include <Flux/Reactive/Signal.hpp>
+#include <Flux/Core/ComponentKey.hpp>
 #include <Flux/Detail/Runtime.hpp>
 #include <Flux/UI/Environment.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
@@ -84,32 +85,49 @@ inline std::vector<InteractionSignalBundle const*>& interactionSignalMountStack(
   return stack;
 }
 
+inline std::vector<ComponentKey const*>& interactionScopeKeyMountStack() {
+  static thread_local std::vector<ComponentKey const*> stack;
+  return stack;
+}
+
 inline InteractionSignalBundle const* currentInteractionSignals() {
   auto& stack = interactionSignalMountStack();
   return stack.empty() ? nullptr : stack.back();
 }
 
+inline ComponentKey const* currentInteractionScopeKey() {
+  auto& stack = interactionScopeKeyMountStack();
+  return stack.empty() ? nullptr : stack.back();
+}
+
 class HookInteractionSignalScope {
 public:
-  explicit HookInteractionSignalScope(Reactive::Scope& owner) {
+  explicit HookInteractionSignalScope(Reactive::Scope& owner)
+      : scopeKey_(ComponentKey::fromScope(owner.state())) {
     auto const it = ownerInteractionSignals().find(owner.state());
     if (it != ownerInteractionSignals().end()) {
       signals_ = &it->second.signals;
     }
     interactionSignalMountStack().push_back(signals_);
+    interactionScopeKeyMountStack().push_back(&scopeKey_);
   }
 
   HookInteractionSignalScope(HookInteractionSignalScope const&) = delete;
   HookInteractionSignalScope& operator=(HookInteractionSignalScope const&) = delete;
 
   ~HookInteractionSignalScope() {
-    auto& stack = interactionSignalMountStack();
-    if (!stack.empty()) {
-      stack.pop_back();
+    auto& signalStack = interactionSignalMountStack();
+    if (!signalStack.empty()) {
+      signalStack.pop_back();
+    }
+    auto& keyStack = interactionScopeKeyMountStack();
+    if (!keyStack.empty()) {
+      keyStack.pop_back();
     }
   }
 
 private:
+  ComponentKey scopeKey_;
   InteractionSignalBundle const* signals_ = nullptr;
 };
 
@@ -334,8 +352,10 @@ inline void useViewAction(std::string const& name, std::function<void()> handler
   if (!runtime) {
     return;
   }
+  Reactive::detail::ScopeState* scope = Reactive::detail::sCurrentOwner;
+  ComponentKey const key = scope ? ComponentKey::fromScope(scope) : ComponentKey{};
   ActionId const id = runtime->actionRegistry().registerViewClaim(
-      ComponentKey{}, name, std::move(handler), std::move(isEnabled));
+      key, name, std::move(handler), std::move(isEnabled));
   Reactive::onCleanup([runtime, id] {
     runtime->actionRegistry().unregister(id);
   });

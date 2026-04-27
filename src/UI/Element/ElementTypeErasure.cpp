@@ -340,7 +340,15 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
   auto* rawWrapper = wrapper.get();
   if (modifiers.hasInteraction()) {
     auto interaction = std::make_unique<scenegraph::InteractionData>();
-    interaction->stableTargetKey = ctx.measureContext().currentElementKey();
+    if (ComponentKey const* scopeKey = detail::currentInteractionScopeKey()) {
+      ComponentKey targetKey = *scopeKey;
+      for (LocalId const id : ctx.measureContext().currentElementKey().materialize()) {
+        targetKey.push_back(id);
+      }
+      interaction->stableTargetKey = std::move(targetKey);
+    } else {
+      interaction->stableTargetKey = ctx.measureContext().currentElementKey();
+    }
     interaction->onTap = modifiers.onTap;
     interaction->onPointerEnter = modifiers.onPointerEnter;
     interaction->onPointerExit = modifiers.onPointerExit;
