@@ -36,11 +36,12 @@ Completed so far:
 - Relayout architecture: retained-tree resize relayout, prepared render-op replay at current positions, retained stack sizing fixes, text-position preservation, scale binding survival across relayout, and bounded reactive size propagation.
 - Ownership and retained-build correctness: composite body measurement effects scoped, composite bodies materialized once, `useState` body-once invariant documented/asserted, child mount contexts split into shared/owned scope paths.
 - Reactivity cleanup: legacy `observe` callbacks removed, computed dirty propagation restored, transition/effect interaction isolated, and deferred diamond-poll revisit TODO documented with profiling rationale.
-- Control-flow/layout fixes: collapsed control flow remains mounted for layout updates, For row measurement is retained/cached, stale `SceneBuilder` and `MeasureLayoutCache` artifacts removed.
+- Control-flow/layout fixes: collapsed control flow remains mounted for layout updates, For row measurement is retained/cached, stale `SceneBuilder`, `MeasureLayoutCache`, cursor-controller, text-edit-behavior, leaf-bounds, and grid-layout artifacts removed.
 - Input/action cutover: focus, keyboard-focus, hover, and press hooks wired to runtime interaction signals; view/window action hooks wired to the registry with scope cleanup.
 - Performance hardening: scene-graph plumbing callbacks moved to `SmallFn`, environment replay skipped for independent bindings, environment snapshot replay borrows captured layers, and real `/usr/bin/sample` AmbientLoopLab data recorded.
+- Release-prep scan: `scripts/check_stale_symbols.sh` now checks removed SceneBuilder artifacts, unlisted implementation sources, declaration-only public headers, and unmatched forward declarations.
 
-Remaining release-prep work is tracked by the v5 action items list, including the stricter stale-symbol scan and any follow-up perf target from the latest AmbientLoopLab sample.
+Remaining release-prep work is tracked by the v5 action items list, including any follow-up perf target from the latest AmbientLoopLab sample.
 
 ## Latest Validation
 
@@ -69,4 +70,4 @@ Additional validation:
 - `build-stage9-ubsan`: test build and `ctest` passed.
 - `build-stage9-tsan`: test build and `ctest` passed.
 - `git diff --check` passed.
-- The final stale-symbol scan over source, tests, examples, docs, README, and CMake returned zero hits.
+- `scripts/check_stale_symbols.sh` passed.

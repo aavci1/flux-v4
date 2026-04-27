@@ -3,7 +3,6 @@
 #include <Flux/UI/Views/Popover.hpp>
 #include <Flux/UI/Views/PopoverCalloutShape.hpp>
 
-#include "UI/Layout/Algorithms/GridLayout.hpp"
 #include "UI/Layout/Algorithms/OverlayLayout.hpp"
 #include "UI/Layout/Algorithms/ScrollLayout.hpp"
 #include "UI/Layout/Algorithms/StackLayout.hpp"
@@ -143,84 +142,6 @@ TEST_CASE("StackLayout: horizontal center alignment uses assigned cross size") {
   CHECK(layout.slots[0].origin.y == doctest::Approx(54.f));
   CHECK(layout.slots[1].origin.y == doctest::Approx(32.f));
   CHECK(layout.slots[2].origin.y == doctest::Approx(46.f));
-}
-
-TEST_CASE("GridLayout: intrinsic sizing uses widest column and tallest row") {
-  GridTrackMetrics const metrics =
-      resolveGridTrackMetrics(2, 3, 8.f, 6.f, 0.f, false, 0.f, false);
-  std::array<Size, 3> childSizes{{
-      Size{20.f, 10.f},
-      Size{40.f, 12.f},
-      Size{30.f, 18.f},
-  }};
-
-  GridLayoutResult const layout =
-      layoutGrid(metrics, 8.f, 6.f, 0.f, false, 0.f, false, childSizes);
-  REQUIRE(layout.slots.size() == 3);
-  CHECK(layout.containerSize.width == doctest::Approx(78.f));
-  CHECK(layout.containerSize.height == doctest::Approx(36.f));
-  CHECK(layout.slots[2].x == doctest::Approx(0.f));
-  CHECK(layout.slots[2].y == doctest::Approx(18.f));
-}
-
-TEST_CASE("GridLayout: assigned outer height does not flatten per-row intrinsic heights") {
-  GridTrackMetrics const metrics =
-      resolveGridTrackMetrics(2, 4, 8.f, 6.f, 96.f, true, 100.f, true);
-  std::array<Size, 4> childSizes{{
-      Size{44.f, 12.f},
-      Size{44.f, 12.f},
-      Size{44.f, 36.f},
-      Size{44.f, 12.f},
-  }};
-
-  LayoutConstraints childConstraints{};
-  childConstraints.maxWidth = 96.f;
-  childConstraints.maxHeight = 100.f;
-  childConstraints = gridChildConstraints(childConstraints, metrics);
-  CHECK(std::isinf(childConstraints.maxHeight));
-
-  GridLayoutResult const layout =
-      layoutGrid(metrics, 8.f, 6.f, 96.f, true, 100.f, true, childSizes);
-  REQUIRE(layout.rowHeights.size() == 2);
-  CHECK(layout.rowHeights[0] == doctest::Approx(12.f));
-  CHECK(layout.rowHeights[1] == doctest::Approx(36.f));
-  CHECK(layout.slots[2].y == doctest::Approx(18.f));
-  CHECK(layout.slots[2].height == doctest::Approx(36.f));
-  CHECK(layout.containerSize.height == doctest::Approx(100.f));
-}
-
-TEST_CASE("GridLayout: column spans pack rows and preserve equal-width columns") {
-  std::array<std::size_t, 7> spans{{1u, 1u, 1u, 1u, 4u, 2u, 2u}};
-  GridTrackMetrics const metrics =
-      resolveGridTrackMetrics(4, spans, 8.f, 6.f, 424.f, true, 0.f, false);
-  std::array<Size, 7> childSizes{{
-      Size{100.f, 12.f},
-      Size{100.f, 12.f},
-      Size{100.f, 12.f},
-      Size{100.f, 12.f},
-      Size{424.f, 20.f},
-      Size{208.f, 16.f},
-      Size{208.f, 18.f},
-  }};
-
-  LayoutConstraints constraints{};
-  constraints.maxWidth = 424.f;
-  LayoutConstraints const spanChildConstraints = gridChildConstraints(constraints, metrics, 4);
-  CHECK(spanChildConstraints.maxWidth == doctest::Approx(424.f));
-
-  GridLayoutResult const layout =
-      layoutGrid(metrics, 8.f, 6.f, 424.f, true, 0.f, false, childSizes);
-  REQUIRE(layout.slots.size() == 7);
-  CHECK(layout.slots[4].x == doctest::Approx(0.f));
-  CHECK(layout.slots[4].y == doctest::Approx(18.f));
-  CHECK(layout.slots[4].width == doctest::Approx(424.f));
-  CHECK(layout.slots[5].x == doctest::Approx(0.f));
-  CHECK(layout.slots[5].y == doctest::Approx(44.f));
-  CHECK(layout.slots[5].width == doctest::Approx(208.f));
-  CHECK(layout.slots[6].x == doctest::Approx(216.f));
-  CHECK(layout.slots[6].y == doctest::Approx(44.f));
-  CHECK(layout.slots[6].width == doctest::Approx(208.f));
-  CHECK(layout.containerSize.width == doctest::Approx(424.f));
 }
 
 TEST_CASE("ScrollLayout: clamps offsets and assigns vertical child slots") {
