@@ -281,6 +281,7 @@ if(FLUX_BUILD_TESTS)
     tests/SceneGraphTests.cpp
     tests/ParagraphCacheTests.cpp
     tests/ParagraphCacheIncrementalTests.cpp
+    tests/RuntimeInputTests.cpp
     tests/RuntimeTests.cpp
     tests/ShowTests.cpp
     tests/ThemeReactivityTests.cpp
