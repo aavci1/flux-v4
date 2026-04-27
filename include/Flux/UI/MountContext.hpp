@@ -28,7 +28,7 @@ public:
                MeasureContext& measureContext, LayoutConstraints constraints,
                LayoutHints hints = {}, std::function<void()> requestRedraw = {});
 
-  Reactive::Scope& owner() const noexcept { return owner_; }
+  Reactive::Scope& owner() const noexcept { return *owner_; }
   EnvironmentStack& environment() const noexcept { return environment_; }
   TextSystem& textSystem() const noexcept { return textSystem_; }
   MeasureContext& measureContext() const noexcept { return measureContext_; }
@@ -40,7 +40,13 @@ public:
   void requestRedraw() const;
 
 private:
-  Reactive::Scope& owner_;
+  MountContext(std::shared_ptr<Reactive::Scope> owner, EnvironmentStack& environment,
+               TextSystem& textSystem, MeasureContext& measureContext,
+               LayoutConstraints constraints, LayoutHints hints,
+               std::function<void()> requestRedraw);
+
+  std::shared_ptr<Reactive::Scope> ownedOwner_;
+  Reactive::Scope* owner_;
   EnvironmentStack& environment_;
   TextSystem& textSystem_;
   MeasureContext& measureContext_;

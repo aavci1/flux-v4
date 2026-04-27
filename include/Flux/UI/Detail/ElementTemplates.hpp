@@ -125,13 +125,8 @@ std::unique_ptr<scenegraph::SceneNode> Element::Model<C>::mount(MountContext& ct
                        }) {
     return value.mount(ctx);
   } else if constexpr (BodyComponent<C>) {
-    auto childScope = std::make_shared<Reactive::Scope>();
-    ctx.owner().onCleanup([childScope] {
-      childScope->dispose();
-    });
-    MountContext childCtx{*childScope, ctx.environment(), ctx.textSystem(), ctx.measureContext(),
-                          ctx.constraints(), ctx.hints(), ctx.redrawCallback()};
-    return Reactive::withOwner(*childScope, [&] {
+    MountContext childCtx = ctx.child(ctx.constraints(), ctx.hints());
+    return Reactive::withOwner(childCtx.owner(), [&] {
       detail::HookLayoutScope const hookScope{ctx.constraints()};
       Element child{value.body()};
       return child.mount(childCtx);

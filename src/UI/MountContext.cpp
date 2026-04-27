@@ -257,7 +257,20 @@ MountContext::MountContext(Reactive::Scope& owner, EnvironmentStack& environment
                            TextSystem& textSystem, MeasureContext& measureContext,
                            LayoutConstraints constraints, LayoutHints hints,
                            std::function<void()> requestRedraw)
-    : owner_(owner)
+    : owner_(&owner)
+    , environment_(environment)
+    , textSystem_(textSystem)
+    , measureContext_(measureContext)
+    , constraints_(constraints)
+    , hints_(hints)
+    , requestRedraw_(std::move(requestRedraw)) {}
+
+MountContext::MountContext(std::shared_ptr<Reactive::Scope> owner, EnvironmentStack& environment,
+                           TextSystem& textSystem, MeasureContext& measureContext,
+                           LayoutConstraints constraints, LayoutHints hints,
+                           std::function<void()> requestRedraw)
+    : ownedOwner_(std::move(owner))
+    , owner_(ownedOwner_.get())
     , environment_(environment)
     , textSystem_(textSystem)
     , measureContext_(measureContext)
@@ -266,7 +279,11 @@ MountContext::MountContext(Reactive::Scope& owner, EnvironmentStack& environment
     , requestRedraw_(std::move(requestRedraw)) {}
 
 MountContext MountContext::child(LayoutConstraints constraints, LayoutHints hints) const {
-  return MountContext{owner_, environment_, textSystem_, measureContext_, constraints,
+  auto childScope = std::make_shared<Reactive::Scope>();
+  owner().onCleanup([childScope] {
+    childScope->dispose();
+  });
+  return MountContext{std::move(childScope), environment_, textSystem_, measureContext_, constraints,
                       hints, requestRedraw_};
 }
 

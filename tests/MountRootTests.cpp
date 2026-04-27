@@ -144,6 +144,34 @@ TEST_CASE("modifier envelopes honor fixed viewport constraints") {
   CHECK(sceneGraph.root().children()[0]->size() == flux::Size{24.f, 12.f});
 }
 
+TEST_CASE("MountContext child creates a scoped owner") {
+  flux::Reactive::Scope rootScope;
+  flux::EnvironmentStack environment;
+  FakeTextSystem textSystem;
+  flux::MeasureContext measureContext{textSystem};
+  flux::MountContext rootContext{
+      rootScope,
+      environment,
+      textSystem,
+      measureContext,
+      flux::LayoutConstraints{.maxWidth = 100.f, .maxHeight = 100.f},
+  };
+
+  int childCleanups = 0;
+  {
+    flux::MountContext childContext =
+        rootContext.child(flux::LayoutConstraints{.maxWidth = 40.f, .maxHeight = 20.f});
+    CHECK(&childContext.owner() != &rootContext.owner());
+    childContext.owner().onCleanup([&childCleanups] {
+      ++childCleanups;
+    });
+  }
+
+  CHECK(childCleanups == 0);
+  rootScope.dispose();
+  CHECK(childCleanups == 1);
+}
+
 TEST_CASE("MountRoot resize relayouts without remounting root state") {
   int bodyCalls = 0;
 
