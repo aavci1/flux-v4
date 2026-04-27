@@ -831,7 +831,7 @@ struct EffectState final : detail::Computation {
     detail::scheduleEffect(this);
   }
 
-  SmallFn<void()> fn;
+  BindingFn fn;
 };
 
 namespace detail {

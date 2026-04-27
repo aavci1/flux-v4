@@ -24,9 +24,12 @@ class SceneNode;
 
 class MountContext {
 public:
+  using EnvironmentSnapshot = std::shared_ptr<std::vector<EnvironmentLayer> const>;
+
   MountContext(Reactive::Scope& owner, EnvironmentStack& environment, TextSystem& textSystem,
                MeasureContext& measureContext, LayoutConstraints constraints,
-               LayoutHints hints = {}, Reactive::SmallFn<void()> requestRedraw = {});
+               LayoutHints hints = {}, Reactive::SmallFn<void()> requestRedraw = {},
+               EnvironmentSnapshot environmentSnapshot = {});
 
   Reactive::Scope& owner() const noexcept { return *owner_; }
   EnvironmentStack& environment() const noexcept { return environment_; }
@@ -35,6 +38,7 @@ public:
   LayoutConstraints const& constraints() const noexcept { return constraints_; }
   LayoutHints const& hints() const noexcept { return hints_; }
   Reactive::SmallFn<void()> const& redrawCallback() const noexcept { return requestRedraw_; }
+  EnvironmentSnapshot const& environmentSnapshot() const noexcept { return environmentSnapshot_; }
 
   MountContext childWithSharedScope(LayoutConstraints constraints, LayoutHints hints = {}) const;
   MountContext childWithOwnScope(LayoutConstraints constraints, LayoutHints hints = {}) const;
@@ -45,7 +49,8 @@ private:
   MountContext(std::shared_ptr<Reactive::Scope> owner, EnvironmentStack& environment,
                TextSystem& textSystem, MeasureContext& measureContext,
                LayoutConstraints constraints, LayoutHints hints,
-               Reactive::SmallFn<void()> requestRedraw);
+               Reactive::SmallFn<void()> requestRedraw,
+               EnvironmentSnapshot environmentSnapshot);
 
   std::shared_ptr<Reactive::Scope> ownedOwner_;
   Reactive::Scope* owner_;
@@ -55,6 +60,7 @@ private:
   LayoutConstraints constraints_;
   LayoutHints hints_;
   Reactive::SmallFn<void()> requestRedraw_;
+  EnvironmentSnapshot environmentSnapshot_;
 };
 
 namespace detail {

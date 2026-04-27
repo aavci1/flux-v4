@@ -30,6 +30,8 @@ namespace detail {
 struct SceneNodeAccess;
 }
 
+using RelayoutFn = Reactive::SmallFn<void(LayoutConstraints const&), 64>;
+
 enum class SceneNodeKind : std::uint8_t {
   Group,
   Rect,
@@ -76,7 +78,7 @@ class SceneNode {
     void setLayoutConstraints(LayoutConstraints constraints) noexcept;
     bool hasLayoutConstraints() const noexcept;
     LayoutConstraints layoutConstraints() const noexcept;
-    void setRelayout(Reactive::SmallFn<void(LayoutConstraints const&)> relayout);
+    void setRelayout(RelayoutFn relayout);
     bool relayoutStoredConstraints();
     bool relayout(LayoutConstraints const& constraints);
 
@@ -120,7 +122,7 @@ class SceneNode {
     SceneNode* parent_ = nullptr;
     std::vector<std::unique_ptr<SceneNode>> children_{};
     std::unique_ptr<InteractionData> interaction_{};
-    Reactive::SmallFn<void(LayoutConstraints const&)> relayout_{};
+    RelayoutFn relayout_{};
     mutable bool ownPaintingDirty_ = true;
     mutable bool subtreeDirty_ = true;
     mutable std::unique_ptr<PreparedRenderOps> preparedRenderOps_{};

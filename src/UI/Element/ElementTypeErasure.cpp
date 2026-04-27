@@ -146,9 +146,9 @@ private:
 template<typename T, typename Setter>
 void installBinding(MountContext& ctx, Reactive::Bindable<T> binding, Setter setter) {
   EnvironmentStack* environment = &ctx.environment();
-  std::vector<EnvironmentLayer> environmentLayers = environment->snapshot();
+  MountContext::EnvironmentSnapshot environmentSnapshot = ctx.environmentSnapshot();
   if (!binding.isReactive()) {
-    ScopedEnvironmentSnapshot environmentScope{*environment, environmentLayers};
+    ScopedEnvironmentSnapshot environmentScope{*environment, *environmentSnapshot};
     setter(binding.evaluate());
     return;
   }
@@ -158,7 +158,7 @@ void installBinding(MountContext& ctx, Reactive::Bindable<T> binding, Setter set
   Reactive::withOwner(ctx.owner(), [&] {
     Reactive::Effect([binding = std::move(binding), setter = std::move(setter),
                        requestRedraw = std::move(requestRedraw), environment,
-                       environmentLayers = std::move(environmentLayers),
+                       environmentSnapshot = std::move(environmentSnapshot),
                        lastValue = std::optional<T>{},
                        firstRun = true,
                        tracksEnvironment = initiallyTracksEnvironment]() mutable {
@@ -174,7 +174,7 @@ void installBinding(MountContext& ctx, Reactive::Bindable<T> binding, Setter set
       };
 
       auto evaluateWithEnvironment = [&] {
-        ScopedEnvironmentSnapshot environmentScope{*environment, environmentLayers};
+        ScopedEnvironmentSnapshot environmentScope{*environment, *environmentSnapshot};
         detail::EnvironmentReadTrackingScope environmentReads;
         bool const changed = applyValue(binding.evaluate());
         if (environmentReads.observed()) {

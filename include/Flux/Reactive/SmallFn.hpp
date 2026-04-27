@@ -24,6 +24,9 @@ struct IsStdFunction<std::function<R(Args...)>> : std::true_type {};
 template <typename Signature, std::size_t InlineSize = 32>
 class SmallFn;
 
+/// Wider inline budget for framework-generated UI binding closures that capture retained-node plumbing.
+using BindingFn = SmallFn<void(), 64>;
+
 template <typename R, typename... Args, std::size_t InlineSize>
 class SmallFn<R(Args...), InlineSize> {
 public:

@@ -92,8 +92,10 @@ controlMountElement(Element const& element, Reactive::Scope& owner,
                     Reactive::SmallFn<void()> const& requestRedraw) {
   ScopedEnvironmentSnapshot environmentScope{environment, environmentLayers};
   MeasureContext measureContext{textSystem};
+  auto environmentSnapshot =
+      std::make_shared<std::vector<EnvironmentLayer> const>(environmentLayers);
   MountContext mountContext{owner, environment, textSystem, measureContext, constraints,
-                            hints, requestRedraw};
+                            hints, requestRedraw, std::move(environmentSnapshot)};
   return Reactive::withOwner(owner, [&] {
     HookInteractionSignalScope const interactionScope{owner};
     return element.mount(mountContext);

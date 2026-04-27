@@ -263,19 +263,24 @@ void rewindMeasuredChildren(MountContext& ctx) {
 MountContext::MountContext(Reactive::Scope& owner, EnvironmentStack& environment,
                            TextSystem& textSystem, MeasureContext& measureContext,
                            LayoutConstraints constraints, LayoutHints hints,
-                           Reactive::SmallFn<void()> requestRedraw)
+                           Reactive::SmallFn<void()> requestRedraw,
+                           EnvironmentSnapshot environmentSnapshot)
     : owner_(&owner)
     , environment_(environment)
     , textSystem_(textSystem)
     , measureContext_(measureContext)
     , constraints_(constraints)
     , hints_(hints)
-    , requestRedraw_(std::move(requestRedraw)) {}
+    , requestRedraw_(std::move(requestRedraw))
+    , environmentSnapshot_(environmentSnapshot
+          ? std::move(environmentSnapshot)
+          : std::make_shared<std::vector<EnvironmentLayer> const>(environment.snapshot())) {}
 
 MountContext::MountContext(std::shared_ptr<Reactive::Scope> owner, EnvironmentStack& environment,
                            TextSystem& textSystem, MeasureContext& measureContext,
                            LayoutConstraints constraints, LayoutHints hints,
-                           Reactive::SmallFn<void()> requestRedraw)
+                           Reactive::SmallFn<void()> requestRedraw,
+                           EnvironmentSnapshot environmentSnapshot)
     : ownedOwner_(std::move(owner))
     , owner_(ownedOwner_.get())
     , environment_(environment)
@@ -283,12 +288,15 @@ MountContext::MountContext(std::shared_ptr<Reactive::Scope> owner, EnvironmentSt
     , measureContext_(measureContext)
     , constraints_(constraints)
     , hints_(hints)
-    , requestRedraw_(std::move(requestRedraw)) {}
+    , requestRedraw_(std::move(requestRedraw))
+    , environmentSnapshot_(environmentSnapshot
+          ? std::move(environmentSnapshot)
+          : std::make_shared<std::vector<EnvironmentLayer> const>(environment.snapshot())) {}
 
 MountContext MountContext::childWithSharedScope(LayoutConstraints constraints,
                                                 LayoutHints hints) const {
   return MountContext{owner(), environment_, textSystem_, measureContext_, constraints,
-                      hints, requestRedraw_};
+                      hints, requestRedraw_, environmentSnapshot_};
 }
 
 MountContext MountContext::childWithOwnScope(LayoutConstraints constraints,
@@ -298,7 +306,7 @@ MountContext MountContext::childWithOwnScope(LayoutConstraints constraints,
     childScope->dispose();
   });
   return MountContext{std::move(childScope), environment_, textSystem_, measureContext_, constraints,
-                      hints, requestRedraw_};
+                      hints, requestRedraw_, environmentSnapshot_};
 }
 
 void MountContext::requestRedraw() const {

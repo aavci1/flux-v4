@@ -14,7 +14,6 @@
 #include <typeinfo>
 #include <typeindex>
 #include <type_traits>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -70,7 +69,7 @@ public:
     static_assert(std::is_copy_constructible_v<T>,
         "Environment values must be copy-constructible. EnvironmentLayer copies values during stack push/pop.");
 
-    Slot& slot = values_[std::type_index(typeid(T))];
+    Slot& slot = upsert(std::type_index(typeid(T)));
     slot.value = std::move(value);
     slot.equals = &slotEquals<T>;
   }
@@ -84,21 +83,21 @@ public:
     signal.setUntrackedReadWarning(
         "useEnvironment value read outside tracking context - read inside a Bindable closure or Effect body for reactive updates.");
 #endif
-    Slot& slot = values_[std::type_index(typeid(T))];
+    Slot& slot = upsert(std::type_index(typeid(T)));
     slot.value = std::move(signal);
     slot.equals = &signalSlotEquals<T>;
   }
 
   template<typename T>
   T const* get() const {
-    auto it = values_.find(std::type_index(typeid(T)));
-    if (it == values_.end()) {
+    Slot const* slot = find(std::type_index(typeid(T)));
+    if (!slot) {
       return nullptr;
     }
-    if (T const* value = std::any_cast<T>(&it->second.value)) {
+    if (T const* value = std::any_cast<T>(&slot->value)) {
       return value;
     }
-    if (auto const* signal = std::any_cast<Reactive::Signal<T>>(&it->second.value)) {
+    if (auto const* signal = std::any_cast<Reactive::Signal<T>>(&slot->value)) {
       return &signal->peek();
     }
     return nullptr;
@@ -106,29 +105,30 @@ public:
 
   template<typename T>
   Reactive::Signal<T> const* signal() const {
-    auto it = values_.find(std::type_index(typeid(T)));
-    if (it == values_.end()) {
+    Slot const* slot = find(std::type_index(typeid(T)));
+    if (!slot) {
       return nullptr;
     }
-    return std::any_cast<Reactive::Signal<T>>(&it->second.value);
+    return std::any_cast<Reactive::Signal<T>>(&slot->value);
   }
 
-  bool empty() const { return values_.empty(); }
-  std::size_t size() const { return values_.size(); }
+  bool empty() const { return entries_.empty(); }
+  std::size_t size() const { return entries_.size(); }
 
   bool operator==(EnvironmentLayer const& other) const {
-    if (values_.size() != other.values_.size()) {
+    if (entries_.size() != other.entries_.size()) {
       return false;
     }
-    for (auto const& [type, slot] : values_) {
-      auto it = other.values_.find(type);
-      if (it == other.values_.end()) {
+    for (Entry const& entry : entries_) {
+      Slot const* otherSlot = other.find(entry.type);
+      if (!otherSlot) {
         return false;
       }
-      if (slot.equals != it->second.equals || !slot.equals) {
+      Slot const& slot = entry.slot;
+      if (slot.equals != otherSlot->equals || !slot.equals) {
         return false;
       }
-      if (!slot.equals(slot.value, it->second.value)) {
+      if (!slot.equals(slot.value, otherSlot->value)) {
         return false;
       }
     }
@@ -139,6 +139,11 @@ private:
   struct Slot {
     std::any value;
     bool (*equals)(std::any const&, std::any const&) = nullptr;
+  };
+
+  struct Entry {
+    std::type_index type;
+    Slot slot;
   };
 
   template<typename T>
@@ -155,7 +160,33 @@ private:
     return lhs && rhs && lhs->peek() == rhs->peek();
   }
 
-  std::unordered_map<std::type_index, Slot> values_;
+  Slot* find(std::type_index type) {
+    for (Entry& entry : entries_) {
+      if (entry.type == type) {
+        return &entry.slot;
+      }
+    }
+    return nullptr;
+  }
+
+  Slot const* find(std::type_index type) const {
+    for (Entry const& entry : entries_) {
+      if (entry.type == type) {
+        return &entry.slot;
+      }
+    }
+    return nullptr;
+  }
+
+  Slot& upsert(std::type_index type) {
+    if (Slot* slot = find(type)) {
+      return *slot;
+    }
+    entries_.push_back(Entry{type, Slot{}});
+    return entries_.back().slot;
+  }
+
+  std::vector<Entry> entries_;
 };
 
 class EnvironmentStack {
