@@ -195,7 +195,7 @@ private:
         .equals = [](void const* a, void const* b) {
           SignalT const& lhs = *static_cast<SignalT const*>(a);
           SignalT const& rhs = *static_cast<SignalT const*>(b);
-          return &lhs.peek() == &rhs.peek();
+          return lhs == rhs;
         },
         .size = static_cast<std::uint16_t>(sizeof(SignalT)),
         .align = static_cast<std::uint16_t>(alignof(SignalT)),

@@ -646,8 +646,8 @@ public:
     return get();
   }
 
-  bool operator==(Signal const&) const noexcept {
-    return false;
+  bool operator==(Signal const& other) const noexcept {
+    return state_ == other.state_;
   }
 
   bool disposed() const {

@@ -47,6 +47,15 @@ TEST_CASE("Reactive untrack reads without subscribing") {
   CHECK(untracked == 3);
 }
 
+TEST_CASE("Signal operator== compares handle identity") {
+  Signal<int> a{42};
+  Signal<int> b{42};
+  Signal<int> c = a;
+
+  CHECK(a == c);
+  CHECK_FALSE(a == b);
+}
+
 TEST_CASE("Reactive SmallFn uses inline storage for small closures") {
   int captured = 7;
   SmallFn<int(int)> small([captured](int value) {
