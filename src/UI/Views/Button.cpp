@@ -119,9 +119,9 @@ Element Button::body() const {
     bool const isDisabled = disabled.evaluate();
     Reactive::Bindable<bool> disabledBinding = disabled;
     ButtonColors const colors = deriveColors(variant, accent, destructive, theme.accentForegroundColor, theme.dangerForegroundColor, theme);
-    auto hovered = useState(false);
-    auto pressed = useState(false);
-    auto focused = useState(false);
+    Reactive::Signal<bool> hovered = useHover();
+    Reactive::Signal<bool> pressed = usePress();
+    Reactive::Signal<bool> focused = useFocus();
 
     Reactive::Bindable<Color> const fillTarget{[disabledBinding, pressed, hovered, colors, theme] {
         return disabledBinding.evaluate() ? theme.disabledControlBackgroundColor :
@@ -168,23 +168,6 @@ Element Button::body() const {
                (!disabledBinding.evaluate() && colors.border.a > 0.01f) ? StrokeStyle::solid(colors.border, 1.f) :
                                                                             StrokeStyle::none();
     }};
-    auto pointerEnter = [hovered, disabledBinding] {
-        if (!disabledBinding.evaluate()) {
-            hovered = true;
-        }
-    };
-    auto pointerExit = [hovered, pressed] {
-        hovered = false;
-        pressed = false;
-    };
-    auto pointerDown = [pressed, disabledBinding](Point) {
-        if (!disabledBinding.evaluate()) {
-            pressed = true;
-        }
-    };
-    auto pointerUp = [pressed](Point) {
-        pressed = false;
-    };
 
     return ScaleAroundCenter {
         .scale = scaleTarget,
@@ -202,15 +185,6 @@ Element Button::body() const {
                      .padding(paddingV, paddingH, paddingV, paddingH)
                      .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
                      .focusable(!isDisabled)
-                     .onPointerEnter(isDisabled ? std::function<void()> {} : std::function<void()> {pointerEnter})
-                     .onPointerExit(isDisabled ? std::function<void()> {} : std::function<void()> {pointerExit})
-                     .onPointerDown(isDisabled ? std::function<void(Point)> {} : std::function<void(Point)> {pointerDown})
-                     .onPointerUp(isDisabled ? std::function<void(Point)> {} : std::function<void(Point)> {pointerUp})
-                     .onFocus(isDisabled ? std::function<void()> {} : std::function<void()> {[focused] { focused = true; }})
-                     .onBlur(isDisabled ? std::function<void()> {} : std::function<void()> {[focused, pressed] {
-                         focused = false;
-                         pressed = false;
-                     }})
                      .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})
         .onTap(isDisabled ? std::function<void()> {} : std::function<void()> {handleTap})
     };
@@ -221,9 +195,10 @@ Element LinkButton::body() const {
     auto [fontResolved, accentResolved] = resolveStyle(style, theme);
     bool const isDisabled = disabled.evaluate();
     Reactive::Bindable<bool> disabledBinding = disabled;
-    auto hovered = useState(false);
-    auto pressed = useState(false);
-    auto focused = useState(false);
+    Reactive::Signal<bool> hovered = useHover();
+    Reactive::Signal<bool> pressed = usePress();
+    Reactive::Signal<bool> focused = useFocus();
+    Reactive::Signal<bool> keyboardFocused = useKeyboardFocus();
 
     Reactive::Bindable<Color> const labelColor{[disabledBinding, pressed, hovered, accentResolved, theme] {
         return disabledBinding.evaluate() ? theme.disabledTextColor :
@@ -246,8 +221,8 @@ Element LinkButton::body() const {
         }
     };
 
-    Reactive::Bindable<StrokeStyle> const focusStroke{[disabledBinding, focused, theme] {
-        return !disabledBinding.evaluate() && focused.get()
+    Reactive::Bindable<StrokeStyle> const focusStroke{[disabledBinding, focused, keyboardFocused, theme] {
+        return !disabledBinding.evaluate() && focused.get() && keyboardFocused.get()
                    ? StrokeStyle::solid(theme.keyboardFocusIndicatorColor, 2.f)
                    : StrokeStyle::none();
     }};
@@ -265,26 +240,6 @@ Element LinkButton::body() const {
         .padding(0.f, 3.f, 0.f, 3.f)
         .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
         .focusable(!isDisabled)
-        .onPointerEnter(isDisabled ? std::function<void()> {} : std::function<void()> {[hovered, disabledBinding] {
-            if (!disabledBinding.evaluate()) {
-                hovered = true;
-            }
-        }})
-        .onPointerExit(isDisabled ? std::function<void()> {} : std::function<void()> {[hovered, pressed] {
-            hovered = false;
-            pressed = false;
-        }})
-        .onPointerDown(isDisabled ? std::function<void(Point)> {} : std::function<void(Point)> {[pressed, disabledBinding](Point) {
-            if (!disabledBinding.evaluate()) {
-                pressed = true;
-            }
-        }})
-        .onPointerUp(isDisabled ? std::function<void(Point)> {} : std::function<void(Point)> {[pressed](Point) { pressed = false; }})
-        .onFocus(isDisabled ? std::function<void()> {} : std::function<void()> {[focused] { focused = true; }})
-        .onBlur(isDisabled ? std::function<void()> {} : std::function<void()> {[focused, pressed] {
-            focused = false;
-            pressed = false;
-        }})
         .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})
         .onTap(isDisabled ? std::function<void()> {} : std::function<void()> {handleTap});
 }
@@ -294,9 +249,10 @@ Element IconButton::body() const {
     auto [sizeResolved, weightResolved, accentResolved] = resolveStyle(style, theme);
     bool const isDisabled = disabled.evaluate();
     Reactive::Bindable<bool> disabledBinding = disabled;
-    auto hovered = useState(false);
-    auto pressed = useState(false);
-    auto focused = useState(false);
+    Reactive::Signal<bool> hovered = useHover();
+    Reactive::Signal<bool> pressed = usePress();
+    Reactive::Signal<bool> focused = useFocus();
+    Reactive::Signal<bool> keyboardFocused = useKeyboardFocus();
 
     Reactive::Bindable<Color> const iconColor{[disabledBinding, pressed, hovered, accentResolved, theme] {
         return disabledBinding.evaluate() ? theme.disabledTextColor :
@@ -319,8 +275,8 @@ Element IconButton::body() const {
         }
     };
 
-    Reactive::Bindable<StrokeStyle> const focusStroke{[disabledBinding, focused, theme] {
-        return !disabledBinding.evaluate() && focused.get()
+    Reactive::Bindable<StrokeStyle> const focusStroke{[disabledBinding, focused, keyboardFocused, theme] {
+        return !disabledBinding.evaluate() && focused.get() && keyboardFocused.get()
                    ? StrokeStyle::solid(theme.keyboardFocusIndicatorColor, 2.f)
                    : StrokeStyle::none();
     }};
@@ -336,26 +292,6 @@ Element IconButton::body() const {
         .cornerRadius(CornerRadius {theme.radiusXSmall})
         .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
         .focusable(!isDisabled)
-        .onPointerEnter(isDisabled ? std::function<void()> {} : std::function<void()> {[hovered, disabledBinding] {
-            if (!disabledBinding.evaluate()) {
-                hovered = true;
-            }
-        }})
-        .onPointerExit(isDisabled ? std::function<void()> {} : std::function<void()> {[hovered, pressed] {
-            hovered = false;
-            pressed = false;
-        }})
-        .onPointerDown(isDisabled ? std::function<void(Point)> {} : std::function<void(Point)> {[pressed, disabledBinding](Point) {
-            if (!disabledBinding.evaluate()) {
-                pressed = true;
-            }
-        }})
-        .onPointerUp(isDisabled ? std::function<void(Point)> {} : std::function<void(Point)> {[pressed](Point) { pressed = false; }})
-        .onFocus(isDisabled ? std::function<void()> {} : std::function<void()> {[focused] { focused = true; }})
-        .onBlur(isDisabled ? std::function<void()> {} : std::function<void()> {[focused, pressed] {
-            focused = false;
-            pressed = false;
-        }})
         .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})
         .onTap(isDisabled ? std::function<void()> {} : std::function<void()> {handleTap});
 }

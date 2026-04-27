@@ -41,6 +41,10 @@ struct RuntimeTargetSnapshot {
   std::function<void(KeyCode, Modifiers)> onKeyUp;
   std::function<void(std::string const&)> onTextInput;
   std::function<void()> onTap;
+  Reactive::Signal<bool> hoverSignal;
+  Reactive::Signal<bool> pressSignal;
+  Reactive::Signal<bool> focusSignal;
+  Reactive::Signal<bool> keyboardFocusSignal;
 };
 
 struct RuntimeInputState {
@@ -201,6 +205,38 @@ std::optional<HitTarget> hitWindow(Window& window, Point point,
   return std::nullopt;
 }
 
+void appendFocusableTargets(scenegraph::SceneGraph const& graph, OverlayId overlay,
+                            std::vector<HitTarget>& out) {
+  for (ComponentKey const& key : scenegraph::collectFocusableKeys(graph)) {
+    auto const [node, interaction] = scenegraph::findInteractionByKey(graph, key);
+    if (node && interaction && interaction->focusable) {
+      out.push_back(HitTarget{
+          .node = node,
+          .interaction = interaction,
+          .localPoint = {},
+          .overlay = overlay,
+      });
+    }
+  }
+}
+
+std::vector<HitTarget> focusableTargets(Window& window) {
+  std::vector<HitTarget> targets;
+  auto const& overlays = window.overlayManager().entries();
+  for (auto it = overlays.rbegin(); it != overlays.rend(); ++it) {
+    if (*it) {
+      appendFocusableTargets((*it)->sceneGraph, (*it)->id, targets);
+      if ((*it)->config.modal && !targets.empty()) {
+        return targets;
+      }
+    }
+  }
+  if (window.hasSceneGraph()) {
+    appendFocusableTargets(window.sceneGraph(), kInvalidOverlayId, targets);
+  }
+  return targets;
+}
+
 RuntimeTargetSnapshot snapshot(scenegraph::SceneNode const* node,
                                scenegraph::InteractionData const* interaction,
                                OverlayId overlay) {
@@ -224,6 +260,10 @@ RuntimeTargetSnapshot snapshot(scenegraph::SceneNode const* node,
     target.onKeyUp = interaction->onKeyUp;
     target.onTextInput = interaction->onTextInput;
     target.onTap = interaction->onTap;
+    target.hoverSignal = interaction->hoverSignal;
+    target.pressSignal = interaction->pressSignal;
+    target.focusSignal = interaction->focusSignal;
+    target.keyboardFocusSignal = interaction->keyboardFocusSignal;
   }
   return target;
 }
@@ -284,6 +324,26 @@ void applyCursor(RuntimeInputState& input, Window& window, Cursor cursor) {
   window.setCursor(cursor);
 }
 
+void writeSignal(Reactive::Signal<bool> const& signal, bool active) {
+  if (!signal.disposed()) {
+    signal.set(active);
+  }
+}
+
+void setHoverActive(RuntimeTargetSnapshot const& target, bool active) {
+  writeSignal(target.hoverSignal, active);
+}
+
+void setPressActive(RuntimeTargetSnapshot const& target, bool active) {
+  writeSignal(target.pressSignal, active);
+}
+
+void setFocusActive(RuntimeTargetSnapshot const& target, bool active,
+                    FocusInputKind kind = FocusInputKind::Pointer) {
+  writeSignal(target.focusSignal, active);
+  writeSignal(target.keyboardFocusSignal, active && kind == FocusInputKind::Keyboard);
+}
+
 void updateCursorForPoint(RuntimeInputState& input, Window& window, Point point) {
   if (input.pressTarget && input.pressTarget->cursor != Cursor::Inherit) {
     applyCursor(input, window, input.pressTarget->cursor);
@@ -317,6 +377,7 @@ void updateHoverForPoint(RuntimeInputState& input, Window& window, Point point) 
   }
 
   for (std::size_t i = input.hoverChain.size(); i > common; --i) {
+    setHoverActive(input.hoverChain[i - 1], false);
     std::function<void()> exit = input.hoverChain[i - 1].onPointerExit;
     if (exit) {
       exit();
@@ -324,6 +385,7 @@ void updateHoverForPoint(RuntimeInputState& input, Window& window, Point point) 
   }
 
   for (std::size_t i = common; i < nextChain.size(); ++i) {
+    setHoverActive(nextChain[i], true);
     std::function<void()> enter = nextChain[i].onPointerEnter;
     if (enter) {
       enter();
@@ -333,17 +395,24 @@ void updateHoverForPoint(RuntimeInputState& input, Window& window, Point point) 
   input.hoverChain = std::move(nextChain);
 }
 
-void setFocus(RuntimeInputState& input, std::optional<HitTarget> hit, bool notify = true) {
+void setFocus(RuntimeInputState& input, std::optional<HitTarget> hit, bool notify = true,
+              FocusInputKind kind = FocusInputKind::Pointer) {
   if (input.focusTarget && hit && sameTarget(*input.focusTarget, *hit)) {
     return;
   }
 
   std::function<void()> blur = notify && input.focusTarget ? input.focusTarget->onBlur
                                                           : std::function<void()>{};
+  if (input.focusTarget) {
+    setFocusActive(*input.focusTarget, false);
+  }
   input.focusTarget = hit ? std::optional<RuntimeTargetSnapshot>{snapshot(*hit)}
                          : std::nullopt;
   std::function<void()> focus = notify && input.focusTarget ? input.focusTarget->onFocus
                                                            : std::function<void()>{};
+  if (input.focusTarget) {
+    setFocusActive(*input.focusTarget, true, kind);
+  }
   if (blur) {
     blur();
   }
@@ -352,7 +421,34 @@ void setFocus(RuntimeInputState& input, std::optional<HitTarget> hit, bool notif
   }
 }
 
+void cycleKeyboardFocus(RuntimeInputState& input, Window& window, bool reverse) {
+  std::vector<HitTarget> targets = focusableTargets(window);
+  if (targets.empty()) {
+    setFocus(input, std::nullopt, true, FocusInputKind::Keyboard);
+    return;
+  }
+
+  std::size_t nextIndex = reverse ? targets.size() - 1 : 0;
+  if (input.focusTarget) {
+    for (std::size_t i = 0; i < targets.size(); ++i) {
+      if (sameTarget(*input.focusTarget, targets[i])) {
+        nextIndex = reverse ? (i == 0 ? targets.size() - 1 : i - 1)
+                            : (i + 1) % targets.size();
+        break;
+      }
+    }
+  }
+
+  setFocus(input, targets[nextIndex], true, FocusInputKind::Keyboard);
+}
+
 void resetTransientTargets(RuntimeInputState& input, Window& window) {
+  for (RuntimeTargetSnapshot const& target : input.hoverChain) {
+    setHoverActive(target, false);
+  }
+  if (input.pressTarget) {
+    setPressActive(*input.pressTarget, false);
+  }
   input.hoverChain.clear();
   input.pressTarget.reset();
   setFocus(input, std::nullopt, false);
@@ -371,6 +467,11 @@ void Runtime::handleInput(InputEvent const& event) {
       d->window.removeOverlay(top->id);
       return;
     }
+  }
+
+  if (event.kind == InputEvent::Kind::KeyDown && event.key == keys::Tab) {
+    cycleKeyboardFocus(d->input, d->window, any(event.modifiers & Modifiers::Shift));
+    return;
   }
 
   if (event.kind == InputEvent::Kind::KeyDown ||
@@ -427,17 +528,21 @@ void Runtime::handleInput(InputEvent const& event) {
 
   switch (event.kind) {
   case InputEvent::Kind::PointerDown:
+    if (d->input.pressTarget) {
+      setPressActive(*d->input.pressTarget, false);
+    }
     d->input.pressTarget.reset();
     d->input.pressCancelled = false;
     d->input.pressPoint = point;
     if (auto hit = hitWindow(d->window, point)) {
       RuntimeTargetSnapshot target = snapshot(*hit);
       if (target.focusable) {
-        setFocus(d->input, hit);
+        setFocus(d->input, hit, true, FocusInputKind::Pointer);
       } else {
         setFocus(d->input, std::nullopt);
       }
       d->input.pressTarget = target;
+      setPressActive(target, true);
       if (target.onPointerDown) {
         target.onPointerDown(hit->localPoint);
       }
@@ -474,6 +579,7 @@ void Runtime::handleInput(InputEvent const& event) {
       bool const cancelled = d->input.pressCancelled;
       d->input.pressTarget.reset();
       d->input.pressCancelled = false;
+      setPressActive(released, false);
       if (released.onPointerUp) {
         Point const local = localPointForTarget(released, d->window, point).value_or(point);
         released.onPointerUp(local);

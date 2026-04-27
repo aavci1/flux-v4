@@ -3,6 +3,7 @@
 #include <string>
 
 #include <Flux/Core/KeyCodes.hpp>
+#include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/Views/TableView.hpp>
 #include <Flux/UI/Views/Badge.hpp>
 #include <Flux/UI/Views/For.hpp>
@@ -319,8 +320,8 @@ Element TableRow::body() const {
     Theme const &theme = useEnvironment<Theme>();
     TableRow::Style const resolved = resolveRowStyle(style, theme);
     TableLayoutContext const &table = useEnvironment<TableLayoutContext>();
-    auto hovered = useState(false);
-    auto pressed = useState(false);
+    Reactive::Signal<bool> hovered = useHover();
+    Reactive::Signal<bool> pressed = usePress();
     bool const interactive = !disabled && static_cast<bool>(onTap);
 
     Reactive::Bindable<Color> const fill{[selected = selected, pressed, hovered,
@@ -378,21 +379,6 @@ Element TableRow::body() const {
     }
         .cursor(interactive ? Cursor::Hand : Cursor::Arrow)
         .focusable(interactive)
-        .onPointerEnter(std::function<void()> {[hovered, interactive] {
-            if (interactive) {
-                hovered = true;
-            }
-        }})
-        .onPointerExit(std::function<void()> {[hovered, pressed] {
-            hovered = false;
-            pressed = false;
-        }})
-        .onPointerDown(std::function<void(Point)> {[pressed, interactive](Point) {
-            if (interactive) {
-                pressed = true;
-            }
-        }})
-        .onPointerUp(std::function<void(Point)> {[pressed](Point) { pressed = false; }})
         .onKeyDown(interactive ? std::function<void(KeyCode, Modifiers)> {handleKey}
                                : std::function<void(KeyCode, Modifiers)> {})
         .onTap(interactive ? std::function<void()> {handleTap} : std::function<void()> {});

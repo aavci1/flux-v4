@@ -241,6 +241,72 @@ TEST_CASE("composite child body is materialized once across measure and mount") 
   CHECK(sceneGraph.root().children()[0]->size() == flux::Size{20.f, 10.f});
 }
 
+TEST_CASE("interaction hooks attach reactive signals to mounted interaction data") {
+  struct Root {
+    flux::Element body() const {
+      flux::Reactive::Signal<bool> hovered = flux::useHover();
+      flux::Reactive::Signal<bool> pressed = flux::usePress();
+      flux::Reactive::Signal<bool> focused = flux::useFocus();
+      flux::Reactive::Signal<bool> keyboardFocused = flux::useKeyboardFocus();
+      return flux::Rectangle{}
+          .size(20.f, 10.f)
+          .fill(flux::Reactive::Bindable<flux::Color>{[hovered, pressed, focused, keyboardFocused] {
+            if (keyboardFocused.get()) {
+              return flux::Colors::yellow;
+            }
+            if (focused.get()) {
+              return flux::Colors::blue;
+            }
+            if (pressed.get()) {
+              return flux::Colors::green;
+            }
+            if (hovered.get()) {
+              return flux::Colors::red;
+            }
+            return flux::Colors::black;
+          }})
+          .focusable(true)
+          .onTap([] {});
+    }
+  };
+
+  FakeTextSystem textSystem;
+  flux::scenegraph::SceneGraph sceneGraph;
+  flux::MountRoot root{
+      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{}),
+      textSystem,
+      testEnvironment(),
+      flux::Size{200.f, 100.f},
+  };
+
+  root.mount(sceneGraph);
+
+  REQUIRE(sceneGraph.root().kind() == flux::scenegraph::SceneNodeKind::Rect);
+  auto const& rect = static_cast<flux::scenegraph::RectNode const&>(sceneGraph.root());
+  REQUIRE(rect.interaction() != nullptr);
+  CHECK(solidColor(rect) == flux::Colors::black);
+
+  rect.interaction()->hoverSignal.set(true);
+  CHECK(solidColor(rect) == flux::Colors::red);
+  rect.interaction()->hoverSignal.set(false);
+  CHECK(solidColor(rect) == flux::Colors::black);
+
+  rect.interaction()->pressSignal.set(true);
+  CHECK(solidColor(rect) == flux::Colors::green);
+  rect.interaction()->pressSignal.set(false);
+  CHECK(solidColor(rect) == flux::Colors::black);
+
+  rect.interaction()->focusSignal.set(true);
+  CHECK(solidColor(rect) == flux::Colors::blue);
+  rect.interaction()->focusSignal.set(false);
+  CHECK(solidColor(rect) == flux::Colors::black);
+
+  rect.interaction()->keyboardFocusSignal.set(true);
+  CHECK(solidColor(rect) == flux::Colors::yellow);
+  rect.interaction()->keyboardFocusSignal.set(false);
+  CHECK(solidColor(rect) == flux::Colors::black);
+}
+
 TEST_CASE("modifier envelopes honor fixed viewport constraints") {
   struct Root {
     flux::Element body() const {

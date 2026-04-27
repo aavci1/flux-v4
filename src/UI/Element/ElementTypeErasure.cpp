@@ -4,6 +4,7 @@
 #include <Flux/SceneGraph/InteractionData.hpp>
 #include <Flux/SceneGraph/RectNode.hpp>
 #include <Flux/SceneGraph/SceneNode.hpp>
+#include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/MountContext.hpp>
 
 #include "UI/Element/ModifierLayoutHelpers.hpp"
@@ -310,6 +311,12 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
     interaction->onTextInput = modifiers.onTextInput;
     interaction->focusable = modifiers.focusable;
     interaction->cursor = modifiers.cursor;
+    if (detail::InteractionSignalBundle const* signals = detail::currentInteractionSignals()) {
+      interaction->hoverSignal = signals->hover;
+      interaction->pressSignal = signals->press;
+      interaction->focusSignal = signals->focus;
+      interaction->keyboardFocusSignal = signals->keyboardFocus;
+    }
     rawWrapper->setInteraction(std::move(interaction));
   }
   installBinding<FillStyle>(ctx, modifiers.fill, [rawWrapper](FillStyle fill) {

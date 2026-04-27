@@ -1,4 +1,5 @@
 #include <Flux/Core/KeyCodes.hpp>
+#include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Views/ListView.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
@@ -27,8 +28,8 @@ ListView::Style resolveListStyle(ListView::Style const &style, Theme const &them
 Element ListRow::body() const {
     Theme const &theme = useEnvironment<Theme>();
     ListRow::Style const resolved = resolveRowStyle(style, theme);
-    auto hovered = useState(false);
-    auto pressed = useState(false);
+    Reactive::Signal<bool> hovered = useHover();
+    Reactive::Signal<bool> pressed = usePress();
     bool const isDisabled = disabled;
 
     Reactive::Bindable<Color> const fill{[selected = selected, pressed, hovered, theme] {
@@ -55,21 +56,6 @@ Element ListRow::body() const {
         .fill(fill)
         .cursor(isDisabled ? Cursor::Arrow : Cursor::Hand)
         .focusable(!isDisabled)
-        .onPointerEnter(std::function<void()> {[hovered, isDisabled] {
-            if (!isDisabled) {
-                hovered = true;
-            }
-        }})
-        .onPointerExit(std::function<void()> {[hovered, pressed] {
-            hovered = false;
-            pressed = false;
-        }})
-        .onPointerDown(std::function<void(Point)> {[pressed, isDisabled](Point) {
-            if (!isDisabled) {
-                pressed = true;
-            }
-        }})
-        .onPointerUp(std::function<void(Point)> {[pressed](Point) { pressed = false; }})
         .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)>{} : std::function<void(KeyCode, Modifiers)>{handleKey})
         .onTap(isDisabled ? std::function<void()>{} : std::function<void()>{handleTap});
 }

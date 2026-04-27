@@ -13,15 +13,68 @@
 #include <Flux/UI/Theme.hpp>
 
 #include <cmath>
-#include <utility>
 #include <functional>
+#include <unordered_map>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace flux {
 
 namespace detail {
+
+struct InteractionSignalBundle {
+  Reactive::Signal<bool> hover;
+  Reactive::Signal<bool> press;
+  Reactive::Signal<bool> focus;
+  Reactive::Signal<bool> keyboardFocus;
+};
+
+struct OwnerInteractionSignals {
+  InteractionSignalBundle signals;
+  bool cleanupRegistered = false;
+};
+
+inline std::unordered_map<Reactive::detail::ScopeState*, OwnerInteractionSignals>&
+ownerInteractionSignals() {
+  static thread_local std::unordered_map<Reactive::detail::ScopeState*, OwnerInteractionSignals> signals;
+  return signals;
+}
+
+inline std::vector<InteractionSignalBundle const*>& interactionSignalMountStack() {
+  static thread_local std::vector<InteractionSignalBundle const*> stack;
+  return stack;
+}
+
+inline InteractionSignalBundle const* currentInteractionSignals() {
+  auto& stack = interactionSignalMountStack();
+  return stack.empty() ? nullptr : stack.back();
+}
+
+class HookInteractionSignalScope {
+public:
+  explicit HookInteractionSignalScope(Reactive::Scope& owner) {
+    auto const it = ownerInteractionSignals().find(owner.state());
+    if (it != ownerInteractionSignals().end()) {
+      signals_ = &it->second.signals;
+    }
+    interactionSignalMountStack().push_back(signals_);
+  }
+
+  HookInteractionSignalScope(HookInteractionSignalScope const&) = delete;
+  HookInteractionSignalScope& operator=(HookInteractionSignalScope const&) = delete;
+
+  ~HookInteractionSignalScope() {
+    auto& stack = interactionSignalMountStack();
+    if (!stack.empty()) {
+      stack.pop_back();
+    }
+  }
+
+private:
+  InteractionSignalBundle const* signals_ = nullptr;
+};
 
 inline std::vector<LayoutConstraints>& hookLayoutConstraintStack() {
   static thread_local std::vector<LayoutConstraints> stack;
@@ -48,6 +101,46 @@ public:
 inline LayoutConstraints const* currentHookLayoutConstraints() {
   auto& stack = hookLayoutConstraintStack();
   return stack.empty() ? nullptr : &stack.back();
+}
+
+enum class InteractionSignalKind {
+  Hover,
+  Press,
+  Focus,
+  KeyboardFocus,
+};
+
+inline Reactive::Signal<bool>& signalSlot(InteractionSignalBundle& signals,
+                                          InteractionSignalKind kind) {
+  switch (kind) {
+  case InteractionSignalKind::Hover:
+    return signals.hover;
+  case InteractionSignalKind::Press:
+    return signals.press;
+  case InteractionSignalKind::Focus:
+    return signals.focus;
+  case InteractionSignalKind::KeyboardFocus:
+    return signals.keyboardFocus;
+  }
+  return signals.hover;
+}
+
+inline Reactive::Signal<bool> useInteractionSignal(InteractionSignalKind kind) {
+  Reactive::Signal<bool> signal{false};
+  Reactive::detail::ScopeState* owner = Reactive::detail::sCurrentOwner;
+  if (!owner) {
+    return signal;
+  }
+
+  auto& entry = ownerInteractionSignals()[owner];
+  signalSlot(entry.signals, kind) = signal;
+  if (!entry.cleanupRegistered) {
+    entry.cleanupRegistered = true;
+    Reactive::onCleanup([owner] {
+      ownerInteractionSignals().erase(owner);
+    });
+  }
+  return signal;
 }
 
 } // namespace detail
@@ -128,10 +221,21 @@ Animation<T> useAnimation(T initial, AnimationOptions options) {
   return animation;
 }
 
-inline bool useFocus() { return false; }
-inline bool useKeyboardFocus() { return false; }
-inline bool useHover() { return false; }
-inline bool usePress() { return false; }
+inline Reactive::Signal<bool> useFocus() {
+  return detail::useInteractionSignal(detail::InteractionSignalKind::Focus);
+}
+
+inline Reactive::Signal<bool> useKeyboardFocus() {
+  return detail::useInteractionSignal(detail::InteractionSignalKind::KeyboardFocus);
+}
+
+inline Reactive::Signal<bool> useHover() {
+  return detail::useInteractionSignal(detail::InteractionSignalKind::Hover);
+}
+
+inline Reactive::Signal<bool> usePress() {
+  return detail::useInteractionSignal(detail::InteractionSignalKind::Press);
+}
 
 inline LayoutConstraints const* useLayoutConstraints() {
   return detail::currentHookLayoutConstraints();

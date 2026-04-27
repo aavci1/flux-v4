@@ -1,6 +1,7 @@
 #include <Flux/UI/Views/Checkbox.hpp>
 
 #include <Flux/Core/KeyCodes.hpp>
+#include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Views/Icon.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
@@ -38,7 +39,7 @@ Element Checkbox::body() const {
 
     float const iconSz = boxSize * 0.6f;
 
-    auto focused = useState(false);
+    Reactive::Signal<bool> focused = useFocus();
     Reactive::Bindable<bool> const indeterminateBinding = indeterminate;
     Reactive::Bindable<bool> const disabledBinding = disabled;
     bool const isDisabled = disabledBinding.evaluate();
@@ -111,8 +112,6 @@ Element Checkbox::body() const {
         }
                      .cursor(disabledBinding.evaluate() ? Cursor::Inherit : Cursor::Hand)
                      .focusable(!isDisabled)
-                     .onFocus(isDisabled ? std::function<void()> {} : std::function<void()> {[focused] { focused = true; }})
-                     .onBlur(isDisabled ? std::function<void()> {} : std::function<void()> {[focused] { focused = false; }})
                      .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})
                      .onTap(isDisabled ? std::function<void()> {} : std::function<void()> {handleToggle}),
     };

@@ -7,6 +7,7 @@
 #include <Flux/Core/ComponentKey.hpp>
 #include <Flux/Core/Cursor.hpp>
 #include <Flux/Core/Types.hpp>
+#include <Flux/Reactive/Signal.hpp>
 
 #include <functional>
 #include <string>
@@ -29,11 +30,17 @@ struct InteractionData {
   std::function<void(KeyCode, Modifiers)> onKeyUp;
   std::function<void(std::string const&)> onTextInput;
   std::function<void()> onTap;
+  Reactive::Signal<bool> hoverSignal;
+  Reactive::Signal<bool> pressSignal;
+  Reactive::Signal<bool> focusSignal;
+  Reactive::Signal<bool> keyboardFocusSignal;
 
   [[nodiscard]] bool isEmpty() const noexcept {
     return !onPointerEnter && !onPointerExit && !onFocus && !onBlur && !onPointerDown &&
            !onPointerUp && !onPointerMove && !onScroll && !onKeyDown && !onKeyUp &&
-           !onTextInput && !onTap && !focusable && cursor == Cursor::Inherit;
+           !onTextInput && !onTap && hoverSignal.disposed() && pressSignal.disposed() &&
+           focusSignal.disposed() && keyboardFocusSignal.disposed() && !focusable &&
+           cursor == Cursor::Inherit;
   }
 };
 

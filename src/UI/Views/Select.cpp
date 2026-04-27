@@ -5,6 +5,7 @@
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Reactive/Interpolatable.hpp>
 #include <Flux/Reactive/Transition.hpp>
+#include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/InputFieldChrome.hpp>
 #include <Flux/UI/InputFieldLayout.hpp>
 #include <Flux/UI/Theme.hpp>
@@ -190,9 +191,9 @@ struct SelectMenuRow : ViewModifiers<SelectMenuRow> {
 
     Element body() const {
         bool const disabled = option.disabled;
-        auto hovered = useState(false);
-        auto pressed = useState(false);
-        auto focused = useState(false);
+        Reactive::Signal<bool> hovered = useHover();
+        Reactive::Signal<bool> pressed = usePress();
+        Reactive::Signal<bool> focused = useFocus();
 
         Color const selectedFill = withAlpha(style.accentColor, 0.16f);
         Color const selectedHoverFill = withAlpha(style.accentColor, 0.24f);
@@ -289,26 +290,6 @@ struct SelectMenuRow : ViewModifiers<SelectMenuRow> {
             .cornerRadius(CornerRadius {style.cornerRadius})
             .cursor(disabled ? Cursor::Inherit : Cursor::Hand)
             .focusable(!disabled)
-            .onPointerEnter(std::function<void()> {[hovered, disabled] {
-                if (!disabled) {
-                    hovered = true;
-                }
-            }})
-            .onPointerExit(std::function<void()> {[hovered, pressed] {
-                hovered = false;
-                pressed = false;
-            }})
-            .onPointerDown(std::function<void(Point)> {[pressed, disabled](Point) {
-                if (!disabled) {
-                    pressed = true;
-                }
-            }})
-            .onPointerUp(std::function<void(Point)> {[pressed](Point) { pressed = false; }})
-            .onFocus(std::function<void()> {[focused] { focused = true; }})
-            .onBlur(std::function<void()> {[focused, pressed] {
-                focused = false;
-                pressed = false;
-            }})
             .onKeyDown(disabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})
             .onTap(disabled ? std::function<void()> {} : std::function<void()> {activate});
     }
@@ -418,9 +399,9 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
             isValidIndex(currentIndex, options.size()) ? &options[static_cast<std::size_t>(currentIndex)] : nullptr;
 
         bool const isDisabled = disabled;
-        auto hovered = useState(false);
-        auto pressed = useState(false);
-        auto focused = useState(false);
+        Reactive::Signal<bool> hovered = useHover();
+        Reactive::Signal<bool> pressed = usePress();
+        Reactive::Signal<bool> focused = useFocus();
         bool const open = isPresented;
         Rect const bounds = useBounds();
         ResolvedInputFieldChrome const &fieldChrome = style.fieldChrome;
@@ -701,22 +682,6 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
                 .cornerRadius(CornerRadius {theme.radiusXSmall})
                 .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
                 .focusable(!isDisabled)
-                .onPointerEnter(isDisabled ? std::function<void()> {} : std::function<void()> {[hovered] {
-                    hovered = true;
-                }})
-                .onPointerExit(isDisabled ? std::function<void()> {} : std::function<void()> {[hovered, pressed] {
-                    hovered = false;
-                    pressed = false;
-                }})
-                .onPointerDown(isDisabled ? std::function<void(Point)> {} : std::function<void(Point)> {[pressed](Point) {
-                    pressed = true;
-                }})
-                .onPointerUp(isDisabled ? std::function<void(Point)> {} : std::function<void(Point)> {[pressed](Point) { pressed = false; }})
-                .onFocus(isDisabled ? std::function<void()> {} : std::function<void()> {[focused] { focused = true; }})
-                .onBlur(isDisabled ? std::function<void()> {} : std::function<void()> {[focused, pressed] {
-                    focused = false;
-                    pressed = false;
-                }})
                 .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})
                 .onTap(isDisabled ? std::function<void()> {} : std::function<void()> {toggleMenu});
         }
@@ -732,22 +697,6 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
             .cornerRadius(CornerRadius {fieldChrome.cornerRadius})
             .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
             .focusable(!isDisabled)
-            .onPointerEnter(isDisabled ? std::function<void()> {} : std::function<void()> {[hovered] {
-                hovered = true;
-            }})
-            .onPointerExit(isDisabled ? std::function<void()> {} : std::function<void()> {[hovered, pressed] {
-                hovered = false;
-                pressed = false;
-            }})
-            .onPointerDown(isDisabled ? std::function<void(Point)> {} : std::function<void(Point)> {[pressed](Point) {
-                pressed = true;
-            }})
-            .onPointerUp(isDisabled ? std::function<void(Point)> {} : std::function<void(Point)> {[pressed](Point) { pressed = false; }})
-            .onFocus(isDisabled ? std::function<void()> {} : std::function<void()> {[focused] { focused = true; }})
-            .onBlur(isDisabled ? std::function<void()> {} : std::function<void()> {[focused, pressed] {
-                focused = false;
-                pressed = false;
-            }})
             .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})
             .onTap(isDisabled ? std::function<void()> {} : std::function<void()> {toggleMenu});
 

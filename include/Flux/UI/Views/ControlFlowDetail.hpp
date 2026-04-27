@@ -4,6 +4,7 @@
 #include <Flux/SceneGraph/GroupNode.hpp>
 #include <Flux/SceneGraph/RectNode.hpp>
 #include <Flux/UI/Element.hpp>
+#include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/MeasureContext.hpp>
 #include <Flux/UI/MountContext.hpp>
 #include <Flux/UI/Detail/MountPosition.hpp>
@@ -93,6 +94,7 @@ controlMountElement(Element const& element, Reactive::Scope& owner,
   MountContext mountContext{owner, environment, textSystem, measureContext, constraints,
                             hints, requestRedraw};
   return Reactive::withOwner(owner, [&] {
+    HookInteractionSignalScope const interactionScope{owner};
     return element.mount(mountContext);
   });
 }

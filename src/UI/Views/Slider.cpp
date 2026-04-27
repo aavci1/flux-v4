@@ -58,7 +58,7 @@ Element Slider::body() const {
     auto focusColor = theme.keyboardFocusIndicatorColor;
 
     auto isDisabled = disabled;
-    auto focused = useState(false);
+    Reactive::Signal<bool> focused = useFocus();
     auto dragging = useState(false);
 
     LayoutConstraints const* layoutConstraints = useLayoutConstraints();
@@ -174,9 +174,7 @@ Element Slider::body() const {
     }
         .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
         .focusable(!isDisabled)
-        .onFocus(std::function<void()> {[focused] { focused = true; }})
-        .onBlur(std::function<void()> {[focused, dragging] {
-            focused = false;
+        .onBlur(std::function<void()> {[dragging] {
             dragging = false;
         }})
         .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})

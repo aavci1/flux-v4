@@ -3,6 +3,7 @@
 #include <Flux/Core/KeyCodes.hpp>
 #include <Flux/Reactive/Interpolatable.hpp>
 #include <Flux/Reactive/Transition.hpp>
+#include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/ScaleAroundCenter.hpp>
@@ -51,7 +52,7 @@ Element Toggle::body() const {
     float const xOff = thumbInset;
     float const xOn = std::max(xOff, trackWidth - thumbInset - thumbSize);
 
-    auto focused = useState(false);
+    Reactive::Signal<bool> focused = useFocus();
     bool const isDisabled = disabled;
 
     auto v = value;
@@ -101,8 +102,6 @@ Element Toggle::body() const {
         }
                      .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
                      .focusable(!isDisabled)
-                     .onFocus(isDisabled ? std::function<void()> {} : std::function<void()> {[focused] { focused = true; }})
-                     .onBlur(isDisabled ? std::function<void()> {} : std::function<void()> {[focused] { focused = false; }})
                      .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})
                      .onTap(isDisabled ? std::function<void()> {} : std::function<void()> {handleToggle}),
     };

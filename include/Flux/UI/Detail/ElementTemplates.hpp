@@ -161,6 +161,7 @@ std::unique_ptr<scenegraph::SceneNode> Element::Model<C>::mount(MountContext& ct
     }
     return Reactive::withOwner(childCtx.owner(), [&] {
       detail::HookLayoutScope const hookScope{ctx.constraints()};
+      detail::HookInteractionSignalScope const interactionScope{*bodyCache_.scope};
       return child.mount(childCtx);
     });
   } else {

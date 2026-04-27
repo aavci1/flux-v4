@@ -72,6 +72,7 @@ void MountRoot::mount(scenegraph::SceneGraph& sceneGraph) {
   auto node = Reactive::withOwner(rootScope_, [&] {
     detail::HookLayoutScope const hookScope{rootConstraints(viewportSize_)};
     Element rootElement = root_->makeElement();
+    detail::HookInteractionSignalScope const interactionScope{rootScope_};
     return rootElement.mount(context);
   });
   if (node) {
