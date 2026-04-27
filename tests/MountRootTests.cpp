@@ -20,6 +20,7 @@
 #include <Flux/UI/Views/VStack.hpp>
 #include <Flux/UI/Views/ZStack.hpp>
 
+#include <limits>
 #include <memory>
 #include <string_view>
 #include <vector>
@@ -164,6 +165,53 @@ struct RelayoutProbeFrame {
       rawGroup->setSize({100.f, 100.f});
     });
     return group;
+  }
+};
+
+struct RelayoutPassthroughFrame {
+  flux::Element child;
+
+  flux::Size measure(flux::MeasureContext& ctx, flux::LayoutConstraints const& constraints,
+                     flux::LayoutHints const& hints, flux::TextSystem& textSystem) const {
+    return child.measure(ctx, constraints, hints, textSystem);
+  }
+
+  std::unique_ptr<flux::scenegraph::SceneNode> mount(flux::MountContext& ctx) const {
+    auto group = std::make_unique<flux::scenegraph::GroupNode>();
+    flux::MountContext childCtx = ctx.childWithSharedScope(ctx.constraints(), ctx.hints());
+    auto childNode = child.mount(childCtx);
+    flux::scenegraph::SceneNode* rawChild = childNode.get();
+    if (childNode) {
+      group->setSize(childNode->size());
+      group->appendChild(std::move(childNode));
+    }
+    flux::scenegraph::GroupNode* rawGroup = group.get();
+    rawGroup->setLayoutConstraints(ctx.constraints());
+    rawGroup->setRelayout([rawGroup, rawChild](flux::LayoutConstraints const& constraints) {
+      if (rawChild) {
+        rawChild->relayout(constraints);
+        rawGroup->setSize(rawChild->size());
+      }
+    });
+    return group;
+  }
+};
+
+struct DeepRelayoutNode {
+  int depth = 0;
+  flux::Reactive::Signal<float> width;
+
+  flux::Element body() const {
+    if (depth <= 0) {
+      return flux::Element{flux::Rectangle{}}
+          .size(flux::Reactive::Bindable<float>{[width = width] {
+                  return width.get();
+                }},
+                flux::Reactive::Bindable<float>{10.f});
+    }
+    return flux::Element{RelayoutPassthroughFrame{
+        .child = flux::Element{DeepRelayoutNode{depth - 1, width}},
+    }};
   }
 };
 
@@ -423,6 +471,36 @@ TEST_CASE("reactive size changes relayout ancestor stack alignment") {
   CHECK(row.size().height == doctest::Approx(60.f));
   CHECK(row.position().y == doctest::Approx(20.f));
   CHECK(row.children()[1]->position().y == doctest::Approx(20.f));
+}
+
+TEST_CASE("reactive size relayout propagates through a 32-level scene tree") {
+  FakeTextSystem textSystem;
+  flux::Reactive::Scope scope;
+  flux::EnvironmentStack environment;
+  flux::MeasureContext measureContext{textSystem};
+  flux::MountContext context{
+      scope,
+      environment,
+      textSystem,
+      measureContext,
+      flux::LayoutConstraints{
+          .maxWidth = std::numeric_limits<float>::infinity(),
+          .maxHeight = std::numeric_limits<float>::infinity(),
+          .minWidth = 0.f,
+          .minHeight = 0.f,
+      },
+  };
+  flux::Reactive::Signal<float> width{20.f};
+  flux::Element root{DeepRelayoutNode{32, width}};
+
+  std::unique_ptr<flux::scenegraph::SceneNode> node = root.mount(context);
+
+  REQUIRE(node);
+  CHECK(node->size().width == doctest::Approx(20.f));
+
+  width.set(48.f);
+
+  CHECK(node->size().width == doctest::Approx(48.f));
 }
 
 TEST_CASE("reactive size relayout stops at unchanged ancestors") {

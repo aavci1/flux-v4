@@ -10,6 +10,7 @@
 #include "UI/Element/ModifierLayoutHelpers.hpp"
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <limits>
 #include <optional>
@@ -93,6 +94,9 @@ LayoutConstraints fixedConstraints(Size size) {
 
 void relayoutStoredAncestors(scenegraph::SceneNode& node) {
   constexpr float epsilon = 0.01f;
+  // Trees deeper than 64 stored scene-graph ancestors are not supported for reactive
+  // relayout propagation. This bounds the synchronous relayout walk; current demos are
+  // far shallower (lambda-studio max observed retained depth is 16).
   scenegraph::SceneNode* current = &node;
   for (int depth = 0; depth < 64; ++depth) {
     scenegraph::SceneNode* parent = current->parent();
@@ -110,6 +114,7 @@ void relayoutStoredAncestors(scenegraph::SceneNode& node) {
     }
     current = parent;
   }
+  assert(false && "reactive relayout ancestor walk exceeded the 64-level depth cap");
 }
 
 class ScopedEnvironmentSnapshot {
