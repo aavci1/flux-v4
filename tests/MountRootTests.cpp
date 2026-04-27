@@ -11,6 +11,7 @@
 #include <Flux/UI/MountRoot.hpp>
 #include <Flux/UI/MountContext.hpp>
 #include <Flux/UI/Theme.hpp>
+#include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/ScaleAroundCenter.hpp>
 #include <Flux/UI/Views/ScrollView.hpp>
@@ -180,6 +181,99 @@ TEST_CASE("modifier envelopes honor fixed viewport constraints") {
   CHECK(sceneGraph.root().size() == flux::Size{200.f, 100.f});
   REQUIRE(sceneGraph.root().children().size() == 1);
   CHECK(sceneGraph.root().children()[0]->size() == flux::Size{24.f, 12.f});
+}
+
+TEST_CASE("HStack flex children honor assigned main-axis size with explicit modifiers") {
+  struct Root {
+    flux::Element body() const {
+      return flux::HStack{
+          .spacing = 12.f,
+          .alignment = flux::Alignment::Center,
+          .children = flux::children(
+              flux::Element{flux::Rectangle{}}
+                  .size(56.f, 54.f)
+                  .fill(flux::Colors::red)
+                  .flex(2.f, 1.f, 0.f),
+              flux::Rectangle{}.size(56.f, 76.f),
+              flux::Element{flux::Rectangle{}}
+                  .size(56.f, 40.f)
+                  .fill(flux::Colors::blue)
+                  .flex(1.f, 1.f, 0.f),
+              flux::Rectangle{}.size(56.f, 54.f)),
+      };
+    }
+  };
+
+  FakeTextSystem textSystem;
+  flux::scenegraph::SceneGraph sceneGraph;
+  flux::MountRoot root{
+      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{}),
+      textSystem,
+      testEnvironment(),
+      flux::Size{704.f, 100.f},
+  };
+
+  root.mount(sceneGraph);
+
+  REQUIRE(sceneGraph.root().kind() == flux::scenegraph::SceneNodeKind::Group);
+  auto const& group = static_cast<flux::scenegraph::GroupNode const&>(sceneGraph.root());
+  REQUIRE(group.children().size() == 4);
+  CHECK(group.children()[0]->size().width == doctest::Approx(370.666f).epsilon(0.001));
+  CHECK(group.children()[2]->size().width == doctest::Approx(185.333f).epsilon(0.001));
+  CHECK(group.children()[1]->position().x == doctest::Approx(382.666f).epsilon(0.001));
+  CHECK(group.children()[3]->position().x == doctest::Approx(648.f));
+}
+
+TEST_CASE("reactive size changes relayout ancestor stack alignment") {
+  struct Root {
+    flux::Reactive::Signal<float> barHeight;
+
+    flux::Element body() const {
+      return flux::ZStack{
+          .horizontalAlignment = flux::Alignment::Center,
+          .verticalAlignment = flux::Alignment::Center,
+          .children = flux::children(
+              flux::Rectangle{}.size(100.f, 100.f),
+              flux::HStack{
+                  .spacing = 8.f,
+                  .alignment = flux::Alignment::Center,
+                  .children = flux::children(
+                      flux::Rectangle{}.size(
+                          flux::Reactive::Bindable<float>{20.f},
+                          flux::Reactive::Bindable<float>{[barHeight = barHeight] {
+                            return barHeight.get();
+                          }}),
+                      flux::Rectangle{}.size(20.f, 20.f)),
+              }),
+      };
+    }
+  };
+
+  FakeTextSystem textSystem;
+  flux::scenegraph::SceneGraph sceneGraph;
+  flux::Reactive::Signal<float> barHeight{20.f};
+  flux::MountRoot root{
+      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{barHeight}),
+      textSystem,
+      testEnvironment(),
+      flux::Size{100.f, 100.f},
+  };
+
+  root.mount(sceneGraph);
+
+  REQUIRE(sceneGraph.root().kind() == flux::scenegraph::SceneNodeKind::Group);
+  auto const& zstack = static_cast<flux::scenegraph::GroupNode const&>(sceneGraph.root());
+  REQUIRE(zstack.children().size() == 2);
+  auto const& row = static_cast<flux::scenegraph::GroupNode const&>(*zstack.children()[1]);
+  REQUIRE(row.children().size() == 2);
+  CHECK(row.position().y == doctest::Approx(40.f));
+  CHECK(row.children()[1]->position().y == doctest::Approx(0.f));
+
+  barHeight.set(60.f);
+
+  CHECK(row.size().height == doctest::Approx(60.f));
+  CHECK(row.position().y == doctest::Approx(20.f));
+  CHECK(row.children()[1]->position().y == doctest::Approx(20.f));
 }
 
 TEST_CASE("MountContext child creates a scoped owner") {

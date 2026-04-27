@@ -73,7 +73,11 @@ class SceneNode {
     void setTransform(Mat3 const& transform);
     void setLayoutFlow(LayoutFlow flow) noexcept;
     void setLayoutSpacing(float spacing) noexcept;
+    void setLayoutConstraints(LayoutConstraints constraints) noexcept;
+    bool hasLayoutConstraints() const noexcept;
+    LayoutConstraints layoutConstraints() const noexcept;
     void setRelayout(std::function<void(LayoutConstraints const&)> relayout);
+    bool relayoutStoredConstraints();
     bool relayout(LayoutConstraints const& constraints);
 
     SceneNode *parent() const noexcept;
@@ -111,6 +115,8 @@ class SceneNode {
     Mat3 transform_ = Mat3::identity();
     LayoutFlow layoutFlow_ = LayoutFlow::None;
     float layoutSpacing_ = 0.f;
+    LayoutConstraints layoutConstraints_{};
+    bool hasLayoutConstraints_ = false;
     SceneNode* parent_ = nullptr;
     std::vector<std::unique_ptr<SceneNode>> children_{};
     std::unique_ptr<InteractionData> interaction_{};

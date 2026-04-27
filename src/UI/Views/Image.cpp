@@ -65,6 +65,7 @@ std::unique_ptr<scenegraph::SceneNode> Image::mount(MountContext& ctx) const {
       Rect{0.f, 0.f, frameSize.width, frameSize.height}, source, fillMode);
   auto* rawNode = node.get();
   std::shared_ptr<flux::Image> imageSource = source;
+  rawNode->setLayoutConstraints(ctx.constraints());
   rawNode->setRelayout([rawNode, imageSource = std::move(imageSource)](
                            LayoutConstraints const& constraints) {
     Size const nextSize = resolveFrame(naturalSize(imageSource), constraints);

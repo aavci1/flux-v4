@@ -40,6 +40,7 @@ std::unique_ptr<scenegraph::SceneNode> Render::mount(MountContext& ctx) const {
   auto* rawNode = node.get();
   auto measure = measureFn;
   LayoutHints hints = ctx.hints();
+  rawNode->setLayoutConstraints(ctx.constraints());
   rawNode->setRelayout([rawNode, measure = std::move(measure),
                         hints](LayoutConstraints const& constraints) mutable {
     Size measured{};

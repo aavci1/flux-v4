@@ -78,6 +78,7 @@ std::unique_ptr<scenegraph::SceneNode> ScaleAroundCenter::mount(MountContext& ct
   group->appendChild(std::move(childNode));
   includeVisualBounds(*group);
   auto* rawGroup = group.get();
+  rawGroup->setLayoutConstraints(ctx.constraints());
   rawGroup->setRelayout([rawGroup, rawChild, frameSize, applyScale, scaleBinding](
                             LayoutConstraints const& constraints) mutable {
     if (rawChild) {

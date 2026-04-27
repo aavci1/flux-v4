@@ -6,6 +6,8 @@
 #include <Flux/SceneGraph/SceneNode.hpp>
 #include <Flux/UI/MountContext.hpp>
 
+#include "UI/Element/ModifierLayoutHelpers.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -41,17 +43,19 @@ LayoutConstraints insetConstraints(LayoutConstraints constraints, EdgeInsets pad
 }
 
 LayoutConstraints modifierInnerConstraints(LayoutConstraints constraints, EdgeInsets padding,
-                                           float width, float height) {
+                                           LayoutHints const& hints, float width, float height) {
   float const dx = std::max(0.f, padding.left) + std::max(0.f, padding.right);
   float const dy = std::max(0.f, padding.top) + std::max(0.f, padding.bottom);
+  float const resolvedWidth = detail::resolvedModifierWidth(constraints, hints, width);
+  float const resolvedHeight = detail::resolvedModifierHeight(constraints, hints, height);
   constraints = insetConstraints(constraints, padding);
-  if (width > 0.f) {
-    float const innerWidth = std::max(0.f, width - dx);
+  if (resolvedWidth > 0.f) {
+    float const innerWidth = std::max(0.f, resolvedWidth - dx);
     constraints.maxWidth = innerWidth;
     constraints.minWidth = innerWidth;
   }
-  if (height > 0.f) {
-    float const innerHeight = std::max(0.f, height - dy);
+  if (resolvedHeight > 0.f) {
+    float const innerHeight = std::max(0.f, resolvedHeight - dy);
     constraints.maxHeight = innerHeight;
     constraints.minHeight = innerHeight;
   }
@@ -64,6 +68,19 @@ LayoutConstraints modifierInnerConstraints(LayoutConstraints constraints, EdgeIn
   return constraints;
 }
 
+Size resolveModifierOuterSize(Size size, LayoutConstraints const& constraints,
+                              LayoutHints const& hints, float width, float height) {
+  float const resolvedWidth = detail::resolvedModifierWidth(constraints, hints, width);
+  float const resolvedHeight = detail::resolvedModifierHeight(constraints, hints, height);
+  if (resolvedWidth > 0.f) {
+    size.width = resolvedWidth;
+  }
+  if (resolvedHeight > 0.f) {
+    size.height = resolvedHeight;
+  }
+  return Size{positive(size.width), positive(size.height)};
+}
+
 LayoutConstraints fixedConstraints(Size size) {
   return LayoutConstraints{
       .maxWidth = std::max(0.f, size.width),
@@ -71,6 +88,20 @@ LayoutConstraints fixedConstraints(Size size) {
       .minWidth = std::max(0.f, size.width),
       .minHeight = std::max(0.f, size.height),
   };
+}
+
+void relayoutStoredAncestors(scenegraph::SceneNode& node) {
+  scenegraph::SceneNode* current = &node;
+  for (int depth = 0; depth < 64; ++depth) {
+    scenegraph::SceneNode* parent = current->parent();
+    if (!parent) {
+      return;
+    }
+    if (!parent->relayoutStoredConstraints()) {
+      return;
+    }
+    current = parent;
+  }
 }
 
 class ScopedEnvironmentSnapshot {
@@ -242,7 +273,7 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
   float const width = modifiers.sizeWidth.evaluate();
   float const height = modifiers.sizeHeight.evaluate();
   LayoutConstraints innerConstraints =
-      modifierInnerConstraints(ctx.constraints(), padding, width, height);
+      modifierInnerConstraints(ctx.constraints(), padding, ctx.hints(), width, height);
   MountContext innerCtx = ctx.child(innerConstraints, ctx.hints());
   std::unique_ptr<scenegraph::SceneNode> content = impl_->mount(innerCtx);
   if (!content) {
@@ -250,7 +281,8 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
     return nullptr;
   }
 
-  Size outerSize = measuredOuterSize(*this, ctx);
+  Size outerSize = resolveModifierOuterSize(
+      measuredOuterSize(*this, ctx), ctx.constraints(), ctx.hints(), width, height);
   auto wrapper = std::make_unique<scenegraph::RectNode>(
       Rect{0.f, 0.f, positive(outerSize.width), positive(outerSize.height)});
 
@@ -294,18 +326,32 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
   content->setPosition(Point{std::max(0.f, padding.left), std::max(0.f, padding.top)});
   wrapper->appendChild(std::move(content));
 
-  installBinding<float>(ctx, modifiers.sizeWidth, [rawWrapper](float width) {
-    if (width > 0.f) {
+  LayoutConstraints const bindingConstraints = ctx.constraints();
+  LayoutHints const bindingHints = ctx.hints();
+  installBinding<float>(ctx, modifiers.sizeWidth,
+                        [rawWrapper, bindingConstraints, bindingHints](float width) {
+    float const resolvedWidth = detail::resolvedModifierWidth(bindingConstraints, bindingHints, width);
+    if (resolvedWidth > 0.f) {
       Size size = rawWrapper->size();
-      size.width = width;
+      Size const oldSize = size;
+      size.width = resolvedWidth;
       rawWrapper->setSize(size);
+      if (rawWrapper->size() != oldSize) {
+        relayoutStoredAncestors(*rawWrapper);
+      }
     }
   });
-  installBinding<float>(ctx, modifiers.sizeHeight, [rawWrapper](float height) {
-    if (height > 0.f) {
+  installBinding<float>(ctx, modifiers.sizeHeight,
+                        [rawWrapper, bindingConstraints, bindingHints](float height) {
+    float const resolvedHeight = detail::resolvedModifierHeight(bindingConstraints, bindingHints, height);
+    if (resolvedHeight > 0.f) {
       Size size = rawWrapper->size();
-      size.height = height;
+      Size const oldSize = size;
+      size.height = resolvedHeight;
       rawWrapper->setSize(size);
+      if (rawWrapper->size() != oldSize) {
+        relayoutStoredAncestors(*rawWrapper);
+      }
     }
   });
   installBinding<Vec2>(ctx, modifiers.translation, [rawWrapper, px = modifiers.positionX,
@@ -335,7 +381,9 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
     }
   }
 
-  rawWrapper->setRelayout([rawWrapper, rawContent,
+  LayoutHints const relayoutHints = ctx.hints();
+  rawWrapper->setLayoutConstraints(ctx.constraints());
+  rawWrapper->setRelayout([rawWrapper, rawContent, relayoutHints,
                            modifiers](LayoutConstraints const& constraints) mutable {
     EdgeInsets const padding = modifiers.padding.evaluate();
     float const padL = std::max(0.f, padding.left);
@@ -344,29 +392,31 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
     float const padB = std::max(0.f, padding.bottom);
     float const width = modifiers.sizeWidth.evaluate();
     float const height = modifiers.sizeHeight.evaluate();
+    float const resolvedWidth = detail::resolvedModifierWidth(constraints, relayoutHints, width);
+    float const resolvedHeight = detail::resolvedModifierHeight(constraints, relayoutHints, height);
     LayoutConstraints innerConstraints =
-        modifierInnerConstraints(constraints, padding, width, height);
+        modifierInnerConstraints(constraints, padding, relayoutHints, width, height);
     if (rawContent) {
       rawContent->relayout(innerConstraints);
     }
     Size contentSize = rawContent ? rawContent->size() : Size{};
     Size nextSize{contentSize.width + padL + padR, contentSize.height + padT + padB};
-    if (width > 0.f) {
-      nextSize.width = width;
+    if (resolvedWidth > 0.f) {
+      nextSize.width = resolvedWidth;
     }
-    if (height > 0.f) {
-      nextSize.height = height;
+    if (resolvedHeight > 0.f) {
+      nextSize.height = resolvedHeight;
     }
-    if (width <= 0.f) {
+    if (resolvedWidth <= 0.f) {
       nextSize.width = std::max(nextSize.width, constraints.minWidth);
     }
-    if (height <= 0.f) {
+    if (resolvedHeight <= 0.f) {
       nextSize.height = std::max(nextSize.height, constraints.minHeight);
     }
-    if (width <= 0.f && std::isfinite(constraints.maxWidth)) {
+    if (resolvedWidth <= 0.f && std::isfinite(constraints.maxWidth)) {
       nextSize.width = std::min(nextSize.width, constraints.maxWidth);
     }
-    if (height <= 0.f && std::isfinite(constraints.maxHeight)) {
+    if (resolvedHeight <= 0.f && std::isfinite(constraints.maxHeight)) {
       nextSize.height = std::min(nextSize.height, constraints.maxHeight);
     }
     rawWrapper->setSize(Size{positive(nextSize.width), positive(nextSize.height)});

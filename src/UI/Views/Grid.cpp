@@ -190,6 +190,7 @@ std::unique_ptr<scenegraph::SceneNode> Grid::mount(MountContext& ctx) const {
   }
   auto* rawGroup = group.get();
   Grid grid = *this;
+  rawGroup->setLayoutConstraints(ctx.constraints());
   rawGroup->setRelayout([rawGroup, mountedChildren, grid = std::move(grid)](
                             LayoutConstraints const& constraints) mutable {
     std::size_t const columnsCount = clampedColumns(grid.columns);

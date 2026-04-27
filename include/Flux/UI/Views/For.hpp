@@ -67,6 +67,7 @@ public:
                           ctx.constraints(), ctx.redrawCallback());
 
     scenegraph::GroupNode* rawGroup = group.get();
+    rawGroup->setLayoutConstraints(ctx.constraints());
     rawGroup->setRelayout([state, rawGroup](LayoutConstraints const& constraints) {
       state->relayout(*rawGroup, constraints);
     });

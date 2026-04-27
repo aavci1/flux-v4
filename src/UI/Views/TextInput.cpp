@@ -276,6 +276,7 @@ std::unique_ptr<scenegraph::SceneNode> TextInput::mount(MountContext& ctx) const
 
   auto* rawWrapper = wrapper.get();
   TextSystem* textSystem = &ctx.textSystem();
+  rawWrapper->setLayoutConstraints(ctx.constraints());
   rawWrapper->setRelayout([rawWrapper, rawText, input = *this, resolved,
                            frameSize, textSystem](LayoutConstraints const& constraints) mutable {
     *frameSize = textInputFrameSize(input, resolved, constraints, *textSystem);

@@ -300,6 +300,7 @@ std::unique_ptr<scenegraph::SceneNode> mountRectangle(Rectangle const&, MountCon
   auto node = std::make_unique<scenegraph::RectNode>(
       Rect{0.f, 0.f, finiteOrZero(size.width), finiteOrZero(size.height)});
   auto* rawNode = node.get();
+  rawNode->setLayoutConstraints(ctx.constraints());
   rawNode->setRelayout([rawNode](LayoutConstraints const& constraints) {
     Size const nextSize = assignedSize(constraints);
     rawNode->setSize(Size{finiteOrZero(nextSize.width), finiteOrZero(nextSize.height)});
@@ -330,6 +331,7 @@ std::unique_ptr<scenegraph::SceneNode> mountText(Text const& text, MountContext&
   auto node = std::make_unique<scenegraph::TextNode>(box, std::move(layout));
 
   auto* rawNode = node.get();
+  rawNode->setLayoutConstraints(ctx.constraints());
   TextSystem* textSystemForRelayout = &ctx.textSystem();
   Reactive::Bindable<std::string> relayoutTextBinding = text.text;
   Reactive::Bindable<Color> relayoutColorBinding = text.color;
@@ -487,6 +489,7 @@ std::unique_ptr<scenegraph::SceneNode> mountVStack(VStack const& stack, MountCon
   Alignment const alignment = stack.alignment;
   JustifyContent const justifyContent = stack.justifyContent;
   LayoutHints const relayoutHints = ctx.hints();
+  rawGroup->setLayoutConstraints(ctx.constraints());
   rawGroup->setRelayout([rawGroup, mountedChildren, spacing, alignment,
                          justifyContent, relayoutHints](LayoutConstraints const& constraints) {
     float const nextAssignedWidth = finiteSpan(constraints.maxWidth);
@@ -675,6 +678,7 @@ std::unique_ptr<scenegraph::SceneNode> mountHStack(HStack const& stack, MountCon
   Alignment const alignment = stack.alignment;
   JustifyContent const justifyContent = stack.justifyContent;
   LayoutHints const relayoutHints = ctx.hints();
+  rawGroup->setLayoutConstraints(ctx.constraints());
   rawGroup->setRelayout([rawGroup, mountedChildren, spacing, alignment,
                          justifyContent, relayoutHints](LayoutConstraints const& constraints) {
     float const nextAssignedWidth = finiteSpan(constraints.maxWidth);
@@ -832,6 +836,7 @@ std::unique_ptr<scenegraph::SceneNode> mountZStack(ZStack const& stack, MountCon
   auto* rawGroup = group.get();
   Alignment const horizontalAlignment = stack.horizontalAlignment;
   Alignment const verticalAlignment = stack.verticalAlignment;
+  rawGroup->setLayoutConstraints(ctx.constraints());
   rawGroup->setRelayout([rawGroup, mountedChildren, horizontalAlignment,
                          verticalAlignment](LayoutConstraints const& constraints) {
     float const assignedWidth = finiteSpan(constraints.maxWidth);

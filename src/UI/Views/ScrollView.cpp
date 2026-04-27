@@ -336,6 +336,7 @@ std::unique_ptr<scenegraph::SceneNode> ScrollView::mount(MountContext& ctx) cons
   };
   viewportNode->setInteraction(std::move(interaction));
   ScrollView scrollView = *this;
+  rawViewportNode->setLayoutConstraints(ctx.constraints());
   rawViewportNode->setRelayout([rawViewportNode, rawContentGroup, rawIndicatorOverlay,
                                 rawVerticalIndicator, rawHorizontalIndicator,
                                 scrollView = std::move(scrollView), offsetState,
