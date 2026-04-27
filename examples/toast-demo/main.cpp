@@ -97,7 +97,7 @@ Element sectionCard(Theme const& theme, std::string title, std::string caption, 
 
 struct ToastDemoRoot {
   Element body() const {
-    auto theme = useEnvironmentReactive<ThemeKey>();
+    auto theme = useEnvironment<ThemeKey>();
 
     auto placementIndex = useState<int>(4);
     auto persistent = useState(false);

@@ -78,7 +78,7 @@ struct IconCell {
     bool operator==(IconCell const &) const = default;
 
     auto body() const {
-        auto theme = useEnvironmentReactive<ThemeKey>();
+        auto theme = useEnvironment<ThemeKey>();
 
         return VStack {
             .spacing = theme().space2,
@@ -106,7 +106,7 @@ struct IconCell {
 
 struct IconDemoRoot {
     auto body() const {
-        auto theme = useEnvironmentReactive<ThemeKey>();
+        auto theme = useEnvironment<ThemeKey>();
 
         std::vector<Element> gridCells;
         gridCells.reserve(sizeof(kIcons) / sizeof(kIcons[0]));

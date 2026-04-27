@@ -26,7 +26,7 @@ ListView::Style resolveListStyle(ListView::Style const &style, Theme const &them
 } // namespace
 
 Element ListRow::body() const {
-    auto theme = useEnvironmentReactive<ThemeKey>();
+    auto theme = useEnvironment<ThemeKey>();
     ListRow::Style const resolved = resolveRowStyle(style, theme());
     Reactive::Signal<bool> hovered = useHover();
     Reactive::Signal<bool> pressed = usePress();
@@ -61,7 +61,7 @@ Element ListRow::body() const {
 }
 
 Element ListView::body() const {
-    auto theme = useEnvironmentReactive<ThemeKey>();
+    auto theme = useEnvironment<ThemeKey>();
     ListView::Style const resolved = resolveListStyle(style, theme());
 
     std::vector<Element> childrenList;

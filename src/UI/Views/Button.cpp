@@ -114,7 +114,7 @@ ButtonColors deriveColors(ButtonVariant variant, Color accent, Color destructive
 } // namespace
 
 Element Button::body() const {
-    auto theme = useEnvironmentReactive<ThemeKey>();
+    auto theme = useEnvironment<ThemeKey>();
     auto [fontResolved, paddingH, paddingV, radiusResolved, accent, destructive] = resolveStyle(style, theme());
     bool const isDisabled = disabled.evaluate();
     Reactive::Bindable<bool> disabledBinding = disabled;
@@ -203,7 +203,7 @@ Element Button::body() const {
 }
 
 Element LinkButton::body() const {
-    auto theme = useEnvironmentReactive<ThemeKey>();
+    auto theme = useEnvironment<ThemeKey>();
     auto [fontResolved, accentResolved] = resolveStyle(style, theme());
     bool const isDisabled = disabled.evaluate();
     Reactive::Bindable<bool> disabledBinding = disabled;
@@ -263,7 +263,7 @@ Element LinkButton::body() const {
 }
 
 Element IconButton::body() const {
-    auto theme = useEnvironmentReactive<ThemeKey>();
+    auto theme = useEnvironment<ThemeKey>();
     auto [sizeResolved, weightResolved, accentResolved] = resolveStyle(style, theme());
     bool const isDisabled = disabled.evaluate();
     Reactive::Bindable<bool> disabledBinding = disabled;

@@ -104,7 +104,7 @@ constexpr float kChannelScale = 1.f / 255.f;
 
 struct SliderDemoRoot {
     Element body() const {
-        auto theme = useEnvironmentReactive<ThemeKey>();
+        auto theme = useEnvironment<ThemeKey>();
 
         auto red = useState(90.f);
         auto green = useState(120.f);

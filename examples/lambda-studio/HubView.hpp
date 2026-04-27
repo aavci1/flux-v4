@@ -39,7 +39,7 @@ struct RemoteModelRow : ViewModifiers<RemoteModelRow> {
     std::function<void()> onTap;
 
     auto body() const {
-        auto theme = useEnvironmentReactive<ThemeKey>();
+        auto theme = useEnvironment<ThemeKey>();
 
         std::string meta = model.author.empty() ? model.id : model.author;
         if (!model.pipelineTag.empty()) {
@@ -104,7 +104,7 @@ struct RemoteFileRow : ViewModifiers<RemoteFileRow> {
     std::function<void()> onCancel;
 
     auto body() const {
-        auto theme = useEnvironmentReactive<ThemeKey>();
+        auto theme = useEnvironment<ThemeKey>();
         bool const showProgress = downloading && totalBytes > 0;
         std::string meta = formatModelSize(file.sizeBytes) + (file.cached ? "  •  Cached locally" : "");
         if (downloading) {
@@ -178,7 +178,7 @@ struct HubView : ViewModifiers<HubView> {
     std::function<void(std::string const &)> onCancelDownload;
 
     auto body() const {
-        auto theme = useEnvironmentReactive<ThemeKey>();
+        auto theme = useEnvironment<ThemeKey>();
         auto searchQuery = useState<std::string>(state.modelSearchQuery);
         auto sortIndex = useState<int>(state.remoteModelSort == RemoteModelSort::Likes ? 1 :
                                        state.remoteModelSort == RemoteModelSort::Updated ? 2 :

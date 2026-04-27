@@ -20,7 +20,7 @@ Divider::Style resolveStyle(Divider::Style const &style, Theme const &theme) {
 } // namespace
 
 Element Divider::body() const {
-    Divider::Style const resolved = resolveStyle(style, flux::useEnvironmentReactive<ThemeKey>()());
+    Divider::Style const resolved = resolveStyle(style, flux::useEnvironment<ThemeKey>()());
     return Rectangle {}
         .size(orientation == Orientation::Horizontal ? 0.f : resolved.thickness,
               orientation == Orientation::Vertical ? 0.f : resolved.thickness)

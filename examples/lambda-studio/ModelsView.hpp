@@ -257,7 +257,7 @@ struct ModelRow : ViewModifiers<ModelRow> {
     std::function<void()> onDelete;
 
     auto body() const {
-        auto theme = useEnvironmentReactive<ThemeKey>();
+        auto theme = useEnvironment<ThemeKey>();
         model_row_presentation::PresentedLocalModelRow const presented =
             model_row_presentation::presentLocalModel(model);
 
@@ -318,7 +318,7 @@ struct DownloadJobRow : ViewModifiers<DownloadJobRow> {
     std::function<void()> onRemove;
 
     auto body() const {
-        auto theme = useEnvironmentReactive<ThemeKey>();
+        auto theme = useEnvironment<ThemeKey>();
         std::string title = job.filePath;
         if (!job.repoId.empty()) {
             title += "  •  " + job.repoId;
@@ -421,7 +421,7 @@ struct ModelsView : ViewModifiers<ModelsView> {
     std::function<void(std::string const &)> onRemoveDownload;
 
     auto body() const {
-        auto theme = useEnvironmentReactive<ThemeKey>();
+        auto theme = useEnvironment<ThemeKey>();
 
         std::vector<Element> localRows;
         localRows.reserve(state.localModels.size());

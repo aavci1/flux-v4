@@ -595,7 +595,7 @@ Element makeMixedCompositionDemo(Theme const &theme) {
 
 struct JustifyPlaygroundSection {
     Element body() const {
-        auto theme = useEnvironmentReactive<ThemeKey>();
+        auto theme = useEnvironment<ThemeKey>();
         Signal<int> const axisIndex = useState<int>(0);
         Signal<int> const alignmentIndex = useState<int>(1);
         Signal<int> const justifyIndex = useState<int>(4);
@@ -748,7 +748,7 @@ Element makeFlexBasisDemo(Theme const &theme) {
 
 struct StackDemoRoot {
     Element body() const {
-        auto theme = useEnvironmentReactive<ThemeKey>();
+        auto theme = useEnvironment<ThemeKey>();
 
         return ScrollView {
             .axis = ScrollAxis::Vertical,

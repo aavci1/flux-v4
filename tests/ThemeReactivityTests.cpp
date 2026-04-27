@@ -81,7 +81,7 @@ TEST_CASE("theme signal updates retained leaf bindings without remounting") {
 
     flux::Element body() const {
       ++*bodyCalls;
-      auto theme = flux::useEnvironmentReactive<flux::ThemeKey>();
+      auto theme = flux::useEnvironment<flux::ThemeKey>();
       flux::Reactive::onCleanup([cleanups = cleanups] {
         ++*cleanups;
       });

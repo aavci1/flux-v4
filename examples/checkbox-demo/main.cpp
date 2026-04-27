@@ -98,7 +98,7 @@ Element summaryTile(Theme const &theme,
 
 struct CheckboxDemoRoot {
     Element body() const {
-        auto theme = useEnvironmentReactive<ThemeKey>();
+        auto theme = useEnvironment<ThemeKey>();
 
         auto termsAccepted = useState(false);
         auto newsletter = useState(true);

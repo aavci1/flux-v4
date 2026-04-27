@@ -66,7 +66,7 @@ Element labeledField(Theme const &theme, std::string label, Element field) {
 
 struct TextInputShowcase {
     auto body() const {
-        auto theme = useEnvironmentReactive<ThemeKey>();
+        auto theme = useEnvironment<ThemeKey>();
 
         auto name = useState(std::string {"Abdurrahman Avci"});
         auto email = useState(std::string {"hello@flux.dev"});

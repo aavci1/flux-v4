@@ -789,7 +789,7 @@ struct StudioApp : ViewModifiers<StudioApp> {
     std::shared_ptr<AppRuntime> runtime;
 
     Element body() const {
-        auto theme = useEnvironmentReactive<ThemeKey>();
+        auto theme = useEnvironment<ThemeKey>();
         auto appState = useState<AppState>(makeInitialAppState());
         std::shared_ptr<AppRuntime> runtimeInstance = runtime;
         if (!runtimeInstance) {

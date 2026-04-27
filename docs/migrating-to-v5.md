@@ -46,7 +46,7 @@ Control-flow factories receive their own scopes, so row and branch state persist
 Theme is now an explicit environment key. Read the active theme with:
 
 ```cpp
-auto theme = useEnvironmentReactive<ThemeKey>();
+auto theme = useEnvironment<ThemeKey>();
 ```
 
 Read `theme()` inside a `Bindable` closure or `Effect` body when the result must
@@ -84,11 +84,11 @@ FLUX_DEFINE_ENVIRONMENT_KEY(LocaleKey, Locale, Locale{});
 
 Use these APIs:
 
-- `useEnvironment<Key>()` returns the current value by copy. Use it for mount-time static reads.
+- `useEnvironmentValue<Key>()` returns the current value by copy. Use it only when a non-reactive snapshot is required.
 - `useEnvironmentSignal<Key>()` returns the upstream signal when the provider is signal-backed.
-- `useEnvironmentReactive<Key>()` returns a signal-shaped value, using the upstream signal when present or a constant signal otherwise.
+- `useEnvironment<Key>()` returns a signal-shaped value, using the upstream signal when present or a constant signal otherwise.
 - `.environment<Key>(value)` and `.environment<Key>(signal)` provide value-backed and signal-backed subtree overrides.
 
 The old type-keyed API is gone: `useEnvironment<Theme>()` becomes
-`useEnvironmentReactive<ThemeKey>()`, and `.environment(theme)` becomes
+`useEnvironment<ThemeKey>()`, and `.environment(theme)` becomes
 `.environment<ThemeKey>(theme)`.

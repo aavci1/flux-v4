@@ -146,7 +146,7 @@ std::string selectedLabel(std::vector<SelectOption> const &options, int index, s
 
 struct SelectDemoRoot {
   Element body() const {
-    auto theme = useEnvironmentReactive<ThemeKey>();
+    auto theme = useEnvironment<ThemeKey>();
 
     std::vector<SelectOption> const envOptions = environmentOptions();
     std::vector<SelectOption> const peopleOptions = reviewerOptions();

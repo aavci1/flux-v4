@@ -6,7 +6,7 @@ using namespace flux;
 
 struct HelloRoot {
   auto body() const {
-    auto theme = useEnvironmentReactive<ThemeKey>();
+    auto theme = useEnvironment<ThemeKey>();
     return Text{
         .text = "Hello, World!",
         .font = Font::largeTitle(),

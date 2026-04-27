@@ -143,7 +143,7 @@ Element wrappingExamples(Theme const &theme) {
 
 struct TextDemoRoot {
     auto body() const {
-        auto theme = useEnvironmentReactive<ThemeKey>();
+        auto theme = useEnvironment<ThemeKey>();
 
         Element intro = VStack {
             .spacing = theme().space3,

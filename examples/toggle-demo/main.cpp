@@ -108,7 +108,7 @@ Element metricTile(Theme const &theme,
 
 struct ToggleDemoRoot {
     Element body() const {
-        auto theme = useEnvironmentReactive<ThemeKey>();
+        auto theme = useEnvironment<ThemeKey>();
 
         auto wifiEnabled = useState(true);
         auto bluetoothEnabled = useState(false);

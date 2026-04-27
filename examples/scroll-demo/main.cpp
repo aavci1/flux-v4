@@ -292,7 +292,7 @@ Element makeBothAxesDemo(Theme const& theme) {
 
 struct ScrollDemoRoot {
     Element body() const {
-        auto theme = useEnvironmentReactive<ThemeKey>();
+        auto theme = useEnvironment<ThemeKey>();
 
         return ScrollView{
             .axis = ScrollAxis::Vertical,

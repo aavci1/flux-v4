@@ -103,7 +103,7 @@ Element buttonRow(Theme const &theme, std::vector<Element> buttons) {
 
 struct PlaybackLab : ViewModifiers<PlaybackLab> {
     auto body() const {
-        auto theme = useEnvironmentReactive<ThemeKey>();
+        auto theme = useEnvironment<ThemeKey>();
 
         auto progress = useAnimation<float>(0.f);
 
@@ -198,7 +198,7 @@ struct PlaybackLab : ViewModifiers<PlaybackLab> {
 
 struct MorphLab : ViewModifiers<MorphLab> {
     auto body() const {
-        auto theme = useEnvironmentReactive<ThemeKey>();
+        auto theme = useEnvironment<ThemeKey>();
 
         auto travel = useAnimation<float>(0.f);
         auto width = useAnimation<float>(132.f);
@@ -308,7 +308,7 @@ struct MorphLab : ViewModifiers<MorphLab> {
 
 struct AmbientLoopLab : ViewModifiers<AmbientLoopLab> {
     auto body() const {
-        auto theme = useEnvironmentReactive<ThemeKey>();
+        auto theme = useEnvironment<ThemeKey>();
 
         auto phase = useState(0.f);
         double const startedAt = nowSeconds();
@@ -383,7 +383,7 @@ struct AmbientLoopLab : ViewModifiers<AmbientLoopLab> {
 
 struct AnimationDemoRoot {
     auto body() const {
-        auto windowTheme = useEnvironmentReactive<ThemeKey>();
+        auto windowTheme = useEnvironment<ThemeKey>();
 
         Theme demoTheme = windowTheme();
 

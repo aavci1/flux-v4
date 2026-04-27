@@ -140,7 +140,7 @@ Element swatchGrid(Theme const &theme, std::vector<Element> tiles) {
 }
 
 Element previewWindow(Theme previewTheme, std::string name, std::string note) {
-    auto theme = useEnvironmentReactive<ThemeKey>();
+    auto theme = useEnvironment<ThemeKey>();
 
     Element content = VStack {
         .spacing = theme().space3,
@@ -234,7 +234,7 @@ Element previewWindow(Theme previewTheme, std::string name, std::string note) {
 
 struct TypographyDemoRoot {
     auto body() const {
-        auto theme = useEnvironmentReactive<ThemeKey>();
+        auto theme = useEnvironment<ThemeKey>();
 
         Element previews = HStack {
             .spacing = theme().space3,

@@ -623,7 +623,7 @@ Element makeIconButtonDemo(Theme const &theme, Signal<std::string> lastEvent) {
 
 struct ButtonDemoRoot {
     Element body() const {
-        auto theme = useEnvironmentReactive<ThemeKey>();
+        auto theme = useEnvironment<ThemeKey>();
 
         auto dirty = useState(true);
         auto reviewPassed = useState(false);

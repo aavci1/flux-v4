@@ -591,7 +591,7 @@ struct ModelParametersDialog : ViewModifiers<ModelParametersDialog> {
     std::function<void()> onClose;
 
     auto body() const {
-        auto theme = useEnvironmentReactive<ThemeKey>();
+        auto theme = useEnvironment<ThemeKey>();
         auto localParams = useState<lambda_studio_backend::GenerationParams>(params);
 
         auto apply = [localParams, onAdjustGeneration = onAdjustGeneration](lambda_studio_backend::GenerationParamsPatch const &patch) {
@@ -712,7 +712,7 @@ struct ModelParametersDialog : ViewModifiers<ModelParametersDialog> {
 
 struct ThinkingDots : ViewModifiers<ThinkingDots> {
     auto body() const {
-        auto theme = useEnvironmentReactive<ThemeKey>();
+        auto theme = useEnvironment<ThemeKey>();
 
         auto phase = useAnimation<float>(
             0.f,
@@ -763,7 +763,7 @@ struct ChatBubble : ViewModifiers<ChatBubble> {
     std::function<void()> onDenyTool;
 
     Element body() const {
-        auto theme = useEnvironmentReactive<ThemeKey>();
+        auto theme = useEnvironment<ThemeKey>();
 
         bool const isUser = message.role == ChatRole::User;
         bool const isReasoning = message.role == ChatRole::Reasoning;
@@ -1252,7 +1252,7 @@ struct ChatComposer : ViewModifiers<ChatComposer> {
     bool streaming = false;
 
     auto body() const {
-        auto theme = useEnvironmentReactive<ThemeKey>();
+        auto theme = useEnvironment<ThemeKey>();
         auto [showDialog, hideDialog, isDialogPresented] = useOverlay();
         (void)isDialogPresented;
         int derivedSelectedIndex = -1;
@@ -1416,7 +1416,7 @@ struct ChatView : ViewModifiers<ChatView> {
     std::function<void(lambda_studio_backend::GenerationParamsPatch const &)> onAdjustGeneration;
 
     auto body() const {
-        auto theme = useEnvironmentReactive<ThemeKey>();
+        auto theme = useEnvironment<ThemeKey>();
         auto draft = useState<std::string>("");
 
         std::string selectedModelLabel = "Select model";

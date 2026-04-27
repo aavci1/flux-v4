@@ -190,7 +190,7 @@ std::string appendLimited(std::string value, std::string const& text, int maxLen
 Size TextInput::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
                         LayoutHints const&, TextSystem& textSystem) const {
   ctx.advanceChildSlot();
-  auto theme = useEnvironmentReactive<ThemeKey>();
+  auto theme = useEnvironment<ThemeKey>();
   return textInputFrameSize(*this, resolveTextInputStyle(style, theme()), constraints, textSystem);
 }
 

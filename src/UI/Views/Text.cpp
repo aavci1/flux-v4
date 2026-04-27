@@ -27,7 +27,7 @@ TextLayoutOptions textLayoutOptions(Text const& text) {
 Size Text::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
                    LayoutHints const&, TextSystem& textSystem) const {
   ctx.advanceChildSlot();
-  auto theme = useEnvironmentReactive<ThemeKey>();
+  auto theme = useEnvironment<ThemeKey>();
   Font const resolvedFont = resolveFont(font, theme().bodyFont, theme());
   Color const resolvedColor = resolveColor(color.evaluate(), theme().labelColor, theme());
   TextLayoutOptions const options = textLayoutOptions(*this);

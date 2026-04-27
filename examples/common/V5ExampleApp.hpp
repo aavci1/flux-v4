@@ -28,7 +28,7 @@ struct V5ExampleRoot {
   V5ExampleConfig config;
 
   Element body() const {
-    auto theme = useEnvironmentReactive<ThemeKey>();
+    auto theme = useEnvironment<ThemeKey>();
     auto rows = useState(config.rows);
 
     return VStack{

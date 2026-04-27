@@ -28,7 +28,7 @@ const std::vector<std::tuple<std::string, Cursor>> cursors = {
 /// Hover each row to see the platform cursor; drag the bottom strip to verify the cursor stays locked.
 struct CursorDemo {
     auto body() const {
-        auto theme = useEnvironmentReactive<ThemeKey>();
+        auto theme = useEnvironment<ThemeKey>();
 
         std::vector<Element> cells = {};
         for (auto const &[name, cursor] : cursors) {

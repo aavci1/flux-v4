@@ -228,7 +228,7 @@ inline void debugRegisterUseState(std::source_location location) {
 } // namespace detail
 
 template<typename Key>
-typename EnvironmentKey<Key>::Value useEnvironment() {
+typename EnvironmentKey<Key>::Value useEnvironmentValue() {
   if (MountContext* mount = detail::currentMountContext()) {
     return mount->environmentBinding().value<Key>();
   }
@@ -251,16 +251,16 @@ useEnvironmentSignal() {
 }
 
 template<typename Key>
-Reactive::Signal<typename EnvironmentKey<Key>::Value> useEnvironmentReactive() {
+Reactive::Signal<typename EnvironmentKey<Key>::Value> useEnvironment() {
   if (auto signal = useEnvironmentSignal<Key>()) {
     return *signal;
   }
-  return Reactive::Signal<typename EnvironmentKey<Key>::Value>{useEnvironment<Key>()};
+  return Reactive::Signal<typename EnvironmentKey<Key>::Value>{useEnvironmentValue<Key>()};
 }
 
 template<typename Key, typename Field>
 Reactive::Computed<Field> useEnvironmentField(Field EnvironmentKey<Key>::Value::* member) {
-  Reactive::Signal<typename EnvironmentKey<Key>::Value> value = useEnvironmentReactive<Key>();
+  Reactive::Signal<typename EnvironmentKey<Key>::Value> value = useEnvironment<Key>();
   return Reactive::makeComputed([value, member] {
     return value().*member;
   });

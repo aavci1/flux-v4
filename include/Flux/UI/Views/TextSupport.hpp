@@ -16,7 +16,7 @@
 namespace flux::text_detail {
 
 inline std::pair<Font, Color> resolveBodyTextStyle(Font const& font, Color color) {
-  auto theme = useEnvironmentReactive<ThemeKey>();
+  auto theme = useEnvironment<ThemeKey>();
   return {
       resolveFont(font, theme().bodyFont, theme()),
       resolveColor(color, theme().labelColor, theme()),

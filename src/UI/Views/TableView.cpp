@@ -299,8 +299,8 @@ std::vector<RenderedTableRow> buildRenderedRows(std::vector<TableView::Item> con
 }
 
 Element TableCell::body() const {
-    auto table = useEnvironmentReactive<TableLayoutContextKey>();
-    auto index = useEnvironmentReactive<TableColumnIndexKey>();
+    auto table = useEnvironment<TableLayoutContextKey>();
+    auto index = useEnvironment<TableColumnIndexKey>();
 
     float resolvedWidth = style.width > 0.f ? style.width : 0.f;
     bool usesTableFlex = false;
@@ -337,9 +337,9 @@ Element TableCell::body() const {
 }
 
 Element TableRow::body() const {
-    auto theme = useEnvironmentReactive<ThemeKey>();
+    auto theme = useEnvironment<ThemeKey>();
     TableRow::Style const resolved = resolveRowStyle(style, theme());
-    auto table = useEnvironmentReactive<TableLayoutContextKey>();
+    auto table = useEnvironment<TableLayoutContextKey>();
     Reactive::Signal<bool> hovered = useHover();
     Reactive::Signal<bool> pressed = usePress();
     bool const interactive = !disabled && static_cast<bool>(onTap);
@@ -405,7 +405,7 @@ Element TableRow::body() const {
 }
 
 Element TableView::body() const {
-    auto theme = useEnvironmentReactive<ThemeKey>();
+    auto theme = useEnvironment<ThemeKey>();
     TableView::Style const resolved = resolveTableStyle(style, theme());
     Signal<int> const sortColumn = useState<int>(-1);
     Signal<bool> const sortAscending = useState<bool>(true);

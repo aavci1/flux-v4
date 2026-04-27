@@ -91,7 +91,7 @@ Flux v5 mounts UI once and updates retained scene nodes through reactive depende
 - `.get()` remains available as an explicit synonym, but examples use `()` for
   read-and-subscribe sites.
 - Use `.peek()` for intentional non-tracking reads.
-- `useEnvironment<T>()` returns a signal for the active environment value. Read it
+- `useEnvironment<Key>()` returns a signal for the active environment value. Read it
   inside `Bindable` closures or `Effect` bodies when UI should update after
   environment changes. A body-time read is a static mount-time seed and does not
   subscribe.
