@@ -9,6 +9,7 @@
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Detail/MountPosition.hpp>
 #include <Flux/UI/Views/HStack.hpp>
+#include <Flux/UI/Views/ControlFlowDetail.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/Spacer.hpp>
 #include <Flux/UI/Views/Text.hpp>
@@ -433,13 +434,16 @@ std::unique_ptr<scenegraph::SceneNode> mountVStack(VStack const& stack, MountCon
         : ctx.child(childConstraints, childHints);
     auto node = child.mount(childCtx);
     Size mountedSize = active ? slot->assignedSize : Size{};
+    Point layoutOrigin = active ? slot->origin : nextCollapsedOrigin;
+    if (active) {
+      layoutOrigin.y = std::max(layoutOrigin.y, nextCollapsedOrigin.y);
+    }
     if (node) {
-      Point const origin = active ? slot->origin : nextCollapsedOrigin;
-      detail::setLayoutPosition(*node, origin);
+      detail::setLayoutPosition(*node, layoutOrigin);
       mountedSize = active ? slot->assignedSize : node->size();
       mountedChildren->push_back(MountedLayoutChild{
           .node = node.get(),
-          .layoutOrigin = origin,
+          .layoutOrigin = layoutOrigin,
           .flexGrow = child.flexGrow(),
           .flexShrink = child.flexShrink(),
           .flexBasis = child.flexBasis(),
@@ -450,13 +454,17 @@ std::unique_ptr<scenegraph::SceneNode> mountVStack(VStack const& stack, MountCon
       group->appendChild(std::move(node));
     }
     if (active) {
-      Point const origin = slot->origin;
-      nextCollapsedOrigin = Point{origin.x, origin.y + slot->assignedSize.height + stack.spacing};
+      nextCollapsedOrigin =
+          Point{layoutOrigin.x, layoutOrigin.y + slot->assignedSize.height + stack.spacing};
     } else if (mountedSize.height > layout::kFlexEpsilon) {
       nextCollapsedOrigin = Point{nextCollapsedOrigin.x,
                                   nextCollapsedOrigin.y + mountedSize.height + stack.spacing};
     }
   }
+  Size const mountedExtents = controlStackExtents(*group, scenegraph::LayoutFlow::VerticalStack);
+  Size const initialGroupSize = group->size();
+  group->setSize(Size{finiteOrZero(std::max(initialGroupSize.width, mountedExtents.width)),
+                      finiteOrZero(std::max(initialGroupSize.height, mountedExtents.height))});
   auto* rawGroup = group.get();
   float const spacing = stack.spacing;
   Alignment const alignment = stack.alignment;
@@ -614,13 +622,16 @@ std::unique_ptr<scenegraph::SceneNode> mountHStack(HStack const& stack, MountCon
         : ctx.child(initialConstraints, rowHints);
     auto node = child.mount(childCtx);
     Size mountedSize = active ? slot->assignedSize : Size{};
+    Point layoutOrigin = active ? slot->origin : nextCollapsedOrigin;
+    if (active) {
+      layoutOrigin.x = std::max(layoutOrigin.x, nextCollapsedOrigin.x);
+    }
     if (node) {
-      Point const origin = active ? slot->origin : nextCollapsedOrigin;
-      detail::setLayoutPosition(*node, origin);
+      detail::setLayoutPosition(*node, layoutOrigin);
       mountedSize = active ? slot->assignedSize : node->size();
       mountedChildren->push_back(MountedLayoutChild{
           .node = node.get(),
-          .layoutOrigin = origin,
+          .layoutOrigin = layoutOrigin,
           .flexGrow = child.flexGrow(),
           .flexShrink = child.flexShrink(),
           .flexBasis = child.flexBasis(),
@@ -631,13 +642,17 @@ std::unique_ptr<scenegraph::SceneNode> mountHStack(HStack const& stack, MountCon
       group->appendChild(std::move(node));
     }
     if (active) {
-      Point const origin = slot->origin;
-      nextCollapsedOrigin = Point{origin.x + slot->assignedSize.width + stack.spacing, origin.y};
+      nextCollapsedOrigin =
+          Point{layoutOrigin.x + slot->assignedSize.width + stack.spacing, layoutOrigin.y};
     } else if (mountedSize.width > layout::kFlexEpsilon) {
       nextCollapsedOrigin = Point{nextCollapsedOrigin.x + mountedSize.width + stack.spacing,
                                   nextCollapsedOrigin.y};
     }
   }
+  Size const mountedExtents = controlStackExtents(*group, scenegraph::LayoutFlow::HorizontalStack);
+  Size const initialGroupSize = group->size();
+  group->setSize(Size{finiteOrZero(std::max(initialGroupSize.width, mountedExtents.width)),
+                      finiteOrZero(std::max(initialGroupSize.height, mountedExtents.height))});
   auto* rawGroup = group.get();
   float const spacing = stack.spacing;
   Alignment const alignment = stack.alignment;

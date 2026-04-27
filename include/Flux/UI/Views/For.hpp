@@ -9,7 +9,9 @@
 #include <Flux/UI/Alignment.hpp>
 #include <Flux/UI/Views/ControlFlowDetail.hpp>
 
+#include <algorithm>
 #include <concepts>
+#include <cmath>
 #include <cstddef>
 #include <functional>
 #include <limits>
@@ -31,51 +33,19 @@ public:
   static_assert(std::equality_comparable<Key>,
                 "For keys must be equality-comparable so rows can be reconciled.");
 
+private:
+  struct State;
+
+public:
   ForView(Reactive::Signal<Items> items, KeyFn keyFn, Factory factory,
           float spacing = 0.f, Alignment alignment = Alignment::Start)
-      : items_(std::move(items))
-      , keyFn_(std::move(keyFn))
-      , factory_(std::move(factory))
-      , spacing_(spacing)
-      , alignment_(alignment) {}
+      : state_(std::make_shared<State>(
+            std::move(items), std::move(keyFn), std::move(factory), spacing, alignment)) {}
 
   Size measure(MeasureContext& ctx, LayoutConstraints const& constraints,
                LayoutHints const&, TextSystem& textSystem) const {
-    ctx.advanceChildSlot();
-    EnvironmentStack& environment = EnvironmentStack::current();
-    std::vector<EnvironmentLayer> const environmentLayers = environment.snapshot();
-    Items const items = items_.get();
-    LayoutConstraints childConstraints = constraints;
-    childConstraints.minWidth = 0.f;
-    childConstraints.minHeight = 0.f;
-    childConstraints.maxHeight = std::numeric_limits<float>::infinity();
-    LayoutHints childHints{};
-    childHints.vStackCrossAlign = alignment_;
-
-    float width = 0.f;
-    float height = 0.f;
-    for (std::size_t index = 0; index < items.size(); ++index) {
-      Reactive::Signal<std::size_t> indexSignal{index};
-      auto factory = factory_;
-      Element element = detail::invokeForFactory(factory, items[index], indexSignal);
-      Size const measured = detail::controlMeasureElement(
-          element, environment, environmentLayers, textSystem, childConstraints, childHints);
-      width = std::max(width, measured.width);
-      height += measured.height;
-      if (index + 1 < items.size()) {
-        height += spacing_;
-      }
-    }
-
-    width = std::max(width, constraints.minWidth);
-    height = std::max(height, constraints.minHeight);
-    if (std::isfinite(constraints.maxWidth)) {
-      width = std::min(width, constraints.maxWidth);
-    }
-    if (std::isfinite(constraints.maxHeight)) {
-      height = std::min(height, constraints.maxHeight);
-    }
-    return Size{width, height};
+    (void)textSystem;
+    return state_->measure(ctx, constraints);
   }
 
   std::unique_ptr<scenegraph::SceneNode> mount(MountContext& ctx) const {
@@ -84,18 +54,23 @@ public:
         Rect{0.f, 0.f, detail::controlFiniteOrZero(frameSize.width),
              detail::controlFiniteOrZero(frameSize.height)});
     group->setLayoutFlow(scenegraph::LayoutFlow::VerticalStack);
-    group->setLayoutSpacing(spacing_);
+    group->setLayoutSpacing(state_->spacing);
 
     auto controlScope = std::make_shared<Reactive::Scope>();
-    ctx.owner().onCleanup([controlScope] {
+    auto state = state_;
+    ctx.owner().onCleanup([controlScope, state] {
       controlScope->dispose();
+      state->dispose();
     });
 
-    auto state = std::make_shared<State>(
-        items_, keyFn_, factory_, spacing_, alignment_, frameSize, ctx.environment(),
-        ctx.environment().snapshot(), ctx.textSystem(), ctx.constraints(), ctx.redrawCallback());
+    state->configureMount(ctx.environment(), ctx.environment().snapshot(), ctx.textSystem(),
+                          ctx.constraints(), ctx.redrawCallback());
 
     scenegraph::GroupNode* rawGroup = group.get();
+    rawGroup->setRelayout([state, rawGroup](LayoutConstraints const& constraints) {
+      state->relayout(*rawGroup, constraints);
+    });
+
     Reactive::withOwner(*controlScope, [state, rawGroup] {
       Reactive::Effect([state, rawGroup] {
         state->reconcile(*rawGroup);
@@ -110,6 +85,23 @@ private:
     Key key;
     Reactive::Signal<std::size_t> index;
     std::shared_ptr<Reactive::Scope> scope;
+    Element element;
+    Size cachedSize{};
+    LayoutConstraints cachedConstraints{};
+    LayoutHints cachedHints{};
+    bool hasCachedSize = false;
+
+    Row(Key keyIn, Reactive::Signal<std::size_t> indexIn,
+        std::shared_ptr<Reactive::Scope> scopeIn, Element elementIn)
+        : key(std::move(keyIn))
+        , index(std::move(indexIn))
+        , scope(std::move(scopeIn))
+        , element(std::move(elementIn)) {}
+
+    Row(Row&&) noexcept = default;
+    Row& operator=(Row&&) noexcept = default;
+    Row(Row const&) = delete;
+    Row& operator=(Row const&) = delete;
   };
 
   struct State {
@@ -118,37 +110,58 @@ private:
     Factory factory;
     float spacing = 0.f;
     Alignment alignment = Alignment::Start;
-    Size frameSize{};
-    EnvironmentStack& environment;
+    EnvironmentStack* environment = nullptr;
     std::vector<EnvironmentLayer> environmentLayers;
-    TextSystem& textSystem;
+    TextSystem* textSystem = nullptr;
     LayoutConstraints constraints;
     std::function<void()> requestRedraw;
     std::vector<Row> rows;
+    bool disposed = false;
 
     State(Reactive::Signal<Items> itemsIn, KeyFn keyFnIn, Factory factoryIn,
-          float spacingIn, Alignment alignmentIn, Size frameSizeIn,
-          EnvironmentStack& environmentIn,
-          std::vector<EnvironmentLayer> environmentLayersIn,
-          TextSystem& textSystemIn, LayoutConstraints constraintsIn,
-          std::function<void()> requestRedrawIn)
+          float spacingIn, Alignment alignmentIn)
         : items(std::move(itemsIn))
         , keyFn(std::move(keyFnIn))
         , factory(std::move(factoryIn))
         , spacing(spacingIn)
-        , alignment(alignmentIn)
-        , frameSize(frameSizeIn)
-        , environment(environmentIn)
-        , environmentLayers(std::move(environmentLayersIn))
-        , textSystem(textSystemIn)
-        , constraints(constraintsIn)
-        , requestRedraw(std::move(requestRedrawIn)) {}
+        , alignment(alignmentIn) {}
 
     ~State() {
+      dispose();
+    }
+
+    Size measure(MeasureContext& ctx, LayoutConstraints const& nextConstraints) const {
+      ctx.advanceChildSlot();
+      if (disposed) {
+        return clampSize({}, nextConstraints);
+      }
+      return measuredStackSize(nextConstraints);
+    }
+
+    void configureMount(EnvironmentStack& environmentIn,
+                        std::vector<EnvironmentLayer> environmentLayersIn,
+                        TextSystem& textSystemIn, LayoutConstraints constraintsIn,
+                        std::function<void()> requestRedrawIn) {
+      disposed = false;
+      environment = &environmentIn;
+      environmentLayers = std::move(environmentLayersIn);
+      textSystem = &textSystemIn;
+      constraints = constraintsIn;
+      requestRedraw = std::move(requestRedrawIn);
+    }
+
+    void dispose() {
+      if (disposed) {
+        return;
+      }
+      disposed = true;
       disposeRows(rows);
     }
 
     void reconcile(scenegraph::GroupNode& group) {
+      if (disposed || !environment || !textSystem) {
+        return;
+      }
       Size const oldSize = group.size();
       Items const nextItems = items.get();
       std::vector<std::unique_ptr<scenegraph::SceneNode>> oldNodes = group.releaseChildren();
@@ -159,6 +172,9 @@ private:
       nextRows.reserve(nextItems.size());
       nextNodes.reserve(nextItems.size());
 
+      LayoutConstraints const childConstraints = rowConstraints(constraints);
+      LayoutHints const childHints = rowHints();
+
       for (std::size_t index = 0; index < nextItems.size(); ++index) {
         T const& item = nextItems[index];
         Key key = std::invoke(keyFn, item);
@@ -167,13 +183,33 @@ private:
           std::size_t const oldIndex = *match;
           used[oldIndex] = true;
           Row row = std::move(oldRows[oldIndex]);
+          bool const indexChanged = row.index.peek() != index;
           row.index.set(index);
+          if (indexChanged) {
+            row.hasCachedSize = false;
+          }
+          std::unique_ptr<scenegraph::SceneNode> node;
+          if (oldIndex < oldNodes.size()) {
+            node = std::move(oldNodes[oldIndex]);
+          }
+          if (node) {
+            row.cachedSize = node->size();
+            row.cachedConstraints = childConstraints;
+            row.cachedHints = childHints;
+            row.hasCachedSize = true;
+          } else {
+            ensureMeasured(row, *environment, environmentLayers, *textSystem,
+                           childConstraints, childHints);
+            node = mountRowNode(row, childHints);
+          }
           nextRows.push_back(std::move(row));
-          nextNodes.push_back(std::move(oldNodes[oldIndex]));
+          nextNodes.push_back(std::move(node));
         } else {
-          auto mounted = mountRow(item, index, key);
-          nextRows.push_back(std::move(mounted.row));
-          nextNodes.push_back(std::move(mounted.node));
+          Row row = createRow(item, index, std::move(key), *environment, environmentLayers);
+          ensureMeasured(row, *environment, environmentLayers, *textSystem,
+                         childConstraints, childHints);
+          nextNodes.push_back(mountRowNode(row, childHints));
+          nextRows.push_back(std::move(row));
         }
       }
 
@@ -185,11 +221,33 @@ private:
 
       rows = std::move(nextRows);
       group.replaceChildren(std::move(nextNodes));
-      detail::controlLayoutVertical(group, frameSize, spacing);
+      detail::controlLayoutVertical(group, Size{}, spacing);
       detail::controlPropagateLayoutChange(group, oldSize);
       if (requestRedraw) {
         requestRedraw();
       }
+    }
+
+    void relayout(scenegraph::GroupNode& group, LayoutConstraints const& nextConstraints) {
+      if (disposed) {
+        return;
+      }
+      constraints = nextConstraints;
+      LayoutConstraints const childConstraints = rowConstraints(nextConstraints);
+      LayoutHints const childHints = rowHints();
+      auto children = group.children();
+      for (std::size_t i = 0; i < rows.size(); ++i) {
+        Row& row = rows[i];
+        scenegraph::SceneNode* child = i < children.size() ? children[i].get() : nullptr;
+        if (child) {
+          (void)child->relayout(childConstraints);
+          row.cachedSize = child->size();
+          row.cachedConstraints = childConstraints;
+          row.cachedHints = childHints;
+          row.hasCachedSize = true;
+        }
+      }
+      detail::controlLayoutVertical(group, Size{}, spacing);
     }
 
     static void disposeRows(std::vector<Row>& rowsToDispose) {
@@ -212,46 +270,112 @@ private:
       return std::nullopt;
     }
 
-    struct MountedRow {
-      Row row;
-      std::unique_ptr<scenegraph::SceneNode> node;
-    };
-
-    MountedRow mountRow(T const& item, std::size_t index, Key key) {
+    Row createRow(T const& item, std::size_t index, Key key,
+                  EnvironmentStack& rowEnvironment,
+                  std::vector<EnvironmentLayer> const& rowEnvironmentLayers) {
       return Reactive::untrack([&] {
         auto rowScope = std::make_shared<Reactive::Scope>();
         Reactive::Signal<std::size_t> indexSignal = Reactive::withOwner(*rowScope, [&] {
           return Reactive::Signal<std::size_t>(index);
         });
 
-        auto node = Reactive::withOwner(*rowScope, [&] {
-          Element element = detail::invokeForFactory(factory, item, indexSignal);
-          LayoutConstraints childConstraints = constraints;
-          childConstraints.minWidth = 0.f;
-          childConstraints.minHeight = 0.f;
-          childConstraints.maxHeight = std::numeric_limits<float>::infinity();
-          LayoutHints childHints{};
-          childHints.vStackCrossAlign = alignment;
-          Size measured = detail::controlMeasureElement(
-              element, environment, environmentLayers, textSystem, childConstraints, childHints);
-          return detail::controlMountElement(
-              element, *rowScope, environment, environmentLayers, textSystem,
-              detail::controlFixedConstraints(measured), childHints, requestRedraw);
+        Element element = Reactive::withOwner(*rowScope, [&] {
+          detail::ScopedEnvironmentSnapshot environmentScope{
+              rowEnvironment, rowEnvironmentLayers};
+          return detail::invokeForFactory(factory, item, indexSignal);
         });
 
-        return MountedRow{
-            .row = Row{std::move(key), std::move(indexSignal), std::move(rowScope)},
-            .node = std::move(node),
-        };
+        return Row{std::move(key), std::move(indexSignal), std::move(rowScope),
+                   std::move(element)};
       });
+    }
+
+    std::unique_ptr<scenegraph::SceneNode> mountRowNode(Row& row,
+                                                       LayoutHints const& childHints) {
+      if (!environment || !textSystem) {
+        return nullptr;
+      }
+      if (!row.hasCachedSize) {
+        ensureMeasured(row, *environment, environmentLayers, *textSystem,
+                       rowConstraints(constraints), childHints);
+      }
+      return detail::controlMountElement(
+          row.element, *row.scope, *environment, environmentLayers, *textSystem,
+          detail::controlFixedConstraints(row.cachedSize), childHints, requestRedraw);
+    }
+
+    void ensureMeasured(Row& row, EnvironmentStack& measureEnvironment,
+                        std::vector<EnvironmentLayer> const& measureEnvironmentLayers,
+                        TextSystem& measureTextSystem,
+                        LayoutConstraints const& childConstraints,
+                        LayoutHints const& childHints) {
+      if (row.hasCachedSize &&
+          constraintsEqual(row.cachedConstraints, childConstraints) &&
+          hintsEqual(row.cachedHints, childHints)) {
+        return;
+      }
+      row.cachedSize = detail::controlMeasureElement(
+          row.element, measureEnvironment, measureEnvironmentLayers, measureTextSystem,
+          childConstraints, childHints);
+      row.cachedConstraints = childConstraints;
+      row.cachedHints = childHints;
+      row.hasCachedSize = true;
+    }
+
+    Size measuredStackSize(LayoutConstraints const& outerConstraints) const {
+      Size size{};
+      for (std::size_t i = 0; i < rows.size(); ++i) {
+        size.width = std::max(size.width, rows[i].cachedSize.width);
+        size.height += rows[i].cachedSize.height;
+        if (i + 1 < rows.size()) {
+          size.height += spacing;
+        }
+      }
+      return clampSize(size, outerConstraints);
+    }
+
+    LayoutConstraints rowConstraints(LayoutConstraints rowConstraintsIn) const {
+      rowConstraintsIn.minWidth = 0.f;
+      rowConstraintsIn.minHeight = 0.f;
+      rowConstraintsIn.maxHeight = std::numeric_limits<float>::infinity();
+      return rowConstraintsIn;
+    }
+
+    LayoutHints rowHints() const {
+      LayoutHints childHints{};
+      childHints.vStackCrossAlign = alignment;
+      return childHints;
+    }
+
+    static Size clampSize(Size size, LayoutConstraints const& outerConstraints) {
+      size.width = std::max(size.width, outerConstraints.minWidth);
+      size.height = std::max(size.height, outerConstraints.minHeight);
+      if (std::isfinite(outerConstraints.maxWidth)) {
+        size.width = std::min(size.width, outerConstraints.maxWidth);
+      }
+      if (std::isfinite(outerConstraints.maxHeight)) {
+        size.height = std::min(size.height, outerConstraints.maxHeight);
+      }
+      return size;
+    }
+
+    static bool constraintsEqual(LayoutConstraints const& lhs,
+                                 LayoutConstraints const& rhs) {
+      return lhs.maxWidth == rhs.maxWidth &&
+             lhs.maxHeight == rhs.maxHeight &&
+             lhs.minWidth == rhs.minWidth &&
+             lhs.minHeight == rhs.minHeight;
+    }
+
+    static bool hintsEqual(LayoutHints const& lhs, LayoutHints const& rhs) {
+      return lhs.hStackCrossAlign == rhs.hStackCrossAlign &&
+             lhs.vStackCrossAlign == rhs.vStackCrossAlign &&
+             lhs.zStackHorizontalAlign == rhs.zStackHorizontalAlign &&
+             lhs.zStackVerticalAlign == rhs.zStackVerticalAlign;
     }
   };
 
-  Reactive::Signal<Items> items_;
-  KeyFn keyFn_;
-  Factory factory_;
-  float spacing_ = 0.f;
-  Alignment alignment_ = Alignment::Start;
+  std::shared_ptr<State> state_;
 };
 
 template<typename T, typename KeyFn, typename Factory>
