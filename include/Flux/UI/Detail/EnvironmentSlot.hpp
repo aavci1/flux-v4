@@ -51,7 +51,7 @@ public:
     copyFrom(other);
   }
 
-  EnvironmentEntry(EnvironmentEntry&& other) {
+  EnvironmentEntry(EnvironmentEntry&& other) noexcept {
     moveFrom(std::move(other));
   }
 
@@ -63,7 +63,7 @@ public:
     return *this;
   }
 
-  EnvironmentEntry& operator=(EnvironmentEntry&& other) {
+  EnvironmentEntry& operator=(EnvironmentEntry&& other) noexcept {
     if (this != &other) {
       reset();
       moveFrom(std::move(other));
@@ -105,7 +105,7 @@ public:
     EnvironmentEntryVTable const* table = valueVTable<T>();
     void* newHeap = nullptr;
     void* dst = storage_;
-    if (!fitsInline(*table)) {
+    if constexpr (!fitsInlineMoveSafely<T>()) {
       newHeap = allocate(*table);
       dst = newHeap;
     }
@@ -134,7 +134,7 @@ public:
     void* newHeap = nullptr;
     void* dst = storage_;
     using SignalT = Reactive::Signal<T>;
-    if (!fitsInline(*table)) {
+    if constexpr (!fitsInlineMoveSafely<SignalT>()) {
       newHeap = allocate(*table);
       dst = newHeap;
     }
@@ -203,8 +203,11 @@ private:
     return &table;
   }
 
-  static bool fitsInline(EnvironmentEntryVTable const& table) noexcept {
-    return table.size <= kInlineBytes && table.align <= alignof(std::max_align_t);
+  template<typename T>
+  static constexpr bool fitsInlineMoveSafely() noexcept {
+    return sizeof(T) <= kInlineBytes &&
+           alignof(T) <= alignof(std::max_align_t) &&
+           std::is_nothrow_copy_constructible_v<T>;
   }
 
   static void* allocate(EnvironmentEntryVTable const& table) {
@@ -231,7 +234,7 @@ private:
     EnvironmentEntryVTable const* table = other.vtable_;
     void* newHeap = nullptr;
     void* dst = storage_;
-    if (!fitsInline(*table)) {
+    if (other.heap_) {
       newHeap = allocate(*table);
       dst = newHeap;
     }
@@ -248,7 +251,7 @@ private:
     heap_ = newHeap;
   }
 
-  void moveFrom(EnvironmentEntry&& other) {
+  void moveFrom(EnvironmentEntry&& other) noexcept {
     if (other.kind_ == EnvironmentEntryKind::None) {
       return;
     }
@@ -264,6 +267,9 @@ private:
       return;
     }
     assert(nextVTable);
+    // Invariant: inline-stored entries are nothrow-copy-constructible, filtered by
+    // setValue/setSignal. The vtable signature cannot express that, but this copyTo
+    // call is effectively noexcept for every inline entry.
     nextVTable->copyTo(other.objectPtr(), storage_);
     kind_ = nextKind;
     vtable_ = nextVTable;

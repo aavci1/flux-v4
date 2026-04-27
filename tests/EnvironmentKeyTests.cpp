@@ -10,6 +10,7 @@
 #include <array>
 #include <cstdint>
 #include <string>
+#include <type_traits>
 #include <typeinfo>
 #include <utility>
 
@@ -117,6 +118,11 @@ TEST_CASE("environment entries copy, move, and destroy stored values") {
     CHECK(copy.kind() == flux::detail::EnvironmentEntryKind::None);
   }
   CHECK(destroyed >= 3);
+}
+
+TEST_CASE("environment entry move is noexcept") {
+  static_assert(std::is_nothrow_move_constructible_v<flux::detail::EnvironmentEntry>);
+  static_assert(std::is_nothrow_move_assignable_v<flux::detail::EnvironmentEntry>);
 }
 
 TEST_CASE("environment binding resolves defaults, values, and signals") {
