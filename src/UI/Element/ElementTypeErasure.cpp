@@ -91,13 +91,20 @@ LayoutConstraints fixedConstraints(Size size) {
 }
 
 void relayoutStoredAncestors(scenegraph::SceneNode& node) {
+  constexpr float epsilon = 0.01f;
   scenegraph::SceneNode* current = &node;
   for (int depth = 0; depth < 64; ++depth) {
     scenegraph::SceneNode* parent = current->parent();
     if (!parent) {
       return;
     }
+    Size const oldSize = parent->size();
     if (!parent->relayoutStoredConstraints()) {
+      return;
+    }
+    Size const newSize = parent->size();
+    if (std::abs(newSize.width - oldSize.width) <= epsilon &&
+        std::abs(newSize.height - oldSize.height) <= epsilon) {
       return;
     }
     current = parent;

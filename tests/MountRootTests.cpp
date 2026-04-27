@@ -123,6 +123,50 @@ struct IntrinsicBox {
   }
 };
 
+flux::LayoutConstraints fixedConstraints(flux::Size size) {
+  return flux::LayoutConstraints{
+      .maxWidth = std::max(0.f, size.width),
+      .maxHeight = std::max(0.f, size.height),
+      .minWidth = std::max(0.f, size.width),
+      .minHeight = std::max(0.f, size.height),
+  };
+}
+
+struct RelayoutProbeFrame {
+  flux::Element child;
+  int* relayouts = nullptr;
+
+  flux::Size measure(flux::MeasureContext& ctx, flux::LayoutConstraints const&,
+                     flux::LayoutHints const&, flux::TextSystem&) const {
+    ctx.advanceChildSlot();
+    return {100.f, 100.f};
+  }
+
+  std::unique_ptr<flux::scenegraph::SceneNode> mount(flux::MountContext& ctx) const {
+    auto group = std::make_unique<flux::scenegraph::GroupNode>(
+        flux::Rect{0.f, 0.f, 100.f, 100.f});
+    flux::MountContext childCtx = ctx.child(fixedConstraints({100.f, 100.f}), ctx.hints());
+    auto childNode = child.mount(childCtx);
+    flux::scenegraph::SceneNode* rawChild = childNode.get();
+    if (childNode) {
+      group->appendChild(std::move(childNode));
+    }
+    auto* rawGroup = group.get();
+    rawGroup->setLayoutConstraints(ctx.constraints());
+    rawGroup->setRelayout([rawGroup, rawChild, relayouts = relayouts](
+                              flux::LayoutConstraints const&) {
+      if (relayouts) {
+        ++*relayouts;
+      }
+      if (rawChild) {
+        rawChild->relayout(fixedConstraints({100.f, 100.f}));
+      }
+      rawGroup->setSize({100.f, 100.f});
+    });
+    return group;
+  }
+};
+
 } // namespace
 
 TEST_CASE("MountRoot mounts a static root once") {
@@ -274,6 +318,53 @@ TEST_CASE("reactive size changes relayout ancestor stack alignment") {
   CHECK(row.size().height == doctest::Approx(60.f));
   CHECK(row.position().y == doctest::Approx(20.f));
   CHECK(row.children()[1]->position().y == doctest::Approx(20.f));
+}
+
+TEST_CASE("reactive size relayout stops at unchanged ancestors") {
+  struct Root {
+    flux::Reactive::Signal<float> barHeight;
+    int* outerRelayouts = nullptr;
+
+    flux::Element body() const {
+      return RelayoutProbeFrame{
+          .child = flux::Element{flux::ZStack{
+              .horizontalAlignment = flux::Alignment::Center,
+              .verticalAlignment = flux::Alignment::Center,
+              .children = flux::children(
+                  flux::Rectangle{}.size(100.f, 100.f),
+                  flux::HStack{
+                      .spacing = 8.f,
+                      .alignment = flux::Alignment::Center,
+                      .children = flux::children(
+                          flux::Rectangle{}.size(
+                              flux::Reactive::Bindable<float>{20.f},
+                              flux::Reactive::Bindable<float>{[barHeight = barHeight] {
+                                return barHeight.get();
+                              }}),
+                          flux::Rectangle{}.size(20.f, 20.f)),
+                  }),
+          }},
+          .relayouts = outerRelayouts,
+      };
+    }
+  };
+
+  FakeTextSystem textSystem;
+  flux::scenegraph::SceneGraph sceneGraph;
+  flux::Reactive::Signal<float> barHeight{20.f};
+  int outerRelayouts = 0;
+  flux::MountRoot root{
+      std::make_unique<flux::TypedRootHolder<Root>>(
+          std::in_place, Root{barHeight, &outerRelayouts}),
+      textSystem,
+      testEnvironment(),
+      flux::Size{100.f, 100.f},
+  };
+
+  root.mount(sceneGraph);
+  barHeight.set(60.f);
+
+  CHECK(outerRelayouts == 0);
 }
 
 TEST_CASE("MountContext child creates a scoped owner") {
