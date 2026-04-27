@@ -145,6 +145,26 @@ void relayoutStoredAncestors(scenegraph::SceneNode& node) {
   assert(false && "reactive relayout ancestor walk exceeded the 64-level depth cap");
 }
 
+struct BindingClosureSizeProbeSetter {
+  scenegraph::RectNode* node = nullptr;
+  EnvironmentBinding environment;
+
+  void operator()(Color) const {}
+};
+
+struct BindingClosureSizeProbe {
+  Reactive::Bindable<Color> binding;
+  BindingClosureSizeProbeSetter setter;
+  Reactive::SmallFn<void()> requestRedraw;
+  std::optional<Color> lastValue;
+  bool compareEvaluatedValue = true;
+
+  void operator()() {}
+};
+
+static_assert(sizeof(BindingClosureSizeProbe) <= Reactive::BindingFn::inlineCapacity,
+              "Binding closure exceeded BindingFn inline budget; bump the SBO size");
+
 template<typename T, typename Setter>
 void installBinding(MountContext& ctx, Reactive::Bindable<T> binding, Setter setter,
                     bool compareEvaluatedValue = true) {

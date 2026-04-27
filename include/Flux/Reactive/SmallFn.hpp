@@ -25,11 +25,13 @@ template <typename Signature, std::size_t InlineSize = 32>
 class SmallFn;
 
 /// Wider inline budget for framework-generated UI binding closures that capture retained-node plumbing.
-using BindingFn = SmallFn<void(), 64>;
+using BindingFn = SmallFn<void(), 160>;
 
 template <typename R, typename... Args, std::size_t InlineSize>
 class SmallFn<R(Args...), InlineSize> {
 public:
+  static constexpr std::size_t inlineCapacity = InlineSize;
+
   SmallFn() = default;
   SmallFn(std::nullptr_t) {}
 
