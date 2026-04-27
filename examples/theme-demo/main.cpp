@@ -1134,8 +1134,7 @@ struct ThemeDemoPage {
                     .fill(FillStyle::solid(Color::windowBackground()))
             ),
         }
-            .fill(FillStyle::solid(Color::windowBackground()))
-            .environment<ThemeKey>(theme);
+            .fill(FillStyle::solid(Color::windowBackground()));
     }
 };
 
