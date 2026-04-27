@@ -11,7 +11,10 @@
 #include <Flux/Core/ComponentKey.hpp>
 #include <Flux/Detail/Runtime.hpp>
 #include <Flux/UI/Environment.hpp>
+#include <Flux/UI/EnvironmentKeys.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
+#include <Flux/UI/MeasureContext.hpp>
+#include <Flux/UI/MountContext.hpp>
 #include <Flux/UI/Theme.hpp>
 
 #include <cmath>
@@ -224,27 +227,43 @@ inline void debugRegisterUseState(std::source_location location) {
 
 } // namespace detail
 
-template<typename T>
-T const& environmentFallback() {
-  static T fallback{};
-  return fallback;
+template<typename Key>
+typename EnvironmentKey<Key>::Value useEnvironment() {
+  if (MountContext* mount = detail::currentMountContext()) {
+    return mount->environmentBinding().value<Key>();
+  }
+  if (MeasureContext* measure = detail::currentMeasureContext()) {
+    return measure->environmentBinding().value<Key>();
+  }
+  return EnvironmentKey<Key>::defaultValue();
 }
 
-template<>
-inline Theme const& environmentFallback<Theme>() {
-  static Theme const fallback = Theme::light();
-  return fallback;
+template<typename Key>
+std::optional<Reactive::Signal<typename EnvironmentKey<Key>::Value>>
+useEnvironmentSignal() {
+  if (MountContext* mount = detail::currentMountContext()) {
+    return mount->environmentBinding().signal<Key>();
+  }
+  if (MeasureContext* measure = detail::currentMeasureContext()) {
+    return measure->environmentBinding().signal<Key>();
+  }
+  return std::nullopt;
 }
 
-template<typename T>
-Reactive::Signal<T> useEnvironment() {
-  if (auto const* signal = EnvironmentStack::current().findSignal<T>()) {
+template<typename Key>
+Reactive::Signal<typename EnvironmentKey<Key>::Value> useEnvironmentReactive() {
+  if (auto signal = useEnvironmentSignal<Key>()) {
     return *signal;
   }
-  if (T const* value = EnvironmentStack::current().find<T>()) {
-    return Reactive::Signal<T>{*value};
-  }
-  return Reactive::Signal<T>{environmentFallback<T>()};
+  return Reactive::Signal<typename EnvironmentKey<Key>::Value>{useEnvironment<Key>()};
+}
+
+template<typename Key, typename Field>
+Reactive::Computed<Field> useEnvironmentField(Field EnvironmentKey<Key>::Value::* member) {
+  Reactive::Signal<typename EnvironmentKey<Key>::Value> value = useEnvironmentReactive<Key>();
+  return Reactive::makeComputed([value, member] {
+    return value().*member;
+  });
 }
 
 /// Each `useState` call allocates a fresh `Signal<T>` owned by the current reactive scope.

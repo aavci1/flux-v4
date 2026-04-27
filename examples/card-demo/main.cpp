@@ -31,7 +31,7 @@ struct ExpandableCard : ViewModifiers<ExpandableCard> {
     bool operator==(ExpandableCard const &) const = default;
 
     Element body() const {
-        auto theme = useEnvironment<Theme>();
+        auto theme = useEnvironmentReactive<ThemeKey>();
         auto expanded = useState(false);
         Color const accentColor = accent;
 
@@ -117,7 +117,7 @@ struct ExpandableCard : ViewModifiers<ExpandableCard> {
 
 struct CardDemoView {
     Element body() const {
-        auto theme = useEnvironment<Theme>();
+        auto theme = useEnvironmentReactive<ThemeKey>();
 
         auto accentBorder = useState(true);
         auto dropShadow = useState(true);

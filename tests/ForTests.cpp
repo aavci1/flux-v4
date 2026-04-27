@@ -57,10 +57,8 @@ public:
   }
 };
 
-flux::EnvironmentLayer testEnvironment() {
-  flux::EnvironmentLayer environment;
-  environment.set(flux::Theme::light());
-  return environment;
+flux::EnvironmentBinding testEnvironment() {
+  return flux::EnvironmentBinding{}.withValue<flux::ThemeKey>(flux::Theme::light());
 }
 
 flux::scenegraph::GroupNode const& rootGroup(flux::scenegraph::SceneGraph const& sceneGraph) {
@@ -242,8 +240,6 @@ TEST_CASE("For measures retained rows without rebuilding factory output") {
   FakeTextSystem textSystem;
 
   {
-    flux::EnvironmentStack& environment = flux::EnvironmentStack::current();
-    environment.push(testEnvironment());
     auto measuredOnly = flux::For(
         items,
         [](int value) { return value; },
@@ -254,7 +250,7 @@ TEST_CASE("For measures retained rows without rebuilding factory output") {
               .fill(flux::Colors::blue);
         },
         2.f);
-    flux::MeasureContext measureContext{textSystem};
+    flux::MeasureContext measureContext{textSystem, testEnvironment()};
     flux::LayoutConstraints constraints{
         .maxWidth = 240.f,
         .maxHeight = 160.f,
@@ -266,7 +262,6 @@ TEST_CASE("For measures retained rows without rebuilding factory output") {
     CHECK(measureOnlyFactoryCalls == 2);
     CHECK(measuredOnly.measure(measureContext, constraints, {}, textSystem).height == doctest::Approx(18.f));
     measureContext.popConstraints();
-    environment.pop();
   }
   CHECK(measureOnlyFactoryCalls == 2);
 

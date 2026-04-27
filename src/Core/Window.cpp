@@ -40,12 +40,10 @@ struct Window::Impl {
   std::unique_ptr<Runtime> runtime_;
   std::unordered_map<std::string, ActionDescriptor> actions_;
   Reactive::Signal<Theme> themeSignal_{Theme::light()};
-  EnvironmentLayer windowEnvironment_{};
   EnvironmentBinding windowEnvironmentBinding_{};
   bool shutdown_ = false;
 
   explicit Impl(Window&) {
-    windowEnvironment_.setSignal(themeSignal_);
     windowEnvironmentBinding_ = EnvironmentBinding{}.withSignal<ThemeKey>(themeSignal_);
   }
   ~Impl();
@@ -162,7 +160,6 @@ Color Window::clearColor() const { return d->clearColor_; }
 
 void Window::setTheme(Theme theme) {
   d->themeSignal_.set(std::move(theme));
-  d->windowEnvironment_.setSignal(d->themeSignal_);
   d->windowEnvironmentBinding_ = EnvironmentBinding{}.withSignal<ThemeKey>(d->themeSignal_);
   requestRedraw();
 }
@@ -229,15 +226,11 @@ void Window::setViewRoot(std::unique_ptr<RootHolder> holder) {
   d->setViewRoot(*this, std::move(holder));
 }
 
-EnvironmentLayer& Window::environmentLayerMut() {
-  return d->windowEnvironment_;
-}
-
-EnvironmentLayer const& Window::environmentLayer() const {
-  return d->windowEnvironment_;
-}
-
 EnvironmentBinding const& Window::environmentBinding() const {
+  return d->windowEnvironmentBinding_;
+}
+
+EnvironmentBinding& Window::environmentBindingMut() {
   return d->windowEnvironmentBinding_;
 }
 

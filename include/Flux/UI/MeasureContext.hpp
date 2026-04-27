@@ -6,6 +6,7 @@
 
 #include <Flux/Core/ComponentKey.hpp>
 #include <Flux/UI/Detail/TraversalContext.hpp>
+#include <Flux/UI/EnvironmentBinding.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 
 #include <cstddef>
@@ -21,10 +22,12 @@ struct ElementModifiers;
 
 class MeasureContext {
 public:
-  explicit MeasureContext(TextSystem& ts);
+  explicit MeasureContext(TextSystem& ts, EnvironmentBinding environment = {});
   ~MeasureContext();
 
   TextSystem& textSystem();
+  EnvironmentBinding const& environmentBinding() const noexcept { return environmentBinding_; }
+  void setEnvironmentBinding(EnvironmentBinding environment) { environmentBinding_ = std::move(environment); }
 
   LayoutConstraints const& constraints() const;
   LayoutHints const& hints() const;
@@ -65,8 +68,25 @@ public:
 
 protected:
   TextSystem& textSystem_;
+  EnvironmentBinding environmentBinding_;
   detail::TraversalContext traversal_{};
   Element const* currentElement_{nullptr};
 };
 
+namespace detail {
+
+MeasureContext* currentMeasureContext() noexcept;
+
+class CurrentMeasureContextScope {
+public:
+  explicit CurrentMeasureContextScope(MeasureContext& ctx) noexcept;
+  CurrentMeasureContextScope(CurrentMeasureContextScope const&) = delete;
+  CurrentMeasureContextScope& operator=(CurrentMeasureContextScope const&) = delete;
+  ~CurrentMeasureContextScope();
+
+private:
+  MeasureContext* previous_ = nullptr;
+};
+
+} // namespace detail
 } // namespace flux

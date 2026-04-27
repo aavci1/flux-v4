@@ -29,7 +29,7 @@ float availableEnd(Rect const& anchor, Size window) {
 } // namespace
 
 Element Popover::body() const {
-  auto theme = useEnvironment<Theme>();
+  auto theme = useEnvironmentReactive<ThemeKey>();
   ResolvedPopoverCardBody const surface =
       resolvePopoverCardBody(backgroundColor, borderColor, borderWidth, cornerRadius,
                              contentPadding, theme());

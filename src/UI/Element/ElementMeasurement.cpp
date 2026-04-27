@@ -10,6 +10,9 @@
 #include <algorithm>
 #include <cassert>
 #include <cmath>
+#include <memory>
+#include <utility>
+#include <vector>
 
 namespace flux {
 
@@ -28,6 +31,33 @@ struct ChildLocalIdScope {
   }
 
   ~ChildLocalIdScope() { ctx.popExplicitChildLocalId(); }
+};
+
+struct EnvironmentBindingScope {
+  MeasureContext& ctx;
+  EnvironmentBinding previous;
+  bool active = false;
+
+  EnvironmentBindingScope(MeasureContext& context,
+                          std::vector<std::shared_ptr<detail::EnvironmentOverride const>> const& overrides)
+      : ctx(context)
+      , previous(context.environmentBinding())
+      , active(!overrides.empty()) {
+    if (!active) {
+      return;
+    }
+    EnvironmentBinding next = previous;
+    for (auto const& override : overrides) {
+      next = override->apply(next);
+    }
+    ctx.setEnvironmentBinding(std::move(next));
+  }
+
+  ~EnvironmentBindingScope() {
+    if (active) {
+      ctx.setEnvironmentBinding(std::move(previous));
+    }
+  }
 };
 
 } // namespace
@@ -111,16 +141,12 @@ Size Element::measureWithModifiersImpl(MeasureContext& ctx, LayoutConstraints co
 Size Element::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
                       LayoutHints const& hints, TextSystem& textSystem) const {
   ChildLocalIdScope const childIdScope{ctx, key_};
+  detail::CurrentMeasureContextScope const currentMeasureContext{ctx};
+  EnvironmentBindingScope const environmentBindingScope{ctx, envOverrides_};
   Element const* const prevEl = ctx.currentElement();
   ctx.setCurrentElement(this);
-  if (envLayer_) {
-    EnvironmentStack::current().push(*envLayer_);
-  }
   Size const sz = modifiers_ && modifiers_->needsModifierPass() ? measureWithModifiersImpl(ctx, constraints, hints, textSystem)
                                                                 : impl_->measure(ctx, constraints, hints, textSystem);
-  if (envLayer_) {
-    EnvironmentStack::current().pop();
-  }
   ctx.setCurrentElement(prevEl);
   layoutDebugRecordMeasure(measureId_, constraints, sz);
 #ifndef NDEBUG

@@ -14,13 +14,7 @@ Font resolveFont(Font const& override, Font const& themeValue) {
 
 namespace {
 
-Theme const& activeTheme() {
-  if (auto const* themeSignal = EnvironmentStack::current().findSignal<Theme>()) {
-    return themeSignal->get();
-  }
-  if (Theme const* theme = EnvironmentStack::current().find<Theme>()) {
-    return *theme;
-  }
+Theme const& defaultTheme() {
   static Theme const fallback = Theme::light();
   return fallback;
 }
@@ -122,247 +116,247 @@ Font resolveSemanticFontToken(int token, Theme const& theme) {
 } // namespace
 
 Color Color::theme() {
-  Color color = resolveSemanticColorToken(1, activeTheme());
+  Color color = resolveSemanticColorToken(1, defaultTheme());
   color.semantic = 1;
   return color;
 }
 
 Color Color::primary() {
-  Color color = resolveSemanticColorToken(2, activeTheme());
+  Color color = resolveSemanticColorToken(2, defaultTheme());
   color.semantic = 2;
   return color;
 }
 
 Color Color::secondary() {
-  Color color = resolveSemanticColorToken(3, activeTheme());
+  Color color = resolveSemanticColorToken(3, defaultTheme());
   color.semantic = 3;
   return color;
 }
 
 Color Color::tertiary() {
-  Color color = resolveSemanticColorToken(4, activeTheme());
+  Color color = resolveSemanticColorToken(4, defaultTheme());
   color.semantic = 4;
   return color;
 }
 
 Color Color::quaternary() {
-  Color color = resolveSemanticColorToken(5, activeTheme());
+  Color color = resolveSemanticColorToken(5, defaultTheme());
   color.semantic = 5;
   return color;
 }
 
 Color Color::placeholder() {
-  Color color = resolveSemanticColorToken(6, activeTheme());
+  Color color = resolveSemanticColorToken(6, defaultTheme());
   color.semantic = 6;
   return color;
 }
 
 Color Color::disabled() {
-  Color color = resolveSemanticColorToken(7, activeTheme());
+  Color color = resolveSemanticColorToken(7, defaultTheme());
   color.semantic = 7;
   return color;
 }
 
 Color Color::accent() {
-  Color color = resolveSemanticColorToken(8, activeTheme());
+  Color color = resolveSemanticColorToken(8, defaultTheme());
   color.semantic = 8;
   return color;
 }
 
 Color Color::accentForeground() {
-  Color color = resolveSemanticColorToken(9, activeTheme());
+  Color color = resolveSemanticColorToken(9, defaultTheme());
   color.semantic = 9;
   return color;
 }
 
 Color Color::windowBackground() {
-  Color color = resolveSemanticColorToken(10, activeTheme());
+  Color color = resolveSemanticColorToken(10, defaultTheme());
   color.semantic = 10;
   return color;
 }
 
 Color Color::controlBackground() {
-  Color color = resolveSemanticColorToken(11, activeTheme());
+  Color color = resolveSemanticColorToken(11, defaultTheme());
   color.semantic = 11;
   return color;
 }
 
 Color Color::elevatedBackground() {
-  Color color = resolveSemanticColorToken(12, activeTheme());
+  Color color = resolveSemanticColorToken(12, defaultTheme());
   color.semantic = 12;
   return color;
 }
 
 Color Color::textBackground() {
-  Color color = resolveSemanticColorToken(13, activeTheme());
+  Color color = resolveSemanticColorToken(13, defaultTheme());
   color.semantic = 13;
   return color;
 }
 
 Color Color::separator() {
-  Color color = resolveSemanticColorToken(14, activeTheme());
+  Color color = resolveSemanticColorToken(14, defaultTheme());
   color.semantic = 14;
   return color;
 }
 
 Color Color::opaqueSeparator() {
-  Color color = resolveSemanticColorToken(15, activeTheme());
+  Color color = resolveSemanticColorToken(15, defaultTheme());
   color.semantic = 15;
   return color;
 }
 
 Color Color::selectedContentBackground() {
-  Color color = resolveSemanticColorToken(16, activeTheme());
+  Color color = resolveSemanticColorToken(16, defaultTheme());
   color.semantic = 16;
   return color;
 }
 
 Color Color::focusRing() {
-  Color color = resolveSemanticColorToken(17, activeTheme());
+  Color color = resolveSemanticColorToken(17, defaultTheme());
   color.semantic = 17;
   return color;
 }
 
 Color Color::scrim() {
-  Color color = resolveSemanticColorToken(18, activeTheme());
+  Color color = resolveSemanticColorToken(18, defaultTheme());
   color.semantic = 18;
   return color;
 }
 
 Color Color::popoverScrim() {
-  Color color = resolveSemanticColorToken(19, activeTheme());
+  Color color = resolveSemanticColorToken(19, defaultTheme());
   color.semantic = 19;
   return color;
 }
 
 Color Color::success() {
-  Color color = resolveSemanticColorToken(20, activeTheme());
+  Color color = resolveSemanticColorToken(20, defaultTheme());
   color.semantic = 20;
   return color;
 }
 
 Color Color::successForeground() {
-  Color color = resolveSemanticColorToken(21, activeTheme());
+  Color color = resolveSemanticColorToken(21, defaultTheme());
   color.semantic = 21;
   return color;
 }
 
 Color Color::successBackground() {
-  Color color = resolveSemanticColorToken(22, activeTheme());
+  Color color = resolveSemanticColorToken(22, defaultTheme());
   color.semantic = 22;
   return color;
 }
 
 Color Color::warning() {
-  Color color = resolveSemanticColorToken(23, activeTheme());
+  Color color = resolveSemanticColorToken(23, defaultTheme());
   color.semantic = 23;
   return color;
 }
 
 Color Color::warningForeground() {
-  Color color = resolveSemanticColorToken(24, activeTheme());
+  Color color = resolveSemanticColorToken(24, defaultTheme());
   color.semantic = 24;
   return color;
 }
 
 Color Color::warningBackground() {
-  Color color = resolveSemanticColorToken(25, activeTheme());
+  Color color = resolveSemanticColorToken(25, defaultTheme());
   color.semantic = 25;
   return color;
 }
 
 Color Color::danger() {
-  Color color = resolveSemanticColorToken(26, activeTheme());
+  Color color = resolveSemanticColorToken(26, defaultTheme());
   color.semantic = 26;
   return color;
 }
 
 Color Color::dangerForeground() {
-  Color color = resolveSemanticColorToken(27, activeTheme());
+  Color color = resolveSemanticColorToken(27, defaultTheme());
   color.semantic = 27;
   return color;
 }
 
 Color Color::dangerBackground() {
-  Color color = resolveSemanticColorToken(28, activeTheme());
+  Color color = resolveSemanticColorToken(28, defaultTheme());
   color.semantic = 28;
   return color;
 }
 
 Font Font::theme() {
-  Font font = resolveSemanticFontToken(1, activeTheme());
+  Font font = resolveSemanticFontToken(1, defaultTheme());
   font.semantic = 1;
   return font;
 }
 
 Font Font::largeTitle() {
-  Font font = resolveSemanticFontToken(2, activeTheme());
+  Font font = resolveSemanticFontToken(2, defaultTheme());
   font.semantic = 2;
   return font;
 }
 
 Font Font::title() {
-  Font font = resolveSemanticFontToken(3, activeTheme());
+  Font font = resolveSemanticFontToken(3, defaultTheme());
   font.semantic = 3;
   return font;
 }
 
 Font Font::title2() {
-  Font font = resolveSemanticFontToken(4, activeTheme());
+  Font font = resolveSemanticFontToken(4, defaultTheme());
   font.semantic = 4;
   return font;
 }
 
 Font Font::title3() {
-  Font font = resolveSemanticFontToken(5, activeTheme());
+  Font font = resolveSemanticFontToken(5, defaultTheme());
   font.semantic = 5;
   return font;
 }
 
 Font Font::headline() {
-  Font font = resolveSemanticFontToken(6, activeTheme());
+  Font font = resolveSemanticFontToken(6, defaultTheme());
   font.semantic = 6;
   return font;
 }
 
 Font Font::subheadline() {
-  Font font = resolveSemanticFontToken(7, activeTheme());
+  Font font = resolveSemanticFontToken(7, defaultTheme());
   font.semantic = 7;
   return font;
 }
 
 Font Font::body() {
-  Font font = resolveSemanticFontToken(8, activeTheme());
+  Font font = resolveSemanticFontToken(8, defaultTheme());
   font.semantic = 8;
   return font;
 }
 
 Font Font::callout() {
-  Font font = resolveSemanticFontToken(9, activeTheme());
+  Font font = resolveSemanticFontToken(9, defaultTheme());
   font.semantic = 9;
   return font;
 }
 
 Font Font::footnote() {
-  Font font = resolveSemanticFontToken(10, activeTheme());
+  Font font = resolveSemanticFontToken(10, defaultTheme());
   font.semantic = 10;
   return font;
 }
 
 Font Font::caption() {
-  Font font = resolveSemanticFontToken(11, activeTheme());
+  Font font = resolveSemanticFontToken(11, defaultTheme());
   font.semantic = 11;
   return font;
 }
 
 Font Font::caption2() {
-  Font font = resolveSemanticFontToken(12, activeTheme());
+  Font font = resolveSemanticFontToken(12, defaultTheme());
   font.semantic = 12;
   return font;
 }
 
 Font Font::monospacedBody() {
-  Font font = resolveSemanticFontToken(13, activeTheme());
+  Font font = resolveSemanticFontToken(13, defaultTheme());
   font.semantic = 13;
   return font;
 }

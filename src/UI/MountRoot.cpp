@@ -15,23 +15,6 @@ namespace flux {
 
 namespace {
 
-struct EnvironmentScope {
-  EnvironmentStack& stack;
-  bool pushed = false;
-
-  EnvironmentScope(EnvironmentStack& environment, EnvironmentLayer layer)
-      : stack(environment) {
-    stack.push(std::move(layer));
-    pushed = true;
-  }
-
-  ~EnvironmentScope() {
-    if (pushed) {
-      stack.pop();
-    }
-  }
-};
-
 LayoutConstraints rootConstraints(Size size) {
   return LayoutConstraints{
       .maxWidth = size.width,
@@ -44,13 +27,11 @@ LayoutConstraints rootConstraints(Size size) {
 } // namespace
 
 MountRoot::MountRoot(std::unique_ptr<RootHolder> root, TextSystem& textSystem,
-                     EnvironmentLayer environment, Size viewportSize,
-                     Reactive::SmallFn<void()> requestRedraw,
-                     EnvironmentBinding environmentBinding)
+                     EnvironmentBinding environment, Size viewportSize,
+                     Reactive::SmallFn<void()> requestRedraw)
     : root_(std::move(root))
     , textSystem_(textSystem)
     , environment_(std::move(environment))
-    , environmentBinding_(std::move(environmentBinding))
     , viewportSize_(viewportSize)
     , requestRedraw_(std::move(requestRedraw)) {}
 
@@ -65,14 +46,13 @@ void MountRoot::mount(scenegraph::SceneGraph& sceneGraph) {
     unmount(sceneGraph);
   }
 
-  MeasureContext measureContext{textSystem_};
-  EnvironmentStack& environment = EnvironmentStack::current();
-  EnvironmentScope const environmentScope{environment, environment_};
-  MountContext context{rootScope_, environment, textSystem_, measureContext,
-                       rootConstraints(viewportSize_), LayoutHints{}, requestRedraw_, {},
-                       environmentBinding_};
+  MeasureContext measureContext{textSystem_, environment_};
+  MountContext context{rootScope_, textSystem_, measureContext,
+                       rootConstraints(viewportSize_), LayoutHints{}, requestRedraw_,
+                       environment_};
 
   auto node = Reactive::withOwner(rootScope_, [&] {
+    detail::CurrentMountContextScope const currentMountContext{context};
     detail::HookLayoutScope const hookScope{rootConstraints(viewportSize_)};
     Element rootElement = root_->makeElement();
     detail::HookInteractionSignalScope const interactionScope{rootScope_};

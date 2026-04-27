@@ -26,7 +26,7 @@ Checkbox::Style resolveStyle(Checkbox::Style const &style, Theme const &theme) {
 }
 
 Element Checkbox::body() const {
-    auto theme = useEnvironment<Theme>();
+    auto theme = useEnvironmentReactive<ThemeKey>();
 
     auto [boxSize,
           cornerRadius,

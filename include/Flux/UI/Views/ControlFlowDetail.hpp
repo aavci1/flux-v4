@@ -45,38 +45,10 @@ inline LayoutConstraints controlFixedConstraints(Size size) {
   };
 }
 
-class ScopedEnvironmentSnapshot {
-public:
-  ScopedEnvironmentSnapshot(EnvironmentStack& stack,
-                            std::vector<EnvironmentLayer> const& layers)
-      : stack_(stack) {
-    for (EnvironmentLayer const& layer : layers) {
-      stack_.pushBorrowed(layer);
-      ++pushed_;
-    }
-  }
-
-  ScopedEnvironmentSnapshot(ScopedEnvironmentSnapshot const&) = delete;
-  ScopedEnvironmentSnapshot& operator=(ScopedEnvironmentSnapshot const&) = delete;
-
-  ~ScopedEnvironmentSnapshot() {
-    while (pushed_ > 0) {
-      stack_.pop();
-      --pushed_;
-    }
-  }
-
-private:
-  EnvironmentStack& stack_;
-  std::size_t pushed_ = 0;
-};
-
-inline Size controlMeasureElement(Element const& element, EnvironmentStack& environment,
-                                  std::vector<EnvironmentLayer> const& environmentLayers,
+inline Size controlMeasureElement(Element const& element, EnvironmentBinding const& environment,
                                   TextSystem& textSystem, LayoutConstraints const& constraints,
                                   LayoutHints const& hints) {
-  ScopedEnvironmentSnapshot environmentScope{environment, environmentLayers};
-  MeasureContext measureContext{textSystem};
+  MeasureContext measureContext{textSystem, environment};
   measureContext.pushConstraints(constraints, hints);
   Size measured = element.measure(measureContext, constraints, hints, textSystem);
   measureContext.popConstraints();
@@ -85,18 +57,15 @@ inline Size controlMeasureElement(Element const& element, EnvironmentStack& envi
 
 inline std::unique_ptr<scenegraph::SceneNode>
 controlMountElement(Element const& element, Reactive::Scope& owner,
-                    EnvironmentStack& environment,
-                    std::vector<EnvironmentLayer> const& environmentLayers,
+                    EnvironmentBinding const& environment,
                     TextSystem& textSystem, LayoutConstraints const& constraints,
                     LayoutHints const& hints,
                     Reactive::SmallFn<void()> const& requestRedraw) {
-  ScopedEnvironmentSnapshot environmentScope{environment, environmentLayers};
-  MeasureContext measureContext{textSystem};
-  auto environmentSnapshot =
-      std::make_shared<std::vector<EnvironmentLayer> const>(environmentLayers);
-  MountContext mountContext{owner, environment, textSystem, measureContext, constraints,
-                            hints, requestRedraw, std::move(environmentSnapshot)};
+  MeasureContext measureContext{textSystem, environment};
+  MountContext mountContext{owner, textSystem, measureContext, constraints,
+                            hints, requestRedraw, environment};
   return Reactive::withOwner(owner, [&] {
+    CurrentMountContextScope const currentMountContext{mountContext};
     HookInteractionSignalScope const interactionScope{owner};
     return element.mount(mountContext);
   });

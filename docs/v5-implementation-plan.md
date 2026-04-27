@@ -10,11 +10,11 @@ Flux v5 is a hard cutover to a retained mount runtime with fine-grained reactivi
 
 - View bodies describe a mount-time retained scene tree.
 - `MountRoot` owns the root scope and scene-node subtree.
-- `MountContext` carries the owner scope, environment stack, text system, and root invalidation hooks during mount.
+- `MountContext` carries the owner scope, keyed environment binding, text system, and root invalidation hooks during mount.
 - `Signal`, `Computed`, `Effect`, and `Scope` form the reactive graph.
 - `Bindable<T>` modifier values install effects that update mounted scene nodes.
 - `For`, `Show`, and `Switch` own row and branch scopes for reactive control flow.
-- `EnvironmentLayer` supports both constant values and reactive signals.
+- Compile-time `EnvironmentKey` bindings support both constant values and reactive signals.
 - `Window` owns a reactive `Theme` signal and exposes `setTheme()`.
 
 ## Stage Plan

@@ -19,7 +19,7 @@
 namespace flux {
 
 Element Alert::body() const {
-  auto theme = useEnvironment<Theme>();
+  auto theme = useEnvironmentReactive<ThemeKey>();
   ResolvedAlertCardColors const surface =
       resolveAlertCardColors(cardColor, cardStrokeColor, cornerRadius, theme());
   Color const titleC = resolveColor(titleColor, Color::primary(), theme());

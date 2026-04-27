@@ -20,7 +20,7 @@ struct PopoverDemoRoot {
         auto dismissOutside = useState<bool>(true);
         auto [showPopover, hidePopover, popoverOpen] = usePopover();
 
-        auto theme = useEnvironment<Theme>();
+        auto theme = useEnvironmentReactive<ThemeKey>();
 
         std::vector<Element> scrollChildren;
 

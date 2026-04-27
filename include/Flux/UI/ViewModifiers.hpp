@@ -11,6 +11,7 @@
 #include <Flux/Core/Types.hpp>
 #include <Flux/Graphics/Styles.hpp>
 #include <Flux/Reactive/Bindable.hpp>
+#include <Flux/UI/Environment.hpp>
 
 #include <functional>
 #include <string>
@@ -66,8 +67,11 @@ struct ViewModifiers {
   Element flex(float grow) &&;
   Element flex(float grow, float shrink) &&;
   Element flex(float grow, float shrink, float basis) &&;
-  template<typename T>
-  Element environment(T value) &&;
+  template<typename Key>
+  Element environment(typename EnvironmentKey<Key>::Value value) &&;
+
+  template<typename Key>
+  Element environment(Reactive::Signal<typename EnvironmentKey<Key>::Value> signal) &&;
 };
 
 } // namespace flux

@@ -204,9 +204,18 @@ Element ViewModifiers<Derived>::flex(float grow, float shrink, float basis) && {
 }
 
 template<typename Derived>
-template<typename T>
-Element ViewModifiers<Derived>::environment(T value) && {
-  return Element{std::move(static_cast<Derived&>(*this))}.environment(std::move(value));
+template<typename Key>
+Element ViewModifiers<Derived>::environment(typename EnvironmentKey<Key>::Value value) && {
+  return Element{std::move(static_cast<Derived&>(*this))}
+      .template environment<Key>(std::move(value));
+}
+
+template<typename Derived>
+template<typename Key>
+Element ViewModifiers<Derived>::environment(
+    Reactive::Signal<typename EnvironmentKey<Key>::Value> signal) && {
+  return Element{std::move(static_cast<Derived&>(*this))}
+      .template environment<Key>(std::move(signal));
 }
 
 } // namespace flux

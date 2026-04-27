@@ -30,7 +30,7 @@ Toggle::Style resolveStyle(Toggle::Style const &style, Theme const &theme) {
 }
 
 Element Toggle::body() const {
-    auto theme = useEnvironment<Theme>();
+    auto theme = useEnvironmentReactive<ThemeKey>();
 
     auto [trackWidth,
           trackHeight,

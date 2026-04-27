@@ -17,8 +17,6 @@
 
 namespace flux {
 
-namespace {
-
 struct TableColumnLayout {
     float width = 0.f;
     float flexGrow = 0.f;
@@ -36,6 +34,30 @@ struct TableColumnIndex {
     std::size_t value = 0;
 
     bool operator==(TableColumnIndex const &) const = default;
+};
+
+struct TableLayoutContextKey {};
+template<>
+struct EnvironmentKey<TableLayoutContextKey> {
+    using Value = TableLayoutContext;
+    static Value defaultValue() { return {}; }
+    static ::flux::detail::EnvironmentSlot const& slot() {
+        static ::flux::detail::EnvironmentSlot s{
+            ::flux::detail::allocateEnvironmentSlot(typeid(TableLayoutContextKey))};
+        return s;
+    }
+};
+
+struct TableColumnIndexKey {};
+template<>
+struct EnvironmentKey<TableColumnIndexKey> {
+    using Value = TableColumnIndex;
+    static Value defaultValue() { return {}; }
+    static ::flux::detail::EnvironmentSlot const& slot() {
+        static ::flux::detail::EnvironmentSlot s{
+            ::flux::detail::allocateEnvironmentSlot(typeid(TableColumnIndexKey))};
+        return s;
+    }
 };
 
 struct RenderedTableRow {
@@ -276,11 +298,9 @@ std::vector<RenderedTableRow> buildRenderedRows(std::vector<TableView::Item> con
     return rendered;
 }
 
-} // namespace
-
 Element TableCell::body() const {
-    auto table = useEnvironment<TableLayoutContext>();
-    auto index = useEnvironment<TableColumnIndex>();
+    auto table = useEnvironmentReactive<TableLayoutContextKey>();
+    auto index = useEnvironmentReactive<TableColumnIndexKey>();
 
     float resolvedWidth = style.width > 0.f ? style.width : 0.f;
     bool usesTableFlex = false;
@@ -317,9 +337,9 @@ Element TableCell::body() const {
 }
 
 Element TableRow::body() const {
-    auto theme = useEnvironment<Theme>();
+    auto theme = useEnvironmentReactive<ThemeKey>();
     TableRow::Style const resolved = resolveRowStyle(style, theme());
-    auto table = useEnvironment<TableLayoutContext>();
+    auto table = useEnvironmentReactive<TableLayoutContextKey>();
     Reactive::Signal<bool> hovered = useHover();
     Reactive::Signal<bool> pressed = usePress();
     bool const interactive = !disabled && static_cast<bool>(onTap);
@@ -347,7 +367,7 @@ Element TableRow::body() const {
     rowCells.reserve(cells.size());
     for (std::size_t i = 0; i < cells.size(); ++i) {
         Element cell = cells[i];
-        cell = std::move(cell).environment(TableColumnIndex {.value = i});
+        cell = std::move(cell).environment<TableColumnIndexKey>(TableColumnIndex {.value = i});
         if (i < table().columns.size()) {
             TableColumnLayout const &column = table().columns[i];
             if (column.width <= 0.f && column.flexGrow > 0.f) {
@@ -385,7 +405,7 @@ Element TableRow::body() const {
 }
 
 Element TableView::body() const {
-    auto theme = useEnvironment<Theme>();
+    auto theme = useEnvironmentReactive<ThemeKey>();
     TableView::Style const resolved = resolveTableStyle(style, theme());
     Signal<int> const sortColumn = useState<int>(-1);
     Signal<bool> const sortAscending = useState<bool>(true);
@@ -421,7 +441,7 @@ Element TableView::body() const {
         },
         [layout](RenderedTableRow const &row) {
             Element element = row.row;
-            return std::move(element).environment(layout);
+            return std::move(element).environment<TableLayoutContextKey>(layout);
         },
         0.f,
         Alignment::Stretch
@@ -442,7 +462,7 @@ Element TableView::body() const {
         if (!items.empty()) {
             headerRow = decorateHeader(std::move(headerRow), columns, theme(), sortColumn, sortAscending);
         }
-        childrenList.push_back(std::move(headerRow).environment(layout));
+        childrenList.push_back(std::move(headerRow).environment<TableLayoutContextKey>(layout));
         if (showDividers && (!items.empty() || !rows.empty())) {
             childrenList.push_back(divider(resolved.dividerColor, resolved.dividerInsetH));
         }

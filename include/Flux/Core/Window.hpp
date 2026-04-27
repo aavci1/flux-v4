@@ -6,7 +6,7 @@
 
 
 #include <Flux/Core/Action.hpp>
-#include <Flux/UI/Environment.hpp>
+#include <Flux/UI/EnvironmentBinding.hpp>
 
 #include <memory>
 #include <string>
@@ -25,7 +25,6 @@ struct OverlayId;
 class Application;
 class Canvas;
 class PlatformWindow;
-class EnvironmentBinding;
 namespace scenegraph {
 class SceneGraph;
 }
@@ -121,14 +120,13 @@ public:
   template<typename C>
   void setView();
 
-  EnvironmentLayer const& environmentLayer() const;
   EnvironmentBinding const& environmentBinding() const;
 
   template<typename T>
-  void setEnvironmentValue(T value);
+  void setEnvironmentValue(typename EnvironmentKey<T>::Value value);
 
   template<typename T>
-  T const* environmentValue() const;
+  typename EnvironmentKey<T>::Value environmentValue() const;
 
 protected:
   friend class Application;
@@ -139,7 +137,7 @@ private:
   friend class Runtime;
   friend class InputDispatcher;
 
-  EnvironmentLayer& environmentLayerMut();
+  EnvironmentBinding& environmentBindingMut();
 
   std::unordered_map<std::string, ActionDescriptor> const& actionDescriptors() const;
 
@@ -153,13 +151,13 @@ private:
 };
 
 template<typename T>
-void Window::setEnvironmentValue(T value) {
-  environmentLayerMut().set(std::move(value));
+void Window::setEnvironmentValue(typename EnvironmentKey<T>::Value value) {
+  environmentBindingMut() = environmentBinding().withValue<T>(std::move(value));
 }
 
 template<typename T>
-T const* Window::environmentValue() const {
-  return environmentLayer().get<T>();
+typename EnvironmentKey<T>::Value Window::environmentValue() const {
+  return environmentBinding().value<T>();
 }
 
 } // namespace flux

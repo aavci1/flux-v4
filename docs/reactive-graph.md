@@ -39,6 +39,6 @@ return Rectangle{}
 
 ## Environment
 
-`EnvironmentLayer` can hold constants or reactive signals. `useEnvironment<T>()` returns a `Signal<T>`; read it inside a `Bindable` closure or `Effect` body to subscribe to later environment writes.
+Environment values are explicit compile-time keys. `.environment<Key>(value)` provides a static subtree value, and `.environment<Key>(signal)` provides a signal-backed value. Use `useEnvironment<Key>()` for mount-time reads, or `useEnvironmentReactive<Key>()` when a `Bindable` closure or `Effect` must subscribe to later environment writes.
 
-`Window` owns a reactive `Theme` signal. Calling `Window::setTheme()` updates retained theme-dependent bindings without remounting the app.
+`Window` owns a reactive `ThemeKey` signal. Calling `Window::setTheme()` updates retained theme-dependent bindings without remounting the app.

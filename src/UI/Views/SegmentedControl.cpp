@@ -169,7 +169,7 @@ struct SegmentedControlItem : ViewModifiers<SegmentedControlItem> {
 } // namespace
 
 Element SegmentedControl::body() const {
-    auto theme = useEnvironment<Theme>();
+    auto theme = useEnvironmentReactive<ThemeKey>();
     ResolvedStyle const resolved = resolveStyle(style, theme());
     Signal<int> const selection = selectedIndex;
 

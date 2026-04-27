@@ -100,10 +100,10 @@ Runtime::~Runtime() {
 void Runtime::setRoot(std::unique_ptr<RootHolder> holder) {
   d->actions.beginRebuild();
   d->root = std::make_unique<MountRoot>(
-      std::move(holder), Application::instance().textSystem(), d->window.environmentLayer(),
+      std::move(holder), Application::instance().textSystem(), d->window.environmentBinding(),
       d->window.getSize(), [handle = d->window.handle()] {
         Window::postRedraw(handle);
-      }, d->window.environmentBinding());
+      });
   Runtime* previous = current_;
   current_ = this;
   d->root->mount(d->window.sceneGraph());

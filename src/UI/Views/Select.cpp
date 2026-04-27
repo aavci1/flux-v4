@@ -395,7 +395,7 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
     }
 
     Element body() const {
-        auto theme = useEnvironment<Theme>();
+        auto theme = useEnvironmentReactive<ThemeKey>();
 
         auto [showPopover, hidePopover, isPresented] = usePopover();
 
@@ -729,7 +729,7 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
 } // namespace
 
 Element Select::body() const {
-    auto theme = useEnvironment<Theme>();
+    auto theme = useEnvironmentReactive<ThemeKey>();
     SelectResolvedStyle const resolved = resolveStyle(style, theme());
 
     Signal<int> const selection = selectedIndex;

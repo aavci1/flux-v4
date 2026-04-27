@@ -586,7 +586,7 @@ struct MarkdownText : flux::ViewModifiers<MarkdownText> {
     }
 
     auto body() const {
-        auto theme = flux::useEnvironment<flux::Theme>();
+        auto theme = flux::useEnvironmentReactive<flux::ThemeKey>();
         auto selectableStateHandle =
             flux::useState<std::shared_ptr<detail::SelectableMarkdownState>>(
                 std::make_shared<detail::SelectableMarkdownState>()

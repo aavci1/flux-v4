@@ -219,19 +219,4 @@ struct Theme {
     bool operator==(Theme const& other) const = default;
 };
 
-template<typename Field>
-Reactive::Computed<Field> themeField(Field Theme::* member) {
-    Reactive::Signal<Theme> theme;
-    if (auto const* signal = EnvironmentStack::current().findSignal<Theme>()) {
-        theme = *signal;
-    } else if (Theme const* value = EnvironmentStack::current().find<Theme>()) {
-        theme = Reactive::Signal<Theme>(*value);
-    } else {
-        theme = Reactive::Signal<Theme>(Theme::light());
-    }
-    return Reactive::makeComputed([theme, member] {
-        return theme().*member;
-    });
-}
-
 } // namespace flux

@@ -9,7 +9,7 @@ Date: 2026-04-27
 | Historical baseline | Ambient animation lab | 36% CPU |
 | Optimized pre-cutover baseline | Ambient animation lab | 10% CPU |
 | v5 Stage 9 | Full tests and examples | Green normal, ASAN, UBSAN, and TSAN validation |
-| v5 final | `animation-demo` AmbientLoopLab @60fps, 55s steady-state | Reactive scheduling/propagation: 0.02% wall-clock; inclusive reactive-triggered effect path: 0.21% wall-clock |
+| v5 final after keyed environment migration | `animation-demo` AmbientLoopLab @60fps, 55s steady-state | Reactive scheduling/propagation: 0.02% wall-clock; inclusive reactive-triggered effect path: 0.19% wall-clock |
 
 ## Measurement Method
 
@@ -31,18 +31,18 @@ cmake --build build-profile --target animation-demo flux_tests -j8
 
 Each display-link report uses wall-clock time as the denominator, not active sample counts. Nested timers subtract child time before accumulating, so the bucket sum is stable and comparable between runs.
 
-AmbientLoopLab was run for 60 seconds from `build-profile/examples/animation-demo` after the final API, animation, reactive-core, and environment-binding waves landed. The first 5-second report was discarded as warmup. The next eleven reports, from 10s through 60s, each contained 300 frames, confirming a sustained 60fps animation. Their averaged bucket percentages were:
+AmbientLoopLab was rerun for 60 seconds from `build-profile/examples/animation-demo` after the compile-time-keyed environment migration landed. The first 5-second report was discarded as warmup. The next eleven reports, from 10s through 60s, each contained 300 frames, confirming a sustained 60fps animation. Their averaged bucket percentages were:
 
 | Bucket | Wall-clock share |
 |--------|------------------|
 | Signal set | 0.01% |
-| Effect runs, including effect-body work | 0.19% |
+| Effect runs, including effect-body work | 0.17% |
 | Poll | below 0.005% |
 | Propagation | below 0.005% |
-| Flush | below 0.005% |
-| Inclusive total | 0.21% |
+| Flush | 0.005% |
+| Inclusive total | 0.19% |
 
-The reactive scheduling/propagation subtotal excludes effect-body work and is approximately `signal_set + poll + propagation + flush = 0.02%`. The inclusive reactive-triggered path includes effect-body work and is 0.21%. The previous Stage 10, 10b, and 10c `/usr/bin/sample` rows were removed because their active-sample denominators varied too much to compare directly.
+The reactive scheduling/propagation subtotal excludes effect-body work and is approximately `signal_set + poll + propagation + flush = 0.02%`. The inclusive reactive-triggered path includes effect-body work and is 0.19%. The previous Stage 10, 10b, and 10c `/usr/bin/sample` rows were removed because their active-sample denominators varied too much to compare directly.
 
 ## Final Validation
 

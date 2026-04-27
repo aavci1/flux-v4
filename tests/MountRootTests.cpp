@@ -99,10 +99,8 @@ public:
   }
 };
 
-flux::EnvironmentLayer testEnvironment() {
-  flux::EnvironmentLayer environment;
-  environment.set(flux::Theme::light());
-  return environment;
+flux::EnvironmentBinding testEnvironment() {
+  return flux::EnvironmentBinding{}.withValue<flux::ThemeKey>(flux::Theme::light());
 }
 
 flux::Color solidColor(flux::scenegraph::RectNode const& rect) {
@@ -476,11 +474,9 @@ TEST_CASE("reactive size changes relayout ancestor stack alignment") {
 TEST_CASE("reactive size relayout propagates through a 32-level scene tree") {
   FakeTextSystem textSystem;
   flux::Reactive::Scope scope;
-  flux::EnvironmentStack environment;
-  flux::MeasureContext measureContext{textSystem};
+  flux::MeasureContext measureContext{textSystem, testEnvironment()};
   flux::MountContext context{
       scope,
-      environment,
       textSystem,
       measureContext,
       flux::LayoutConstraints{
@@ -552,12 +548,10 @@ TEST_CASE("reactive size relayout stops at unchanged ancestors") {
 
 TEST_CASE("MountContext childWithOwnScope creates a scoped owner") {
   flux::Reactive::Scope rootScope;
-  flux::EnvironmentStack environment;
   FakeTextSystem textSystem;
-  flux::MeasureContext measureContext{textSystem};
+  flux::MeasureContext measureContext{textSystem, testEnvironment()};
   flux::MountContext rootContext{
       rootScope,
-      environment,
       textSystem,
       measureContext,
       flux::LayoutConstraints{.maxWidth = 100.f, .maxHeight = 100.f},
@@ -580,12 +574,10 @@ TEST_CASE("MountContext childWithOwnScope creates a scoped owner") {
 
 TEST_CASE("MountContext childWithSharedScope reuses parent owner") {
   flux::Reactive::Scope rootScope;
-  flux::EnvironmentStack environment;
   FakeTextSystem textSystem;
-  flux::MeasureContext measureContext{textSystem};
+  flux::MeasureContext measureContext{textSystem, testEnvironment()};
   flux::MountContext rootContext{
       rootScope,
-      environment,
       textSystem,
       measureContext,
       flux::LayoutConstraints{.maxWidth = 100.f, .maxHeight = 100.f},

@@ -95,15 +95,8 @@ LayoutConstraints fixedConstraints(Size size) {
   };
 }
 
-Theme const& activeTheme(EnvironmentStack& environment) {
-  if (auto const* themeSignal = environment.findSignal<Theme>()) {
-    return themeSignal->get();
-  }
-  if (Theme const* theme = environment.find<Theme>()) {
-    return *theme;
-  }
-  static Theme const fallback = Theme::light();
-  return fallback;
+Theme activeTheme(EnvironmentBinding const& environment) {
+  return environment.value<ThemeKey>();
 }
 
 FillStyle resolveFillStyle(FillStyle style, Theme const& theme) {
@@ -152,86 +145,29 @@ void relayoutStoredAncestors(scenegraph::SceneNode& node) {
   assert(false && "reactive relayout ancestor walk exceeded the 64-level depth cap");
 }
 
-class ScopedEnvironmentSnapshot {
-public:
-  ScopedEnvironmentSnapshot(EnvironmentStack& stack, std::vector<EnvironmentLayer> const& layers)
-      : stack_(stack) {
-    for (EnvironmentLayer const& layer : layers) {
-      stack_.pushBorrowed(layer);
-      ++pushed_;
-    }
-  }
-
-  ScopedEnvironmentSnapshot(ScopedEnvironmentSnapshot const&) = delete;
-  ScopedEnvironmentSnapshot& operator=(ScopedEnvironmentSnapshot const&) = delete;
-
-  ~ScopedEnvironmentSnapshot() {
-    while (pushed_ > 0) {
-      stack_.pop();
-      --pushed_;
-    }
-  }
-
-private:
-  EnvironmentStack& stack_;
-  std::size_t pushed_ = 0;
-};
-
 template<typename T, typename Setter>
-void installBinding(MountContext& ctx, Reactive::Bindable<T> binding, Setter setter) {
-  EnvironmentStack* environment = &ctx.environment();
-  MountContext::EnvironmentSnapshot environmentSnapshot = ctx.environmentSnapshot();
+void installBinding(MountContext& ctx, Reactive::Bindable<T> binding, Setter setter,
+                    bool compareEvaluatedValue = true) {
   if (!binding.isReactive()) {
-    ScopedEnvironmentSnapshot environmentScope{*environment, *environmentSnapshot};
     setter(binding.evaluate());
     return;
   }
 
   Reactive::SmallFn<void()> requestRedraw = ctx.redrawCallback();
-  bool const initiallyTracksEnvironment = binding.tracksEnvironment();
   Reactive::withOwner(ctx.owner(), [&] {
     Reactive::Effect([binding = std::move(binding), setter = std::move(setter),
-                       requestRedraw = std::move(requestRedraw), environment,
-                       environmentSnapshot = std::move(environmentSnapshot),
-                       lastValue = std::optional<T>{},
-                       firstRun = true,
-                       tracksEnvironment = initiallyTracksEnvironment]() mutable {
-      auto applyValue = [&](T value) {
-        if constexpr (std::equality_comparable<T>) {
-          if (lastValue && *lastValue == value) {
-            return false;
-          }
-          lastValue = value;
+                      requestRedraw = std::move(requestRedraw),
+                      lastValue = std::optional<T>{},
+                      compareEvaluatedValue]() mutable {
+      T value = binding.evaluate();
+      if constexpr (std::equality_comparable<T>) {
+        if (compareEvaluatedValue && lastValue && *lastValue == value) {
+          return;
         }
-        setter(std::move(value));
-        return true;
-      };
-
-      auto evaluateWithEnvironment = [&] {
-        ScopedEnvironmentSnapshot environmentScope{*environment, *environmentSnapshot};
-        detail::EnvironmentReadTrackingScope environmentReads;
-        bool const changed = applyValue(binding.evaluate());
-        if (environmentReads.observed()) {
-          tracksEnvironment = true;
-          binding.setTracksEnvironment(true);
-        }
-        return changed;
-      };
-
-      bool changed = false;
-      if (tracksEnvironment || firstRun) {
-        changed = evaluateWithEnvironment();
-        firstRun = false;
-      } else {
-        detail::EnvironmentReadTrackingScope environmentReads;
-        changed = applyValue(binding.evaluate());
-        if (environmentReads.observed()) {
-          tracksEnvironment = true;
-          binding.setTracksEnvironment(true);
-          changed = evaluateWithEnvironment() || changed;
-        }
+        lastValue = value;
       }
-      if (changed && requestRedraw) {
+      setter(std::move(value));
+      if (requestRedraw) {
         requestRedraw();
       }
     });
@@ -338,26 +274,21 @@ Element Element::key(std::string key) && {
 
 std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
   std::unique_ptr<MountContext> scopedEnvironmentContext;
-  if (envLayer_) {
-    ctx.environment().push(*envLayer_);
-    auto environmentSnapshot =
-        std::make_shared<std::vector<EnvironmentLayer> const>(ctx.environment().snapshot());
+  if (!envOverrides_.empty()) {
+    EnvironmentBinding activeEnvironment = ctx.environmentBinding();
+    for (auto const& override : envOverrides_) {
+      activeEnvironment = override->apply(activeEnvironment);
+    }
     scopedEnvironmentContext = std::make_unique<MountContext>(
-        ctx.owner(), ctx.environment(), ctx.textSystem(), ctx.measureContext(),
-        ctx.constraints(), ctx.hints(), ctx.redrawCallback(), std::move(environmentSnapshot));
+        ctx.owner(), ctx.textSystem(), ctx.measureContext(),
+        ctx.constraints(), ctx.hints(), ctx.redrawCallback(),
+        std::move(activeEnvironment));
   }
   MountContext& activeCtx = scopedEnvironmentContext ? *scopedEnvironmentContext : ctx;
-
-  auto popEnvironment = [&] {
-    if (envLayer_) {
-      ctx.environment().pop();
-    }
-  };
+  detail::CurrentMountContextScope const currentMountContext{activeCtx};
 
   if (!modifiers_ || !modifiers_->needsModifierPass()) {
-    auto node = impl_->mount(activeCtx);
-    popEnvironment();
-    return node;
+    return impl_->mount(activeCtx);
   }
 
   detail::ElementModifiers const& modifiers = *modifiers_;
@@ -369,7 +300,6 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
   MountContext innerCtx = activeCtx.childWithSharedScope(innerConstraints, activeCtx.hints());
   std::unique_ptr<scenegraph::SceneNode> content = impl_->mount(innerCtx);
   if (!content) {
-    popEnvironment();
     return nullptr;
   }
 
@@ -412,16 +342,16 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
     }
     rawWrapper->setInteraction(std::move(interaction));
   }
-  EnvironmentStack* bindingEnvironment = &activeCtx.environment();
+  EnvironmentBinding bindingEnvironment = activeCtx.environmentBinding();
   installBinding<FillStyle>(activeCtx, modifiers.fill, [rawWrapper, bindingEnvironment](FillStyle fill) {
-    rawWrapper->setFill(resolveFillStyle(std::move(fill), activeTheme(*bindingEnvironment)));
-  });
+    rawWrapper->setFill(resolveFillStyle(std::move(fill), activeTheme(bindingEnvironment)));
+  }, false);
   installBinding<StrokeStyle>(activeCtx, modifiers.stroke, [rawWrapper, bindingEnvironment](StrokeStyle stroke) {
-    rawWrapper->setStroke(resolveStrokeStyle(std::move(stroke), activeTheme(*bindingEnvironment)));
-  });
+    rawWrapper->setStroke(resolveStrokeStyle(std::move(stroke), activeTheme(bindingEnvironment)));
+  }, false);
   installBinding<ShadowStyle>(activeCtx, modifiers.shadow, [rawWrapper, bindingEnvironment](ShadowStyle shadow) {
-    rawWrapper->setShadow(resolveShadowStyle(shadow, activeTheme(*bindingEnvironment)));
-  });
+    rawWrapper->setShadow(resolveShadowStyle(shadow, activeTheme(bindingEnvironment)));
+  }, false);
   installBinding<CornerRadius>(activeCtx, modifiers.cornerRadius, [rawWrapper](CornerRadius radius) {
     rawWrapper->setCornerRadius(radius);
   });
@@ -540,7 +470,6 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
     }
   });
 
-  popEnvironment();
   return wrapper;
 }
 

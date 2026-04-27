@@ -22,7 +22,7 @@ struct ChatListRow : ViewModifiers<ChatListRow> {
     std::function<void()> onTap;
 
     auto body() const {
-        auto theme = useEnvironment<Theme>();
+        auto theme = useEnvironmentReactive<ThemeKey>();
         Color const titleColor = Color::primary();
         Color const detailColor = selected ? Color::primary() : Color::secondary();
 
@@ -82,7 +82,7 @@ struct ChatsView : ViewModifiers<ChatsView> {
     std::function<void(int, lambda_studio_backend::GenerationParamsPatch const &)> onAdjustGeneration;
 
     auto body() const {
-        auto theme = useEnvironment<Theme>();
+        auto theme = useEnvironmentReactive<ThemeKey>();
         std::vector<ChatThread> const &chatThreads = state.chats;
 
         int const selectedIndex = clampedChatIndex(state);

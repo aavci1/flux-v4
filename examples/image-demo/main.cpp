@@ -216,7 +216,7 @@ struct ImageDemoRoot {
     std::string imagePath;
 
     Element body() const {
-        auto theme = useEnvironment<Theme>();
+        auto theme = useEnvironmentReactive<ThemeKey>();
 
         if (!image) {
             return ScrollView{

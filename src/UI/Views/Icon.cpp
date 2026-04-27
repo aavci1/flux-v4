@@ -37,7 +37,7 @@ std::string encodeUtf8(char32_t cp) {
 }
 
 Element Icon::body() const {
-    auto theme = useEnvironment<Theme>();
+    auto theme = useEnvironmentReactive<ThemeKey>();
 
     Reactive::Bindable<IconName> nameBinding = name;
     float const s = resolveFloat(size, theme().bodyFont.size);

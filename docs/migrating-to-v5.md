@@ -15,7 +15,7 @@ struct ToggleSwatch {
         .size(48.f, 48.f)
         .fill([active] {
           return active() ? Color::accent() : Color::separator();
-        }})
+        })
         .cornerRadius(8.f)
         .onTap([active] { active = !active(); });
   }
@@ -43,15 +43,15 @@ Control-flow factories receive their own scopes, so row and branch state persist
 
 ## Theme
 
-Read the active theme with:
+Theme is now an explicit environment key. Read the active theme with:
 
 ```cpp
-auto theme = useEnvironment<Theme>();
+auto theme = useEnvironmentReactive<ThemeKey>();
 ```
 
-Environment values are signals. Read `theme()` inside a `Bindable` closure or `Effect`
-body when the result must update after `Window::setTheme(...)` or another environment
-write. Reads at body time are one-time static reads, which is appropriate for fixed
+Read `theme()` inside a `Bindable` closure or `Effect` body when the result must
+update after `Window::setTheme(...)` or another signal-backed environment write.
+Reads at body time are one-time static reads, which is appropriate for fixed
 mount-time layout seeds.
 
 ```cpp
@@ -61,5 +61,34 @@ Text {
 }
 ```
 
-Debug builds warn when a signal-backed environment value is read outside a tracking
-context, because that read does not subscribe to future environment changes.
+For a single field, use a computed field helper:
+
+```cpp
+auto space = useEnvironmentField<ThemeKey>(&Theme::space3);
+```
+
+Provide a theme to a subtree with a keyed environment modifier:
+
+```cpp
+return content.environment<ThemeKey>(Theme::dark());
+```
+
+## Environment Keys
+
+Environment lookups are compile-time keyed. Define a key once, colocating its
+value type and default:
+
+```cpp
+FLUX_DEFINE_ENVIRONMENT_KEY(LocaleKey, Locale, Locale{});
+```
+
+Use these APIs:
+
+- `useEnvironment<Key>()` returns the current value by copy. Use it for mount-time static reads.
+- `useEnvironmentSignal<Key>()` returns the upstream signal when the provider is signal-backed.
+- `useEnvironmentReactive<Key>()` returns a signal-shaped value, using the upstream signal when present or a constant signal otherwise.
+- `.environment<Key>(value)` and `.environment<Key>(signal)` provide value-backed and signal-backed subtree overrides.
+
+The old type-keyed API is gone: `useEnvironment<Theme>()` becomes
+`useEnvironmentReactive<ThemeKey>()`, and `.environment(theme)` becomes
+`.environment<ThemeKey>(theme)`.

@@ -54,10 +54,8 @@ public:
   }
 };
 
-EnvironmentLayer testEnvironment() {
-  EnvironmentLayer environment;
-  environment.set(Theme::light());
-  return environment;
+EnvironmentBinding testEnvironment() {
+  return EnvironmentBinding{}.withValue<ThemeKey>(Theme::light());
 }
 
 scenegraph::RectNode const* findMovedThumb(scenegraph::SceneNode const& node) {

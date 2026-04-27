@@ -443,7 +443,7 @@ Element makeLayoutDemo(Theme const &theme, Signal<int> compactMode, Signal<std::
 
 struct SegmentedDemoRoot {
     Element body() const {
-        auto theme = useEnvironment<Theme>();
+        auto theme = useEnvironmentReactive<ThemeKey>();
 
         auto workspace = useState<int>(0);
         auto channel = useState<int>(1);

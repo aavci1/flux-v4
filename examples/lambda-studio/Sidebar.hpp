@@ -24,7 +24,7 @@ struct SidebarButton : ViewModifiers<SidebarButton> {
     std::function<void()> onTap;
 
     auto body() const {
-        auto theme = useEnvironment<Theme>();
+        auto theme = useEnvironmentReactive<ThemeKey>();
 
         auto hovered = useState(false);
         auto pressed = useState(false);
@@ -81,7 +81,7 @@ struct Sidebar : ViewModifiers<Sidebar> {
     std::function<void(std::string)> onSelect;
 
     auto body() const {
-        auto theme = useEnvironment<Theme>();
+        auto theme = useEnvironmentReactive<ThemeKey>();
 
         auto makeButton = [this](IconName icon, std::string title) {
             return SidebarButton {

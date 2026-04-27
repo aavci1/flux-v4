@@ -50,18 +50,17 @@ public:
                LayoutHints const& hints, TextSystem& textSystem) const {
     ctx.advanceChildSlot();
     Value const value = detail::readSelectorCopy(selector_);
-    EnvironmentStack& environment = EnvironmentStack::current();
-    std::vector<EnvironmentLayer> const environmentLayers = environment.snapshot();
+    EnvironmentBinding const environment = ctx.environmentBinding();
     for (SwitchCase<Value> const& candidate : cases_) {
       if (candidate.value == value) {
         Element element = candidate.factory();
         return detail::controlMeasureElement(
-            element, environment, environmentLayers, textSystem, constraints, hints);
+            element, environment, textSystem, constraints, hints);
       }
     }
     Element element = defaultFactory_();
     return detail::controlMeasureElement(
-        element, environment, environmentLayers, textSystem, constraints, hints);
+        element, environment, textSystem, constraints, hints);
   }
 
   std::unique_ptr<scenegraph::SceneNode> mount(MountContext& ctx) const {
@@ -76,8 +75,8 @@ public:
     });
 
     auto state = std::make_shared<State>(
-        selector_, cases_, defaultFactory_, frameSize, ctx.environment(),
-        ctx.environment().snapshot(), ctx.textSystem(), ctx.constraints(), ctx.hints(),
+        selector_, cases_, defaultFactory_, frameSize, ctx.environmentBinding(),
+        ctx.textSystem(), ctx.constraints(), ctx.hints(),
         ctx.redrawCallback());
 
     scenegraph::GroupNode* rawGroup = group.get();
@@ -96,8 +95,7 @@ private:
     std::vector<SwitchCase<Value>> cases;
     std::function<Element()> defaultFactory;
     Size frameSize{};
-    EnvironmentStack& environment;
-    std::vector<EnvironmentLayer> environmentLayers;
+    EnvironmentBinding environment;
     TextSystem& textSystem;
     LayoutConstraints constraints;
     LayoutHints hints;
@@ -107,16 +105,14 @@ private:
 
     State(Selector selectorIn, std::vector<SwitchCase<Value>> casesIn,
           std::function<Element()> defaultFactoryIn, Size frameSizeIn,
-          EnvironmentStack& environmentIn,
-          std::vector<EnvironmentLayer> environmentLayersIn, TextSystem& textSystemIn,
+          EnvironmentBinding environmentIn, TextSystem& textSystemIn,
           LayoutConstraints constraintsIn, LayoutHints hintsIn,
           Reactive::SmallFn<void()> requestRedrawIn)
         : selector(std::move(selectorIn))
         , cases(std::move(casesIn))
         , defaultFactory(std::move(defaultFactoryIn))
         , frameSize(frameSizeIn)
-        , environment(environmentIn)
-        , environmentLayers(std::move(environmentLayersIn))
+        , environment(std::move(environmentIn))
         , textSystem(textSystemIn)
         , constraints(constraintsIn)
         , hints(hintsIn)
@@ -172,13 +168,17 @@ private:
       return Reactive::untrack([&] {
         branchScope = std::make_shared<Reactive::Scope>();
         return Reactive::withOwner(*branchScope, [&] {
+          MeasureContext factoryMeasureContext{textSystem, environment};
+          MountContext factoryMountContext{*branchScope, textSystem, factoryMeasureContext,
+                                           constraints, hints, requestRedraw, environment};
+          detail::CurrentMountContextScope const currentMountContext{factoryMountContext};
           Element element = branch < cases.size()
               ? cases[branch].factory()
               : defaultFactory();
           Size measured = detail::controlMeasureElement(
-              element, environment, environmentLayers, textSystem, constraints, hints);
+              element, environment, textSystem, constraints, hints);
           return detail::controlMountElement(
-              element, *branchScope, environment, environmentLayers, textSystem,
+              element, *branchScope, environment, textSystem,
               detail::controlFixedConstraints(measured), hints, requestRedraw);
         });
       });

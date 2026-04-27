@@ -72,13 +72,11 @@ TEST_CASE("Alert action wrapper preserves the original action after dismiss tear
 
 TEST_CASE("Alert mounts as an intrinsic card for overlay centering") {
   FakeTextSystem textSystem;
-  flux::MeasureContext measureContext{textSystem};
   flux::Reactive::Scope scope;
-  flux::EnvironmentLayer layer;
   flux::Theme const theme = flux::Theme::light();
-  layer.set(theme);
-  flux::EnvironmentStack& environment = flux::EnvironmentStack::current();
-  environment.push(layer);
+  flux::EnvironmentBinding environment =
+      flux::EnvironmentBinding{}.withValue<flux::ThemeKey>(theme);
+  flux::MeasureContext measureContext{textSystem, environment};
 
   flux::LayoutConstraints constraints{
       .maxWidth = 800.f,
@@ -86,7 +84,7 @@ TEST_CASE("Alert mounts as an intrinsic card for overlay centering") {
       .minWidth = 0.f,
       .minHeight = 0.f,
   };
-  flux::MountContext context{scope, environment, textSystem, measureContext, constraints};
+  flux::MountContext context{scope, textSystem, measureContext, constraints, {}, {}, environment};
   flux::Element alertElement{flux::Alert{
       .title = "Delete item?",
       .message = "This action cannot be undone.",
@@ -96,7 +94,6 @@ TEST_CASE("Alert mounts as an intrinsic card for overlay centering") {
   }};
 
   std::unique_ptr<flux::scenegraph::SceneNode> node = alertElement.mount(context);
-  environment.pop();
 
   REQUIRE(node);
   CHECK(node->bounds().width == doctest::Approx(360.f));

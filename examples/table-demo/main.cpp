@@ -98,7 +98,7 @@ struct DealTableRow : ViewModifiers<DealTableRow> {
     Deal deal;
 
     Element body() const {
-        auto theme = useEnvironment<Theme>();
+        auto theme = useEnvironmentReactive<ThemeKey>();
         auto expanded = useState(false);
 
         std::vector<Element> cells;
@@ -236,7 +236,7 @@ struct DealTableRow : ViewModifiers<DealTableRow> {
 
 struct TableDemoView {
     Element body() const {
-        auto theme = useEnvironment<Theme>();
+        auto theme = useEnvironmentReactive<ThemeKey>();
         std::vector<Deal> deals = sampleDeals();
         double totalValue = 0.0;
         float totalProgress = 0.f;

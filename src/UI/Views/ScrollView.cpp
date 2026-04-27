@@ -61,8 +61,8 @@ Size measureChild(Element const& child, MeasureContext& ctx, LayoutConstraints c
   return size;
 }
 
-Color scrollIndicatorColor(EnvironmentStack& environment) {
-  Theme const& theme = environment.find<Theme>() ? *environment.find<Theme>() : Theme::light();
+Color scrollIndicatorColor(EnvironmentBinding const& environment) {
+  Theme const theme = environment.value<ThemeKey>();
   return Color{
       theme.secondaryLabelColor.r,
       theme.secondaryLabelColor.g,
@@ -212,7 +212,7 @@ std::unique_ptr<scenegraph::SceneNode> ScrollView::mount(MountContext& ctx) cons
   scenegraph::RectNode* rawVerticalIndicator = nullptr;
   scenegraph::RectNode* rawHorizontalIndicator = nullptr;
   if (showsAnyIndicator) {
-    Color const indicatorColor = scrollIndicatorColor(ctx.environment());
+    Color const indicatorColor = scrollIndicatorColor(ctx.environmentBinding());
     auto indicatorOverlay =
         std::make_unique<scenegraph::RectNode>(Rect{0.f, 0.f, viewport.width, viewport.height});
     indicatorOverlay->setOpacity(0.f);

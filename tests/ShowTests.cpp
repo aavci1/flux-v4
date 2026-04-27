@@ -56,10 +56,8 @@ public:
   }
 };
 
-flux::EnvironmentLayer testEnvironment() {
-  flux::EnvironmentLayer environment;
-  environment.set(flux::Theme::light());
-  return environment;
+flux::EnvironmentBinding testEnvironment() {
+  return flux::EnvironmentBinding{}.withValue<flux::ThemeKey>(flux::Theme::light());
 }
 
 flux::scenegraph::GroupNode const& rootGroup(flux::scenegraph::SceneGraph const& sceneGraph) {

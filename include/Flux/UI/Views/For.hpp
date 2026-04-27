@@ -62,7 +62,7 @@ public:
       state->dispose();
     });
 
-    state->configureMount(ctx.environment(), ctx.environment().snapshot(), ctx.textSystem(),
+    state->configureMount(ctx.environmentBinding(), ctx.textSystem(),
                           ctx.constraints(), ctx.redrawCallback());
 
     scenegraph::GroupNode* rawGroup = group.get();
@@ -113,8 +113,7 @@ private:
     Factory factory;
     float spacing = 0.f;
     Alignment alignment = Alignment::Start;
-    EnvironmentStack* environment = nullptr;
-    std::vector<EnvironmentLayer> environmentLayers;
+    EnvironmentBinding environment;
     TextSystem* textSystem = nullptr;
     LayoutConstraints constraints;
     Reactive::SmallFn<void()> requestRedraw;
@@ -139,22 +138,18 @@ private:
       if (disposed) {
         return clampSize({}, nextConstraints);
       }
-      EnvironmentStack& currentEnvironment = EnvironmentStack::current();
-      environment = &currentEnvironment;
-      environmentLayers = currentEnvironment.snapshot();
+      environment = ctx.environmentBinding();
       textSystem = &measureTextSystem;
       constraints = nextConstraints;
       reconcileMeasuredRows(items.peek());
       return measuredStackSize(nextConstraints);
     }
 
-    void configureMount(EnvironmentStack& environmentIn,
-                        std::vector<EnvironmentLayer> environmentLayersIn,
+    void configureMount(EnvironmentBinding environmentIn,
                         TextSystem& textSystemIn, LayoutConstraints constraintsIn,
                         Reactive::SmallFn<void()> requestRedrawIn) {
       disposed = false;
-      environment = &environmentIn;
-      environmentLayers = std::move(environmentLayersIn);
+      environment = std::move(environmentIn);
       textSystem = &textSystemIn;
       constraints = constraintsIn;
       requestRedraw = std::move(requestRedrawIn);
@@ -169,7 +164,7 @@ private:
     }
 
     void reconcile(scenegraph::GroupNode& group, Items const& nextItems) {
-      if (disposed || !environment || !textSystem) {
+      if (disposed || !textSystem) {
         return;
       }
       Size const oldSize = group.size();
@@ -207,15 +202,15 @@ private:
             row.cachedHints = childHints;
             row.hasCachedSize = true;
           } else {
-            ensureMeasured(row, *environment, environmentLayers, *textSystem,
+            ensureMeasured(row, environment, *textSystem,
                            childConstraints, childHints);
             node = mountRowNode(row, childHints);
           }
           nextRows.push_back(std::move(row));
           nextNodes.push_back(std::move(node));
         } else {
-          Row row = createRow(item, index, std::move(key), *environment, environmentLayers);
-          ensureMeasured(row, *environment, environmentLayers, *textSystem,
+          Row row = createRow(item, index, std::move(key), environment);
+          ensureMeasured(row, environment, *textSystem,
                          childConstraints, childHints);
           nextNodes.push_back(mountRowNode(row, childHints));
           nextRows.push_back(std::move(row));
@@ -238,7 +233,7 @@ private:
     }
 
     void reconcileMeasuredRows(Items const& nextItems) {
-      if (!environment || !textSystem) {
+      if (!textSystem) {
         return;
       }
       std::vector<bool> used(rows.size(), false);
@@ -261,12 +256,12 @@ private:
           if (indexChanged) {
             row.hasCachedSize = false;
           }
-          ensureMeasured(row, *environment, environmentLayers, *textSystem,
+          ensureMeasured(row, environment, *textSystem,
                          childConstraints, childHints);
           nextRows.push_back(std::move(row));
         } else {
-          Row row = createRow(item, index, std::move(key), *environment, environmentLayers);
-          ensureMeasured(row, *environment, environmentLayers, *textSystem,
+          Row row = createRow(item, index, std::move(key), environment);
+          ensureMeasured(row, environment, *textSystem,
                          childConstraints, childHints);
           nextRows.push_back(std::move(row));
         }
@@ -324,8 +319,7 @@ private:
     }
 
     Row createRow(T const& item, std::size_t index, Key key,
-                  EnvironmentStack& rowEnvironment,
-                  std::vector<EnvironmentLayer> const& rowEnvironmentLayers) {
+                  EnvironmentBinding const& rowEnvironment) {
       return Reactive::untrack([&] {
         auto rowScope = std::make_shared<Reactive::Scope>();
         Reactive::Signal<std::size_t> indexSignal = Reactive::withOwner(*rowScope, [&] {
@@ -333,8 +327,10 @@ private:
         });
 
         Element element = Reactive::withOwner(*rowScope, [&] {
-          detail::ScopedEnvironmentSnapshot environmentScope{
-              rowEnvironment, rowEnvironmentLayers};
+          MeasureContext factoryMeasureContext{*textSystem, rowEnvironment};
+          MountContext factoryMountContext{*rowScope, *textSystem, factoryMeasureContext,
+                                           constraints, rowHints(), requestRedraw, rowEnvironment};
+          detail::CurrentMountContextScope const currentMountContext{factoryMountContext};
           return detail::invokeForFactory(factory, item, indexSignal);
         });
 
@@ -345,20 +341,19 @@ private:
 
     std::unique_ptr<scenegraph::SceneNode> mountRowNode(Row& row,
                                                        LayoutHints const& childHints) {
-      if (!environment || !textSystem) {
+      if (!textSystem) {
         return nullptr;
       }
       if (!row.hasCachedSize) {
-        ensureMeasured(row, *environment, environmentLayers, *textSystem,
+        ensureMeasured(row, environment, *textSystem,
                        rowConstraints(constraints), childHints);
       }
       return detail::controlMountElement(
-          row.element, *row.scope, *environment, environmentLayers, *textSystem,
+          row.element, *row.scope, environment, *textSystem,
           detail::controlFixedConstraints(row.cachedSize), childHints, requestRedraw);
     }
 
-    void ensureMeasured(Row& row, EnvironmentStack& measureEnvironment,
-                        std::vector<EnvironmentLayer> const& measureEnvironmentLayers,
+    void ensureMeasured(Row& row, EnvironmentBinding const& measureEnvironment,
                         TextSystem& measureTextSystem,
                         LayoutConstraints const& childConstraints,
                         LayoutHints const& childHints) {
@@ -368,7 +363,7 @@ private:
         return;
       }
       row.cachedSize = detail::controlMeasureElement(
-          row.element, measureEnvironment, measureEnvironmentLayers, measureTextSystem,
+          row.element, measureEnvironment, measureTextSystem,
           childConstraints, childHints);
       row.cachedConstraints = childConstraints;
       row.cachedHints = childHints;

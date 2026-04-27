@@ -2,13 +2,21 @@
 
 #include <cassert>
 #include <cmath>
+#include <utility>
 
 #include <Flux/Graphics/TextSystem.hpp>
 
 namespace flux {
 
-MeasureContext::MeasureContext(TextSystem& ts)
-    : textSystem_(ts) {}
+namespace {
+
+thread_local MeasureContext* sCurrentMeasureContext = nullptr;
+
+} // namespace
+
+MeasureContext::MeasureContext(TextSystem& ts, EnvironmentBinding environment)
+    : textSystem_(ts)
+    , environmentBinding_(std::move(environment)) {}
 
 MeasureContext::~MeasureContext() = default;
 
@@ -77,5 +85,22 @@ void MeasureContext::pushCompositeKeyTail(ComponentKey const& compositeKey) {
 void MeasureContext::popCompositeKeyTail() {
   traversal_.popCompositeKeyTail();
 }
+
+namespace detail {
+
+MeasureContext* currentMeasureContext() noexcept {
+  return sCurrentMeasureContext;
+}
+
+CurrentMeasureContextScope::CurrentMeasureContextScope(MeasureContext& ctx) noexcept
+    : previous_(sCurrentMeasureContext) {
+  sCurrentMeasureContext = &ctx;
+}
+
+CurrentMeasureContextScope::~CurrentMeasureContextScope() {
+  sCurrentMeasureContext = previous_;
+}
+
+} // namespace detail
 
 } // namespace flux

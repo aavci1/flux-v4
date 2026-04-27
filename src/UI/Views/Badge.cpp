@@ -20,7 +20,7 @@ Badge::Style resolveStyle(Badge::Style const &style, Theme const &theme) {
 } // namespace
 
 Element Badge::body() const {
-    Badge::Style const resolved = resolveStyle(style, flux::useEnvironment<Theme>()());
+    Badge::Style const resolved = resolveStyle(style, flux::useEnvironmentReactive<ThemeKey>()());
     return Text {
         .text = label,
         .font = resolved.font,

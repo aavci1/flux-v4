@@ -40,7 +40,7 @@ struct EmptyStatePanel : ViewModifiers<EmptyStatePanel> {
     std::string detail;
 
     auto body() const {
-        auto theme = useEnvironment<Theme>();
+        auto theme = useEnvironmentReactive<ThemeKey>();
 
         return VStack {
             .spacing = theme().space2,
@@ -75,7 +75,7 @@ struct LabeledValueRow : ViewModifiers<LabeledValueRow> {
     int maxLines = 2;
 
     auto body() const {
-        auto theme = useEnvironment<Theme>();
+        auto theme = useEnvironmentReactive<ThemeKey>();
 
         return HStack {
             .spacing = spacing > 0.f ? spacing : theme().space2,

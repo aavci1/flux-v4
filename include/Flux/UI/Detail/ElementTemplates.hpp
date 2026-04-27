@@ -152,6 +152,7 @@ std::unique_ptr<scenegraph::SceneNode> Element::Model<C>::mount(MountContext& ct
     return value.mount(ctx);
   } else if constexpr (BodyComponent<C>) {
     MountContext childCtx = ctx.childWithOwnScope(ctx.constraints(), ctx.hints());
+    detail::CurrentMountContextScope const currentMountContext{childCtx};
     Element const& child = bodyElement(ctx.constraints());
     if (bodyCache_.scope) {
       std::shared_ptr<Reactive::Scope> bodyScope = bodyCache_.scope;

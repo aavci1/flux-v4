@@ -55,10 +55,8 @@ public:
   }
 };
 
-flux::EnvironmentLayer themeEnvironment(flux::Reactive::Signal<flux::Theme> theme) {
-  flux::EnvironmentLayer environment;
-  environment.setSignal(std::move(theme));
-  return environment;
+flux::EnvironmentBinding themeBinding(flux::Reactive::Signal<flux::Theme> theme) {
+  return flux::EnvironmentBinding{}.withSignal<flux::ThemeKey>(std::move(theme));
 }
 
 flux::Color solidColor(flux::scenegraph::RectNode const& rect) {
@@ -83,7 +81,7 @@ TEST_CASE("theme signal updates retained leaf bindings without remounting") {
 
     flux::Element body() const {
       ++*bodyCalls;
-      auto theme = flux::useEnvironment<flux::Theme>();
+      auto theme = flux::useEnvironmentReactive<flux::ThemeKey>();
       flux::Reactive::onCleanup([cleanups = cleanups] {
         ++*cleanups;
       });
@@ -107,7 +105,7 @@ TEST_CASE("theme signal updates retained leaf bindings without remounting") {
   flux::MountRoot root{
       std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{&bodyCalls, &cleanups}),
       textSystem,
-      themeEnvironment(theme),
+      themeBinding(theme),
       flux::Size{200.f, 120.f},
   };
 
@@ -143,18 +141,16 @@ TEST_CASE("element environment applies to modifier bindings on the same retained
           .size(32.f, 18.f)
           .fill(flux::Color::controlBackground())
           .stroke(flux::Color::separator(), 1.f)
-          .environment(flux::Theme::dark());
+          .environment<flux::ThemeKey>(flux::Theme::dark());
     }
   };
 
   FakeTextSystem textSystem;
   flux::scenegraph::SceneGraph sceneGraph;
-  flux::EnvironmentLayer environment;
-  environment.set(flux::Theme::light());
   flux::MountRoot root{
       std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{}),
       textSystem,
-      std::move(environment),
+      flux::EnvironmentBinding{}.withValue<flux::ThemeKey>(flux::Theme::light()),
       flux::Size{200.f, 120.f},
   };
 
@@ -166,13 +162,13 @@ TEST_CASE("element environment applies to modifier bindings on the same retained
   CHECK(rect.stroke().color == flux::Theme::dark().separatorColor);
 }
 
-TEST_CASE("themeField exposes a computed theme member to bindable leaves") {
+TEST_CASE("useEnvironmentField exposes a computed theme member to bindable leaves") {
   struct Root {
     int* bodyCalls = nullptr;
 
     flux::Element body() const {
       ++*bodyCalls;
-      auto space3 = flux::themeField(&flux::Theme::space3);
+      auto space3 = flux::useEnvironmentField<flux::ThemeKey>(&flux::Theme::space3);
       return flux::Element{flux::Rectangle{}}
           .size([space3] {
                   return space3.get();
@@ -189,7 +185,7 @@ TEST_CASE("themeField exposes a computed theme member to bindable leaves") {
   flux::MountRoot root{
       std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{&bodyCalls}),
       textSystem,
-      themeEnvironment(theme),
+      themeBinding(theme),
       flux::Size{200.f, 120.f},
   };
 

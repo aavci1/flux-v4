@@ -299,7 +299,7 @@ struct SettingsView : ViewModifiers<SettingsView> {
     std::function<void(lambda_studio_backend::LoadParamsPatch const &)> onAdjustLoadDefaults;
 
     auto body() const {
-        auto theme = useEnvironment<Theme>();
+        auto theme = useEnvironmentReactive<ThemeKey>();
         using namespace settings_view_detail;
 
         std::string const statusText = primaryStatusText(state);

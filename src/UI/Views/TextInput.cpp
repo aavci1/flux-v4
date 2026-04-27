@@ -22,14 +22,6 @@ namespace flux {
 
 namespace {
 
-Theme const& activeTheme(EnvironmentStack& environment) {
-  if (Theme const* theme = environment.find<Theme>()) {
-    return *theme;
-  }
-  static Theme const fallback = Theme::light();
-  return fallback;
-}
-
 struct ResolvedTextInputStyle {
   Font font{};
   Color textColor{};
@@ -198,12 +190,12 @@ std::string appendLimited(std::string value, std::string const& text, int maxLen
 Size TextInput::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
                         LayoutHints const&, TextSystem& textSystem) const {
   ctx.advanceChildSlot();
-  auto theme = useEnvironment<Theme>();
+  auto theme = useEnvironmentReactive<ThemeKey>();
   return textInputFrameSize(*this, resolveTextInputStyle(style, theme()), constraints, textSystem);
 }
 
 std::unique_ptr<scenegraph::SceneNode> TextInput::mount(MountContext& ctx) const {
-  Theme const& theme = activeTheme(ctx.environment());
+  Theme const theme = ctx.environmentBinding().value<ThemeKey>();
   ResolvedTextInputStyle const resolved = resolveTextInputStyle(style, theme);
   auto frameSize = std::make_shared<Size>(
       textInputFrameSize(*this, resolved, ctx.constraints(), ctx.textSystem()));

@@ -13,7 +13,7 @@ add_failure() {
 
 is_allowed_header_only_class() {
   case "$1" in
-    AnimationBase|Bindable|Clipboard|Computed|Effect|EnvironmentLayer|EnvironmentReadTrackingScope|EnvironmentValue|ForView|HookInteractionSignalScope|HookLayoutScope|PreparedRenderOps|Renderer|Scope|ScopedEnvironmentSnapshot|ScopedTimer|ShowView|Signal|SmallFn|SmallVector|SwitchView)
+    AnimationBase|Bindable|Clipboard|Computed|Effect|EnvironmentBinding|EnvironmentEntry|EnvironmentSlot|ForView|HookInteractionSignalScope|HookLayoutScope|PreparedRenderOps|Renderer|Scope|ScopedTimer|ShowView|Signal|SmallFn|SmallVector|SwitchView)
       return 0
       ;;
   esac

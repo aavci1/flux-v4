@@ -22,7 +22,7 @@ ProgressBar::Style resolveStyle(ProgressBar::Style const &style, Theme const &th
 } // namespace
 
 Element ProgressBar::body() const {
-    ProgressBar::Style const resolved = resolveStyle(style, flux::useEnvironment<Theme>()());
+    ProgressBar::Style const resolved = resolveStyle(style, flux::useEnvironmentReactive<ThemeKey>()());
     float const clamped = std::clamp(progress, 0.f, 1.f);
     Rect const bounds = useBounds();
     float const componentWidth = bounds.width > 0.f ? bounds.width : kDefaultProgressBarWidth;

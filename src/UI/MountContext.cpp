@@ -33,20 +33,7 @@ namespace flux {
 
 namespace {
 
-Theme const& activeTheme(EnvironmentStack& environment) {
-  if (Theme const* theme = environment.find<Theme>()) {
-    return *theme;
-  }
-  static Theme const fallback = Theme::light();
-  return fallback;
-}
-
-std::optional<Reactive::Signal<Theme>> activeThemeSignal(EnvironmentStack& environment) {
-  if (auto const* signal = environment.findSignal<Theme>()) {
-    return *signal;
-  }
-  return std::nullopt;
-}
+thread_local MountContext* sCurrentMountContext = nullptr;
 
 TextLayoutOptions textLayoutOptions(Text const& text) {
   TextLayoutOptions options{};
@@ -260,47 +247,37 @@ void rewindMeasuredChildren(MountContext& ctx) {
 
 } // namespace
 
-MountContext::MountContext(Reactive::Scope& owner, EnvironmentStack& environment,
+MountContext::MountContext(Reactive::Scope& owner,
                            TextSystem& textSystem, MeasureContext& measureContext,
                            LayoutConstraints constraints, LayoutHints hints,
                            Reactive::SmallFn<void()> requestRedraw,
-                           EnvironmentSnapshot environmentSnapshot,
                            EnvironmentBinding environmentBinding)
     : owner_(&owner)
-    , environment_(environment)
     , environmentBinding_(std::move(environmentBinding))
     , textSystem_(textSystem)
     , measureContext_(measureContext)
     , constraints_(constraints)
     , hints_(hints)
-    , requestRedraw_(std::move(requestRedraw))
-    , environmentSnapshot_(environmentSnapshot
-          ? std::move(environmentSnapshot)
-          : std::make_shared<std::vector<EnvironmentLayer> const>(environment.snapshot())) {}
+    , requestRedraw_(std::move(requestRedraw)) {}
 
-MountContext::MountContext(std::shared_ptr<Reactive::Scope> owner, EnvironmentStack& environment,
+MountContext::MountContext(std::shared_ptr<Reactive::Scope> owner,
                            TextSystem& textSystem, MeasureContext& measureContext,
                            LayoutConstraints constraints, LayoutHints hints,
                            Reactive::SmallFn<void()> requestRedraw,
-                           EnvironmentSnapshot environmentSnapshot,
                            EnvironmentBinding environmentBinding)
     : ownedOwner_(std::move(owner))
     , owner_(ownedOwner_.get())
-    , environment_(environment)
     , environmentBinding_(std::move(environmentBinding))
     , textSystem_(textSystem)
     , measureContext_(measureContext)
     , constraints_(constraints)
     , hints_(hints)
-    , requestRedraw_(std::move(requestRedraw))
-    , environmentSnapshot_(environmentSnapshot
-          ? std::move(environmentSnapshot)
-          : std::make_shared<std::vector<EnvironmentLayer> const>(environment.snapshot())) {}
+    , requestRedraw_(std::move(requestRedraw)) {}
 
 MountContext MountContext::childWithSharedScope(LayoutConstraints constraints,
                                                 LayoutHints hints) const {
-  return MountContext{owner(), environment_, textSystem_, measureContext_, constraints,
-                      hints, requestRedraw_, environmentSnapshot_, environmentBinding_};
+  return MountContext{owner(), textSystem_, measureContext_, constraints,
+                      hints, requestRedraw_, environmentBinding_};
 }
 
 MountContext MountContext::childWithOwnScope(LayoutConstraints constraints,
@@ -309,15 +286,15 @@ MountContext MountContext::childWithOwnScope(LayoutConstraints constraints,
   owner().onCleanup([childScope] {
     childScope->dispose();
   });
-  return MountContext{std::move(childScope), environment_, textSystem_, measureContext_, constraints,
-                      hints, requestRedraw_, environmentSnapshot_, environmentBinding_};
+  return MountContext{std::move(childScope), textSystem_, measureContext_, constraints,
+                      hints, requestRedraw_, environmentBinding_};
 }
 
 MountContext MountContext::childWithEnvironment(EnvironmentBinding environment,
                                                 LayoutConstraints constraints,
                                                 LayoutHints hints) const {
-  return MountContext{owner(), environment_, textSystem_, measureContext_, constraints,
-                      hints, requestRedraw_, environmentSnapshot_, std::move(environment)};
+  return MountContext{owner(), textSystem_, measureContext_, constraints,
+                      hints, requestRedraw_, std::move(environment)};
 }
 
 void MountContext::requestRedraw() const {
@@ -327,6 +304,19 @@ void MountContext::requestRedraw() const {
 }
 
 namespace detail {
+
+MountContext* currentMountContext() noexcept {
+  return sCurrentMountContext;
+}
+
+CurrentMountContextScope::CurrentMountContextScope(MountContext& ctx) noexcept
+    : previous_(sCurrentMountContext) {
+  sCurrentMountContext = &ctx;
+}
+
+CurrentMountContextScope::~CurrentMountContextScope() {
+  sCurrentMountContext = previous_;
+}
 
 std::unique_ptr<scenegraph::SceneNode> mountRectangle(Rectangle const&, MountContext& ctx) {
   Size const size = assignedSize(ctx.constraints());
@@ -342,8 +332,8 @@ std::unique_ptr<scenegraph::SceneNode> mountRectangle(Rectangle const&, MountCon
 }
 
 std::unique_ptr<scenegraph::SceneNode> mountText(Text const& text, MountContext& ctx) {
-  std::optional<Reactive::Signal<Theme>> themeSignal = activeThemeSignal(ctx.environment());
-  Theme const fallbackTheme = themeSignal ? themeSignal->peek() : activeTheme(ctx.environment());
+  std::optional<Reactive::Signal<Theme>> themeSignal = ctx.environmentBinding().signal<ThemeKey>();
+  Theme const fallbackTheme = themeSignal ? themeSignal->peek() : ctx.environmentBinding().value<ThemeKey>();
   Theme const& theme = themeSignal ? themeSignal->peek() : fallbackTheme;
   Font const baseFont = text.font;
   Font const font = resolveFont(baseFont, theme.bodyFont, theme);

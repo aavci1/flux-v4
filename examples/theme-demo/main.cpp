@@ -26,7 +26,7 @@ struct ToolbarNavButton : ViewModifiers<ToolbarNavButton> {
     std::function<void()> onTap;
 
     Element body() const {
-        auto theme = useEnvironment<Theme>();
+        auto theme = useEnvironmentReactive<ThemeKey>();
         auto hovered = useState(false);
 
         Bindable<Color> fill {[active = active, hovered, theme] {
@@ -62,7 +62,7 @@ struct SidebarGlyphButton : ViewModifiers<SidebarGlyphButton> {
     std::function<void()> onTap;
 
     Element body() const {
-        auto theme = useEnvironment<Theme>();
+        auto theme = useEnvironmentReactive<ThemeKey>();
         auto hovered = useState(false);
 
         Bindable<Color> fill {[selected = selected, hovered, theme] {
@@ -111,7 +111,7 @@ struct DensityPreviewRow : ViewModifiers<DensityPreviewRow> {
     bool stacked = false;
 
     Element body() const {
-        auto theme = useEnvironment<Theme>();
+        auto theme = useEnvironmentReactive<ThemeKey>();
 
         Element preview = HStack {
             .spacing = previewTheme.space4,
@@ -132,7 +132,7 @@ struct DensityPreviewRow : ViewModifiers<DensityPreviewRow> {
             .fill(FillStyle::solid(Color::controlBackground()))
             .stroke(StrokeStyle::solid(Color::separator(), 1.f))
             .cornerRadius(CornerRadius {previewTheme.radiusXLarge})
-            .environment(previewTheme);
+            .environment<ThemeKey>(previewTheme);
 
         if (stacked) {
             return VStack {
@@ -1135,13 +1135,13 @@ struct ThemeDemoPage {
             ),
         }
             .fill(FillStyle::solid(Color::windowBackground()))
-            .environment(theme);
+            .environment<ThemeKey>(theme);
     }
 };
 
 struct ThemeDemoRoot {
     auto body() const {
-        auto theme = useEnvironment<Theme>();
+        auto theme = useEnvironmentReactive<ThemeKey>();
         auto darkMode = useState(false);
         auto scrollOffset = useState(Point {0.f, 0.f});
         auto viewportSize = useState(Size {0.f, 0.f});

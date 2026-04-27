@@ -47,7 +47,7 @@ Slider::Style resolveStyle(Slider::Style const &style, Theme const &theme) {
 }
 
 Element Slider::body() const {
-    auto theme = useEnvironment<Theme>();
+    auto theme = useEnvironmentReactive<ThemeKey>();
 
     auto [activeColor,
           inactiveColor,

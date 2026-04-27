@@ -18,7 +18,7 @@ using namespace flux;
 
 struct AlertDemoRoot {
     auto body() const {
-        auto theme = useEnvironment<Theme>();
+        auto theme = useEnvironmentReactive<ThemeKey>();
         auto [showAlert, hideAlert, alertOpen] = useAlert();
         (void)alertOpen;
 

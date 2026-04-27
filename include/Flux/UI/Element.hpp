@@ -10,6 +10,7 @@
 #include <Flux/UI/Component.hpp>
 #include <Flux/UI/Detail/ElementModifiers.hpp>
 #include <Flux/UI/Environment.hpp>
+#include <Flux/UI/EnvironmentBinding.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 #include <Flux/UI/Leaves.hpp>
 #include <Flux/UI/MeasureContext.hpp>
@@ -51,6 +52,39 @@ class SceneNode;
 }
 namespace detail {
 std::uint64_t nextElementMeasureId();
+
+struct EnvironmentOverride {
+  virtual ~EnvironmentOverride() = default;
+  virtual EnvironmentBinding apply(EnvironmentBinding const& parent) const = 0;
+};
+
+template<typename Key>
+struct ValueEnvironmentOverride final : EnvironmentOverride {
+  using Value = typename EnvironmentKey<Key>::Value;
+
+  explicit ValueEnvironmentOverride(Value valueIn)
+      : value(std::move(valueIn)) {}
+
+  EnvironmentBinding apply(EnvironmentBinding const& parent) const override {
+    return parent.withValue<Key>(value);
+  }
+
+  Value value;
+};
+
+template<typename Key>
+struct SignalEnvironmentOverride final : EnvironmentOverride {
+  using Value = typename EnvironmentKey<Key>::Value;
+
+  explicit SignalEnvironmentOverride(Reactive::Signal<Value> signalIn)
+      : signal(std::move(signalIn)) {}
+
+  EnvironmentBinding apply(EnvironmentBinding const& parent) const override {
+    return parent.withSignal<Key>(signal);
+  }
+
+  Reactive::Signal<Value> signal;
+};
 } // namespace detail
 
 template<typename>
@@ -92,10 +126,6 @@ public:
   [[nodiscard]] detail::ElementModifiers const* modifiers() const noexcept {
     return modifiers_.get();
   }
-  [[nodiscard]] EnvironmentLayer const* environmentLayer() const noexcept {
-    return envLayer_ ? &*envLayer_ : nullptr;
-  }
-
   template<typename T>
   [[nodiscard]] bool is() const noexcept;
 
@@ -113,12 +143,17 @@ public:
   Element key(std::string key) &&;
   [[nodiscard]] std::optional<std::string> const& explicitKey() const noexcept { return key_; }
 
-  template<typename T>
-  Element environment(T value) && {
-    if (!envLayer_) {
-      envLayer_.emplace();
-    }
-    envLayer_->set(std::move(value));
+  template<typename Key>
+  Element environment(typename EnvironmentKey<Key>::Value value) && {
+    envOverrides_.push_back(
+        std::make_shared<detail::ValueEnvironmentOverride<Key>>(std::move(value)));
+    return std::move(*this);
+  }
+
+  template<typename Key>
+  Element environment(Reactive::Signal<typename EnvironmentKey<Key>::Value> signal) && {
+    envOverrides_.push_back(
+        std::make_shared<detail::SignalEnvironmentOverride<Key>>(std::move(signal)));
     return std::move(*this);
   }
 
@@ -186,7 +221,7 @@ private:
   std::optional<float> flexShrinkOverride_;
   std::optional<float> flexBasisOverride_;
   std::optional<float> minMainSizeOverride_;
-  std::optional<EnvironmentLayer> envLayer_;
+  std::vector<std::shared_ptr<detail::EnvironmentOverride const>> envOverrides_;
   std::shared_ptr<detail::ElementModifiers> modifiers_;
   std::optional<std::string> key_{};
   std::uint64_t measureId_{};

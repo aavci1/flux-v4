@@ -77,7 +77,7 @@ struct ToastCard {
   std::function<void(std::uint64_t)> dismiss;
 
   Element body() const {
-    auto theme = useEnvironment<Theme>();
+    auto theme = useEnvironmentReactive<ThemeKey>();
     Color const toneColor = colorForTone(toast.tone, theme());
     Color const toneBackground = backgroundForTone(toast.tone, theme());
     std::uint64_t const toastId = toast.id;
@@ -210,7 +210,7 @@ OverlayConfig overlayConfigForToast(Toast const& toast, Window& window, std::siz
 } // namespace
 
 Element ToastOverlay::body() const {
-  auto theme = useEnvironment<Theme>();
+  auto theme = useEnvironmentReactive<ThemeKey>();
   std::vector<Element> cards;
   cards.reserve(toasts.size());
   for (Toast const& toast : toasts) {

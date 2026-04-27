@@ -21,23 +21,6 @@ namespace flux {
 
 namespace {
 
-struct EnvironmentScope {
-  EnvironmentStack& stack;
-  bool pushed = false;
-
-  EnvironmentScope(EnvironmentStack& environment, EnvironmentLayer layer)
-      : stack(environment) {
-    stack.push(std::move(layer));
-    pushed = true;
-  }
-
-  ~EnvironmentScope() {
-    if (pushed) {
-      stack.pop();
-    }
-  }
-};
-
 LayoutConstraints overlayConstraints(Size windowSize, OverlayConfig const& config) {
   LayoutConstraints constraints{};
   constraints.minWidth = 0.f;
@@ -139,13 +122,11 @@ void OverlayManager::rebuild(Size windowSize, Runtime& runtime) {
     Rect contentBounds{};
     if (entry.content) {
       LayoutConstraints const constraints = overlayConstraints(windowSize, entry.config);
-      MeasureContext measureContext{Application::instance().textSystem()};
-      EnvironmentStack& environment = EnvironmentStack::current();
-      EnvironmentScope const environmentScope{environment, runtime.window().environmentLayer()};
-      MountContext context{entry.scope, environment, Application::instance().textSystem(),
+      MeasureContext measureContext{Application::instance().textSystem(), runtime.window().environmentBinding()};
+      MountContext context{entry.scope, Application::instance().textSystem(),
                            measureContext, constraints, LayoutHints{}, [handle = runtime.window().handle()] {
                              Window::postRedraw(handle);
-                           }, {}, runtime.window().environmentBinding()};
+                           }, runtime.window().environmentBinding()};
 
       contentNode = Reactive::withOwner(entry.scope, [&] {
         return entry.content->mount(context);
