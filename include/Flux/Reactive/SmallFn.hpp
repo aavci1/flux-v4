@@ -3,12 +3,23 @@
 #include <cassert>
 #include <cstddef>
 #include <cstring>
+#include <functional>
 #include <memory>
 #include <new>
 #include <type_traits>
 #include <utility>
 
 namespace flux::Reactive {
+
+namespace detail {
+
+template <typename>
+struct IsStdFunction : std::false_type {};
+
+template <typename R, typename... Args>
+struct IsStdFunction<std::function<R(Args...)>> : std::true_type {};
+
+} // namespace detail
 
 template <typename Signature, std::size_t InlineSize = 32>
 class SmallFn;
@@ -31,7 +42,13 @@ public:
     requires(!std::is_same_v<std::decay_t<Fn>, SmallFn> &&
              std::is_invocable_r_v<R, std::decay_t<Fn>&, Args...>)
   SmallFn(Fn&& fn) {
-    emplace<std::decay_t<Fn>>(std::forward<Fn>(fn));
+    using FnType = std::decay_t<Fn>;
+    if constexpr (detail::IsStdFunction<FnType>::value) {
+      if (!fn) {
+        return;
+      }
+    }
+    emplace<FnType>(std::forward<Fn>(fn));
   }
 
   ~SmallFn() {

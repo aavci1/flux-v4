@@ -5,6 +5,7 @@
 
 #include <array>
 #include <doctest/doctest.h>
+#include <functional>
 
 using namespace flux::Reactive;
 
@@ -60,4 +61,14 @@ TEST_CASE("Reactive SmallFn uses inline storage for small closures") {
   SmallFn<int(int)> large(largeCapture);
   CHECK(large(9) == 9);
   CHECK(large.usesHeapStorage());
+}
+
+TEST_CASE("Reactive SmallFn treats empty std::function as empty") {
+  std::function<void(int)> empty;
+  SmallFn<void(int)> fn(empty);
+  CHECK_FALSE(fn);
+
+  std::function<void(int)> movedEmpty;
+  SmallFn<void(int)> moved(std::move(movedEmpty));
+  CHECK_FALSE(moved);
 }
