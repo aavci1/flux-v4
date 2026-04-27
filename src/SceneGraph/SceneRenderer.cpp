@@ -146,6 +146,7 @@ struct SceneRenderer::Impl {
     }
 
     void render(SceneNode const &node) {
+        debug::perf::recordSceneRenderPass();
         if (kEnablePreparedRenderCache) {
             prepareNodeCache(node);
         }
@@ -184,6 +185,7 @@ struct SceneRenderer::Impl {
     }
 
     void renderNode(SceneNode const &node, float inheritedOpacity, Point inheritedTranslation) {
+        debug::perf::recordSceneNodeVisit(node.kind() == SceneNodeKind::Group);
         float nodeOpacity = inheritedOpacity;
         if (node.kind() == SceneNodeKind::Rect) {
             nodeOpacity *= static_cast<RectNode const &>(node).opacity();
@@ -202,6 +204,7 @@ struct SceneRenderer::Impl {
             isIdentityTransform(node.transform())) {
             if (localBounds.width > 0.f && localBounds.height > 0.f &&
                 renderer->quickReject(offsetRect(localBounds, accumulatedTranslation))) {
+                debug::perf::recordSceneQuickReject();
                 return;
             }
             for (std::unique_ptr<SceneNode> const &child : node.children()) {
@@ -216,6 +219,7 @@ struct SceneRenderer::Impl {
                 Rect const translatedBounds = detail::transformBounds(
                     Mat3::translate(accumulatedTranslation) * node.transform(), localBounds);
                 if (renderer->quickReject(translatedBounds)) {
+                    debug::perf::recordSceneQuickReject();
                     return;
                 }
             }
@@ -243,6 +247,7 @@ struct SceneRenderer::Impl {
                 }
                 debug::perf::recordPreparedReplayCall();
                 bool const replayed = prepared->replay(*renderer);
+                debug::perf::recordPreparedReplayResult(replayed);
                 if (needsState) {
                     renderer->restore();
                 }
@@ -261,21 +266,27 @@ struct SceneRenderer::Impl {
 
         if (localBounds.width > 0.f && localBounds.height > 0.f &&
             renderer->quickReject(localBounds)) {
+            debug::perf::recordSceneQuickReject();
             renderer->restore();
             return;
         }
 
         if (node.kind() != SceneNodeKind::Group) {
             if (!kEnablePreparedRenderCache || !node.canPrepareRenderOps()) {
+                debug::perf::recordLiveLeafRender();
                 node.render(*renderer);
             } else {
                 std::unique_ptr<PreparedRenderOps> &prepared =
                     detail::SceneNodeAccess::preparedRenderOps(node);
                 if (!prepared) {
+                    debug::perf::recordLiveLeafRender();
                     node.render(*renderer);
                 } else {
                     debug::perf::recordPreparedReplayCall();
-                    if (!prepared->replay(*renderer)) {
+                    bool const replayed = prepared->replay(*renderer);
+                    debug::perf::recordPreparedReplayResult(replayed);
+                    if (!replayed) {
+                        debug::perf::recordLiveLeafRender();
                         node.render(*renderer);
                     }
                 }
