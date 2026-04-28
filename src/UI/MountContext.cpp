@@ -491,9 +491,7 @@ std::unique_ptr<scenegraph::SceneNode> mountVStack(VStack const& stack, MountCon
       continue;
     }
 
-    MountContext childCtx = active
-        ? ctx.childWithSharedScope(fixedConstraints(slot->assignedSize), childHints)
-        : ctx.childWithSharedScope(childConstraints, childHints);
+    MountContext childCtx = ctx.childWithSharedScope(childConstraints, childHints);
     auto node = child.mount(childCtx);
     Size mountedSize = active ? slot->assignedSize : Size{};
     Point layoutOrigin = active ? slot->origin : nextCollapsedOrigin;
@@ -501,8 +499,11 @@ std::unique_ptr<scenegraph::SceneNode> mountVStack(VStack const& stack, MountCon
       layoutOrigin.y = std::max(layoutOrigin.y, nextCollapsedOrigin.y);
     }
     if (node) {
+      if (active) {
+        node->relayout(fixedConstraints(slot->assignedSize), false);
+      }
       detail::setLayoutPosition(*node, layoutOrigin);
-      mountedSize = active ? slot->assignedSize : node->size();
+      mountedSize = node->size();
       mountedChildren->push_back(MountedLayoutChild{
           .node = node.get(),
           .layoutOrigin = layoutOrigin,
@@ -569,7 +570,6 @@ std::unique_ptr<scenegraph::SceneNode> mountVStack(VStack const& stack, MountCon
                             mainLayout.mainSizes, mainLayout.itemSpacing,
                             mainLayout.containerMainSize, mainLayout.startOffset,
                             nextAssignedWidth, widthAssigned);
-
     std::vector<std::optional<layout::StackSlot>> slotsByMounted(mountedChildren->size());
     for (std::size_t layoutIndex = 0; layoutIndex < activeIndices.size(); ++layoutIndex) {
       slotsByMounted[activeIndices[layoutIndex]] = stackLayout.slots[layoutIndex];
@@ -581,7 +581,7 @@ std::unique_ptr<scenegraph::SceneNode> mountVStack(VStack const& stack, MountCon
       std::optional<layout::StackSlot> const& slot = slotsByMounted[childIndex];
       bool const active = slot.has_value();
       if (active && child.node) {
-        child.node->relayout(fixedConstraints(slot->assignedSize));
+        child.node->relayout(fixedConstraints(slot->assignedSize), false);
         setMountedLayoutPosition(child, slot->origin);
         nextCollapsedOrigin =
             Point{slot->origin.x, slot->origin.y + slot->assignedSize.height + spacing};
@@ -680,9 +680,7 @@ std::unique_ptr<scenegraph::SceneNode> mountHStack(HStack const& stack, MountCon
       continue;
     }
 
-    MountContext childCtx = active
-        ? ctx.childWithSharedScope(fixedConstraints(slot->assignedSize), rowHints)
-        : ctx.childWithSharedScope(initialConstraints, rowHints);
+    MountContext childCtx = ctx.childWithSharedScope(initialConstraints, rowHints);
     auto node = child.mount(childCtx);
     Size mountedSize = active ? slot->assignedSize : Size{};
     Point layoutOrigin = active ? slot->origin : nextCollapsedOrigin;
@@ -690,8 +688,11 @@ std::unique_ptr<scenegraph::SceneNode> mountHStack(HStack const& stack, MountCon
       layoutOrigin.x = std::max(layoutOrigin.x, nextCollapsedOrigin.x);
     }
     if (node) {
+      if (active) {
+        node->relayout(fixedConstraints(slot->assignedSize), false);
+      }
       detail::setLayoutPosition(*node, layoutOrigin);
-      mountedSize = active ? slot->assignedSize : node->size();
+      mountedSize = node->size();
       mountedChildren->push_back(MountedLayoutChild{
           .node = node.get(),
           .layoutOrigin = layoutOrigin,
@@ -793,7 +794,7 @@ std::unique_ptr<scenegraph::SceneNode> mountHStack(HStack const& stack, MountCon
       std::optional<layout::StackSlot> const& slot = slotsByMounted[childIndex];
       bool const active = slot.has_value();
       if (active && child.node) {
-        child.node->relayout(fixedConstraints(slot->assignedSize));
+        child.node->relayout(fixedConstraints(slot->assignedSize), false);
         setMountedLayoutPosition(child, slot->origin);
         nextCollapsedOrigin =
             Point{slot->origin.x + slot->assignedSize.width + spacing, slot->origin.y};
@@ -855,9 +856,10 @@ std::unique_ptr<scenegraph::SceneNode> mountZStack(ZStack const& stack, MountCon
     if (stack.verticalAlignment == Alignment::Stretch || fillsStack) {
       childFrame.height = height;
     }
-    MountContext childCtx = ctx.childWithSharedScope(fixedConstraints(childFrame), childHints);
+    MountContext childCtx = ctx.childWithSharedScope(childMeasure, childHints);
     auto node = child.mount(childCtx);
     if (node) {
+      node->relayout(fixedConstraints(childFrame), false);
       Point const origin{
           layout::hAlignOffset(childFrame.width, width, stack.horizontalAlignment),
           layout::vAlignOffset(childFrame.height, height, stack.verticalAlignment),
@@ -921,7 +923,7 @@ std::unique_ptr<scenegraph::SceneNode> mountZStack(ZStack const& stack, MountCon
         childFrame.height = height;
       }
       if (child.node) {
-        child.node->relayout(fixedConstraints(childFrame));
+        child.node->relayout(fixedConstraints(childFrame), false);
         setMountedLayoutPosition(child, Point{
             layout::hAlignOffset(childFrame.width, width, horizontalAlignment),
             layout::vAlignOffset(childFrame.height, height, verticalAlignment),

@@ -62,6 +62,7 @@ bool canReplayPreparedLeaf(SceneNode const& node) {
 bool canReplayPreparedGroup(SceneNode const& node) {
     Rect const bounds = node.localBounds();
     return node.kind() == SceneNodeKind::Group &&
+           node.layoutFlow() == LayoutFlow::None &&
            !node.children().empty() &&
            bounds.width > 0.f &&
            bounds.height > 0.f &&

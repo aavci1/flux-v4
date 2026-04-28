@@ -15,7 +15,26 @@
 namespace flux::scenegraph {
 
 namespace {
+
+thread_local int gTransientRelayoutDepth = 0;
 thread_local int gRelayoutDepth = 0;
+
+struct TransientRelayoutScope {
+    explicit TransientRelayoutScope(bool enabled) noexcept : enabled_(enabled) {
+        if (enabled_) {
+            ++gTransientRelayoutDepth;
+        }
+    }
+
+    ~TransientRelayoutScope() {
+        if (enabled_) {
+            --gTransientRelayoutDepth;
+        }
+    }
+
+    bool enabled_ = false;
+};
+
 } // namespace
 
 std::string_view sceneNodeKindName(SceneNodeKind kind) noexcept {
@@ -147,17 +166,22 @@ bool SceneNode::relayoutStoredConstraints() {
     return relayout(layoutConstraints_);
 }
 
-bool SceneNode::relayout(LayoutConstraints const& constraints) {
+bool SceneNode::relayout(LayoutConstraints const& constraints, bool storeConstraints) {
     if (!relayout_) {
         return false;
     }
+    bool const effectiveStoreConstraints = storeConstraints && gTransientRelayoutDepth == 0;
+    if (effectiveStoreConstraints) {
+        setLayoutConstraints(constraints);
+    }
     bool const shouldDump = ::flux::layout::layoutDebugLayoutEnabled() && gRelayoutDepth == 0;
     ++gRelayoutDepth;
-    setLayoutConstraints(constraints);
+    TransientRelayoutScope const transientScope{!storeConstraints};
     relayout_(constraints);
     --gRelayoutDepth;
     if (shouldDump && gRelayoutDepth == 0) {
-        layoutDebugDumpAttached("scene-node-relayout");
+        layoutDebugDumpAttached(storeConstraints ? "scene-node-relayout"
+                                                : "scene-node-transient-relayout");
     }
     return true;
 }

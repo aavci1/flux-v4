@@ -508,7 +508,7 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
     auto children = rawWrapper->children();
     for (std::size_t i = 1; i < children.size(); ++i) {
       if (children[i]) {
-        children[i]->relayout(fixedConstraints(rawWrapper->size()));
+        children[i]->relayout(fixedConstraints(rawWrapper->size()), false);
       }
     }
   });

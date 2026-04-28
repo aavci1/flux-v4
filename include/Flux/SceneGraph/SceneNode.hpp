@@ -80,7 +80,7 @@ class SceneNode {
     LayoutConstraints layoutConstraints() const noexcept;
     void setRelayout(RelayoutFn relayout);
     bool relayoutStoredConstraints();
-    bool relayout(LayoutConstraints const& constraints);
+    bool relayout(LayoutConstraints const& constraints, bool storeConstraints = true);
 
     SceneNode *parent() const noexcept;
     std::span<std::unique_ptr<SceneNode> const> children() const noexcept;

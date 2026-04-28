@@ -108,7 +108,7 @@ std::unique_ptr<scenegraph::SceneNode> ScaleAroundCenter::mount(MountContext& ct
     if (rawChild) {
       rawChild->relayout(constraints);
       *frameSize = rawChild->size();
-      rawChild->relayout(fixedConstraints(*frameSize));
+      rawChild->relayout(fixedConstraints(*frameSize), false);
       rawChild->setPosition(Point{});
     }
     rawGroup->setSize(*frameSize);

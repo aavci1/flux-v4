@@ -226,7 +226,7 @@ std::unique_ptr<scenegraph::SceneNode> Grid::mount(MountContext& ctx) const {
         continue;
       }
       Rect const slot = plan.slots[i];
-      child.node->relayout(fixedConstraints(Size{slot.width, slot.height}));
+      child.node->relayout(fixedConstraints(Size{slot.width, slot.height}), false);
       Rect const bounds = child.node->bounds();
       Point const current = child.node->position();
       Vec2 const localOffset{current.x - child.layoutOrigin.x,
