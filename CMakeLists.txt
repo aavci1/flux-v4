@@ -5,7 +5,7 @@ project(flux VERSION 5.0.0 LANGUAGES CXX C)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-set(CMAKE_CXX_RELEASE_FLAGS "-march=native -O3 -flto")
+set(CMAKE_CXX_FLAGS_RELEASE "-march=native -O3 -flto")
 
 # Planned backends: LINUX_WAYLAND, LINUX_KMS — reserved for future CMake branches.
 set(FLUX_PLATFORM "AUTO" CACHE STRING
