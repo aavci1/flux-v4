@@ -41,7 +41,6 @@ public:
   WithTransition(WithTransition const&) = delete;
   WithTransition& operator=(WithTransition const&) = delete;
 
-  static bool hasCurrent();
   static Transition current();
 };
 

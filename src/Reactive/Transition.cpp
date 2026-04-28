@@ -55,10 +55,6 @@ WithTransition::~WithTransition() {
   }
 }
 
-bool WithTransition::hasCurrent() {
-  return !gTransitionStack.empty();
-}
-
 Transition WithTransition::current() {
   if (gTransitionStack.empty()) {
     return Transition::instant();

@@ -73,8 +73,7 @@ public:
   }
 
   Animation const& operator=(T value) const {
-    set(std::move(value), WithTransition::hasCurrent() ? WithTransition::current()
-                                                       : Transition::instant());
+    set(std::move(value), WithTransition::current());
     return *this;
   }
 
