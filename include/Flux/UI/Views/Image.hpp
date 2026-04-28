@@ -30,7 +30,9 @@ struct Image : ViewModifiers<Image> {
                        ::flux::TextSystem&) const;
   std::unique_ptr<::flux::scenegraph::SceneNode> mount(::flux::MountContext&) const;
 
+  /// Source bitmap to display.
   std::shared_ptr<flux::Image> source;
+  /// How the bitmap fits inside the resolved frame.
   ImageFillMode fillMode = ImageFillMode::Cover;
 
   bool operator==(Image const& other) const {

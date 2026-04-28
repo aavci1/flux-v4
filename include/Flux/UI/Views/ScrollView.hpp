@@ -25,11 +25,17 @@ Point clampScrollOffset(ScrollAxis axis, Point o, Size const &viewport, Size con
 struct ScrollView : ViewModifiers<ScrollView> {
     // ── Layout / axis ─────────────────────────────────────────────────────────
 
+    /// Which axes may scroll.
     ScrollAxis axis = ScrollAxis::Vertical;
+    /// Controlled scroll position in content coordinates.
     Signal<Point> scrollOffset {};
+    /// Resolved viewport size written by the view during layout.
     Signal<Size> viewportSize {};
+    /// Resolved content size written by the view during layout.
     Signal<Size> contentSize {};
+    /// Enables pointer drag-to-scroll in addition to wheel / trackpad scrolling.
     bool dragScrollEnabled = true;
+    /// Content children. Most callers pass a single layout container such as `VStack`.
     std::vector<Element> children;
 
     /// Custom measurement hook used by the measured-component pipeline.

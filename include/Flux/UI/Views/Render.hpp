@@ -20,8 +20,13 @@ class SceneNode;
 }
 
 struct Render : ViewModifiers<Render> {
+  /// Custom measurement callback. Return the retained leaf's desired size for the given constraints.
   std::function<Size(LayoutConstraints const&, LayoutHints const&)> measureFn{};
+  /// Paint callback. Called with the node's local canvas and resolved frame.
   std::function<void(Canvas&, Rect)> draw{};
+  /// Marks the draw callback as side-effect-free and replay-safe, so retained rendering may cache or
+  /// reuse its output more aggressively. Set false when drawing depends on mutable external state,
+  /// timers, randomness, or anything not captured by the retained node state itself.
   bool pure = false;
 
   bool operator==(Render const& other) const {

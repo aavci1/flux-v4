@@ -23,7 +23,9 @@ struct Divider : ViewModifiers<Divider> {
         bool operator==(Style const& other) const = default;
     };
 
+    /// Divider direction.
     Orientation orientation = Orientation::Horizontal;
+    /// Optional token overrides.
     Style style {};
 
     bool operator==(Divider const& other) const {

@@ -20,7 +20,9 @@ namespace flux {
 
 struct TableColumn {
     struct Sort {
+        /// Initial direction when the user first sorts this column.
         bool initialAscending = true;
+        /// Comparator for sort payloads stored in `SortValue`.
         std::function<bool(std::any const &, std::any const &)> less;
 
         bool operator==(Sort const& other) const {
@@ -49,8 +51,11 @@ struct TableColumn {
         }
     };
 
+    /// Preferred fixed width for the column.
     float width = kFloatFromTheme;
+    /// Extra horizontal growth factor after fixed widths are satisfied.
     float flexGrow = 0.f;
+    /// Optional sort behavior for this column.
     std::optional<Sort> sort {};
 
     bool operator==(TableColumn const& other) const = default;
@@ -64,7 +69,9 @@ struct TableCell : ViewModifiers<TableCell> {
         bool operator==(Style const& other) const = default;
     };
 
+    /// Cell body content.
     Element content;
+    /// Per-cell width / alignment override.
     Style style {};
 
     bool operator==(TableCell const& other) const {
@@ -86,11 +93,17 @@ struct TableRow : ViewModifiers<TableRow> {
         bool operator==(Style const& other) const = default;
     };
 
+    /// Cell elements in column order.
     std::vector<Element> cells;
+    /// Optional expandable detail content rendered under the main row.
     std::optional<Element> detail {};
+    /// Selected state for styling.
     bool selected = false;
+    /// Prevents interaction when true.
     bool disabled = false;
+    /// Optional row token overrides.
     Style style {};
+    /// Called when the row is activated.
     std::function<void()> onTap;
 
     bool operator==(TableRow const& other) const {
@@ -104,7 +117,9 @@ struct TableRow : ViewModifiers<TableRow> {
 
 struct TableView : ViewModifiers<TableView> {
     struct SortValue {
+        /// Column index this sort value belongs to.
         std::size_t column = 0;
+        /// Opaque sort payload consumed by the column comparator.
         std::any value {};
 
         SortValue() = default;
@@ -126,7 +141,9 @@ struct TableView : ViewModifiers<TableView> {
     };
 
     struct Item {
+        /// Row element to render.
         Element row;
+        /// Per-column values used when sorting.
         std::vector<SortValue> sortValues;
 
         bool operator==(Item const& other) const {
@@ -135,19 +152,29 @@ struct TableView : ViewModifiers<TableView> {
     };
 
     struct Style {
+        /// Horizontal inset applied to row dividers.
         float dividerInsetH = kFloatFromTheme;
+        /// Table background color.
         Color backgroundColor = Color::theme();
+        /// Divider color between rows.
         Color dividerColor = Color::theme();
 
         bool operator==(Style const& other) const = default;
     };
 
+    /// Optional header row rendered above the body.
     std::optional<Element> header {};
+    /// Structured item API with built-in sorting metadata.
     std::vector<Item> items;
+    /// Simpler row-only API when sorting metadata is not needed.
     std::vector<Element> rows;
+    /// Column definitions used for width and sorting behavior.
     std::vector<TableColumn> columns;
+    /// Draws row separators when true.
     bool showDividers = true;
+    /// Wraps the body rows in a `ScrollView` when true.
     bool scrollBody = true;
+    /// Optional token overrides.
     Style style {};
 
     bool operator==(TableView const& other) const {

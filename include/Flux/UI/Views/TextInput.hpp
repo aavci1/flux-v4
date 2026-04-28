@@ -26,8 +26,11 @@ class SceneNode;
 }
 
 struct TextInputHeight {
+    /// Fixed control height. `0` means size from content / style.
     float fixed = 0.f;
+    /// Minimum intrinsic height for multiline inputs.
     float minIntrinsic = 80.f;
+    /// Maximum intrinsic height for multiline inputs. `0` means no cap.
     float maxIntrinsic = 0.f;
 
     bool operator==(TextInputHeight const& other) const = default;
@@ -35,21 +38,37 @@ struct TextInputHeight {
 
 struct TextInput : ViewModifiers<TextInput> {
     struct Style {
+        /// Text font.
         Font font = Font::theme();
+        /// Main text color.
         Color textColor = Color::theme();
+        /// Placeholder text color.
         Color placeholderColor = Color::theme();
+        /// Input background fill.
         Color backgroundColor = Color::theme();
+        /// Border color at rest.
         Color borderColor = Color::theme();
+        /// Border color while focused.
         Color borderFocusColor = Color::theme();
+        /// Caret color.
         Color caretColor = Color::theme();
+        /// Selection highlight color.
         Color selectionColor = Color::theme();
+        /// Tint applied when disabled.
         Color disabledColor = Color::theme();
+        /// Border thickness at rest.
         float borderWidth = kFloatFromTheme;
+        /// Border thickness while focused.
         float borderFocusWidth = kFloatFromTheme;
+        /// Corner radius of the input chrome.
         float cornerRadius = kFloatFromTheme;
+        /// Horizontal text inset.
         float paddingH = kFloatFromTheme;
+        /// Vertical text inset.
         float paddingV = kFloatFromTheme;
+        /// Explicit line height override. `0` uses font metrics.
         float lineHeight = 0.f;
+        /// Legacy single-line height override. Prefer modifiers or `multilineHeight` for new code.
         float height = 0.f;
 
         static Style plain() {
@@ -59,21 +78,33 @@ struct TextInput : ViewModifiers<TextInput> {
         bool operator==(Style const& other) const = default;
     };
 
+    /// Controlled text value.
     Signal<std::string> value {};
+    /// Placeholder shown when `value` is empty.
     std::string placeholder;
 
+    /// Optional syntax / attributed-run builder for custom text styling.
     std::function<std::vector<AttributedRun>(std::string_view)> styler;
+    /// Optional validation tint derived from the current text.
     std::function<Color(std::string_view)> validationColor;
 
+    /// Optional token overrides.
     Style style {};
 
+    /// Enables multiline editing behavior when true.
     bool multiline = false;
+    /// Disables editing and focus when true.
     bool disabled = false;
+    /// Maximum accepted character count. `0` means unlimited.
     int maxLength = 0;
+    /// Height policy for multiline mode.
     TextInputHeight multilineHeight {};
 
+    /// Called whenever the text changes.
     std::function<void(std::string const &)> onChange;
+    /// Called on submit/confirm action.
     std::function<void(std::string const &)> onSubmit;
+    /// Called when Escape is pressed while the control is focused.
     std::function<void(std::string const &)> onEscape;
 
     bool operator==(TextInput const& other) const {

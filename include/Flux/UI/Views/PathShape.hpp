@@ -16,6 +16,7 @@ namespace flux {
 struct PathShape : ViewModifiers<PathShape> {
   Size measure(MeasureContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
 
+  /// Vector path to render in local coordinates.
   Path path{};
 
   bool operator==(PathShape const& other) const {

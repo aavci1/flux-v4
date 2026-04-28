@@ -19,14 +19,23 @@ namespace flux {
 struct PopoverCalloutShape : ViewModifiers<PopoverCalloutShape> {
   Size measure(MeasureContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
 
+  /// Side on which the callout arrow is attached.
   PopoverPlacement placement = PopoverPlacement::Below;
+  /// Draws the callout arrow when true.
   bool arrow = true;
+  /// Inset between the outer shape and `content`.
   float padding = 12.f;
+  /// Card corner radii.
   CornerRadius cornerRadius{10.f};
+  /// Card fill color.
   Color backgroundColor = Color::hex(0xFFFFFF);
+  /// Card border color.
   Color borderColor = Color::hex(0xE0E0E6);
+  /// Card border thickness.
   float borderWidth = 1.f;
+  /// Optional maximum content size before clipping / internal layout constraints.
   std::optional<Size> maxSize{};
+  /// Content rendered inside the popover chrome.
   Element content{Rectangle{}};
 
   bool operator==(PopoverCalloutShape const& other) const {

@@ -18,14 +18,19 @@
 namespace flux {
 
 enum class SelectTriggerMode : std::uint8_t {
+    /// Button-like field with border and chevron.
     Field,
+    /// Link-style trigger with minimal chrome.
     Link,
 };
 
 /// One menu row in a \ref Select.
 struct SelectOption {
+    /// Primary row label.
     std::string label;
+    /// Optional secondary description shown in the menu and, optionally, trigger.
     std::string detail;
+    /// Prevents selection when true.
     bool disabled = false;
 
     bool operator==(SelectOption const& other) const = default;
@@ -36,17 +41,29 @@ struct SelectOption {
 /// `selectedIndex == -1` means “no selection”, which shows \ref placeholder when present.
 struct Select : ViewModifiers<Select> {
     struct Style {
+        /// Primary label font.
         Font labelFont = Font::theme();
+        /// Secondary detail font.
         Font detailFont = Font::theme();
+        /// Trigger corner radius.
         float cornerRadius = kFloatFromTheme;
+        /// Menu surface corner radius.
         float menuCornerRadius = kFloatFromTheme;
+        /// Maximum menu height before scrolling.
         float menuMaxHeight = kFloatFromTheme;
+        /// Maximum menu width. `0` means unconstrained except by viewport.
         float menuMaxWidth = 0.f;
+        /// Minimum menu width before trigger matching is applied.
         float minMenuWidth = kFloatFromTheme;
+        /// Accent used for focused / selected affordances.
         Color accentColor = Color::theme();
+        /// Trigger background color.
         Color fieldColor = Color::theme();
+        /// Trigger background color while hovered.
         Color fieldHoverColor = Color::theme();
+        /// Trigger border color.
         Color borderColor = Color::theme();
+        /// Menu row hover background.
         Color rowHoverColor = Color::theme();
 
         bool operator==(Style const& other) const = default;
@@ -55,21 +72,33 @@ struct Select : ViewModifiers<Select> {
     /// Controlled selection state. When omitted, the control manages its own local selection.
     Signal<int> selectedIndex = Signal<int>{-1};
 
+    /// Menu options in display order.
     std::vector<SelectOption> options;
 
+    /// Trigger text shown when there is no current selection.
     std::string placeholder = "Select an option";
+    /// Optional helper text shown below the trigger.
     std::string helperText;
+    /// Fallback text shown when the options list is empty.
     std::string emptyText = "No options available";
 
+    /// Disables the control when true.
     bool disabled = false;
+    /// Shows a checkmark beside the selected option in the menu.
     bool showCheckmark = true;
+    /// Dismisses the menu immediately after a selection.
     bool dismissOnSelect = true;
+    /// Shows option detail text in the trigger for the selected row.
     bool showDetailInTrigger = true;
+    /// Expands the menu width to at least the trigger width.
     bool matchTriggerWidth = true;
 
+    /// Trigger chrome style.
     SelectTriggerMode triggerMode = SelectTriggerMode::Field;
 
+    /// Preferred popover placement relative to the trigger.
     PopoverPlacement placement = PopoverPlacement::Below;
+    /// Optional token overrides.
     Style style {};
 
     /// Called after user selection changes. Receives the selected option index.

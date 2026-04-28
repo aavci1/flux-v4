@@ -14,13 +14,21 @@ namespace flux {
 /// Surface container for card-like content: padded elevated background, optional border, radius, and shadow.
 struct Card : ViewModifiers<Card> {
   struct Style {
+    /// Uniform content inset. `paddingH` / `paddingV` override per-axis when set.
     float padding = kFloatFromTheme;
+    /// Horizontal content inset override.
     float paddingH = kFloatFromTheme;
+    /// Vertical content inset override.
     float paddingV = kFloatFromTheme;
+    /// Card corner radius.
     float cornerRadius = kFloatFromTheme;
+    /// Border thickness.
     float borderWidth = kFloatFromTheme;
+    /// Card fill color.
     Reactive::Bindable<Color> backgroundColor{Color::theme()};
+    /// Card stroke color.
     Reactive::Bindable<Color> borderColor{Color::theme()};
+    /// Card shadow style.
     Reactive::Bindable<ShadowStyle> shadow{ShadowStyle::none()};
 
     bool operator==(Style const& other) const {
@@ -36,7 +44,9 @@ struct Card : ViewModifiers<Card> {
     }
   };
 
+  /// Card body content.
   Element child;
+  /// Optional token overrides.
   Style style {};
 
   bool operator==(Card const& other) const {

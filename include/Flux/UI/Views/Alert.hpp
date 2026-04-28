@@ -19,8 +19,11 @@
 namespace flux {
 
 struct AlertButton {
+  /// Button label text.
   std::string label;
+  /// Button visual treatment.
   ButtonVariant variant = ButtonVariant::Secondary;
+  /// Disables activation when true.
   bool disabled = false;
   /// Called when this button is tapped or activated by keyboard.
   /// The alert is dismissed automatically before this is called.
@@ -35,6 +38,7 @@ struct AlertButton {
 struct Alert : ViewModifiers<Alert> {
   // ── Content ──────────────────────────────────────────────────────────────
 
+  /// Alert headline.
   std::string title;
   /// Optional; empty = no message row.
   std::string message;
@@ -49,10 +53,15 @@ struct Alert : ViewModifiers<Alert> {
   /// Width of the card. 360 pt matches macOS alert width convention.
   float cardWidth = 360.f;
 
+  /// Alert card fill color.
   Color cardColor = Color::theme();
+  /// Alert card border color.
   Color cardStrokeColor = Color::theme();
+  /// Title text color.
   Color titleColor = Color::theme();
+  /// Message text color.
   Color messageColor = Color::theme();
+  /// Full-window scrim color behind the alert.
   Color backdropColor = Color::theme();
   /// Uniform card corner radius (`kFloatFromTheme` = `Theme::radiusXLarge`). Not a `CornerRadius`
   /// struct field — all corners share one value; asymmetric cards need a custom element.

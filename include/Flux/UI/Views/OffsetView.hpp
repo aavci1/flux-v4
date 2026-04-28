@@ -22,10 +22,15 @@ struct OffsetView : ViewModifiers<OffsetView> {
   Size measure(MeasureContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
   std::unique_ptr<scenegraph::SceneNode> mount(MountContext&) const;
 
+  /// Content translation in local coordinates.
   Point offset{};
+  /// Which axes participate in scrolling / stacking.
   ScrollAxis axis = ScrollAxis::Vertical;
+  /// Resolved viewport size written during layout.
   Signal<Size> viewportSize{};
+  /// Resolved content size written during layout.
   Signal<Size> contentSize{};
+  /// Children translated by `offset`.
   std::vector<Element> children;
 
   bool operator==(OffsetView const& other) const {

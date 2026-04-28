@@ -26,20 +26,31 @@ enum class ButtonVariant : std::uint8_t {
 
 struct Button : ViewModifiers<Button> {
     struct Style {
+        /// Label font.
         Font font = Font::theme();
+        /// Horizontal content inset inside the button chrome.
         float paddingH = kFloatFromTheme;
+        /// Vertical content inset inside the button chrome.
         float paddingV = kFloatFromTheme;
+        /// Corner radius of the button background.
         float cornerRadius = kFloatFromTheme;
+        /// Accent used by primary / secondary variants.
         Color accentColor = Color::theme();
+        /// Accent used by destructive variant.
         Color destructiveColor = Color::theme();
 
         bool operator==(Style const& other) const = default;
     };
 
+    /// Button label text.
     Reactive::Bindable<std::string> label{std::string{}};
+    /// Visual treatment preset.
     ButtonVariant variant = ButtonVariant::Primary;
+    /// Disables interaction and uses disabled styling when true.
     Reactive::Bindable<bool> disabled{false};
+    /// Optional token overrides.
     Style style {};
+    /// Called when the button is activated.
     std::function<void()> onTap;
 
     bool operator==(Button const& other) const {
@@ -55,15 +66,21 @@ struct Button : ViewModifiers<Button> {
 
 struct LinkButton : ViewModifiers<LinkButton> {
     struct Style {
+        /// Label font.
         Font font = Font::theme();
+        /// Link text color.
         Color color = Color::theme();
 
         bool operator==(Style const& other) const = default;
     };
 
+    /// Link label text.
     Reactive::Bindable<std::string> label{std::string{}};
+    /// Disables interaction and uses disabled styling when true.
     Reactive::Bindable<bool> disabled{false};
+    /// Optional token overrides.
     Style style {};
+    /// Called when the link button is activated.
     std::function<void()> onTap;
 
     bool operator==(LinkButton const& other) const {
@@ -78,16 +95,23 @@ struct LinkButton : ViewModifiers<LinkButton> {
 
 struct IconButton : ViewModifiers<IconButton> {
     struct Style {
+        /// Square button size.
         float size = kFloatFromTheme;
+        /// Icon stroke / glyph weight.
         float weight = kFloatFromTheme;
+        /// Icon color.
         Color color = Color::theme();
 
         bool operator==(Style const& other) const = default;
     };
 
+    /// Icon glyph to render.
     IconName icon {};
+    /// Disables interaction and uses disabled styling when true.
     Reactive::Bindable<bool> disabled{false};
+    /// Optional token overrides.
     Style style {};
+    /// Called when the icon button is activated.
     std::function<void()> onTap;
 
     bool operator==(IconButton const& other) const {
