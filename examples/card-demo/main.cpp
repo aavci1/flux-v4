@@ -1,6 +1,7 @@
 #include <Flux.hpp>
 #include <Flux/Core/Window.hpp>
 #include <Flux/Core/WindowUI.hpp>
+#include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/UI.hpp>
 #include <Flux/UI/Views/Button.hpp>
@@ -8,7 +9,6 @@
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Icon.hpp>
 #include <Flux/UI/Views/ScrollView.hpp>
-#include <Flux/UI/Views/Show.hpp>
 #include <Flux/UI/Views/Spacer.hpp>
 #include <Flux/UI/Views/Text.hpp>
 #include <Flux/UI/Views/Toggle.hpp>
@@ -33,84 +33,71 @@ struct ExpandableCard : ViewModifiers<ExpandableCard> {
     Element body() const {
         auto theme = useEnvironment<ThemeKey>();
         auto expanded = useState(false);
+        auto detailHeight = useAnimation(0.f);
+        auto detailOpacity = useAnimation(0.f);
         Color const accentColor = accent;
 
-        std::vector<Element> content;
-        content.push_back(
-            HStack {
-                .spacing = theme().space3,
-                .alignment = Alignment::Center,
-                .children = children(
-                    Icon {
-                        .name = icon,
-                        .size = 18.f,
-                        .color = accent,
-                    },
-                    VStack {
-                        .spacing = theme().space1,
-                        .alignment = Alignment::Start,
-                        .children = children(
-                            Text {
-                                .text = title,
-                                .font = Font::headline(),
-                                .color = Color::primary(),
-                            },
-                            Text {
-                                .text = summary,
-                                .font = Font::footnote(),
-                                .color = Color::secondary(),
-                                .wrapping = TextWrapping::Wrap,
-                            })
-                    }
-                        .flex(1.f, 1.f, 0.f),
-                    Icon {
-                        .name = [expanded] {
-                            return expanded() ? IconName::ExpandLess : IconName::ExpandMore;
-                        },
-                        .size = 18.f,
-                        .color = Color::tertiary(),
-                    })
-            });
-
-        content.push_back(
-            Show([expanded] {
-                return expanded();
-            }, [detailText = detail] {
-                return Element {
-                    Text {
-                        .text = detailText,
-                        .font = Font::body(),
-                        .color = Color::secondary(),
-                        .wrapping = TextWrapping::Wrap,
-                    }};
-            }));
+        auto bounds = useBounds();
+        auto layout = Application::instance().textSystem().layout(detail, Font::body(), Color::secondary(), bounds.width - 2 * theme().space3, TextLayoutOptions {.wrapping = TextWrapping::Wrap});
+        auto numLines = layout->lines.size();
 
         return Card {
             .child = VStack {
                 .spacing = theme().space3,
                 .alignment = Alignment::Stretch,
-                .children = std::move(content),
-            },
-            .style = Card::Style {
-                .padding = theme().space4,
-                .cornerRadius = theme().radiusXLarge,
-                .borderColor = [expanded, accentColor, theme] {
-                    return expanded() ? accentColor : theme().separatorColor;
-                },
-                .shadow = [expanded, theme] {
-                    return expanded()
-                               ? ShadowStyle {
-                                     .radius = theme().shadowRadiusPopover,
-                                     .offset = {0.f, theme().shadowOffsetYPopover},
-                                     .color = Color {0.f, 0.f, 0.f, 0.12f},
-                                 }
-                               : ShadowStyle::none();
-                },
-            },
+                .children = children(
+                    HStack {
+                        .spacing = theme().space3,
+                        .alignment = Alignment::Center,
+                        .children = children(
+                            Icon {
+                                .name = icon,
+                                .size = 18.f,
+                                .color = accent,
+                            },
+                            VStack {
+                                .spacing = theme().space1,
+                                .alignment = Alignment::Start,
+                                .children = children(
+                                    Text {
+                                        .text = title,
+                                        .font = Font::headline(),
+                                        .color = Color::primary(),
+                                    },
+                                    Text {
+                                        .text = summary,
+                                        .font = Font::footnote(),
+                                        .color = Color::secondary(),
+                                        .wrapping = TextWrapping::Wrap,
+                                    }
+                                )
+                            }
+                                .flex(1.f, 1.f, 0.f),
+                            Icon {
+                                .name = [expanded] {
+                                    return expanded() ? IconName::ExpandLess : IconName::ExpandMore;
+                                },
+                                .size = 18.f,
+                                .color = Color::tertiary(),
+                            }
+                        )
+                    },
+                    Text {
+                        .text = detail,
+                        .font = Font::body(),
+                        .color = Color::secondary(),
+                        .wrapping = TextWrapping::Wrap,
+                    }
+                        .height([detailHeight] { return detailHeight(); })
+                        .opacity([detailOpacity] { return detailOpacity; })
+                )
+            }.clipContent(true)
         }
             .cursor(Cursor::Hand)
-            .onTap([expanded] {
+            .onTap([expanded, theme, numLines, detailHeight, detailOpacity] {
                 expanded = !*expanded;
+                detailHeight.set(expanded() ? theme().bodyFont.size * numLines * 1.2f : -theme().space3, Transition::spring());
+                detailOpacity.set(expanded() ? 1.f : 0.f, Transition::spring());
             });
     }
 };
