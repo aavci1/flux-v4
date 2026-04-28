@@ -202,7 +202,7 @@ struct ClockFace : ViewModifiers<ClockFace> {
       return static_cast<float>(clock().seconds / 120.0);
     };
     auto secondSpring = [] {
-      return Transition::spring(980.f, 16.f, 0.46f);
+      return Transition::spring(980.f, 24.f, 0.46f);
     };
     auto slowHandSpring = [] {
       return Transition::spring(360.f, 28.f, 0.36f);
