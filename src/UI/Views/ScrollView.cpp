@@ -363,9 +363,11 @@ std::unique_ptr<scenegraph::SceneNode> ScrollView::mount(MountContext& ctx) cons
     }
     plan.contentLayout =
         layout::layoutScrollContent(scrollView.axis, plan.viewport, offsetState.peek(), *childSizes);
-    for (std::size_t i = 0; i < mountedChildren.size() && i < plan.contentLayout.slots.size(); ++i) {
+    layout::ScrollContentLayout const childLayout =
+        layout::layoutScrollContent(scrollView.axis, plan.viewport, Point{}, *childSizes);
+    for (std::size_t i = 0; i < mountedChildren.size() && i < childLayout.slots.size(); ++i) {
       if (mountedChildren[i]) {
-        mountedChildren[i]->setPosition(plan.contentLayout.slots[i].origin);
+        mountedChildren[i]->setPosition(childLayout.slots[i].origin);
       }
     }
     rawViewportNode->setSize(plan.viewport);

@@ -711,6 +711,109 @@ TEST_CASE("MountRoot resize preserves direct text positions in stacks") {
   CHECK(stack.children()[2]->position().y == doctest::Approx(thirdY));
 }
 
+TEST_CASE("modifier-wrapped root ScrollView keeps viewport height after resize") {
+  struct Root {
+    flux::Reactive::Signal<flux::Point> offset;
+    flux::Reactive::Signal<flux::Size> viewport;
+    flux::Reactive::Signal<flux::Size> content;
+
+    flux::Element body() const {
+      return flux::ScrollView{
+          .axis = flux::ScrollAxis::Vertical,
+          .scrollOffset = offset,
+          .viewportSize = viewport,
+          .contentSize = content,
+          .children = flux::children(
+              flux::Rectangle{}.size(80.f, 100.f),
+              flux::Rectangle{}.size(80.f, 100.f)),
+      }.fill(flux::Colors::red);
+    }
+  };
+
+  FakeTextSystem textSystem;
+  flux::scenegraph::SceneGraph sceneGraph;
+  flux::Reactive::Signal<flux::Point> offset{flux::Point{0.f, 0.f}};
+  flux::Reactive::Signal<flux::Size> viewport{flux::Size{}};
+  flux::Reactive::Signal<flux::Size> content{flux::Size{}};
+  flux::MountRoot root{
+      std::make_unique<flux::TypedRootHolder<Root>>(
+          std::in_place, Root{offset, viewport, content}),
+      textSystem,
+      testEnvironment(),
+      flux::Size{80.f, 80.f},
+  };
+
+  root.mount(sceneGraph);
+  root.resize(flux::Size{80.f, 60.f}, sceneGraph);
+
+  REQUIRE(sceneGraph.root().kind() == flux::scenegraph::SceneNodeKind::Rect);
+  auto const& wrapper = static_cast<flux::scenegraph::RectNode const&>(sceneGraph.root());
+  REQUIRE(wrapper.children().size() == 1);
+  auto const& scrollViewport = static_cast<flux::scenegraph::RectNode const&>(*wrapper.children()[0]);
+  CHECK(wrapper.size() == flux::Size{80.f, 60.f});
+  CHECK(scrollViewport.size() == flux::Size{80.f, 60.f});
+  CHECK(viewport.get().height == doctest::Approx(60.f));
+  CHECK(content.get().height == doctest::Approx(200.f));
+
+  REQUIRE(scrollViewport.interaction() != nullptr);
+  REQUIRE(scrollViewport.interaction()->onScroll);
+  scrollViewport.interaction()->onScroll(flux::Vec2{0.f, -12.f});
+
+  CHECK(offset.get().y == doctest::Approx(12.f));
+  REQUIRE(scrollViewport.children().size() >= 1);
+  CHECK(scrollViewport.children()[0]->position().y == doctest::Approx(-12.f));
+}
+
+TEST_CASE("ScrollView resize preserves child positions when already scrolled") {
+  struct Root {
+    flux::Reactive::Signal<flux::Point> offset;
+
+    flux::Element body() const {
+      return flux::ScrollView{
+          .axis = flux::ScrollAxis::Vertical,
+          .scrollOffset = offset,
+          .children = flux::children(
+              flux::Rectangle{}.size(80.f, 80.f),
+              flux::Rectangle{}.size(80.f, 80.f)),
+      };
+    }
+  };
+
+  FakeTextSystem textSystem;
+  flux::scenegraph::SceneGraph sceneGraph;
+  flux::Reactive::Signal<flux::Point> offset{flux::Point{0.f, 20.f}};
+  flux::MountRoot root{
+      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{offset}),
+      textSystem,
+      testEnvironment(),
+      flux::Size{80.f, 80.f},
+  };
+
+  root.mount(sceneGraph);
+
+  auto const& viewport = static_cast<flux::scenegraph::RectNode const&>(sceneGraph.root());
+  REQUIRE(viewport.children().size() >= 1);
+  auto const& content = static_cast<flux::scenegraph::GroupNode const&>(*viewport.children()[0]);
+  REQUIRE(content.children().size() == 2);
+  CHECK(content.position().y == doctest::Approx(-20.f));
+  CHECK(content.children()[0]->position().y == doctest::Approx(0.f));
+  CHECK(content.children()[1]->position().y == doctest::Approx(80.f));
+
+  root.resize(flux::Size{80.f, 60.f}, sceneGraph);
+
+  CHECK(content.position().y == doctest::Approx(-20.f));
+  CHECK(content.children()[0]->position().y == doctest::Approx(0.f));
+  CHECK(content.children()[1]->position().y == doctest::Approx(80.f));
+
+  REQUIRE(viewport.interaction() != nullptr);
+  REQUIRE(viewport.interaction()->onScroll);
+  viewport.interaction()->onScroll(flux::Vec2{0.f, -12.f});
+
+  CHECK(content.position().y == doctest::Approx(-32.f));
+  CHECK(content.children()[0]->position().y == doctest::Approx(0.f));
+  CHECK(content.children()[1]->position().y == doctest::Approx(80.f));
+}
+
 TEST_CASE("ScaleAroundCenter relayout keeps reactive scale binding alive") {
   struct Root {
     flux::Reactive::Signal<float> scale;
