@@ -91,11 +91,20 @@ void RectNode::setShadow(ShadowStyle shadow) {
 }
 
 void RectNode::setClipsContents(bool clipsContents) noexcept {
+    if (clipsContents_ == clipsContents) {
+        return;
+    }
     clipsContents_ = clipsContents;
+    markSubtreeDirty();
 }
 
 void RectNode::setOpacity(float opacity) noexcept {
-    opacity_ = std::clamp(opacity, 0.f, 1.f);
+    float const next = std::clamp(opacity, 0.f, 1.f);
+    if (opacity_ == next) {
+        return;
+    }
+    opacity_ = next;
+    markSubtreeDirty();
 }
 
 Rect RectNode::localBounds() const noexcept {

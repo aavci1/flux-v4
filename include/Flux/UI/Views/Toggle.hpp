@@ -15,7 +15,7 @@
 namespace flux {
 
 /// On/off switch control (track + thumb). Binds to \ref value, supports keyboard (Space/Return),
-/// pointer, focus ring, and theme-driven motion when \ref Theme::reducedMotion is false.
+/// pointer, focus ring, and theme-driven motion.
 struct Toggle : ViewModifiers<Toggle> {
   /// Visual tokens; any field may use \c Color::theme() / \c kFloatFromTheme to inherit from \ref Theme.
   struct Style {
@@ -36,7 +36,7 @@ struct Toggle : ViewModifiers<Toggle> {
   // ── State ──────────────────────────────────────────────────────────────────
 
   /// Current on/off state; typically from \c useState<bool>() in a parent or owned by this subtree.
-  State<bool> value { };
+  Signal<bool> value { };
 
   // ── Properties ─────────────────────────────────────────────────────────────
 

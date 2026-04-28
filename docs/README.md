@@ -1,11 +1,14 @@
-# Flux v4 — documentation
+# Flux v5 Documentation
 
 | Document | Contents |
 |----------|----------|
-| [conventions.md](conventions.md) | Repository layout, CMake, namespaces, pimpl, naming, includes, examples |
-| [composites.md](composites.md) | Structural equality contract for `Element` values and retained subtree reuse |
-| [ui-view-body-style.md](ui-view-body-style.md) | Indentation and structure for `body()` returning declarative view trees; wrapping and modifier chains |
-| [event_queue.md](event_queue.md) | `Event` variants, `EventQueue` API, dispatch order, threading, macOS integration |
-| [TextArea-spec.md](TextArea-spec.md) | Multiline text field behavior notes: `LineRange`/`LineMetrics` space, vertical nav, scroll clamp (now implemented by multiline `TextInput`) |
+| [conventions.md](conventions.md) | Repository layout, CMake, namespaces, platform boundaries, examples |
+| [reactive-graph.md](reactive-graph.md) | Signals, computed values, effects, scopes, bindings, and environment reactivity |
+| [migrating-to-v5.md](migrating-to-v5.md) | Practical migration notes for apps and examples |
+| [composites.md](composites.md) | Current retained component and mount semantics |
+| [ui-view-body-style.md](ui-view-body-style.md) | Formatting conventions for declarative `body()` trees |
+| [event_queue.md](event_queue.md) | `EventQueue` API, dispatch order, threading, macOS integration |
+| [v5-progress.md](v5-progress.md) | Completed stage-gate record |
+| [v5-final-perf.md](v5-final-perf.md) | Final v5 validation and performance measurements |
 
-The project root [README.md](../README.md) has build commands and the full list of example executable targets.
+The project root [README.md](../README.md) has build commands and the current example target list.

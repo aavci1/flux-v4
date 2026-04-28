@@ -4,8 +4,8 @@
 #include <Flux/UI/Views/Button.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Popover.hpp>
-#include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/ScrollView.hpp>
+#include <Flux/UI/Views/Spacer.hpp>
 #include <Flux/UI/Views/Text.hpp>
 #include <Flux/UI/Views/VStack.hpp>
 
@@ -20,7 +20,7 @@ struct PopoverDemoRoot {
         auto dismissOutside = useState<bool>(true);
         auto [showPopover, hidePopover, popoverOpen] = usePopover();
 
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<ThemeKey>();
 
         std::vector<Element> scrollChildren;
 
@@ -91,7 +91,9 @@ struct PopoverDemoRoot {
                 Text {.text = "Arrow", .font = Font::headline(), .color = Color::primary()},
                 Spacer {},
                 Button {
-                    .label = *showArrow ? "On" : "Off",
+                    .label = [showArrow] {
+                        return showArrow() ? std::string {"On"} : std::string {"Off"};
+                    },
                     .variant = ButtonVariant::Ghost,
                     .onTap = [=] { showArrow = !*showArrow; },
                 }
@@ -104,7 +106,9 @@ struct PopoverDemoRoot {
                 Text {.text = "Dismiss outside tap", .font = Font::headline(), .color = Color::primary()},
                 Spacer {},
                 Button {
-                    .label = *dismissOutside ? "On" : "Off",
+                    .label = [dismissOutside] {
+                        return dismissOutside() ? std::string {"On"} : std::string {"Off"};
+                    },
                     .variant = ButtonVariant::Ghost,
                     .onTap = [=] { dismissOutside = !*dismissOutside; },
                 }
@@ -233,7 +237,7 @@ struct PopoverDemoRoot {
                 }
                     .flex(1.f, 1.f, 0.f)
                     .fill(FillStyle::solid(Color::elevatedBackground()))
-                    .cornerRadius(CornerRadius {theme.radiusLarge})
+                    .cornerRadius(CornerRadius {theme().radiusLarge})
             ),
         }
             .padding(20.f)

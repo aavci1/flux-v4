@@ -1,10 +1,217 @@
 #include <Flux/UI/Element.hpp>
 
-#include <Flux/UI/Views/Popover.hpp>
+#include <Flux/Reactive/Effect.hpp>
+#include <Flux/SceneGraph/InteractionData.hpp>
+#include <Flux/SceneGraph/RectNode.hpp>
+#include <Flux/SceneGraph/SceneNode.hpp>
+#include <Flux/UI/Hooks.hpp>
+#include <Flux/UI/MountContext.hpp>
+#include <Flux/UI/Theme.hpp>
+#include <Flux/UI/Detail/LayoutDebugDump.hpp>
 
+#include "UI/Element/ModifierLayoutHelpers.hpp"
+
+#include <algorithm>
+#include <cassert>
+#include <concepts>
+#include <cmath>
+#include <limits>
+#include <memory>
+#include <optional>
 #include <vector>
 
 namespace flux {
+
+namespace {
+
+float positive(float value) {
+  return std::isfinite(value) ? std::max(0.f, value) : 0.f;
+}
+
+LayoutConstraints insetConstraints(LayoutConstraints constraints, EdgeInsets padding) {
+  float const dx = std::max(0.f, padding.left) + std::max(0.f, padding.right);
+  float const dy = std::max(0.f, padding.top) + std::max(0.f, padding.bottom);
+  if (std::isfinite(constraints.maxWidth)) {
+    constraints.maxWidth = std::max(0.f, constraints.maxWidth - dx);
+  }
+  if (std::isfinite(constraints.maxHeight)) {
+    constraints.maxHeight = std::max(0.f, constraints.maxHeight - dy);
+  }
+  constraints.minWidth = std::max(0.f, constraints.minWidth - dx);
+  constraints.minHeight = std::max(0.f, constraints.minHeight - dy);
+  if (std::isfinite(constraints.maxWidth)) {
+    constraints.minWidth = std::min(constraints.minWidth, constraints.maxWidth);
+  }
+  if (std::isfinite(constraints.maxHeight)) {
+    constraints.minHeight = std::min(constraints.minHeight, constraints.maxHeight);
+  }
+  return constraints;
+}
+
+LayoutConstraints modifierInnerConstraints(LayoutConstraints constraints, EdgeInsets padding,
+                                           LayoutHints const& hints, float width, float height,
+                                           bool hasWidth, bool hasHeight) {
+  float const dx = std::max(0.f, padding.left) + std::max(0.f, padding.right);
+  float const dy = std::max(0.f, padding.top) + std::max(0.f, padding.bottom);
+  float const resolvedWidth = detail::resolvedModifierWidth(constraints, hints, width);
+  float const resolvedHeight = detail::resolvedModifierHeight(constraints, hints, height);
+  bool const hasResolvedWidth = detail::hasResolvedModifierWidth(constraints, hints, hasWidth);
+  bool const hasResolvedHeight = detail::hasResolvedModifierHeight(constraints, hints, hasHeight);
+  constraints = insetConstraints(constraints, padding);
+  if (hasResolvedWidth) {
+    float const innerWidth = std::max(0.f, resolvedWidth - dx);
+    constraints.maxWidth = innerWidth;
+    constraints.minWidth = innerWidth;
+  }
+  if (hasResolvedHeight) {
+    float const innerHeight = std::max(0.f, resolvedHeight - dy);
+    constraints.maxHeight = innerHeight;
+    constraints.minHeight = innerHeight;
+  }
+  if (std::isfinite(constraints.maxWidth)) {
+    constraints.minWidth = std::min(constraints.minWidth, constraints.maxWidth);
+  }
+  if (std::isfinite(constraints.maxHeight)) {
+    constraints.minHeight = std::min(constraints.minHeight, constraints.maxHeight);
+  }
+  return constraints;
+}
+
+Size resolveModifierOuterSize(Size size, LayoutConstraints const& constraints,
+                              LayoutHints const& hints, float width, float height,
+                              bool hasWidth, bool hasHeight) {
+  float const resolvedWidth = detail::resolvedModifierWidth(constraints, hints, width);
+  float const resolvedHeight = detail::resolvedModifierHeight(constraints, hints, height);
+  bool const hasResolvedWidth = detail::hasResolvedModifierWidth(constraints, hints, hasWidth);
+  bool const hasResolvedHeight = detail::hasResolvedModifierHeight(constraints, hints, hasHeight);
+  if (hasResolvedWidth) {
+    size.width = resolvedWidth;
+  }
+  if (hasResolvedHeight) {
+    size.height = resolvedHeight;
+  }
+  return Size{positive(size.width), positive(size.height)};
+}
+
+LayoutConstraints fixedConstraints(Size size) {
+  return LayoutConstraints{
+      .maxWidth = std::max(0.f, size.width),
+      .maxHeight = std::max(0.f, size.height),
+      .minWidth = std::max(0.f, size.width),
+      .minHeight = std::max(0.f, size.height),
+  };
+}
+
+Theme activeTheme(EnvironmentBinding const& environment) {
+  return environment.value<ThemeKey>();
+}
+
+FillStyle resolveFillStyle(FillStyle style, Theme const& theme) {
+  Color color{};
+  if (!style.solidColor(&color)) {
+    return style;
+  }
+  style.data = resolveColor(color, theme);
+  return style;
+}
+
+StrokeStyle resolveStrokeStyle(StrokeStyle style, Theme const& theme) {
+  if (style.type == StrokeStyle::Type::Solid) {
+    style.color = resolveColor(style.color, theme);
+  }
+  return style;
+}
+
+ShadowStyle resolveShadowStyle(ShadowStyle style, Theme const& theme) {
+  style.color = resolveColor(style.color, theme);
+  return style;
+}
+
+void relayoutStoredAncestors(scenegraph::SceneNode& node) {
+  constexpr float epsilon = 0.01f;
+  // Trees deeper than 64 stored scene-graph ancestors are not supported for reactive
+  // relayout propagation. This bounds the synchronous relayout walk; current demos are
+  // far shallower (lambda-studio max observed retained depth is 16).
+  scenegraph::SceneNode* current = &node;
+  for (int depth = 0; depth < 64; ++depth) {
+    scenegraph::SceneNode* parent = current->parent();
+    if (!parent) {
+      layoutDebugDumpAttached("runtime-relayout");
+      return;
+    }
+    Size const oldSize = parent->size();
+    if (!parent->relayoutStoredConstraints()) {
+      layoutDebugDumpAttached("runtime-relayout");
+      return;
+    }
+    Size const newSize = parent->size();
+    if (std::abs(newSize.width - oldSize.width) <= epsilon &&
+        std::abs(newSize.height - oldSize.height) <= epsilon) {
+      layoutDebugDumpAttached("runtime-relayout");
+      return;
+    }
+    current = parent;
+  }
+  assert(false && "reactive relayout ancestor walk exceeded the 64-level depth cap");
+}
+
+struct BindingClosureSizeProbeSetter {
+  scenegraph::RectNode* node = nullptr;
+  EnvironmentBinding environment;
+
+  void operator()(Color) const {}
+};
+
+struct BindingClosureSizeProbe {
+  Reactive::Bindable<Color> binding;
+  BindingClosureSizeProbeSetter setter;
+  Reactive::SmallFn<void()> requestRedraw;
+  std::optional<Color> lastValue;
+  bool compareEvaluatedValue = true;
+
+  void operator()() {}
+};
+
+static_assert(sizeof(BindingClosureSizeProbe) <= Reactive::BindingFn::inlineCapacity,
+              "Binding closure exceeded BindingFn inline budget; bump the SBO size");
+
+template<typename T, typename Setter>
+void installBinding(MountContext& ctx, Reactive::Bindable<T> binding, Setter setter,
+                    bool compareEvaluatedValue = true) {
+  if (!binding.isReactive()) {
+    setter(binding.evaluate());
+    return;
+  }
+
+  Reactive::SmallFn<void()> requestRedraw = ctx.redrawCallback();
+  Reactive::withOwner(ctx.owner(), [&] {
+    Reactive::Effect([binding = std::move(binding), setter = std::move(setter),
+                      requestRedraw = std::move(requestRedraw),
+                      lastValue = std::optional<T>{},
+                      compareEvaluatedValue]() mutable {
+      T value = binding.evaluate();
+      if constexpr (std::equality_comparable<T>) {
+        if (compareEvaluatedValue && lastValue && *lastValue == value) {
+          return;
+        }
+        lastValue = value;
+      }
+      setter(std::move(value));
+      if (requestRedraw) {
+        requestRedraw();
+      }
+    });
+  });
+}
+
+Size measuredOuterSize(Element const& element, MountContext& ctx) {
+  ctx.measureContext().pushConstraints(ctx.constraints(), ctx.hints());
+  Size size = element.measure(ctx.measureContext(), ctx.constraints(), ctx.hints(), ctx.textSystem());
+  ctx.measureContext().popConstraints();
+  return Size{positive(size.width), positive(size.height)};
+}
+
+} // namespace
 
 namespace detail {
 
@@ -13,32 +220,16 @@ void ElementDeleter::operator()(Element* element) const noexcept {
 }
 
 std::uint64_t nextElementMeasureId() {
-  static std::uint64_t n = 1;
-  return n++;
+  static std::uint64_t next = 1;
+  return next++;
 }
 
 Popover* popoverOverlayStateIf(Element& el) {
-  el.ensureUniqueImpl();
-  auto* m = dynamic_cast<Element::Model<Popover>*>(el.impl_.get());
-  return m ? &m->value : nullptr;
+  (void)el;
+  return nullptr;
 }
 
 } // namespace detail
-
-namespace {
-
-struct EnvironmentPushScope {
-  std::size_t count = 0;
-
-  ~EnvironmentPushScope() {
-    EnvironmentStack& environment = EnvironmentStack::current();
-    while (count-- > 0) {
-      environment.pop();
-    }
-  }
-};
-
-} // namespace
 
 Element::Element(Element const& other) = default;
 
@@ -59,68 +250,6 @@ detail::ElementModifiers& Element::writableModifiers() {
   return *modifiers_;
 }
 
-detail::ResolvedElement Element::resolve(ComponentKey const& key,
-                                         LayoutConstraints const& constraints) const {
-  detail::ResolvedElement resolved{};
-  EnvironmentPushScope pushedEnvironments{};
-  Element const* current = this;
-  ComponentKey currentKey = key;
-  bool expandedAnyBody = false;
-  bool descendantsStable = true;
-  auto stableInteractionKey = [&resolved, &key]() -> ComponentKey {
-    if (!resolved.bodyComponentKeys.empty()) {
-      return resolved.bodyComponentKeys.back();
-    }
-    return key;
-  };
-
-  while (current) {
-    if (EnvironmentLayer const* envLayer = current->environmentLayer()) {
-      resolved.environmentLayers.push_back(*envLayer);
-      EnvironmentStack::current().push(*envLayer);
-      ++pushedEnvironments.count;
-    }
-    if (detail::ElementModifiers const* modifiers = current->modifiers()) {
-      resolved.modifierLayers.push_back(*modifiers);
-    }
-    if (!current->expandsBody()) {
-      resolved.sceneElement = current;
-      resolved.stableInteractionKey = stableInteractionKey();
-      resolved.descendantsStable = expandedAnyBody && descendantsStable;
-      return resolved;
-    }
-
-    if (expandedAnyBody) {
-      resolved.bodyComponentKeys.push_back(currentKey);
-    }
-    expandedAnyBody = true;
-    detail::CompositeBodyResolution bodyResolution = current->resolveCompositeBody(currentKey, constraints);
-    descendantsStable = descendantsStable && bodyResolution.descendantsStable;
-    if (!bodyResolution.body) {
-      resolved.sceneElement = current;
-      resolved.stableInteractionKey = stableInteractionKey();
-      resolved.descendantsStable = false;
-      return resolved;
-    }
-    if (!resolved.nestSceneUnderFirstBody && bodyResolution.body->expandsBody()) {
-      resolved.nestSceneUnderFirstBody = true;
-    }
-
-    if (bodyResolution.ownedBody) {
-      resolved.ownedBodies.emplace_back(bodyResolution.ownedBody.release());
-      current = resolved.ownedBodies.back().get();
-    } else {
-      current = bodyResolution.body;
-    }
-    currentKey = ComponentKey{currentKey, detail::compositeBodyLocalId()};
-  }
-
-  resolved.sceneElement = this;
-  resolved.stableInteractionKey = stableInteractionKey();
-  resolved.descendantsStable = false;
-  return resolved;
-}
-
 float Element::flexGrow() const {
   return flexGrowOverride_.value_or(impl_->flexGrow());
 }
@@ -134,6 +263,10 @@ std::optional<float> Element::flexBasis() const {
     return flexBasisOverride_;
   }
   return impl_->flexBasis();
+}
+
+bool Element::mountsWhenCollapsed() const {
+  return impl_ && impl_->mountsWhenCollapsed();
 }
 
 float Element::minMainSize() const {
@@ -167,6 +300,220 @@ Element Element::flex(float grow, float shrink, float basis) && {
 Element Element::key(std::string key) && {
   key_ = std::move(key);
   return std::move(*this);
+}
+
+std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
+  std::unique_ptr<MountContext> scopedEnvironmentContext;
+  if (!envOverrides_.empty()) {
+    EnvironmentBinding activeEnvironment = ctx.environmentBinding();
+    for (auto const& override : envOverrides_) {
+      activeEnvironment = override->apply(activeEnvironment);
+    }
+    scopedEnvironmentContext = std::make_unique<MountContext>(
+        ctx.owner(), ctx.textSystem(), ctx.measureContext(),
+        ctx.constraints(), ctx.hints(), ctx.redrawCallback(),
+        std::move(activeEnvironment));
+  }
+  MountContext& activeCtx = scopedEnvironmentContext ? *scopedEnvironmentContext : ctx;
+  detail::CurrentMountContextScope const currentMountContext{activeCtx};
+
+  if (!modifiers_ || !modifiers_->needsModifierPass()) {
+    return impl_->mount(activeCtx);
+  }
+
+  detail::ElementModifiers const& modifiers = *modifiers_;
+  EdgeInsets const padding = modifiers.padding.evaluate();
+  float const width = modifiers.sizeWidth.evaluate();
+  float const height = modifiers.sizeHeight.evaluate();
+  LayoutConstraints innerConstraints =
+      modifierInnerConstraints(activeCtx.constraints(), padding, activeCtx.hints(), width, height,
+                               modifiers.hasSizeWidth, modifiers.hasSizeHeight);
+  MountContext innerCtx = activeCtx.childWithSharedScope(innerConstraints, activeCtx.hints());
+  std::unique_ptr<scenegraph::SceneNode> content = impl_->mount(innerCtx);
+  if (!content) {
+    return nullptr;
+  }
+
+  Size outerSize = resolveModifierOuterSize(
+      measuredOuterSize(*this, activeCtx), activeCtx.constraints(), activeCtx.hints(), width, height,
+      modifiers.hasSizeWidth, modifiers.hasSizeHeight);
+  auto wrapper = std::make_unique<scenegraph::RectNode>(
+      Rect{0.f, 0.f, positive(outerSize.width), positive(outerSize.height)});
+
+  auto* rawWrapper = wrapper.get();
+  if (modifiers.hasInteraction()) {
+    auto interaction = std::make_unique<scenegraph::InteractionData>();
+    if (ComponentKey const* scopeKey = detail::currentInteractionScopeKey()) {
+      ComponentKey targetKey = *scopeKey;
+      for (LocalId const id : ctx.measureContext().currentElementKey().materialize()) {
+        targetKey.push_back(id);
+      }
+      interaction->stableTargetKey = std::move(targetKey);
+    } else {
+      interaction->stableTargetKey = ctx.measureContext().currentElementKey();
+    }
+    interaction->onTap = modifiers.onTap;
+    interaction->onPointerEnter = modifiers.onPointerEnter;
+    interaction->onPointerExit = modifiers.onPointerExit;
+    interaction->onFocus = modifiers.onFocus;
+    interaction->onBlur = modifiers.onBlur;
+    interaction->onPointerDown = modifiers.onPointerDown;
+    interaction->onPointerUp = modifiers.onPointerUp;
+    interaction->onPointerMove = modifiers.onPointerMove;
+    interaction->onScroll = modifiers.onScroll;
+    interaction->onKeyDown = modifiers.onKeyDown;
+    interaction->onKeyUp = modifiers.onKeyUp;
+    interaction->onTextInput = modifiers.onTextInput;
+    interaction->focusable = modifiers.focusable;
+    interaction->cursor = modifiers.cursor;
+    if (detail::InteractionSignalBundle const* signals = detail::currentInteractionSignals()) {
+      interaction->hoverSignal = signals->hover;
+      interaction->pressSignal = signals->press;
+      interaction->focusSignal = signals->focus;
+      interaction->keyboardFocusSignal = signals->keyboardFocus;
+    }
+    rawWrapper->setInteraction(std::move(interaction));
+  }
+  EnvironmentBinding bindingEnvironment = activeCtx.environmentBinding();
+  installBinding<FillStyle>(activeCtx, modifiers.fill, [rawWrapper, bindingEnvironment](FillStyle fill) {
+    rawWrapper->setFill(resolveFillStyle(std::move(fill), activeTheme(bindingEnvironment)));
+  }, false);
+  installBinding<StrokeStyle>(activeCtx, modifiers.stroke, [rawWrapper, bindingEnvironment](StrokeStyle stroke) {
+    rawWrapper->setStroke(resolveStrokeStyle(std::move(stroke), activeTheme(bindingEnvironment)));
+  }, false);
+  installBinding<ShadowStyle>(activeCtx, modifiers.shadow, [rawWrapper, bindingEnvironment](ShadowStyle shadow) {
+    rawWrapper->setShadow(resolveShadowStyle(shadow, activeTheme(bindingEnvironment)));
+  }, false);
+  installBinding<CornerRadius>(activeCtx, modifiers.cornerRadius, [rawWrapper](CornerRadius radius) {
+    rawWrapper->setCornerRadius(radius);
+  });
+  installBinding<float>(activeCtx, modifiers.opacity, [rawWrapper](float opacity) {
+    rawWrapper->setOpacity(opacity);
+  });
+  rawWrapper->setClipsContents(modifiers.clip);
+
+  scenegraph::SceneNode* rawContent = content.get();
+  content->setPosition(Point{std::max(0.f, padding.left), std::max(0.f, padding.top)});
+  wrapper->appendChild(std::move(content));
+
+  LayoutConstraints const bindingConstraints = activeCtx.constraints();
+  LayoutHints const bindingHints = activeCtx.hints();
+  if (modifiers.hasSizeWidth) {
+    installBinding<float>(activeCtx, modifiers.sizeWidth,
+                          [rawWrapper, bindingConstraints, bindingHints](float width) {
+                            float const resolvedWidth =
+                                detail::resolvedModifierWidth(bindingConstraints, bindingHints, width);
+                            Size size = rawWrapper->size();
+                            Size const oldSize = size;
+                            size.width = resolvedWidth;
+                            rawWrapper->setSize(size);
+                            if (rawWrapper->size() != oldSize) {
+                              relayoutStoredAncestors(*rawWrapper);
+                            }
+                          });
+  }
+  if (modifiers.hasSizeHeight) {
+    installBinding<float>(activeCtx, modifiers.sizeHeight,
+                          [rawWrapper, bindingConstraints, bindingHints](float height) {
+                            float const resolvedHeight =
+                                detail::resolvedModifierHeight(bindingConstraints, bindingHints, height);
+                            Size size = rawWrapper->size();
+                            Size const oldSize = size;
+                            size.height = resolvedHeight;
+                            rawWrapper->setSize(size);
+                            if (rawWrapper->size() != oldSize) {
+                              relayoutStoredAncestors(*rawWrapper);
+                            }
+                          });
+  }
+  installBinding<Vec2>(activeCtx, modifiers.translation, [rawWrapper, px = modifiers.positionX,
+                                                          py = modifiers.positionY](
+                                                           Vec2 translation) mutable {
+    rawWrapper->setPosition(Point{px.evaluate() + translation.x, py.evaluate() + translation.y});
+  });
+  installBinding<float>(activeCtx, modifiers.positionX, [rawWrapper, tr = modifiers.translation,
+                                                         py = modifiers.positionY](float x) mutable {
+    Vec2 const translation = tr.evaluate();
+    rawWrapper->setPosition(Point{x + translation.x, py.evaluate() + translation.y});
+  });
+  installBinding<float>(activeCtx, modifiers.positionY, [rawWrapper, tr = modifiers.translation,
+                                                         px = modifiers.positionX](float y) mutable {
+    Vec2 const translation = tr.evaluate();
+    rawWrapper->setPosition(Point{px.evaluate() + translation.x, y + translation.y});
+  });
+
+  if (modifiers.overlay) {
+    MountContext overlayCtx = activeCtx.childWithSharedScope(LayoutConstraints{
+        .maxWidth = outerSize.width,
+        .maxHeight = outerSize.height,
+        .minWidth = 0.f,
+        .minHeight = 0.f,
+    }, activeCtx.hints());
+    if (auto overlayNode = modifiers.overlay->mount(overlayCtx)) {
+      wrapper->appendChild(std::move(overlayNode));
+    }
+  }
+
+  LayoutHints const relayoutHints = activeCtx.hints();
+  rawWrapper->setLayoutConstraints(activeCtx.constraints());
+  rawWrapper->setRelayout([rawWrapper, rawContent, relayoutHints,
+                           modifiers](LayoutConstraints const& constraints) mutable {
+    EdgeInsets const padding = modifiers.padding.evaluate();
+    float const padL = std::max(0.f, padding.left);
+    float const padR = std::max(0.f, padding.right);
+    float const padT = std::max(0.f, padding.top);
+    float const padB = std::max(0.f, padding.bottom);
+    float const width = modifiers.sizeWidth.evaluate();
+    float const height = modifiers.sizeHeight.evaluate();
+    float const resolvedWidth = detail::resolvedModifierWidth(constraints, relayoutHints, width);
+    float const resolvedHeight = detail::resolvedModifierHeight(constraints, relayoutHints, height);
+    bool const hasResolvedWidth =
+        detail::hasResolvedModifierWidth(constraints, relayoutHints, modifiers.hasSizeWidth);
+    bool const hasResolvedHeight =
+        detail::hasResolvedModifierHeight(constraints, relayoutHints, modifiers.hasSizeHeight);
+    LayoutConstraints innerConstraints =
+        modifierInnerConstraints(constraints, padding, relayoutHints, width, height,
+                                 modifiers.hasSizeWidth, modifiers.hasSizeHeight);
+    if (!hasResolvedHeight) {
+      innerConstraints.maxHeight = std::numeric_limits<float>::infinity();
+      innerConstraints.minHeight = 0.f;
+    }
+    if (rawContent) {
+      rawContent->relayout(innerConstraints);
+    }
+    Size contentSize = rawContent ? rawContent->size() : Size{};
+    Size nextSize{contentSize.width + padL + padR, contentSize.height + padT + padB};
+    if (hasResolvedWidth) {
+      nextSize.width = resolvedWidth;
+    }
+    if (hasResolvedHeight) {
+      nextSize.height = resolvedHeight;
+    }
+    if (!hasResolvedWidth) {
+      nextSize.width = std::max(nextSize.width, constraints.minWidth);
+    }
+    if (!hasResolvedHeight) {
+      nextSize.height = std::max(nextSize.height, constraints.minHeight);
+    }
+    if (!hasResolvedWidth && std::isfinite(constraints.maxWidth)) {
+      nextSize.width = std::min(nextSize.width, constraints.maxWidth);
+    }
+    if (!hasResolvedHeight && std::isfinite(constraints.maxHeight)) {
+      nextSize.height = std::min(nextSize.height, constraints.maxHeight);
+    }
+    rawWrapper->setSize(Size{positive(nextSize.width), positive(nextSize.height)});
+    if (rawContent) {
+      rawContent->setPosition(Point{padL, padT});
+    }
+    auto children = rawWrapper->children();
+    for (std::size_t i = 1; i < children.size(); ++i) {
+      if (children[i]) {
+        children[i]->relayout(fixedConstraints(rawWrapper->size()), false);
+      }
+    }
+  });
+
+  return wrapper;
 }
 
 } // namespace flux

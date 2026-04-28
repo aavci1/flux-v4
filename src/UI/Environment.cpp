@@ -1,33 +1,38 @@
 #include <Flux/UI/Environment.hpp>
 
-#include <Flux/Core/Window.hpp>
-#include <Flux/Detail/Runtime.hpp>
+#include <cassert>
+#include <mutex>
+#include <typeindex>
+#include <unordered_map>
 
 namespace flux {
 
-EnvironmentStack& EnvironmentStack::current() {
-  thread_local EnvironmentStack stack;
-  return stack;
-}
-
-void EnvironmentStack::push(EnvironmentLayer layer) {
-  layers_.push_back(std::move(layer));
-}
-
-void EnvironmentStack::pop() {
-  if (!layers_.empty()) {
-    layers_.pop_back();
-  }
-}
-
 namespace detail {
 
-EnvironmentLayer const* windowEnvironmentLayerForCurrentRuntime() {
-  Runtime* const rt = Runtime::current();
-  if (!rt) {
-    return nullptr;
+namespace {
+
+struct SlotRegistry {
+  std::mutex mutex;
+  std::uint16_t nextIndex = 0;
+  std::unordered_map<std::type_index, std::uint16_t> assigned;
+};
+
+SlotRegistry& slotRegistry() {
+  static SlotRegistry registry;
+  return registry;
+}
+
+} // namespace
+
+std::uint16_t allocateEnvironmentSlot(std::type_info const& tag) {
+  SlotRegistry& registry = slotRegistry();
+  std::lock_guard lock{registry.mutex};
+  auto [it, inserted] = registry.assigned.try_emplace(std::type_index{tag}, registry.nextIndex);
+  if (inserted) {
+    assert(registry.nextIndex < kMaxEnvironmentSlots && "too many environment keys");
+    ++registry.nextIndex;
   }
-  return &rt->window().environmentLayer();
+  return it->second;
 }
 
 } // namespace detail

@@ -159,6 +159,7 @@ Size resolveMeasuredScrollViewSize(ScrollAxis axis, Size contentSize, LayoutCons
       out.height = std::min(out.height, constraints.maxHeight);
     }
     out.width = std::max(out.width, constraints.minWidth);
+    out.height = std::max(out.height, constraints.minHeight);
     break;
   case ScrollAxis::Both:
     if (std::isfinite(constraints.maxWidth) && constraints.maxWidth > 0.f) {
@@ -167,6 +168,8 @@ Size resolveMeasuredScrollViewSize(ScrollAxis axis, Size contentSize, LayoutCons
     if (std::isfinite(constraints.maxHeight) && constraints.maxHeight > 0.f) {
       out.height = std::min(out.height, constraints.maxHeight);
     }
+    out.width = std::max(out.width, constraints.minWidth);
+    out.height = std::max(out.height, constraints.minHeight);
     break;
   }
 

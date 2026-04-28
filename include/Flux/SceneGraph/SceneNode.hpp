@@ -6,6 +6,8 @@
 /// local coordinates.
 
 #include <Flux/Core/Types.hpp>
+#include <Flux/Reactive/SmallFn.hpp>
+#include <Flux/UI/LayoutEngine.hpp>
 
 #include <concepts>
 #include <cstddef>
@@ -28,6 +30,8 @@ namespace detail {
 struct SceneNodeAccess;
 }
 
+using RelayoutFn = Reactive::SmallFn<void(LayoutConstraints const&), 64>;
+
 enum class SceneNodeKind : std::uint8_t {
   Group,
   Rect,
@@ -35,6 +39,12 @@ enum class SceneNodeKind : std::uint8_t {
   Image,
   Path,
   Render,
+};
+
+enum class LayoutFlow : std::uint8_t {
+  None,
+  VerticalStack,
+  HorizontalStack,
 };
 
 std::string_view sceneNodeKindName(SceneNodeKind kind) noexcept;
@@ -56,11 +66,21 @@ class SceneNode {
     Mat3 const& transform() const noexcept;
     bool isDirty() const noexcept;
     bool isSubtreeDirty() const noexcept;
+    LayoutFlow layoutFlow() const noexcept;
+    float layoutSpacing() const noexcept;
 
     void setBounds(Rect bounds);
     void setPosition(Point position);
     void setSize(Size size);
     void setTransform(Mat3 const& transform);
+    void setLayoutFlow(LayoutFlow flow) noexcept;
+    void setLayoutSpacing(float spacing) noexcept;
+    void setLayoutConstraints(LayoutConstraints constraints) noexcept;
+    bool hasLayoutConstraints() const noexcept;
+    LayoutConstraints layoutConstraints() const noexcept;
+    void setRelayout(RelayoutFn relayout);
+    bool relayoutStoredConstraints();
+    bool relayout(LayoutConstraints const& constraints, bool storeConstraints = true);
 
     SceneNode *parent() const noexcept;
     std::span<std::unique_ptr<SceneNode> const> children() const noexcept;
@@ -95,11 +115,17 @@ class SceneNode {
     SceneNodeKind kind_;
     Rect bounds_{};
     Mat3 transform_ = Mat3::identity();
+    LayoutFlow layoutFlow_ = LayoutFlow::None;
+    float layoutSpacing_ = 0.f;
+    LayoutConstraints layoutConstraints_{};
+    bool hasLayoutConstraints_ = false;
     SceneNode* parent_ = nullptr;
     std::vector<std::unique_ptr<SceneNode>> children_{};
     std::unique_ptr<InteractionData> interaction_{};
+    RelayoutFn relayout_{};
     mutable bool ownPaintingDirty_ = true;
     mutable bool subtreeDirty_ = true;
+    mutable bool preparedGroupCacheSuppressed_ = false;
     mutable std::unique_ptr<PreparedRenderOps> preparedRenderOps_{};
 
     friend struct detail::SceneNodeAccess;

@@ -1,51 +1,40 @@
-# Flux v4 - composite structural equality
+# Retained Components
 
-Flux retains and reuses scene subtrees by comparing the `Element` tree produced by a component's
-`body()` against the previous frame. Every type stored in an `Element` must therefore be
-structurally comparable.
+Flux v5 treats component `body()` functions as mount-time declarations. A component is mounted into a `SceneNode` subtree once, and reactive values update retained nodes through bindings and effects after that.
 
-## Required contract
+## Component Contract
 
-Any component, view, or measured leaf used as an `Element` value must either:
+- A component can expose `Element body() const`.
+- Advanced components can expose `std::unique_ptr<SceneNode> mount(MountContext&) const`.
+- Hooks such as `useState`, `useComputed`, `useEffect`, `useAnimation`, and keyed environment helpers must run while a reactive owner scope is active.
+- Reactive changes should flow through `Signal`, `Computed`, `Bindable`, control-flow views, or explicit scene-node effects.
 
-- Be trivially copyable.
-- Define `operator==`.
+## Retention Model
 
-Values pushed with `.environment(value)` must also define `operator==` and be copy-constructible.
+The retained scene tree is the identity layer. Flux does not re-run arbitrary component bodies to discover changes. Instead:
 
-The framework enforces this with a compile-time error in `Element::Model<C>`. This is intentional:
-without a real comparison, `Element::structuralEquals` would return false for that value on every
-frame and prevent subtree reuse above it.
+- `Bindable<T>` modifier values install effects against mounted scene nodes.
+- `For` keeps keyed row scopes alive across reorder and disposes removed rows.
+- `Show` and `Switch` own branch scopes and replace only the branch scene subtree.
+- Signal-backed environment bindings let ambient values such as `ThemeKey` participate in reactive tracking.
 
-## Equality rules
+## Authoring Guidance
 
-- If all fields are equality-comparable, prefer `bool operator==(T const&) const = default;`.
-- For `Element` fields, compare with `element.structuralEquals(other.element)`.
-- For `std::vector<Element>`, compare with `elementsStructurallyEqual(lhs, rhs)`.
-- For `std::function` callbacks, compare callback presence with `static_cast<bool>(callback)`.
-- For `State<T>` and animation handles, compare handle identity; the underlying value may change
-  without requiring the view tree structure to change.
-- For opaque fields such as `std::any`, compare only the structural information that affects
-  retained-scene safety, and document the looseness near the comparison.
-
-Callback values should not be compared directly. Flux refreshes retained interaction callbacks
-through callback cells, so a retained node can keep a stable forwarder while the closure behind it
-is updated on the next visited frame.
-
-## Example
+Prefer small components with stable inputs and reactive values captured by bindings:
 
 ```cpp
-struct Row : flux::ViewModifiers<Row> {
-  std::string title;
-  flux::State<bool> selected;
-  std::function<void()> onTap;
+struct Swatch {
+  Reactive::Signal<bool> active;
 
-  bool operator==(Row const& other) const {
-    return title == other.title &&
-           selected == other.selected &&
-           static_cast<bool>(onTap) == static_cast<bool>(other.onTap);
+  Element body() const {
+    return Rectangle{}
+        .size(32.f, 32.f)
+        .fill([active = active] {
+          return active() ? Color::accent() : Color::separator();
+        })
+        .cornerRadius(8.f);
   }
-
-  flux::Element body() const;
 };
 ```
+
+Use control-flow views when the shape of the retained subtree changes. Use bindable modifiers when only node properties change.

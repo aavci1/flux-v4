@@ -1,5 +1,7 @@
 #include <Flux/Reactive/Transition.hpp>
 
+#include <utility>
+
 namespace flux {
 
 Transition Transition::instant() {
@@ -53,15 +55,24 @@ WithTransition::~WithTransition() {
   }
 }
 
-bool WithTransition::hasCurrent() {
-  return !gTransitionStack.empty();
-}
-
 Transition WithTransition::current() {
   if (gTransitionStack.empty()) {
     return Transition::instant();
   }
   return gTransitionStack.back();
 }
+
+namespace detail {
+
+TransitionScopeSuspension::TransitionScopeSuspension()
+    : saved_(std::move(gTransitionStack)) {
+  gTransitionStack.clear();
+}
+
+TransitionScopeSuspension::~TransitionScopeSuspension() {
+  gTransitionStack = std::move(saved_);
+}
+
+} // namespace detail
 
 } // namespace flux

@@ -5,6 +5,7 @@
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/Reactive/Interpolatable.hpp>
 #include <Flux/Reactive/Transition.hpp>
+#include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/InputFieldChrome.hpp>
 #include <Flux/UI/InputFieldLayout.hpp>
 #include <Flux/UI/Theme.hpp>
@@ -190,9 +191,9 @@ struct SelectMenuRow : ViewModifiers<SelectMenuRow> {
 
     Element body() const {
         bool const disabled = option.disabled;
-        bool const hovered = useHover();
-        bool const pressed = usePress();
-        bool const focused = useFocus();
+        Reactive::Signal<bool> hovered = useHover();
+        Reactive::Signal<bool> pressed = usePress();
+        Reactive::Signal<bool> focused = useFocus();
 
         Color const selectedFill = withAlpha(style.accentColor, 0.16f);
         Color const selectedHoverFill = withAlpha(style.accentColor, 0.24f);
@@ -201,11 +202,17 @@ struct SelectMenuRow : ViewModifiers<SelectMenuRow> {
         Color const hoverFill = style.rowHoverColor;
         Color const pressFill = darken(style.rowHoverColor, 0.04f);
 
-        Color const fillTarget =
-            disabled ? Colors::transparent : selected ? (pressed ? selectedPressFill : hovered ? selectedHoverFill :
-                                                                                                 selectedFill) :
-                                                        (pressed ? pressFill : hovered ? hoverFill :
-                                                                                         idleFill);
+        auto motion = [theme = theme] {
+            return Transition::ease(theme.durationFast);
+        };
+        auto fillTarget = [disabled, selected = selected, pressed, hovered,
+                           selectedPressFill, selectedHoverFill, selectedFill,
+                           pressFill, hoverFill, idleFill] {
+            return disabled ? Colors::transparent :
+                   selected ? (pressed() ? selectedPressFill : hovered() ? selectedHoverFill : selectedFill) :
+                              (pressed() ? pressFill : hovered() ? hoverFill : idleFill);
+        };
+        auto fillAnim = useAnimation(fillTarget, motion);
         Color const labelTarget =
             disabled ? theme.disabledTextColor : selected ? style.accentColor :
                                                             theme.labelColor;
@@ -278,8 +285,13 @@ struct SelectMenuRow : ViewModifiers<SelectMenuRow> {
             .children = std::move(rowChildren),
         }
             .padding(theme.space2, theme.space3, theme.space2, theme.space3)
-            .fill(FillStyle::solid(fillTarget))
-            .stroke(focused && !disabled ? StrokeStyle::solid(theme.keyboardFocusIndicatorColor, 2.f) : StrokeStyle::none())
+            .fill([fillAnim] {
+                return fillAnim();
+            })
+            .stroke([focused, disabled, focusColor = theme.keyboardFocusIndicatorColor] {
+                return focused.get() && !disabled ? StrokeStyle::solid(focusColor, 2.f)
+                                                  : StrokeStyle::none();
+            })
             .cornerRadius(CornerRadius {style.cornerRadius})
             .cursor(disabled ? Cursor::Inherit : Cursor::Hand)
             .focusable(!disabled)
@@ -289,7 +301,7 @@ struct SelectMenuRow : ViewModifiers<SelectMenuRow> {
 };
 
 struct SelectMenuContent {
-    State<int> selectedIndex {};
+    Signal<int> selectedIndex {};
     std::vector<SelectOption> options;
     std::string emptyText;
     bool showCheckmark = true;
@@ -356,7 +368,7 @@ struct SelectMenuContent {
 };
 
 struct SelectTrigger : ViewModifiers<SelectTrigger> {
-    State<int> selectedIndex {};
+    Signal<int> selectedIndex {};
     std::vector<SelectOption> options;
     std::string placeholder;
     std::string emptyText;
@@ -383,7 +395,7 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
     }
 
     Element body() const {
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<ThemeKey>();
 
         auto [showPopover, hidePopover, isPresented] = usePopover();
 
@@ -392,9 +404,9 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
             isValidIndex(currentIndex, options.size()) ? &options[static_cast<std::size_t>(currentIndex)] : nullptr;
 
         bool const isDisabled = disabled;
-        bool const hovered = useHover();
-        bool const pressed = usePress();
-        bool const focused = useFocus();
+        Reactive::Signal<bool> hovered = useHover();
+        Reactive::Signal<bool> pressed = usePress();
+        Reactive::Signal<bool> focused = useFocus();
         bool const open = isPresented;
         Rect const bounds = useBounds();
         ResolvedInputFieldChrome const &fieldChrome = style.fieldChrome;
@@ -402,55 +414,55 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
         float const fieldVerticalPadding = fieldChrome.paddingV + shellInset;
         float const fieldHorizontalPadding = fieldChrome.paddingH + shellInset;
 
-        Transition const trMotion = Transition::ease(theme.durationMedium);
-        Transition const trFast = Transition::ease(theme.durationFast);
-
         Color const idleFill = fieldChrome.backgroundColor;
         Color const hoverFill = style.fieldHoverColor;
         Color const pressFill = darken(style.fieldHoverColor, 0.03f);
         Color const openFill = style.fieldHoverColor;
-        Color const fillTarget =
-            triggerMode == SelectTriggerMode::Link ? Colors::transparent :
-            pressed ? pressFill : open ? openFill :
-            hovered ? hoverFill :
-                      idleFill;
+        auto motion = [theme] {
+            return Transition::ease(theme().durationFast);
+        };
+        auto fillTarget = [triggerMode = triggerMode, pressed, hovered, open,
+                           pressFill, openFill, hoverFill, idleFill] {
+            return triggerMode == SelectTriggerMode::Link ? Colors::transparent :
+                   pressed()                             ? pressFill :
+                   open                                  ? openFill :
+                   hovered()                             ? hoverFill :
+                                                           idleFill;
+        };
 
-        Color const labelTarget =
-            triggerMode == SelectTriggerMode::Link ? (isDisabled ? theme.disabledTextColor : pressed       ? darken(style.accentColor, 0.12f) :
-                                                                                         (hovered || open) ? lighten(style.accentColor, 0.12f) :
-                                                                                                             style.accentColor) :
-                                                     (isDisabled ? theme.disabledTextColor : currentOption ? theme.labelColor :
-                                                                                                             theme.placeholderTextColor);
-        Color const detailTarget =
-            triggerMode == SelectTriggerMode::Link ? labelTarget : (isDisabled ? theme.disabledTextColor : theme.secondaryLabelColor);
-        Color const chevronTarget =
-            triggerMode == SelectTriggerMode::Link ? labelTarget : (isDisabled ? theme.disabledTextColor : open ? style.accentColor :
-                                                                                                                  theme.secondaryLabelColor);
-
-        auto fillAnim = useAnimation<Color>(fillTarget);
-        if (*fillAnim != fillTarget) {
-            fillAnim.set(fillTarget, trFast);
-        }
-
-        auto labelAnim = useAnimation<Color>(labelTarget);
-        if (*labelAnim != labelTarget) {
-            labelAnim.set(labelTarget, trMotion);
-        }
-
-        auto detailAnim = useAnimation<Color>(detailTarget);
-        if (*detailAnim != detailTarget) {
-            detailAnim.set(detailTarget, trMotion);
-        }
-
-        auto chevronAnim = useAnimation<Color>(chevronTarget);
-        if (*chevronAnim != chevronTarget) {
-            chevronAnim.set(chevronTarget, trMotion);
-        }
+        bool const hasCurrentOption = currentOption != nullptr;
+        auto labelTarget = [triggerMode = triggerMode, isDisabled, pressed,
+                            hovered, open, accent = style.accentColor,
+                            hasCurrentOption, theme] {
+            if (triggerMode == SelectTriggerMode::Link) {
+                return isDisabled ? theme().disabledTextColor :
+                       pressed() ? darken(accent, 0.12f) :
+                       (hovered() || open) ? lighten(accent, 0.12f) :
+                                                 accent;
+            }
+            return isDisabled ? theme().disabledTextColor :
+                   hasCurrentOption ? theme().labelColor : theme().placeholderTextColor;
+        };
+        auto detailTarget = [triggerMode = triggerMode, isDisabled, labelTarget, theme] {
+            return triggerMode == SelectTriggerMode::Link ? labelTarget() :
+                   isDisabled ? theme().disabledTextColor : theme().secondaryLabelColor;
+        };
+        auto chevronTarget = [triggerMode = triggerMode, isDisabled, open,
+                              labelTarget, accent = style.accentColor,
+                              theme] {
+            return triggerMode == SelectTriggerMode::Link ? labelTarget() :
+                   isDisabled ? theme().disabledTextColor :
+                   open ? accent : theme().secondaryLabelColor;
+        };
+        auto fillAnim = useAnimation(fillTarget, motion);
+        auto labelAnim = useAnimation(labelTarget, motion);
+        auto detailAnim = useAnimation(detailTarget, motion);
+        auto chevronAnim = useAnimation(chevronTarget, motion);
 
         float const triggerWidth = bounds.width > 0.f ? bounds.width : style.minMenuWidth;
         EdgeInsets const anchorOutsets = EdgeInsets {};
         std::optional<float> const menuWidth = matchTriggerWidth ? std::optional<float> {triggerWidth} :
-                                                                   std::optional<float> {intrinsicMenuWidth(options, style, theme, showCheckmark, emptyText)};
+                                                                   std::optional<float> {intrinsicMenuWidth(options, style, theme(), showCheckmark, emptyText)};
         std::optional<float> const anchorMaxHeight =
             triggerMode == SelectTriggerMode::Link ? std::nullopt : (bounds.height > 0.f ? std::optional<float> {bounds.height} : std::nullopt);
 
@@ -474,14 +486,14 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
                          showCheckmark = showCheckmark,
                          dismissOnSelect = dismissOnSelect,
                          style = style,
-                         theme,
+                         theme = theme(),
                          menuWidth,
                          matchTriggerWidth = matchTriggerWidth,
                          triggerMode = triggerMode,
                          placement = placement,
                          anchorMaxHeight,
                          anchorOutsets,
-                         popoverGap = triggerMode == SelectTriggerMode::Field ? theme.space1 : kFloatFromTheme,
+                         popoverGap = triggerMode == SelectTriggerMode::Field ? theme().space1 : kFloatFromTheme,
                          onChange = onChange]() {
             auto handleSelect = [selectedIndex, options = options, dismissOnSelect, hidePopover, onChange](int nextIndex) {
                 if (!isValidIndex(nextIndex, options.size()) || options[static_cast<std::size_t>(nextIndex)].disabled) {
@@ -596,9 +608,16 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
 
         bool const hasDetail = showDetailInTrigger && currentOption && !currentOption->detail.empty();
         Element triggerLabel = Text {
-            .text = currentOption ? currentOption->label : placeholder,
+            .text = [selectedIndex = selectedIndex, options = options, placeholder = placeholder] {
+                int const index = selectedIndex.get();
+                return isValidIndex(index, options.size())
+                           ? options[static_cast<std::size_t>(index)].label
+                           : placeholder;
+            },
             .font = style.labelFont,
-            .color = *labelAnim,
+            .color = [labelAnim] {
+                return labelAnim();
+            },
             .horizontalAlignment = HorizontalAlignment::Leading,
             .verticalAlignment = VerticalAlignment::Center,
             .wrapping = TextWrapping::NoWrap,
@@ -614,51 +633,67 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
             std::vector<Element> triggerTextChildren;
             triggerTextChildren.reserve(2);
             triggerTextChildren.emplace_back(Text {
-                .text = currentOption ? currentOption->label : placeholder,
+                .text = [selectedIndex = selectedIndex, options = options, placeholder = placeholder] {
+                    int const index = selectedIndex.get();
+                    return isValidIndex(index, options.size())
+                               ? options[static_cast<std::size_t>(index)].label
+                               : placeholder;
+                },
                 .font = style.labelFont,
-                .color = *labelAnim,
+                .color = [labelAnim] {
+                    return labelAnim();
+                },
                 .horizontalAlignment = HorizontalAlignment::Leading,
                 .verticalAlignment = VerticalAlignment::Center,
                 .wrapping = TextWrapping::Wrap,
             });
             triggerTextChildren.emplace_back(Text {
-                .text = currentOption->detail,
+                .text = [selectedIndex = selectedIndex, options = options] {
+                    int const index = selectedIndex.get();
+                    return isValidIndex(index, options.size())
+                               ? options[static_cast<std::size_t>(index)].detail
+                               : std::string {};
+                },
                 .font = style.detailFont,
-                .color = *detailAnim,
+                .color = [detailAnim] {
+                    return detailAnim();
+                },
                 .horizontalAlignment = HorizontalAlignment::Leading,
                 .verticalAlignment = VerticalAlignment::Center,
                 .wrapping = TextWrapping::Wrap,
                 .maxLines = 2,
             });
             triggerTextBlock = VStack {
-                .spacing = theme.space1 * 0.5f,
+                .spacing = theme().space1 * 0.5f,
                 .alignment = Alignment::Start,
                 .children = std::move(triggerTextChildren),
             };
         }
 
         Element trigger = HStack {
-            .spacing = theme.space1,
+            .spacing = theme().space1,
             .alignment = Alignment::Center,
             .children = children(
                 std::move(triggerTextBlock).flex(triggerMode == SelectTriggerMode::Field ? 1.f : 0.f, 1.f),
                 Icon {
                     .name = open ? IconName::KeyboardArrowUp : IconName::KeyboardArrowDown,
                     .size = 18.f,
-                    .color = *chevronAnim,
+                    .color = [chevronAnim] {
+                        return chevronAnim();
+                    },
                 }
             )
         };
 
         if (triggerMode == SelectTriggerMode::Link) {
-            bool const keyboardFocused = useKeyboardFocus();
-            StrokeStyle const focusStroke =
-                !isDisabled && focused && keyboardFocused ? StrokeStyle::solid(theme.keyboardFocusIndicatorColor, 2.f) : StrokeStyle::none();
             return std::move(trigger)
                 .padding(0.f, 3.f, 0.f, 3.f)
                 .fill(FillStyle::none())
-                .stroke(focusStroke)
-                .cornerRadius(CornerRadius {theme.radiusXSmall})
+                .stroke([focused, isDisabled, theme] {
+                    return !isDisabled && focused.get() ? StrokeStyle::solid(theme().keyboardFocusIndicatorColor, 2.f)
+                                                        : StrokeStyle::none();
+                })
+                .cornerRadius(CornerRadius {theme().radiusXSmall})
                 .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
                 .focusable(!isDisabled)
                 .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})
@@ -667,9 +702,14 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
 
         Element fieldTrigger = std::move(trigger)
             .padding(fieldVerticalPadding, fieldHorizontalPadding, fieldVerticalPadding, fieldHorizontalPadding)
-            .fill(FillStyle::solid(*fillAnim))
-            .stroke((focused || open) && !isDisabled ? StrokeStyle::solid(fieldChrome.borderFocusColor, fieldChrome.borderFocusWidth) :
-                                                       StrokeStyle::solid(fieldChrome.borderColor, fieldChrome.borderWidth))
+            .fill([fillAnim] {
+                return fillAnim();
+            })
+            .stroke([focused, open, isDisabled, fieldChrome] {
+                return (focused.get() || open) && !isDisabled
+                           ? StrokeStyle::solid(fieldChrome.borderFocusColor, fieldChrome.borderFocusWidth)
+                           : StrokeStyle::solid(fieldChrome.borderColor, fieldChrome.borderWidth);
+            })
             .cornerRadius(CornerRadius {fieldChrome.cornerRadius})
             .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
             .focusable(!isDisabled)
@@ -689,10 +729,10 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
 } // namespace
 
 Element Select::body() const {
-    Theme const &theme = useEnvironment<Theme>();
-    SelectResolvedStyle const resolved = resolveStyle(style, theme);
+    auto theme = useEnvironment<ThemeKey>();
+    SelectResolvedStyle const resolved = resolveStyle(style, theme());
 
-    State<int> const selection = selectedIndex.signal ? selectedIndex : useState<int>(-1);
+    Signal<int> const selection = selectedIndex;
     Element field = SelectTrigger {
         .selectedIndex = selection,
         .options = options,
@@ -714,14 +754,14 @@ Element Select::body() const {
     }
 
     return VStack {
-        .spacing = theme.space1,
+        .spacing = theme().space1,
         .alignment = Alignment::Start,
         .children = children(
             std::move(field),
             Text {
                 .text = helperText,
                 .font = resolved.detailFont,
-                .color = disabled ? theme.disabledTextColor : theme.secondaryLabelColor,
+                .color = disabled ? theme().disabledTextColor : theme().secondaryLabelColor,
                 .horizontalAlignment = HorizontalAlignment::Leading,
                 .wrapping = TextWrapping::Wrap,
             }

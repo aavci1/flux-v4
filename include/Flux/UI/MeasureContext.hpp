@@ -2,10 +2,11 @@
 
 /// \file Flux/UI/MeasureContext.hpp
 ///
-/// Context for \ref Element::measure during retained-scene rebuilds.
+/// Context for \ref Element::measure during retained-scene layout.
 
 #include <Flux/Core/ComponentKey.hpp>
 #include <Flux/UI/Detail/TraversalContext.hpp>
+#include <Flux/UI/EnvironmentBinding.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 
 #include <cstddef>
@@ -17,15 +18,16 @@ class TextSystem;
 class Element;
 namespace detail {
 struct ElementModifiers;
-class MeasureLayoutCache;
 }
 
 class MeasureContext {
 public:
-  explicit MeasureContext(TextSystem& ts, detail::MeasureLayoutCache* layoutCache = nullptr);
+  explicit MeasureContext(TextSystem& ts, EnvironmentBinding environment = {});
   ~MeasureContext();
 
   TextSystem& textSystem();
+  EnvironmentBinding const& environmentBinding() const noexcept { return environmentBinding_; }
+  void setEnvironmentBinding(EnvironmentBinding environment) { environmentBinding_ = std::move(environment); }
 
   LayoutConstraints const& constraints() const;
   LayoutHints const& hints() const;
@@ -49,15 +51,11 @@ public:
   void setMeasurementRootKey(ComponentKey key);
   void clearMeasurementRootKey() noexcept;
 
-  void beginCompositeBodySubtree(ComponentKey compositeKey);
-  bool consumeCompositeBodySubtreeRootSkip();
-
   void pushCompositeKeyTail(ComponentKey const& compositeKey);
   void popCompositeKeyTail();
 
   void setCurrentElement(Element const* el) noexcept { currentElement_ = el; }
   [[nodiscard]] Element const* currentElement() const noexcept { return currentElement_; }
-  [[nodiscard]] detail::MeasureLayoutCache* layoutCache() const noexcept { return layoutCache_; }
 
 #ifndef NDEBUG
   std::size_t debugConstraintStackDepth() const noexcept { return traversal_.debugFrameDepth(); }
@@ -70,9 +68,25 @@ public:
 
 protected:
   TextSystem& textSystem_;
+  EnvironmentBinding environmentBinding_;
   detail::TraversalContext traversal_{};
   Element const* currentElement_{nullptr};
-  detail::MeasureLayoutCache* layoutCache_ = nullptr;
 };
 
+namespace detail {
+
+MeasureContext* currentMeasureContext() noexcept;
+
+class CurrentMeasureContextScope {
+public:
+  explicit CurrentMeasureContextScope(MeasureContext& ctx) noexcept;
+  CurrentMeasureContextScope(CurrentMeasureContextScope const&) = delete;
+  CurrentMeasureContextScope& operator=(CurrentMeasureContextScope const&) = delete;
+  ~CurrentMeasureContextScope();
+
+private:
+  MeasureContext* previous_ = nullptr;
+};
+
+} // namespace detail
 } // namespace flux

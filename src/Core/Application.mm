@@ -35,10 +35,6 @@ bool signalBridgeApplicationHasInstance() {
   return Application::hasInstance();
 }
 
-void signalBridgeMarkReactiveDirty() {
-  Application::instance().markReactiveDirty();
-}
-
 } // namespace detail
 
 namespace {
@@ -69,8 +65,6 @@ struct Application::Impl {
   void* iconFont_ = nullptr;
 
   bool quit_ = false;
-  bool reactiveDirty_ = false;
-
   struct NextFrameEntry {
     std::uint64_t id = 0;
     std::function<void()> callback;
@@ -183,8 +177,8 @@ Application::Application(int /*argc*/, char** /*argv*/) {
 
   [NSApplication sharedApplication];
   [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
-
   AnimationClock::instance().install(d->eventQueue_);
+
 }
 
 Application::~Application() {
@@ -246,13 +240,6 @@ void Application::unobserveNextFrame(ObserverHandle handle) {
   std::erase_if(d->nextFrame_, [&](Impl::NextFrameEntry const& e) { return e.id == handle.id; });
 }
 
-void Application::markReactiveDirty() {
-  d->reactiveDirty_ = true;
-  if (!isMainThread()) {
-    wakeEventLoop();
-  }
-}
-
 bool Application::isMainThread() const noexcept {
   return d && d->mainThreadId_ == std::this_thread::get_id();
 }
@@ -290,19 +277,18 @@ void Application::requestWindowRedraw(unsigned int handle) {
     d->pendingAdoptRedraws_.insert(handle);
     return;
   }
+  bool const alreadyRequested = stateIt->second.redrawRequested;
   stateIt->second.redrawRequested = true;
-  windowIt->second->platformWindow()->requestAnimationFrame();
-  if (!isMainThread()) {
+  if (!alreadyRequested) {
+    windowIt->second->platformWindow()->requestAnimationFrame();
+  }
+  if (!alreadyRequested && !isMainThread()) {
     wakeEventLoop();
   }
 }
 
-void Application::processReactiveUpdates() {
+void Application::processFrameCallbacks() {
   debug::perf::ScopedTimer perfTimer(debug::perf::TimedMetric::ProcessReactiveUpdates);
-  if (!d->reactiveDirty_) {
-    return;
-  }
-  d->reactiveDirty_ = false;
   for (auto& e : d->nextFrame_) {
     if (e.callback) {
       e.callback();
@@ -357,7 +343,7 @@ void Application::presentRequestedWindows(bool requireFrameReady, bool keepFrame
 }
 
 void Application::flushRedraw() {
-  processReactiveUpdates();
+  processFrameCallbacks();
   presentRequestedWindows(false, AnimationClock::instance().needsFramePump());
 }
 
@@ -402,14 +388,11 @@ int Application::exec() {
       }
     }
 
-    processReactiveUpdates();
+    processFrameCallbacks();
 
     presentRequestedWindows(true, AnimationClock::instance().needsFramePump());
 
     int timeoutMs = d->nextTimerTimeoutMs();
-    if (d->reactiveDirty_) {
-      timeoutMs = 0;
-    }
     if (!d->windows_.empty()) {
       d->windows_[0]->platformWindow()->waitForEvents(timeoutMs);
     } else {

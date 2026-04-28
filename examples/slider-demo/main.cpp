@@ -65,7 +65,10 @@ Element makeSectionCard(Theme const &theme, std::string title, std::string capti
     };
 }
 
-Element labeledSlider(Theme const &theme, std::string label, std::string valueText, State<float> value,
+Element labeledSlider(Theme const &theme,
+                      std::string label,
+                      Bindable<std::string> valueText,
+                      Signal<float> value,
                       float min, float max, float step, Slider::Style style = {}) {
     return VStack {
         .spacing = theme.space2,
@@ -101,7 +104,7 @@ constexpr float kChannelScale = 1.f / 255.f;
 
 struct SliderDemoRoot {
     Element body() const {
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<ThemeKey>();
 
         auto red = useState(90.f);
         auto green = useState(120.f);
@@ -109,10 +112,16 @@ struct SliderDemoRoot {
         auto volume = useState(68.f);
         auto scrubber = useState(42.f);
 
-        Color const preview = Color {*red * kChannelScale, *green * kChannelScale, *blue * kChannelScale, 1.f};
+        Bindable<Color> preview {[red, green, blue] {
+            return Color {red() * kChannelScale, green() * kChannelScale, blue() * kChannelScale, 1.f};
+        }};
+        Bindable<Color> previewTextColor {[red, green, blue] {
+            Color const color {red() * kChannelScale, green() * kChannelScale, blue() * kChannelScale, 1.f};
+            return luminance(color) > 0.55f ? Color::primary() : Color::accentForeground();
+        }};
 
         Element page = Element {VStack {
-                                    .spacing = theme.space4,
+                                    .spacing = theme().space4,
                                     .children = children(
                                         Text {
                                             .text = "Slider Demo",
@@ -128,52 +137,66 @@ struct SliderDemoRoot {
                                             .wrapping = TextWrapping::Wrap,
                                         },
                                         makeSectionCard(
-                                            theme, "RGB Mixer",
+                                            theme(), "RGB Mixer",
                                             "A slider should feel at home in a composed panel, not just as a lone horizontal line.",
                                             VStack {
-                                                .spacing = theme.space3,
+                                                .spacing = theme().space3,
                                                 .children = children(
                                                     ZStack {
                                                         .horizontalAlignment = Alignment::Center,
                                                         .verticalAlignment = Alignment::Center,
                                                         .children = children(
                                                             Rectangle {}
-                                                                .fill(FillStyle::solid(preview))
+                                                                .fill(preview)
                                                                 .stroke(StrokeStyle::solid(Color::opaqueSeparator(), 1.f))
                                                                 .height(150.f)
-                                                                .cornerRadius(CornerRadius {theme.radiusLarge})
+                                                                .cornerRadius(CornerRadius {theme().radiusLarge})
                                                                 .flex(1.f, 1.f, 0.f),
                                                             Text {
-                                                                .text = fmtHex(*red, *green, *blue),
+                                                                .text = [red, green, blue] {
+                                                                    return fmtHex(red(), green(), blue());
+                                                                },
                                                                 .font = Font::title2(),
-                                                                .color = luminance(preview) > 0.55f ? Color::primary() : Color::accentForeground(),
+                                                                .color = previewTextColor,
                                                                 .horizontalAlignment = HorizontalAlignment::Center,
                                                                 .verticalAlignment = VerticalAlignment::Center,
                                                             }
                                                         )
                                                     },
-                                                    labeledSlider(theme, "Red", fmtInt(*red), red, 0.f, 255.f, 1.f,
+                                                    labeledSlider(theme(), "Red", [red] {
+                                                        return fmtInt(red());
+                                                    }, red, 0.f, 255.f, 1.f,
                                                                   Slider::Style {.activeColor = Color::danger()}),
-                                                    labeledSlider(theme, "Green", fmtInt(*green), green, 0.f, 255.f, 1.f,
+                                                    labeledSlider(theme(), "Green", [green] {
+                                                        return fmtInt(green());
+                                                    }, green, 0.f, 255.f, 1.f,
                                                                   Slider::Style {.activeColor = Color::success()}),
-                                                    labeledSlider(theme, "Blue", fmtInt(*blue), blue, 0.f, 255.f, 1.f,
+                                                    labeledSlider(theme(), "Blue", [blue] {
+                                                        return fmtInt(blue());
+                                                    }, blue, 0.f, 255.f, 1.f,
                                                                   Slider::Style {.activeColor = Color::accent()})
                                                 )
                                             }
                                         ),
                                         makeSectionCard(
-                                            theme, "Media Scrubber",
+                                            theme(), "Media Scrubber",
                                             "The same primitive can read as a playback control when the surrounding layout explains what the value means.",
                                             VStack {
-                                                .spacing = theme.space3,
+                                                .spacing = theme().space3,
                                                 .children = children(
                                                     HStack {
-                                                        .spacing = theme.space2,
+                                                        .spacing = theme().space2,
                                                         .alignment = Alignment::Center,
                                                         .children = children(
                                                             Text {.text = "Playback position", .font = Font::headline(), .color = Color::primary()},
                                                             Spacer {},
-                                                            Text {.text = fmtMinutes(*scrubber), .font = Font::headline(), .color = Color::secondary()}
+                                                            Text {
+                                                                .text = [scrubber] {
+                                                                    return fmtMinutes(scrubber());
+                                                                },
+                                                                .font = Font::headline(),
+                                                                .color = Color::secondary(),
+                                                            }
                                                         )
                                                     },
                                                     Slider {
@@ -196,20 +219,41 @@ struct SliderDemoRoot {
                                                 )
                                             }
                                         ),
-                                        makeSectionCard(theme, "Compact Controls", "Sliders also work well in shorter utility rows when the value is the main feedback.", VStack {.spacing = theme.space2, .children = children(labeledSlider(theme, "Volume", fmtPercent(*volume), volume, 0.f, 100.f, 1.f, Slider::Style {
-                                                                                                                                                                                                                                                                                                                 .activeColor = Color::success(),
-                                                                                                                                                                                                                                                                                                                 .trackHeight = 4.f,
-                                                                                                                                                                                                                                                                                                                 .thumbSize = 16.f,
-                                                                                                                                                                                                                                                                                                             }),
-                                                                                                                                                                                                                                Text {
-                                                                                                                                                                                                                                    .text = "The minimum-value fill workaround stays in place here to avoid the zero-width rendering bug you called out.",
-                                                                                                                                                                                                                                    .font = Font::footnote(),
-                                                                                                                                                                                                                                    .color = Color::tertiary(),
-                                                                                                                                                                                                                                    .wrapping = TextWrapping::Wrap,
-                                                                                                                                                                                                                                })})
+                                        makeSectionCard(
+                                            theme(),
+                                            "Compact Controls",
+                                            "Sliders also work well in shorter utility rows when the value is the main feedback.",
+                                            VStack {
+                                                .spacing = theme().space2,
+                                                .children = children(
+                                                    labeledSlider(
+                                                        theme(),
+                                                        "Volume",
+                                                        [volume] {
+                                                            return fmtPercent(volume());
+                                                        },
+                                                        volume,
+                                                        0.f,
+                                                        100.f,
+                                                        1.f,
+                                                        Slider::Style {
+                                                            .activeColor = Color::success(),
+                                                            .trackHeight = 4.f,
+                                                            .thumbSize = 16.f,
+                                                        }
+                                                    ),
+                                                    Text {
+                                                        .text = "The minimum-value fill workaround stays in place here to avoid the zero-width rendering bug you called out.",
+                                                        .font = Font::footnote(),
+                                                        .color = Color::tertiary(),
+                                                        .wrapping = TextWrapping::Wrap,
+                                                    }
+                                                )
+                                            }
+                                        )
                                     )
                                 }}
-                           .padding(theme.space5);
+                           .padding(theme().space5);
 
         return ScrollView {
             .axis = ScrollAxis::Vertical,

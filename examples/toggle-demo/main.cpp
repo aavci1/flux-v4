@@ -78,7 +78,10 @@ Element settingRow(Theme const &theme, std::string title, std::string detail, El
         .cornerRadius(CornerRadius {theme.radiusMedium});
 }
 
-Element metricTile(Theme const &theme, std::string value, std::string label, Color accent) {
+Element metricTile(Theme const &theme,
+                   Bindable<std::string> value,
+                   std::string label,
+                   Bindable<Color> accent) {
     return VStack {
         .spacing = theme.space1,
         .alignment = Alignment::Start,
@@ -105,7 +108,7 @@ Element metricTile(Theme const &theme, std::string value, std::string label, Col
 
 struct ToggleDemoRoot {
     Element body() const {
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<ThemeKey>();
 
         auto wifiEnabled = useState(true);
         auto bluetoothEnabled = useState(false);
@@ -114,14 +117,17 @@ struct ToggleDemoRoot {
         auto compactEnabled = useState(false);
         auto greenAccent = useState(true);
 
-        int const enabledCount = static_cast<int>(*wifiEnabled) + static_cast<int>(*bluetoothEnabled) +
-                                 static_cast<int>(*syncEnabled) + static_cast<int>(*notificationsEnabled);
+        Bindable<std::string> enabledCount {[wifiEnabled, bluetoothEnabled, syncEnabled, notificationsEnabled] {
+            int const count = static_cast<int>(wifiEnabled()) + static_cast<int>(bluetoothEnabled()) +
+                              static_cast<int>(syncEnabled()) + static_cast<int>(notificationsEnabled());
+            return std::to_string(count);
+        }};
 
         return ScrollView {
             .axis = ScrollAxis::Vertical,
             .children = children(
                 VStack {
-                    .spacing = theme.space4,
+                    .spacing = theme().space4,
                     .children = children(
                         Text {
                             .text = "Toggle Demo",
@@ -135,13 +141,13 @@ struct ToggleDemoRoot {
                             .wrapping = TextWrapping::Wrap,
                         },
                         makeSectionCard(
-                            theme, "Preferences",
+                            theme(), "Preferences",
                             "Toggles work best in quiet settings rows where the label carries the meaning and the switch only answers yes or no.",
                             VStack {
-                                .spacing = theme.space2,
+                                .spacing = theme().space2,
                                 .children = children(
                                     settingRow(
-                                        theme, "Wi-Fi", "Keep the workspace online for syncing and collaboration.",
+                                        theme(), "Wi-Fi", "Keep the workspace online for syncing and collaboration.",
                                         Toggle {
                                             .value = wifiEnabled,
                                             .onChange = [](bool v) {
@@ -149,39 +155,106 @@ struct ToggleDemoRoot {
                                             },
                                         }
                                     ),
-                                    settingRow(theme, "Bluetooth", "Enable accessory pairing for keyboards, trackpads, and audio.", Toggle {
-                                                                                                                                        .value = bluetoothEnabled,
-                                                                                                                                        .onChange = [](bool v) {
-                                                                                                                                            std::fprintf(stderr, "[toggle-demo] Bluetooth -> %s\n", v ? "on" : "off");
-                                                                                                                                        },
-                                                                                                                                    }),
-                                    settingRow(theme, "Background sync", "This row is intentionally disabled to show the non-interactive state.", Toggle {
-                                                                                                                                                      .value = syncEnabled,
-                                                                                                                                                      .disabled = true,
-                                                                                                                                                  }),
-                                    settingRow(theme, "Notifications", "Promote status changes without pushing users into a modal flow.", Toggle {
-                                                                                                                                              .value = notificationsEnabled,
-                                                                                                                                              .onChange = [](bool v) {
-                                                                                                                                                  std::fprintf(stderr, "[toggle-demo] Notifications -> %s\n", v ? "on" : "off");
-                                                                                                                                              },
-                                                                                                                                          })
+                                    settingRow(
+                                        theme(),
+                                        "Bluetooth",
+                                        "Enable accessory pairing for keyboards, trackpads, and audio.",
+                                        Toggle {
+                                            .value = bluetoothEnabled,
+                                            .onChange = [](bool v) {
+                                                std::fprintf(stderr, "[toggle-demo] Bluetooth -> %s\n", v ? "on" : "off");
+                                            },
+                                        }
+                                    ),
+                                    settingRow(
+                                        theme(),
+                                        "Background sync",
+                                        "This row is intentionally disabled to show the non-interactive state.",
+                                        Toggle {
+                                            .value = syncEnabled,
+                                            .disabled = true,
+                                        }
+                                    ),
+                                    settingRow(
+                                        theme(),
+                                        "Notifications",
+                                        "Promote status changes without pushing users into a modal flow.",
+                                        Toggle {
+                                            .value = notificationsEnabled,
+                                            .onChange = [](bool v) {
+                                                std::fprintf(stderr, "[toggle-demo] Notifications -> %s\n", v ? "on" : "off");
+                                            },
+                                        }
+                                    )
                                 ),
                             }
                         ),
-                        makeSectionCard(theme, "States", "A small summary helps show the control in a real context instead of as an isolated widget.", HStack {.spacing = theme.space3, .alignment = Alignment::Stretch, .children = children(metricTile(theme, std::to_string(enabledCount), "Enabled settings", Color::accent()), metricTile(theme, *notificationsEnabled ? "Live" : "Quiet", "Notifications", *notificationsEnabled ? Color::success() : Color::warning()), metricTile(theme, *wifiEnabled ? "Online" : "Offline", "Connectivity", *wifiEnabled ? Color::success() : Color::secondary()))}), makeSectionCard(theme, "Styling", "Style tokens should support subtle variations without turning the control into a different component.", VStack {.spacing = theme.space2, .children = children(settingRow(theme, "Success accent", "Useful when a toggle implies a positive enabled state.", Toggle {
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 .value = greenAccent,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 .style = Toggle::Style {
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     .onColor = Color::success(),
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 },
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             }),
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               settingRow(theme, "Compact density", "A narrower track works for table rows and denser settings surfaces.", Toggle {
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               .value = compactEnabled,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               .style = Toggle::Style {
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   .trackWidth = 34.f,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   .trackHeight = 20.f,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   .thumbInset = 2.f,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               },
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           }))}),
+                        makeSectionCard(
+                            theme(),
+                            "States",
+                            "A small summary helps show the control in a real context instead of as an isolated widget.",
+                            HStack {
+                                .spacing = theme().space3,
+                                .alignment = Alignment::Stretch,
+                                .children = children(
+                                    metricTile(theme(), enabledCount, "Enabled settings", Color::accent()),
+                                    metricTile(
+                                        theme(),
+                                        [notificationsEnabled] {
+                                            return notificationsEnabled() ? "Live" : "Quiet";
+                                        },
+                                        "Notifications",
+                                        [notificationsEnabled] {
+                                            return notificationsEnabled() ? Color::success() : Color::warning();
+                                        }
+                                    ),
+                                    metricTile(
+                                        theme(),
+                                        [wifiEnabled] {
+                                            return wifiEnabled() ? "Online" : "Offline";
+                                        },
+                                        "Connectivity",
+                                        [wifiEnabled] {
+                                            return wifiEnabled() ? Color::success() : Color::secondary();
+                                        }
+                                    )
+                                )
+                            }
+                        ),
+                        makeSectionCard(
+                            theme(),
+                            "Styling",
+                            "Style tokens should support subtle variations without turning the control into a different component.",
+                            VStack {
+                                .spacing = theme().space2,
+                                .children = children(
+                                    settingRow(
+                                        theme(),
+                                        "Success accent",
+                                        "Useful when a toggle implies a positive enabled state.",
+                                        Toggle {
+                                            .value = greenAccent,
+                                            .style = Toggle::Style {
+                                                .onColor = Color::success(),
+                                            },
+                                        }
+                                    ),
+                                    settingRow(
+                                        theme(),
+                                        "Compact density",
+                                        "A narrower track works for table rows and denser settings surfaces.",
+                                        Toggle {
+                                            .value = compactEnabled,
+                                            .style = Toggle::Style {
+                                                .trackWidth = 34.f,
+                                                .trackHeight = 20.f,
+                                                .thumbInset = 2.f,
+                                            },
+                                        }
+                                    )
+                                )
+                            }
+                        ),
                         Text {
                             .text = "Try keyboard focus as well: Tab to a toggle, then use Space or Return.",
                             .font = Font::footnote(),
@@ -191,7 +264,7 @@ struct ToggleDemoRoot {
                         }
                     )
                 } //
-                    .padding(theme.space5)
+                    .padding(theme().space5)
             )
         };
     }

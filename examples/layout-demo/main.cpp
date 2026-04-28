@@ -8,6 +8,7 @@
 #include <Flux/UI/Views/ScrollView.hpp>
 #include <Flux/UI/Views/Select.hpp>
 #include <Flux/UI/Views/Spacer.hpp>
+#include <Flux/UI/Views/Switch.hpp>
 #include <Flux/UI/Views/Text.hpp>
 #include <Flux/UI/Views/VStack.hpp>
 #include <Flux/UI/Views/ZStack.hpp>
@@ -157,7 +158,7 @@ JustifyContent justifyContentFromIndex(int index) {
     }
 }
 
-Element makeJustifyControl(Theme const &theme, std::string label, State<int> selection,
+Element makeJustifyControl(Theme const &theme, std::string label, Signal<int> selection,
                            std::vector<SelectOption> options) {
     return VStack {
         .spacing = theme.space1,
@@ -221,6 +222,10 @@ Element makeVStackJustifyPlaygroundPreview(Theme const &theme, Alignment alignme
         ),
     }
         .size(0.f, 188.f);
+}
+
+int justifyPreviewKey(int axisIndex, int alignmentIndex, int justifyIndex) {
+    return axisIndex * 100 + alignmentIndex * 10 + justifyIndex;
 }
 
 Element makeVStackDemo(Theme const &theme) {
@@ -590,33 +595,56 @@ Element makeMixedCompositionDemo(Theme const &theme) {
 
 struct JustifyPlaygroundSection {
     Element body() const {
-        Theme const &theme = useEnvironment<Theme>();
-        State<int> const axisIndex = useState<int>(0);
-        State<int> const alignmentIndex = useState<int>(1);
-        State<int> const justifyIndex = useState<int>(4);
+        auto theme = useEnvironment<ThemeKey>();
+        Signal<int> const axisIndex = useState<int>(0);
+        Signal<int> const alignmentIndex = useState<int>(1);
+        Signal<int> const justifyIndex = useState<int>(4);
 
-        Alignment const alignment = stackAlignmentFromIndex(*alignmentIndex);
-        JustifyContent const justifyContent = justifyContentFromIndex(*justifyIndex);
-        Element preview = *axisIndex == 0 ? makeHStackJustifyPlaygroundPreview(theme, alignment, justifyContent)
-                                          : makeVStackJustifyPlaygroundPreview(theme, alignment, justifyContent);
+        std::vector<SwitchCase<int>> previewCases;
+        previewCases.reserve(48);
+        for (int axis = 0; axis < 2; ++axis) {
+            for (int alignment = 0; alignment < 4; ++alignment) {
+                for (int justify = 0; justify < 6; ++justify) {
+                    previewCases.push_back(Case(
+                        justifyPreviewKey(axis, alignment, justify),
+                        [theme, axis, alignment, justify] {
+                            Alignment const resolvedAlignment = stackAlignmentFromIndex(alignment);
+                            JustifyContent const resolvedJustify = justifyContentFromIndex(justify);
+                            return axis == 0
+                                       ? makeHStackJustifyPlaygroundPreview(theme(), resolvedAlignment, resolvedJustify)
+                                       : makeVStackJustifyPlaygroundPreview(theme(), resolvedAlignment, resolvedJustify);
+                        }));
+                }
+            }
+        }
+
+        Element preview = Element {Switch(
+            [axisIndex, alignmentIndex, justifyIndex] {
+                return justifyPreviewKey(axisIndex(), alignmentIndex(), justifyIndex());
+            },
+            std::move(previewCases))};
 
         return makeSectionCard(
-            theme, "Justify Content",
+            theme(), "Justify Content",
             "Use the selects to switch between HStack and VStack, cross-axis alignment, and flexbox-like justify-content behavior in one preview.",
             VStack {
-                .spacing = theme.space3,
+                .spacing = theme().space3,
                 .alignment = Alignment::Stretch,
                 .children = children(
-                    makeJustifyControl(theme, "Axis", axisIndex, stackAxisOptions()),
-                    makeJustifyControl(theme, "Alignment", alignmentIndex, stackAlignmentOptions()),
-                    makeJustifyControl(theme, "Justify", justifyIndex, justifyContentOptions()),
+                    makeJustifyControl(theme(), "Axis", axisIndex, stackAxisOptions()),
+                    makeJustifyControl(theme(), "Alignment", alignmentIndex, stackAlignmentOptions()),
+                    makeJustifyControl(theme(), "Justify", justifyIndex, justifyContentOptions()),
                     VStack {
-                        .spacing = theme.space2,
+                        .spacing = theme().space2,
                         .alignment = Alignment::Stretch,
                         .children = children(
                             Text {
-                                .text = stackAxisLabel(*axisIndex) + " using " + stackAlignmentLabel(*alignmentIndex) +
-                                        " alignment and " + justifyContentLabel(*justifyIndex) + " distribution.",
+                                .text = [axisIndex, alignmentIndex, justifyIndex] {
+                                    return stackAxisLabel(axisIndex()) + " using " +
+                                           stackAlignmentLabel(alignmentIndex()) +
+                                           " alignment and " + justifyContentLabel(justifyIndex()) +
+                                           " distribution.";
+                                },
                                 .font = Font::footnote(),
                                 .color = Color::secondary(),
                                 .horizontalAlignment = HorizontalAlignment::Leading,
@@ -625,9 +653,9 @@ struct JustifyPlaygroundSection {
                             std::move(preview)
                         )
                     }
-                        .padding(theme.space3)
+                        .padding(theme().space3)
                         .fill(FillStyle::solid(Color::windowBackground()))
-                        .cornerRadius(CornerRadius {theme.radiusMedium})
+                        .cornerRadius(CornerRadius {theme().radiusMedium})
                 )
             }
         );
@@ -720,13 +748,13 @@ Element makeFlexBasisDemo(Theme const &theme) {
 
 struct StackDemoRoot {
     Element body() const {
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<ThemeKey>();
 
         return ScrollView {
             .axis = ScrollAxis::Vertical,
             .children = children(
                 VStack {
-                    .spacing = theme.space4,
+                    .spacing = theme().space4,
                     .alignment = Alignment::Start,
                     .children = children(
                         Text {
@@ -743,16 +771,16 @@ struct StackDemoRoot {
                             .horizontalAlignment = HorizontalAlignment::Leading,
                             .wrapping = TextWrapping::Wrap,
                         },
-                        makeVStackDemo(theme),
-                        makeHStackDemo(theme),
-                        makeZStackDemo(theme),
-                        makeGridDemo(theme),
-                        makeMixedCompositionDemo(theme),
+                        makeVStackDemo(theme()),
+                        makeHStackDemo(theme()),
+                        makeZStackDemo(theme()),
+                        makeGridDemo(theme()),
+                        makeMixedCompositionDemo(theme()),
                         Element {JustifyPlaygroundSection {}},
-                        makeFlexBasisDemo(theme)
+                        makeFlexBasisDemo(theme())
                     )
                 } //
-                    .padding(theme.space5)
+                    .padding(theme().space5)
             )
         } //
             .fill(FillStyle::solid(Color::windowBackground()));

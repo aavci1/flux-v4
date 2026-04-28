@@ -1,24 +1,26 @@
 #pragma once
 
 #include <Flux/Core/Application.hpp>
+#include <Flux/Core/Clipboard.hpp>
+#include <Flux/Core/KeyCodes.hpp>
 #include <Flux/Core/Types.hpp>
 #include <Flux/Graphics/AttributedString.hpp>
 #include <Flux/Graphics/Font.hpp>
 #include <Flux/Graphics/TextLayoutOptions.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
 #include <Flux/UI/Element.hpp>
-#include <Flux/UI/StateStore.hpp>
+#include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/ViewModifiers.hpp>
-#include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/Render.hpp>
-#include <Flux/UI/Views/SelectableTextSupport.hpp>
-#include <Flux/UI/Views/ZStack.hpp>
+#include <Flux/UI/Views/TextEditUtils.hpp>
 
 #include <algorithm>
 #include <bit>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -377,6 +379,160 @@ inline std::shared_ptr<flux::TextLayout const> resolveMarkdownLayout(MarkdownLay
     return layout;
 }
 
+struct SelectableMarkdownClickTracker {
+    flux::Point lastPoint {};
+    std::chrono::steady_clock::time_point lastClickAt {};
+    int clickCount = 0;
+};
+
+struct SelectableMarkdownState {
+    flux::detail::TextEditSelection selection {};
+    bool dragging = false;
+    SelectableMarkdownClickTracker clickTracker {};
+    flux::detail::TextEditLayoutResult layoutResult {};
+    std::string text;
+};
+
+inline bool selectableMarkdownHasMod(flux::Modifiers m, flux::Modifiers bit) noexcept {
+    return (static_cast<std::uint32_t>(m) & static_cast<std::uint32_t>(bit)) != 0;
+}
+
+inline bool selectableMarkdownCmdLike(flux::Modifiers m) noexcept {
+    return selectableMarkdownHasMod(m, flux::Modifiers::Meta) || selectableMarkdownHasMod(m, flux::Modifiers::Ctrl);
+}
+
+inline void markSelectableMarkdownDirty() {
+    if (!flux::Application::hasInstance()) {
+        return;
+    }
+    flux::Application::instance().requestRedraw();
+}
+
+inline void updateSelectableMarkdownLayout(
+    SelectableMarkdownState &state,
+    std::shared_ptr<flux::TextLayout const> layout,
+    std::string text,
+    float contentWidth
+) {
+    state.text = std::move(text);
+    state.layoutResult = flux::detail::makeTextEditLayoutResult(
+        std::move(layout),
+        static_cast<int>(state.text.size()),
+        contentWidth
+    );
+    state.selection = flux::detail::clampSelection(state.text, state.selection);
+}
+
+inline void copySelectableMarkdownSelection(SelectableMarkdownState const &state) {
+    if (!flux::Application::hasInstance()) {
+        return;
+    }
+    auto const [start, end] = state.selection.ordered();
+    if (start >= end || start < 0 || end > static_cast<int>(state.text.size())) {
+        return;
+    }
+    flux::Application::instance().clipboard().writeText(
+        state.text.substr(static_cast<std::size_t>(start), static_cast<std::size_t>(end - start))
+    );
+}
+
+inline int registerSelectableMarkdownClick(SelectableMarkdownClickTracker &tracker, flux::Point local) {
+    auto const now = std::chrono::steady_clock::now();
+    float const dx = local.x - tracker.lastPoint.x;
+    float const dy = local.y - tracker.lastPoint.y;
+    float const dist2 = dx * dx + dy * dy;
+    bool const chained = tracker.clickCount > 0 &&
+                         now - tracker.lastClickAt <= std::chrono::milliseconds(500) &&
+                         dist2 <= 36.f;
+    tracker.clickCount = chained ? tracker.clickCount + 1 : 1;
+    tracker.lastClickAt = now;
+    tracker.lastPoint = local;
+    return tracker.clickCount;
+}
+
+inline void handleSelectableMarkdownPointerDown(SelectableMarkdownState &state, flux::Point local) {
+    int const byte = flux::detail::caretByteAtPoint(state.layoutResult, local, state.text);
+    int const clickCount = registerSelectableMarkdownClick(state.clickTracker, local);
+    state.dragging = (clickCount == 1);
+    if (clickCount >= 3) {
+        state.selection = flux::detail::selectAllSelection(state.text);
+    } else if (clickCount == 2) {
+        state.selection = flux::detail::wordSelectionAtByte(state.text, byte);
+    } else {
+        state.selection = flux::detail::moveSelectionToByte(state.text, state.selection, byte, false);
+    }
+    markSelectableMarkdownDirty();
+}
+
+inline void handleSelectableMarkdownPointerDrag(SelectableMarkdownState &state, flux::Point local) {
+    if (!state.dragging) {
+        return;
+    }
+    int const byte = flux::detail::caretByteAtPoint(state.layoutResult, local, state.text);
+    state.selection = flux::detail::moveSelectionToByte(state.text, state.selection, byte, true);
+    markSelectableMarkdownDirty();
+}
+
+inline void handleSelectableMarkdownPointerUp(SelectableMarkdownState &state) {
+    state.dragging = false;
+}
+
+inline bool handleSelectableMarkdownKey(
+    SelectableMarkdownState &state,
+    flux::KeyCode key,
+    flux::Modifiers modifiers
+) {
+    bool const shift = selectableMarkdownHasMod(modifiers, flux::Modifiers::Shift);
+    bool const alt = selectableMarkdownHasMod(modifiers, flux::Modifiers::Alt);
+    bool const cmd = selectableMarkdownCmdLike(modifiers);
+
+    if (cmd && !shift && key == flux::keys::A) {
+        state.selection = flux::detail::selectAllSelection(state.text);
+        markSelectableMarkdownDirty();
+        return true;
+    }
+    if (cmd && !shift && key == flux::keys::C) {
+        copySelectableMarkdownSelection(state);
+        return true;
+    }
+    if (key == flux::keys::LeftArrow) {
+        state.selection = cmd ? flux::detail::moveSelectionToDocumentBoundary(state.text, state.selection, false, shift) :
+                         alt ? flux::detail::moveSelectionByWord(state.text, state.selection, -1, shift) :
+                               flux::detail::moveSelectionByChar(state.text, state.selection, -1, shift);
+        markSelectableMarkdownDirty();
+        return true;
+    }
+    if (key == flux::keys::RightArrow) {
+        state.selection = cmd ? flux::detail::moveSelectionToDocumentBoundary(state.text, state.selection, true, shift) :
+                         alt ? flux::detail::moveSelectionByWord(state.text, state.selection, 1, shift) :
+                               flux::detail::moveSelectionByChar(state.text, state.selection, 1, shift);
+        markSelectableMarkdownDirty();
+        return true;
+    }
+    if (key == flux::keys::Home) {
+        state.selection = flux::detail::moveSelectionToDocumentBoundary(state.text, state.selection, false, shift);
+        markSelectableMarkdownDirty();
+        return true;
+    }
+    if (key == flux::keys::End) {
+        state.selection = flux::detail::moveSelectionToDocumentBoundary(state.text, state.selection, true, shift);
+        markSelectableMarkdownDirty();
+        return true;
+    }
+    if ((key == flux::keys::UpArrow || key == flux::keys::DownArrow) && state.layoutResult.lines.size() > 1) {
+        int const caret = flux::detail::moveCaretVertically(
+            state.layoutResult,
+            state.text,
+            state.selection.caretByte,
+            key == flux::keys::UpArrow ? -1 : 1
+        );
+        state.selection = flux::detail::moveSelectionToByte(state.text, state.selection, caret, shift);
+        markSelectableMarkdownDirty();
+        return true;
+    }
+    return false;
+}
+
 } // namespace detail
 
 struct MarkdownText : flux::ViewModifiers<MarkdownText> {
@@ -430,85 +586,101 @@ struct MarkdownText : flux::ViewModifiers<MarkdownText> {
     }
 
     auto body() const {
-        flux::Theme const &theme = flux::useEnvironment<flux::Theme>();
-        flux::LayoutConstraints const *constraints = flux::useLayoutConstraints();
-        float const maxWidth =
-            constraints && std::isfinite(constraints->maxWidth) && constraints->maxWidth > 0.f ? constraints->maxWidth
-                                                                                                : 0.f;
-        std::shared_ptr<flux::TextLayout const> textLayout =
-            layoutForWidth(maxWidth, flux::Application::instance().textSystem());
-        std::vector<flux::Element> children;
-        std::shared_ptr<flux::detail::SelectableTextState> selectableState;
+        auto theme = flux::useEnvironment<flux::ThemeKey>();
+        auto selectableStateHandle =
+            flux::useState<std::shared_ptr<detail::SelectableMarkdownState>>(
+                std::make_shared<detail::SelectableMarkdownState>()
+            );
+        std::shared_ptr<detail::SelectableMarkdownState> selectableState =
+            selectable ? *selectableStateHandle : nullptr;
+        MarkdownText markdown = *this;
 
-        if (selectable && textLayout) {
-            flux::StateStore *store = flux::StateStore::current();
-            if (store) {
-                selectableState = flux::detail::selectableTextState(store->currentComponentKey());
-                MarkdownResolvedStyle const selectionStyle{
-                    .baseFont = baseFont,
-                    .boldFont = detail::markdownBoldFont(baseFont),
-                    .h1Font = h1Font,
-                    .h2Font = h2Font,
-                    .h3Font = h3Font,
-                    .codeFont = codeFont,
-                    .baseColor = baseColor,
-                    .codeBackground = codeBackground,
+        auto widthForConstraints = [markdown](flux::LayoutConstraints const &constraints) {
+            return std::isfinite(constraints.maxWidth) && constraints.maxWidth > 0.f ? constraints.maxWidth : 0.f;
+        };
+        auto layoutForFrame = [markdown](float width) {
+            return markdown.layoutForWidth(width, flux::Application::instance().textSystem());
+        };
+        auto updateSelectionLayout =
+            [markdown](detail::SelectableMarkdownState &state, std::shared_ptr<flux::TextLayout const> const &layout) {
+                MarkdownResolvedStyle const selectionStyle {
+                    .baseFont = markdown.baseFont,
+                    .boldFont = detail::markdownBoldFont(markdown.baseFont),
+                    .h1Font = markdown.h1Font,
+                    .h2Font = markdown.h2Font,
+                    .h3Font = markdown.h3Font,
+                    .codeFont = markdown.codeFont,
+                    .baseColor = markdown.baseColor,
+                    .codeBackground = markdown.codeBackground,
                 };
-                flux::AttributedString renderedText = detail::makeMarkdownAttributedString(text, selectionStyle);
-                flux::detail::updateSelectableTextLayout(*selectableState, textLayout, std::move(renderedText.utf8),
-                                                         textLayout->measuredSize.width);
-                if (selectableState->selection.hasSelection()) {
-                    flux::Color const resolvedSelectionColor =
-                        flux::resolveColor(selectionColor, theme.selectedContentBackgroundColor, theme);
-                    for (flux::Rect const &rect :
-                         flux::detail::selectionRects(selectableState->layoutResult, selectableState->selection,
-                                                      &selectableState->text, 0.f, 0.f)) {
-                        children.push_back(flux::Element{flux::Rectangle{}}
-                                               .fill(flux::FillStyle::solid(resolvedSelectionColor))
-                                               .size(rect.width, rect.height)
-                                               .position(rect.x, rect.y));
+                flux::AttributedString renderedText =
+                    detail::makeMarkdownAttributedString(markdown.text, selectionStyle);
+                detail::updateSelectableMarkdownLayout(
+                    state,
+                    layout,
+                    std::move(renderedText.utf8),
+                    layout ? layout->measuredSize.width : 0.f
+                );
+            };
+
+        flux::Element content = flux::Element{flux::Render{
+            .measureFn = [layoutForFrame, widthForConstraints](
+                             flux::LayoutConstraints const &constraints,
+                             flux::LayoutHints const &) {
+                std::shared_ptr<flux::TextLayout const> textLayout =
+                    layoutForFrame(widthForConstraints(constraints));
+                return textLayout ? textLayout->measuredSize : flux::Size {};
+            },
+            .draw = [layoutForFrame, selectableState, updateSelectionLayout, theme, selectionColor = selectionColor](
+                        flux::Canvas &canvas,
+                        flux::Rect frame) {
+                std::shared_ptr<flux::TextLayout const> textLayout = layoutForFrame(frame.width);
+                if (!textLayout) {
+                    return;
+                }
+
+                if (selectableState) {
+                    updateSelectionLayout(*selectableState, textLayout);
+                    if (selectableState->selection.hasSelection()) {
+                        flux::Color const resolvedSelectionColor =
+                            flux::resolveColor(selectionColor, theme().selectedContentBackgroundColor, theme());
+                        for (flux::Rect const &rect : flux::detail::selectionRects(
+                                 selectableState->layoutResult,
+                                 selectableState->selection,
+                                 &selectableState->text,
+                                 0.f,
+                                 0.f
+                             )) {
+                            canvas.drawRect(
+                                rect,
+                                flux::CornerRadius {},
+                                flux::FillStyle::solid(resolvedSelectionColor),
+                                flux::StrokeStyle::none()
+                            );
+                        }
                     }
                 }
-            }
-        }
 
-        if (textLayout) {
-            children.push_back(flux::Element{flux::Render{
-                                   .measureFn =
-                                       [textLayout](flux::LayoutConstraints const &, flux::LayoutHints const &) {
-                                           return textLayout ? textLayout->measuredSize : flux::Size{};
-                                       },
-                                   .draw =
-                                       [textLayout](flux::Canvas &canvas, flux::Rect) {
-                                           if (textLayout) {
-                                               canvas.drawTextLayout(*textLayout, flux::Point{});
-                                           }
-                                       },
-                                   .pure = true,
-                               }}
-                                   .size(textLayout->measuredSize.width, textLayout->measuredSize.height));
-        }
-
-        flux::Element content = flux::Element{flux::ZStack{
-            .horizontalAlignment = flux::Alignment::Start,
-            .verticalAlignment = flux::Alignment::Start,
-            .children = std::move(children),
+                canvas.drawTextLayout(*textLayout, flux::Point {});
+            },
+            .pure = !selectable,
         }};
+
         if (selectable && selectableState) {
             content = std::move(content)
                           .focusable(true)
                           .cursor(flux::Cursor::IBeam)
                           .onPointerDown([state = selectableState](flux::Point local) {
-                              flux::detail::handleSelectableTextPointerDown(*state, local);
+                              detail::handleSelectableMarkdownPointerDown(*state, local);
                           })
                           .onPointerMove([state = selectableState](flux::Point local) {
-                              flux::detail::handleSelectableTextPointerDrag(*state, local);
+                              detail::handleSelectableMarkdownPointerDrag(*state, local);
                           })
                           .onPointerUp([state = selectableState](flux::Point) {
-                              flux::detail::handleSelectableTextPointerUp(*state);
+                              detail::handleSelectableMarkdownPointerUp(*state);
                           })
                           .onKeyDown([state = selectableState](flux::KeyCode key, flux::Modifiers modifiers) {
-                              flux::detail::handleSelectableTextKey(*state, key, modifiers);
+                              detail::handleSelectableMarkdownKey(*state, key, modifiers);
                           });
         }
         return content;

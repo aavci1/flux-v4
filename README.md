@@ -1,41 +1,45 @@
-# Flux v4
+# Flux v5
 
-A small **C++23** application framework for **macOS** with a **Metal** 2D canvas, vector paths (tessellated via [libtess2](https://github.com/memononen/libtess2)), and **CoreText**-backed text layout and glyph rasterization. It also provides an optional **declarative UI** layer built on a retained **scene tree**, plus **reactive** primitives (`Signal`, `Computed`, `Animated`, transitions) coordinated with the main loop.
+Flux is a small **C++23** application framework for **macOS** with a **Metal** 2D canvas, vector paths tessellated through [libtess2](https://github.com/memononen/libtess2), CoreText-backed text layout, and a retained declarative UI layer.
+
+The v5 UI runtime mounts each view tree once, owns reactive state in scopes, and updates retained scene nodes through `Signal`, `Computed`, `Effect`, `Bindable`, animation handles, and reactive environment values.
 
 Linux desktop (Wayland/Vulkan) and embedded Linux (KMS/DRM) are reserved in CMake but not implemented yet.
 
 ## Build
 
-Requirements: **CMake 3.25+**, **Xcode command-line tools** (Metal compiler `xcrun metal`, `xxd` for embedded shader bytecode).
+Requirements: **CMake 3.25+**, **Xcode command-line tools** (`xcrun metal` and `xxd`).
 
 ```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DFLUX_BUILD_EXAMPLES=ON
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DFLUX_BUILD_TESTS=ON -DFLUX_BUILD_EXAMPLES=ON
 cmake --build build
+ctest --test-dir build --output-on-failure
 ```
 
-By default only the static `flux` library is built. Pass **`-DFLUX_BUILD_EXAMPLES=ON`** (as above) to build the sample executables below (each links `flux`):
+By default only the static `flux` library is built. Pass `-DFLUX_BUILD_EXAMPLES=ON` to build the sample executables.
 
-| Target | Description |
-|--------|-------------|
-| `hello_world` | Minimal window and `Application::exec()` |
-| `clock_demo` | Timers and canvas drawing |
-| `blend_demo` | Opacity and blend modes |
-| `text_demo` | `TextSystem`, `AttributedString`, `Canvas::drawTextLayout` |
-| `image_demo` | Loading and drawing `Image` from a file |
-| `reactive_demo` | `Signal` / `Computed` / `Animated` and observers |
-| `theme_demo` | Full native port of the Flux theme showcase: colors, typography, spacing, density, and component tokens |
-| `card_demo` | Declarative UI (`setView`), stacks, state hooks, animation |
+## Examples
 
-Configure-time options:
+Current example targets:
 
-- `FLUX_PLATFORM` — `AUTO` (default), `MACOS`, or reserved future values (`LINUX_WAYLAND`, `LINUX_KMS`).
-- `FLUX_ENABLE_DEFAULT_EVENT_LOGGING` — default **OFF**; set **ON** to print built-in `Application` event handlers to stdout (useful while debugging).
-- `FLUX_BUILD_EXAMPLES` — default **OFF**; set **ON** to build example executables under [`examples/CMakeLists.txt`](examples/CMakeLists.txt).
+`alert-demo`, `animation-demo`, `blend-demo`, `button-demo`, `card-demo`, `checkbox-demo`, `cursor-demo`, `hello-world`, `icon-demo`, `image-demo`, `lambda-studio`, `layout-demo`, `markdown-formatter-demo`, `popover-demo`, `reactive-demo`, `scene-graph-demo`, `scroll-demo`, `segmented-demo`, `select-demo`, `slider-demo`, `table-demo`, `text-demo`, `textinput-demo`, `theme-demo`, `toast-demo`, `toggle-demo`, `tooltip-demo`, `typography-demo`.
+
+## Options
+
+- `FLUX_PLATFORM` - `AUTO` (default), `MACOS`, or reserved future values (`LINUX_WAYLAND`, `LINUX_KMS`).
+- `FLUX_BUILD_TESTS` - default `OFF`; set `ON` to build unit and reactive tests.
+- `FLUX_BUILD_EXAMPLES` - default `OFF`; set `ON` to build examples.
+- `FLUX_BUILD_BENCHMARKS` - default `OFF`; set `ON` to build micro-benchmarks.
+- `FLUX_ENABLE_ASAN` - default `OFF`; set `ON` for AddressSanitizer builds.
+- `FLUX_ENABLE_DEFAULT_EVENT_LOGGING` - default `OFF`; set `ON` to print default `Application` event handlers.
+- `FLUX_V5_PROTOTYPE` - default `OFF`; builds the archived standalone prototype used during the v5 migration.
 
 ## Documentation
 
-- [Documentation index](docs/README.md) — table of contents for `docs/`.
-- [Conventions](docs/conventions.md) — layout, naming, pimpl, platform boundaries.
-- [Event queue](docs/event_queue.md) — `EventQueue`, dispatch order, timers, custom events.
+- [Documentation index](docs/README.md)
+- [Conventions](docs/conventions.md)
+- [Reactive graph](docs/reactive-graph.md)
+- [Migrating to v5](docs/migrating-to-v5.md)
+- [Final performance record](docs/v5-final-perf.md)
 
-Public API headers live under `include/Flux/`. The umbrella header is [`include/Flux.hpp`](include/Flux.hpp) (core, graphics, and [`Reactive.hpp`](include/Flux/Reactive/Reactive.hpp)). Declarative UI pulls in [`UI/UI.hpp`](include/Flux/UI/UI.hpp) (also includes `WindowUI.hpp` for `Window::setView`).
+Public API headers live under `include/Flux/`. The umbrella header is [`include/Flux.hpp`](include/Flux.hpp). Declarative UI apps usually include [`include/Flux/UI/UI.hpp`](include/Flux/UI/UI.hpp) and use `Window::setView`.

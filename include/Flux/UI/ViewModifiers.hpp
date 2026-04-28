@@ -10,6 +10,8 @@
 #include <Flux/Core/Cursor.hpp>
 #include <Flux/Core/Types.hpp>
 #include <Flux/Graphics/Styles.hpp>
+#include <Flux/Reactive/Bindable.hpp>
+#include <Flux/UI/Environment.hpp>
 
 #include <functional>
 #include <string>
@@ -24,30 +26,34 @@ template<typename Derived>
 struct ViewModifiers {
   bool operator==(ViewModifiers const&) const noexcept = default;
 
-  Element padding(float all) &&;
-  Element padding(EdgeInsets insets) &&;
-  Element padding(float top, float right, float bottom, float left) &&;
-  Element fill(FillStyle style) &&;
-  Element fill(Color color) &&;
-  Element shadow(ShadowStyle style) &&;
-  Element size(float width, float height) &&;
-  Element width(float w) &&;
-  Element height(float h) &&;
-  Element stroke(StrokeStyle style) &&;
-  Element stroke(Color color, float width) &&;
-  Element cornerRadius(CornerRadius radius) &&;
-  /// Uniform radius on all corners (same as \c cornerRadius(CornerRadius{all})).
-  Element cornerRadius(float radius) &&;
-  Element opacity(float opacity) &&;
-  Element position(Vec2 p) &&;
-  Element position(float x, float y) &&;
-  Element translate(Vec2 delta) &&;
-  Element translate(float dx, float dy) &&;
+  Element padding(Reactive::Bindable<float> all) &&;
+  Element padding(Reactive::Bindable<EdgeInsets> insets) &&;
+  Element padding(Reactive::Bindable<float> top, Reactive::Bindable<float> right,
+                  Reactive::Bindable<float> bottom, Reactive::Bindable<float> left) &&;
+  Element fill(Reactive::Bindable<FillStyle> style) &&;
+  Element fill(Reactive::Bindable<Color> color) &&;
+  Element shadow(Reactive::Bindable<ShadowStyle> style) &&;
+  Element size(Reactive::Bindable<float> width, Reactive::Bindable<float> height) &&;
+  Element width(Reactive::Bindable<float> w) &&;
+  Element height(Reactive::Bindable<float> h) &&;
+  Element stroke(Reactive::Bindable<StrokeStyle> style) &&;
+  Element stroke(Reactive::Bindable<Color> color, Reactive::Bindable<float> width) &&;
+  Element cornerRadius(Reactive::Bindable<CornerRadius> radius) &&;
+  Element cornerRadius(Reactive::Bindable<float> radius) &&;
+  Element opacity(Reactive::Bindable<float> opacity) &&;
+  Element position(Reactive::Bindable<Vec2> p) &&;
+  Element position(Reactive::Bindable<float> x, Reactive::Bindable<float> y) &&;
+  Element translate(Reactive::Bindable<Vec2> delta) &&;
+  Element translate(Reactive::Bindable<float> dx, Reactive::Bindable<float> dy) &&;
   Element clipContent(bool clip) &&;
   Element overlay(Element over) &&;
   Element key(std::string key) &&;
 
   Element onTap(std::function<void()> handler) &&;
+  Element onPointerEnter(std::function<void()> handler) &&;
+  Element onPointerExit(std::function<void()> handler) &&;
+  Element onFocus(std::function<void()> handler) &&;
+  Element onBlur(std::function<void()> handler) &&;
   Element onPointerDown(std::function<void(Point)> handler) &&;
   Element onPointerUp(std::function<void(Point)> handler) &&;
   Element onPointerMove(std::function<void(Point)> handler) &&;
@@ -61,8 +67,11 @@ struct ViewModifiers {
   Element flex(float grow) &&;
   Element flex(float grow, float shrink) &&;
   Element flex(float grow, float shrink, float basis) &&;
-  template<typename T>
-  Element environment(T value) &&;
+  template<typename Key>
+  Element environment(typename EnvironmentKey<Key>::Value value) &&;
+
+  template<typename Key>
+  Element environment(Reactive::Signal<typename EnvironmentKey<Key>::Value> signal) &&;
 };
 
 } // namespace flux

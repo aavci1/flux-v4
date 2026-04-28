@@ -1,7 +1,12 @@
 #include <Flux.hpp>
+#include <Flux/Detail/Runtime.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/UI.hpp>
 #include <Flux/UI/Views/Views.hpp>
+
+// This demo intentionally keeps one mounted tree while toggling light/dark themes.
+// Window::setTheme writes the Theme environment signal; theme-dependent bindings
+// read theme() and update retained nodes without a Switch-driven remount.
 
 #include <algorithm>
 #include <array>
@@ -17,27 +22,35 @@ namespace {
 
 struct ToolbarNavButton : ViewModifiers<ToolbarNavButton> {
     std::string label;
-    bool active = false;
+    Bindable<bool> active = false;
     std::function<void()> onTap;
 
     Element body() const {
-        Theme const &theme = useEnvironment<Theme>();
-        bool const hovered = useHover();
+        auto theme = useEnvironment<ThemeKey>();
+        auto hovered = useState(false);
 
-        Color const fill = active ? Color::selectedContentBackground() :
-                           hovered ? theme.rowHoverBackgroundColor :
-                                     Colors::transparent;
-        Color const textColor = active ? Color::accent() : hovered ? Color::primary() : Color::secondary();
+        Bindable<Color> fill {[active = active, hovered, theme] {
+            return active.evaluate() ? Color::selectedContentBackground() :
+                   hovered() ? theme().rowHoverBackgroundColor :
+                                   Colors::transparent;
+        }};
+        Bindable<Color> textColor {[active = active, hovered] {
+            return active.evaluate() ? Color::accent() :
+                   hovered() ? Color::primary() :
+                                   Color::secondary();
+        }};
 
         return Text {
             .text = label,
             .font = Font::body(),
             .color = textColor,
         }
-            .padding(5.f, theme.space3, 5.f, theme.space3)
-            .fill(FillStyle::solid(fill))
-            .cornerRadius(CornerRadius {theme.radiusSmall})
+            .padding(5.f, theme().space3, 5.f, theme().space3)
+            .fill(fill)
+            .cornerRadius(CornerRadius {theme().radiusSmall})
             .cursor(Cursor::Hand)
+            .onPointerEnter(std::function<void()> {[hovered] { hovered = true; }})
+            .onPointerExit(std::function<void()> {[hovered] { hovered = false; }})
             .onTap(onTap);
     }
 };
@@ -45,17 +58,21 @@ struct ToolbarNavButton : ViewModifiers<ToolbarNavButton> {
 struct SidebarGlyphButton : ViewModifiers<SidebarGlyphButton> {
     IconName icon {};
     std::string label;
-    bool selected = false;
+    Bindable<bool> selected = false;
     std::function<void()> onTap;
 
     Element body() const {
-        Theme const &theme = useEnvironment<Theme>();
-        bool const hovered = useHover();
+        auto theme = useEnvironment<ThemeKey>();
+        auto hovered = useState(false);
 
-        Color const fill = selected ? Color::selectedContentBackground() :
-                           hovered ? theme.hoveredControlBackgroundColor :
-                                     Colors::transparent;
-        Color const foreground = selected ? Color::accent() : Color::secondary();
+        Bindable<Color> fill {[selected = selected, hovered, theme] {
+            return selected.evaluate() ? Color::selectedContentBackground() :
+                   hovered() ? theme().hoveredControlBackgroundColor :
+                                   Colors::transparent;
+        }};
+        Bindable<Color> foreground {[selected = selected] {
+            return selected.evaluate() ? Color::accent() : Color::secondary();
+        }};
 
         return VStack {
             .spacing = 2.f,
@@ -75,12 +92,14 @@ struct SidebarGlyphButton : ViewModifiers<SidebarGlyphButton> {
                 }
             ),
         }
-            .padding(theme.space2)
+            .padding(theme().space2)
             .flex(0.f, 0.f, 72.f)
-            .fill(FillStyle::solid(fill))
-            .cornerRadius(CornerRadius {theme.radiusLarge})
+            .fill(fill)
+            .cornerRadius(CornerRadius {theme().radiusLarge})
             // .width(72.f)
             .cursor(Cursor::Hand)
+            .onPointerEnter(std::function<void()> {[hovered] { hovered = true; }})
+            .onPointerExit(std::function<void()> {[hovered] { hovered = false; }})
             .onTap(onTap);
     }
 };
@@ -88,11 +107,11 @@ struct SidebarGlyphButton : ViewModifiers<SidebarGlyphButton> {
 struct DensityPreviewRow : ViewModifiers<DensityPreviewRow> {
     std::string label;
     Theme previewTheme;
-    State<std::string> searchValue {};
+    Signal<std::string> searchValue {};
     bool stacked = false;
 
     Element body() const {
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<ThemeKey>();
 
         Element preview = HStack {
             .spacing = previewTheme.space4,
@@ -110,19 +129,19 @@ struct DensityPreviewRow : ViewModifiers<DensityPreviewRow> {
             ),
         }
             .padding(previewTheme.space3)
-            .fill(FillStyle::solid(Color::controlBackground()))
-            .stroke(StrokeStyle::solid(Color::separator(), 1.f))
+            .fill(Color::controlBackground())
+            .stroke(Color::separator(), 1.f)
             .cornerRadius(CornerRadius {previewTheme.radiusXLarge})
-            .environment(previewTheme);
+            .environment<ThemeKey>(previewTheme);
 
         if (stacked) {
             return VStack {
-                .spacing = theme.space2,
+                .spacing = theme().space2,
                 .alignment = Alignment::Start,
                 .children = children(
                     Text {
                         .text = label,
-                        .font = Font {.family = theme.monospacedBodyFont.family, .size = 10.f, .weight = 500.f},
+                        .font = Font {.family = theme().monospacedBodyFont.family, .size = 10.f, .weight = 500.f},
                         .color = Color::tertiary(),
                     },
                     std::move(preview)
@@ -131,12 +150,12 @@ struct DensityPreviewRow : ViewModifiers<DensityPreviewRow> {
         }
 
         return HStack {
-            .spacing = theme.space5,
+            .spacing = theme().space5,
             .alignment = Alignment::Center,
             .children = children(
                 Text {
                     .text = label,
-                    .font = Font {.family = theme.monospacedBodyFont.family, .size = 10.f, .weight = 500.f},
+                    .font = Font {.family = theme().monospacedBodyFont.family, .size = 10.f, .weight = 500.f},
                     .color = Color::tertiary(),
                 }
                     .width(160.f),
@@ -189,15 +208,15 @@ Element panel(Theme const &theme, Element content, float padding = -1.f) {
     float const resolvedPadding = padding >= 0.f ? padding : theme.space5;
     return std::move(content)
         .padding(resolvedPadding)
-        .fill(FillStyle::solid(Color::controlBackground()))
-        .stroke(StrokeStyle::solid(Color::separator(), 1.f))
+        .fill(Color::controlBackground())
+        .stroke(Color::separator(), 1.f)
         .cornerRadius(CornerRadius {theme.radiusXLarge});
 }
 
 Element divider(Theme const &theme, float width = 0.f) {
     Element line = Rectangle {}
                        .size(width, 1.f)
-                       .fill(FillStyle::solid(Color::separator()));
+                       .fill(Color::separator());
     if (width <= 0.f) {
         return line;
     }
@@ -210,7 +229,7 @@ Element accentDot(Color color, float size = 8.f, bool bordered = false) {
                       .fill(FillStyle::solid(color))
                       .cornerRadius(CornerRadius {size * 0.5f});
     if (bordered) {
-        return std::move(dot).stroke(StrokeStyle::solid(Color::separator(), 1.f));
+        return std::move(dot).stroke(Color::separator(), 1.f);
     }
     return dot;
 }
@@ -250,7 +269,7 @@ Element paletteSwatch(Theme const &theme, Color color, std::string_view step) {
                          );
 
     if (needsBorder) {
-        return std::move(swatch).stroke(StrokeStyle::solid(Color::separator(), 1.f));
+        return std::move(swatch).stroke(Color::separator(), 1.f);
     }
     return swatch;
 }
@@ -299,8 +318,8 @@ Element heroChip(Theme const &theme, std::string label, Color dotColor = Colors:
         .children = std::move(row),
     }
         .padding(5.f, theme.space3, 5.f, theme.space3)
-        .fill(FillStyle::solid(Color::controlBackground()))
-        .stroke(StrokeStyle::solid(Color::separator(), 1.f))
+        .fill(Color::controlBackground())
+        .stroke(Color::separator(), 1.f)
         .cornerRadius(CornerRadius {theme.radiusFull});
 }
 
@@ -311,7 +330,7 @@ Element statusBadge(Theme const &theme, std::string label, Color fill, Color tex
         .color = textColor,
     }
         .padding(4.f, theme.space2, 4.f, theme.space2)
-        .fill(FillStyle::solid(fill))
+        .fill(fill)
         .cornerRadius(CornerRadius {theme.radiusFull});
 }
 
@@ -480,8 +499,8 @@ Element radiusToken(Theme const &theme, std::string label, float radius, std::st
         .children = children(
             Rectangle {}
                 .size(44.f, 44.f)
-                .fill(FillStyle::solid(Color::selectedContentBackground()))
-                .stroke(StrokeStyle::solid(Color::accent(), 1.5f))
+                .fill(Color::selectedContentBackground())
+                .stroke(Color::accent(), 1.5f)
                 .cornerRadius(CornerRadius {radius}),
             Text {
                 .text = std::move(label) + "\n" + std::move(valueLabel),
@@ -527,7 +546,7 @@ Element controlRow(Theme const &theme, std::string label, Element control) {
     };
 }
 
-Element sliderMetricRow(Theme const &theme, std::string label, State<float> value, float min, float max, float step) {
+Element sliderMetricRow(Theme const &theme, std::string label, Signal<float> value, float min, float max, float step) {
     return HStack {
         .spacing = theme.space4,
         .alignment = Alignment::Center,
@@ -546,7 +565,9 @@ Element sliderMetricRow(Theme const &theme, std::string label, State<float> valu
             }
                 .flex(1.f, 1.f, 0.f),
             Text {
-                .text = decimalLabel(*value),
+                .text = [value] {
+                    return decimalLabel(value());
+                },
                 .font = monoFont(theme, 12.f, 400.f),
                 .color = Color::secondary(),
                 .horizontalAlignment = HorizontalAlignment::Trailing,
@@ -556,8 +577,8 @@ Element sliderMetricRow(Theme const &theme, std::string label, State<float> valu
     };
 }
 
-Element makeToolbar(Theme const &theme, bool showNav, int activeNav, State<bool> darkMode,
-                    std::function<void(float)> onJump) {
+Element makeToolbar(Theme const &theme, bool showNav, Bindable<int> activeNav, Signal<bool> darkMode,
+                    std::function<void(float)> onJump, std::function<void(bool)> onDarkModeChange) {
     return VStack {
         .spacing = 0.f,
         .children = children(
@@ -576,61 +597,89 @@ Element makeToolbar(Theme const &theme, bool showNav, int activeNav, State<bool>
                         .color = Color::secondary(),
                     }
                         .padding(2.f, 7.f, 2.f, 7.f)
-                        .fill(FillStyle::solid(Color::controlBackground()))
-                        .stroke(StrokeStyle::solid(Color::separator(), 1.f))
+                        .fill(Color::controlBackground())
+                        .stroke(Color::separator(), 1.f)
                         .cornerRadius(CornerRadius {theme.radiusFull}),
-                        Spacer {},
-                    ToolbarNavButton {.label = "Colors", .active = activeNav == 0, .onTap = [onJump] { onJump(0.00f); }},
-                    ToolbarNavButton {.label = "Type", .active = activeNav == 1, .onTap = [onJump] { onJump(0.34f); }},
-                    ToolbarNavButton {.label = "Spacing", .active = activeNav == 2, .onTap = [onJump] { onJump(0.63f); }},
-                    ToolbarNavButton {.label = "Components", .active = activeNav == 3, .onTap = [onJump] { onJump(0.83f); }},
+                    Spacer {},
+                    ToolbarNavButton {
+                        .label = "Colors",
+                        .active = [activeNav] {
+                            return activeNav.evaluate() == 0;
+                        },
+                        .onTap = [onJump] { onJump(0.00f); },
+                    },
+                    ToolbarNavButton {
+                        .label = "Type",
+                        .active = [activeNav] {
+                            return activeNav.evaluate() == 1;
+                        },
+                        .onTap = [onJump] { onJump(0.34f); },
+                    },
+                    ToolbarNavButton {
+                        .label = "Spacing",
+                        .active = [activeNav] {
+                            return activeNav.evaluate() == 2;
+                        },
+                        .onTap = [onJump] { onJump(0.63f); },
+                    },
+                    ToolbarNavButton {
+                        .label = "Components",
+                        .active = [activeNav] {
+                            return activeNav.evaluate() == 3;
+                        },
+                        .onTap = [onJump] { onJump(0.83f); },
+                    },
                     Icon {
-                        .name = *darkMode ? IconName::LightMode : IconName::DarkMode,
+                        .name = [darkMode] {
+                            return darkMode() ? IconName::LightMode : IconName::DarkMode;
+                        },
                         .size = 16.f,
                         .weight = 400.f,
                         .color = Color::secondary(),
                     },
                     Toggle {
                         .value = darkMode,
+                        .onChange = std::move(onDarkModeChange),
                     }
                 )
             }
                 .padding(theme.space4, theme.space6, theme.space4, theme.space6)
-                .fill(FillStyle::solid(Color::elevatedBackground())),
+                .fill(Color::elevatedBackground()),
             Rectangle {}
                 .size(0.f, 1.f)
-                .fill(FillStyle::solid(Color::separator()))
+                .fill(Color::separator())
         ),
     };
 }
 
 } // namespace
 
-struct ThemeDemoRoot {
+struct ThemeDemoPage {
+    Signal<bool> darkMode {};
+    Signal<Point> scrollOffset {};
+    Signal<Size> viewportSize {};
+    Signal<Size> contentSize {};
+    Signal<bool> flashAttention {};
+    Signal<bool> enableThinking {};
+    Signal<bool> useMmap {};
+    Signal<float> temperature {};
+    Signal<float> topP {};
+    Signal<std::string> repoSearch {};
+    Signal<std::string> workspacePath {};
+    Signal<std::string> disabledField {};
+    Signal<std::string> compactSearch {};
+    Signal<std::string> defaultSearch {};
+    Signal<std::string> comfortableSearch {};
+    Signal<int> selectedSidebar {};
+    Theme theme {};
+    std::function<void(bool)> onDarkModeChange;
+
     auto body() const {
-        auto darkMode = useState(false);
-        auto scrollOffset = useState(Point {0.f, 0.f});
-        auto viewportSize = useState(Size {0.f, 0.f});
-        auto contentSize = useState(Size {0.f, 0.f});
+        auto scrollOffsetState = scrollOffset;
+        auto viewportSizeState = viewportSize;
+        auto contentSizeState = contentSize;
+        auto selectedSidebarState = selectedSidebar;
 
-        auto flashAttention = useState(true);
-        auto enableThinking = useState(false);
-        auto useMmap = useState(true);
-
-        auto temperature = useState(0.70f);
-        auto topP = useState(0.92f);
-
-        auto repoSearch = useState(std::string {});
-        auto workspacePath = useState(std::string {"/Users/alex/projects"});
-        auto disabledField = useState(std::string {"Disabled"});
-
-        auto compactSearch = useState(std::string {});
-        auto defaultSearch = useState(std::string {});
-        auto comfortableSearch = useState(std::string {});
-
-        auto selectedSidebar = useState(0);
-
-        Theme const theme = *darkMode ? Theme::dark() : Theme::light();
         Theme const compactTheme = theme.withDensity(0.75f);
         Theme const comfortableTheme = theme.withDensity(1.25f);
         FluxPalette const palette {};
@@ -643,13 +692,15 @@ struct ThemeDemoRoot {
 
         float const horizontalInset = narrow ? theme.space4 : theme.space7;
         float const contentWidth = std::clamp(viewportWidth - horizontalInset * 2.f, 320.f, 1080.f);
-        float const maxScroll = std::max(0.f, (*contentSize).height - (*viewportSize).height);
-        float const scrollProgress = maxScroll > 0.f ? (*scrollOffset).y / maxScroll : 0.f;
-        int const activeNav = scrollProgress < 0.24f ? 0 : scrollProgress < 0.53f ? 1 : scrollProgress < 0.73f ? 2 : 3;
+        Bindable<int> activeNav {[scrollOffsetState, viewportSizeState, contentSizeState] {
+            float const maxScroll = std::max(0.f, contentSizeState().height - viewportSizeState().height);
+            float const scrollProgress = maxScroll > 0.f ? scrollOffsetState().y / maxScroll : 0.f;
+            return scrollProgress < 0.24f ? 0 : scrollProgress < 0.53f ? 1 : scrollProgress < 0.73f ? 2 : 3;
+        }};
 
-        auto jumpToSection = [scrollOffset, viewportSize, contentSize](float ratio) {
-            float const maxY = std::max(0.f, (*contentSize).height - (*viewportSize).height);
-            scrollOffset = Point {0.f, std::clamp(maxY * ratio, 0.f, maxY)};
+        auto jumpToSection = [scrollOffsetState, viewportSizeState, contentSizeState](float ratio) {
+            float const maxY = std::max(0.f, contentSizeState().height - viewportSizeState().height);
+            scrollOffsetState = Point {0.f, std::clamp(maxY * ratio, 0.f, maxY)};
         };
 
         std::vector<Element> heroChips;
@@ -963,10 +1014,38 @@ struct ThemeDemoRoot {
                 .horizontalAlignment = Alignment::Center,
                 .verticalAlignment = Alignment::Center,
                 .children = children(
-                    SidebarGlyphButton {.icon = IconName::Chat, .label = "Chats", .selected = *selectedSidebar == 0, .onTap = [selectedSidebar] { selectedSidebar = 0; }},
-                    SidebarGlyphButton {.icon = IconName::Hub, .label = "Hub", .selected = *selectedSidebar == 1, .onTap = [selectedSidebar] { selectedSidebar = 1; }},
-                    SidebarGlyphButton {.icon = IconName::Folder, .label = "Files", .selected = *selectedSidebar == 2, .onTap = [selectedSidebar] { selectedSidebar = 2; }},
-                    SidebarGlyphButton {.icon = IconName::Settings, .label = "Settings", .selected = *selectedSidebar == 3, .onTap = [selectedSidebar] { selectedSidebar = 3; }}
+                    SidebarGlyphButton {
+                        .icon = IconName::Chat,
+                        .label = "Chats",
+                        .selected = [selectedSidebarState] {
+                            return selectedSidebarState() == 0;
+                        },
+                        .onTap = [selectedSidebarState] { selectedSidebarState = 0; },
+                    },
+                    SidebarGlyphButton {
+                        .icon = IconName::Hub,
+                        .label = "Hub",
+                        .selected = [selectedSidebarState] {
+                            return selectedSidebarState() == 1;
+                        },
+                        .onTap = [selectedSidebarState] { selectedSidebarState = 1; },
+                    },
+                    SidebarGlyphButton {
+                        .icon = IconName::Folder,
+                        .label = "Files",
+                        .selected = [selectedSidebarState] {
+                            return selectedSidebarState() == 2;
+                        },
+                        .onTap = [selectedSidebarState] { selectedSidebarState = 2; },
+                    },
+                    SidebarGlyphButton {
+                        .icon = IconName::Settings,
+                        .label = "Settings",
+                        .selected = [selectedSidebarState] {
+                            return selectedSidebarState() == 3;
+                        },
+                        .onTap = [selectedSidebarState] { selectedSidebarState = 3; },
+                    }
                 ),
             }
         );
@@ -1043,7 +1122,7 @@ struct ThemeDemoRoot {
             .spacing = 0.f,
             .alignment = Alignment::Stretch,
             .children = children(
-                makeToolbar(theme, showToolbarNav, activeNav, darkMode, jumpToSection),
+                makeToolbar(theme, showToolbarNav, activeNav, darkMode, jumpToSection, onDarkModeChange),
                 ScrollView {
                     .axis = ScrollAxis::Vertical,
                     .scrollOffset = scrollOffset,
@@ -1052,11 +1131,58 @@ struct ThemeDemoRoot {
                     .children = children(std::move(content)),
                 }
                     .flex(1.f, 1.f, 0.f)
-                    .fill(FillStyle::solid(Color::windowBackground()))
+                    .fill(Color::windowBackground())
             ),
         }
-            .fill(FillStyle::solid(Color::windowBackground()))
-            .environment(theme);
+            .fill(Color::windowBackground());
+    }
+};
+
+struct ThemeDemoRoot {
+    auto body() const {
+        auto theme = useEnvironment<ThemeKey>();
+        auto darkMode = useState(false);
+        auto scrollOffset = useState(Point {0.f, 0.f});
+        auto viewportSize = useState(Size {0.f, 0.f});
+        auto contentSize = useState(Size {0.f, 0.f});
+        auto flashAttention = useState(true);
+        auto enableThinking = useState(false);
+        auto useMmap = useState(true);
+        auto temperature = useState(0.70f);
+        auto topP = useState(0.92f);
+        auto repoSearch = useState(std::string {});
+        auto workspacePath = useState(std::string {"/Users/alex/projects"});
+        auto disabledField = useState(std::string {"Disabled"});
+        auto compactSearch = useState(std::string {});
+        auto defaultSearch = useState(std::string {});
+        auto comfortableSearch = useState(std::string {});
+        auto selectedSidebar = useState(0);
+        Runtime* runtime = Runtime::current();
+
+        return ThemeDemoPage {
+            .darkMode = darkMode,
+            .scrollOffset = scrollOffset,
+            .viewportSize = viewportSize,
+            .contentSize = contentSize,
+            .flashAttention = flashAttention,
+            .enableThinking = enableThinking,
+            .useMmap = useMmap,
+            .temperature = temperature,
+            .topP = topP,
+            .repoSearch = repoSearch,
+            .workspacePath = workspacePath,
+            .disabledField = disabledField,
+            .compactSearch = compactSearch,
+            .defaultSearch = defaultSearch,
+            .comfortableSearch = comfortableSearch,
+            .selectedSidebar = selectedSidebar,
+            .theme = theme(),
+            .onDarkModeChange = [runtime](bool enabled) {
+                if (runtime) {
+                    runtime->window().setTheme(enabled ? Theme::dark() : Theme::light());
+                }
+            },
+        };
     }
 };
 

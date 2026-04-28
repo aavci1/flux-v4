@@ -15,8 +15,14 @@ detail::ElementModifiers::ElementModifiers(detail::ElementModifiers const& o)
     , positionY(o.positionY)
     , sizeWidth(o.sizeWidth)
     , sizeHeight(o.sizeHeight)
+    , hasSizeWidth(o.hasSizeWidth)
+    , hasSizeHeight(o.hasSizeHeight)
     , overlay(o.overlay ? std::make_unique<Element>(*o.overlay) : nullptr)
     , onTap(o.onTap)
+    , onPointerEnter(o.onPointerEnter)
+    , onPointerExit(o.onPointerExit)
+    , onFocus(o.onFocus)
+    , onBlur(o.onBlur)
     , onPointerDown(o.onPointerDown)
     , onPointerUp(o.onPointerUp)
     , onPointerMove(o.onPointerMove)
@@ -41,8 +47,14 @@ detail::ElementModifiers& detail::ElementModifiers::operator=(detail::ElementMod
     positionY = o.positionY;
     sizeWidth = o.sizeWidth;
     sizeHeight = o.sizeHeight;
+    hasSizeWidth = o.hasSizeWidth;
+    hasSizeHeight = o.hasSizeHeight;
     overlay = o.overlay ? std::make_unique<Element>(*o.overlay) : nullptr;
     onTap = o.onTap;
+    onPointerEnter = o.onPointerEnter;
+    onPointerExit = o.onPointerExit;
+    onFocus = o.onFocus;
+    onBlur = o.onBlur;
     onPointerDown = o.onPointerDown;
     onPointerUp = o.onPointerUp;
     onPointerMove = o.onPointerMove;
@@ -58,96 +70,126 @@ detail::ElementModifiers& detail::ElementModifiers::operator=(detail::ElementMod
 
 detail::ElementModifiers::~ElementModifiers() = default;
 
-Element Element::padding(float all) && {
-  return std::move(*this).padding(EdgeInsets::uniform(all));
-}
-
-Element Element::padding(EdgeInsets insets) && {
+Element Element::padding(Reactive::Bindable<EdgeInsets> insets) && {
   writableModifiers().padding = std::move(insets);
   return std::move(*this);
 }
 
-Element Element::padding(float top, float right, float bottom, float left) && {
-  return std::move(*this).padding(EdgeInsets{.top = top, .right = right, .bottom = bottom, .left = left});
+Element Element::padding(Reactive::Bindable<float> all) && {
+  writableModifiers().padding = Reactive::Bindable<EdgeInsets>([all = std::move(all)] {
+    return EdgeInsets::uniform(all.evaluate());
+  });
+  return std::move(*this);
 }
 
-Element Element::fill(FillStyle style) && {
+Element Element::padding(Reactive::Bindable<float> top, Reactive::Bindable<float> right,
+                         Reactive::Bindable<float> bottom, Reactive::Bindable<float> left) && {
+  writableModifiers().padding = Reactive::Bindable<EdgeInsets>(
+      [top = std::move(top), right = std::move(right), bottom = std::move(bottom),
+       left = std::move(left)] {
+        return EdgeInsets{
+            .top = top.evaluate(),
+            .right = right.evaluate(),
+            .bottom = bottom.evaluate(),
+            .left = left.evaluate(),
+        };
+      });
+  return std::move(*this);
+}
+
+Element Element::fill(Reactive::Bindable<FillStyle> style) && {
   writableModifiers().fill = std::move(style);
   return std::move(*this);
 }
 
-Element Element::fill(Color color) && {
-  writableModifiers().fill = FillStyle::solid(std::move(color));
+Element Element::fill(Reactive::Bindable<Color> color) && {
+  writableModifiers().fill = Reactive::Bindable<FillStyle>([color = std::move(color)] {
+    return FillStyle::solid(color.evaluate());
+  });
   return std::move(*this);
 }
 
-Element Element::shadow(ShadowStyle style) && {
+Element Element::shadow(Reactive::Bindable<ShadowStyle> style) && {
   writableModifiers().shadow = std::move(style);
   return std::move(*this);
 }
 
-Element Element::size(float width, float height) && {
+Element Element::size(Reactive::Bindable<float> width, Reactive::Bindable<float> height) && {
   detail::ElementModifiers& modifiers = writableModifiers();
-  modifiers.sizeWidth = width;
-  modifiers.sizeHeight = height;
+  modifiers.sizeWidth = std::move(width);
+  modifiers.sizeHeight = std::move(height);
+  modifiers.hasSizeWidth = true;
+  modifiers.hasSizeHeight = true;
   return std::move(*this);
 }
 
-Element Element::width(float w) && {
-  writableModifiers().sizeWidth = w;
+Element Element::width(Reactive::Bindable<float> w) && {
+  detail::ElementModifiers& modifiers = writableModifiers();
+  modifiers.sizeWidth = std::move(w);
+  modifiers.hasSizeWidth = true;
   return std::move(*this);
 }
 
-Element Element::height(float h) && {
-  writableModifiers().sizeHeight = h;
+Element Element::height(Reactive::Bindable<float> h) && {
+  detail::ElementModifiers& modifiers = writableModifiers();
+  modifiers.sizeHeight = std::move(h);
+  modifiers.hasSizeHeight = true;
   return std::move(*this);
 }
 
-Element Element::stroke(StrokeStyle style) && {
+Element Element::stroke(Reactive::Bindable<StrokeStyle> style) && {
   writableModifiers().stroke = std::move(style);
   return std::move(*this);
 }
 
-Element Element::stroke(Color color, float width) && {
-  writableModifiers().stroke = StrokeStyle::solid(std::move(color), width);
+Element Element::stroke(Reactive::Bindable<Color> color, Reactive::Bindable<float> width) && {
+  writableModifiers().stroke = Reactive::Bindable<StrokeStyle>(
+      [color = std::move(color), width = std::move(width)] {
+        return StrokeStyle::solid(color.evaluate(), width.evaluate());
+      });
   return std::move(*this);
 }
 
-Element Element::cornerRadius(CornerRadius radius) && {
-  writableModifiers().cornerRadius = radius;
+Element Element::cornerRadius(Reactive::Bindable<CornerRadius> radius) && {
+  writableModifiers().cornerRadius = std::move(radius);
   return std::move(*this);
 }
 
-Element Element::cornerRadius(float radius) && {
-  return std::move(*this).cornerRadius(CornerRadius(radius));
-}
-
-Element Element::opacity(float opacity) && {
-  writableModifiers().opacity = opacity;
+Element Element::cornerRadius(Reactive::Bindable<float> radius) && {
+  writableModifiers().cornerRadius = Reactive::Bindable<CornerRadius>([radius = std::move(radius)] {
+    return CornerRadius(radius.evaluate());
+  });
   return std::move(*this);
 }
 
-Element Element::position(Vec2 p) && {
+Element Element::opacity(Reactive::Bindable<float> opacity) && {
+  writableModifiers().opacity = std::move(opacity);
+  return std::move(*this);
+}
+
+Element Element::position(Reactive::Bindable<Vec2> p) && {
+  writableModifiers().positionX = Reactive::Bindable<float>([p] { return p.evaluate().x; });
+  writableModifiers().positionY = Reactive::Bindable<float>([p] { return p.evaluate().y; });
+  return std::move(*this);
+}
+
+Element Element::position(Reactive::Bindable<float> x, Reactive::Bindable<float> y) && {
   detail::ElementModifiers& modifiers = writableModifiers();
-  modifiers.positionX = p.x;
-  modifiers.positionY = p.y;
+  modifiers.positionX = std::move(x);
+  modifiers.positionY = std::move(y);
   return std::move(*this);
 }
 
-Element Element::position(float x, float y) && {
-  detail::ElementModifiers& modifiers = writableModifiers();
-  modifiers.positionX = x;
-  modifiers.positionY = y;
+Element Element::translate(Reactive::Bindable<Vec2> delta) && {
+  writableModifiers().translation = std::move(delta);
   return std::move(*this);
 }
 
-Element Element::translate(Vec2 delta) && {
-  writableModifiers().translation = delta;
-  return std::move(*this);
-}
-
-Element Element::translate(float dx, float dy) && {
-  writableModifiers().translation = {dx, dy};
+Element Element::translate(Reactive::Bindable<float> dx, Reactive::Bindable<float> dy) && {
+  writableModifiers().translation = Reactive::Bindable<Vec2>(
+      [dx = std::move(dx), dy = std::move(dy)] {
+        return Vec2{dx.evaluate(), dy.evaluate()};
+      });
   return std::move(*this);
 }
 
@@ -163,6 +205,26 @@ Element Element::overlay(Element over) && {
 
 Element Element::onTap(std::function<void()> handler) && {
   writableModifiers().onTap = std::move(handler);
+  return std::move(*this);
+}
+
+Element Element::onPointerEnter(std::function<void()> handler) && {
+  writableModifiers().onPointerEnter = std::move(handler);
+  return std::move(*this);
+}
+
+Element Element::onPointerExit(std::function<void()> handler) && {
+  writableModifiers().onPointerExit = std::move(handler);
+  return std::move(*this);
+}
+
+Element Element::onFocus(std::function<void()> handler) && {
+  writableModifiers().onFocus = std::move(handler);
+  return std::move(*this);
+}
+
+Element Element::onBlur(std::function<void()> handler) && {
+  writableModifiers().onBlur = std::move(handler);
   return std::move(*this);
 }
 

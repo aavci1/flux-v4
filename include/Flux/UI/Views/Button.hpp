@@ -36,14 +36,17 @@ struct Button : ViewModifiers<Button> {
         bool operator==(Style const& other) const = default;
     };
 
-    std::string label;
+    Reactive::Bindable<std::string> label{std::string{}};
     ButtonVariant variant = ButtonVariant::Primary;
-    bool disabled = false;
+    Reactive::Bindable<bool> disabled{false};
     Style style {};
     std::function<void()> onTap;
 
     bool operator==(Button const& other) const {
-        return label == other.label && variant == other.variant && disabled == other.disabled &&
+        bool const sameLabel = label.isValue() && other.label.isValue() && label.value() == other.label.value();
+        bool const sameDisabled = disabled.isValue() && other.disabled.isValue() &&
+                                  disabled.value() == other.disabled.value();
+        return sameLabel && variant == other.variant && sameDisabled &&
                style == other.style;
     }
 
@@ -58,13 +61,16 @@ struct LinkButton : ViewModifiers<LinkButton> {
         bool operator==(Style const& other) const = default;
     };
 
-    std::string label;
-    bool disabled = false;
+    Reactive::Bindable<std::string> label{std::string{}};
+    Reactive::Bindable<bool> disabled{false};
     Style style {};
     std::function<void()> onTap;
 
     bool operator==(LinkButton const& other) const {
-        return label == other.label && disabled == other.disabled && style == other.style;
+        bool const sameLabel = label.isValue() && other.label.isValue() && label.value() == other.label.value();
+        bool const sameDisabled = disabled.isValue() && other.disabled.isValue() &&
+                                  disabled.value() == other.disabled.value();
+        return sameLabel && sameDisabled && style == other.style;
     }
 
     Element body() const;
@@ -80,12 +86,14 @@ struct IconButton : ViewModifiers<IconButton> {
     };
 
     IconName icon {};
-    bool disabled = false;
+    Reactive::Bindable<bool> disabled{false};
     Style style {};
     std::function<void()> onTap;
 
     bool operator==(IconButton const& other) const {
-        return icon == other.icon && disabled == other.disabled && style == other.style;
+        bool const sameDisabled = disabled.isValue() && other.disabled.isValue() &&
+                                  disabled.value() == other.disabled.value();
+        return icon == other.icon && sameDisabled && style == other.style;
     }
 
     Element body() const;

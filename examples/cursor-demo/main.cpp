@@ -2,15 +2,14 @@
 #include <Flux/Core/WindowUI.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/UI.hpp>
-#include <Flux/UI/Views/HStack.hpp>
-#include <Flux/UI/Views/Rectangle.hpp>
+#include <Flux/UI/Views/Grid.hpp>
 #include <Flux/UI/Views/ScrollView.hpp>
 #include <Flux/UI/Views/Text.hpp>
 #include <Flux/UI/Views/VStack.hpp>
-#include <Flux/UI/Views/ZStack.hpp>
 
 #include <string>
 #include <tuple>
+#include <vector>
 
 using namespace flux;
 
@@ -29,7 +28,7 @@ const std::vector<std::tuple<std::string, Cursor>> cursors = {
 /// Hover each row to see the platform cursor; drag the bottom strip to verify the cursor stays locked.
 struct CursorDemo {
     auto body() const {
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<ThemeKey>();
 
         std::vector<Element> cells = {};
         for (auto const &[name, cursor] : cursors) {
@@ -39,7 +38,7 @@ struct CursorDemo {
                     .horizontalAlignment = HorizontalAlignment::Center,
                     .verticalAlignment = VerticalAlignment::Center,
                 }
-                    // .cornerRadius(theme.radiusXLarge)
+                    // .cornerRadius(theme().radiusXLarge)
                     .cursor(cursor)
                     .fill(Color::elevatedBackground())
                     .height(200.f)
@@ -50,7 +49,7 @@ struct CursorDemo {
             .axis = ScrollAxis::Vertical,
             .children = children(
                 VStack {
-                    .spacing = theme.space4,
+                    .spacing = theme().space4,
                     .children = children(
                         Text {
                             .text = "Cursor Demo",
@@ -65,8 +64,8 @@ struct CursorDemo {
                         },
                         Grid {
                             .columns = 3,
-                            .horizontalSpacing = theme.space1,
-                            .verticalSpacing = theme.space1,
+                            .horizontalSpacing = theme().space1,
+                            .verticalSpacing = theme().space1,
                             .horizontalAlignment = Alignment::Stretch,
                             .verticalAlignment = Alignment::Stretch,
                             .children = std::move(cells)
@@ -75,7 +74,7 @@ struct CursorDemo {
                 }
             )
         }
-            .padding(theme.space5);
+            .padding(theme().space5);
     }
 };
 

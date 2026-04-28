@@ -22,13 +22,13 @@ struct ChatListRow : ViewModifiers<ChatListRow> {
     std::function<void()> onTap;
 
     auto body() const {
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<ThemeKey>();
         Color const titleColor = Color::primary();
         Color const detailColor = selected ? Color::primary() : Color::secondary();
 
         return ListRow {
             .content = HStack {
-                .spacing = theme.space1,
+                .spacing = theme().space1,
                 .alignment = Alignment::Start,
                 .children = children(
                     VStack {
@@ -82,7 +82,7 @@ struct ChatsView : ViewModifiers<ChatsView> {
     std::function<void(int, lambda_studio_backend::GenerationParamsPatch const &)> onAdjustGeneration;
 
     auto body() const {
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<ThemeKey>();
         std::vector<ChatThread> const &chatThreads = state.chats;
 
         int const selectedIndex = clampedChatIndex(state);
@@ -168,7 +168,7 @@ struct ChatsView : ViewModifiers<ChatsView> {
                     .alignment = Alignment::Start,
                     .children = {
                         HStack {
-                            .spacing = theme.space2,
+                            .spacing = theme().space2,
                             .alignment = Alignment::Center,
                             .children = {
                                 Text {
@@ -181,13 +181,13 @@ struct ChatsView : ViewModifiers<ChatsView> {
                                 IconButton {
                                     .icon = IconName::Add,
                                     .style = {
-                                        .size = theme.titleFont.size,
-                                        .weight = theme.headlineFont.weight,
+                                        .size = theme().titleFont.size,
+                                        .weight = theme().headlineFont.weight,
                                     },
                                     .onTap = onNewChat
                                 }
                             }
-                        }.padding(theme.space4),
+                        }.padding(theme().space4),
                         Divider { .orientation = Divider::Orientation::Horizontal },
                         ListView {
                             .rows = std::move(rows),

@@ -47,9 +47,6 @@ public:
   void setMeasurementRootKey(ComponentKey key);
   void clearMeasurementRootKey() noexcept;
 
-  void beginCompositeBodySubtree(ComponentKey compositeKey);
-  bool consumeCompositeBodySubtreeRootSkip();
-
   void pushCompositeKeyTail(ComponentKey const& compositeKey);
   void popCompositeKeyTail();
 
@@ -71,7 +68,6 @@ private:
   ComponentKey keyPrefix_{};
   ComponentKey measurementRootKey_{};
   std::size_t nextChildIndex_{0};
-  bool skipNextLayoutChildAdvance_{false};
   bool useMeasurementRootKey_{false};
 };
 

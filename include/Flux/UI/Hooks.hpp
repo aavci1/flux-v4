@@ -2,292 +2,427 @@
 
 /// \file Flux/UI/Hooks.hpp
 ///
-/// Part of the Flux public API.
-
+/// Scope-owned v5 hooks and environment accessors.
 
 #include <Flux/Reactive/Animation.hpp>
-#include <Flux/Reactive/Interpolatable.hpp>
+#include <Flux/Reactive/Computed.hpp>
+#include <Flux/Reactive/Effect.hpp>
 #include <Flux/Reactive/Signal.hpp>
-#include <Flux/UI/StateStore.hpp>
+#include <Flux/Core/ComponentKey.hpp>
+#include <Flux/Detail/Runtime.hpp>
+#include <Flux/UI/Environment.hpp>
+#include <Flux/UI/EnvironmentKeys.hpp>
+#include <Flux/UI/LayoutEngine.hpp>
+#include <Flux/UI/MeasureContext.hpp>
+#include <Flux/UI/MountContext.hpp>
 #include <Flux/UI/Theme.hpp>
 
+#include <cmath>
 #include <cassert>
-#include <cstddef>
+#include <cstdint>
 #include <functional>
-#include <optional>
+#include <source_location>
 #include <string>
 #include <type_traits>
+#include <unordered_map>
+#include <unordered_set>
 #include <utility>
-
-#include <Flux/Core/Types.hpp>
-
-#include <Flux/UI/LayoutEngine.hpp>
+#include <vector>
 
 namespace flux {
 
+namespace detail {
+
+struct InteractionSignalBundle {
+  Reactive::Signal<bool> hover;
+  Reactive::Signal<bool> press;
+  Reactive::Signal<bool> focus;
+  Reactive::Signal<bool> keyboardFocus;
+};
+
+struct OwnerInteractionSignals {
+  InteractionSignalBundle signals;
+  bool cleanupRegistered = false;
+};
+
+#ifndef NDEBUG
+struct UseStateDebugKey {
+  char const* file = nullptr;
+  std::uint_least32_t line = 0;
+  std::uint_least32_t column = 0;
+
+  bool operator==(UseStateDebugKey const&) const = default;
+};
+
+struct UseStateDebugKeyHash {
+  std::size_t operator()(UseStateDebugKey const& key) const noexcept {
+    std::size_t seed = std::hash<char const*>{}(key.file);
+    seed ^= std::hash<std::uint_least32_t>{}(key.line) + 0x9e3779b9u + (seed << 6) + (seed >> 2);
+    seed ^= std::hash<std::uint_least32_t>{}(key.column) + 0x9e3779b9u + (seed << 6) + (seed >> 2);
+    return seed;
+  }
+};
+
+struct OwnerUseStateDebugInfo {
+  std::unordered_set<UseStateDebugKey, UseStateDebugKeyHash> callSites;
+  bool cleanupRegistered = false;
+};
+#endif
+
+inline std::unordered_map<Reactive::detail::ScopeState*, OwnerInteractionSignals>&
+ownerInteractionSignals() {
+  static thread_local std::unordered_map<Reactive::detail::ScopeState*, OwnerInteractionSignals> signals;
+  return signals;
+}
+
+#ifndef NDEBUG
+inline std::unordered_map<Reactive::detail::ScopeState*, OwnerUseStateDebugInfo>&
+ownerUseStateDebugInfo() {
+  static thread_local std::unordered_map<Reactive::detail::ScopeState*, OwnerUseStateDebugInfo> info;
+  return info;
+}
+#endif
+
+inline std::vector<InteractionSignalBundle const*>& interactionSignalMountStack() {
+  static thread_local std::vector<InteractionSignalBundle const*> stack;
+  return stack;
+}
+
+inline std::vector<ComponentKey const*>& interactionScopeKeyMountStack() {
+  static thread_local std::vector<ComponentKey const*> stack;
+  return stack;
+}
+
+inline InteractionSignalBundle const* currentInteractionSignals() {
+  auto& stack = interactionSignalMountStack();
+  return stack.empty() ? nullptr : stack.back();
+}
+
+inline ComponentKey const* currentInteractionScopeKey() {
+  auto& stack = interactionScopeKeyMountStack();
+  return stack.empty() ? nullptr : stack.back();
+}
+
+class HookInteractionSignalScope {
+public:
+  explicit HookInteractionSignalScope(Reactive::Scope& owner)
+      : scopeKey_(ComponentKey::fromScope(owner.state())) {
+    auto const it = ownerInteractionSignals().find(owner.state());
+    if (it != ownerInteractionSignals().end()) {
+      signals_ = &it->second.signals;
+    }
+    interactionSignalMountStack().push_back(signals_);
+    interactionScopeKeyMountStack().push_back(&scopeKey_);
+  }
+
+  HookInteractionSignalScope(HookInteractionSignalScope const&) = delete;
+  HookInteractionSignalScope& operator=(HookInteractionSignalScope const&) = delete;
+
+  ~HookInteractionSignalScope() {
+    auto& signalStack = interactionSignalMountStack();
+    if (!signalStack.empty()) {
+      signalStack.pop_back();
+    }
+    auto& keyStack = interactionScopeKeyMountStack();
+    if (!keyStack.empty()) {
+      keyStack.pop_back();
+    }
+  }
+
+private:
+  ComponentKey scopeKey_;
+  InteractionSignalBundle const* signals_ = nullptr;
+};
+
+inline std::vector<LayoutConstraints>& hookLayoutConstraintStack() {
+  static thread_local std::vector<LayoutConstraints> stack;
+  return stack;
+}
+
+class HookLayoutScope {
+public:
+  explicit HookLayoutScope(LayoutConstraints constraints) {
+    hookLayoutConstraintStack().push_back(constraints);
+  }
+
+  HookLayoutScope(HookLayoutScope const&) = delete;
+  HookLayoutScope& operator=(HookLayoutScope const&) = delete;
+
+  ~HookLayoutScope() {
+    auto& stack = hookLayoutConstraintStack();
+    if (!stack.empty()) {
+      stack.pop_back();
+    }
+  }
+};
+
+inline LayoutConstraints const* currentHookLayoutConstraints() {
+  auto& stack = hookLayoutConstraintStack();
+  return stack.empty() ? nullptr : &stack.back();
+}
+
+enum class InteractionSignalKind {
+  Hover,
+  Press,
+  Focus,
+  KeyboardFocus,
+};
+
+inline Reactive::Signal<bool>& signalSlot(InteractionSignalBundle& signals,
+                                          InteractionSignalKind kind) {
+  switch (kind) {
+  case InteractionSignalKind::Hover:
+    return signals.hover;
+  case InteractionSignalKind::Press:
+    return signals.press;
+  case InteractionSignalKind::Focus:
+    return signals.focus;
+  case InteractionSignalKind::KeyboardFocus:
+    return signals.keyboardFocus;
+  }
+  return signals.hover;
+}
+
+inline Reactive::Signal<bool> useInteractionSignal(InteractionSignalKind kind) {
+  Reactive::Signal<bool> signal{false};
+  Reactive::detail::ScopeState* owner = Reactive::detail::sCurrentOwner;
+  if (!owner) {
+    return signal;
+  }
+
+  auto& entry = ownerInteractionSignals()[owner];
+  signalSlot(entry.signals, kind) = signal;
+  if (!entry.cleanupRegistered) {
+    entry.cleanupRegistered = true;
+    Reactive::onCleanup([owner] {
+      ownerInteractionSignals().erase(owner);
+    });
+  }
+  return signal;
+}
+
+#ifndef NDEBUG
+inline void debugRegisterUseState(std::source_location location) {
+  Reactive::detail::ScopeState* owner = Reactive::detail::sCurrentOwner;
+  if (!owner) {
+    return;
+  }
+
+  auto& entry = ownerUseStateDebugInfo()[owner];
+  UseStateDebugKey const key{
+      .file = location.file_name(),
+      .line = location.line(),
+      .column = location.column(),
+  };
+  bool const inserted = entry.callSites.insert(key).second;
+  assert(inserted && "useState call site was evaluated more than once in the same mount scope");
+  if (!entry.cleanupRegistered) {
+    entry.cleanupRegistered = true;
+    Reactive::onCleanup([owner] {
+      ownerUseStateDebugInfo().erase(owner);
+    });
+  }
+}
+#endif
+
+} // namespace detail
+
+template<typename Key>
+Reactive::Signal<typename EnvironmentKey<Key>::Value> useEnvironment() {
+  if (MountContext* mount = detail::currentMountContext()) {
+    if (auto signal = mount->environmentBinding().signal<Key>()) {
+      return *signal;
+    }
+    return Reactive::Signal<typename EnvironmentKey<Key>::Value>{
+        mount->environmentBinding().value<Key>()};
+  }
+  if (MeasureContext* measure = detail::currentMeasureContext()) {
+    if (auto signal = measure->environmentBinding().signal<Key>()) {
+      return *signal;
+    }
+    return Reactive::Signal<typename EnvironmentKey<Key>::Value>{
+        measure->environmentBinding().value<Key>()};
+  }
+  return Reactive::Signal<typename EnvironmentKey<Key>::Value>{
+      EnvironmentKey<Key>::defaultValue()};
+}
+
+/// Each `useState` call allocates a fresh `Signal<T>` owned by the current reactive scope.
+/// The v5 retained UI model guarantees `body()` runs exactly once for a mount cycle; therefore
+/// each `useState` call site allocates one signal for that cycle. Re-entering the same body and
+/// evaluating the same call site twice is a framework error and is asserted in debug builds.
 template<typename T>
-T const& useEnvironment();
+Reactive::Signal<T> useState(T initial = T{},
+                             std::source_location location = std::source_location::current()) {
+#ifndef NDEBUG
+  detail::debugRegisterUseState(location);
+#else
+  (void)location;
+#endif
+  return Reactive::Signal<T>(std::move(initial));
+}
+
+template<typename Fn>
+auto useComputed(Fn&& fn) {
+  return Reactive::makeComputed(std::forward<Fn>(fn));
+}
+
+template<typename Fn>
+void useEffect(Fn&& fn) {
+  Reactive::Effect{std::forward<Fn>(fn)};
+}
+
+template<Interpolatable T>
+Animation<T> useAnimation(T initial = T{}) {
+  return Animation<T>(std::move(initial));
+}
+
+template<Interpolatable T>
+Animation<T> useAnimation(T initial, AnimationOptions options) {
+  Animation<T> animation{std::move(initial)};
+  animation.play(animation.get(), std::move(options));
+  return animation;
+}
 
 namespace detail {
 
-inline std::size_t combineHash(std::size_t seed, std::size_t h) {
-  return seed ^ (h + 0x9e3779b9u + (seed << 6) + (seed >> 2));
+inline bool animationTargetChanged(float current, float next) {
+  return std::abs(current - next) > 0.001f;
 }
 
-inline std::size_t hashDeps() { return 0; }
-
-template<typename First, typename... Rest>
-inline std::size_t hashDeps(First const& first, Rest const&... rest) {
-  std::size_t const h = std::hash<std::decay_t<First>>{}(first);
-  return combineHash(h, hashDeps(rest...));
+template<typename T>
+bool animationTargetChanged(T const& current, T const& next) {
+  return !(current == next);
 }
 
 } // namespace detail
 
-/// Cached memo slot for `useMemo` — holds the last value and dependency hash.
-template<typename T>
-struct MemoSlot {
-  T value{};
-  std::size_t depsHash = 0;
-  bool initialised = false;
-};
-
-/// Copyable handle to the persistent `Signal<T>` for this hook slot. Capturing a
-/// `State<T>` in a lambda copies the pointer — safe for the window lifetime.
-template<typename T>
-struct State {
-  Signal<T>* signal = nullptr;
-
-  /// Default-constructed `State` is invalid (`signal == nullptr`). Only use default
-  /// construction when the handle will be assigned before `operator*` or conversion.
-  State() = default;
-  explicit State(Signal<T>* s) : signal(s) {}
-
-  T const& operator*() const { return signal->get(); }
-  operator T const&() const { return signal->get(); }
-  /// Mutates through the stored pointer — safe to call on a const `State` (e.g. in a lambda capture).
-  void operator=(T value) const { signal->set(std::move(value)); }
-  void setSilently(T value) const { signal->setSilently(std::move(value)); }
-  bool operator==(State const& other) const noexcept { return signal == other.signal; }
-};
-
-/// Copyable handle to the persistent `Animation<T>` for this hook slot.
-template<Interpolatable T>
-struct AnimationHandle {
-  flux::Animation<T>* animation = nullptr;
-
-  explicit AnimationHandle(flux::Animation<T>* a) : animation(a) {}
-
-  T const& operator*() const { return animation->get(); }
-  operator T const&() const { return animation->get(); }
-  /// Uses the hook's stored `AnimationOptions` and respects `WithTransition` scope overrides.
-  void operator=(T value) const { animation->set(std::move(value)); }
-  void set(T value) const { animation->set(std::move(value)); }
-  void set(T value, Transition transition) const { animation->set(std::move(value), std::move(transition)); }
-  void set(T value, AnimationOptions options) const { animation->set(std::move(value), std::move(options)); }
-  void play(T value) const { animation->play(std::move(value)); }
-  void play(T value, Transition transition) const { animation->play(std::move(value), std::move(transition)); }
-  void play(T value, AnimationOptions options) const { animation->play(std::move(value), std::move(options)); }
-  void setOptions(AnimationOptions options) const { animation->setOptions(std::move(options)); }
-  void pause() const { animation->pause(); }
-  void resume() const { animation->resume(); }
-  void stop() const { animation->stop(); }
-  bool isAnimating() const { return animation->isAnimating(); }
-  bool isPaused() const { return animation->isPaused(); }
-  bool isRunning() const { return animation->isRunning(); }
-  bool operator==(AnimationHandle const& other) const noexcept { return animation == other.animation; }
-};
-
-/// Returns a persistent `Signal<T>` for the current component instance.
-/// `initial` is used only on the first call at this position.
-/// Must be called in the same order every body() invocation.
-template<typename T>
-State<T> useState(T initial = T{}) {
-  StateStore* store = StateStore::current();
-  assert(store && "useState called outside of a build pass");
-  return State<T>{&store->claimSlot<Signal<T>>(std::move(initial))};
-}
-
-/// Returns a persistent `Animation<T>` for the current component instance.
-template<Interpolatable T>
-AnimationHandle<T> useAnimation(T initial = T{}) {
-  StateStore* store = StateStore::current();
-  assert(store && "useAnimation called outside of a build pass");
-  auto& animation = store->claimSlot<flux::Animation<T>>(std::move(initial));
-  animation.setOptions(AnimationOptions{});
-  animation.setReducedMotion(useEnvironment<Theme>().reducedMotion);
-  return AnimationHandle<T>{&animation};
-}
-
-template<Interpolatable T>
-AnimationHandle<T> useAnimation(T initial, Transition transition) {
-  AnimationOptions options{};
-  options.transition = std::move(transition);
-  StateStore* store = StateStore::current();
-  assert(store && "useAnimation called outside of a build pass");
-  auto& animation = store->claimSlot<flux::Animation<T>>(std::move(initial));
-  animation.setOptions(std::move(options));
-  animation.setReducedMotion(useEnvironment<Theme>().reducedMotion);
-  return AnimationHandle<T>{&animation};
-}
-
-template<Interpolatable T>
-AnimationHandle<T> useAnimation(T initial, AnimationOptions options) {
-  StateStore* store = StateStore::current();
-  assert(store && "useAnimation called outside of a build pass");
-  auto& animation = store->claimSlot<flux::Animation<T>>(std::move(initial));
-  animation.setOptions(std::move(options));
-  animation.setReducedMotion(useEnvironment<Theme>().reducedMotion);
-  return AnimationHandle<T>{&animation};
-}
-
-/// Returns true if the calling component's subtree contains the window's focused node.
-/// Must be called inside body() like other hooks.
-bool useFocus();
-
-/// True when the subtree has focus and focus last moved via keyboard (Tab / cycle / programmatic),
-/// not via pointer down. Used for link-style focus rings that should not show after mouse focus.
-bool useKeyboardFocus();
-
-/// Returns true when the pointer is geometrically over the calling component's subtree and the hit
-/// is not a cursor-passthrough overlay. Updates reactively on pointer moves.
-/// Must be called inside body() like other hooks.
-bool useHover();
-
-/// Returns true when the primary mouse button is held and the calling component's subtree was the
-/// original press target (true even if the pointer moves outside during a drag).
-/// Must be called inside body() like other hooks.
-bool usePress();
-
-/// Returns a callable that, when invoked, focuses the first focusable leaf node in the calling
-/// component's subtree. Does not consume a StateStore slot; it captures the current component
-/// key and Runtime pointer at call time.
-///
-/// The returned `std::function<void()>` is safe to capture in lambdas and call from event
-/// handlers — it does not require an active build pass.
-///
-/// If the component has no focusable descendants when the callable is invoked, the call is a no-op.
-///
-/// Must be called inside body() like other hooks.
-std::function<void()> useRequestFocus();
-
-/// Returns a callable that clears keyboard focus for the current window when invoked.
-///
-/// The returned `std::function<void()>` is safe to capture in lambdas and call from event
-/// handlers — it does not require an active build pass.
-///
-/// Must be called inside body() like other hooks.
-std::function<void()> useClearFocus();
-
-/// Returns a cached value of `fn()`, recomputing only when the combined hash of `deps...`
-/// changes from the previous call.
-///
-/// This is **not** reactive: it does not subscribe to signals. It only avoids redundant work
-/// within and across rebuilds when dependencies are unchanged.
-///
-/// Must be called in the same order every `body()` invocation (same rules as `useState`).
-/// Each `deps` value is hashed with `std::hash` and mixed into a single fingerprint; types
-/// without `std::hash` fail to compile at the call site.
-///
-/// The returned reference is valid for the duration of the current `body()` call only. Copy
-/// values into lambdas that may outlive `body()`.
-///
-/// If `T` holds pointers or `std::string_view` into storage not owned by the memo slot, you
-/// must ensure that storage outlives the slot (typically the window lifetime). Prefer returning
-/// owning values from `fn()`.
-///
-/// With **zero dependencies**, the hash is always `0` and `fn` runs once (first initialisation)
-/// then never again — useful for one-time setup, easy to misuse if you omit a dependency.
-///
-/// `fn` should return a value type; the implementation stores `std::decay_t` of the result.
-template<typename Fn, typename... Deps>
-std::decay_t<std::invoke_result_t<Fn&&>> const& useMemo(Fn&& fn, Deps const&... deps) {
-  using T = std::decay_t<std::invoke_result_t<Fn&&>>;
-  StateStore* store = StateStore::current();
-  assert(store && "useMemo called outside of a build pass");
-
-  MemoSlot<T>& slot = store->claimSlot<MemoSlot<T>>();
-
-  std::size_t const currentHash = detail::hashDeps(deps...);
-  if (!slot.initialised || slot.depsHash != currentHash) {
-    slot.value = std::invoke(std::forward<Fn>(fn));
-    slot.depsHash = currentHash;
-    slot.initialised = true;
-  }
-  return slot.value;
-}
-
-/// Window-space rect for the calling composite from the last completed layout pass (see `Runtime`).
-std::optional<Rect> useLayoutRect();
-
-/// Best-effort window-space bounds for the calling composite.
-///
-/// Uses the last completed layout rect when available; otherwise synthesizes a provisional box from
-/// the current composite layout constraints. Returns an empty rect when neither source can provide
-/// useful geometry yet.
-Rect useBounds();
-
-/// Layout constraints for the current composite `body()` call (see `Runtime::pushCompositeConstraints`).
-LayoutConstraints const* useLayoutConstraints();
-
-namespace detail {
-struct ElementModifiers;
-}
-
-/// Outer \ref Element wrapper modifiers during \c body() when the view uses chained
-/// \c .padding() / \c .fill() / \c .stroke() / … (see \c StateStore::pushCompositeElementModifiers).
-/// \c nullptr when there is no modifier pass or outside \c body().
-detail::ElementModifiers const* useOuterElementModifiers() noexcept;
-
-/// Registers a handler for the named action that fires only when the calling component subtree has focus.
-///
-/// Must not be called from overlay subtrees: overlay `ComponentKey` paths can collide with the main tree,
-/// which would make dispatch match the wrong claim. Use raw keyboard handlers in overlays instead.
-void useViewAction(std::string const& name, std::function<void()> handler,
-                   std::function<bool()> isEnabled = {});
-
-/// Registers a window-level action handler (last registration in build order wins for a given name).
-void useWindowAction(std::string const& name, std::function<void()> handler,
-                     std::function<bool()> isEnabled = {});
-
-/// Nearest environment value of type \p T: (1) thread-local stack (subtree \c .environment() and the
-/// window baseline pushed during rebuild), (2) else the active \c Runtime's window \c EnvironmentLayer,
-/// (3) else a static default-constructed \p T (only when no window is current).
-template<typename T>
-T const& useEnvironment();
-
-} // namespace flux
-
-#include <Flux/UI/Environment.hpp>
-
-namespace flux {
-
-namespace detail {
-/// Used by \c useEnvironment when the stack has no value (e.g. outside \c rebuild). Not for app code.
-EnvironmentLayer const* windowEnvironmentLayerForCurrentRuntime();
-}
-
-template<typename T>
-T const& useEnvironment() {
-  if (T const* v = EnvironmentStack::current().find<T>()) {
-    if (StateStore* store = StateStore::current()) {
-      store->recordEnvironmentDependency(*v);
+template<Interpolatable T, typename TargetFn, typename TransitionFn>
+Animation<T> useAnimation(T initial, TargetFn&& target, TransitionFn&& transition) {
+  Animation<T> animation = useAnimation<T>(std::move(initial));
+  useEffect([animation,
+             target = std::forward<TargetFn>(target),
+             transition = std::forward<TransitionFn>(transition)]() mutable {
+    T next = target();
+    if (detail::animationTargetChanged(animation.peek(), next)) {
+      animation.set(std::move(next), transition());
     }
-    return *v;
+  });
+  return animation;
+}
+
+template<Interpolatable T, typename TargetFn>
+Animation<T> useAnimation(T initial, TargetFn&& target, Transition transition) {
+  return useAnimation<T>(
+      std::move(initial),
+      std::forward<TargetFn>(target),
+      [transition] {
+        return transition;
+      });
+}
+
+template<typename TargetFn, typename TransitionFn>
+  requires std::is_invocable_v<TargetFn&> &&
+           Interpolatable<std::remove_cvref_t<std::invoke_result_t<TargetFn&>>> &&
+           std::is_invocable_r_v<Transition, TransitionFn&>
+Animation<std::remove_cvref_t<std::invoke_result_t<TargetFn&>>>
+useAnimation(TargetFn&& target, TransitionFn&& transition) {
+  using T = std::remove_cvref_t<std::invoke_result_t<TargetFn&>>;
+  std::decay_t<TargetFn> targetFn{std::forward<TargetFn>(target)};
+  T initial = targetFn();
+  return useAnimation<T>(
+      std::move(initial),
+      std::move(targetFn),
+      std::forward<TransitionFn>(transition));
+}
+
+template<typename TargetFn>
+  requires std::is_invocable_v<TargetFn&> &&
+           Interpolatable<std::remove_cvref_t<std::invoke_result_t<TargetFn&>>>
+Animation<std::remove_cvref_t<std::invoke_result_t<TargetFn&>>>
+useAnimation(TargetFn&& target, Transition transition) {
+  using T = std::remove_cvref_t<std::invoke_result_t<TargetFn&>>;
+  std::decay_t<TargetFn> targetFn{std::forward<TargetFn>(target)};
+  T initial = targetFn();
+  return useAnimation<T>(
+      std::move(initial),
+      std::move(targetFn),
+      std::move(transition));
+}
+
+/// Scope-owned frame callback for custom per-frame work that is not a single interpolated value.
+/// Prefer \ref useAnimation for normal control transitions.
+template<typename Fn>
+void useFrame(Fn&& callback) {
+  ObserverHandle const handle =
+      AnimationClock::instance().subscribe(Reactive::SmallFn<void(AnimationTick const&)>{std::forward<Fn>(callback)});
+  Reactive::onCleanup([handle] {
+    AnimationClock::instance().unsubscribe(handle);
+  });
+}
+
+inline Reactive::Signal<bool> useFocus() {
+  return detail::useInteractionSignal(detail::InteractionSignalKind::Focus);
+}
+
+inline Reactive::Signal<bool> useKeyboardFocus() {
+  return detail::useInteractionSignal(detail::InteractionSignalKind::KeyboardFocus);
+}
+
+inline Reactive::Signal<bool> useHover() {
+  return detail::useInteractionSignal(detail::InteractionSignalKind::Hover);
+}
+
+inline Reactive::Signal<bool> usePress() {
+  return detail::useInteractionSignal(detail::InteractionSignalKind::Press);
+}
+
+inline LayoutConstraints const* useLayoutConstraints() {
+  return detail::currentHookLayoutConstraints();
+}
+
+inline Rect useBounds() {
+  LayoutConstraints const* constraints = useLayoutConstraints();
+  if (!constraints) {
+    return {};
   }
-  if (EnvironmentLayer const* layer = detail::windowEnvironmentLayerForCurrentRuntime()) {
-    if (T const* v = layer->get<T>()) {
-      if (StateStore* store = StateStore::current()) {
-        store->recordEnvironmentDependency(*v);
-      }
-      return *v;
-    }
+
+  Rect bounds{};
+  if (std::isfinite(constraints->maxWidth) && constraints->maxWidth > 0.f) {
+    bounds.width = constraints->maxWidth;
   }
-  static T const sDefault{};
-  if (StateStore* store = StateStore::current()) {
-    store->recordEnvironmentDependency(sDefault);
+  if (std::isfinite(constraints->maxHeight) && constraints->maxHeight > 0.f) {
+    bounds.height = constraints->maxHeight;
   }
-  return sDefault;
+  return bounds;
+}
+
+inline void useViewAction(std::string const& name, std::function<void()> handler,
+                          std::function<bool()> isEnabled = {}) {
+  Runtime* runtime = Runtime::current();
+  if (!runtime) {
+    return;
+  }
+  Reactive::detail::ScopeState* scope = Reactive::detail::sCurrentOwner;
+  ComponentKey const key = scope ? ComponentKey::fromScope(scope) : ComponentKey{};
+  ActionId const id = runtime->actionRegistry().registerViewClaim(
+      key, name, std::move(handler), std::move(isEnabled));
+  Reactive::onCleanup([runtime, id] {
+    runtime->actionRegistry().unregister(id);
+  });
+}
+
+inline void useWindowAction(std::string const& name, std::function<void()> handler,
+                            std::function<bool()> isEnabled = {}) {
+  Runtime* runtime = Runtime::current();
+  if (!runtime) {
+    return;
+  }
+  ActionId const id = runtime->actionRegistry().registerWindowAction(
+      name, std::move(handler), std::move(isEnabled));
+  Reactive::onCleanup([runtime, id] {
+    runtime->actionRegistry().unregister(id);
+  });
 }
 
 } // namespace flux

@@ -20,11 +20,12 @@ enum class ScrollAxis { Vertical, Horizontal, Both };
 /// `VStack`/`HStack` (or similar) as the child when you need spacing.
 struct OffsetView : ViewModifiers<OffsetView> {
   Size measure(MeasureContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
+  std::unique_ptr<scenegraph::SceneNode> mount(MountContext&) const;
 
   Point offset{};
   ScrollAxis axis = ScrollAxis::Vertical;
-  State<Size> viewportSize{};
-  State<Size> contentSize{};
+  Signal<Size> viewportSize{};
+  Signal<Size> contentSize{};
   std::vector<Element> children;
 
   bool operator==(OffsetView const& other) const {

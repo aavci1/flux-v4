@@ -6,6 +6,9 @@
 
 #include <Flux/Core/Types.hpp>
 #include <Flux/Graphics/Font.hpp>
+#include <Flux/Reactive/Computed.hpp>
+#include <Flux/Reactive/Signal.hpp>
+#include <Flux/UI/Environment.hpp>
 
 #include <string>
 
@@ -168,8 +171,6 @@ struct Theme {
     float durationFast = 0.10f;
     float durationMedium = 0.18f;
     float durationSlow = 0.30f;
-
-    bool reducedMotion = false;
 
     // Toggle
     float toggleTrackWidth = 44.f;

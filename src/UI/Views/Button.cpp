@@ -1,5 +1,6 @@
 #include <Flux/Reactive/Interpolatable.hpp>
 #include <Flux/Reactive/Transition.hpp>
+#include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Views/Button.hpp>
 #include <Flux/UI/Views/Icon.hpp>
@@ -113,34 +114,48 @@ ButtonColors deriveColors(ButtonVariant variant, Color accent, Color destructive
 } // namespace
 
 Element Button::body() const {
-    Theme const &theme = useEnvironment<Theme>();
-    auto [fontResolved, paddingH, paddingV, radiusResolved, accent, destructive] = resolveStyle(style, theme);
-    bool const isDisabled = disabled;
-    ButtonColors const colors = deriveColors(variant, accent, destructive, theme.accentForegroundColor, theme.dangerForegroundColor, theme);
-    bool const hovered = useHover();
-    bool const pressed = usePress();
-    bool const focused = useFocus();
+    auto theme = useEnvironment<ThemeKey>();
+    auto [fontResolved, paddingH, paddingV, radiusResolved, accent, destructive] = resolveStyle(style, theme());
+    bool const isDisabled = disabled.evaluate();
+    Reactive::Bindable<bool> disabledBinding = disabled;
+    ButtonColors const colors = deriveColors(variant, accent, destructive, theme().accentForegroundColor, theme().dangerForegroundColor, theme());
+    Reactive::Signal<bool> hovered = useHover();
+    Reactive::Signal<bool> pressed = usePress();
+    Reactive::Signal<bool> focused = useFocus();
 
-    Color const fillTarget = isDisabled ? theme.disabledControlBackgroundColor :
-                             pressed    ? colors.fillPress :
-                             hovered    ? colors.fillHover :
-                                          colors.fill;
-    Color const labelTarget = isDisabled ? theme.disabledTextColor : colors.label;
-    float const scaleTarget = (pressed && !isDisabled) ? 0.97f : 1.f;
-
-    ShadowStyle shadow = ShadowStyle::none();
-    if (!isDisabled) {
-        if (pressed) {
-            shadow = ShadowStyle {.radius = theme.shadowRadiusControl + 2.f, .offset = {0.f, theme.shadowOffsetYControl + 1.f}, .color = Color {theme.shadowColor.r, theme.shadowColor.g, theme.shadowColor.b, std::min(theme.shadowColor.a + 0.08f, 1.f)}};
-        } else if (hovered) {
-            shadow = colors.shadow.isNone() ? ShadowStyle {.radius = theme.shadowRadiusControl * 0.8f, .offset = {0.f, theme.shadowOffsetYControl + 0.5f}, .color = Color {theme.shadowColor.r, theme.shadowColor.g, theme.shadowColor.b, theme.shadowColor.a * 0.7f}} : colors.shadow;
-        } else {
-            shadow = colors.shadow;
+    auto motion = [theme] {
+        return Transition::ease(theme().durationFast);
+    };
+    auto fillTarget = [disabledBinding, pressed, hovered, colors, theme] {
+        return disabledBinding.evaluate() ? theme().disabledControlBackgroundColor :
+               pressed()                 ? colors.fillPress :
+               hovered()                 ? colors.fillHover :
+                                           colors.fill;
+    };
+    auto labelTarget = [disabledBinding, colors, theme] {
+        return disabledBinding.evaluate() ? theme().disabledTextColor : colors.label;
+    };
+    auto scaleTarget = [disabledBinding, pressed] {
+        return (pressed() && !disabledBinding.evaluate()) ? 0.97f : 1.f;
+    };
+    auto fillAnim = useAnimation(fillTarget, motion);
+    auto labelAnim = useAnimation(labelTarget, motion);
+    auto scaleAnim = useAnimation(scaleTarget, motion);
+    Reactive::Bindable<ShadowStyle> const shadow{[disabledBinding, pressed, hovered, colors, theme] {
+        if (disabledBinding.evaluate()) {
+            return ShadowStyle::none();
         }
-    }
+        if (pressed()) {
+            return ShadowStyle {.radius = theme().shadowRadiusControl + 2.f, .offset = {0.f, theme().shadowOffsetYControl + 1.f}, .color = Color {theme().shadowColor.r, theme().shadowColor.g, theme().shadowColor.b, std::min(theme().shadowColor.a + 0.08f, 1.f)}};
+        }
+        if (hovered()) {
+            return colors.shadow.isNone() ? ShadowStyle {.radius = theme().shadowRadiusControl * 0.8f, .offset = {0.f, theme().shadowOffsetYControl + 0.5f}, .color = Color {theme().shadowColor.r, theme().shadowColor.g, theme().shadowColor.b, theme().shadowColor.a * 0.7f}} : colors.shadow;
+        }
+        return colors.shadow;
+    }};
 
-    auto handleTap = [onTap = onTap, isDisabled]() {
-        if (isDisabled) {
+    auto handleTap = [onTap = onTap, disabledBinding]() {
+        if (disabledBinding.evaluate()) {
             return;
         }
         if (onTap) {
@@ -153,23 +168,29 @@ Element Button::body() const {
         }
     };
 
-    bool const showFocusRing = !isDisabled && focused;
     CornerRadius const cr {radiusResolved};
-
-    StrokeStyle const stroke = showFocusRing                            ? StrokeStyle::solid(colors.focusRing, 2.f) :
-                               (!isDisabled && colors.border.a > 0.01f) ? StrokeStyle::solid(colors.border, 1.f) :
-                                                                          StrokeStyle::none();
+    Reactive::Bindable<StrokeStyle> const stroke{[disabledBinding, focused, colors] {
+        return !disabledBinding.evaluate() && focused.get() ? StrokeStyle::solid(colors.focusRing, 2.f) :
+               (!disabledBinding.evaluate() && colors.border.a > 0.01f) ? StrokeStyle::solid(colors.border, 1.f) :
+                                                                            StrokeStyle::none();
+    }};
 
     return ScaleAroundCenter {
-        .scale = scaleTarget,
+        .scale = [scaleAnim] {
+            return scaleAnim();
+        },
         .child = Text {
             .text = label,
             .font = fontResolved,
-            .color = labelTarget,
+            .color = [labelAnim] {
+                return labelAnim();
+            },
             .horizontalAlignment = HorizontalAlignment::Center,
             .verticalAlignment = VerticalAlignment::Center,
         }
-                     .fill(FillStyle::solid(fillTarget))
+                     .fill([fillAnim] {
+                         return fillAnim();
+                     })
                      .stroke(stroke)
                      .cornerRadius(cr)
                      .shadow(shadow)
@@ -182,21 +203,28 @@ Element Button::body() const {
 }
 
 Element LinkButton::body() const {
-    Theme const &theme = useEnvironment<Theme>();
-    auto [fontResolved, accentResolved] = resolveStyle(style, theme);
-    bool const isDisabled = disabled;
-    bool const hovered = useHover();
-    bool const pressed = usePress();
-    bool const focused = useFocus();
-    bool const keyboardFocused = useKeyboardFocus();
+    auto theme = useEnvironment<ThemeKey>();
+    auto [fontResolved, accentResolved] = resolveStyle(style, theme());
+    bool const isDisabled = disabled.evaluate();
+    Reactive::Bindable<bool> disabledBinding = disabled;
+    Reactive::Signal<bool> hovered = useHover();
+    Reactive::Signal<bool> pressed = usePress();
+    Reactive::Signal<bool> focused = useFocus();
+    Reactive::Signal<bool> keyboardFocused = useKeyboardFocus();
 
-    Color const labelColor =
-        isDisabled ? theme.disabledTextColor : pressed ? darken(accentResolved, 0.12f) :
-                                           hovered     ? lighten(accentResolved, 0.12f) :
-                                                         accentResolved;
+    auto motion = [theme] {
+        return Transition::ease(theme().durationFast);
+    };
+    auto labelTarget = [disabledBinding, pressed, hovered, accentResolved, theme] {
+        return disabledBinding.evaluate() ? theme().disabledTextColor :
+               pressed()                 ? darken(accentResolved, 0.12f) :
+               hovered()                 ? lighten(accentResolved, 0.12f) :
+                                           accentResolved;
+    };
+    auto labelAnim = useAnimation(labelTarget, motion);
 
-    auto handleTap = [onTap = onTap, isDisabled]() {
-        if (isDisabled) {
+    auto handleTap = [onTap = onTap, disabledBinding]() {
+        if (disabledBinding.evaluate()) {
             return;
         }
         if (onTap) {
@@ -209,21 +237,24 @@ Element LinkButton::body() const {
         }
     };
 
-    StrokeStyle focusStroke = StrokeStyle::none();
-    if (!isDisabled && focused && keyboardFocused) {
-        focusStroke = StrokeStyle::solid(theme.keyboardFocusIndicatorColor, 2.f);
-    }
+    Reactive::Bindable<StrokeStyle> const focusStroke{[disabledBinding, focused, keyboardFocused, theme] {
+        return !disabledBinding.evaluate() && focused.get() && keyboardFocused.get()
+                   ? StrokeStyle::solid(theme().keyboardFocusIndicatorColor, 2.f)
+                   : StrokeStyle::none();
+    }};
 
     return Text {
         .text = label,
         .font = fontResolved,
-        .color = labelColor,
+        .color = [labelAnim] {
+            return labelAnim();
+        },
         .horizontalAlignment = HorizontalAlignment::Leading,
         .verticalAlignment = VerticalAlignment::Center,
     }
         .fill(FillStyle::none())
         .stroke(focusStroke)
-        .cornerRadius(CornerRadius {theme.radiusXSmall})
+        .cornerRadius(CornerRadius {theme().radiusXSmall})
         .padding(0.f, 3.f, 0.f, 3.f)
         .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
         .focusable(!isDisabled)
@@ -232,21 +263,28 @@ Element LinkButton::body() const {
 }
 
 Element IconButton::body() const {
-    Theme const &theme = useEnvironment<Theme>();
-    auto [sizeResolved, weightResolved, accentResolved] = resolveStyle(style, theme);
-    bool const isDisabled = disabled;
-    bool const hovered = useHover();
-    bool const pressed = usePress();
-    bool const focused = useFocus();
-    bool const keyboardFocused = useKeyboardFocus();
+    auto theme = useEnvironment<ThemeKey>();
+    auto [sizeResolved, weightResolved, accentResolved] = resolveStyle(style, theme());
+    bool const isDisabled = disabled.evaluate();
+    Reactive::Bindable<bool> disabledBinding = disabled;
+    Reactive::Signal<bool> hovered = useHover();
+    Reactive::Signal<bool> pressed = usePress();
+    Reactive::Signal<bool> focused = useFocus();
+    Reactive::Signal<bool> keyboardFocused = useKeyboardFocus();
 
-    Color const iconColor =
-        isDisabled ? theme.disabledTextColor : pressed ? darken(accentResolved, 0.12f) :
-                                           hovered     ? lighten(accentResolved, 0.12f) :
-                                                         accentResolved;
+    auto motion = [theme] {
+        return Transition::ease(theme().durationFast);
+    };
+    auto iconTarget = [disabledBinding, pressed, hovered, accentResolved, theme] {
+        return disabledBinding.evaluate() ? theme().disabledTextColor :
+               pressed()                 ? darken(accentResolved, 0.12f) :
+               hovered()                 ? lighten(accentResolved, 0.12f) :
+                                           accentResolved;
+    };
+    auto iconAnim = useAnimation(iconTarget, motion);
 
-    auto handleTap = [onTap = onTap, isDisabled]() {
-        if (isDisabled) {
+    auto handleTap = [onTap = onTap, disabledBinding]() {
+        if (disabledBinding.evaluate()) {
             return;
         }
         if (onTap) {
@@ -259,20 +297,23 @@ Element IconButton::body() const {
         }
     };
 
-    StrokeStyle focusStroke = StrokeStyle::none();
-    if (!isDisabled && focused && keyboardFocused) {
-        focusStroke = StrokeStyle::solid(theme.keyboardFocusIndicatorColor, 2.f);
-    }
+    Reactive::Bindable<StrokeStyle> const focusStroke{[disabledBinding, focused, keyboardFocused, theme] {
+        return !disabledBinding.evaluate() && focused.get() && keyboardFocused.get()
+                   ? StrokeStyle::solid(theme().keyboardFocusIndicatorColor, 2.f)
+                   : StrokeStyle::none();
+    }};
 
     return Icon {
         .name = icon,
         .size = sizeResolved,
         .weight = weightResolved,
-        .color = iconColor,
+        .color = [iconAnim] {
+            return iconAnim();
+        },
     }
         .fill(FillStyle::none())
         .stroke(focusStroke)
-        .cornerRadius(CornerRadius {theme.radiusXSmall})
+        .cornerRadius(CornerRadius {theme().radiusXSmall})
         .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
         .focusable(!isDisabled)
         .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})

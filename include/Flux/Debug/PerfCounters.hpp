@@ -4,6 +4,7 @@
 
 #include <array>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 
@@ -11,7 +12,6 @@ namespace flux::debug::perf {
 
 enum class TimedMetric : std::uint8_t {
   ProcessReactiveUpdates = 0,
-  IncrementalRebuild,
   SceneRender,
   CanvasPresent,
   CanvasDrawableWait,
@@ -19,32 +19,12 @@ enum class TimedMetric : std::uint8_t {
   Count,
 };
 
-enum class ValueEqualsBranch : std::uint8_t {
-  Equality,
-  Memcmp,
-  Fallthrough,
-};
-
-enum class StructuralFailReason : std::uint8_t {
-  Value,
-  FlexGrow,
-  FlexShrink,
-  FlexBasis,
-  MinMainSize,
-  Key,
-  Environment,
-  Modifiers,
-};
-
-struct BuildCounters {
-  std::uint64_t resolvedNodes = 0;
-  std::uint64_t materializedNodes = 0;
-  std::uint64_t arrangedNodes = 0;
-  std::uint64_t reusedNodes = 0;
-  std::uint64_t skippedSubtrees = 0;
-  std::uint64_t skipBlockedByDirtyDescendant = 0;
-  std::uint64_t skipBlockedByModifierChange = 0;
-  std::uint64_t skipBlockedByMissingGeometry = 0;
+enum class RenderCounterKind : std::uint8_t {
+  Rect = 0,
+  Image,
+  Path,
+  Glyph,
+  Count,
 };
 
 struct ComponentKeyCounters {
@@ -62,29 +42,34 @@ struct ComponentKeyCounters {
   std::uint64_t heapCapacity = 0;
 };
 
-struct CompositeBodyCounters {
-  std::uint64_t rebuilds = 0;
-  std::uint64_t structuralCompares = 0;
-  std::uint64_t structuralMatches = 0;
-  std::uint64_t legacyPredicateMisses = 0;
+struct RenderCounters {
+  std::array<std::uint64_t, static_cast<std::size_t>(RenderCounterKind::Count)> ops{};
+  std::array<std::uint64_t, static_cast<std::size_t>(RenderCounterKind::Count)> drawCalls{};
+  std::array<std::uint64_t, static_cast<std::size_t>(RenderCounterKind::Count)> uploadBytes{};
+  std::uint64_t opOrderEntries = 0;
+  std::uint64_t pathVertices = 0;
+  std::uint64_t glyphVertices = 0;
+  std::uint64_t recorderCapacityGrowths = 0;
+  std::uint64_t recorderCapacityGrowthBytes = 0;
 };
 
-struct ValueEqualsCounters {
-  std::uint64_t equalityComparable = 0;
-  std::uint64_t triviallyCopyable = 0;
-  std::uint64_t fallthrough = 0;
+struct SceneCounters {
+  std::uint64_t renderPasses = 0;
+  std::uint64_t nodesVisited = 0;
+  std::uint64_t groupsVisited = 0;
+  std::uint64_t leavesVisited = 0;
+  std::uint64_t quickRejects = 0;
+  std::uint64_t liveLeafRenders = 0;
+  std::uint64_t preparedReplaySuccesses = 0;
+  std::uint64_t preparedReplayFailures = 0;
 };
 
-struct StructuralFailCounters {
-  std::uint64_t value = 0;
-  std::uint64_t flexGrow = 0;
-  std::uint64_t flexShrink = 0;
-  std::uint64_t flexBasis = 0;
-  std::uint64_t minMainSize = 0;
-  std::uint64_t key = 0;
-  std::uint64_t environment = 0;
-  std::uint64_t modifiers = 0;
-  std::uint64_t pass = 0;
+struct TextCounters {
+  std::uint64_t layoutCalls = 0;
+  std::uint64_t layoutCacheHits = 0;
+  std::uint64_t layoutCacheMisses = 0;
+  std::uint64_t paragraphVariantHits = 0;
+  std::uint64_t paragraphVariantMisses = 0;
 };
 
 namespace detail {
@@ -92,12 +77,10 @@ namespace detail {
 struct IntervalCounters {
   std::chrono::steady_clock::time_point startedAt = std::chrono::steady_clock::now();
   std::uint64_t frames = 0;
-  std::uint64_t builds = 0;
-  BuildCounters build{};
   ComponentKeyCounters componentKeys{};
-  CompositeBodyCounters compositeBodies{};
-  ValueEqualsCounters valueEquals{};
-  StructuralFailCounters structuralFail{};
+  RenderCounters render{};
+  SceneCounters scene{};
+  TextCounters text{};
   std::uint64_t preparedPrepareCalls = 0;
   std::uint64_t preparedReplayCalls = 0;
   std::array<std::uint64_t, static_cast<std::size_t>(TimedMetric::Count)> durationsNs{};
@@ -105,12 +88,10 @@ struct IntervalCounters {
   void reset(std::chrono::steady_clock::time_point now) {
     startedAt = now;
     frames = 0;
-    builds = 0;
-    build = {};
     componentKeys = {};
-    compositeBodies = {};
-    valueEquals = {};
-    structuralFail = {};
+    render = {};
+    scene = {};
+    text = {};
     preparedPrepareCalls = 0;
     preparedReplayCalls = 0;
     durationsNs.fill(0);
@@ -144,48 +125,12 @@ inline void logIfReady() {
   double const seconds = std::chrono::duration_cast<std::chrono::duration<double>>(elapsed).count();
   std::fprintf(
       stderr,
-      "[flux:perf] %.2fs frames=%llu builds=%llu "
-      "resolved=%llu(%.1f/f) materialized=%llu(%.1f/f) arranged=%llu(%.1f/f) reused=%llu(%.1f/f) skipped=%llu(%.1f/f) "
-      "skipBlocked dirty=%llu modifier=%llu geometry=%llu "
-      "body rebuild=%llu(%.1f/f) compare=%llu stable=%llu legacyMiss=%llu "
-      "valueEquals eq=%llu memcmp=%llu fallthrough=%llu "
-      "structuralFail value=%llu flexGrow=%llu flexShrink=%llu flexBasis=%llu minMainSize=%llu key=%llu environment=%llu modifiers=%llu pass=%llu "
+      "[flux:perf] %.2fs frames=%llu "
       "ck copy=%llu/%lluid append=%llu/%lluid hash=%llu/%lluid eq=%llu/%lluid prefix=%llu/%lluid grow=%llu "
       "prepare=%llu(%.2f/f) replay=%llu(%.2f/f) "
-      "ms reactive=%.2f(%.2f/f) incremental=%.2f(%.2f/f) render=%.2f(%.2f/f) present=%.2f(%.2f/f) drawableWait=%.2f(%.2f/f) frameBudget=%.2f(%.2f/f)\n",
+      "ms reactive=%.2f(%.2f/f) render=%.2f(%.2f/f) present=%.2f(%.2f/f) drawableWait=%.2f(%.2f/f) frameBudget=%.2f(%.2f/f)\n",
       seconds,
       static_cast<unsigned long long>(interval.frames),
-      static_cast<unsigned long long>(interval.builds),
-      static_cast<unsigned long long>(interval.build.resolvedNodes),
-      perFrame(interval.build.resolvedNodes, interval.frames),
-      static_cast<unsigned long long>(interval.build.materializedNodes),
-      perFrame(interval.build.materializedNodes, interval.frames),
-      static_cast<unsigned long long>(interval.build.arrangedNodes),
-      perFrame(interval.build.arrangedNodes, interval.frames),
-      static_cast<unsigned long long>(interval.build.reusedNodes),
-      perFrame(interval.build.reusedNodes, interval.frames),
-      static_cast<unsigned long long>(interval.build.skippedSubtrees),
-      perFrame(interval.build.skippedSubtrees, interval.frames),
-      static_cast<unsigned long long>(interval.build.skipBlockedByDirtyDescendant),
-      static_cast<unsigned long long>(interval.build.skipBlockedByModifierChange),
-      static_cast<unsigned long long>(interval.build.skipBlockedByMissingGeometry),
-      static_cast<unsigned long long>(interval.compositeBodies.rebuilds),
-      perFrame(interval.compositeBodies.rebuilds, interval.frames),
-      static_cast<unsigned long long>(interval.compositeBodies.structuralCompares),
-      static_cast<unsigned long long>(interval.compositeBodies.structuralMatches),
-      static_cast<unsigned long long>(interval.compositeBodies.legacyPredicateMisses),
-      static_cast<unsigned long long>(interval.valueEquals.equalityComparable),
-      static_cast<unsigned long long>(interval.valueEquals.triviallyCopyable),
-      static_cast<unsigned long long>(interval.valueEquals.fallthrough),
-      static_cast<unsigned long long>(interval.structuralFail.value),
-      static_cast<unsigned long long>(interval.structuralFail.flexGrow),
-      static_cast<unsigned long long>(interval.structuralFail.flexShrink),
-      static_cast<unsigned long long>(interval.structuralFail.flexBasis),
-      static_cast<unsigned long long>(interval.structuralFail.minMainSize),
-      static_cast<unsigned long long>(interval.structuralFail.key),
-      static_cast<unsigned long long>(interval.structuralFail.environment),
-      static_cast<unsigned long long>(interval.structuralFail.modifiers),
-      static_cast<unsigned long long>(interval.structuralFail.pass),
       static_cast<unsigned long long>(interval.componentKeys.copies),
       static_cast<unsigned long long>(interval.componentKeys.copiedIds),
       static_cast<unsigned long long>(interval.componentKeys.appends),
@@ -204,9 +149,6 @@ inline void logIfReady() {
       nanosToMillis(interval.durationsNs[static_cast<std::size_t>(TimedMetric::ProcessReactiveUpdates)]),
       nanosToMillis(interval.durationsNs[static_cast<std::size_t>(TimedMetric::ProcessReactiveUpdates)]) /
           (interval.frames == 0 ? 1.0 : static_cast<double>(interval.frames)),
-      nanosToMillis(interval.durationsNs[static_cast<std::size_t>(TimedMetric::IncrementalRebuild)]),
-      nanosToMillis(interval.durationsNs[static_cast<std::size_t>(TimedMetric::IncrementalRebuild)]) /
-          (interval.frames == 0 ? 1.0 : static_cast<double>(interval.frames)),
       nanosToMillis(interval.durationsNs[static_cast<std::size_t>(TimedMetric::SceneRender)]),
       nanosToMillis(interval.durationsNs[static_cast<std::size_t>(TimedMetric::SceneRender)]) /
           (interval.frames == 0 ? 1.0 : static_cast<double>(interval.frames)),
@@ -220,6 +162,73 @@ inline void logIfReady() {
       nanosToMillis(interval.durationsNs[static_cast<std::size_t>(TimedMetric::DisplayLinkToPresent)]) /
           (interval.frames == 0 ? 1.0 : static_cast<double>(interval.frames)));
 
+  std::fprintf(
+      stderr,
+      "[flux:perf:render] %.2fs frames=%llu "
+      "scene passes=%llu(%.2f/f) nodes=%llu(%.2f/f) groups=%llu(%.2f/f) leaves=%llu(%.2f/f) "
+      "reject=%llu live=%llu replayOk=%llu replayFail=%llu "
+      "ops rect=%llu(%.2f/f) image=%llu(%.2f/f) path=%llu(%.2f/f) glyph=%llu(%.2f/f) order=%llu(%.2f/f) "
+      "draw rect=%llu(%.2f/f) image=%llu(%.2f/f) path=%llu(%.2f/f) glyph=%llu(%.2f/f) "
+      "uploadKB rect=%.1f(%.2f/f) image=%.1f(%.2f/f) path=%.1f(%.2f/f) glyph=%.1f(%.2f/f) "
+      "verts path=%llu(%.2f/f) glyph=%llu(%.2f/f) "
+      "recorderGrow=%llu growKB=%.1f "
+      "text layout=%llu hit=%llu miss=%llu paraHit=%llu paraMiss=%llu\n",
+      seconds,
+      static_cast<unsigned long long>(interval.frames),
+      static_cast<unsigned long long>(interval.scene.renderPasses),
+      perFrame(interval.scene.renderPasses, interval.frames),
+      static_cast<unsigned long long>(interval.scene.nodesVisited),
+      perFrame(interval.scene.nodesVisited, interval.frames),
+      static_cast<unsigned long long>(interval.scene.groupsVisited),
+      perFrame(interval.scene.groupsVisited, interval.frames),
+      static_cast<unsigned long long>(interval.scene.leavesVisited),
+      perFrame(interval.scene.leavesVisited, interval.frames),
+      static_cast<unsigned long long>(interval.scene.quickRejects),
+      static_cast<unsigned long long>(interval.scene.liveLeafRenders),
+      static_cast<unsigned long long>(interval.scene.preparedReplaySuccesses),
+      static_cast<unsigned long long>(interval.scene.preparedReplayFailures),
+      static_cast<unsigned long long>(interval.render.ops[static_cast<std::size_t>(RenderCounterKind::Rect)]),
+      perFrame(interval.render.ops[static_cast<std::size_t>(RenderCounterKind::Rect)], interval.frames),
+      static_cast<unsigned long long>(interval.render.ops[static_cast<std::size_t>(RenderCounterKind::Image)]),
+      perFrame(interval.render.ops[static_cast<std::size_t>(RenderCounterKind::Image)], interval.frames),
+      static_cast<unsigned long long>(interval.render.ops[static_cast<std::size_t>(RenderCounterKind::Path)]),
+      perFrame(interval.render.ops[static_cast<std::size_t>(RenderCounterKind::Path)], interval.frames),
+      static_cast<unsigned long long>(interval.render.ops[static_cast<std::size_t>(RenderCounterKind::Glyph)]),
+      perFrame(interval.render.ops[static_cast<std::size_t>(RenderCounterKind::Glyph)], interval.frames),
+      static_cast<unsigned long long>(interval.render.opOrderEntries),
+      perFrame(interval.render.opOrderEntries, interval.frames),
+      static_cast<unsigned long long>(interval.render.drawCalls[static_cast<std::size_t>(RenderCounterKind::Rect)]),
+      perFrame(interval.render.drawCalls[static_cast<std::size_t>(RenderCounterKind::Rect)], interval.frames),
+      static_cast<unsigned long long>(interval.render.drawCalls[static_cast<std::size_t>(RenderCounterKind::Image)]),
+      perFrame(interval.render.drawCalls[static_cast<std::size_t>(RenderCounterKind::Image)], interval.frames),
+      static_cast<unsigned long long>(interval.render.drawCalls[static_cast<std::size_t>(RenderCounterKind::Path)]),
+      perFrame(interval.render.drawCalls[static_cast<std::size_t>(RenderCounterKind::Path)], interval.frames),
+      static_cast<unsigned long long>(interval.render.drawCalls[static_cast<std::size_t>(RenderCounterKind::Glyph)]),
+      perFrame(interval.render.drawCalls[static_cast<std::size_t>(RenderCounterKind::Glyph)], interval.frames),
+      static_cast<double>(interval.render.uploadBytes[static_cast<std::size_t>(RenderCounterKind::Rect)]) / 1024.0,
+      perFrame(interval.render.uploadBytes[static_cast<std::size_t>(RenderCounterKind::Rect)], interval.frames) /
+          1024.0,
+      static_cast<double>(interval.render.uploadBytes[static_cast<std::size_t>(RenderCounterKind::Image)]) / 1024.0,
+      perFrame(interval.render.uploadBytes[static_cast<std::size_t>(RenderCounterKind::Image)], interval.frames) /
+          1024.0,
+      static_cast<double>(interval.render.uploadBytes[static_cast<std::size_t>(RenderCounterKind::Path)]) / 1024.0,
+      perFrame(interval.render.uploadBytes[static_cast<std::size_t>(RenderCounterKind::Path)], interval.frames) /
+          1024.0,
+      static_cast<double>(interval.render.uploadBytes[static_cast<std::size_t>(RenderCounterKind::Glyph)]) / 1024.0,
+      perFrame(interval.render.uploadBytes[static_cast<std::size_t>(RenderCounterKind::Glyph)], interval.frames) /
+          1024.0,
+      static_cast<unsigned long long>(interval.render.pathVertices),
+      perFrame(interval.render.pathVertices, interval.frames),
+      static_cast<unsigned long long>(interval.render.glyphVertices),
+      perFrame(interval.render.glyphVertices, interval.frames),
+      static_cast<unsigned long long>(interval.render.recorderCapacityGrowths),
+      static_cast<double>(interval.render.recorderCapacityGrowthBytes) / 1024.0,
+      static_cast<unsigned long long>(interval.text.layoutCalls),
+      static_cast<unsigned long long>(interval.text.layoutCacheHits),
+      static_cast<unsigned long long>(interval.text.layoutCacheMisses),
+      static_cast<unsigned long long>(interval.text.paragraphVariantHits),
+      static_cast<unsigned long long>(interval.text.paragraphVariantMisses));
+
   interval.reset(now);
 }
 
@@ -227,98 +236,6 @@ inline void logIfReady() {
 
 inline bool enabled() {
   return perfEnabled();
-}
-
-inline void recordBuildCounters(BuildCounters const& build) {
-  if (!enabled()) {
-    return;
-  }
-  detail::IntervalCounters& interval = detail::counters();
-  ++interval.builds;
-  interval.build.resolvedNodes += build.resolvedNodes;
-  interval.build.materializedNodes += build.materializedNodes;
-  interval.build.arrangedNodes += build.arrangedNodes;
-  interval.build.reusedNodes += build.reusedNodes;
-  interval.build.skippedSubtrees += build.skippedSubtrees;
-  interval.build.skipBlockedByDirtyDescendant += build.skipBlockedByDirtyDescendant;
-  interval.build.skipBlockedByModifierChange += build.skipBlockedByModifierChange;
-  interval.build.skipBlockedByMissingGeometry += build.skipBlockedByMissingGeometry;
-}
-
-inline void recordCompositeBodyResolve(bool comparedPreviousBody, bool structurallyStable,
-                                       bool legacyPredicateWouldHaveMatched) {
-  if (!enabled()) {
-    return;
-  }
-  auto& counters = detail::counters().compositeBodies;
-  ++counters.rebuilds;
-  if (comparedPreviousBody) {
-    ++counters.structuralCompares;
-  }
-  if (structurallyStable) {
-    ++counters.structuralMatches;
-  }
-  if (!legacyPredicateWouldHaveMatched) {
-    ++counters.legacyPredicateMisses;
-  }
-}
-
-inline void recordValueEqualsHit(ValueEqualsBranch branch) {
-  if (!enabled()) {
-    return;
-  }
-  auto& counters = detail::counters().valueEquals;
-  switch (branch) {
-  case ValueEqualsBranch::Equality:
-    ++counters.equalityComparable;
-    break;
-  case ValueEqualsBranch::Memcmp:
-    ++counters.triviallyCopyable;
-    break;
-  case ValueEqualsBranch::Fallthrough:
-    ++counters.fallthrough;
-    break;
-  }
-}
-
-inline void recordStructuralFail(StructuralFailReason reason) {
-  if (!enabled()) {
-    return;
-  }
-  auto& counters = detail::counters().structuralFail;
-  switch (reason) {
-  case StructuralFailReason::Value:
-    ++counters.value;
-    break;
-  case StructuralFailReason::FlexGrow:
-    ++counters.flexGrow;
-    break;
-  case StructuralFailReason::FlexShrink:
-    ++counters.flexShrink;
-    break;
-  case StructuralFailReason::FlexBasis:
-    ++counters.flexBasis;
-    break;
-  case StructuralFailReason::MinMainSize:
-    ++counters.minMainSize;
-    break;
-  case StructuralFailReason::Key:
-    ++counters.key;
-    break;
-  case StructuralFailReason::Environment:
-    ++counters.environment;
-    break;
-  case StructuralFailReason::Modifiers:
-    ++counters.modifiers;
-    break;
-  }
-}
-
-inline void recordStructuralPass() {
-  if (!enabled()) {
-    return;
-  }
-  ++detail::counters().structuralFail.pass;
 }
 
 inline void recordPreparedPrepareCall() {
@@ -333,6 +250,125 @@ inline void recordPreparedReplayCall() {
     return;
   }
   ++detail::counters().preparedReplayCalls;
+}
+
+inline void recordPreparedReplayResult(bool success) {
+  if (!enabled()) {
+    return;
+  }
+  if (success) {
+    ++detail::counters().scene.preparedReplaySuccesses;
+  } else {
+    ++detail::counters().scene.preparedReplayFailures;
+  }
+}
+
+inline void recordSceneRenderPass() {
+  if (!enabled()) {
+    return;
+  }
+  ++detail::counters().scene.renderPasses;
+}
+
+inline void recordSceneNodeVisit(bool group) {
+  if (!enabled()) {
+    return;
+  }
+  auto& scene = detail::counters().scene;
+  ++scene.nodesVisited;
+  if (group) {
+    ++scene.groupsVisited;
+  } else {
+    ++scene.leavesVisited;
+  }
+}
+
+inline void recordSceneQuickReject() {
+  if (!enabled()) {
+    return;
+  }
+  ++detail::counters().scene.quickRejects;
+}
+
+inline void recordLiveLeafRender() {
+  if (!enabled()) {
+    return;
+  }
+  ++detail::counters().scene.liveLeafRenders;
+}
+
+inline void recordFrameOps(std::uint64_t rectOps, std::uint64_t imageOps, std::uint64_t pathOps,
+                           std::uint64_t glyphOps, std::uint64_t orderEntries,
+                           std::uint64_t pathVertices, std::uint64_t glyphVertices) {
+  if (!enabled()) {
+    return;
+  }
+  auto& render = detail::counters().render;
+  render.ops[static_cast<std::size_t>(RenderCounterKind::Rect)] += rectOps;
+  render.ops[static_cast<std::size_t>(RenderCounterKind::Image)] += imageOps;
+  render.ops[static_cast<std::size_t>(RenderCounterKind::Path)] += pathOps;
+  render.ops[static_cast<std::size_t>(RenderCounterKind::Glyph)] += glyphOps;
+  render.opOrderEntries += orderEntries;
+  render.pathVertices += pathVertices;
+  render.glyphVertices += glyphVertices;
+}
+
+inline void recordDrawCall(RenderCounterKind kind) {
+  if (!enabled()) {
+    return;
+  }
+  ++detail::counters().render.drawCalls[static_cast<std::size_t>(kind)];
+}
+
+inline void recordUploadBytes(RenderCounterKind kind, std::uint64_t bytes) {
+  if (!enabled()) {
+    return;
+  }
+  detail::counters().render.uploadBytes[static_cast<std::size_t>(kind)] += bytes;
+}
+
+inline void recordRecorderCapacityGrowth(std::uint64_t bytes) {
+  if (!enabled()) {
+    return;
+  }
+  auto& render = detail::counters().render;
+  ++render.recorderCapacityGrowths;
+  render.recorderCapacityGrowthBytes += bytes;
+}
+
+inline void recordTextLayoutCall() {
+  if (!enabled()) {
+    return;
+  }
+  ++detail::counters().text.layoutCalls;
+}
+
+inline void recordTextLayoutCacheHit() {
+  if (!enabled()) {
+    return;
+  }
+  ++detail::counters().text.layoutCacheHits;
+}
+
+inline void recordTextLayoutCacheMiss() {
+  if (!enabled()) {
+    return;
+  }
+  ++detail::counters().text.layoutCacheMisses;
+}
+
+inline void recordTextParagraphVariantHit() {
+  if (!enabled()) {
+    return;
+  }
+  ++detail::counters().text.paragraphVariantHits;
+}
+
+inline void recordTextParagraphVariantMiss() {
+  if (!enabled()) {
+    return;
+  }
+  ++detail::counters().text.paragraphVariantMisses;
 }
 
 inline void recordDuration(TimedMetric metric, std::chrono::nanoseconds elapsed) {

@@ -1,18 +1,17 @@
-#include <Flux/Core/Window.hpp>
-#include <Flux/Core/WindowUI.hpp>
-#include <Flux/Detail/Runtime.hpp>
-#include <Flux/UI/StateStore.hpp>
-#include <Flux/UI/Theme.hpp>
-#include <Flux/UI/OverlaySurfaceHelpers.hpp>
 #include <Flux/UI/Views/Alert.hpp>
+
+#include <Flux/Core/Window.hpp>
+#include <Flux/Detail/Runtime.hpp>
 #include <Flux/UI/Overlay.hpp>
+#include <Flux/UI/OverlaySurfaceHelpers.hpp>
+#include <Flux/UI/Theme.hpp>
+#include <Flux/UI/Views/Button.hpp>
 #include <Flux/UI/Views/HStack.hpp>
-#include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/Spacer.hpp>
 #include <Flux/UI/Views/Text.hpp>
 #include <Flux/UI/Views/VStack.hpp>
-#include <Flux/UI/Views/ZStack.hpp>
 
+#include <algorithm>
 #include <utility>
 
 #include "UI/Views/AlertActionHelpers.hpp"
@@ -20,41 +19,28 @@
 namespace flux {
 
 Element Alert::body() const {
-  Theme const& theme = useEnvironment<Theme>();
-  ResolvedAlertCardColors const surface = resolveAlertCardColors(cardColor, cardStrokeColor, cornerRadius, theme);
-  Color const card = surface.cardFill;
-  Color const stroke = surface.cardStroke;
-  Color const titleC = resolveColor(titleColor, Color::primary(), theme);
-  Color const msgC = resolveColor(messageColor, Color::secondary(), theme);
-  CornerRadius const cardCorner = surface.cornerRadius;
+  auto theme = useEnvironment<ThemeKey>();
+  ResolvedAlertCardColors const surface =
+      resolveAlertCardColors(cardColor, cardStrokeColor, cornerRadius, theme());
+  Color const titleC = resolveColor(titleColor, Color::primary(), theme());
+  Color const msgC = resolveColor(messageColor, Color::secondary(), theme());
 
-  return VStack {
-      .spacing = 0.f,
-      .alignment = Alignment::Center,
-      .children = children(
-          HStack {
-              .spacing = 0.f,
-              .children = children(
-                  VStack {
-                      .spacing = theme.space3,
-                      .alignment = Alignment::Start,
-                      .children = buildContent(titleC, msgC, theme),
-                  }
-                      .fill(FillStyle::solid(card))
-                      .stroke(StrokeStyle::solid(stroke, 1.f))
-                      .size(cardWidth, 0.f)
-                      .cornerRadius(cardCorner)
-                      .padding(theme.space6)
-              ),
-          }
-      ),
-  };
+  return VStack{
+      .spacing = theme().space3,
+      .alignment = Alignment::Start,
+      .children = buildContent(titleC, msgC, theme()),
+  }
+      .fill(FillStyle::solid(surface.cardFill))
+      .stroke(StrokeStyle::solid(surface.cardStroke, 1.f))
+      .size(cardWidth, 0.f)
+      .cornerRadius(surface.cornerRadius)
+      .padding(theme().space6);
 }
 
 std::vector<Element> Alert::buildContent(Color titleC, Color msgC, Theme const& theme) const {
   std::vector<Element> rows;
-
   float const contentW = std::max(0.f, cardWidth - 2.f * theme.space6);
+
   rows.push_back(Text{
                      .text = title,
                      .font = Font::title2(),
@@ -73,34 +59,33 @@ std::vector<Element> Alert::buildContent(Color titleC, Color msgC, Theme const& 
   }
 
   if (buttons.size() == 1) {
-    auto const& btn = buttons[0];
+    AlertButton const& button = buttons.front();
     rows.push_back(HStack{
         .spacing = theme.space2,
-        .children = flux::children(
-                Spacer{},
-                Button{
-                    .label = btn.label,
-                    .variant = btn.variant,
-                    .disabled = btn.disabled,
-                    .onTap = btn.action,
-                }),
+        .children = children(
+            Spacer{},
+            Button{
+                .label = button.label,
+                .variant = button.variant,
+                .disabled = button.disabled,
+                .onTap = button.action,
+            }),
     });
   } else {
-    std::vector<Element> buttonElems;
-    buttonElems.reserve(buttons.size());
-    for (auto const& btn : buttons) {
-      buttonElems.push_back(
-          Button{
-              .label = btn.label,
-              .variant = btn.variant,
-              .disabled = btn.disabled,
-              .onTap = btn.action,
-          }
-              .flex(1.f));
+    std::vector<Element> buttonElements;
+    buttonElements.reserve(buttons.size());
+    for (AlertButton const& button : buttons) {
+      buttonElements.push_back(Button{
+                                   .label = button.label,
+                                   .variant = button.variant,
+                                   .disabled = button.disabled,
+                                   .onTap = button.action,
+                               }
+                                   .flex(1.f));
     }
     rows.push_back(HStack{
         .spacing = theme.space2,
-        .children = std::move(buttonElems),
+        .children = std::move(buttonElements),
     });
   }
 
@@ -109,37 +94,24 @@ std::vector<Element> Alert::buildContent(Color titleC, Color msgC, Theme const& 
 
 std::tuple<std::function<void(Alert)>, std::function<void()>, bool> useAlert() {
   auto [showOverlay, hideOverlay, isPresented] = useOverlay();
-  StateStore* store = StateStore::current();
-  Runtime* rt = Runtime::current();
-  assert(store && rt && "useAlert must be called inside body()");
-  (void)store;
-  Window* wPtr = &rt->window();
+  Runtime* runtime = Runtime::current();
+  Window* window = runtime ? &runtime->window() : nullptr;
 
-  auto show = [showOverlay, hideOverlay, wPtr](Alert alert) {
+  auto show = [showOverlay = std::move(showOverlay), hideOverlay, window](Alert alert) mutable {
     if (alert.buttons.empty()) {
-      // Empty action (not hideOverlay): the loop below wraps every button with
-      // hideOverlay() then originalAction. OK only needs dismiss — same result as
-      // spec's hideOverlay on the slot, without stuffing hideOverlay into original
-      // and running it twice through the wrapper.
-      alert.buttons.push_back({
+      alert.buttons.push_back(AlertButton{
           .label = "OK",
           .variant = ButtonVariant::Secondary,
-          .action = {},
       });
     }
-
-    // Cap at three buttons in all builds (assert would vanish in release).
     if (alert.buttons.size() > 3) {
       alert.buttons.resize(3);
     }
-
-    for (auto& btn : alert.buttons) {
-      btn.action = detail::wrapDismissThenInvoke(hideOverlay, std::move(btn.action));
+    for (AlertButton& button : alert.buttons) {
+      button.action = detail::wrapDismissThenInvoke(hideOverlay, std::move(button.action));
     }
 
-    // show() runs outside a build pass — read window storage, not useEnvironment (backdrop is show-time).
-    Theme const* tp = wPtr->environmentValue<Theme>();
-    Theme const theme = tp ? *tp : Theme::light();
+    Theme const theme = window ? window->theme() : Theme::light();
     Color const backdrop = resolveAlertBackdropColor(alert.backdropColor, theme);
     bool const dismissEsc = alert.dismissOnEscape;
 
@@ -151,10 +123,11 @@ std::tuple<std::function<void(Alert)>, std::function<void()>, bool> useAlert() {
             .dismissOnOutsideTap = false,
             .dismissOnEscape = dismissEsc,
             .onDismiss = hideOverlay,
+            .debugName = "alert",
         });
   };
 
-  return {std::move(show), hideOverlay, isPresented};
+  return {std::move(show), std::move(hideOverlay), isPresented};
 }
 
 } // namespace flux

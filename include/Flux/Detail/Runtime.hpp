@@ -1,21 +1,9 @@
 #pragma once
 
-/// \file Flux/Detail/Runtime.hpp
-///
-/// Part of the Flux public API.
-
-
-#include <Flux/UI/BuildOrchestrator.hpp>
-#include <Flux/UI/CursorController.hpp>
-#include <Flux/UI/FocusController.hpp>
-#include <Flux/UI/GestureTracker.hpp>
-#include <Flux/UI/HoverController.hpp>
-#include <Flux/UI/InputDispatcher.hpp>
 #include <Flux/Core/ComponentKey.hpp>
 #include <Flux/Core/Events.hpp>
 #include <Flux/Core/Types.hpp>
-#include <Flux/Detail/RootHolder.hpp>
-#include <Flux/UI/Overlay.hpp>
+#include <Flux/UI/ActionRegistry.hpp>
 
 #include <memory>
 #include <optional>
@@ -23,76 +11,44 @@
 
 namespace flux {
 
+struct RootHolder;
 class Window;
+namespace scenegraph {
+class SceneGraph;
+}
 
 class Runtime {
 public:
   explicit Runtime(Window& window);
   ~Runtime();
 
+  Runtime(Runtime const&) = delete;
+  Runtime& operator=(Runtime const&) = delete;
+
   void setRoot(std::unique_ptr<RootHolder> holder);
-  void handleInput(InputEvent const& e);
+  void handleInput(InputEvent const& event);
+  void handleWindowEvent(WindowEvent const& event);
+  void beginShutdown();
+  void beginShutdown(scenegraph::SceneGraph* sceneGraph);
+
+  bool wantsTextInput() const noexcept { return true; }
+  bool textCacheOverlayEnabled() const noexcept { return false; }
+  bool isActionCurrentlyEnabled(std::string const& name) const;
+  ActionRegistry& actionRegistry() noexcept;
+  ActionRegistry const& actionRegistry() const noexcept;
   Window& window() noexcept;
+  Window const& window() const noexcept;
 
   static Runtime* current() noexcept;
 
-  FocusController& focus() noexcept;
-  HoverController& hover() noexcept;
-  GestureTracker& gesture() noexcept;
-
-  ActionRegistry& actionRegistryForBuild() noexcept;
-
-  bool isActionCurrentlyEnabled(std::string const& name) const;
-  bool wantsTextInput() const;
-
-  void requestFocusInSubtree(ComponentKey const& subtreeKey, std::optional<OverlayId> overlayScope = std::nullopt);
-
-  std::optional<Rect> layoutRectForCurrentComponent() const;
   std::optional<Rect> layoutRectForKey(ComponentKey const& key) const;
-  std::optional<Rect> layoutRectForTapAnchor() const;
-  std::optional<Rect> layoutRectForLeafKeyPrefix(ComponentKey const& stableTargetKey) const;
-  std::optional<ComponentKey> tapAnchorLeafKeySnapshot() const;
-
-  Rect buildSlotRect() const;
-
-  bool shuttingDown() const noexcept;
-  void beginShutdown() noexcept;
-
-  /// Alias for overlay teardown checks (same as `shuttingDown()`).
-  bool imploding() const noexcept;
-
-  /// When true, \ref Window::render draws a semi-transparent wireframe overlay for each retained scene node.
-  bool layoutOverlayEnabled() const noexcept { return layoutOverlayEnabled_; }
-  void setLayoutOverlayEnabled(bool enabled) noexcept { layoutOverlayEnabled_ = enabled; }
-
-  /// When true, \ref Window::render draws the text-cache stats panel (independent of layout wireframes).
-  bool textCacheOverlayEnabled() const noexcept { return textCacheOverlayEnabled_; }
-  void setTextCacheOverlayEnabled(bool enabled) noexcept { textCacheOverlayEnabled_ = enabled; }
-
-  void onOverlayPushed(OverlayEntry& entry);
-  void onOverlayRemoved(OverlayEntry const& entry);
-  void syncModalOverlayFocusAfterRebuild(OverlayEntry& entry);
+  std::optional<Rect> layoutRectForLeafKeyPrefix(ComponentKey const& key) const;
 
 private:
-  void rebuild(std::optional<Size> sizeOverride = std::nullopt);
-  void subscribeInput();
-  void subscribeWindowEvents();
-  bool markInteractiveDirty(ComponentKey const& key, std::optional<OverlayId> overlayScope);
+  static thread_local Runtime* current_;
 
-  static thread_local Runtime* sCurrent;
-
-  Window& window_;
-  FocusController focus_{};
-  HoverController hover_{};
-  GestureTracker gesture_{};
-  CursorController cursor_;
-  BuildOrchestrator buildOrchestrator_;
-  InputDispatcher dispatcher_;
-  bool windowHasFocus_ = true;
-  bool shuttingDown_ = false;
-  bool inputRegistered_ = false;
-  bool layoutOverlayEnabled_ = false;
-  bool textCacheOverlayEnabled_ = false;
+  struct Impl;
+  std::unique_ptr<Impl> d;
 };
 
 } // namespace flux

@@ -11,6 +11,7 @@
 #include <Flux/Core/Application.hpp>
 #include <Flux/Core/Window.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
+#include <Flux/Reactive/Profile.hpp>
 
 #include "Core/PlatformWindow.hpp"
 #include "Core/PlatformWindowCreate.hpp"
@@ -866,7 +867,10 @@ void MacMetalPlatformWindow::wakeEventLoop() {
 }
 
 void MacMetalPlatformWindow::requestAnimationFrame() {
-  d->frameRequested_.store(true, std::memory_order_release);
+  bool const wasRequested = d->frameRequested_.exchange(true, std::memory_order_acq_rel);
+  if (wasRequested) {
+    return;
+  }
   if (d->displayLink_) {
     setModernDisplayLinkPaused(false);
     return;
@@ -906,6 +910,7 @@ void MacMetalPlatformWindow::completeAnimationFrame(bool needsAnotherFrame) {
 }
 
 CVReturn MacMetalPlatformWindow::onDisplayLinkTick() {
+  Reactive::detail::profile::frameBoundary();
   if (!d->frameRequested_.load(std::memory_order_acquire)) {
     return kCVReturnSuccess;
   }

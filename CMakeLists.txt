@@ -1,10 +1,11 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(flux VERSION 4.0.0 LANGUAGES CXX C)
+project(flux VERSION 5.0.0 LANGUAGES CXX C)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_CXX_RELEASE_FLAGS "-march=native -O3 -flto")
 
 # Planned backends: LINUX_WAYLAND, LINUX_KMS — reserved for future CMake branches.
 set(FLUX_PLATFORM "AUTO" CACHE STRING
@@ -68,6 +69,19 @@ option(FLUX_ENABLE_ASAN
   "Build flux and flux_tests with AddressSanitizer instrumentation."
   OFF)
 
+option(FLUX_PROFILE_REACTIVE
+  "Compile deterministic reactive profiling counters and 5-second display-link reports."
+  OFF)
+
+option(FLUX_V5_PROTOTYPE
+  "Build the standalone Flux v5 reactive prototype."
+  OFF)
+
+if(FLUX_V5_PROTOTYPE)
+  enable_testing()
+  add_subdirectory(prototype/reactive)
+endif()
+
 # Offline Metal: compile CanvasShaders.metal → air → metallib → C header (xxd) embedded in MetalShaderLibrary.mm
 set(FLUX_METAL_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Metal/CanvasShaders.metal)
 set(FLUX_METAL_AIR ${CMAKE_CURRENT_BINARY_DIR}/CanvasShaders.air)
@@ -89,78 +103,61 @@ add_custom_target(flux_shaders DEPENDS ${FLUX_METALLIB_EMBED_H})
 add_library(flux STATIC
   src/Core/Application.mm
   src/Core/EventQueue.cpp
-  src/Reactive/Signal.cpp
   src/Reactive/Observer.cpp
-  src/Reactive/Computed.cpp
   src/Reactive/Easing.cpp
   src/Reactive/Transition.cpp
-  src/Reactive/AnimationRebuild.cpp
   src/Reactive/AnimationClock.cpp
   src/Core/ComponentKey.cpp
   src/Core/ComponentKeyUtil.cpp
   src/Core/Window.cpp
   src/Core/WindowRender.cpp
   src/UI/MeasureContext.cpp
+  src/UI/ActionRegistry.cpp
+  src/UI/InputFieldChrome.cpp
+  src/UI/InputFieldLayout.cpp
   src/UI/Detail/TraversalContext.cpp
   src/UI/Environment.cpp
   src/UI/Theme.cpp
-  src/UI/StateStore.cpp
   src/UI/Element/ElementMeasurement.cpp
   src/UI/Element/ElementModifiers.cpp
   src/UI/Element/ElementTypeErasure.cpp
-  src/UI/ActionRegistry.cpp
-  src/UI/Build/BuildPass.cpp
-  src/UI/Build/ComponentBuildContext.cpp
-  src/UI/Layout/Algorithms/StackLayout.cpp
-  src/UI/Layout/Algorithms/GridLayout.cpp
-  src/UI/Layout/Algorithms/ScrollLayout.cpp
-  src/UI/Layout/Algorithms/OverlayLayout.cpp
-  src/UI/SceneBuilder.cpp
-  src/UI/Detail/LeafBounds.cpp
-  src/UI/FocusController.cpp
-  src/UI/HoverController.cpp
-  src/UI/GestureTracker.cpp
-  src/UI/CursorController.cpp
-  src/UI/BuildOrchestrator.cpp
-  src/UI/LayoutDebugDump.cpp
-  src/UI/InputDispatcher.cpp
-  src/UI/Hooks.cpp
-  src/UI/ActionHooks.cpp
-  src/UI/OverlayHooks.cpp
+  src/UI/MountContext.cpp
+  src/UI/MountRoot.cpp
   src/UI/Runtime.cpp
-  src/UI/OverlayManager.cpp
-  src/UI/InputFieldLayout.cpp
-  src/UI/InputFieldChrome.cpp
+  src/UI/Overlay.cpp
   src/UI/OverlaySurfaceHelpers.cpp
-  src/UI/Views/TextEditUtils.cpp
-  src/UI/Views/TextEditBehavior.cpp
-  src/UI/Views/Rectangle.cpp
-  src/UI/Views/Image.cpp
-  src/UI/Views/PathShape.cpp
-  src/UI/Views/Render.cpp
-  src/UI/Views/LayoutContainers.cpp
-  src/UI/Views/Text.cpp
-  src/UI/Views/TextInput.cpp
+  src/UI/Views/Alert.cpp
   src/UI/Views/Badge.cpp
   src/UI/Views/Button.cpp
   src/UI/Views/Card.cpp
-  src/UI/Views/Divider.cpp
-  src/UI/Views/Toggle.cpp
-  src/UI/Views/Slider.cpp
   src/UI/Views/Checkbox.cpp
-  src/UI/Views/Select.cpp
-  src/UI/Views/ScrollView.cpp
-  src/UI/Views/SegmentedControl.cpp
+  src/UI/Views/Divider.cpp
+  src/UI/Views/Grid.cpp
   src/UI/Views/Icon.cpp
+  src/UI/Views/Image.cpp
   src/UI/Views/ListView.cpp
-  src/UI/Views/ProgressBar.cpp
-  src/UI/Views/TableView.cpp
-  src/UI/Views/Alert.cpp
+  src/UI/Views/Rectangle.cpp
+  src/UI/Views/Render.cpp
+  src/UI/Views/Text.cpp
+  src/UI/Views/TextEditUtils.cpp
+  src/UI/Views/TextInput.cpp
+  src/UI/Views/LayoutContainers.cpp
   src/UI/Views/Popover.cpp
+  src/UI/Views/PopoverCalloutPath.cpp
+  src/UI/Views/ProgressBar.cpp
+  src/UI/Views/ScrollView.cpp
+  src/UI/Views/Select.cpp
+  src/UI/Views/SegmentedControl.cpp
+  src/UI/Views/Slider.cpp
+  src/UI/Views/TableView.cpp
   src/UI/Views/Toast.cpp
   src/UI/Views/Tooltip.cpp
-  src/UI/Views/PopoverCalloutPath.cpp
-  src/UI/PopoverCalloutShapeElement.cpp
+  src/UI/Views/TransformViews.cpp
+  src/UI/Views/Toggle.cpp
+  src/UI/Layout/Algorithms/ScrollLayout.cpp
+  src/UI/Layout/Algorithms/OverlayLayout.cpp
+  src/UI/Layout/Algorithms/StackLayout.cpp
+  src/UI/LayoutDebugDump.cpp
   src/SceneGraph/SceneNode.cpp
   src/SceneGraph/GroupNode.cpp
   src/SceneGraph/RectNode.cpp
@@ -222,6 +219,12 @@ else()
   target_compile_definitions(flux PRIVATE FLUX_ENABLE_DEFAULT_EVENT_LOGGING=0)
 endif()
 
+if(FLUX_PROFILE_REACTIVE)
+  target_compile_definitions(flux PUBLIC FLUX_PROFILE_REACTIVE=1)
+else()
+  target_compile_definitions(flux PUBLIC FLUX_PROFILE_REACTIVE=0)
+endif()
+
 option(FLUX_DISABLE_VARIANT_REFS
   "Deep-copy paragraph cache layouts (revert to clone on fast path); disables variant shared_ptr retention."
   OFF)
@@ -270,21 +273,22 @@ if(FLUX_BUILD_TESTS)
   enable_testing()
 
   add_executable(flux_tests
-    tests/AnimationTests.cpp
     tests/AlertTests.cpp
+    tests/AnimationTests.cpp
+    tests/BindableInferenceTests.cpp
+    tests/EnvironmentKeyOtherTU.cpp
+    tests/EnvironmentKeyTests.cpp
+    tests/ForTests.cpp
     tests/MetalCanvasTests.mm
+    tests/MountRootTests.cpp
     tests/main.cpp
-    tests/LayoutAlgorithmTests.cpp
-    tests/SceneBuilderReuseTests.cpp
-    tests/SceneBuilderLayoutTests.cpp
-    tests/SceneGeometryIndexTests.cpp
-    tests/SceneTraversalTests.cpp
     tests/SceneGraphTests.cpp
     tests/ParagraphCacheTests.cpp
     tests/ParagraphCacheIncrementalTests.cpp
+    tests/RuntimeInputTests.cpp
     tests/RuntimeTests.cpp
-    tests/TextEditUtilsTests.cpp
-    tests/SemanticThemeTests.cpp
+    tests/ShowTests.cpp
+    tests/ThemeReactivityTests.cpp
   )
 
   target_include_directories(flux_tests PRIVATE
@@ -305,6 +309,35 @@ if(FLUX_BUILD_TESTS)
   endif()
 
   add_test(NAME flux_tests COMMAND flux_tests)
+
+  add_executable(flux_reactive_tests
+    tests/Reactive/main.cpp
+    tests/Reactive/SignalTests.cpp
+    tests/Reactive/ComputedTests.cpp
+    tests/Reactive/EffectTests.cpp
+    tests/Reactive/ScopeTests.cpp
+    tests/Reactive/DiamondTests.cpp
+    tests/Reactive/BindableTests.cpp
+  )
+
+  target_include_directories(flux_reactive_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+  )
+
+  target_link_libraries(flux_reactive_tests PRIVATE
+    flux
+    doctest::doctest
+  )
+
+  set_target_properties(flux_reactive_tests PROPERTIES CXX_STANDARD 23)
+
+  if(FLUX_ENABLE_ASAN)
+    target_compile_options(flux_reactive_tests PRIVATE -fsanitize=address -fno-omit-frame-pointer)
+    target_link_options(flux_reactive_tests PRIVATE -fsanitize=address)
+  endif()
+
+  add_test(NAME flux_reactive_tests COMMAND flux_reactive_tests)
 endif()
 
 option(FLUX_BUILD_EXAMPLES

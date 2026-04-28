@@ -257,17 +257,17 @@ struct ModelRow : ViewModifiers<ModelRow> {
     std::function<void()> onDelete;
 
     auto body() const {
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<ThemeKey>();
         model_row_presentation::PresentedLocalModelRow const presented =
             model_row_presentation::presentLocalModel(model);
 
         return ListRow {
             .content = HStack {
-                .spacing = theme.space3,
+                .spacing = theme().space3,
                 .alignment = Alignment::Center,
                 .children = children(
                     VStack {
-                        .spacing = theme.space1,
+                        .spacing = theme().space1,
                         .alignment = Alignment::Start,
                         .children = children(
                             Text {
@@ -296,8 +296,8 @@ struct ModelRow : ViewModifiers<ModelRow> {
                         .icon = IconName::Delete,
                         .disabled = deleting,
                         .style = {
-                            .size = theme.titleFont.size,
-                            .weight = theme.headlineFont.weight,
+                            .size = theme().titleFont.size,
+                            .weight = theme().headlineFont.weight,
                             .color = deleting ? Color::disabled() : Color::danger(),
                         },
                         .onTap = onDelete,
@@ -318,7 +318,7 @@ struct DownloadJobRow : ViewModifiers<DownloadJobRow> {
     std::function<void()> onRemove;
 
     auto body() const {
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<ThemeKey>();
         std::string title = job.filePath;
         if (!job.repoId.empty()) {
             title += "  •  " + job.repoId;
@@ -359,7 +359,7 @@ struct DownloadJobRow : ViewModifiers<DownloadJobRow> {
                     .progress = downloadJobProgress(job),
                     .style = {
                         .activeColor = Color::accent(),
-                        .inactiveColor = theme.hoveredControlBackgroundColor,
+                        .inactiveColor = theme().hoveredControlBackgroundColor,
                         .trackHeight = 6.f,
                     },
                 }.size(112.f, 0.f)
@@ -368,11 +368,11 @@ struct DownloadJobRow : ViewModifiers<DownloadJobRow> {
 
         return ListRow {
             .content = HStack {
-                .spacing = theme.space3,
+                .spacing = theme().space3,
                 .alignment = Alignment::Center,
                 .children = children(
                     VStack {
-                        .spacing = theme.space2,
+                        .spacing = theme().space2,
                         .alignment = Alignment::Start,
                         .children = std::move(infoChildren)
                     }
@@ -385,7 +385,7 @@ struct DownloadJobRow : ViewModifiers<DownloadJobRow> {
                           }}
                         : job.status == DownloadJobStatus::Failed
                               ? Element {HStack {
-                                    .spacing = theme.space2,
+                                    .spacing = theme().space2,
                                     .alignment = Alignment::Center,
                                     .children = children(
                                         LinkButton {
@@ -396,8 +396,8 @@ struct DownloadJobRow : ViewModifiers<DownloadJobRow> {
                                         IconButton {
                                             .icon = IconName::Delete,
                                             .style = {
-                                                .size = theme.bodyFont.size,
-                                                .weight = theme.headlineFont.weight,
+                                                .size = theme().bodyFont.size,
+                                                .weight = theme().headlineFont.weight,
                                                 .color = Color::secondary(),
                                             },
                                             .onTap = onRemove,
@@ -421,7 +421,7 @@ struct ModelsView : ViewModifiers<ModelsView> {
     std::function<void(std::string const &)> onRemoveDownload;
 
     auto body() const {
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<ThemeKey>();
 
         std::vector<Element> localRows;
         localRows.reserve(state.localModels.size());
@@ -498,7 +498,7 @@ struct ModelsView : ViewModifiers<ModelsView> {
             .alignment = Alignment::Stretch,
             .children = children(
                 HStack {
-                    .spacing = theme.space3,
+                    .spacing = theme().space3,
                     .alignment = Alignment::Center,
                     .children = children(
                         Text {
@@ -514,7 +514,7 @@ struct ModelsView : ViewModifiers<ModelsView> {
                         }
                     )
                 }
-                    .padding(theme.space4),
+                    .padding(theme().space4),
                 Divider {
                     .orientation = Divider::Orientation::Horizontal
                 },

@@ -1,41 +1,77 @@
 #include <Flux/UI/Views/Image.hpp>
 
+#include <Flux/SceneGraph/ImageNode.hpp>
 #include <Flux/UI/MeasureContext.hpp>
+#include <Flux/UI/MountContext.hpp>
 
-#include "UI/Build/ComponentBuildContext.hpp"
-#include "UI/Build/ComponentBuildSupport.hpp"
+#include <algorithm>
+#include <cmath>
+#include <memory>
 
 namespace flux::views {
 
-Size Image::measure(MeasureContext& ctx, LayoutConstraints const& constraints, LayoutHints const&,
-                    TextSystem&) const {
+namespace {
+
+float finiteDimension(float value, float fallback) {
+  return std::isfinite(value) ? std::max(0.f, value) : fallback;
+}
+
+Size naturalSize(std::shared_ptr<flux::Image> const& image) {
+  if (!image) {
+    return Size{};
+  }
+  Size size = image->size();
+  size.width = std::max(0.f, size.width);
+  size.height = std::max(0.f, size.height);
+  return size;
+}
+
+Size resolveFrame(Size natural, LayoutConstraints const& constraints) {
+  Size size = natural;
+  if (size.width <= 0.f && std::isfinite(constraints.maxWidth)) {
+    size.width = constraints.maxWidth;
+  }
+  if (size.height <= 0.f && std::isfinite(constraints.maxHeight)) {
+    size.height = constraints.maxHeight;
+  }
+  if (std::isfinite(constraints.maxWidth) && constraints.maxWidth > 0.f &&
+      std::isfinite(constraints.maxHeight) && constraints.maxHeight > 0.f) {
+    size.width = constraints.maxWidth;
+  }
+
+  if (std::isfinite(constraints.maxWidth)) {
+    size.width = std::min(size.width, constraints.maxWidth);
+  }
+  if (std::isfinite(constraints.maxHeight)) {
+    size.height = std::min(size.height, constraints.maxHeight);
+  }
+  size.width = std::max(size.width, constraints.minWidth);
+  size.height = std::max(size.height, constraints.minHeight);
+  return Size{finiteDimension(size.width, constraints.minWidth),
+              finiteDimension(size.height, constraints.minHeight)};
+}
+
+} // namespace
+
+Size Image::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
+                    LayoutHints const&, TextSystem&) const {
   ctx.advanceChildSlot();
-  float const width = std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 0.f;
-  float const height = std::isfinite(constraints.maxHeight) ? constraints.maxHeight : 0.f;
-  return {width, height};
+  return resolveFrame(naturalSize(source), constraints);
+}
+
+std::unique_ptr<scenegraph::SceneNode> Image::mount(MountContext& ctx) const {
+  Size const frameSize = resolveFrame(naturalSize(source), ctx.constraints());
+  auto node = std::make_unique<scenegraph::ImageNode>(
+      Rect{0.f, 0.f, frameSize.width, frameSize.height}, source, fillMode);
+  auto* rawNode = node.get();
+  std::shared_ptr<flux::Image> imageSource = source;
+  rawNode->setLayoutConstraints(ctx.constraints());
+  rawNode->setRelayout([rawNode, imageSource = std::move(imageSource)](
+                           LayoutConstraints const& constraints) {
+    Size const nextSize = resolveFrame(naturalSize(imageSource), constraints);
+    rawNode->setSize(nextSize);
+  });
+  return node;
 }
 
 } // namespace flux::views
-
-namespace flux::detail {
-
-ComponentBuildResult buildMeasuredComponent(views::Image const& image, ComponentBuildContext& ctx,
-                                            std::unique_ptr<scenegraph::SceneNode> existing) {
-  (void)existing;
-  Rect const frameRect =
-      build::assignedFrameForLeaf(ctx.paddedContentSize(), ctx.innerConstraints(), ctx.contentAssignedSize(),
-                                  ctx.hasAssignedWidth(), ctx.hasAssignedHeight(), ctx.modifiers(), ctx.hints());
-  auto imageNode = std::make_unique<scenegraph::ImageNode>(
-      Rect {0.f, 0.f, frameRect.width, frameRect.height},
-      image.source,
-      image.fillMode
-  );
-
-  ComponentBuildResult result{};
-  result.node = std::move(imageNode);
-  result.geometrySize = ctx.layoutOuterSize();
-  result.hasGeometrySize = true;
-  return result;
-}
-
-} // namespace flux::detail

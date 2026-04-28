@@ -2,8 +2,10 @@
 
 #include <Flux/SceneGraph/InteractionData.hpp>
 #include <Flux/SceneGraph/Renderer.hpp>
+#include <Flux/UI/Detail/LayoutDebugDump.hpp>
 
 #include "SceneGraph/SceneNodeInternal.hpp"
+#include "UI/Layout/LayoutHelpers.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -11,6 +13,29 @@
 #include <utility>
 
 namespace flux::scenegraph {
+
+namespace {
+
+thread_local int gTransientRelayoutDepth = 0;
+thread_local int gRelayoutDepth = 0;
+
+struct TransientRelayoutScope {
+    explicit TransientRelayoutScope(bool enabled) noexcept : enabled_(enabled) {
+        if (enabled_) {
+            ++gTransientRelayoutDepth;
+        }
+    }
+
+    ~TransientRelayoutScope() {
+        if (enabled_) {
+            --gTransientRelayoutDepth;
+        }
+    }
+
+    bool enabled_ = false;
+};
+
+} // namespace
 
 std::string_view sceneNodeKindName(SceneNodeKind kind) noexcept {
     switch (kind) {
@@ -62,6 +87,14 @@ bool SceneNode::isSubtreeDirty() const noexcept {
     return subtreeDirty_;
 }
 
+LayoutFlow SceneNode::layoutFlow() const noexcept {
+    return layoutFlow_;
+}
+
+float SceneNode::layoutSpacing() const noexcept {
+    return layoutSpacing_;
+}
+
 void SceneNode::setBounds(Rect bounds) {
     if (bounds_ == bounds) {
         return;
@@ -80,6 +113,7 @@ void SceneNode::setPosition(Point position) {
     }
     bounds_.x = position.x;
     bounds_.y = position.y;
+    markSubtreeDirty();
 }
 
 void SceneNode::setSize(Size size) {
@@ -97,6 +131,59 @@ void SceneNode::setTransform(Mat3 const &transformValue) {
         return;
     }
     transform_ = transformValue;
+    markSubtreeDirty();
+}
+
+void SceneNode::setLayoutFlow(LayoutFlow flow) noexcept {
+    layoutFlow_ = flow;
+}
+
+void SceneNode::setLayoutSpacing(float spacing) noexcept {
+    layoutSpacing_ = std::max(0.f, spacing);
+}
+
+void SceneNode::setLayoutConstraints(LayoutConstraints constraints) noexcept {
+    layoutConstraints_ = constraints;
+    hasLayoutConstraints_ = true;
+}
+
+bool SceneNode::hasLayoutConstraints() const noexcept {
+    return hasLayoutConstraints_;
+}
+
+LayoutConstraints SceneNode::layoutConstraints() const noexcept {
+    return layoutConstraints_;
+}
+
+void SceneNode::setRelayout(RelayoutFn relayout) {
+    relayout_ = std::move(relayout);
+}
+
+bool SceneNode::relayoutStoredConstraints() {
+    if (!hasLayoutConstraints_) {
+        return false;
+    }
+    return relayout(layoutConstraints_);
+}
+
+bool SceneNode::relayout(LayoutConstraints const& constraints, bool storeConstraints) {
+    if (!relayout_) {
+        return false;
+    }
+    bool const effectiveStoreConstraints = storeConstraints && gTransientRelayoutDepth == 0;
+    if (effectiveStoreConstraints) {
+        setLayoutConstraints(constraints);
+    }
+    bool const shouldDump = ::flux::layout::layoutDebugLayoutEnabled() && gRelayoutDepth == 0;
+    ++gRelayoutDepth;
+    TransientRelayoutScope const transientScope{!storeConstraints};
+    relayout_(constraints);
+    --gRelayoutDepth;
+    if (shouldDump && gRelayoutDepth == 0) {
+        layoutDebugDumpAttached(storeConstraints ? "scene-node-relayout"
+                                                : "scene-node-transient-relayout");
+    }
+    return true;
 }
 
 SceneNode *SceneNode::parent() const noexcept {
@@ -240,6 +327,14 @@ bool detail::SceneNodeAccess::subtreeDirty(SceneNode const &node) noexcept {
 
 void detail::SceneNodeAccess::clearSubtreeDirty(SceneNode const &node) noexcept {
     node.subtreeDirty_ = false;
+}
+
+bool detail::SceneNodeAccess::preparedGroupCacheSuppressed(SceneNode const &node) noexcept {
+    return node.preparedGroupCacheSuppressed_;
+}
+
+void detail::SceneNodeAccess::suppressPreparedGroupCache(SceneNode const &node) noexcept {
+    node.preparedGroupCacheSuppressed_ = true;
 }
 
 std::unique_ptr<PreparedRenderOps>& detail::SceneNodeAccess::preparedRenderOps(

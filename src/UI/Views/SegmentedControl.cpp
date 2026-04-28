@@ -2,6 +2,8 @@
 
 #include <Flux/Core/KeyCodes.hpp>
 #include <Flux/Reactive/Interpolatable.hpp>
+#include <Flux/Reactive/Transition.hpp>
+#include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
@@ -24,6 +26,11 @@ Color lighten(Color c, float t) {
 Color darken(Color c, float t) {
     Color const b = Colors::black;
     return Color {lerp(c.r, b.r, t), lerp(c.g, b.g, t), lerp(c.b, b.b, t), c.a};
+}
+
+Color withAlpha(Color c, float alpha) {
+    c.a = alpha;
+    return c;
 }
 
 struct ResolvedStyle {
@@ -59,41 +66,71 @@ int clampIndex(int index, std::size_t count) {
 
 struct SegmentedControlItem : ViewModifiers<SegmentedControlItem> {
     SegmentedControlOption option;
-    bool selected = false;
+    Signal<int> selectedIndex {};
+    int index = 0;
     bool disabled = false;
     ResolvedStyle style {};
     Theme theme {};
     std::function<void()> onTap;
 
     bool operator==(SegmentedControlItem const &other) const {
-        return option == other.option && selected == other.selected && disabled == other.disabled &&
-               style == other.style && theme == other.theme &&
+        return option == other.option && selectedIndex == other.selectedIndex &&
+               index == other.index && disabled == other.disabled && style == other.style && theme == other.theme &&
                static_cast<bool>(onTap) == static_cast<bool>(other.onTap);
     }
 
     Element body() const {
         bool const isDisabled = disabled || option.disabled;
-        bool const hovered = useHover();
-        bool const pressed = usePress();
-        bool const focused = useFocus();
-        bool const keyboardFocused = useKeyboardFocus();
+        Reactive::Signal<bool> hovered = useHover();
+        Reactive::Signal<bool> pressed = usePress();
+        Reactive::Signal<bool> focused = useFocus();
+        Color const disabledTextColor = theme.disabledTextColor;
+        Color const accentForegroundColor = theme.accentForegroundColor;
+        Color const secondaryLabelColor = theme.secondaryLabelColor;
 
         Color const selectedFill = style.accentColor;
         Color const selectedHoverFill = lighten(style.accentColor, 0.08f);
         Color const selectedPressFill = darken(style.accentColor, 0.08f);
-        Color const idleFill = Colors::transparent;
         Color const hoverFill = darken(style.trackColor, 0.04f);
         Color const pressFill = darken(style.trackColor, 0.12f);
-        Color const fill = isDisabled ? Colors::transparent
-                           : selected ? (pressed ? selectedPressFill : hovered ? selectedHoverFill : selectedFill)
-                                      : (pressed ? pressFill : hovered ? hoverFill : idleFill);
-        Color const labelColor = isDisabled ? theme.disabledTextColor
-                                 : selected ? theme.accentForegroundColor
-                                            : theme.secondaryLabelColor;
-        StrokeStyle const stroke =
-            !isDisabled && focused && keyboardFocused
-                ? StrokeStyle::solid(theme.keyboardFocusIndicatorColor, 2.f)
-                : StrokeStyle::none();
+        Color const idleFill = withAlpha(hoverFill, 0.f);
+        auto motion = [theme = theme] {
+            return Transition::ease(theme.durationFast);
+        };
+        auto fillTarget = [selectedIndex = selectedIndex,
+                           index = index,
+                           isDisabled,
+                           pressed,
+                           hovered,
+                           selectedFill,
+                           selectedHoverFill,
+                           selectedPressFill,
+                           pressFill,
+                           hoverFill,
+                           idleFill] {
+            bool const selected = selectedIndex() == index;
+            return isDisabled ? Colors::transparent
+                              : selected ? (pressed() ? selectedPressFill : hovered() ? selectedHoverFill : selectedFill)
+                                         : (pressed() ? pressFill : hovered() ? hoverFill : idleFill);
+        };
+        auto labelTarget = [selectedIndex = selectedIndex,
+                            index = index,
+                            isDisabled,
+                            disabledTextColor,
+                            accentForegroundColor,
+                            secondaryLabelColor] {
+            bool const selected = selectedIndex() == index;
+            return isDisabled ? disabledTextColor
+                              : selected ? accentForegroundColor : secondaryLabelColor;
+        };
+        auto fillAnim = useAnimation(fillTarget, motion);
+        auto labelAnim = useAnimation(labelTarget, motion);
+        Reactive::Bindable<StrokeStyle> const stroke{[isDisabled, focused,
+                                                       focusColor = theme.keyboardFocusIndicatorColor] {
+            return !isDisabled && focused.get()
+                       ? StrokeStyle::solid(focusColor, 2.f)
+                       : StrokeStyle::none();
+        }};
 
         auto handleTap = [isDisabled, onTap = onTap]() {
             if (!isDisabled && onTap) {
@@ -109,12 +146,16 @@ struct SegmentedControlItem : ViewModifiers<SegmentedControlItem> {
         return Text {
             .text = option.label,
             .font = style.font,
-            .color = labelColor,
+            .color = [labelAnim] {
+                return labelAnim();
+            },
             .horizontalAlignment = HorizontalAlignment::Center,
             .verticalAlignment = VerticalAlignment::Center,
         }
             .padding(style.paddingV, style.paddingH, style.paddingV, style.paddingH)
-            .fill(FillStyle::solid(fill))
+            .fill([fillAnim] {
+                return fillAnim();
+            })
             .stroke(stroke)
             .cornerRadius(CornerRadius {std::max(0.f, style.cornerRadius - 2.f)})
             .cursor(isDisabled ? Cursor::Arrow : Cursor::Hand)
@@ -128,11 +169,9 @@ struct SegmentedControlItem : ViewModifiers<SegmentedControlItem> {
 } // namespace
 
 Element SegmentedControl::body() const {
-    Theme const &theme = useEnvironment<Theme>();
-    ResolvedStyle const resolved = resolveStyle(style, theme);
-    LayoutConstraints const *layoutConstraints = useLayoutConstraints();
-    State<int> const selection = selectedIndex.signal ? selectedIndex : useState<int>(0);
-    int const currentIndex = clampIndex(*selection, options.size());
+    auto theme = useEnvironment<ThemeKey>();
+    ResolvedStyle const resolved = resolveStyle(style, theme());
+    Signal<int> const selection = selectedIndex;
 
     auto commitSelection = [selection, onChange = onChange](int index) {
         selection = index;
@@ -140,11 +179,12 @@ Element SegmentedControl::body() const {
             onChange(index);
         }
     };
-    auto handleKey = [commitSelection, options = options, currentIndex](KeyCode key, Modifiers) {
+    auto handleKey = [commitSelection, options = options, selection](KeyCode key, Modifiers) {
         if (options.empty()) {
             return;
         }
 
+        int const currentIndex = clampIndex(selection.get(), options.size());
         int nextIndex = currentIndex;
         if (key == keys::LeftArrow) {
             nextIndex = std::max(0, currentIndex - 1);
@@ -168,10 +208,11 @@ Element SegmentedControl::body() const {
     for (std::size_t i = 0; i < options.size(); ++i) {
         items.push_back(SegmentedControlItem {
             .option = options[i],
-            .selected = static_cast<int>(i) == currentIndex,
+            .selectedIndex = selection,
+            .index = static_cast<int>(i),
             .disabled = disabled,
             .style = resolved,
-            .theme = theme,
+            .theme = theme(),
             .onTap = [commitSelection, index = static_cast<int>(i)] {
                 commitSelection(index);
             },
@@ -183,16 +224,13 @@ Element SegmentedControl::body() const {
         .alignment = Alignment::Stretch,
         .children = std::move(items),
     }
-        .fill(FillStyle::solid(disabled ? theme.windowBackgroundColor : resolved.trackColor))
+        .fill(FillStyle::solid(disabled ? theme().windowBackgroundColor : resolved.trackColor))
         .stroke(StrokeStyle::solid(resolved.borderColor, 1.f))
         .cornerRadius(CornerRadius {resolved.cornerRadius})
         .focusable(!disabled)
         .onKeyDown(disabled ? std::function<void(KeyCode, Modifiers)> {} :
                               std::function<void(KeyCode, Modifiers)> {handleKey});
 
-    if (layoutConstraints && std::isfinite(layoutConstraints->maxWidth) && layoutConstraints->maxWidth > 0.f) {
-        root = std::move(root).width(layoutConstraints->maxWidth);
-    }
     return root;
 }
 

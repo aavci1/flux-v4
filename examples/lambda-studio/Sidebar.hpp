@@ -24,24 +24,23 @@ struct SidebarButton : ViewModifiers<SidebarButton> {
     std::function<void()> onTap;
 
     auto body() const {
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<ThemeKey>();
 
-        bool const hovered = useHover();
-        bool const pressed = usePress();
-        bool const focused = useFocus();
+        auto hovered = useState(false);
+        auto pressed = useState(false);
 
-        Color color = Color::secondary();
-
-        if (hovered) {
-            color = Color::selectedContentBackground();
-        }
-
-        if (pressed || selected) {
-            color = Color::accent();
-        }
+        Bindable<Color> color {[hovered, pressed, selected = selected] {
+            if (pressed() || selected) {
+                return Color::accent();
+            }
+            if (hovered()) {
+                return Color::selectedContentBackground();
+            }
+            return Color::secondary();
+        }};
 
         return VStack {
-            .spacing = theme.space1,
+            .spacing = theme().space1,
             .alignment = Alignment::Center,
             .children = children(
                 Icon {
@@ -61,6 +60,13 @@ struct SidebarButton : ViewModifiers<SidebarButton> {
         }
             .cursor(Cursor::Hand)
             .focusable(true)
+            .onPointerEnter(std::function<void()> {[hovered] { hovered = true; }})
+            .onPointerExit(std::function<void()> {[hovered, pressed] {
+                hovered = false;
+                pressed = false;
+            }})
+            .onPointerDown(std::function<void(Point)> {[pressed](Point) { pressed = true; }})
+            .onPointerUp(std::function<void(Point)> {[pressed](Point) { pressed = false; }})
             .onTap([onTap = onTap] {
                 if (onTap) {
                     onTap();
@@ -75,7 +81,7 @@ struct Sidebar : ViewModifiers<Sidebar> {
     std::function<void(std::string)> onSelect;
 
     auto body() const {
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<ThemeKey>();
 
         auto makeButton = [this](IconName icon, std::string title) {
             return SidebarButton {
@@ -105,11 +111,11 @@ struct Sidebar : ViewModifiers<Sidebar> {
         }
 
         return VStack {
-            .spacing = theme.space6,
+            .spacing = theme().space6,
             .alignment = Alignment::Center,
             .children = std::move(topChildren),
         }
-            .padding(theme.space4, theme.space2, theme.space4, theme.space2);
+            .padding(theme().space4, theme().space2, theme().space4, theme().space2);
     }
 };
 

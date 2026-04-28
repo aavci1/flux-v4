@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -215,14 +216,14 @@ struct ImageDemoRoot {
     std::string imagePath;
 
     Element body() const {
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<ThemeKey>();
 
         if (!image) {
             return ScrollView{
                 .axis = ScrollAxis::Vertical,
                 .children = children(
                     VStack{
-                        .spacing = theme.space4,
+                        .spacing = theme().space4,
                         .children = children(
                             Text{
                                 .text = "Image Demo",
@@ -231,10 +232,10 @@ struct ImageDemoRoot {
                                 .horizontalAlignment = HorizontalAlignment::Leading,
                             },
                             makeSectionCard(
-                                theme, "Image load failed",
+                                theme(), "Image load failed",
                                 "The demo needs a bitmap asset to render the image element showcase.",
                                 VStack{
-                                    .spacing = theme.space2,
+                                    .spacing = theme().space2,
                                     .alignment = Alignment::Start,
                                     .children = children(
                                         Text{
@@ -253,7 +254,7 @@ struct ImageDemoRoot {
                                         })
                                 }))
                     }
-                        .padding(theme.space5))
+                        .padding(theme().space5))
             };
         }
 
@@ -261,31 +262,31 @@ struct ImageDemoRoot {
         std::vector<Element> modeTiles;
         modeTiles.reserve(5);
         modeTiles.emplace_back(makeModeTile(
-            theme, image, "Cover",
+            theme(), image, "Cover",
             "Fills the frame edge to edge and crops when the aspect ratio does not match.",
             ImageFillMode::Cover));
         modeTiles.emplace_back(makeModeTile(
-            theme, image, "Fit",
+            theme(), image, "Fit",
             "Preserves the whole image inside the frame and leaves empty space when needed.",
             ImageFillMode::Fit));
         modeTiles.emplace_back(makeModeTile(
-            theme, image, "Stretch",
+            theme(), image, "Stretch",
             "Matches the frame exactly and ignores the source aspect ratio.",
             ImageFillMode::Stretch));
         modeTiles.emplace_back(makeModeTile(
-            theme, image, "Center",
+            theme(), image, "Center",
             "Keeps the image at its natural size and centers it without scaling.",
             ImageFillMode::Center));
         modeTiles.emplace_back(makeModeTile(
-            theme, image, "Tile",
-                "Repeats the source to turn a single image asset into a textured surface.",
+            theme(), image, "Tile",
+            "Repeats the source to turn a single image asset into a textured surface.",
             ImageFillMode::Tile, 120.f));
 
         Element heroOverlay = VStack{
-            .spacing = theme.space2,
+            .spacing = theme().space2,
             .alignment = Alignment::Start,
             .children = children(
-                makeBadge(theme, "Cover hero", withAlpha(Color::accent(), 0.18f), Colors::white),
+                makeBadge(theme(), "Cover hero", withAlpha(Color::accent(), 0.18f), Colors::white),
                 Text{
                     .text = fileNameForPath(imagePath),
                     .font = Font::title3(),
@@ -302,25 +303,25 @@ struct ImageDemoRoot {
         };
 
         Element metrics = HStack{
-            .spacing = theme.space3,
+            .spacing = theme().space3,
             .alignment = Alignment::Stretch,
             .children = children(
-                makeMetricTile(theme, pixelSizeLabel(size), "Source size", Color::accent()),
-                makeMetricTile(theme, aspectRatioLabel(size), "Aspect ratio", Color::success()),
-                makeMetricTile(theme, "5", "Image fill modes", Color::warning()))
+                makeMetricTile(theme(), pixelSizeLabel(size), "Source size", Color::accent()),
+                makeMetricTile(theme(), aspectRatioLabel(size), "Aspect ratio", Color::success()),
+                makeMetricTile(theme(), "5", "Image fill modes", Color::warning()))
         };
 
         Element heroSection = makeSectionCard(
-            theme, "Hero Treatment",
+            theme(), "Hero Treatment",
             "Large editorial-style media blocks are mostly just a cover image plus ordinary layout elements layered on top.",
             VStack{
-                .spacing = theme.space3,
+                .spacing = theme().space3,
                 .children = children(
-                    makeImageSurface(theme, image, ImageFillMode::Cover, 248.f, heroOverlay)
+                    makeImageSurface(theme(), image, ImageFillMode::Cover, 248.f, heroOverlay)
                         .shadow(ShadowStyle{
-                            .radius = theme.shadowRadiusPopover + 6.f,
-                            .offset = {0.f, theme.shadowOffsetYPopover + 2.f},
-                            .color = withAlpha(theme.shadowColor, std::max(0.18f, theme.shadowColor.a)),
+                            .radius = theme().shadowRadiusPopover + 6.f,
+                            .offset = {0.f, theme().shadowOffsetYPopover + 2.f},
+                            .color = withAlpha(theme().shadowColor, std::max(0.18f, theme().shadowColor.a)),
                         }),
                     Text{
                         .text = imagePath,
@@ -332,34 +333,34 @@ struct ImageDemoRoot {
             });
 
         Element fillModesSection = makeSectionCard(
-            theme, "Fill Modes",
+            theme(), "Fill Modes",
             "These use the same image source and the same `views::Image` element, changing only the fill mode.",
             Grid{
                 .columns = 2,
-                .horizontalSpacing = theme.space3,
-                .verticalSpacing = theme.space3,
+                .horizontalSpacing = theme().space3,
+                .verticalSpacing = theme().space3,
                 .children = std::move(modeTiles),
             });
 
         Element styledVariationsSection = makeSectionCard(
-            theme, "Styled Variations",
+            theme(), "Styled Variations",
             "Because image is just another element, it composes with modifiers and neighboring content instead of needing a special container type.",
             Grid{
                 .columns = 2,
-                .horizontalSpacing = theme.space3,
-                .verticalSpacing = theme.space3,
+                .horizontalSpacing = theme().space3,
+                .verticalSpacing = theme().space3,
                 .children = children(
                     VStack{
-                        .spacing = theme.space2,
+                        .spacing = theme().space2,
                         .alignment = Alignment::Start,
                         .children = children(
                             makeImageSurface(
-                                theme, image, ImageFillMode::Fit, 180.f,
-                                makeBadge(theme, "Rounded fit", withAlpha(Color::success(), 0.18f), Colors::white))
-                                .padding(theme.space2)
+                                theme(), image, ImageFillMode::Fit, 180.f,
+                                makeBadge(theme(), "Rounded fit", withAlpha(Color::success(), 0.18f), Colors::white))
+                                .padding(theme().space2)
                                 .fill(FillStyle::solid(Color::windowBackground()))
                                 .stroke(StrokeStyle::solid(Color::separator(), 1.f))
-                                .cornerRadius(CornerRadius{theme.radiusMedium}),
+                                .cornerRadius(CornerRadius{theme().radiusMedium}),
                             Text{
                                 .text = "Inset framing keeps the full asset visible inside a more editorial card treatment.",
                                 .font = Font::footnote(),
@@ -368,19 +369,19 @@ struct ImageDemoRoot {
                                 .wrapping = TextWrapping::Wrap,
                             })
                     }
-                        .padding(theme.space3)
+                        .padding(theme().space3)
                         .fill(FillStyle::solid(Color::windowBackground()))
-                        .cornerRadius(CornerRadius{theme.radiusMedium}),
+                        .cornerRadius(CornerRadius{theme().radiusMedium}),
                     VStack{
-                        .spacing = theme.space2,
+                        .spacing = theme().space2,
                         .alignment = Alignment::Start,
                         .children = children(
                             ZStack{
                                 .children = children(
-                                    makeImageSurface(theme, image, ImageFillMode::Cover, 180.f),
+                                    makeImageSurface(theme(), image, ImageFillMode::Cover, 180.f),
                                     Rectangle{}
                                         .fill(FillStyle::solid(Color{0.f, 0.f, 0.f, 0.26f}))
-                                        .cornerRadius(CornerRadius{theme.radiusMedium})
+                                        .cornerRadius(CornerRadius{theme().radiusMedium})
                                         .height(180.f),
                                     VStack{
                                         .children = children(
@@ -393,7 +394,7 @@ struct ImageDemoRoot {
                                                 .wrapping = TextWrapping::Wrap,
                                             })
                                     }
-                                        .padding(theme.space3)
+                                        .padding(theme().space3)
                                         .height(180.f))
                             },
                             Text{
@@ -404,27 +405,27 @@ struct ImageDemoRoot {
                                 .wrapping = TextWrapping::Wrap,
                             })
                     }
-                        .padding(theme.space3)
+                        .padding(theme().space3)
                         .fill(FillStyle::solid(Color::windowBackground()))
-                        .cornerRadius(CornerRadius{theme.radiusMedium}))
+                        .cornerRadius(CornerRadius{theme().radiusMedium}))
             });
 
         Element usageSection = makeSectionCard(
-            theme, "In Product Layouts",
+            theme(), "In Product Layouts",
             "The same element also works in denser UI rows, not just large hero surfaces.",
             VStack{
-                .spacing = theme.space3,
+                .spacing = theme().space3,
                 .children = children(
                     makeUsageRow(
-                        theme, image, "Library card thumb",
+                        theme(), image, "Library card thumb",
                         "A cover crop works well when the row needs a strong visual anchor and the image can absorb some cropping.",
                         ImageFillMode::Cover, 116.f),
                     makeUsageRow(
-                        theme, image, "Inspection pane preview",
+                        theme(), image, "Inspection pane preview",
                         "Fit mode is a better default when the viewer needs to see the whole asset without losing context at the edges.",
                         ImageFillMode::Fit, 116.f),
                     makeUsageRow(
-                        theme, image, "Decorative texture strip",
+                        theme(), image, "Decorative texture strip",
                         "Tile mode can turn one file into a repeating background accent without additional assets.",
                         ImageFillMode::Tile, 116.f))
             });
@@ -433,7 +434,7 @@ struct ImageDemoRoot {
             .axis = ScrollAxis::Vertical,
             .children = children(
                 VStack{
-                    .spacing = theme.space4,
+                    .spacing = theme().space4,
                     .children = children(
                         Text{
                             .text = "Image Demo",
@@ -454,7 +455,7 @@ struct ImageDemoRoot {
                         std::move(styledVariationsSection),
                         std::move(usageSection))
                 }
-                    .padding(theme.space5))
+                    .padding(theme().space5))
         };
     }
 };

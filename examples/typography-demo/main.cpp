@@ -140,14 +140,14 @@ Element swatchGrid(Theme const &theme, std::vector<Element> tiles) {
 }
 
 Element previewWindow(Theme previewTheme, std::string name, std::string note) {
-    Theme const &theme = useEnvironment<Theme>();
+    auto theme = useEnvironment<ThemeKey>();
 
     Element content = VStack {
-        .spacing = theme.space3,
+        .spacing = theme().space3,
         .alignment = Alignment::Start,
         .children = children(
             HStack {
-                .spacing = theme.space2,
+                .spacing = theme().space2,
                 .alignment = Alignment::Center,
                 .children = children(
                     dot(Color::danger()),
@@ -161,7 +161,7 @@ Element previewWindow(Theme previewTheme, std::string name, std::string note) {
                 )
             },
             VStack {
-                .spacing = theme.space1,
+                .spacing = theme().space1,
                 .alignment = Alignment::Start,
                 .children = children(
                     Text {
@@ -178,7 +178,7 @@ Element previewWindow(Theme previewTheme, std::string name, std::string note) {
                 )
             },
             VStack {
-                .spacing = theme.space2,
+                .spacing = theme().space2,
                 .alignment = Alignment::Start,
                 .children = children(
                     Text {
@@ -186,20 +186,20 @@ Element previewWindow(Theme previewTheme, std::string name, std::string note) {
                         .font = Font::headline(),
                         .color = Color::primary(),
                     }
-                        .padding(theme.space3)
+                        .padding(theme().space3)
                         .fill(Color::selectedContentBackground())
-                        .cornerRadius(theme.radiusMedium),
+                        .cornerRadius(theme().radiusMedium),
                     Text {
                         .text = "Placeholder",
                         .font = Font::body(),
                         .color = Color::placeholder(),
                     }
-                        .padding(theme.space3)
+                        .padding(theme().space3)
                         .fill(Color::textBackground())
                         .stroke(Color::opaqueSeparator(), 1.f)
-                        .cornerRadius(theme.radiusMedium),
+                        .cornerRadius(theme().radiusMedium),
                     HStack {
-                        .spacing = theme.space2,
+                        .spacing = theme().space2,
                         .alignment = Alignment::Center,
                         .children = children(
                             Text {
@@ -207,9 +207,9 @@ Element previewWindow(Theme previewTheme, std::string name, std::string note) {
                                 .font = Font::headline(),
                                 .color = Color::accentForeground(),
                             }
-                                .padding(theme.space3)
+                                .padding(theme().space3)
                                 .fill(Color::accent())
-                                .cornerRadius(theme.radiusMedium),
+                                .cornerRadius(theme().radiusMedium),
                             Text {
                                 .text = "Sync complete",
                                 .font = Font::footnote(),
@@ -221,11 +221,11 @@ Element previewWindow(Theme previewTheme, std::string name, std::string note) {
             }
         )
     }
-        .padding(theme.space4)
+        .padding(theme().space4)
         .fill(Color::controlBackground())
         .stroke(Color::separator(), 1.f)
-        .cornerRadius(theme.radiusXLarge)
-        .environment(previewTheme);
+        .cornerRadius(theme().radiusXLarge)
+        .environment<ThemeKey>(previewTheme);
 
     return std::move(content).flex(1.f);
 }
@@ -234,10 +234,10 @@ Element previewWindow(Theme previewTheme, std::string name, std::string note) {
 
 struct TypographyDemoRoot {
     auto body() const {
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<ThemeKey>();
 
         Element previews = HStack {
-            .spacing = theme.space3,
+            .spacing = theme().space3,
             .alignment = Alignment::Start,
             .children = children(
                 previewWindow(Theme::light(), "Light Appearance", "Primary and secondary content should feel calm and legible."),
@@ -246,18 +246,18 @@ struct TypographyDemoRoot {
         };
 
         std::vector<Element> typeRows;
-        typeRows.push_back(typeRow(theme, "Font::largeTitle()", Font::largeTitle(), "Screen headline"));
-        typeRows.push_back(typeRow(theme, "Font::title()", Font::title(), "Primary section title"));
-        typeRows.push_back(typeRow(theme, "Font::title2()", Font::title2(), "Panel or card title"));
-        typeRows.push_back(typeRow(theme, "Font::title3()", Font::title3(), "Subsection title"));
-        typeRows.push_back(typeRow(theme, "Font::headline()", Font::headline(), "Control label or emphasized row"));
-        typeRows.push_back(typeRow(theme, "Font::subheadline()", Font::subheadline(), "Supporting hierarchy"));
-        typeRows.push_back(typeRow(theme, "Font::body()", Font::body(), "Default reading text"));
-        typeRows.push_back(typeRow(theme, "Font::callout()", Font::callout(), "Compact callout copy"));
-        typeRows.push_back(typeRow(theme, "Font::footnote()", Font::footnote(), "Metadata and support text"));
-        typeRows.push_back(typeRow(theme, "Font::caption()", Font::caption(), "Dense UI label"));
-        typeRows.push_back(typeRow(theme, "Font::caption2()", Font::caption2(), "Tight caption"));
-        typeRows.push_back(typeRow(theme, "Font::monospacedBody()", Font::monospacedBody(), "system.token = semantic"));
+        typeRows.push_back(typeRow(theme(), "Font::largeTitle()", Font::largeTitle(), "Screen headline"));
+        typeRows.push_back(typeRow(theme(), "Font::title()", Font::title(), "Primary section title"));
+        typeRows.push_back(typeRow(theme(), "Font::title2()", Font::title2(), "Panel or card title"));
+        typeRows.push_back(typeRow(theme(), "Font::title3()", Font::title3(), "Subsection title"));
+        typeRows.push_back(typeRow(theme(), "Font::headline()", Font::headline(), "Control label or emphasized row"));
+        typeRows.push_back(typeRow(theme(), "Font::subheadline()", Font::subheadline(), "Supporting hierarchy"));
+        typeRows.push_back(typeRow(theme(), "Font::body()", Font::body(), "Default reading text"));
+        typeRows.push_back(typeRow(theme(), "Font::callout()", Font::callout(), "Compact callout copy"));
+        typeRows.push_back(typeRow(theme(), "Font::footnote()", Font::footnote(), "Metadata and support text"));
+        typeRows.push_back(typeRow(theme(), "Font::caption()", Font::caption(), "Dense UI label"));
+        typeRows.push_back(typeRow(theme(), "Font::caption2()", Font::caption2(), "Tight caption"));
+        typeRows.push_back(typeRow(theme(), "Font::monospacedBody()", Font::monospacedBody(), "system.token = semantic"));
 
         Element typeHeader = TableRow {
             .cells = {
@@ -282,16 +282,16 @@ struct TypographyDemoRoot {
             },
             .style = TableRow::Style {
                 .paddingH = 0.f,
-                .paddingV = theme.space2,
-                .spacing = theme.space3,
-                .backgroundColor = theme.controlBackgroundColor,
-                .hoverBackgroundColor = theme.controlBackgroundColor,
-                .selectedBackgroundColor = theme.controlBackgroundColor,
+                .paddingV = theme().space2,
+                .spacing = theme().space3,
+                .backgroundColor = theme().controlBackgroundColor,
+                .hoverBackgroundColor = theme().controlBackgroundColor,
+                .selectedBackgroundColor = theme().controlBackgroundColor,
             },
         };
 
         Element scaleSection = sectionCard(
-            theme, "Typography", "Apple-style text roles",
+            theme(), "Typography", "Apple-style text roles",
             "These samples render exclusively through semantic `Font::...` tokens. The theme decides the concrete face, size, and weight later.",
             TableView {
                 .header = std::move(typeHeader),
@@ -303,60 +303,60 @@ struct TypographyDemoRoot {
                 .scrollBody = false,
                 .style = TableView::Style {
                     .dividerInsetH = 0.f,
-                    .backgroundColor = theme.controlBackgroundColor,
-                    .dividerColor = theme.separatorColor,
+                    .backgroundColor = theme().controlBackgroundColor,
+                    .dividerColor = theme().separatorColor,
                 },
             }
         );
 
         Element textColors = sectionCard(
-            theme, "Color", "Semantic text colors",
+            theme(), "Color", "Semantic text colors",
             "These follow the macOS model: content asks for meaning like primary or placeholder, not a concrete hex value.",
             swatchGrid(
-                theme,
+                theme(),
                 children(
-                    swatchTile(theme, "Color::primary()", Color::primary(), "Main reading ink."),
-                    swatchTile(theme, "Color::secondary()", Color::secondary(), "Supporting descriptions.", Color::secondary()),
-                    swatchTile(theme, "Color::tertiary()", Color::tertiary(), "Metadata and quiet detail.", Color::tertiary()),
-                    swatchTile(theme, "Color::placeholder()", Color::placeholder(), "Transient hints before input.", Color::placeholder())
+                    swatchTile(theme(), "Color::primary()", Color::primary(), "Main reading ink."),
+                    swatchTile(theme(), "Color::secondary()", Color::secondary(), "Supporting descriptions.", Color::secondary()),
+                    swatchTile(theme(), "Color::tertiary()", Color::tertiary(), "Metadata and quiet detail.", Color::tertiary()),
+                    swatchTile(theme(), "Color::placeholder()", Color::placeholder(), "Transient hints before input.", Color::placeholder())
                 )
             )
         );
 
         Element surfaces = sectionCard(
-            theme, "Surfaces", "Background and separation",
+            theme(), "Surfaces", "Background and separation",
             "Window, control, elevated, and text surfaces stay distinct without hard-coding different palettes in each component.",
             swatchGrid(
-                theme,
+                theme(),
                 children(
-                    swatchTile(theme, "Color::windowBackground()", Color::windowBackground(), "Canvas and app backdrop."),
-                    swatchTile(theme, "Color::controlBackground()", Color::controlBackground(), "Cards and panels."),
-                    swatchTile(theme, "Color::elevatedBackground()", Color::elevatedBackground(), "Raised surfaces like sheets."),
-                    swatchTile(theme, "Color::textBackground()", Color::textBackground(), "Fields and editable regions.")
+                    swatchTile(theme(), "Color::windowBackground()", Color::windowBackground(), "Canvas and app backdrop."),
+                    swatchTile(theme(), "Color::controlBackground()", Color::controlBackground(), "Cards and panels."),
+                    swatchTile(theme(), "Color::elevatedBackground()", Color::elevatedBackground(), "Raised surfaces like sheets."),
+                    swatchTile(theme(), "Color::textBackground()", Color::textBackground(), "Fields and editable regions.")
                 )
             )
         );
 
         Element states = sectionCard(
-            theme, "States", "Accent, focus, and feedback",
+            theme(), "States", "Accent, focus, and feedback",
             "Interactive and status colors stay semantic too, including fills that now resolve late in the scene graph.",
             swatchGrid(
-                theme,
+                theme(),
                 children(
-                    swatchTile(theme, "Color::accent()", Color::accent(), "Primary interaction tint.", Color::accent()),
-                    swatchTile(theme, "Color::selectedContentBackground()", Color::selectedContentBackground(), "Selected rows and ranges."),
-                    swatchTile(theme, "Color::focusRing()", Color::focusRing(), "Keyboard focus affordance.", Color::focusRing()),
-                    swatchTile(theme, "Color::separator()", Color::separator(), "Subtle chrome boundaries.", Color::secondary()),
-                    swatchTile(theme, "Color::success()", Color::success(), "Positive confirmation.", Color::success()),
-                    swatchTile(theme, "Color::warning()", Color::warning(), "Caution without failure.", Color::warning()),
-                    swatchTile(theme, "Color::danger()", Color::danger(), "Destructive or failed state.", Color::danger()),
-                    swatchTile(theme, "Color::scrim()", Color::scrim(), "Modal backdrop tone.", Color::secondary())
+                    swatchTile(theme(), "Color::accent()", Color::accent(), "Primary interaction tint.", Color::accent()),
+                    swatchTile(theme(), "Color::selectedContentBackground()", Color::selectedContentBackground(), "Selected rows and ranges."),
+                    swatchTile(theme(), "Color::focusRing()", Color::focusRing(), "Keyboard focus affordance.", Color::focusRing()),
+                    swatchTile(theme(), "Color::separator()", Color::separator(), "Subtle chrome boundaries.", Color::secondary()),
+                    swatchTile(theme(), "Color::success()", Color::success(), "Positive confirmation.", Color::success()),
+                    swatchTile(theme(), "Color::warning()", Color::warning(), "Caution without failure.", Color::warning()),
+                    swatchTile(theme(), "Color::danger()", Color::danger(), "Destructive or failed state.", Color::danger()),
+                    swatchTile(theme(), "Color::scrim()", Color::scrim(), "Modal backdrop tone.", Color::secondary())
                 )
             )
         );
 
         Element content = VStack {
-            .spacing = theme.space5,
+            .spacing = theme().space5,
             .alignment = Alignment::Start,
             .children = children(
                 Text {
@@ -377,7 +377,7 @@ struct TypographyDemoRoot {
                 std::move(states)
             )
         }
-            .padding(theme.space5);
+            .padding(theme().space5);
 
         return ScrollView {
             .axis = ScrollAxis::Vertical,

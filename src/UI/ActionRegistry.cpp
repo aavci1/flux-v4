@@ -1,5 +1,7 @@
 #include <Flux/UI/ActionRegistry.hpp>
 
+#include <algorithm>
+
 namespace flux {
 
 void ActionRegistry::beginRebuild() {
@@ -7,22 +9,54 @@ void ActionRegistry::beginRebuild() {
   windowActions_.clear();
 }
 
-void ActionRegistry::registerViewClaim(ComponentKey const& key, std::string const& actionName,
-                                      std::function<void()> handler, std::function<bool()> isEnabled) {
+ActionId ActionRegistry::registerViewClaim(ComponentKey const& key, std::string const& actionName,
+                                           std::function<void()> handler,
+                                           std::function<bool()> isEnabled) {
   ActionHandler h;
+  h.id = nextId_++;
   h.name = actionName;
   h.trigger = std::move(handler);
   h.isEnabled = std::move(isEnabled);
+  ActionId const id = h.id;
   viewClaims_[key].push_back(std::move(h));
+  return id;
 }
 
-void ActionRegistry::registerWindowAction(std::string const& actionName, std::function<void()> handler,
-                                         std::function<bool()> isEnabled) {
+ActionId ActionRegistry::registerWindowAction(std::string const& actionName,
+                                              std::function<void()> handler,
+                                              std::function<bool()> isEnabled) {
   ActionHandler h;
+  h.id = nextId_++;
   h.name = actionName;
   h.trigger = std::move(handler);
   h.isEnabled = std::move(isEnabled);
+  ActionId const id = h.id;
   windowActions_.push_back(std::move(h));
+  return id;
+}
+
+void ActionRegistry::unregister(ActionId id) {
+  if (id == 0) {
+    return;
+  }
+  for (auto it = viewClaims_.begin(); it != viewClaims_.end();) {
+    auto& handlers = it->second;
+    handlers.erase(std::remove_if(handlers.begin(), handlers.end(),
+                                  [id](ActionHandler const& handler) {
+                                    return handler.id == id;
+                                  }),
+                   handlers.end());
+    if (handlers.empty()) {
+      it = viewClaims_.erase(it);
+    } else {
+      ++it;
+    }
+  }
+  windowActions_.erase(std::remove_if(windowActions_.begin(), windowActions_.end(),
+                                      [id](ActionHandler const& handler) {
+                                        return handler.id == id;
+                                      }),
+                       windowActions_.end());
 }
 
 ActionHandler const* ActionRegistry::findViewClaim(ComponentKey const& focusedKey,
@@ -58,34 +92,32 @@ bool ActionRegistry::dispatchShortcut(ComponentKey const& focusedKey, KeyCode ke
                                     std::unordered_map<std::string, ActionDescriptor> const& descriptors) const {
   // Step 1: view-claims on the focused leaf or an ancestor composite. `useViewAction` registers on the
   // composite key while `focusedKey_` is the leaf `stableTargetKey`, so we walk key prefixes.
-  if (!focusedKey.empty()) {
-    ComponentKey probe = focusedKey;
-    for (;;) {
-      auto cit = viewClaims_.find(probe);
-      if (cit != viewClaims_.end()) {
-        for (ActionHandler const& claim : cit->second) {
-          auto dit = descriptors.find(claim.name);
-          if (dit == descriptors.end()) {
-            continue;
-          }
-          if (!dit->second.shortcut.matches(key, modifiers)) {
-            continue;
-          }
-          if (dit->second.isEnabled && !dit->second.isEnabled()) {
-            continue;
-          }
-          if (claim.isEnabled && !claim.isEnabled()) {
-            continue;
-          }
-          claim.trigger();
-          return true;
+  ComponentKey probe = focusedKey;
+  for (;;) {
+    auto cit = viewClaims_.find(probe);
+    if (cit != viewClaims_.end()) {
+      for (ActionHandler const& claim : cit->second) {
+        auto dit = descriptors.find(claim.name);
+        if (dit == descriptors.end()) {
+          continue;
         }
+        if (!dit->second.shortcut.matches(key, modifiers)) {
+          continue;
+        }
+        if (dit->second.isEnabled && !dit->second.isEnabled()) {
+          continue;
+        }
+        if (claim.isEnabled && !claim.isEnabled()) {
+          continue;
+        }
+        claim.trigger();
+        return true;
       }
-      if (probe.empty()) {
-        break;
-      }
-      probe.pop_back();
     }
+    if (probe.empty()) {
+      break;
+    }
+    probe.pop_back();
   }
 
   // Step 2: window-actions — last registration wins (scan from end).

@@ -53,7 +53,7 @@ struct Select : ViewModifiers<Select> {
     };
 
     /// Controlled selection state. When omitted, the control manages its own local selection.
-    State<int> selectedIndex {};
+    Signal<int> selectedIndex = Signal<int>{-1};
 
     std::vector<SelectOption> options;
 

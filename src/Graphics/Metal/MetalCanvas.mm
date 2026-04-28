@@ -163,6 +163,9 @@ bool pathIsMoveLineOnlyStroke(Path const& path) {
   return true;
 }
 
+template <typename Vec>
+void recordVectorCapacityIncrease(std::size_t previousCapacity, Vec const& vec);
+
 void appendGlyphQuad(std::vector<MetalGlyphVertex>& out, Mat3 const& M, float dpiX, float dpiY, Point tlLogical,
                      float gw, float gh, float u0, float v0, float u1, float v1, vector_float4 premulRgba) {
   Point const c0 = tlLogical;
@@ -204,12 +207,14 @@ void appendOwnedGlyphSource(MetalFrameRecorder& recorder, std::uint32_t start, s
   if (count == 0) {
     return;
   }
+  std::size_t const sourceCapacity = recorder.glyphVertexSources.capacity();
   recorder.glyphVertexSources.push_back(MetalGlyphVertexSource{
       .kind = MetalGlyphVertexSource::Owned,
       .start = start,
       .count = count,
       .borrowed = nullptr,
   });
+  recordVectorCapacityIncrease(sourceCapacity, recorder.glyphVertexSources);
   recorder.glyphVertexCount += count;
 }
 
@@ -218,12 +223,14 @@ void appendBorrowedGlyphSource(MetalFrameRecorder& recorder, MetalGlyphVertex co
   if (count == 0) {
     return;
   }
+  std::size_t const sourceCapacity = recorder.glyphVertexSources.capacity();
   recorder.glyphVertexSources.push_back(MetalGlyphVertexSource{
       .kind = MetalGlyphVertexSource::Borrowed,
       .start = 0,
       .count = count,
       .borrowed = vertices,
   });
+  recordVectorCapacityIncrease(sourceCapacity, recorder.glyphVertexSources);
   recorder.glyphVertexCount += count;
 }
 
@@ -268,6 +275,59 @@ bool sameRoundedClipForBatch(T const& a, T const& b) {
 template <typename T>
 bool sameTranslationForBatch(T const& a, T const& b) {
   return a.translation.x == b.translation.x && a.translation.y == b.translation.y;
+}
+
+template <typename Vec>
+void recordVectorCapacityIncrease(std::size_t previousCapacity, Vec const& vec) {
+  if (!debug::perf::enabled() || vec.capacity() <= previousCapacity) {
+    return;
+  }
+  using Value = typename Vec::value_type;
+  debug::perf::recordRecorderCapacityGrowth(
+      static_cast<std::uint64_t>((vec.capacity() - previousCapacity) * sizeof(Value)));
+}
+
+struct RecorderCapacitySnapshot {
+  bool enabled = false;
+  std::size_t rectOps = 0;
+  std::size_t imageOps = 0;
+  std::size_t pathOps = 0;
+  std::size_t glyphOps = 0;
+  std::size_t opOrder = 0;
+  std::size_t pathVerts = 0;
+  std::size_t glyphVerts = 0;
+  std::size_t glyphSources = 0;
+};
+
+RecorderCapacitySnapshot snapshotRecorderCapacity(MetalFrameRecorder const& recorder) {
+  if (!debug::perf::enabled()) {
+    return {};
+  }
+  return RecorderCapacitySnapshot{
+      .enabled = true,
+      .rectOps = recorder.rectOps.capacity(),
+      .imageOps = recorder.imageOps.capacity(),
+      .pathOps = recorder.pathOps.capacity(),
+      .glyphOps = recorder.glyphOps.capacity(),
+      .opOrder = recorder.opOrder.capacity(),
+      .pathVerts = recorder.pathVerts.capacity(),
+      .glyphVerts = recorder.glyphVerts.capacity(),
+      .glyphSources = recorder.glyphVertexSources.capacity(),
+  };
+}
+
+void recordRecorderCapacityIncreases(RecorderCapacitySnapshot const& before, MetalFrameRecorder const& recorder) {
+  if (!before.enabled) {
+    return;
+  }
+  recordVectorCapacityIncrease(before.rectOps, recorder.rectOps);
+  recordVectorCapacityIncrease(before.imageOps, recorder.imageOps);
+  recordVectorCapacityIncrease(before.pathOps, recorder.pathOps);
+  recordVectorCapacityIncrease(before.glyphOps, recorder.glyphOps);
+  recordVectorCapacityIncrease(before.opOrder, recorder.opOrder);
+  recordVectorCapacityIncrease(before.pathVerts, recorder.pathVerts);
+  recordVectorCapacityIncrease(before.glyphVerts, recorder.glyphVerts);
+  recordVectorCapacityIncrease(before.glyphSources, recorder.glyphVertexSources);
 }
 
 MetalDrawUniforms makeDrawUniforms(float viewportW, float viewportH, vector_float2 translation) {
@@ -441,7 +501,21 @@ public:
       return;
     }
 
-    metal_.uploadRectOps(frame_.rectOps);
+    debug::perf::recordFrameOps(frame_.rectOps.size(), frame_.imageOps.size(), frame_.pathOps.size(),
+                                frame_.glyphOps.size(), frame_.opOrder.size(), frame_.pathVerts.size(),
+                                frame_.glyphVertexCount);
+    std::uint32_t const uploadedRectInstances = metal_.uploadRectOps(frame_.rectOps);
+    debug::perf::recordUploadBytes(debug::perf::RenderCounterKind::Rect,
+                                   static_cast<std::uint64_t>(uploadedRectInstances) *
+                                       sizeof(MetalRectInstance));
+    debug::perf::recordUploadBytes(debug::perf::RenderCounterKind::Image,
+                                   frame_.imageOps.size() * sizeof(MetalImageInstance));
+    debug::perf::recordUploadBytes(debug::perf::RenderCounterKind::Path,
+                                   frame_.pathVerts.size() * sizeof(PathVertex));
+    debug::perf::recordUploadBytes(debug::perf::RenderCounterKind::Glyph,
+                                   static_cast<std::uint64_t>(frame_.glyphVertexCount) *
+                                       sizeof(MetalGlyphVertex));
+
     metal_.uploadImageOps(frame_.imageOps);
     metal_.uploadPathVertices(frame_.pathVerts);
     metal_.uploadGlyphVertices(frame_);
@@ -502,9 +576,15 @@ public:
           }
           MetalRectOp const& o2 = frame_.rectOps[nextRef.index];
           MetalOpRef const prevRef = frame_.opOrder[j - 1];
-          if (o2.isLine != op.isLine || o2.blendMode != op.blendMode || !sameScissorForBatch(op, o2) ||
+          MetalRectOp const& prev = frame_.rectOps[prevRef.index];
+          std::uint32_t const prevInstanceIndex =
+              prev.externalInstanceBuffer ? prev.externalInstanceIndex : prev.arenaInstanceIndex;
+          std::uint32_t const nextInstanceIndex =
+              o2.externalInstanceBuffer ? o2.externalInstanceIndex : o2.arenaInstanceIndex;
+          if (o2.externalInstanceBuffer != op.externalInstanceBuffer ||
+              o2.isLine != op.isLine || o2.blendMode != op.blendMode || !sameScissorForBatch(op, o2) ||
               !sameRoundedClipForBatch(op, o2) || !sameTranslationForBatch(op, o2) ||
-              nextRef.index != prevRef.index + 1) {
+              nextInstanceIndex != prevInstanceIndex + 1) {
             break;
           }
           ++j;
@@ -513,21 +593,28 @@ public:
         setEncoderScissorForOp(enc, op, fullScissor, &lastScissor, &haveScissor);
         MetalDrawUniforms const uniforms = makeDrawUniforms(vw, vh, op.translation);
         setEncoderRoundedClipBuffer(enc, clipBuf, clipDst, &clipIndex, op.roundedClip);
+        id<MTLBuffer> instanceBuf =
+            op.externalInstanceBuffer ? (__bridge id<MTLBuffer>)op.externalInstanceBuffer
+                                      : metal_.instanceArenaBuffer();
+        std::uint32_t const instanceIndex =
+            op.externalInstanceBuffer ? op.externalInstanceIndex : op.arenaInstanceIndex;
         setEncoderDrawUniformBuffer(enc, uniformBuf, uniformDst, &uniformIndex, uniforms, 2);
         if (!op.isLine) {
           [enc setRenderPipelineState:metal_.rectPSO(op.blendMode)];
           [enc setVertexBuffer:metal_.quadBuffer() offset:0 atIndex:0];
-          const NSUInteger off = static_cast<NSUInteger>(ref.index) * sizeof(MetalRectInstance);
-          [enc setVertexBuffer:metal_.instanceArenaBuffer() offset:off atIndex:1];
+          const NSUInteger off = static_cast<NSUInteger>(instanceIndex) * sizeof(MetalRectInstance);
+          [enc setVertexBuffer:instanceBuf offset:off atIndex:1];
           [enc drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:kQuadStripCount
                   instanceCount:static_cast<NSUInteger>(runLen)];
+          debug::perf::recordDrawCall(debug::perf::RenderCounterKind::Rect);
         } else {
           [enc setRenderPipelineState:metal_.linePSO(op.blendMode)];
           [enc setVertexBuffer:metal_.quadBuffer() offset:0 atIndex:0];
-          const NSUInteger off = static_cast<NSUInteger>(ref.index) * sizeof(MetalRectInstance);
-          [enc setVertexBuffer:metal_.instanceArenaBuffer() offset:off atIndex:1];
+          const NSUInteger off = static_cast<NSUInteger>(instanceIndex) * sizeof(MetalRectInstance);
+          [enc setVertexBuffer:instanceBuf offset:off atIndex:1];
           [enc drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:kQuadStripCount
                   instanceCount:static_cast<NSUInteger>(runLen)];
+          debug::perf::recordDrawCall(debug::perf::RenderCounterKind::Rect);
         }
         i = j;
         continue;
@@ -543,7 +630,8 @@ public:
             break;
           }
           MetalGlyphOp const& o2 = frame_.glyphOps[nextRef.index];
-          if (o2.blendMode != op.blendMode || !sameScissorForBatch(op, o2) ||
+          if (o2.externalVertexBuffer != op.externalVertexBuffer ||
+              o2.blendMode != op.blendMode || !sameScissorForBatch(op, o2) ||
               !sameRoundedClipForBatch(op, o2) || !sameTranslationForBatch(op, o2) ||
               o2.glyphStart != runStart + runVerts || nextRef.index != frame_.opOrder[j - 1].index + 1) {
             break;
@@ -554,7 +642,8 @@ public:
         setEncoderScissorForOp(enc, op, fullScissor, &lastScissor, &haveScissor);
         setEncoderRoundedClipBuffer(enc, clipBuf, clipDst, &clipIndex, op.roundedClip);
         [enc setRenderPipelineState:metal_.glyphPSO(op.blendMode)];
-        id<MTLBuffer> gbuf = metal_.glyphVertexArenaBuffer();
+        id<MTLBuffer> gbuf =
+            op.externalVertexBuffer ? (__bridge id<MTLBuffer>)op.externalVertexBuffer : metal_.glyphVertexArenaBuffer();
         const NSUInteger goff = static_cast<NSUInteger>(runStart) * sizeof(MetalGlyphVertex);
         [enc setVertexBuffer:gbuf offset:goff atIndex:0];
         MetalDrawUniforms const uniforms = makeDrawUniforms(vw, vh, op.translation);
@@ -562,6 +651,7 @@ public:
         [enc setFragmentTexture:glyphAtlas_->texture() atIndex:0];
         [enc setFragmentSamplerState:metal_.linearSampler() atIndex:0];
         [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:static_cast<NSUInteger>(runVerts)];
+        debug::perf::recordDrawCall(debug::perf::RenderCounterKind::Glyph);
         i = j;
         continue;
       }
@@ -584,6 +674,7 @@ public:
         [enc setFragmentSamplerState:op.repeatSampler ? metal_.repeatSampler() : metal_.linearSampler() atIndex:0];
         [enc drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:kQuadStripCount
                 instanceCount:1];
+        debug::perf::recordDrawCall(debug::perf::RenderCounterKind::Image);
         ++i;
         continue;
       }
@@ -601,6 +692,7 @@ public:
         MetalDrawUniforms const uniforms = makeDrawUniforms(vw, vh, op.translation);
         setEncoderDrawUniformBuffer(enc, uniformBuf, uniformDst, &uniformIndex, uniforms, 1);
         [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:static_cast<NSUInteger>(op.pathCount)];
+        debug::perf::recordDrawCall(debug::perf::RenderCounterKind::Path);
         ++i;
         continue;
       }
@@ -639,7 +731,7 @@ public:
       dispatch_semaphore_signal(frameSem_);
       syncPresent_ = false;
     } else {
-      __block dispatch_semaphore_t sem = frameSem_;
+      dispatch_semaphore_t sem = frameSem_;
       [cmdBuf_ addCompletedHandler:^(id<MTLCommandBuffer> /*cb*/) { dispatch_semaphore_signal(sem); }];
       [cmdBuf_ presentDrawable:drawable_];
       lastSubmittedCmdBuf_ = cmdBuf_;
@@ -1139,6 +1231,7 @@ public:
     float const invDpiY = 1.f / dpiScaleY_;
     std::uint32_t const glyphStart = recorder.glyphVertexCount;
     std::uint32_t const ownedGlyphStart = static_cast<std::uint32_t>(recorder.glyphVerts.size());
+    std::size_t const glyphVertsCapacity = recorder.glyphVerts.capacity();
     for (auto const& placed : layout.runs) {
       TextRun const& text = placed.run;
       float const baselineY = origin.y + placed.origin.y;
@@ -1186,6 +1279,7 @@ public:
         appendGlyphQuad(recorder.glyphVerts, M, dpiScaleX_, dpiScaleY_, tl, gw, gh, u0, vLo, u1, vHi, premul);
       }
     }
+    recordVectorCapacityIncrease(glyphVertsCapacity, recorder.glyphVerts);
 
     std::uint32_t const vertCount = static_cast<std::uint32_t>(recorder.glyphVerts.size()) - ownedGlyphStart;
     if (vertCount > 0) {
@@ -1357,32 +1451,38 @@ private:
 
   void pushRectOp(MetalRectOp&& op) {
     MetalFrameRecorder& recorder = activeRecorder();
+    RecorderCapacitySnapshot const capacityBefore = snapshotRecorderCapacity(recorder);
     tagOpWithClip(op, clipScissorValid_, clipScissor_, clipRoundedStack_);
     recorder.opOrder.push_back(MetalOpRef{
         .kind = MetalOpRef::Rect,
         .index = static_cast<std::uint32_t>(recorder.rectOps.size()),
     });
     recorder.rectOps.push_back(std::move(op));
+    recordRecorderCapacityIncreases(capacityBefore, recorder);
   }
 
   void pushImageOp(MetalImageOp&& op) {
     MetalFrameRecorder& recorder = activeRecorder();
+    RecorderCapacitySnapshot const capacityBefore = snapshotRecorderCapacity(recorder);
     tagOpWithClip(op, clipScissorValid_, clipScissor_, clipRoundedStack_);
     recorder.opOrder.push_back(MetalOpRef{
         .kind = MetalOpRef::Image,
         .index = static_cast<std::uint32_t>(recorder.imageOps.size()),
     });
     recorder.imageOps.push_back(std::move(op));
+    recordRecorderCapacityIncreases(capacityBefore, recorder);
   }
 
   void pushGlyphOp(MetalGlyphOp&& op) {
     MetalFrameRecorder& recorder = activeRecorder();
+    RecorderCapacitySnapshot const capacityBefore = snapshotRecorderCapacity(recorder);
     tagOpWithClip(op, clipScissorValid_, clipScissor_, clipRoundedStack_);
     recorder.opOrder.push_back(MetalOpRef{
         .kind = MetalOpRef::Glyph,
         .index = static_cast<std::uint32_t>(recorder.glyphOps.size()),
     });
     recorder.glyphOps.push_back(std::move(op));
+    recordRecorderCapacityIncreases(capacityBefore, recorder);
   }
 
   void emitRect(Rect const& deviceRect, CornerRadius const& corners, Color const& fillColor, Color const& strokeColor,
@@ -1442,8 +1542,62 @@ public:
     updateClipScissor();
   }
 
+  void* preparedRectInstanceBuffer(MetalFrameRecorder const& recorded) {
+    std::uint32_t const instanceCount = static_cast<std::uint32_t>(recorded.rectOps.size());
+    if (instanceCount == 0) {
+      return nullptr;
+    }
+    if (recorded.preparedRectInstanceBuffer && recorded.preparedRectInstanceCapacity >= instanceCount) {
+      return recorded.preparedRectInstanceBuffer;
+    }
+    if (recorded.preparedRectInstanceBuffer) {
+      (void)(__bridge_transfer id<MTLBuffer>)recorded.preparedRectInstanceBuffer;
+      recorded.preparedRectInstanceBuffer = nullptr;
+      recorded.preparedRectInstanceCapacity = 0;
+    }
+    NSUInteger const bytes = static_cast<NSUInteger>(instanceCount * sizeof(MetalRectInstance));
+    id<MTLBuffer> buffer = [metal_.device() newBufferWithLength:bytes options:MTLResourceStorageModeShared];
+    if (!buffer) {
+      return nullptr;
+    }
+    auto* dst = static_cast<MetalRectInstance*>([buffer contents]);
+    for (std::size_t i = 0; i < recorded.rectOps.size(); ++i) {
+      dst[i] = recorded.rectOps[i].inst;
+    }
+    recorded.preparedRectInstanceBuffer = (__bridge_retained void*)buffer;
+    recorded.preparedRectInstanceCapacity = instanceCount;
+    return recorded.preparedRectInstanceBuffer;
+  }
+
+  void* preparedGlyphVertexBuffer(MetalFrameRecorder const& recorded) {
+    std::uint32_t const vertexCount = static_cast<std::uint32_t>(recorded.glyphVerts.size());
+    if (vertexCount == 0) {
+      return nullptr;
+    }
+    if (recorded.preparedGlyphVertexBuffer && recorded.preparedGlyphVertexCapacity >= vertexCount) {
+      return recorded.preparedGlyphVertexBuffer;
+    }
+    if (recorded.preparedGlyphVertexBuffer) {
+      (void)(__bridge_transfer id<MTLBuffer>)recorded.preparedGlyphVertexBuffer;
+      recorded.preparedGlyphVertexBuffer = nullptr;
+      recorded.preparedGlyphVertexCapacity = 0;
+    }
+    NSUInteger const bytes = static_cast<NSUInteger>(vertexCount * sizeof(MetalGlyphVertex));
+    id<MTLBuffer> buffer = [metal_.device() newBufferWithBytes:recorded.glyphVerts.data()
+                                                        length:bytes
+                                                       options:MTLResourceStorageModeShared];
+    if (!buffer) {
+      return nullptr;
+    }
+    recorded.preparedGlyphVertexBuffer = (__bridge_retained void*)buffer;
+    recorded.preparedGlyphVertexCapacity = vertexCount;
+    return recorded.preparedGlyphVertexBuffer;
+  }
+
   void replayRecordedOps(MetalFrameRecorder const& recorded, MetalRecorderSlice const& slice) {
     MetalFrameRecorder& frame = frame_;
+    RecorderCapacitySnapshot const capacityBefore = snapshotRecorderCapacity(frame);
+    void* const externalRectBuffer = slice.rectCount > 0 ? preparedRectInstanceBuffer(recorded) : nullptr;
     std::uint32_t const framePathVertexBase = static_cast<std::uint32_t>(frame.pathVerts.size());
     std::uint32_t const frameGlyphVertexBase = frame.glyphVertexCount;
     std::uint32_t const frameRectBase = static_cast<std::uint32_t>(frame.rectOps.size());
@@ -1458,14 +1612,23 @@ public:
                                   static_cast<std::ptrdiff_t>(slice.pathVertexStart + slice.pathVertexCount));
     }
     if (slice.glyphVertexCount > 0) {
-      appendBorrowedGlyphSource(frame,
-                                recorded.glyphVerts.data() + static_cast<std::size_t>(slice.glyphVertexStart),
-                                slice.glyphVertexCount);
+      if (!preparedGlyphVertexBuffer(recorded)) {
+        appendBorrowedGlyphSource(frame,
+                                  recorded.glyphVerts.data() + static_cast<std::size_t>(slice.glyphVertexStart),
+                                  slice.glyphVertexCount);
+      }
     }
     if (slice.rectCount > 0) {
       frame.rectOps.insert(frame.rectOps.end(),
                             recorded.rectOps.begin() + static_cast<std::ptrdiff_t>(slice.rectStart),
                             recorded.rectOps.begin() + static_cast<std::ptrdiff_t>(slice.rectStart + slice.rectCount));
+      if (externalRectBuffer) {
+        for (std::uint32_t i = 0; i < slice.rectCount; ++i) {
+          MetalRectOp& op = frame.rectOps[frameRectBase + static_cast<std::size_t>(i)];
+          op.externalInstanceBuffer = externalRectBuffer;
+          op.externalInstanceIndex = slice.rectStart + i;
+        }
+      }
     }
     if (slice.imageCount > 0) {
       frame.imageOps.insert(frame.imageOps.end(),
@@ -1496,7 +1659,10 @@ public:
                                  static_cast<std::ptrdiff_t>(slice.glyphOpStart + slice.glyphOpCount));
       for (std::uint32_t i = 0; i < slice.glyphOpCount; ++i) {
         MetalGlyphOp& op = frame.glyphOps[frameGlyphOpBase + static_cast<std::size_t>(i)];
-        op.glyphStart = frameGlyphVertexBase + (op.glyphStart - slice.glyphVertexStart);
+        op.externalVertexBuffer = recorded.preparedGlyphVertexBuffer;
+        if (!op.externalVertexBuffer) {
+          op.glyphStart = frameGlyphVertexBase + (op.glyphStart - slice.glyphVertexStart);
+        }
       }
     }
     if (slice.orderCount > 0) {
@@ -1521,6 +1687,7 @@ public:
         }
       }
     }
+    recordRecorderCapacityIncreases(capacityBefore, frame);
   }
 
   bool replayRecordedLocalOps(MetalFrameRecorder const& recorded, MetalRecorderSlice const& slice) {
@@ -1537,6 +1704,11 @@ public:
     float const opacityScale = currentState().opacity;
     std::optional<Rect> const clipRect = currentState().clip;
     MetalFrameRecorder& frame = frame_;
+    RecorderCapacitySnapshot const capacityBefore = snapshotRecorderCapacity(frame);
+    void* const externalGlyphBuffer =
+        (slice.glyphVertexCount > 0 && opacityScale >= 0.9999f) ? preparedGlyphVertexBuffer(recorded) : nullptr;
+    void* const externalRectBuffer =
+        (slice.rectCount > 0 && opacityScale >= 0.9999f) ? preparedRectInstanceBuffer(recorded) : nullptr;
     std::uint32_t const framePathVertexBase = static_cast<std::uint32_t>(frame.pathVerts.size());
     std::uint32_t const frameGlyphVertexBase = frame.glyphVertexCount;
     std::uint32_t const frameRectBase = static_cast<std::uint32_t>(frame.rectOps.size());
@@ -1592,7 +1764,7 @@ public:
           MetalGlyphVertex& vertex = frame.glyphVerts[static_cast<std::size_t>(ownedGlyphStart) + i];
           vertex.color *= opacityScale;
         }
-      } else {
+      } else if (!externalGlyphBuffer) {
         appendBorrowedGlyphSource(frame, recorded.glyphVerts.data() + start, slice.glyphVertexCount);
       }
     }
@@ -1606,7 +1778,12 @@ public:
         MetalRectOp& op = frame.rectOps[static_cast<std::size_t>(frameRectBase) + i];
         (void)clipRect;
         op.translation = translation;
-        op.inst.strokeWidthOpacity.y *= opacityScale;
+        op.externalInstanceBuffer = externalRectBuffer;
+        if (externalRectBuffer) {
+          op.externalInstanceIndex = static_cast<std::uint32_t>(start + i);
+        } else {
+          op.inst.strokeWidthOpacity.y *= opacityScale;
+        }
         tagOpWithClip(op, clipScissorValid_, clipScissor_, clipRoundedStack_);
       }
     }
@@ -1647,7 +1824,10 @@ public:
                             recorded.glyphOps.begin() + static_cast<std::ptrdiff_t>(start + count));
       for (std::size_t i = 0; i < count; ++i) {
         MetalGlyphOp& op = frame.glyphOps[static_cast<std::size_t>(frameGlyphOpBase) + i];
-        op.glyphStart = frameGlyphVertexBase + (op.glyphStart - slice.glyphVertexStart);
+        op.externalVertexBuffer = externalGlyphBuffer;
+        if (!externalGlyphBuffer) {
+          op.glyphStart = frameGlyphVertexBase + (op.glyphStart - slice.glyphVertexStart);
+        }
         op.translation = translation;
         tagOpWithClip(op, clipScissorValid_, clipScissor_, clipRoundedStack_);
       }
@@ -1677,6 +1857,7 @@ public:
       }
     }
 
+    recordRecorderCapacityIncreases(capacityBefore, frame);
     return true;
   }
 

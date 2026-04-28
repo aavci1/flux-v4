@@ -340,3 +340,58 @@
 - Final status:
   - `animation-demo` stays at `59-61 fps`.
   - External foreground CPU confirmation is below the `10%` target.
+
+## v5 Stage 5 Baseline
+
+- Date: 2026-04-26
+- Build: `build-stage5/examples/animation-demo`
+- CPU method:
+  - Launch `animation-demo`.
+  - Wait 3 seconds.
+  - Sample `ps -p <pid> -o %cpu=` 10 times at 0.5 second intervals.
+- Result:
+  - Average CPU: `0.00%` across 10 samples.
+- Notes:
+  - This Stage 5 port validates the build-once mount path and `useAnimation` handle API with a focused static smoke scene.
+  - Full reactive control-flow and richer example migration resume in Stages 6-8.
+
+## v5 Stage 8 Example Idle CPU
+
+- Date: 2026-04-26
+- Build: `build-stage8/examples/*`
+- CPU method:
+  - Launch each example.
+  - Wait 2 seconds for startup work to settle.
+  - Sample `ps -p <pid> -o %cpu=` 5 times at 0.4 second intervals.
+  - Terminate the process and treat exit code `143` as a clean smoke termination.
+- Result:
+  - `alert-demo`: `0.00%`
+  - `animation-demo`: `0.00%`
+  - `blend-demo`: `0.00%`
+  - `button-demo`: `0.00%`
+  - `card-demo`: `0.00%`
+  - `checkbox-demo`: `0.00%`
+  - `cursor-demo`: `0.00%`
+  - `hello-world`: `0.00%`
+  - `icon-demo`: `0.00%`
+  - `image-demo`: `0.00%`
+  - `lambda-studio`: `0.00%`
+  - `layout-demo`: `0.00%`
+  - `markdown-formatter-demo`: `0.00%`
+  - `popover-demo`: `0.00%`
+  - `reactive-demo`: `0.00%`
+  - `scene-graph-demo`: `0.00%`
+  - `scroll-demo`: `0.00%`
+  - `segmented-demo`: `0.00%`
+  - `select-demo`: `0.00%`
+  - `slider-demo`: `0.00%`
+  - `table-demo`: `0.00%`
+  - `text-demo`: `0.00%`
+  - `textinput-demo`: `0.00%`
+  - `theme-demo`: `0.00%`
+  - `toast-demo`: `0.00%`
+  - `toggle-demo`: `0.00%`
+  - `tooltip-demo`: `0.00%`
+  - `typography-demo`: `0.00%`
+- Notes:
+  - The current repository contains 28 example entry points; all 28 build and pass launch smoke checks in Stage 8.

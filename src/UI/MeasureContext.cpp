@@ -2,14 +2,21 @@
 
 #include <cassert>
 #include <cmath>
+#include <utility>
 
 #include <Flux/Graphics/TextSystem.hpp>
 
 namespace flux {
 
-MeasureContext::MeasureContext(TextSystem& ts, detail::MeasureLayoutCache* layoutCache)
+namespace {
+
+thread_local MeasureContext* sCurrentMeasureContext = nullptr;
+
+} // namespace
+
+MeasureContext::MeasureContext(TextSystem& ts, EnvironmentBinding environment)
     : textSystem_(ts)
-    , layoutCache_(layoutCache) {}
+    , environmentBinding_(std::move(environment)) {}
 
 MeasureContext::~MeasureContext() = default;
 
@@ -71,14 +78,6 @@ void MeasureContext::clearMeasurementRootKey() noexcept {
   traversal_.clearMeasurementRootKey();
 }
 
-void MeasureContext::beginCompositeBodySubtree(ComponentKey compositeKey) {
-  traversal_.beginCompositeBodySubtree(compositeKey);
-}
-
-bool MeasureContext::consumeCompositeBodySubtreeRootSkip() {
-  return traversal_.consumeCompositeBodySubtreeRootSkip();
-}
-
 void MeasureContext::pushCompositeKeyTail(ComponentKey const& compositeKey) {
   traversal_.pushCompositeKeyTail(compositeKey);
 }
@@ -86,5 +85,22 @@ void MeasureContext::pushCompositeKeyTail(ComponentKey const& compositeKey) {
 void MeasureContext::popCompositeKeyTail() {
   traversal_.popCompositeKeyTail();
 }
+
+namespace detail {
+
+MeasureContext* currentMeasureContext() noexcept {
+  return sCurrentMeasureContext;
+}
+
+CurrentMeasureContextScope::CurrentMeasureContextScope(MeasureContext& ctx) noexcept
+    : previous_(sCurrentMeasureContext) {
+  sCurrentMeasureContext = &ctx;
+}
+
+CurrentMeasureContextScope::~CurrentMeasureContextScope() {
+  sCurrentMeasureContext = previous_;
+}
+
+} // namespace detail
 
 } // namespace flux

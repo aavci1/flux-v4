@@ -40,10 +40,10 @@ struct EmptyStatePanel : ViewModifiers<EmptyStatePanel> {
     std::string detail;
 
     auto body() const {
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<ThemeKey>();
 
         return VStack {
-            .spacing = theme.space2,
+            .spacing = theme().space2,
             .alignment = Alignment::Center,
             .children = children(
                 Text {
@@ -61,7 +61,7 @@ struct EmptyStatePanel : ViewModifiers<EmptyStatePanel> {
                 }
             )
         }
-            .padding(theme.space6)
+            .padding(theme().space6)
             .flex(1.f, 1.f);
     }
 };
@@ -75,10 +75,10 @@ struct LabeledValueRow : ViewModifiers<LabeledValueRow> {
     int maxLines = 2;
 
     auto body() const {
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<ThemeKey>();
 
         return HStack {
-            .spacing = spacing > 0.f ? spacing : theme.space2,
+            .spacing = spacing > 0.f ? spacing : theme().space2,
             .alignment = Alignment::Start,
             .children = children(
                 Text {

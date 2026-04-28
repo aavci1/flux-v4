@@ -17,7 +17,11 @@ MetalFrameRecorder::MetalFrameRecorder(MetalFrameRecorder&& other) noexcept
       pathVerts(std::move(other.pathVerts)),
       glyphVerts(std::move(other.glyphVerts)),
       glyphVertexSources(std::move(other.glyphVertexSources)),
-      glyphVertexCount(other.glyphVertexCount) {
+      glyphVertexCount(other.glyphVertexCount),
+      preparedRectInstanceBuffer(other.preparedRectInstanceBuffer),
+      preparedRectInstanceCapacity(other.preparedRectInstanceCapacity),
+      preparedGlyphVertexBuffer(other.preparedGlyphVertexBuffer),
+      preparedGlyphVertexCapacity(other.preparedGlyphVertexCapacity) {
   other.rectOps.clear();
   other.imageOps.clear();
   other.pathOps.clear();
@@ -27,6 +31,10 @@ MetalFrameRecorder::MetalFrameRecorder(MetalFrameRecorder&& other) noexcept
   other.glyphVerts.clear();
   other.glyphVertexSources.clear();
   other.glyphVertexCount = 0;
+  other.preparedRectInstanceBuffer = nullptr;
+  other.preparedRectInstanceCapacity = 0;
+  other.preparedGlyphVertexBuffer = nullptr;
+  other.preparedGlyphVertexCapacity = 0;
 }
 
 MetalFrameRecorder& MetalFrameRecorder::operator=(MetalFrameRecorder&& other) noexcept {
@@ -43,6 +51,10 @@ MetalFrameRecorder& MetalFrameRecorder::operator=(MetalFrameRecorder&& other) no
   glyphVerts = std::move(other.glyphVerts);
   glyphVertexSources = std::move(other.glyphVertexSources);
   glyphVertexCount = other.glyphVertexCount;
+  preparedRectInstanceBuffer = other.preparedRectInstanceBuffer;
+  preparedRectInstanceCapacity = other.preparedRectInstanceCapacity;
+  preparedGlyphVertexBuffer = other.preparedGlyphVertexBuffer;
+  preparedGlyphVertexCapacity = other.preparedGlyphVertexCapacity;
   other.rectOps.clear();
   other.imageOps.clear();
   other.pathOps.clear();
@@ -52,6 +64,10 @@ MetalFrameRecorder& MetalFrameRecorder::operator=(MetalFrameRecorder&& other) no
   other.glyphVerts.clear();
   other.glyphVertexSources.clear();
   other.glyphVertexCount = 0;
+  other.preparedRectInstanceBuffer = nullptr;
+  other.preparedRectInstanceCapacity = 0;
+  other.preparedGlyphVertexBuffer = nullptr;
+  other.preparedGlyphVertexCapacity = 0;
   return *this;
 }
 
@@ -61,6 +77,16 @@ void MetalFrameRecorder::clear() {
       (void)(__bridge_transfer id<MTLTexture>)op.texture;
     }
     op.texture = nullptr;
+  }
+  if (preparedGlyphVertexBuffer) {
+    (void)(__bridge_transfer id<MTLBuffer>)preparedGlyphVertexBuffer;
+    preparedGlyphVertexBuffer = nullptr;
+    preparedGlyphVertexCapacity = 0;
+  }
+  if (preparedRectInstanceBuffer) {
+    (void)(__bridge_transfer id<MTLBuffer>)preparedRectInstanceBuffer;
+    preparedRectInstanceBuffer = nullptr;
+    preparedRectInstanceCapacity = 0;
   }
   rectOps.clear();
   imageOps.clear();

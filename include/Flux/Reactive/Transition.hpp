@@ -9,6 +9,7 @@
 
 #include <functional>
 #include <optional>
+#include <vector>
 
 namespace flux {
 
@@ -29,14 +30,34 @@ struct Transition {
 
 class WithTransition {
 public:
+  /// Lexical scope used by Animation::operator= on the current thread.
+  ///
+  /// Reactive effects suspend any ambient transition while executing. If an
+  /// effect should animate its writes, create a WithTransition inside that
+  /// effect body.
   explicit WithTransition(Transition t);
   ~WithTransition();
 
   WithTransition(WithTransition const&) = delete;
   WithTransition& operator=(WithTransition const&) = delete;
 
-  static bool hasCurrent();
   static Transition current();
 };
+
+namespace detail {
+
+class TransitionScopeSuspension {
+public:
+  TransitionScopeSuspension();
+  ~TransitionScopeSuspension();
+
+  TransitionScopeSuspension(TransitionScopeSuspension const&) = delete;
+  TransitionScopeSuspension& operator=(TransitionScopeSuspension const&) = delete;
+
+private:
+  std::vector<Transition> saved_;
+};
+
+} // namespace detail
 
 } // namespace flux

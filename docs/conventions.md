@@ -1,143 +1,119 @@
-# Flux v4 — codebase conventions
+# Flux v5 Codebase Conventions
 
-This document describes how the repository is organized and the patterns used consistently across the code. It reflects the current tree as of this writing.
+This document describes the current repository layout and coding patterns.
 
-## Project identity
+## Project Identity
 
-- **Name / version:** Flux v4 (`CMakeLists.txt`: `project(flux VERSION 4.0.0 …)`).
-- **Platforms (roadmap):** **macOS** is implemented today. **Linux desktop** (Wayland + Vulkan) and **embedded Linux** (KMS/DRM) are planned; CMake reserves `FLUX_PLATFORM` values for those backends. Non-macOS builds fail at configure time until a backend is added.
-- **Library:** Static library `flux`, plus optional example executables (default **OFF**) listed in [`examples/CMakeLists.txt`](../examples/CMakeLists.txt); enable with **`FLUX_BUILD_EXAMPLES=ON`**.
-- **Language:** **C++23** (`CMAKE_CXX_STANDARD 23`), extensions off (`CMAKE_CXX_EXTENSIONS OFF`).
-- **Minimum macOS:** 11.0 (`CMAKE_OSX_DEPLOYMENT_TARGET`) when targeting macOS.
+- **Name / version:** Flux v5 (`CMakeLists.txt`: `project(flux VERSION 5.0.0 ...)`).
+- **Platform:** macOS is implemented today. Linux desktop and embedded Linux values are reserved by `FLUX_PLATFORM` but fail at configure time until a backend is added.
+- **Language:** C++23, extensions off.
+- **Minimum macOS:** 11.0.
+- **Library:** Static library target `flux`.
+- **Examples:** Optional executable targets in [`examples/CMakeLists.txt`](../examples/CMakeLists.txt), enabled with `FLUX_BUILD_EXAMPLES=ON`.
 
-## Build system
+## Build System
 
-- **CMake** minimum 3.25. The top-level `project()` enables **CXX** and **C** (C is used by the vendored **libtess2** sources).
-- **Platform selection:** Cache variable `FLUX_PLATFORM` — `AUTO` (default on Apple hosts resolves to `MACOS`), `MACOS`, or reserved `LINUX_WAYLAND` / `LINUX_KMS` for future use. Only `MACOS` builds successfully today.
-- **Languages:** `CXX` everywhere; **`OBJCXX` enabled only for the macOS backend** (`enable_language(OBJCXX)` when `FLUX_PLATFORM_MACOS`). Future Linux targets can stay **CXX-only** for core + Wayland/Vulkan sources.
-- **Sources:** Mix of `.cpp` (portable core) and **Objective-C++** (`.mm`) for Cocoa / AppKit on macOS (`Application.mm`, `Platform/Mac/MacMetalWindow.mm`).
-- **Includes:** Public API under `include/`; private helpers under `src/` (e.g. `src/Core/PlatformWindowCreate.hpp`) with `target_include_directories(… PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)`.
-- **Warnings:** `-Wall -Wextra -Wpedantic` on the `flux` target.
-- **Optional logging:** `FLUX_ENABLE_DEFAULT_EVENT_LOGGING` (CMake `option`, default **`OFF`**) — set **`ON`** to print default `Application` event handlers to stdout (handy for debugging).
-- **Examples:** `FLUX_BUILD_EXAMPLES` (default **`OFF`**) — when **`ON`**, the root project `add_subdirectory(examples)`; example targets are defined in [`examples/CMakeLists.txt`](../examples/CMakeLists.txt).
-- **Apple frameworks (linked privately on macOS):** Cocoa, QuartzCore, Metal, MetalKit, Foundation, CoreText.
-- **Third-party (FetchContent):** **libtess2** — path fill/stroke tessellation; pulled at configure time from GitHub.
-- **Metal shaders:** `src/Graphics/Metal/CanvasShaders.metal` is compiled to a **metallib** and embedded into `MetalShaderLibrary.mm` via a CMake custom command (`xcrun metal` / `metallib` / `xxd`).
+- CMake minimum is 3.25.
+- C is enabled for vendored `libtess2`; Objective-C and Objective-C++ are enabled only for the macOS backend.
+- Public includes come from `include/`; private implementation helpers come from `src/`.
+- The `flux` target builds with `-Wall -Wextra -Wpedantic`.
+- Metal shaders compile through `xcrun metal`, `metallib`, and `xxd` into an embedded shader header.
 
-## Directory layout
+## Directory Layout
 
 | Path | Role |
 |------|------|
-| `include/Flux/` | Public headers; stable API surface. |
-| `include/Flux.hpp` | Umbrella include: core, graphics, and [`Reactive.hpp`](../include/Flux/Reactive/Reactive.hpp). |
-| `include/Flux/UI/` | Declarative UI (`Element`, layout, views, hooks, `LayoutEngine`). Entry point: [`UI.hpp`](../include/Flux/UI/UI.hpp). |
-| `include/Flux/Scene/` | Scene graph, renderer, hit testing, node store. |
-| `include/Flux/Reactive/` | Signals, computed values, animation, observers. |
-| `include/Flux/Detail/` | Internal helpers (`Runtime.hpp`, `RootHolder.hpp`) — not stable public API. |
-| `src/Core/` | Core implementation (`Application`, `Window`, `EventQueue`, `PlatformWindow.hpp`, `PlatformWindowCreate.hpp`, factory). |
-| `src/UI/` | UI runtime, layout, element build, state store, event map. |
-| `src/Scene/` | Scene graph storage, renderer, hit tester, optional dump. |
-| `src/Reactive/` | Reactive primitives implementation. |
-| `src/Graphics/` | Portable graphics (`Canvas.cpp`, `Path.cpp`, `PathFlattener`, `TextSystem.cpp`) and Metal/Core Text implementations (`Metal/`, `CoreTextSystem.mm`). |
-| `src/Platform/Mac/` | macOS-specific windowing (`MacMetalWindow.mm`). |
-| `src/Platform/` | Future: e.g. `Linux/Wayland/`, `Linux/Kms/` mirroring the Mac layout — one implementation of `detail::createPlatformWindow` per supported platform build. |
-| `examples/` | Sample apps; CMake lists targets in [`examples/CMakeLists.txt`](../examples/CMakeLists.txt) (see [Examples](#examples)). |
-| `docs/` | Project documentation (this file and companions). |
-
-Public headers live under `Flux/Core/`, **`Flux/Graphics/`**, **`Flux/UI/`**, **`Flux/Scene/`**, and **`Flux/Reactive/`**. The abstract `PlatformWindow` interface is **private** — [`src/Core/PlatformWindow.hpp`](src/Core/PlatformWindow.hpp) — used only when building the library. Headers under **`Flux/Detail/`** are implementation-facing; prefer **`Window::setView`** and **`#include <Flux/UI/UI.hpp>`** rather than including detail headers directly.
-
-**Factory rule:** `flux::detail::createPlatformWindow(WindowConfig)` is implemented in exactly one platform translation unit per build — **no** `#ifdef` platform branches inside portable core files such as `Window.cpp`.
+| `include/Flux/` | Public headers |
+| `include/Flux.hpp` | Umbrella include |
+| `include/Flux/Reactive/` | Signals, computed values, effects, scopes, bindings, animation |
+| `include/Flux/UI/` | Declarative UI, hooks, views, layout, mount runtime |
+| `include/Flux/SceneGraph/` | Retained scene tree and renderer-facing nodes |
+| `include/Flux/Graphics/` | Canvas, text, path, and style types |
+| `include/Flux/Detail/` | Implementation-facing public headers |
+| `src/Core/` | `Application`, `Window`, event loop, platform window factory |
+| `src/UI/` | Mount/runtime/layout implementation |
+| `src/Reactive/` | Non-template reactive and animation implementation |
+| `src/SceneGraph/` | Scene graph storage, traversal, hit testing, rendering |
+| `src/Graphics/` | Portable graphics plus Metal/CoreText implementations |
+| `src/Platform/Mac/` | macOS windowing |
+| `examples/` | Sample apps |
+| `docs/` | Documentation |
 
 ## Namespace
 
-- All library API lives in **`flux`**.
-- **`flux::detail`** is reserved for implementation helpers not meant as public API (e.g. `detail::isEventAlternativeV` in `EventQueue.hpp`, `detail::createPlatformWindow` in `PlatformWindowCreate.hpp`, and internal helpers inside `.mm` translation units).
+- Public API lives in `flux`.
+- Reactive primitives live in `flux::Reactive`.
+- `flux::detail` is reserved for implementation helpers not meant as app-facing API.
 
-## Public vs private headers
+## Public And Private Headers
 
-- **Public:** Anything under `include/Flux/…` included by consumers.
-- **Private:** Headers under `src/` (e.g. `PlatformWindow.hpp`, `PlatformWindowCreate.hpp`) are implementation details; they must not be required by external projects using only `include/`.
+- Headers under `include/Flux/...` are public.
+- Headers under `src/...` are private and must not be required by external consumers.
+- Public headers must stay Objective-C-free.
 
-## Umbrella include
+## Umbrella Includes
 
-- Prefer **`#include <Flux.hpp>`** for apps that want the main surface area; it pulls `Application`, `EventQueue`, `Events`, `Types`, `Window`, the **`Reactive`** umbrella, **`Canvas`**, and **`Styles`** (see `include/Flux.hpp`). Graphics-only consumers can include **`TextSystem.hpp`**, **`Path.hpp`**, etc., directly under `Flux/Graphics/`.
-- Declarative UI: **`#include <Flux/UI/UI.hpp>`** (and `WindowUI.hpp` is included there for **`Window::setView`**). Scene-only or imperative demos can include the retained scene tree headers under **`Flux/Scene/`** without the UI layer.
-- Finer-grained includes (`<Flux/Core/…>`) are fine when dependencies should stay minimal.
+- Use `#include <Flux.hpp>` for applications that want core, graphics, scene graph, and reactive primitives.
+- Use `#include <Flux/UI/UI.hpp>` for declarative UI applications.
+- Finer-grained includes are preferred inside library headers and tests when they reduce dependencies.
 
-## Private implementation (pimpl)
+## Pimpl
 
-Public classes that carry hidden state use the **pimpl** pattern consistently:
+Public owning classes that hide platform or implementation state use:
 
-- The opaque type is always named **`struct Impl`** (nested forward declaration in the public header).
-- The owning pointer is always **`std::unique_ptr<Impl> d`** — the member name is **`d`**, not `d_` or `impl_`.
-- **`struct Impl` is defined only in `.cpp` / `.mm`** files, so the public header stays free of heavy dependencies and private members.
+- nested forward declaration `struct Impl`;
+- member `std::unique_ptr<Impl> d`;
+- `Impl` definition only in `.cpp` or `.mm`.
 
-Applies to: `Application`, `Window`, `EventQueue`, the macOS `MacMetalPlatformWindow` implementation class, and **`CoreTextSystem`** (concrete `TextSystem`).
-
-`EventQueue` exposes template methods (`post` / `on`) in the header. Only **`Application`** may construct a queue (`friend class Application`); the app holds `std::unique_ptr<EventQueue>` and exposes it via **`Application::eventQueue()`**. Construction uses `new EventQueue()` in `Application.mm` (friendship applies to `Application` member functions, not to `std::make_unique`). Call sites that invoke methods on **`eventQueue()`** must include **`EventQueue.hpp`** (a forward declaration in **`Application.hpp`** is not enough for `post` / `dispatch`). The private section also holds `friend struct detail::EventQueueImplAccess`, `struct Impl`, and `std::unique_ptr<Impl> d`. Template bodies call `detail::EventQueueImplAccess` static methods (declared after the class, defined in the `.cpp`) so `Impl` stays incomplete in the header. Application code should not use `EventQueueImplAccess`. **`post` / `dispatch` / `on`** are **main-thread-only by contract** (not enforced at runtime).
-
-## Rule of five
-
-Types that own unique resources or singleton-like semantics **delete** copy and move operations when not intended to be copied or moved:
-
-- `Application`, `Window`, and `EventQueue` declare deleted copy/move constructors and assignment operators in their public headers.
+This applies to `Application`, `Window`, `EventQueue`, macOS platform implementations, and `CoreTextSystem`.
 
 ## Naming
 
-- **Types:** `PascalCase` for classes and structs (`Window`, `WindowConfig`, `EventQueue`).
-- **Functions / methods:** `camelCase` (`createWindow`, `eventQueue`, `handle` on `Window`).
-- **Enumerations:** `enum class` with `PascalCase` enumerators where used (`WindowEvent::Kind::Resize`, `InputEvent::Kind::PointerDown`).
-- **Constants:** File-local or internal constants often use a **`k` prefix** and `camelCase` remainder (e.g. `kLifecycle`, `kWindow`, `kInput`, `kTimer`, `kCustom`, `kBucketCount` in `EventQueue.cpp`).
-- **Impl members:** Fields inside `Impl` structs may use **trailing underscores** for private data (`eventQueue_`, `buckets_`, …), distinguishing them from public API without a `m_` prefix on the outer class (the outer class has almost no private data besides `d`).
+- Types: `PascalCase`.
+- Functions and methods: `camelCase`.
+- Constants: local constants often use `kName`.
+- Private data in implementation structs may use trailing underscores.
 
-## Types and aliases
+## Retained UI
 
-Shared vocabulary lives in `Types.hpp` (`Size`, `Vec2`, time aliases, `MouseButton`, `KeyCode`, `Modifiers`, etc.).
+Flux v5 mounts UI once and updates retained scene nodes through reactive dependencies:
+
+- `MountRoot` owns the root scene node and root `Reactive::Scope`.
+- Hooks require an active owner scope.
+- `Bindable<T>` modifiers install effects during mount.
+- `For`, `Show`, and `Switch` manage dynamic subtree scopes.
+- Environment values can be constants or reactive signals.
+
+## Reactive UI
+
+- Hooks that expose state return `Signal<T>`; read with `signal()` and write with
+  `signal = value` or `signal.set(value)`.
+- `.get()` remains available as an explicit synonym, but examples use `()` for
+  read-and-subscribe sites.
+- Use `.peek()` for intentional non-tracking reads.
+- `useEnvironment<Key>()` returns a signal for the active environment value. Read it
+  inside `Bindable` closures or `Effect` bodies when UI should update after
+  environment changes. A body-time read is a static mount-time seed and does not
+  subscribe.
 
 ## Events
 
-- **`Event`** is `std::variant<WindowLifecycleEvent, WindowEvent, InputEvent, TimerEvent, CustomEvent>` — see `Events.hpp`.
-- **`CustomEvent`** carries a `std::uint32_t type` and `std::any payload` for arbitrary user payloads; `EventQueue` maps non-framework types to `CustomEvent` via `typeid`-derived IDs.
-- **`EventQueue`:** `post` / `dispatch` / `on` are **main-thread-only by convention**. Obtain the queue with **`Application::instance().eventQueue()`** (or **`app.eventQueue()`**).
-- **`TextSystem`:** obtain with **`Application::instance().textSystem()`** for layout, measurement, and font/glyph resolution used by **`Canvas::drawTextLayout`** and the Metal glyph atlas.
-- **`Application`:** reactive integration includes **`markReactiveDirty()`** (internal / reactive layer) and **`onNextFrameNeeded()`** for batched work once per main-loop iteration after reactive updates.
+- `Event` is a variant of window lifecycle, window, input, timer, and custom events.
+- `EventQueue::post`, `dispatch`, and `on` are main-thread-only by contract.
+- Custom events use typed payloads wrapped in `CustomEvent`.
+- Reactive work and next-frame callbacks are drained by `Application` on the same main loop as events.
 
-## Platform abstraction
+## Platform Abstraction
 
-- **`PlatformWindow`** ([`src/Core/PlatformWindow.hpp`](src/Core/PlatformWindow.hpp)) is an internal abstract interface: sizing, title, fullscreen, native presentation surface (`nativeGraphicsSurface()`), `setFluxWindow(Window*)`, etc. Not installed as a public header.
-- **Factory:** `flux::detail::createPlatformWindow(WindowConfig)` returns `std::unique_ptr<PlatformWindow>`; implemented in the platform translation unit (e.g. `Platform/Mac/MacMetalWindow.mm` on macOS).
-- Cocoa/AppKit types and Objective-C categories/implementations stay inside **`.mm` files**; public C++ headers stay ObjC-free.
+`PlatformWindow` is private to `src/Core`. Portable core code calls `flux::detail::createPlatformWindow(WindowConfig)`, which is implemented by exactly one platform translation unit in a build.
 
 ## Includes
 
-- Headers use **`#pragma once`** guard.
-- Project headers use **angle brackets** and paths relative to `include/` — e.g. `#include <Flux/Core/Events.hpp>`.
-- Private includes from `src/` use paths relative to the `src` root — e.g. `#include "Core/PlatformWindow.hpp"` / `#include "Core/PlatformWindowCreate.hpp"` from any `.cpp` / `.mm` under `src/`.
-- Order is typically: corresponding public header first (in `.cpp`), then other Flux headers, then standard library, then system/framework (in `.mm`).
-
-## Documentation comments
-
-- Public APIs use **`///` Doxygen-style** line comments where extra clarity is needed (e.g. `EventQueue`, `Window`).
+- Headers use `#pragma once`.
+- Public project includes use angle brackets and paths relative to `include/`.
+- Private includes from `src/` use paths relative to the `src` root.
+- `.cpp` files include their corresponding public header first when there is one.
 
 ## Examples
 
-| Directory | Demonstrates |
-|-----------|----------------|
-| `examples/hello-world` | Minimal `Application`, `Window`, `WindowConfig`, `app.exec()` |
-| `examples/clock-demo` | Timers, redraw requests, `Window::render` / canvas drawing |
-| `examples/blend-demo` | Opacity and blend modes on the canvas |
-| `examples/text-demo` | `TextSystem`, `AttributedString`, `TextLayout`, `Canvas::drawTextLayout` |
-| `examples/image-demo` | `loadImageFromFile`, `Image`, `Canvas::drawImage` |
-| `examples/reactive-demo` | `Signal`, `Computed`, `Animation`, `Observer` with canvas |
-| `examples/animation-demo` | `useAnimation`, `WithTransition`, repeat/autoreverse, reduced motion |
-| `examples/card-demo` | `setView`, `VStack` / `HStack`, hooks, `useAnimation`, interactions |
-
-Each target links the `flux` static library; see [`examples/CMakeLists.txt`](../examples/CMakeLists.txt) for CMake target names (`hello_world`, `clock_demo`, …).
-
-## Git
-
-- A `.gitignore` at the repo root excludes build trees (`build/`, `cmake-build-*/`), CMake artifacts, common IDE paths, and macOS artifacts.
-
----
-
-When adding new features, prefer extending these patterns (pimpl with `Impl` + `d`, `flux::detail` for non-public helpers, main-thread discipline for `EventQueue`, platform code behind `PlatformWindow` + factory, graphics behind `Canvas` + `TextSystem`, UI rebuilds and layout behind **`Runtime`** + **`LayoutEngine`**) so the codebase stays uniform and the public headers stay stable.
+Examples are intentionally small and are registered by `flux_add_example()` in [`examples/CMakeLists.txt`](../examples/CMakeLists.txt). Shared v5 example scaffolding lives in [`examples/common/V5ExampleApp.hpp`](../examples/common/V5ExampleApp.hpp).

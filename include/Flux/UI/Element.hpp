@@ -6,16 +6,17 @@
 /// optional flex overrides, and per-subtree environment values.
 
 #include <Flux/Graphics/Styles.hpp>
+#include <Flux/Reactive/Bindable.hpp>
 #include <Flux/UI/Component.hpp>
-#include <Flux/UI/Detail/MeasuredBuild.hpp>
 #include <Flux/UI/Detail/ElementModifiers.hpp>
 #include <Flux/UI/Environment.hpp>
+#include <Flux/UI/EnvironmentBinding.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 #include <Flux/UI/Leaves.hpp>
 #include <Flux/UI/MeasureContext.hpp>
-#include <Flux/UI/StateStore.hpp>
 
 #include <functional>
+#include <cstdint>
 #include <cstring>
 #include <memory>
 #include <optional>
@@ -27,6 +28,7 @@
 namespace flux {
 
 class Element;
+class MountContext;
 class TextSystem;
 struct Popover;
 struct Rectangle;
@@ -45,6 +47,45 @@ struct PopoverCalloutShape;
 namespace views {
 struct Image;
 } // namespace views
+namespace scenegraph {
+class SceneNode;
+}
+namespace detail {
+std::uint64_t nextElementMeasureId();
+
+struct EnvironmentOverride {
+  virtual ~EnvironmentOverride() = default;
+  virtual EnvironmentBinding apply(EnvironmentBinding const& parent) const = 0;
+};
+
+template<typename Key>
+struct ValueEnvironmentOverride final : EnvironmentOverride {
+  using Value = typename EnvironmentKey<Key>::Value;
+
+  explicit ValueEnvironmentOverride(Value valueIn)
+      : value(std::move(valueIn)) {}
+
+  EnvironmentBinding apply(EnvironmentBinding const& parent) const override {
+    return parent.withValue<Key>(value);
+  }
+
+  Value value;
+};
+
+template<typename Key>
+struct SignalEnvironmentOverride final : EnvironmentOverride {
+  using Value = typename EnvironmentKey<Key>::Value;
+
+  explicit SignalEnvironmentOverride(Reactive::Signal<Value> signalIn)
+      : signal(std::move(signalIn)) {}
+
+  EnvironmentBinding apply(EnvironmentBinding const& parent) const override {
+    return parent.withSignal<Key>(signal);
+  }
+
+  Reactive::Signal<Value> signal;
+};
+} // namespace detail
 
 template<typename>
 inline constexpr bool alwaysFalse = false;
@@ -79,31 +120,17 @@ public:
 
   Size measure(MeasureContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints, TextSystem& textSystem) const;
   [[nodiscard]] std::uint64_t measureId() const noexcept { return measureId_; }
+  std::unique_ptr<scenegraph::SceneNode> mount(MountContext& ctx) const;
   [[nodiscard]] ElementType typeTag() const noexcept { return impl_ ? impl_->elementType() : ElementType::Unknown; }
-  [[nodiscard]] bool expandsBody() const noexcept { return impl_ && impl_->expandsBody(); }
-  [[nodiscard]] detail::CompositeBodyResolution resolveCompositeBody(ComponentKey const& key, LayoutConstraints const& constraints) const {
-    return impl_ ? impl_->resolveCompositeBody(key, constraints, modifiers()) : detail::CompositeBodyResolution{};
-  }
-  [[nodiscard]] detail::ComponentBuildResult
-  buildMeasured(detail::ComponentBuildContext& ctx,
-                std::unique_ptr<scenegraph::SceneNode> existing) const {
-    return impl_ ? impl_->buildMeasured(ctx, std::move(existing)) : detail::ComponentBuildResult{};
-  }
-  [[nodiscard]] detail::ResolvedElement resolve(ComponentKey const& key, LayoutConstraints const& constraints) const;
+  [[nodiscard]] bool mountsWhenCollapsed() const;
   [[nodiscard]] detail::ElementModifiers const* modifiers() const noexcept {
     return modifiers_.get();
   }
-  [[nodiscard]] EnvironmentLayer const* environmentLayer() const noexcept {
-    return envLayer_ ? &*envLayer_ : nullptr;
-  }
-
   template<typename T>
   [[nodiscard]] bool is() const noexcept;
 
   template<typename T>
   [[nodiscard]] T const& as() const;
-  [[nodiscard]] bool valueEquals(Element const& other) const noexcept;
-  [[nodiscard]] bool structuralEquals(Element const& other) const noexcept;
 
   float flexGrow() const;
   float flexShrink() const;
@@ -116,37 +143,47 @@ public:
   Element key(std::string key) &&;
   [[nodiscard]] std::optional<std::string> const& explicitKey() const noexcept { return key_; }
 
-  template<typename T>
-  Element environment(T value) && {
-    if (!envLayer_) {
-      envLayer_.emplace();
-    }
-    envLayer_->set(std::move(value));
+  template<typename Key>
+  Element environment(typename EnvironmentKey<Key>::Value value) && {
+    envOverrides_.push_back(
+        std::make_shared<detail::ValueEnvironmentOverride<Key>>(std::move(value)));
     return std::move(*this);
   }
 
-  Element padding(float all) &&;
-  Element padding(EdgeInsets insets) &&;
-  Element padding(float top, float right, float bottom, float left) &&;
-  Element fill(FillStyle style) &&;
-  Element fill(Color color) &&;
-  Element shadow(ShadowStyle style) &&;
-  Element size(float width, float height) &&;
-  Element width(float w) &&;
-  Element height(float h) &&;
-  Element stroke(StrokeStyle style) &&;
-  Element stroke(Color c, float width) &&;
-  Element cornerRadius(CornerRadius radius) &&;
-  Element cornerRadius(float radius) &&;
-  Element opacity(float opacity) &&;
-  Element position(Vec2 p) &&;
-  Element position(float x, float y) &&;
-  Element translate(Vec2 delta) &&;
-  Element translate(float dx, float dy) &&;
+  template<typename Key>
+  Element environment(Reactive::Signal<typename EnvironmentKey<Key>::Value> signal) && {
+    envOverrides_.push_back(
+        std::make_shared<detail::SignalEnvironmentOverride<Key>>(std::move(signal)));
+    return std::move(*this);
+  }
+
+  Element padding(Reactive::Bindable<float> all) &&;
+  Element padding(Reactive::Bindable<EdgeInsets> insets) &&;
+  Element padding(Reactive::Bindable<float> top, Reactive::Bindable<float> right,
+                  Reactive::Bindable<float> bottom, Reactive::Bindable<float> left) &&;
+  Element fill(Reactive::Bindable<FillStyle> style) &&;
+  Element fill(Reactive::Bindable<Color> color) &&;
+  Element shadow(Reactive::Bindable<ShadowStyle> style) &&;
+  Element size(Reactive::Bindable<float> width, Reactive::Bindable<float> height) &&;
+  Element width(Reactive::Bindable<float> w) &&;
+  Element height(Reactive::Bindable<float> h) &&;
+  Element stroke(Reactive::Bindable<StrokeStyle> style) &&;
+  Element stroke(Reactive::Bindable<Color> c, Reactive::Bindable<float> width) &&;
+  Element cornerRadius(Reactive::Bindable<CornerRadius> radius) &&;
+  Element cornerRadius(Reactive::Bindable<float> radius) &&;
+  Element opacity(Reactive::Bindable<float> opacity) &&;
+  Element position(Reactive::Bindable<Vec2> p) &&;
+  Element position(Reactive::Bindable<float> x, Reactive::Bindable<float> y) &&;
+  Element translate(Reactive::Bindable<Vec2> delta) &&;
+  Element translate(Reactive::Bindable<float> dx, Reactive::Bindable<float> dy) &&;
   Element clipContent(bool clip) &&;
   Element overlay(Element over) &&;
 
   Element onTap(std::function<void()> handler) &&;
+  Element onPointerEnter(std::function<void()> handler) &&;
+  Element onPointerExit(std::function<void()> handler) &&;
+  Element onFocus(std::function<void()> handler) &&;
+  Element onBlur(std::function<void()> handler) &&;
   Element onPointerDown(std::function<void(Point)> handler) &&;
   Element onPointerUp(std::function<void(Point)> handler) &&;
   Element onPointerMove(std::function<void(Point)> handler) &&;
@@ -166,18 +203,10 @@ private:
     virtual ElementType elementType() const noexcept { return ElementType::Unknown; }
     virtual std::type_index modelType() const noexcept = 0;
     virtual void const* rawValuePtr() const noexcept = 0;
-    virtual bool valueEquals(Concept const&) const noexcept { return false; }
-    virtual bool expandsBody() const noexcept { return false; }
-    virtual detail::CompositeBodyResolution resolveCompositeBody(ComponentKey const&,
-                                                                 LayoutConstraints const&,
-                                                                 detail::ElementModifiers const*) const {
-      return {};
-    }
-    virtual detail::ComponentBuildResult
-    buildMeasured(detail::ComponentBuildContext& ctx,
-                  std::unique_ptr<scenegraph::SceneNode> existing) const = 0;
     virtual Size measure(MeasureContext& ctx, LayoutConstraints const& constraints,
                          LayoutHints const& hints, TextSystem& textSystem) const = 0;
+    virtual std::unique_ptr<scenegraph::SceneNode> mount(MountContext& ctx) const = 0;
+    virtual bool mountsWhenCollapsed() const { return false; }
     virtual float flexGrow() const { return 0.f; }
     virtual float flexShrink() const { return 0.f; }
     virtual std::optional<float> flexBasis() const { return std::nullopt; }
@@ -192,7 +221,7 @@ private:
   std::optional<float> flexShrinkOverride_;
   std::optional<float> flexBasisOverride_;
   std::optional<float> minMainSizeOverride_;
-  std::optional<EnvironmentLayer> envLayer_;
+  std::vector<std::shared_ptr<detail::EnvironmentOverride const>> envOverrides_;
   std::shared_ptr<detail::ElementModifiers> modifiers_;
   std::optional<std::string> key_{};
   std::uint64_t measureId_{};
@@ -206,8 +235,7 @@ private:
 template<typename... Args>
 std::vector<Element> children(Args&&... args);
 
-[[nodiscard]] bool elementsStructurallyEqual(std::vector<Element> const& lhs,
-                                             std::vector<Element> const& rhs) noexcept;
+bool elementsStructurallyEqual(std::vector<Element> const& lhs, std::vector<Element> const& rhs) noexcept;
 
 } // namespace flux
 

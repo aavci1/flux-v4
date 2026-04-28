@@ -47,7 +47,7 @@ Element makeSectionCard(Theme const &theme, std::string title, std::string capti
     };
 }
 
-Element metricTile(Theme const &theme, std::string value, std::string label, Color accent) {
+Element metricTile(Theme const &theme, Bindable<std::string> value, std::string label, Color accent) {
     return VStack {
         .spacing = theme.space1,
         .alignment = Alignment::Start,
@@ -72,7 +72,7 @@ Element metricTile(Theme const &theme, std::string value, std::string label, Col
         .flex(1.f, 1.f, 0.f);
 }
 
-Element statusPill(Theme const &theme, std::string text, Color fill, Color label) {
+Element statusPill(Theme const &theme, Bindable<std::string> text, Color fill, Color label) {
     return Text {
         .text = std::move(text),
         .font = Font::caption(),
@@ -85,7 +85,10 @@ Element statusPill(Theme const &theme, std::string text, Color fill, Color label
         .cornerRadius(CornerRadius {theme.radiusLarge});
 }
 
-Element surfacePreview(Theme const &theme, std::string title, std::string body, Color accent) {
+Element surfacePreview(Theme const &theme,
+                       Bindable<std::string> title,
+                       Bindable<std::string> body,
+                       Color accent) {
     return VStack {
         .spacing = theme.space2,
         .alignment = Alignment::Start,
@@ -154,14 +157,20 @@ std::string densityLabel(int index) {
     }
 }
 
-Element makeHeroDemo(Theme const &theme, State<int> workspace, State<std::string> lastEvent) {
-    std::string const current = workspaceLabel(*workspace);
-    std::string title = *workspace == 0 ? "Weekly performance digest" :
-                        *workspace == 1 ? "Production rollout checklist" :
-                                          "Live incident timeline";
-    std::string body = *workspace == 0 ? "A broader summary surface where the segmented control behaves like top-level workspace navigation." :
-                       *workspace == 1 ? "A task-oriented view with focused rollout actions and environment status." :
-                                         "A denser operational surface with event streams, traces, and recent alerts.";
+Element makeHeroDemo(Theme const &theme, Signal<int> workspace, Signal<std::string> lastEvent) {
+    Bindable<std::string> current {[workspace] {
+        return workspaceLabel(workspace());
+    }};
+    Bindable<std::string> title {[workspace] {
+        return workspace() == 0 ? std::string {"Weekly performance digest"} :
+               workspace() == 1 ? std::string {"Production rollout checklist"} :
+                                      std::string {"Live incident timeline"};
+    }};
+    Bindable<std::string> body {[workspace] {
+        return workspace() == 0 ? std::string {"A broader summary surface where the segmented control behaves like top-level workspace navigation."} :
+               workspace() == 1 ? std::string {"A task-oriented view with focused rollout actions and environment status."} :
+                                      std::string {"A denser operational surface with event streams, traces, and recent alerts."};
+    }};
 
     return makeSectionCard(
         theme,
@@ -196,7 +205,7 @@ Element makeHeroDemo(Theme const &theme, State<int> workspace, State<std::string
                     .spacing = theme.space3,
                     .alignment = Alignment::Stretch,
                     .children = children(
-                        surfacePreview(theme, std::move(title), std::move(body), Color::accent()),
+                        surfacePreview(theme, title, body, Color::accent()),
                         surfacePreview(theme, "Why it works",
                                        "The selected segment owns the same content region, so the control reads as a mode switch rather than a loose set of buttons.",
                                        Color::success())
@@ -207,7 +216,7 @@ Element makeHeroDemo(Theme const &theme, State<int> workspace, State<std::string
     );
 }
 
-Element makeToolbarDemo(Theme const &theme, State<int> channel, State<int> density, State<std::string> lastEvent) {
+Element makeToolbarDemo(Theme const &theme, Signal<int> channel, Signal<int> density, Signal<std::string> lastEvent) {
     return makeSectionCard(
         theme,
         "Utility Toolbar",
@@ -264,8 +273,12 @@ Element makeToolbarDemo(Theme const &theme, State<int> channel, State<int> densi
                     .spacing = theme.space3,
                     .alignment = Alignment::Stretch,
                     .children = children(
-                        metricTile(theme, channelLabel(*channel), "Delivery channel", Color::accent()),
-                        metricTile(theme, densityLabel(*density), "Interface density", Color::success()),
+                        metricTile(theme, [channel] {
+                            return channelLabel(channel());
+                        }, "Delivery channel", Color::accent()),
+                        metricTile(theme, [density] {
+                            return densityLabel(density());
+                        }, "Interface density", Color::success()),
                         metricTile(theme, "3", "Choices per group", Color::warning())
                     )
                 }
@@ -274,7 +287,7 @@ Element makeToolbarDemo(Theme const &theme, State<int> channel, State<int> densi
     );
 }
 
-Element makeStateDemo(Theme const &theme, State<int> branch, State<std::string> lastEvent) {
+Element makeStateDemo(Theme const &theme, Signal<int> branch, Signal<std::string> lastEvent) {
     return makeSectionCard(
         theme,
         "States And Availability",
@@ -331,7 +344,7 @@ Element makeStateDemo(Theme const &theme, State<int> branch, State<std::string> 
     );
 }
 
-Element makeLayoutDemo(Theme const &theme, State<int> compactMode, State<std::string> lastEvent) {
+Element makeLayoutDemo(Theme const &theme, Signal<int> compactMode, Signal<std::string> lastEvent) {
     return makeSectionCard(
         theme,
         "Layout Variations",
@@ -430,7 +443,7 @@ Element makeLayoutDemo(Theme const &theme, State<int> compactMode, State<std::st
 
 struct SegmentedDemoRoot {
     Element body() const {
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<ThemeKey>();
 
         auto workspace = useState<int>(0);
         auto channel = useState<int>(1);
@@ -445,7 +458,7 @@ struct SegmentedDemoRoot {
             .axis = ScrollAxis::Vertical,
             .children = children(
                 VStack {
-                    .spacing = theme.space4,
+                    .spacing = theme().space4,
                     .children = children(
                         Text {
                             .text = "Segmented Control Demo",
@@ -461,20 +474,28 @@ struct SegmentedDemoRoot {
                             .wrapping = TextWrapping::Wrap,
                         },
                         HStack {
-                            .spacing = theme.space3,
+                            .spacing = theme().space3,
                             .alignment = Alignment::Stretch,
                             .children = children(
-                                metricTile(theme, workspaceLabel(*workspace), "Primary workspace", Color::accent()),
-                                metricTile(theme, channelLabel(*channel), "Delivery mode", Color::success()),
-                                metricTile(theme, densityLabel(*density), "Density preset", Color::warning())
+                                metricTile(theme(), [workspace] {
+                                    return workspaceLabel(workspace());
+                                }, "Primary workspace", Color::accent()),
+                                metricTile(theme(), [channel] {
+                                    return channelLabel(channel());
+                                }, "Delivery mode", Color::success()),
+                                metricTile(theme(), [density] {
+                                    return densityLabel(density());
+                                }, "Density preset", Color::warning())
                             )
                         },
-                        makeHeroDemo(theme, workspace, lastEvent),
-                        makeToolbarDemo(theme, channel, density, lastEvent),
-                        makeStateDemo(theme, branch, lastEvent),
-                        makeLayoutDemo(theme, layoutMode, lastEvent),
+                        makeHeroDemo(theme(), workspace, lastEvent),
+                        makeToolbarDemo(theme(), channel, density, lastEvent),
+                        makeStateDemo(theme(), branch, lastEvent),
+                        makeLayoutDemo(theme(), layoutMode, lastEvent),
                         Text {
-                            .text = *lastEvent,
+                            .text = [lastEvent] {
+                                return lastEvent();
+                            },
                             .font = Font::footnote(),
                             .color = Color::tertiary(),
                             .horizontalAlignment = HorizontalAlignment::Leading,
@@ -482,7 +503,7 @@ struct SegmentedDemoRoot {
                         }
                     )
                 }
-                    .padding(theme.space5)
+                    .padding(theme().space5)
             )
         }
             .fill(FillStyle::solid(Color::windowBackground()));

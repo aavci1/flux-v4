@@ -9,14 +9,21 @@
 #include <Flux/Graphics/AttributedString.hpp>
 #include <Flux/Graphics/Font.hpp>
 #include <Flux/Graphics/Styles.hpp>
+#include <Flux/UI/Detail/PrimitiveForwards.hpp>
 #include <Flux/UI/Element.hpp>
 #include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/Theme.hpp>
 
 #include <functional>
+#include <memory>
 #include <string>
 
 namespace flux {
+
+class MountContext;
+namespace scenegraph {
+class SceneNode;
+}
 
 struct TextInputHeight {
     float fixed = 0.f;
@@ -52,7 +59,7 @@ struct TextInput : ViewModifiers<TextInput> {
         bool operator==(Style const& other) const = default;
     };
 
-    State<std::string> value {};
+    Signal<std::string> value {};
     std::string placeholder;
 
     std::function<std::vector<AttributedRun>(std::string_view)> styler;
@@ -81,6 +88,8 @@ struct TextInput : ViewModifiers<TextInput> {
                static_cast<bool>(onEscape) == static_cast<bool>(other.onEscape);
     }
 
+    Size measure(MeasureContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
+    std::unique_ptr<scenegraph::SceneNode> mount(MountContext&) const;
     Element body() const;
 };
 

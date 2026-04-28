@@ -59,6 +59,8 @@ void AnimationClock::shutdown() {
   subscribers_.clear();
   nextSubscriberId_ = 1;
   framePulseQueued_ = false;
+  dispatchingSubscribers_ = false;
+  subscribersNeedCompaction_ = false;
   installed_ = false;
 }
 
@@ -89,12 +91,12 @@ void AnimationClock::unregisterAnimation(AnimationBase* animation) {
   }
 }
 
-ObserverHandle AnimationClock::subscribe(std::function<void(AnimationTick const&)> callback) {
+ObserverHandle AnimationClock::subscribe(Reactive::SmallFn<void(AnimationTick const&)> callback) {
   if (!callback) {
     return {};
   }
   std::uint64_t const id = nextSubscriberId_++;
-  subscribers_.push_back(Subscriber{id, std::move(callback)});
+  subscribers_.push_back(Subscriber{id, std::move(callback), true});
   if (!running_) {
     startFramePump();
   }
@@ -105,18 +107,29 @@ void AnimationClock::unsubscribe(ObserverHandle handle) {
   if (!handle.isValid()) {
     return;
   }
-  std::erase_if(subscribers_, [&](Subscriber const& s) { return s.id == handle.id; });
+  if (dispatchingSubscribers_) {
+    for (Subscriber& s : subscribers_) {
+      if (s.id == handle.id) {
+        s.active = false;
+        subscribersNeedCompaction_ = true;
+      }
+    }
+  } else {
+    std::erase_if(subscribers_, [&](Subscriber const& s) { return s.id == handle.id; });
+  }
   if (!needsFramePump()) {
     stopFramePump();
   }
 }
 
 void AnimationClock::onTick(std::int64_t deadlineNanos) {
+  Reactive::detail::BatchGuard batch;
   const double now = static_cast<double>(deadlineNanos) * 1e-9;
   AnimationTick const tick{deadlineNanos, now};
 
-  std::vector<AnimationBase*> snapshot = active_;
-  for (AnimationBase* p : snapshot) {
+  static thread_local std::vector<AnimationBase*> snapshotBuffer;
+  snapshotBuffer.assign(active_.begin(), active_.end());
+  for (AnimationBase* p : snapshotBuffer) {
     if (!p) {
       continue;
     }
@@ -124,12 +137,20 @@ void AnimationClock::onTick(std::int64_t deadlineNanos) {
       unregisterAnimation(p);
     }
   }
+  snapshotBuffer.clear();
 
-  std::vector<Subscriber> subSnap = subscribers_;
-  for (Subscriber const& s : subSnap) {
-    if (s.callback) {
+  dispatchingSubscribers_ = true;
+  std::size_t const subscriberCount = subscribers_.size();
+  for (std::size_t i = 0; i < subscriberCount && i < subscribers_.size(); ++i) {
+    Subscriber const& s = subscribers_[i];
+    if (s.active && s.callback) {
       s.callback(tick);
     }
+  }
+  dispatchingSubscribers_ = false;
+  if (subscribersNeedCompaction_) {
+    std::erase_if(subscribers_, [](Subscriber const& s) { return !s.active; });
+    subscribersNeedCompaction_ = false;
   }
 
   if (!needsFramePump()) {

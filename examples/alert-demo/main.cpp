@@ -7,6 +7,7 @@
 #include <Flux/UI/Views/Alert.hpp>
 #include <Flux/UI/Views/Button.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
+#include <Flux/UI/Views/ScrollView.hpp>
 #include <Flux/UI/Views/Text.hpp>
 #include <Flux/UI/Views/VStack.hpp>
 #include <Flux/UI/Views/ZStack.hpp>
@@ -17,7 +18,7 @@ using namespace flux;
 
 struct AlertDemoRoot {
     auto body() const {
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<ThemeKey>();
         auto [showAlert, hideAlert, alertOpen] = useAlert();
         (void)alertOpen;
 
@@ -44,7 +45,9 @@ struct AlertDemoRoot {
                             .wrapping = TextWrapping::Wrap
                         },
                         Text {
-                            .text = status,
+                            .text = [status] {
+                                return status();
+                            },
                             .font = Font::footnote(),
                             .color = Color::accent(),
                             .wrapping = TextWrapping::Wrap

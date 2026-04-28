@@ -1,9 +1,24 @@
 #include "Graphics/Metal/MetalPathRasterizer.hpp"
+#include "Debug/PerfCounters.hpp"
 
 #include <algorithm>
 #include <vector>
 
 namespace flux {
+
+namespace {
+
+template <typename Vec>
+void recordCapacityIncrease(std::size_t previousCapacity, Vec const& vec) {
+  if (!debug::perf::enabled() || vec.capacity() <= previousCapacity) {
+    return;
+  }
+  using Value = typename Vec::value_type;
+  debug::perf::recordRecorderCapacityGrowth(
+      static_cast<std::uint64_t>((vec.capacity() - previousCapacity) * sizeof(Value)));
+}
+
+} // namespace
 
 void metalPathRasterizeToMesh(Path const& path, FillStyle const& fs, StrokeStyle const& ss, Mat3 const& transform,
                               float dpiScaleX, float dpiScaleY, float opacity, float viewportW, float viewportH,
@@ -28,7 +43,9 @@ void metalPathRasterizeToMesh(Path const& path, FillStyle const& fs, StrokeStyle
     if (t.vertices.empty()) {
       return;
     }
+    std::size_t const previousCapacity = pathVerts.capacity();
     pathVerts.insert(pathVerts.end(), t.vertices.begin(), t.vertices.end());
+    recordCapacityIncrease(previousCapacity, pathVerts);
   };
 
   if (!fs.isNone()) {
@@ -76,11 +93,15 @@ void metalPathRasterizeToMesh(Path const& path, FillStyle const& fs, StrokeStyle
     pop.pathStart = static_cast<std::uint32_t>(pathBegin);
     pop.pathCount = static_cast<std::uint32_t>(pathEnd - pathBegin);
     pop.blendMode = blendMode;
+    std::size_t const orderCapacity = opOrder.capacity();
+    std::size_t const pathOpCapacity = pathOps.capacity();
     opOrder.push_back(MetalOpRef{
         .kind = MetalOpRef::Path,
         .index = static_cast<std::uint32_t>(pathOps.size()),
     });
     pathOps.push_back(pop);
+    recordCapacityIncrease(orderCapacity, opOrder);
+    recordCapacityIncrease(pathOpCapacity, pathOps);
   }
 }
 

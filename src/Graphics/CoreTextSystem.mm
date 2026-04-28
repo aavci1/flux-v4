@@ -8,6 +8,7 @@
 
 #include "Graphics/CoreTextSystem.hpp"
 #include "Graphics/TextSystemPrivate.hpp"
+#include "Debug/PerfCounters.hpp"
 
 #include <Flux/Detail/SmallVector.hpp>
 #include <Flux/Graphics/TextLayout.hpp>
@@ -970,12 +971,14 @@ public:
   void recordVariantHit(bool suppressStats) noexcept {
     if (!suppressStats) {
       ++variantStats_.hits;
+      debug::perf::recordTextParagraphVariantHit();
     }
   }
 
   void recordVariantMiss(bool suppressStats) noexcept {
     if (!suppressStats) {
       ++variantStats_.misses;
+      debug::perf::recordTextParagraphVariantMiss();
     }
   }
 
@@ -2833,6 +2836,7 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layoutUnboxed(AttributedString
 std::shared_ptr<TextLayout const> CoreTextSystem::layout(std::string_view utf8, Font const& font,
                                                          Color const& color, float maxWidth,
                                                          TextLayoutOptions const& options) {
+  debug::perf::recordTextLayoutCall();
   std::uint32_t const wq = quantizeWidth(maxWidth);
 
   // --- Tier 0: pointer-identity exact-repeat (same backing buffer, same width) ---
@@ -2842,6 +2846,7 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layout(std::string_view utf8, 
     if (!options.suppressCacheStats) {
       ++d->memoStats_.hits;
     }
+    debug::perf::recordTextLayoutCacheHit();
     return d->lastLayout_.layout;
   }
 
@@ -2885,11 +2890,13 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layout(std::string_view utf8, 
     if (!options.suppressCacheStats) {
       ++d->stats_.l3_layout.hits;
     }
+    debug::perf::recordTextLayoutCacheHit();
     return ls.unboxed;
   }
   if (!options.suppressCacheStats) {
     ++d->stats_.l3_layout.misses;
   }
+  debug::perf::recordTextLayoutCacheMiss();
 
   AttributedString as;
   as.utf8 = std::string(utf8);
@@ -2914,6 +2921,7 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layout(std::string_view utf8, 
 
 std::shared_ptr<TextLayout const> CoreTextSystem::layout(AttributedString const& text, float maxWidth,
                                                          TextLayoutOptions const& options) {
+  debug::perf::recordTextLayoutCall();
   std::uint32_t const wq = quantizeWidth(maxWidth);
 
   // --- Tier 0: pointer-identity exact-repeat (same string object, same width) ---
@@ -2922,6 +2930,7 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layout(AttributedString const&
                           text.utf8.size() == d->lastLayout_.utf8Size);
     if (samePtr) {
       if (!options.suppressCacheStats) ++d->memoStats_.hits;
+      debug::perf::recordTextLayoutCacheHit();
       return d->lastLayout_.layout;
     }
   }
@@ -2962,6 +2971,7 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layout(AttributedString const&
       options.maxLines == 0) {
     if (auto incr = d->tryIncrementalSplit(*this, text, resolved, options)) {
       auto parasCopy = incr->paragraphs; // SmallVector copy; incr still valid for the pointer
+      debug::perf::recordTextLayoutCacheMiss();
       auto result = d->layoutViaParagraphCache(*this, text, maxWidth, options, resolved,
           std::move(parasCopy), &*incr);
       updateMemoIds(result, ContentHash{}, false);
@@ -2974,6 +2984,7 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layout(AttributedString const&
     ContentHash const ch = d->computeContentHash(*this, text, resolved, options);
     if (ch == d->lastLayout_.contentHash) {
       if (!options.suppressCacheStats) ++d->memoStats_.hits;
+      debug::perf::recordTextLayoutCacheHit();
       // Update pointer identity for future Tier-0 hits.
       d->lastLayout_.utf8Ptr  = text.utf8.data();
       d->lastLayout_.utf8Size = text.utf8.size();
@@ -2981,29 +2992,34 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layout(AttributedString const&
     }
     // Cache miss at same width.
     if (paragraphCachePredicate(text, options)) {
+      debug::perf::recordTextLayoutCacheMiss();
       auto paras = d->splitIntoParagraphs(*this, text, resolved, options);
       auto result = d->layoutViaParagraphCache(*this, text, maxWidth, options, resolved,
                                                std::move(paras));
       updateMemoIds(result, ch, true);
       return result;
     }
+    debug::perf::recordTextLayoutCacheMiss();
     return layoutUnboxed(text, options, maxWidth, true, ch.hi, ch.lo);
   }
 
   // --- Tier 3: cold path (different width or no memo) ---
   if (paragraphCachePredicate(text, options)) {
     ContentHash const ch = d->computeContentHash(*this, text, resolved, options);
+    debug::perf::recordTextLayoutCacheMiss();
     auto paras = d->splitIntoParagraphs(*this, text, resolved, options);
     auto result = d->layoutViaParagraphCache(*this, text, maxWidth, options, resolved,
                                              std::move(paras));
     updateMemoIds(result, ch, true);
     return result;
   }
+  debug::perf::recordTextLayoutCacheMiss();
   return layoutUnboxed(text, options, maxWidth, false, 0, 0);
 }
 
 std::shared_ptr<TextLayout const> CoreTextSystem::layoutBoxedImpl(AttributedString const& text, Rect const& box,
                                                                   TextLayoutOptions const& options) {
+  debug::perf::recordTextLayoutCall();
   float const maxWidth = options.wrapping == TextWrapping::NoWrap ? 0.f : box.width;
   validateRuns(text);
   std::vector<ResolvedStyle> resolved;
@@ -3043,12 +3059,14 @@ std::shared_ptr<TextLayout const> CoreTextSystem::layoutBoxedImpl(AttributedStri
       if (!options.suppressCacheStats) {
         ++d->stats_.l4_boxLayout.hits;
       }
+      debug::perf::recordTextLayoutCacheHit();
       return bs.layout;
     }
   }
   if (!options.suppressCacheStats) {
     ++d->stats_.l4_boxLayout.misses;
   }
+  debug::perf::recordTextLayoutCacheMiss();
   std::shared_ptr<TextLayout> mut = cloneTextLayout(*base);
   detail::applyBoxOptions(*mut, box, options);
   auto boxed = std::shared_ptr<TextLayout const>(mut);

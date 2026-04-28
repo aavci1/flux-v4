@@ -10,13 +10,17 @@
 #include <Flux/Core/Types.hpp>
 
 #include <functional>
+#include <cstdint>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
 namespace flux {
 
+using ActionId = std::uint64_t;
+
 struct ActionHandler {
+  ActionId id = 0;
   std::string name;
   std::function<void()> trigger;
   std::function<bool()> isEnabled; // empty = always enabled
@@ -28,12 +32,15 @@ public:
   void beginRebuild();
 
   /// Registers a view-claim for the given component key.
-  void registerViewClaim(ComponentKey const& key, std::string const& actionName,
-                         std::function<void()> handler, std::function<bool()> isEnabled = {});
+  ActionId registerViewClaim(ComponentKey const& key, std::string const& actionName,
+                             std::function<void()> handler,
+                             std::function<bool()> isEnabled = {});
 
   /// Registers a window-action. Last call for a given name in build order wins.
-  void registerWindowAction(std::string const& actionName, std::function<void()> handler,
-                           std::function<bool()> isEnabled = {});
+  ActionId registerWindowAction(std::string const& actionName, std::function<void()> handler,
+                                std::function<bool()> isEnabled = {});
+
+  void unregister(ActionId id);
 
   /// Returns the view-claim handler for (focusedKey, actionName), or nullptr.
   ActionHandler const* findViewClaim(ComponentKey const& focusedKey, std::string const& actionName) const;
@@ -56,6 +63,7 @@ private:
 
   // Registration order — last matching name wins (scan from end).
   std::vector<ActionHandler> windowActions_;
+  ActionId nextId_ = 1;
 };
 
 } // namespace flux

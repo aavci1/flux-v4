@@ -7,9 +7,12 @@
 #include <Flux/Detail/RootHolder.hpp>
 #include <Flux/Detail/Runtime.hpp>
 #include <Flux/Graphics/Canvas.hpp>
+#include <Flux/Reactive/Signal.hpp>
 #include <Flux/SceneGraph/SceneGraph.hpp>
 #include <Flux/SceneGraph/SceneRenderer.hpp>
 #include <Flux/UI/Overlay.hpp>
+#include <Flux/UI/EnvironmentBinding.hpp>
+#include <Flux/UI/EnvironmentKeys.hpp>
 #include <Flux/UI/Theme.hpp>
 
 #include <memory>
@@ -27,7 +30,8 @@ struct Window::Impl {
   std::unique_ptr<Canvas> canvas_;
   std::unique_ptr<scenegraph::SceneRenderer> sceneRenderer_;
   std::optional<scenegraph::SceneGraph> sceneGraph_;
-  Color clearColor_ {Color::hex(0xF2F2F7)};
+  Color clearColor_ {Theme::light().windowBackgroundColor};
+  bool hasCustomClearColor_ = false;
   /// Declared before `runtime_` so `~Runtime` (and `OverlayHookSlot` teardown calling `removeOverlay`)
   /// runs while `OverlayManager` is still alive. Reverse member destruction order would destroy
   /// `overlayMgr_` first and use-after-free on window close with an open overlay.
@@ -36,15 +40,18 @@ struct Window::Impl {
   TextCacheRingBuffer textCacheRing_{};
   std::unique_ptr<Runtime> runtime_;
   std::unordered_map<std::string, ActionDescriptor> actions_;
-  EnvironmentLayer windowEnvironment_{};
+  Reactive::Signal<Theme> themeSignal_{Theme::light()};
+  EnvironmentBinding windowEnvironmentBinding_{};
+  bool shutdown_ = false;
 
   explicit Impl(Window&) {
-    windowEnvironment_.set(Theme::light());
+    windowEnvironmentBinding_ = EnvironmentBinding{}.withSignal<ThemeKey>(themeSignal_);
   }
   ~Impl();
 
   PlatformWindow* platformWindow() const { return platform_.get(); }
   void setViewRoot(Window& window, std::unique_ptr<RootHolder> holder);
+  void shutdown();
 };
 
 void Window::Impl::setViewRoot(Window& window, std::unique_ptr<RootHolder> holder) {
@@ -55,9 +62,20 @@ void Window::Impl::setViewRoot(Window& window, std::unique_ptr<RootHolder> holde
 }
 
 Window::Impl::~Impl() {
+  shutdown();
+}
+
+void Window::Impl::shutdown() {
+  if (shutdown_) {
+    return;
+  }
+  shutdown_ = true;
   if (runtime_) {
-    runtime_->beginShutdown();
-    overlayMgr_.clear(runtime_.get(), false);
+    runtime_->beginShutdown(sceneGraph_ ? &*sceneGraph_ : nullptr);
+    overlayMgr_.clear(nullptr, false);
+    runtime_.reset();
+  } else {
+    overlayMgr_.clear(nullptr, false);
   }
 }
 
@@ -73,6 +91,9 @@ Window::Window(const WindowConfig& config) {
 }
 
 Window::~Window() {
+  if (d) {
+    d->shutdown();
+  }
   const unsigned int id = handle();
   if (Application::hasInstance()) {
     Application::instance().unregisterWindowHandle(id);
@@ -134,9 +155,26 @@ void Window::postRedraw(unsigned int handle) {
   Application::instance().requestWindowRedraw(handle);
 }
 
-void Window::setClearColor(Color color) { d->clearColor_ = color; }
+void Window::setClearColor(Color color) {
+  d->clearColor_ = color;
+  d->hasCustomClearColor_ = true;
+}
 
 Color Window::clearColor() const { return d->clearColor_; }
+
+void Window::setTheme(Theme theme) {
+  Color const clearColor = theme.windowBackgroundColor;
+  d->themeSignal_.set(std::move(theme));
+  d->windowEnvironmentBinding_ = EnvironmentBinding{}.withSignal<ThemeKey>(d->themeSignal_);
+  if (!d->hasCustomClearColor_) {
+    d->clearColor_ = clearColor;
+  }
+  requestRedraw();
+}
+
+Theme const& Window::theme() const {
+  return d->themeSignal_.peek();
+}
 
 bool Window::wantsTextInput() const {
   return d->runtime_ && d->runtime_->wantsTextInput();
@@ -196,12 +234,12 @@ void Window::setViewRoot(std::unique_ptr<RootHolder> holder) {
   d->setViewRoot(*this, std::move(holder));
 }
 
-EnvironmentLayer& Window::environmentLayerMut() {
-  return d->windowEnvironment_;
+EnvironmentBinding const& Window::environmentBinding() const {
+  return d->windowEnvironmentBinding_;
 }
 
-EnvironmentLayer const& Window::environmentLayer() const {
-  return d->windowEnvironment_;
+EnvironmentBinding& Window::environmentBindingMut() {
+  return d->windowEnvironmentBinding_;
 }
 
 void Window::render(Canvas& canvas) {

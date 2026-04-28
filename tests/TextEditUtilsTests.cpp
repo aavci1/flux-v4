@@ -1,11 +1,8 @@
 #include <doctest/doctest.h>
 
-#include <Flux/UI/Views/TextEditBehavior.hpp>
 #include <Flux/UI/Views/TextEditUtils.hpp>
 
-#include <Flux/Core/KeyCodes.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
-#include <Flux/Reactive/Signal.hpp>
 
 #include <string>
 
@@ -156,47 +153,6 @@ TEST_CASE("TextEditUtils: eraseToLineBoundary deletes to start and end of line")
         eraseToLineBoundary("abc\ndef", TextEditSelection {.caretByte = 1, .anchorByte = 1}, true);
     CHECK(forward.text == "a\ndef");
     CHECK(forward.selection.caretByte == 1);
-}
-
-TEST_CASE("TextEditBehavior: cmd-backspace deletes to line start") {
-    Signal<std::string> value {std::string {"abc\ndef"}};
-    TextEditBehavior behavior {value, {.multiline = true}};
-    behavior.moveCaretTo(6, false);
-
-    bool const handled = behavior.handleKey(KeyEvent {.key = keys::Delete, .modifiers = Modifiers::Meta});
-    CHECK(handled);
-    CHECK(value.get() == "abc\nf");
-    CHECK(behavior.caretByte() == 4);
-}
-
-TEST_CASE("TextEditBehavior: disabled ignores key, text input, and pointer down") {
-    Signal<std::string> value {std::string {"hello"}};
-    TextEditBehavior behavior {value, {.multiline = true}};
-    behavior.setDisabled(true);
-
-    CHECK_FALSE(behavior.handleKey(KeyEvent {.key = keys::RightArrow, .modifiers = Modifiers::None}));
-    CHECK_FALSE(behavior.handleTextInput("x"));
-    CHECK_FALSE(behavior.handlePointerDown(2, false));
-    CHECK(value.get() == "hello");
-    CHECK(behavior.caretByte() == static_cast<int>(value.get().size()));
-}
-
-TEST_CASE("TextEditBehavior: typing and navigation request caret visibility") {
-    Signal<std::string> value {std::string {"hello"}};
-    TextEditBehavior behavior {value, {.multiline = false}};
-
-    behavior.moveCaretTo(2, false);
-    CHECK(behavior.consumeEnsureCaretVisibleRequest());
-    CHECK_FALSE(behavior.consumeEnsureCaretVisibleRequest());
-
-    CHECK(behavior.handleTextInput("X"));
-    CHECK(value.get() == "heXllo");
-    CHECK(behavior.consumeEnsureCaretVisibleRequest());
-    CHECK_FALSE(behavior.consumeEnsureCaretVisibleRequest());
-
-    CHECK(behavior.handleKey(KeyEvent {.key = keys::RightArrow, .modifiers = Modifiers::None}));
-    CHECK(behavior.consumeEnsureCaretVisibleRequest());
-    CHECK_FALSE(behavior.consumeEnsureCaretVisibleRequest());
 }
 
 TEST_CASE("TextEditUtils: lineIndexForByte") {

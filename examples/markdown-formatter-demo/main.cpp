@@ -1,16 +1,13 @@
 // Multiline TextInput `.styler` demo: lightweight markdown-inspired highlighting (headings, bold, `code`).
 
 #include <Flux.hpp>
-#include <Flux/Core/WindowUI.hpp>
 #include <Flux/Graphics/AttributedString.hpp>
 #include <Flux/Graphics/Styles.hpp>
-#include <Flux/Reactive/Reactive.hpp>
 #include <Flux/UI/UI.hpp>
 #include <Flux/UI/Views/Text.hpp>
 #include <Flux/UI/Views/TextInput.hpp>
 #include <Flux/UI/Views/VStack.hpp>
 
-#include <iostream>
 #include <map>
 #include <string>
 #include <vector>
@@ -192,30 +189,26 @@ std::vector<AttributedRun> markdownStyler(std::string_view sv) {
 
 struct MarkdownEditor {
     auto body() const {
-        Theme const &theme = useEnvironment<Theme>();
         auto doc = useState(std::string {
             R"(# Flux Layout System
 
 ## Architecture Overview
 
-Flux uses a **retained scene tree** model. There is no base `View` class — views are plain structs that satisfy one of three C++ concepts. A universal wrapper called `Element` type-erases them and dispatches `layout` and `measure` through a virtual `Concept`/`Model<C>` pattern, then `SceneBuilder` reconciles the retained `SceneTree`.
+Flux uses a **retained scene graph** model. There is no base `View` class — views are plain structs that satisfy one of three C++ concepts. A universal wrapper called `Element` type-erases them and dispatches measurement and mounting through a virtual `Concept`/`Model<C>` pattern, then retained nodes are relaid out in place as constraints and reactive bindings change.
 
 The pipeline for each rebuild has two distinct phases:
 
 ```
-Phase 1: Build + Reconcile    — Element tree → retained SceneTree
-Phase 2: Paint                — Retained SceneTree → Canvas
+Phase 1: Mount + Relayout     — Element tree → retained SceneGraph
+Phase 2: Paint                — Retained SceneGraph → Canvas
 ```
 
-**Phase 1** walks the element tree, runs `measure` and flex distribution, records assigned geometry in scene nodes and the geometry index, and reconciles a retained `SceneTree`. The only dependencies are `LayoutConstraints`, `LayoutHints`, and `TextSystem` (for text measurement).
+**Phase 1** walks the element tree once, runs `measure` and flex distribution, records assigned geometry in scene nodes and the geometry index, and keeps retained nodes alive across reactive updates. The only dependencies are `LayoutConstraints`, `LayoutHints`, and `TextSystem` (for text measurement).
 
-**Phase 2** walks the retained `SceneTree` to Canvas. Paint retention is node-local, and input/hit testing also resolves directly against retained scene nodes rather than a separate event map.
+**Phase 2** walks the retained `SceneGraph` to Canvas. Paint retention is node-local, and input/hit testing also resolves directly against retained scene nodes rather than a separate event map.
 
 )"
         });
-
-        Font const baseFont = resolveFont(Font::theme(), Font::body(), theme);
-        Color const baseColor = Color::primary();
 
         return VStack {
             .spacing = 12.f,

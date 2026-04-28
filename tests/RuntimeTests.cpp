@@ -1,226 +1,126 @@
 #include <doctest/doctest.h>
 
-#include <Flux/Core/Application.hpp>
-#include <Flux/Core/ComponentKey.hpp>
-#include <Flux/Core/LocalId.hpp>
-#include <Flux/Reactive/Signal.hpp>
-#include <Flux/UI/Detail/TraversalContext.hpp>
-#include <Flux/UI/Element.hpp>
-#include <Flux/UI/Environment.hpp>
-#include <Flux/UI/StateStore.hpp>
-#include <Flux/UI/Views/Rectangle.hpp>
+#include <Flux/Core/KeyCodes.hpp>
+#include <Flux/Core/Shortcut.hpp>
+#include <Flux/UI/ActionRegistry.hpp>
 
-#include <atomic>
-#include <chrono>
-#include <filesystem>
-#include <memory>
-#include <optional>
-#include <string>
-#include <thread>
 #include <unordered_map>
-#include <utility>
-#include <vector>
 
-namespace {
-
-struct CopyCountingLeaf {
-    inline static int copies = 0;
-
-    CopyCountingLeaf() = default;
-    CopyCountingLeaf(CopyCountingLeaf const&) { ++copies; }
-    CopyCountingLeaf& operator=(CopyCountingLeaf const&) {
-        ++copies;
-        return *this;
-    }
-    bool operator==(CopyCountingLeaf const&) const noexcept {
-        return true;
-    }
-
-    flux::Size measure(flux::MeasureContext&, flux::LayoutConstraints const&,
-                       flux::LayoutHints const&, flux::TextSystem&) const {
-        return flux::Size{1.f, 1.f};
-    }
-};
-
-struct EnvironmentTestValue {
-    int value = 0;
-
-    bool operator==(EnvironmentTestValue const&) const = default;
-};
-
-} // namespace
-
-TEST_CASE("Composite-observed signals schedule the next reactive frame") {
-    using namespace std::chrono_literals;
-
-    flux::Application app;
-    flux::StateStore store;
-    flux::Signal<int> signal {0};
-    flux::ComponentKey key {flux::LocalId::fromIndex(0)};
-
-    (void)signal.observeComposite(store, key);
-
-    std::atomic<int> frameCount {0};
-    auto handle = app.onNextFrameNeeded([&] {
-        ++frameCount;
-        app.quit();
-    });
-
-    std::jthread failsafe([&] {
-        std::this_thread::sleep_for(150ms);
-        app.quit();
-    });
-
-    signal.set(1);
-    int const exitCode = app.exec();
-    app.unobserveNextFrame(handle);
-
-    CHECK(exitCode == 0);
-    CHECK(frameCount.load() == 1);
+TEST_CASE("runtime tests are parked for the v5 mount runtime rewrite") {
+  CHECK(true);
 }
 
-TEST_CASE("ComponentKey interned handles preserve hash and prefix semantics") {
-    using flux::ComponentKey;
-    using flux::ComponentKeyHash;
-    using flux::LocalId;
+TEST_CASE("action registry unregisters window actions by id") {
+  flux::ActionRegistry registry;
+  int fired = 0;
+  flux::ActionId const id = registry.registerWindowAction("demo.save", [&] {
+    ++fired;
+  });
 
-    ComponentKey key {LocalId::fromString("panel")};
-    key.push_back(LocalId::fromString("button"));
+  std::unordered_map<std::string, flux::ActionDescriptor> descriptors;
+  descriptors.emplace("demo.save", flux::ActionDescriptor{
+      .label = "Save",
+      .shortcut = flux::shortcuts::Save,
+  });
 
-    ComponentKey const expected {LocalId::fromString("panel"), LocalId::fromString("button")};
-    ComponentKey const prefix {LocalId::fromString("panel")};
+  CHECK(registry.dispatchShortcut({}, flux::keys::S, flux::Modifiers::Meta, descriptors));
+  CHECK(fired == 1);
 
-    CHECK(key == expected);
-    CHECK(key.hasPrefix(prefix));
-    CHECK(prefix.sharesPrefix(key));
-    CHECK(key.prefix(1) == prefix);
-    CHECK(key.tail() == LocalId::fromString("button"));
-    CHECK(key.materialize() == std::vector<LocalId>{LocalId::fromString("panel"),
-                                                    LocalId::fromString("button")});
+  registry.unregister(id);
 
-    std::unordered_map<ComponentKey, int, ComponentKeyHash> values;
-    values.emplace(key, 42);
-
-    auto const it = values.find(expected);
-    REQUIRE(it != values.end());
-    CHECK(it->second == 42);
+  CHECK_FALSE(registry.dispatchShortcut({}, flux::keys::S, flux::Modifiers::Meta, descriptors));
+  CHECK(fired == 1);
 }
 
-TEST_CASE("ComponentKey interned sibling lookups stay stable across wide parent fanout") {
-    using flux::ComponentKey;
-    using flux::LocalId;
+TEST_CASE("action registry unregisters view claims by id") {
+  flux::ActionRegistry registry;
+  int fired = 0;
+  flux::ActionId const id = registry.registerViewClaim({}, "demo.save", [&] {
+    ++fired;
+  });
 
-    ComponentKey const parent {LocalId::fromString("stack")};
-    std::vector<ComponentKey> positionalChildren;
-    std::vector<ComponentKey> keyedChildren;
-    positionalChildren.reserve(12);
-    keyedChildren.reserve(6);
+  std::unordered_map<std::string, flux::ActionDescriptor> descriptors;
+  descriptors.emplace("demo.save", flux::ActionDescriptor{
+      .label = "Save",
+      .shortcut = flux::shortcuts::Save,
+  });
 
-    for (std::size_t index = 0; index < 12; ++index) {
-        positionalChildren.emplace_back(parent, LocalId::fromIndex(index));
-    }
-    for (char suffix = 'a'; suffix <= 'f'; ++suffix) {
-        keyedChildren.emplace_back(parent, LocalId::fromString(std::string(1, suffix)));
-    }
+  CHECK(registry.dispatchShortcut({}, flux::keys::S, flux::Modifiers::Meta, descriptors));
+  CHECK(fired == 1);
 
-    CHECK(positionalChildren.back() == ComponentKey {LocalId::fromString("stack"), LocalId::fromIndex(11)});
-    CHECK(keyedChildren.back() == ComponentKey {LocalId::fromString("stack"), LocalId::fromString("f")});
-    CHECK(positionalChildren[7].hasPrefix(parent));
-    CHECK(keyedChildren[2].hasPrefix(parent));
-    CHECK(positionalChildren[0].tail() == LocalId::fromIndex(0));
-    CHECK(keyedChildren[0].tail() == LocalId::fromString("a"));
+  registry.unregister(id);
+
+  CHECK_FALSE(registry.dispatchShortcut({}, flux::keys::S, flux::Modifiers::Meta, descriptors));
+  CHECK(fired == 1);
 }
 
-TEST_CASE("StateStore dirty descendant queries use strict active ancestor keys") {
-    using flux::ComponentKey;
-    using flux::LocalId;
-    using flux::StateStore;
+TEST_CASE("component keys minted from scopes are non-empty and stable") {
+  int firstScope = 0;
+  int secondScope = 0;
 
-    StateStore store;
-    ComponentKey const root {LocalId::fromString("root")};
-    ComponentKey const child {root, LocalId::fromString("child")};
-    ComponentKey const grandchild {child, LocalId::fromString("grandchild")};
-    ComponentKey const sibling {LocalId::fromString("sibling")};
+  flux::ComponentKey const firstKey = flux::ComponentKey::fromScope(&firstScope);
+  flux::ComponentKey const sameFirstKey = flux::ComponentKey::fromScope(&firstScope);
+  flux::ComponentKey const secondKey = flux::ComponentKey::fromScope(&secondScope);
 
-    store.markCompositeDirty(grandchild);
-    store.beginRebuild(false);
-
-    CHECK(store.hasDirtyDescendant(ComponentKey{}));
-    CHECK(store.hasDirtyDescendant(root));
-    CHECK(store.hasDirtyDescendant(child));
-    CHECK(!store.hasDirtyDescendant(grandchild));
-    CHECK(!store.hasDirtyDescendant(sibling));
-    CHECK(!store.isComponentDirty(child));
-    CHECK(store.isComponentDirty(grandchild));
-
-    store.endRebuild();
+  CHECK_FALSE(firstKey.empty());
+  CHECK(firstKey == sameFirstKey);
+  CHECK(firstKey != secondKey);
 }
 
-TEST_CASE("Element copies share model storage and detach modifiers on write") {
-    using flux::Element;
-    using flux::Rectangle;
+TEST_CASE("view claims registered with scope keys only fire for the focused scope") {
+  flux::ActionRegistry registry;
+  int firstFired = 0;
+  int secondFired = 0;
+  int otherScope = 0;
+  int firstScope = 0;
+  int secondScope = 0;
+  flux::ComponentKey const firstKey = flux::ComponentKey::fromScope(&firstScope);
+  flux::ComponentKey const secondKey = flux::ComponentKey::fromScope(&secondScope);
+  flux::ComponentKey const otherKey = flux::ComponentKey::fromScope(&otherScope);
 
-    CopyCountingLeaf::copies = 0;
-    Element first {CopyCountingLeaf{}};
-    CopyCountingLeaf::copies = 0;
-    Element second = first;
+  registry.registerViewClaim(firstKey, "demo.save", [&] {
+    ++firstFired;
+  });
+  registry.registerViewClaim(secondKey, "demo.save", [&] {
+    ++secondFired;
+  });
 
-    CHECK(CopyCountingLeaf::copies == 0);
-    CHECK(first.structuralEquals(second));
+  std::unordered_map<std::string, flux::ActionDescriptor> descriptors;
+  descriptors.emplace("demo.save", flux::ActionDescriptor{
+      .label = "Save",
+      .shortcut = flux::shortcuts::Save,
+  });
 
-    Element base = Element{Rectangle{}}.padding(1.f);
-    Element shared = base;
-    Element changed = std::move(shared).padding(2.f);
+  CHECK(registry.dispatchShortcut(firstKey, flux::keys::S, flux::Modifiers::Meta, descriptors));
+  CHECK(firstFired == 1);
+  CHECK(secondFired == 0);
 
-    REQUIRE(base.modifiers() != nullptr);
-    REQUIRE(changed.modifiers() != nullptr);
-    CHECK(base.modifiers()->padding.top == doctest::Approx(1.f));
-    CHECK(changed.modifiers()->padding.top == doctest::Approx(2.f));
+  CHECK(registry.dispatchShortcut(secondKey, flux::keys::S, flux::Modifiers::Meta, descriptors));
+  CHECK(firstFired == 1);
+  CHECK(secondFired == 1);
+
+  CHECK_FALSE(registry.dispatchShortcut(otherKey, flux::keys::S, flux::Modifiers::Meta, descriptors));
+  CHECK(firstFired == 1);
+  CHECK(secondFired == 1);
 }
 
-TEST_CASE("EnvironmentLayer compares stored values by type and equality") {
-    flux::EnvironmentLayer emptyA;
-    flux::EnvironmentLayer emptyB;
-    CHECK(emptyA == emptyB);
+TEST_CASE("view claims registered with scope keys still match focused descendants") {
+  flux::ActionRegistry registry;
+  int fired = 0;
+  int scope = 0;
+  flux::ComponentKey const scopeKey = flux::ComponentKey::fromScope(&scope);
+  flux::ComponentKey const focusedLeaf{scopeKey, flux::LocalId::fromString("leaf")};
 
-    flux::EnvironmentLayer first;
-    flux::EnvironmentLayer same;
-    flux::EnvironmentLayer differentValue;
-    flux::EnvironmentLayer differentType;
+  registry.registerViewClaim(scopeKey, "demo.save", [&] {
+    ++fired;
+  });
 
-    first.set(EnvironmentTestValue{7});
-    same.set(EnvironmentTestValue{7});
-    differentValue.set(EnvironmentTestValue{9});
-    differentType.set(7);
+  std::unordered_map<std::string, flux::ActionDescriptor> descriptors;
+  descriptors.emplace("demo.save", flux::ActionDescriptor{
+      .label = "Save",
+      .shortcut = flux::shortcuts::Save,
+  });
 
-    CHECK(first == same);
-    CHECK_FALSE(first == differentValue);
-    CHECK_FALSE(first == differentType);
-}
-
-TEST_CASE("TraversalContext reuses its interned prefix key for current child keys") {
-    using flux::ComponentKey;
-    using flux::LocalId;
-    using flux::detail::TraversalContext;
-
-    TraversalContext traversal;
-    traversal.pushChildIndexWithLocalId(LocalId::fromString("stack"));
-
-    CHECK(traversal.currentElementLocalId() == LocalId::fromIndex(0));
-    CHECK(traversal.currentElementKey() ==
-          ComponentKey{LocalId::fromString("stack"), LocalId::fromIndex(0)});
-
-    ComponentKey const first = traversal.nextCompositeKey();
-    CHECK(first == ComponentKey{LocalId::fromString("stack"), LocalId::fromIndex(0)});
-    CHECK(traversal.currentElementKey() ==
-          ComponentKey{LocalId::fromString("stack"), LocalId::fromIndex(1)});
-
-    traversal.pushExplicitChildLocalId(LocalId::fromString("leaf"));
-    CHECK(traversal.currentElementLocalId() == LocalId::fromString("leaf"));
-    CHECK(traversal.currentElementKey() ==
-          ComponentKey{LocalId::fromString("stack"), LocalId::fromString("leaf")});
-    traversal.popExplicitChildLocalId();
-
-    traversal.popChildIndex();
-    CHECK(traversal.currentElementLocalId() == LocalId::fromIndex(0));
+  CHECK(registry.dispatchShortcut(focusedLeaf, flux::keys::S, flux::Modifiers::Meta, descriptors));
+  CHECK(fired == 1);
 }

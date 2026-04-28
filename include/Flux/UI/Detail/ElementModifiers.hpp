@@ -9,6 +9,7 @@
 #include <Flux/Core/Types.hpp>
 #include <Flux/Detail/SmallVector.hpp>
 #include <Flux/Graphics/Styles.hpp>
+#include <Flux/Reactive/Bindable.hpp>
 #include <Flux/UI/Environment.hpp>
 #include <Flux/UI/LayoutEngine.hpp>
 
@@ -24,7 +25,6 @@ namespace flux {
 class Element;
 struct Popover;
 struct Spacer;
-class StateStore;
 
 namespace detail {
 
@@ -34,24 +34,7 @@ struct ElementDeleter {
 
 using OwnedElementPtr = std::unique_ptr<Element, ElementDeleter>;
 
-std::uint64_t nextElementMeasureId();
-
 Popover* popoverOverlayStateIf(Element& el);
-
-struct CompositeBodyResolution {
-  Element* body = nullptr;
-  std::unique_ptr<Element> ownedBody{};
-  bool descendantsStable = false;
-};
-
-inline LocalId compositeBodyLocalId() {
-  return LocalId::fromString("$flux.body");
-}
-
-template<typename C, typename BuildFn>
-CompositeBodyResolution resolveCompositeBody(StateStore* store, ComponentKey const& key,
-                                             LayoutConstraints const& constraints, C const& value,
-                                             BuildFn&& buildFn);
 
 template<typename C>
 float flexGrowOf(C const& v) {
@@ -94,21 +77,27 @@ float minMainSizeOf(C const& v) {
 }
 
 struct ElementModifiers {
-  EdgeInsets padding{};
-  FillStyle fill = FillStyle::none();
-  StrokeStyle stroke = StrokeStyle::none();
-  ShadowStyle shadow = ShadowStyle::none();
-  CornerRadius cornerRadius{};
-  float opacity = 1.f;
-  Vec2 translation{};
+  Reactive::Bindable<EdgeInsets> padding{EdgeInsets{}};
+  Reactive::Bindable<FillStyle> fill{FillStyle::none()};
+  Reactive::Bindable<StrokeStyle> stroke{StrokeStyle::none()};
+  Reactive::Bindable<ShadowStyle> shadow{ShadowStyle::none()};
+  Reactive::Bindable<CornerRadius> cornerRadius{CornerRadius{}};
+  Reactive::Bindable<float> opacity{1.f};
+  Reactive::Bindable<Vec2> translation{Vec2{}};
   bool clip = false;
-  float positionX = 0.f;
-  float positionY = 0.f;
-  float sizeWidth = 0.f;
-  float sizeHeight = 0.f;
+  Reactive::Bindable<float> positionX{0.f};
+  Reactive::Bindable<float> positionY{0.f};
+  Reactive::Bindable<float> sizeWidth{0.f};
+  Reactive::Bindable<float> sizeHeight{0.f};
+  bool hasSizeWidth = false;
+  bool hasSizeHeight = false;
   std::unique_ptr<Element> overlay;
 
   std::function<void()> onTap;
+  std::function<void()> onPointerEnter;
+  std::function<void()> onPointerExit;
+  std::function<void()> onFocus;
+  std::function<void()> onBlur;
   std::function<void(Point)> onPointerDown;
   std::function<void(Point)> onPointerUp;
   std::function<void(Point)> onPointerMove;
@@ -120,17 +109,29 @@ struct ElementModifiers {
   Cursor cursor = Cursor::Inherit;
 
   bool hasInteraction() const noexcept {
-    return static_cast<bool>(onTap) || static_cast<bool>(onPointerDown) || static_cast<bool>(onPointerUp) ||
-           static_cast<bool>(onPointerMove) || static_cast<bool>(onScroll) || static_cast<bool>(onKeyDown) ||
-           static_cast<bool>(onKeyUp) || static_cast<bool>(onTextInput) || focusable ||
-           cursor != Cursor::Inherit;
+    return static_cast<bool>(onTap) || static_cast<bool>(onPointerEnter) ||
+           static_cast<bool>(onPointerExit) || static_cast<bool>(onFocus) ||
+           static_cast<bool>(onBlur) || static_cast<bool>(onPointerDown) ||
+           static_cast<bool>(onPointerUp) || static_cast<bool>(onPointerMove) ||
+           static_cast<bool>(onScroll) || static_cast<bool>(onKeyDown) ||
+           static_cast<bool>(onKeyUp) || static_cast<bool>(onTextInput) ||
+           focusable || cursor != Cursor::Inherit;
   }
 
   bool needsModifierPass() const {
-    return !padding.isZero() || !fill.isNone() || !stroke.isNone() || !shadow.isNone() ||
-           !cornerRadius.isZero() || opacity < 1.f - 1e-6f || std::fabs(translation.x) > 1e-6f ||
-           std::fabs(translation.y) > 1e-6f || clip || std::fabs(positionX) > 1e-6f ||
-           std::fabs(positionY) > 1e-6f || hasInteraction() || sizeWidth > 0.f || sizeHeight > 0.f ||
+    auto const p = padding.evaluate();
+    auto const f = fill.evaluate();
+    auto const s = stroke.evaluate();
+    auto const sh = shadow.evaluate();
+    auto const cr = cornerRadius.evaluate();
+    auto const op = opacity.evaluate();
+    auto const tr = translation.evaluate();
+    auto const px = positionX.evaluate();
+    auto const py = positionY.evaluate();
+    return !p.isZero() || !f.isNone() || !s.isNone() || !sh.isNone() ||
+           !cr.isZero() || op < 1.f - 1e-6f || std::fabs(tr.x) > 1e-6f ||
+           std::fabs(tr.y) > 1e-6f || clip || std::fabs(px) > 1e-6f ||
+           std::fabs(py) > 1e-6f || hasInteraction() || hasSizeWidth || hasSizeHeight ||
            overlay != nullptr;
   }
 
@@ -144,17 +145,6 @@ struct ElementModifiers {
 
 [[nodiscard]] bool elementModifiersStructurallyEqual(ElementModifiers const& lhs,
                                                      ElementModifiers const& rhs) noexcept;
-
-struct ResolvedElement {
-  Element const* sceneElement = nullptr;
-  SmallVector<OwnedElementPtr, 2> ownedBodies{};
-  SmallVector<EnvironmentLayer, 4> environmentLayers{};
-  SmallVector<ElementModifiers, 4> modifierLayers{};
-  SmallVector<ComponentKey, 4> bodyComponentKeys{};
-  ComponentKey stableInteractionKey{};
-  bool nestSceneUnderFirstBody = false;
-  bool descendantsStable = false;
-};
 
 } // namespace detail
 } // namespace flux

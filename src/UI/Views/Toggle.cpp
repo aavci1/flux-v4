@@ -3,6 +3,7 @@
 #include <Flux/Core/KeyCodes.hpp>
 #include <Flux/Reactive/Interpolatable.hpp>
 #include <Flux/Reactive/Transition.hpp>
+#include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/ScaleAroundCenter.hpp>
@@ -29,7 +30,7 @@ Toggle::Style resolveStyle(Toggle::Style const &style, Theme const &theme) {
 }
 
 Element Toggle::body() const {
-    Theme const &theme = useEnvironment<Theme>();
+    auto theme = useEnvironment<ThemeKey>();
 
     auto [trackWidth,
           trackHeight,
@@ -40,9 +41,9 @@ Element Toggle::body() const {
           offColor,
           thumbColor,
           thumbBorderColor,
-          borderColor] = resolveStyle(style, theme);
-    auto disabledColor = theme.disabledTextColor;
-    auto focusColor = theme.keyboardFocusIndicatorColor;
+          borderColor] = resolveStyle(style, theme());
+    auto disabledColor = theme().disabledTextColor;
+    auto focusColor = theme().keyboardFocusIndicatorColor;
 
     float const maxInset = std::max(0.f, trackHeight * 0.5f - 0.5f);
     thumbInset = std::min(thumbInset, maxInset);
@@ -51,49 +52,39 @@ Element Toggle::body() const {
     float const xOff = thumbInset;
     float const xOn = std::max(xOff, trackWidth - thumbInset - thumbSize);
 
-    bool const isOn = *value;
-    bool const focused = useFocus();
-    bool const pressed = usePress();
+    Reactive::Signal<bool> focused = useFocus();
+    Reactive::Signal<bool> pressed = usePress();
     bool const isDisabled = disabled;
-
-    // ── Animations ────────────────────────────────────────────────────────────
-
-    Transition const trInstant = Transition::instant();
-    Transition const trMotion = Transition::ease(theme.durationMedium);
-    Transition const tr = isDisabled ? trInstant : trMotion;
-    Transition const trPress = Transition::ease(theme.durationFast);
-
-    auto thumbXAnim = useAnimation<float>(isOn ? xOn : xOff);
-    {
-        float const targetX = isOn ? xOn : xOff;
-        if (std::abs(*thumbXAnim - targetX) > 0.01f) {
-            thumbXAnim.set(targetX, tr);
-        }
-    }
-
-    auto trackFillAnim = useAnimation<Color>(isOn ? onColor : offColor);
-    {
-        Color const targetFill = isDisabled ? theme.disabledControlBackgroundColor : isOn ? onColor :
-                                                                                  offColor;
-        if (*trackFillAnim != targetFill) {
-            trackFillAnim.set(targetFill, tr);
-        }
-    }
-
-    auto scaleAnim = useAnimation<float>(1.f);
-    {
-        float const target = (pressed && !isDisabled) ? 0.90f : 1.f;
-        if (std::abs(*scaleAnim - target) > 0.001f) {
-            scaleAnim.set(target, trPress);
-        }
-    }
-
     auto v = value;
+
+    auto targetMotion = [theme, isDisabled] {
+        return isDisabled ? Transition::instant() : Transition::ease(theme().durationMedium);
+    };
+    auto pressMotion = [theme] {
+        return Transition::ease(theme().durationFast);
+    };
+    auto thumbXTarget = [v, xOn, xOff] {
+        return v() ? xOn : xOff;
+    };
+    auto trackFillTarget = [theme, style = style, v, isDisabled] {
+        Theme const &currentTheme = theme();
+        Toggle::Style const currentStyle = resolveStyle(style, currentTheme);
+        return isDisabled ? currentTheme.disabledControlBackgroundColor
+                          : v() ? currentStyle.onColor : currentStyle.offColor;
+    };
+    auto scaleTarget = [pressed, isDisabled] {
+        return (pressed() && !isDisabled) ? 0.90f : 1.f;
+    };
+
+    auto thumbXAnim = useAnimation(thumbXTarget, targetMotion);
+    auto trackFillAnim = useAnimation(trackFillTarget, targetMotion);
+    auto scaleAnim = useAnimation(scaleTarget, pressMotion);
+
     auto handleToggle = [v, onChange = onChange, isDisabled]() {
         if (isDisabled) {
             return;
         }
-        bool const next = !*v;
+        bool const next = !v.peek();
         v = next;
         if (onChange) {
             onChange(next);
@@ -107,21 +98,30 @@ Element Toggle::body() const {
     };
 
     return ScaleAroundCenter {
-        .scale = *scaleAnim,
+        .scale = [scaleAnim] {
+            return scaleAnim();
+        },
         .child = ZStack {
             .horizontalAlignment = Alignment::Start,
             .verticalAlignment = Alignment::Start,
             .children = flux::children(
                 Rectangle {}
-                    .fill(FillStyle::solid(*trackFillAnim))
-                    .stroke(StrokeStyle::solid(focused ? focusColor : borderColor, focused ? std::max(borderWidth, 2.f) : borderWidth))
+                    .fill([trackFillAnim] {
+                        return trackFillAnim();
+                    })
+                    .stroke([focused, focusColor, borderColor, borderWidth] {
+                        return StrokeStyle::solid(focused() ? focusColor : borderColor,
+                                                  focused() ? std::max(borderWidth, 2.f) : borderWidth);
+                    })
                     .size(trackWidth, trackHeight)
                     .cornerRadius(CornerRadius {trackHeight * 0.5f}),
                 Rectangle {}
                     .fill(FillStyle::solid(isDisabled ? disabledColor : thumbColor))
                     .stroke(StrokeStyle::solid(thumbBorderColor, thumbBorderWidth))
-                    .shadow(isDisabled ? ShadowStyle::none() : ShadowStyle {.radius = theme.shadowRadiusControl, .offset = {0.f, theme.shadowOffsetYControl}, .color = theme.shadowColor})
-                    .position(*thumbXAnim, thumbInset)
+                    .shadow(isDisabled ? ShadowStyle::none() : ShadowStyle {.radius = theme().shadowRadiusControl, .offset = {0.f, theme().shadowOffsetYControl}, .color = theme().shadowColor})
+                    .position([thumbXAnim] {
+                        return thumbXAnim();
+                    }, thumbInset)
                     .size(thumbSize, thumbSize)
                     .cornerRadius(CornerRadius {thumbSize * 0.5f})
             ),

@@ -5,6 +5,7 @@
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/UI.hpp>
 #include <Flux/UI/ViewModifiers.hpp>
+#include <Flux/UI/Views/Grid.hpp>
 #include <Flux/UI/Views/Render.hpp>
 
 #include <array>

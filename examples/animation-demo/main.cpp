@@ -9,11 +9,11 @@
 #include <Flux/UI/Views/ScrollView.hpp>
 #include <Flux/UI/Views/Slider.hpp>
 #include <Flux/UI/Views/Text.hpp>
-#include <Flux/UI/Views/Toggle.hpp>
 #include <Flux/UI/Views/VStack.hpp>
 #include <Flux/UI/Views/ZStack.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <string>
@@ -29,8 +29,14 @@ std::string formatFloat(float value) {
     return buffer;
 }
 
-Color alpha(Color color, float opacity) {
-    return Color {color.r, color.g, color.b, opacity};
+double nowSeconds() {
+    auto const nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::steady_clock::now().time_since_epoch());
+    return static_cast<double>(nanos.count()) * 1e-9;
+}
+
+float loopBarEmphasis(float phase, float anchor) {
+    return std::clamp(1.f - std::abs(phase - anchor) * 2.8f, 0.f, 1.f);
 }
 
 Element makeSectionCard(Theme const &theme, std::string title, std::string caption, Element content) {
@@ -62,7 +68,7 @@ Element makeSectionCard(Theme const &theme, std::string title, std::string capti
     };
 }
 
-Element metricTile(Theme const &theme, std::string value, std::string label, Color accent) {
+Element metricTile(Theme const &theme, Bindable<std::string> value, std::string label, Color accent) {
     return VStack {
         .spacing = theme.space1,
         .alignment = Alignment::Start,
@@ -97,15 +103,13 @@ Element buttonRow(Theme const &theme, std::vector<Element> buttons) {
 
 struct PlaybackLab : ViewModifiers<PlaybackLab> {
     auto body() const {
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<ThemeKey>();
 
         auto progress = useAnimation<float>(0.f);
 
-        std::string const state = progress.isPaused() ? "Paused" : progress.isRunning() ? "Running" : "Idle";
-
         auto playOnce = [progress, theme] {
             progress.set(0.f, Transition::instant());
-            progress.play(1.f, Transition::ease(std::max(0.01f, theme.durationSlow)).delayed(0.12f));
+            progress.play(1.f, Transition::ease(std::max(0.01f, theme().durationSlow)).delayed(0.12f));
         };
         auto loopForever = [progress] {
             progress.set(0.f, Transition::instant());
@@ -131,15 +135,17 @@ struct PlaybackLab : ViewModifiers<PlaybackLab> {
             progress.set(0.f, Transition::instant());
         };
 
-        float clamped = std::clamp(*progress, 0.f, 1.f);
+        float clamped = std::clamp(progress(), 0.f, 1.f);
         auto previewValue = useState(clamped);
-        previewValue.setSilently(clamped);
+        useEffect([progress, previewValue] {
+            previewValue = std::clamp(progress(), 0.f, 1.f);
+        });
 
         return makeSectionCard(
-            theme, "Playback Controls",
+            theme(), "Playback Controls",
             "Drive one handle with play, pause, resume, stop, finite repeats, infinite repeats, and delayed starts.",
             VStack {
-                .spacing = theme.space3,
+                .spacing = theme().space3,
                 .alignment = Alignment::Stretch,
                 .children = children(
                     Slider {
@@ -149,17 +155,26 @@ struct PlaybackLab : ViewModifiers<PlaybackLab> {
                         .disabled = true
                     },
                     HStack {
-                        .spacing = theme.space3,
+                        .spacing = theme().space3,
                         .alignment = Alignment::Stretch,
                         .children = children(
-                            metricTile(theme, state, "State", Color::accent()),
-                            metricTile(theme, formatFloat(progress), "Progress", Color::success()),
-                            metricTile(theme, theme.reducedMotion ? "On" : "Off", "Reduced motion",
-                                       theme.reducedMotion ? Color::warning() : Color::secondary())
+                            metricTile(theme(), [progress] {
+                                float const value = progress();
+                                if (value <= 0.001f) {
+                                    return std::string {"Idle"};
+                                }
+                                if (value >= 0.999f) {
+                                    return std::string {"Settled"};
+                                }
+                                return std::string {"Running"};
+                            }, "State", Color::accent()),
+                            metricTile(theme(), [progress] {
+                                return formatFloat(progress());
+                            }, "Progress", Color::success())
                         )
                     },
                     buttonRow(
-                        theme,
+                        theme(),
                         std::vector<Element> {
                             Button {.label = "Play Once", .variant = ButtonVariant::Primary, .onTap = playOnce},
                             Button {.label = "Loop Forever", .variant = ButtonVariant::Secondary, .onTap = loopForever},
@@ -167,7 +182,7 @@ struct PlaybackLab : ViewModifiers<PlaybackLab> {
                         }
                     ),
                     buttonRow(
-                        theme,
+                        theme(),
                         std::vector<Element> {
                             Button {.label = "Pause", .variant = ButtonVariant::Ghost, .disabled = !progress.isRunning() || progress.isPaused(), .onTap = pause},
                             Button {.label = "Resume", .variant = ButtonVariant::Ghost, .disabled = !progress.isPaused(), .onTap = resume},
@@ -183,7 +198,7 @@ struct PlaybackLab : ViewModifiers<PlaybackLab> {
 
 struct MorphLab : ViewModifiers<MorphLab> {
     auto body() const {
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<ThemeKey>();
 
         auto travel = useAnimation<float>(0.f);
         auto width = useAnimation<float>(132.f);
@@ -193,11 +208,11 @@ struct MorphLab : ViewModifiers<MorphLab> {
         auto fill = useAnimation<Color>(Color::accent());
 
         auto calmPreset = [travel, width, height, radius, lift, fill, theme] {
-            WithTransition transition {Transition::ease(std::max(0.01f, theme.durationSlow))};
+            WithTransition transition {Transition::ease(std::max(0.01f, theme().durationSlow))};
             travel = 0.f;
             width = 132.f;
             height = 52.f;
-            radius = theme.radiusLarge;
+            radius = theme().radiusLarge;
             lift = 0.f;
             fill = Color::accent();
         };
@@ -214,19 +229,18 @@ struct MorphLab : ViewModifiers<MorphLab> {
             travel.set(0.35f, Transition::instant());
             width.set(116.f, Transition::instant());
             height.set(40.f, Transition::instant());
-            radius.set(theme.radiusFull, Transition::instant());
+            radius.set(theme().radiusFull, Transition::instant());
             lift.set(10.f, Transition::instant());
             fill.set(Color::success(), Transition::instant());
         };
 
         float const previewWidth = 260.f;
-        float const objectX = 18.f + (previewWidth - *width - 36.f) * std::clamp(*travel, 0.f, 1.f);
 
         return makeSectionCard(
-            theme, "WithTransition Scope",
+            theme(), "WithTransition Scope",
             "A single WithTransition scope lets several useAnimation handles share one easing or spring without repeating the transition at each call site.",
             VStack {
-                .spacing = theme.space3,
+                .spacing = theme().space3,
                 .children = children(
                     ZStack {
                         .horizontalAlignment = Alignment::Start,
@@ -234,7 +248,7 @@ struct MorphLab : ViewModifiers<MorphLab> {
                         .children = children(
                             Rectangle {}
                                 .size(previewWidth, 118.f)
-                                .cornerRadius(theme.radiusLarge)
+                                .cornerRadius(theme().radiusLarge)
                                 .fill(Color::windowBackground())
                                 .stroke(Color::separator(), 1.f),
                             Rectangle {}
@@ -243,24 +257,43 @@ struct MorphLab : ViewModifiers<MorphLab> {
                                 .fill(Color::separator())
                                 .position(16.f, 58.f),
                             Rectangle {}
-                                .size(*width, *height)
-                                .cornerRadius(*radius)
-                                .fill(*fill)
-                                .position(objectX, 32.f + *lift)
+                                .size([width] {
+                                    return width();
+                                }, [height] {
+                                    return height();
+                                })
+                                .cornerRadius([radius] {
+                                    return radius();
+                                })
+                                .fill([fill] {
+                                    return fill();
+                                })
+                                .position([travel, width, previewWidth] {
+                                    return 18.f + (previewWidth - width() - 36.f) *
+                                                   std::clamp(travel(), 0.f, 1.f);
+                                }, [lift] {
+                                    return 32.f + lift();
+                                })
                         )
                     }
                         .size(previewWidth, 118.f),
                     HStack {
-                        .spacing = theme.space3,
+                        .spacing = theme().space3,
                         .alignment = Alignment::Stretch,
                         .children = children(
-                            metricTile(theme, formatFloat(*travel), "Travel", Color::accent()),
-                            metricTile(theme, formatFloat(*width), "Width", Color::warning()),
-                            metricTile(theme, formatFloat(*radius), "Corner radius", Color::success())
+                            metricTile(theme(), [travel] {
+                                return formatFloat(travel());
+                            }, "Travel", Color::accent()),
+                            metricTile(theme(), [width] {
+                                return formatFloat(width());
+                            }, "Width", Color::warning()),
+                            metricTile(theme(), [radius] {
+                                return formatFloat(radius());
+                            }, "Corner radius", Color::success())
                         )
                     },
                     buttonRow(
-                        theme,
+                        theme(),
                         std::vector<Element> {
                             Button {.label = "Calm Ease", .variant = ButtonVariant::Primary, .onTap = calmPreset},
                             Button {.label = "Spring Burst", .variant = ButtonVariant::Secondary, .onTap = springPreset},
@@ -275,46 +308,44 @@ struct MorphLab : ViewModifiers<MorphLab> {
 
 struct AmbientLoopLab : ViewModifiers<AmbientLoopLab> {
     auto body() const {
-        Theme const &theme = useEnvironment<Theme>();
+        auto theme = useEnvironment<ThemeKey>();
 
-        auto phase = useAnimation<float>(
-            0.f,
-            AnimationOptions {
-                .transition = Transition::linear(1.4f),
-                .repeat = AnimationOptions::kRepeatForever,
-                .autoreverse = true,
-            }
-        );
-        if (theme.reducedMotion) {
-            if (phase.isRunning() || std::abs(*phase - 1.f) > 0.001f) {
-                phase.set(1.f, Transition::instant());
-            }
-        } else if (!phase.isRunning()) {
-            if (*phase >= 0.999f) {
-                phase.set(0.f, Transition::instant());
-            }
-            phase.play(1.f);
-        }
+        auto phase = useState(0.f);
+        double const startedAt = nowSeconds();
+        useFrame([phase, startedAt](AnimationTick const& tick) {
+                double const cycle = 2.8;
+                double local = std::fmod(std::max(0.0, tick.nowSeconds - startedAt), cycle) / 1.4;
+                if (local > 1.0) {
+                    local = 2.0 - local;
+                }
+                phase = static_cast<float>(std::clamp(local, 0.0, 1.0));
+            });
 
         std::vector<Element> bars;
         bars.reserve(5);
         for (int i = 0; i < 5; ++i) {
             float const anchor = static_cast<float>(i) / 4.f;
-            float const emphasis = std::clamp(1.f - std::abs(*phase - anchor) * 2.8f, 0.f, 1.f);
-            float const barHeight = 18.f + emphasis * 34.f;
             bars.push_back(
                 Rectangle {}
-                    .size(22.f, barHeight)
+                    .size(22.f, [phase, anchor] {
+                        float const emphasis = loopBarEmphasis(phase(), anchor);
+                        return 18.f + emphasis * 34.f;
+                    })
                     .cornerRadius(11.f)
-                    .fill(alpha(Color::accent(), 0.30f + emphasis * 0.70f))
+                    .fill([theme, phase, anchor] {
+                        float const emphasis = loopBarEmphasis(phase(), anchor);
+                        Color color = theme().accentColor;
+                        color.a = 0.30f + emphasis * 0.70f;
+                        return color;
+                    })
             );
         }
 
         return makeSectionCard(
-            theme, "Auto-Running Loop",
-            "This panel starts a repeating autoreversing animation from body(). When reduced motion is turned on, the loop collapses to its final frame and resumes when motion is re-enabled.",
+            theme(), "Auto-Running Loop",
+            "This panel starts a repeating autoreversing animation from body() and keeps the loop owned by the component scope.",
             VStack {
-                .spacing = theme.space3,
+                .spacing = theme().space3,
                 .children = children(
                     ZStack {
                         .horizontalAlignment = Alignment::Center,
@@ -322,11 +353,11 @@ struct AmbientLoopLab : ViewModifiers<AmbientLoopLab> {
                         .children = children(
                             Rectangle {}
                                 .size(260.f, 104.f)
-                                .cornerRadius(theme.radiusLarge)
+                                .cornerRadius(theme().radiusLarge)
                                 .fill(Color::windowBackground())
                                 .stroke(Color::separator(), 1.f),
                             HStack {
-                                .spacing = theme.space2,
+                                .spacing = theme().space2,
                                 .alignment = Alignment::Center,
                                 .children = std::move(bars),
                             }
@@ -334,12 +365,15 @@ struct AmbientLoopLab : ViewModifiers<AmbientLoopLab> {
                     }
 ,
                     HStack {
-                        .spacing = theme.space3,
+                        .spacing = theme().space3,
                         .alignment = Alignment::Stretch,
                         .children = children(
-                            metricTile(theme, formatFloat(*phase), "Phase", Color::accent()),
-                            metricTile(theme, phase.isRunning() ? "Looping" : "Settled", "Runtime state",
-                                       phase.isRunning() ? Color::success() : Color::warning())
+                            metricTile(theme(), [phase] {
+                                return formatFloat(phase());
+                            }, "Phase", Color::accent()),
+                            metricTile(theme(), [] {
+                                return std::string {"Looping"};
+                            }, "Runtime state", Color::success())
                         )
                     }
                 )
@@ -350,11 +384,9 @@ struct AmbientLoopLab : ViewModifiers<AmbientLoopLab> {
 
 struct AnimationDemoRoot {
     auto body() const {
-        Theme const &windowTheme = useEnvironment<Theme>();
-        auto reducedMotion = useState(false);
+        auto windowTheme = useEnvironment<ThemeKey>();
 
-        Theme demoTheme = windowTheme;
-        demoTheme.reducedMotion = *reducedMotion;
+        Theme demoTheme = windowTheme();
 
         return ScrollView {
             .axis = ScrollAxis::Vertical,
@@ -370,45 +402,12 @@ struct AnimationDemoRoot {
                             .horizontalAlignment = HorizontalAlignment::Leading,
                         },
                         Text {
-                            .text = "Detailed useAnimation walkthrough: explicit play/set controls, repeat and autoreverse, synchronized WithTransition updates, and automatic reduced-motion handling from Theme.",
+                            .text = "Detailed useAnimation walkthrough: explicit play/set controls, repeat and autoreverse, synchronized WithTransition updates, and scoped frame callbacks.",
                             .font = Font::body(),
                             .color = Color::secondary(),
                             .horizontalAlignment = HorizontalAlignment::Leading,
                             .wrapping = TextWrapping::Wrap,
                         },
-                        makeSectionCard(
-                            demoTheme, "Environment",
-                            "The toggle below flips Theme::reducedMotion for the whole demo subtree. Hook-backed animations snap instantly when it is enabled.",
-                            HStack {
-                                .spacing = demoTheme.space3,
-                                .alignment = Alignment::Center,
-                                .children = children(
-                                    VStack {
-                                        .spacing = demoTheme.space1,
-                                        .alignment = Alignment::Start,
-                                        .children = children(
-                                            Text {
-                                                .text = "Reduced motion",
-                                                .font = Font::headline(),
-                                                .color = Color::primary(),
-                                                .horizontalAlignment = HorizontalAlignment::Leading,
-                                            },
-                                            Text {
-                                                .text = *reducedMotion
-                                                            ? "Transitions collapse to their final values."
-                                                            : "Animations run with their configured timing and repeats.",
-                                                .font = Font::footnote(),
-                                                .color = Color::secondary(),
-                                                .horizontalAlignment = HorizontalAlignment::Leading,
-                                                .wrapping = TextWrapping::Wrap,
-                                            }
-                                        )
-                                    }
-                                        .flex(1.f, 1.f, 0.f),
-                                    Toggle {.value = reducedMotion}
-                                )
-                            }
-                        ),
                         PlaybackLab {},
                         MorphLab {},
                         AmbientLoopLab {},
@@ -425,7 +424,7 @@ struct AnimationDemoRoot {
             )
         }
             .fill(demoTheme.windowBackgroundColor)
-            .environment(demoTheme);
+            .environment<ThemeKey>(demoTheme);
     }
 };
 

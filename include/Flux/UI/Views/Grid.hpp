@@ -30,6 +30,7 @@ namespace flux {
 /// `Element`.
 struct Grid : ViewModifiers<Grid> {
   Size measure(MeasureContext&, LayoutConstraints const&, LayoutHints const&, TextSystem&) const;
+  std::unique_ptr<scenegraph::SceneNode> mount(MountContext&) const;
 
   /// Number of columns. Values below 1 are clamped to 1 during layout.
   std::size_t columns = 2;

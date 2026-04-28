@@ -1,18 +1,21 @@
 #include <algorithm>
 #include <numeric>
+#include <string>
 
 #include <Flux/Core/KeyCodes.hpp>
+#include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/Views/TableView.hpp>
+#include <Flux/UI/Views/Badge.hpp>
+#include <Flux/UI/Views/For.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Icon.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/ScrollView.hpp>
 #include <Flux/UI/Views/VStack.hpp>
+#include <Flux/UI/Views/Text.hpp>
 #include <Flux/UI/Views/ZStack.hpp>
 
 namespace flux {
-
-namespace {
 
 struct TableColumnLayout {
     float width = 0.f;
@@ -31,6 +34,39 @@ struct TableColumnIndex {
     std::size_t value = 0;
 
     bool operator==(TableColumnIndex const &) const = default;
+};
+
+struct TableLayoutContextKey {};
+template<>
+struct EnvironmentKey<TableLayoutContextKey> {
+    using Value = TableLayoutContext;
+    static Value defaultValue() { return {}; }
+    static ::flux::detail::EnvironmentSlot const& slot() {
+        static ::flux::detail::EnvironmentSlot s{
+            ::flux::detail::allocateEnvironmentSlot(typeid(TableLayoutContextKey))};
+        return s;
+    }
+};
+
+struct TableColumnIndexKey {};
+template<>
+struct EnvironmentKey<TableColumnIndexKey> {
+    using Value = TableColumnIndex;
+    static Value defaultValue() { return {}; }
+    static ::flux::detail::EnvironmentSlot const& slot() {
+        static ::flux::detail::EnvironmentSlot s{
+            ::flux::detail::allocateEnvironmentSlot(typeid(TableColumnIndexKey))};
+        return s;
+    }
+};
+
+struct RenderedTableRow {
+    std::string key;
+    Element row;
+
+    bool operator==(RenderedTableRow const &other) const {
+        return key == other.key;
+    }
 };
 
 TableRow::Style resolveRowStyle(TableRow::Style const &style, Theme const &theme) {
@@ -117,17 +153,30 @@ bool shouldPlaceBefore(TableView::Item const &lhs, TableView::Item const &rhs, s
     return ascending ? lhsBeforeRhs : rhsBeforeLhs;
 }
 
-Element sortIndicator(bool active, bool ascending, Theme const &theme) {
+Element sortIndicator(std::size_t columnIndex,
+                      Theme const &theme,
+                      Signal<int> sortColumn,
+                      Signal<bool> sortAscending) {
+    int const column = static_cast<int>(columnIndex);
     return Icon {
-        .name = active ? (ascending ? IconName::ArrowUpward : IconName::ArrowDownward) : IconName::Sort,
+        .name = [sortColumn, sortAscending, column] {
+            return sortColumn.get() == column
+                       ? (sortAscending.get() ? IconName::ArrowUpward : IconName::ArrowDownward)
+                       : IconName::Sort;
+        },
         .size = 16.f,
-        .color = active ? theme.accentColor : theme.tertiaryLabelColor,
+        .color = [sortColumn,
+                  column,
+                  accent = theme.accentColor,
+                  tertiary = theme.tertiaryLabelColor] {
+            return sortColumn.get() == column ? accent : tertiary;
+        },
     };
 }
 
-Element makeSortableHeaderCell(Element cell, std::size_t columnIndex, TableColumn::Sort sort, bool active,
-                               bool ascending, Theme const &theme, State<int> sortColumn,
-                               State<bool> sortAscending) {
+Element makeSortableHeaderCell(Element cell, std::size_t columnIndex, TableColumn::Sort sort,
+                               Theme const &theme, Signal<int> sortColumn,
+                               Signal<bool> sortAscending) {
     auto activateSort = [columnIndex, sort = std::move(sort), sortColumn, sortAscending] {
         int const requested = static_cast<int>(columnIndex);
         if (*sortColumn == requested) {
@@ -148,7 +197,10 @@ Element makeSortableHeaderCell(Element cell, std::size_t columnIndex, TableColum
         headerCell.content = HStack {
             .spacing = theme.space1,
             .alignment = Alignment::Center,
-            .children = children(std::move(headerCell.content), sortIndicator(active, ascending, theme)),
+            .children = children(
+                std::move(headerCell.content),
+                sortIndicator(columnIndex, theme, sortColumn, sortAscending)
+            ),
         };
         cell = Element {std::move(headerCell)};
     }
@@ -160,8 +212,8 @@ Element makeSortableHeaderCell(Element cell, std::size_t columnIndex, TableColum
         .onTap(activateSort);
 }
 
-Element decorateHeader(Element header, std::vector<TableColumn> const &columns, int activeColumn, bool ascending,
-                       Theme const &theme, State<int> sortColumn, State<bool> sortAscending) {
+Element decorateHeader(Element header, std::vector<TableColumn> const &columns, Theme const &theme,
+                       Signal<int> sortColumn, Signal<bool> sortAscending) {
     if (!header.is<TableRow>()) {
         return header;
     }
@@ -171,23 +223,89 @@ Element decorateHeader(Element header, std::vector<TableColumn> const &columns, 
         if (!isSortable(columns[i])) {
             continue;
         }
-        row.cells[i] =
-            makeSortableHeaderCell(std::move(row.cells[i]), i, *columns[i].sort, activeColumn == static_cast<int>(i),
-                                   ascending, theme, sortColumn, sortAscending);
+        row.cells[i] = makeSortableHeaderCell(
+            std::move(row.cells[i]),
+            i,
+            *columns[i].sort,
+            theme,
+            sortColumn,
+            sortAscending
+        );
     }
     return Element {std::move(row)};
 }
 
-} // namespace
+std::string itemRowKey(TableView::Item const &item, std::size_t fallbackIndex) {
+    if (item.row.explicitKey()) {
+        return "item:" + *item.row.explicitKey();
+    }
+    return "item:" + std::to_string(fallbackIndex);
+}
+
+std::vector<std::size_t> sortedItemOrder(std::vector<TableView::Item> const &items,
+                                         std::vector<TableColumn> const &columns,
+                                         int activeColumn,
+                                         bool ascending) {
+    std::vector<std::size_t> order(items.size());
+    std::iota(order.begin(), order.end(), 0u);
+    if (TableColumn::Sort const *sort = activeSort(columns, activeColumn)) {
+        std::stable_sort(order.begin(), order.end(), [&](std::size_t lhsIndex, std::size_t rhsIndex) {
+            return shouldPlaceBefore(items[lhsIndex], items[rhsIndex], static_cast<std::size_t>(activeColumn), *sort,
+                                     ascending);
+        });
+    }
+    return order;
+}
+
+std::vector<RenderedTableRow> buildRenderedRows(std::vector<TableView::Item> const &items,
+                                                std::vector<Element> const &rows,
+                                                std::vector<TableColumn> const &columns,
+                                                int activeColumn,
+                                                bool ascending,
+                                                bool showDividers,
+                                                TableView::Style const &resolved) {
+    std::vector<std::size_t> const itemOrder = sortedItemOrder(items, columns, activeColumn, ascending);
+    std::size_t const totalRows = itemOrder.size() + rows.size();
+    std::vector<RenderedTableRow> rendered;
+    rendered.reserve(showDividers && totalRows > 0 ? totalRows * 2u - 1u : totalRows);
+    std::size_t renderedRowCount = 0;
+
+    auto pushDivider = [&] {
+        if (showDividers && renderedRowCount > 0) {
+            rendered.push_back(RenderedTableRow {
+                .key = "divider:" + std::to_string(renderedRowCount),
+                .row = divider(resolved.dividerColor, resolved.dividerInsetH),
+            });
+        }
+    };
+
+    for (std::size_t index : itemOrder) {
+        pushDivider();
+        rendered.push_back(RenderedTableRow {
+            .key = itemRowKey(items[index], index),
+            .row = items[index].row,
+        });
+        ++renderedRowCount;
+    }
+    for (std::size_t i = 0; i < rows.size(); ++i) {
+        pushDivider();
+        rendered.push_back(RenderedTableRow {
+            .key = "row:" + std::to_string(i),
+            .row = rows[i],
+        });
+        ++renderedRowCount;
+    }
+    return rendered;
+}
 
 Element TableCell::body() const {
-    TableLayoutContext const &table = useEnvironment<TableLayoutContext>();
-    TableColumnIndex const &index = useEnvironment<TableColumnIndex>();
+    auto table = useEnvironment<TableLayoutContextKey>();
+    auto index = useEnvironment<TableColumnIndexKey>();
 
     float resolvedWidth = style.width > 0.f ? style.width : 0.f;
     bool usesTableFlex = false;
-    if (index.value < table.columns.size()) {
-        TableColumnLayout const &column = table.columns[index.value];
+    if (index().value < table().columns.size()) {
+        TableColumnLayout const &column = table().columns[index().value];
         if (column.width > 0.f) {
             resolvedWidth = column.width;
         } else if (column.flexGrow > 0.f) {
@@ -200,8 +318,15 @@ Element TableCell::body() const {
         return cellContent;
     }
 
+    bool const stretchesContent = cellContent.is<Text>() || cellContent.is<Badge>();
+    if (cellContent.is<Text>()) {
+        Text text = cellContent.as<Text>();
+        text.horizontalAlignment = style.alignment;
+        cellContent = Element {std::move(text)};
+    }
+
     Element aligned = ZStack {
-        .horizontalAlignment = resolveHorizontalAlignment(style.alignment),
+        .horizontalAlignment = stretchesContent ? Alignment::Stretch : resolveHorizontalAlignment(style.alignment),
         .verticalAlignment = Alignment::Center,
         .children = children(std::move(cellContent)),
     };
@@ -212,17 +337,20 @@ Element TableCell::body() const {
 }
 
 Element TableRow::body() const {
-    Theme const &theme = useEnvironment<Theme>();
-    TableRow::Style const resolved = resolveRowStyle(style, theme);
-    TableLayoutContext const &table = useEnvironment<TableLayoutContext>();
-    bool const hovered = useHover();
-    bool const pressed = usePress();
+    auto theme = useEnvironment<ThemeKey>();
+    TableRow::Style const resolved = resolveRowStyle(style, theme());
+    auto table = useEnvironment<TableLayoutContextKey>();
+    Reactive::Signal<bool> hovered = useHover();
+    Reactive::Signal<bool> pressed = usePress();
     bool const interactive = !disabled && static_cast<bool>(onTap);
 
-    Color const fill = selected ? resolved.selectedBackgroundColor :
-                      pressed && interactive ? resolved.hoverBackgroundColor :
-                      hovered ? resolved.hoverBackgroundColor :
-                                resolved.backgroundColor;
+    Reactive::Bindable<Color> const fill{[selected = selected, pressed, hovered,
+                                          interactive, resolved] {
+        return selected                     ? resolved.selectedBackgroundColor :
+               pressed.get() && interactive ? resolved.hoverBackgroundColor :
+               hovered.get()                ? resolved.hoverBackgroundColor :
+                                              resolved.backgroundColor;
+    }};
 
     auto handleTap = [onTap = onTap, disabled = disabled] {
         if (!disabled && onTap) {
@@ -239,9 +367,9 @@ Element TableRow::body() const {
     rowCells.reserve(cells.size());
     for (std::size_t i = 0; i < cells.size(); ++i) {
         Element cell = cells[i];
-        cell = std::move(cell).environment(TableColumnIndex {.value = i});
-        if (i < table.columns.size()) {
-            TableColumnLayout const &column = table.columns[i];
+        cell = std::move(cell).environment<TableColumnIndexKey>(TableColumnIndex {.value = i});
+        if (i < table().columns.size()) {
+            TableColumnLayout const &column = table().columns[i];
             if (column.width <= 0.f && column.flexGrow > 0.f) {
                 cell = std::move(cell).flex(column.flexGrow, 1.f, 0.f);
             }
@@ -258,7 +386,7 @@ Element TableRow::body() const {
             .children = std::move(rowCells),
         }
             .padding(resolved.paddingV, resolved.paddingH, resolved.paddingV, resolved.paddingH)
-            .fill(FillStyle::solid(fill))
+            .fill(fill)
     );
     if (detail) {
         childrenList.push_back(*detail);
@@ -277,10 +405,10 @@ Element TableRow::body() const {
 }
 
 Element TableView::body() const {
-    Theme const &theme = useEnvironment<Theme>();
-    TableView::Style const resolved = resolveTableStyle(style, theme);
-    State<int> const sortColumn = useState<int>(-1);
-    State<bool> const sortAscending = useState<bool>(true);
+    auto theme = useEnvironment<ThemeKey>();
+    TableView::Style const resolved = resolveTableStyle(style, theme());
+    Signal<int> const sortColumn = useState<int>(-1);
+    Signal<bool> const sortAscending = useState<bool>(true);
     TableLayoutContext layout {};
     layout.columns.reserve(columns.size());
     for (TableColumn const &column : columns) {
@@ -290,42 +418,34 @@ Element TableView::body() const {
         });
     }
 
-    int const activeColumn = activeSort(columns, *sortColumn) ? *sortColumn : -1;
-    std::vector<std::size_t> itemOrder(items.size());
-    std::iota(itemOrder.begin(), itemOrder.end(), 0u);
-    if (TableColumn::Sort const *sort = activeSort(columns, activeColumn)) {
-        std::stable_sort(itemOrder.begin(), itemOrder.end(), [&](std::size_t lhsIndex, std::size_t rhsIndex) {
-            return shouldPlaceBefore(items[lhsIndex], items[rhsIndex], static_cast<std::size_t>(activeColumn), *sort,
-                                     *sortAscending);
-        });
-    }
+    int const activeColumn = activeSort(columns, sortColumn.get()) ? sortColumn.get() : -1;
+    Signal<std::vector<RenderedTableRow>> const renderedRows = useState<std::vector<RenderedTableRow>>(
+        buildRenderedRows(items, rows, columns, activeColumn, sortAscending.get(), showDividers, resolved)
+    );
+    useEffect([renderedRows,
+               items = items,
+               rows = rows,
+               columns = columns,
+               showDividers = showDividers,
+               resolved,
+               sortColumn,
+               sortAscending] {
+        int const column = activeSort(columns, sortColumn.get()) ? sortColumn.get() : -1;
+        renderedRows = buildRenderedRows(items, rows, columns, column, sortAscending.get(), showDividers, resolved);
+    });
 
-    std::size_t const totalRows = itemOrder.size() + rows.size();
-    std::vector<Element> rowChildren;
-    rowChildren.reserve(showDividers && totalRows > 0 ? totalRows * 2u - 1u : totalRows);
-    std::size_t renderedRowCount = 0;
-    for (std::size_t index : itemOrder) {
-        if (showDividers && renderedRowCount > 0) {
-            rowChildren.push_back(divider(resolved.dividerColor, resolved.dividerInsetH));
-        }
-        Element row = items[index].row;
-        rowChildren.push_back(std::move(row).environment(layout));
-        ++renderedRowCount;
-    }
-    for (std::size_t i = 0; i < rows.size(); ++i) {
-        if (showDividers && renderedRowCount > 0) {
-            rowChildren.push_back(divider(resolved.dividerColor, resolved.dividerInsetH));
-        }
-        Element row = rows[i];
-        rowChildren.push_back(std::move(row).environment(layout));
-        ++renderedRowCount;
-    }
-
-    Element bodyContent = VStack {
-        .spacing = 0.f,
-        .alignment = Alignment::Stretch,
-        .children = std::move(rowChildren),
-    };
+    Element bodyContent = Element {For<RenderedTableRow>(
+        renderedRows,
+        [](RenderedTableRow const &row) {
+            return row.key;
+        },
+        [layout](RenderedTableRow const &row) {
+            Element element = row.row;
+            return std::move(element).environment<TableLayoutContextKey>(layout);
+        },
+        0.f,
+        Alignment::Stretch
+    )};
 
     Element bodyElement = scrollBody
                               ? Element {ScrollView {
@@ -340,11 +460,10 @@ Element TableView::body() const {
     if (header) {
         Element headerRow = *header;
         if (!items.empty()) {
-            headerRow =
-                decorateHeader(std::move(headerRow), columns, activeColumn, *sortAscending, theme, sortColumn, sortAscending);
+            headerRow = decorateHeader(std::move(headerRow), columns, theme(), sortColumn, sortAscending);
         }
-        childrenList.push_back(std::move(headerRow).environment(layout));
-        if (showDividers && totalRows > 0) {
+        childrenList.push_back(std::move(headerRow).environment<TableLayoutContextKey>(layout));
+        if (showDividers && (!items.empty() || !rows.empty())) {
             childrenList.push_back(divider(resolved.dividerColor, resolved.dividerInsetH));
         }
     }

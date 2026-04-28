@@ -1,37 +1,44 @@
-# Declarative UI: `body()` view trees
+# Declarative UI Body Style
 
-Conventions for the `auto body() const` member that returns a Flux view (designated-initializer tree). See [`examples/stack-demo/main.cpp`](../examples/stack-demo/main.cpp) for a full, formatted example.
+Use these conventions for `Element body() const` or `auto body() const` members that return Flux view trees.
 
 ## Indentation
 
-- Use **2 spaces** per nesting level (same as the rest of the project; see [`conventions.md`](conventions.md)).
-- **`return ViewType{`** sits one indent level inside `body()`.
-- **Fields** of a view (`.spacing`, `.children`, etc.) are indented **one level** past the line that opens that view’s `{`.
-- Inside **`.children = {`**, each sibling is indented **one more level** than the `.children` line so the hierarchy reads as a clear staircase.
+- Use 2 spaces per nesting level.
+- Put `return ViewType{` one indent inside `body()`.
+- Put designated-initializer fields one indent deeper than the view opener.
+- Inside `.children = children(...)`, put each sibling on its own line when the list is not trivial.
 
-## Braces and types
+## Braces And Types
 
-- Prefer **`ViewType {`** (space before `{`) for multi-line trees.
-- **Designated initializers:** one **`.member = value`** per line; keep short nested aggregates on one line when readable (e.g. `.font = {.size = …, .weight = …}`).
-- **Trailing commas** after the last field in a multi-line initializer are fine and match common struct style.
+- Prefer `ViewType{` for designated-initializer trees.
+- Use one `.member = value` per line in multi-line initializers.
+- Keep short nested aggregates on one line when readable.
+- Trailing commas are fine in multi-line initializers.
 
 ## Structure
 
-- **Root** is often a scroll container (`ScrollView`, etc.) with layout fields (axis, flex) and a single **`.children`** entry that is the main stack.
-- **Stacks** (`VStack`, `HStack`, `ZStack`): set spacing and alignment, **`.children = {`** and list siblings; chain **`.padding(…)`** on the stack when you need inset (same as other `ViewModifiers`).
-- **Nesting:** each inner `VStack` / `HStack` is a full indented block at the depth of its siblings—do not outdent inner stacks so they look like they leave the parent’s `children` array.
+- Use `VStack`, `HStack`, and `ZStack` for layout.
+- Keep nested stacks indented at the depth of their sibling.
+- Use `Element{...}` only when a composite needs explicit type erasure.
+- Use `For`, `Show`, and `Switch` when subtree shape changes reactively.
 
-## Wrapping and modifiers
+## Modifiers
 
-- Views that inherit **`ViewModifiers`** (e.g. `Text`, `Rectangle`, `Button`) can call **`padding`**, **`background`**, **`size`**, **`flex`**, **`environment`**, etc. directly on the struct; each returns an **`Element`** so you can chain: `Text{…}.padding(8.f).background(fill).flex(1.f)`.
-- When you need an **`Element{…}`** wrapper (e.g. wrapping a composite that does not use `ViewModifiers`), put the inner view’s fields one indent inside **`Element {`**, and keep chained calls such as **`.flex(…)`** on the closing `}` before the comma.
-- See **Element modifiers** in [`layout-system.md`](layout-system.md) for how decoration maps to the scene graph (single merged `RectNode` / `LayerNode` path) and how **`LayoutHints`** (stack alignment) are forwarded through modifier builds so **`Rectangle`** chains like **`.cornerRadius(…).flex(…)`** behave like unmodified rects inside **`VStack`** / **`HStack`**.
+Views that support modifiers can chain calls such as:
 
-## Colors and `main`
+```cpp
+Text{
+  .text = "Ready",
+  .font = Font::headline(),
+  .color = Color::primary(),
+}.padding(theme.space3)
+ .fill(Color::controlBackground())
+ .cornerRadius(theme.radiusMedium);
+```
 
-- **Shared colors:** a small **`namespace pal { constexpr Color … }`** (or equivalent) at file scope; reference as **`pal::name`** in views.
-- **`main`:** `Application` → **`createWindow<Window>({ … })`** with window fields indented consistently → **`setView<RootType>()`** → **`app.exec()`**.
+Use `Bindable<T>` overloads when a mounted scene-node property should update after mount.
 
 ## Includes
 
-- Include **`Flux/UI/UI.hpp`** (and any view headers you use: `VStack.hpp`, `Text.hpp`, etc.). Prefer the same include order as sibling examples: umbrella/core, then UI, then views.
+Applications usually include `Flux.hpp`, `Flux/UI/UI.hpp`, and the specific view headers they use. Keep examples in the same order as nearby examples: umbrella/core headers, UI headers, view headers, then standard library headers.

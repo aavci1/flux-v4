@@ -10,8 +10,14 @@
 #include <Flux/UI/ViewModifiers.hpp>
 
 #include <functional>
+#include <memory>
 
 namespace flux {
+
+class MountContext;
+namespace scenegraph {
+class SceneNode;
+}
 
 struct Render : ViewModifiers<Render> {
   std::function<Size(LayoutConstraints const&, LayoutHints const&)> measureFn{};
@@ -25,6 +31,7 @@ struct Render : ViewModifiers<Render> {
 
   Size measure(MeasureContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
                TextSystem& textSystem) const;
+  std::unique_ptr<scenegraph::SceneNode> mount(MountContext& ctx) const;
 
   Size measure(LayoutConstraints const& constraints, LayoutHints const& hints) const {
     if (measureFn) {

@@ -2,38 +2,55 @@
 
 #include <Flux/SceneGraph/RenderNode.hpp>
 #include <Flux/UI/MeasureContext.hpp>
+#include <Flux/UI/MountContext.hpp>
 
-#include "UI/Build/ComponentBuildContext.hpp"
-#include "UI/Build/ComponentBuildSupport.hpp"
+#include <algorithm>
+#include <cmath>
 
 namespace flux {
 
-Size Render::measure(MeasureContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints,
-                     TextSystem&) const {
+namespace {
+
+Size assignedSize(LayoutConstraints const& constraints, Size measured) {
+  Size size = measured;
+  if (std::isfinite(constraints.maxWidth) && constraints.maxWidth > 0.f) {
+    size.width = constraints.maxWidth;
+  }
+  if (std::isfinite(constraints.maxHeight) && constraints.maxHeight > 0.f) {
+    size.height = constraints.maxHeight;
+  }
+  size.width = std::max(size.width, constraints.minWidth);
+  size.height = std::max(size.height, constraints.minHeight);
+  return Size{std::max(0.f, size.width), std::max(0.f, size.height)};
+}
+
+} // namespace
+
+Size Render::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
+                     LayoutHints const& hints, TextSystem&) const {
   ctx.advanceChildSlot();
   return measure(constraints, hints);
 }
 
-namespace detail {
-
-ComponentBuildResult buildMeasuredComponent(Render const& renderView, ComponentBuildContext& ctx,
-                                            std::unique_ptr<scenegraph::SceneNode> existing) {
-  (void)existing;
-  Rect const frameRect =
-      build::assignedFrameForLeaf(ctx.paddedContentSize(), ctx.innerConstraints(), ctx.contentAssignedSize(),
-                                  ctx.hasAssignedWidth(), ctx.hasAssignedHeight(), ctx.modifiers(),
-                                  ctx.hints());
-
-  auto renderNode = std::make_unique<scenegraph::RenderNode>(frameRect, renderView.draw, renderView.pure);
-  renderNode->setBounds(Rect{0.f, 0.f, frameRect.width, frameRect.height});
-
-  ComponentBuildResult result{};
-  result.node = std::move(renderNode);
-  result.geometrySize = ctx.layoutOuterSize();
-  result.hasGeometrySize = true;
-  return result;
+std::unique_ptr<scenegraph::SceneNode> Render::mount(MountContext& ctx) const {
+  Size const measured = measure(ctx.constraints(), ctx.hints());
+  Size const size = assignedSize(ctx.constraints(), measured);
+  auto node = std::make_unique<scenegraph::RenderNode>(
+      Rect{0.f, 0.f, size.width, size.height}, draw, pure);
+  auto* rawNode = node.get();
+  auto measure = measureFn;
+  LayoutHints hints = ctx.hints();
+  rawNode->setLayoutConstraints(ctx.constraints());
+  rawNode->setRelayout([rawNode, measure = std::move(measure),
+                        hints](LayoutConstraints const& constraints) mutable {
+    Size measured{};
+    if (measure) {
+      measured = measure(constraints, hints);
+    }
+    Size const nextSize = assignedSize(constraints, measured);
+    rawNode->setSize(nextSize);
+  });
+  return node;
 }
-
-} // namespace detail
 
 } // namespace flux

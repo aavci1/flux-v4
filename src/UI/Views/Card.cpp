@@ -13,8 +13,12 @@ Card::Style resolveStyle(Card::Style const &style, Theme const &theme) {
       .paddingV = resolveFloat(style.paddingV, padding),
       .cornerRadius = resolveFloat(style.cornerRadius, theme.radiusXLarge),
       .borderWidth = resolveFloat(style.borderWidth, 1.f),
-      .backgroundColor = resolveColor(style.backgroundColor, theme.elevatedBackgroundColor, theme),
-      .borderColor = resolveColor(style.borderColor, theme.separatorColor, theme),
+      .backgroundColor = [background = style.backgroundColor, theme] {
+        return resolveColor(background.evaluate(), theme.elevatedBackgroundColor, theme);
+      },
+      .borderColor = [border = style.borderColor, theme] {
+        return resolveColor(border.evaluate(), theme.separatorColor, theme);
+      },
       .shadow = style.shadow,
   };
 }
@@ -22,17 +26,20 @@ Card::Style resolveStyle(Card::Style const &style, Theme const &theme) {
 } // namespace
 
 Element Card::body() const {
-  Card::Style const resolved = resolveStyle(style, useEnvironment<Theme>());
+  Card::Style const resolved = resolveStyle(style, useEnvironment<ThemeKey>()());
 
-  StrokeStyle const stroke =
-      resolved.borderWidth <= 0.f || resolved.borderColor.a <= 0.001f
-          ? StrokeStyle::none()
-          : StrokeStyle::solid(resolved.borderColor, resolved.borderWidth);
+  Reactive::Bindable<StrokeStyle> const stroke{[borderWidth = resolved.borderWidth,
+                                                borderColor = resolved.borderColor] {
+    Color const color = borderColor.evaluate();
+    return borderWidth <= 0.f || color.a <= 0.001f
+        ? StrokeStyle::none()
+        : StrokeStyle::solid(color, borderWidth);
+  }};
 
   Element content = child;
   return std::move(content)
       .padding(resolved.paddingV, resolved.paddingH, resolved.paddingV, resolved.paddingH)
-      .fill(FillStyle::solid(resolved.backgroundColor))
+      .fill(resolved.backgroundColor)
       .stroke(stroke)
       .cornerRadius(CornerRadius {resolved.cornerRadius})
       .shadow(resolved.shadow);

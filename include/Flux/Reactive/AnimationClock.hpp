@@ -6,9 +6,9 @@
 
 
 #include <Flux/Reactive/Observer.hpp>
+#include <Flux/Reactive/SmallFn.hpp>
 
 #include <cstdint>
-#include <functional>
 #include <vector>
 
 namespace flux {
@@ -16,6 +16,8 @@ namespace flux {
 class AnimationBase;
 class Application;
 class EventQueue;
+template<typename Fn>
+void useFrame(Fn&& callback);
 
 /// One tick from the shared frame pump (`steady_clock` domain, same as `FrameEvent::deadlineNanos`).
 struct AnimationTick {
@@ -35,24 +37,26 @@ public:
   void registerAnimation(AnimationBase* animation);
   void unregisterAnimation(AnimationBase* animation);
 
-  /// Subscribe to the shared animation tick. The callback must not assume a full frame will be presented — only call
-  /// `Window::requestRedraw()` or `Application::markReactiveDirty()` when output actually changes.
-  ObserverHandle subscribe(std::function<void(AnimationTick const&)> callback);
-  void unsubscribe(ObserverHandle handle);
-
 private:
   friend class Application;
+  template<typename Fn>
+  friend void useFrame(Fn&& callback);
 
   AnimationClock();
 
   bool needsFramePump() const;
+  /// Subscribe to the shared animation tick. The callback must not assume a full frame will be presented — only call
+  /// `Window::requestRedraw()` when output actually changes.
+  ObserverHandle subscribe(Reactive::SmallFn<void(AnimationTick const&)> callback);
+  void unsubscribe(ObserverHandle handle);
   void onTick(std::int64_t deadlineNanos);
   void startFramePump();
   void stopFramePump();
 
   struct Subscriber {
     std::uint64_t id = 0;
-    std::function<void(AnimationTick const&)> callback;
+    Reactive::SmallFn<void(AnimationTick const&)> callback;
+    bool active = true;
   };
 
   std::vector<AnimationBase*> active_;
@@ -62,6 +66,8 @@ private:
   bool running_ = false;
   bool installed_ = false;
   bool framePulseQueued_ = false;
+  bool dispatchingSubscribers_ = false;
+  bool subscribersNeedCompaction_ = false;
 };
 
 } // namespace flux

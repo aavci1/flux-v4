@@ -1,4 +1,5 @@
 #include <Flux/Core/KeyCodes.hpp>
+#include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Views/ListView.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
@@ -25,15 +26,18 @@ ListView::Style resolveListStyle(ListView::Style const &style, Theme const &them
 } // namespace
 
 Element ListRow::body() const {
-    Theme const &theme = useEnvironment<Theme>();
-    ListRow::Style const resolved = resolveRowStyle(style, theme);
-    bool const hovered = useHover();
-    bool const pressed = usePress();
+    auto theme = useEnvironment<ThemeKey>();
+    ListRow::Style const resolved = resolveRowStyle(style, theme());
+    Reactive::Signal<bool> hovered = useHover();
+    Reactive::Signal<bool> pressed = usePress();
     bool const isDisabled = disabled;
 
-    Color const fill = selected ? theme.selectedContentBackgroundColor : pressed ? theme.rowHoverBackgroundColor :
-                                                        hovered     ? theme.hoveredControlBackgroundColor :
-                                                                      Colors::transparent;
+    Reactive::Bindable<Color> const fill{[selected = selected, pressed, hovered, theme] {
+        return selected      ? theme().selectedContentBackgroundColor :
+               pressed.get() ? theme().rowHoverBackgroundColor :
+               hovered.get() ? theme().hoveredControlBackgroundColor :
+                               Colors::transparent;
+    }};
 
     auto handleTap = [onTap = onTap, isDisabled]() {
         if (!isDisabled && onTap) {
@@ -49,7 +53,7 @@ Element ListRow::body() const {
     Element rowContent = content;
     return std::move(rowContent)
         .padding(resolved.paddingV, resolved.paddingH, resolved.paddingV, resolved.paddingH)
-        .fill(FillStyle::solid(fill))
+        .fill(fill)
         .cursor(isDisabled ? Cursor::Arrow : Cursor::Hand)
         .focusable(!isDisabled)
         .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)>{} : std::function<void(KeyCode, Modifiers)>{handleKey})
@@ -57,8 +61,8 @@ Element ListRow::body() const {
 }
 
 Element ListView::body() const {
-    Theme const &theme = useEnvironment<Theme>();
-    ListView::Style const resolved = resolveListStyle(style, theme);
+    auto theme = useEnvironment<ThemeKey>();
+    ListView::Style const resolved = resolveListStyle(style, theme());
 
     std::vector<Element> childrenList;
     childrenList.reserve(showDividers && !rows.empty() ? rows.size() * 2 - 1 : rows.size());
