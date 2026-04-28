@@ -15,6 +15,8 @@ detail::ElementModifiers::ElementModifiers(detail::ElementModifiers const& o)
     , positionY(o.positionY)
     , sizeWidth(o.sizeWidth)
     , sizeHeight(o.sizeHeight)
+    , hasSizeWidth(o.hasSizeWidth)
+    , hasSizeHeight(o.hasSizeHeight)
     , overlay(o.overlay ? std::make_unique<Element>(*o.overlay) : nullptr)
     , onTap(o.onTap)
     , onPointerEnter(o.onPointerEnter)
@@ -45,6 +47,8 @@ detail::ElementModifiers& detail::ElementModifiers::operator=(detail::ElementMod
     positionY = o.positionY;
     sizeWidth = o.sizeWidth;
     sizeHeight = o.sizeHeight;
+    hasSizeWidth = o.hasSizeWidth;
+    hasSizeHeight = o.hasSizeHeight;
     overlay = o.overlay ? std::make_unique<Element>(*o.overlay) : nullptr;
     onTap = o.onTap;
     onPointerEnter = o.onPointerEnter;
@@ -114,16 +118,22 @@ Element Element::size(Reactive::Bindable<float> width, Reactive::Bindable<float>
   detail::ElementModifiers& modifiers = writableModifiers();
   modifiers.sizeWidth = std::move(width);
   modifiers.sizeHeight = std::move(height);
+  modifiers.hasSizeWidth = true;
+  modifiers.hasSizeHeight = true;
   return std::move(*this);
 }
 
 Element Element::width(Reactive::Bindable<float> w) && {
-  writableModifiers().sizeWidth = std::move(w);
+  detail::ElementModifiers& modifiers = writableModifiers();
+  modifiers.sizeWidth = std::move(w);
+  modifiers.hasSizeWidth = true;
   return std::move(*this);
 }
 
 Element Element::height(Reactive::Bindable<float> h) && {
-  writableModifiers().sizeHeight = std::move(h);
+  detail::ElementModifiers& modifiers = writableModifiers();
+  modifiers.sizeHeight = std::move(h);
+  modifiers.hasSizeHeight = true;
   return std::move(*this);
 }
 

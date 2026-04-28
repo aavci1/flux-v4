@@ -76,6 +76,10 @@ Size Element::measureWithModifiersImpl(MeasureContext& ctx, LayoutConstraints co
   float const height = m.sizeHeight.evaluate();
   float const resolvedWidth = detail::resolvedModifierWidth(constraints, hints, width);
   float const resolvedHeight = detail::resolvedModifierHeight(constraints, hints, height);
+  bool const hasResolvedWidth =
+      detail::hasResolvedModifierWidth(constraints, hints, m.hasSizeWidth);
+  bool const hasResolvedHeight =
+      detail::hasResolvedModifierHeight(constraints, hints, m.hasSizeHeight);
   LayoutConstraints innerCs = constraints;
   if (padW > 0.f || padH > 0.f) {
     if (std::isfinite(innerCs.maxWidth)) {
@@ -87,12 +91,12 @@ Size Element::measureWithModifiersImpl(MeasureContext& ctx, LayoutConstraints co
     innerCs.minWidth = std::max(0.f, innerCs.minWidth - padW);
     innerCs.minHeight = std::max(0.f, innerCs.minHeight - padH);
   }
-  if (resolvedWidth > 0.f) {
+  if (hasResolvedWidth) {
     float const innerWidth = std::max(0.f, resolvedWidth - padW);
     innerCs.maxWidth = innerWidth;
     innerCs.minWidth = innerWidth;
   }
-  if (resolvedHeight > 0.f) {
+  if (hasResolvedHeight) {
     float const innerHeight = std::max(0.f, resolvedHeight - padH);
     innerCs.maxHeight = innerHeight;
     innerCs.minHeight = innerHeight;
@@ -117,22 +121,22 @@ Size Element::measureWithModifiersImpl(MeasureContext& ctx, LayoutConstraints co
     sz.width += padW;
     sz.height += padH;
   }
-  if (resolvedWidth > 0.f) {
+  if (hasResolvedWidth) {
     sz.width = resolvedWidth;
   }
-  if (resolvedHeight > 0.f) {
+  if (hasResolvedHeight) {
     sz.height = resolvedHeight;
   }
-  if (resolvedWidth <= 0.f) {
+  if (!hasResolvedWidth) {
     sz.width = std::max(sz.width, constraints.minWidth);
   }
-  if (resolvedHeight <= 0.f) {
+  if (!hasResolvedHeight) {
     sz.height = std::max(sz.height, constraints.minHeight);
   }
-  if (resolvedWidth <= 0.f && std::isfinite(constraints.maxWidth)) {
+  if (!hasResolvedWidth && std::isfinite(constraints.maxWidth)) {
     sz.width = std::min(sz.width, constraints.maxWidth);
   }
-  if (resolvedHeight <= 0.f && std::isfinite(constraints.maxHeight)) {
+  if (!hasResolvedHeight && std::isfinite(constraints.maxHeight)) {
     sz.height = std::min(sz.height, constraints.maxHeight);
   }
   return sz;

@@ -94,6 +94,7 @@ void SceneNode::setPosition(Point position) {
     }
     bounds_.x = position.x;
     bounds_.y = position.y;
+    markSubtreeDirty();
 }
 
 void SceneNode::setSize(Size size) {
@@ -111,6 +112,7 @@ void SceneNode::setTransform(Mat3 const &transformValue) {
         return;
     }
     transform_ = transformValue;
+    markSubtreeDirty();
 }
 
 void SceneNode::setLayoutFlow(LayoutFlow flow) noexcept {

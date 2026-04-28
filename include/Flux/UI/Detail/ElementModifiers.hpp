@@ -89,6 +89,8 @@ struct ElementModifiers {
   Reactive::Bindable<float> positionY{0.f};
   Reactive::Bindable<float> sizeWidth{0.f};
   Reactive::Bindable<float> sizeHeight{0.f};
+  bool hasSizeWidth = false;
+  bool hasSizeHeight = false;
   std::unique_ptr<Element> overlay;
 
   std::function<void()> onTap;
@@ -126,12 +128,10 @@ struct ElementModifiers {
     auto const tr = translation.evaluate();
     auto const px = positionX.evaluate();
     auto const py = positionY.evaluate();
-    auto const sw = sizeWidth.evaluate();
-    auto const sy = sizeHeight.evaluate();
     return !p.isZero() || !f.isNone() || !s.isNone() || !sh.isNone() ||
            !cr.isZero() || op < 1.f - 1e-6f || std::fabs(tr.x) > 1e-6f ||
            std::fabs(tr.y) > 1e-6f || clip || std::fabs(px) > 1e-6f ||
-           std::fabs(py) > 1e-6f || hasInteraction() || sw > 0.f || sy > 0.f ||
+           std::fabs(py) > 1e-6f || hasInteraction() || hasSizeWidth || hasSizeHeight ||
            overlay != nullptr;
   }
 
