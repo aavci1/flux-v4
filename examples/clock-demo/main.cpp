@@ -35,11 +35,6 @@ Color withAlpha(Color c, float alpha) {
   return c;
 }
 
-bool debugClock() {
-  static bool const enabled = std::getenv("FLUX_DEBUG_CLOCK") != nullptr;
-  return enabled;
-}
-
 ClockSnapshot readClock(double dayOffset = 0.0) {
   using namespace std::chrono;
 
@@ -182,10 +177,6 @@ struct ClockFace : ViewModifiers<ClockFace> {
         lastRawSecond = next.rawSecondOfDay;
         clock = std::move(next);
         redrawUntil = tick.nowSeconds + kSecondHandSettleSeconds;
-        if (debugClock()) {
-          std::fprintf(stderr, "[clock] tick targetSecondAngle=%.2f redrawUntil=%.3f\n",
-                       static_cast<float>(clock.peek().seconds * 6.0), redrawUntil);
-        }
         Application::instance().requestRedraw();
       } else if (tick.nowSeconds < redrawUntil) {
         Application::instance().requestRedraw();
@@ -219,14 +210,6 @@ struct ClockFace : ViewModifiers<ClockFace> {
           return Size{std::max(1.f, width), std::max(1.f, height)};
         },
         .draw = [theme, clock, hour, minute, second](Canvas& canvas, Rect frame) {
-          if (debugClock()) {
-            static int samples = 0;
-            if (samples < 160) {
-              std::fprintf(stderr, "[clock] render secondAngle=%.2f target=%.2f\n",
-                           second.peek(), static_cast<float>(clock.peek().seconds * 6.0));
-              ++samples;
-            }
-          }
           drawClock(canvas, frame, theme(), hour.peek(), minute.peek(), second.peek(),
                     clock.peek().label);
         },
