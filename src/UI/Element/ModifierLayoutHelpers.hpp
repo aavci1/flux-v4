@@ -53,4 +53,16 @@ inline float resolvedModifierHeight(LayoutConstraints const& constraints,
   return assigned > 0.f ? assigned : explicitHeight;
 }
 
+inline bool hasResolvedModifierWidth(LayoutConstraints const& constraints,
+                                     LayoutHints const& hints,
+                                     bool hasExplicitWidth) {
+  return modifierStackAssignedWidth(constraints, hints) > 0.f || hasExplicitWidth;
+}
+
+inline bool hasResolvedModifierHeight(LayoutConstraints const& constraints,
+                                      LayoutHints const& hints,
+                                      bool hasExplicitHeight) {
+  return modifierStackAssignedHeight(constraints, hints) > 0.f || hasExplicitHeight;
+}
+
 } // namespace flux::detail

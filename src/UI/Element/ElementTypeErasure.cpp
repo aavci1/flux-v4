@@ -49,18 +49,21 @@ LayoutConstraints insetConstraints(LayoutConstraints constraints, EdgeInsets pad
 }
 
 LayoutConstraints modifierInnerConstraints(LayoutConstraints constraints, EdgeInsets padding,
-                                           LayoutHints const& hints, float width, float height) {
+                                           LayoutHints const& hints, float width, float height,
+                                           bool hasWidth, bool hasHeight) {
   float const dx = std::max(0.f, padding.left) + std::max(0.f, padding.right);
   float const dy = std::max(0.f, padding.top) + std::max(0.f, padding.bottom);
   float const resolvedWidth = detail::resolvedModifierWidth(constraints, hints, width);
   float const resolvedHeight = detail::resolvedModifierHeight(constraints, hints, height);
+  bool const hasResolvedWidth = detail::hasResolvedModifierWidth(constraints, hints, hasWidth);
+  bool const hasResolvedHeight = detail::hasResolvedModifierHeight(constraints, hints, hasHeight);
   constraints = insetConstraints(constraints, padding);
-  if (resolvedWidth > 0.f) {
+  if (hasResolvedWidth) {
     float const innerWidth = std::max(0.f, resolvedWidth - dx);
     constraints.maxWidth = innerWidth;
     constraints.minWidth = innerWidth;
   }
-  if (resolvedHeight > 0.f) {
+  if (hasResolvedHeight) {
     float const innerHeight = std::max(0.f, resolvedHeight - dy);
     constraints.maxHeight = innerHeight;
     constraints.minHeight = innerHeight;
@@ -75,13 +78,16 @@ LayoutConstraints modifierInnerConstraints(LayoutConstraints constraints, EdgeIn
 }
 
 Size resolveModifierOuterSize(Size size, LayoutConstraints const& constraints,
-                              LayoutHints const& hints, float width, float height) {
+                              LayoutHints const& hints, float width, float height,
+                              bool hasWidth, bool hasHeight) {
   float const resolvedWidth = detail::resolvedModifierWidth(constraints, hints, width);
   float const resolvedHeight = detail::resolvedModifierHeight(constraints, hints, height);
-  if (resolvedWidth > 0.f) {
+  bool const hasResolvedWidth = detail::hasResolvedModifierWidth(constraints, hints, hasWidth);
+  bool const hasResolvedHeight = detail::hasResolvedModifierHeight(constraints, hints, hasHeight);
+  if (hasResolvedWidth) {
     size.width = resolvedWidth;
   }
-  if (resolvedHeight > 0.f) {
+  if (hasResolvedHeight) {
     size.height = resolvedHeight;
   }
   return Size{positive(size.width), positive(size.height)};
@@ -320,7 +326,8 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
   float const width = modifiers.sizeWidth.evaluate();
   float const height = modifiers.sizeHeight.evaluate();
   LayoutConstraints innerConstraints =
-      modifierInnerConstraints(activeCtx.constraints(), padding, activeCtx.hints(), width, height);
+      modifierInnerConstraints(activeCtx.constraints(), padding, activeCtx.hints(), width, height,
+                               modifiers.hasSizeWidth, modifiers.hasSizeHeight);
   MountContext innerCtx = activeCtx.childWithSharedScope(innerConstraints, activeCtx.hints());
   std::unique_ptr<scenegraph::SceneNode> content = impl_->mount(innerCtx);
   if (!content) {
@@ -328,7 +335,8 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
   }
 
   Size outerSize = resolveModifierOuterSize(
-      measuredOuterSize(*this, activeCtx), activeCtx.constraints(), activeCtx.hints(), width, height);
+      measuredOuterSize(*this, activeCtx), activeCtx.constraints(), activeCtx.hints(), width, height,
+      modifiers.hasSizeWidth, modifiers.hasSizeHeight);
   auto wrapper = std::make_unique<scenegraph::RectNode>(
       Rect{0.f, 0.f, positive(outerSize.width), positive(outerSize.height)});
 
@@ -390,32 +398,34 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
 
   LayoutConstraints const bindingConstraints = activeCtx.constraints();
   LayoutHints const bindingHints = activeCtx.hints();
-  installBinding<float>(activeCtx, modifiers.sizeWidth,
-                        [rawWrapper, bindingConstraints, bindingHints](float width) {
-    float const resolvedWidth = detail::resolvedModifierWidth(bindingConstraints, bindingHints, width);
-    if (resolvedWidth > 0.f) {
-      Size size = rawWrapper->size();
-      Size const oldSize = size;
-      size.width = resolvedWidth;
-      rawWrapper->setSize(size);
-      if (rawWrapper->size() != oldSize) {
-        relayoutStoredAncestors(*rawWrapper);
-      }
-    }
-  });
-  installBinding<float>(activeCtx, modifiers.sizeHeight,
-                        [rawWrapper, bindingConstraints, bindingHints](float height) {
-    float const resolvedHeight = detail::resolvedModifierHeight(bindingConstraints, bindingHints, height);
-    if (resolvedHeight > 0.f) {
-      Size size = rawWrapper->size();
-      Size const oldSize = size;
-      size.height = resolvedHeight;
-      rawWrapper->setSize(size);
-      if (rawWrapper->size() != oldSize) {
-        relayoutStoredAncestors(*rawWrapper);
-      }
-    }
-  });
+  if (modifiers.hasSizeWidth) {
+    installBinding<float>(activeCtx, modifiers.sizeWidth,
+                          [rawWrapper, bindingConstraints, bindingHints](float width) {
+                            float const resolvedWidth =
+                                detail::resolvedModifierWidth(bindingConstraints, bindingHints, width);
+                            Size size = rawWrapper->size();
+                            Size const oldSize = size;
+                            size.width = resolvedWidth;
+                            rawWrapper->setSize(size);
+                            if (rawWrapper->size() != oldSize) {
+                              relayoutStoredAncestors(*rawWrapper);
+                            }
+                          });
+  }
+  if (modifiers.hasSizeHeight) {
+    installBinding<float>(activeCtx, modifiers.sizeHeight,
+                          [rawWrapper, bindingConstraints, bindingHints](float height) {
+                            float const resolvedHeight =
+                                detail::resolvedModifierHeight(bindingConstraints, bindingHints, height);
+                            Size size = rawWrapper->size();
+                            Size const oldSize = size;
+                            size.height = resolvedHeight;
+                            rawWrapper->setSize(size);
+                            if (rawWrapper->size() != oldSize) {
+                              relayoutStoredAncestors(*rawWrapper);
+                            }
+                          });
+  }
   installBinding<Vec2>(activeCtx, modifiers.translation, [rawWrapper, px = modifiers.positionX,
                                                           py = modifiers.positionY](
                                                            Vec2 translation) mutable {
@@ -457,29 +467,38 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
     float const height = modifiers.sizeHeight.evaluate();
     float const resolvedWidth = detail::resolvedModifierWidth(constraints, relayoutHints, width);
     float const resolvedHeight = detail::resolvedModifierHeight(constraints, relayoutHints, height);
+    bool const hasResolvedWidth =
+        detail::hasResolvedModifierWidth(constraints, relayoutHints, modifiers.hasSizeWidth);
+    bool const hasResolvedHeight =
+        detail::hasResolvedModifierHeight(constraints, relayoutHints, modifiers.hasSizeHeight);
     LayoutConstraints innerConstraints =
-        modifierInnerConstraints(constraints, padding, relayoutHints, width, height);
+        modifierInnerConstraints(constraints, padding, relayoutHints, width, height,
+                                 modifiers.hasSizeWidth, modifiers.hasSizeHeight);
+    if (!hasResolvedHeight) {
+      innerConstraints.maxHeight = std::numeric_limits<float>::infinity();
+      innerConstraints.minHeight = 0.f;
+    }
     if (rawContent) {
       rawContent->relayout(innerConstraints);
     }
     Size contentSize = rawContent ? rawContent->size() : Size{};
     Size nextSize{contentSize.width + padL + padR, contentSize.height + padT + padB};
-    if (resolvedWidth > 0.f) {
+    if (hasResolvedWidth) {
       nextSize.width = resolvedWidth;
     }
-    if (resolvedHeight > 0.f) {
+    if (hasResolvedHeight) {
       nextSize.height = resolvedHeight;
     }
-    if (resolvedWidth <= 0.f) {
+    if (!hasResolvedWidth) {
       nextSize.width = std::max(nextSize.width, constraints.minWidth);
     }
-    if (resolvedHeight <= 0.f) {
+    if (!hasResolvedHeight) {
       nextSize.height = std::max(nextSize.height, constraints.minHeight);
     }
-    if (resolvedWidth <= 0.f && std::isfinite(constraints.maxWidth)) {
+    if (!hasResolvedWidth && std::isfinite(constraints.maxWidth)) {
       nextSize.width = std::min(nextSize.width, constraints.maxWidth);
     }
-    if (resolvedHeight <= 0.f && std::isfinite(constraints.maxHeight)) {
+    if (!hasResolvedHeight && std::isfinite(constraints.maxHeight)) {
       nextSize.height = std::min(nextSize.height, constraints.maxHeight);
     }
     rawWrapper->setSize(Size{positive(nextSize.width), positive(nextSize.height)});
