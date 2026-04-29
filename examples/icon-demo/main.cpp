@@ -44,6 +44,7 @@ constexpr NamedIcon kIcons[] = {
     {IconName::ContentPaste, "ContentPaste"},
     {IconName::Delete, "Delete"},
 
+    {IconName::FolderOpen, "FolderOpen"},
     {IconName::Edit, "Edit"},
     {IconName::Save, "Save"},
     {IconName::Search, "Search"},
@@ -53,22 +54,15 @@ constexpr NamedIcon kIcons[] = {
     {IconName::Info, "Info"},
     {IconName::Warning, "Warning"},
 
-    {IconName::Description, "Description"},
-    {IconName::Folder, "Folder"},
-    {IconName::FolderOpen, "FolderOpen"},
-    {IconName::Home, "Home"},
-    {IconName::Settings, "Settings"},
-
-    {IconName::FormatBold, "FormatBold"},
-    {IconName::FormatItalic, "FormatItalic"},
-    {IconName::FormatUnderlined, "FormatUnderlined"},
-    {IconName::FormatListBulleted, "FormatListBulleted"},
-    {IconName::FormatListNumbered, "FormatListNumbered"},
-
     {IconName::DarkMode, "DarkMode"},
     {IconName::LightMode, "LightMode"},
     {IconName::Visibility, "Visibility"},
     {IconName::VisibilityOff, "VisibilityOff"},
+
+    {IconName::FormatBold, "FormatBold"},
+    {IconName::FormatItalic, "FormatItalic"},
+    {IconName::FormatListBulleted, "FormatListBulleted"},
+    {IconName::FormatListNumbered, "FormatListNumbered"},
 };
 
 struct IconCell {
