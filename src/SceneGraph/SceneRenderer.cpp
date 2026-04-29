@@ -88,6 +88,22 @@ MetalRecorderSlice fullRecordedSlice(MetalFrameRecorder const &recorded) {
     };
 }
 
+bool roundedClipHasEntries(MetalRoundedClipStack const &clip) noexcept {
+    return clip.header.x > 0.f;
+}
+
+template <typename Op>
+bool opHasRecordedClip(Op const &op) noexcept {
+    return op.scissorValid || roundedClipHasEntries(op.roundedClip);
+}
+
+bool recordedOpsContainClipState(MetalFrameRecorder const &recorded) noexcept {
+    return std::any_of(recorded.rectOps.begin(), recorded.rectOps.end(), opHasRecordedClip<MetalRectOp>) ||
+           std::any_of(recorded.imageOps.begin(), recorded.imageOps.end(), opHasRecordedClip<MetalImageOp>) ||
+           std::any_of(recorded.pathOps.begin(), recorded.pathOps.end(), opHasRecordedClip<MetalPathOp>) ||
+           std::any_of(recorded.glyphOps.begin(), recorded.glyphOps.end(), opHasRecordedClip<MetalGlyphOp>);
+}
+
 class CanvasRenderer final : public Renderer {
   public:
     explicit CanvasRenderer(Canvas &canvas) : canvas_(canvas) {}
@@ -132,6 +148,13 @@ class CanvasPreparedRenderOps final : public PreparedRenderOps {
     MetalRecorderSlice slice_ {};
 };
 
+class CanvasUnreplayablePreparedRenderOps final : public PreparedRenderOps {
+  public:
+    bool replay(Renderer &) const override {
+        return false;
+    }
+};
+
 std::unique_ptr<PreparedRenderOps> CanvasRenderer::prepare(SceneNode const &node) {
     MetalFrameRecorder recorded;
     if (!beginRecordedOpsCaptureForCanvas(&canvas_, &recorded)) {
@@ -139,6 +162,11 @@ std::unique_ptr<PreparedRenderOps> CanvasRenderer::prepare(SceneNode const &node
     }
     node.render(*this);
     endRecordedOpsCaptureForCanvas(&canvas_);
+    if (recordedOpsContainClipState(recorded)) {
+        // Local replay retags cached ops with the caller's current clip. Until it can merge
+        // recorded and caller clips, keep internally clipped leaves on the live render path.
+        return std::make_unique<CanvasUnreplayablePreparedRenderOps>();
+    }
     return std::make_unique<CanvasPreparedRenderOps>(std::move(recorded));
 }
 
@@ -228,6 +256,11 @@ struct SceneRenderer::Impl {
             renderNode(*child, 1.f, Point {}, false, false);
         }
         endRecordedOpsCaptureForCanvas(canvas);
+        if (recordedOpsContainClipState(recorded)) {
+            // Group captures include clips from descendants. Replaying them as one local
+            // display list would drop those nested clips, so let the normal traversal render it.
+            return std::make_unique<CanvasUnreplayablePreparedRenderOps>();
+        }
         return std::make_unique<CanvasPreparedRenderOps>(std::move(recorded));
     }
 
