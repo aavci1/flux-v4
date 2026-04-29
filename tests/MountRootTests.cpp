@@ -11,6 +11,7 @@
 #include <Flux/UI/MountRoot.hpp>
 #include <Flux/UI/MountContext.hpp>
 #include <Flux/UI/Theme.hpp>
+#include <Flux/UI/Views/Grid.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/ScaleAroundCenter.hpp>
@@ -20,6 +21,7 @@
 #include <Flux/UI/Views/VStack.hpp>
 #include <Flux/UI/Views/ZStack.hpp>
 
+#include <cmath>
 #include <limits>
 #include <memory>
 #include <string_view>
@@ -119,6 +121,38 @@ struct IntrinsicBox {
   std::unique_ptr<flux::scenegraph::SceneNode> mount(flux::MountContext&) const {
     return std::make_unique<flux::scenegraph::RectNode>(
         flux::Rect{0.f, 0.f, 24.f, 12.f});
+  }
+};
+
+struct StretchBox {
+  flux::Size intrinsic{24.f, 12.f};
+
+  flux::Size measure(flux::MeasureContext& ctx, flux::LayoutConstraints const&,
+                     flux::LayoutHints const&, flux::TextSystem&) const {
+    ctx.advanceChildSlot();
+    return intrinsic;
+  }
+
+  std::unique_ptr<flux::scenegraph::SceneNode> mount(flux::MountContext& ctx) const {
+    auto sizeFor = [intrinsic = intrinsic](flux::LayoutConstraints const& constraints) {
+      flux::Size size{
+          std::isfinite(constraints.maxWidth) ? constraints.maxWidth : intrinsic.width,
+          std::isfinite(constraints.maxHeight) ? constraints.maxHeight : intrinsic.height,
+      };
+      size.width = std::max(size.width, constraints.minWidth);
+      size.height = std::max(size.height, constraints.minHeight);
+      return size;
+    };
+
+    flux::Size const initialSize = sizeFor(ctx.constraints());
+    auto group = std::make_unique<flux::scenegraph::GroupNode>(
+        flux::Rect{0.f, 0.f, initialSize.width, initialSize.height});
+    auto* rawGroup = group.get();
+    rawGroup->setRelayout([rawGroup, sizeFor = std::move(sizeFor)](
+                              flux::LayoutConstraints const& constraints) {
+      rawGroup->setSize(sizeFor(constraints));
+    });
+    return group;
   }
 };
 
@@ -417,6 +451,55 @@ TEST_CASE("HStack flex children honor assigned main-axis size with explicit modi
   CHECK(group.children()[2]->size().width == doctest::Approx(185.333f).epsilon(0.001));
   CHECK(group.children()[1]->position().x == doctest::Approx(382.666f).epsilon(0.001));
   CHECK(group.children()[3]->position().x == doctest::Approx(648.f));
+}
+
+TEST_CASE("Grid expands row tracks when flex assigns extra height") {
+  struct Root {
+    flux::Element body() const {
+      return flux::VStack{
+          .spacing = 0.f,
+          .alignment = flux::Alignment::Stretch,
+          .children = flux::children(
+              flux::Grid{
+                  .columns = 1,
+                  .horizontalSpacing = 0.f,
+                  .verticalSpacing = 8.f,
+                  .verticalAlignment = flux::Alignment::Stretch,
+                  .children = flux::children(
+                      StretchBox{{20.f, 10.f}},
+                      StretchBox{{20.f, 160.f}},
+                      StretchBox{{20.f, 10.f}},
+                      StretchBox{{20.f, 10.f}}),
+              }.flex(1.f, 1.f, 0.f)),
+      };
+    }
+  };
+
+  FakeTextSystem textSystem;
+  flux::scenegraph::SceneGraph sceneGraph;
+  flux::MountRoot root{
+      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{}),
+      textSystem,
+      testEnvironment(),
+      flux::Size{100.f, 400.f},
+  };
+
+  root.mount(sceneGraph);
+
+  REQUIRE(sceneGraph.root().kind() == flux::scenegraph::SceneNodeKind::Group);
+  REQUIRE(sceneGraph.root().children().size() == 1);
+  flux::scenegraph::SceneNode const& gridNode = *sceneGraph.root().children()[0];
+  CHECK(gridNode.size().height == doctest::Approx(400.f));
+  REQUIRE(gridNode.children().size() == 4);
+
+  CHECK(gridNode.children()[0]->position().y == doctest::Approx(0.f));
+  CHECK(gridNode.children()[0]->size().height == doctest::Approx(72.f));
+  CHECK(gridNode.children()[1]->position().y == doctest::Approx(80.f));
+  CHECK(gridNode.children()[1]->size().height == doctest::Approx(160.f));
+  CHECK(gridNode.children()[2]->position().y == doctest::Approx(248.f));
+  CHECK(gridNode.children()[2]->size().height == doctest::Approx(72.f));
+  CHECK(gridNode.children()[3]->position().y == doctest::Approx(328.f));
+  CHECK(gridNode.children()[3]->size().height == doctest::Approx(72.f));
 }
 
 TEST_CASE("reactive size changes relayout ancestor stack alignment") {

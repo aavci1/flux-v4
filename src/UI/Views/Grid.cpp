@@ -15,6 +15,8 @@ namespace flux {
 
 namespace {
 
+constexpr float kGridLayoutEpsilon = 1e-4f;
+
 std::size_t clampedColumns(std::size_t columns) {
   return std::max<std::size_t>(1, columns);
 }
@@ -163,6 +165,72 @@ float spannedHeight(std::vector<float> const& rowHeights, std::size_t row,
   return height;
 }
 
+float totalRowSpacing(std::size_t rows, float verticalSpacing) {
+  return rows > 1 ? static_cast<float>(rows - 1) * verticalSpacing : 0.f;
+}
+
+float rowHeightSum(std::vector<float> const& rowHeights) {
+  float total = 0.f;
+  for (float height : rowHeights) {
+    total += height;
+  }
+  return total;
+}
+
+float assignedGridHeight(LayoutConstraints const& constraints) {
+  if (std::isfinite(constraints.maxHeight) && constraints.maxHeight > 0.f &&
+      constraints.minHeight >= constraints.maxHeight - kGridLayoutEpsilon) {
+    return constraints.maxHeight;
+  }
+  return constraints.minHeight > 0.f ? constraints.minHeight : 0.f;
+}
+
+void stretchRowsToAssignedHeight(std::vector<float>& rowHeights, float verticalSpacing,
+                                 LayoutConstraints const& constraints) {
+  if (rowHeights.empty()) {
+    return;
+  }
+
+  float const assignedHeight = assignedGridHeight(constraints);
+  if (assignedHeight <= 0.f) {
+    return;
+  }
+
+  float const targetRowsHeight =
+      std::max(0.f, assignedHeight - totalRowSpacing(rowHeights.size(), verticalSpacing));
+  float const minimumRowsHeight = rowHeightSum(rowHeights);
+  if (targetRowsHeight <= minimumRowsHeight + kGridLayoutEpsilon) {
+    return;
+  }
+
+  std::vector<bool> locked(rowHeights.size(), false);
+  std::size_t flexibleRows = rowHeights.size();
+  float remainingHeight = targetRowsHeight;
+
+  while (flexibleRows > 0) {
+    float const candidateHeight = remainingHeight / static_cast<float>(flexibleRows);
+    bool lockedAny = false;
+    for (std::size_t i = 0; i < rowHeights.size(); ++i) {
+      if (locked[i] || rowHeights[i] <= candidateHeight + kGridLayoutEpsilon) {
+        continue;
+      }
+      locked[i] = true;
+      remainingHeight -= rowHeights[i];
+      --flexibleRows;
+      lockedAny = true;
+    }
+    if (lockedAny) {
+      continue;
+    }
+    for (std::size_t i = 0; i < rowHeights.size(); ++i) {
+      if (!locked[i]) {
+        rowHeights[i] = candidateHeight;
+      }
+    }
+    break;
+  }
+}
+
 GridPlan planGrid(Grid const& grid, LayoutConstraints const& constraints,
                   std::vector<Size> const& measured) {
   GridPlan plan{};
@@ -206,6 +274,7 @@ GridPlan planGrid(Grid const& grid, LayoutConstraints const& constraints,
       rowHeights[r] += perRow;
     }
   }
+  stretchRowsToAssignedHeight(rowHeights, grid.verticalSpacing, constraints);
 
   std::vector<float> rowY(rows, 0.f);
   float y = 0.f;

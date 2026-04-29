@@ -60,6 +60,10 @@ public:
         ctx.redrawCallback());
 
     scenegraph::GroupNode* rawGroup = group.get();
+    rawGroup->setLayoutConstraints(ctx.constraints());
+    rawGroup->setRelayout([state, rawGroup](LayoutConstraints const& constraints) {
+      state->relayout(*rawGroup, constraints);
+    });
     Reactive::withOwner(*controlScope, [state, rawGroup] {
       Reactive::Effect([state, rawGroup] {
         state->reconcile(*rawGroup);
@@ -118,11 +122,22 @@ private:
         children.push_back(std::move(node));
         group.replaceChildren(std::move(children));
       }
+      frameSize = detail::controlAssignedSize(constraints);
       detail::controlLayoutSingle(group, frameSize);
       detail::controlPropagateLayoutChange(group, oldSize);
       if (requestRedraw) {
         requestRedraw();
       }
+    }
+
+    void relayout(scenegraph::GroupNode& group, LayoutConstraints const& nextConstraints) {
+      constraints = nextConstraints;
+      frameSize = detail::controlAssignedSize(nextConstraints);
+      auto children = group.children();
+      if (!children.empty() && children.front()) {
+        (void)children.front()->relayout(nextConstraints);
+      }
+      detail::controlLayoutSingle(group, frameSize);
     }
 
     void disposeBranch() {

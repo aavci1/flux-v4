@@ -9,6 +9,7 @@
 #include <Flux/UI/Hooks.hpp>
 #include <Flux/UI/MountRoot.hpp>
 #include <Flux/UI/Theme.hpp>
+#include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/Show.hpp>
 #include <Flux/UI/Views/Switch.hpp>
@@ -299,6 +300,44 @@ TEST_CASE("Show hidden stack child stays mounted and expands later") {
   REQUIRE(hiddenAgain.children().size() == 3);
   CHECK(hiddenAgain.children()[1]->size().height == doctest::Approx(0.f));
   CHECK(hiddenAgain.children()[2]->position().y == doctest::Approx(22.f));
+}
+
+TEST_CASE("Show relayouts active branch into flexible stack slot") {
+  struct Root {
+    flux::Element body() const {
+      return flux::HStack{
+          .spacing = 0.f,
+          .alignment = flux::Alignment::Stretch,
+          .children = flux::children(
+              flux::Element{flux::Rectangle{}}
+                  .size(20.f, 10.f)
+                  .fill(flux::Colors::red),
+              flux::Element{flux::Show(true, [] {
+                return flux::Rectangle{}.fill(flux::Colors::blue);
+              })}.flex(1.f, 1.f, 0.f)),
+      };
+    }
+  };
+
+  FakeTextSystem textSystem;
+  flux::scenegraph::SceneGraph sceneGraph;
+  flux::MountRoot root{
+      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{}),
+      textSystem,
+      testEnvironment(),
+      flux::Size{100.f, 40.f},
+  };
+
+  root.mount(sceneGraph);
+
+  auto const& group = rootGroup(sceneGraph);
+  REQUIRE(group.children().size() == 2);
+  CHECK(group.children()[1]->position().x == doctest::Approx(20.f));
+  CHECK(group.children()[1]->size().width == doctest::Approx(80.f));
+  CHECK(group.children()[1]->size().height == doctest::Approx(40.f));
+  REQUIRE(group.children()[1]->children().size() == 1);
+  CHECK(group.children()[1]->children()[0]->size().width == doctest::Approx(80.f));
+  CHECK(group.children()[1]->children()[0]->size().height == doctest::Approx(40.f));
 }
 
 TEST_CASE("Show size changes grow wrapper ancestors and move following stack siblings") {
