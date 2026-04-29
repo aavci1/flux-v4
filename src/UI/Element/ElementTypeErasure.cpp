@@ -15,6 +15,7 @@
 #include <cassert>
 #include <concepts>
 #include <cmath>
+#include <cstdint>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -111,12 +112,34 @@ Theme activeTheme(EnvironmentBinding const& environment) {
   return environment.value<ThemeKey>();
 }
 
+template <typename Gradient>
+Gradient resolveGradientStops(Gradient gradient, Theme const& theme) {
+  for (std::uint8_t i = 0; i < gradient.stopCount; ++i) {
+    gradient.stops[i].color = resolveColor(gradient.stops[i].color, theme);
+  }
+  return gradient;
+}
+
 FillStyle resolveFillStyle(FillStyle style, Theme const& theme) {
   Color color{};
-  if (!style.solidColor(&color)) {
+  if (style.solidColor(&color)) {
+    style.data = resolveColor(color, theme);
     return style;
   }
-  style.data = resolveColor(color, theme);
+  LinearGradient gradient{};
+  if (style.linearGradient(&gradient)) {
+    style.data = resolveGradientStops(gradient, theme);
+    return style;
+  }
+  RadialGradient radial{};
+  if (style.radialGradient(&radial)) {
+    style.data = resolveGradientStops(radial, theme);
+    return style;
+  }
+  ConicalGradient conical{};
+  if (style.conicalGradient(&conical)) {
+    style.data = resolveGradientStops(conical, theme);
+  }
   return style;
 }
 

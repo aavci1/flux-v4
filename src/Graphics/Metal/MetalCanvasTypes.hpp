@@ -19,11 +19,20 @@ struct MetalRectInstance {
   vector_float4 strokeColor;
   vector_float2 strokeWidthOpacity;
   vector_float2 viewport;
+  /// .x = rotation radians, .y = gradient stop count, .z = gradient type, .w unused.
   vector_float4 rotationPad;
   /// Premultiplied shadow tint; .w is alpha scale.
   vector_float4 shadowColor;
   /// .xy = offset (device px), .z = blur radius (device px, uniform scale), .w unused.
   vector_float4 shadowGeom;
+  /// Extra gradient stops. `fillColor` is stop 0; these are stops 1-3.
+  vector_float4 gradientColor1;
+  vector_float4 gradientColor2;
+  vector_float4 gradientColor3;
+  /// Normalized stop positions for stops 0-3.
+  vector_float4 gradientStops;
+  /// Linear: start.xy/end.zw. Radial/conical: center.xy, radius/startAngle in .z.
+  vector_float4 gradientPoints;
 };
 
 static_assert(std::is_trivially_copyable_v<MetalRectInstance>);

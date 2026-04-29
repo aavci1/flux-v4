@@ -49,6 +49,94 @@ vector_float4 cornersToSimd(const CornerRadius& cr) {
   return simd_make_float4(cr.topLeft, cr.topRight, cr.bottomRight, cr.bottomLeft);
 }
 
+constexpr float kGradientTypeNone = 0.f;
+constexpr float kGradientTypeLinear = 1.f;
+constexpr float kGradientTypeRadial = 2.f;
+constexpr float kGradientTypeConical = 3.f;
+
+struct EncodedFillStyle {
+  bool hasFill = false;
+  Color fillColor = Colors::transparent;
+  Color gradientColor1 = Colors::transparent;
+  Color gradientColor2 = Colors::transparent;
+  Color gradientColor3 = Colors::transparent;
+  vector_float4 gradientStops = simd_make_float4(0.f, 1.f, 1.f, 1.f);
+  vector_float4 gradientPoints = simd_make_float4(0.f, 0.f, 1.f, 1.f);
+  float gradientStopCount = 0.f;
+  float gradientType = kGradientTypeNone;
+};
+
+template <typename Gradient>
+void encodeGradientStops(EncodedFillStyle& encoded, Gradient const& gradient) {
+  encoded.hasFill = true;
+  encoded.fillColor = gradient.stops[0].color;
+  encoded.gradientColor1 = gradient.stops[1].color;
+  encoded.gradientColor2 = gradient.stopCount > 2 ? gradient.stops[2].color : gradient.stops[1].color;
+  encoded.gradientColor3 = gradient.stopCount > 3 ? gradient.stops[3].color : encoded.gradientColor2;
+  encoded.gradientStops = simd_make_float4(
+      gradient.stops[0].position,
+      gradient.stops[1].position,
+      gradient.stopCount > 2 ? gradient.stops[2].position : gradient.stops[1].position,
+      gradient.stopCount > 3 ? gradient.stops[3].position : gradient.stops[gradient.stopCount - 1].position);
+  encoded.gradientStopCount = static_cast<float>(gradient.stopCount);
+}
+
+EncodedFillStyle encodeFillStyle(FillStyle const& fs) {
+  EncodedFillStyle encoded{};
+  Color color{};
+  if (fs.solidColor(&color)) {
+    encoded.hasFill = true;
+    encoded.fillColor = color;
+    return encoded;
+  }
+
+  LinearGradient gradient{};
+  if (fs.linearGradient(&gradient) && gradient.stopCount >= 2) {
+    encodeGradientStops(encoded, gradient);
+    encoded.gradientPoints =
+        simd_make_float4(gradient.start.x, gradient.start.y, gradient.end.x, gradient.end.y);
+    encoded.gradientType = kGradientTypeLinear;
+    return encoded;
+  }
+  RadialGradient radial{};
+  if (fs.radialGradient(&radial) && radial.stopCount >= 2) {
+    encodeGradientStops(encoded, radial);
+    encoded.gradientPoints = simd_make_float4(radial.center.x, radial.center.y, radial.radius, 0.f);
+    encoded.gradientType = kGradientTypeRadial;
+    return encoded;
+  }
+  ConicalGradient conical{};
+  if (fs.conicalGradient(&conical) && conical.stopCount >= 2) {
+    encodeGradientStops(encoded, conical);
+    encoded.gradientPoints =
+        simd_make_float4(conical.center.x, conical.center.y, conical.startAngleRadians, 0.f);
+    encoded.gradientType = kGradientTypeConical;
+  }
+  return encoded;
+}
+
+bool representativeFillColor(FillStyle const& fs, Color* out) {
+  if (fs.solidColor(out)) {
+    return true;
+  }
+  LinearGradient gradient{};
+  if (fs.linearGradient(&gradient) && gradient.stopCount > 0) {
+    *out = gradient.stops[0].color;
+    return true;
+  }
+  RadialGradient radial{};
+  if (fs.radialGradient(&radial) && radial.stopCount > 0) {
+    *out = radial.stops[0].color;
+    return true;
+  }
+  ConicalGradient conical{};
+  if (fs.conicalGradient(&conical) && conical.stopCount > 0) {
+    *out = conical.stops[0].color;
+    return true;
+  }
+  return false;
+}
+
 Rect boundsOfTransformedRect(Rect const& r, Mat3 const& m) {
   Point p0 = m.apply({r.x, r.y});
   Point p1 = m.apply({r.x + r.width, r.y});
@@ -876,17 +964,13 @@ public:
     if (!inFrame_) {
       return;
     }
-    Color fillC{};
+    EncodedFillStyle fill = encodeFillStyle(fs);
     Color strokeC{};
-    bool hasFill = false;
     bool hasStroke = false;
-    if (!fs.isNone() && fs.solidColor(&fillC)) {
-      hasFill = true;
-    }
     if (!ss.isNone() && ss.solidColor(&strokeC)) {
       hasStroke = true;
     }
-    if (!hasFill && !hasStroke && shadow.isNone()) {
+    if (!fill.hasFill && !hasStroke && shadow.isNone()) {
       return;
     }
     if (quickReject(rect)) {
@@ -931,7 +1015,7 @@ public:
       shadowOy = shadow.offset.y * dpiScaleY_;
       shadowR = shadow.radius * s;
     }
-    emitRect(device, cr, hasFill ? fillC : Color{0, 0, 0, 0}, hasStroke ? strokeC : Color{0, 0, 0, 0},
+    emitRect(device, cr, fill, hasStroke ? strokeC : Color{0, 0, 0, 0},
              hasStroke ? ss.width * s : 0.f, op, rotationRad, shadowC, shadowOx, shadowOy, shadowR);
   }
 
@@ -1015,21 +1099,18 @@ public:
       }
       const bool circlePrim = cv.type == Path::CommandType::Circle && cv.dataCount >= 3;
       const bool ellipsePrim = cv.type == Path::CommandType::Ellipse && cv.dataCount >= 4;
-      if (circlePrim || ellipsePrim) {
-        Color fc{};
-        if (!fs.isNone() && fs.solidColor(&fc)) {
-          if (circlePrim) {
-            float const rad = cv.data[2];
-            Rect r{cv.data[0] - rad, cv.data[1] - rad, rad * 2.f, rad * 2.f};
-            drawRect(r, CornerRadius::pill(r), fs, ss, shadow);
-          } else {
-            float const rx = cv.data[2];
-            float const ry = cv.data[3];
-            Rect r{cv.data[0] - rx, cv.data[1] - ry, rx * 2.f, ry * 2.f};
-            drawRect(r, CornerRadius::pill(r), fs, ss, shadow);
-          }
-          return;
+      if ((circlePrim || ellipsePrim) && !fs.isNone()) {
+        if (circlePrim) {
+          float const rad = cv.data[2];
+          Rect r{cv.data[0] - rad, cv.data[1] - rad, rad * 2.f, rad * 2.f};
+          drawRect(r, CornerRadius::pill(r), fs, ss, shadow);
+        } else {
+          float const rx = cv.data[2];
+          float const ry = cv.data[3];
+          Rect r{cv.data[0] - rx, cv.data[1] - ry, rx * 2.f, ry * 2.f};
+          drawRect(r, CornerRadius::pill(r), fs, ss, shadow);
         }
+        return;
       }
     }
 
@@ -1057,7 +1138,7 @@ public:
     // Mesh path: draw translated fill as drop shadow (no SDF blur; matches rect shadow intent via offset).
     if (!shadow.isNone()) {
       Color fillProbe{};
-      if (!fs.isNone() && fs.solidColor(&fillProbe)) {
+      if (!fs.isNone() && representativeFillColor(fs, &fillProbe)) {
         (void)fillProbe;
         save();
         translate(shadow.offset.x, shadow.offset.y);
@@ -1496,19 +1577,24 @@ private:
     recordRecorderCapacityIncreases(capacityBefore, recorder);
   }
 
-  void emitRect(Rect const& deviceRect, CornerRadius const& corners, Color const& fillColor, Color const& strokeColor,
-                float strokeWidth, float opacity, float rotationRad, Color const& shadowColor, float shadowOffsetX,
-                float shadowOffsetY, float shadowRadius) {
+  void emitRect(Rect const& deviceRect, CornerRadius const& corners, EncodedFillStyle const& fill,
+                Color const& strokeColor, float strokeWidth, float opacity, float rotationRad,
+                Color const& shadowColor, float shadowOffsetX, float shadowOffsetY, float shadowRadius) {
     MetalRectOp op{};
     op.inst.rect = simd_make_float4(deviceRect.x, deviceRect.y, deviceRect.width, deviceRect.height);
     op.inst.corners = cornersToSimd(corners);
-    op.inst.fillColor = toSimd4(fillColor);
+    op.inst.fillColor = toSimd4(fill.fillColor);
     op.inst.strokeColor = toSimd4(strokeColor);
     op.inst.strokeWidthOpacity = simd_make_float2(strokeWidth, opacity);
     op.inst.viewport = simd_make_float2(frameDrawableW_, frameDrawableH_);
-    op.inst.rotationPad = simd_make_float4(rotationRad, 0.f, 0.f, 0.f);
+    op.inst.rotationPad = simd_make_float4(rotationRad, fill.gradientStopCount, fill.gradientType, 0.f);
     op.inst.shadowColor = toSimd4(shadowColor);
     op.inst.shadowGeom = simd_make_float4(shadowOffsetX, shadowOffsetY, shadowRadius, 0.f);
+    op.inst.gradientColor1 = toSimd4(fill.gradientColor1);
+    op.inst.gradientColor2 = toSimd4(fill.gradientColor2);
+    op.inst.gradientColor3 = toSimd4(fill.gradientColor3);
+    op.inst.gradientStops = fill.gradientStops;
+    op.inst.gradientPoints = fill.gradientPoints;
     op.blendMode = currentState().blendMode;
     pushRectOp(std::move(op));
   }

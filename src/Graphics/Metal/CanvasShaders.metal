@@ -17,6 +17,11 @@ struct RectInstance {
   float4 rotationPad;
   float4 shadowColor;
   float4 shadowGeom;
+  float4 gradientColor1;
+  float4 gradientColor2;
+  float4 gradientColor3;
+  float4 gradientStops;
+  float4 gradientPoints;
 };
 
 constant uint kMaxRoundedClipMasks = 4;
@@ -46,6 +51,13 @@ struct RectVertexOut {
   float2 fragViewport;
   float4 fragShadowColor;
   float4 fragShadowGeom;
+  float4 fragGradientColor1;
+  float4 fragGradientColor2;
+  float4 fragGradientColor3;
+  float4 fragGradientStops;
+  float4 fragGradientPoints;
+  float fragGradientStopCount;
+  float fragGradientType;
 };
 
 /// Same layout as `RectVertexOut`, but `clip` has no `[[position]]` so the fragment can also take `float4 [[position]]` for pixel coords (Metal allows only one `[[position]]` per fragment signature when using `[[stage_in]]`).
@@ -63,6 +75,13 @@ struct RectFragmentIn {
   float2 fragViewport;
   float4 fragShadowColor;
   float4 fragShadowGeom;
+  float4 fragGradientColor1;
+  float4 fragGradientColor2;
+  float4 fragGradientColor3;
+  float4 fragGradientStops;
+  float4 fragGradientPoints;
+  float fragGradientStopCount;
+  float fragGradientType;
 };
 
 vertex RectVertexOut rect_sdf_vert(uint vid [[vertex_id]], uint iid [[instance_id]],
@@ -101,6 +120,13 @@ vertex RectVertexOut rect_sdf_vert(uint vid [[vertex_id]], uint iid [[instance_i
   out.fragViewport = uniforms[0].viewport;
   out.fragShadowColor = inst.shadowColor;
   out.fragShadowGeom = inst.shadowGeom;
+  out.fragGradientColor1 = inst.gradientColor1;
+  out.fragGradientColor2 = inst.gradientColor2;
+  out.fragGradientColor3 = inst.gradientColor3;
+  out.fragGradientStops = inst.gradientStops;
+  out.fragGradientPoints = inst.gradientPoints;
+  out.fragGradientStopCount = inst.rotationPad.y;
+  out.fragGradientType = inst.rotationPad.z;
   return out;
 }
 
@@ -127,6 +153,47 @@ static float roundedClipCoverage(float2 pixel, constant RoundedClipStack& clips)
   return coverage;
 }
 
+static float4 gradientColor(RectFragmentIn in, float2 localPos) {
+  if (in.fragGradientStopCount < 2.0f || in.fragGradientType < 0.5f) {
+    return in.fragFillColor;
+  }
+  float2 denom = max(2.0f * in.fragHalfSize, float2(1e-4f));
+  float2 unit = (localPos + in.fragHalfSize) / denom;
+  float t = 0.0f;
+  if (in.fragGradientType < 1.5f) {
+    float2 start = in.fragGradientPoints.xy;
+    float2 end = in.fragGradientPoints.zw;
+    float2 axis = end - start;
+    float axisLenSq = dot(axis, axis);
+    t = axisLenSq > 1e-8f ? clamp(dot(unit - start, axis) / axisLenSq, 0.0f, 1.0f) : 0.0f;
+  } else if (in.fragGradientType < 2.5f) {
+    float radius = max(in.fragGradientPoints.z, 1e-4f);
+    t = clamp(distance(unit, in.fragGradientPoints.xy) / radius, 0.0f, 1.0f);
+  } else {
+    const float twoPi = 6.28318530718f;
+    float2 delta = unit - in.fragGradientPoints.xy;
+    float angle = atan2(delta.y, delta.x) - in.fragGradientPoints.z;
+    t = fract(angle / twoPi);
+  }
+
+  float4 colors[4] = {in.fragFillColor, in.fragGradientColor1, in.fragGradientColor2, in.fragGradientColor3};
+  float stops[4] = {in.fragGradientStops.x, in.fragGradientStops.y, in.fragGradientStops.z, in.fragGradientStops.w};
+  int stopCount = min(max((int)(in.fragGradientStopCount + 0.5f), 2), 4);
+  if (t <= stops[0]) {
+    return colors[0];
+  }
+  for (int i = 0; i < stopCount - 1; ++i) {
+    float a = stops[i];
+    float b = stops[i + 1];
+    if (t <= b || i == stopCount - 2) {
+      float span = max(b - a, 1e-5f);
+      float u = clamp((t - a) / span, 0.0f, 1.0f);
+      return mix(colors[i], colors[i + 1], u);
+    }
+  }
+  return colors[stopCount - 1];
+}
+
 fragment float4 rect_sdf_frag(RectFragmentIn in [[stage_in]], float4 fragCoord [[position]],
                               constant RoundedClipStack* clips [[buffer(0)]]) {
   // Built-in fragment position: pixel coordinates in the render target (same space as vertex `screenPos` / inst.rect).
@@ -145,9 +212,10 @@ fragment float4 rect_sdf_frag(RectFragmentIn in [[stage_in]], float4 fragCoord [
     float sd = abs(d) - in.fragStrokeWidth * 0.5f;
     strokeCoverage = 1.0f - smoothstep(-0.75f, 0.75f, sd);
   }
-  float fillA = in.fragFillColor.a * fillCoverage;
+  float4 fillColor = gradientColor(in, p);
+  float fillA = fillColor.a * fillCoverage;
   float strokeA = in.fragStrokeColor.a * strokeCoverage;
-  float4 fillP = float4(in.fragFillColor.rgb * fillA, fillA);
+  float4 fillP = float4(fillColor.rgb * fillA, fillA);
   float4 strokeP = float4(in.fragStrokeColor.rgb * strokeA, strokeA);
   float4 blended = strokeP + fillP * (1.0f - strokeP.a);
 
@@ -190,6 +258,11 @@ struct ImageInstance {
   float4 rotationPad;
   float4 shadowColor;
   float4 shadowGeom;
+  float4 gradientColor1;
+  float4 gradientColor2;
+  float4 gradientColor3;
+  float4 gradientStops;
+  float4 gradientPoints;
   float4 uvBounds;
   float2 texSizeInv;
   float2 imageModePad;
@@ -338,6 +411,13 @@ vertex RectVertexOut line_sdf_vert(uint vid [[vertex_id]], uint iid [[instance_i
   out.fragViewport = uniforms[0].viewport;
   out.fragShadowColor = float4(0.0f);
   out.fragShadowGeom = float4(0.0f);
+  out.fragGradientColor1 = float4(0.0f);
+  out.fragGradientColor2 = float4(0.0f);
+  out.fragGradientColor3 = float4(0.0f);
+  out.fragGradientStops = float4(0.0f);
+  out.fragGradientPoints = float4(0.0f);
+  out.fragGradientStopCount = 0.0f;
+  out.fragGradientType = 0.0f;
   return out;
 }
 

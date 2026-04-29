@@ -339,6 +339,116 @@ TEST_CASE("MetalCanvas applies rounded clip masks to child content") {
 #endif
 }
 
+TEST_CASE("MetalCanvas shades linear gradient rect fills") {
+#if !defined(__APPLE__)
+  SUCCEED();
+#else
+  @autoreleasepool {
+    CoreTextSystem textSystem;
+    TestSurface surface = makeSurface();
+    auto canvas = createMetalCanvas(nullptr, (__bridge void*)surface.layer, 0, textSystem);
+    REQUIRE(canvas);
+    canvas->resize(640, 480);
+    canvas->updateDpiScale(2.f, 2.f);
+
+    auto root = std::make_unique<GroupNode>(flux::Rect{0.f, 0.f, 640.f, 480.f});
+    root->appendChild(std::make_unique<RectNode>(
+        flux::Rect{0.f, 0.f, 640.f, 480.f},
+        FillStyle::solid(Colors::black)
+    ));
+    root->appendChild(std::make_unique<RectNode>(
+        flux::Rect{20.f, 20.f, 100.f, 40.f},
+        FillStyle::linearGradient(Colors::red, Colors::blue, flux::Point{0.f, 0.f}, flux::Point{1.f, 0.f})
+    ));
+
+    SceneGraph graph{std::move(root)};
+    SceneRenderer renderer{*canvas};
+
+    requestNextFrameCaptureForCanvas(canvas.get());
+    canvas->beginFrame();
+    canvas->clear(Colors::black);
+    renderer.render(graph);
+    canvas->present();
+    waitForCanvasLastPresentComplete(canvas.get());
+
+    std::vector<std::uint8_t> pixels;
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+    REQUIRE(takeCapturedFrameForCanvas(canvas.get(), pixels, width, height));
+
+    std::uint32_t const leftX = 60;
+    std::uint32_t const rightX = 220;
+    std::uint32_t const y = 60;
+    CHECK(capturedChannel(pixels, width, leftX, y, 2) > capturedChannel(pixels, width, leftX, y, 0) + 80);
+    CHECK(capturedChannel(pixels, width, rightX, y, 0) > capturedChannel(pixels, width, rightX, y, 2) + 80);
+  }
+#endif
+}
+
+TEST_CASE("MetalCanvas shades radial and conical gradient rect fills") {
+#if !defined(__APPLE__)
+  SUCCEED();
+#else
+  @autoreleasepool {
+    CoreTextSystem textSystem;
+    TestSurface surface = makeSurface();
+    auto canvas = createMetalCanvas(nullptr, (__bridge void*)surface.layer, 0, textSystem);
+    REQUIRE(canvas);
+    canvas->resize(640, 480);
+    canvas->updateDpiScale(2.f, 2.f);
+
+    auto root = std::make_unique<GroupNode>(flux::Rect{0.f, 0.f, 640.f, 480.f});
+    root->appendChild(std::make_unique<RectNode>(
+        flux::Rect{0.f, 0.f, 640.f, 480.f},
+        FillStyle::solid(Colors::black)
+    ));
+    root->appendChild(std::make_unique<RectNode>(
+        flux::Rect{20.f, 80.f, 100.f, 100.f},
+        FillStyle::radialGradient(Colors::white, Colors::black, flux::Point{0.5f, 0.5f}, 0.5f)
+    ));
+    root->appendChild(std::make_unique<RectNode>(
+        flux::Rect{150.f, 80.f, 100.f, 100.f},
+        FillStyle::conicalGradient({
+            GradientStop{0.00f, Colors::red},
+            GradientStop{0.33f, Colors::green},
+            GradientStop{0.66f, Colors::blue},
+            GradientStop{1.00f, Colors::red},
+        })
+    ));
+
+    SceneGraph graph{std::move(root)};
+    SceneRenderer renderer{*canvas};
+
+    requestNextFrameCaptureForCanvas(canvas.get());
+    canvas->beginFrame();
+    canvas->clear(Colors::black);
+    renderer.render(graph);
+    canvas->present();
+    waitForCanvasLastPresentComplete(canvas.get());
+
+    std::vector<std::uint8_t> pixels;
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+    REQUIRE(takeCapturedFrameForCanvas(canvas.get(), pixels, width, height));
+
+    std::uint32_t const radialCenterX = 140;
+    std::uint32_t const radialCenterY = 260;
+    std::uint32_t const radialEdgeX = 50;
+    CHECK(capturedChannel(pixels, width, radialCenterX, radialCenterY, 0) >
+          capturedChannel(pixels, width, radialEdgeX, radialCenterY, 0) + 80);
+    CHECK(capturedChannel(pixels, width, radialCenterX, radialCenterY, 1) >
+          capturedChannel(pixels, width, radialEdgeX, radialCenterY, 1) + 80);
+    CHECK(capturedChannel(pixels, width, radialCenterX, radialCenterY, 2) >
+          capturedChannel(pixels, width, radialEdgeX, radialCenterY, 2) + 80);
+
+    std::uint32_t const conicRightX = 490;
+    std::uint32_t const conicLeftX = 310;
+    std::uint32_t const conicY = 260;
+    CHECK(colorDelta(pixels, width, conicRightX, conicY, conicLeftX, conicY) > 120);
+  }
+#endif
+}
+
 TEST_CASE("MetalCanvas preserves rounded rect geometry when clipped by the viewport") {
 #if !defined(__APPLE__)
   SUCCEED();

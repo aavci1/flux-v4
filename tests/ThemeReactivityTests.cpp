@@ -134,6 +134,49 @@ TEST_CASE("theme signal updates retained leaf bindings without remounting") {
   CHECK(cleanups == 1);
 }
 
+TEST_CASE("theme signal resolves semantic gradient fill stops") {
+  struct Root {
+    flux::Element body() const {
+      auto theme = flux::useEnvironment<flux::ThemeKey>();
+      return flux::Element{flux::Rectangle{}}
+          .size(32.f, 18.f)
+          .fill([theme] {
+            (void)theme();
+            return flux::FillStyle::linearGradient({
+                flux::GradientStop{0.f, flux::Color::accent()},
+                flux::GradientStop{1.f, flux::Color::danger()},
+            });
+          });
+    }
+  };
+
+  flux::Reactive::Signal<flux::Theme> theme{flux::Theme::light()};
+  FakeTextSystem textSystem;
+  flux::scenegraph::SceneGraph sceneGraph;
+  flux::MountRoot root{
+      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{}),
+      textSystem,
+      themeBinding(theme),
+      flux::Size{200.f, 120.f},
+  };
+
+  root.mount(sceneGraph);
+  REQUIRE(sceneGraph.root().kind() == flux::scenegraph::SceneNodeKind::Rect);
+  auto const* rect = &static_cast<flux::scenegraph::RectNode const&>(sceneGraph.root());
+
+  flux::LinearGradient gradient{};
+  REQUIRE(rect->fill().linearGradient(&gradient));
+  REQUIRE(gradient.stopCount == 2);
+  checkSameChannels(gradient.stops[0].color, flux::Theme::light().accentColor);
+  checkSameChannels(gradient.stops[1].color, flux::Theme::light().dangerColor);
+
+  theme.set(flux::Theme::dark());
+  REQUIRE(rect->fill().linearGradient(&gradient));
+  REQUIRE(gradient.stopCount == 2);
+  checkSameChannels(gradient.stops[0].color, flux::Theme::dark().accentColor);
+  checkSameChannels(gradient.stops[1].color, flux::Theme::dark().dangerColor);
+}
+
 TEST_CASE("element environment applies to modifier bindings on the same retained subtree") {
   struct Root {
     flux::Element body() const {
