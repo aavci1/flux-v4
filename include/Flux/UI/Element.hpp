@@ -15,6 +15,7 @@
 #include <Flux/UI/Leaves.hpp>
 #include <Flux/UI/MeasureContext.hpp>
 
+#include <cstddef>
 #include <functional>
 #include <cstdint>
 #include <cstring>
@@ -136,10 +137,14 @@ public:
   float flexShrink() const;
   std::optional<float> flexBasis() const;
   float minMainSize() const;
+  std::size_t colSpan() const;
+  std::size_t rowSpan() const;
 
   Element flex(float grow) &&;
   Element flex(float grow, float shrink) &&;
   Element flex(float grow, float shrink, float basis) &&;
+  Element colSpan(std::size_t span) &&;
+  Element rowSpan(std::size_t span) &&;
   Element key(std::string key) &&;
   [[nodiscard]] std::optional<std::string> const& explicitKey() const noexcept { return key_; }
 
@@ -221,6 +226,8 @@ private:
   std::optional<float> flexShrinkOverride_;
   std::optional<float> flexBasisOverride_;
   std::optional<float> minMainSizeOverride_;
+  std::optional<std::size_t> colSpanOverride_;
+  std::optional<std::size_t> rowSpanOverride_;
   std::vector<std::shared_ptr<detail::EnvironmentOverride const>> envOverrides_;
   std::shared_ptr<detail::ElementModifiers> modifiers_;
   std::optional<std::string> key_{};

@@ -204,6 +204,16 @@ Element ViewModifiers<Derived>::flex(float grow, float shrink, float basis) && {
 }
 
 template<typename Derived>
+Element ViewModifiers<Derived>::colSpan(std::size_t span) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.colSpan(span);
+}
+
+template<typename Derived>
+Element ViewModifiers<Derived>::rowSpan(std::size_t span) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.rowSpan(span);
+}
+
+template<typename Derived>
 template<typename Key>
 Element ViewModifiers<Derived>::environment(typename EnvironmentKey<Key>::Value value) && {
   return Element{std::move(static_cast<Derived&>(*this))}

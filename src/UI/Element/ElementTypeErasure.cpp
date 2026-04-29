@@ -278,6 +278,14 @@ float Element::minMainSize() const {
   return minMainSizeOverride_.value_or(impl_->minMainSize());
 }
 
+std::size_t Element::colSpan() const {
+  return colSpanOverride_.value_or(1u);
+}
+
+std::size_t Element::rowSpan() const {
+  return rowSpanOverride_.value_or(1u);
+}
+
 Element Element::flex(float grow) && {
   flexGrowOverride_ = grow;
   flexShrinkOverride_ = 1.f;
@@ -299,6 +307,16 @@ Element Element::flex(float grow, float shrink, float basis) && {
   flexShrinkOverride_ = shrink;
   flexBasisOverride_ = std::max(0.f, basis);
   minMainSizeOverride_.reset();
+  return std::move(*this);
+}
+
+Element Element::colSpan(std::size_t span) && {
+  colSpanOverride_ = std::max<std::size_t>(1, span);
+  return std::move(*this);
+}
+
+Element Element::rowSpan(std::size_t span) && {
+  rowSpanOverride_ = std::max<std::size_t>(1, span);
   return std::move(*this);
 }
 

@@ -13,6 +13,7 @@
 #include <Flux/Reactive/Bindable.hpp>
 #include <Flux/UI/Environment.hpp>
 
+#include <cstddef>
 #include <functional>
 #include <string>
 
@@ -67,6 +68,8 @@ struct ViewModifiers {
   Element flex(float grow) &&;
   Element flex(float grow, float shrink) &&;
   Element flex(float grow, float shrink, float basis) &&;
+  Element colSpan(std::size_t span) &&;
+  Element rowSpan(std::size_t span) &&;
   template<typename Key>
   Element environment(typename EnvironmentKey<Key>::Value value) &&;
 

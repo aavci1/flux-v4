@@ -19,9 +19,17 @@ std::size_t clampedColumns(std::size_t columns) {
   return std::max<std::size_t>(1, columns);
 }
 
-std::size_t spanFor(Grid const& grid, std::size_t index) {
-  if (index < grid.columnSpans.size()) {
-    return std::max<std::size_t>(1, std::min(grid.columnSpans[index], clampedColumns(grid.columns)));
+std::size_t colSpanFor(Grid const& grid, std::size_t index) {
+  if (index < grid.children.size()) {
+    return std::max<std::size_t>(1, std::min(grid.children[index].colSpan(),
+                                             clampedColumns(grid.columns)));
+  }
+  return 1;
+}
+
+std::size_t rowSpanFor(Grid const& grid, std::size_t index) {
+  if (index < grid.children.size()) {
+    return std::max<std::size_t>(1, grid.children[index].rowSpan());
   }
   return 1;
 }
@@ -61,6 +69,100 @@ struct GridPlan {
   std::vector<Rect> slots;
 };
 
+struct GridPlacement {
+  std::size_t row = 0;
+  std::size_t column = 0;
+  std::size_t colSpan = 1;
+  std::size_t rowSpan = 1;
+};
+
+using OccupancyGrid = std::vector<std::vector<bool>>;
+
+bool canOccupy(OccupancyGrid const& occupied, std::size_t row, std::size_t column,
+               std::size_t colSpan, std::size_t rowSpan, std::size_t columns) {
+  if (column + colSpan > columns) {
+    return false;
+  }
+  for (std::size_t r = row; r < row + rowSpan; ++r) {
+    if (r >= occupied.size()) {
+      continue;
+    }
+    for (std::size_t c = column; c < column + colSpan; ++c) {
+      if (occupied[r][c]) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+void markOccupied(OccupancyGrid& occupied, GridPlacement const& placement, std::size_t columns) {
+  std::size_t const requiredRows = placement.row + placement.rowSpan;
+  while (occupied.size() < requiredRows) {
+    occupied.push_back(std::vector<bool>(columns, false));
+  }
+  for (std::size_t r = placement.row; r < placement.row + placement.rowSpan; ++r) {
+    for (std::size_t c = placement.column; c < placement.column + placement.colSpan; ++c) {
+      occupied[r][c] = true;
+    }
+  }
+}
+
+std::vector<GridPlacement> placeGridItems(Grid const& grid, std::size_t count) {
+  std::size_t const columns = clampedColumns(grid.columns);
+  std::vector<GridPlacement> placements(count);
+  OccupancyGrid occupied;
+  std::size_t row = 0;
+  std::size_t column = 0;
+
+  for (std::size_t i = 0; i < count; ++i) {
+    GridPlacement placement{
+        .row = row,
+        .column = column,
+        .colSpan = colSpanFor(grid, i),
+        .rowSpan = rowSpanFor(grid, i),
+    };
+
+    while (!canOccupy(occupied, placement.row, placement.column,
+                      placement.colSpan, placement.rowSpan, columns)) {
+      ++placement.column;
+      if (placement.column >= columns) {
+        ++placement.row;
+        placement.column = 0;
+      }
+    }
+
+    placements[i] = placement;
+    markOccupied(occupied, placement, columns);
+
+    row = placement.row;
+    column = placement.column + placement.colSpan;
+    if (column >= columns) {
+      ++row;
+      column = 0;
+    }
+  }
+
+  return placements;
+}
+
+float slotWidth(GridPlacement const& placement, float columnWidth, float horizontalSpacing) {
+  return columnWidth * static_cast<float>(placement.colSpan) +
+         horizontalSpacing * static_cast<float>(placement.colSpan - 1);
+}
+
+float spannedHeight(std::vector<float> const& rowHeights, std::size_t row,
+                    std::size_t rowSpan, float verticalSpacing) {
+  float height = 0.f;
+  for (std::size_t r = row; r < row + rowSpan && r < rowHeights.size(); ++r) {
+    height += rowHeights[r];
+  }
+  if (rowSpan > 1) {
+    height += verticalSpacing * static_cast<float>(rowSpan - 1);
+  }
+  return height;
+}
+
 GridPlan planGrid(Grid const& grid, LayoutConstraints const& constraints,
                   std::vector<Size> const& measured) {
   GridPlan plan{};
@@ -74,42 +176,58 @@ GridPlan planGrid(Grid const& grid, LayoutConstraints const& constraints,
                                         : 0.f;
 
   plan.slots.resize(measured.size());
-  std::size_t column = 0;
-  float y = 0.f;
-  float rowHeight = 0.f;
-  std::size_t rowStart = 0;
+  std::vector<GridPlacement> const placements = placeGridItems(grid, measured.size());
 
-  auto finishRow = [&](std::size_t rowEnd) {
-    for (std::size_t i = rowStart; i < rowEnd; ++i) {
-      plan.slots[i].height = rowHeight;
+  std::size_t rows = 0;
+  for (GridPlacement const& placement : placements) {
+    rows = std::max(rows, placement.row + placement.rowSpan);
+  }
+
+  std::vector<float> rowHeights(rows, 0.f);
+  for (std::size_t i = 0; i < measured.size(); ++i) {
+    GridPlacement const& placement = placements[i];
+    if (placement.rowSpan == 1 && placement.row < rowHeights.size()) {
+      rowHeights[placement.row] = std::max(rowHeights[placement.row], measured[i].height);
     }
-    y += rowHeight + grid.verticalSpacing;
-    rowHeight = 0.f;
-    rowStart = rowEnd;
-    column = 0;
-  };
+  }
+  for (std::size_t i = 0; i < measured.size(); ++i) {
+    GridPlacement const& placement = placements[i];
+    if (placement.rowSpan <= 1) {
+      continue;
+    }
+    float const currentHeight = spannedHeight(rowHeights, placement.row, placement.rowSpan,
+                                             grid.verticalSpacing);
+    float const deficit = measured[i].height - currentHeight;
+    if (deficit <= 0.f) {
+      continue;
+    }
+    float const perRow = deficit / static_cast<float>(placement.rowSpan);
+    for (std::size_t r = placement.row; r < placement.row + placement.rowSpan && r < rowHeights.size(); ++r) {
+      rowHeights[r] += perRow;
+    }
+  }
+
+  std::vector<float> rowY(rows, 0.f);
+  float y = 0.f;
+  for (std::size_t r = 0; r < rows; ++r) {
+    rowY[r] = y;
+    y += rowHeights[r];
+    if (r + 1 < rows) {
+      y += grid.verticalSpacing;
+    }
+  }
 
   for (std::size_t i = 0; i < measured.size(); ++i) {
-    std::size_t const span = spanFor(grid, i);
-    if (column > 0 && column + span > columns) {
-      finishRow(i);
-    }
-    float const x = static_cast<float>(column) * (columnWidth + grid.horizontalSpacing);
-    float const width = columnWidth * static_cast<float>(span) +
-                        grid.horizontalSpacing * static_cast<float>(span - 1);
-    rowHeight = std::max(rowHeight, measured[i].height);
-    plan.slots[i] = Rect{x, y, width, measured[i].height};
-    column += span;
-    if (column >= columns) {
-      finishRow(i + 1);
-    }
+    GridPlacement const& placement = placements[i];
+    float const x = static_cast<float>(placement.column) * (columnWidth + grid.horizontalSpacing);
+    plan.slots[i] = Rect{
+        x,
+        placement.row < rowY.size() ? rowY[placement.row] : 0.f,
+        slotWidth(placement, columnWidth, grid.horizontalSpacing),
+        spannedHeight(rowHeights, placement.row, placement.rowSpan, grid.verticalSpacing),
+    };
   }
-  if (rowStart < measured.size()) {
-    finishRow(measured.size());
-  }
-  if (!measured.empty()) {
-    y -= grid.verticalSpacing;
-  }
+
   plan.size = Size{std::max(availableWidth, constraints.minWidth), std::max(y, constraints.minHeight)};
   return plan;
 }
@@ -127,10 +245,9 @@ Size Grid::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
                                              static_cast<float>(columnsCount));
   std::vector<Size> measured;
   measured.reserve(children.size());
+  std::vector<GridPlacement> const placements = placeGridItems(*this, children.size());
   for (std::size_t i = 0; i < children.size(); ++i) {
-    std::size_t const span = spanFor(*this, i);
-    float const width = columnWidth * static_cast<float>(span) +
-                        horizontalSpacing * static_cast<float>(span - 1);
+    float const width = slotWidth(placements[i], columnWidth, horizontalSpacing);
     LayoutConstraints childConstraints{
         .maxWidth = width,
         .maxHeight = std::numeric_limits<float>::infinity(),
@@ -153,10 +270,9 @@ std::unique_ptr<scenegraph::SceneNode> Grid::mount(MountContext& ctx) const {
 
   std::vector<Size> measured;
   measured.reserve(children.size());
+  std::vector<GridPlacement> const placements = placeGridItems(*this, children.size());
   for (std::size_t i = 0; i < children.size(); ++i) {
-    std::size_t const span = spanFor(*this, i);
-    float const width = columnWidth * static_cast<float>(span) +
-                        horizontalSpacing * static_cast<float>(span - 1);
+    float const width = slotWidth(placements[i], columnWidth, horizontalSpacing);
     LayoutConstraints childConstraints{
         .maxWidth = width,
         .maxHeight = std::numeric_limits<float>::infinity(),
@@ -171,7 +287,9 @@ std::unique_ptr<scenegraph::SceneNode> Grid::mount(MountContext& ctx) const {
   struct MountedGridChild {
     scenegraph::SceneNode* node = nullptr;
     Point layoutOrigin{};
+    std::size_t childIndex = 0;
   };
+  auto measuredSizes = std::make_shared<std::vector<Size>>(std::move(measured));
   auto mountedChildren = std::make_shared<std::vector<MountedGridChild>>();
   for (std::size_t i = 0; i < children.size(); ++i) {
     Rect const slot = plan.slots[i];
@@ -184,14 +302,14 @@ std::unique_ptr<scenegraph::SceneNode> Grid::mount(MountContext& ctx) const {
           slot.y + alignedOffset(slot.height, bounds.height, verticalAlignment),
       };
       detail::setLayoutPosition(*childNode, origin);
-      mountedChildren->push_back(MountedGridChild{childNode.get(), origin});
+      mountedChildren->push_back(MountedGridChild{childNode.get(), origin, i});
       group->appendChild(std::move(childNode));
     }
   }
   auto* rawGroup = group.get();
   Grid grid = *this;
   rawGroup->setLayoutConstraints(ctx.constraints());
-  rawGroup->setRelayout([rawGroup, mountedChildren, grid = std::move(grid)](
+  rawGroup->setRelayout([rawGroup, mountedChildren, measuredSizes, grid = std::move(grid)](
                             LayoutConstraints const& constraints) mutable {
     std::size_t const columnsCount = clampedColumns(grid.columns);
     float const availableWidth = std::isfinite(constraints.maxWidth) && constraints.maxWidth > 0.f
@@ -200,32 +318,33 @@ std::unique_ptr<scenegraph::SceneNode> Grid::mount(MountContext& ctx) const {
     float const totalGap = static_cast<float>(columnsCount - 1) * grid.horizontalSpacing;
     float const columnWidth = std::max(0.f, (availableWidth - totalGap) /
                                                static_cast<float>(columnsCount));
-    std::vector<Size> measured;
-    measured.reserve(mountedChildren->size());
-    for (std::size_t i = 0; i < mountedChildren->size(); ++i) {
-      std::size_t const span = spanFor(grid, i);
-      float const width = columnWidth * static_cast<float>(span) +
-                          grid.horizontalSpacing * static_cast<float>(span - 1);
+    std::vector<GridPlacement> const placements = placeGridItems(grid, grid.children.size());
+    std::vector<Size> measured = *measuredSizes;
+    measured.resize(grid.children.size());
+    for (MountedGridChild const& child : *mountedChildren) {
+      if (!child.node || child.childIndex >= placements.size()) {
+        continue;
+      }
+      float const width = slotWidth(placements[child.childIndex], columnWidth, grid.horizontalSpacing);
       LayoutConstraints childConstraints{
           .maxWidth = width,
           .maxHeight = std::numeric_limits<float>::infinity(),
           .minWidth = 0.f,
           .minHeight = 0.f,
       };
-      MountedGridChild const& child = (*mountedChildren)[i];
       if (child.node && child.node->relayout(childConstraints)) {
-        measured.push_back(child.node->size());
+        measured[child.childIndex] = child.node->size();
       } else {
-        measured.push_back(child.node ? child.node->size() : Size{});
+        measured[child.childIndex] = child.node ? child.node->size() : Size{};
       }
     }
+    *measuredSizes = measured;
     GridPlan const plan = planGrid(grid, constraints, measured);
-    for (std::size_t i = 0; i < mountedChildren->size() && i < plan.slots.size(); ++i) {
-      MountedGridChild& child = (*mountedChildren)[i];
-      if (!child.node) {
+    for (MountedGridChild& child : *mountedChildren) {
+      if (!child.node || child.childIndex >= plan.slots.size()) {
         continue;
       }
-      Rect const slot = plan.slots[i];
+      Rect const slot = plan.slots[child.childIndex];
       child.node->relayout(fixedConstraints(Size{slot.width, slot.height}), false);
       Rect const bounds = child.node->bounds();
       Point const current = child.node->position();

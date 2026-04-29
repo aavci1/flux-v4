@@ -432,24 +432,34 @@ Element makeGridDemo(Theme const &theme) {
             .padding(theme.space3)
             .fill(FillStyle::solid(Color::accent()))
             .cornerRadius(CornerRadius {theme.radiusMedium})
+            .colSpan(3u)
     );
     spanCells.push_back(
         VStack {
-            .spacing = theme.space1,
+            .spacing = theme.space2,
             .alignment = Alignment::Start,
             .children = children(
                 Text {
-                    .text = "Span 1",
-                    .font = Font::caption(),
+                    .text = "Rows 2",
+                    .font = Font::headline(),
                     .color = Color::primary(),
                     .horizontalAlignment = HorizontalAlignment::Leading,
                 },
-                colorBlock(Color::secondary(), 26.f, 18.f, theme.radiusSmall)
+                Text {
+                    .text = "This card reserves two row tracks, so later cells flow around it.",
+                    .font = Font::caption(),
+                    .color = Color::secondary(),
+                    .horizontalAlignment = HorizontalAlignment::Leading,
+                    .wrapping = TextWrapping::Wrap,
+                },
+                Spacer {},
+                colorBlock(Color::secondary(), 26.f, 52.f, theme.radiusSmall)
             )
         }
             .padding(theme.space3)
             .fill(FillStyle::solid(Color::controlBackground()))
             .cornerRadius(CornerRadius {theme.radiusMedium})
+            .rowSpan(2u)
     );
     spanCells.push_back(
         VStack {
@@ -474,6 +484,7 @@ Element makeGridDemo(Theme const &theme) {
             .padding(theme.space3)
             .fill(FillStyle::solid(Color::successBackground()))
             .cornerRadius(CornerRadius {theme.radiusMedium})
+            .colSpan(2u)
     );
     spanCells.push_back(
         VStack {
@@ -514,7 +525,7 @@ Element makeGridDemo(Theme const &theme) {
 
     return makeSectionCard(
         theme, "Grid",
-        "Fixed columns place children row-by-row. Mixed intrinsic sizes stay aligned inside each cell, and column spans let specific items stretch across multiple tracks.",
+        "Fixed columns place children row-by-row. Mixed intrinsic sizes stay aligned inside each cell, and column or row spans let specific items stretch across multiple tracks.",
         VStack {
             .spacing = theme.space3,
             .alignment = Alignment::Stretch,
@@ -532,9 +543,8 @@ Element makeGridDemo(Theme const &theme) {
                     .horizontalSpacing = theme.space3,
                     .verticalSpacing = theme.space3,
                     .horizontalAlignment = Alignment::Start,
-                    .verticalAlignment = Alignment::Center,
+                    .verticalAlignment = Alignment::Stretch,
                     .children = std::move(spanCells),
-                    .columnSpans = {3u, 1u, 2u, 1u, 1u},
                 }
             )
         }
