@@ -45,6 +45,7 @@ public:
   id<MTLTexture> texture() const { return texture_; }
 
   bool grow();
+  std::uint64_t generation() const noexcept { return generation_; }
 
   /// Tier A: grow before drawing when shelf usage is high so `grow()` rarely runs mid-frame (which would
   /// invalidate UVs already written to the frame). Call from `Canvas::beginFrame` after clearing frame data.
@@ -78,6 +79,7 @@ private:
 
   std::unordered_map<GlyphKey, AtlasEntry, GlyphKeyHash> entries_;
 
+  std::uint64_t generation_ = 1;
   bool pendingGrow_ = false;
   std::function<bool()> beforeGrow_{};
 };

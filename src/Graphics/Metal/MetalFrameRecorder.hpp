@@ -3,6 +3,7 @@
 #include "Graphics/Metal/MetalCanvasTypes.hpp"
 #include "Graphics/PathFlattener.hpp"
 
+#include <cstdint>
 #include <vector>
 
 namespace flux {
@@ -22,6 +23,7 @@ struct MetalFrameRecorder {
   mutable std::uint32_t preparedRectInstanceCapacity = 0;
   mutable void* preparedGlyphVertexBuffer = nullptr;
   mutable std::uint32_t preparedGlyphVertexCapacity = 0;
+  std::uint64_t glyphAtlasGeneration = 0;
 
   MetalFrameRecorder() = default;
   ~MetalFrameRecorder();

@@ -418,7 +418,9 @@ public:
       : textSystem_(textSystem), metal_(layer), windowHandle_(handle) {
     glyphAtlas_ = std::make_unique<GlyphAtlas>(metal_.device(), textSystem_);
     glyphAtlas_->setBeforeGrowCallback([this]() {
-      return frame_.glyphVerts.empty() && frame_.glyphVertexSources.empty() && frame_.glyphVertexCount == 0;
+      MetalFrameRecorder const& recorder = activeRecorder();
+      return recorder.glyphVerts.empty() && recorder.glyphVertexSources.empty() &&
+             recorder.glyphVertexCount == 0;
     });
     frameSem_ = dispatch_semaphore_create(static_cast<int>(kFramesInFlight));
     pushState();
@@ -1283,6 +1285,7 @@ public:
 
     std::uint32_t const vertCount = static_cast<std::uint32_t>(recorder.glyphVerts.size()) - ownedGlyphStart;
     if (vertCount > 0) {
+      recorder.glyphAtlasGeneration = glyphAtlas_->generation();
       appendOwnedGlyphSource(recorder, ownedGlyphStart, vertCount);
       MetalGlyphOp op{};
       op.glyphStart = glyphStart;
@@ -1350,6 +1353,14 @@ private:
   GpuState const& currentState() const { return stateStack_.back(); }
   MetalFrameRecorder& activeRecorder() { return captureRecorder_ ? *captureRecorder_ : frame_; }
   MetalFrameRecorder const& activeRecorder() const { return captureRecorder_ ? *captureRecorder_ : frame_; }
+
+  bool recordedGlyphAtlasCurrent(MetalFrameRecorder const& recorded,
+                                 MetalRecorderSlice const& slice) const {
+    if (slice.glyphVertexCount == 0 && slice.glyphOpCount == 0) {
+      return true;
+    }
+    return recorded.glyphAtlasGeneration == glyphAtlas_->generation();
+  }
 
   void pushState() { stateStack_.push_back(stateStack_.empty() ? GpuState{} : stateStack_.back()); }
 
@@ -1595,6 +1606,9 @@ public:
   }
 
   void replayRecordedOps(MetalFrameRecorder const& recorded, MetalRecorderSlice const& slice) {
+    if (!recordedGlyphAtlasCurrent(recorded, slice)) {
+      return;
+    }
     MetalFrameRecorder& frame = frame_;
     RecorderCapacitySnapshot const capacityBefore = snapshotRecorderCapacity(frame);
     void* const externalRectBuffer = slice.rectCount > 0 ? preparedRectInstanceBuffer(recorded) : nullptr;
@@ -1692,6 +1706,9 @@ public:
 
   bool replayRecordedLocalOps(MetalFrameRecorder const& recorded, MetalRecorderSlice const& slice) {
     if (!inFrame_) {
+      return false;
+    }
+    if (!recordedGlyphAtlasCurrent(recorded, slice)) {
       return false;
     }
     if (!currentState().transform.isTranslationOnly()) {

@@ -21,7 +21,8 @@ MetalFrameRecorder::MetalFrameRecorder(MetalFrameRecorder&& other) noexcept
       preparedRectInstanceBuffer(other.preparedRectInstanceBuffer),
       preparedRectInstanceCapacity(other.preparedRectInstanceCapacity),
       preparedGlyphVertexBuffer(other.preparedGlyphVertexBuffer),
-      preparedGlyphVertexCapacity(other.preparedGlyphVertexCapacity) {
+      preparedGlyphVertexCapacity(other.preparedGlyphVertexCapacity),
+      glyphAtlasGeneration(other.glyphAtlasGeneration) {
   other.rectOps.clear();
   other.imageOps.clear();
   other.pathOps.clear();
@@ -35,6 +36,7 @@ MetalFrameRecorder::MetalFrameRecorder(MetalFrameRecorder&& other) noexcept
   other.preparedRectInstanceCapacity = 0;
   other.preparedGlyphVertexBuffer = nullptr;
   other.preparedGlyphVertexCapacity = 0;
+  other.glyphAtlasGeneration = 0;
 }
 
 MetalFrameRecorder& MetalFrameRecorder::operator=(MetalFrameRecorder&& other) noexcept {
@@ -55,6 +57,7 @@ MetalFrameRecorder& MetalFrameRecorder::operator=(MetalFrameRecorder&& other) no
   preparedRectInstanceCapacity = other.preparedRectInstanceCapacity;
   preparedGlyphVertexBuffer = other.preparedGlyphVertexBuffer;
   preparedGlyphVertexCapacity = other.preparedGlyphVertexCapacity;
+  glyphAtlasGeneration = other.glyphAtlasGeneration;
   other.rectOps.clear();
   other.imageOps.clear();
   other.pathOps.clear();
@@ -68,6 +71,7 @@ MetalFrameRecorder& MetalFrameRecorder::operator=(MetalFrameRecorder&& other) no
   other.preparedRectInstanceCapacity = 0;
   other.preparedGlyphVertexBuffer = nullptr;
   other.preparedGlyphVertexCapacity = 0;
+  other.glyphAtlasGeneration = 0;
   return *this;
 }
 
@@ -97,6 +101,7 @@ void MetalFrameRecorder::clear() {
   glyphVerts.clear();
   glyphVertexSources.clear();
   glyphVertexCount = 0;
+  glyphAtlasGeneration = 0;
 }
 
 } // namespace flux

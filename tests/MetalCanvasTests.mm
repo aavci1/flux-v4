@@ -2,6 +2,7 @@
 
 #include "Graphics/CoreTextSystem.hpp"
 #include "Graphics/Metal/MetalCanvas.hpp"
+#include "Graphics/Metal/MetalFrameRecorder.hpp"
 
 #include <Flux/Graphics/Image.hpp>
 #include <Flux/SceneGraph/GroupNode.hpp>
@@ -74,6 +75,25 @@ static std::shared_ptr<TextLayout const> makeLabel(CoreTextSystem& textSystem, s
   font.size = 13.f;
   font.weight = 400.f;
   return textSystem.layout(text, font, Colors::white, 120.f, {});
+}
+
+static MetalRecorderSlice fullSlice(MetalFrameRecorder const& recorded) {
+  return MetalRecorderSlice{
+      .orderStart = 0,
+      .orderCount = static_cast<std::uint32_t>(recorded.opOrder.size()),
+      .rectStart = 0,
+      .rectCount = static_cast<std::uint32_t>(recorded.rectOps.size()),
+      .imageStart = 0,
+      .imageCount = static_cast<std::uint32_t>(recorded.imageOps.size()),
+      .pathOpStart = 0,
+      .pathOpCount = static_cast<std::uint32_t>(recorded.pathOps.size()),
+      .glyphOpStart = 0,
+      .glyphOpCount = static_cast<std::uint32_t>(recorded.glyphOps.size()),
+      .pathVertexStart = 0,
+      .pathVertexCount = static_cast<std::uint32_t>(recorded.pathVerts.size()),
+      .glyphVertexStart = 0,
+      .glyphVertexCount = recorded.glyphVertexCount,
+  };
 }
 
 struct StressScene {
@@ -202,6 +222,56 @@ TEST_CASE("MetalCanvas can render multiple queued frames without arena aliasing 
 
     waitForCanvasLastPresentComplete(canvas.get());
     CHECK(true);
+  }
+#endif
+}
+
+TEST_CASE("MetalCanvas rejects prepared glyph replay after atlas growth") {
+#if !defined(__APPLE__)
+  SUCCEED();
+#else
+  @autoreleasepool {
+    CoreTextSystem textSystem;
+    TestSurface surface = makeSurface();
+    auto canvas = createMetalCanvas(nullptr, (__bridge void*)surface.layer, 0, textSystem);
+    REQUIRE(canvas);
+    canvas->resize(640, 480);
+    canvas->updateDpiScale(2.f, 2.f);
+
+    Font cachedFont{};
+    cachedFont.family = ".AppleSystemUIFont";
+    cachedFont.size = 24.f;
+    cachedFont.weight = 500.f;
+    auto cachedLayout = textSystem.layout("Cached", cachedFont, Colors::white, 160.f, {});
+
+    MetalFrameRecorder recorded;
+    canvas->beginFrame();
+    canvas->clear(Colors::black);
+    REQUIRE(beginRecordedOpsCaptureForCanvas(canvas.get(), &recorded));
+    canvas->drawTextLayout(*cachedLayout, flux::Point{12.f, 12.f});
+    endRecordedOpsCaptureForCanvas(canvas.get());
+    canvas->present();
+    waitForCanvasLastPresentComplete(canvas.get());
+
+    REQUIRE(recorded.glyphVertexCount > 0);
+    REQUIRE(recorded.glyphAtlasGeneration > 0);
+
+    Font largeFont = cachedFont;
+    largeFont.size = 240.f;
+    auto largeLayout =
+        textSystem.layout("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", largeFont, Colors::white, 12000.f, {});
+
+    canvas->beginFrame();
+    canvas->clear(Colors::black);
+    canvas->drawTextLayout(*largeLayout, flux::Point{0.f, 260.f});
+    canvas->present();
+    waitForCanvasLastPresentComplete(canvas.get());
+
+    canvas->beginFrame();
+    canvas->clear(Colors::black);
+    CHECK_FALSE(replayRecordedLocalOpsForCanvas(canvas.get(), recorded, fullSlice(recorded)));
+    canvas->present();
+    waitForCanvasLastPresentComplete(canvas.get());
   }
 #endif
 }

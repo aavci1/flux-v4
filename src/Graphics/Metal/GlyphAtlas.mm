@@ -98,6 +98,7 @@ bool GlyphAtlas::grow() {
     throw std::runtime_error("GlyphAtlas: grow failed to allocate texture");
   }
   texture_ = newTex;
+  ++generation_;
 
   for (GlyphKey const& k : keys) {
     (void)getOrUpload(k);
