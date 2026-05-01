@@ -1,8 +1,11 @@
 #include <Flux/SceneGraph/SceneGraph.hpp>
 
 #include <Flux/SceneGraph/GroupNode.hpp>
+#include <Flux/SceneGraph/RasterCacheNode.hpp>
+#include <Flux/SceneGraph/Renderer.hpp>
 
 #include "Debug/PerfCounters.hpp"
+#include "SceneGraph/SceneNodeInternal.hpp"
 
 #include <algorithm>
 #include <stdexcept>
@@ -33,6 +36,20 @@ void rebindNodeMappings(std::unordered_map<ComponentKey, SceneNode*, ComponentKe
         if (node == from) {
             node = to;
         }
+    }
+}
+
+void invalidateNodeRenderCaches(SceneNode& node) {
+    detail::SceneNodeAccess::preparedRenderOps(node).reset();
+    if (node.kind() == SceneNodeKind::RasterCache) {
+        static_cast<RasterCacheNode&>(node).invalidateCache();
+    } else if (node.kind() == SceneNodeKind::Group) {
+        detail::SceneNodeAccess::markSubtreeDirty(node);
+    } else {
+        detail::SceneNodeAccess::markDirty(node);
+    }
+    for (std::unique_ptr<SceneNode> const& child : node.children()) {
+        invalidateNodeRenderCaches(*child);
     }
 }
 
@@ -97,6 +114,12 @@ void SceneGraph::clearGeometry() {
     impl_->buildingGeometry.clear();
     impl_->currentNodes.clear();
     impl_->buildingNodes.clear();
+}
+
+void SceneGraph::invalidateRenderCaches() {
+    if (impl_->root) {
+        invalidateNodeRenderCaches(*impl_->root);
+    }
 }
 
 void SceneGraph::recordGeometry(ComponentKey const& key, Rect rect) {

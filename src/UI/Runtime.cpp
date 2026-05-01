@@ -250,6 +250,21 @@ std::vector<HitTarget> focusableTargets(Window& window) {
   return targets;
 }
 
+bool invalidateRenderCaches(Window& window) {
+  bool invalidated = false;
+  if (window.hasSceneGraph()) {
+    window.sceneGraph().invalidateRenderCaches();
+    invalidated = true;
+  }
+  for (std::unique_ptr<OverlayEntry> const& entry : window.overlayManager().entries()) {
+    if (entry) {
+      entry->sceneGraph.invalidateRenderCaches();
+      invalidated = true;
+    }
+  }
+  return invalidated;
+}
+
 RuntimeTargetSnapshot snapshot(scenegraph::SceneNode const* node,
                                scenegraph::InteractionData const* interaction,
                                OverlayId overlay) {
@@ -669,7 +684,12 @@ void Runtime::handleWindowEvent(WindowEvent const& event) {
     resetTransientTargets(d->input, d->window);
     break;
   case WindowEvent::Kind::FocusGained:
+    break;
   case WindowEvent::Kind::DpiChanged:
+    if (invalidateRenderCaches(d->window)) {
+      d->window.requestRedraw();
+    }
+    break;
   case WindowEvent::Kind::CloseRequest:
     break;
   }

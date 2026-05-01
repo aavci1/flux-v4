@@ -532,6 +532,38 @@ TEST_CASE("SceneRenderer does not reprepare parent paint for child-only content 
     CHECK(renderer.fallbackRectDraws == 0);
 }
 
+TEST_CASE("SceneGraph invalidates prepared render caches") {
+    auto root = std::make_unique<GroupNode>(Rect {0.f, 0.f, 200.f, 100.f});
+    auto rect = std::make_unique<RectNode>(
+        Rect {10.f, 12.f, 50.f, 30.f}, FillStyle::solid(Colors::red));
+    RectNode* rectNode = rect.get();
+    root->appendChild(std::move(rect));
+
+    SceneGraph graph {std::move(root)};
+    PreparedCountingRenderer renderer;
+    SceneRenderer sceneRenderer {renderer};
+
+    sceneRenderer.render(graph);
+    CHECK(renderer.prepareCalls == 1);
+    CHECK(renderer.replayCalls == 1);
+    CHECK_FALSE(graph.root().isSubtreeDirty());
+    CHECK_FALSE(rectNode->isDirty());
+
+    sceneRenderer.render(graph);
+    CHECK(renderer.prepareCalls == 1);
+    CHECK(renderer.replayCalls == 2);
+
+    graph.invalidateRenderCaches();
+    CHECK(graph.root().isSubtreeDirty());
+    CHECK(rectNode->isDirty());
+
+    sceneRenderer.render(graph);
+    CHECK(renderer.prepareCalls == 2);
+    CHECK(renderer.replayCalls == 3);
+    CHECK_FALSE(graph.root().isSubtreeDirty());
+    CHECK_FALSE(rectNode->isDirty());
+}
+
 TEST_CASE("RasterCacheNode bypasses prepared ops for descendants") {
     auto root = std::make_unique<GroupNode>(Rect {0.f, 0.f, 240.f, 160.f});
     auto raster = std::make_unique<RasterCacheNode>(Rect {20.f, 24.f, 120.f, 80.f});
@@ -547,6 +579,33 @@ TEST_CASE("RasterCacheNode bypasses prepared ops for descendants") {
     CHECK(renderer.prepareCalls == 0);
     CHECK(renderer.replayCalls == 0);
     CHECK(renderer.fallbackRectDraws == 1);
+}
+
+TEST_CASE("SceneGraph invalidates raster cache boundaries") {
+    auto root = std::make_unique<GroupNode>(Rect {0.f, 0.f, 240.f, 160.f});
+    auto raster = std::make_unique<RasterCacheNode>(Rect {20.f, 24.f, 120.f, 80.f});
+    RasterCacheNode* rasterNode = raster.get();
+    raster->setSubtree(std::make_unique<RectNode>(
+        Rect {0.f, 0.f, 80.f, 40.f}, FillStyle::solid(Colors::red)));
+    root->appendChild(std::move(raster));
+
+    SceneGraph graph {std::move(root)};
+    PreparedCountingRenderer renderer;
+    SceneRenderer sceneRenderer {renderer};
+
+    sceneRenderer.render(graph);
+    CHECK(renderer.prepareCalls == 0);
+    CHECK(renderer.fallbackRectDraws == 1);
+    CHECK_FALSE(rasterNode->isDirty());
+
+    graph.invalidateRenderCaches();
+    CHECK(rasterNode->isDirty());
+    CHECK(rasterNode->isSubtreeDirty());
+
+    sceneRenderer.render(graph);
+    CHECK(renderer.prepareCalls == 0);
+    CHECK(renderer.fallbackRectDraws == 2);
+    CHECK_FALSE(rasterNode->isDirty());
 }
 
 } // namespace

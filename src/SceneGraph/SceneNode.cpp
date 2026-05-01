@@ -315,6 +315,14 @@ void SceneNode::markSubtreeDirty() noexcept {
     }
 }
 
+void detail::SceneNodeAccess::markDirty(SceneNode &node) noexcept {
+    node.markDirty();
+}
+
+void detail::SceneNodeAccess::markSubtreeDirty(SceneNode &node) noexcept {
+    node.markSubtreeDirty();
+}
+
 void detail::SceneNodeAccess::clearDirty(SceneNode const &node) noexcept {
     node.ownPaintingDirty_ = false;
 }

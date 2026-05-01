@@ -35,6 +35,7 @@ class SceneGraph {
     void beginGeometryBuild();
     void finishGeometryBuild();
     void clearGeometry();
+    void invalidateRenderCaches();
     void recordGeometry(ComponentKey const& key, Rect rect);
     void recordNode(ComponentKey const& key, SceneNode* node);
     bool retainSubtreeGeometry(ComponentKey const& key, Point newOrigin);
