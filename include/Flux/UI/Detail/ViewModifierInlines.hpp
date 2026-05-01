@@ -109,6 +109,18 @@ Element ViewModifiers<Derived>::clipContent(bool clip) && {
 }
 
 template<typename Derived>
+Element ViewModifiers<Derived>::rasterize() && {
+  return Element{std::move(static_cast<Derived&>(*this))}.rasterize();
+}
+
+template<typename Derived>
+template<typename T>
+Element ViewModifiers<Derived>::rasterizeInvalidateOn(Reactive::Bindable<T> binding) && {
+  return Element{std::move(static_cast<Derived&>(*this))}
+      .rasterizeInvalidateOn(std::move(binding));
+}
+
+template<typename Derived>
 Element ViewModifiers<Derived>::overlay(Element over) && {
   return Element{std::move(static_cast<Derived&>(*this))}.overlay(std::move(over));
 }

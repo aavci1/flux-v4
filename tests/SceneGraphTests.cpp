@@ -8,6 +8,7 @@
 #include <Flux/SceneGraph/ImageNode.hpp>
 #include <Flux/SceneGraph/InteractionData.hpp>
 #include <Flux/SceneGraph/PathNode.hpp>
+#include <Flux/SceneGraph/RasterCacheNode.hpp>
 #include <Flux/SceneGraph/RectNode.hpp>
 #include <Flux/SceneGraph/Renderer.hpp>
 #include <Flux/SceneGraph/SceneInteraction.hpp>
@@ -529,6 +530,23 @@ TEST_CASE("SceneRenderer does not reprepare parent paint for child-only content 
     CHECK(renderer.prepareCalls == 3);
     CHECK(renderer.replayCalls == 4);
     CHECK(renderer.fallbackRectDraws == 0);
+}
+
+TEST_CASE("RasterCacheNode bypasses prepared ops for descendants") {
+    auto root = std::make_unique<GroupNode>(Rect {0.f, 0.f, 240.f, 160.f});
+    auto raster = std::make_unique<RasterCacheNode>(Rect {20.f, 24.f, 120.f, 80.f});
+    raster->setSubtree(std::make_unique<RectNode>(
+        Rect {0.f, 0.f, 80.f, 40.f}, FillStyle::solid(Colors::red)));
+    root->appendChild(std::move(raster));
+
+    SceneGraph graph {std::move(root)};
+    PreparedCountingRenderer renderer;
+    SceneRenderer sceneRenderer {renderer};
+
+    sceneRenderer.render(graph);
+    CHECK(renderer.prepareCalls == 0);
+    CHECK(renderer.replayCalls == 0);
+    CHECK(renderer.fallbackRectDraws == 1);
 }
 
 } // namespace

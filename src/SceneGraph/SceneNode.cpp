@@ -41,6 +41,8 @@ std::string_view sceneNodeKindName(SceneNodeKind kind) noexcept {
     switch (kind) {
     case SceneNodeKind::Group:
         return "Group";
+  case SceneNodeKind::RasterCache:
+    return "RasterCache";
   case SceneNodeKind::Rect:
     return "Rect";
   case SceneNodeKind::Text:

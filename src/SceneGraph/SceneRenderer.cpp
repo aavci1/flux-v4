@@ -2,6 +2,7 @@
 
 #include <Flux/Graphics/Canvas.hpp>
 #include <Flux/SceneGraph/PathNode.hpp>
+#include <Flux/SceneGraph/RasterCacheNode.hpp>
 #include <Flux/SceneGraph/RectNode.hpp>
 #include <Flux/SceneGraph/RenderNode.hpp>
 #include <Flux/SceneGraph/Renderer.hpp>
@@ -196,6 +197,14 @@ struct SceneRenderer::Impl {
             return;
         }
         if (!detail::SceneNodeAccess::subtreeDirty(node)) {
+            return;
+        }
+        if (node.kind() == SceneNodeKind::RasterCache) {
+            detail::SceneNodeAccess::preparedRenderOps(node).reset();
+            if (detail::SceneNodeAccess::ownPaintingDirty(node)) {
+                detail::SceneNodeAccess::clearDirty(node);
+            }
+            detail::SceneNodeAccess::clearSubtreeDirty(node);
             return;
         }
         bool const hadPreparedGroup =
@@ -442,8 +451,10 @@ struct SceneRenderer::Impl {
                                rectNode.cornerRadius());
         }
 
+        bool const childUsePreparedCache =
+            usePreparedCache && node.kind() != SceneNodeKind::RasterCache;
         for (std::unique_ptr<SceneNode> const &child : node.children()) {
-            renderNode(*child, nodeOpacity, Point {}, collectCounters, usePreparedCache);
+            renderNode(*child, nodeOpacity, Point {}, collectCounters, childUsePreparedCache);
         }
 
         if (clipsContents) {

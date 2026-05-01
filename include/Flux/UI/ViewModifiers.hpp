@@ -47,6 +47,9 @@ struct ViewModifiers {
   Element translate(Reactive::Bindable<Vec2> delta) &&;
   Element translate(Reactive::Bindable<float> dx, Reactive::Bindable<float> dy) &&;
   Element clipContent(bool clip) &&;
+  Element rasterize() &&;
+  template<typename T>
+  Element rasterizeInvalidateOn(Reactive::Bindable<T> binding) &&;
   Element overlay(Element over) &&;
   Element key(std::string key) &&;
 

@@ -2,6 +2,7 @@
 
 #include <Flux/Reactive/Effect.hpp>
 #include <Flux/SceneGraph/InteractionData.hpp>
+#include <Flux/SceneGraph/RasterCacheNode.hpp>
 #include <Flux/SceneGraph/RectNode.hpp>
 #include <Flux/SceneGraph/SceneNode.hpp>
 #include <Flux/UI/Hooks.hpp>
@@ -438,6 +439,12 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
   });
   rawWrapper->setClipsContents(modifiers.clip);
 
+  if (modifiers.rasterize) {
+    auto raster = std::make_unique<scenegraph::RasterCacheNode>(
+        Rect{0.f, 0.f, content->size().width, content->size().height});
+    raster->setSubtree(std::move(content));
+    content = std::move(raster);
+  }
   scenegraph::SceneNode* rawContent = content.get();
   content->setPosition(Point{std::max(0.f, padding.left), std::max(0.f, padding.top)});
   wrapper->appendChild(std::move(content));

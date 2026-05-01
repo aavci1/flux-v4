@@ -161,6 +161,7 @@ add_library(flux STATIC
   src/UI/LayoutDebugDump.cpp
   src/SceneGraph/SceneNode.cpp
   src/SceneGraph/GroupNode.cpp
+  src/SceneGraph/RasterCacheNode.cpp
   src/SceneGraph/RectNode.cpp
   src/SceneGraph/TextNode.cpp
   src/SceneGraph/ImageNode.cpp

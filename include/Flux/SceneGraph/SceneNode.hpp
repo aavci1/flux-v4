@@ -34,6 +34,7 @@ using RelayoutFn = Reactive::SmallFn<void(LayoutConstraints const&), 64>;
 
 enum class SceneNodeKind : std::uint8_t {
   Group,
+  RasterCache,
   Rect,
   Text,
   Image,

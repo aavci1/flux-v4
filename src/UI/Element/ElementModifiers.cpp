@@ -17,6 +17,7 @@ detail::ElementModifiers::ElementModifiers(detail::ElementModifiers const& o)
     , sizeHeight(o.sizeHeight)
     , hasSizeWidth(o.hasSizeWidth)
     , hasSizeHeight(o.hasSizeHeight)
+    , rasterize(o.rasterize)
     , overlay(o.overlay ? std::make_unique<Element>(*o.overlay) : nullptr)
     , onTap(o.onTap)
     , onPointerEnter(o.onPointerEnter)
@@ -49,6 +50,7 @@ detail::ElementModifiers& detail::ElementModifiers::operator=(detail::ElementMod
     sizeHeight = o.sizeHeight;
     hasSizeWidth = o.hasSizeWidth;
     hasSizeHeight = o.hasSizeHeight;
+    rasterize = o.rasterize;
     overlay = o.overlay ? std::make_unique<Element>(*o.overlay) : nullptr;
     onTap = o.onTap;
     onPointerEnter = o.onPointerEnter;
@@ -195,6 +197,11 @@ Element Element::translate(Reactive::Bindable<float> dx, Reactive::Bindable<floa
 
 Element Element::clipContent(bool clip) && {
   writableModifiers().clip = clip;
+  return std::move(*this);
+}
+
+Element Element::rasterize() && {
+  writableModifiers().rasterize = true;
   return std::move(*this);
 }
 
