@@ -3,13 +3,11 @@
 /// \file Flux/SceneGraph/RasterCacheNode.hpp
 ///
 /// Scene-graph boundary for subtrees opted into texture rasterization.
-///
-/// Current implementation note: this is a staged node. It creates the invalidation and renderer
-/// boundary and suppresses PreparedRenderOps below the subtree, but subtree drawing still falls
-/// through to the parent canvas until the Metal offscreen texture pass lands.
 
+#include <Flux/Graphics/Image.hpp>
 #include <Flux/SceneGraph/SceneNode.hpp>
 
+#include <cstdint>
 #include <memory>
 
 namespace flux::scenegraph {
@@ -24,9 +22,23 @@ public:
   SceneNode const* subtree() const noexcept;
 
   void invalidateCache();
+  bool hasValidCache(Size logicalSize, float dpiScale) const noexcept;
+  std::shared_ptr<Image> cachedImage() const noexcept;
+  void setCachedImage(std::shared_ptr<Image> image, Size logicalSize, float dpiScale) const;
+  void noteRasterized() const;
 
   void render(Renderer& renderer) const override;
   bool canPrepareRenderOps() const noexcept override;
+
+private:
+  mutable std::shared_ptr<Image> cachedImage_{};
+  mutable Size cachedLogicalSize_{};
+  mutable float cachedDpiScale_ = 0.f;
+#ifndef NDEBUG
+  mutable std::uint32_t rasterizeBurstCount_ = 0;
+  mutable bool rasterizeWarningLogged_ = false;
+  mutable double rasterizeBurstStartSeconds_ = 0.0;
+#endif
 };
 
 } // namespace flux::scenegraph

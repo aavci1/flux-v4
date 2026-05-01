@@ -18,6 +18,7 @@ detail::ElementModifiers::ElementModifiers(detail::ElementModifiers const& o)
     , hasSizeWidth(o.hasSizeWidth)
     , hasSizeHeight(o.hasSizeHeight)
     , rasterize(o.rasterize)
+    , rasterizeInvalidators(o.rasterizeInvalidators)
     , overlay(o.overlay ? std::make_unique<Element>(*o.overlay) : nullptr)
     , onTap(o.onTap)
     , onPointerEnter(o.onPointerEnter)
@@ -51,6 +52,7 @@ detail::ElementModifiers& detail::ElementModifiers::operator=(detail::ElementMod
     hasSizeWidth = o.hasSizeWidth;
     hasSizeHeight = o.hasSizeHeight;
     rasterize = o.rasterize;
+    rasterizeInvalidators = o.rasterizeInvalidators;
     overlay = o.overlay ? std::make_unique<Element>(*o.overlay) : nullptr;
     onTap = o.onTap;
     onPointerEnter = o.onPointerEnter;

@@ -439,9 +439,11 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
   });
   rawWrapper->setClipsContents(modifiers.clip);
 
+  scenegraph::RasterCacheNode* rawRasterNode = nullptr;
   if (modifiers.rasterize) {
     auto raster = std::make_unique<scenegraph::RasterCacheNode>(
         Rect{0.f, 0.f, content->size().width, content->size().height});
+    rawRasterNode = raster.get();
     raster->setSubtree(std::move(content));
     content = std::move(raster);
   }
@@ -494,6 +496,22 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
     Vec2 const translation = tr.evaluate();
     rawWrapper->setPosition(Point{px.evaluate() + translation.x, y + translation.y});
   });
+  if (rawRasterNode) {
+    for (Reactive::BindingFn invalidator : modifiers.rasterizeInvalidators) {
+      Reactive::SmallFn<void()> requestRedraw = activeCtx.redrawCallback();
+      Reactive::withOwner(activeCtx.owner(), [rawRasterNode, invalidator = std::move(invalidator),
+                                              requestRedraw = std::move(requestRedraw)]() mutable {
+        Reactive::Effect([rawRasterNode, invalidator = std::move(invalidator),
+                          requestRedraw = std::move(requestRedraw)]() mutable {
+          invalidator();
+          rawRasterNode->invalidateCache();
+          if (requestRedraw) {
+            requestRedraw();
+          }
+        });
+      });
+    }
+  }
 
   if (modifiers.overlay) {
     MountContext overlayCtx = activeCtx.childWithSharedScope(LayoutConstraints{

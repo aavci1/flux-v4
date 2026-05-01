@@ -3,6 +3,9 @@
 #include <Flux/SceneGraph/Renderer.hpp>
 
 #include <algorithm>
+#include <chrono>
+#include <cstdio>
+#include <cmath>
 #include <memory>
 
 namespace flux::scenegraph {
@@ -42,7 +45,50 @@ SceneNode const* RasterCacheNode::subtree() const noexcept {
 }
 
 void RasterCacheNode::invalidateCache() {
+  cachedImage_.reset();
+  cachedLogicalSize_ = {};
+  cachedDpiScale_ = 0.f;
   markDirty();
+}
+
+bool RasterCacheNode::hasValidCache(Size logicalSize, float dpiScale) const noexcept {
+  constexpr float eps = 1e-3f;
+  return static_cast<bool>(cachedImage_) &&
+         std::abs(cachedLogicalSize_.width - logicalSize.width) <= eps &&
+         std::abs(cachedLogicalSize_.height - logicalSize.height) <= eps &&
+         std::abs(cachedDpiScale_ - dpiScale) <= eps;
+}
+
+std::shared_ptr<Image> RasterCacheNode::cachedImage() const noexcept {
+  return cachedImage_;
+}
+
+void RasterCacheNode::setCachedImage(std::shared_ptr<Image> image, Size logicalSize, float dpiScale) const {
+  cachedImage_ = std::move(image);
+  cachedLogicalSize_ = logicalSize;
+  cachedDpiScale_ = dpiScale;
+}
+
+void RasterCacheNode::noteRasterized() const {
+#ifndef NDEBUG
+  using Clock = std::chrono::steady_clock;
+  double const now = std::chrono::duration<double>(Clock::now().time_since_epoch()).count();
+  constexpr double kWindowSeconds = 0.5;
+  constexpr std::uint32_t kWarningThreshold = 8;
+  if (rasterizeBurstStartSeconds_ <= 0.0 || now - rasterizeBurstStartSeconds_ > kWindowSeconds) {
+    rasterizeBurstStartSeconds_ = now;
+    rasterizeBurstCount_ = 1;
+    return;
+  }
+  ++rasterizeBurstCount_;
+  if (!rasterizeWarningLogged_ && rasterizeBurstCount_ > kWarningThreshold) {
+    rasterizeWarningLogged_ = true;
+    std::fprintf(stderr,
+                 "[flux:render] RasterCacheNode re-rasterized %u times in %.0fms; "
+                 "remove .rasterize() from animated content\n",
+                 rasterizeBurstCount_, kWindowSeconds * 1000.0);
+  }
+#endif
 }
 
 void RasterCacheNode::render(Renderer&) const {

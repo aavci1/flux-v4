@@ -598,9 +598,16 @@ TEST_CASE("SceneGraph invalidates raster cache boundaries") {
     CHECK(renderer.fallbackRectDraws == 1);
     CHECK_FALSE(rasterNode->isDirty());
 
+    rasterNode->setCachedImage(std::make_shared<DummyImage>(Size{240.f, 160.f}),
+                               Size{120.f, 80.f}, 2.f);
+    REQUIRE(rasterNode->cachedImage());
+    CHECK(rasterNode->hasValidCache(Size{120.f, 80.f}, 2.f));
+
     graph.invalidateRenderCaches();
     CHECK(rasterNode->isDirty());
     CHECK(rasterNode->isSubtreeDirty());
+    CHECK_FALSE(rasterNode->cachedImage());
+    CHECK_FALSE(rasterNode->hasValidCache(Size{120.f, 80.f}, 2.f));
 
     sceneRenderer.render(graph);
     CHECK(renderer.prepareCalls == 0);

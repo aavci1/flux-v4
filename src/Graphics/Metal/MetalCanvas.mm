@@ -1393,6 +1393,19 @@ private:
     std::uint32_t roundedClipCount = 0;
   };
 
+  struct RasterCaptureMetrics {
+    int logicalW = 0;
+    int logicalH = 0;
+    float dpiScaleX = 1.f;
+    float dpiScaleY = 1.f;
+    float dpiScale = 1.f;
+    CGSize frameDrawableSize{};
+    float frameDrawableW = 0.f;
+    float frameDrawableH = 0.f;
+    NSUInteger frameDrawablePixelsW = 0;
+    NSUInteger frameDrawablePixelsH = 0;
+  };
+
   TextSystem& textSystem_;
   std::unique_ptr<GlyphAtlas> glyphAtlas_;
   MetalDeviceResources metal_;
@@ -1424,6 +1437,7 @@ private:
 
   MetalFrameRecorder frame_;
   MetalFrameRecorder* captureRecorder_{nullptr};
+  std::optional<RasterCaptureMetrics> rasterCaptureMetrics_{};
   std::vector<GpuState> stateStack_;
 
   MTLScissorRect clipScissor_{};
@@ -1620,7 +1634,170 @@ private:
     pushImageOp(std::move(op));
   }
 
+  void uploadRecorder(MetalFrameRecorder& recorder) {
+    metal_.uploadRectOps(recorder.rectOps);
+    metal_.uploadImageOps(recorder.imageOps);
+    metal_.uploadPathVertices(recorder.pathVerts);
+    metal_.uploadGlyphVertices(recorder);
+    metal_.reserveDrawStateBuffers(static_cast<std::uint32_t>(recorder.opOrder.size()),
+                                   static_cast<std::uint32_t>(recorder.opOrder.size()));
+  }
+
+  void encodeRecorderOps(MetalFrameRecorder& recorder, id<MTLRenderCommandEncoder> enc,
+                         float viewportW, float viewportH,
+                         NSUInteger viewportPixelsW, NSUInteger viewportPixelsH) {
+    MTLScissorRect const fullScissor = {0, 0, viewportPixelsW, viewportPixelsH};
+    MTLScissorRect lastScissor = {0, 0, 0, 0};
+    bool haveScissor = false;
+
+    id<MTLBuffer> pathBuf = metal_.pathVertexArenaBuffer();
+    id<MTLBuffer> uniformBuf = metal_.drawUniformArenaBuffer();
+    id<MTLBuffer> clipBuf = metal_.roundedClipArenaBuffer();
+    auto* uniformDst = uniformBuf ? static_cast<MetalDrawUniforms*>([uniformBuf contents]) : nullptr;
+    auto* clipDst = clipBuf ? static_cast<MetalRoundedClipStack*>([clipBuf contents]) : nullptr;
+    std::uint32_t uniformIndex = 0;
+    std::uint32_t clipIndex = 0;
+    std::size_t const opCount = recorder.opOrder.size();
+    std::size_t i = 0;
+    while (i < opCount) {
+      MetalOpRef const ref = recorder.opOrder[i];
+      if (ref.kind == MetalOpRef::Rect) {
+        MetalRectOp const& op = recorder.rectOps[ref.index];
+        std::size_t j = i + 1;
+        while (j < opCount) {
+          MetalOpRef const nextRef = recorder.opOrder[j];
+          if (nextRef.kind != MetalOpRef::Rect) {
+            break;
+          }
+          MetalRectOp const& o2 = recorder.rectOps[nextRef.index];
+          MetalOpRef const prevRef = recorder.opOrder[j - 1];
+          MetalRectOp const& prev = recorder.rectOps[prevRef.index];
+          std::uint32_t const prevInstanceIndex =
+              prev.externalInstanceBuffer ? prev.externalInstanceIndex : prev.arenaInstanceIndex;
+          std::uint32_t const nextInstanceIndex =
+              o2.externalInstanceBuffer ? o2.externalInstanceIndex : o2.arenaInstanceIndex;
+          if (o2.externalInstanceBuffer != op.externalInstanceBuffer ||
+              o2.isLine != op.isLine || o2.blendMode != op.blendMode || !sameScissorForBatch(op, o2) ||
+              !sameRoundedClipForBatch(op, o2) || !sameTranslationForBatch(op, o2) ||
+              nextInstanceIndex != prevInstanceIndex + 1) {
+            break;
+          }
+          ++j;
+        }
+        std::size_t const runLen = j - i;
+        setEncoderScissorForOp(enc, op, fullScissor, &lastScissor, &haveScissor);
+        MetalDrawUniforms const uniforms = makeDrawUniforms(viewportW, viewportH, op.translation);
+        setEncoderRoundedClipBuffer(enc, clipBuf, clipDst, &clipIndex, op.roundedClip);
+        id<MTLBuffer> instanceBuf =
+            op.externalInstanceBuffer ? (__bridge id<MTLBuffer>)op.externalInstanceBuffer
+                                      : metal_.instanceArenaBuffer();
+        std::uint32_t const instanceIndex =
+            op.externalInstanceBuffer ? op.externalInstanceIndex : op.arenaInstanceIndex;
+        setEncoderDrawUniformBuffer(enc, uniformBuf, uniformDst, &uniformIndex, uniforms, 2);
+        if (!op.isLine) {
+          [enc setRenderPipelineState:metal_.rectPSO(op.blendMode)];
+          [enc setVertexBuffer:metal_.quadBuffer() offset:0 atIndex:0];
+          const NSUInteger off = static_cast<NSUInteger>(instanceIndex) * sizeof(MetalRectInstance);
+          [enc setVertexBuffer:instanceBuf offset:off atIndex:1];
+          [enc drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:kQuadStripCount
+                  instanceCount:static_cast<NSUInteger>(runLen)];
+          debug::perf::recordDrawCall(debug::perf::RenderCounterKind::Rect);
+        } else {
+          [enc setRenderPipelineState:metal_.linePSO(op.blendMode)];
+          [enc setVertexBuffer:metal_.quadBuffer() offset:0 atIndex:0];
+          const NSUInteger off = static_cast<NSUInteger>(instanceIndex) * sizeof(MetalRectInstance);
+          [enc setVertexBuffer:instanceBuf offset:off atIndex:1];
+          [enc drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:kQuadStripCount
+                  instanceCount:static_cast<NSUInteger>(runLen)];
+          debug::perf::recordDrawCall(debug::perf::RenderCounterKind::Rect);
+        }
+        i = j;
+        continue;
+      }
+      if (ref.kind == MetalOpRef::Glyph) {
+        MetalGlyphOp const& op = recorder.glyphOps[ref.index];
+        std::size_t j = i + 1;
+        std::uint32_t runStart = op.glyphStart;
+        std::uint32_t runVerts = op.glyphVertexCount;
+        while (j < opCount) {
+          MetalOpRef const nextRef = recorder.opOrder[j];
+          if (nextRef.kind != MetalOpRef::Glyph) {
+            break;
+          }
+          MetalGlyphOp const& o2 = recorder.glyphOps[nextRef.index];
+          if (o2.externalVertexBuffer != op.externalVertexBuffer ||
+              o2.blendMode != op.blendMode || !sameScissorForBatch(op, o2) ||
+              !sameRoundedClipForBatch(op, o2) || !sameTranslationForBatch(op, o2) ||
+              o2.glyphStart != runStart + runVerts || nextRef.index != recorder.opOrder[j - 1].index + 1) {
+            break;
+          }
+          runVerts += o2.glyphVertexCount;
+          ++j;
+        }
+        setEncoderScissorForOp(enc, op, fullScissor, &lastScissor, &haveScissor);
+        setEncoderRoundedClipBuffer(enc, clipBuf, clipDst, &clipIndex, op.roundedClip);
+        [enc setRenderPipelineState:metal_.glyphPSO(op.blendMode)];
+        id<MTLBuffer> gbuf =
+            op.externalVertexBuffer ? (__bridge id<MTLBuffer>)op.externalVertexBuffer : metal_.glyphVertexArenaBuffer();
+        const NSUInteger goff = static_cast<NSUInteger>(runStart) * sizeof(MetalGlyphVertex);
+        [enc setVertexBuffer:gbuf offset:goff atIndex:0];
+        MetalDrawUniforms const uniforms = makeDrawUniforms(viewportW, viewportH, op.translation);
+        setEncoderDrawUniformBuffer(enc, uniformBuf, uniformDst, &uniformIndex, uniforms, 1);
+        [enc setFragmentTexture:glyphAtlas_->texture() atIndex:0];
+        [enc setFragmentSamplerState:metal_.linearSampler() atIndex:0];
+        [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:static_cast<NSUInteger>(runVerts)];
+        debug::perf::recordDrawCall(debug::perf::RenderCounterKind::Glyph);
+        i = j;
+        continue;
+      }
+
+      if (ref.kind == MetalOpRef::Image) {
+        MetalImageOp const& op = recorder.imageOps[ref.index];
+        setEncoderScissorForOp(enc, op, fullScissor, &lastScissor, &haveScissor);
+        if (!op.texture) {
+          ++i;
+          continue;
+        }
+        setEncoderRoundedClipBuffer(enc, clipBuf, clipDst, &clipIndex, op.roundedClip);
+        [enc setRenderPipelineState:metal_.imagePSO(op.blendMode)];
+        [enc setVertexBuffer:metal_.quadBuffer() offset:0 atIndex:0];
+        const NSUInteger off = static_cast<NSUInteger>(ref.index) * sizeof(MetalImageInstance);
+        [enc setVertexBuffer:metal_.imageInstanceArenaBuffer() offset:off atIndex:1];
+        MetalDrawUniforms const uniforms = makeDrawUniforms(viewportW, viewportH, op.translation);
+        setEncoderDrawUniformBuffer(enc, uniformBuf, uniformDst, &uniformIndex, uniforms, 2);
+        [enc setFragmentTexture:(__bridge id<MTLTexture>)op.texture atIndex:0];
+        [enc setFragmentSamplerState:op.repeatSampler ? metal_.repeatSampler() : metal_.linearSampler() atIndex:0];
+        [enc drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:kQuadStripCount
+                instanceCount:1];
+        debug::perf::recordDrawCall(debug::perf::RenderCounterKind::Image);
+        ++i;
+        continue;
+      }
+      if (ref.kind == MetalOpRef::Path) {
+        MetalPathOp const& op = recorder.pathOps[ref.index];
+        setEncoderScissorForOp(enc, op, fullScissor, &lastScissor, &haveScissor);
+        if (op.pathCount == 0) {
+          ++i;
+          continue;
+        }
+        setEncoderRoundedClipBuffer(enc, clipBuf, clipDst, &clipIndex, op.roundedClip);
+        [enc setRenderPipelineState:metal_.pathPSO(op.blendMode)];
+        const NSUInteger off = static_cast<NSUInteger>(op.pathStart) * sizeof(PathVertex);
+        [enc setVertexBuffer:pathBuf offset:off atIndex:0];
+        MetalDrawUniforms const uniforms = makeDrawUniforms(viewportW, viewportH, op.translation);
+        setEncoderDrawUniformBuffer(enc, uniformBuf, uniformDst, &uniformIndex, uniforms, 1);
+        [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:static_cast<NSUInteger>(op.pathCount)];
+        debug::perf::recordDrawCall(debug::perf::RenderCounterKind::Path);
+        ++i;
+        continue;
+      }
+      assert(false && "unsupported Metal op ref kind");
+    }
+  }
+
 public:
+  float dpiScale() const noexcept { return dpiScale_; }
+
   void beginRecordedOpsCapture(MetalFrameRecorder* target) {
     if (!target) {
       return;
@@ -1637,6 +1814,118 @@ public:
       stateStack_.pop_back();
     }
     updateClipScissor();
+  }
+
+  bool beginRasterCacheCapture(MetalFrameRecorder* target, Size logicalSize, float dpiScale) {
+    if (!target || captureRecorder_ || logicalSize.width <= 0.f || logicalSize.height <= 0.f ||
+        dpiScale <= 0.f) {
+      return false;
+    }
+    NSUInteger const pixelW = static_cast<NSUInteger>(std::ceil(logicalSize.width * dpiScale));
+    NSUInteger const pixelH = static_cast<NSUInteger>(std::ceil(logicalSize.height * dpiScale));
+    if (pixelW == 0 || pixelH == 0) {
+      return false;
+    }
+    target->clear();
+    rasterCaptureMetrics_ = RasterCaptureMetrics{
+        .logicalW = logicalW_,
+        .logicalH = logicalH_,
+        .dpiScaleX = dpiScaleX_,
+        .dpiScaleY = dpiScaleY_,
+        .dpiScale = dpiScale_,
+        .frameDrawableSize = frameDrawableSize_,
+        .frameDrawableW = frameDrawableW_,
+        .frameDrawableH = frameDrawableH_,
+        .frameDrawablePixelsW = frameDrawablePixelsW_,
+        .frameDrawablePixelsH = frameDrawablePixelsH_,
+    };
+    captureRecorder_ = target;
+    logicalW_ = static_cast<int>(std::ceil(logicalSize.width));
+    logicalH_ = static_cast<int>(std::ceil(logicalSize.height));
+    dpiScaleX_ = dpiScale;
+    dpiScaleY_ = dpiScale;
+    dpiScale_ = dpiScale;
+    frameDrawableSize_ = CGSizeMake(static_cast<CGFloat>(pixelW), static_cast<CGFloat>(pixelH));
+    frameDrawableW_ = static_cast<float>(pixelW);
+    frameDrawableH_ = static_cast<float>(pixelH);
+    frameDrawablePixelsW_ = pixelW;
+    frameDrawablePixelsH_ = pixelH;
+    stateStack_.push_back(GpuState{});
+    updateClipScissor();
+    return true;
+  }
+
+  void endRasterCacheCapture() {
+    captureRecorder_ = nullptr;
+    if (!stateStack_.empty()) {
+      stateStack_.pop_back();
+    }
+    if (rasterCaptureMetrics_.has_value()) {
+      RasterCaptureMetrics const metrics = *rasterCaptureMetrics_;
+      logicalW_ = metrics.logicalW;
+      logicalH_ = metrics.logicalH;
+      dpiScaleX_ = metrics.dpiScaleX;
+      dpiScaleY_ = metrics.dpiScaleY;
+      dpiScale_ = metrics.dpiScale;
+      frameDrawableSize_ = metrics.frameDrawableSize;
+      frameDrawableW_ = metrics.frameDrawableW;
+      frameDrawableH_ = metrics.frameDrawableH;
+      frameDrawablePixelsW_ = metrics.frameDrawablePixelsW;
+      frameDrawablePixelsH_ = metrics.frameDrawablePixelsH;
+      rasterCaptureMetrics_.reset();
+    }
+    updateClipScissor();
+  }
+
+  std::shared_ptr<Image> rasterizeRecordedOps(MetalFrameRecorder& recorded, Size logicalSize,
+                                              float dpiScale) {
+    if (logicalSize.width <= 0.f || logicalSize.height <= 0.f || dpiScale <= 0.f) {
+      return nullptr;
+    }
+    NSUInteger const pixelW = static_cast<NSUInteger>(std::ceil(logicalSize.width * dpiScale));
+    NSUInteger const pixelH = static_cast<NSUInteger>(std::ceil(logicalSize.height * dpiScale));
+    if (pixelW == 0 || pixelH == 0 || !metal_.device() || !metal_.queue()) {
+      return nullptr;
+    }
+
+    MTLTextureDescriptor* desc =
+        [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm
+                                                           width:pixelW
+                                                          height:pixelH
+                                                       mipmapped:NO];
+    desc.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
+    desc.storageMode = MTLStorageModePrivate;
+    id<MTLTexture> texture = [metal_.device() newTextureWithDescriptor:desc];
+    if (!texture) {
+      return nullptr;
+    }
+
+    uploadRecorder(recorded);
+    id<MTLCommandBuffer> commandBuffer = [metal_.queue() commandBuffer];
+    if (!commandBuffer) {
+      return nullptr;
+    }
+
+    MTLRenderPassDescriptor* pass = [MTLRenderPassDescriptor renderPassDescriptor];
+    pass.colorAttachments[0].texture = texture;
+    pass.colorAttachments[0].loadAction = MTLLoadActionClear;
+    pass.colorAttachments[0].clearColor = MTLClearColorMake(0.0, 0.0, 0.0, 0.0);
+    pass.colorAttachments[0].storeAction = MTLStoreActionStore;
+
+    id<MTLRenderCommandEncoder> enc = [commandBuffer renderCommandEncoderWithDescriptor:pass];
+    if (!enc) {
+      return nullptr;
+    }
+    MTLViewport viewport = {0, 0, static_cast<double>(pixelW), static_cast<double>(pixelH), 0.0, 1.0};
+    [enc setViewport:viewport];
+    encodeRecorderOps(recorded, enc, static_cast<float>(pixelW), static_cast<float>(pixelH), pixelW, pixelH);
+    [enc endEncoding];
+    [commandBuffer commit];
+    [commandBuffer waitUntilCompleted];
+    if (commandBuffer.status == MTLCommandBufferStatusError) {
+      return nullptr;
+    }
+    return std::make_shared<MetalImage>(texture);
   }
 
   void* preparedRectInstanceBuffer(MetalFrameRecorder const& recorded) {
@@ -2050,6 +2339,47 @@ bool replayRecordedLocalOpsForCanvas(Canvas* canvas, MetalFrameRecorder const& r
     return mc->replayRecordedLocalOps(recorded, slice);
   }
   return false;
+}
+
+float dpiScaleForCanvas(Canvas* canvas) {
+  if (!canvas) {
+    return 1.f;
+  }
+  if (auto* mc = dynamic_cast<MetalCanvas*>(canvas)) {
+    return mc->dpiScale();
+  }
+  return 1.f;
+}
+
+bool beginRasterCacheCaptureForCanvas(Canvas* canvas, MetalFrameRecorder* target, Size logicalSize,
+                                      float dpiScale) {
+  if (!canvas || !target) {
+    return false;
+  }
+  if (auto* mc = dynamic_cast<MetalCanvas*>(canvas)) {
+    return mc->beginRasterCacheCapture(target, logicalSize, dpiScale);
+  }
+  return false;
+}
+
+void endRasterCacheCaptureForCanvas(Canvas* canvas) {
+  if (!canvas) {
+    return;
+  }
+  if (auto* mc = dynamic_cast<MetalCanvas*>(canvas)) {
+    mc->endRasterCacheCapture();
+  }
+}
+
+std::shared_ptr<Image> rasterizeRecordedOpsForCanvas(Canvas* canvas, MetalFrameRecorder& recorded,
+                                                     Size logicalSize, float dpiScale) {
+  if (!canvas) {
+    return nullptr;
+  }
+  if (auto* mc = dynamic_cast<MetalCanvas*>(canvas)) {
+    return mc->rasterizeRecordedOps(recorded, logicalSize, dpiScale);
+  }
+  return nullptr;
 }
 
 bool requestNextFrameCaptureForCanvas(Canvas* canvas) {

@@ -60,6 +60,15 @@ bool canReplayPreparedLeaf(SceneNode const& node) {
            !static_cast<RectNode const&>(node).clipsContents();
 }
 
+bool subtreeContainsRasterCache(SceneNode const& node) {
+    for (std::unique_ptr<SceneNode> const& child : node.children()) {
+        if (child->kind() == SceneNodeKind::RasterCache || subtreeContainsRasterCache(*child)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool canReplayPreparedGroup(SceneNode const& node) {
     Rect const bounds = node.localBounds();
     return node.kind() == SceneNodeKind::Group &&
@@ -67,7 +76,8 @@ bool canReplayPreparedGroup(SceneNode const& node) {
            !node.children().empty() &&
            bounds.width > 0.f &&
            bounds.height > 0.f &&
-           isIdentityTransform(node.transform());
+           isIdentityTransform(node.transform()) &&
+           !subtreeContainsRasterCache(node);
 }
 
 MetalRecorderSlice fullRecordedSlice(MetalFrameRecorder const &recorded) {
@@ -200,6 +210,7 @@ struct SceneRenderer::Impl {
             return;
         }
         if (node.kind() == SceneNodeKind::RasterCache) {
+            const_cast<RasterCacheNode&>(static_cast<RasterCacheNode const&>(node)).invalidateCache();
             detail::SceneNodeAccess::preparedRenderOps(node).reset();
             if (detail::SceneNodeAccess::ownPaintingDirty(node)) {
                 detail::SceneNodeAccess::clearDirty(node);
@@ -252,6 +263,52 @@ struct SceneRenderer::Impl {
         detail::SceneNodeAccess::clearSubtreeDirty(node);
     }
 
+    bool renderRasterCacheNode(RasterCacheNode const& node, float nodeOpacity,
+                               Point accumulatedTranslation) {
+        Canvas *canvas = renderer->canvas();
+        if (!canvas) {
+            return false;
+        }
+        Size const logicalSize = node.size();
+        if (logicalSize.width <= 0.f || logicalSize.height <= 0.f) {
+            return true;
+        }
+        float const dpiScale = dpiScaleForCanvas(canvas);
+        std::shared_ptr<Image> cached =
+            node.hasValidCache(logicalSize, dpiScale) ? node.cachedImage() : nullptr;
+        if (!cached) {
+            MetalFrameRecorder recorded;
+            if (!beginRasterCacheCaptureForCanvas(canvas, &recorded, logicalSize, dpiScale)) {
+                return false;
+            }
+            for (std::unique_ptr<SceneNode> const &child : node.children()) {
+                renderNode(*child, 1.f, Point {}, false, false);
+            }
+            endRasterCacheCaptureForCanvas(canvas);
+            cached = rasterizeRecordedOpsForCanvas(canvas, recorded, logicalSize, dpiScale);
+            if (!cached) {
+                return false;
+            }
+            node.setCachedImage(cached, logicalSize, dpiScale);
+            node.noteRasterized();
+        }
+
+        renderer->save();
+        if (!isZeroOffset(accumulatedTranslation)) {
+            renderer->translate(accumulatedTranslation);
+        }
+        if (!isIdentityTransform(node.transform())) {
+            renderer->transform(node.transform());
+        }
+        renderer->setOpacity(nodeOpacity);
+        renderer->drawImage(*cached, Rect::sharp(0.f, 0.f, logicalSize.width, logicalSize.height),
+                            ImageFillMode::Stretch);
+        renderer->restore();
+        detail::SceneNodeAccess::clearDirty(node);
+        detail::SceneNodeAccess::clearSubtreeDirty(node);
+        return true;
+    }
+
     std::unique_ptr<PreparedRenderOps> prepareSubtree(SceneNode const &node) {
         Canvas *canvas = renderer->canvas();
         if (!canvas) {
@@ -290,6 +347,12 @@ struct SceneRenderer::Impl {
         bool const clipsContents =
             node.kind() == SceneNodeKind::Rect &&
             static_cast<RectNode const &>(node).clipsContents();
+
+        if (node.kind() == SceneNodeKind::RasterCache &&
+            renderRasterCacheNode(static_cast<RasterCacheNode const&>(node), nodeOpacity,
+                                  accumulatedTranslation)) {
+            return;
+        }
 
         if (node.kind() == SceneNodeKind::Group && usePreparedCache &&
             kEnablePreparedRenderCache && !detail::SceneNodeAccess::subtreeDirty(node) &&

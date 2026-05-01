@@ -92,6 +92,7 @@ struct ElementModifiers {
   bool hasSizeWidth = false;
   bool hasSizeHeight = false;
   bool rasterize = false;
+  std::vector<Reactive::BindingFn> rasterizeInvalidators;
   std::unique_ptr<Element> overlay;
 
   std::function<void()> onTap;

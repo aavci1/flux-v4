@@ -8,6 +8,7 @@
 #include <Flux/SceneGraph/GroupNode.hpp>
 #include <Flux/SceneGraph/ImageNode.hpp>
 #include <Flux/SceneGraph/PathNode.hpp>
+#include <Flux/SceneGraph/RasterCacheNode.hpp>
 #include <Flux/SceneGraph/RectNode.hpp>
 #include <Flux/SceneGraph/SceneGraph.hpp>
 #include <Flux/SceneGraph/SceneRenderer.hpp>
@@ -572,6 +573,49 @@ TEST_CASE("MetalCanvas preserves image sampling when clipped by the viewport") {
     std::uint32_t const rightX = 420;
     std::uint32_t const rightY = 120;
     CHECK(colorDelta(pixels, width, leftX, leftY, rightX, rightY) <= 18);
+  }
+#endif
+}
+
+TEST_CASE("SceneRenderer rasterizes RasterCacheNode into a reusable Metal image") {
+#if !defined(__APPLE__)
+  SUCCEED();
+#else
+  @autoreleasepool {
+    CoreTextSystem textSystem;
+    TestSurface surface = makeSurface();
+    auto canvas = createMetalCanvas(nullptr, (__bridge void*)surface.layer, 0, textSystem);
+    REQUIRE(canvas);
+    canvas->resize(640, 480);
+    canvas->updateDpiScale(2.f, 2.f);
+
+    auto root = std::make_unique<GroupNode>(flux::Rect{0.f, 0.f, 160.f, 120.f});
+    auto raster = std::make_unique<RasterCacheNode>(flux::Rect{20.f, 24.f, 80.f, 40.f});
+    RasterCacheNode* rasterNode = raster.get();
+    raster->setSubtree(std::make_unique<RectNode>(
+        flux::Rect{0.f, 0.f, 80.f, 40.f},
+        FillStyle::solid(Colors::red)
+    ));
+    root->appendChild(std::move(raster));
+
+    SceneGraph graph{std::move(root)};
+    SceneRenderer renderer{*canvas};
+
+    canvas->beginFrame();
+    canvas->clear(Colors::black);
+    renderer.render(graph);
+    std::shared_ptr<Image> firstCache = rasterNode->cachedImage();
+    REQUIRE(firstCache);
+    CHECK(firstCache->size() == flux::Size{160.f, 80.f});
+    canvas->present();
+    waitForCanvasLastPresentComplete(canvas.get());
+
+    canvas->beginFrame();
+    canvas->clear(Colors::black);
+    renderer.render(graph);
+    CHECK(rasterNode->cachedImage() == firstCache);
+    canvas->present();
+    waitForCanvasLastPresentComplete(canvas.get());
   }
 #endif
 }
