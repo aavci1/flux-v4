@@ -68,7 +68,15 @@ struct MusicScreen : ViewModifiers<MusicScreen> {
         std::vector<Element> rows;
         std::vector<QueueItem> queue = state().queue;
         for (std::size_t i = 0; i < queue.size(); ++i) {
-            rows.push_back(QueueRow{.index = static_cast<int>(i), .title = queue[i].title, .artist = queue[i].artist, .duration = queue[i].duration, .active = i == 0});
+            rows.push_back(QueueRow{
+                .index = static_cast<int>(i),
+                .title = queue[i].title,
+                .artist = queue[i].artist,
+                .duration = queue[i].duration,
+                .active = Reactive::Bindable<bool>{[s = state, title = queue[i].title] {
+                    return title == s().music.title;
+                }}
+            });
             rows.push_back(Divider{.orientation = Divider::Orientation::Horizontal});
         }
         Element queueCard = Card {

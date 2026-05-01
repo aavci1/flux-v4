@@ -40,7 +40,7 @@ struct ClimateScreen : ViewModifiers<ClimateScreen> {
                         .children = children(
                             Chip {.icon = IconName::Face, .label = "Face", .active = Reactive::Bindable<bool> {[s = state] { return hasFlow(s().climate, FlowMode::Face); }}, .onTap = [patch] { patch([](ClimateState &c) { auto it = std::find(c.flow.begin(), c.flow.end(), FlowMode::Face); if (it == c.flow.end()) c.flow.push_back(FlowMode::Face); else c.flow.erase(it); }); }},
                             Chip {.icon = IconName::DirectionsWalk, .label = "Feet", .active = Reactive::Bindable<bool> {[s = state] { return hasFlow(s().climate, FlowMode::Feet); }}, .onTap = [patch] { patch([](ClimateState &c) { auto it = std::find(c.flow.begin(), c.flow.end(), FlowMode::Feet); if (it == c.flow.end()) c.flow.push_back(FlowMode::Feet); else c.flow.erase(it); }); }},
-                            Chip {.icon = IconName::Window, .label = "Window", .active = Reactive::Bindable<bool> {[s = state] { return hasFlow(s().climate, FlowMode::Window); }}, .onTap = [patch] { patch([](ClimateState &c) { auto it = std::find(c.flow.begin(), c.flow.end(), FlowMode::Window); if (it == c.flow.end()) c.flow.push_back(FlowMode::Window); else c.flow.erase(it); }); }}
+                            Chip {.icon = IconName::Air, .label = "Window", .active = Reactive::Bindable<bool> {[s = state] { return hasFlow(s().climate, FlowMode::Window); }}, .onTap = [patch] { patch([](ClimateState &c) { auto it = std::find(c.flow.begin(), c.flow.end(), FlowMode::Window); if (it == c.flow.end()) c.flow.push_back(FlowMode::Window); else c.flow.erase(it); }); }}
                         ),
                     }
                         .padding(theme().space4, 0.f, 0.f, 0.f),
@@ -52,7 +52,7 @@ struct ClimateScreen : ViewModifiers<ClimateScreen> {
                         .children = children(
                             Chip {.icon = IconName::AcUnit, .label = "A/C", .active = Reactive::Bindable<bool> {[s = state] { return s().climate.ac; }}, .onTap = [patch] { patch([](ClimateState &c) { c.ac = !c.ac; }); }},
                             Chip {.icon = IconName::Autorenew, .label = "Auto", .active = Reactive::Bindable<bool> {[s = state] { return s().climate.auto_; }}, .onTap = [patch] { patch([](ClimateState &c) { c.auto_ = !c.auto_; }); }},
-                            Chip {.icon = IconName::Window, .label = "Defrost", .active = Reactive::Bindable<bool> {[s = state] { return s().climate.defrost; }}, .onTap = [patch] { patch([](ClimateState &c) { c.defrost = !c.defrost; }); }},
+                            Chip {.icon = IconName::WindshieldDefrostFront, .label = "Defrost", .active = Reactive::Bindable<bool> {[s = state] { return s().climate.defrost; }}, .onTap = [patch] { patch([](ClimateState &c) { c.defrost = !c.defrost; }); }},
                             Chip {.icon = IconName::Recycling, .label = "Recirc", .active = Reactive::Bindable<bool> {[s = state] { return s().climate.recirc; }}, .onTap = [patch] { patch([](ClimateState &c) { c.recirc = !c.recirc; }); }}
                         ),
                     },
