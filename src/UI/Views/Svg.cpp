@@ -2,7 +2,7 @@
 
 #include <Flux/Graphics/Canvas.hpp>
 #include <Flux/Graphics/SvgPath.hpp>
-#include <Flux/Reactive/Effect.hpp>
+#include <Flux/SceneGraph/RasterCacheNode.hpp>
 #include <Flux/SceneGraph/RenderNode.hpp>
 #include <Flux/UI/MeasureContext.hpp>
 #include <Flux/UI/MountContext.hpp>
@@ -14,44 +14,207 @@
 #include <type_traits>
 #include <unordered_map>
 #include <utility>
+#include <variant>
 
 namespace flux {
 
+namespace {
+
+struct SvgPathElement {
+  std::string d;
+  FillStyle fill{FillStyle::none()};
+  StrokeStyle stroke{StrokeStyle::none()};
+  float opacity = 1.f;
+  bool operator==(SvgPathElement const&) const = default;
+};
+
+struct SvgRectElement {
+  float x = 0.f;
+  float y = 0.f;
+  float width = 0.f;
+  float height = 0.f;
+  CornerRadius cornerRadius{};
+  FillStyle fill{FillStyle::none()};
+  StrokeStyle stroke{StrokeStyle::none()};
+  float opacity = 1.f;
+  bool operator==(SvgRectElement const&) const = default;
+};
+
+struct SvgCircleElement {
+  float cx = 0.f;
+  float cy = 0.f;
+  float r = 0.f;
+  FillStyle fill{FillStyle::none()};
+  StrokeStyle stroke{StrokeStyle::none()};
+  float opacity = 1.f;
+  bool operator==(SvgCircleElement const&) const = default;
+};
+
+struct SvgEllipseElement {
+  float cx = 0.f;
+  float cy = 0.f;
+  float rx = 0.f;
+  float ry = 0.f;
+  FillStyle fill{FillStyle::none()};
+  StrokeStyle stroke{StrokeStyle::none()};
+  float opacity = 1.f;
+  bool operator==(SvgEllipseElement const&) const = default;
+};
+
+struct SvgLineElement {
+  float x1 = 0.f;
+  float y1 = 0.f;
+  float x2 = 0.f;
+  float y2 = 0.f;
+  StrokeStyle stroke{StrokeStyle::none()};
+  float opacity = 1.f;
+  bool operator==(SvgLineElement const&) const = default;
+};
+
+struct SvgPolygonElement {
+  std::vector<Point> points;
+  FillStyle fill{FillStyle::none()};
+  StrokeStyle stroke{StrokeStyle::none()};
+  float opacity = 1.f;
+  bool operator==(SvgPolygonElement const&) const = default;
+};
+
+struct SvgPolylineElement {
+  std::vector<Point> points;
+  FillStyle fill{FillStyle::none()};
+  StrokeStyle stroke{StrokeStyle::none()};
+  float opacity = 1.f;
+  bool operator==(SvgPolylineElement const&) const = default;
+};
+
+struct SvgGroupElement {
+  Mat3 transform{Mat3::identity()};
+  std::vector<SvgNode> children;
+  float opacity = 1.f;
+  bool operator==(SvgGroupElement const&) const = default;
+};
+
+using SvgNodeStorage = std::variant<SvgPathElement, SvgRectElement, SvgCircleElement,
+                                    SvgEllipseElement, SvgLineElement, SvgPolygonElement,
+                                    SvgPolylineElement, SvgGroupElement>;
+
+} // namespace
+
+struct SvgNode::Impl {
+  SvgNodeStorage storage;
+
+  explicit Impl(SvgNodeStorage value)
+      : storage(std::move(value)) {}
+
+  bool operator==(Impl const&) const = default;
+};
+
+namespace detail {
+
+struct SvgAccess {
+  template <typename T>
+  static SvgNode make(T value) {
+    return SvgNode{std::make_unique<SvgNode::Impl>(SvgNodeStorage{std::move(value)})};
+  }
+
+  static SvgNode::Impl const* impl(SvgNode const& node) noexcept {
+    return node.impl_.get();
+  }
+};
+
+} // namespace detail
+
 SvgNode::SvgNode() = default;
-SvgNode::SvgNode(SvgPath value) : storage(std::move(value)) {}
-SvgNode::SvgNode(SvgRect value) : storage(std::move(value)) {}
-SvgNode::SvgNode(SvgCircle value) : storage(std::move(value)) {}
-SvgNode::SvgNode(SvgEllipse value) : storage(std::move(value)) {}
-SvgNode::SvgNode(SvgLine value) : storage(std::move(value)) {}
-SvgNode::SvgNode(SvgPolygon value) : storage(std::move(value)) {}
-SvgNode::SvgNode(SvgPolyline value) : storage(std::move(value)) {}
-SvgNode::SvgNode(SvgGroup value) : storage(std::make_shared<SvgGroup>(std::move(value))) {}
-SvgNode::SvgNode(SvgConditional value) : storage(std::make_shared<SvgConditional>(std::move(value))) {}
+
+SvgNode::SvgNode(std::unique_ptr<Impl> impl)
+    : impl_(std::move(impl)) {}
+
+SvgNode::SvgNode(SvgNode const& other)
+    : impl_(other.impl_ ? std::make_unique<Impl>(*other.impl_) : nullptr) {}
+
+SvgNode::SvgNode(SvgNode&&) noexcept = default;
+
+SvgNode& SvgNode::operator=(SvgNode const& other) {
+  if (this != &other) {
+    impl_ = other.impl_ ? std::make_unique<Impl>(*other.impl_) : nullptr;
+  }
+  return *this;
+}
+
+SvgNode& SvgNode::operator=(SvgNode&&) noexcept = default;
+
+SvgNode::~SvgNode() = default;
 
 bool SvgNode::operator==(SvgNode const& other) const {
-  if (storage.index() != other.storage.index()) {
-    return false;
+  if (!impl_ || !other.impl_) {
+    return impl_ == other.impl_;
   }
-  return std::visit([](auto const& lhs, auto const& rhs) -> bool {
-    using L = std::decay_t<decltype(lhs)>;
-    using R = std::decay_t<decltype(rhs)>;
-    if constexpr (!std::is_same_v<L, R>) {
-      return false;
-    } else if constexpr (std::is_same_v<L, GroupPtr>) {
-      if (!lhs || !rhs) {
-        return lhs == rhs;
-      }
-      return *lhs == *rhs;
-    } else if constexpr (std::is_same_v<L, ConditionalPtr>) {
-      if (!lhs || !rhs) {
-        return lhs == rhs;
-      }
-      return *lhs == *rhs;
-    } else {
-      return lhs == rhs;
-    }
-  }, storage, other.storage);
+  return *impl_ == *other.impl_;
 }
+
+namespace svg {
+
+SvgNode path(std::string d, FillStyle fill, StrokeStyle stroke, float opacity) {
+  return detail::SvgAccess::make(SvgPathElement{
+      .d = std::move(d), .fill = std::move(fill), .stroke = std::move(stroke), .opacity = opacity});
+}
+
+SvgNode rect(float x, float y, float width, float height, CornerRadius cornerRadius,
+             FillStyle fill, StrokeStyle stroke, float opacity) {
+  return detail::SvgAccess::make(SvgRectElement{
+      .x = x, .y = y, .width = width, .height = height, .cornerRadius = cornerRadius,
+      .fill = std::move(fill), .stroke = std::move(stroke), .opacity = opacity});
+}
+
+SvgNode circle(float cx, float cy, float r, FillStyle fill, StrokeStyle stroke, float opacity) {
+  return detail::SvgAccess::make(SvgCircleElement{
+      .cx = cx, .cy = cy, .r = r, .fill = std::move(fill),
+      .stroke = std::move(stroke), .opacity = opacity});
+}
+
+SvgNode ellipse(float cx, float cy, float rx, float ry, FillStyle fill,
+                StrokeStyle stroke, float opacity) {
+  return detail::SvgAccess::make(SvgEllipseElement{
+      .cx = cx, .cy = cy, .rx = rx, .ry = ry, .fill = std::move(fill),
+      .stroke = std::move(stroke), .opacity = opacity});
+}
+
+SvgNode line(float x1, float y1, float x2, float y2, StrokeStyle stroke, float opacity) {
+  return detail::SvgAccess::make(SvgLineElement{
+      .x1 = x1, .y1 = y1, .x2 = x2, .y2 = y2, .stroke = std::move(stroke),
+      .opacity = opacity});
+}
+
+SvgNode polygon(std::vector<Point> points, FillStyle fill, StrokeStyle stroke, float opacity) {
+  return detail::SvgAccess::make(SvgPolygonElement{
+      .points = std::move(points), .fill = std::move(fill), .stroke = std::move(stroke),
+      .opacity = opacity});
+}
+
+SvgNode polyline(std::vector<Point> points, FillStyle fill, StrokeStyle stroke, float opacity) {
+  return detail::SvgAccess::make(SvgPolylineElement{
+      .points = std::move(points), .fill = std::move(fill), .stroke = std::move(stroke),
+      .opacity = opacity});
+}
+
+SvgNode group(Mat3 transform, std::vector<SvgNode> children, float opacity) {
+  return detail::SvgAccess::make(SvgGroupElement{
+      .transform = transform, .children = std::move(children), .opacity = opacity});
+}
+
+SvgNode translated(float x, float y, std::vector<SvgNode> children) {
+  return group(Mat3::translate(x, y), std::move(children));
+}
+
+SvgNode rotated(float radians, Point pivot, std::vector<SvgNode> children) {
+  return group(Mat3::rotate(radians, pivot), std::move(children));
+}
+
+SvgNode scaled(float sx, float sy, std::vector<SvgNode> children) {
+  return group(Mat3::scale(sx, sy), std::move(children));
+}
+
+} // namespace svg
 
 namespace {
 
@@ -124,13 +287,7 @@ Path pathFromPoints(std::vector<Point> const& points, bool close) {
   return path;
 }
 
-Path const& cachedPathFor(SvgPath const& element, std::unordered_map<std::string, Path>& cache,
-                          Path& transient) {
-  std::string d = element.d.evaluate();
-  if (element.d.isReactive()) {
-    transient = parseSvgPath(d);
-    return transient;
-  }
+Path const& cachedPathFor(std::string const& d, std::unordered_map<std::string, Path>& cache) {
   auto it = cache.find(d);
   if (it == cache.end()) {
     it = cache.emplace(d, parseSvgPath(d)).first;
@@ -140,78 +297,63 @@ Path const& cachedPathFor(SvgPath const& element, std::unordered_map<std::string
 
 void drawNode(Canvas& canvas, SvgNode const& node, std::unordered_map<std::string, Path>& pathCache);
 
-void drawGroup(Canvas& canvas, SvgGroup const& group, std::unordered_map<std::string, Path>& pathCache) {
-  withOpacity(canvas, group.opacity.evaluate(), [&] {
-    canvas.save();
-    canvas.transform(group.transform.evaluate());
-    for (SvgNode const& child : group.children) {
-      drawNode(canvas, child, pathCache);
-    }
-    canvas.restore();
-  });
-}
-
-void drawConditional(Canvas& canvas, SvgConditional const& conditional,
-                     std::unordered_map<std::string, Path>& pathCache) {
-  if (!conditional.when.evaluate()) {
-    return;
-  }
-  for (SvgNode const& child : conditional.children) {
+void drawChildren(Canvas& canvas, std::vector<SvgNode> const& children,
+                  std::unordered_map<std::string, Path>& pathCache) {
+  for (SvgNode const& child : children) {
     drawNode(canvas, child, pathCache);
   }
 }
 
 void drawNode(Canvas& canvas, SvgNode const& node, std::unordered_map<std::string, Path>& pathCache) {
+  auto const* impl = detail::SvgAccess::impl(node);
+  if (!impl) {
+    return;
+  }
   std::visit([&](auto const& value) {
     using T = std::decay_t<decltype(value)>;
-    if constexpr (std::is_same_v<T, SvgPath>) {
-      Path transient;
-      Path const& path = cachedPathFor(value, pathCache, transient);
-      withOpacity(canvas, value.opacity.evaluate(), [&] {
-        canvas.drawPath(path, value.fill.evaluate(), value.stroke.evaluate());
+    if constexpr (std::is_same_v<T, SvgPathElement>) {
+      Path const& path = cachedPathFor(value.d, pathCache);
+      withOpacity(canvas, value.opacity, [&] {
+        canvas.drawPath(path, value.fill, value.stroke);
       });
-    } else if constexpr (std::is_same_v<T, SvgRect>) {
-      Rect const rect{value.x.evaluate(), value.y.evaluate(), value.width.evaluate(), value.height.evaluate()};
-      withOpacity(canvas, value.opacity.evaluate(), [&] {
-        canvas.drawRect(rect, value.cornerRadius.evaluate(), value.fill.evaluate(), value.stroke.evaluate());
+    } else if constexpr (std::is_same_v<T, SvgRectElement>) {
+      Rect const rect{value.x, value.y, value.width, value.height};
+      withOpacity(canvas, value.opacity, [&] {
+        canvas.drawRect(rect, value.cornerRadius, value.fill, value.stroke);
       });
-    } else if constexpr (std::is_same_v<T, SvgCircle>) {
-      withOpacity(canvas, value.opacity.evaluate(), [&] {
-        canvas.drawCircle(Point{value.cx.evaluate(), value.cy.evaluate()}, value.r.evaluate(),
-                          value.fill.evaluate(), value.stroke.evaluate());
+    } else if constexpr (std::is_same_v<T, SvgCircleElement>) {
+      withOpacity(canvas, value.opacity, [&] {
+        canvas.drawCircle(Point{value.cx, value.cy}, value.r, value.fill, value.stroke);
       });
-    } else if constexpr (std::is_same_v<T, SvgEllipse>) {
+    } else if constexpr (std::is_same_v<T, SvgEllipseElement>) {
       Path path;
-      path.ellipse(Point{value.cx.evaluate(), value.cy.evaluate()}, value.rx.evaluate(), value.ry.evaluate());
-      withOpacity(canvas, value.opacity.evaluate(), [&] {
-        canvas.drawPath(path, value.fill.evaluate(), value.stroke.evaluate());
+      path.ellipse(Point{value.cx, value.cy}, value.rx, value.ry);
+      withOpacity(canvas, value.opacity, [&] {
+        canvas.drawPath(path, value.fill, value.stroke);
       });
-    } else if constexpr (std::is_same_v<T, SvgLine>) {
-      withOpacity(canvas, value.opacity.evaluate(), [&] {
-        canvas.drawLine(Point{value.x1.evaluate(), value.y1.evaluate()},
-                        Point{value.x2.evaluate(), value.y2.evaluate()},
-                        value.stroke.evaluate());
+    } else if constexpr (std::is_same_v<T, SvgLineElement>) {
+      withOpacity(canvas, value.opacity, [&] {
+        canvas.drawLine(Point{value.x1, value.y1}, Point{value.x2, value.y2}, value.stroke);
       });
-    } else if constexpr (std::is_same_v<T, SvgPolygon>) {
+    } else if constexpr (std::is_same_v<T, SvgPolygonElement>) {
       Path path = pathFromPoints(value.points, true);
-      withOpacity(canvas, value.opacity.evaluate(), [&] {
-        canvas.drawPath(path, value.fill.evaluate(), value.stroke.evaluate());
+      withOpacity(canvas, value.opacity, [&] {
+        canvas.drawPath(path, value.fill, value.stroke);
       });
-    } else if constexpr (std::is_same_v<T, SvgPolyline>) {
+    } else if constexpr (std::is_same_v<T, SvgPolylineElement>) {
       Path path = pathFromPoints(value.points, false);
-      withOpacity(canvas, value.opacity.evaluate(), [&] {
-        canvas.drawPath(path, value.fill.evaluate(), value.stroke.evaluate());
+      withOpacity(canvas, value.opacity, [&] {
+        canvas.drawPath(path, value.fill, value.stroke);
       });
-    } else if constexpr (std::is_same_v<T, SvgNode::GroupPtr>) {
-      if (value) {
-        drawGroup(canvas, *value, pathCache);
-      }
-    } else if constexpr (std::is_same_v<T, SvgNode::ConditionalPtr>) {
-      if (value) {
-        drawConditional(canvas, *value, pathCache);
-      }
+    } else if constexpr (std::is_same_v<T, SvgGroupElement>) {
+      withOpacity(canvas, value.opacity, [&] {
+        canvas.save();
+        canvas.transform(value.transform);
+        drawChildren(canvas, value.children, pathCache);
+        canvas.restore();
+      });
     }
-  }, node.storage);
+  }, impl->storage);
 }
 
 Mat3 viewBoxTransform(Rect viewBox, Rect frame, SvgPreserveAspectRatio preserveAspectRatio) {
@@ -233,60 +375,6 @@ Mat3 viewBoxTransform(Rect viewBox, Rect frame, SvgPreserveAspectRatio preserveA
   return Mat3::translate(tx, ty) * Mat3::scale(scale);
 }
 
-template<typename T>
-void observeBinding(Reactive::Bindable<T> const& binding) {
-  if (binding.isReactive()) {
-    (void)binding.evaluate();
-  }
-}
-
-void observeNode(SvgNode const& node);
-
-void observeGroup(SvgGroup const& group) {
-  observeBinding(group.transform);
-  observeBinding(group.opacity);
-  for (SvgNode const& child : group.children) {
-    observeNode(child);
-  }
-}
-
-void observeNode(SvgNode const& node) {
-  std::visit([](auto const& value) {
-    using T = std::decay_t<decltype(value)>;
-    if constexpr (std::is_same_v<T, SvgPath>) {
-      observeBinding(value.d);
-      observeBinding(value.fill);
-      observeBinding(value.stroke);
-      observeBinding(value.opacity);
-    } else if constexpr (std::is_same_v<T, SvgRect>) {
-      observeBinding(value.x); observeBinding(value.y); observeBinding(value.width); observeBinding(value.height);
-      observeBinding(value.cornerRadius); observeBinding(value.fill); observeBinding(value.stroke); observeBinding(value.opacity);
-    } else if constexpr (std::is_same_v<T, SvgCircle>) {
-      observeBinding(value.cx); observeBinding(value.cy); observeBinding(value.r);
-      observeBinding(value.fill); observeBinding(value.stroke); observeBinding(value.opacity);
-    } else if constexpr (std::is_same_v<T, SvgEllipse>) {
-      observeBinding(value.cx); observeBinding(value.cy); observeBinding(value.rx); observeBinding(value.ry);
-      observeBinding(value.fill); observeBinding(value.stroke); observeBinding(value.opacity);
-    } else if constexpr (std::is_same_v<T, SvgLine>) {
-      observeBinding(value.x1); observeBinding(value.y1); observeBinding(value.x2); observeBinding(value.y2);
-      observeBinding(value.stroke); observeBinding(value.opacity);
-    } else if constexpr (std::is_same_v<T, SvgPolygon> || std::is_same_v<T, SvgPolyline>) {
-      observeBinding(value.fill); observeBinding(value.stroke); observeBinding(value.opacity);
-    } else if constexpr (std::is_same_v<T, SvgNode::GroupPtr>) {
-      if (value) {
-        observeGroup(*value);
-      }
-    } else if constexpr (std::is_same_v<T, SvgNode::ConditionalPtr>) {
-      if (value) {
-        observeBinding(value->when);
-        for (SvgNode const& child : value->children) {
-          observeNode(child);
-        }
-      }
-    }
-  }, node.storage);
-}
-
 } // namespace
 
 Size Svg::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
@@ -300,7 +388,7 @@ std::unique_ptr<scenegraph::SceneNode> Svg::mount(MountContext& ctx) const {
   Size const size = assignedSize(ctx.constraints(), measured);
   Svg document = *this;
   auto pathCache = std::make_shared<std::unordered_map<std::string, Path>>();
-  auto draw = [document, pathCache](Canvas& canvas, Rect frame) mutable {
+  auto draw = [document = std::move(document), pathCache](Canvas& canvas, Rect frame) mutable {
     if (document.viewBox.width <= 0.f || document.viewBox.height <= 0.f ||
         frame.width <= 0.f || frame.height <= 0.f) {
       return;
@@ -308,48 +396,32 @@ std::unique_ptr<scenegraph::SceneNode> Svg::mount(MountContext& ctx) const {
     canvas.save();
     canvas.clipRect(frame, CornerRadius{}, true);
     canvas.transform(viewBoxTransform(document.viewBox, frame, document.preserveAspectRatio));
-    drawGroup(canvas, document.root, *pathCache);
+    drawChildren(canvas, document.children, *pathCache);
     canvas.restore();
   };
 
-  auto node = std::make_unique<scenegraph::RenderNode>(
-      Rect{0.f, 0.f, size.width, size.height}, draw);
-  auto* rawNode = node.get();
-  rawNode->setPurity(scenegraph::RenderNode::Purity::Live);
-  rawNode->setLayoutConstraints(ctx.constraints());
-  rawNode->setRelayout([rawNode, document](LayoutConstraints const& constraints) mutable {
-    rawNode->setSize(assignedSize(constraints, measureSvg(document, constraints)));
+  auto renderNode = std::make_unique<scenegraph::RenderNode>(
+      Rect{0.f, 0.f, size.width, size.height}, std::move(draw));
+  auto* rawRenderNode = renderNode.get();
+  rawRenderNode->setPurity(scenegraph::RenderNode::Purity::Pure);
+  rawRenderNode->setLayoutConstraints(ctx.constraints());
+  rawRenderNode->setRelayout([rawRenderNode, document = *this](LayoutConstraints const& constraints) mutable {
+    rawRenderNode->setSize(assignedSize(constraints, measureSvg(document, constraints)));
   });
 
-  Reactive::SmallFn<void()> requestRedraw = ctx.redrawCallback();
-  Reactive::withOwner(ctx.owner(), [rawNode, document, requestRedraw = std::move(requestRedraw)]() mutable {
-    Reactive::Effect([rawNode, document, requestRedraw, first = true]() mutable {
-      observeGroup(document.root);
-      if (first) {
-        first = false;
-        return;
-      }
-      auto draw = rawNode->draw();
-      rawNode->setDraw(std::move(draw));
-      if (requestRedraw) {
-        requestRedraw();
-      }
-    });
+  auto rasterNode = std::make_unique<scenegraph::RasterCacheNode>(
+      Rect{0.f, 0.f, size.width, size.height});
+  auto* rawRasterNode = rasterNode.get();
+  rasterNode->setSubtree(std::move(renderNode));
+  rawRasterNode->setLayoutConstraints(ctx.constraints());
+  rawRasterNode->setRelayout([rawRasterNode](LayoutConstraints const& constraints) {
+    if (scenegraph::SceneNode* child = rawRasterNode->subtree()) {
+      child->relayout(constraints);
+      child->setPosition(Point{});
+      rawRasterNode->setSize(child->size());
+    }
   });
-
-  return node;
-}
-
-SvgGroup translated(float x, float y, std::vector<SvgNode> children) {
-  return SvgGroup{.transform = Mat3::translate(x, y), .children = std::move(children)};
-}
-
-SvgGroup rotated(float radians, Point pivot, std::vector<SvgNode> children) {
-  return SvgGroup{.transform = Mat3::rotate(radians, pivot), .children = std::move(children)};
-}
-
-SvgGroup scaled(float sx, float sy, std::vector<SvgNode> children) {
-  return SvgGroup{.transform = Mat3::scale(sx, sy), .children = std::move(children)};
+  return rasterNode;
 }
 
 } // namespace flux

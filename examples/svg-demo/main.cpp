@@ -103,10 +103,7 @@ LoadedSvg loadSvgForDemo(std::string const& path) {
       fill = colorFromHex(inlineFill);
     }
 
-    loaded.nodes.emplace_back(SvgPath{
-        .d = d,
-        .fill = FillStyle::solid(fill),
-    });
+    loaded.nodes.emplace_back(svg::path(d, FillStyle::solid(fill)));
   }
 
   loaded.status += " (" + std::to_string(loaded.nodes.size()) + " paths)";
@@ -123,7 +120,7 @@ struct SvgDemoRoot {
     Element preview = Svg{
         .viewBox = loaded.viewBox,
         .preserveAspectRatio = SvgPreserveAspectRatio::Meet,
-        .root = SvgGroup{.children = std::move(loaded.nodes)},
+        .children = std::move(loaded.nodes),
     }
         .flex(1.f, 1.f, 0.f);
 
