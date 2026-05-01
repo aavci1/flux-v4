@@ -149,6 +149,7 @@ add_library(flux STATIC
   src/UI/Views/Select.cpp
   src/UI/Views/SegmentedControl.cpp
   src/UI/Views/Slider.cpp
+  src/UI/Views/Svg.cpp
   src/UI/Views/TableView.cpp
   src/UI/Views/Toast.cpp
   src/UI/Views/Tooltip.cpp
@@ -178,6 +179,7 @@ add_library(flux STATIC
   src/Graphics/CoreTextSystem.mm
   src/Graphics/Path.cpp
   src/Graphics/PathFlattener.cpp
+  src/Graphics/SvgPath.cpp
   src/Graphics/Metal/GlyphAtlas.mm
   src/Graphics/Metal/MetalImage.mm
   src/Graphics/Metal/MetalPathRasterizer.cpp
@@ -288,6 +290,7 @@ if(FLUX_BUILD_TESTS)
     tests/RuntimeInputTests.cpp
     tests/RuntimeTests.cpp
     tests/ShowTests.cpp
+    tests/SvgPathTests.cpp
     tests/ThemeReactivityTests.cpp
   )
 

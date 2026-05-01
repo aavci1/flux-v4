@@ -6,37 +6,18 @@ namespace car {
 
 struct TireDiagram : ViewModifiers<TireDiagram> {
     auto body() const {
-        return Render{
-            .measureFn = [](LayoutConstraints const& constraints, LayoutHints const&) {
-                Size size{200.f, 240.f};
-                if (std::isfinite(constraints.maxWidth) && constraints.maxWidth > 0.f) {
-                    size.width = constraints.maxWidth;
-                }
-                if (std::isfinite(constraints.maxHeight) && constraints.maxHeight > 0.f) {
-                    size.height = constraints.maxHeight;
-                }
-                size.width = std::max(size.width, constraints.minWidth);
-                size.height = std::max(size.height, constraints.minHeight);
-                return size;
-            },
-            .draw = [](Canvas& canvas, Rect frame) {
-                constexpr float baseW = 200.f;
-                constexpr float baseH = 240.f;
-                canvas.save();
-                canvas.translate(frame.x, frame.y);
-                canvas.scale(frame.width / baseW, frame.height / baseH);
-                canvas.drawRect(Rect{41.f, 24.f, 118.f, 192.f}, CornerRadius{34.f},
-                                FillStyle::solid(Color::controlBackground()),
-                                StrokeStyle::solid(Color::separator(), 1.f));
-                canvas.drawRect(Rect{50.f, 40.f, 100.f, 14.f}, CornerRadius{5.f},
-                                FillStyle::solid(Color::elevatedBackground()),
-                                StrokeStyle::solid(Color::separator(), 1.f));
-                canvas.drawRect(Rect{50.f, 186.f, 100.f, 14.f}, CornerRadius{5.f},
-                                FillStyle::solid(Color::elevatedBackground()),
-                                StrokeStyle::solid(Color::separator(), 1.f));
-                canvas.restore();
-            },
-            .pure = true,
+        return Svg{
+            .viewBox = Rect{0.f, 0.f, 200.f, 240.f},
+            .preserveAspectRatio = SvgPreserveAspectRatio::Stretch,
+            .root = SvgGroup{.children = {
+                SvgPath{
+                    .d = "M 64,24 C 54,24 46,32 44,44 L 38,80 C 34,100 34,140 38,160 L 44,196 C 46,208 54,216 64,216 L 136,216 C 146,216 154,208 156,196 L 162,160 C 166,140 166,100 162,80 L 156,44 C 154,32 146,24 136,24 Z",
+                    .fill = FillStyle::solid(Color::elevatedBackground()),
+                    .stroke = StrokeStyle::solid(Color::opaqueSeparator(), 1.5f),
+                },
+                SvgPath{.d = "M 50,52 L 58,40 L 142,40 L 150,52 Z", .fill = FillStyle::solid(Color::controlBackground()), .stroke = StrokeStyle::solid(Color::separator(), 1.f)},
+                SvgPath{.d = "M 50,188 L 58,200 L 142,200 L 150,188 Z", .fill = FillStyle::solid(Color::controlBackground()), .stroke = StrokeStyle::solid(Color::separator(), 1.f)},
+            }},
         };
     }
 };

@@ -345,6 +345,8 @@ struct Mat3 {
 
   /// Determinant of the upper-left 2×2 (scale/rotation/shear); zero when the affine map collapses 2D area.
   float affineDeterminant() const { return m[0] * m[4] - m[1] * m[3]; }
+
+  bool operator==(Mat3 const&) const = default;
 };
 
 enum class MouseButton : std::uint8_t { None, Left, Right, Middle, Other };

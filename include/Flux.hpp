@@ -16,6 +16,7 @@
 #include <Flux/Core/WindowUI.hpp>
 #include <Flux/Reactive/Reactive.hpp>
 #include <Flux/Graphics/Canvas.hpp>
+#include <Flux/Graphics/SvgPath.hpp>
 #include <Flux/Graphics/Styles.hpp>
 #include <Flux/SceneGraph/GroupNode.hpp>
 #include <Flux/SceneGraph/ImageNode.hpp>

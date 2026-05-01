@@ -18,10 +18,10 @@ struct MapPalette {
 inline constexpr MapPalette kMapPaletteNight{
     .land = Color::hex(0x1B1D24),
     .water = Color::hex(0x0E1620),
-    .park = Color::hex(0x1F2A1E),
-    .road = Color::hex(0x2A2E3A),
-    .minor = Color::hex(0x232734),
-    .stroke = Color::hex(0x14171C),
+    .park = Color::hex(0x1F2620),
+    .road = Color::hex(0x2E323B),
+    .minor = Color::hex(0x23262D),
+    .stroke = Color::hex(0x15171C),
 };
 
 struct StylizedMap : ViewModifiers<StylizedMap> {
@@ -34,75 +34,62 @@ struct StylizedMap : ViewModifiers<StylizedMap> {
         return stroke;
     }
 
-    static void drawMapRect(Canvas& canvas, float x, float y, float w, float h, Color color, float radius = 4.f) {
-        canvas.drawRect(Rect{x, y, w, h}, CornerRadius{radius}, FillStyle::solid(color), StrokeStyle::none());
-    }
-
-    static void drawMapRoad(Canvas& canvas, float x, float y, float w, float h, Color color, float radius = 4.f) {
-        drawMapRect(canvas, x, y, w, h, color, radius);
-    }
-
-    static void drawMapContent(Canvas& canvas, Rect frame) {
+    auto body() const {
         constexpr MapPalette p = kMapPaletteNight;
-        constexpr float baseW = 600.f;
-        constexpr float baseH = 320.f;
-        if (frame.width <= 0.f || frame.height <= 0.f) {
-            return;
+        auto ring = useAnimation<float>(0.f);
+        if (!ring.isRunning() && std::abs(*ring) < 0.001f) {
+            ring.play(1.f, AnimationOptions{
+                .transition = Transition::ease(2.4f),
+                .repeat = AnimationOptions::kRepeatForever,
+                .autoreverse = true,
+            });
         }
 
-        canvas.save();
-        canvas.clipRect(frame, CornerRadius{}, true);
-        canvas.translate(frame.x, frame.y);
-        canvas.scale(frame.width / baseW, frame.height / baseH);
+        Color const accent = Color::hex(kSignatureBlue);
+        Reactive::Bindable<float> ringRadius{[ring] { return 16.f + ring() * 10.f; }};
+        Reactive::Bindable<FillStyle> ringFill{[ring] {
+            return FillStyle::solid(alphaBlue(0.28f - ring() * 0.23f));
+        }};
 
-        drawMapRect(canvas, 0.f, 0.f, baseW, baseH, p.land, 0.f);
-        drawMapRect(canvas, -30.f, 210.f, 660.f, 130.f, p.water, 65.f);
-        drawMapRect(canvas, 340.f, 36.f, 135.f, 90.f, p.park, 18.f);
-        drawMapRoad(canvas, 0.f, 82.f, baseW, 14.f, p.minor);
-        drawMapRoad(canvas, 0.f, 258.f, baseW, 14.f, p.minor);
-        drawMapRoad(canvas, 122.f, 0.f, 14.f, baseH, p.minor);
-        drawMapRoad(canvas, 462.f, 0.f, 14.f, baseH, p.minor);
-        drawMapRoad(canvas, 244.f, 0.f, 14.f, 204.f, p.minor);
-        drawMapRoad(canvas, 0.f, 150.f, 620.f, 22.f, p.road, 9.f);
-        drawMapRoad(canvas, 332.f, 116.f, 228.f, 10.f, p.minor);
-        drawMapRoad(canvas, 352.f, 126.f, 10.f, 122.f, p.minor);
-
-        Path route;
-        route.moveTo({58.f, 290.f});
-        route.lineTo({58.f, 174.f});
-        route.bezierTo({93.f, 158.f}, {148.f, 168.f}, {206.f, 158.f});
-        route.bezierTo({288.f, 144.f}, {341.f, 124.f}, {418.f, 76.f});
-        canvas.drawPath(route, FillStyle::none(), roundStroke(alphaBlue(0.32f), 15.f));
-        canvas.drawPath(route, FillStyle::none(), roundStroke(Color::hex(kSignatureBlue), 7.f));
-        canvas.drawPath(route, FillStyle::none(), roundStroke(Color{0.70f, 0.88f, 1.f, 0.9f}, 2.f));
-
-        canvas.drawCircle({58.f, 290.f}, 8.f, FillStyle::solid(p.land), StrokeStyle::solid(Color::hex(kSignatureBlue), 3.f));
-        canvas.drawCircle({206.f, 158.f}, 25.f, FillStyle::solid(alphaBlue(0.15f)), StrokeStyle::none());
-        canvas.drawCircle({206.f, 158.f}, 8.f, FillStyle::solid(Color::hex(kSignatureBlue)), StrokeStyle::solid(Colors::white, 2.5f));
-        drawMapRect(canvas, 406.f, 58.f, 28.f, 36.f, Color::hex(kSignatureBlue), 14.f);
-        canvas.drawCircle({420.f, 72.f}, 4.f, FillStyle::solid(Colors::white), StrokeStyle::none());
-
-        canvas.restore();
-    }
-
-    auto body() const {
-        float const preferredW = 600.f * scale;
-        float const preferredH = 320.f * scale;
-        return Render{
-            .measureFn = [preferredW, preferredH](LayoutConstraints const& constraints, LayoutHints const&) {
-                Size size{preferredW, preferredH};
-                if (std::isfinite(constraints.maxWidth) && constraints.maxWidth > 0.f) {
-                    size.width = constraints.maxWidth;
-                }
-                if (std::isfinite(constraints.maxHeight) && constraints.maxHeight > 0.f) {
-                    size.height = constraints.maxHeight;
-                }
-                size.width = std::max(size.width, constraints.minWidth);
-                size.height = std::max(size.height, constraints.minHeight);
-                return size;
-            },
-            .draw = [](Canvas& canvas, Rect frame) { drawMapContent(canvas, frame); },
-            .pure = true,
+        return Svg{
+            .viewBox = Rect{0.f, 0.f, 600.f, 320.f},
+            .preserveAspectRatio = SvgPreserveAspectRatio::Slice,
+            .intrinsicSize = Size{600.f * scale, 320.f * scale},
+            .root = SvgGroup{.children = {
+                SvgRect{.x = 0.f, .y = 0.f, .width = 600.f, .height = 320.f, .fill = FillStyle::solid(p.land)},
+                SvgPath{
+                    .d = "M -20,210 C 80,180 180,250 280,210 S 480,170 620,200 L 620,340 L -20,340 Z",
+                    .fill = FillStyle::solid(p.water),
+                    .opacity = 0.9f,
+                },
+                SvgPath{.d = "M 340,40 L 460,30 L 480,110 L 380,130 Z", .fill = FillStyle::solid(p.park), .opacity = 0.9f},
+                SvgPath{.d = "M 0,80 L 600,90", .stroke = StrokeStyle::solid(p.minor, 14.f)},
+                SvgPath{.d = "M 0,260 L 600,270", .stroke = StrokeStyle::solid(p.minor, 14.f)},
+                SvgPath{.d = "M 120,0 L 130,320", .stroke = StrokeStyle::solid(p.minor, 14.f)},
+                SvgPath{.d = "M 460,0 L 470,320", .stroke = StrokeStyle::solid(p.minor, 14.f)},
+                SvgPath{.d = "M 240,0 L 250,200", .stroke = StrokeStyle::solid(p.minor, 14.f)},
+                SvgPath{.d = "M 0,160 C 100,150 180,180 280,150 S 480,140 620,170", .stroke = StrokeStyle::solid(p.road, 20.f)},
+                SvgPath{.d = "M 0,160 C 100,150 180,180 280,150 S 480,140 620,170", .stroke = StrokeStyle::solid(p.stroke, 0.5f)},
+                SvgPath{
+                    .d = "M 60,290 L 60,170 C 60,162 64,158 72,158 L 280,150 C 350,148 380,120 420,80",
+                    .stroke = roundStroke(accent, 6.f),
+                },
+                SvgPath{
+                    .d = "M 60,290 L 60,170 C 60,162 64,158 72,158 L 280,150 C 350,148 380,120 420,80",
+                    .stroke = StrokeStyle::solid(Colors::white, 2.f),
+                    .opacity = 0.4f,
+                },
+                SvgCircle{.cx = 60.f, .cy = 290.f, .r = 8.f, .fill = FillStyle::solid(p.land), .stroke = StrokeStyle::solid(accent, 3.f)},
+                SvgCircle{.cx = 200.f, .cy = 153.f, .r = ringRadius, .fill = ringFill},
+                SvgCircle{.cx = 200.f, .cy = 153.f, .r = 7.f, .fill = FillStyle::solid(accent), .stroke = StrokeStyle::solid(Colors::white, 2.5f)},
+                translated(420.f, 80.f, {
+                    SvgPath{
+                        .d = "M 0,-22 C -8,-22 -14,-16 -14,-8 C -14,2 0,14 0,14 C 0,14 14,2 14,-8 C 14,-16 8,-22 0,-22 Z",
+                        .fill = FillStyle::solid(accent),
+                    },
+                    SvgCircle{.cx = 0.f, .cy = -9.f, .r = 4.f, .fill = FillStyle::solid(Colors::white)},
+                }),
+            }},
         };
     }
 };

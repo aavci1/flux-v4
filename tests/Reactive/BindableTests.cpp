@@ -45,3 +45,15 @@ TEST_CASE("Reactive Bindable works with Flux value types") {
   });
   CHECK(computedColor.evaluate() == Color::hex(0xFFFFFF));
 }
+
+TEST_CASE("Reactive Bindable equality compares only concrete values") {
+  Bindable<int> first(4);
+  Bindable<int> second(4);
+  Bindable<int> different(5);
+  Bindable<int> reactive([] { return 4; });
+
+  CHECK(first == second);
+  CHECK_FALSE(first == different);
+  CHECK_FALSE(first == reactive);
+  CHECK_FALSE(reactive == first);
+}

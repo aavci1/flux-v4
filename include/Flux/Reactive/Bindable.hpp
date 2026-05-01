@@ -2,6 +2,7 @@
 
 #include <Flux/Reactive/SmallFn.hpp>
 
+#include <concepts>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -46,6 +47,12 @@ public:
       return *value;
     }
     return std::get<SmallFn<T()>>(storage_)();
+  }
+
+  bool operator==(Bindable const& other) const
+    requires std::equality_comparable<T>
+  {
+    return isValue() && other.isValue() && value() == other.value();
   }
 
 private:

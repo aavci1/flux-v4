@@ -32,6 +32,7 @@
 #include <Flux/UI/Views/Spacer.hpp>
 #include <Flux/UI/Views/Show.hpp>
 #include <Flux/UI/Views/Switch.hpp>
+#include <Flux/UI/Views/Svg.hpp>
 #include <Flux/UI/Views/TableView.hpp>
 #include <Flux/UI/Views/TextInput.hpp>
 #include <Flux/UI/Views/Toast.hpp>
