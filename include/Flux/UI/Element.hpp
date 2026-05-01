@@ -182,6 +182,11 @@ public:
   Element translate(Reactive::Bindable<Vec2> delta) &&;
   Element translate(Reactive::Bindable<float> dx, Reactive::Bindable<float> dy) &&;
   Element clipContent(bool clip) &&;
+  /// Marks this subtree as a raster-cache boundary.
+  ///
+  /// Current implementation note: this is a staged API. It preserves invalidation boundaries and
+  /// disables PreparedRenderOps below the subtree, but does not yet allocate an offscreen texture or
+  /// provide a performance benefit. The Metal offscreen pass will make this an actual texture cache.
   Element rasterize() &&;
   template <typename T>
   Element rasterizeInvalidateOn(Reactive::Bindable<T> binding) && {
