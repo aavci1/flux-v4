@@ -204,7 +204,8 @@ struct ClockFace : ViewModifiers<ClockFace> {
           return Size{std::max(1.f, width), std::max(1.f, height)};
         },
         .draw = [theme, clock, hour, minute, second](Canvas& canvas, Rect frame) {
-          drawClock(canvas, frame, theme(), hour(), minute(), second(), clock().label);
+          drawClock(canvas, frame, theme.evaluate(), hour.evaluate(), minute.evaluate(),
+                    second.evaluate(), clock.evaluate().label);
         },
     }
         .flex(1.f);

@@ -608,6 +608,10 @@ public:
     return state_->value;
   }
 
+  T const& evaluate() const {
+    return get();
+  }
+
   T const& operator()() const {
     return get();
   }
@@ -740,6 +744,10 @@ public:
     }
     state_->reportRead();
     return *state_->value;
+  }
+
+  T const& evaluate() const {
+    return get();
   }
 
   T const& operator()() const {

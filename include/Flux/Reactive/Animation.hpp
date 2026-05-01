@@ -47,6 +47,7 @@ public:
       : state_(std::make_shared<State>(std::move(initial))) {}
 
   T const& get() const { return state().value.get(); }
+  T const& evaluate() const { return get(); }
   T const& operator()() const { return get(); }
   T const& peek() const { return state().value.peek(); }
   T const& operator*() const { return get(); }

@@ -23,6 +23,8 @@ struct Render : ViewModifiers<Render> {
   /// Custom measurement callback. Return the retained leaf's desired size for the given constraints.
   std::function<Size(LayoutConstraints const&, LayoutHints const&)> measureFn{};
   /// Paint callback. Called with the node's local canvas and resolved frame.
+  /// Reactive reads inside the draw must use `evaluate()` (or another tracked read such as `get()`).
+  /// `peek()` reads do not register dependencies and can cause stale rendering when cached.
   std::function<void(Canvas&, Rect)> draw{};
 
   bool operator==(Render const& other) const {

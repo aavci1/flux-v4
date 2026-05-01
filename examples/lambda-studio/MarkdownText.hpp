@@ -643,7 +643,7 @@ struct MarkdownText : flux::ViewModifiers<MarkdownText> {
                     updateSelectionLayout(*selectableState, textLayout);
                     if (selectableState->selection.hasSelection()) {
                         flux::Color const resolvedSelectionColor =
-                            flux::resolveColor(selectionColor, theme().selectedContentBackgroundColor, theme());
+                            flux::resolveColor(selectionColor, theme.evaluate().selectedContentBackgroundColor, theme.evaluate());
                         for (flux::Rect const &rect : flux::detail::selectionRects(
                                  selectableState->layoutResult,
                                  selectableState->selection,
