@@ -5,6 +5,7 @@
 #include <Flux/UI/UI.hpp>
 #include <Flux/UI/ViewModifiers.hpp>
 #include <Flux/UI/Views/Render.hpp>
+#include <Flux/UI/Views/ZStack.hpp>
 
 #include <algorithm>
 #include <chrono>
@@ -80,8 +81,22 @@ void drawCenteredText(Canvas& canvas, std::string_view text, Font const& font, C
   canvas.drawTextLayout(*layout, {center.x - measured.width * 0.5f, center.y - measured.height * 0.5f});
 }
 
-void drawClock(Canvas& canvas, Rect frame, Theme const& theme, float hourDegrees,
-               float minuteDegrees, float secondDegrees, std::string_view timeLabel) {
+Size measureClock(LayoutConstraints const& constraints) {
+  float const width = std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 640.f;
+  float const height = std::isfinite(constraints.maxHeight) ? constraints.maxHeight : width;
+  return Size{std::max(1.f, width), std::max(1.f, height)};
+}
+
+struct ClockGeometry {
+  float topBand = 0.f;
+  float bottomBand = 0.f;
+  Rect clockFrame{};
+  float side = 1.f;
+  Point center{};
+  float radius = 1.f;
+};
+
+ClockGeometry clockGeometry(Rect frame) {
   float const topBand = std::clamp(frame.height * 0.15f, 72.f, 128.f);
   float const bottomBand = std::clamp(frame.height * 0.10f, 48.f, 84.f);
   Rect const clockFrame{
@@ -94,19 +109,32 @@ void drawClock(Canvas& canvas, Rect frame, Theme const& theme, float hourDegrees
   float const side = std::max(1.f, std::min(clockFrame.width, clockFrame.height));
   Point const center = clockFrame.center();
   float const radius = side * 0.45f;
+  return ClockGeometry{
+      .topBand = topBand,
+      .bottomBand = bottomBand,
+      .clockFrame = clockFrame,
+      .side = side,
+      .center = center,
+      .radius = radius,
+  };
+}
+
+void drawClockFace(Canvas& canvas, Rect frame, Theme const& theme) {
+  ClockGeometry const geometry = clockGeometry(frame);
+  Point const center = geometry.center;
+  float const radius = geometry.radius;
 
   Color const face = theme.elevatedBackgroundColor;
   Color const ring = theme.separatorColor;
   Color const major = theme.labelColor;
   Color const minor = theme.tertiaryLabelColor;
-  Color const accent = theme.dangerColor;
 
   drawCenteredText(canvas, "Clock Demo", theme.largeTitleFont, theme.labelColor,
                    std::max(1.f, frame.width - 48.f),
-                   {frame.center().x, frame.y + topBand * 0.32f});
+                   {frame.center().x, frame.y + geometry.topBand * 0.32f});
   drawCenteredText(canvas, "spring-ticked seconds", theme.bodyFont, theme.secondaryLabelColor,
                    std::max(1.f, frame.width - 48.f),
-                   {frame.center().x, frame.y + topBand * 0.66f});
+                   {frame.center().x, frame.y + geometry.topBand * 0.66f});
 
   canvas.drawCircle(center, radius + 14.f, FillStyle::solid(withAlpha(theme.accentColor, 0.07f)),
                     StrokeStyle::none());
@@ -138,6 +166,18 @@ void drawClock(Canvas& canvas, Rect frame, Theme const& theme, float hourDegrees
     Point const p = polar(center, radius * 0.62f, mark.degrees);
     canvas.drawTextLayout(*layout, {p.x - measured.width * 0.5f, p.y - measured.height * 0.5f});
   }
+}
+
+void drawClockHands(Canvas& canvas, Rect frame, Theme const& theme, float hourDegrees,
+                    float minuteDegrees, float secondDegrees, std::string_view timeLabel) {
+  ClockGeometry const geometry = clockGeometry(frame);
+  Point const center = geometry.center;
+  float const side = geometry.side;
+  float const radius = geometry.radius;
+
+  Color const face = theme.elevatedBackgroundColor;
+  Color const major = theme.labelColor;
+  Color const accent = theme.dangerColor;
 
   StrokeStyle hourStroke = StrokeStyle::solid(major, std::max(5.f, side * 0.018f));
   hourStroke.cap = StrokeCap::Round;
@@ -155,10 +195,25 @@ void drawClock(Canvas& canvas, Rect frame, Theme const& theme, float hourDegrees
 
   drawCenteredText(canvas, timeLabel, theme.monospacedBodyFont, theme.secondaryLabelColor,
                    std::max(1.f, frame.width - 48.f),
-                   {frame.center().x, frame.y + frame.height - bottomBand * 0.48f});
+                   {frame.center().x, frame.y + frame.height - geometry.bottomBand * 0.48f});
 }
 
 struct ClockFace : ViewModifiers<ClockFace> {
+  auto body() const {
+    auto theme = useEnvironment<ThemeKey>();
+    return Render{
+        .measureFn = [](LayoutConstraints const& constraints, LayoutHints const&) {
+          return measureClock(constraints);
+        },
+        .draw = [theme](Canvas& canvas, Rect frame) {
+          drawClockFace(canvas, frame, theme.evaluate());
+        },
+    }
+        .rasterize();
+  }
+};
+
+struct ClockHands : ViewModifiers<ClockHands> {
   auto body() const {
     auto theme = useEnvironment<ThemeKey>();
     auto clock = useState(readClock());
@@ -199,14 +254,23 @@ struct ClockFace : ViewModifiers<ClockFace> {
 
     return Render{
         .measureFn = [](LayoutConstraints const& constraints, LayoutHints const&) {
-          float const width = std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 640.f;
-          float const height = std::isfinite(constraints.maxHeight) ? constraints.maxHeight : width;
-          return Size{std::max(1.f, width), std::max(1.f, height)};
+          return measureClock(constraints);
         },
         .draw = [theme, clock, hour, minute, second](Canvas& canvas, Rect frame) {
-          drawClock(canvas, frame, theme.evaluate(), hour.evaluate(), minute.evaluate(),
-                    second.evaluate(), clock.evaluate().label);
+          drawClockHands(canvas, frame, theme.evaluate(), hour.evaluate(), minute.evaluate(),
+                         second.evaluate(), clock.evaluate().label);
         },
+    };
+  }
+};
+
+struct Clock : ViewModifiers<Clock> {
+  auto body() const {
+    return ZStack{
+        .children = children(
+            ClockFace{},
+            ClockHands{}
+        ),
     }
         .flex(1.f);
   }
@@ -215,7 +279,7 @@ struct ClockFace : ViewModifiers<ClockFace> {
 struct ClockDemoRoot {
   auto body() const {
     auto theme = useEnvironment<ThemeKey>();
-    return ClockFace{}
+    return Clock{}
         .padding(theme().space5)
         .fill(theme().windowBackgroundColor);
   }
