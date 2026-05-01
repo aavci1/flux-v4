@@ -80,6 +80,11 @@ bool canReplayPreparedGroup(SceneNode const& node) {
            !subtreeContainsRasterCache(node);
 }
 
+enum class RenderTraversalMode : std::uint8_t {
+    Normal,
+    PreparedCacheBypass,
+};
+
 MetalRecorderSlice fullRecordedSlice(MetalFrameRecorder const &recorded) {
     return MetalRecorderSlice {
         .orderStart = 0,
@@ -282,7 +287,7 @@ struct SceneRenderer::Impl {
                 return false;
             }
             for (std::unique_ptr<SceneNode> const &child : node.children()) {
-                renderNode(*child, 1.f, Point {}, false, false);
+                renderNode(*child, 1.f, Point {}, false, RenderTraversalMode::PreparedCacheBypass);
             }
             endRasterCacheCaptureForCanvas(canvas);
             cached = rasterizeRecordedOpsForCanvas(canvas, recorded, logicalSize, dpiScale);
@@ -319,7 +324,7 @@ struct SceneRenderer::Impl {
             return nullptr;
         }
         for (std::unique_ptr<SceneNode> const &child : node.children()) {
-            renderNode(*child, 1.f, Point {}, false, false);
+            renderNode(*child, 1.f, Point {}, false, RenderTraversalMode::PreparedCacheBypass);
         }
         endRecordedOpsCaptureForCanvas(canvas);
         if (recordedOpsContainClipState(recorded)) {
@@ -331,7 +336,10 @@ struct SceneRenderer::Impl {
     }
 
     void renderNode(SceneNode const &node, float inheritedOpacity, Point inheritedTranslation,
-                    bool collectCounters = true, bool usePreparedCache = true) {
+                    bool collectCounters = true,
+                    RenderTraversalMode mode = RenderTraversalMode::Normal) {
+        bool const usePreparedCache =
+            mode == RenderTraversalMode::Normal && node.transform().isTranslationOnly();
         if (collectCounters) {
             debug::perf::recordSceneNodeVisit(node.kind() == SceneNodeKind::Group);
         }
@@ -404,7 +412,7 @@ struct SceneRenderer::Impl {
                 return;
             }
             for (std::unique_ptr<SceneNode> const &child : node.children()) {
-                renderNode(*child, nodeOpacity, accumulatedTranslation, collectCounters, usePreparedCache);
+                renderNode(*child, nodeOpacity, accumulatedTranslation, collectCounters, mode);
             }
             return;
         }
@@ -514,10 +522,14 @@ struct SceneRenderer::Impl {
                                rectNode.cornerRadius());
         }
 
-        bool const childUsePreparedCache =
-            usePreparedCache && node.kind() != SceneNodeKind::RasterCache;
+        RenderTraversalMode const childMode =
+            mode == RenderTraversalMode::PreparedCacheBypass ||
+                    node.kind() == SceneNodeKind::RasterCache ||
+                    !node.transform().isTranslationOnly()
+                ? RenderTraversalMode::PreparedCacheBypass
+                : mode;
         for (std::unique_ptr<SceneNode> const &child : node.children()) {
-            renderNode(*child, nodeOpacity, Point {}, collectCounters, childUsePreparedCache);
+            renderNode(*child, nodeOpacity, Point {}, collectCounters, childMode);
         }
 
         if (clipsContents) {
