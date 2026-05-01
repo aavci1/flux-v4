@@ -6,8 +6,8 @@
 
 namespace flux::scenegraph {
 
-RenderNode::RenderNode(Rect bounds, DrawFunction draw, bool pure)
-    : SceneNode(SceneNodeKind::Render, bounds), draw_(std::move(draw)), pure_(pure) {}
+RenderNode::RenderNode(Rect bounds, DrawFunction draw)
+    : SceneNode(SceneNodeKind::Render, bounds), draw_(std::move(draw)) {}
 
 RenderNode::~RenderNode() = default;
 
@@ -15,20 +15,25 @@ RenderNode::DrawFunction const &RenderNode::draw() const noexcept {
     return draw_;
 }
 
-bool RenderNode::pure() const noexcept {
-    return pure_;
+RenderNode::Purity RenderNode::purity() const noexcept {
+    return purity_;
 }
 
 void RenderNode::setDraw(DrawFunction drawValue) {
     draw_ = std::move(drawValue);
+    purity_ = Purity::Unknown;
     markDirty();
 }
 
-void RenderNode::setPure(bool pureValue) {
-    if (pure_ == pureValue) {
+void RenderNode::setPurity(Purity purityValue) {
+    if (purity_ == purityValue) {
         return;
     }
-    pure_ = pureValue;
+    purity_ = purityValue;
+    markDirty();
+}
+
+void RenderNode::invalidate() {
     markDirty();
 }
 
@@ -41,7 +46,7 @@ void RenderNode::render(Renderer &renderer) const {
 }
 
 bool RenderNode::canPrepareRenderOps() const noexcept {
-    return pure_;
+    return purity_ == Purity::Pure;
 }
 
 } // namespace flux::scenegraph

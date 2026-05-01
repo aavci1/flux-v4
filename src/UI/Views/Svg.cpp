@@ -313,8 +313,9 @@ std::unique_ptr<scenegraph::SceneNode> Svg::mount(MountContext& ctx) const {
   };
 
   auto node = std::make_unique<scenegraph::RenderNode>(
-      Rect{0.f, 0.f, size.width, size.height}, draw, false);
+      Rect{0.f, 0.f, size.width, size.height}, draw);
   auto* rawNode = node.get();
+  rawNode->setPurity(scenegraph::RenderNode::Purity::Live);
   rawNode->setLayoutConstraints(ctx.constraints());
   rawNode->setRelayout([rawNode, document](LayoutConstraints const& constraints) mutable {
     rawNode->setSize(assignedSize(constraints, measureSvg(document, constraints)));

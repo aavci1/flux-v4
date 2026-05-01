@@ -20,7 +20,6 @@ using namespace flux;
 namespace {
 
 constexpr float kPi = 3.14159265358979323846f;
-constexpr double kSecondHandSettleSeconds = 0.46;
 
 struct ClockSnapshot {
   int rawSecondOfDay = 0;
@@ -165,9 +164,8 @@ struct ClockFace : ViewModifiers<ClockFace> {
     auto clock = useState(readClock());
 
     double dayOffset = 0.0;
-    double redrawUntil = 0.0;
     int lastRawSecond = clock.peek().rawSecondOfDay;
-    useFrame([clock, dayOffset, redrawUntil, lastRawSecond](AnimationTick const& tick) mutable {
+    useFrame([clock, dayOffset, lastRawSecond](AnimationTick const&) mutable {
       ClockSnapshot next = readClock(dayOffset);
       if (next.rawSecondOfDay < lastRawSecond) {
         dayOffset += 24.0 * 60.0 * 60.0;
@@ -176,10 +174,6 @@ struct ClockFace : ViewModifiers<ClockFace> {
       if (next.rawSecondOfDay != lastRawSecond) {
         lastRawSecond = next.rawSecondOfDay;
         clock = std::move(next);
-        redrawUntil = tick.nowSeconds + kSecondHandSettleSeconds;
-        Application::instance().requestRedraw();
-      } else if (tick.nowSeconds < redrawUntil) {
-        Application::instance().requestRedraw();
       }
     });
 
@@ -210,10 +204,8 @@ struct ClockFace : ViewModifiers<ClockFace> {
           return Size{std::max(1.f, width), std::max(1.f, height)};
         },
         .draw = [theme, clock, hour, minute, second](Canvas& canvas, Rect frame) {
-          drawClock(canvas, frame, theme(), hour.peek(), minute.peek(), second.peek(),
-                    clock.peek().label);
+          drawClock(canvas, frame, theme(), hour(), minute(), second(), clock().label);
         },
-        .pure = false,
     }
         .flex(1.f);
   }

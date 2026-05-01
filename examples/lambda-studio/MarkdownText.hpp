@@ -663,7 +663,6 @@ struct MarkdownText : flux::ViewModifiers<MarkdownText> {
 
                 canvas.drawTextLayout(*textLayout, flux::Point {});
             },
-            .pure = !selectable,
         }};
 
         if (selectable && selectableState) {
