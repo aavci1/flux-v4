@@ -932,6 +932,108 @@ TEST_CASE("ScaleAroundCenter relayout keeps reactive scale binding alive") {
   CHECK(sceneGraph.root().size().height >= 10.f);
 }
 
+TEST_CASE("element transform modifiers compose in call order") {
+  struct TranslateThenRotate {
+    flux::Element body() const {
+      return flux::Rectangle{}
+          .size(10.f, 10.f)
+          .translate(10.f, 0.f)
+          .rotate(1.5707963267948966f);
+    }
+  };
+  struct RotateThenTranslate {
+    flux::Element body() const {
+      return flux::Rectangle{}
+          .size(10.f, 10.f)
+          .rotate(1.5707963267948966f)
+          .translate(10.f, 0.f);
+    }
+  };
+  struct RepeatedTranslate {
+    flux::Element body() const {
+      return flux::Rectangle{}
+          .size(10.f, 10.f)
+          .translate(10.f, 2.f)
+          .translate(3.f, 4.f);
+    }
+  };
+
+  FakeTextSystem textSystem;
+  flux::scenegraph::SceneGraph translateThenRotateGraph;
+  flux::scenegraph::SceneGraph rotateThenTranslateGraph;
+  flux::scenegraph::SceneGraph repeatedTranslateGraph;
+
+  flux::MountRoot translateThenRotateRoot{
+      std::make_unique<flux::TypedRootHolder<TranslateThenRotate>>(std::in_place),
+      textSystem,
+      testEnvironment(),
+      flux::Size{100.f, 100.f},
+  };
+  flux::MountRoot rotateThenTranslateRoot{
+      std::make_unique<flux::TypedRootHolder<RotateThenTranslate>>(std::in_place),
+      textSystem,
+      testEnvironment(),
+      flux::Size{100.f, 100.f},
+  };
+  flux::MountRoot repeatedTranslateRoot{
+      std::make_unique<flux::TypedRootHolder<RepeatedTranslate>>(std::in_place),
+      textSystem,
+      testEnvironment(),
+      flux::Size{100.f, 100.f},
+  };
+
+  translateThenRotateRoot.mount(translateThenRotateGraph);
+  rotateThenTranslateRoot.mount(rotateThenTranslateGraph);
+  repeatedTranslateRoot.mount(repeatedTranslateGraph);
+
+  flux::Point const sample{1.f, 0.f};
+  flux::Point const tr =
+      translateThenRotateGraph.root().transform().apply(sample);
+  flux::Point const rt =
+      rotateThenTranslateGraph.root().transform().apply(sample);
+  flux::Point const repeated =
+      repeatedTranslateGraph.root().transform().apply({0.f, 0.f});
+
+  CHECK(tr.x == doctest::Approx(10.f).epsilon(0.001));
+  CHECK(tr.y == doctest::Approx(1.f).epsilon(0.001));
+  CHECK(rt.x == doctest::Approx(0.f).epsilon(0.001));
+  CHECK(rt.y == doctest::Approx(11.f).epsilon(0.001));
+  CHECK(repeated.x == doctest::Approx(13.f).epsilon(0.001));
+  CHECK(repeated.y == doctest::Approx(6.f).epsilon(0.001));
+}
+
+TEST_CASE("reactive element transform modifiers update mounted node") {
+  struct Root {
+    flux::Reactive::Signal<float> dx;
+
+    flux::Element body() const {
+      return flux::Rectangle{}
+          .size(10.f, 10.f)
+          .translate(flux::Reactive::Bindable<float>{[dx = dx] {
+            return dx.get();
+          }},
+                     0.f);
+    }
+  };
+
+  FakeTextSystem textSystem;
+  flux::scenegraph::SceneGraph sceneGraph;
+  flux::Reactive::Signal<float> dx{0.f};
+  flux::MountRoot root{
+      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{dx}),
+      textSystem,
+      testEnvironment(),
+      flux::Size{100.f, 100.f},
+  };
+
+  root.mount(sceneGraph);
+  CHECK(sceneGraph.root().transform().apply({0.f, 0.f}).x == doctest::Approx(0.f));
+
+  dx.set(21.f);
+
+  CHECK(sceneGraph.root().transform().apply({0.f, 0.f}).x == doctest::Approx(21.f));
+}
+
 TEST_CASE("TextInput fills finite assigned stack width") {
   struct Root {
     flux::Element body() const {

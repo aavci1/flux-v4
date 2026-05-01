@@ -181,6 +181,10 @@ public:
   Element position(Reactive::Bindable<float> x, Reactive::Bindable<float> y) &&;
   Element translate(Reactive::Bindable<Vec2> delta) &&;
   Element translate(Reactive::Bindable<float> dx, Reactive::Bindable<float> dy) &&;
+  Element rotate(Reactive::Bindable<float> radians) &&;
+  Element scale(Reactive::Bindable<float> factor) &&;
+  Element scale(Reactive::Bindable<Vec2> factors) &&;
+  Element scale(Reactive::Bindable<float> sx, Reactive::Bindable<float> sy) &&;
   Element clipContent(bool clip) &&;
   /// Renders this subtree into an offscreen texture and reuses that texture until the subtree,
   /// bounds, or DPI scale changes.

@@ -1,6 +1,66 @@
 #include <Flux/UI/Element.hpp>
 
+#include <cmath>
+
 namespace flux {
+
+namespace {
+
+float finiteOr(float value, float fallback) {
+  return std::isfinite(value) ? value : fallback;
+}
+
+Mat3 translateMatrix(Vec2 delta) {
+  return Mat3::translate(finiteOr(delta.x, 0.f), finiteOr(delta.y, 0.f));
+}
+
+Mat3 rotateMatrix(float radians) {
+  return Mat3::rotate(finiteOr(radians, 0.f));
+}
+
+Mat3 scaleMatrix(Vec2 factors) {
+  return Mat3::scale(finiteOr(factors.x, 1.f), finiteOr(factors.y, 1.f));
+}
+
+Reactive::Bindable<Mat3> composeTransform(Reactive::Bindable<Mat3> current,
+                                          Reactive::Bindable<Mat3> next) {
+  if (!current.isReactive() && !next.isReactive()) {
+    return current.value() * next.value();
+  }
+  return Reactive::Bindable<Mat3>{
+      [current = std::move(current), next = std::move(next)] {
+        return current.evaluate() * next.evaluate();
+      }};
+}
+
+Reactive::Bindable<Mat3> translateTransform(Reactive::Bindable<Vec2> delta) {
+  if (!delta.isReactive()) {
+    return translateMatrix(delta.value());
+  }
+  return Reactive::Bindable<Mat3>{[delta = std::move(delta)] {
+    return translateMatrix(delta.evaluate());
+  }};
+}
+
+Reactive::Bindable<Mat3> rotateTransform(Reactive::Bindable<float> radians) {
+  if (!radians.isReactive()) {
+    return rotateMatrix(radians.value());
+  }
+  return Reactive::Bindable<Mat3>{[radians = std::move(radians)] {
+    return rotateMatrix(radians.evaluate());
+  }};
+}
+
+Reactive::Bindable<Mat3> scaleTransform(Reactive::Bindable<Vec2> factors) {
+  if (!factors.isReactive()) {
+    return scaleMatrix(factors.value());
+  }
+  return Reactive::Bindable<Mat3>{[factors = std::move(factors)] {
+    return scaleMatrix(factors.evaluate());
+  }};
+}
+
+} // namespace
 
 detail::ElementModifiers::ElementModifiers(detail::ElementModifiers const& o)
     : padding(o.padding)
@@ -9,7 +69,7 @@ detail::ElementModifiers::ElementModifiers(detail::ElementModifiers const& o)
     , shadow(o.shadow)
     , cornerRadius(o.cornerRadius)
     , opacity(o.opacity)
-    , translation(o.translation)
+    , transform(o.transform)
     , clip(o.clip)
     , positionX(o.positionX)
     , positionY(o.positionY)
@@ -43,7 +103,7 @@ detail::ElementModifiers& detail::ElementModifiers::operator=(detail::ElementMod
     shadow = o.shadow;
     cornerRadius = o.cornerRadius;
     opacity = o.opacity;
-    translation = o.translation;
+    transform = o.transform;
     clip = o.clip;
     positionX = o.positionX;
     positionY = o.positionY;
@@ -185,15 +245,63 @@ Element Element::position(Reactive::Bindable<float> x, Reactive::Bindable<float>
 }
 
 Element Element::translate(Reactive::Bindable<Vec2> delta) && {
-  writableModifiers().translation = std::move(delta);
+  detail::ElementModifiers& modifiers = writableModifiers();
+  modifiers.transform = composeTransform(std::move(modifiers.transform),
+                                         translateTransform(std::move(delta)));
   return std::move(*this);
 }
 
 Element Element::translate(Reactive::Bindable<float> dx, Reactive::Bindable<float> dy) && {
-  writableModifiers().translation = Reactive::Bindable<Vec2>(
-      [dx = std::move(dx), dy = std::move(dy)] {
-        return Vec2{dx.evaluate(), dy.evaluate()};
-      });
+  Reactive::Bindable<Vec2> delta =
+      (!dx.isReactive() && !dy.isReactive())
+          ? Reactive::Bindable<Vec2>{Vec2{dx.value(), dy.value()}}
+          : Reactive::Bindable<Vec2>{[dx = std::move(dx), dy = std::move(dy)] {
+              return Vec2{dx.evaluate(), dy.evaluate()};
+            }};
+  detail::ElementModifiers& modifiers = writableModifiers();
+  modifiers.transform = composeTransform(std::move(modifiers.transform),
+                                         translateTransform(std::move(delta)));
+  return std::move(*this);
+}
+
+Element Element::rotate(Reactive::Bindable<float> radians) && {
+  detail::ElementModifiers& modifiers = writableModifiers();
+  modifiers.transform = composeTransform(std::move(modifiers.transform),
+                                         rotateTransform(std::move(radians)));
+  return std::move(*this);
+}
+
+Element Element::scale(Reactive::Bindable<float> factor) && {
+  Reactive::Bindable<Vec2> factors =
+      !factor.isReactive()
+          ? Reactive::Bindable<Vec2>{Vec2{factor.value(), factor.value()}}
+          : Reactive::Bindable<Vec2>{[factor = std::move(factor)] {
+              float const value = factor.evaluate();
+              return Vec2{value, value};
+            }};
+  detail::ElementModifiers& modifiers = writableModifiers();
+  modifiers.transform = composeTransform(std::move(modifiers.transform),
+                                         scaleTransform(std::move(factors)));
+  return std::move(*this);
+}
+
+Element Element::scale(Reactive::Bindable<Vec2> factors) && {
+  detail::ElementModifiers& modifiers = writableModifiers();
+  modifiers.transform = composeTransform(std::move(modifiers.transform),
+                                         scaleTransform(std::move(factors)));
+  return std::move(*this);
+}
+
+Element Element::scale(Reactive::Bindable<float> sx, Reactive::Bindable<float> sy) && {
+  Reactive::Bindable<Vec2> factors =
+      (!sx.isReactive() && !sy.isReactive())
+          ? Reactive::Bindable<Vec2>{Vec2{sx.value(), sy.value()}}
+          : Reactive::Bindable<Vec2>{[sx = std::move(sx), sy = std::move(sy)] {
+              return Vec2{sx.evaluate(), sy.evaluate()};
+            }};
+  detail::ElementModifiers& modifiers = writableModifiers();
+  modifiers.transform = composeTransform(std::move(modifiers.transform),
+                                         scaleTransform(std::move(factors)));
   return std::move(*this);
 }
 

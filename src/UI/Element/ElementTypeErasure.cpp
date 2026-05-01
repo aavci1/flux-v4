@@ -453,15 +453,31 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
 
   LayoutConstraints const bindingConstraints = activeCtx.constraints();
   LayoutHints const bindingHints = activeCtx.hints();
+  auto applyTransform = [rawWrapper, transform = modifiers.transform]() mutable {
+    rawWrapper->setTransform(transform.evaluate());
+  };
+  applyTransform();
+  if (modifiers.transform.isReactive()) {
+    Reactive::SmallFn<void()> requestRedraw = activeCtx.redrawCallback();
+    Reactive::withOwner(activeCtx.owner(), [applyTransform, requestRedraw = std::move(requestRedraw)]() mutable {
+      Reactive::Effect([applyTransform, requestRedraw]() mutable {
+        applyTransform();
+        if (requestRedraw) {
+          requestRedraw();
+        }
+      });
+    });
+  }
   if (modifiers.hasSizeWidth) {
     installBinding<float>(activeCtx, modifiers.sizeWidth,
-                          [rawWrapper, bindingConstraints, bindingHints](float width) {
+                          [rawWrapper, bindingConstraints, bindingHints, applyTransform](float width) mutable {
                             float const resolvedWidth =
                                 detail::resolvedModifierWidth(bindingConstraints, bindingHints, width);
                             Size size = rawWrapper->size();
                             Size const oldSize = size;
                             size.width = resolvedWidth;
                             rawWrapper->setSize(size);
+                            applyTransform();
                             if (rawWrapper->size() != oldSize) {
                               relayoutStoredAncestors(*rawWrapper);
                             }
@@ -469,32 +485,24 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
   }
   if (modifiers.hasSizeHeight) {
     installBinding<float>(activeCtx, modifiers.sizeHeight,
-                          [rawWrapper, bindingConstraints, bindingHints](float height) {
+                          [rawWrapper, bindingConstraints, bindingHints, applyTransform](float height) mutable {
                             float const resolvedHeight =
                                 detail::resolvedModifierHeight(bindingConstraints, bindingHints, height);
                             Size size = rawWrapper->size();
                             Size const oldSize = size;
                             size.height = resolvedHeight;
                             rawWrapper->setSize(size);
+                            applyTransform();
                             if (rawWrapper->size() != oldSize) {
                               relayoutStoredAncestors(*rawWrapper);
                             }
                           });
   }
-  installBinding<Vec2>(activeCtx, modifiers.translation, [rawWrapper, px = modifiers.positionX,
-                                                          py = modifiers.positionY](
-                                                           Vec2 translation) mutable {
-    rawWrapper->setPosition(Point{px.evaluate() + translation.x, py.evaluate() + translation.y});
+  installBinding<float>(activeCtx, modifiers.positionX, [rawWrapper, py = modifiers.positionY](float x) mutable {
+    rawWrapper->setPosition(Point{x, py.evaluate()});
   });
-  installBinding<float>(activeCtx, modifiers.positionX, [rawWrapper, tr = modifiers.translation,
-                                                         py = modifiers.positionY](float x) mutable {
-    Vec2 const translation = tr.evaluate();
-    rawWrapper->setPosition(Point{x + translation.x, py.evaluate() + translation.y});
-  });
-  installBinding<float>(activeCtx, modifiers.positionY, [rawWrapper, tr = modifiers.translation,
-                                                         px = modifiers.positionX](float y) mutable {
-    Vec2 const translation = tr.evaluate();
-    rawWrapper->setPosition(Point{px.evaluate() + translation.x, y + translation.y});
+  installBinding<float>(activeCtx, modifiers.positionY, [rawWrapper, px = modifiers.positionX](float y) mutable {
+    rawWrapper->setPosition(Point{px.evaluate(), y});
   });
   if (rawRasterNode) {
     for (Reactive::BindingFn invalidator : modifiers.rasterizeInvalidators) {
@@ -573,6 +581,7 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
       nextSize.height = std::min(nextSize.height, constraints.maxHeight);
     }
     rawWrapper->setSize(Size{positive(nextSize.width), positive(nextSize.height)});
+    rawWrapper->setTransform(modifiers.transform.evaluate());
     if (rawContent) {
       rawContent->setPosition(Point{padL, padT});
     }

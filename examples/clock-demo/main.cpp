@@ -4,7 +4,9 @@
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/UI.hpp>
 #include <Flux/UI/ViewModifiers.hpp>
+#include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/Render.hpp>
+#include <Flux/UI/Views/Text.hpp>
 #include <Flux/UI/Views/ZStack.hpp>
 
 #include <algorithm>
@@ -64,14 +66,6 @@ Point polar(Point center, float radius, float degrees) {
       center.x + std::sin(radians) * radius,
       center.y - std::cos(radians) * radius,
   };
-}
-
-void drawHand(Canvas& canvas, Point center, float degrees, float length, float tail,
-              StrokeStyle stroke) {
-  canvas.save();
-  canvas.rotate(std::fmod(degrees, 360.f) * kPi / 180.f, center);
-  canvas.drawLine({center.x, center.y + tail}, {center.x, center.y - length}, stroke);
-  canvas.restore();
 }
 
 void drawCenteredText(Canvas& canvas, std::string_view text, Font const& font, Color color,
@@ -168,36 +162,6 @@ void drawClockFace(Canvas& canvas, Rect frame, Theme const& theme) {
   }
 }
 
-void drawClockHands(Canvas& canvas, Rect frame, Theme const& theme, float hourDegrees,
-                    float minuteDegrees, float secondDegrees, std::string_view timeLabel) {
-  ClockGeometry const geometry = clockGeometry(frame);
-  Point const center = geometry.center;
-  float const side = geometry.side;
-  float const radius = geometry.radius;
-
-  Color const face = theme.elevatedBackgroundColor;
-  Color const major = theme.labelColor;
-  Color const accent = theme.dangerColor;
-
-  StrokeStyle hourStroke = StrokeStyle::solid(major, std::max(5.f, side * 0.018f));
-  hourStroke.cap = StrokeCap::Round;
-  StrokeStyle minuteStroke = StrokeStyle::solid(major, std::max(4.f, side * 0.013f));
-  minuteStroke.cap = StrokeCap::Round;
-  StrokeStyle secondStroke = StrokeStyle::solid(accent, std::max(2.f, side * 0.006f));
-  secondStroke.cap = StrokeCap::Round;
-
-  drawHand(canvas, center, hourDegrees, radius * 0.42f, radius * 0.08f, hourStroke);
-  drawHand(canvas, center, minuteDegrees, radius * 0.64f, radius * 0.10f, minuteStroke);
-  drawHand(canvas, center, secondDegrees, radius * 0.72f, radius * 0.16f, secondStroke);
-
-  canvas.drawCircle(center, radius * 0.055f, FillStyle::solid(accent),
-                    StrokeStyle::solid(face, 3.f));
-
-  drawCenteredText(canvas, timeLabel, theme.monospacedBodyFont, theme.secondaryLabelColor,
-                   std::max(1.f, frame.width - 48.f),
-                   {frame.center().x, frame.y + frame.height - geometry.bottomBand * 0.48f});
-}
-
 struct ClockFace : ViewModifiers<ClockFace> {
   auto body() const {
     auto theme = useEnvironment<ThemeKey>();
@@ -212,6 +176,45 @@ struct ClockFace : ViewModifiers<ClockFace> {
         .rasterize();
   }
 };
+
+Reactive::Bindable<float> radiansFromDegrees(Reactive::Bindable<float> degrees) {
+  return Reactive::Bindable<float>{[degrees = std::move(degrees)] {
+    return std::fmod(degrees.evaluate(), 360.f) * kPi / 180.f;
+  }};
+}
+
+template<typename Source>
+Reactive::Bindable<float> bindDegrees(Source source) {
+  return Reactive::Bindable<float>{[source = std::move(source)] {
+    return source.evaluate();
+  }};
+}
+
+Element clockHandLayer(ClockGeometry const& geometry, Reactive::Bindable<float> radians,
+                       Color color, float width, float length, float tail) {
+  Point const center = geometry.center;
+  return ZStack{
+      .children = children(
+          Rectangle{}
+              .size(width, length + tail)
+              .cornerRadius(width * 0.5f)
+              .fill(color)
+              .position(-width * 0.5f, -length)
+      ),
+  }
+      .position(center.x, center.y)
+      .rotate(std::move(radians));
+}
+
+Element centerDot(ClockGeometry const& geometry, Theme const& theme) {
+  float const radius = geometry.radius * 0.055f;
+  return Rectangle{}
+      .size(radius * 2.f, radius * 2.f)
+      .cornerRadius(radius)
+      .fill(theme.dangerColor)
+      .stroke(theme.elevatedBackgroundColor, 3.f)
+      .position(geometry.center.x - radius, geometry.center.y - radius);
+}
 
 struct ClockHands : ViewModifiers<ClockHands> {
   auto body() const {
@@ -252,15 +255,42 @@ struct ClockHands : ViewModifiers<ClockHands> {
     auto minute = useAnimation(minuteTarget, slowHandSpring);
     auto hour = useAnimation(hourTarget, slowHandSpring);
 
-    return Render{
-        .measureFn = [](LayoutConstraints const& constraints, LayoutHints const&) {
-          return measureClock(constraints);
-        },
-        .draw = [theme, clock, hour, minute, second](Canvas& canvas, Rect frame) {
-          drawClockHands(canvas, frame, theme.evaluate(), hour.evaluate(), minute.evaluate(),
-                         second.evaluate(), clock.evaluate().label);
-        },
-    };
+    LayoutConstraints const* constraints = useLayoutConstraints();
+    Size const measured = constraints ? measureClock(*constraints) : Size{640.f, 640.f};
+    Rect const frame{0.f, 0.f, measured.width, measured.height};
+    ClockGeometry const geometry = clockGeometry(frame);
+    Theme const initialTheme = theme();
+    float const side = geometry.side;
+    float const radius = geometry.radius;
+    float const hourWidth = std::max(5.f, side * 0.018f);
+    float const minuteWidth = std::max(4.f, side * 0.013f);
+    float const secondWidth = std::max(2.f, side * 0.006f);
+
+    return ZStack{
+        .children = children(
+            clockHandLayer(geometry, radiansFromDegrees(bindDegrees(hour)),
+                           initialTheme.labelColor, hourWidth, radius * 0.42f, radius * 0.08f),
+            clockHandLayer(geometry, radiansFromDegrees(bindDegrees(minute)),
+                           initialTheme.labelColor, minuteWidth, radius * 0.64f, radius * 0.10f),
+            clockHandLayer(geometry, radiansFromDegrees(bindDegrees(second)),
+                           initialTheme.dangerColor, secondWidth, radius * 0.72f, radius * 0.16f),
+            centerDot(geometry, initialTheme),
+            Text{
+                .text = Reactive::Bindable<std::string>{[clock] {
+                  return clock.evaluate().label;
+                }},
+                .font = initialTheme.monospacedBodyFont,
+                .color = Reactive::Bindable<Color>{[theme] {
+                  return theme.evaluate().secondaryLabelColor;
+                }},
+                .horizontalAlignment = HorizontalAlignment::Center,
+                .verticalAlignment = VerticalAlignment::Center,
+            }
+                .size(std::max(1.f, frame.width - 48.f), geometry.bottomBand)
+                .position(24.f, frame.height - geometry.bottomBand * 0.98f)
+        ),
+    }
+        .flex(1.f);
   }
 };
 
@@ -269,7 +299,7 @@ struct Clock : ViewModifiers<Clock> {
     return ZStack{
         .children = children(
             ClockFace{},
-            ClockHands{}
+            ClockHands{}.flex(1.f)
         ),
     }
         .flex(1.f);

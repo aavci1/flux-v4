@@ -83,7 +83,7 @@ struct ElementModifiers {
   Reactive::Bindable<ShadowStyle> shadow{ShadowStyle::none()};
   Reactive::Bindable<CornerRadius> cornerRadius{CornerRadius{}};
   Reactive::Bindable<float> opacity{1.f};
-  Reactive::Bindable<Vec2> translation{Vec2{}};
+  Reactive::Bindable<Mat3> transform{Mat3::identity()};
   bool clip = false;
   Reactive::Bindable<float> positionX{0.f};
   Reactive::Bindable<float> positionY{0.f};
@@ -127,14 +127,14 @@ struct ElementModifiers {
     auto const sh = shadow.evaluate();
     auto const cr = cornerRadius.evaluate();
     auto const op = opacity.evaluate();
-    auto const tr = translation.evaluate();
+    auto const tx = transform.evaluate();
     auto const px = positionX.evaluate();
     auto const py = positionY.evaluate();
     return !p.isZero() || !f.isNone() || !s.isNone() || !sh.isNone() ||
-           !cr.isZero() || op < 1.f - 1e-6f || std::fabs(tr.x) > 1e-6f ||
-           std::fabs(tr.y) > 1e-6f || clip || std::fabs(px) > 1e-6f ||
-           std::fabs(py) > 1e-6f || hasInteraction() || hasSizeWidth || hasSizeHeight ||
-           rasterize ||
+           !cr.isZero() || op < 1.f - 1e-6f || transform.isReactive() ||
+           tx != Mat3::identity() ||
+           clip || std::fabs(px) > 1e-6f || std::fabs(py) > 1e-6f ||
+           hasInteraction() || hasSizeWidth || hasSizeHeight || rasterize ||
            overlay != nullptr;
   }
 

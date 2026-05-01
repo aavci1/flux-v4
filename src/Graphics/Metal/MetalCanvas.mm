@@ -990,12 +990,15 @@ public:
       float tx = 0.f;
       float ty = 0.f;
       bool const decomposed = tryDecomposeRotationTranslation(M, &rotationRad, &tx, &ty);
-      mapped = boundsOfTransformedRect(rect, M);
       if (decomposed) {
+        Point const center = M.apply(rect.center());
+        mapped = Rect::sharp(center.x - rect.width * 0.5f, center.y - rect.height * 0.5f,
+                             rect.width, rect.height);
+      } else {
+        mapped = boundsOfTransformedRect(rect, M);
         rotationRad = 0.f;
       }
     }
-
     const float s = dpiScale_;
     CornerRadius cr{};
     cr.topLeft = crEffective.topLeft * s;

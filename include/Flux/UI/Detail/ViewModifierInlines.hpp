@@ -104,6 +104,27 @@ Element ViewModifiers<Derived>::translate(Reactive::Bindable<float> dx,
 }
 
 template<typename Derived>
+Element ViewModifiers<Derived>::rotate(Reactive::Bindable<float> radians) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.rotate(std::move(radians));
+}
+
+template<typename Derived>
+Element ViewModifiers<Derived>::scale(Reactive::Bindable<float> factor) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.scale(std::move(factor));
+}
+
+template<typename Derived>
+Element ViewModifiers<Derived>::scale(Reactive::Bindable<Vec2> factors) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.scale(std::move(factors));
+}
+
+template<typename Derived>
+Element ViewModifiers<Derived>::scale(Reactive::Bindable<float> sx,
+                                      Reactive::Bindable<float> sy) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.scale(std::move(sx), std::move(sy));
+}
+
+template<typename Derived>
 Element ViewModifiers<Derived>::clipContent(bool clip) && {
   return Element{std::move(static_cast<Derived&>(*this))}.clipContent(clip);
 }
