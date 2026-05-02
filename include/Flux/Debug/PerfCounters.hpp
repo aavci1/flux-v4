@@ -3,10 +3,12 @@
 #include <Flux/Debug/DebugFlags.hpp>
 
 #include <array>
+#include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <cmath>
 
 namespace flux::debug::perf {
 
@@ -75,6 +77,8 @@ struct TextCounters {
 namespace detail {
 
 struct IntervalCounters {
+  static constexpr std::size_t kMaxFrameBudgetSamples = 512;
+
   std::chrono::steady_clock::time_point startedAt = std::chrono::steady_clock::now();
   std::uint64_t frames = 0;
   ComponentKeyCounters componentKeys{};
@@ -84,6 +88,8 @@ struct IntervalCounters {
   std::uint64_t preparedPrepareCalls = 0;
   std::uint64_t preparedReplayCalls = 0;
   std::array<std::uint64_t, static_cast<std::size_t>(TimedMetric::Count)> durationsNs{};
+  std::array<std::uint64_t, kMaxFrameBudgetSamples> frameBudgetSamplesNs{};
+  std::size_t frameBudgetSampleCount = 0;
 
   void reset(std::chrono::steady_clock::time_point now) {
     startedAt = now;
@@ -95,6 +101,8 @@ struct IntervalCounters {
     preparedPrepareCalls = 0;
     preparedReplayCalls = 0;
     durationsNs.fill(0);
+    frameBudgetSamplesNs.fill(0);
+    frameBudgetSampleCount = 0;
   }
 };
 
@@ -114,8 +122,179 @@ inline double nanosToMillis(std::uint64_t totalNs) {
   return static_cast<double>(totalNs) / 1'000'000.0;
 }
 
+inline double perFrameMillis(std::uint64_t totalNs, std::uint64_t frames) {
+  if (frames == 0) {
+    return 0.0;
+  }
+  return nanosToMillis(totalNs) / static_cast<double>(frames);
+}
+
+inline double frameBudgetPercentileMillis(IntervalCounters const& interval, double percentile) {
+  if (interval.frameBudgetSampleCount == 0) {
+    return perFrameMillis(interval.durationsNs[static_cast<std::size_t>(TimedMetric::DisplayLinkToPresent)],
+                          interval.frames);
+  }
+  std::array<std::uint64_t, IntervalCounters::kMaxFrameBudgetSamples> samples = interval.frameBudgetSamplesNs;
+  std::size_t const count = interval.frameBudgetSampleCount;
+  std::sort(samples.begin(), samples.begin() + static_cast<std::ptrdiff_t>(count));
+  double const clamped = std::clamp(percentile, 0.0, 1.0);
+  std::size_t const index = std::min(count - 1, static_cast<std::size_t>(std::round(clamped * (count - 1))));
+  return nanosToMillis(samples[index]);
+}
+
+inline double uploadKilobytesPerFrame(RenderCounters const& render, std::uint64_t frames) {
+  std::uint64_t total = 0;
+  for (std::uint64_t bytes : render.uploadBytes) {
+    total += bytes;
+  }
+  return perFrame(total, frames) / 1024.0;
+}
+
+inline void printCompactCount(FILE* out, double value) {
+  double const rounded = std::round(value);
+  if (std::abs(value - rounded) < 0.05) {
+    std::fprintf(out, "%.0f", rounded);
+  } else {
+    std::fprintf(out, "%.1f", value);
+  }
+}
+
+inline void printDrawSummary(IntervalCounters const& interval) {
+  std::fprintf(stderr, "draw");
+  auto const printKind = [&](char label, RenderCounterKind kind) {
+    double const value = perFrame(interval.render.drawCalls[static_cast<std::size_t>(kind)], interval.frames);
+    if (value <= 0.0) {
+      return;
+    }
+    std::fprintf(stderr, " %c", label);
+    printCompactCount(stderr, value);
+  };
+  printKind('r', RenderCounterKind::Rect);
+  printKind('i', RenderCounterKind::Image);
+  printKind('p', RenderCounterKind::Path);
+  printKind('g', RenderCounterKind::Glyph);
+}
+
+inline bool hasComponentKeyWork(ComponentKeyCounters const& ck) {
+  return ck.copies || ck.copiedIds || ck.appends || ck.appendedIds || ck.hashCalls || ck.hashedIds ||
+         ck.equalityCalls || ck.equalityIds || ck.prefixCalls || ck.prefixIds || ck.heapGrowths;
+}
+
+inline void printSummaryLine(IntervalCounters const& interval, double seconds) {
+  double const fps = seconds > 0.0 ? static_cast<double>(interval.frames) / seconds : 0.0;
+  std::fprintf(stderr, "[flux:perf] %.0ffps  budget %.2fms  render %.2fms  ",
+               fps,
+               frameBudgetPercentileMillis(interval, 0.50),
+               perFrameMillis(interval.durationsNs[static_cast<std::size_t>(TimedMetric::SceneRender)],
+                              interval.frames));
+  printDrawSummary(interval);
+  std::fprintf(stderr, "  cache ");
+  printCompactCount(stderr, perFrame(interval.scene.preparedReplaySuccesses, interval.frames));
+  std::fprintf(stderr, "/");
+  printCompactCount(stderr, perFrame(interval.scene.preparedReplayFailures, interval.frames));
+  std::fprintf(stderr, "  upload %.1fKB  text %llu/%llu\n",
+               uploadKilobytesPerFrame(interval.render, interval.frames),
+               static_cast<unsigned long long>(interval.text.layoutCacheHits),
+               static_cast<unsigned long long>(interval.text.layoutCacheMisses));
+}
+
+inline void printVerboseLine(IntervalCounters const& interval, double seconds) {
+  std::fprintf(
+      stderr,
+      "[flux:perf:detail] %.2fs frames=%llu "
+      "timing reactive=%.2fms render=%.2fms present=%.2fms drawableWait=%.2fms budget[p50/p99]=%.2f/%.2fms "
+      "prepare=%llu(%.2f/f) replay=%llu(%.2f/f) "
+      "scene passes=%llu(%.2f/f) nodes=%llu(%.2f/f) reject=%llu cache=%llu/%llu "
+      "draw r%llu(%.2f/f) i%llu(%.2f/f)",
+      seconds,
+      static_cast<unsigned long long>(interval.frames),
+      perFrameMillis(interval.durationsNs[static_cast<std::size_t>(TimedMetric::ProcessReactiveUpdates)],
+                     interval.frames),
+      perFrameMillis(interval.durationsNs[static_cast<std::size_t>(TimedMetric::SceneRender)], interval.frames),
+      perFrameMillis(interval.durationsNs[static_cast<std::size_t>(TimedMetric::CanvasPresent)], interval.frames),
+      perFrameMillis(interval.durationsNs[static_cast<std::size_t>(TimedMetric::CanvasDrawableWait)],
+                     interval.frames),
+      frameBudgetPercentileMillis(interval, 0.50),
+      frameBudgetPercentileMillis(interval, 0.99),
+      static_cast<unsigned long long>(interval.preparedPrepareCalls),
+      perFrame(interval.preparedPrepareCalls, interval.frames),
+      static_cast<unsigned long long>(interval.preparedReplayCalls),
+      perFrame(interval.preparedReplayCalls, interval.frames),
+      static_cast<unsigned long long>(interval.scene.renderPasses),
+      perFrame(interval.scene.renderPasses, interval.frames),
+      static_cast<unsigned long long>(interval.scene.nodesVisited),
+      perFrame(interval.scene.nodesVisited, interval.frames),
+      static_cast<unsigned long long>(interval.scene.quickRejects),
+      static_cast<unsigned long long>(interval.scene.preparedReplaySuccesses),
+      static_cast<unsigned long long>(interval.scene.preparedReplayFailures),
+      static_cast<unsigned long long>(interval.render.drawCalls[static_cast<std::size_t>(RenderCounterKind::Rect)]),
+      perFrame(interval.render.drawCalls[static_cast<std::size_t>(RenderCounterKind::Rect)], interval.frames),
+      static_cast<unsigned long long>(interval.render.drawCalls[static_cast<std::size_t>(RenderCounterKind::Image)]),
+      perFrame(interval.render.drawCalls[static_cast<std::size_t>(RenderCounterKind::Image)], interval.frames));
+
+  if (interval.render.drawCalls[static_cast<std::size_t>(RenderCounterKind::Path)] > 0) {
+    std::fprintf(stderr, " p%llu(%.2f/f)",
+                 static_cast<unsigned long long>(
+                     interval.render.drawCalls[static_cast<std::size_t>(RenderCounterKind::Path)]),
+                 perFrame(interval.render.drawCalls[static_cast<std::size_t>(RenderCounterKind::Path)],
+                          interval.frames));
+  }
+  if (interval.render.drawCalls[static_cast<std::size_t>(RenderCounterKind::Glyph)] > 0) {
+    std::fprintf(stderr, " g%llu(%.2f/f)",
+                 static_cast<unsigned long long>(
+                     interval.render.drawCalls[static_cast<std::size_t>(RenderCounterKind::Glyph)]),
+                 perFrame(interval.render.drawCalls[static_cast<std::size_t>(RenderCounterKind::Glyph)],
+                          interval.frames));
+  }
+
+  std::fprintf(stderr,
+               " uploadKB %.1f text layout=%llu hit=%llu miss=%llu",
+               uploadKilobytesPerFrame(interval.render, 1),
+               static_cast<unsigned long long>(interval.text.layoutCalls),
+               static_cast<unsigned long long>(interval.text.layoutCacheHits),
+               static_cast<unsigned long long>(interval.text.layoutCacheMisses));
+
+  if (interval.render.recorderCapacityGrowths > 0) {
+    std::fprintf(stderr, " recorderGrow=%llu growKB=%.1f",
+                 static_cast<unsigned long long>(interval.render.recorderCapacityGrowths),
+                 static_cast<double>(interval.render.recorderCapacityGrowthBytes) / 1024.0);
+  }
+
+  if (hasComponentKeyWork(interval.componentKeys)) {
+    ComponentKeyCounters const& ck = interval.componentKeys;
+    std::fprintf(stderr,
+                 " ck copy=%llu/%lluid append=%llu/%lluid hash=%llu/%lluid eq=%llu/%lluid "
+                 "prefix=%llu/%lluid grow=%llu",
+                 static_cast<unsigned long long>(ck.copies),
+                 static_cast<unsigned long long>(ck.copiedIds),
+                 static_cast<unsigned long long>(ck.appends),
+                 static_cast<unsigned long long>(ck.appendedIds),
+                 static_cast<unsigned long long>(ck.hashCalls),
+                 static_cast<unsigned long long>(ck.hashedIds),
+                 static_cast<unsigned long long>(ck.equalityCalls),
+                 static_cast<unsigned long long>(ck.equalityIds),
+                 static_cast<unsigned long long>(ck.prefixCalls),
+                 static_cast<unsigned long long>(ck.prefixIds),
+                 static_cast<unsigned long long>(ck.heapGrowths));
+  }
+
+  std::fprintf(stderr, "\n");
+}
+
+inline bool shouldPrintAnomalyLine(IntervalCounters const& interval, std::uint64_t completedWindows) {
+  constexpr std::uint64_t kWarmupWindows = 3;
+  constexpr std::uint64_t kTextMissThreshold = 8;
+  constexpr double kFrameBudgetP99TargetMs = 16.67;
+  return completedWindows < kWarmupWindows ||
+         interval.scene.preparedReplayFailures > 0 ||
+         interval.render.recorderCapacityGrowths > 0 ||
+         interval.text.layoutCacheMisses > kTextMissThreshold ||
+         frameBudgetPercentileMillis(interval, 0.99) > kFrameBudgetP99TargetMs;
+}
+
 inline void logIfReady() {
   IntervalCounters& interval = counters();
+  static std::uint64_t completedWindows = 0;
   auto const now = std::chrono::steady_clock::now();
   auto const elapsed = now - interval.startedAt;
   if (elapsed < std::chrono::seconds(1)) {
@@ -123,112 +302,15 @@ inline void logIfReady() {
   }
 
   double const seconds = std::chrono::duration_cast<std::chrono::duration<double>>(elapsed).count();
-  std::fprintf(
-      stderr,
-      "[flux:perf] %.2fs frames=%llu "
-      "ck copy=%llu/%lluid append=%llu/%lluid hash=%llu/%lluid eq=%llu/%lluid prefix=%llu/%lluid grow=%llu "
-      "prepare=%llu(%.2f/f) replay=%llu(%.2f/f) "
-      "ms reactive=%.2f(%.2f/f) render=%.2f(%.2f/f) present=%.2f(%.2f/f) drawableWait=%.2f(%.2f/f) frameBudget=%.2f(%.2f/f)\n",
-      seconds,
-      static_cast<unsigned long long>(interval.frames),
-      static_cast<unsigned long long>(interval.componentKeys.copies),
-      static_cast<unsigned long long>(interval.componentKeys.copiedIds),
-      static_cast<unsigned long long>(interval.componentKeys.appends),
-      static_cast<unsigned long long>(interval.componentKeys.appendedIds),
-      static_cast<unsigned long long>(interval.componentKeys.hashCalls),
-      static_cast<unsigned long long>(interval.componentKeys.hashedIds),
-      static_cast<unsigned long long>(interval.componentKeys.equalityCalls),
-      static_cast<unsigned long long>(interval.componentKeys.equalityIds),
-      static_cast<unsigned long long>(interval.componentKeys.prefixCalls),
-      static_cast<unsigned long long>(interval.componentKeys.prefixIds),
-      static_cast<unsigned long long>(interval.componentKeys.heapGrowths),
-      static_cast<unsigned long long>(interval.preparedPrepareCalls),
-      perFrame(interval.preparedPrepareCalls, interval.frames),
-      static_cast<unsigned long long>(interval.preparedReplayCalls),
-      perFrame(interval.preparedReplayCalls, interval.frames),
-      nanosToMillis(interval.durationsNs[static_cast<std::size_t>(TimedMetric::ProcessReactiveUpdates)]),
-      nanosToMillis(interval.durationsNs[static_cast<std::size_t>(TimedMetric::ProcessReactiveUpdates)]) /
-          (interval.frames == 0 ? 1.0 : static_cast<double>(interval.frames)),
-      nanosToMillis(interval.durationsNs[static_cast<std::size_t>(TimedMetric::SceneRender)]),
-      nanosToMillis(interval.durationsNs[static_cast<std::size_t>(TimedMetric::SceneRender)]) /
-          (interval.frames == 0 ? 1.0 : static_cast<double>(interval.frames)),
-      nanosToMillis(interval.durationsNs[static_cast<std::size_t>(TimedMetric::CanvasPresent)]),
-      nanosToMillis(interval.durationsNs[static_cast<std::size_t>(TimedMetric::CanvasPresent)]) /
-          (interval.frames == 0 ? 1.0 : static_cast<double>(interval.frames)),
-      nanosToMillis(interval.durationsNs[static_cast<std::size_t>(TimedMetric::CanvasDrawableWait)]),
-      nanosToMillis(interval.durationsNs[static_cast<std::size_t>(TimedMetric::CanvasDrawableWait)]) /
-          (interval.frames == 0 ? 1.0 : static_cast<double>(interval.frames)),
-      nanosToMillis(interval.durationsNs[static_cast<std::size_t>(TimedMetric::DisplayLinkToPresent)]),
-      nanosToMillis(interval.durationsNs[static_cast<std::size_t>(TimedMetric::DisplayLinkToPresent)]) /
-          (interval.frames == 0 ? 1.0 : static_cast<double>(interval.frames)));
+  bool const anomalyOnly = perfAnomalyOnly();
+  if (!anomalyOnly || shouldPrintAnomalyLine(interval, completedWindows)) {
+    printSummaryLine(interval, seconds);
+    if (perfVerbose()) {
+      printVerboseLine(interval, seconds);
+    }
+  }
 
-  std::fprintf(
-      stderr,
-      "[flux:perf:render] %.2fs frames=%llu "
-      "scene passes=%llu(%.2f/f) nodes=%llu(%.2f/f) groups=%llu(%.2f/f) leaves=%llu(%.2f/f) "
-      "reject=%llu live=%llu replayOk=%llu replayFail=%llu "
-      "ops rect=%llu(%.2f/f) image=%llu(%.2f/f) path=%llu(%.2f/f) glyph=%llu(%.2f/f) order=%llu(%.2f/f) "
-      "draw rect=%llu(%.2f/f) image=%llu(%.2f/f) path=%llu(%.2f/f) glyph=%llu(%.2f/f) "
-      "uploadKB rect=%.1f(%.2f/f) image=%.1f(%.2f/f) path=%.1f(%.2f/f) glyph=%.1f(%.2f/f) "
-      "verts path=%llu(%.2f/f) glyph=%llu(%.2f/f) "
-      "recorderGrow=%llu growKB=%.1f "
-      "text layout=%llu hit=%llu miss=%llu paraHit=%llu paraMiss=%llu\n",
-      seconds,
-      static_cast<unsigned long long>(interval.frames),
-      static_cast<unsigned long long>(interval.scene.renderPasses),
-      perFrame(interval.scene.renderPasses, interval.frames),
-      static_cast<unsigned long long>(interval.scene.nodesVisited),
-      perFrame(interval.scene.nodesVisited, interval.frames),
-      static_cast<unsigned long long>(interval.scene.groupsVisited),
-      perFrame(interval.scene.groupsVisited, interval.frames),
-      static_cast<unsigned long long>(interval.scene.leavesVisited),
-      perFrame(interval.scene.leavesVisited, interval.frames),
-      static_cast<unsigned long long>(interval.scene.quickRejects),
-      static_cast<unsigned long long>(interval.scene.liveLeafRenders),
-      static_cast<unsigned long long>(interval.scene.preparedReplaySuccesses),
-      static_cast<unsigned long long>(interval.scene.preparedReplayFailures),
-      static_cast<unsigned long long>(interval.render.ops[static_cast<std::size_t>(RenderCounterKind::Rect)]),
-      perFrame(interval.render.ops[static_cast<std::size_t>(RenderCounterKind::Rect)], interval.frames),
-      static_cast<unsigned long long>(interval.render.ops[static_cast<std::size_t>(RenderCounterKind::Image)]),
-      perFrame(interval.render.ops[static_cast<std::size_t>(RenderCounterKind::Image)], interval.frames),
-      static_cast<unsigned long long>(interval.render.ops[static_cast<std::size_t>(RenderCounterKind::Path)]),
-      perFrame(interval.render.ops[static_cast<std::size_t>(RenderCounterKind::Path)], interval.frames),
-      static_cast<unsigned long long>(interval.render.ops[static_cast<std::size_t>(RenderCounterKind::Glyph)]),
-      perFrame(interval.render.ops[static_cast<std::size_t>(RenderCounterKind::Glyph)], interval.frames),
-      static_cast<unsigned long long>(interval.render.opOrderEntries),
-      perFrame(interval.render.opOrderEntries, interval.frames),
-      static_cast<unsigned long long>(interval.render.drawCalls[static_cast<std::size_t>(RenderCounterKind::Rect)]),
-      perFrame(interval.render.drawCalls[static_cast<std::size_t>(RenderCounterKind::Rect)], interval.frames),
-      static_cast<unsigned long long>(interval.render.drawCalls[static_cast<std::size_t>(RenderCounterKind::Image)]),
-      perFrame(interval.render.drawCalls[static_cast<std::size_t>(RenderCounterKind::Image)], interval.frames),
-      static_cast<unsigned long long>(interval.render.drawCalls[static_cast<std::size_t>(RenderCounterKind::Path)]),
-      perFrame(interval.render.drawCalls[static_cast<std::size_t>(RenderCounterKind::Path)], interval.frames),
-      static_cast<unsigned long long>(interval.render.drawCalls[static_cast<std::size_t>(RenderCounterKind::Glyph)]),
-      perFrame(interval.render.drawCalls[static_cast<std::size_t>(RenderCounterKind::Glyph)], interval.frames),
-      static_cast<double>(interval.render.uploadBytes[static_cast<std::size_t>(RenderCounterKind::Rect)]) / 1024.0,
-      perFrame(interval.render.uploadBytes[static_cast<std::size_t>(RenderCounterKind::Rect)], interval.frames) /
-          1024.0,
-      static_cast<double>(interval.render.uploadBytes[static_cast<std::size_t>(RenderCounterKind::Image)]) / 1024.0,
-      perFrame(interval.render.uploadBytes[static_cast<std::size_t>(RenderCounterKind::Image)], interval.frames) /
-          1024.0,
-      static_cast<double>(interval.render.uploadBytes[static_cast<std::size_t>(RenderCounterKind::Path)]) / 1024.0,
-      perFrame(interval.render.uploadBytes[static_cast<std::size_t>(RenderCounterKind::Path)], interval.frames) /
-          1024.0,
-      static_cast<double>(interval.render.uploadBytes[static_cast<std::size_t>(RenderCounterKind::Glyph)]) / 1024.0,
-      perFrame(interval.render.uploadBytes[static_cast<std::size_t>(RenderCounterKind::Glyph)], interval.frames) /
-          1024.0,
-      static_cast<unsigned long long>(interval.render.pathVertices),
-      perFrame(interval.render.pathVertices, interval.frames),
-      static_cast<unsigned long long>(interval.render.glyphVertices),
-      perFrame(interval.render.glyphVertices, interval.frames),
-      static_cast<unsigned long long>(interval.render.recorderCapacityGrowths),
-      static_cast<double>(interval.render.recorderCapacityGrowthBytes) / 1024.0,
-      static_cast<unsigned long long>(interval.text.layoutCalls),
-      static_cast<unsigned long long>(interval.text.layoutCacheHits),
-      static_cast<unsigned long long>(interval.text.layoutCacheMisses),
-      static_cast<unsigned long long>(interval.text.paragraphVariantHits),
-      static_cast<unsigned long long>(interval.text.paragraphVariantMisses));
-
+  ++completedWindows;
   interval.reset(now);
 }
 
@@ -375,8 +457,13 @@ inline void recordDuration(TimedMetric metric, std::chrono::nanoseconds elapsed)
   if (!enabled()) {
     return;
   }
-  detail::counters().durationsNs[static_cast<std::size_t>(metric)] +=
-      static_cast<std::uint64_t>(elapsed.count());
+  auto& interval = detail::counters();
+  std::uint64_t const nanos = static_cast<std::uint64_t>(elapsed.count());
+  interval.durationsNs[static_cast<std::size_t>(metric)] += nanos;
+  if (metric == TimedMetric::DisplayLinkToPresent &&
+      interval.frameBudgetSampleCount < detail::IntervalCounters::kMaxFrameBudgetSamples) {
+    interval.frameBudgetSamplesNs[interval.frameBudgetSampleCount++] = nanos;
+  }
 }
 
 inline void recordComponentKeyCopy(std::uint64_t copiedIds) {

@@ -42,4 +42,29 @@ inline bool perfEnabled() {
   return cached != 0;
 }
 
+inline int perfLevel() {
+  static int cached = -2;
+  if (cached == -2) {
+    char const* value = std::getenv("FLUX_DEBUG_PERF");
+    if (!envTruthy(value)) {
+      cached = 0;
+    } else if (std::strcmp(value, "2") == 0 || std::strcmp(value, "verbose") == 0) {
+      cached = 2;
+    } else if (std::strcmp(value, "anomaly") == 0 || std::strcmp(value, "quiet") == 0) {
+      cached = -1;
+    } else {
+      cached = 1;
+    }
+  }
+  return cached;
+}
+
+inline bool perfVerbose() {
+  return perfLevel() >= 2;
+}
+
+inline bool perfAnomalyOnly() {
+  return perfLevel() < 0;
+}
+
 } // namespace flux::debug
