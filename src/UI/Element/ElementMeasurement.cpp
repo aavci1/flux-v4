@@ -152,7 +152,7 @@ Size Element::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
   Size const sz = modifiers_ && modifiers_->needsModifierPass() ? measureWithModifiersImpl(ctx, constraints, hints, textSystem)
                                                                 : impl_->measure(ctx, constraints, hints, textSystem);
   ctx.setCurrentElement(prevEl);
-  layoutDebugRecordMeasure(measureId_, constraints, sz);
+  layoutDebugRecordMeasure(constraints, sz);
 #ifndef NDEBUG
   assert(std::isfinite(sz.width) && std::isfinite(sz.height));
   assert(sz.width >= 0.f && sz.height >= 0.f);

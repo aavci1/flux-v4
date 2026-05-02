@@ -41,9 +41,6 @@ public:
 
   static Runtime* current() noexcept;
 
-  std::optional<Rect> layoutRectForKey(ComponentKey const& key) const;
-  std::optional<Rect> layoutRectForLeafKeyPrefix(ComponentKey const& key) const;
-
 private:
   static thread_local Runtime* current_;
 

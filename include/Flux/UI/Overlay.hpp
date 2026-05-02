@@ -75,6 +75,7 @@ public:
   OverlayManager() = default;
 
   void rebuild(Size windowSize, Runtime& runtime);
+  void remountEntry(OverlayId id, Runtime& runtime);
   OverlayId push(Element content, OverlayConfig config, Runtime* runtime);
   void remove(OverlayId id, Runtime* runtime);
   void clear(Runtime* runtime, bool invokeDismissCallbacks = true);

@@ -9,6 +9,7 @@
 #include <Flux/Detail/Runtime.hpp>
 #include <Flux/Reactive/Signal.hpp>
 #include <Flux/UI/Hooks.hpp>
+#include <Flux/UI/Overlay.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/ScrollView.hpp>
@@ -124,6 +125,25 @@ struct SingleProbeRoot {
 
   flux::Element body() const {
     return ProbeView{hover, press, focus, keyboardFocus};
+  }
+};
+
+struct StatefulOverlayProbe {
+  int* bodyCalls = nullptr;
+  int* cleanups = nullptr;
+  flux::Reactive::Signal<int>* state = nullptr;
+
+  flux::Element body() const {
+    ++*bodyCalls;
+    auto localState = flux::useState(1);
+    *state = localState;
+    flux::Reactive::onCleanup([cleanups = cleanups] {
+      ++*cleanups;
+    });
+    return flux::Element{flux::Rectangle{}}
+        .size([localState] {
+          return 20.f + static_cast<float>(localState.get());
+        }, 12.f);
   }
 };
 
@@ -398,6 +418,29 @@ TEST_CASE("scroll view measurement does not overwrite mounted scroll range") {
   harness.scroll({10.f, 40.f}, {0.f, -12.f});
 
   CHECK(offset.get().y == doctest::Approx(12.f));
+}
+
+TEST_CASE("overlay rebuild relayouts mounted content without remounting state") {
+  RuntimeHarness harness;
+  int bodyCalls = 0;
+  int cleanups = 0;
+  flux::Reactive::Signal<int> state;
+
+  flux::OverlayId const id = harness.window.overlayManager().push(
+      StatefulOverlayProbe{.bodyCalls = &bodyCalls, .cleanups = &cleanups, .state = &state},
+      flux::OverlayConfig{}, &harness.runtime);
+
+  REQUIRE(id.isValid());
+  REQUIRE(harness.window.overlayManager().find(id) != nullptr);
+  CHECK(bodyCalls == 1);
+  CHECK(cleanups == 0);
+
+  state.set(9);
+  harness.window.overlayManager().rebuild({320.f, 180.f}, harness.runtime);
+
+  CHECK(bodyCalls == 1);
+  CHECK(cleanups == 0);
+  CHECK(state.get() == 9);
 }
 
 TEST_CASE("window clear color follows theme unless overridden") {

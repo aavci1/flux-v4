@@ -52,8 +52,6 @@ namespace scenegraph {
 class SceneNode;
 }
 namespace detail {
-std::uint64_t nextElementMeasureId();
-
 struct EnvironmentOverride {
   virtual ~EnvironmentOverride() = default;
   virtual EnvironmentBinding apply(EnvironmentBinding const& parent) const = 0;
@@ -86,6 +84,15 @@ struct SignalEnvironmentOverride final : EnvironmentOverride {
 
   Reactive::Signal<Value> signal;
 };
+
+struct LayoutOverrides {
+  std::optional<float> flexGrow;
+  std::optional<float> flexShrink;
+  std::optional<float> flexBasis;
+  std::optional<float> minMainSize;
+  std::optional<std::size_t> colSpan;
+  std::optional<std::size_t> rowSpan;
+};
 } // namespace detail
 
 template<typename>
@@ -102,7 +109,6 @@ public:
   Element& operator=(Element&&) noexcept = default;
 
   Size measure(MeasureContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints, TextSystem& textSystem) const;
-  [[nodiscard]] std::uint64_t measureId() const noexcept { return measureId_; }
   std::unique_ptr<scenegraph::SceneNode> mount(MountContext& ctx) const;
   [[nodiscard]] bool mountsWhenCollapsed() const;
   [[nodiscard]] detail::ElementModifiers const* modifiers() const noexcept {
@@ -208,29 +214,24 @@ private:
     virtual Size measure(MeasureContext& ctx, LayoutConstraints const& constraints,
                          LayoutHints const& hints, TextSystem& textSystem) const = 0;
     virtual std::unique_ptr<scenegraph::SceneNode> mount(MountContext& ctx) const = 0;
-    virtual bool mountsWhenCollapsed() const { return false; }
   };
 
   template<typename C>
   struct Model;
 
   std::shared_ptr<Concept> impl_;
-  std::optional<float> flexGrowOverride_;
-  std::optional<float> flexShrinkOverride_;
-  std::optional<float> flexBasisOverride_;
-  std::optional<float> minMainSizeOverride_;
-  std::optional<std::size_t> colSpanOverride_;
-  std::optional<std::size_t> rowSpanOverride_;
   float flexGrow_ = 0.f;
   float flexShrink_ = 0.f;
   std::optional<float> flexBasis_;
   float minMainSize_ = 0.f;
+  bool mountsWhenCollapsed_ = false;
   std::vector<std::shared_ptr<detail::EnvironmentOverride const>> envOverrides_;
   std::shared_ptr<detail::ElementModifiers> modifiers_;
   std::optional<std::string> key_{};
-  std::uint64_t measureId_{};
+  std::unique_ptr<detail::LayoutOverrides> overrides_;
 
   detail::ElementModifiers& writableModifiers();
+  detail::LayoutOverrides& writableOverrides();
   Size measureWithModifiersImpl(MeasureContext& ctx, LayoutConstraints const& constraints,
                                 LayoutHints const& hints, TextSystem& textSystem) const;
 };

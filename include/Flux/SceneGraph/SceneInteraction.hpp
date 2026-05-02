@@ -17,8 +17,6 @@ class SceneNode;
 
 std::pair<SceneNode const*, InteractionData const*> findInteractionByKey(SceneGraph const& graph,
                                                                          ComponentKey const& key);
-std::pair<SceneNode const*, InteractionData const*> findClosestInteractionByKey(SceneGraph const& graph,
-                                                                                ComponentKey const& key);
 
 std::optional<InteractionHitResult> hitTestInteraction(SceneGraph const& graph, Point rootPoint);
 std::optional<InteractionHitResult> hitTestInteraction(

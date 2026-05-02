@@ -695,18 +695,4 @@ void Runtime::handleWindowEvent(WindowEvent const& event) {
   }
 }
 
-std::optional<Rect> Runtime::layoutRectForKey(ComponentKey const& key) const {
-  if (!d->window.hasSceneGraph()) {
-    return std::nullopt;
-  }
-  return d->window.sceneGraph().rectForKey(key);
-}
-
-std::optional<Rect> Runtime::layoutRectForLeafKeyPrefix(ComponentKey const& key) const {
-  if (!d->window.hasSceneGraph()) {
-    return std::nullopt;
-  }
-  return d->window.sceneGraph().rectForLeafKeyPrefix(key);
-}
-
 } // namespace flux

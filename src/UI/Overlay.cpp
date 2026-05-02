@@ -38,6 +38,24 @@ LayoutConstraints overlayConstraints(Size windowSize, OverlayConfig const& confi
   return constraints;
 }
 
+Rect contentBoundsFor(scenegraph::SceneNode const* contentNode) {
+  if (!contentNode) {
+    return Rect{0.f, 0.f, 1.f, 1.f};
+  }
+  Rect bounds = contentNode->bounds();
+  if (bounds.width <= 0.f || bounds.height <= 0.f) {
+    Size const size = contentNode->size();
+    bounds = Rect{0.f, 0.f, std::max(1.f, size.width), std::max(1.f, size.height)};
+  }
+  if (bounds.width <= 0.f) {
+    bounds.width = 1.f;
+  }
+  if (bounds.height <= 0.f) {
+    bounds.height = 1.f;
+  }
+  return bounds;
+}
+
 std::unique_ptr<scenegraph::InteractionData> makeBackdropInteraction(Window& window,
                                                                      OverlayEntry& entry,
                                                                      bool dismissOnTap) {
@@ -67,6 +85,68 @@ void insertBackdrop(scenegraph::GroupNode& root, OverlayEntry& entry, Size windo
   auto capture = std::make_unique<scenegraph::RectNode>(Rect{ox, oy, windowSize.width, windowSize.height});
   capture->setInteraction(makeBackdropInteraction(window, entry, dismissOnTap));
   root.appendChild(std::move(capture));
+}
+
+std::unique_ptr<scenegraph::SceneNode> takeMountedContentNode(OverlayEntry& entry) {
+  if (!entry.content) {
+    return nullptr;
+  }
+  std::vector<std::unique_ptr<scenegraph::SceneNode>> children =
+      entry.sceneGraph.root().releaseChildren();
+  if (children.empty()) {
+    return nullptr;
+  }
+  std::unique_ptr<scenegraph::SceneNode> contentNode = std::move(children.back());
+  children.pop_back();
+  return contentNode;
+}
+
+void rebuildOverlayRoot(OverlayEntry& entry, Size windowSize, Window& window,
+                        std::unique_ptr<scenegraph::SceneNode> contentNode) {
+  Rect const contentBounds = contentBoundsFor(contentNode.get());
+  entry.resolvedFrame = layout::resolveOverlayFrame(windowSize, entry.config, contentBounds);
+
+  auto root = std::make_unique<scenegraph::GroupNode>(
+      Rect{0.f, 0.f, std::max(windowSize.width, entry.resolvedFrame.width),
+           std::max(windowSize.height, entry.resolvedFrame.height)});
+  bool capturesBackdrop = false;
+  bool dismissBackdropTap = false;
+  if (entry.config.modal) {
+    insertBackdrop(*root, entry, windowSize, window, false);
+    capturesBackdrop = true;
+  } else if (entry.config.backdropColor.a > 0.001f) {
+    insertBackdrop(*root, entry, windowSize, window, entry.config.dismissOnOutsideTap);
+    capturesBackdrop = true;
+    dismissBackdropTap = entry.config.dismissOnOutsideTap;
+  }
+  if (capturesBackdrop) {
+    root->setInteraction(makeBackdropInteraction(window, entry, dismissBackdropTap));
+  }
+  if (contentNode) {
+    root->appendChild(std::move(contentNode));
+  }
+  entry.sceneGraph.setRoot(std::move(root));
+}
+
+void mountOverlay(OverlayEntry& entry, Size windowSize, Runtime& runtime,
+                  LayoutConstraints const& constraints) {
+  entry.scope.dispose();
+  entry.scope = Reactive::Scope{};
+  entry.sceneGraph.releaseRoot();
+
+  std::unique_ptr<scenegraph::SceneNode> contentNode;
+  if (entry.content) {
+    MeasureContext measureContext{Application::instance().textSystem(), runtime.window().environmentBinding()};
+    MountContext context{entry.scope, Application::instance().textSystem(),
+                         measureContext, constraints, LayoutHints{}, [handle = runtime.window().handle()] {
+                           Window::postRedraw(handle);
+                         }, runtime.window().environmentBinding()};
+
+    contentNode = Reactive::withOwner(entry.scope, [&] {
+      return entry.content->mount(context);
+    });
+  }
+  rebuildOverlayRoot(entry, windowSize, runtime.window(), std::move(contentNode));
 }
 
 } // namespace
@@ -114,61 +194,27 @@ std::tuple<std::function<void(Element, OverlayConfig)>, std::function<void()>, b
 void OverlayManager::rebuild(Size windowSize, Runtime& runtime) {
   for (auto& entryPtr : overlays_) {
     OverlayEntry& entry = *entryPtr;
-    entry.scope.dispose();
-    entry.scope = Reactive::Scope{};
-    entry.sceneGraph.releaseRoot();
-
-    std::unique_ptr<scenegraph::SceneNode> contentNode;
-    Rect contentBounds{};
-    if (entry.content) {
-      LayoutConstraints const constraints = overlayConstraints(windowSize, entry.config);
-      MeasureContext measureContext{Application::instance().textSystem(), runtime.window().environmentBinding()};
-      MountContext context{entry.scope, Application::instance().textSystem(),
-                           measureContext, constraints, LayoutHints{}, [handle = runtime.window().handle()] {
-                             Window::postRedraw(handle);
-                           }, runtime.window().environmentBinding()};
-
-      contentNode = Reactive::withOwner(entry.scope, [&] {
-        return entry.content->mount(context);
-      });
-      if (contentNode) {
-        contentBounds = contentNode->bounds();
-        if (contentBounds.width <= 0.f || contentBounds.height <= 0.f) {
-          contentBounds = Rect{0.f, 0.f, std::max(1.f, contentNode->size().width),
-                               std::max(1.f, contentNode->size().height)};
-        }
-      }
-    }
-
-    if (contentBounds.width <= 0.f) {
-      contentBounds.width = 1.f;
-    }
-    if (contentBounds.height <= 0.f) {
-      contentBounds.height = 1.f;
-    }
-    entry.resolvedFrame = layout::resolveOverlayFrame(windowSize, entry.config, contentBounds);
-
-    auto root = std::make_unique<scenegraph::GroupNode>(
-        Rect{0.f, 0.f, std::max(windowSize.width, entry.resolvedFrame.width),
-             std::max(windowSize.height, entry.resolvedFrame.height)});
-    bool capturesBackdrop = false;
-    bool dismissBackdropTap = false;
-    if (entry.config.modal) {
-      insertBackdrop(*root, entry, windowSize, runtime.window(), false);
-      capturesBackdrop = true;
-    } else if (entry.config.backdropColor.a > 0.001f) {
-      insertBackdrop(*root, entry, windowSize, runtime.window(), entry.config.dismissOnOutsideTap);
-      capturesBackdrop = true;
-      dismissBackdropTap = entry.config.dismissOnOutsideTap;
-    }
-    if (capturesBackdrop) {
-      root->setInteraction(makeBackdropInteraction(runtime.window(), entry, dismissBackdropTap));
-    }
+    LayoutConstraints const constraints = overlayConstraints(windowSize, entry.config);
+    std::unique_ptr<scenegraph::SceneNode> contentNode = takeMountedContentNode(entry);
     if (contentNode) {
-      root->appendChild(std::move(contentNode));
+      if (!contentNode->relayout(constraints)) {
+        contentNode->setSize(Size{constraints.maxWidth, constraints.maxHeight});
+      }
+      rebuildOverlayRoot(entry, windowSize, runtime.window(), std::move(contentNode));
+    } else {
+      mountOverlay(entry, windowSize, runtime, constraints);
     }
-    entry.sceneGraph.setRoot(std::move(root));
   }
+}
+
+void OverlayManager::remountEntry(OverlayId id, Runtime& runtime) {
+  OverlayEntry* entry = find(id);
+  if (!entry) {
+    return;
+  }
+  mountOverlay(*entry, runtime.window().getSize(), runtime,
+               overlayConstraints(runtime.window().getSize(), entry->config));
+  runtime.window().requestRedraw();
 }
 
 OverlayId OverlayManager::push(Element content, OverlayConfig config, Runtime* runtime) {

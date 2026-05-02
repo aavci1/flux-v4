@@ -77,7 +77,7 @@ struct Popover : ViewModifiers<Popover> {
   bool useTapAnchor = true;
 
   /// When true (e.g. tooltips), resolve the anchor like tap-driven popovers but using the current
-  /// hover leaf key: \c Runtime::layoutRectForLeafKeyPrefix(hoveredKey) and track that leaf for scroll.
+  /// hover leaf key through the retained scene graph's leaf-prefix lookup, and track that leaf for scroll.
   /// Matches popover-demo placement without requiring a pointer-down.
   bool useHoverLeafAnchor = false;
 

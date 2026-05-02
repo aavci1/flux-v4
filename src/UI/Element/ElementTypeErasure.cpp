@@ -113,6 +113,13 @@ Theme activeTheme(EnvironmentBinding const& environment) {
   return environment.value<ThemeKey>();
 }
 
+std::unique_ptr<detail::LayoutOverrides> cloneLayoutOverrides(detail::LayoutOverrides const* overrides) {
+  if (!overrides) {
+    return nullptr;
+  }
+  return std::make_unique<detail::LayoutOverrides>(*overrides);
+}
+
 template <typename Gradient>
 Gradient resolveGradientStops(Gradient gradient, Theme const& theme) {
   for (std::uint8_t i = 0; i < gradient.stopCount; ++i) {
@@ -248,11 +255,6 @@ void ElementDeleter::operator()(Element* element) const noexcept {
   delete element;
 }
 
-std::uint64_t nextElementMeasureId() {
-  static std::uint64_t next = 1;
-  return next++;
-}
-
 Popover* popoverOverlayStateIf(Element& el) {
   (void)el;
   return nullptr;
@@ -260,9 +262,35 @@ Popover* popoverOverlayStateIf(Element& el) {
 
 } // namespace detail
 
-Element::Element(Element const& other) = default;
+Element::Element(Element const& other)
+    : impl_(other.impl_)
+    , flexGrow_(other.flexGrow_)
+    , flexShrink_(other.flexShrink_)
+    , flexBasis_(other.flexBasis_)
+    , minMainSize_(other.minMainSize_)
+    , mountsWhenCollapsed_(other.mountsWhenCollapsed_)
+    , envOverrides_(other.envOverrides_)
+    , modifiers_(other.modifiers_)
+    , key_(other.key_)
+    , overrides_(cloneLayoutOverrides(other.overrides_.get()))
+{}
 
-Element& Element::operator=(Element const& other) = default;
+Element& Element::operator=(Element const& other) {
+  if (this == &other) {
+    return *this;
+  }
+  impl_ = other.impl_;
+  flexGrow_ = other.flexGrow_;
+  flexShrink_ = other.flexShrink_;
+  flexBasis_ = other.flexBasis_;
+  minMainSize_ = other.minMainSize_;
+  mountsWhenCollapsed_ = other.mountsWhenCollapsed_;
+  envOverrides_ = other.envOverrides_;
+  modifiers_ = other.modifiers_;
+  key_ = other.key_;
+  overrides_ = cloneLayoutOverrides(other.overrides_.get());
+  return *this;
+}
 
 detail::ElementModifiers& Element::writableModifiers() {
   if (!modifiers_) {
@@ -273,68 +301,93 @@ detail::ElementModifiers& Element::writableModifiers() {
   return *modifiers_;
 }
 
+detail::LayoutOverrides& Element::writableOverrides() {
+  if (!overrides_) {
+    overrides_ = std::make_unique<detail::LayoutOverrides>();
+  }
+  return *overrides_;
+}
+
 float Element::flexGrow() const {
-  return flexGrowOverride_.value_or(flexGrow_);
+  if (overrides_ && overrides_->flexGrow) {
+    return *overrides_->flexGrow;
+  }
+  return flexGrow_;
 }
 
 float Element::flexShrink() const {
-  return flexShrinkOverride_.value_or(flexShrink_);
+  if (overrides_ && overrides_->flexShrink) {
+    return *overrides_->flexShrink;
+  }
+  return flexShrink_;
 }
 
 std::optional<float> Element::flexBasis() const {
-  if (flexBasisOverride_.has_value()) {
-    return flexBasisOverride_;
+  if (overrides_ && overrides_->flexBasis) {
+    return overrides_->flexBasis;
   }
   return flexBasis_;
 }
 
 bool Element::mountsWhenCollapsed() const {
-  return impl_ && impl_->mountsWhenCollapsed();
+  return mountsWhenCollapsed_;
 }
 
 float Element::minMainSize() const {
-  return minMainSizeOverride_.value_or(minMainSize_);
+  if (overrides_ && overrides_->minMainSize) {
+    return *overrides_->minMainSize;
+  }
+  return minMainSize_;
 }
 
 std::size_t Element::colSpan() const {
-  return colSpanOverride_.value_or(1u);
+  if (overrides_ && overrides_->colSpan) {
+    return *overrides_->colSpan;
+  }
+  return 1u;
 }
 
 std::size_t Element::rowSpan() const {
-  return rowSpanOverride_.value_or(1u);
+  if (overrides_ && overrides_->rowSpan) {
+    return *overrides_->rowSpan;
+  }
+  return 1u;
 }
 
 Element Element::flex(float grow) && {
-  flexGrowOverride_ = grow;
-  flexShrinkOverride_ = 1.f;
-  flexBasisOverride_.reset();
-  minMainSizeOverride_.reset();
+  detail::LayoutOverrides& overrides = writableOverrides();
+  overrides.flexGrow = grow;
+  overrides.flexShrink = 1.f;
+  overrides.flexBasis.reset();
+  overrides.minMainSize.reset();
   return std::move(*this);
 }
 
 Element Element::flex(float grow, float shrink) && {
-  flexGrowOverride_ = grow;
-  flexShrinkOverride_ = shrink;
-  flexBasisOverride_.reset();
-  minMainSizeOverride_.reset();
+  detail::LayoutOverrides& overrides = writableOverrides();
+  overrides.flexGrow = grow;
+  overrides.flexShrink = shrink;
+  overrides.flexBasis.reset();
+  overrides.minMainSize.reset();
   return std::move(*this);
 }
 
 Element Element::flex(float grow, float shrink, float basis) && {
-  flexGrowOverride_ = grow;
-  flexShrinkOverride_ = shrink;
-  flexBasisOverride_ = std::max(0.f, basis);
-  minMainSizeOverride_.reset();
+  detail::LayoutOverrides& overrides = writableOverrides();
+  overrides.flexGrow = grow;
+  overrides.flexShrink = shrink;
+  overrides.flexBasis = std::max(0.f, basis);
+  overrides.minMainSize.reset();
   return std::move(*this);
 }
 
 Element Element::colSpan(std::size_t span) && {
-  colSpanOverride_ = std::max<std::size_t>(1, span);
+  writableOverrides().colSpan = std::max<std::size_t>(1, span);
   return std::move(*this);
 }
 
 Element Element::rowSpan(std::size_t span) && {
-  rowSpanOverride_ = std::max<std::size_t>(1, span);
+  writableOverrides().rowSpan = std::max<std::size_t>(1, span);
   return std::move(*this);
 }
 

@@ -6,16 +6,16 @@
 #include "UI/Layout/LayoutHelpers.hpp"
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdio>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 namespace flux {
 
 namespace {
 
-thread_local std::unordered_map<std::uint64_t, Size> gMeasureSize;
+thread_local std::size_t gMeasureCount = 0;
 thread_local scenegraph::SceneGraph const* gAttachedSceneGraph = nullptr;
 
 void printIndent(int depth) {
@@ -86,7 +86,7 @@ void layoutDebugBeginPass() {
   if (!flux::layout::layoutDebugLayoutEnabled()) {
     return;
   }
-  gMeasureSize.clear();
+  gMeasureCount = 0;
   std::fprintf(stderr, "[flux:layout] --- rebuild ---\n");
 }
 
@@ -97,12 +97,13 @@ void layoutDebugEndPass() {
   std::fprintf(stderr, "[flux:layout] --- end ---\n");
 }
 
-void layoutDebugRecordMeasure(std::uint64_t measureId, LayoutConstraints const&, Size sz) {
-  if (!flux::layout::layoutDebugLayoutEnabled()) {
-    return;
-  }
-  gMeasureSize[measureId] = sz;
+namespace detail {
+
+void layoutDebugRecordMeasureSlow(LayoutConstraints const&, Size) {
+  ++gMeasureCount;
 }
+
+} // namespace detail
 
 void layoutDebugDumpRetained(scenegraph::SceneGraph const& graph) {
   if (!flux::layout::layoutDebugLayoutEnabled()) {
@@ -138,7 +139,7 @@ void layoutDebugDumpRetained(scenegraph::SceneGraph const& graph) {
                  static_cast<double>(rect.height));
   }
 
-  std::fprintf(stderr, "[flux:layout] measures=%zu\n", gMeasureSize.size());
+  std::fprintf(stderr, "[flux:layout] measure calls=%zu\n", gMeasureCount);
 }
 
 void layoutDebugAttachSceneGraph(scenegraph::SceneGraph const* graph) {

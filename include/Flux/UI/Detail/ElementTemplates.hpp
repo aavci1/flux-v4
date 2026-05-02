@@ -40,13 +40,6 @@ struct Element::Model : Concept {
   Size measure(MeasureContext& ctx, LayoutConstraints const& constraints,
                LayoutHints const& hints, TextSystem& textSystem) const override;
   std::unique_ptr<scenegraph::SceneNode> mount(MountContext& ctx) const override;
-  bool mountsWhenCollapsed() const override {
-    if constexpr (requires { C::mountsWhenCollapsed; }) {
-      return C::mountsWhenCollapsed;
-    } else {
-      return false;
-    }
-  }
 };
 
 template<typename C>
@@ -128,7 +121,8 @@ Element::Element(C component)
     , flexShrink_(detail::flexShrinkOf(static_cast<Model<C> const&>(*impl_).value))
     , flexBasis_(detail::flexBasisOf(static_cast<Model<C> const&>(*impl_).value))
     , minMainSize_(detail::minMainSizeOf(static_cast<Model<C> const&>(*impl_).value))
-    , measureId_(detail::nextElementMeasureId()) {}
+    , mountsWhenCollapsed_(detail::mountsWhenCollapsedOf<C>())
+{}
 
 template<typename T>
 bool Element::is() const noexcept {

@@ -339,7 +339,7 @@ TEST_CASE("Scenegraph hit testing respects clipped rounded rect subtrees") {
     CHECK(hit->interaction->stableTargetKey == ComponentKey {LocalId::fromString("clipped")});
 }
 
-TEST_CASE("Scenegraph interaction lookup collects focusable keys and closest matches") {
+TEST_CASE("Scenegraph interaction lookup collects focusable keys") {
     auto root = std::make_unique<GroupNode>(Rect {0.f, 0.f, 200.f, 120.f});
 
     auto panel = std::make_unique<RectNode>(Rect {10.f, 10.f, 80.f, 40.f}, FillStyle::none());
@@ -361,14 +361,6 @@ TEST_CASE("Scenegraph interaction lookup collects focusable keys and closest mat
     std::vector<ComponentKey> const focusable = collectFocusableKeys(graph);
     REQUIRE(focusable.size() == 1);
     CHECK(focusable[0] == ComponentKey {LocalId::fromString("panel"), LocalId::fromString("button")});
-
-    auto const [node, interaction] = findClosestInteractionByKey(
-        graph, ComponentKey {LocalId::fromString("panel"), LocalId::fromString("button"),
-                             LocalId::fromString("icon")});
-    REQUIRE(node != nullptr);
-    REQUIRE(interaction != nullptr);
-    CHECK(interaction->stableTargetKey ==
-          ComponentKey {LocalId::fromString("panel"), LocalId::fromString("button")});
 }
 
 TEST_CASE("SceneGraph stores geometry keyed by component key") {

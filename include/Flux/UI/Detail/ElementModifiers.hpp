@@ -76,6 +76,15 @@ float minMainSizeOf(C const& v) {
   return 0.f;
 }
 
+template<typename C>
+bool mountsWhenCollapsedOf() {
+  if constexpr (requires { C::mountsWhenCollapsed; }) {
+    return C::mountsWhenCollapsed;
+  } else {
+    return false;
+  }
+}
+
 struct ElementModifiers {
   Reactive::Bindable<EdgeInsets> padding{EdgeInsets{}};
   Reactive::Bindable<FillStyle> fill{FillStyle::none()};
