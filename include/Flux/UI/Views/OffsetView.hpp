@@ -33,11 +33,6 @@ struct OffsetView : ViewModifiers<OffsetView> {
   /// Children translated by `offset`.
   std::vector<Element> children;
 
-  bool operator==(OffsetView const& other) const {
-    return offset == other.offset && axis == other.axis &&
-           viewportSize == other.viewportSize && contentSize == other.contentSize &&
-           elementsStructurallyEqual(children, other.children);
-  }
 };
 
 } // namespace flux

@@ -42,13 +42,6 @@ struct Grid : ViewModifiers<Grid> {
   /// Children in row-major order (left-to-right, top-to-bottom).
   std::vector<Element> children;
 
-  bool operator==(Grid const& other) const {
-    return columns == other.columns && horizontalSpacing == other.horizontalSpacing &&
-           verticalSpacing == other.verticalSpacing &&
-           horizontalAlignment == other.horizontalAlignment &&
-           verticalAlignment == other.verticalAlignment &&
-           elementsStructurallyEqual(children, other.children);
-  }
 };
 
 } // namespace flux

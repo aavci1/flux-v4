@@ -95,20 +95,6 @@ struct Popover : ViewModifiers<Popover> {
 
   /// body() wraps content in the card container. Not the primary API —
   /// use usePopover() instead.
-  bool operator==(Popover const& other) const {
-    return content.typeTag() == other.content.typeTag() && placement == other.placement &&
-           crossAlignment == other.crossAlignment && gap == other.gap && arrow == other.arrow &&
-           backgroundColor == other.backgroundColor && borderColor == other.borderColor &&
-           borderWidth == other.borderWidth && cornerRadius == other.cornerRadius &&
-           contentPadding == other.contentPadding && maxSize == other.maxSize &&
-           backdropColor == other.backdropColor && anchorMaxHeight == other.anchorMaxHeight &&
-           anchorOutsets == other.anchorOutsets && dismissOnEscape == other.dismissOnEscape &&
-           dismissOnOutsideTap == other.dismissOnOutsideTap && useTapAnchor == other.useTapAnchor &&
-           useHoverLeafAnchor == other.useHoverLeafAnchor &&
-           anchorRectOverride == other.anchorRectOverride &&
-           resolvedPlacement == other.resolvedPlacement && debugName == other.debugName;
-  }
-
   Element body() const;
 
   static constexpr float kArrowW = 10.f;

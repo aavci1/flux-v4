@@ -74,10 +74,6 @@ struct TableCell : ViewModifiers<TableCell> {
     /// Per-cell width / alignment override.
     Style style {};
 
-    bool operator==(TableCell const& other) const {
-        return content.typeTag() == other.content.typeTag() && style == other.style;
-    }
-
     Element body() const;
 };
 
@@ -105,12 +101,6 @@ struct TableRow : ViewModifiers<TableRow> {
     Style style {};
     /// Called when the row is activated.
     std::function<void()> onTap;
-
-    bool operator==(TableRow const& other) const {
-        return elementsStructurallyEqual(cells, other.cells) && detail.has_value() == other.detail.has_value() &&
-               (!detail || detail->typeTag() == other.detail->typeTag()) && selected == other.selected &&
-               disabled == other.disabled && style == other.style;
-    }
 
     Element body() const;
 };
@@ -146,9 +136,6 @@ struct TableView : ViewModifiers<TableView> {
         /// Per-column values used when sorting.
         std::vector<SortValue> sortValues;
 
-        bool operator==(Item const& other) const {
-            return row.typeTag() == other.row.typeTag() && sortValues == other.sortValues;
-        }
     };
 
     struct Style {
@@ -176,15 +163,6 @@ struct TableView : ViewModifiers<TableView> {
     bool scrollBody = true;
     /// Optional token overrides.
     Style style {};
-
-    bool operator==(TableView const& other) const {
-        return header.has_value() == other.header.has_value() &&
-               (!header || header->typeTag() == other.header->typeTag()) &&
-               items == other.items &&
-               elementsStructurallyEqual(rows, other.rows) &&
-               columns == other.columns && showDividers == other.showDividers &&
-               scrollBody == other.scrollBody && style == other.style;
-    }
 
     Element body() const;
 };

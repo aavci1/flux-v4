@@ -146,8 +146,5 @@ struct ElementModifiers {
   ~ElementModifiers();
 };
 
-[[nodiscard]] bool elementModifiersStructurallyEqual(ElementModifiers const& lhs,
-                                                     ElementModifiers const& rhs) noexcept;
-
 } // namespace detail
 } // namespace flux

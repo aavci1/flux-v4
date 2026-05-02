@@ -77,14 +77,6 @@ struct Alert : ViewModifiers<Alert> {
   /// body() is not the primary API. Use show() / hide() / useAlert() instead.
   Element body() const;
 
-  bool operator==(Alert const& other) const {
-    return title == other.title && message == other.message && buttons == other.buttons &&
-           cardWidth == other.cardWidth && cardColor == other.cardColor &&
-           cardStrokeColor == other.cardStrokeColor && titleColor == other.titleColor &&
-           messageColor == other.messageColor && backdropColor == other.backdropColor &&
-           cornerRadius == other.cornerRadius && dismissOnEscape == other.dismissOnEscape;
-  }
-
 private:
   std::vector<Element> buildContent(Color titleC, Color msgC, Theme const& theme) const;
 };

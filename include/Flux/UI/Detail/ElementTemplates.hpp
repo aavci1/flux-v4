@@ -5,7 +5,6 @@
 #include <Flux/UI/MountContext.hpp>
 
 #include <cassert>
-#include <cstdlib>
 #include <memory>
 #include <optional>
 #include <type_traits>
@@ -34,16 +33,6 @@ struct Element::Model : Concept {
 
   explicit Model(C c) : value(std::move(c)) {}
 
-  std::unique_ptr<Concept> clone() const override {
-    if constexpr (std::is_copy_constructible_v<C>) {
-      return std::make_unique<Model<C>>(value);
-    } else {
-      assert(false && "Non-copyable component cannot be placed in a children list");
-      std::abort();
-    }
-  }
-
-  ElementType elementType() const noexcept override;
   std::type_index modelType() const noexcept override { return std::type_index(typeid(C)); }
   void const* rawValuePtr() const noexcept override { return &value; }
   Element const& bodyElement(LayoutConstraints const& constraints) const;
@@ -58,46 +47,7 @@ struct Element::Model : Concept {
       return false;
     }
   }
-  float flexGrow() const override { return detail::flexGrowOf(value); }
-  float flexShrink() const override { return detail::flexShrinkOf(value); }
-  std::optional<float> flexBasis() const override { return detail::flexBasisOf(value); }
-  float minMainSize() const override { return detail::minMainSizeOf(value); }
 };
-
-template<typename C>
-ElementType Element::Model<C>::elementType() const noexcept {
-  if constexpr (std::is_same_v<C, Rectangle>) {
-    return ElementType::Rectangle;
-  } else if constexpr (std::is_same_v<C, Text>) {
-    return ElementType::Text;
-  } else if constexpr (std::is_same_v<C, views::Image>) {
-    return ElementType::Image;
-  } else if constexpr (std::is_same_v<C, PathShape>) {
-    return ElementType::Path;
-  } else if constexpr (std::is_same_v<C, Render>) {
-    return ElementType::Render;
-  } else if constexpr (std::is_same_v<C, VStack>) {
-    return ElementType::VStack;
-  } else if constexpr (std::is_same_v<C, HStack>) {
-    return ElementType::HStack;
-  } else if constexpr (std::is_same_v<C, ZStack>) {
-    return ElementType::ZStack;
-  } else if constexpr (std::is_same_v<C, Grid>) {
-    return ElementType::Grid;
-  } else if constexpr (std::is_same_v<C, OffsetView>) {
-    return ElementType::OffsetView;
-  } else if constexpr (std::is_same_v<C, ScrollView>) {
-    return ElementType::ScrollView;
-  } else if constexpr (std::is_same_v<C, ScaleAroundCenter>) {
-    return ElementType::ScaleAroundCenter;
-  } else if constexpr (std::is_same_v<C, Spacer>) {
-    return ElementType::Spacer;
-  } else if constexpr (std::is_same_v<C, PopoverCalloutShape>) {
-    return ElementType::PopoverCalloutShape;
-  } else {
-    return ElementType::Unknown;
-  }
-}
 
 template<typename C>
 Element const& Element::Model<C>::bodyElement(LayoutConstraints const& constraints) const {
@@ -174,6 +124,10 @@ std::unique_ptr<scenegraph::SceneNode> Element::Model<C>::mount(MountContext& ct
 template<typename C>
 Element::Element(C component)
     : impl_(std::make_shared<Model<C>>(std::move(component)))
+    , flexGrow_(detail::flexGrowOf(static_cast<Model<C> const&>(*impl_).value))
+    , flexShrink_(detail::flexShrinkOf(static_cast<Model<C> const&>(*impl_).value))
+    , flexBasis_(detail::flexBasisOf(static_cast<Model<C> const&>(*impl_).value))
+    , minMainSize_(detail::minMainSizeOf(static_cast<Model<C> const&>(*impl_).value))
     , measureId_(detail::nextElementMeasureId()) {}
 
 template<typename T>
@@ -193,19 +147,6 @@ std::vector<Element> children(Args&&... args) {
   v.reserve(sizeof...(args));
   (v.emplace_back(std::forward<Args>(args)), ...);
   return v;
-}
-
-inline bool elementsStructurallyEqual(std::vector<Element> const& lhs,
-                                      std::vector<Element> const& rhs) noexcept {
-  if (lhs.size() != rhs.size()) {
-    return false;
-  }
-  for (std::size_t i = 0; i < lhs.size(); ++i) {
-    if (lhs[i].typeTag() != rhs[i].typeTag()) {
-      return false;
-    }
-  }
-  return true;
 }
 
 } // namespace flux

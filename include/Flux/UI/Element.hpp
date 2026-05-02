@@ -91,24 +91,6 @@ struct SignalEnvironmentOverride final : EnvironmentOverride {
 template<typename>
 inline constexpr bool alwaysFalse = false;
 
-enum class ElementType : std::uint8_t {
-  Unknown,
-  Rectangle,
-  Text,
-  Image,
-  Path,
-  Render,
-  VStack,
-  HStack,
-  ZStack,
-  Grid,
-  OffsetView,
-  ScrollView,
-  ScaleAroundCenter,
-  Spacer,
-  PopoverCalloutShape,
-};
-
 class Element {
 public:
   template<typename C>
@@ -122,7 +104,6 @@ public:
   Size measure(MeasureContext& ctx, LayoutConstraints const& constraints, LayoutHints const& hints, TextSystem& textSystem) const;
   [[nodiscard]] std::uint64_t measureId() const noexcept { return measureId_; }
   std::unique_ptr<scenegraph::SceneNode> mount(MountContext& ctx) const;
-  [[nodiscard]] ElementType typeTag() const noexcept { return impl_ ? impl_->elementType() : ElementType::Unknown; }
   [[nodiscard]] bool mountsWhenCollapsed() const;
   [[nodiscard]] detail::ElementModifiers const* modifiers() const noexcept {
     return modifiers_.get();
@@ -222,18 +203,12 @@ private:
 
   struct Concept {
     virtual ~Concept() = default;
-    virtual std::unique_ptr<Concept> clone() const = 0;
-    virtual ElementType elementType() const noexcept { return ElementType::Unknown; }
     virtual std::type_index modelType() const noexcept = 0;
     virtual void const* rawValuePtr() const noexcept = 0;
     virtual Size measure(MeasureContext& ctx, LayoutConstraints const& constraints,
                          LayoutHints const& hints, TextSystem& textSystem) const = 0;
     virtual std::unique_ptr<scenegraph::SceneNode> mount(MountContext& ctx) const = 0;
     virtual bool mountsWhenCollapsed() const { return false; }
-    virtual float flexGrow() const { return 0.f; }
-    virtual float flexShrink() const { return 0.f; }
-    virtual std::optional<float> flexBasis() const { return std::nullopt; }
-    virtual float minMainSize() const { return 0.f; }
   };
 
   template<typename C>
@@ -246,12 +221,15 @@ private:
   std::optional<float> minMainSizeOverride_;
   std::optional<std::size_t> colSpanOverride_;
   std::optional<std::size_t> rowSpanOverride_;
+  float flexGrow_ = 0.f;
+  float flexShrink_ = 0.f;
+  std::optional<float> flexBasis_;
+  float minMainSize_ = 0.f;
   std::vector<std::shared_ptr<detail::EnvironmentOverride const>> envOverrides_;
   std::shared_ptr<detail::ElementModifiers> modifiers_;
   std::optional<std::string> key_{};
   std::uint64_t measureId_{};
 
-  void ensureUniqueImpl();
   detail::ElementModifiers& writableModifiers();
   Size measureWithModifiersImpl(MeasureContext& ctx, LayoutConstraints const& constraints,
                                 LayoutHints const& hints, TextSystem& textSystem) const;
@@ -259,8 +237,6 @@ private:
 
 template<typename... Args>
 std::vector<Element> children(Args&&... args);
-
-bool elementsStructurallyEqual(std::vector<Element> const& lhs, std::vector<Element> const& rhs) noexcept;
 
 } // namespace flux
 

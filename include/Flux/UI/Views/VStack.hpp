@@ -26,11 +26,6 @@ struct VStack : ViewModifiers<VStack> {
   /// Children laid out top-to-bottom.
   std::vector<Element> children;
 
-  bool operator==(VStack const& other) const {
-    return spacing == other.spacing && alignment == other.alignment &&
-           justifyContent == other.justifyContent &&
-           elementsStructurallyEqual(children, other.children);
-  }
 };
 
 } // namespace flux

@@ -35,11 +35,6 @@ struct ListRow : ViewModifiers<ListRow> {
     /// Called when the row is activated.
     std::function<void()> onTap;
 
-    bool operator==(ListRow const& other) const {
-        return content.typeTag() == other.content.typeTag() && selected == other.selected &&
-               disabled == other.disabled && style == other.style;
-    }
-
     Element body() const;
 };
 
@@ -57,11 +52,6 @@ struct ListView : ViewModifiers<ListView> {
     bool showDividers = true;
     /// Optional list token overrides.
     Style style {};
-
-    bool operator==(ListView const& other) const {
-        return elementsStructurallyEqual(rows, other.rows) && showDividers == other.showDividers &&
-               style == other.style;
-    }
 
     Element body() const;
 };

@@ -151,7 +151,7 @@ struct MountedLayoutChild {
   std::optional<float> flexBasis;
   float minMainSize = 0.f;
   bool mountsWhenCollapsed = false;
-  ElementType typeTag = ElementType::Unknown;
+  bool fillsStack = false;
 };
 
 void setMountedLayoutPosition(MountedLayoutChild& child, Point origin) {
@@ -512,7 +512,7 @@ std::unique_ptr<scenegraph::SceneNode> mountVStack(VStack const& stack, MountCon
           .flexBasis = child.flexBasis(),
           .minMainSize = child.minMainSize(),
           .mountsWhenCollapsed = child.mountsWhenCollapsed(),
-          .typeTag = child.typeTag(),
+          .fillsStack = child.is<Text>() || child.flexGrow() > 0.f,
       });
       group->appendChild(std::move(node));
     }
@@ -701,7 +701,7 @@ std::unique_ptr<scenegraph::SceneNode> mountHStack(HStack const& stack, MountCon
           .flexBasis = child.flexBasis(),
           .minMainSize = child.minMainSize(),
           .mountsWhenCollapsed = child.mountsWhenCollapsed(),
-          .typeTag = child.typeTag(),
+          .fillsStack = child.is<Text>() || child.flexGrow() > 0.f,
       });
       group->appendChild(std::move(node));
     }
@@ -873,7 +873,7 @@ std::unique_ptr<scenegraph::SceneNode> mountZStack(ZStack const& stack, MountCon
           .flexBasis = child.flexBasis(),
           .minMainSize = child.minMainSize(),
           .mountsWhenCollapsed = child.mountsWhenCollapsed(),
-          .typeTag = child.typeTag(),
+          .fillsStack = fillsStack,
       });
       group->appendChild(std::move(node));
     }
@@ -915,11 +915,10 @@ std::unique_ptr<scenegraph::SceneNode> mountZStack(ZStack const& stack, MountCon
     for (std::size_t i = 0; i < mountedChildren->size(); ++i) {
       MountedLayoutChild& child = (*mountedChildren)[i];
       Size childFrame = i < sizes.size() ? sizes[i] : Size{};
-      bool const fillsStack = child.typeTag == ElementType::Text || child.flexGrow > 0.f;
-      if (horizontalAlignment == Alignment::Stretch || fillsStack) {
+      if (horizontalAlignment == Alignment::Stretch || child.fillsStack) {
         childFrame.width = width;
       }
-      if (verticalAlignment == Alignment::Stretch || fillsStack) {
+      if (verticalAlignment == Alignment::Stretch || child.fillsStack) {
         childFrame.height = height;
       }
       if (child.node) {

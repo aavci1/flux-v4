@@ -24,12 +24,6 @@ struct ScaleAroundCenter : ViewModifiers<ScaleAroundCenter> {
   /// Content to transform.
   Element child;
 
-  bool operator==(ScaleAroundCenter const& other) const {
-    return scale.isValue() && other.scale.isValue() && scale.value() == other.scale.value() &&
-           scaleX.isValue() && other.scaleX.isValue() && scaleX.value() == other.scaleX.value() &&
-           scaleY.isValue() && other.scaleY.isValue() && scaleY.value() == other.scaleY.value() &&
-           child.typeTag() == other.child.typeTag();
-  }
 };
 
 } // namespace flux

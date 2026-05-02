@@ -49,10 +49,6 @@ struct Card : ViewModifiers<Card> {
   /// Optional token overrides.
   Style style {};
 
-  bool operator==(Card const& other) const {
-    return child.typeTag() == other.child.typeTag() && style == other.style;
-  }
-
   Element body() const;
 };
 

@@ -264,12 +264,6 @@ Element::Element(Element const& other) = default;
 
 Element& Element::operator=(Element const& other) = default;
 
-void Element::ensureUniqueImpl() {
-  if (impl_ && impl_.use_count() != 1) {
-    impl_ = std::shared_ptr<Concept>(impl_->clone());
-  }
-}
-
 detail::ElementModifiers& Element::writableModifiers() {
   if (!modifiers_) {
     modifiers_ = std::make_shared<detail::ElementModifiers>();
@@ -280,18 +274,18 @@ detail::ElementModifiers& Element::writableModifiers() {
 }
 
 float Element::flexGrow() const {
-  return flexGrowOverride_.value_or(impl_->flexGrow());
+  return flexGrowOverride_.value_or(flexGrow_);
 }
 
 float Element::flexShrink() const {
-  return flexShrinkOverride_.value_or(impl_->flexShrink());
+  return flexShrinkOverride_.value_or(flexShrink_);
 }
 
 std::optional<float> Element::flexBasis() const {
   if (flexBasisOverride_.has_value()) {
     return flexBasisOverride_;
   }
-  return impl_->flexBasis();
+  return flexBasis_;
 }
 
 bool Element::mountsWhenCollapsed() const {
@@ -299,7 +293,7 @@ bool Element::mountsWhenCollapsed() const {
 }
 
 float Element::minMainSize() const {
-  return minMainSizeOverride_.value_or(impl_->minMainSize());
+  return minMainSizeOverride_.value_or(minMainSize_);
 }
 
 std::size_t Element::colSpan() const {
