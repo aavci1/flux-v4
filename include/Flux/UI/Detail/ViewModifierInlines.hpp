@@ -237,6 +237,11 @@ Element ViewModifiers<Derived>::flex(float grow, float shrink, float basis) && {
 }
 
 template<typename Derived>
+Element ViewModifiers<Derived>::minMainSize(float size) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.minMainSize(size);
+}
+
+template<typename Derived>
 Element ViewModifiers<Derived>::colSpan(std::size_t span) && {
   return Element{std::move(static_cast<Derived&>(*this))}.colSpan(span);
 }

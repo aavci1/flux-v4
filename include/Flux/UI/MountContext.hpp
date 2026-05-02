@@ -17,7 +17,6 @@ struct Text;
 struct VStack;
 struct HStack;
 struct ZStack;
-struct Spacer;
 
 namespace scenegraph {
 class SceneNode;
@@ -82,7 +81,6 @@ std::unique_ptr<scenegraph::SceneNode> mountText(Text const& text, MountContext&
 std::unique_ptr<scenegraph::SceneNode> mountVStack(VStack const& stack, MountContext& ctx);
 std::unique_ptr<scenegraph::SceneNode> mountHStack(HStack const& stack, MountContext& ctx);
 std::unique_ptr<scenegraph::SceneNode> mountZStack(ZStack const& stack, MountContext& ctx);
-std::unique_ptr<scenegraph::SceneNode> mountSpacer(Spacer const& spacer, MountContext& ctx);
 
 } // namespace detail
 } // namespace flux

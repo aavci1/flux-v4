@@ -23,7 +23,7 @@ namespace flux {
 ///
 /// `Spacer` has no flex axis here (unlike `VStack` / `HStack`), but it remains a valid child: it is
 /// measured like other cells, occupies a full column in row-major order, and produces no output.
-/// Slot / key indices stay aligned by advancing the child cursor without calling `Spacer::build`.
+/// Slot / key indices stay aligned through the normal child measurement path.
 ///
 /// For outer inset or clipping, use **`.padding(float)`** / **`.clipContent(bool)`** on the wrapping
 /// `Element`.

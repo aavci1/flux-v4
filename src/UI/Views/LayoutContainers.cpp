@@ -1,5 +1,4 @@
 #include <Flux/UI/Views/HStack.hpp>
-#include <Flux/UI/Views/Spacer.hpp>
 #include <Flux/UI/Views/VStack.hpp>
 #include <Flux/UI/Views/ZStack.hpp>
 
@@ -107,17 +106,6 @@ void rewindMeasuredChildren(MeasureContext& ctx) {
 }
 
 } // namespace
-
-Size Spacer::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
-                     LayoutHints const&, TextSystem&) const {
-  (void)constraints;
-  ctx.advanceChildSlot();
-  float minSize = 0.f;
-  if (Element const* element = ctx.currentElement()) {
-    minSize = std::max(0.f, element->minMainSize());
-  }
-  return Size{minSize, minSize};
-}
 
 Size VStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
                      LayoutHints const& hints, TextSystem& textSystem) const {

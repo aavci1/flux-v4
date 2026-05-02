@@ -6,7 +6,7 @@
 
 #include <Flux/Reactive/Effect.hpp>
 #include <Flux/UI/Views/ControlFlowDetail.hpp>
-#include <Flux/UI/Views/Spacer.hpp>
+#include <Flux/UI/Views/Rectangle.hpp>
 
 #include <functional>
 #include <memory>
@@ -185,7 +185,7 @@ Show(Condition&& condition, ThenFactory&& thenFactory, ElseFactory&& elseFactory
 template<typename Condition, typename ThenFactory>
 auto Show(Condition&& condition, ThenFactory&& thenFactory) {
   auto empty = [] {
-    return Spacer{};
+    return Element{Rectangle{}}.size(0.f, 0.f);
   };
   return Show(std::forward<Condition>(condition), std::forward<ThenFactory>(thenFactory),
               std::move(empty));

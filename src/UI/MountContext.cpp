@@ -11,7 +11,6 @@
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/ControlFlowDetail.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
-#include <Flux/UI/Views/Spacer.hpp>
 #include <Flux/UI/Views/Text.hpp>
 #include <Flux/UI/Views/VStack.hpp>
 #include <Flux/UI/Views/ZStack.hpp>
@@ -932,13 +931,6 @@ std::unique_ptr<scenegraph::SceneNode> mountZStack(ZStack const& stack, MountCon
     rawGroup->setSize(Size{finiteOrZero(width), finiteOrZero(height)});
   });
   return group;
-}
-
-std::unique_ptr<scenegraph::SceneNode> mountSpacer(Spacer const&, MountContext& ctx) {
-  (void)ctx;
-  Size const size{};
-  return std::make_unique<scenegraph::GroupNode>(
-      Rect{0.f, 0.f, finiteOrZero(size.width), finiteOrZero(size.height)});
 }
 
 } // namespace detail

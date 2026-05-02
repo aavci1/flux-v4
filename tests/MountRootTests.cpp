@@ -16,6 +16,7 @@
 #include <Flux/UI/Views/Rectangle.hpp>
 #include <Flux/UI/Views/ScaleAroundCenter.hpp>
 #include <Flux/UI/Views/ScrollView.hpp>
+#include <Flux/UI/Views/Spacer.hpp>
 #include <Flux/UI/Views/Text.hpp>
 #include <Flux/UI/Views/TextInput.hpp>
 #include <Flux/UI/Views/VStack.hpp>
@@ -451,6 +452,72 @@ TEST_CASE("HStack flex children honor assigned main-axis size with explicit modi
   CHECK(group.children()[2]->size().width == doctest::Approx(185.333f).epsilon(0.001));
   CHECK(group.children()[1]->position().x == doctest::Approx(382.666f).epsilon(0.001));
   CHECK(group.children()[3]->position().x == doctest::Approx(648.f));
+}
+
+TEST_CASE("Spacer as composite expands to fill main axis in HStack") {
+  struct Root {
+    flux::Element body() const {
+      return flux::HStack{
+          .spacing = 0.f,
+          .alignment = flux::Alignment::Stretch,
+          .children = flux::children(
+              flux::Rectangle{}.size(20.f, 10.f),
+              flux::Spacer{},
+              flux::Rectangle{}.size(30.f, 10.f)),
+      };
+    }
+  };
+
+  FakeTextSystem textSystem;
+  flux::scenegraph::SceneGraph sceneGraph;
+  flux::MountRoot root{
+      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{}),
+      textSystem,
+      testEnvironment(),
+      flux::Size{200.f, 40.f},
+  };
+
+  root.mount(sceneGraph);
+
+  REQUIRE(sceneGraph.root().kind() == flux::scenegraph::SceneNodeKind::Group);
+  auto const& group = static_cast<flux::scenegraph::GroupNode const&>(sceneGraph.root());
+  REQUIRE(group.children().size() == 3);
+  CHECK(group.children()[0]->size().width == doctest::Approx(20.f));
+  CHECK(group.children()[1]->position().x == doctest::Approx(20.f));
+  CHECK(group.children()[1]->size().width == doctest::Approx(150.f));
+  CHECK(group.children()[2]->position().x == doctest::Approx(170.f));
+  CHECK(group.children()[2]->size().width == doctest::Approx(30.f));
+}
+
+TEST_CASE("Spacer as composite respects user-set minMainSize override") {
+  struct Root {
+    flux::Element body() const {
+      return flux::HStack{
+          .spacing = 0.f,
+          .alignment = flux::Alignment::Stretch,
+          .children = flux::children(
+              flux::Spacer{}.minMainSize(40.f),
+              flux::Rectangle{}.size(10.f, 10.f)),
+      };
+    }
+  };
+
+  FakeTextSystem textSystem;
+  flux::scenegraph::SceneGraph sceneGraph;
+  flux::MountRoot root{
+      std::make_unique<flux::TypedRootHolder<Root>>(std::in_place, Root{}),
+      textSystem,
+      testEnvironment(),
+      flux::Size{30.f, 40.f},
+  };
+
+  root.mount(sceneGraph);
+
+  REQUIRE(sceneGraph.root().kind() == flux::scenegraph::SceneNodeKind::Group);
+  auto const& group = static_cast<flux::scenegraph::GroupNode const&>(sceneGraph.root());
+  REQUIRE(group.children().size() == 2);
+  CHECK(group.children()[0]->size().width == doctest::Approx(40.f));
+  CHECK(group.children()[1]->position().x == doctest::Approx(40.f));
 }
 
 TEST_CASE("Grid expands row tracks when flex assigns extra height") {

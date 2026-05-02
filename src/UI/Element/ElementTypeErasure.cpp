@@ -9,6 +9,7 @@
 #include <Flux/UI/MountContext.hpp>
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Detail/LayoutDebugDump.hpp>
+#include <Flux/UI/Views/Spacer.hpp>
 
 #include "UI/Element/ModifierLayoutHelpers.hpp"
 
@@ -264,10 +265,6 @@ Popover* popoverOverlayStateIf(Element& el) {
 
 Element::Element(Element const& other)
     : impl_(other.impl_)
-    , flexGrow_(other.flexGrow_)
-    , flexShrink_(other.flexShrink_)
-    , flexBasis_(other.flexBasis_)
-    , minMainSize_(other.minMainSize_)
     , mountsWhenCollapsed_(other.mountsWhenCollapsed_)
     , envOverrides_(other.envOverrides_)
     , modifiers_(other.modifiers_)
@@ -280,10 +277,6 @@ Element& Element::operator=(Element const& other) {
     return *this;
   }
   impl_ = other.impl_;
-  flexGrow_ = other.flexGrow_;
-  flexShrink_ = other.flexShrink_;
-  flexBasis_ = other.flexBasis_;
-  minMainSize_ = other.minMainSize_;
   mountsWhenCollapsed_ = other.mountsWhenCollapsed_;
   envOverrides_ = other.envOverrides_;
   modifiers_ = other.modifiers_;
@@ -291,6 +284,9 @@ Element& Element::operator=(Element const& other) {
   overrides_ = cloneLayoutOverrides(other.overrides_.get());
   return *this;
 }
+
+Element::Element(Spacer spacer)
+    : Element(spacer.body()) {}
 
 detail::ElementModifiers& Element::writableModifiers() {
   if (!modifiers_) {
@@ -312,21 +308,18 @@ float Element::flexGrow() const {
   if (overrides_ && overrides_->flexGrow) {
     return *overrides_->flexGrow;
   }
-  return flexGrow_;
+  return 0.f;
 }
 
 float Element::flexShrink() const {
   if (overrides_ && overrides_->flexShrink) {
     return *overrides_->flexShrink;
   }
-  return flexShrink_;
+  return 0.f;
 }
 
 std::optional<float> Element::flexBasis() const {
-  if (overrides_ && overrides_->flexBasis) {
-    return overrides_->flexBasis;
-  }
-  return flexBasis_;
+  return overrides_ ? overrides_->flexBasis : std::nullopt;
 }
 
 bool Element::mountsWhenCollapsed() const {
@@ -337,7 +330,7 @@ float Element::minMainSize() const {
   if (overrides_ && overrides_->minMainSize) {
     return *overrides_->minMainSize;
   }
-  return minMainSize_;
+  return 0.f;
 }
 
 std::size_t Element::colSpan() const {
@@ -378,6 +371,11 @@ Element Element::flex(float grow, float shrink, float basis) && {
   overrides.flexShrink = shrink;
   overrides.flexBasis = std::max(0.f, basis);
   overrides.minMainSize.reset();
+  return std::move(*this);
+}
+
+Element Element::minMainSize(float size) && {
+  writableOverrides().minMainSize = std::max(0.f, size);
   return std::move(*this);
 }
 

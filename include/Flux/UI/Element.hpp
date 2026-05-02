@@ -102,6 +102,7 @@ class Element {
 public:
   template<typename C>
   Element(C component);
+  Element(Spacer spacer);
 
   Element(Element const& other);
   Element& operator=(Element const& other);
@@ -130,6 +131,7 @@ public:
   Element flex(float grow) &&;
   Element flex(float grow, float shrink) &&;
   Element flex(float grow, float shrink, float basis) &&;
+  Element minMainSize(float size) &&;
   Element colSpan(std::size_t span) &&;
   Element rowSpan(std::size_t span) &&;
   Element key(std::string key) &&;
@@ -220,10 +222,6 @@ private:
   struct Model;
 
   std::shared_ptr<Concept> impl_;
-  float flexGrow_ = 0.f;
-  float flexShrink_ = 0.f;
-  std::optional<float> flexBasis_;
-  float minMainSize_ = 0.f;
   bool mountsWhenCollapsed_ = false;
   std::vector<std::shared_ptr<detail::EnvironmentOverride const>> envOverrides_;
   std::shared_ptr<detail::ElementModifiers> modifiers_;

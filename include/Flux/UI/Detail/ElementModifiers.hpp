@@ -16,15 +16,12 @@
 #include <cmath>
 #include <functional>
 #include <memory>
-#include <optional>
-#include <type_traits>
 #include <vector>
 
 namespace flux {
 
 class Element;
 struct Popover;
-struct Spacer;
 
 namespace detail {
 
@@ -35,46 +32,6 @@ struct ElementDeleter {
 using OwnedElementPtr = std::unique_ptr<Element, ElementDeleter>;
 
 Popover* popoverOverlayStateIf(Element& el);
-
-template<typename C>
-float flexGrowOf(C const& v) {
-  if constexpr (requires { v.flexGrow; }) {
-    return v.flexGrow;
-  } else if constexpr (std::is_same_v<C, Spacer>) {
-    return 1.f;
-  }
-  return 0.f;
-}
-
-template<typename C>
-float flexShrinkOf(C const& v) {
-  if constexpr (requires { v.flexShrink; }) {
-    return v.flexShrink;
-  }
-  return 0.f;
-}
-
-template<typename C>
-std::optional<float> flexBasisOf(C const& v) {
-  if constexpr (requires { v.flexBasis; }) {
-    return std::max(0.f, v.flexBasis);
-  }
-  return std::nullopt;
-}
-
-template<typename C>
-float minMainSizeOf(C const& v) {
-  if constexpr (requires { v.minMainSize; }) {
-    return v.minMainSize;
-  }
-  if constexpr (requires { v.minSize; }) {
-    return v.minSize;
-  }
-  if constexpr (requires { v.minLength; }) {
-    return std::max(0.f, v.minLength);
-  }
-  return 0.f;
-}
 
 template<typename C>
 bool mountsWhenCollapsedOf() {

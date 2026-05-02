@@ -6,7 +6,7 @@
 
 #include <Flux/Reactive/Effect.hpp>
 #include <Flux/UI/Views/ControlFlowDetail.hpp>
-#include <Flux/UI/Views/Spacer.hpp>
+#include <Flux/UI/Views/Rectangle.hpp>
 
 #include <functional>
 #include <memory>
@@ -208,7 +208,9 @@ private:
 template<typename Selector, typename Value = std::decay_t<std::invoke_result_t<Selector&>>>
 SwitchView<Value, std::decay_t<Selector>>
 Switch(Selector&& selector, std::vector<SwitchCase<Value>> cases,
-       std::function<Element()> defaultFactory = [] { return Element{Spacer{}}; }) {
+       std::function<Element()> defaultFactory = [] {
+         return Element{Rectangle{}}.size(0.f, 0.f);
+       }) {
   return SwitchView<Value, std::decay_t<Selector>>{
       std::forward<Selector>(selector), std::move(cases), std::move(defaultFactory)};
 }

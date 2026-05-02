@@ -87,8 +87,6 @@ std::unique_ptr<scenegraph::SceneNode> Element::Model<C>::mount(MountContext& ct
     return detail::mountHStack(value, ctx);
   } else if constexpr (std::is_same_v<C, ZStack>) {
     return detail::mountZStack(value, ctx);
-  } else if constexpr (std::is_same_v<C, Spacer>) {
-    return detail::mountSpacer(value, ctx);
   } else if constexpr (requires(C const& component, MountContext& mountContext) {
                          { component.mount(mountContext) } -> std::same_as<std::unique_ptr<scenegraph::SceneNode>>;
                        }) {
@@ -117,10 +115,6 @@ std::unique_ptr<scenegraph::SceneNode> Element::Model<C>::mount(MountContext& ct
 template<typename C>
 Element::Element(C component)
     : impl_(std::make_shared<Model<C>>(std::move(component)))
-    , flexGrow_(detail::flexGrowOf(static_cast<Model<C> const&>(*impl_).value))
-    , flexShrink_(detail::flexShrinkOf(static_cast<Model<C> const&>(*impl_).value))
-    , flexBasis_(detail::flexBasisOf(static_cast<Model<C> const&>(*impl_).value))
-    , minMainSize_(detail::minMainSizeOf(static_cast<Model<C> const&>(*impl_).value))
     , mountsWhenCollapsed_(detail::mountsWhenCollapsedOf<C>())
 {}
 

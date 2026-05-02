@@ -77,6 +77,7 @@ struct ViewModifiers {
   Element flex(float grow) &&;
   Element flex(float grow, float shrink) &&;
   Element flex(float grow, float shrink, float basis) &&;
+  Element minMainSize(float size) &&;
   Element colSpan(std::size_t span) &&;
   Element rowSpan(std::size_t span) &&;
   template<typename Key>
