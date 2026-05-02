@@ -20,6 +20,10 @@ MetalFrameRecorder::MetalFrameRecorder(MetalFrameRecorder&& other) noexcept
       glyphVertexCount(other.glyphVertexCount),
       preparedRectInstanceBuffer(other.preparedRectInstanceBuffer),
       preparedRectInstanceCapacity(other.preparedRectInstanceCapacity),
+      preparedImageInstanceBuffer(other.preparedImageInstanceBuffer),
+      preparedImageInstanceCapacity(other.preparedImageInstanceCapacity),
+      preparedPathVertexBuffer(other.preparedPathVertexBuffer),
+      preparedPathVertexCapacity(other.preparedPathVertexCapacity),
       preparedGlyphVertexBuffer(other.preparedGlyphVertexBuffer),
       preparedGlyphVertexCapacity(other.preparedGlyphVertexCapacity),
       glyphAtlasGeneration(other.glyphAtlasGeneration) {
@@ -34,6 +38,10 @@ MetalFrameRecorder::MetalFrameRecorder(MetalFrameRecorder&& other) noexcept
   other.glyphVertexCount = 0;
   other.preparedRectInstanceBuffer = nullptr;
   other.preparedRectInstanceCapacity = 0;
+  other.preparedImageInstanceBuffer = nullptr;
+  other.preparedImageInstanceCapacity = 0;
+  other.preparedPathVertexBuffer = nullptr;
+  other.preparedPathVertexCapacity = 0;
   other.preparedGlyphVertexBuffer = nullptr;
   other.preparedGlyphVertexCapacity = 0;
   other.glyphAtlasGeneration = 0;
@@ -55,6 +63,10 @@ MetalFrameRecorder& MetalFrameRecorder::operator=(MetalFrameRecorder&& other) no
   glyphVertexCount = other.glyphVertexCount;
   preparedRectInstanceBuffer = other.preparedRectInstanceBuffer;
   preparedRectInstanceCapacity = other.preparedRectInstanceCapacity;
+  preparedImageInstanceBuffer = other.preparedImageInstanceBuffer;
+  preparedImageInstanceCapacity = other.preparedImageInstanceCapacity;
+  preparedPathVertexBuffer = other.preparedPathVertexBuffer;
+  preparedPathVertexCapacity = other.preparedPathVertexCapacity;
   preparedGlyphVertexBuffer = other.preparedGlyphVertexBuffer;
   preparedGlyphVertexCapacity = other.preparedGlyphVertexCapacity;
   glyphAtlasGeneration = other.glyphAtlasGeneration;
@@ -69,6 +81,10 @@ MetalFrameRecorder& MetalFrameRecorder::operator=(MetalFrameRecorder&& other) no
   other.glyphVertexCount = 0;
   other.preparedRectInstanceBuffer = nullptr;
   other.preparedRectInstanceCapacity = 0;
+  other.preparedImageInstanceBuffer = nullptr;
+  other.preparedImageInstanceCapacity = 0;
+  other.preparedPathVertexBuffer = nullptr;
+  other.preparedPathVertexCapacity = 0;
   other.preparedGlyphVertexBuffer = nullptr;
   other.preparedGlyphVertexCapacity = 0;
   other.glyphAtlasGeneration = 0;
@@ -86,6 +102,16 @@ void MetalFrameRecorder::clear() {
     (void)(__bridge_transfer id<MTLBuffer>)preparedGlyphVertexBuffer;
     preparedGlyphVertexBuffer = nullptr;
     preparedGlyphVertexCapacity = 0;
+  }
+  if (preparedPathVertexBuffer) {
+    (void)(__bridge_transfer id<MTLBuffer>)preparedPathVertexBuffer;
+    preparedPathVertexBuffer = nullptr;
+    preparedPathVertexCapacity = 0;
+  }
+  if (preparedImageInstanceBuffer) {
+    (void)(__bridge_transfer id<MTLBuffer>)preparedImageInstanceBuffer;
+    preparedImageInstanceBuffer = nullptr;
+    preparedImageInstanceCapacity = 0;
   }
   if (preparedRectInstanceBuffer) {
     (void)(__bridge_transfer id<MTLBuffer>)preparedRectInstanceBuffer;

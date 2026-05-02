@@ -101,6 +101,9 @@ static_assert(std::is_trivially_copyable_v<MetalRectOp>);
 
 struct MetalImageOp {
   MetalImageInstance inst{};
+  /// Non-owning MTLBuffer pointer for prepared static image instances. Null means use the per-frame image arena.
+  void* externalInstanceBuffer = nullptr;
+  std::uint32_t externalInstanceIndex = 0;
   BlendMode blendMode = BlendMode::Normal;
   vector_float2 translation{};
   MetalRoundedClipStack roundedClip{};
@@ -116,6 +119,8 @@ struct MetalImageOp {
 struct MetalPathOp {
   std::uint32_t pathStart = 0;
   std::uint32_t pathCount = 0;
+  /// Non-owning MTLBuffer pointer for prepared static path vertices. Null means use the per-frame path arena.
+  void* externalVertexBuffer = nullptr;
   BlendMode blendMode = BlendMode::Normal;
   vector_float2 translation{};
   MetalRoundedClipStack roundedClip{};

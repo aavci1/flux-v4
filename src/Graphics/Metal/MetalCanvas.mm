@@ -630,6 +630,13 @@ public:
       return;
     }
 
+    std::shared_ptr<std::vector<PendingRasterPass>> pendingRasterKeepAlive;
+    if (!pendingRasterPasses_.empty()) {
+      pendingRasterKeepAlive = std::make_shared<std::vector<PendingRasterPass>>(std::move(pendingRasterPasses_));
+      pendingRasterPasses_.clear();
+      encodePendingRasterPasses(*pendingRasterKeepAlive);
+    }
+
     MTLRenderPassDescriptor* pass = [MTLRenderPassDescriptor renderPassDescriptor];
     pass.colorAttachments[0].texture = drawable_.texture;
     pass.colorAttachments[0].loadAction = MTLLoadActionClear;
@@ -756,8 +763,13 @@ public:
         setEncoderRoundedClipBuffer(enc, clipBuf, clipDst, &clipIndex, op.roundedClip);
         [enc setRenderPipelineState:metal_.imagePSO(op.blendMode)];
         [enc setVertexBuffer:metal_.quadBuffer() offset:0 atIndex:0];
-        const NSUInteger off = static_cast<NSUInteger>(ref.index) * sizeof(MetalImageInstance);
-        [enc setVertexBuffer:metal_.imageInstanceArenaBuffer() offset:off atIndex:1];
+        id<MTLBuffer> imageInstanceBuf =
+            op.externalInstanceBuffer ? (__bridge id<MTLBuffer>)op.externalInstanceBuffer
+                                      : metal_.imageInstanceArenaBuffer();
+        std::uint32_t const imageInstanceIndex =
+            op.externalInstanceBuffer ? op.externalInstanceIndex : ref.index;
+        const NSUInteger off = static_cast<NSUInteger>(imageInstanceIndex) * sizeof(MetalImageInstance);
+        [enc setVertexBuffer:imageInstanceBuf offset:off atIndex:1];
         MetalDrawUniforms const uniforms = makeDrawUniforms(vw, vh, op.translation);
         setEncoderDrawUniformBuffer(enc, uniformBuf, uniformDst, &uniformIndex, uniforms, 2);
         [enc setFragmentTexture:(__bridge id<MTLTexture>)op.texture atIndex:0];
@@ -778,7 +790,9 @@ public:
         setEncoderRoundedClipBuffer(enc, clipBuf, clipDst, &clipIndex, op.roundedClip);
         [enc setRenderPipelineState:metal_.pathPSO(op.blendMode)];
         const NSUInteger off = static_cast<NSUInteger>(op.pathStart) * sizeof(PathVertex);
-        [enc setVertexBuffer:pathBuf offset:off atIndex:0];
+        id<MTLBuffer> effectivePathBuf =
+            op.externalVertexBuffer ? (__bridge id<MTLBuffer>)op.externalVertexBuffer : pathBuf;
+        [enc setVertexBuffer:effectivePathBuf offset:off atIndex:0];
         MetalDrawUniforms const uniforms = makeDrawUniforms(vw, vh, op.translation);
         setEncoderDrawUniformBuffer(enc, uniformBuf, uniformDst, &uniformIndex, uniforms, 1);
         [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:static_cast<NSUInteger>(op.pathCount)];
@@ -815,6 +829,10 @@ public:
 
     if (syncPresent_) {
       lastSubmittedCmdBuf_ = cmdBuf_;
+      auto keepAlive = pendingRasterKeepAlive;
+      if (keepAlive) {
+        [cmdBuf_ addCompletedHandler:^(id<MTLCommandBuffer> /*cb*/) { (void)keepAlive; }];
+      }
       [cmdBuf_ commit];
       [cmdBuf_ waitUntilScheduled];
       [drawable_ present];
@@ -822,7 +840,11 @@ public:
       syncPresent_ = false;
     } else {
       dispatch_semaphore_t sem = frameSem_;
-      [cmdBuf_ addCompletedHandler:^(id<MTLCommandBuffer> /*cb*/) { dispatch_semaphore_signal(sem); }];
+      auto keepAlive = pendingRasterKeepAlive;
+      [cmdBuf_ addCompletedHandler:^(id<MTLCommandBuffer> /*cb*/) {
+        (void)keepAlive;
+        dispatch_semaphore_signal(sem);
+      }];
       [cmdBuf_ presentDrawable:drawable_];
       lastSubmittedCmdBuf_ = cmdBuf_;
       [cmdBuf_ commit];
@@ -1409,6 +1431,13 @@ private:
     NSUInteger frameDrawablePixelsH = 0;
   };
 
+  struct PendingRasterPass {
+    MetalFrameRecorder recorded;
+    std::shared_ptr<Image> image;
+    NSUInteger pixelW = 0;
+    NSUInteger pixelH = 0;
+  };
+
   TextSystem& textSystem_;
   std::unique_ptr<GlyphAtlas> glyphAtlas_;
   MetalDeviceResources metal_;
@@ -1441,6 +1470,7 @@ private:
   MetalFrameRecorder frame_;
   MetalFrameRecorder* captureRecorder_{nullptr};
   std::optional<RasterCaptureMetrics> rasterCaptureMetrics_{};
+  std::vector<PendingRasterPass> pendingRasterPasses_;
   std::vector<GpuState> stateStack_;
 
   MTLScissorRect clipScissor_{};
@@ -1648,14 +1678,16 @@ private:
 
   void encodeRecorderOps(MetalFrameRecorder& recorder, id<MTLRenderCommandEncoder> enc,
                          float viewportW, float viewportH,
-                         NSUInteger viewportPixelsW, NSUInteger viewportPixelsH) {
+                         NSUInteger viewportPixelsW, NSUInteger viewportPixelsH,
+                         id<MTLBuffer> uniformBufferOverride = nil,
+                         id<MTLBuffer> clipBufferOverride = nil) {
     MTLScissorRect const fullScissor = {0, 0, viewportPixelsW, viewportPixelsH};
     MTLScissorRect lastScissor = {0, 0, 0, 0};
     bool haveScissor = false;
 
     id<MTLBuffer> pathBuf = metal_.pathVertexArenaBuffer();
-    id<MTLBuffer> uniformBuf = metal_.drawUniformArenaBuffer();
-    id<MTLBuffer> clipBuf = metal_.roundedClipArenaBuffer();
+    id<MTLBuffer> uniformBuf = uniformBufferOverride ? uniformBufferOverride : metal_.drawUniformArenaBuffer();
+    id<MTLBuffer> clipBuf = clipBufferOverride ? clipBufferOverride : metal_.roundedClipArenaBuffer();
     auto* uniformDst = uniformBuf ? static_cast<MetalDrawUniforms*>([uniformBuf contents]) : nullptr;
     auto* clipDst = clipBuf ? static_cast<MetalRoundedClipStack*>([clipBuf contents]) : nullptr;
     std::uint32_t uniformIndex = 0;
@@ -1764,8 +1796,13 @@ private:
         setEncoderRoundedClipBuffer(enc, clipBuf, clipDst, &clipIndex, op.roundedClip);
         [enc setRenderPipelineState:metal_.imagePSO(op.blendMode)];
         [enc setVertexBuffer:metal_.quadBuffer() offset:0 atIndex:0];
-        const NSUInteger off = static_cast<NSUInteger>(ref.index) * sizeof(MetalImageInstance);
-        [enc setVertexBuffer:metal_.imageInstanceArenaBuffer() offset:off atIndex:1];
+        id<MTLBuffer> imageInstanceBuf =
+            op.externalInstanceBuffer ? (__bridge id<MTLBuffer>)op.externalInstanceBuffer
+                                      : metal_.imageInstanceArenaBuffer();
+        std::uint32_t const imageInstanceIndex =
+            op.externalInstanceBuffer ? op.externalInstanceIndex : ref.index;
+        const NSUInteger off = static_cast<NSUInteger>(imageInstanceIndex) * sizeof(MetalImageInstance);
+        [enc setVertexBuffer:imageInstanceBuf offset:off atIndex:1];
         MetalDrawUniforms const uniforms = makeDrawUniforms(viewportW, viewportH, op.translation);
         setEncoderDrawUniformBuffer(enc, uniformBuf, uniformDst, &uniformIndex, uniforms, 2);
         [enc setFragmentTexture:(__bridge id<MTLTexture>)op.texture atIndex:0];
@@ -1786,7 +1823,9 @@ private:
         setEncoderRoundedClipBuffer(enc, clipBuf, clipDst, &clipIndex, op.roundedClip);
         [enc setRenderPipelineState:metal_.pathPSO(op.blendMode)];
         const NSUInteger off = static_cast<NSUInteger>(op.pathStart) * sizeof(PathVertex);
-        [enc setVertexBuffer:pathBuf offset:off atIndex:0];
+        id<MTLBuffer> effectivePathBuf =
+            op.externalVertexBuffer ? (__bridge id<MTLBuffer>)op.externalVertexBuffer : pathBuf;
+        [enc setVertexBuffer:effectivePathBuf offset:off atIndex:0];
         MetalDrawUniforms const uniforms = makeDrawUniforms(viewportW, viewportH, op.translation);
         setEncoderDrawUniformBuffer(enc, uniformBuf, uniformDst, &uniformIndex, uniforms, 1);
         [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:static_cast<NSUInteger>(op.pathCount)];
@@ -1795,6 +1834,48 @@ private:
         continue;
       }
       assert(false && "unsupported Metal op ref kind");
+    }
+  }
+
+  void encodePendingRasterPasses(std::vector<PendingRasterPass>& passes) {
+    if (!cmdBuf_ || passes.empty()) {
+      return;
+    }
+    for (PendingRasterPass& pass : passes) {
+      if (!pass.image || pass.pixelW == 0 || pass.pixelH == 0) {
+        continue;
+      }
+      MetalImage const* image = tryMetalImage(*pass.image);
+      if (!image || !image->texture()) {
+        continue;
+      }
+
+      std::size_t const stateCount = std::max<std::size_t>(1, pass.recorded.opOrder.size());
+      id<MTLBuffer> uniformBuffer =
+          [metal_.device() newBufferWithLength:static_cast<NSUInteger>(stateCount * sizeof(MetalDrawUniforms))
+                                       options:MTLResourceStorageModeShared];
+      id<MTLBuffer> clipBuffer =
+          [metal_.device() newBufferWithLength:static_cast<NSUInteger>(stateCount * sizeof(MetalRoundedClipStack))
+                                       options:MTLResourceStorageModeShared];
+      if ((!uniformBuffer || !clipBuffer) && !pass.recorded.opOrder.empty()) {
+        continue;
+      }
+
+      MTLRenderPassDescriptor* passDescriptor = [MTLRenderPassDescriptor renderPassDescriptor];
+      passDescriptor.colorAttachments[0].texture = image->texture();
+      passDescriptor.colorAttachments[0].loadAction = MTLLoadActionClear;
+      passDescriptor.colorAttachments[0].clearColor = MTLClearColorMake(0.0, 0.0, 0.0, 0.0);
+      passDescriptor.colorAttachments[0].storeAction = MTLStoreActionStore;
+
+      id<MTLRenderCommandEncoder> enc = [cmdBuf_ renderCommandEncoderWithDescriptor:passDescriptor];
+      if (!enc) {
+        continue;
+      }
+      MTLViewport viewport = {0, 0, static_cast<double>(pass.pixelW), static_cast<double>(pass.pixelH), 0.0, 1.0};
+      [enc setViewport:viewport];
+      encodeRecorderOps(pass.recorded, enc, static_cast<float>(pass.pixelW), static_cast<float>(pass.pixelH),
+                        pass.pixelW, pass.pixelH, uniformBuffer, clipBuffer);
+      [enc endEncoding];
     }
   }
 
@@ -1903,32 +1984,18 @@ public:
       return nullptr;
     }
 
-    uploadRecorder(recorded);
-    id<MTLCommandBuffer> commandBuffer = [metal_.queue() commandBuffer];
-    if (!commandBuffer) {
+    if (!prepareRecorderForStandaloneEncoding(recorded)) {
       return nullptr;
     }
 
-    MTLRenderPassDescriptor* pass = [MTLRenderPassDescriptor renderPassDescriptor];
-    pass.colorAttachments[0].texture = texture;
-    pass.colorAttachments[0].loadAction = MTLLoadActionClear;
-    pass.colorAttachments[0].clearColor = MTLClearColorMake(0.0, 0.0, 0.0, 0.0);
-    pass.colorAttachments[0].storeAction = MTLStoreActionStore;
-
-    id<MTLRenderCommandEncoder> enc = [commandBuffer renderCommandEncoderWithDescriptor:pass];
-    if (!enc) {
-      return nullptr;
-    }
-    MTLViewport viewport = {0, 0, static_cast<double>(pixelW), static_cast<double>(pixelH), 0.0, 1.0};
-    [enc setViewport:viewport];
-    encodeRecorderOps(recorded, enc, static_cast<float>(pixelW), static_cast<float>(pixelH), pixelW, pixelH);
-    [enc endEncoding];
-    [commandBuffer commit];
-    [commandBuffer waitUntilCompleted];
-    if (commandBuffer.status == MTLCommandBufferStatusError) {
-      return nullptr;
-    }
-    return std::make_shared<MetalImage>(texture);
+    auto image = std::make_shared<MetalImage>(texture);
+    pendingRasterPasses_.push_back(PendingRasterPass{
+        .recorded = std::move(recorded),
+        .image = image,
+        .pixelW = pixelW,
+        .pixelH = pixelH,
+    });
+    return image;
   }
 
   void* preparedRectInstanceBuffer(MetalFrameRecorder const& recorded) {
@@ -1958,6 +2025,58 @@ public:
     return recorded.preparedRectInstanceBuffer;
   }
 
+  void* preparedImageInstanceBuffer(MetalFrameRecorder const& recorded) {
+    std::uint32_t const instanceCount = static_cast<std::uint32_t>(recorded.imageOps.size());
+    if (instanceCount == 0) {
+      return nullptr;
+    }
+    if (recorded.preparedImageInstanceBuffer && recorded.preparedImageInstanceCapacity >= instanceCount) {
+      return recorded.preparedImageInstanceBuffer;
+    }
+    if (recorded.preparedImageInstanceBuffer) {
+      (void)(__bridge_transfer id<MTLBuffer>)recorded.preparedImageInstanceBuffer;
+      recorded.preparedImageInstanceBuffer = nullptr;
+      recorded.preparedImageInstanceCapacity = 0;
+    }
+    NSUInteger const bytes = static_cast<NSUInteger>(instanceCount * sizeof(MetalImageInstance));
+    id<MTLBuffer> buffer = [metal_.device() newBufferWithLength:bytes options:MTLResourceStorageModeShared];
+    if (!buffer) {
+      return nullptr;
+    }
+    auto* dst = static_cast<MetalImageInstance*>([buffer contents]);
+    for (std::size_t i = 0; i < recorded.imageOps.size(); ++i) {
+      dst[i] = recorded.imageOps[i].inst;
+    }
+    recorded.preparedImageInstanceBuffer = (__bridge_retained void*)buffer;
+    recorded.preparedImageInstanceCapacity = instanceCount;
+    return recorded.preparedImageInstanceBuffer;
+  }
+
+  void* preparedPathVertexBuffer(MetalFrameRecorder const& recorded) {
+    std::uint32_t const vertexCount = static_cast<std::uint32_t>(recorded.pathVerts.size());
+    if (vertexCount == 0) {
+      return nullptr;
+    }
+    if (recorded.preparedPathVertexBuffer && recorded.preparedPathVertexCapacity >= vertexCount) {
+      return recorded.preparedPathVertexBuffer;
+    }
+    if (recorded.preparedPathVertexBuffer) {
+      (void)(__bridge_transfer id<MTLBuffer>)recorded.preparedPathVertexBuffer;
+      recorded.preparedPathVertexBuffer = nullptr;
+      recorded.preparedPathVertexCapacity = 0;
+    }
+    NSUInteger const bytes = static_cast<NSUInteger>(vertexCount * sizeof(PathVertex));
+    id<MTLBuffer> buffer = [metal_.device() newBufferWithBytes:recorded.pathVerts.data()
+                                                        length:bytes
+                                                       options:MTLResourceStorageModeShared];
+    if (!buffer) {
+      return nullptr;
+    }
+    recorded.preparedPathVertexBuffer = (__bridge_retained void*)buffer;
+    recorded.preparedPathVertexCapacity = vertexCount;
+    return recorded.preparedPathVertexBuffer;
+  }
+
   void* preparedGlyphVertexBuffer(MetalFrameRecorder const& recorded) {
     std::uint32_t const vertexCount = static_cast<std::uint32_t>(recorded.glyphVerts.size());
     if (vertexCount == 0) {
@@ -1981,6 +2100,43 @@ public:
     recorded.preparedGlyphVertexBuffer = (__bridge_retained void*)buffer;
     recorded.preparedGlyphVertexCapacity = vertexCount;
     return recorded.preparedGlyphVertexBuffer;
+  }
+
+  bool prepareRecorderForStandaloneEncoding(MetalFrameRecorder& recorded) {
+    void* const rectBuffer = recorded.rectOps.empty() ? nullptr : preparedRectInstanceBuffer(recorded);
+    if (!recorded.rectOps.empty() && !rectBuffer) {
+      return false;
+    }
+    void* const imageBuffer = recorded.imageOps.empty() ? nullptr : preparedImageInstanceBuffer(recorded);
+    if (!recorded.imageOps.empty() && !imageBuffer) {
+      return false;
+    }
+    void* const pathBuffer = recorded.pathVerts.empty() ? nullptr : preparedPathVertexBuffer(recorded);
+    if (!recorded.pathVerts.empty() && !pathBuffer) {
+      return false;
+    }
+    void* const glyphBuffer = recorded.glyphVerts.empty() ? nullptr : preparedGlyphVertexBuffer(recorded);
+    if (!recorded.glyphVerts.empty() && !glyphBuffer) {
+      return false;
+    }
+
+    for (std::size_t i = 0; i < recorded.rectOps.size(); ++i) {
+      MetalRectOp& op = recorded.rectOps[i];
+      op.externalInstanceBuffer = rectBuffer;
+      op.externalInstanceIndex = static_cast<std::uint32_t>(i);
+    }
+    for (std::size_t i = 0; i < recorded.imageOps.size(); ++i) {
+      MetalImageOp& op = recorded.imageOps[i];
+      op.externalInstanceBuffer = imageBuffer;
+      op.externalInstanceIndex = static_cast<std::uint32_t>(i);
+    }
+    for (MetalPathOp& op : recorded.pathOps) {
+      op.externalVertexBuffer = pathBuffer;
+    }
+    for (MetalGlyphOp& op : recorded.glyphOps) {
+      op.externalVertexBuffer = glyphBuffer;
+    }
+    return true;
   }
 
   void replayRecordedOps(MetalFrameRecorder const& recorded, MetalRecorderSlice const& slice) {

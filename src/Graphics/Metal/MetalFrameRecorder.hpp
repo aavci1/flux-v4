@@ -21,6 +21,10 @@ struct MetalFrameRecorder {
   std::uint32_t glyphVertexCount = 0;
   mutable void* preparedRectInstanceBuffer = nullptr;
   mutable std::uint32_t preparedRectInstanceCapacity = 0;
+  mutable void* preparedImageInstanceBuffer = nullptr;
+  mutable std::uint32_t preparedImageInstanceCapacity = 0;
+  mutable void* preparedPathVertexBuffer = nullptr;
+  mutable std::uint32_t preparedPathVertexCapacity = 0;
   mutable void* preparedGlyphVertexBuffer = nullptr;
   mutable std::uint32_t preparedGlyphVertexCapacity = 0;
   std::uint64_t glyphAtlasGeneration = 0;
