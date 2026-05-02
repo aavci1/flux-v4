@@ -1,0 +1,255 @@
+#pragma once
+
+#include <Flux.hpp>
+#include <Flux/Core/WindowUI.hpp>
+#include <Flux/Graphics/TextSystem.hpp>
+#include <Flux/UI/Theme.hpp>
+#include <Flux/UI/UI.hpp>
+#include <Flux/UI/ViewModifiers.hpp>
+#include <Flux/UI/Views/Render.hpp>
+#include <Flux/UI/Views/ZStack.hpp>
+
+#include <algorithm>
+#include <chrono>
+#include <cmath>
+#include <ctime>
+#include <string>
+#include <utility>
+
+namespace clock_demo {
+
+constexpr float kPi = 3.14159265358979323846f;
+
+struct ClockSnapshot {
+  int rawSecondOfDay = 0;
+  double seconds = 0.0;
+  std::string label = "00:00:00";
+
+  bool operator==(ClockSnapshot const&) const = default;
+};
+
+inline flux::Color withAlpha(flux::Color color, float alpha) {
+  color.a = alpha;
+  return color;
+}
+
+inline ClockSnapshot readClock(double dayOffset = 0.0) {
+  using namespace std::chrono;
+
+  auto const now = system_clock::now();
+  std::time_t const nowTime = system_clock::to_time_t(now);
+  std::tm local{};
+#if defined(_WIN32)
+  localtime_s(&local, &nowTime);
+#else
+  localtime_r(&nowTime, &local);
+#endif
+
+  char buffer[16]{};
+  std::strftime(buffer, sizeof(buffer), "%H:%M:%S", &local);
+
+  int const raw = local.tm_hour * 3600 + local.tm_min * 60 + local.tm_sec;
+  return ClockSnapshot{
+      .rawSecondOfDay = raw,
+      .seconds = static_cast<double>(raw) + dayOffset,
+      .label = buffer,
+  };
+}
+
+inline flux::Signal<ClockSnapshot> useClock() {
+  auto clock = flux::useState(readClock());
+
+  double dayOffset = 0.0;
+  int lastRawSecond = clock.peek().rawSecondOfDay;
+  flux::useFrame([clock, dayOffset, lastRawSecond](flux::AnimationTick const&) mutable {
+    ClockSnapshot next = readClock(dayOffset);
+    if (next.rawSecondOfDay < lastRawSecond) {
+      dayOffset += 24.0 * 60.0 * 60.0;
+      next = readClock(dayOffset);
+    }
+    if (next.rawSecondOfDay != lastRawSecond) {
+      lastRawSecond = next.rawSecondOfDay;
+      clock = std::move(next);
+    }
+  });
+
+  return clock;
+}
+
+inline flux::Point polar(flux::Point center, float radius, float degrees) {
+  float const radians = degrees * kPi / 180.f;
+  return flux::Point{
+      center.x + std::sin(radians) * radius,
+      center.y - std::cos(radians) * radius,
+  };
+}
+
+inline flux::Size measureClock(flux::LayoutConstraints const& constraints) {
+  float const width = std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 640.f;
+  float const height = std::isfinite(constraints.maxHeight) ? constraints.maxHeight : width;
+  return flux::Size{std::max(1.f, width), std::max(1.f, height)};
+}
+
+struct ClockGeometry {
+  float side = 1.f;
+  flux::Point center{};
+  float radius = 1.f;
+};
+
+inline ClockGeometry clockGeometry(flux::Rect frame) {
+  float const side = std::max(1.f, std::min(frame.width, frame.height));
+  return ClockGeometry{
+      .side = side,
+      .center = frame.center(),
+      .radius = side * 0.45f,
+  };
+}
+
+inline void drawClockFace(flux::Canvas& canvas, flux::Rect frame, flux::Theme const& theme) {
+  ClockGeometry const geometry = clockGeometry(frame);
+  flux::Point const center = geometry.center;
+  float const radius = geometry.radius;
+
+  flux::Color const face = theme.elevatedBackgroundColor;
+  flux::Color const ring = theme.separatorColor;
+  flux::Color const major = theme.labelColor;
+  flux::Color const minor = theme.tertiaryLabelColor;
+
+  canvas.drawCircle(center, radius + 14.f, flux::FillStyle::solid(withAlpha(theme.accentColor, 0.07f)),
+                    flux::StrokeStyle::none());
+  canvas.drawCircle(center, radius, flux::FillStyle::solid(face),
+                    flux::StrokeStyle::solid(withAlpha(ring, 0.95f), 2.f));
+  canvas.drawCircle(center, radius * 0.76f, flux::FillStyle::none(),
+                    flux::StrokeStyle::solid(withAlpha(ring, 0.45f), 1.f));
+
+  for (int i = 0; i < 60; ++i) {
+    bool const isHour = (i % 5) == 0;
+    float const degrees = static_cast<float>(i) * 6.f;
+    float const outer = radius - 16.f;
+    float const inner = radius - (isHour ? 42.f : 28.f);
+    flux::StrokeStyle stroke = flux::StrokeStyle::solid(isHour ? major : minor, isHour ? 3.f : 1.25f);
+    stroke.cap = flux::StrokeCap::Round;
+    canvas.drawLine(polar(center, inner, degrees), polar(center, outer, degrees), stroke);
+  }
+
+  flux::Font const numberFont{.size = 24.f, .weight = 650.f};
+  struct NumberMark {
+    char const* text;
+    float degrees;
+  };
+  NumberMark const numbers[]{{"12", 0.f}, {"3", 90.f}, {"6", 180.f}, {"9", 270.f}};
+  for (NumberMark const& mark : numbers) {
+    auto layout = flux::Application::instance().textSystem().layout(
+        mark.text, numberFont, theme.secondaryLabelColor, 0.f);
+    flux::Size const measured = layout->measuredSize;
+    flux::Point const p = polar(center, radius * 0.62f, mark.degrees);
+    canvas.drawTextLayout(*layout, {p.x - measured.width * 0.5f, p.y - measured.height * 0.5f});
+  }
+}
+
+struct ClockFace : flux::ViewModifiers<ClockFace> {
+  auto body() const {
+    auto theme = flux::useEnvironment<flux::ThemeKey>();
+    return flux::Render{
+        .measureFn = [](flux::LayoutConstraints const& constraints, flux::LayoutHints const&) {
+          return measureClock(constraints);
+        },
+        .draw = [theme](flux::Canvas& canvas, flux::Rect frame) {
+          drawClockFace(canvas, frame, theme.evaluate());
+        },
+    }
+        .rasterize();
+  }
+};
+
+struct ClockHands : flux::ViewModifiers<ClockHands> {
+  flux::Reactive::Bindable<ClockSnapshot> clock{readClock()};
+
+  auto body() const {
+    auto theme = flux::useEnvironment<flux::ThemeKey>();
+    auto clockBinding = clock;
+
+    auto secondTarget = [clockBinding] {
+      return static_cast<float>(clockBinding.evaluate().seconds * 6.0);
+    };
+    auto minuteTarget = [clockBinding] {
+      return static_cast<float>(clockBinding.evaluate().seconds * 0.1);
+    };
+    auto hourTarget = [clockBinding] {
+      return static_cast<float>(clockBinding.evaluate().seconds / 120.0);
+    };
+    auto secondSpring = [] {
+      return flux::Transition::spring(980.f, 16.f, 0.46f);
+    };
+    auto slowHandSpring = [] {
+      return flux::Transition::spring(360.f, 28.f, 0.36f);
+    };
+
+    auto second = flux::useAnimation(secondTarget, secondSpring);
+    auto minute = flux::useAnimation(minuteTarget, slowHandSpring);
+    auto hour = flux::useAnimation(hourTarget, slowHandSpring);
+
+    return flux::Render{
+        .measureFn = [](flux::LayoutConstraints const& constraints, flux::LayoutHints const&) {
+          return measureClock(constraints);
+        },
+        .draw = [theme, hour, minute, second](flux::Canvas& canvas, flux::Rect frame) {
+          flux::Theme const currentTheme = theme.evaluate();
+          ClockGeometry const geometry = clockGeometry(frame);
+          float const hourWidth = std::max(5.f, geometry.side * 0.018f);
+          float const minuteWidth = std::max(4.f, geometry.side * 0.013f);
+          float const secondWidth = std::max(2.f, geometry.side * 0.006f);
+
+          auto drawHand = [&](float degrees, flux::Color color, float width, float length, float tail) {
+            float const radians = std::fmod(degrees, 360.f) * kPi / 180.f;
+            canvas.save();
+            canvas.translate(geometry.center);
+            canvas.rotate(radians);
+            canvas.drawRect(flux::Rect{-width * 0.5f, -length, width, length + tail},
+                            flux::CornerRadius{width * 0.5f},
+                            flux::FillStyle::solid(color),
+                            flux::StrokeStyle::none());
+            canvas.restore();
+          };
+
+          drawHand(hour.evaluate(), currentTheme.labelColor, hourWidth,
+                   geometry.radius * 0.42f, geometry.radius * 0.08f);
+          drawHand(minute.evaluate(), currentTheme.labelColor, minuteWidth,
+                   geometry.radius * 0.64f, geometry.radius * 0.10f);
+          drawHand(second.evaluate(), currentTheme.dangerColor, secondWidth,
+                   geometry.radius * 0.72f, geometry.radius * 0.16f);
+
+          float const dotRadius = geometry.radius * 0.055f;
+          canvas.drawCircle(geometry.center, dotRadius,
+                            flux::FillStyle::solid(currentTheme.dangerColor),
+                            flux::StrokeStyle::solid(currentTheme.elevatedBackgroundColor, 3.f));
+        },
+    }
+        .flex(1.f);
+  }
+
+  bool operator==(ClockHands const& other) const {
+    return clock == other.clock;
+  }
+};
+
+struct Clock : flux::ViewModifiers<Clock> {
+  flux::Reactive::Bindable<ClockSnapshot> clock{readClock()};
+
+  auto body() const {
+    auto clockBinding = clock;
+    return flux::ZStack{
+        .children = flux::children(
+            ClockFace{},
+            ClockHands{.clock = clockBinding}.flex(1.f)
+        ),
+    }
+        .flex(1.f);
+  }
+
+  bool operator==(Clock const& other) const {
+    return clock == other.clock;
+  }
+};
+
+} // namespace clock_demo
