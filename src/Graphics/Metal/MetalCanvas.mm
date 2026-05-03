@@ -42,6 +42,14 @@ namespace {
 
 constexpr NSUInteger kQuadStripCount = 4;
 constexpr NSUInteger kFramesInFlight = 3;
+constexpr std::uint32_t kPreferredLiveFrameSampleCount = 4;
+
+std::uint32_t chooseLiveFrameSampleCount(id<MTLDevice> device) {
+  if (device && [device supportsTextureSampleCount:kPreferredLiveFrameSampleCount]) {
+    return kPreferredLiveFrameSampleCount;
+  }
+  return 1;
+}
 
 vector_float4 toSimd4(const Color& c) { return simd_make_float4(c.r, c.g, c.b, c.a); }
 
@@ -511,6 +519,7 @@ public:
              recorder.glyphVertexCount == 0;
     });
     frameSem_ = dispatch_semaphore_create(static_cast<int>(kFramesInFlight));
+    frameSampleCount_ = chooseLiveFrameSampleCount(metal_.device());
     pushState();
   }
 
@@ -637,12 +646,26 @@ public:
       encodePendingRasterPasses(*pendingRasterKeepAlive);
     }
 
+    id<MTLTexture> renderTargetTexture = drawable_.texture;
+    std::uint32_t renderSampleCount = 1;
+    if (frameSampleCount_ > 1) {
+      if (id<MTLTexture> msaaTexture = ensureLiveFrameMsaaTexture(drawable_.texture)) {
+        renderTargetTexture = msaaTexture;
+        renderSampleCount = frameSampleCount_;
+      }
+    }
+
     MTLRenderPassDescriptor* pass = [MTLRenderPassDescriptor renderPassDescriptor];
-    pass.colorAttachments[0].texture = drawable_.texture;
+    pass.colorAttachments[0].texture = renderTargetTexture;
     pass.colorAttachments[0].loadAction = MTLLoadActionClear;
     pass.colorAttachments[0].clearColor =
         MTLClearColorMake(clearColor_.r, clearColor_.g, clearColor_.b, clearColor_.a);
-    pass.colorAttachments[0].storeAction = MTLStoreActionStore;
+    if (renderSampleCount > 1) {
+      pass.colorAttachments[0].resolveTexture = drawable_.texture;
+      pass.colorAttachments[0].storeAction = MTLStoreActionMultisampleResolve;
+    } else {
+      pass.colorAttachments[0].storeAction = MTLStoreActionStore;
+    }
 
     id<MTLRenderCommandEncoder> enc = [cmdBuf_ renderCommandEncoderWithDescriptor:pass];
     MTLViewport vp = {0, 0, frameDrawableSize_.width, frameDrawableSize_.height, 0.0, 1.0};
@@ -697,7 +720,7 @@ public:
             op.externalInstanceBuffer ? op.externalInstanceIndex : op.arenaInstanceIndex;
         setEncoderDrawUniformBuffer(enc, uniformBuf, uniformDst, &uniformIndex, uniforms, 2);
         if (!op.isLine) {
-          [enc setRenderPipelineState:metal_.rectPSO(op.blendMode)];
+          [enc setRenderPipelineState:metal_.rectPSO(op.blendMode, renderSampleCount)];
           [enc setVertexBuffer:metal_.quadBuffer() offset:0 atIndex:0];
           const NSUInteger off = static_cast<NSUInteger>(instanceIndex) * sizeof(MetalRectInstance);
           [enc setVertexBuffer:instanceBuf offset:off atIndex:1];
@@ -705,7 +728,7 @@ public:
                   instanceCount:static_cast<NSUInteger>(runLen)];
           debug::perf::recordDrawCall(debug::perf::RenderCounterKind::Rect);
         } else {
-          [enc setRenderPipelineState:metal_.linePSO(op.blendMode)];
+          [enc setRenderPipelineState:metal_.linePSO(op.blendMode, renderSampleCount)];
           [enc setVertexBuffer:metal_.quadBuffer() offset:0 atIndex:0];
           const NSUInteger off = static_cast<NSUInteger>(instanceIndex) * sizeof(MetalRectInstance);
           [enc setVertexBuffer:instanceBuf offset:off atIndex:1];
@@ -738,7 +761,7 @@ public:
         }
         setEncoderScissorForOp(enc, op, fullScissor, &lastScissor, &haveScissor);
         setEncoderRoundedClipBuffer(enc, clipBuf, clipDst, &clipIndex, op.roundedClip);
-        [enc setRenderPipelineState:metal_.glyphPSO(op.blendMode)];
+        [enc setRenderPipelineState:metal_.glyphPSO(op.blendMode, renderSampleCount)];
         id<MTLBuffer> gbuf =
             op.externalVertexBuffer ? (__bridge id<MTLBuffer>)op.externalVertexBuffer : metal_.glyphVertexArenaBuffer();
         const NSUInteger goff = static_cast<NSUInteger>(runStart) * sizeof(MetalGlyphVertex);
@@ -761,7 +784,7 @@ public:
           continue;
         }
         setEncoderRoundedClipBuffer(enc, clipBuf, clipDst, &clipIndex, op.roundedClip);
-        [enc setRenderPipelineState:metal_.imagePSO(op.blendMode)];
+        [enc setRenderPipelineState:metal_.imagePSO(op.blendMode, renderSampleCount)];
         [enc setVertexBuffer:metal_.quadBuffer() offset:0 atIndex:0];
         id<MTLBuffer> imageInstanceBuf =
             op.externalInstanceBuffer ? (__bridge id<MTLBuffer>)op.externalInstanceBuffer
@@ -788,7 +811,7 @@ public:
           continue;
         }
         setEncoderRoundedClipBuffer(enc, clipBuf, clipDst, &clipIndex, op.roundedClip);
-        [enc setRenderPipelineState:metal_.pathPSO(op.blendMode)];
+        [enc setRenderPipelineState:metal_.pathPSO(op.blendMode, renderSampleCount)];
         const NSUInteger off = static_cast<NSUInteger>(op.pathStart) * sizeof(PathVertex);
         id<MTLBuffer> effectivePathBuf =
             op.externalVertexBuffer ? (__bridge id<MTLBuffer>)op.externalVertexBuffer : pathBuf;
@@ -1447,6 +1470,7 @@ private:
   id<MTLCommandBuffer> cmdBuf_{nil};
   id<MTLCommandBuffer> lastSubmittedCmdBuf_{nil};
   id<CAMetalDrawable> drawable_{nil};
+  id<MTLTexture> liveFrameMsaaTexture_{nil};
   id<MTLBuffer> captureBuffer_{nil};
   NSUInteger captureBytesPerRow_{0};
   std::uint32_t captureWidth_{0};
@@ -1454,6 +1478,7 @@ private:
   bool captureNextFrame_{false};
   bool inFrame_{false};
   bool syncPresent_{false};
+  std::uint32_t frameSampleCount_{1};
 
   Color clearColor_{0.f, 0.f, 0.f, 1.f};
   int logicalW_{0};
@@ -1481,6 +1506,30 @@ private:
   GpuState const& currentState() const { return stateStack_.back(); }
   MetalFrameRecorder& activeRecorder() { return captureRecorder_ ? *captureRecorder_ : frame_; }
   MetalFrameRecorder const& activeRecorder() const { return captureRecorder_ ? *captureRecorder_ : frame_; }
+
+  id<MTLTexture> ensureLiveFrameMsaaTexture(id<MTLTexture> resolveTexture) {
+    if (frameSampleCount_ <= 1 || !resolveTexture) {
+      return nil;
+    }
+    if (liveFrameMsaaTexture_ && liveFrameMsaaTexture_.width == resolveTexture.width &&
+        liveFrameMsaaTexture_.height == resolveTexture.height &&
+        liveFrameMsaaTexture_.pixelFormat == resolveTexture.pixelFormat &&
+        liveFrameMsaaTexture_.sampleCount == frameSampleCount_) {
+      return liveFrameMsaaTexture_;
+    }
+
+    MTLTextureDescriptor* desc =
+        [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:resolveTexture.pixelFormat
+                                                           width:resolveTexture.width
+                                                          height:resolveTexture.height
+                                                       mipmapped:NO];
+    desc.textureType = MTLTextureType2DMultisample;
+    desc.sampleCount = frameSampleCount_;
+    desc.storageMode = MTLStorageModePrivate;
+    desc.usage = MTLTextureUsageRenderTarget;
+    liveFrameMsaaTexture_ = [metal_.device() newTextureWithDescriptor:desc];
+    return liveFrameMsaaTexture_;
+  }
 
   bool recordedGlyphAtlasCurrent(MetalFrameRecorder const& recorded,
                                  MetalRecorderSlice const& slice) const {
@@ -1680,7 +1729,8 @@ private:
                          float viewportW, float viewportH,
                          NSUInteger viewportPixelsW, NSUInteger viewportPixelsH,
                          id<MTLBuffer> uniformBufferOverride = nil,
-                         id<MTLBuffer> clipBufferOverride = nil) {
+                         id<MTLBuffer> clipBufferOverride = nil,
+                         std::uint32_t renderSampleCount = 1) {
     MTLScissorRect const fullScissor = {0, 0, viewportPixelsW, viewportPixelsH};
     MTLScissorRect lastScissor = {0, 0, 0, 0};
     bool haveScissor = false;
@@ -1730,7 +1780,7 @@ private:
             op.externalInstanceBuffer ? op.externalInstanceIndex : op.arenaInstanceIndex;
         setEncoderDrawUniformBuffer(enc, uniformBuf, uniformDst, &uniformIndex, uniforms, 2);
         if (!op.isLine) {
-          [enc setRenderPipelineState:metal_.rectPSO(op.blendMode)];
+          [enc setRenderPipelineState:metal_.rectPSO(op.blendMode, renderSampleCount)];
           [enc setVertexBuffer:metal_.quadBuffer() offset:0 atIndex:0];
           const NSUInteger off = static_cast<NSUInteger>(instanceIndex) * sizeof(MetalRectInstance);
           [enc setVertexBuffer:instanceBuf offset:off atIndex:1];
@@ -1738,7 +1788,7 @@ private:
                   instanceCount:static_cast<NSUInteger>(runLen)];
           debug::perf::recordDrawCall(debug::perf::RenderCounterKind::Rect);
         } else {
-          [enc setRenderPipelineState:metal_.linePSO(op.blendMode)];
+          [enc setRenderPipelineState:metal_.linePSO(op.blendMode, renderSampleCount)];
           [enc setVertexBuffer:metal_.quadBuffer() offset:0 atIndex:0];
           const NSUInteger off = static_cast<NSUInteger>(instanceIndex) * sizeof(MetalRectInstance);
           [enc setVertexBuffer:instanceBuf offset:off atIndex:1];
@@ -1771,7 +1821,7 @@ private:
         }
         setEncoderScissorForOp(enc, op, fullScissor, &lastScissor, &haveScissor);
         setEncoderRoundedClipBuffer(enc, clipBuf, clipDst, &clipIndex, op.roundedClip);
-        [enc setRenderPipelineState:metal_.glyphPSO(op.blendMode)];
+        [enc setRenderPipelineState:metal_.glyphPSO(op.blendMode, renderSampleCount)];
         id<MTLBuffer> gbuf =
             op.externalVertexBuffer ? (__bridge id<MTLBuffer>)op.externalVertexBuffer : metal_.glyphVertexArenaBuffer();
         const NSUInteger goff = static_cast<NSUInteger>(runStart) * sizeof(MetalGlyphVertex);
@@ -1794,7 +1844,7 @@ private:
           continue;
         }
         setEncoderRoundedClipBuffer(enc, clipBuf, clipDst, &clipIndex, op.roundedClip);
-        [enc setRenderPipelineState:metal_.imagePSO(op.blendMode)];
+        [enc setRenderPipelineState:metal_.imagePSO(op.blendMode, renderSampleCount)];
         [enc setVertexBuffer:metal_.quadBuffer() offset:0 atIndex:0];
         id<MTLBuffer> imageInstanceBuf =
             op.externalInstanceBuffer ? (__bridge id<MTLBuffer>)op.externalInstanceBuffer
@@ -1821,7 +1871,7 @@ private:
           continue;
         }
         setEncoderRoundedClipBuffer(enc, clipBuf, clipDst, &clipIndex, op.roundedClip);
-        [enc setRenderPipelineState:metal_.pathPSO(op.blendMode)];
+        [enc setRenderPipelineState:metal_.pathPSO(op.blendMode, renderSampleCount)];
         const NSUInteger off = static_cast<NSUInteger>(op.pathStart) * sizeof(PathVertex);
         id<MTLBuffer> effectivePathBuf =
             op.externalVertexBuffer ? (__bridge id<MTLBuffer>)op.externalVertexBuffer : pathBuf;

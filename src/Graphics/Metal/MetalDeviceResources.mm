@@ -20,6 +20,26 @@ constexpr NSUInteger kQuadStripCount = 4;
 
 std::uint32_t blendModeKey(BlendMode m) { return static_cast<std::uint32_t>(static_cast<int>(m)); }
 
+std::uint32_t normalizedSampleCount(std::uint32_t sampleCount) { return std::max(sampleCount, 1u); }
+
+std::uint32_t pipelineKey(BlendMode mode, std::uint32_t sampleCount, std::uint32_t salt = 0) {
+  return blendModeKey(mode) ^ (normalizedSampleCount(sampleCount) << 24) ^ salt;
+}
+
+void setPipelineSampleCount(MTLRenderPipelineDescriptor* descriptor, std::uint32_t sampleCount) {
+  NSUInteger const count = static_cast<NSUInteger>(normalizedSampleCount(sampleCount));
+#if defined(__MAC_OS_X_VERSION_MAX_ALLOWED) && __MAC_OS_X_VERSION_MAX_ALLOWED >= 130000
+  if (@available(macOS 13.0, *)) {
+    descriptor.rasterSampleCount = count;
+    return;
+  }
+#endif
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+  descriptor.sampleCount = count;
+#pragma clang diagnostic pop
+}
+
 void setSrcOverBlend(MTLRenderPipelineColorAttachmentDescriptor* att) {
   att.blendingEnabled = YES;
   att.rgbBlendOperation = MTLBlendOperationAdd;
@@ -153,7 +173,8 @@ void applyBlendModeToAttachment(MTLRenderPipelineColorAttachmentDescriptor* att,
 }
 
 id<MTLRenderPipelineState> makePipeline(id<MTLDevice> device, id<MTLLibrary> lib, NSString* vert, NSString* frag,
-                                        MTLPixelFormat colorFormat, BlendMode blendMode) {
+                                        MTLPixelFormat colorFormat, BlendMode blendMode,
+                                        std::uint32_t sampleCount) {
   id<MTLFunction> vf = [lib newFunctionWithName:vert];
   id<MTLFunction> ff = [lib newFunctionWithName:frag];
   if (!vf || !ff) {
@@ -162,6 +183,7 @@ id<MTLRenderPipelineState> makePipeline(id<MTLDevice> device, id<MTLLibrary> lib
   MTLRenderPipelineDescriptor* d = [[MTLRenderPipelineDescriptor alloc] init];
   d.vertexFunction = vf;
   d.fragmentFunction = ff;
+  setPipelineSampleCount(d, sampleCount);
   d.colorAttachments[0].pixelFormat = colorFormat;
   applyBlendModeToAttachment(d.colorAttachments[0], blendMode);
   NSError* err = nil;
@@ -173,7 +195,7 @@ id<MTLRenderPipelineState> makePipeline(id<MTLDevice> device, id<MTLLibrary> lib
 }
 
 id<MTLRenderPipelineState> makePathPipeline(id<MTLDevice> device, id<MTLLibrary> lib, MTLPixelFormat colorFormat,
-                                            BlendMode blendMode) {
+                                            BlendMode blendMode, std::uint32_t sampleCount) {
   id<MTLFunction> vf = [lib newFunctionWithName:@"path_vert"];
   id<MTLFunction> ff = [lib newFunctionWithName:@"path_frag"];
   if (!vf || !ff) {
@@ -197,6 +219,7 @@ id<MTLRenderPipelineState> makePathPipeline(id<MTLDevice> device, id<MTLLibrary>
   d.vertexFunction = vf;
   d.fragmentFunction = ff;
   d.vertexDescriptor = vd;
+  setPipelineSampleCount(d, sampleCount);
   d.colorAttachments[0].pixelFormat = colorFormat;
   applyBlendModeToAttachment(d.colorAttachments[0], blendMode);
   NSError* err = nil;
@@ -207,7 +230,8 @@ id<MTLRenderPipelineState> makePathPipeline(id<MTLDevice> device, id<MTLLibrary>
   return pso;
 }
 
-id<MTLRenderPipelineState> makeGlyphPipeline(id<MTLDevice> device, id<MTLLibrary> lib, MTLPixelFormat colorFormat, BlendMode blendMode) {
+id<MTLRenderPipelineState> makeGlyphPipeline(id<MTLDevice> device, id<MTLLibrary> lib, MTLPixelFormat colorFormat, BlendMode blendMode,
+                                             std::uint32_t sampleCount) {
   (void)blendMode;
 
   id<MTLFunction> vf = [lib newFunctionWithName:@"glyph_vert"];
@@ -234,6 +258,7 @@ id<MTLRenderPipelineState> makeGlyphPipeline(id<MTLDevice> device, id<MTLLibrary
   d.vertexFunction = vf;
   d.fragmentFunction = ff;
   d.vertexDescriptor = vd;
+  setPipelineSampleCount(d, sampleCount);
   d.colorAttachments[0].pixelFormat = colorFormat;
   // Glyphs are composited as premultiplied alpha: source rgb is already multiplied by alpha,
   // so use (One, OneMinusSrcAlpha) rather than the straight-alpha (SourceAlpha, OneMinusSrcAlpha).
@@ -255,13 +280,14 @@ id<MTLRenderPipelineState> makeGlyphPipeline(id<MTLDevice> device, id<MTLLibrary
 
 } // namespace
 
-id<MTLRenderPipelineState> MetalDeviceResources::rectPSO(BlendMode mode) {
-  const std::uint32_t k = blendModeKey(mode);
+id<MTLRenderPipelineState> MetalDeviceResources::rectPSO(BlendMode mode, std::uint32_t sampleCount) {
+  sampleCount = normalizedSampleCount(sampleCount);
+  const std::uint32_t k = pipelineKey(mode, sampleCount);
   if (auto it = rectPSOCache_.find(k); it != rectPSOCache_.end()) {
     return it->second;
   }
   id<MTLRenderPipelineState> pso =
-      makePipeline(device_, lib_, @"rect_sdf_vert", @"rect_sdf_frag", layer_.pixelFormat, mode);
+      makePipeline(device_, lib_, @"rect_sdf_vert", @"rect_sdf_frag", layer_.pixelFormat, mode, sampleCount);
   if (!pso) {
     throw std::runtime_error("MetalDeviceResources: rect pipeline creation failed");
   }
@@ -269,13 +295,14 @@ id<MTLRenderPipelineState> MetalDeviceResources::rectPSO(BlendMode mode) {
   return pso;
 }
 
-id<MTLRenderPipelineState> MetalDeviceResources::linePSO(BlendMode mode) {
-  const std::uint32_t k = blendModeKey(mode);
+id<MTLRenderPipelineState> MetalDeviceResources::linePSO(BlendMode mode, std::uint32_t sampleCount) {
+  sampleCount = normalizedSampleCount(sampleCount);
+  const std::uint32_t k = pipelineKey(mode, sampleCount);
   if (auto it = linePSOCache_.find(k); it != linePSOCache_.end()) {
     return it->second;
   }
   id<MTLRenderPipelineState> pso =
-      makePipeline(device_, lib_, @"line_sdf_vert", @"line_sdf_frag", layer_.pixelFormat, mode);
+      makePipeline(device_, lib_, @"line_sdf_vert", @"line_sdf_frag", layer_.pixelFormat, mode, sampleCount);
   if (!pso) {
     throw std::runtime_error("MetalDeviceResources: line pipeline creation failed");
   }
@@ -283,12 +310,13 @@ id<MTLRenderPipelineState> MetalDeviceResources::linePSO(BlendMode mode) {
   return pso;
 }
 
-id<MTLRenderPipelineState> MetalDeviceResources::pathPSO(BlendMode mode) {
-  const std::uint32_t k = blendModeKey(mode);
+id<MTLRenderPipelineState> MetalDeviceResources::pathPSO(BlendMode mode, std::uint32_t sampleCount) {
+  sampleCount = normalizedSampleCount(sampleCount);
+  const std::uint32_t k = pipelineKey(mode, sampleCount);
   if (auto it = pathPSOCache_.find(k); it != pathPSOCache_.end()) {
     return it->second;
   }
-  id<MTLRenderPipelineState> pso = makePathPipeline(device_, lib_, layer_.pixelFormat, mode);
+  id<MTLRenderPipelineState> pso = makePathPipeline(device_, lib_, layer_.pixelFormat, mode, sampleCount);
   if (!pso) {
     throw std::runtime_error("MetalDeviceResources: path pipeline creation failed");
   }
@@ -296,13 +324,14 @@ id<MTLRenderPipelineState> MetalDeviceResources::pathPSO(BlendMode mode) {
   return pso;
 }
 
-id<MTLRenderPipelineState> MetalDeviceResources::glyphPSO(BlendMode mode) {
+id<MTLRenderPipelineState> MetalDeviceResources::glyphPSO(BlendMode mode, std::uint32_t sampleCount) {
+  sampleCount = normalizedSampleCount(sampleCount);
   // Bump when glyph vertex layout / stride changes so cached PSOs are not reused incorrectly.
-  const std::uint32_t k = blendModeKey(mode) ^ 0x47595049u; // 'GYPI' — v2: premul blend
+  const std::uint32_t k = pipelineKey(mode, sampleCount, 0x47595049u); // 'GYPI' — v2: premul blend
   if (auto it = glyphPSOCache_.find(k); it != glyphPSOCache_.end()) {
     return it->second;
   }
-  id<MTLRenderPipelineState> pso = makeGlyphPipeline(device_, lib_, layer_.pixelFormat, mode);
+  id<MTLRenderPipelineState> pso = makeGlyphPipeline(device_, lib_, layer_.pixelFormat, mode, sampleCount);
   if (!pso) {
     throw std::runtime_error("MetalDeviceResources: glyph pipeline creation failed");
   }
@@ -310,13 +339,14 @@ id<MTLRenderPipelineState> MetalDeviceResources::glyphPSO(BlendMode mode) {
   return pso;
 }
 
-id<MTLRenderPipelineState> MetalDeviceResources::imagePSO(BlendMode mode) {
-  const std::uint32_t k = blendModeKey(mode) ^ 0x494d4749u; // 'IMGI'
+id<MTLRenderPipelineState> MetalDeviceResources::imagePSO(BlendMode mode, std::uint32_t sampleCount) {
+  sampleCount = normalizedSampleCount(sampleCount);
+  const std::uint32_t k = pipelineKey(mode, sampleCount, 0x494d4749u); // 'IMGI'
   if (auto it = imagePSOCache_.find(k); it != imagePSOCache_.end()) {
     return it->second;
   }
   id<MTLRenderPipelineState> pso =
-      makePipeline(device_, lib_, @"image_sdf_vert", @"image_sdf_frag", layer_.pixelFormat, mode);
+      makePipeline(device_, lib_, @"image_sdf_vert", @"image_sdf_frag", layer_.pixelFormat, mode, sampleCount);
   if (!pso) {
     throw std::runtime_error("MetalDeviceResources: image pipeline creation failed");
   }

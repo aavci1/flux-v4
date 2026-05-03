@@ -38,11 +38,11 @@ public:
   CAMetalLayer* layer() const { return layer_; }
   id<MTLDevice> device() const { return device_; }
   id<MTLCommandQueue> queue() const { return queue_; }
-  id<MTLRenderPipelineState> rectPSO(BlendMode mode);
-  id<MTLRenderPipelineState> linePSO(BlendMode mode);
-  id<MTLRenderPipelineState> pathPSO(BlendMode mode);
-  id<MTLRenderPipelineState> glyphPSO(BlendMode mode);
-  id<MTLRenderPipelineState> imagePSO(BlendMode mode);
+  id<MTLRenderPipelineState> rectPSO(BlendMode mode, std::uint32_t sampleCount = 1);
+  id<MTLRenderPipelineState> linePSO(BlendMode mode, std::uint32_t sampleCount = 1);
+  id<MTLRenderPipelineState> pathPSO(BlendMode mode, std::uint32_t sampleCount = 1);
+  id<MTLRenderPipelineState> glyphPSO(BlendMode mode, std::uint32_t sampleCount = 1);
+  id<MTLRenderPipelineState> imagePSO(BlendMode mode, std::uint32_t sampleCount = 1);
   id<MTLSamplerState> linearSampler() const { return linearSampler_; }
   id<MTLSamplerState> repeatSampler() const { return repeatSampler_; }
   id<MTLBuffer> quadBuffer() const { return quadBuffer_; }
