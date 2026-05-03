@@ -12,6 +12,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <memory>
 #include <optional>
 #include <random>
@@ -38,10 +39,9 @@ constexpr float kBoardHorizontalInset = 40.f;
 constexpr std::int64_t kDropFlyDurationNanos = 200'000'000;
 constexpr std::int64_t kDealFlyDurationNanos = 120'000'000;
 constexpr std::int64_t kDealFlyIntervalNanos = 120'000'000;
-constexpr std::int64_t kAutoFlyDurationNanos = 170'000'000;
-constexpr std::int64_t kAutoFlyIntervalNanos = 48'000'000;
-constexpr std::int64_t kWinCelebrationDurationNanos = 7'000'000'000;
-constexpr std::int64_t kWinCardIntervalNanos = 32'000'000;
+constexpr std::int64_t kAutoFlyDurationNanos = 85'000'000;
+constexpr std::int64_t kWinCelebrationDurationNanos = 35'000'000'000;
+constexpr std::int64_t kWinCardIntervalNanos = 160'000'000;
 constexpr std::int64_t kHintBounceCycleNanos = 380'000'000;
 constexpr int kHintBounceCount = 2;
 constexpr std::int64_t kHintAnimationDurationNanos = kHintBounceCycleNanos * kHintBounceCount;
@@ -209,6 +209,15 @@ std::int64_t nowNanos() {
 }
 
 std::uint32_t randomSeed() {
+  if (char const* seedText = std::getenv("SOLITAIRE_SEED")) {
+    char* end = nullptr;
+    unsigned long const parsed = std::strtoul(seedText, &end, 10);
+    if (end != seedText && parsed <= 0xffff'fffful) {
+      std::uint32_t const seed = static_cast<std::uint32_t>(parsed);
+      return seed == 0 ? 1u : seed;
+    }
+  }
+
   static std::random_device randomDevice;
   std::uint64_t const nanos = static_cast<std::uint64_t>(nowNanos());
   std::uint32_t seed = randomDevice();
@@ -286,38 +295,14 @@ bool canPlaceOnFoundation(Card const& moving, Card const* top) {
   return moving.suit == top->suit && rankValue(moving) == rankValue(*top) + 1;
 }
 
-Board dealBoard(std::uint32_t seed) {
-  std::vector<Card> deck;
-  deck.reserve(52);
-  int id = 0;
-  for (Suit suit : {Suit::Spades, Suit::Hearts, Suit::Diamonds, Suit::Clubs}) {
-    for (int rank = 1; rank <= 13; ++rank) {
-      deck.push_back(Card{.id = id++, .rank = rank, .suit = suit, .faceUp = false});
-    }
-  }
-
-  std::mt19937 rng(seed);
-  std::shuffle(deck.begin(), deck.end(), rng);
-
-  Board board;
-  for (int row = 0; row < 7; ++row) {
-    for (int col = row; col < 7; ++col) {
-      Card card = deck.back();
-      deck.pop_back();
-      card.faceUp = row == col;
-      board.tableau[static_cast<std::size_t>(col)].push_back(card);
-    }
-  }
-  board.stock = std::move(deck);
-  return board;
-}
-
 void startDealAnimation(SolitaireState& state);
+Board makeWinnableBoard(std::uint32_t seed, int drawCount, std::uint32_t& resolvedSeed);
 
-SolitaireState makeState(std::uint32_t seed) {
+SolitaireState makeState(std::uint32_t seed, int drawCount) {
+  std::uint32_t resolvedSeed = seed;
   SolitaireState state{
-      .board = dealBoard(seed),
-      .seed = seed,
+      .board = makeWinnableBoard(seed, drawCount, resolvedSeed),
+      .seed = resolvedSeed,
       .startedNanos = nowNanos(),
   };
   startDealAnimation(state);
@@ -572,6 +557,673 @@ void drawStock(SolitaireState& state, int drawCount) {
   ++state.moves;
 }
 
+Card cardFor(Suit suit, int rank, bool faceUp = false) {
+  return Card{
+      .id = foundationIndex(suit) * 13 + rank - 1,
+      .rank = rank,
+      .suit = suit,
+      .faceUp = faceUp,
+  };
+}
+
+enum class WitnessMoveKind : std::uint8_t {
+  TableauToFoundation,
+  FlipTableau,
+  DrawStock,
+  WasteToFoundation,
+  TableauToTableau,
+  WasteToTableau,
+};
+
+struct WitnessMove {
+  WitnessMoveKind kind = WitnessMoveKind::DrawStock;
+  int column = -1;
+  int destColumn = -1;
+};
+
+struct GeneratedDeal {
+  Board board;
+  std::vector<WitnessMove> solution;
+};
+
+bool verifyGeneratedDeal(GeneratedDeal const& generated, int drawCount);
+
+void fillStockForDrawMode(Board& board, std::vector<Card> const& foundationOrder, int drawCount) {
+  std::vector<Card> stockPopOrder;
+  stockPopOrder.reserve(foundationOrder.size());
+  int const groupSize = std::max(1, drawCount);
+  // Draw-3 exposes a group as LIFO waste, so each draw group is stored reversed.
+  for (int start = 0; start < static_cast<int>(foundationOrder.size()); start += groupSize) {
+    int const end = std::min(start + groupSize, static_cast<int>(foundationOrder.size()));
+    for (int i = end - 1; i >= start; --i) {
+      stockPopOrder.push_back(foundationOrder[static_cast<std::size_t>(i)]);
+    }
+  }
+
+  board.stock.clear();
+  board.stock.reserve(stockPopOrder.size());
+  for (auto it = stockPopOrder.rbegin(); it != stockPopOrder.rend(); ++it) {
+    Card card = *it;
+    card.faceUp = false;
+    board.stock.push_back(card);
+  }
+}
+
+std::vector<Card> directFoundationOrder(std::mt19937& rng) {
+  std::vector<Card> order;
+  order.reserve(52);
+  std::array<int, 4> nextRank{1, 1, 1, 1};
+  int lastSuit = -1;
+  int runLength = 0;
+
+  while (order.size() < 52) {
+    std::vector<int> suits;
+    for (int suit = 0; suit < 4; ++suit) {
+      if (nextRank[static_cast<std::size_t>(suit)] <= 13) {
+        suits.push_back(suit);
+      }
+    }
+    std::shuffle(suits.begin(), suits.end(), rng);
+    if (suits.size() > 1 && runLength >= 2) {
+      suits.erase(std::remove(suits.begin(), suits.end(), lastSuit), suits.end());
+    }
+
+    std::uniform_int_distribution<int> pick(0, static_cast<int>(suits.size()) - 1);
+    int const suitIndex = suits[static_cast<std::size_t>(pick(rng))];
+    int const rank = nextRank[static_cast<std::size_t>(suitIndex)]++;
+    order.push_back(cardFor(static_cast<Suit>(suitIndex), rank, true));
+
+    if (suitIndex == lastSuit) {
+      ++runLength;
+    } else {
+      lastSuit = suitIndex;
+      runLength = 1;
+    }
+  }
+  return order;
+}
+
+struct DirectSlot {
+  bool stock = false;
+  int column = -1;
+};
+
+std::vector<DirectSlot> directSourceSlots(std::mt19937& rng, int drawCount) {
+  std::vector<DirectSlot> tableauSlots;
+  tableauSlots.reserve(28);
+  for (int column = 0; column < 7; ++column) {
+    for (int i = 0; i <= column; ++i) {
+      tableauSlots.push_back(DirectSlot{.column = column});
+    }
+  }
+  std::shuffle(tableauSlots.begin(), tableauSlots.end(), rng);
+
+  std::vector<std::vector<DirectSlot>> units;
+  units.reserve(52);
+  int const groupSize = std::max(1, drawCount);
+  for (int i = 0; i < 24; i += groupSize) {
+    std::vector<DirectSlot> unit;
+    int const count = std::min(groupSize, 24 - i);
+    unit.reserve(static_cast<std::size_t>(count));
+    for (int j = 0; j < count; ++j) {
+      unit.push_back(DirectSlot{.stock = true});
+    }
+    units.push_back(std::move(unit));
+  }
+  for (DirectSlot slot : tableauSlots) {
+    units.push_back({slot});
+  }
+  std::shuffle(units.begin(), units.end(), rng);
+
+  std::vector<DirectSlot> slots;
+  slots.reserve(52);
+  for (auto const& unit : units) {
+    for (DirectSlot slot : unit) {
+      slots.push_back(slot);
+    }
+  }
+  return slots;
+}
+
+GeneratedDeal makeDirectFoundationDeal(std::mt19937& rng, int drawCount) {
+  std::vector<Card> const foundationOrder = directFoundationOrder(rng);
+  std::vector<DirectSlot> const slots = directSourceSlots(rng, drawCount);
+  GeneratedDeal generated;
+  std::array<std::vector<Card>, 7> columnForwardOrder;
+  std::array<int, 7> columnSeen{};
+  std::vector<Card> stockFoundationOrder;
+  stockFoundationOrder.reserve(24);
+  generated.solution.reserve(104);
+
+  for (std::size_t i = 0; i < foundationOrder.size(); ++i) {
+    Card card = foundationOrder[i];
+    DirectSlot const slot = slots[i];
+    if (slot.stock) {
+      std::size_t const groupSize = static_cast<std::size_t>(std::max(1, drawCount));
+      if (stockFoundationOrder.size() % groupSize == 0) {
+        generated.solution.push_back(WitnessMove{.kind = WitnessMoveKind::DrawStock});
+      }
+      stockFoundationOrder.push_back(card);
+      generated.solution.push_back(WitnessMove{.kind = WitnessMoveKind::WasteToFoundation});
+      continue;
+    }
+
+    int& seen = columnSeen[static_cast<std::size_t>(slot.column)];
+    if (seen > 0) {
+      generated.solution.push_back(WitnessMove{
+          .kind = WitnessMoveKind::FlipTableau,
+          .column = slot.column,
+      });
+    }
+    generated.solution.push_back(WitnessMove{
+        .kind = WitnessMoveKind::TableauToFoundation,
+        .column = slot.column,
+    });
+    ++seen;
+    columnForwardOrder[static_cast<std::size_t>(slot.column)].push_back(card);
+  }
+
+  for (int column = 0; column < 7; ++column) {
+    auto const& forward = columnForwardOrder[static_cast<std::size_t>(column)];
+    auto& pile = generated.board.tableau[static_cast<std::size_t>(column)];
+    for (int i = static_cast<int>(forward.size()) - 1; i >= 0; --i) {
+      Card card = forward[static_cast<std::size_t>(i)];
+      card.faceUp = i == 0;
+      pile.push_back(card);
+    }
+  }
+
+  fillStockForDrawMode(generated.board, stockFoundationOrder, drawCount);
+  return generated;
+}
+
+struct BuildSource {
+  bool stock = false;
+  int column = -1;
+};
+
+struct Placement {
+  BuildSource source;
+  int cardIndex = 0;
+  bool toFoundation = false;
+  bool stayInColumn = false;
+  int destColumn = -1;
+};
+
+struct LiveMove {
+  int sourceColumn = -1;
+  int destColumn = -1;
+};
+
+struct ChainBuildState {
+  std::array<std::vector<Card>, 7> revealOrder;
+  std::array<std::vector<Card>, 7> liveColumns;
+  std::array<int, 7> revealed{};
+  std::array<int, 4> foundationRanks{};
+  std::array<bool, 52> relocated{};
+  std::vector<Card> stockOrder;
+  std::vector<Card> remaining;
+  std::vector<WitnessMove> solution;
+};
+
+std::vector<Card> shuffledDeck(std::mt19937& rng) {
+  std::vector<Card> deck;
+  deck.reserve(52);
+  for (Suit suit : {Suit::Spades, Suit::Hearts, Suit::Diamonds, Suit::Clubs}) {
+    for (int rank = 1; rank <= 13; ++rank) {
+      deck.push_back(cardFor(suit, rank));
+    }
+  }
+  std::shuffle(deck.begin(), deck.end(), rng);
+  return deck;
+}
+
+bool foundationReady(std::array<int, 4> const& foundationRanks, Card const& card) {
+  int const foundation = foundationIndex(card.suit);
+  return card.rank == foundationRanks[static_cast<std::size_t>(foundation)] + 1;
+}
+
+bool canMoveToGeneratedColumn(ChainBuildState const& state, Card const& card, int destColumn) {
+  auto const& dest = state.liveColumns[static_cast<std::size_t>(destColumn)];
+  if (!dest.empty()) {
+    Card const& top = dest.back();
+    return redSuit(card.suit) != redSuit(top.suit) && card.rank == top.rank - 1;
+  }
+  return state.revealed[static_cast<std::size_t>(destColumn)] == destColumn + 1 && card.rank == 13;
+}
+
+void moveGeneratedTopToFoundation(ChainBuildState& state, int column) {
+  auto& live = state.liveColumns[static_cast<std::size_t>(column)];
+  Card card = live.back();
+  live.pop_back();
+  state.foundationRanks[static_cast<std::size_t>(foundationIndex(card.suit))] = card.rank;
+  state.solution.push_back(WitnessMove{
+      .kind = WitnessMoveKind::TableauToFoundation,
+      .column = column,
+  });
+}
+
+void autoClearGeneratedFoundations(ChainBuildState& state) {
+  bool changed = true;
+  while (changed) {
+    changed = false;
+    std::vector<int> candidates;
+    for (int column = 0; column < 7; ++column) {
+      auto const& live = state.liveColumns[static_cast<std::size_t>(column)];
+      if (!live.empty() && foundationReady(state.foundationRanks, live.back())) {
+        candidates.push_back(column);
+      }
+    }
+    if (!candidates.empty()) {
+      int const column = *std::min_element(candidates.begin(), candidates.end(), [&](int a, int b) {
+        Card const& ca = state.liveColumns[static_cast<std::size_t>(a)].back();
+        Card const& cb = state.liveColumns[static_cast<std::size_t>(b)].back();
+        if (ca.rank != cb.rank) {
+          return ca.rank < cb.rank;
+        }
+        return a < b;
+      });
+      moveGeneratedTopToFoundation(state, column);
+      changed = true;
+    }
+  }
+}
+
+std::vector<LiveMove> possibleLiveMoves(ChainBuildState const& state) {
+  std::vector<LiveMove> moves;
+  for (int sourceColumn = 0; sourceColumn < 7; ++sourceColumn) {
+    auto const& source = state.liveColumns[static_cast<std::size_t>(sourceColumn)];
+    if (source.empty() || state.revealed[static_cast<std::size_t>(sourceColumn)] >= sourceColumn + 1) {
+      continue;
+    }
+    Card const& card = source.back();
+    if (state.relocated[static_cast<std::size_t>(card.id)]) {
+      continue;
+    }
+    for (int destColumn = 0; destColumn < 7; ++destColumn) {
+      if (destColumn == sourceColumn) {
+        continue;
+      }
+      if (canMoveToGeneratedColumn(state, card, destColumn)) {
+        moves.push_back(LiveMove{
+            .sourceColumn = sourceColumn,
+            .destColumn = destColumn,
+        });
+      }
+    }
+  }
+  return moves;
+}
+
+void applyLiveMove(ChainBuildState& state, LiveMove move) {
+  auto& source = state.liveColumns[static_cast<std::size_t>(move.sourceColumn)];
+  Card card = source.back();
+  source.pop_back();
+  state.relocated[static_cast<std::size_t>(card.id)] = true;
+  state.liveColumns[static_cast<std::size_t>(move.destColumn)].push_back(card);
+  state.solution.push_back(WitnessMove{
+      .kind = WitnessMoveKind::TableauToTableau,
+      .column = move.sourceColumn,
+      .destColumn = move.destColumn,
+  });
+  autoClearGeneratedFoundations(state);
+}
+
+std::vector<BuildSource> availableSources(ChainBuildState const& state) {
+  std::vector<BuildSource> sources;
+  sources.reserve(8);
+  for (int column = 0; column < 7; ++column) {
+    if (state.liveColumns[static_cast<std::size_t>(column)].empty() &&
+        state.revealed[static_cast<std::size_t>(column)] < column + 1) {
+      sources.push_back(BuildSource{.column = column});
+    }
+  }
+  if (state.stockOrder.size() < 24) {
+    sources.push_back(BuildSource{.stock = true});
+  }
+  return sources;
+}
+
+std::vector<Placement> possiblePlacements(ChainBuildState const& state) {
+  std::vector<Placement> placements;
+  std::vector<BuildSource> const sources = availableSources(state);
+  for (BuildSource source : sources) {
+    for (int cardIndex = 0; cardIndex < static_cast<int>(state.remaining.size()); ++cardIndex) {
+      Card const& card = state.remaining[static_cast<std::size_t>(cardIndex)];
+      if (!source.stock) {
+        placements.push_back(Placement{
+            .source = source,
+            .cardIndex = cardIndex,
+            .stayInColumn = true,
+            .destColumn = source.column,
+        });
+      }
+      if (foundationReady(state.foundationRanks, card)) {
+        placements.push_back(Placement{
+            .source = source,
+            .cardIndex = cardIndex,
+            .toFoundation = true,
+        });
+      }
+      for (int destColumn = 0; destColumn < 7; ++destColumn) {
+        if (!source.stock && source.column == destColumn) {
+          continue;
+        }
+        if (canMoveToGeneratedColumn(state, card, destColumn)) {
+          placements.push_back(Placement{
+              .source = source,
+              .cardIndex = cardIndex,
+              .destColumn = destColumn,
+          });
+        }
+      }
+    }
+  }
+  return placements;
+}
+
+void applyPlacement(ChainBuildState& state, Placement placement) {
+  Card card = state.remaining[static_cast<std::size_t>(placement.cardIndex)];
+  state.remaining.erase(state.remaining.begin() + placement.cardIndex);
+  card.faceUp = true;
+
+  if (placement.source.stock) {
+    Card stockCard = card;
+    stockCard.faceUp = false;
+    state.stockOrder.push_back(stockCard);
+    state.solution.push_back(WitnessMove{.kind = WitnessMoveKind::DrawStock});
+    if (placement.toFoundation) {
+      state.solution.push_back(WitnessMove{.kind = WitnessMoveKind::WasteToFoundation});
+    } else {
+      state.solution.push_back(WitnessMove{
+          .kind = WitnessMoveKind::WasteToTableau,
+          .destColumn = placement.destColumn,
+      });
+    }
+  } else {
+    int const column = placement.source.column;
+    auto& revealed = state.revealed[static_cast<std::size_t>(column)];
+    state.revealOrder[static_cast<std::size_t>(column)].push_back(card);
+    if (revealed > 0) {
+      state.solution.push_back(WitnessMove{
+          .kind = WitnessMoveKind::FlipTableau,
+          .column = column,
+      });
+    }
+    ++revealed;
+    if (placement.stayInColumn) {
+      // The generated card is now the visible top of its original column.
+    } else if (placement.toFoundation) {
+      state.solution.push_back(WitnessMove{
+          .kind = WitnessMoveKind::TableauToFoundation,
+          .column = column,
+      });
+    } else {
+      state.solution.push_back(WitnessMove{
+          .kind = WitnessMoveKind::TableauToTableau,
+          .column = column,
+          .destColumn = placement.destColumn,
+      });
+    }
+  }
+
+  if (placement.toFoundation) {
+    state.foundationRanks[static_cast<std::size_t>(foundationIndex(card.suit))] = card.rank;
+  } else {
+    state.liveColumns[static_cast<std::size_t>(placement.destColumn)].push_back(card);
+  }
+  autoClearGeneratedFoundations(state);
+}
+
+bool generatedBuildComplete(ChainBuildState const& state) {
+  if (!state.remaining.empty() || state.stockOrder.size() != 24) {
+    return false;
+  }
+  for (int column = 0; column < 7; ++column) {
+    if (state.revealed[static_cast<std::size_t>(column)] != column + 1 ||
+        !state.liveColumns[static_cast<std::size_t>(column)].empty()) {
+      return false;
+    }
+  }
+  return std::all_of(state.foundationRanks.begin(), state.foundationRanks.end(), [](int rank) {
+    return rank == 13;
+  });
+}
+
+std::optional<ChainBuildState> tryBuildChainedDeal(std::mt19937& rng) {
+  ChainBuildState state;
+  state.remaining = shuffledDeck(rng);
+  state.stockOrder.reserve(24);
+  state.solution.reserve(160);
+
+  int steps = 0;
+  while (!state.remaining.empty() && steps++ < 500) {
+    autoClearGeneratedFoundations(state);
+    std::vector<LiveMove> liveMoves = possibleLiveMoves(state);
+    if (!liveMoves.empty()) {
+      std::uniform_int_distribution<int> pick(0, static_cast<int>(liveMoves.size()) - 1);
+      applyLiveMove(state, liveMoves[static_cast<std::size_t>(pick(rng))]);
+      continue;
+    }
+
+    std::vector<Placement> placements = possiblePlacements(state);
+    if (placements.empty()) {
+      return std::nullopt;
+    }
+
+    std::vector<Placement> tableauPlacements;
+    std::vector<Placement> stayPlacements;
+    tableauPlacements.reserve(placements.size());
+    stayPlacements.reserve(placements.size());
+    for (Placement const& placement : placements) {
+      if (placement.stayInColumn) {
+        stayPlacements.push_back(placement);
+      } else if (!placement.toFoundation) {
+        tableauPlacements.push_back(placement);
+      }
+    }
+
+    std::vector<Placement> const* choices = &placements;
+    if (!tableauPlacements.empty() && !stayPlacements.empty()) {
+      std::uniform_int_distribution<int> preferEscape(0, 99);
+      choices = preferEscape(rng) < 70 ? &tableauPlacements : &stayPlacements;
+    } else if (!tableauPlacements.empty()) {
+      choices = &tableauPlacements;
+    } else if (!stayPlacements.empty()) {
+      choices = &stayPlacements;
+    }
+    std::uniform_int_distribution<int> pick(0, static_cast<int>(choices->size()) - 1);
+    applyPlacement(state, (*choices)[static_cast<std::size_t>(pick(rng))]);
+  }
+
+  autoClearGeneratedFoundations(state);
+  if (steps >= 500) {
+    return std::nullopt;
+  }
+  if (!generatedBuildComplete(state)) {
+    return std::nullopt;
+  }
+  return state;
+}
+
+GeneratedDeal makeGeneratedDeal(std::mt19937& rng, int drawCount) {
+  for (int attempt = 0; attempt < 200; ++attempt) {
+    auto state = tryBuildChainedDeal(rng);
+    if (!state) {
+      continue;
+    }
+
+    GeneratedDeal generated;
+    generated.solution = std::move(state->solution);
+    for (int column = 0; column < 7; ++column) {
+      auto const& revealOrder = state->revealOrder[static_cast<std::size_t>(column)];
+      auto& pile = generated.board.tableau[static_cast<std::size_t>(column)];
+      for (int i = static_cast<int>(revealOrder.size()) - 1; i >= 0; --i) {
+        Card card = revealOrder[static_cast<std::size_t>(i)];
+        card.faceUp = i == 0;
+        pile.push_back(card);
+      }
+    }
+    fillStockForDrawMode(generated.board, state->stockOrder, drawCount);
+    if (verifyGeneratedDeal(generated, drawCount)) {
+      return generated;
+    }
+  }
+
+  std::fprintf(stderr, "solitaire chained generation failed; using direct fallback\n");
+  GeneratedDeal fallback = makeDirectFoundationDeal(rng, drawCount);
+  if (!verifyGeneratedDeal(fallback, drawCount)) {
+    std::fprintf(stderr, "solitaire direct fallback produced an invalid witness\n");
+  }
+  return fallback;
+}
+
+bool moveTableauToFoundation(Board& board, int column) {
+  if (column < 0 || column >= 7) {
+    return false;
+  }
+  auto& pile = board.tableau[static_cast<std::size_t>(column)];
+  if (pile.empty() || !pile.back().faceUp) {
+    return false;
+  }
+  Card card = pile.back();
+  auto& foundation = board.foundations[static_cast<std::size_t>(foundationIndex(card.suit))];
+  Card const* top = foundation.empty() ? nullptr : &foundation.back();
+  if (!canPlaceOnFoundation(card, top)) {
+    return false;
+  }
+  pile.pop_back();
+  card.faceUp = true;
+  foundation.push_back(card);
+  return true;
+}
+
+bool moveWasteToFoundation(Board& board) {
+  if (board.waste.empty()) {
+    return false;
+  }
+  Card card = board.waste.back();
+  auto& foundation = board.foundations[static_cast<std::size_t>(foundationIndex(card.suit))];
+  Card const* top = foundation.empty() ? nullptr : &foundation.back();
+  if (!canPlaceOnFoundation(card, top)) {
+    return false;
+  }
+  board.waste.pop_back();
+  card.faceUp = true;
+  foundation.push_back(card);
+  return true;
+}
+
+bool moveTableauToTableau(Board& board, int sourceColumn, int destColumn) {
+  if (sourceColumn < 0 || sourceColumn >= 7 || destColumn < 0 || destColumn >= 7 ||
+      sourceColumn == destColumn) {
+    return false;
+  }
+  auto& source = board.tableau[static_cast<std::size_t>(sourceColumn)];
+  if (source.empty() || !source.back().faceUp) {
+    return false;
+  }
+  auto& dest = board.tableau[static_cast<std::size_t>(destColumn)];
+  Card const* destTop = dest.empty() ? nullptr : &dest.back();
+  if (!canPlaceOnTableau(source.back(), destTop)) {
+    return false;
+  }
+  Card card = source.back();
+  source.pop_back();
+  card.faceUp = true;
+  dest.push_back(card);
+  return true;
+}
+
+bool moveWasteToTableau(Board& board, int destColumn) {
+  if (destColumn < 0 || destColumn >= 7 || board.waste.empty()) {
+    return false;
+  }
+  auto& dest = board.tableau[static_cast<std::size_t>(destColumn)];
+  Card const* destTop = dest.empty() ? nullptr : &dest.back();
+  if (!canPlaceOnTableau(board.waste.back(), destTop)) {
+    return false;
+  }
+  Card card = board.waste.back();
+  board.waste.pop_back();
+  card.faceUp = true;
+  dest.push_back(card);
+  return true;
+}
+
+bool drawForWitness(Board& board, int drawCount) {
+  if (board.stock.empty()) {
+    return false;
+  }
+  int const count = std::min(std::max(1, drawCount), static_cast<int>(board.stock.size()));
+  for (int i = 0; i < count; ++i) {
+    Card card = board.stock.back();
+    board.stock.pop_back();
+    card.faceUp = true;
+    board.waste.push_back(card);
+  }
+  return true;
+}
+
+bool applyWitnessMove(Board& board, WitnessMove move, int drawCount) {
+  if (move.kind == WitnessMoveKind::TableauToFoundation) {
+    return moveTableauToFoundation(board, move.column);
+  }
+  if (move.kind == WitnessMoveKind::WasteToFoundation) {
+    return moveWasteToFoundation(board);
+  }
+  if (move.kind == WitnessMoveKind::DrawStock) {
+    return drawForWitness(board, drawCount);
+  }
+  if (move.kind == WitnessMoveKind::TableauToTableau) {
+    return moveTableauToTableau(board, move.column, move.destColumn);
+  }
+  if (move.kind == WitnessMoveKind::WasteToTableau) {
+    return moveWasteToTableau(board, move.destColumn);
+  }
+
+  if (move.column < 0 || move.column >= 7) {
+    return false;
+  }
+  auto& pile = board.tableau[static_cast<std::size_t>(move.column)];
+  if (pile.empty() || pile.back().faceUp) {
+    return false;
+  }
+  pile.back().faceUp = true;
+  return true;
+}
+
+bool verifyGeneratedDeal(GeneratedDeal const& generated, int drawCount) {
+  Board replay = generated.board;
+  for (WitnessMove move : generated.solution) {
+    if (!applyWitnessMove(replay, move, drawCount)) {
+      return false;
+    }
+  }
+  if (!gameComplete(replay) || !replay.stock.empty() || !replay.waste.empty()) {
+    return false;
+  }
+  return std::all_of(replay.tableau.begin(), replay.tableau.end(), [](std::vector<Card> const& pile) {
+    return pile.empty();
+  });
+}
+
+Board constructedWinnableBoard(std::uint32_t seed, int drawCount) {
+  std::mt19937 rng(seed);
+  GeneratedDeal generated = makeGeneratedDeal(rng, drawCount);
+  if (!verifyGeneratedDeal(generated, drawCount)) {
+    std::fprintf(stderr, "solitaire reverse generation produced an invalid witness for seed %u\n", seed);
+  }
+  return generated.board;
+}
+
+Board makeWinnableBoard(std::uint32_t seed, int drawCount, std::uint32_t& resolvedSeed) {
+  (void)drawCount;
+  int const normalizedDrawCount = 1;
+  resolvedSeed = seed == 0 ? 1u : seed;
+  return constructedWinnableBoard(resolvedSeed, normalizedDrawCount);
+}
+
 float columnX(BoardGeometry const& geometry, int column) {
   return (kCardW + geometry.columnGap) * static_cast<float>(column);
 }
@@ -743,6 +1395,9 @@ void startDealAnimation(SolitaireState& state) {
   for (int row = 0; row < 7; ++row) {
     for (int col = row; col < 7; ++col) {
       auto const& column = state.board.tableau[static_cast<std::size_t>(col)];
+      if (row >= static_cast<int>(column.size())) {
+        continue;
+      }
       float y = tableauTop;
       for (int previousRow = 0; previousRow < row; ++previousRow) {
         Card const& previous = column[static_cast<std::size_t>(previousRow)];
@@ -891,56 +1546,43 @@ std::optional<Source> nextFoundationAutoSource(Board const& board) {
   return best;
 }
 
-bool autoFinishToFoundations(SolitaireState& state, int drawCount, BoardGeometry const& geometry,
-                             std::int64_t startNanos) {
-  if (playControlsDisabled(state) || !state.animations.empty()) {
+bool scheduleNextAutoFinishMove(SolitaireState& state, int drawCount, BoardGeometry const& geometry,
+                                std::int64_t startNanos, bool recordHistory) {
+  if (!state.animations.empty()) {
     return false;
   }
 
-  bool recordedHistory = false;
-  int moved = 0;
-  for (int guard = 0; guard < 52; ++guard) {
-    std::optional<Source> source = nextFoundationAutoSource(state.board);
-    if (!source) {
-      break;
-    }
-
-    std::vector<Card> moving = cardsFromSource(state.board, *source, 1);
-    if (moving.size() != 1) {
-      break;
-    }
-    std::optional<int> dest = findFoundationFor(state.board, moving.front());
-    if (!dest) {
-      break;
-    }
-
-    std::vector<CardPosition> const before = buildCardPositions(state.board, drawCount, geometry);
-    Rect const from = rectForCard(before, moving.front().id)
-                          .value_or(slotRect(source->kind, source->index, geometry));
-    if (!recordedHistory) {
-      pushHistory(state);
-      recordedHistory = true;
-    }
-    if (!performMove(state, *source, Source{.kind = PileKind::Foundation, .index = *dest}, 1, false)) {
-      break;
-    }
-
-    std::vector<CardPosition> const after = buildCardPositions(state.board, drawCount, geometry);
-    Rect const to = rectForCard(after, moving.front().id)
-                        .value_or(slotRect(PileKind::Foundation, *dest, geometry));
-    addCardAnimation(state, moving.front(), from, to,
-                     startNanos + static_cast<std::int64_t>(moved) * kAutoFlyIntervalNanos,
-                     kAutoFlyDurationNanos);
-    ++moved;
+  std::optional<Source> source = nextFoundationAutoSource(state.board);
+  if (!source) {
+    return false;
   }
 
-  if (moved == 0) {
-    if (recordedHistory && !state.history.empty()) {
+  std::vector<Card> moving = cardsFromSource(state.board, *source, 1);
+  if (moving.size() != 1) {
+    return false;
+  }
+  std::optional<int> dest = findFoundationFor(state.board, moving.front());
+  if (!dest) {
+    return false;
+  }
+
+  std::vector<CardPosition> const before = buildCardPositions(state.board, drawCount, geometry);
+  Rect const from = rectForCard(before, moving.front().id)
+                        .value_or(slotRect(source->kind, source->index, geometry));
+  if (recordHistory) {
+    pushHistory(state);
+  }
+  if (!performMove(state, *source, Source{.kind = PileKind::Foundation, .index = *dest}, 1, false)) {
+    if (recordHistory && !state.history.empty()) {
       state.history.pop_back();
     }
     return false;
   }
 
+  std::vector<CardPosition> const after = buildCardPositions(state.board, drawCount, geometry);
+  Rect const to = rectForCard(after, moving.front().id)
+                      .value_or(slotRect(PileKind::Foundation, *dest, geometry));
+  addCardAnimation(state, moving.front(), from, to, startNanos, kAutoFlyDurationNanos);
   state.selection = {};
   state.hint = {};
   state.peek = {};
@@ -948,6 +1590,14 @@ bool autoFinishToFoundations(SolitaireState& state, int drawCount, BoardGeometry
   state.autoFinishing = true;
   state.frameNanos = startNanos;
   return true;
+}
+
+bool autoFinishToFoundations(SolitaireState& state, int drawCount, BoardGeometry const& geometry,
+                             std::int64_t startNanos) {
+  if (playControlsDisabled(state) || !state.animations.empty()) {
+    return false;
+  }
+  return scheduleNextAutoFinishMove(state, drawCount, geometry, startNanos, true);
 }
 
 void autoFinish(Signal<SolitaireState> const& state, Signal<int> const& drawMode) {
@@ -1287,12 +1937,16 @@ void undo(Signal<SolitaireState> const& state) {
   });
 }
 
-void newGame(Signal<SolitaireState> const& state) {
+void newGameWithDrawCount(Signal<SolitaireState> const& state, int drawCount) {
   std::uint32_t nextSeed = randomSeed();
   if (nextSeed == state.peek().seed) {
     ++nextSeed;
   }
-  state = makeState(nextSeed);
+  state = makeState(nextSeed, drawCount);
+}
+
+void newGame(Signal<SolitaireState> const& state, Signal<int> const& drawMode) {
+  newGameWithDrawCount(state, drawMode.peek() == 0 ? 1 : 3);
 }
 
 void drawText(Canvas& canvas, std::string_view text, Font font, Color color, Point origin,
@@ -1541,6 +2195,15 @@ float positiveModulo(float value, float divisor) {
   return result;
 }
 
+float reflectedPosition(float value, float limit) {
+  if (limit <= 0.f) {
+    return 0.f;
+  }
+  float const period = limit * 2.f;
+  float const wrapped = positiveModulo(value, period);
+  return wrapped <= limit ? wrapped : period - wrapped;
+}
+
 float easedProgress(FlyAnimation const& animation, std::int64_t now) {
   double const raw = static_cast<double>(now - animation.startNanos) /
                      static_cast<double>(std::max<std::int64_t>(1, animation.durationNanos));
@@ -1584,34 +2247,47 @@ void drawWinCelebration(Canvas& canvas, SolitaireState const& state, BoardGeomet
 
   float const laneWidth = std::max(kCardW, geometry.layoutWidth - kCardW);
   float const floorY = geometry.layoutHeight - kCardH + 8.f;
-  int index = 0;
+  int foundationStartIndex = 0;
   for (int foundation = 0; foundation < 4; ++foundation) {
     Rect const base = slotRect(PileKind::Foundation, foundation, geometry);
     auto const& pile = state.board.foundations[static_cast<std::size_t>(foundation)];
-    for (Card const& card : pile) {
+
+    for (int cardIndex = 0; cardIndex < static_cast<int>(pile.size()); ++cardIndex) {
+      int const launchIndex = foundationStartIndex + static_cast<int>(pile.size()) - 1 - cardIndex;
       std::int64_t const localNanos = now - state.celebrationStartNanos -
-                                      static_cast<std::int64_t>(index) * kWinCardIntervalNanos;
+                                      static_cast<std::int64_t>(launchIndex) * kWinCardIntervalNanos;
+      if (localNanos <= 0) {
+        drawCard(canvas, pile[static_cast<std::size_t>(cardIndex)], base);
+      }
+    }
+
+    for (int cardIndex = static_cast<int>(pile.size()) - 1; cardIndex >= 0; --cardIndex) {
+      int const launchIndex = foundationStartIndex + static_cast<int>(pile.size()) - 1 - cardIndex;
+      Card const& card = pile[static_cast<std::size_t>(cardIndex)];
+      std::int64_t const localNanos = now - state.celebrationStartNanos -
+                                      static_cast<std::int64_t>(launchIndex) * kWinCardIntervalNanos;
+      if (localNanos <= 0) {
+        continue;
+      }
       Rect rect = base;
       float angle = 0.f;
-      if (localNanos > 0) {
-        float const t = static_cast<float>(localNanos) / 1'000'000'000.f;
-        float const direction = (index % 2 == 0) ? 1.f : -1.f;
-        float const speed = direction * (128.f + static_cast<float>((index * 19) % 96));
-        float const x = positiveModulo(base.x + speed * t + static_cast<float>(index % 5) * 37.f,
-                                       laneWidth);
-        float const jump = std::abs(std::sin(t * (4.1f + static_cast<float>(index % 4) * 0.35f) +
-                                             static_cast<float>(index) * 0.41f));
-        float const y = floorY - jump * (120.f + static_cast<float>(index % 8) * 15.f);
-        float const intro = std::clamp(t / 0.34f, 0.f, 1.f);
-        float const eased = intro * intro * (3.f - 2.f * intro);
-        rect = Rect::sharp(base.x + (x - base.x) * eased,
-                           base.y + (y - base.y) * eased,
-                           kCardW, kCardH);
-        angle = std::sin(t * 4.8f + static_cast<float>(index) * 0.27f) * 0.16f;
-      }
+      float const t = static_cast<float>(localNanos) / 1'000'000'000.f;
+      float const direction = (launchIndex % 2 == 0) ? 1.f : -1.f;
+      float const speed = direction * (128.f + static_cast<float>((launchIndex * 19) % 96));
+      float const x = reflectedPosition(base.x + speed * t + static_cast<float>(launchIndex % 5) * 37.f,
+                                        laneWidth);
+      float const jump = std::abs(std::sin(t * (4.1f + static_cast<float>(launchIndex % 4) * 0.35f) +
+                                           static_cast<float>(launchIndex) * 0.41f));
+      float const y = floorY - jump * (120.f + static_cast<float>(launchIndex % 8) * 15.f);
+      float const intro = std::clamp(t / 0.34f, 0.f, 1.f);
+      float const eased = intro * intro * (3.f - 2.f * intro);
+      rect = Rect::sharp(base.x + (x - base.x) * eased,
+                         base.y + (y - base.y) * eased,
+                         kCardW, kCardH);
+      angle = std::sin(t * 4.8f + static_cast<float>(launchIndex) * 0.27f) * 0.16f;
       drawRotatedCard(canvas, card, rect, angle);
-      ++index;
     }
+    foundationStartIndex += static_cast<int>(pile.size());
   }
 }
 
@@ -1728,7 +2404,8 @@ void drawBoard(Canvas& canvas, Rect frame, SolitaireState const& state, int draw
   }
 
   canvas.restore();
-  if (state.completed && !celebrationActive(state, animationNow)) {
+  if (state.completed && state.animations.empty() && !state.autoFinishing &&
+      state.celebrationStartNanos > 0 && !celebrationActive(state, animationNow)) {
     drawCompletionOverlay(canvas, frame, state);
   }
 }
@@ -1741,7 +2418,7 @@ struct StatView : ViewModifiers<StatView> {
     auto body() const {
         auto theme = useEnvironment<ThemeKey>();
         return HStack {
-            .spacing = 3.f,
+            .spacing = theme().space2,
             .alignment = Alignment::Center,
             .children = children(
                 Icon {.name = icon, .size = 16.f, .weight = 400.f, .color = Color::tertiary()},
@@ -1756,12 +2433,14 @@ struct StatView : ViewModifiers<StatView> {
 };
 
 struct SettingsDialog : ViewModifiers<SettingsDialog> {
+  Signal<SolitaireState> state;
   Signal<int> drawMode;
   Signal<int> feltIndex;
   std::function<void()> onClose;
 
   auto body() const {
     auto theme = useEnvironment<ThemeKey>();
+    auto stateSignal = state;
     auto drawSignal = drawMode;
     auto feltSignal = feltIndex;
     auto closeAction = onClose;
@@ -1811,7 +2490,13 @@ struct SettingsDialog : ViewModifiers<SettingsDialog> {
                                         .selectedIndex = drawSignal,
                                         .options = {SegmentedControlOption{.label = "Draw 1"},
                                                     SegmentedControlOption{.label = "Draw 3"}},
-                                        .onChange = [drawSignal](int index) { drawSignal = index; },
+                                        .onChange = [stateSignal, drawSignal](int index) {
+                                          if (index == drawSignal.peek()) {
+                                            return;
+                                          }
+                                          drawSignal = index;
+                                          newGameWithDrawCount(stateSignal, index == 0 ? 1 : 3);
+                                        },
                                     }.flex(1.f, 1.f)
                                 ),
                             },
@@ -1861,7 +2546,7 @@ struct SettingsDialog : ViewModifiers<SettingsDialog> {
   }
 
   bool operator==(SettingsDialog const& other) const {
-    return drawMode == other.drawMode && feltIndex == other.feltIndex &&
+    return state == other.state && drawMode == other.drawMode && feltIndex == other.feltIndex &&
            static_cast<bool>(onClose) == static_cast<bool>(other.onClose);
   }
 };
@@ -1926,13 +2611,13 @@ struct BoardSurface : ViewModifiers<BoardSurface> {
 
 struct RootView : ViewModifiers<RootView> {
   auto body() const {
-    auto state = useState<SolitaireState>(makeState(randomSeed()));
     auto drawMode = useState<int>(0);
+    auto state = useState<SolitaireState>(makeState(randomSeed(), drawMode.peek() == 0 ? 1 : 3));
     auto feltIndex = useState<int>(0);
     auto [showSettings, hideSettings, settingsPresented] = useOverlay();
     (void)settingsPresented;
 
-    useFrame([state](AnimationTick const& tick) {
+    useFrame([state, drawMode](AnimationTick const& tick) {
       SolitaireState current = state.peek();
       bool changed = false;
       if (!current.completed) {
@@ -1945,19 +2630,28 @@ struct RootView : ViewModifiers<RootView> {
       }
       if (!current.animations.empty()) {
         current.frameNanos = tick.deadlineNanos;
-        auto const oldSize = current.animations.size();
         current.animations.erase(
             std::remove_if(current.animations.begin(), current.animations.end(), [now = tick.deadlineNanos](FlyAnimation const& animation) {
               return !animationActive(animation, now);
             }),
             current.animations.end());
         changed = true;
-        (void)oldSize;
       }
-      if ((current.dealing || current.autoFinishing) && current.animations.empty()) {
+      if (current.autoFinishing && current.animations.empty()) {
+        int const drawCount = drawMode.peek() == 0 ? 1 : 3;
+        if (scheduleNextAutoFinishMove(current, drawCount, BoardGeometry{}, tick.deadlineNanos, false)) {
+          changed = true;
+        } else {
+          current.autoFinishing = false;
+          if (!current.completed) {
+            current.frameNanos = 0;
+          }
+          changed = true;
+        }
+      }
+      if (current.dealing && current.animations.empty()) {
         current.dealing = false;
-        current.autoFinishing = false;
-        if (!current.completed) {
+        if (!current.completed && !current.autoFinishing) {
           current.frameNanos = 0;
         }
         changed = true;
@@ -2001,13 +2695,14 @@ struct RootView : ViewModifiers<RootView> {
         .children = children(
             HStack {
                 .spacing = theme().space3,
-                .alignment = Alignment::Center,
+                .alignment = Alignment::Stretch,
                 .children = children(
                     Button {
                         .label = "New Game",
                         .variant = ButtonVariant::Primary,
-                        .onTap = [state] { newGame(state); },
+                        .onTap = [state, drawMode] { newGame(state, drawMode); },
                     },
+                    Divider {.orientation = Divider::Orientation::Vertical},
                     Spacer {},
                     HStack {
                         .spacing = theme().space4,
@@ -2028,7 +2723,8 @@ struct RootView : ViewModifiers<RootView> {
                             }
                         ),
                     },
-                    Divider {.orientation = Divider::Orientation::Vertical}.height(20.f),
+                    Spacer {},
+                    Divider {.orientation = Divider::Orientation::Vertical},
                     Button {
                         .label = "Undo",
                         .variant = ButtonVariant::Secondary,
@@ -2060,9 +2756,10 @@ struct RootView : ViewModifiers<RootView> {
                             .weight = 450.f,
                             .color = Color::secondary(),
                         },
-                        .onTap = [showSettings, hideSettings, drawMode, feltIndex] {
+                        .onTap = [showSettings, hideSettings, state, drawMode, feltIndex] {
                           showSettings(
                               SettingsDialog{
+                                  .state = state,
                                   .drawMode = drawMode,
                                   .feltIndex = feltIndex,
                                   .onClose = hideSettings,
