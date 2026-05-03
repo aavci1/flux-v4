@@ -34,14 +34,14 @@ struct RuntimeTargetSnapshot {
   Reactive::SmallFn<void()> onPointerExit;
   Reactive::SmallFn<void()> onFocus;
   Reactive::SmallFn<void()> onBlur;
-  Reactive::SmallFn<void(Point)> onPointerDown;
-  Reactive::SmallFn<void(Point)> onPointerUp;
+  Reactive::SmallFn<void(Point, MouseButton)> onPointerDown;
+  Reactive::SmallFn<void(Point, MouseButton)> onPointerUp;
   Reactive::SmallFn<void(Point)> onPointerMove;
   Reactive::SmallFn<void(Vec2)> onScroll;
   Reactive::SmallFn<void(KeyCode, Modifiers)> onKeyDown;
   Reactive::SmallFn<void(KeyCode, Modifiers)> onKeyUp;
   Reactive::SmallFn<void(std::string const&)> onTextInput;
-  Reactive::SmallFn<void()> onTap;
+  Reactive::SmallFn<void(MouseButton)> onTap;
   Reactive::Signal<bool> hoverSignal;
   Reactive::Signal<bool> pressSignal;
   Reactive::Signal<bool> focusSignal;
@@ -587,7 +587,7 @@ void Runtime::handleInput(InputEvent const& event) {
       d->input.pressTarget = target;
       setPressActive(target, true);
       if (target.onPointerDown) {
-        target.onPointerDown(hit->localPoint);
+        target.onPointerDown(hit->localPoint, event.button);
       }
     } else {
       setFocus(d->input, std::nullopt);
@@ -625,17 +625,17 @@ void Runtime::handleInput(InputEvent const& event) {
       setPressActive(released, false);
       if (released.onPointerUp) {
         Point const local = localPointForTarget(released, d->window, point).value_or(point);
-        released.onPointerUp(local);
+        released.onPointerUp(local, event.button);
       }
       if (!cancelled && released.onTap) {
-        released.onTap();
+        released.onTap(event.button);
       }
     } else if (auto hit = hitWindow(d->window, point)) {
       if (hit->interaction && hit->interaction->onPointerUp) {
-        hit->interaction->onPointerUp(hit->localPoint);
+        hit->interaction->onPointerUp(hit->localPoint, event.button);
       }
       if (hit->interaction && hit->interaction->onTap) {
-        hit->interaction->onTap();
+        hit->interaction->onTap(event.button);
       }
     }
     updateHoverForPoint(d->input, d->window, point);

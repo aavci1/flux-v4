@@ -770,7 +770,7 @@ TEST_CASE("MountRoot resize relayouts without remounting root state") {
   root.mount(sceneGraph);
   REQUIRE(sceneGraph.root().interaction() != nullptr);
   REQUIRE(sceneGraph.root().interaction()->onTap);
-  sceneGraph.root().interaction()->onTap();
+  sceneGraph.root().interaction()->onTap(flux::MouseButton::Left);
   CHECK(sceneGraph.root().size() == flux::Size{64.f, 10.f});
 
   root.resize(flux::Size{320.f, 180.f}, sceneGraph);

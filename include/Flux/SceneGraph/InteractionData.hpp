@@ -22,14 +22,14 @@ struct InteractionData {
   Reactive::SmallFn<void()> onPointerExit;
   Reactive::SmallFn<void()> onFocus;
   Reactive::SmallFn<void()> onBlur;
-  Reactive::SmallFn<void(Point)> onPointerDown;
-  Reactive::SmallFn<void(Point)> onPointerUp;
+  Reactive::SmallFn<void(Point, MouseButton)> onPointerDown;
+  Reactive::SmallFn<void(Point, MouseButton)> onPointerUp;
   Reactive::SmallFn<void(Point)> onPointerMove;
   Reactive::SmallFn<void(Vec2)> onScroll;
   Reactive::SmallFn<void(KeyCode, Modifiers)> onKeyDown;
   Reactive::SmallFn<void(KeyCode, Modifiers)> onKeyUp;
   Reactive::SmallFn<void(std::string const&)> onTextInput;
-  Reactive::SmallFn<void()> onTap;
+  Reactive::SmallFn<void(MouseButton)> onTap;
   Reactive::Signal<bool> hoverSignal;
   Reactive::Signal<bool> pressSignal;
   Reactive::Signal<bool> focusSignal;
@@ -37,8 +37,9 @@ struct InteractionData {
 
   [[nodiscard]] bool isEmpty() const noexcept {
     return !onPointerEnter && !onPointerExit && !onFocus && !onBlur && !onPointerDown &&
-           !onPointerUp && !onPointerMove && !onScroll && !onKeyDown && !onKeyUp &&
-           !onTextInput && !onTap && hoverSignal.disposed() && pressSignal.disposed() &&
+           !onPointerUp && !onPointerMove &&
+           !onScroll && !onKeyDown && !onKeyUp && !onTextInput && !onTap &&
+           hoverSignal.disposed() && pressSignal.disposed() &&
            focusSignal.disposed() && keyboardFocusSignal.disposed() && !focusable &&
            cursor == Cursor::Inherit;
   }

@@ -59,13 +59,16 @@ struct ViewModifiers {
   Element overlay(Element over) &&;
   Element key(std::string key) &&;
 
-  Element onTap(std::function<void()> handler) &&;
+  Element onTap(std::function<void()> handler, MouseButton button = MouseButton::Left) &&;
+  Element onTap(std::function<void(MouseButton)> handler) &&;
   Element onPointerEnter(std::function<void()> handler) &&;
   Element onPointerExit(std::function<void()> handler) &&;
   Element onFocus(std::function<void()> handler) &&;
   Element onBlur(std::function<void()> handler) &&;
-  Element onPointerDown(std::function<void(Point)> handler) &&;
-  Element onPointerUp(std::function<void(Point)> handler) &&;
+  Element onPointerDown(std::function<void(Point)> handler, MouseButton button = MouseButton::Left) &&;
+  Element onPointerDown(std::function<void(Point, MouseButton)> handler) &&;
+  Element onPointerUp(std::function<void(Point)> handler, MouseButton button = MouseButton::Left) &&;
+  Element onPointerUp(std::function<void(Point, MouseButton)> handler) &&;
   Element onPointerMove(std::function<void(Point)> handler) &&;
   Element onScroll(std::function<void(Vec2)> handler) &&;
   Element onKeyDown(std::function<void(KeyCode, Modifiers)> handler) &&;

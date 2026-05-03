@@ -61,13 +61,13 @@ struct ElementModifiers {
   std::vector<Reactive::BindingFn> rasterizeInvalidators;
   std::unique_ptr<Element> overlay;
 
-  std::function<void()> onTap;
+  std::function<void(MouseButton)> onTap;
   std::function<void()> onPointerEnter;
   std::function<void()> onPointerExit;
   std::function<void()> onFocus;
   std::function<void()> onBlur;
-  std::function<void(Point)> onPointerDown;
-  std::function<void(Point)> onPointerUp;
+  std::function<void(Point, MouseButton)> onPointerDown;
+  std::function<void(Point, MouseButton)> onPointerUp;
   std::function<void(Point)> onPointerMove;
   std::function<void(Vec2)> onScroll;
   std::function<void(KeyCode, Modifiers)> onKeyDown;

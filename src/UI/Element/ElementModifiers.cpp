@@ -320,7 +320,20 @@ Element Element::overlay(Element over) && {
   return std::move(*this);
 }
 
-Element Element::onTap(std::function<void()> handler) && {
+Element Element::onTap(std::function<void()> handler, MouseButton button) && {
+  if (!handler) {
+    writableModifiers().onTap = {};
+    return std::move(*this);
+  }
+  writableModifiers().onTap = [handler = std::move(handler), button](MouseButton eventButton) {
+    if (eventButton == button) {
+      handler();
+    }
+  };
+  return std::move(*this);
+}
+
+Element Element::onTap(std::function<void(MouseButton)> handler) && {
   writableModifiers().onTap = std::move(handler);
   return std::move(*this);
 }
@@ -345,12 +358,38 @@ Element Element::onBlur(std::function<void()> handler) && {
   return std::move(*this);
 }
 
-Element Element::onPointerDown(std::function<void(Point)> handler) && {
+Element Element::onPointerDown(std::function<void(Point)> handler, MouseButton button) && {
+  if (!handler) {
+    writableModifiers().onPointerDown = {};
+    return std::move(*this);
+  }
+  writableModifiers().onPointerDown = [handler = std::move(handler), button](Point point, MouseButton eventButton) {
+    if (eventButton == button) {
+      handler(point);
+    }
+  };
+  return std::move(*this);
+}
+
+Element Element::onPointerDown(std::function<void(Point, MouseButton)> handler) && {
   writableModifiers().onPointerDown = std::move(handler);
   return std::move(*this);
 }
 
-Element Element::onPointerUp(std::function<void(Point)> handler) && {
+Element Element::onPointerUp(std::function<void(Point)> handler, MouseButton button) && {
+  if (!handler) {
+    writableModifiers().onPointerUp = {};
+    return std::move(*this);
+  }
+  writableModifiers().onPointerUp = [handler = std::move(handler), button](Point point, MouseButton eventButton) {
+    if (eventButton == button) {
+      handler(point);
+    }
+  };
+  return std::move(*this);
+}
+
+Element Element::onPointerUp(std::function<void(Point, MouseButton)> handler) && {
   writableModifiers().onPointerUp = std::move(handler);
   return std::move(*this);
 }

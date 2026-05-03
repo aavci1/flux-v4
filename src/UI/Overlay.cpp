@@ -64,11 +64,13 @@ std::unique_ptr<scenegraph::InteractionData> makeBackdropInteraction(Window& win
   interaction->onScroll = [](Vec2) {};
   if (dismissOnTap) {
     OverlayId const id = entry.id;
-    interaction->onTap = [&window, id] {
-      window.removeOverlay(id);
+    interaction->onTap = [&window, id](MouseButton button) {
+      if (button == MouseButton::Left) {
+        window.removeOverlay(id);
+      }
     };
   } else {
-    interaction->onTap = [] {};
+    interaction->onTap = [](MouseButton) {};
   }
   return interaction;
 }
