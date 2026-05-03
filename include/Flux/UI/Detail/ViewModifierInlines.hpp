@@ -232,8 +232,18 @@ Element ViewModifiers<Derived>::focusable(bool enabled) && {
 }
 
 template<typename Derived>
+Element ViewModifiers<Derived>::focusable(Reactive::Bindable<bool> enabled) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.focusable(std::move(enabled));
+}
+
+template<typename Derived>
 Element ViewModifiers<Derived>::cursor(Cursor c) && {
   return Element{std::move(static_cast<Derived&>(*this))}.cursor(c);
+}
+
+template<typename Derived>
+Element ViewModifiers<Derived>::cursor(Reactive::Bindable<Cursor> c) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.cursor(std::move(c));
 }
 
 template<typename Derived>

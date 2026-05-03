@@ -222,7 +222,7 @@ void appendFocusableTargets(scenegraph::SceneGraph const& graph, OverlayId overl
                             std::vector<HitTarget>& out) {
   for (ComponentKey const& key : scenegraph::collectFocusableKeys(graph)) {
     auto const [node, interaction] = scenegraph::findInteractionByKey(graph, key);
-    if (node && interaction && interaction->focusable) {
+    if (node && interaction && interaction->focusable.evaluate()) {
       out.push_back(HitTarget{
           .node = node,
           .interaction = interaction,
@@ -275,8 +275,8 @@ RuntimeTargetSnapshot snapshot(scenegraph::SceneNode const* node,
   target.inOverlay = overlay.isValid();
   if (interaction) {
     target.stableTargetKey = interaction->stableTargetKey;
-    target.cursor = interaction->cursor;
-    target.focusable = interaction->focusable;
+    target.cursor = interaction->cursor.evaluate();
+    target.focusable = interaction->focusable.evaluate();
     target.onPointerEnter = interaction->onPointerEnter;
     target.onPointerExit = interaction->onPointerExit;
     target.onFocus = interaction->onFocus;
@@ -380,9 +380,9 @@ void updateCursorForPoint(RuntimeInputState& input, Window& window, Point point)
   }
 
   auto hit = hitWindow(window, point, [](scenegraph::InteractionData const& interaction) {
-    return interaction.cursor != Cursor::Inherit;
+    return interaction.cursor.evaluate() != Cursor::Inherit;
   });
-  applyCursor(input, window, hit && hit->interaction ? hit->interaction->cursor : Cursor::Arrow);
+  applyCursor(input, window, hit && hit->interaction ? hit->interaction->cursor.evaluate() : Cursor::Arrow);
 }
 
 void updateHoverForPoint(RuntimeInputState& input, Window& window, Point point) {

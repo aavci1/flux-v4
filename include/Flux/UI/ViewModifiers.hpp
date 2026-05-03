@@ -75,7 +75,9 @@ struct ViewModifiers {
   Element onKeyUp(std::function<void(KeyCode, Modifiers)> handler) &&;
   Element onTextInput(std::function<void(std::string const&)> handler) &&;
   Element focusable(bool enabled) &&;
+  Element focusable(Reactive::Bindable<bool> enabled) &&;
   Element cursor(Cursor c) &&;
+  Element cursor(Reactive::Bindable<Cursor> c) &&;
 
   Element flex(float grow) &&;
   Element flex(float grow, float shrink) &&;

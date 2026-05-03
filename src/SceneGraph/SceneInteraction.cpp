@@ -55,7 +55,7 @@ std::vector<ComponentKey> collectFocusableKeys(SceneGraph const& graph) {
     std::vector<ComponentKey> out{};
     walkSceneGraph(graph.root(), [&](SceneNode const& node) {
         if (InteractionData const* interaction = node.interaction();
-            interaction && interaction->focusable && !interaction->stableTargetKey.empty()) {
+            interaction && interaction->focusable.evaluate() && !interaction->stableTargetKey.empty()) {
             out.push_back(interaction->stableTargetKey);
         }
     });

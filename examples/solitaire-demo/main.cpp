@@ -35,7 +35,19 @@ constexpr float kMinBoardW = kCardW * 7.f + kColGap * 6.f;
 constexpr float kBoardH = 720.f;
 constexpr float kBoardTop = 28.f;
 constexpr float kBoardHorizontalInset = 40.f;
-constexpr std::int64_t kDropFlyDurationNanos = 340'000'000;
+constexpr std::int64_t kDropFlyDurationNanos = 200'000'000;
+constexpr std::int64_t kDealFlyDurationNanos = 120'000'000;
+constexpr std::int64_t kDealFlyIntervalNanos = 120'000'000;
+constexpr std::int64_t kAutoFlyDurationNanos = 170'000'000;
+constexpr std::int64_t kAutoFlyIntervalNanos = 48'000'000;
+constexpr std::int64_t kWinCelebrationDurationNanos = 7'000'000'000;
+constexpr std::int64_t kWinCardIntervalNanos = 32'000'000;
+constexpr std::int64_t kHintBounceCycleNanos = 380'000'000;
+constexpr int kHintBounceCount = 2;
+constexpr std::int64_t kHintAnimationDurationNanos = kHintBounceCycleNanos * kHintBounceCount;
+constexpr float kHintBounceAmplitude = 16.f;
+constexpr float kSelectedCardScale = 1.035f;
+constexpr float kMovingCardScale = 1.07f;
 
 enum class Suit : std::uint8_t { Spades, Hearts, Diamonds, Clubs };
 enum class PileKind : std::uint8_t { None, Stock, Waste, Tableau, Foundation };
@@ -62,6 +74,7 @@ struct HistoryEntry {
   Board board;
   int moves = 0;
   int score = 0;
+  bool completed = false;
 
   bool operator==(HistoryEntry const&) const = default;
 };
@@ -84,8 +97,13 @@ struct Selection {
 
 struct Hint {
   Source source;
+  std::int64_t startedNanos = 0;
 
   bool active() const { return source.kind != PileKind::None; }
+  bool animating(std::int64_t now) const {
+    return active() && startedNanos > 0 &&
+           now < startedNanos + kHintAnimationDurationNanos;
+  }
   bool operator==(Hint const&) const = default;
 };
 
@@ -138,9 +156,21 @@ struct SolitaireState {
   std::uint32_t seed = 1;
   std::int64_t startedNanos = 0;
   std::int64_t frameNanos = 0;
+  bool completed = false;
+  bool dealing = false;
+  bool autoFinishing = false;
+  std::int64_t celebrationStartNanos = 0;
 
   bool operator==(SolitaireState const&) const = default;
 };
+
+bool dealAnimationRunning(SolitaireState const& state) {
+  return state.dealing && !state.animations.empty();
+}
+
+bool playControlsDisabled(SolitaireState const& state) {
+  return state.completed || state.autoFinishing || dealAnimationRunning(state);
+}
 
 struct CardPosition {
   Card card;
@@ -270,26 +300,28 @@ Board dealBoard(std::uint32_t seed) {
   std::shuffle(deck.begin(), deck.end(), rng);
 
   Board board;
-  std::size_t cursor = 0;
-  for (int col = 0; col < 7; ++col) {
-    for (int row = 0; row <= col; ++row) {
-      Card card = deck[cursor++];
+  for (int row = 0; row < 7; ++row) {
+    for (int col = row; col < 7; ++col) {
+      Card card = deck.back();
+      deck.pop_back();
       card.faceUp = row == col;
       board.tableau[static_cast<std::size_t>(col)].push_back(card);
     }
   }
-  for (; cursor < deck.size(); ++cursor) {
-    board.stock.push_back(deck[cursor]);
-  }
+  board.stock = std::move(deck);
   return board;
 }
 
+void startDealAnimation(SolitaireState& state);
+
 SolitaireState makeState(std::uint32_t seed) {
-  return SolitaireState{
+  SolitaireState state{
       .board = dealBoard(seed),
       .seed = seed,
       .startedNanos = nowNanos(),
   };
+  startDealAnimation(state);
+  return state;
 }
 
 std::string formatTime(int seconds) {
@@ -300,6 +332,30 @@ std::string formatTime(int seconds) {
   return buffer;
 }
 
+bool gameComplete(Board const& board) {
+  return std::all_of(board.foundations.begin(), board.foundations.end(), [](std::vector<Card> const& pile) {
+    return pile.size() == 13;
+  });
+}
+
+void refreshCompletion(SolitaireState& state) {
+  bool const complete = gameComplete(state.board);
+  if (complete && !state.completed) {
+    std::int64_t const now = nowNanos();
+    state.elapsedSeconds = static_cast<int>(
+        std::max<std::int64_t>(0, now - state.startedNanos) / 1'000'000'000);
+    state.selection = {};
+    state.hint = {};
+    state.peek = {};
+    state.drag = {};
+    state.celebrationStartNanos = 0;
+  }
+  state.completed = complete;
+  if (!complete) {
+    state.celebrationStartNanos = 0;
+  }
+}
+
 void pushHistory(SolitaireState& state) {
   if (state.history.size() >= 50) {
     state.history.erase(state.history.begin());
@@ -308,6 +364,7 @@ void pushHistory(SolitaireState& state) {
       .board = state.board,
       .moves = state.moves,
       .score = state.score,
+      .completed = state.completed,
   });
 }
 
@@ -404,15 +461,19 @@ bool canMove(Board const& board, Source source, int count, Source dest) {
   return false;
 }
 
-bool performMove(SolitaireState& state, Source source, Source dest, int count) {
+bool performMove(SolitaireState& state, Source source, Source dest, int count, bool recordHistory = true) {
   if (!canMove(state.board, source, count, dest)) {
     return false;
   }
 
-  pushHistory(state);
+  if (recordHistory) {
+    pushHistory(state);
+  }
   std::vector<Card> moving;
   if (!takeCards(state.board, source, count, moving)) {
-    state.history.pop_back();
+    if (recordHistory) {
+      state.history.pop_back();
+    }
     return false;
   }
 
@@ -447,6 +508,7 @@ bool performMove(SolitaireState& state, Source source, Source dest, int count) {
   state.peek = {};
   state.drag = {};
   ++state.moves;
+  refreshCompletion(state);
   return true;
 }
 
@@ -480,6 +542,9 @@ bool autoMove(SolitaireState& state, Source source, int count) {
 }
 
 void drawStock(SolitaireState& state, int drawCount) {
+  if (playControlsDisabled(state)) {
+    return;
+  }
   pushHistory(state);
   if (state.board.stock.empty()) {
     while (!state.board.waste.empty()) {
@@ -649,6 +714,52 @@ Rect slotRect(PileKind kind, int index, BoardGeometry const& geometry) {
   return {};
 }
 
+void addCardAnimation(SolitaireState& state, Card card, Rect from, Rect to,
+                      std::int64_t startNanos, std::int64_t durationNanos) {
+  state.animations.push_back(FlyAnimation{
+      .cards = {card},
+      .fromRects = {from},
+      .toRects = {to},
+      .startNanos = startNanos,
+      .durationNanos = durationNanos,
+  });
+}
+
+void startDealAnimation(SolitaireState& state) {
+  BoardGeometry const geometry{};
+  std::int64_t const now = nowNanos();
+  Rect const stockTop = slotRect(PileKind::Stock, 0, geometry);
+  Rect const from = Rect::sharp(stockTop.x, stockTop.y - 10.f, stockTop.width, stockTop.height);
+  std::int64_t delay = 0;
+
+  state.animations.clear();
+  state.dealing = true;
+  state.autoFinishing = false;
+  state.completed = false;
+  state.celebrationStartNanos = 0;
+  state.frameNanos = now;
+
+  float const tableauTop = kCardH + kTopToTableauGap;
+  for (int row = 0; row < 7; ++row) {
+    for (int col = row; col < 7; ++col) {
+      auto const& column = state.board.tableau[static_cast<std::size_t>(col)];
+      float y = tableauTop;
+      for (int previousRow = 0; previousRow < row; ++previousRow) {
+        Card const& previous = column[static_cast<std::size_t>(previousRow)];
+        y += previous.faceUp ? kFanOpen : kFanClosed;
+      }
+      Card const card = column[static_cast<std::size_t>(row)];
+      Card animatedCard = card;
+      animatedCard.faceUp = false;
+      Rect const to = Rect::sharp(columnX(geometry, col), y, kCardW, kCardH);
+      addCardAnimation(state, animatedCard, from, to, now + delay, kDealFlyDurationNanos);
+      delay += kDealFlyIntervalNanos;
+    }
+  }
+
+  state.startedNanos = now + delay + kDealFlyDurationNanos;
+}
+
 std::optional<CardPosition> hitCard(Board const& board, int drawCount, BoardGeometry const& geometry, Point p) {
   std::vector<CardPosition> positions = buildCardPositions(board, drawCount, geometry);
   for (auto it = positions.rbegin(); it != positions.rend(); ++it) {
@@ -756,6 +867,98 @@ bool autoMoveWithAnimation(SolitaireState& state, Source source, int count, int 
                            1, drawCount, geometry, startNanos);
 }
 
+std::optional<Source> nextFoundationAutoSource(Board const& board) {
+  if (!board.waste.empty() && findFoundationFor(board, board.waste.back())) {
+    return Source{.kind = PileKind::Waste};
+  }
+
+  std::optional<Source> best;
+  int bestRank = 99;
+  for (int col = 0; col < 7; ++col) {
+    auto const& column = board.tableau[static_cast<std::size_t>(col)];
+    if (column.empty()) {
+      continue;
+    }
+    Card const& top = column.back();
+    if (!top.faceUp || !findFoundationFor(board, top)) {
+      continue;
+    }
+    if (top.rank < bestRank) {
+      bestRank = top.rank;
+      best = Source{.kind = PileKind::Tableau, .index = col, .row = static_cast<int>(column.size()) - 1};
+    }
+  }
+  return best;
+}
+
+bool autoFinishToFoundations(SolitaireState& state, int drawCount, BoardGeometry const& geometry,
+                             std::int64_t startNanos) {
+  if (playControlsDisabled(state) || !state.animations.empty()) {
+    return false;
+  }
+
+  bool recordedHistory = false;
+  int moved = 0;
+  for (int guard = 0; guard < 52; ++guard) {
+    std::optional<Source> source = nextFoundationAutoSource(state.board);
+    if (!source) {
+      break;
+    }
+
+    std::vector<Card> moving = cardsFromSource(state.board, *source, 1);
+    if (moving.size() != 1) {
+      break;
+    }
+    std::optional<int> dest = findFoundationFor(state.board, moving.front());
+    if (!dest) {
+      break;
+    }
+
+    std::vector<CardPosition> const before = buildCardPositions(state.board, drawCount, geometry);
+    Rect const from = rectForCard(before, moving.front().id)
+                          .value_or(slotRect(source->kind, source->index, geometry));
+    if (!recordedHistory) {
+      pushHistory(state);
+      recordedHistory = true;
+    }
+    if (!performMove(state, *source, Source{.kind = PileKind::Foundation, .index = *dest}, 1, false)) {
+      break;
+    }
+
+    std::vector<CardPosition> const after = buildCardPositions(state.board, drawCount, geometry);
+    Rect const to = rectForCard(after, moving.front().id)
+                        .value_or(slotRect(PileKind::Foundation, *dest, geometry));
+    addCardAnimation(state, moving.front(), from, to,
+                     startNanos + static_cast<std::int64_t>(moved) * kAutoFlyIntervalNanos,
+                     kAutoFlyDurationNanos);
+    ++moved;
+  }
+
+  if (moved == 0) {
+    if (recordedHistory && !state.history.empty()) {
+      state.history.pop_back();
+    }
+    return false;
+  }
+
+  state.selection = {};
+  state.hint = {};
+  state.peek = {};
+  state.drag = {};
+  state.autoFinishing = true;
+  state.frameNanos = startNanos;
+  return true;
+}
+
+void autoFinish(Signal<SolitaireState> const& state, Signal<int> const& drawMode) {
+  int const drawCount = drawMode.peek() == 0 ? 1 : 3;
+  BoardGeometry const geometry{};
+  std::int64_t const startNanos = nowNanos();
+  mutate(state, [drawCount, geometry, startNanos](SolitaireState& s) {
+    autoFinishToFoundations(s, drawCount, geometry, startNanos);
+  });
+}
+
 bool sourceMatches(Source a, Source b, bool includeStack) {
   if (a.kind != b.kind || a.index != b.index) {
     return false;
@@ -770,6 +973,10 @@ bool cardIsAnimating(SolitaireState const& state, int cardId, std::int64_t now);
 
 void handleBoardClick(Signal<SolitaireState> const& state, Signal<int> const& drawMode,
                       Point localPoint, Size viewport) {
+  SolitaireState const stateSnapshot = state.peek();
+  if (playControlsDisabled(stateSnapshot)) {
+    return;
+  }
   int const drawCount = drawMode.peek() == 0 ? 1 : 3;
   BoardGeometry const geometry = boardGeometry(viewport);
   Point const p = toBoardPoint(localPoint, geometry);
@@ -827,6 +1034,9 @@ void startBoardDrag(Signal<SolitaireState> const& state, Signal<int> const& draw
   BoardGeometry const geometry = boardGeometry(viewport);
   Point const p = toBoardPoint(localPoint, geometry);
   SolitaireState const current = state();
+  if (playControlsDisabled(current)) {
+    return;
+  }
   std::int64_t const animationNow = current.frameNanos > 0 ? current.frameNanos : nowNanos();
 
   std::optional<CardPosition> hit = hitCard(current.board, drawCount, geometry, p);
@@ -954,6 +1164,9 @@ void startBoardPeek(Signal<SolitaireState> const& state, Signal<int> const& draw
   BoardGeometry const geometry = boardGeometry(viewport);
   Point const p = toBoardPoint(localPoint, geometry);
   SolitaireState const current = state();
+  if (playControlsDisabled(current)) {
+    return;
+  }
   std::vector<CardPosition> positions = buildCardPositions(current.board, drawCount, geometry);
 
   for (auto it = positions.rbegin(); it != positions.rend(); ++it) {
@@ -985,20 +1198,29 @@ void stopBoardPeek(Signal<SolitaireState> const& state) {
 }
 
 void showHint(Signal<SolitaireState> const& state) {
-  mutate(state, [](SolitaireState& s) {
+  std::int64_t const hintNanos = nowNanos();
+  mutate(state, [hintNanos](SolitaireState& s) {
+    if (playControlsDisabled(s)) {
+      return;
+    }
+    auto hint = [hintNanos](Source source) {
+      return Hint{.source = source, .startedNanos = hintNanos};
+    };
     Board const& board = s.board;
     if (!board.waste.empty()) {
       Source source{.kind = PileKind::Waste};
       Card const& card = board.waste.back();
       if (findFoundationFor(board, card)) {
-        s.hint = Hint{.source = source};
+        s.hint = hint(source);
+        s.frameNanos = hintNanos;
         return;
       }
       for (int col = 0; col < 7; ++col) {
         auto const& dest = board.tableau[static_cast<std::size_t>(col)];
         Card const* top = dest.empty() ? nullptr : &dest.back();
         if (canPlaceOnTableau(card, top)) {
-          s.hint = Hint{.source = source};
+          s.hint = hint(source);
+          s.frameNanos = hintNanos;
           return;
         }
       }
@@ -1013,7 +1235,8 @@ void showHint(Signal<SolitaireState> const& state) {
       Card const& top = column.back();
       Source topSource{.kind = PileKind::Tableau, .index = col, .row = topRow};
       if (top.faceUp && findFoundationFor(board, top)) {
-        s.hint = Hint{.source = topSource};
+        s.hint = hint(topSource);
+        s.frameNanos = hintNanos;
         return;
       }
       for (int row = 0; row < static_cast<int>(column.size()); ++row) {
@@ -1028,14 +1251,16 @@ void showHint(Signal<SolitaireState> const& state) {
           auto const& dest = board.tableau[static_cast<std::size_t>(destCol)];
           Card const* destTop = dest.empty() ? nullptr : &dest.back();
           if (canPlaceOnTableau(moving, destTop)) {
-            s.hint = Hint{.source = Source{.kind = PileKind::Tableau, .index = col, .row = row}};
+            s.hint = hint(Source{.kind = PileKind::Tableau, .index = col, .row = row});
+            s.frameNanos = hintNanos;
             return;
           }
         }
       }
     }
 
-    s.hint = Hint{.source = Source{.kind = PileKind::Stock}};
+    s.hint = hint(Source{.kind = PileKind::Stock});
+    s.frameNanos = hintNanos;
   });
 }
 
@@ -1049,10 +1274,16 @@ void undo(Signal<SolitaireState> const& state) {
     s.board = std::move(prev.board);
     s.moves = prev.moves;
     s.score = prev.score;
+    s.completed = prev.completed;
     s.selection = {};
     s.hint = {};
     s.peek = {};
     s.drag = {};
+    s.animations.clear();
+    s.frameNanos = 0;
+    s.dealing = false;
+    s.autoFinishing = false;
+    s.celebrationStartNanos = 0;
   });
 }
 
@@ -1088,7 +1319,7 @@ void drawRotatedCenteredText(Canvas& canvas, std::string_view text, Font font, C
 }
 
 void drawSuit(Canvas& canvas, Suit suit, Point center, float size, Color color, float radians = 0.f) {
-  Font const font{.size = size * 1.12f, .weight = 400.f};
+  Font const font{.size = size * 1.44f, .weight = 400.f};
   if (radians != 0.f) {
     drawRotatedCenteredText(canvas, suitGlyph(suit), font, color, center, radians);
   } else {
@@ -1138,23 +1369,23 @@ void drawCardBack(Canvas& canvas, Rect rect) {
 std::vector<Point> pipLayout(int rank) {
   switch (rank) {
   case 2:
-    return {{0.5f, 0.18f}, {0.5f, 0.82f}};
+    return {{0.5f, 0.14f}, {0.5f, 0.86f}};
   case 3:
-    return {{0.5f, 0.18f}, {0.5f, 0.5f}, {0.5f, 0.82f}};
+    return {{0.5f, 0.14f}, {0.5f, 0.5f}, {0.5f, 0.86f}};
   case 4:
-    return {{0.25f, 0.18f}, {0.75f, 0.18f}, {0.25f, 0.82f}, {0.75f, 0.82f}};
+    return {{0.20f, 0.14f}, {0.80f, 0.14f}, {0.20f, 0.86f}, {0.80f, 0.86f}};
   case 5:
-    return {{0.25f, 0.18f}, {0.75f, 0.18f}, {0.5f, 0.5f}, {0.25f, 0.82f}, {0.75f, 0.82f}};
+    return {{0.20f, 0.14f}, {0.80f, 0.14f}, {0.5f, 0.5f}, {0.20f, 0.86f}, {0.80f, 0.86f}};
   case 6:
-    return {{0.25f, 0.18f}, {0.75f, 0.18f}, {0.25f, 0.5f}, {0.75f, 0.5f}, {0.25f, 0.82f}, {0.75f, 0.82f}};
+    return {{0.20f, 0.14f}, {0.80f, 0.14f}, {0.20f, 0.5f}, {0.80f, 0.5f}, {0.20f, 0.86f}, {0.80f, 0.86f}};
   case 7:
-    return {{0.25f, 0.18f}, {0.75f, 0.18f}, {0.5f, 0.32f}, {0.25f, 0.5f}, {0.75f, 0.5f}, {0.25f, 0.82f}, {0.75f, 0.82f}};
+    return {{0.20f, 0.14f}, {0.80f, 0.14f}, {0.5f, 0.32f}, {0.20f, 0.5f}, {0.80f, 0.5f}, {0.20f, 0.86f}, {0.80f, 0.86f}};
   case 8:
-    return {{0.25f, 0.18f}, {0.75f, 0.18f}, {0.5f, 0.32f}, {0.25f, 0.5f}, {0.75f, 0.5f}, {0.5f, 0.68f}, {0.25f, 0.82f}, {0.75f, 0.82f}};
+    return {{0.20f, 0.14f}, {0.80f, 0.14f}, {0.5f, 0.32f}, {0.20f, 0.5f}, {0.80f, 0.5f}, {0.5f, 0.68f}, {0.20f, 0.86f}, {0.80f, 0.86f}};
   case 9:
-    return {{0.25f, 0.18f}, {0.75f, 0.18f}, {0.25f, 0.36f}, {0.75f, 0.36f}, {0.5f, 0.5f}, {0.25f, 0.64f}, {0.75f, 0.64f}, {0.25f, 0.82f}, {0.75f, 0.82f}};
+    return {{0.20f, 0.14f}, {0.80f, 0.14f}, {0.20f, 0.36f}, {0.80f, 0.36f}, {0.5f, 0.5f}, {0.20f, 0.64f}, {0.80f, 0.64f}, {0.20f, 0.86f}, {0.80f, 0.86f}};
   case 10:
-    return {{0.25f, 0.18f}, {0.75f, 0.18f}, {0.5f, 0.28f}, {0.25f, 0.4f}, {0.75f, 0.4f}, {0.25f, 0.6f}, {0.75f, 0.6f}, {0.5f, 0.72f}, {0.25f, 0.82f}, {0.75f, 0.82f}};
+    return {{0.20f, 0.14f}, {0.80f, 0.14f}, {0.5f, 0.28f}, {0.20f, 0.4f}, {0.80f, 0.4f}, {0.20f, 0.6f}, {0.80f, 0.6f}, {0.5f, 0.72f}, {0.20f, 0.86f}, {0.80f, 0.86f}};
   default:
     return {};
   }
@@ -1195,23 +1426,69 @@ void drawCardFace(Canvas& canvas, Card const& card, Rect rect) {
   }
 }
 
-void drawCard(Canvas& canvas, Card const& card, Rect rect, bool selected, bool hinted) {
+void drawCard(Canvas& canvas, Card const& card, Rect rect) {
   if (card.faceUp) {
     drawCardFace(canvas, card, rect);
   } else {
     drawCardBack(canvas, rect);
   }
-  if (selected || hinted) {
-    Color const accent = selected ? colorHex(0x0A84FF, 0.95f) : colorHex(0xFBBF24, 0.95f);
-    canvas.drawRect(Rect::sharp(rect.x - 2.f, rect.y - 2.f, rect.width + 4.f, rect.height + 4.f),
-                    CornerRadius{10.f}, FillStyle::none(), StrokeStyle::solid(accent, 2.5f));
-    canvas.drawRect(Rect::sharp(rect.x - 5.f, rect.y - 5.f, rect.width + 10.f, rect.height + 10.f),
-                    CornerRadius{12.f}, FillStyle::none(), StrokeStyle::solid(withAlpha(accent, 0.35f), 4.f));
+}
+
+Rect scaledRect(Rect rect, float scale) {
+  if (std::abs(scale - 1.f) < 0.001f) {
+    return rect;
   }
+  Point const center = rect.center();
+  float const width = rect.width * scale;
+  float const height = rect.height * scale;
+  return Rect::sharp(center.x - width * 0.5f, center.y - height * 0.5f, width, height);
+}
+
+void drawRotatedCard(Canvas& canvas, Card const& card, Rect rect, float radians) {
+  if (std::abs(radians) < 0.001f) {
+    drawCard(canvas, card, rect);
+    return;
+  }
+  Point const center = rect.center();
+  canvas.save();
+  canvas.translate(center);
+  canvas.rotate(radians);
+  drawCard(canvas, card, Rect::sharp(-rect.width * 0.5f, -rect.height * 0.5f, rect.width, rect.height));
+  canvas.restore();
+}
+
+float hintBounceOffset(Hint const& hint, std::int64_t now) {
+  if (!hint.animating(now)) {
+    return 0.f;
+  }
+  std::int64_t const elapsed = std::max<std::int64_t>(0, now - hint.startedNanos);
+  double const phase = static_cast<double>(elapsed % kHintBounceCycleNanos) /
+                       static_cast<double>(kHintBounceCycleNanos);
+  return -kHintBounceAmplitude * std::sin(static_cast<float>(phase) * kPi);
+}
+
+Rect visualCardRect(CardPosition const& pos, SolitaireState const& state, std::int64_t now) {
+  bool const hinted = state.hint.animating(now) && sourceMatches(pos.source, state.hint.source, true);
+  float const offsetY = hinted ? hintBounceOffset(state.hint, now) : 0.f;
+  return Rect::sharp(pos.rect.x, pos.rect.y + offsetY, pos.rect.width, pos.rect.height);
+}
+
+float visualCardScale(CardPosition const& pos, SolitaireState const& state) {
+  bool const selected = state.selection.active() && sourceMatches(pos.source, state.selection.source, true);
+  return selected ? kSelectedCardScale : 1.f;
+}
+
+bool celebrationActive(SolitaireState const& state, std::int64_t now) {
+  return state.celebrationStartNanos > 0 &&
+         now < state.celebrationStartNanos + kWinCelebrationDurationNanos;
 }
 
 bool animationActive(FlyAnimation const& animation, std::int64_t now) {
   return now < animation.startNanos + animation.durationNanos;
+}
+
+bool animationVisible(FlyAnimation const& animation, std::int64_t now) {
+  return now >= animation.startNanos && animationActive(animation, now);
 }
 
 bool cardIsAnimating(SolitaireState const& state, int cardId, std::int64_t now) {
@@ -1230,6 +1507,13 @@ bool cardIsAnimating(SolitaireState const& state, int cardId, std::int64_t now) 
 
 std::vector<int> hiddenCardIds(SolitaireState const& state, std::int64_t now) {
   std::vector<int> ids;
+  if (celebrationActive(state, now)) {
+    for (auto const& pile : state.board.foundations) {
+      for (Card const& card : pile) {
+        ids.push_back(card.id);
+      }
+    }
+  }
   for (FlyAnimation const& animation : state.animations) {
     if (!animationActive(animation, now)) {
       continue;
@@ -1244,6 +1528,17 @@ std::vector<int> hiddenCardIds(SolitaireState const& state, std::int64_t now) {
     }
   }
   return ids;
+}
+
+float positiveModulo(float value, float divisor) {
+  if (divisor <= 0.f) {
+    return 0.f;
+  }
+  float result = std::fmod(value, divisor);
+  if (result < 0.f) {
+    result += divisor;
+  }
+  return result;
 }
 
 float easedProgress(FlyAnimation const& animation, std::int64_t now) {
@@ -1263,15 +1558,59 @@ Rect lerpRect(Rect from, Rect to, float t) {
 }
 
 void drawFlyAnimations(Canvas& canvas, SolitaireState const& state, std::int64_t now) {
-  for (FlyAnimation const& animation : state.animations) {
-    if (!animationActive(animation, now)) {
-      continue;
+  auto drawAnimation = [&](FlyAnimation const& animation) {
+    if (!animationVisible(animation, now)) {
+      return;
     }
     float const t = easedProgress(animation, now);
     for (std::size_t i = 0; i < animation.cards.size(); ++i) {
       Rect const from = i < animation.fromRects.size() ? animation.fromRects[i] : Rect::sharp(0.f, 0.f, kCardW, kCardH);
       Rect const to = i < animation.toRects.size() ? animation.toRects[i] : from;
-      drawCard(canvas, animation.cards[i], lerpRect(from, to, t), false, false);
+      float const scale = 1.f + (kMovingCardScale - 1.f) * std::sin(t * kPi);
+      drawCard(canvas, animation.cards[i], scaledRect(lerpRect(from, to, t), scale));
+    }
+  };
+
+  for (FlyAnimation const& animation : state.animations) {
+    drawAnimation(animation);
+  }
+}
+
+void drawWinCelebration(Canvas& canvas, SolitaireState const& state, BoardGeometry const& geometry,
+                        std::int64_t now) {
+  if (!celebrationActive(state, now)) {
+    return;
+  }
+
+  float const laneWidth = std::max(kCardW, geometry.layoutWidth - kCardW);
+  float const floorY = geometry.layoutHeight - kCardH + 8.f;
+  int index = 0;
+  for (int foundation = 0; foundation < 4; ++foundation) {
+    Rect const base = slotRect(PileKind::Foundation, foundation, geometry);
+    auto const& pile = state.board.foundations[static_cast<std::size_t>(foundation)];
+    for (Card const& card : pile) {
+      std::int64_t const localNanos = now - state.celebrationStartNanos -
+                                      static_cast<std::int64_t>(index) * kWinCardIntervalNanos;
+      Rect rect = base;
+      float angle = 0.f;
+      if (localNanos > 0) {
+        float const t = static_cast<float>(localNanos) / 1'000'000'000.f;
+        float const direction = (index % 2 == 0) ? 1.f : -1.f;
+        float const speed = direction * (128.f + static_cast<float>((index * 19) % 96));
+        float const x = positiveModulo(base.x + speed * t + static_cast<float>(index % 5) * 37.f,
+                                       laneWidth);
+        float const jump = std::abs(std::sin(t * (4.1f + static_cast<float>(index % 4) * 0.35f) +
+                                             static_cast<float>(index) * 0.41f));
+        float const y = floorY - jump * (120.f + static_cast<float>(index % 8) * 15.f);
+        float const intro = std::clamp(t / 0.34f, 0.f, 1.f);
+        float const eased = intro * intro * (3.f - 2.f * intro);
+        rect = Rect::sharp(base.x + (x - base.x) * eased,
+                           base.y + (y - base.y) * eased,
+                           kCardW, kCardH);
+        angle = std::sin(t * 4.8f + static_cast<float>(index) * 0.27f) * 0.16f;
+      }
+      drawRotatedCard(canvas, card, rect, angle);
+      ++index;
     }
   }
 }
@@ -1281,7 +1620,7 @@ void drawDraggedCards(Canvas& canvas, DragState const& drag) {
     return;
   }
   for (std::size_t i = 0; i < drag.cards.size(); ++i) {
-    drawCard(canvas, drag.cards[i], dragCardRect(drag, i), true, false);
+    drawCard(canvas, drag.cards[i], scaledRect(dragCardRect(drag, i), kMovingCardScale));
   }
 }
 
@@ -1313,6 +1652,35 @@ void drawFelt(Canvas& canvas, Rect frame, int feltIndex) {
   canvas.drawRect(frame, {}, FillStyle::radialGradient(Color{0.f, 0.f, 0.f, 0.f}, Color{0.f, 0.f, 0.f, 0.42f},
                                                        Point{0.5f, 0.46f}, 0.72f),
                   StrokeStyle::none());
+}
+
+void drawCompletionOverlay(Canvas& canvas, Rect frame, SolitaireState const& state) {
+  canvas.drawRect(frame, {}, FillStyle::solid(Color{0.f, 0.f, 0.f, 0.34f}), StrokeStyle::none());
+
+  float const panelW = std::min(420.f, std::max(280.f, frame.width - 48.f));
+  float const panelH = 190.f;
+  Rect const panel = Rect::sharp(frame.x + (frame.width - panelW) * 0.5f,
+                                 frame.y + std::max(24.f, (frame.height - panelH) * 0.5f),
+                                 panelW, panelH);
+
+  canvas.drawRect(panel, CornerRadius{18.f},
+                  FillStyle::linearGradient(Color{1.f, 1.f, 1.f, 0.96f},
+                                            Color{0.94f, 0.96f, 0.98f, 0.96f},
+                                            Point{0.f, 0.f}, Point{0.f, 1.f}),
+                  StrokeStyle::solid(Color{1.f, 1.f, 1.f, 0.72f}, 1.f),
+                  ShadowStyle{.radius = 18.f, .offset = {0.f, 8.f}, .color = Color{0.f, 0.f, 0.f, 0.28f}});
+
+  drawCenteredText(canvas, "Game Complete", Font{.size = 28.f, .weight = 750.f},
+                   Color::hex(0x111827), Point{panel.center().x, panel.y + 48.f});
+  drawCenteredText(canvas, "All foundations are filled.", Font{.size = 14.f, .weight = 500.f},
+                   Color{0.29f, 0.34f, 0.42f, 1.f}, Point{panel.center().x, panel.y + 82.f});
+
+  std::string const stats = "Time " + formatTime(state.elapsedSeconds) + "   Moves " +
+                            std::to_string(state.moves) + "   Score " + std::to_string(state.score);
+  drawCenteredText(canvas, stats, Font{.size = 14.f, .weight = 650.f},
+                   Color::hex(0x0F766E), Point{panel.center().x, panel.y + 121.f});
+  drawCenteredText(canvas, "Use Undo or New Game from the toolbar.", Font{.size = 12.f, .weight = 500.f},
+                   Color{0.42f, 0.46f, 0.52f, 1.f}, Point{panel.center().x, panel.y + 153.f});
 }
 
 void drawBoard(Canvas& canvas, Rect frame, SolitaireState const& state, int drawCount, int feltIndex) {
@@ -1349,73 +1717,152 @@ void drawBoard(Canvas& canvas, Rect frame, SolitaireState const& state, int draw
   }
 
   for (CardPosition const& pos : buildCardPositions(state.board, drawCount, geometry, hiddenIds)) {
-    bool const selected = selection.active() && sourceMatches(pos.source, selection.source, true);
-    bool const hinted = state.hint.active() && sourceMatches(pos.source, state.hint.source, false);
-    drawCard(canvas, pos.card, pos.rect, selected, hinted);
+    drawCard(canvas, pos.card, scaledRect(visualCardRect(pos, state, animationNow), visualCardScale(pos, state)));
   }
 
   drawFlyAnimations(canvas, state, animationNow);
+  drawWinCelebration(canvas, state, geometry, animationNow);
   drawDraggedCards(canvas, state.drag);
   if (state.peek.active(animationNow)) {
-    drawCard(canvas, state.peek.card, state.peek.rect, false, true);
+    drawCard(canvas, state.peek.card, state.peek.rect);
   }
 
   canvas.restore();
+  if (state.completed && !celebrationActive(state, animationNow)) {
+    drawCompletionOverlay(canvas, frame, state);
+  }
 }
 
 struct StatView : ViewModifiers<StatView> {
-  IconName icon{};
-  std::string label;
-  Bindable<std::string> value;
-  bool accent = false;
+    IconName icon {};
+    Bindable<std::string> value;
+    bool accent = false;
+
+    auto body() const {
+        auto theme = useEnvironment<ThemeKey>();
+        return HStack {
+            .spacing = 3.f,
+            .alignment = Alignment::Center,
+            .children = children(
+                Icon {.name = icon, .size = 16.f, .weight = 400.f, .color = Color::tertiary()},
+                Text {
+                    .text = value,
+                    .font = Font {.size = 16.f, .weight = 650.f},
+                    .color = accent ? Color::accent() : Color::primary(),
+                }
+            ),
+        };
+    }
+};
+
+struct SettingsDialog : ViewModifiers<SettingsDialog> {
+  Signal<int> drawMode;
+  Signal<int> feltIndex;
+  std::function<void()> onClose;
 
   auto body() const {
     auto theme = useEnvironment<ThemeKey>();
-    return VStack{
-        .spacing = 1.f,
-        .alignment = Alignment::Start,
-        .children = children(
-            HStack{
-                .spacing = 3.f,
-                .alignment = Alignment::Center,
-                .children = children(
-                    Icon{.name = icon, .size = 12.f, .weight = 400.f, .color = Color::tertiary()},
-                    Text{.text = label, .font = Font{.size = 10.f, .weight = 600.f}, .color = Color::tertiary()}
-                ),
-            },
-            Text{
-                .text = value,
-                .font = Font{.size = 13.f, .weight = 650.f},
-                .color = accent ? Color::accent() : Color::primary(),
-            }
-        ),
-    }.width(68.f);
-  }
-};
+    auto drawSignal = drawMode;
+    auto feltSignal = feltIndex;
+    auto closeAction = onClose;
 
-struct BrandMark : ViewModifiers<BrandMark> {
-  auto body() const {
     return ZStack{
         .horizontalAlignment = Alignment::Center,
         .verticalAlignment = Alignment::Center,
         .children = children(
-            Rectangle{}
-                .size(28.f, 28.f)
-                .fill(FillStyle::linearGradient({{0.f, Color::hex(0x1E3FA8)},
-                                                 {0.5f, Color::hex(0x2563EB)},
-                                                 {1.f, Color::hex(0x0A84FF)}},
-                                                Point{0.f, 0.f}, Point{1.f, 1.f}))
-                .cornerRadius(7.f)
-                .shadow(ShadowStyle{.radius = 3.f, .offset = {0.f, 1.f}, .color = Color{0.f, 0.f, 0.f, 0.2f}}),
-            Text{
-                .text = "λ",
-                .font = Font{.size = 18.f, .weight = 650.f},
-                .color = Colors::white,
-                .horizontalAlignment = HorizontalAlignment::Center,
-                .verticalAlignment = VerticalAlignment::Center,
+            VStack{
+                .spacing = theme().space4,
+                .alignment = Alignment::Stretch,
+                .children = children(
+                    HStack{
+                        .spacing = theme().space2,
+                        .alignment = Alignment::Center,
+                        .children = children(
+                            Text{
+                                .text = "Settings",
+                                .font = Font::title(),
+                                .color = Color::primary(),
+                            }.flex(1.f, 1.f),
+                            IconButton{
+                                .icon = IconName::Close,
+                                .style = IconButton::Style{
+                                    .size = 26.f,
+                                    .weight = 450.f,
+                                    .color = Color::secondary(),
+                                },
+                                .onTap = closeAction,
+                            }
+                        ),
+                    },
+                    VStack{
+                        .spacing = theme().space3,
+                        .alignment = Alignment::Stretch,
+                        .children = children(
+                            HStack{
+                                .spacing = theme().space3,
+                                .alignment = Alignment::Center,
+                                .children = children(
+                                    Text{
+                                        .text = "Draw",
+                                        .font = Font{.size = 13.f, .weight = 650.f},
+                                        .color = Color::secondary(),
+                                    }.width(70.f),
+                                    SegmentedControl{
+                                        .selectedIndex = drawSignal,
+                                        .options = {SegmentedControlOption{.label = "Draw 1"},
+                                                    SegmentedControlOption{.label = "Draw 3"}},
+                                        .onChange = [drawSignal](int index) { drawSignal = index; },
+                                    }.flex(1.f, 1.f)
+                                ),
+                            },
+                            HStack{
+                                .spacing = theme().space3,
+                                .alignment = Alignment::Center,
+                                .children = children(
+                                    Text{
+                                        .text = "Theme",
+                                        .font = Font{.size = 13.f, .weight = 650.f},
+                                        .color = Color::secondary(),
+                                    }.width(70.f),
+                                    SegmentedControl{
+                                        .selectedIndex = feltSignal,
+                                        .options = {SegmentedControlOption{.label = "Emerald"},
+                                                    SegmentedControlOption{.label = "Sapphire"},
+                                                    SegmentedControlOption{.label = "Obsidian"},
+                                                    SegmentedControlOption{.label = "Crimson"}},
+                                        .onChange = [feltSignal](int index) { feltSignal = index; },
+                                    }.flex(1.f, 1.f)
+                                ),
+                            }
+                        ),
+                    },
+                    HStack{
+                        .spacing = theme().space2,
+                        .alignment = Alignment::Center,
+                        .children = children(
+                            Spacer{},
+                            Button{
+                                .label = "Done",
+                                .variant = ButtonVariant::Primary,
+                                .onTap = closeAction,
+                            }.width(96.f)
+                        ),
+                    }
+                ),
             }
+                .width(480.f)
+                .padding(20.f)
+                .fill(Color::elevatedBackground())
+                .stroke(Color::separator(), 1.f)
+                .cornerRadius(CornerRadius{18.f})
+                .shadow(ShadowStyle{.radius = 20.f, .offset = {0.f, 8.f}, .color = Color{0.f, 0.f, 0.f, 0.18f}})
         ),
-    }.size(28.f, 28.f);
+    };
+  }
+
+  bool operator==(SettingsDialog const& other) const {
+    return drawMode == other.drawMode && feltIndex == other.feltIndex &&
+           static_cast<bool>(onClose) == static_cast<bool>(other.onClose);
   }
 };
 
@@ -1482,15 +1929,19 @@ struct RootView : ViewModifiers<RootView> {
     auto state = useState<SolitaireState>(makeState(randomSeed()));
     auto drawMode = useState<int>(0);
     auto feltIndex = useState<int>(0);
+    auto [showSettings, hideSettings, settingsPresented] = useOverlay();
+    (void)settingsPresented;
 
     useFrame([state](AnimationTick const& tick) {
       SolitaireState current = state.peek();
       bool changed = false;
-      int const elapsed = static_cast<int>(std::max<std::int64_t>(0, tick.deadlineNanos - current.startedNanos) /
-                                           1'000'000'000);
-      if (elapsed != current.elapsedSeconds) {
-        current.elapsedSeconds = elapsed;
-        changed = true;
+      if (!current.completed) {
+        int const elapsed = static_cast<int>(std::max<std::int64_t>(0, tick.deadlineNanos - current.startedNanos) /
+                                             1'000'000'000);
+        if (elapsed != current.elapsedSeconds) {
+          current.elapsedSeconds = elapsed;
+          changed = true;
+        }
       }
       if (!current.animations.empty()) {
         current.frameNanos = tick.deadlineNanos;
@@ -1503,6 +1954,36 @@ struct RootView : ViewModifiers<RootView> {
         changed = true;
         (void)oldSize;
       }
+      if ((current.dealing || current.autoFinishing) && current.animations.empty()) {
+        current.dealing = false;
+        current.autoFinishing = false;
+        if (!current.completed) {
+          current.frameNanos = 0;
+        }
+        changed = true;
+      }
+      if (current.completed && current.celebrationStartNanos == 0 && current.animations.empty()) {
+        current.celebrationStartNanos = tick.deadlineNanos;
+        current.frameNanos = tick.deadlineNanos;
+        changed = true;
+      }
+      if (current.hint.animating(tick.deadlineNanos)) {
+        current.frameNanos = tick.deadlineNanos;
+        changed = true;
+      } else if (current.hint.active()) {
+        current.hint = {};
+        if (current.animations.empty() && !celebrationActive(current, tick.deadlineNanos)) {
+          current.frameNanos = 0;
+        }
+        changed = true;
+      }
+      if (celebrationActive(current, tick.deadlineNanos)) {
+        current.frameNanos = tick.deadlineNanos;
+        changed = true;
+      } else if (current.celebrationStartNanos > 0 && current.frameNanos != 0) {
+        current.frameNanos = 0;
+        changed = true;
+      }
       if (current.peek.source.kind != PileKind::None && !current.peek.active(tick.deadlineNanos)) {
         current.peek = {};
         changed = true;
@@ -1514,103 +1995,98 @@ struct RootView : ViewModifiers<RootView> {
 
     auto theme = useEnvironment<ThemeKey>();
 
-    return VStack{
+    return VStack {
         .spacing = 0.f,
         .alignment = Alignment::Stretch,
         .children = children(
-            HStack{
+            HStack {
                 .spacing = theme().space3,
                 .alignment = Alignment::Center,
                 .children = children(
-                    HStack{
-                        .spacing = theme().space2,
-                        .alignment = Alignment::Center,
-                        .children = children(
-                            BrandMark{},
-                            Text{.text = "Lambda Solitaire", .font = Font{.size = 13.f, .weight = 700.f}, .color = Color::primary()},
-                            Divider{.orientation = Divider::Orientation::Vertical}.height(20.f),
-                            HStack{
-                                .spacing = 4.f,
-                                .alignment = Alignment::Center,
-                                .children = children(
-                                    Icon{.name = IconName::Casino, .size = 14.f, .weight = 400.f, .color = Color::tertiary()},
-                                    Text{
-                                        .text = [drawMode] {
-                                          return drawMode.evaluate() == 0 ? std::string{"Klondike - Draw 1"}
-                                                                         : std::string{"Klondike - Draw 3"};
-                                        },
-                                        .font = Font{.size = 11.f, .weight = 500.f},
-                                        .color = Color::tertiary(),
-                                    }
-                                ),
-                            }
-                        ),
+                    Button {
+                        .label = "New Game",
+                        .variant = ButtonVariant::Primary,
+                        .onTap = [state] { newGame(state); },
                     },
-                    Spacer{},
-                    HStack{
+                    Spacer {},
+                    HStack {
                         .spacing = theme().space4,
                         .alignment = Alignment::Center,
                         .children = children(
-                            StatView{
+                            StatView {
                                 .icon = IconName::Schedule,
-                                .label = "TIME",
                                 .value = [state] { return formatTime(state.evaluate().elapsedSeconds); },
                             },
-                            StatView{
+                            StatView {
                                 .icon = IconName::SwapVert,
-                                .label = "MOVES",
                                 .value = [state] { return std::to_string(state.evaluate().moves); },
                             },
-                            StatView{
+                            StatView {
                                 .icon = IconName::Trophy,
-                                .label = "SCORE",
                                 .value = [state] { return std::to_string(state.evaluate().score); },
                                 .accent = true,
                             }
                         ),
                     },
-                    Divider{.orientation = Divider::Orientation::Vertical}.height(20.f),
-                    Button{
+                    Divider {.orientation = Divider::Orientation::Vertical}.height(20.f),
+                    Button {
                         .label = "Undo",
                         .variant = ButtonVariant::Secondary,
                         .disabled = [state] { return state.evaluate().history.empty(); },
                         .onTap = [state] { undo(state); },
                     },
-                    Button{
+                    Button {
                         .label = "Hint",
                         .variant = ButtonVariant::Secondary,
+                        .disabled = [state] {
+                          SolitaireState const s = state.evaluate();
+                          return playControlsDisabled(s);
+                        },
                         .onTap = [state] { showHint(state); },
                     },
-                    Button{
-                        .label = "New Game",
-                        .variant = ButtonVariant::Primary,
-                        .onTap = [state] { newGame(state); },
+                    Button {
+                        .label = "Auto",
+                        .variant = ButtonVariant::Secondary,
+                        .disabled = [state] {
+                          SolitaireState const s = state.evaluate();
+                          return playControlsDisabled(s) || !s.animations.empty();
+                        },
+                        .onTap = [state, drawMode] { autoFinish(state, drawMode); },
                     },
-                    SegmentedControl{
-                        .selectedIndex = drawMode,
-                        .options = {SegmentedControlOption{.label = "Draw 1"},
-                                    SegmentedControlOption{.label = "Draw 3"}},
-                        .onChange = [drawMode](int index) { drawMode = index; },
-                    }.width(158.f),
-                    Select{
-                        .selectedIndex = feltIndex,
-                        .options = {SelectOption{.label = "Emerald"},
-                                    SelectOption{.label = "Sapphire"},
-                                    SelectOption{.label = "Obsidian"},
-                                    SelectOption{.label = "Crimson"}},
-                        .placeholder = "Felt",
-                        .showDetailInTrigger = false,
-                        .onChange = [feltIndex](int index) { feltIndex = index; },
-                    }.width(132.f)
+                    IconButton {
+                        .icon = IconName::Settings,
+                        .style = IconButton::Style {
+                            .size = 30.f,
+                            .weight = 450.f,
+                            .color = Color::secondary(),
+                        },
+                        .onTap = [showSettings, hideSettings, drawMode, feltIndex] {
+                          showSettings(
+                              SettingsDialog{
+                                  .drawMode = drawMode,
+                                  .feltIndex = feltIndex,
+                                  .onClose = hideSettings,
+                              },
+                              OverlayConfig{
+                                  .modal = true,
+                                  .backdropColor = Color{0.f, 0.f, 0.f, 0.35f},
+                                  .dismissOnOutsideTap = true,
+                                  .dismissOnEscape = true,
+                                  .onDismiss = hideSettings,
+                                  .debugName = "solitaire-settings",
+                              });
+                        },
+                    }
                 ),
             }
                 .padding(12.f, 20.f, 12.f, 20.f)
                 .fill(Color::elevatedBackground())
                 .stroke(Color::separator(), 1.f)
                 .flex(0.f, 0.f),
-            BoardSurface{.state = state, .drawMode = drawMode, .feltIndex = feltIndex}.flex(1.f, 1.f)
+            BoardSurface {.state = state, .drawMode = drawMode, .feltIndex = feltIndex}.flex(1.f, 1.f)
         ),
-    }.fill(Color::windowBackground());
+    }
+        .fill(Color::windowBackground());
   }
 };
 
@@ -1621,7 +2097,7 @@ int main(int argc, char* argv[]) {
 
   auto& window = app.createWindow<Window>({
       .size = {1200, 820},
-      .title = "Lambda Solitaire",
+      .title = "Solitaire",
       .resizable = true,
   });
   window.setTheme(Theme::light());

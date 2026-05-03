@@ -7,6 +7,7 @@
 #include <Flux/Core/ComponentKey.hpp>
 #include <Flux/Core/Cursor.hpp>
 #include <Flux/Core/Types.hpp>
+#include <Flux/Reactive/Bindable.hpp>
 #include <Flux/Reactive/SmallFn.hpp>
 #include <Flux/Reactive/Signal.hpp>
 
@@ -16,8 +17,8 @@ namespace flux::scenegraph {
 
 struct InteractionData {
   ComponentKey stableTargetKey{};
-  Cursor cursor = Cursor::Inherit;
-  bool focusable = false;
+  Reactive::Bindable<Cursor> cursor{Cursor::Inherit};
+  Reactive::Bindable<bool> focusable{false};
   Reactive::SmallFn<void()> onPointerEnter;
   Reactive::SmallFn<void()> onPointerExit;
   Reactive::SmallFn<void()> onFocus;
@@ -40,8 +41,9 @@ struct InteractionData {
            !onPointerUp && !onPointerMove &&
            !onScroll && !onKeyDown && !onKeyUp && !onTextInput && !onTap &&
            hoverSignal.disposed() && pressSignal.disposed() &&
-           focusSignal.disposed() && keyboardFocusSignal.disposed() && !focusable &&
-           cursor == Cursor::Inherit;
+           focusSignal.disposed() && keyboardFocusSignal.disposed() &&
+           !focusable.isReactive() && !focusable.evaluate() &&
+           !cursor.isReactive() && cursor.evaluate() == Cursor::Inherit;
   }
 };
 

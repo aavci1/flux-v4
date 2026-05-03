@@ -116,7 +116,6 @@ ButtonColors deriveColors(ButtonVariant variant, Color accent, Color destructive
 Element Button::body() const {
     auto theme = useEnvironment<ThemeKey>();
     auto [fontResolved, paddingH, paddingV, radiusResolved, accent, destructive] = resolveStyle(style, theme());
-    bool const isDisabled = disabled.evaluate();
     Reactive::Bindable<bool> disabledBinding = disabled;
     ButtonColors const colors = deriveColors(variant, accent, destructive, theme().accentForegroundColor, theme().dangerForegroundColor, theme());
     Reactive::Signal<bool> hovered = useHover();
@@ -195,17 +194,20 @@ Element Button::body() const {
                      .cornerRadius(cr)
                      .shadow(shadow)
                      .padding(paddingV, paddingH, paddingV, paddingH)
-                     .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
-                     .focusable(!isDisabled)
-                     .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})
-        .onTap(isDisabled ? std::function<void()> {} : std::function<void()> {handleTap})
+                     .cursor([disabledBinding] {
+                         return disabledBinding.evaluate() ? Cursor::Inherit : Cursor::Hand;
+                     })
+                     .focusable([disabledBinding] {
+                         return !disabledBinding.evaluate();
+                     })
+                     .onKeyDown(std::function<void(KeyCode, Modifiers)> {handleKey})
+                     .onTap(std::function<void()> {handleTap})
     };
 }
 
 Element LinkButton::body() const {
     auto theme = useEnvironment<ThemeKey>();
     auto [fontResolved, accentResolved] = resolveStyle(style, theme());
-    bool const isDisabled = disabled.evaluate();
     Reactive::Bindable<bool> disabledBinding = disabled;
     Reactive::Signal<bool> hovered = useHover();
     Reactive::Signal<bool> pressed = usePress();
@@ -256,16 +258,19 @@ Element LinkButton::body() const {
         .stroke(focusStroke)
         .cornerRadius(CornerRadius {theme().radiusXSmall})
         .padding(0.f, 3.f, 0.f, 3.f)
-        .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
-        .focusable(!isDisabled)
-        .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})
-        .onTap(isDisabled ? std::function<void()> {} : std::function<void()> {handleTap});
+        .cursor([disabledBinding] {
+            return disabledBinding.evaluate() ? Cursor::Inherit : Cursor::Hand;
+        })
+        .focusable([disabledBinding] {
+            return !disabledBinding.evaluate();
+        })
+        .onKeyDown(std::function<void(KeyCode, Modifiers)> {handleKey})
+        .onTap(std::function<void()> {handleTap});
 }
 
 Element IconButton::body() const {
     auto theme = useEnvironment<ThemeKey>();
     auto [sizeResolved, weightResolved, accentResolved] = resolveStyle(style, theme());
-    bool const isDisabled = disabled.evaluate();
     Reactive::Bindable<bool> disabledBinding = disabled;
     Reactive::Signal<bool> hovered = useHover();
     Reactive::Signal<bool> pressed = usePress();
@@ -314,10 +319,14 @@ Element IconButton::body() const {
         .fill(FillStyle::none())
         .stroke(focusStroke)
         .cornerRadius(CornerRadius {theme().radiusXSmall})
-        .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
-        .focusable(!isDisabled)
-        .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})
-        .onTap(isDisabled ? std::function<void()> {} : std::function<void()> {handleTap});
+        .cursor([disabledBinding] {
+            return disabledBinding.evaluate() ? Cursor::Inherit : Cursor::Hand;
+        })
+        .focusable([disabledBinding] {
+            return !disabledBinding.evaluate();
+        })
+        .onKeyDown(std::function<void(KeyCode, Modifiers)> {handleKey})
+        .onTap(std::function<void()> {handleTap});
 }
 
 } // namespace flux

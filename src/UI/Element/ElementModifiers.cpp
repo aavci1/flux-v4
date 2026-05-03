@@ -424,8 +424,18 @@ Element Element::focusable(bool enabled) && {
   return std::move(*this);
 }
 
+Element Element::focusable(Reactive::Bindable<bool> enabled) && {
+  writableModifiers().focusable = std::move(enabled);
+  return std::move(*this);
+}
+
 Element Element::cursor(Cursor c) && {
   writableModifiers().cursor = c;
+  return std::move(*this);
+}
+
+Element Element::cursor(Reactive::Bindable<Cursor> c) && {
+  writableModifiers().cursor = std::move(c);
   return std::move(*this);
 }
 

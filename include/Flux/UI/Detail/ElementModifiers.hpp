@@ -73,8 +73,8 @@ struct ElementModifiers {
   std::function<void(KeyCode, Modifiers)> onKeyDown;
   std::function<void(KeyCode, Modifiers)> onKeyUp;
   std::function<void(std::string const&)> onTextInput;
-  bool focusable = false;
-  Cursor cursor = Cursor::Inherit;
+  Reactive::Bindable<bool> focusable{false};
+  Reactive::Bindable<Cursor> cursor{Cursor::Inherit};
 
   bool hasInteraction() const noexcept {
     return static_cast<bool>(onTap) || static_cast<bool>(onPointerEnter) ||
@@ -83,7 +83,8 @@ struct ElementModifiers {
            static_cast<bool>(onPointerUp) || static_cast<bool>(onPointerMove) ||
            static_cast<bool>(onScroll) || static_cast<bool>(onKeyDown) ||
            static_cast<bool>(onKeyUp) || static_cast<bool>(onTextInput) ||
-           focusable || cursor != Cursor::Inherit;
+           focusable.isReactive() || focusable.evaluate() ||
+           cursor.isReactive() || cursor.evaluate() != Cursor::Inherit;
   }
 
   bool needsModifierPass() const {
