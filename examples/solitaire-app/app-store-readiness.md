@@ -64,9 +64,8 @@ That's it. No file access, no network, no camera. Pure sandbox.
 
 **12. Check for the Apple-tracked things.**
 - The app uses `std::random_device` + `nowNanos()` for seeding — fine, no crypto requirement.
-- `getenv("SOLITAIRE_SEED")` for testing — sandbox blocks env-var reads of arbitrary names, but this is reading a process env, not a system one — sandbox-safe. Just remove it for the shipped build to avoid reviewer questions. Or `#ifndef NDEBUG` it.
 
-**13. Performance.** I don't have numbers for solitaire-demo specifically, but given the framework's text/cache layers and the game's relatively small scene (52 cards + HUD), CPU should be near-zero idle and well under 1ms/frame active. Battery impact: low. App Store has a "Battery Performance" line item — should be fine.
+**13. Performance.** I don't have numbers for the Solitaire app specifically, but given the framework's text/cache layers and the game's relatively small scene (52 cards + HUD), CPU should be near-zero idle and well under 1ms/frame active. Battery impact: low. App Store has a "Battery Performance" line item — should be fine.
 
 ### What's notable in the code
 
@@ -85,7 +84,7 @@ A few things worth flagging that aren't blockers but you should know about:
 This is the path. Each step independent.
 
 **Phase 1: Make it bundle-ready** (week 1)
-1. New CMake target `solitaire-app` (separate from `solitaire-demo`) that builds an `.app` bundle. Set `MACOSX_BUNDLE`, `MACOSX_BUNDLE_INFO_PLIST` (custom plist file). Copy fonts/ to `Contents/Resources/fonts/`. Optionally copy a stub icon.
+1. CMake target `solitaire-app` builds an `.app` bundle. Set `MACOSX_BUNDLE`, `MACOSX_BUNDLE_INFO_PLIST` (custom plist file). Copy fonts/ to `Contents/Resources/fonts/`. Optionally copy a stub icon.
 2. Write `Info.plist`: `CFBundleIdentifier` (e.g. `com.aavci1.solitaire`), `CFBundleName`, `CFBundleVersion`, `LSMinimumSystemVersion`, `LSApplicationCategoryType = public.app-category.card-games`, `NSHumanReadableCopyright`.
 3. Add minimal `NSMenu` setup in `main.cpp` (App menu with Quit/About/Hide; File menu with New Game; Edit with Undo; Window with Minimize/Zoom; Help). ~80 lines Obj-C++.
 4. Set `[window setContentMinSize:{800, 600}]` after window creation.
@@ -96,8 +95,7 @@ This is the path. Each step independent.
 7. Persistence: serialize `SolitaireState` to JSON (or sqlite) on every `mutate`, deserialize on launch. Store in `NSApplicationSupportDirectory`.
 8. Window-state save: serialize window frame, restore on launch.
 9. Keyboard shortcuts: Cmd+N (new game), Cmd+Z (undo), Cmd+H (hint), Cmd+, (settings), Esc (close dialog).
-10. Remove `SOLITAIRE_SEED` env var or gate behind `#ifndef NDEBUG`.
-11. About dialog with version, copyright, "Made with Flux" credit.
+10. About dialog with version, copyright, "Made with Flux" credit.
 
 **Phase 3: Submission** (week 3)
 12. Apple Developer account ($99/year if not already).

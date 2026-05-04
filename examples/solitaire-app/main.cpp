@@ -13,13 +13,9 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
-#ifdef FLUX_SOLITAIRE_APP
 #include <filesystem>
 #include <fstream>
 #include <sstream>
-#else
-#include <cstdlib>
-#endif
 #include <memory>
 #include <optional>
 #include <random>
@@ -252,17 +248,6 @@ std::int64_t nowNanos() {
 }
 
 std::uint32_t randomSeed() {
-#ifndef FLUX_SOLITAIRE_APP
-  if (char const* seedText = std::getenv("SOLITAIRE_SEED")) {
-    char* end = nullptr;
-    unsigned long const parsed = std::strtoul(seedText, &end, 10);
-    if (end != seedText && parsed <= 0xffff'fffful) {
-      std::uint32_t const seed = static_cast<std::uint32_t>(parsed);
-      return seed == 0 ? 1u : seed;
-    }
-  }
-#endif
-
   static std::random_device randomDevice;
   std::uint64_t const nanos = static_cast<std::uint64_t>(nowNanos());
   std::uint32_t seed = randomDevice();
@@ -271,7 +256,6 @@ std::uint32_t randomSeed() {
   return seed == 0 ? 1u : seed;
 }
 
-#ifdef FLUX_SOLITAIRE_APP
 struct SavedGame {
   SolitaireState state;
   int drawMode = 0;
@@ -466,7 +450,6 @@ std::optional<SavedGame> loadGame() {
       static_cast<std::int64_t>(std::max(0, saved.state.elapsedSeconds)) * 1'000'000'000;
   return saved;
 }
-#endif
 
 template<typename Fn>
 void mutate(Signal<SolitaireState> const& state, Fn&& fn) {
@@ -3237,25 +3220,18 @@ struct BoardSurface : ViewModifiers<BoardSurface> {
 
 struct RootView : ViewModifiers<RootView> {
   auto body() const {
-#ifdef FLUX_SOLITAIRE_APP
     auto savedGame = loadGame();
     int const initialDrawMode = savedGame ? savedGame->drawMode : 0;
     auto drawMode = useState<int>(initialDrawMode);
     auto state = useState<SolitaireState>(
         savedGame ? savedGame->state : makeState(randomSeed(), initialDrawMode == 0 ? 1 : 3));
-#else
-    auto drawMode = useState<int>(0);
-    auto state = useState<SolitaireState>(makeState(randomSeed(), drawMode.peek() == 0 ? 1 : 3));
-#endif
     auto feltIndex = useState<int>(0);
     auto [showSettings, hideSettings, settingsPresented] = useOverlay();
     (void)settingsPresented;
 
-#ifdef FLUX_SOLITAIRE_APP
     useEffect([state, drawMode] {
       saveGame(state.evaluate(), drawMode.evaluate());
     });
-#endif
 
     useFrame([state, drawMode](AnimationTick const& tick) {
       SolitaireState current = state.peek();
@@ -3345,7 +3321,6 @@ struct RootView : ViewModifiers<RootView> {
           });
     };
 
-#ifdef FLUX_SOLITAIRE_APP
     useWindowAction(
         "new-game",
         [state = state, drawMode = drawMode] { newGame(state, drawMode); },
@@ -3394,7 +3369,6 @@ struct RootView : ViewModifiers<RootView> {
             .label = "Settings",
             .shortcut = Shortcut{keys::Comma, Modifiers::Meta},
         });
-#endif
 
     return ZStack{
         .horizontalAlignment = Alignment::Stretch,
@@ -3417,7 +3391,6 @@ struct RootView : ViewModifiers<RootView> {
 int main(int argc, char* argv[]) {
   Application app(argc, argv);
 
-#ifdef FLUX_SOLITAIRE_APP
   app.setMenuBar(MenuBar{
       .menus = {
           MenuItem::submenu("Solitaire", {
@@ -3455,16 +3428,13 @@ int main(int argc, char* argv[]) {
       },
       .appName = "Solitaire",
   });
-#endif
 
   auto& window = app.createWindow<Window>({
       .size = {1200, 960},
       .title = "Solitaire",
       .resizable = true,
-#ifdef FLUX_SOLITAIRE_APP
       .minSize = {800, 600},
       .restoreId = "main",
-#endif
   });
   window.setTheme(Theme::light());
   window.setView<RootView>();
