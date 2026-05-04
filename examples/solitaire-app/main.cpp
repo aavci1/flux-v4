@@ -48,6 +48,7 @@ constexpr std::int64_t kWinCardIntervalNanos = 160'000'000;
 constexpr std::int64_t kHintBounceCycleNanos = 380'000'000;
 constexpr int kHintBounceCount = 2;
 constexpr std::int64_t kHintAnimationDurationNanos = kHintBounceCycleNanos * kHintBounceCount;
+constexpr int kElapsedSaveIntervalSeconds = 15;
 constexpr float kHintBounceAmplitude = 16.f;
 constexpr float kSelectedCardScale = 1.035f;
 constexpr float kMovingCardScale = 1.07f;
@@ -157,6 +158,7 @@ struct SolitaireState {
   int score = 0;
   int elapsedSeconds = 0;
   std::uint32_t seed = 1;
+  std::uint64_t saveRevision = 1;
   std::int64_t startedNanos = 0;
   std::int64_t frameNanos = 0;
   bool completed = false;
@@ -261,6 +263,16 @@ struct SavedGame {
   int drawMode = 0;
 };
 
+struct SaveMarker {
+  std::uint64_t revision = 0;
+  std::uint32_t seed = 0;
+  int drawMode = 0;
+  int elapsedBucket = 0;
+  bool completed = false;
+
+  bool operator==(SaveMarker const&) const = default;
+};
+
 std::filesystem::path saveFilePath() {
   std::string const dir = Application::instance().userDataDir();
   if (dir.empty()) {
@@ -361,22 +373,22 @@ SolitaireState stableForSave(SolitaireState state) {
   return state;
 }
 
-void saveGame(SolitaireState const& state, int drawMode) {
+bool saveGame(SolitaireState const& state, int drawMode) {
   std::filesystem::path const path = saveFilePath();
   if (path.empty()) {
-    return;
+    return false;
   }
   SolitaireState stable = stableForSave(state);
   std::error_code ec;
   std::filesystem::create_directories(path.parent_path(), ec);
   if (ec) {
-    return;
+    return false;
   }
   std::filesystem::path const tmp = path.string() + ".tmp";
   {
     std::ofstream out(tmp, std::ios::trunc);
     if (!out) {
-      return;
+      return false;
     }
     out << "FLUX_SOLITAIRE_SAVE_V1\n";
     out << "DRAW " << drawMode << '\n';
@@ -389,6 +401,10 @@ void saveGame(SolitaireState const& state, int drawMode) {
           << (entry.completed ? 1 : 0) << '\n';
       writeBoard(out, entry.board);
     }
+    if (!out) {
+      std::filesystem::remove(tmp, ec);
+      return false;
+    }
   }
   std::filesystem::rename(tmp, path, ec);
   if (ec) {
@@ -396,6 +412,7 @@ void saveGame(SolitaireState const& state, int drawMode) {
     ec.clear();
     std::filesystem::rename(tmp, path, ec);
   }
+  return !ec;
 }
 
 std::optional<SavedGame> loadGame() {
@@ -449,6 +466,49 @@ std::optional<SavedGame> loadGame() {
       nowNanos() -
       static_cast<std::int64_t>(std::max(0, saved.state.elapsedSeconds)) * 1'000'000'000;
   return saved;
+}
+
+void markSaveDirty(SolitaireState& state) {
+  ++state.saveRevision;
+  if (state.saveRevision == 0) {
+    state.saveRevision = 1;
+  }
+}
+
+bool saveBlockedByTransientState(SolitaireState const& state) {
+  return state.dealing || state.autoFinishing || !state.animations.empty() ||
+         (state.drag.active() && state.drag.moved);
+}
+
+int elapsedSaveBucket(SolitaireState const& state) {
+  if (state.completed) {
+    return std::max(0, state.elapsedSeconds);
+  }
+  return std::max(0, state.elapsedSeconds) / kElapsedSaveIntervalSeconds;
+}
+
+SaveMarker saveMarker(SolitaireState const& state, int drawMode) {
+  return SaveMarker{
+      .revision = state.saveRevision,
+      .seed = state.seed,
+      .drawMode = drawMode,
+      .elapsedBucket = elapsedSaveBucket(state),
+      .completed = state.completed,
+  };
+}
+
+void saveGameIfNeeded(SolitaireState const& state, int drawMode) {
+  static std::optional<SaveMarker> lastSaved;
+  if (saveBlockedByTransientState(state)) {
+    return;
+  }
+  SaveMarker const marker = saveMarker(state, drawMode);
+  if (lastSaved && *lastSaved == marker) {
+    return;
+  }
+  if (saveGame(state, drawMode)) {
+    lastSaved = marker;
+  }
 }
 
 template<typename Fn>
@@ -719,6 +779,7 @@ bool performMove(SolitaireState& state, Source source, Source dest, int count, b
   state.drag = {};
   ++state.moves;
   refreshCompletion(state);
+  markSaveDirty(state);
   return true;
 }
 
@@ -780,6 +841,7 @@ void drawStock(SolitaireState& state, int drawCount) {
   state.peek = {};
   state.drag = {};
   ++state.moves;
+  markSaveDirty(state);
 }
 
 Card cardFor(Suit suit, int rank, bool faceUp = false) {
@@ -2159,6 +2221,7 @@ void undo(Signal<SolitaireState> const& state) {
     s.dealing = false;
     s.autoFinishing = false;
     s.celebrationStartNanos = 0;
+    markSaveDirty(s);
   });
 }
 
@@ -2434,6 +2497,10 @@ float reflectedPosition(float value, float limit) {
   return wrapped <= limit ? wrapped : period - wrapped;
 }
 
+int winCelebrationLaunchIndex(Card const& card) {
+  return std::clamp(13 - card.rank, 0, 12);
+}
+
 float easedProgress(FlyAnimation const& animation, std::int64_t now) {
   double const raw = static_cast<double>(now - animation.startNanos) /
                      static_cast<double>(std::max<std::int64_t>(1, animation.durationNanos));
@@ -2479,23 +2546,23 @@ void drawWinCelebration(Canvas& canvas, SolitaireState const& state, BoardGeomet
   float const windowRight = (geometry.viewport.width - geometry.origin.x) / geometry.scale;
   float const laneWidth = std::max(0.f, windowRight - windowLeft - kCardW);
   float const floorY = (geometry.viewport.height - geometry.origin.y) / geometry.scale - kCardH + 8.f;
-  int foundationStartIndex = 0;
   for (int foundation = 0; foundation < 4; ++foundation) {
     Rect const base = slotRect(PileKind::Foundation, foundation, geometry);
     auto const& pile = state.board.foundations[static_cast<std::size_t>(foundation)];
 
     for (int cardIndex = 0; cardIndex < static_cast<int>(pile.size()); ++cardIndex) {
-      int const launchIndex = foundationStartIndex + static_cast<int>(pile.size()) - 1 - cardIndex;
+      Card const& card = pile[static_cast<std::size_t>(cardIndex)];
+      int const launchIndex = winCelebrationLaunchIndex(card);
       std::int64_t const localNanos = now - state.celebrationStartNanos -
                                       static_cast<std::int64_t>(launchIndex) * kWinCardIntervalNanos;
       if (localNanos <= 0) {
-        drawCard(canvas, pile[static_cast<std::size_t>(cardIndex)], base);
+        drawCard(canvas, card, base);
       }
     }
 
     for (int cardIndex = static_cast<int>(pile.size()) - 1; cardIndex >= 0; --cardIndex) {
-      int const launchIndex = foundationStartIndex + static_cast<int>(pile.size()) - 1 - cardIndex;
       Card const& card = pile[static_cast<std::size_t>(cardIndex)];
+      int const launchIndex = winCelebrationLaunchIndex(card);
       std::int64_t const localNanos = now - state.celebrationStartNanos -
                                       static_cast<std::int64_t>(launchIndex) * kWinCardIntervalNanos;
       if (localNanos <= 0) {
@@ -2504,23 +2571,23 @@ void drawWinCelebration(Canvas& canvas, SolitaireState const& state, BoardGeomet
       Rect rect = base;
       float angle = 0.f;
       float const t = static_cast<float>(localNanos) / 1'000'000'000.f;
-      float const direction = (launchIndex % 2 == 0) ? 1.f : -1.f;
-      float const speed = direction * (128.f + static_cast<float>((launchIndex * 19) % 96));
+      int const motionIndex = launchIndex * 4 + foundation;
+      float const direction = (motionIndex % 2 == 0) ? 1.f : -1.f;
+      float const speed = direction * (128.f + static_cast<float>((motionIndex * 19) % 96));
       float const x = windowLeft + reflectedPosition(base.x - windowLeft + speed * t +
-                                                         static_cast<float>(launchIndex % 5) * 37.f,
+                                                         static_cast<float>(motionIndex % 5) * 37.f,
                                                      laneWidth);
-      float const jump = std::abs(std::sin(t * (4.1f + static_cast<float>(launchIndex % 4) * 0.35f) +
-                                           static_cast<float>(launchIndex) * 0.41f));
-      float const y = floorY - jump * (120.f + static_cast<float>(launchIndex % 8) * 15.f);
+      float const jump = std::abs(std::sin(t * (4.1f + static_cast<float>(motionIndex % 4) * 0.35f) +
+                                           static_cast<float>(motionIndex) * 0.41f));
+      float const y = floorY - jump * (120.f + static_cast<float>(motionIndex % 8) * 15.f);
       float const intro = std::clamp(t / 0.34f, 0.f, 1.f);
       float const eased = intro * intro * (3.f - 2.f * intro);
       rect = Rect::sharp(base.x + (x - base.x) * eased,
                          base.y + (y - base.y) * eased,
                          kCardW, kCardH);
-      angle = std::sin(t * 4.8f + static_cast<float>(launchIndex) * 0.27f) * 0.16f;
+      angle = std::sin(t * 4.8f + static_cast<float>(motionIndex) * 0.27f) * 0.16f;
       drawRotatedCard(canvas, card, rect, angle);
     }
-    foundationStartIndex += static_cast<int>(pile.size());
   }
 }
 
@@ -3230,7 +3297,7 @@ struct RootView : ViewModifiers<RootView> {
     (void)settingsPresented;
 
     useEffect([state, drawMode] {
-      saveGame(state.evaluate(), drawMode.evaluate());
+      saveGameIfNeeded(state.evaluate(), drawMode.evaluate());
     });
 
     useFrame([state, drawMode](AnimationTick const& tick) {
