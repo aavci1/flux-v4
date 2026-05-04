@@ -1930,7 +1930,7 @@ void handleBoardClick(Signal<SolitaireState> const& state, Signal<int> const& dr
     return;
   }
 
-  SolitaireState current = state();
+  SolitaireState const& current = state.peek();
   if (current.selection.active()) {
     if (std::optional<Source> dest = hitDestination(geometry, p)) {
       if (canMove(current.board, current.selection.source, current.selection.count, *dest)) {
@@ -1970,7 +1970,7 @@ void startBoardDrag(Signal<SolitaireState> const& state, Signal<int> const& draw
   int const drawCount = drawMode.peek() == 0 ? 1 : 3;
   BoardGeometry const geometry = boardGeometry(viewport);
   Point const p = toBoardPoint(localPoint, geometry);
-  SolitaireState const current = state();
+  SolitaireState const& current = state.peek();
   if (playControlsDisabled(current)) {
     return;
   }
@@ -2029,7 +2029,7 @@ void finishBoardDrag(Signal<SolitaireState> const& state, Signal<int> const& dra
   Point const p = toBoardPoint(localPoint, geometry);
   float const threshold = 4.f / std::max(0.01f, geometry.scale);
 
-  SolitaireState const current = state();
+  SolitaireState const& current = state.peek();
   if (!current.drag.active()) {
     handleBoardClick(state, drawMode, localPoint, viewport);
     return;
@@ -2100,7 +2100,7 @@ void startBoardPeek(Signal<SolitaireState> const& state, Signal<int> const& draw
   int const drawCount = drawMode.peek() == 0 ? 1 : 3;
   BoardGeometry const geometry = boardGeometry(viewport);
   Point const p = toBoardPoint(localPoint, geometry);
-  SolitaireState const current = state();
+  SolitaireState const& current = state.peek();
   if (playControlsDisabled(current)) {
     return;
   }
@@ -2929,14 +2929,14 @@ struct SolitaireHud : ViewModifiers<SolitaireHud> {
               HudIconButton {
                   .icon = IconName::Lightbulb,
                   .disabled = [state = state] {
-                          SolitaireState const s = state.evaluate();
+                          auto const& s = state.evaluate();
                           return playControlsDisabled(s); },
                   .onTap = [state = state] { showHint(state); },
               },
               HudIconButton {
                   .icon = IconName::Undo,
                   .disabled = [state = state] {
-                          SolitaireState const s = state.evaluate();
+                          auto const& s = state.evaluate();
                           return s.completed || s.autoFinishing || dealAnimationRunning(s) ||
                                  s.history.empty(); },
                   .onTap = [state = state] { undo(state); },
@@ -2947,7 +2947,7 @@ struct SolitaireHud : ViewModifiers<SolitaireHud> {
               HudIconButton {
                   .icon = IconName::AutoAwesome,
                   .disabled = [state = state] {
-                          SolitaireState const s = state.evaluate();
+                          auto const& s = state.evaluate();
                           return playControlsDisabled(s) || !s.animations.empty(); },
                   .onTap = [state = state, drawMode = drawMode] { autoFinish(state, drawMode); },
               },
@@ -3402,7 +3402,7 @@ struct RootView : ViewModifiers<RootView> {
             .label = "Hint",
             .shortcut = Shortcut{keys::H, Modifiers::Meta | Modifiers::Shift},
             .isEnabled = [state = state] {
-              SolitaireState const s = state.evaluate();
+              auto const& s = state.evaluate();
               return !playControlsDisabled(s);
             },
         });
@@ -3413,7 +3413,7 @@ struct RootView : ViewModifiers<RootView> {
             .label = "Undo",
             .shortcut = shortcuts::Undo,
             .isEnabled = [state = state] {
-              SolitaireState const s = state.evaluate();
+              auto const& s = state.evaluate();
               return !s.completed && !s.autoFinishing && !dealAnimationRunning(s) &&
                      !s.history.empty();
             },
@@ -3425,7 +3425,7 @@ struct RootView : ViewModifiers<RootView> {
             .label = "Auto-Finish",
             .shortcut = Shortcut{keys::Return, Modifiers::Meta},
             .isEnabled = [state = state] {
-              SolitaireState const s = state.evaluate();
+              auto const& s = state.evaluate();
               return !playControlsDisabled(s) && s.animations.empty();
             },
         });
