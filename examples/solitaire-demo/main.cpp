@@ -35,7 +35,7 @@ constexpr float kFanClosed = 14.f;
 constexpr float kTopToTableauGap = 36.f;
 constexpr float kMinBoardW = kCardW * 7.f + kColGap * 6.f;
 constexpr float kBoardH = 640.f;
-constexpr float kBoardTop = 96.f;
+constexpr float kBoardTop = 108.f;
 constexpr float kBoardHorizontalInset = 40.f;
 constexpr std::int64_t kDropFlyDurationNanos = 200'000'000;
 constexpr std::int64_t kDealFlyDurationNanos = 120'000'000;
@@ -1368,10 +1368,10 @@ std::vector<CardPosition> buildCardPositions(Board const& board, int drawCount, 
 BoardGeometry boardGeometry(Size viewport) {
   float const inset = std::min(kBoardHorizontalInset, std::max(16.f, viewport.width * 0.08f));
   float const availableW = std::max(1.f, viewport.width - inset);
-  float const availableH = std::max(1.f, viewport.height - 32.f);
-  float const scale = std::max(0.01f, std::min(availableW / kMinBoardW, availableH / (kBoardTop + kBoardH)));
+  float const availableH = std::max(1.f, viewport.height - kBoardTop - 32.f);
+  float const scale = std::max(0.01f, std::min(availableW / kMinBoardW, availableH / kBoardH));
   return BoardGeometry{
-      .origin = Point{(viewport.width - kMinBoardW * scale) * 0.5f, kBoardTop * scale},
+      .origin = Point{(viewport.width - kMinBoardW * scale) * 0.5f, kBoardTop},
       .scale = scale,
       .layoutWidth = kMinBoardW,
       .layoutHeight = kBoardH,
@@ -2282,8 +2282,10 @@ void drawWinCelebration(Canvas& canvas, SolitaireState const& state, BoardGeomet
     return;
   }
 
-  float const laneWidth = std::max(kCardW, geometry.layoutWidth - kCardW);
-  float const floorY = geometry.layoutHeight - kCardH + 8.f;
+  float const windowLeft = -geometry.origin.x / geometry.scale;
+  float const windowRight = (geometry.viewport.width - geometry.origin.x) / geometry.scale;
+  float const laneWidth = std::max(0.f, windowRight - windowLeft - kCardW);
+  float const floorY = (geometry.viewport.height - geometry.origin.y) / geometry.scale - kCardH + 8.f;
   int foundationStartIndex = 0;
   for (int foundation = 0; foundation < 4; ++foundation) {
     Rect const base = slotRect(PileKind::Foundation, foundation, geometry);
@@ -2311,8 +2313,9 @@ void drawWinCelebration(Canvas& canvas, SolitaireState const& state, BoardGeomet
       float const t = static_cast<float>(localNanos) / 1'000'000'000.f;
       float const direction = (launchIndex % 2 == 0) ? 1.f : -1.f;
       float const speed = direction * (128.f + static_cast<float>((launchIndex * 19) % 96));
-      float const x = reflectedPosition(base.x + speed * t + static_cast<float>(launchIndex % 5) * 37.f,
-                                        laneWidth);
+      float const x = windowLeft + reflectedPosition(base.x - windowLeft + speed * t +
+                                                         static_cast<float>(launchIndex % 5) * 37.f,
+                                                     laneWidth);
       float const jump = std::abs(std::sin(t * (4.1f + static_cast<float>(launchIndex % 4) * 0.35f) +
                                            static_cast<float>(launchIndex) * 0.41f));
       float const y = floorY - jump * (120.f + static_cast<float>(launchIndex % 8) * 15.f);
@@ -3142,7 +3145,7 @@ int main(int argc, char* argv[]) {
   Application app(argc, argv);
 
   auto& window = app.createWindow<Window>({
-      .size = {1200, 920},
+      .size = {1200, 960},
       .title = "Solitaire",
       .resizable = true,
   });
