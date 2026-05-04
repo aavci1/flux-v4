@@ -3,8 +3,8 @@
 /// \file Flux/UI/InputFieldChrome.hpp
 ///
 /// Shared theme resolution for field-style controls (e.g. \ref Picker trigger) — avoids duplicating
-/// \c resolveColor / \c resolveFloat blocks. Shell decoration merged with \ref useOuterElementModifiers()
-/// uses \ref applyOuterInputFieldDecoration.
+/// \c resolveColor / \c resolveFloat blocks. Shell decoration uses
+/// \ref applyOuterInputFieldDecoration.
 
 #include <Flux/Core/Types.hpp>
 #include <Flux/Graphics/Styles.hpp>

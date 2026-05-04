@@ -19,7 +19,7 @@ struct LayoutHints {
   /// Set by `HStack` for each row child (`HStack::alignment`). Cleared by `VStack`
   /// when building children so it does not leak into nested rows.
   std::optional<Alignment> hStackCrossAlign;
-  /// Set by `VStack` / `ForEach` for each row (`VStack::alignment`). `Text` maps to
+  /// Set by `VStack` / `For` for each row (`VStack::alignment`). `Text` maps to
   /// \ref TextLayoutOptions in `Element.cpp`. Cleared by `HStack`, `Grid`, `OffsetView`, `ZStack`.
   std::optional<Alignment> vStackCrossAlign;
   /// Set by `ZStack` for direct children. `Stretch` means the child owns the full shared slot on
