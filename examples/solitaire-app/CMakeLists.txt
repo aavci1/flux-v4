@@ -6,4 +6,5 @@ flux_add_app(solitaire-app main.cpp
   COPYRIGHT "Copyright (c) 2026 Abdurrahman Avci"
   CATEGORY "public.app-category.card-games"
   MIN_MACOS "12.0"
+  ICON "${CMAKE_CURRENT_SOURCE_DIR}/icon.svg"
   FONTS "${PROJECT_SOURCE_DIR}/resources/fonts/MaterialSymbolsRounded.ttf")

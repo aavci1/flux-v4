@@ -52,6 +52,7 @@ constexpr int kElapsedSaveIntervalSeconds = 15;
 constexpr float kHintBounceAmplitude = 16.f;
 constexpr float kSelectedCardScale = 1.035f;
 constexpr float kMovingCardScale = 1.07f;
+constexpr std::int64_t kSelectionScaleDurationNanos = 140'000'000;
 
 enum class Suit : std::uint8_t { Spades, Hearts, Diamonds, Clubs };
 enum class PileKind : std::uint8_t { None, Stock, Waste, Tableau, Foundation };
@@ -97,6 +98,21 @@ struct Selection {
 
   bool active() const { return source.kind != PileKind::None && count > 0; }
   bool operator==(Selection const&) const = default;
+};
+
+struct SelectionScaleAnimation {
+  Source source;
+  int count = 0;
+  float fromScale = 1.f;
+  float toScale = 1.f;
+  std::int64_t startNanos = 0;
+
+  bool active(std::int64_t now) const {
+    return source.kind != PileKind::None && count > 0 &&
+           now < startNanos + kSelectionScaleDurationNanos;
+  }
+
+  bool operator==(SelectionScaleAnimation const&) const = default;
 };
 
 struct Hint {
@@ -150,6 +166,7 @@ struct SolitaireState {
   Board board;
   std::vector<HistoryEntry> history;
   std::vector<FlyAnimation> animations;
+  std::vector<SelectionScaleAnimation> selectionScaleAnimations;
   Selection selection;
   Hint hint;
   PeekState peek;
@@ -362,6 +379,7 @@ bool readBoard(std::istream& in, Board& board) {
 
 SolitaireState stableForSave(SolitaireState state) {
   state.animations.clear();
+  state.selectionScaleAnimations.clear();
   state.selection = {};
   state.hint = {};
   state.peek = {};
@@ -774,6 +792,7 @@ bool performMove(SolitaireState& state, Source source, Source dest, int count, b
   }
 
   state.selection = {};
+  state.selectionScaleAnimations.clear();
   state.hint = {};
   state.peek = {};
   state.drag = {};
@@ -837,6 +856,7 @@ void drawStock(SolitaireState& state, int drawCount) {
     }
   }
   state.selection = {};
+  state.selectionScaleAnimations.clear();
   state.hint = {};
   state.peek = {};
   state.drag = {};
@@ -1906,6 +1926,69 @@ bool sourceMatches(Source a, Source b, bool includeStack) {
   return a.row == b.row;
 }
 
+float easeSelectionScale(float t) {
+  t = std::clamp(t, 0.f, 1.f);
+  return t * t * (3.f - 2.f * t);
+}
+
+float selectionAnimationScale(SelectionScaleAnimation const& animation, std::int64_t now) {
+  double const raw = static_cast<double>(now - animation.startNanos) /
+                     static_cast<double>(std::max<std::int64_t>(1, kSelectionScaleDurationNanos));
+  float const t = easeSelectionScale(static_cast<float>(raw));
+  return animation.fromScale + (animation.toScale - animation.fromScale) * t;
+}
+
+float selectionScaleForSource(SolitaireState const& state, Source source, std::int64_t now) {
+  float scale = state.selection.active() && sourceMatches(source, state.selection.source, true)
+                    ? kSelectedCardScale
+                    : 1.f;
+  for (SelectionScaleAnimation const& animation : state.selectionScaleAnimations) {
+    if (sourceMatches(source, animation.source, true)) {
+      scale = animation.active(now) ? selectionAnimationScale(animation, now) : animation.toScale;
+    }
+  }
+  return scale;
+}
+
+void addSelectionScaleAnimation(SolitaireState& state, Selection selection, float toScale,
+                                std::int64_t now) {
+  if (!selection.active()) {
+    return;
+  }
+  float const fromScale = selectionScaleForSource(state, selection.source, now);
+  state.selectionScaleAnimations.erase(
+      std::remove_if(state.selectionScaleAnimations.begin(), state.selectionScaleAnimations.end(),
+                     [source = selection.source](SelectionScaleAnimation const& animation) {
+                       return sourceMatches(animation.source, source, false);
+                     }),
+      state.selectionScaleAnimations.end());
+  if (std::abs(fromScale - toScale) < 0.001f) {
+    return;
+  }
+  state.selectionScaleAnimations.push_back(SelectionScaleAnimation{
+      .source = selection.source,
+      .count = selection.count,
+      .fromScale = fromScale,
+      .toScale = toScale,
+      .startNanos = now,
+  });
+}
+
+void setSelectionWithAnimation(SolitaireState& state, Selection next, std::int64_t now) {
+  Selection const previous = state.selection;
+  if (previous == next) {
+    return;
+  }
+  if (previous.active()) {
+    addSelectionScaleAnimation(state, previous, 1.f, now);
+  }
+  if (next.active()) {
+    addSelectionScaleAnimation(state, next, kSelectedCardScale, now);
+  }
+  state.selection = next;
+  state.frameNanos = now;
+}
+
 bool cardIsAnimating(SolitaireState const& state, int cardId, std::int64_t now);
 
 void handleBoardClick(Signal<SolitaireState> const& state, Signal<int> const& drawMode,
@@ -1918,8 +2001,9 @@ void handleBoardClick(Signal<SolitaireState> const& state, Signal<int> const& dr
   BoardGeometry const geometry = boardGeometry(viewport);
   Point const p = toBoardPoint(localPoint, geometry);
   if (p.x < -20.f || p.y < -20.f || p.x > geometry.layoutWidth + 20.f || p.y > geometry.layoutHeight + 80.f) {
-    mutate(state, [](SolitaireState& s) {
-      s.selection = {};
+    std::int64_t const now = nowNanos();
+    mutate(state, [now](SolitaireState& s) {
+      setSelectionWithAnimation(s, {}, now);
       s.peek = {};
     });
     return;
@@ -1948,19 +2032,20 @@ void handleBoardClick(Signal<SolitaireState> const& state, Signal<int> const& dr
       std::int64_t const startNanos = nowNanos();
       mutate(state, [drawCount, geometry, startNanos](SolitaireState& s) {
         autoMoveWithAnimation(s, s.selection.source, s.selection.count, drawCount, geometry, startNanos);
-        s.selection = {};
       });
       return;
     }
-    mutate(state, [hit](SolitaireState& s) {
-      s.selection = Selection{.source = hit->source, .count = hit->count};
+    std::int64_t const now = nowNanos();
+    mutate(state, [hit, now](SolitaireState& s) {
+      setSelectionWithAnimation(s, Selection{.source = hit->source, .count = hit->count}, now);
       s.hint = {};
     });
     return;
   }
 
-  mutate(state, [](SolitaireState& s) {
-    s.selection = {};
+  std::int64_t const now = nowNanos();
+  mutate(state, [now](SolitaireState& s) {
+    setSelectionWithAnimation(s, {}, now);
     s.peek = {};
   });
 }
@@ -2015,6 +2100,7 @@ void updateBoardDrag(Signal<SolitaireState> const& state, Point localPoint, Size
     s.drag.currentPoint = p;
     if (movedNow && !s.drag.moved) {
       s.selection = {};
+      s.selectionScaleAnimations.clear();
       s.hint = {};
       s.peek = {};
     }
@@ -2213,6 +2299,7 @@ void undo(Signal<SolitaireState> const& state) {
     s.score = prev.score;
     s.completed = prev.completed;
     s.selection = {};
+    s.selectionScaleAnimations.clear();
     s.hint = {};
     s.peek = {};
     s.drag = {};
@@ -2287,8 +2374,8 @@ void drawCardBack(Canvas& canvas, Rect rect) {
                                              {0.48f, Color::hex(0x2563EB)},
                                              {1.f, Color::hex(0x0A84FF)}},
                                             Point{0.f, 0.f}, Point{1.f, 1.f}),
-                  StrokeStyle::solid(colorHex(0x0A2A5C), 1.4f),
-                  ShadowStyle{.radius = 4.f, .offset = {0.f, 1.f}, .color = Color{0.f, 0.f, 0.f, 0.24f}});
+                  StrokeStyle::solid(colorHex(0x0A2A5C, 0.42f), 1.f),
+                  ShadowStyle{.radius = 8.f, .offset = {0.f, 2.f}, .color = Color{0.f, 0.f, 0.f, 0.18f}});
 
   canvas.save();
   canvas.clipRect(rect, CornerRadius{8.f}, true);
@@ -2344,8 +2431,8 @@ void drawCardFace(Canvas& canvas, Card const& card, Rect rect) {
   Color const ink = suitColor(card.suit);
   canvas.drawRect(rect, CornerRadius{8.f},
                   FillStyle::linearGradient(Color::hex(0xFFFFFF), Color::hex(0xFAFAFC), Point{0.f, 0.f}, Point{0.f, 1.f}),
-                  StrokeStyle::solid(Color{0.f, 0.f, 0.f, 0.18f}, 1.f),
-                  ShadowStyle{.radius = 3.f, .offset = {0.f, 1.f}, .color = Color{0.f, 0.f, 0.f, 0.18f}});
+                  StrokeStyle::solid(Color{0.f, 0.f, 0.f, 0.10f}, 0.9f),
+                  ShadowStyle{.radius = 8.f, .offset = {0.f, 2.f}, .color = Color{0.f, 0.f, 0.f, 0.14f}});
 
   std::string const rank = rankLabel(card.rank);
   Font const cornerFont{.size = card.rank == 10 ? 15.f : 17.f, .weight = 650.f};
@@ -2415,9 +2502,8 @@ Rect visualCardRect(CardPosition const& pos, SolitaireState const& state, std::i
   return Rect::sharp(pos.rect.x, pos.rect.y + offsetY, pos.rect.width, pos.rect.height);
 }
 
-float visualCardScale(CardPosition const& pos, SolitaireState const& state) {
-  bool const selected = state.selection.active() && sourceMatches(pos.source, state.selection.source, true);
-  return selected ? kSelectedCardScale : 1.f;
+float visualCardScale(CardPosition const& pos, SolitaireState const& state, std::int64_t now) {
+  return selectionScaleForSource(state, pos.source, now);
 }
 
 bool celebrationActive(SolitaireState const& state, std::int64_t now) {
@@ -2716,7 +2802,8 @@ void drawBoard(Canvas& canvas, Rect frame, SolitaireState const& state, int draw
   }
 
   for (CardPosition const& pos : buildCardPositions(state.board, drawCount, geometry, hiddenIds)) {
-    drawCard(canvas, pos.card, scaledRect(visualCardRect(pos, state, animationNow), visualCardScale(pos, state)));
+    drawCard(canvas, pos.card, scaledRect(visualCardRect(pos, state, animationNow),
+                                          visualCardScale(pos, state, animationNow)));
   }
 
   drawFlyAnimations(canvas, state, animationNow);
@@ -3339,9 +3426,11 @@ struct RootView : ViewModifiers<RootView> {
   auto body() const {
     auto savedGame = loadGame();
     int const initialDrawMode = savedGame ? savedGame->drawMode : 0;
+    bool const useSavedBoard =
+        savedGame && !savedGame->state.completed && !gameComplete(savedGame->state.board);
     auto drawMode = useState<int>(initialDrawMode);
     auto state = useState<SolitaireState>(
-        savedGame ? savedGame->state : makeState(randomSeed(), initialDrawMode == 0 ? 1 : 3));
+        useSavedBoard ? savedGame->state : makeState(randomSeed(), initialDrawMode == 0 ? 1 : 3));
     auto frameNanos = useState<std::int64_t>(0);
     auto feltIndex = useState<int>(0);
     auto [showSettings, hideSettings, settingsPresented] = useOverlay();
@@ -3410,6 +3499,21 @@ struct RootView : ViewModifiers<RootView> {
       } else if (current.hint.active()) {
         current.hint = {};
         if (current.animations.empty() && !celebrationActive(current, tick.deadlineNanos)) {
+          current.frameNanos = 0;
+        }
+        changed = true;
+      }
+      if (!current.selectionScaleAnimations.empty()) {
+        current.frameNanos = tick.deadlineNanos;
+        current.selectionScaleAnimations.erase(
+            std::remove_if(current.selectionScaleAnimations.begin(), current.selectionScaleAnimations.end(),
+                           [now = tick.deadlineNanos](SelectionScaleAnimation const& animation) {
+                             return !animation.active(now);
+                           }),
+            current.selectionScaleAnimations.end());
+        if (current.selectionScaleAnimations.empty() && current.animations.empty() &&
+            !current.hint.animating(tick.deadlineNanos) &&
+            !celebrationActive(current, tick.deadlineNanos)) {
           current.frameNanos = 0;
         }
         changed = true;

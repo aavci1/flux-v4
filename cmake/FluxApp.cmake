@@ -43,8 +43,32 @@ function(flux_add_app target)
         DEPENDS "${FA_ICON}"
         VERBATIM
         COMMENT "Build ${target} app icon")
+    elseif("${FA_ICON}" MATCHES "\\.svg$")
+      find_program(_flux_qlmanage qlmanage)
+      find_program(_flux_sips sips)
+      find_program(_flux_iconutil iconutil)
+      if(NOT _flux_qlmanage OR NOT _flux_sips OR NOT _flux_iconutil)
+        message(FATAL_ERROR
+          "flux_add_app(${target}): SVG icons require qlmanage, sips, and iconutil")
+      endif()
+      set(_icns "${CMAKE_CURRENT_BINARY_DIR}/${target}.icns")
+      set(_iconset "${CMAKE_CURRENT_BINARY_DIR}/${target}.iconset")
+      set(_icon_work_dir "${CMAKE_CURRENT_BINARY_DIR}/${target}-icon-work")
+      add_custom_command(OUTPUT "${_icns}"
+        COMMAND "${CMAKE_COMMAND}"
+          "-DINPUT=${FA_ICON}"
+          "-DOUTPUT=${_icns}"
+          "-DICONSET=${_iconset}"
+          "-DWORK_DIR=${_icon_work_dir}"
+          "-DQLMANAGE=${_flux_qlmanage}"
+          "-DSIPS=${_flux_sips}"
+          "-DICONUTIL=${_flux_iconutil}"
+          -P "${PROJECT_SOURCE_DIR}/cmake/make-icns-from-svg.cmake"
+        DEPENDS "${FA_ICON}" "${PROJECT_SOURCE_DIR}/cmake/make-icns-from-svg.cmake"
+        VERBATIM
+        COMMENT "Build ${target} app icon from SVG")
     else()
-      message(FATAL_ERROR "flux_add_app(${target}): ICON must be a .icns or .iconset path")
+      message(FATAL_ERROR "flux_add_app(${target}): ICON must be a .icns, .iconset, or .svg path")
     endif()
     list(APPEND _generated_sources "${_icns}")
     get_filename_component(_bundle_icon_file "${_icns}" NAME)

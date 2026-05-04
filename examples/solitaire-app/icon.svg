@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="felt" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1FA672"></stop>
+      <stop offset="50%" stop-color="#0F7B4F"></stop>
+      <stop offset="100%" stop-color="#063D28"></stop>
+    </linearGradient>
+
+    <linearGradient id="card" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFFFFF"></stop>
+      <stop offset="100%" stop-color="#FAFAFC"></stop>
+    </linearGradient>
+
+    <linearGradient id="sheen" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.18"></stop>
+      <stop offset="35%" stop-color="#FFFFFF" stop-opacity="0"></stop>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.03"></stop>
+    </linearGradient>
+
+    <symbol id="spade" viewBox="0 0 24 24" overflow="visible">
+      <path d="M12 2 C 7 7, 2 11, 2 15 C 2 18, 5 20, 8 20 C 9.5 20, 11 19.4, 12 18.5 C 11.6 19.5, 11 21.6, 9 22.5 L 15 22.5 C 13 21.6, 12.4 19.5, 12 18.5 C 13 19.4, 14.5 20, 16 20 C 19 20, 22 18, 22 15 C 22 11, 17 7, 12 2 Z" fill="#1A1A22"></path>
+    </symbol>
+
+    <symbol id="heart" viewBox="0 0 24 24" overflow="visible">
+      <path d="M12 22 C 12 22, 2 15.5, 2 8.5 C 2 5, 4.5 2.5, 7.5 2.5 C 10 2.5, 11.5 4, 12 5.5 C 12.5 4, 14 2.5, 16.5 2.5 C 19.5 2.5, 22 5, 22 8.5 C 22 15.5, 12 22, 12 22 Z" fill="#D94040"></path>
+    </symbol>
+
+    
+    <symbol id="seven-spades" viewBox="0 0 560 800" overflow="visible">
+      <rect x="0" y="0" width="560" height="800" rx="56" ry="56" fill="url(#card)" stroke="#E2E2E7" stroke-width="2"></rect>
+
+      
+      <g>
+        <text font-family="Inter, system-ui, sans-serif" font-weight="700" font-size="120" fill="#1A1A22" letter-spacing="-2" text-anchor="middle"><tspan x="80" y="148">7</tspan></text>
+        <use href="#spade" x="30" y="160" width="100" height="100"></use>
+      </g>
+      
+      <g transform="rotate(180 280 400)">
+        <text font-family="Inter, system-ui, sans-serif" font-weight="700" font-size="120" fill="#1A1A22" letter-spacing="-2" text-anchor="middle"><tspan x="80" y="148">7</tspan></text>
+        <use href="#spade" x="30" y="160" width="100" height="100"></use>
+      </g>
+
+      
+      <use href="#spade" x="120.4" y="140.4" width="140" height="140"></use>
+      <use href="#spade" x="299.6" y="140.4" width="140" height="140"></use>
+      <use href="#spade" x="210" y="223.4" width="140" height="140"></use>
+      <use href="#spade" x="120.4" y="330" width="140" height="140"></use>
+      <use href="#spade" x="299.6" y="330" width="140" height="140"></use>
+      <g transform="rotate(180 190.4 606.6)"><use href="#spade" x="120.4" y="536.6" width="140" height="140"></use></g>
+      <g transform="rotate(180 369.6 606.6)"><use href="#spade" x="299.6" y="536.6" width="140" height="140"></use></g>
+
+      
+      <rect x="0" y="0" width="560" height="800" rx="56" ry="56" fill="url(#sheen)" pointer-events="none"></rect>
+    </symbol>
+
+    <symbol id="two-hearts" viewBox="0 0 560 800" overflow="visible">
+      <rect x="0" y="0" width="560" height="800" rx="56" ry="56" fill="url(#card)" stroke="#E2E2E7" stroke-width="2"></rect>
+
+      <g>
+        <text font-family="Inter, system-ui, sans-serif" font-weight="700" font-size="120" fill="#D94040" letter-spacing="-2" text-anchor="middle"><tspan x="80" y="148">2</tspan></text>
+        <use href="#heart" x="30" y="160" width="100" height="100"></use>
+      </g>
+      <g transform="rotate(180 280 400)">
+        <text font-family="Inter, system-ui, sans-serif" font-weight="700" font-size="120" fill="#D94040" letter-spacing="-2" text-anchor="middle"><tspan x="80" y="148">2</tspan></text>
+        <use href="#heart" x="30" y="160" width="100" height="100"></use>
+      </g>
+
+      <use href="#heart" x="210" y="220" width="140" height="140"></use>
+      <g transform="rotate(180 280 606.6)"><use href="#heart" x="210" y="536.6" width="140" height="140"></use></g>
+
+      <rect x="0" y="0" width="560" height="800" rx="56" ry="56" fill="url(#sheen)" pointer-events="none"></rect>
+    </symbol>
+
+    <filter id="cardShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="16"></feGaussianBlur>
+      <feOffset dx="0" dy="18"></feOffset>
+      <feComponentTransfer><feFuncA type="linear" slope="0.45"></feFuncA></feComponentTransfer>
+      <feMerge>
+        <feMergeNode></feMergeNode>
+        <feMergeNode in="SourceGraphic"></feMergeNode>
+      </feMerge>
+    </filter>
+
+    <radialGradient id="vignette" cx="50%" cy="38%" r="78%">
+      <stop offset="60%" stop-color="#000000" stop-opacity="0"></stop>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.32"></stop>
+    </radialGradient>
+
+    
+    <clipPath id="canvasClip">
+      <rect width="1024" height="1024"></rect>
+    </clipPath>
+  </defs>
+
+  
+  <rect width="1024" height="1024" fill="url(#felt)"></rect>
+
+  
+  <g clip-path="url(#canvasClip)">
+    
+    <g transform="translate(60 460) rotate(-18)" filter="url(#cardShadow)">
+      <use href="#seven-spades" width="760" height="1086"></use>
+    </g>
+
+    
+    <g transform="translate(290 480) rotate(-10)" filter="url(#cardShadow)">
+      <use href="#two-hearts" width="760" height="1086"></use>
+    </g>
+  </g>
+
+  
+  <rect width="1024" height="1024" fill="url(#vignette)"></rect>
+</svg>
