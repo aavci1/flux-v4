@@ -2654,11 +2654,12 @@ void drawFloatingCompletionText(Canvas& canvas, Rect frame) {
            Color{1.f, 1.f, 1.f, 0.82f}, Point{center.x, center.y + 24.f});
 }
 
-void drawBoard(Canvas& canvas, Rect frame, SolitaireState const& state, int drawCount, int feltIndex) {
+void drawBoard(Canvas& canvas, Rect frame, SolitaireState const& state, int drawCount, int feltIndex,
+               std::int64_t frameNanos) {
   drawFelt(canvas, frame, feltIndex);
 
   BoardGeometry const geometry = boardGeometry(Size{frame.width, frame.height});
-  std::int64_t const animationNow = state.frameNanos > 0 ? state.frameNanos : nowNanos();
+  std::int64_t const animationNow = frameNanos > 0 ? frameNanos : nowNanos();
   std::vector<int> const hiddenIds = hiddenCardIds(state, animationNow);
   canvas.save();
   canvas.translate(frame.x + geometry.origin.x, frame.y + geometry.origin.y);
@@ -3232,6 +3233,7 @@ struct BoardSurface : ViewModifiers<BoardSurface> {
   Signal<SolitaireState> state;
   Signal<int> drawMode;
   Signal<int> feltIndex;
+  Signal<std::int64_t> frameNanos;
 
   auto body() const {
     Rect const bounds = useBounds();
@@ -3243,6 +3245,7 @@ struct BoardSurface : ViewModifiers<BoardSurface> {
     auto stateSignal = state;
     auto drawModeSignal = drawMode;
     auto feltSignal = feltIndex;
+    auto frameSignal = frameNanos;
 
     return Render{
         .measureFn = [](LayoutConstraints const& constraints, LayoutHints const&) {
@@ -3250,10 +3253,11 @@ struct BoardSurface : ViewModifiers<BoardSurface> {
           float const height = std::isfinite(constraints.maxHeight) ? constraints.maxHeight : 760.f;
           return Size{std::max(1.f, width), std::max(1.f, height)};
         },
-        .draw = [stateSignal, drawModeSignal, feltSignal, viewport](Canvas& canvas, Rect frame) {
+        .draw = [stateSignal, drawModeSignal, feltSignal, frameSignal, viewport](Canvas& canvas, Rect frame) {
           *viewport = Size{frame.width, frame.height};
           int const drawCount = drawModeSignal.evaluate() == 0 ? 1 : 3;
-          drawBoard(canvas, frame, stateSignal.evaluate(), drawCount, feltSignal.evaluate());
+          drawBoard(canvas, frame, stateSignal.evaluate(), drawCount, feltSignal.evaluate(),
+                    frameSignal.evaluate());
         },
     }
         .cursor(Cursor::Hand)
@@ -3281,7 +3285,8 @@ struct BoardSurface : ViewModifiers<BoardSurface> {
   }
 
   bool operator==(BoardSurface const& other) const {
-    return state == other.state && drawMode == other.drawMode && feltIndex == other.feltIndex;
+    return state == other.state && drawMode == other.drawMode && feltIndex == other.feltIndex &&
+           frameNanos == other.frameNanos;
   }
 };
 
@@ -3292,6 +3297,7 @@ struct RootView : ViewModifiers<RootView> {
     auto drawMode = useState<int>(initialDrawMode);
     auto state = useState<SolitaireState>(
         savedGame ? savedGame->state : makeState(randomSeed(), initialDrawMode == 0 ? 1 : 3));
+    auto frameNanos = useState<std::int64_t>(0);
     auto feltIndex = useState<int>(0);
     auto [showSettings, hideSettings, settingsPresented] = useOverlay();
     (void)settingsPresented;
@@ -3300,8 +3306,17 @@ struct RootView : ViewModifiers<RootView> {
       saveGameIfNeeded(state.evaluate(), drawMode.evaluate());
     });
 
-    useFrame([state, drawMode](AnimationTick const& tick) {
-      SolitaireState current = state.peek();
+    useFrame([state, drawMode, frameNanos](AnimationTick const& tick) {
+      SolitaireState const& snapshot = state.peek();
+      if (snapshot.completed && snapshot.animations.empty() && !snapshot.autoFinishing &&
+          !snapshot.dealing && !snapshot.hint.active() &&
+          snapshot.peek.source.kind == PileKind::None && !snapshot.drag.active() &&
+          celebrationActive(snapshot, tick.deadlineNanos)) {
+        frameNanos = tick.deadlineNanos;
+        return;
+      }
+
+      SolitaireState current = snapshot;
       bool changed = false;
       if (!current.completed) {
         int const elapsed = static_cast<int>(std::max<std::int64_t>(0, tick.deadlineNanos - current.startedNanos) /
@@ -3366,6 +3381,7 @@ struct RootView : ViewModifiers<RootView> {
         changed = true;
       }
       if (changed) {
+        frameNanos = current.frameNanos;
         state = std::move(current);
       }
     });
@@ -3441,7 +3457,7 @@ struct RootView : ViewModifiers<RootView> {
         .horizontalAlignment = Alignment::Stretch,
         .verticalAlignment = Alignment::Start,
         .children = children(
-            BoardSurface{.state = state, .drawMode = drawMode, .feltIndex = feltIndex}
+            BoardSurface{.state = state, .drawMode = drawMode, .feltIndex = feltIndex, .frameNanos = frameNanos}
                 .flex(1.f, 1.f),
             SolitaireHud{
                 .state = state,
