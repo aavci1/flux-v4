@@ -4,6 +4,7 @@
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/UI.hpp>
 #include <Flux/UI/Views/Render.hpp>
+#include <Flux/UI/Views/ScaleAroundCenter.hpp>
 #include <Flux/UI/Views/Views.hpp>
 
 #include <algorithm>
@@ -33,8 +34,8 @@ constexpr float kFanOpen = 28.f;
 constexpr float kFanClosed = 14.f;
 constexpr float kTopToTableauGap = 36.f;
 constexpr float kMinBoardW = kCardW * 7.f + kColGap * 6.f;
-constexpr float kBoardH = 720.f;
-constexpr float kBoardTop = 28.f;
+constexpr float kBoardH = 640.f;
+constexpr float kBoardTop = 96.f;
 constexpr float kBoardHorizontalInset = 40.f;
 constexpr std::int64_t kDropFlyDurationNanos = 200'000'000;
 constexpr std::int64_t kDealFlyDurationNanos = 120'000'000;
@@ -200,6 +201,42 @@ Color colorHex(std::uint32_t hex, float alpha = 1.f) {
 Color withAlpha(Color c, float alpha) {
   c.a = alpha;
   return c;
+}
+
+FillStyle glassFill() {
+  return FillStyle::solid(Color{20.f / 255.f, 22.f / 255.f, 28.f / 255.f, 0.42f});
+}
+
+StrokeStyle glassStroke() {
+  return StrokeStyle::solid(Color{1.f, 1.f, 1.f, 0.12f}, 1.f);
+}
+
+ShadowStyle glassShadow(float alpha = 0.22f) {
+  return ShadowStyle{.radius = 12.f, .offset = {0.f, 4.f}, .color = Color{0.f, 0.f, 0.f, alpha}};
+}
+
+std::pair<Color, Color> feltColors(int feltIndex);
+
+FillStyle feltPreviewFill(int feltIndex) {
+  auto [top, bottom] = feltColors(feltIndex);
+  Color mid = top;
+  switch (feltIndex) {
+  case 1:
+    mid = Color::hex(0x1E3A8A);
+    break;
+  case 2:
+    mid = Color::hex(0x18181B);
+    break;
+  case 3:
+    mid = Color::hex(0x5B1414);
+    break;
+  default:
+    mid = Color::hex(0x0F4A30);
+    break;
+  }
+  return FillStyle::radialGradient({GradientStop{0.f, top}, GradientStop{0.55f, mid},
+                                    GradientStop{1.f, bottom}},
+                                   Point{0.5f, 0.f}, 1.1f);
 }
 
 std::int64_t nowNanos() {
@@ -2432,6 +2469,400 @@ struct StatView : ViewModifiers<StatView> {
     }
 };
 
+struct HudIconButton : ViewModifiers<HudIconButton> {
+  IconName icon = IconName::Info;
+  bool primary = false;
+  Reactive::Bindable<bool> disabled{false};
+  std::function<void()> onTap;
+
+  auto body() const {
+    Reactive::Bindable<bool> disabledBinding = disabled;
+    Reactive::Signal<bool> hovered = useHover();
+    Reactive::Signal<bool> pressed = usePress();
+
+    auto iconColor = [primary = primary, disabledBinding] {
+      if (disabledBinding.evaluate()) {
+        return Color{1.f, 1.f, 1.f, 0.42f};
+      }
+      return primary ? Colors::white : Color{1.f, 1.f, 1.f, 0.92f};
+    };
+    auto handleTap = [disabledBinding, onTap = onTap] {
+      if (!disabledBinding.evaluate() && onTap) {
+        onTap();
+      }
+    };
+
+    auto chrome = Render{
+        .measureFn = [](LayoutConstraints const&, LayoutHints const&) {
+          return Size{40.f, 40.f};
+        },
+        .draw = [primary = primary, hovered, pressed, disabledBinding](Canvas& canvas, Rect frame) {
+          auto fill = [&] {
+            if (primary) {
+              Color const top = hovered() ? Color::hex(0x3B8FFF) : Color::hex(0x0A84FF);
+              Color const bottom = pressed() ? Color::hex(0x005BBF) : Color::hex(0x0066D6);
+              return FillStyle::linearGradient(top, bottom, Point{0.f, 0.f}, Point{1.f, 1.f});
+            }
+            if (pressed() && !disabledBinding.evaluate()) {
+              return FillStyle::solid(Color{1.f, 1.f, 1.f, 0.11f});
+            }
+            if (hovered() && !disabledBinding.evaluate()) {
+              return FillStyle::solid(Color{1.f, 1.f, 1.f, 0.16f});
+            }
+            return glassFill();
+          };
+          auto shadow = [&] {
+            if (disabledBinding.evaluate()) {
+              return ShadowStyle::none();
+            }
+            if (primary) {
+              return ShadowStyle{.radius = 16.f, .offset = {0.f, 5.f}, .color = Color{10.f / 255.f, 132.f / 255.f, 1.f, 0.26f}};
+            }
+            return glassShadow(hovered() ? 0.28f : 0.22f);
+          };
+          Rect const base = Rect::sharp(frame.x, frame.y, 40.f, 40.f);
+          canvas.drawRect(base, CornerRadius{12.f}, fill(),
+                          primary ? StrokeStyle::solid(Color{1.f, 1.f, 1.f, 0.18f}, 1.f) : glassStroke(),
+                          shadow());
+          canvas.drawRect(Rect::sharp(frame.x + 1.f, frame.y + 1.f, 38.f, 38.f),
+                          CornerRadius{11.f},
+                          FillStyle::linearGradient(Color{1.f, 1.f, 1.f, primary ? 0.12f : 0.07f},
+                                                    Color{1.f, 1.f, 1.f, 0.f},
+                                                    Point{0.f, 0.f}, Point{0.f, 1.f}),
+                          StrokeStyle::none(),
+                          ShadowStyle::none());
+        },
+    };
+
+    Element button = ZStack{
+        .horizontalAlignment = Alignment::Center,
+        .verticalAlignment = Alignment::Center,
+        .children = children(
+            chrome,
+            Icon{
+                .name = icon,
+                .size = 20.f,
+                .weight = 500.f,
+                .color = iconColor,
+            }
+        ),
+    }
+                         .size(40.f, 40.f)
+                         .opacity([disabledBinding] { return disabledBinding.evaluate() ? 0.32f : 1.f; })
+                         .cursor([disabledBinding] { return disabledBinding.evaluate() ? Cursor::Arrow : Cursor::Hand; })
+                         .focusable([disabledBinding] { return !disabledBinding.evaluate(); })
+                         .onTap(std::function<void()>{handleTap});
+
+    return ScaleAroundCenter{
+        .scale = [pressed, disabledBinding] {
+          return pressed() && !disabledBinding.evaluate() ? 0.94f : 1.f;
+        },
+        .child = std::move(button),
+    };
+  }
+
+  bool operator==(HudIconButton const& other) const {
+    bool const sameDisabled = disabled.isValue() && other.disabled.isValue() &&
+                              disabled.value() == other.disabled.value();
+    return icon == other.icon && primary == other.primary && sameDisabled &&
+           static_cast<bool>(onTap) == static_cast<bool>(other.onTap);
+  }
+};
+
+struct HudStat : ViewModifiers<HudStat> {
+  std::string label;
+  Bindable<std::string> value;
+  bool accent = false;
+
+  auto body() const {
+    return VStack{
+        .spacing = 4.f,
+        .alignment = Alignment::Stretch,
+        .children = children(
+            Text{
+                .text = label,
+                .font = Font{.size = 9.5f, .weight = 600.f},
+                .color = Color{1.f, 1.f, 1.f, 0.45f},
+                .horizontalAlignment = HorizontalAlignment::Leading,
+                .verticalAlignment = VerticalAlignment::Center,
+            },
+            Text{
+                .text = value,
+                .font = Font{.size = 16.f, .weight = 600.f},
+                .color = accent ? Color::hex(0xFBBF24) : Color{1.f, 1.f, 1.f, 0.96f},
+                .horizontalAlignment = HorizontalAlignment::Leading,
+                .verticalAlignment = VerticalAlignment::Center,
+            }
+        ),
+    }
+        .width(88.f)
+        .padding(4.f, 18.f, 4.f, 18.f);
+  }
+
+  bool operator==(HudStat const& other) const {
+    bool const sameValue = value.isValue() && other.value.isValue() && value.value() == other.value.value();
+    return label == other.label && sameValue && accent == other.accent;
+  }
+};
+
+struct PillDivider : ViewModifiers<PillDivider> {
+  auto body() const {
+    return Rectangle{}
+        .size(1.f, 22.f)
+        .fill(Color{1.f, 1.f, 1.f, 0.12f});
+  }
+
+  bool operator==(PillDivider const&) const = default;
+};
+
+struct HudStatsPill : ViewModifiers<HudStatsPill> {
+  Signal<SolitaireState> state;
+
+  auto body() const {
+    return HStack{
+        .spacing = 2.f,
+        .alignment = Alignment::Center,
+        .children = children(
+            HudStat{
+                .label = "Time",
+                .value = [state = state] { return formatTime(state.evaluate().elapsedSeconds); },
+            },
+            PillDivider{},
+            HudStat{
+                .label = "Moves",
+                .value = [state = state] { return std::to_string(state.evaluate().moves); },
+            },
+            PillDivider{},
+            HudStat{
+                .label = "Score",
+                .value = [state = state] { return std::to_string(state.evaluate().score); },
+                .accent = true,
+            }
+        ),
+    }
+        .height(56.f)
+        .padding(8.f, 6.f, 8.f, 6.f)
+        .fill(glassFill())
+        .stroke(glassStroke())
+        .cornerRadius(999.f)
+        .shadow(ShadowStyle{.radius = 18.f, .offset = {0.f, 5.f}, .color = Color{0.f, 0.f, 0.f, 0.22f}});
+  }
+
+  bool operator==(HudStatsPill const& other) const { return state == other.state; }
+};
+
+struct SolitaireHud : ViewModifiers<SolitaireHud> {
+  Signal<SolitaireState> state;
+  Signal<int> drawMode;
+  std::function<void()> onSettings;
+
+  auto body() const {
+      auto theme = useEnvironment<ThemeKey>();
+
+      return HStack {
+          .spacing = theme().space4,
+          .alignment = Alignment::Center,
+          .children = children(
+              HudIconButton {
+                  .icon = IconName::RestartAlt,
+                  .primary = true,
+                  .onTap = [state = state, drawMode = drawMode] { newGame(state, drawMode); },
+              },
+              HudIconButton {
+                  .icon = IconName::Lightbulb,
+                  .disabled = [state = state] {
+                          SolitaireState const s = state.evaluate();
+                          return playControlsDisabled(s); },
+                  .onTap = [state = state] { showHint(state); },
+              },
+              HudIconButton {
+                  .icon = IconName::Undo,
+                  .disabled = [state = state] { return state.evaluate().history.empty(); },
+                  .onTap = [state = state] { undo(state); },
+              },
+              Spacer {},
+              HudStatsPill {.state = state},
+              Spacer {},
+              HudIconButton {
+                  .icon = IconName::AutoAwesome,
+                  .disabled = [state = state] {
+                          SolitaireState const s = state.evaluate();
+                          return playControlsDisabled(s) || !s.animations.empty(); },
+                  .onTap = [state = state, drawMode = drawMode] { autoFinish(state, drawMode); },
+              },
+              HudIconButton {
+                  .icon = IconName::Tune,
+                  .onTap = onSettings,
+              }
+          ),
+      }
+          .padding(theme().space4, theme().space5, theme().space4, theme().space5);
+  }
+
+  bool operator==(SolitaireHud const& other) const {
+    return state == other.state && drawMode == other.drawMode &&
+           static_cast<bool>(onSettings) == static_cast<bool>(other.onSettings);
+  }
+};
+
+struct DialogCloseButton : ViewModifiers<DialogCloseButton> {
+  std::function<void()> onTap;
+
+  auto body() const {
+    Reactive::Signal<bool> hovered = useHover();
+    Reactive::Signal<bool> pressed = usePress();
+    auto handleTap = [onTap = onTap] {
+      if (onTap) {
+        onTap();
+      }
+    };
+
+    return ScaleAroundCenter{
+        .scale = [pressed] { return pressed() ? 0.94f : 1.f; },
+        .child = ZStack{
+            .horizontalAlignment = Alignment::Center,
+            .verticalAlignment = Alignment::Center,
+            .children = children(
+                Rectangle{}
+                    .size(26.f, 26.f)
+                    .fill([hovered] {
+                      return hovered() ? FillStyle::solid(Color{0.f, 0.f, 0.f, 0.05f}) : FillStyle::none();
+                    })
+                    .cornerRadius(6.f),
+                Icon{
+                    .name = IconName::Close,
+                    .size = 18.f,
+                    .weight = 450.f,
+                    .color = Color{0.f, 0.f, 0.f, 0.55f},
+                }
+            ),
+        }
+                     .size(26.f, 26.f)
+                     .cursor(Cursor::Hand)
+                     .focusable(true)
+                     .onTap(std::function<void()>{handleTap}),
+    };
+  }
+
+  bool operator==(DialogCloseButton const& other) const {
+    return static_cast<bool>(onTap) == static_cast<bool>(other.onTap);
+  }
+};
+
+struct SettingsSection : ViewModifiers<SettingsSection> {
+  std::string title;
+  std::vector<Element> content;
+
+  auto body() const {
+    return VStack{
+        .spacing = 8.f,
+        .alignment = Alignment::Stretch,
+        .children = children(
+            Text{
+                .text = title,
+                .font = Font{.size = 12.f, .weight = 500.f},
+                .color = Color{0.f, 0.f, 0.f, 0.55f},
+            },
+            VStack{
+                .spacing = 6.f,
+                .alignment = Alignment::Stretch,
+                .children = content,
+            }
+        ),
+    };
+  }
+
+  bool operator==(SettingsSection const& other) const { return title == other.title; }
+};
+
+struct DialogSegmentedControl : ViewModifiers<DialogSegmentedControl> {
+  Signal<int> selectedIndex;
+  std::vector<std::string> options;
+  std::function<void(int)> onChange;
+
+  auto body() const {
+    std::vector<Element> segments;
+    segments.reserve(options.size());
+    int const selected = selectedIndex();
+    for (std::size_t i = 0; i < options.size(); ++i) {
+      bool const isSelected = selected == static_cast<int>(i);
+      segments.push_back(
+          Text{
+              .text = options[i],
+              .font = Font{.size = 13.f, .weight = isSelected ? 500.f : 400.f},
+              .color = isSelected ? Color::hex(0x1A1A1A) : Color{0.f, 0.f, 0.f, 0.60f},
+              .horizontalAlignment = HorizontalAlignment::Center,
+              .verticalAlignment = VerticalAlignment::Center,
+          }
+              .padding(6.f, 12.f, 6.f, 12.f)
+              .fill(isSelected ? FillStyle::solid(Colors::white) : FillStyle::none())
+              .cornerRadius(5.f)
+              .shadow(isSelected ? ShadowStyle{.radius = 2.f, .offset = {0.f, 1.f}, .color = Color{0.f, 0.f, 0.f, 0.08f}}
+                                  : ShadowStyle::none())
+              .cursor(Cursor::Hand)
+              .onTap(std::function<void()>{[selectedIndex = selectedIndex, onChange = onChange, index = static_cast<int>(i)] {
+                if (index == selectedIndex.peek()) {
+                  return;
+                }
+                selectedIndex = index;
+                if (onChange) {
+                  onChange(index);
+                }
+              }})
+              .flex(1.f, 1.f));
+    }
+
+    return HStack{
+        .spacing = 2.f,
+        .alignment = Alignment::Stretch,
+        .children = std::move(segments),
+    }
+        .padding(2.f)
+        .fill(Color{0.f, 0.f, 0.f, 0.05f})
+        .cornerRadius(6.f);
+  }
+
+  bool operator==(DialogSegmentedControl const& other) const {
+    return selectedIndex == other.selectedIndex && options == other.options &&
+           static_cast<bool>(onChange) == static_cast<bool>(other.onChange);
+  }
+};
+
+struct ThemeSwatch : ViewModifiers<ThemeSwatch> {
+  Signal<int> feltIndex;
+  int index = 0;
+  std::string label;
+
+  auto body() const {
+    bool const selected = feltIndex() == index;
+    return VStack{
+        .spacing = 6.f,
+        .alignment = Alignment::Stretch,
+        .children = children(
+            Rectangle{}
+                .height(64.f)
+                .fill(feltPreviewFill(index))
+                .stroke(selected ? StrokeStyle::solid(Color::hex(0x0A84FF), 2.f)
+                                 : StrokeStyle::solid(Color{0.f, 0.f, 0.f, 0.10f}, 1.f))
+                .cornerRadius(6.f),
+            Text{
+                .text = label,
+                .font = Font{.size = 12.f, .weight = selected ? 500.f : 400.f},
+                .color = selected ? Color::hex(0x1A1A1A) : Color{0.f, 0.f, 0.f, 0.60f},
+                .horizontalAlignment = HorizontalAlignment::Center,
+                .verticalAlignment = VerticalAlignment::Center,
+            }
+        ),
+    }
+        .cursor(Cursor::Hand)
+        .onTap(std::function<void()>{[feltIndex = feltIndex, index = index] { feltIndex = index; }});
+  }
+
+  bool operator==(ThemeSwatch const& other) const {
+    return feltIndex == other.feltIndex && index == other.index && label == other.label;
+  }
+};
+
 struct SettingsDialog : ViewModifiers<SettingsDialog> {
   Signal<SolitaireState> state;
   Signal<int> drawMode;
@@ -2439,7 +2870,6 @@ struct SettingsDialog : ViewModifiers<SettingsDialog> {
   std::function<void()> onClose;
 
   auto body() const {
-    auto theme = useEnvironment<ThemeKey>();
     auto stateSignal = state;
     auto drawSignal = drawMode;
     auto feltSignal = feltIndex;
@@ -2450,97 +2880,83 @@ struct SettingsDialog : ViewModifiers<SettingsDialog> {
         .verticalAlignment = Alignment::Center,
         .children = children(
             VStack{
-                .spacing = theme().space4,
+                .spacing = 0.f,
                 .alignment = Alignment::Stretch,
                 .children = children(
                     HStack{
-                        .spacing = theme().space2,
+                        .spacing = 8.f,
                         .alignment = Alignment::Center,
                         .children = children(
                             Text{
                                 .text = "Settings",
-                                .font = Font::title(),
-                                .color = Color::primary(),
+                                .font = Font{.size = 15.f, .weight = 600.f},
+                                .color = Color::hex(0x1A1A1A),
                             }.flex(1.f, 1.f),
-                            IconButton{
-                                .icon = IconName::Close,
-                                .style = IconButton::Style{
-                                    .size = 26.f,
-                                    .weight = 450.f,
-                                    .color = Color::secondary(),
-                                },
-                                .onTap = closeAction,
-                            }
+                            DialogCloseButton{.onTap = closeAction}
                         ),
-                    },
+                    }.padding(16.f, 20.f, 16.f, 20.f),
+                    Rectangle{}.height(1.f).fill(Color{0.f, 0.f, 0.f, 0.06f}),
                     VStack{
-                        .spacing = theme().space3,
+                        .spacing = 22.f,
                         .alignment = Alignment::Stretch,
                         .children = children(
-                            HStack{
-                                .spacing = theme().space3,
-                                .alignment = Alignment::Center,
-                                .children = children(
-                                    Text{
-                                        .text = "Draw",
-                                        .font = Font{.size = 13.f, .weight = 650.f},
-                                        .color = Color::secondary(),
-                                    }.width(70.f),
-                                    SegmentedControl{
-                                        .selectedIndex = drawSignal,
-                                        .options = {SegmentedControlOption{.label = "Draw 1"},
-                                                    SegmentedControlOption{.label = "Draw 3"}},
-                                        .onChange = [stateSignal, drawSignal](int index) {
-                                          if (index == drawSignal.peek()) {
-                                            return;
-                                          }
-                                          drawSignal = index;
-                                          newGameWithDrawCount(stateSignal, index == 0 ? 1 : 3);
-                                        },
-                                    }.flex(1.f, 1.f)
+                            SettingsSection{
+                                .title = "Felt theme",
+                                .content = children(
+                                    HStack{
+                                        .spacing = 8.f,
+                                        .alignment = Alignment::Stretch,
+                                        .children = children(
+                                            ThemeSwatch{.feltIndex = feltSignal, .index = 0, .label = "Emerald"}.flex(1.f, 1.f),
+                                            ThemeSwatch{.feltIndex = feltSignal, .index = 1, .label = "Sapphire"}.flex(1.f, 1.f),
+                                            ThemeSwatch{.feltIndex = feltSignal, .index = 2, .label = "Obsidian"}.flex(1.f, 1.f),
+                                            ThemeSwatch{.feltIndex = feltSignal, .index = 3, .label = "Crimson"}.flex(1.f, 1.f)
+                                        ),
+                                    }
                                 ),
                             },
-                            HStack{
-                                .spacing = theme().space3,
-                                .alignment = Alignment::Center,
-                                .children = children(
-                                    Text{
-                                        .text = "Theme",
-                                        .font = Font{.size = 13.f, .weight = 650.f},
-                                        .color = Color::secondary(),
-                                    }.width(70.f),
-                                    SegmentedControl{
-                                        .selectedIndex = feltSignal,
-                                        .options = {SegmentedControlOption{.label = "Emerald"},
-                                                    SegmentedControlOption{.label = "Sapphire"},
-                                                    SegmentedControlOption{.label = "Obsidian"},
-                                                    SegmentedControlOption{.label = "Crimson"}},
-                                        .onChange = [feltSignal](int index) { feltSignal = index; },
-                                    }.flex(1.f, 1.f)
+                            SettingsSection{
+                                .title = "Draw mode",
+                                .content = children(
+                                    DialogSegmentedControl{
+                                        .selectedIndex = drawSignal,
+                                        .options = {"Draw 1", "Draw 3"},
+                                        .onChange = [stateSignal](int index) {
+                                          newGameWithDrawCount(stateSignal, index == 0 ? 1 : 3);
+                                        },
+                                    }
                                 ),
                             }
                         ),
-                    },
+                    }.padding(18.f, 20.f, 20.f, 20.f),
+                    Rectangle{}.height(1.f).fill(Color{0.f, 0.f, 0.f, 0.06f}),
                     HStack{
-                        .spacing = theme().space2,
+                        .spacing = 8.f,
                         .alignment = Alignment::Center,
                         .children = children(
                             Spacer{},
                             Button{
                                 .label = "Done",
                                 .variant = ButtonVariant::Primary,
+                                .style = Button::Style{
+                                    .font = Font{.size = 13.f, .weight = 500.f},
+                                    .paddingH = 16.f,
+                                    .paddingV = 7.f,
+                                    .cornerRadius = 6.f,
+                                    .accentColor = Color::hex(0x0A84FF),
+                                },
                                 .onTap = closeAction,
-                            }.width(96.f)
+                            }.height(32.f)
                         ),
-                    }
+                    }.padding(12.f, 20.f, 12.f, 20.f).fill(Color::hex(0xFAFAFA))
                 ),
             }
-                .width(480.f)
-                .padding(20.f)
-                .fill(Color::elevatedBackground())
-                .stroke(Color::separator(), 1.f)
-                .cornerRadius(CornerRadius{18.f})
-                .shadow(ShadowStyle{.radius = 20.f, .offset = {0.f, 8.f}, .color = Color{0.f, 0.f, 0.f, 0.18f}})
+                .width(440.f)
+                .fill(Colors::white)
+                .stroke(Color{0.f, 0.f, 0.f, 0.08f}, 1.f)
+                .cornerRadius(12.f)
+                .shadow(ShadowStyle{.radius = 40.f, .offset = {0.f, 12.f}, .color = Color{0.f, 0.f, 0.f, 0.18f}})
+                .clipContent(true)
         ),
     };
   }
@@ -2579,7 +2995,6 @@ struct BoardSurface : ViewModifiers<BoardSurface> {
           drawBoard(canvas, frame, stateSignal.evaluate(), drawCount, feltSignal.evaluate());
         },
     }
-        .flex(1.f, 1.f)
         .cursor(Cursor::Hand)
         .onPointerDown(std::function<void(Point, MouseButton)>{[stateSignal, drawModeSignal, viewport](Point p, MouseButton button) {
           if (button == MouseButton::Right) {
@@ -2687,103 +3102,37 @@ struct RootView : ViewModifiers<RootView> {
       }
     });
 
-    auto theme = useEnvironment<ThemeKey>();
+    auto openSettings = [showSettings, hideSettings, state, drawMode, feltIndex] {
+      showSettings(
+          SettingsDialog{
+              .state = state,
+              .drawMode = drawMode,
+              .feltIndex = feltIndex,
+              .onClose = hideSettings,
+          },
+          OverlayConfig{
+              .modal = true,
+              .backdropColor = Color{0.f, 0.f, 0.f, 0.28f},
+              .dismissOnOutsideTap = true,
+              .dismissOnEscape = true,
+              .onDismiss = hideSettings,
+              .debugName = "solitaire-settings",
+          });
+    };
 
-    return VStack {
-        .spacing = 0.f,
-        .alignment = Alignment::Stretch,
+    return ZStack{
+        .horizontalAlignment = Alignment::Stretch,
+        .verticalAlignment = Alignment::Start,
         .children = children(
-            HStack {
-                .spacing = theme().space3,
-                .alignment = Alignment::Stretch,
-                .children = children(
-                    Button {
-                        .label = "New Game",
-                        .variant = ButtonVariant::Primary,
-                        .onTap = [state, drawMode] { newGame(state, drawMode); },
-                    },
-                    Divider {.orientation = Divider::Orientation::Vertical},
-                    Spacer {},
-                    HStack {
-                        .spacing = theme().space4,
-                        .alignment = Alignment::Center,
-                        .children = children(
-                            StatView {
-                                .icon = IconName::Schedule,
-                                .value = [state] { return formatTime(state.evaluate().elapsedSeconds); },
-                            },
-                            StatView {
-                                .icon = IconName::SwapVert,
-                                .value = [state] { return std::to_string(state.evaluate().moves); },
-                            },
-                            StatView {
-                                .icon = IconName::Trophy,
-                                .value = [state] { return std::to_string(state.evaluate().score); },
-                                .accent = true,
-                            }
-                        ),
-                    },
-                    Spacer {},
-                    Divider {.orientation = Divider::Orientation::Vertical},
-                    Button {
-                        .label = "Undo",
-                        .variant = ButtonVariant::Secondary,
-                        .disabled = [state] { return state.evaluate().history.empty(); },
-                        .onTap = [state] { undo(state); },
-                    },
-                    Button {
-                        .label = "Hint",
-                        .variant = ButtonVariant::Secondary,
-                        .disabled = [state] {
-                          SolitaireState const s = state.evaluate();
-                          return playControlsDisabled(s);
-                        },
-                        .onTap = [state] { showHint(state); },
-                    },
-                    Button {
-                        .label = "Auto",
-                        .variant = ButtonVariant::Secondary,
-                        .disabled = [state] {
-                          SolitaireState const s = state.evaluate();
-                          return playControlsDisabled(s) || !s.animations.empty();
-                        },
-                        .onTap = [state, drawMode] { autoFinish(state, drawMode); },
-                    },
-                    IconButton {
-                        .icon = IconName::Settings,
-                        .style = IconButton::Style {
-                            .size = 30.f,
-                            .weight = 450.f,
-                            .color = Color::secondary(),
-                        },
-                        .onTap = [showSettings, hideSettings, state, drawMode, feltIndex] {
-                          showSettings(
-                              SettingsDialog{
-                                  .state = state,
-                                  .drawMode = drawMode,
-                                  .feltIndex = feltIndex,
-                                  .onClose = hideSettings,
-                              },
-                              OverlayConfig{
-                                  .modal = true,
-                                  .backdropColor = Color{0.f, 0.f, 0.f, 0.35f},
-                                  .dismissOnOutsideTap = true,
-                                  .dismissOnEscape = true,
-                                  .onDismiss = hideSettings,
-                                  .debugName = "solitaire-settings",
-                              });
-                        },
-                    }
-                ),
+            BoardSurface{.state = state, .drawMode = drawMode, .feltIndex = feltIndex}
+                .flex(1.f, 1.f),
+            SolitaireHud{
+                .state = state,
+                .drawMode = drawMode,
+                .onSettings = openSettings,
             }
-                .padding(12.f, 20.f, 12.f, 20.f)
-                .fill(Color::elevatedBackground())
-                .stroke(Color::separator(), 1.f)
-                .flex(0.f, 0.f),
-            BoardSurface {.state = state, .drawMode = drawMode, .feltIndex = feltIndex}.flex(1.f, 1.f)
         ),
-    }
-        .fill(Color::windowBackground());
+    };
   }
 };
 
@@ -2793,7 +3142,7 @@ int main(int argc, char* argv[]) {
   Application app(argc, argv);
 
   auto& window = app.createWindow<Window>({
-      .size = {1200, 820},
+      .size = {1200, 920},
       .title = "Solitaire",
       .resizable = true,
   });
