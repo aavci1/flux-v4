@@ -2630,6 +2630,28 @@ void drawFelt(Canvas& canvas, Rect frame, int feltIndex) {
                   StrokeStyle::none());
 }
 
+void drawBoardTable(Canvas& canvas, Rect frame, int feltIndex) {
+  drawFelt(canvas, frame, feltIndex);
+
+  BoardGeometry const geometry = boardGeometry(Size{frame.width, frame.height});
+  canvas.save();
+  canvas.translate(frame.x + geometry.origin.x, frame.y + geometry.origin.y);
+  canvas.scale(geometry.scale);
+
+  drawSlot(canvas, slotRect(PileKind::Stock, 0, geometry), "", false);
+  drawSlot(canvas, slotRect(PileKind::Waste, 0, geometry), "", false);
+  for (int i = 0; i < 4; ++i) {
+    Suit const suit = std::array<Suit, 4>{Suit::Spades, Suit::Hearts, Suit::Diamonds, Suit::Clubs}
+        [static_cast<std::size_t>(i)];
+    drawSlot(canvas, slotRect(PileKind::Foundation, i, geometry), suitGlyph(suit), false);
+  }
+  for (int i = 0; i < 7; ++i) {
+    drawSlot(canvas, slotRect(PileKind::Tableau, i, geometry), "", false);
+  }
+
+  canvas.restore();
+}
+
 void drawFloatingCompletionText(Canvas& canvas, Rect frame) {
   Point const center{frame.x + frame.width * 0.5f,
                      frame.y + frame.height * 0.46f};
@@ -2654,10 +2676,8 @@ void drawFloatingCompletionText(Canvas& canvas, Rect frame) {
            Color{1.f, 1.f, 1.f, 0.82f}, Point{center.x, center.y + 24.f});
 }
 
-void drawBoard(Canvas& canvas, Rect frame, SolitaireState const& state, int drawCount, int feltIndex,
+void drawBoard(Canvas& canvas, Rect frame, SolitaireState const& state, int drawCount,
                std::int64_t frameNanos) {
-  drawFelt(canvas, frame, feltIndex);
-
   BoardGeometry const geometry = boardGeometry(Size{frame.width, frame.height});
   std::int64_t const animationNow = frameNanos > 0 ? frameNanos : nowNanos();
   std::vector<int> const hiddenIds = hiddenCardIds(state, animationNow);
@@ -2675,17 +2695,24 @@ void drawBoard(Canvas& canvas, Rect frame, SolitaireState const& state, int draw
     return selectionDrop || dragDrop;
   };
 
-  drawSlot(canvas, slotRect(PileKind::Stock, 0, geometry), state.board.stock.empty() ? "↻" : "",
-           state.hint.source.kind == PileKind::Stock);
-  drawSlot(canvas, slotRect(PileKind::Waste, 0, geometry), "", false);
+  Rect const stockSlot = slotRect(PileKind::Stock, 0, geometry);
+  if (state.hint.source.kind == PileKind::Stock) {
+    drawSlot(canvas, stockSlot, state.board.stock.empty() ? "↻" : "", true);
+  } else if (state.board.stock.empty()) {
+    drawCenteredText(canvas, "↻", Font{.size = 36.f, .weight = 300.f},
+                     withAlpha(Colors::white, 0.36f), stockSlot.center());
+  }
   for (int i = 0; i < 4; ++i) {
     Suit const suit = std::array<Suit, 4>{Suit::Spades, Suit::Hearts, Suit::Diamonds, Suit::Clubs}
         [static_cast<std::size_t>(i)];
-    std::string_view marker = suitGlyph(suit);
-    drawSlot(canvas, slotRect(PileKind::Foundation, i, geometry), marker, validDrop(PileKind::Foundation, i));
+    if (validDrop(PileKind::Foundation, i)) {
+      drawSlot(canvas, slotRect(PileKind::Foundation, i, geometry), suitGlyph(suit), true);
+    }
   }
   for (int i = 0; i < 7; ++i) {
-    drawSlot(canvas, slotRect(PileKind::Tableau, i, geometry), "", validDrop(PileKind::Tableau, i));
+    if (validDrop(PileKind::Tableau, i)) {
+      drawSlot(canvas, slotRect(PileKind::Tableau, i, geometry), "", true);
+    }
   }
 
   for (CardPosition const& pos : buildCardPositions(state.board, drawCount, geometry, hiddenIds)) {
@@ -3229,10 +3256,31 @@ struct SettingsDialog : ViewModifiers<SettingsDialog> {
   }
 };
 
-struct BoardSurface : ViewModifiers<BoardSurface> {
+struct BoardTableSurface : ViewModifiers<BoardTableSurface> {
+  Signal<int> feltIndex;
+
+  auto body() const {
+    auto feltSignal = feltIndex;
+    return Render{
+        .measureFn = [](LayoutConstraints const& constraints, LayoutHints const&) {
+          float const width = std::isfinite(constraints.maxWidth) ? constraints.maxWidth : 1200.f;
+          float const height = std::isfinite(constraints.maxHeight) ? constraints.maxHeight : 760.f;
+          return Size{std::max(1.f, width), std::max(1.f, height)};
+        },
+        .draw = [feltSignal](Canvas& canvas, Rect frame) {
+          drawBoardTable(canvas, frame, feltSignal.evaluate());
+        },
+    }.rasterize();
+  }
+
+  bool operator==(BoardTableSurface const& other) const {
+    return feltIndex == other.feltIndex;
+  }
+};
+
+struct BoardCardSurface : ViewModifiers<BoardCardSurface> {
   Signal<SolitaireState> state;
   Signal<int> drawMode;
-  Signal<int> feltIndex;
   Signal<std::int64_t> frameNanos;
 
   auto body() const {
@@ -3244,7 +3292,6 @@ struct BoardSurface : ViewModifiers<BoardSurface> {
 
     auto stateSignal = state;
     auto drawModeSignal = drawMode;
-    auto feltSignal = feltIndex;
     auto frameSignal = frameNanos;
 
     return Render{
@@ -3253,11 +3300,10 @@ struct BoardSurface : ViewModifiers<BoardSurface> {
           float const height = std::isfinite(constraints.maxHeight) ? constraints.maxHeight : 760.f;
           return Size{std::max(1.f, width), std::max(1.f, height)};
         },
-        .draw = [stateSignal, drawModeSignal, feltSignal, frameSignal, viewport](Canvas& canvas, Rect frame) {
+        .draw = [stateSignal, drawModeSignal, frameSignal, viewport](Canvas& canvas, Rect frame) {
           *viewport = Size{frame.width, frame.height};
           int const drawCount = drawModeSignal.evaluate() == 0 ? 1 : 3;
-          drawBoard(canvas, frame, stateSignal.evaluate(), drawCount, feltSignal.evaluate(),
-                    frameSignal.evaluate());
+          drawBoard(canvas, frame, stateSignal.evaluate(), drawCount, frameSignal.evaluate());
         },
     }
         .cursor(Cursor::Hand)
@@ -3284,9 +3330,8 @@ struct BoardSurface : ViewModifiers<BoardSurface> {
         }});
   }
 
-  bool operator==(BoardSurface const& other) const {
-    return state == other.state && drawMode == other.drawMode && feltIndex == other.feltIndex &&
-           frameNanos == other.frameNanos;
+  bool operator==(BoardCardSurface const& other) const {
+    return state == other.state && drawMode == other.drawMode && frameNanos == other.frameNanos;
   }
 };
 
@@ -3457,7 +3502,9 @@ struct RootView : ViewModifiers<RootView> {
         .horizontalAlignment = Alignment::Stretch,
         .verticalAlignment = Alignment::Start,
         .children = children(
-            BoardSurface{.state = state, .drawMode = drawMode, .feltIndex = feltIndex, .frameNanos = frameNanos}
+            BoardTableSurface{.feltIndex = feltIndex}
+                .flex(1.f, 1.f),
+            BoardCardSurface{.state = state, .drawMode = drawMode, .frameNanos = frameNanos}
                 .flex(1.f, 1.f),
             SolitaireHud{
                 .state = state,
