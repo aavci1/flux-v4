@@ -2542,6 +2542,37 @@ void waitForCanvasLastPresentComplete(Canvas* canvas) {
   }
 }
 
+std::shared_ptr<Image> rasterizeToImage(Canvas& canvas, Size logicalSize,
+                                        RasterizeDrawCallback draw, float dpiScale) {
+  if (!draw || logicalSize.width <= 0.f || logicalSize.height <= 0.f) {
+    return nullptr;
+  }
+  auto* mc = dynamic_cast<MetalCanvas*>(&canvas);
+  if (!mc) {
+    return nullptr;
+  }
+  float const resolvedDpiScale = dpiScale > 0.f ? dpiScale : mc->dpiScale();
+
+  MetalFrameRecorder recorded;
+  if (!mc->beginRasterCacheCapture(&recorded, logicalSize, resolvedDpiScale)) {
+    return nullptr;
+  }
+
+  struct CaptureGuard {
+    MetalCanvas* canvas = nullptr;
+    ~CaptureGuard() {
+      if (canvas) {
+        canvas->endRasterCacheCapture();
+      }
+    }
+  } guard{mc};
+
+  draw(canvas, Rect::sharp(0.f, 0.f, logicalSize.width, logicalSize.height));
+  guard.canvas = nullptr;
+  mc->endRasterCacheCapture();
+  return mc->rasterizeRecordedOps(recorded, logicalSize, resolvedDpiScale);
+}
+
 bool beginRecordedOpsCaptureForCanvas(Canvas* canvas, MetalFrameRecorder* target) {
   if (!canvas || !target) {
     return false;
@@ -2589,37 +2620,6 @@ float dpiScaleForCanvas(Canvas* canvas) {
     return mc->dpiScale();
   }
   return 1.f;
-}
-
-bool beginRasterCacheCaptureForCanvas(Canvas* canvas, MetalFrameRecorder* target, Size logicalSize,
-                                      float dpiScale) {
-  if (!canvas || !target) {
-    return false;
-  }
-  if (auto* mc = dynamic_cast<MetalCanvas*>(canvas)) {
-    return mc->beginRasterCacheCapture(target, logicalSize, dpiScale);
-  }
-  return false;
-}
-
-void endRasterCacheCaptureForCanvas(Canvas* canvas) {
-  if (!canvas) {
-    return;
-  }
-  if (auto* mc = dynamic_cast<MetalCanvas*>(canvas)) {
-    mc->endRasterCacheCapture();
-  }
-}
-
-std::shared_ptr<Image> rasterizeRecordedOpsForCanvas(Canvas* canvas, MetalFrameRecorder& recorded,
-                                                     Size logicalSize, float dpiScale) {
-  if (!canvas) {
-    return nullptr;
-  }
-  if (auto* mc = dynamic_cast<MetalCanvas*>(canvas)) {
-    return mc->rasterizeRecordedOps(recorded, logicalSize, dpiScale);
-  }
-  return nullptr;
 }
 
 bool requestNextFrameCaptureForCanvas(Canvas* canvas) {

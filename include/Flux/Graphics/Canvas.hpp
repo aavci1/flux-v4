@@ -12,6 +12,7 @@
 #include <Flux/Graphics/TextLayout.hpp>
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <span>
 #include <string_view>
@@ -113,5 +114,15 @@ public:
 protected:
   Canvas() = default;
 };
+
+using RasterizeDrawCallback = std::function<void(Canvas&, Rect)>;
+
+/// Records \p draw into an offscreen texture and returns it as an Image.
+///
+/// `logicalSize` is in logical canvas units. Pass `dpiScale <= 0` to use the active canvas scale.
+/// The callback receives a temporary target-local canvas with bounds `{0, 0, logicalSize}`.
+/// Returns null when the active backend cannot rasterize or the requested size is empty.
+std::shared_ptr<Image> rasterizeToImage(Canvas& canvas, Size logicalSize,
+                                        RasterizeDrawCallback draw, float dpiScale = 0.f);
 
 } // namespace flux

@@ -42,17 +42,6 @@ bool replayRecordedLocalOpsForCanvas(Canvas* canvas, MetalFrameRecorder const& r
 /// Returns the active Metal canvas DPI scale, or 1 when the canvas is not Metal-backed.
 float dpiScaleForCanvas(Canvas* canvas);
 
-/// Starts recording a subtree for an offscreen raster cache using target-local logical coordinates.
-bool beginRasterCacheCaptureForCanvas(Canvas* canvas, MetalFrameRecorder* target, Size logicalSize,
-                                      float dpiScale);
-
-/// Stops recording started by `beginRasterCacheCaptureForCanvas`.
-void endRasterCacheCaptureForCanvas(Canvas* canvas);
-
-/// Encodes recorded raster-cache ops into a Metal texture and returns it as an image.
-std::shared_ptr<Image> rasterizeRecordedOpsForCanvas(Canvas* canvas, MetalFrameRecorder& recorded,
-                                                     Size logicalSize, float dpiScale);
-
 /// Requests a CPU readback of the next presented Metal frame.
 bool requestNextFrameCaptureForCanvas(Canvas* canvas);
 

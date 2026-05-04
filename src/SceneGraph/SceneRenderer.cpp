@@ -282,15 +282,11 @@ struct SceneRenderer::Impl {
         std::shared_ptr<Image> cached =
             node.hasValidCache(logicalSize, dpiScale) ? node.cachedImage() : nullptr;
         if (!cached) {
-            MetalFrameRecorder recorded;
-            if (!beginRasterCacheCaptureForCanvas(canvas, &recorded, logicalSize, dpiScale)) {
-                return false;
-            }
-            for (std::unique_ptr<SceneNode> const &child : node.children()) {
-                renderNode(*child, 1.f, Point {}, false, RenderTraversalMode::PreparedCacheBypass);
-            }
-            endRasterCacheCaptureForCanvas(canvas);
-            cached = rasterizeRecordedOpsForCanvas(canvas, recorded, logicalSize, dpiScale);
+            cached = rasterizeToImage(*canvas, logicalSize, [this, &node](Canvas&, Rect) {
+                for (std::unique_ptr<SceneNode> const &child : node.children()) {
+                    renderNode(*child, 1.f, Point {}, false, RenderTraversalMode::PreparedCacheBypass);
+                }
+            }, dpiScale);
             if (!cached) {
                 return false;
             }
