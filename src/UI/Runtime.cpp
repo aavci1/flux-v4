@@ -129,6 +129,13 @@ bool Runtime::isActionCurrentlyEnabled(std::string const& name) const {
   return d->actions.isHandlerEnabled(focusedKey, name, d->window.actionDescriptors());
 }
 
+bool Runtime::dispatchAction(std::string const& name) {
+  ComponentKey const focusedKey = d->input.focusTarget
+      ? d->input.focusTarget->stableTargetKey
+      : ComponentKey{};
+  return d->actions.dispatchAction(focusedKey, name, d->window.actionDescriptors());
+}
+
 ActionRegistry& Runtime::actionRegistry() noexcept {
   return d->actions;
 }
@@ -511,7 +518,10 @@ void Runtime::handleInput(InputEvent const& event) {
     return;
   }
 
-  if (event.kind == InputEvent::Kind::KeyDown &&
+  bool const menuOwnsShortcut = event.kind == InputEvent::Kind::KeyDown &&
+                                Application::hasInstance() &&
+                                Application::instance().isMenuShortcutClaimed(event.key, event.modifiers);
+  if (event.kind == InputEvent::Kind::KeyDown && !menuOwnsShortcut &&
       d->actions.dispatchShortcut(focusedActionKey(d->input), event.key, event.modifiers,
                                   d->window.actionDescriptors())) {
     return;

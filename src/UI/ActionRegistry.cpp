@@ -143,6 +143,34 @@ bool ActionRegistry::dispatchShortcut(ComponentKey const& focusedKey, KeyCode ke
   return false;
 }
 
+bool ActionRegistry::dispatchAction(ComponentKey const& focusedKey, std::string const& name,
+                                    std::unordered_map<std::string, ActionDescriptor> const& descriptors) const {
+  auto enabled = [&](ActionHandler const& handler) {
+    auto dit = descriptors.find(handler.name);
+    if (dit != descriptors.end() && dit->second.isEnabled && !dit->second.isEnabled()) {
+      return false;
+    }
+    return !handler.isEnabled || handler.isEnabled();
+  };
+
+  if (ActionHandler const* claim = findViewClaim(focusedKey, name)) {
+    if (enabled(*claim)) {
+      claim->trigger();
+      return true;
+    }
+    return false;
+  }
+
+  if (ActionHandler const* win = findWindowAction(name)) {
+    if (enabled(*win)) {
+      win->trigger();
+      return true;
+    }
+  }
+
+  return false;
+}
+
 bool ActionRegistry::isHandlerEnabled(ComponentKey const& focusedKey, std::string const& name,
                                     std::unordered_map<std::string, ActionDescriptor> const& descriptors) const {
   auto dit = descriptors.find(name);

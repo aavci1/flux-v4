@@ -7,6 +7,7 @@
 #include <Flux/Reactive/AnimationClock.hpp>
 
 #include "Core/PlatformWindow.hpp"
+#include "Core/PlatformApplication.hpp"
 #include "Debug/PerfCounters.hpp"
 #include "Graphics/CoreTextSystem.hpp"
 #include "Platform/Mac/MacClipboard.hpp"
@@ -15,8 +16,13 @@
 #include <chrono>
 #include <climits>
 #include <cstdint>
+#include <filesystem>
+#include <fstream>
 #include <functional>
+#include <iterator>
 #include <memory>
+#include <regex>
+#include <sstream>
 #include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
@@ -41,6 +47,104 @@ namespace {
 
 Application* gCurrent = nullptr;
 
+std::string jsonEscape(std::string const& input) {
+  std::string out;
+  out.reserve(input.size());
+  for (char c : input) {
+    if (c == '"' || c == '\\') {
+      out.push_back('\\');
+    }
+    out.push_back(c);
+  }
+  return out;
+}
+
+std::filesystem::path windowStatePath(std::string const& userDataDir) {
+  if (userDataDir.empty()) {
+    return {};
+  }
+  return std::filesystem::path(userDataDir) / "window-state.json";
+}
+
+void loadWindowStatesFromDisk(std::filesystem::path const& path,
+                              std::unordered_map<std::string, WindowState>& out) {
+  out.clear();
+  if (path.empty()) {
+    return;
+  }
+  std::ifstream in(path);
+  if (!in) {
+    return;
+  }
+  std::string const text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  std::regex const entry(
+      R"json("([^"]+)"\s*:\s*\{[^}]*"frame"\s*:\s*\[\s*([-0-9.]+)\s*,\s*([-0-9.]+)\s*,\s*([-0-9.]+)\s*,\s*([-0-9.]+)\s*\][^}]*"fullscreen"\s*:\s*(true|false)[^}]*"contentSize"\s*:\s*\[\s*([-0-9.]+)\s*,\s*([-0-9.]+)\s*\][^}]*\})json");
+  for (std::sregex_iterator it(text.begin(), text.end(), entry), end; it != end; ++it) {
+    WindowState state;
+    state.frame = Rect::sharp(std::stof((*it)[2].str()), std::stof((*it)[3].str()),
+                              std::stof((*it)[4].str()), std::stof((*it)[5].str()));
+    state.fullscreen = (*it)[6].str() == "true";
+    state.contentSize = Size{std::stof((*it)[7].str()), std::stof((*it)[8].str())};
+    out[(*it)[1].str()] = state;
+  }
+}
+
+void saveWindowStatesToDisk(std::filesystem::path const& path,
+                            std::unordered_map<std::string, WindowState> const& states) {
+  if (path.empty()) {
+    return;
+  }
+  std::error_code ec;
+  std::filesystem::create_directories(path.parent_path(), ec);
+  if (ec) {
+    return;
+  }
+  std::filesystem::path const tmp = path.string() + ".tmp";
+  {
+    std::ofstream out(tmp, std::ios::trunc);
+    if (!out) {
+      return;
+    }
+    out << "{\n";
+    bool first = true;
+    for (auto const& [id, state] : states) {
+      if (!first) {
+        out << ",\n";
+      }
+      first = false;
+      out << "  \"" << jsonEscape(id) << "\": {\n";
+      out << "    \"frame\": [" << state.frame.x << ", " << state.frame.y << ", "
+          << state.frame.width << ", " << state.frame.height << "],\n";
+      out << "    \"fullscreen\": " << (state.fullscreen ? "true" : "false") << ",\n";
+      out << "    \"contentSize\": [" << state.contentSize.width << ", "
+          << state.contentSize.height << "]\n";
+      out << "  }";
+    }
+    out << "\n}\n";
+  }
+  std::filesystem::rename(tmp, path, ec);
+  if (ec) {
+    std::filesystem::remove(path, ec);
+    ec.clear();
+    std::filesystem::rename(tmp, path, ec);
+  }
+}
+
+void collectMenuState(MenuItem& item, std::unordered_map<std::string, std::function<void()>>& handlers,
+                      std::unordered_map<std::string, std::function<bool()>>& enabled,
+                      std::uint64_t& nextId) {
+  if (item.actionName.empty() && item.handler) {
+    item.actionName = "__flux.menu.handler." + std::to_string(nextId++);
+    handlers[item.actionName] = item.handler;
+  }
+  if (!item.actionName.empty() && item.isEnabled) {
+    enabled[item.actionName] = item.isEnabled;
+  }
+  for (MenuItem& child : item.children) {
+    collectMenuState(child, handlers, enabled, nextId);
+  }
+}
+
 } // namespace
 
 struct Application::Impl {
@@ -59,7 +163,14 @@ struct Application::Impl {
 
   std::unique_ptr<CoreTextSystem> textSystem_;
   std::unique_ptr<Clipboard> clipboard_;
+  std::unique_ptr<PlatformApplication> platformApp_;
   std::thread::id mainThreadId_;
+  MenuBar menuBar_;
+  std::unordered_map<std::string, std::function<void()>> menuHandlers_;
+  std::unordered_map<std::string, std::function<bool()>> menuEnabled_;
+  std::uint64_t nextMenuHandlerId_ = 1;
+  mutable bool windowStatesLoaded_ = false;
+  mutable std::unordered_map<std::string, WindowState> windowStates_;
 
   /// `CTFontRef` retained; released in `Application` destructor.
   void* iconFont_ = nullptr;
@@ -110,6 +221,12 @@ Application::Application(int /*argc*/, char** /*argv*/) {
   d->mainThreadId_ = std::this_thread::get_id();
   d->textSystem_ = std::make_unique<CoreTextSystem>();
   d->clipboard_ = std::make_unique<MacClipboard>();
+  d->platformApp_ = detail::createPlatformApplication();
+  d->platformApp_->initialize();
+  d->platformApp_->setTerminateHandler([this] {
+    saveOpenWindowStates();
+    d->quit_ = true;
+  });
 
   {
     NSBundle* const bundle = [NSBundle mainBundle];
@@ -148,6 +265,9 @@ Application::Application(int /*argc*/, char** /*argv*/) {
       if (it == app->d->windows_.end()) {
         return;
       }
+      if (!(*it)->restoreId().empty()) {
+        app->saveWindowState((*it)->restoreId(), (*it)->currentWindowState());
+      }
       app->d->byHandle_.erase(closeHandle);
       app->d->renderStates_.erase(closeHandle);
       app->d->windows_.erase(it);
@@ -175,13 +295,12 @@ Application::Application(int /*argc*/, char** /*argv*/) {
     windowIt->second->platformWindow()->acknowledgeAnimationFrameTick();
   });
 
-  [NSApplication sharedApplication];
-  [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
   AnimationClock::instance().install(d->eventQueue_);
 
 }
 
 Application::~Application() {
+  saveOpenWindowStates();
   AnimationClock::instance().shutdown();
   if (d->iconFont_) {
     CFRelease(reinterpret_cast<CTFontRef>(reinterpret_cast<std::uintptr_t>(d->iconFont_)));
@@ -225,6 +344,103 @@ TextSystem& Application::textSystem() { return *d->textSystem_; }
 
 Clipboard& Application::clipboard() { return *d->clipboard_; }
 
+void Application::setMenuBar(MenuBar menu) {
+  d->menuHandlers_.clear();
+  d->menuEnabled_.clear();
+  for (MenuItem& item : menu.menus) {
+    collectMenuState(item, d->menuHandlers_, d->menuEnabled_, d->nextMenuHandlerId_);
+  }
+  d->menuBar_ = std::move(menu);
+  d->platformApp_->setMenuBar(d->menuBar_, [this](std::string const& actionName) {
+    return dispatchAction(actionName);
+  });
+  d->platformApp_->revalidateMenuItems([this](std::string const& actionName) {
+    return isActionEnabled(actionName);
+  });
+}
+
+bool Application::dispatchAction(std::string const& name) {
+  auto menuHandler = d->menuHandlers_.find(name);
+  if (menuHandler != d->menuHandlers_.end()) {
+    auto enabled = d->menuEnabled_.find(name);
+    if (enabled != d->menuEnabled_.end() && enabled->second && !enabled->second()) {
+      return false;
+    }
+    if (menuHandler->second) {
+      menuHandler->second();
+      return true;
+    }
+    return false;
+  }
+
+  for (auto it = d->windows_.rbegin(); it != d->windows_.rend(); ++it) {
+    if (*it && (*it)->dispatchAction(name)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool Application::isActionEnabled(std::string const& name) const {
+  auto enabled = d->menuEnabled_.find(name);
+  if (enabled != d->menuEnabled_.end() && enabled->second && !enabled->second()) {
+    return false;
+  }
+  if (d->menuHandlers_.contains(name)) {
+    return true;
+  }
+  for (auto it = d->windows_.rbegin(); it != d->windows_.rend(); ++it) {
+    if (*it && (*it)->isActionEnabled(name)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool Application::isMenuShortcutClaimed(KeyCode key, Modifiers modifiers) const {
+  auto const shortcuts = d->platformApp_->menuClaimedShortcuts();
+  return shortcuts.contains(ShortcutKey{.key = key, .modifiers = modifiers});
+}
+
+std::string Application::userDataDir() const {
+  return d->platformApp_->userDataDir();
+}
+
+std::string Application::cacheDir() const {
+  return d->platformApp_->cacheDir();
+}
+
+std::optional<WindowState> Application::loadWindowState(std::string const& restoreId) const {
+  if (restoreId.empty()) {
+    return std::nullopt;
+  }
+  if (!d->windowStatesLoaded_) {
+    loadWindowStatesFromDisk(windowStatePath(userDataDir()), d->windowStates_);
+    d->windowStatesLoaded_ = true;
+  }
+  auto it = d->windowStates_.find(restoreId);
+  if (it == d->windowStates_.end()) {
+    return std::nullopt;
+  }
+  return it->second;
+}
+
+void Application::saveWindowState(std::string const& restoreId, WindowState const& state) {
+  if (restoreId.empty()) {
+    return;
+  }
+  if (!d->windowStatesLoaded_) {
+    loadWindowStatesFromDisk(windowStatePath(userDataDir()), d->windowStates_);
+    d->windowStatesLoaded_ = true;
+  }
+  d->windowStates_[restoreId] = state;
+  saveWindowStatesToDisk(windowStatePath(userDataDir()), d->windowStates_);
+}
+
+WindowConfig Application::resolveWindowConfig(WindowConfig config) {
+  return config;
+}
+
 void* Application::iconFontHandle() const { return d->iconFont_; }
 
 ObserverHandle Application::onNextFrameNeeded(std::function<void()> callback) {
@@ -260,6 +476,17 @@ void Application::requestAnimationFrames() {
   }
   if (!isMainThread()) {
     wakeEventLoop();
+  }
+}
+
+void Application::saveOpenWindowStates() {
+  if (!d) {
+    return;
+  }
+  for (auto const& window : d->windows_) {
+    if (window && !window->restoreId().empty()) {
+      saveWindowState(window->restoreId(), window->currentWindowState());
+    }
   }
 }
 
@@ -407,6 +634,7 @@ int Application::exec() {
 }
 
 void Application::quit() {
+  saveOpenWindowStates();
   d->quit_ = true;
   for (auto& w : d->windows_) {
     if (w) {

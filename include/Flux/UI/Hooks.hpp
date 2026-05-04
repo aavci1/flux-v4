@@ -9,6 +9,7 @@
 #include <Flux/Reactive/Effect.hpp>
 #include <Flux/Reactive/Signal.hpp>
 #include <Flux/Core/ComponentKey.hpp>
+#include <Flux/Core/Window.hpp>
 #include <Flux/Detail/Runtime.hpp>
 #include <Flux/UI/Environment.hpp>
 #include <Flux/UI/EnvironmentKeys.hpp>
@@ -418,6 +419,21 @@ inline void useWindowAction(std::string const& name, std::function<void()> handl
   if (!runtime) {
     return;
   }
+  ActionId const id = runtime->actionRegistry().registerWindowAction(
+      name, std::move(handler), std::move(isEnabled));
+  Reactive::onCleanup([runtime, id] {
+    runtime->actionRegistry().unregister(id);
+  });
+}
+
+inline void useWindowAction(std::string const& name, std::function<void()> handler,
+                            ActionDescriptor descriptor) {
+  Runtime* runtime = Runtime::current();
+  if (!runtime) {
+    return;
+  }
+  std::function<bool()> isEnabled = descriptor.isEnabled;
+  runtime->window().registerAction(name, std::move(descriptor));
   ActionId const id = runtime->actionRegistry().registerWindowAction(
       name, std::move(handler), std::move(isEnabled));
   Reactive::onCleanup([runtime, id] {

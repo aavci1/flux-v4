@@ -9,6 +9,7 @@
 #include <Flux/UI/EnvironmentBinding.hpp>
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 
@@ -36,6 +37,15 @@ struct WindowConfig {
   std::string title = "Flux Application";
   bool fullscreen = false;
   bool resizable = true;
+  Size minSize{};
+  Size maxSize{};
+  std::string restoreId;
+};
+
+struct WindowState {
+  Rect frame{};
+  bool fullscreen = false;
+  Size contentSize{};
 };
 
 class Window {
@@ -108,6 +118,10 @@ public:
   /// UI can lag by one frame (e.g. clipboard or selection); the next reactive pass corrects it.
   bool isActionEnabled(std::string const& name) const;
 
+  /// Dispatches a named action through the same focused-view first, then window-action ordering used
+  /// for shortcuts. Returns true if an enabled handler fired.
+  bool dispatchAction(std::string const& name);
+
   /// Sets the root view component (declarative UI). Creates internal state on first call.
   /// Definition in `<Flux/Core/WindowUI.hpp>` (include that header in TUs that call `setView`).
   ///
@@ -140,6 +154,10 @@ private:
   EnvironmentBinding& environmentBindingMut();
 
   std::unordered_map<std::string, ActionDescriptor> const& actionDescriptors() const;
+
+  std::string const& restoreId() const;
+  WindowState currentWindowState() const;
+  void applyRestoredWindowState(WindowState const& state);
 
   /// Used by `Application` (friend); implementation on `Impl`.
   PlatformWindow* platformWindow() const;

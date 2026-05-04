@@ -35,7 +35,10 @@ constexpr std::uint16_t P = 0x23;
 constexpr std::uint16_t L = 0x25;
 constexpr std::uint16_t J = 0x26;
 constexpr std::uint16_t K = 0x28;
+constexpr std::uint16_t Comma = 0x2B;
+constexpr std::uint16_t Slash = 0x2C;
 constexpr std::uint16_t M = 0x2E;
+constexpr std::uint16_t Period = 0x2F;
 
 // Editing keys
 constexpr std::uint16_t Return = 0x24;

@@ -7,6 +7,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_RELEASE_FLAGS "-march=native -O3 -flto")
 
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/FluxApp.cmake)
+
 # Planned backends: LINUX_WAYLAND, LINUX_KMS — reserved for future CMake branches.
 set(FLUX_PLATFORM "AUTO" CACHE STRING
     "Flux backend: AUTO, MACOS, LINUX_WAYLAND, LINUX_KMS (only MACOS is implemented).")
@@ -187,6 +189,7 @@ add_library(flux STATIC
   src/Graphics/Metal/MetalShaderLibrary.mm
   src/Graphics/Metal/MetalDeviceResources.mm
   src/Graphics/Metal/MetalCanvas.mm
+  src/Platform/Mac/MacApplication.mm
   src/Platform/Mac/MacMetalWindow.mm
   src/Platform/Mac/MacClipboard.mm
 )

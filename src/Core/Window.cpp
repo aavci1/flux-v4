@@ -42,9 +42,11 @@ struct Window::Impl {
   std::unordered_map<std::string, ActionDescriptor> actions_;
   Reactive::Signal<Theme> themeSignal_{Theme::light()};
   EnvironmentBinding windowEnvironmentBinding_{};
+  std::string restoreId_;
   bool shutdown_ = false;
 
-  explicit Impl(Window&) {
+  explicit Impl(Window&, WindowConfig const& config)
+      : restoreId_(config.restoreId) {
     windowEnvironmentBinding_ = EnvironmentBinding{}.withSignal<ThemeKey>(themeSignal_);
   }
   ~Impl();
@@ -80,7 +82,7 @@ void Window::Impl::shutdown() {
 }
 
 Window::Window(const WindowConfig& config) {
-  d = std::make_unique<Impl>(*this);
+  d = std::make_unique<Impl>(*this, config);
   d->platform_ = detail::createPlatformWindow(config);
   d->platform_->setFluxWindow(this);
   Application::instance().eventQueue().post(WindowLifecycleEvent{
@@ -226,8 +228,32 @@ bool Window::isActionEnabled(std::string const& name) const {
   return d->runtime_->isActionCurrentlyEnabled(name);
 }
 
+bool Window::dispatchAction(std::string const& name) {
+  return d->runtime_ && d->runtime_->dispatchAction(name);
+}
+
 std::unordered_map<std::string, ActionDescriptor> const& Window::actionDescriptors() const {
   return d->actions_;
+}
+
+std::string const& Window::restoreId() const {
+  return d->restoreId_;
+}
+
+WindowState Window::currentWindowState() const {
+  WindowState state;
+  if (auto frame = d->platform_->currentFrame()) {
+    state.frame = *frame;
+  }
+  state.fullscreen = d->platform_->isFullscreen();
+  state.contentSize = d->platform_->currentSize();
+  return state;
+}
+
+void Window::applyRestoredWindowState(WindowState const& state) {
+  if (state.frame.width > 0.f && state.frame.height > 0.f) {
+    d->platform_->setFrame(state.frame);
+  }
 }
 
 void Window::setViewRoot(std::unique_ptr<RootHolder> holder) {

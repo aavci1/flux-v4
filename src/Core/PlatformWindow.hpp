@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <string>
 
 #include <Flux/Core/Cursor.hpp>
@@ -26,10 +27,14 @@ public:
   virtual std::unique_ptr<Canvas> createCanvas(Window& owner) = 0;
 
   virtual void resize(const Size& newSize) = 0;
+  virtual void setMinSize(Size /*size*/) {}
+  virtual void setMaxSize(Size /*size*/) {}
   virtual void setFullscreen(bool fullscreen) = 0;
   virtual void setTitle(const std::string& title) = 0;
 
   virtual Size currentSize() const = 0;
+  virtual std::optional<Rect> currentFrame() const { return std::nullopt; }
+  virtual void setFrame(Rect /*frame*/) {}
   virtual bool isFullscreen() const = 0;
   virtual unsigned int handle() const = 0;
 

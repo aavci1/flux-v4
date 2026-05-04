@@ -34,6 +34,7 @@ public:
   bool wantsTextInput() const noexcept { return true; }
   bool textCacheOverlayEnabled() const noexcept { return false; }
   bool isActionCurrentlyEnabled(std::string const& name) const;
+  bool dispatchAction(std::string const& name);
   ActionRegistry& actionRegistry() noexcept;
   ActionRegistry const& actionRegistry() const noexcept;
   Window& window() noexcept;

@@ -294,9 +294,13 @@ public:
   void setFluxWindow(Window* window) override;
   void show() override;
   void resize(const Size& newSize) override;
+  void setMinSize(Size size) override;
+  void setMaxSize(Size size) override;
   void setFullscreen(bool fullscreen) override;
   void setTitle(const std::string& title) override;
   Size currentSize() const override;
+  std::optional<Rect> currentFrame() const override;
+  void setFrame(Rect frame) override;
   bool isFullscreen() const override;
   unsigned int handle() const override;
   void* nativeGraphicsSurface() const override;
@@ -646,6 +650,15 @@ MacMetalPlatformWindow::MacMetalPlatformWindow(const WindowConfig& config) : d(s
                                             backing:NSBackingStoreBuffered
                                               defer:NO];
   [d->window_ setReleasedWhenClosed:NO];
+  if (config.minSize.width > 0.f || config.minSize.height > 0.f) {
+    [d->window_ setContentMinSize:NSMakeSize(static_cast<CGFloat>(config.minSize.width),
+                                             static_cast<CGFloat>(config.minSize.height))];
+  }
+  if (config.maxSize.width > 0.f || config.maxSize.height > 0.f) {
+    CGFloat const maxW = config.maxSize.width > 0.f ? static_cast<CGFloat>(config.maxSize.width) : CGFLOAT_MAX;
+    CGFloat const maxH = config.maxSize.height > 0.f ? static_cast<CGFloat>(config.maxSize.height) : CGFLOAT_MAX;
+    [d->window_ setContentMaxSize:NSMakeSize(maxW, maxH)];
+  }
   // Avoid scaling a stale snapshot during live resize; custom Metal content must update each frame.
   d->window_.preservesContentDuringLiveResize = NO;
 
@@ -740,6 +753,23 @@ void MacMetalPlatformWindow::resize(const Size& newSize) {
   [d->window_ setContentSize:sz];
 }
 
+void MacMetalPlatformWindow::setMinSize(Size size) {
+  if (!d->window_) {
+    return;
+  }
+  [d->window_ setContentMinSize:NSMakeSize(static_cast<CGFloat>(std::max(0.f, size.width)),
+                                           static_cast<CGFloat>(std::max(0.f, size.height)))];
+}
+
+void MacMetalPlatformWindow::setMaxSize(Size size) {
+  if (!d->window_) {
+    return;
+  }
+  CGFloat const maxW = size.width > 0.f ? static_cast<CGFloat>(size.width) : CGFLOAT_MAX;
+  CGFloat const maxH = size.height > 0.f ? static_cast<CGFloat>(size.height) : CGFLOAT_MAX;
+  [d->window_ setContentMaxSize:NSMakeSize(maxW, maxH)];
+}
+
 void MacMetalPlatformWindow::setFullscreen(bool fullscreen) {
   if (!d->window_) {
     return;
@@ -768,6 +798,44 @@ Size MacMetalPlatformWindow::currentSize() const {
   }
   NSRect bounds = d->metalView_.bounds;
   return Size{static_cast<float>(bounds.size.width), static_cast<float>(bounds.size.height)};
+}
+
+std::optional<Rect> MacMetalPlatformWindow::currentFrame() const {
+  if (!d->window_) {
+    return std::nullopt;
+  }
+  NSRect frame = [d->window_ frame];
+  return Rect::sharp(static_cast<float>(frame.origin.x),
+                     static_cast<float>(frame.origin.y),
+                     static_cast<float>(frame.size.width),
+                     static_cast<float>(frame.size.height));
+}
+
+void MacMetalPlatformWindow::setFrame(Rect frame) {
+  if (!d->window_ || frame.width <= 0.f || frame.height <= 0.f) {
+    return;
+  }
+  NSRect nsFrame = NSMakeRect(static_cast<CGFloat>(frame.x),
+                              static_cast<CGFloat>(frame.y),
+                              static_cast<CGFloat>(frame.width),
+                              static_cast<CGFloat>(frame.height));
+  NSPoint const center = NSMakePoint(NSMidX(nsFrame), NSMidY(nsFrame));
+  bool onScreen = false;
+  for (NSScreen* screen in [NSScreen screens]) {
+    if (NSPointInRect(center, screen.visibleFrame)) {
+      onScreen = true;
+      break;
+    }
+  }
+  if (!onScreen) {
+    NSScreen* screen = [NSScreen mainScreen];
+    NSRect visible = screen ? screen.visibleFrame : NSMakeRect(0, 0, nsFrame.size.width, nsFrame.size.height);
+    nsFrame.size.width = std::min(nsFrame.size.width, visible.size.width);
+    nsFrame.size.height = std::min(nsFrame.size.height, visible.size.height);
+    nsFrame.origin.x = visible.origin.x + (visible.size.width - nsFrame.size.width) * 0.5;
+    nsFrame.origin.y = visible.origin.y + (visible.size.height - nsFrame.size.height) * 0.5;
+  }
+  [d->window_ setFrame:nsFrame display:NO];
 }
 
 bool MacMetalPlatformWindow::isFullscreen() const {

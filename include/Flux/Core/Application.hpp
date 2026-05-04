@@ -9,11 +9,14 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
+#include <string>
 #include <thread>
 #include <type_traits>
 #include <utility>
 
 #include <Flux/Core/Clipboard.hpp>
+#include <Flux/Core/MenuItem.hpp>
 #include <Flux/Core/Window.hpp>
 #include <Flux/Reactive/Observer.hpp>
 
@@ -36,10 +39,24 @@ public:
   template<typename T = Window, typename... Args>
   T& createWindow(WindowConfig const& config, Args&&... args) {
     static_assert(std::is_base_of_v<Window, T>);
+    WindowConfig resolvedConfig = resolveWindowConfig(config);
+    std::optional<WindowState> restoredState;
+    if (!config.restoreId.empty()) {
+      restoredState = loadWindowState(config.restoreId);
+      if (restoredState && !restoredState->contentSize.isEmpty()) {
+        resolvedConfig.size = restoredState->contentSize;
+      }
+    }
     // `new T` must run in a member of `Application` so `friend Application` can call `Window`'s protected ctor.
-    auto window = std::unique_ptr<T>(new T(config, std::forward<Args>(args)...));
+    auto window = std::unique_ptr<T>(new T(resolvedConfig, std::forward<Args>(args)...));
     T* raw = window.get();
+    if (restoredState && restoredState->frame.width > 0.f && restoredState->frame.height > 0.f) {
+      raw->applyRestoredWindowState(*restoredState);
+    }
     adoptOwnedWindow(std::move(window));
+    if (restoredState && restoredState->fullscreen) {
+      raw->setFullscreen(true);
+    }
     return *raw;
   }
 
@@ -71,6 +88,16 @@ public:
   /// The returned reference is valid for the lifetime of the Application.
   Clipboard& clipboard();
 
+  void setMenuBar(MenuBar menu);
+  bool dispatchAction(std::string const& name);
+  bool isActionEnabled(std::string const& name) const;
+  bool isMenuShortcutClaimed(KeyCode key, Modifiers modifiers) const;
+
+  std::string userDataDir() const;
+  std::string cacheDir() const;
+  std::optional<WindowState> loadWindowState(std::string const& restoreId) const;
+  void saveWindowState(std::string const& restoreId, WindowState const& state);
+
   /// Opaque platform font handle for the bundled icon font (on macOS: `CTFontRef`), or null if load failed.
   void* iconFontHandle() const;
 
@@ -87,7 +114,9 @@ private:
   void wakeEventLoop();
   /// Arms platform frame pumps without marking any window dirty for redraw.
   void requestAnimationFrames();
+  void saveOpenWindowStates();
   void adoptOwnedWindow(std::unique_ptr<Window> window);
+  WindowConfig resolveWindowConfig(WindowConfig config);
   /// Invoked when `WindowLifecycleEvent::Registered` is dispatched (first `exec()` `dispatch()` drains the ctor post).
   void onWindowRegistered(Window* window);
   /// Removes `handle` from the running window list before `Window` is destroyed (synchronous; avoids dangling `Window*`).

@@ -53,6 +53,10 @@ public:
   bool dispatchShortcut(ComponentKey const& focusedKey, KeyCode key, Modifiers modifiers,
                         std::unordered_map<std::string, ActionDescriptor> const& descriptors) const;
 
+  /// Dispatch by action name: tries view-claim first, then window-action.
+  bool dispatchAction(ComponentKey const& focusedKey, std::string const& name,
+                      std::unordered_map<std::string, ActionDescriptor> const& descriptors) const;
+
   /// True if a handler exists for \p name and descriptor + handler enabled checks pass.
   bool isHandlerEnabled(ComponentKey const& focusedKey, std::string const& name,
                         std::unordered_map<std::string, ActionDescriptor> const& descriptors) const;
