@@ -2170,8 +2170,13 @@ float visualCardScale(CardPosition const& pos, SolitaireState const& state) {
 }
 
 bool celebrationActive(SolitaireState const& state, std::int64_t now) {
-  return state.celebrationStartNanos > 0 &&
-         now < state.celebrationStartNanos + kWinCelebrationDurationNanos;
+  if (state.celebrationStartNanos <= 0) {
+    return false;
+  }
+  if (state.completed) {
+    return true;
+  }
+  return now < state.celebrationStartNanos + kWinCelebrationDurationNanos;
 }
 
 bool animationActive(FlyAnimation const& animation, std::int64_t now) {
@@ -2370,33 +2375,18 @@ void drawFelt(Canvas& canvas, Rect frame, int feltIndex) {
                   StrokeStyle::none());
 }
 
-void drawCompletionOverlay(Canvas& canvas, Rect frame, SolitaireState const& state) {
-  canvas.drawRect(frame, {}, FillStyle::solid(Color{0.f, 0.f, 0.f, 0.34f}), StrokeStyle::none());
-
-  float const panelW = std::min(420.f, std::max(280.f, frame.width - 48.f));
-  float const panelH = 190.f;
-  Rect const panel = Rect::sharp(frame.x + (frame.width - panelW) * 0.5f,
-                                 frame.y + std::max(24.f, (frame.height - panelH) * 0.5f),
-                                 panelW, panelH);
-
-  canvas.drawRect(panel, CornerRadius{18.f},
-                  FillStyle::linearGradient(Color{1.f, 1.f, 1.f, 0.96f},
-                                            Color{0.94f, 0.96f, 0.98f, 0.96f},
-                                            Point{0.f, 0.f}, Point{0.f, 1.f}),
-                  StrokeStyle::solid(Color{1.f, 1.f, 1.f, 0.72f}, 1.f),
-                  ShadowStyle{.radius = 18.f, .offset = {0.f, 8.f}, .color = Color{0.f, 0.f, 0.f, 0.28f}});
-
-  drawCenteredText(canvas, "Game Complete", Font{.size = 28.f, .weight = 750.f},
-                   Color::hex(0x111827), Point{panel.center().x, panel.y + 48.f});
-  drawCenteredText(canvas, "All foundations are filled.", Font{.size = 14.f, .weight = 500.f},
-                   Color{0.29f, 0.34f, 0.42f, 1.f}, Point{panel.center().x, panel.y + 82.f});
-
-  std::string const stats = "Time " + formatTime(state.elapsedSeconds) + "   Moves " +
-                            std::to_string(state.moves) + "   Score " + std::to_string(state.score);
-  drawCenteredText(canvas, stats, Font{.size = 14.f, .weight = 650.f},
-                   Color::hex(0x0F766E), Point{panel.center().x, panel.y + 121.f});
-  drawCenteredText(canvas, "Use Undo or New Game from the toolbar.", Font{.size = 12.f, .weight = 500.f},
-                   Color{0.42f, 0.46f, 0.52f, 1.f}, Point{panel.center().x, panel.y + 153.f});
+void drawFloatingCompletionText(Canvas& canvas, Rect frame) {
+  Point const center{frame.x + frame.width * 0.5f,
+                     frame.y + std::clamp(frame.height * 0.18f, 132.f, 220.f)};
+  auto shadowed = [&](std::string_view text, Font font, Color color, Point point) {
+    drawCenteredText(canvas, text, font, Color{0.f, 0.f, 0.f, 0.32f},
+                     Point{point.x, point.y + 2.f});
+    drawCenteredText(canvas, text, font, color, point);
+  };
+  shadowed("Congratulations!", Font{.size = 30.f, .weight = 750.f},
+           Color{1.f, 1.f, 1.f, 0.96f}, center);
+  shadowed("Click New Game to start a new game.", Font{.size = 14.f, .weight = 600.f},
+           Color{1.f, 1.f, 1.f, 0.82f}, Point{center.x, center.y + 34.f});
 }
 
 void drawBoard(Canvas& canvas, Rect frame, SolitaireState const& state, int drawCount, int feltIndex) {
@@ -2445,8 +2435,8 @@ void drawBoard(Canvas& canvas, Rect frame, SolitaireState const& state, int draw
 
   canvas.restore();
   if (state.completed && state.animations.empty() && !state.autoFinishing &&
-      state.celebrationStartNanos > 0 && !celebrationActive(state, animationNow)) {
-    drawCompletionOverlay(canvas, frame, state);
+      state.celebrationStartNanos > 0) {
+    drawFloatingCompletionText(canvas, frame);
   }
 }
 
@@ -2680,7 +2670,10 @@ struct SolitaireHud : ViewModifiers<SolitaireHud> {
               },
               HudIconButton {
                   .icon = IconName::Undo,
-                  .disabled = [state = state] { return state.evaluate().history.empty(); },
+                  .disabled = [state = state] {
+                          SolitaireState const s = state.evaluate();
+                          return s.completed || s.autoFinishing || dealAnimationRunning(s) ||
+                                 s.history.empty(); },
                   .onTap = [state = state] { undo(state); },
               },
               Spacer {},
