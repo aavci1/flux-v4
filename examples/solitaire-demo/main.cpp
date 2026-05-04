@@ -13,7 +13,13 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#ifdef FLUX_SOLITAIRE_APP
+#include <filesystem>
+#include <fstream>
+#include <sstream>
+#else
 #include <cstdlib>
+#endif
 #include <memory>
 #include <optional>
 #include <random>
@@ -246,6 +252,7 @@ std::int64_t nowNanos() {
 }
 
 std::uint32_t randomSeed() {
+#ifndef FLUX_SOLITAIRE_APP
   if (char const* seedText = std::getenv("SOLITAIRE_SEED")) {
     char* end = nullptr;
     unsigned long const parsed = std::strtoul(seedText, &end, 10);
@@ -254,6 +261,7 @@ std::uint32_t randomSeed() {
       return seed == 0 ? 1u : seed;
     }
   }
+#endif
 
   static std::random_device randomDevice;
   std::uint64_t const nanos = static_cast<std::uint64_t>(nowNanos());
@@ -262,6 +270,203 @@ std::uint32_t randomSeed() {
   seed ^= static_cast<std::uint32_t>(nanos >> 32);
   return seed == 0 ? 1u : seed;
 }
+
+#ifdef FLUX_SOLITAIRE_APP
+struct SavedGame {
+  SolitaireState state;
+  int drawMode = 0;
+};
+
+std::filesystem::path saveFilePath() {
+  std::string const dir = Application::instance().userDataDir();
+  if (dir.empty()) {
+    return {};
+  }
+  return std::filesystem::path(dir) / "save.txt";
+}
+
+void writeCard(std::ostream& out, Card const& card) {
+  out << card.id << ' ' << card.rank << ' ' << static_cast<int>(card.suit) << ' '
+      << (card.faceUp ? 1 : 0) << '\n';
+}
+
+bool readCard(std::istream& in, Card& card) {
+  int suit = 0;
+  int faceUp = 0;
+  if (!(in >> card.id >> card.rank >> suit >> faceUp)) {
+    return false;
+  }
+  if (card.rank < 1 || card.rank > 13 || suit < 0 || suit > 3) {
+    return false;
+  }
+  card.suit = static_cast<Suit>(suit);
+  card.faceUp = faceUp != 0;
+  return true;
+}
+
+void writePile(std::ostream& out, char prefix, int index, std::vector<Card> const& pile) {
+  out << prefix << ' ' << index << ' ' << pile.size() << '\n';
+  for (Card const& card : pile) {
+    writeCard(out, card);
+  }
+}
+
+bool readPile(std::istream& in, char expectedPrefix, int expectedIndex, std::vector<Card>& pile) {
+  char prefix = 0;
+  int index = 0;
+  std::size_t count = 0;
+  if (!(in >> prefix >> index >> count) || prefix != expectedPrefix || index != expectedIndex) {
+    return false;
+  }
+  pile.clear();
+  pile.reserve(count);
+  for (std::size_t i = 0; i < count; ++i) {
+    Card card;
+    if (!readCard(in, card)) {
+      return false;
+    }
+    pile.push_back(card);
+  }
+  return true;
+}
+
+void writeBoard(std::ostream& out, Board const& board) {
+  out << "BOARD\n";
+  for (int i = 0; i < 7; ++i) {
+    writePile(out, 'T', i, board.tableau[static_cast<std::size_t>(i)]);
+  }
+  writePile(out, 'S', 0, board.stock);
+  writePile(out, 'W', 0, board.waste);
+  for (int i = 0; i < 4; ++i) {
+    writePile(out, 'F', i, board.foundations[static_cast<std::size_t>(i)]);
+  }
+  out << "END_BOARD\n";
+}
+
+bool readBoard(std::istream& in, Board& board) {
+  std::string token;
+  if (!(in >> token) || token != "BOARD") {
+    return false;
+  }
+  for (int i = 0; i < 7; ++i) {
+    if (!readPile(in, 'T', i, board.tableau[static_cast<std::size_t>(i)])) {
+      return false;
+    }
+  }
+  if (!readPile(in, 'S', 0, board.stock) || !readPile(in, 'W', 0, board.waste)) {
+    return false;
+  }
+  for (int i = 0; i < 4; ++i) {
+    if (!readPile(in, 'F', i, board.foundations[static_cast<std::size_t>(i)])) {
+      return false;
+    }
+  }
+  return (in >> token) && token == "END_BOARD";
+}
+
+SolitaireState stableForSave(SolitaireState state) {
+  state.animations.clear();
+  state.selection = {};
+  state.hint = {};
+  state.peek = {};
+  state.drag = {};
+  state.dealing = false;
+  state.autoFinishing = false;
+  state.frameNanos = 0;
+  state.celebrationStartNanos = 0;
+  return state;
+}
+
+void saveGame(SolitaireState const& state, int drawMode) {
+  std::filesystem::path const path = saveFilePath();
+  if (path.empty()) {
+    return;
+  }
+  SolitaireState stable = stableForSave(state);
+  std::error_code ec;
+  std::filesystem::create_directories(path.parent_path(), ec);
+  if (ec) {
+    return;
+  }
+  std::filesystem::path const tmp = path.string() + ".tmp";
+  {
+    std::ofstream out(tmp, std::ios::trunc);
+    if (!out) {
+      return;
+    }
+    out << "FLUX_SOLITAIRE_SAVE_V1\n";
+    out << "DRAW " << drawMode << '\n';
+    out << "STATE " << stable.seed << ' ' << stable.moves << ' ' << stable.score << ' '
+        << stable.elapsedSeconds << ' ' << (stable.completed ? 1 : 0) << '\n';
+    writeBoard(out, stable.board);
+    out << "HISTORY " << stable.history.size() << '\n';
+    for (HistoryEntry const& entry : stable.history) {
+      out << "ENTRY " << entry.moves << ' ' << entry.score << ' '
+          << (entry.completed ? 1 : 0) << '\n';
+      writeBoard(out, entry.board);
+    }
+  }
+  std::filesystem::rename(tmp, path, ec);
+  if (ec) {
+    std::filesystem::remove(path, ec);
+    ec.clear();
+    std::filesystem::rename(tmp, path, ec);
+  }
+}
+
+std::optional<SavedGame> loadGame() {
+  std::filesystem::path const path = saveFilePath();
+  if (path.empty()) {
+    return std::nullopt;
+  }
+  std::ifstream in(path);
+  if (!in) {
+    return std::nullopt;
+  }
+  std::string token;
+  SavedGame saved;
+  int completed = 0;
+  if (!(in >> token) || token != "FLUX_SOLITAIRE_SAVE_V1") {
+    return std::nullopt;
+  }
+  if (!(in >> token >> saved.drawMode) || token != "DRAW") {
+    return std::nullopt;
+  }
+  if (!(in >> token >> saved.state.seed >> saved.state.moves >> saved.state.score >>
+        saved.state.elapsedSeconds >> completed) ||
+      token != "STATE") {
+    return std::nullopt;
+  }
+  saved.state.completed = completed != 0;
+  if (!readBoard(in, saved.state.board)) {
+    return std::nullopt;
+  }
+  std::size_t historyCount = 0;
+  if (!(in >> token >> historyCount) || token != "HISTORY") {
+    return std::nullopt;
+  }
+  saved.state.history.clear();
+  saved.state.history.reserve(historyCount);
+  for (std::size_t i = 0; i < historyCount; ++i) {
+    HistoryEntry entry;
+    int entryCompleted = 0;
+    if (!(in >> token >> entry.moves >> entry.score >> entryCompleted) || token != "ENTRY") {
+      return std::nullopt;
+    }
+    entry.completed = entryCompleted != 0;
+    if (!readBoard(in, entry.board)) {
+      return std::nullopt;
+    }
+    saved.state.history.push_back(std::move(entry));
+  }
+  saved.drawMode = saved.drawMode == 0 ? 0 : 1;
+  saved.state = stableForSave(saved.state);
+  saved.state.startedNanos =
+      nowNanos() -
+      static_cast<std::int64_t>(std::max(0, saved.state.elapsedSeconds)) * 1'000'000'000;
+  return saved;
+}
+#endif
 
 template<typename Fn>
 void mutate(Signal<SolitaireState> const& state, Fn&& fn) {
@@ -2377,16 +2582,26 @@ void drawFelt(Canvas& canvas, Rect frame, int feltIndex) {
 
 void drawFloatingCompletionText(Canvas& canvas, Rect frame) {
   Point const center{frame.x + frame.width * 0.5f,
-                     frame.y + std::clamp(frame.height * 0.18f, 132.f, 220.f)};
+                     frame.y + frame.height * 0.46f};
+  float panelWidth = std::clamp(frame.width * 0.42f, 360.f, 560.f);
+  panelWidth = std::min(panelWidth, std::max(0.f, frame.width - 48.f));
+  Rect const panel = Rect::sharp(center.x - panelWidth * 0.5f, center.y - 55.f, panelWidth, 110.f);
+
+  canvas.drawRect(panel, CornerRadius {24.f},
+                  // FillStyle::solid(Color {20.f / 255.f, 22.f / 255.f, 28.f / 255.f, 0.58f}),
+                  glassFill(),
+                  glassStroke(),
+                  ShadowStyle {.radius = 18.f, .offset = {0.f, 5.f}, .color = Color {0.f, 0.f, 0.f, 0.22f}});
+
   auto shadowed = [&](std::string_view text, Font font, Color color, Point point) {
     drawCenteredText(canvas, text, font, Color{0.f, 0.f, 0.f, 0.32f},
                      Point{point.x, point.y + 2.f});
     drawCenteredText(canvas, text, font, color, point);
   };
   shadowed("Congratulations!", Font{.size = 30.f, .weight = 750.f},
-           Color{1.f, 1.f, 1.f, 0.96f}, center);
+           Color{1.f, 1.f, 1.f, 0.96f}, Point{center.x, center.y - 16.f});
   shadowed("Click New Game to start a new game.", Font{.size = 14.f, .weight = 600.f},
-           Color{1.f, 1.f, 1.f, 0.82f}, Point{center.x, center.y + 34.f});
+           Color{1.f, 1.f, 1.f, 0.82f}, Point{center.x, center.y + 24.f});
 }
 
 void drawBoard(Canvas& canvas, Rect frame, SolitaireState const& state, int drawCount, int feltIndex) {
@@ -3022,11 +3237,25 @@ struct BoardSurface : ViewModifiers<BoardSurface> {
 
 struct RootView : ViewModifiers<RootView> {
   auto body() const {
+#ifdef FLUX_SOLITAIRE_APP
+    auto savedGame = loadGame();
+    int const initialDrawMode = savedGame ? savedGame->drawMode : 0;
+    auto drawMode = useState<int>(initialDrawMode);
+    auto state = useState<SolitaireState>(
+        savedGame ? savedGame->state : makeState(randomSeed(), initialDrawMode == 0 ? 1 : 3));
+#else
     auto drawMode = useState<int>(0);
     auto state = useState<SolitaireState>(makeState(randomSeed(), drawMode.peek() == 0 ? 1 : 3));
+#endif
     auto feltIndex = useState<int>(0);
     auto [showSettings, hideSettings, settingsPresented] = useOverlay();
     (void)settingsPresented;
+
+#ifdef FLUX_SOLITAIRE_APP
+    useEffect([state, drawMode] {
+      saveGame(state.evaluate(), drawMode.evaluate());
+    });
+#endif
 
     useFrame([state, drawMode](AnimationTick const& tick) {
       SolitaireState current = state.peek();
@@ -3116,6 +3345,57 @@ struct RootView : ViewModifiers<RootView> {
           });
     };
 
+#ifdef FLUX_SOLITAIRE_APP
+    useWindowAction(
+        "new-game",
+        [state = state, drawMode = drawMode] { newGame(state, drawMode); },
+        ActionDescriptor{
+            .label = "New Game",
+            .shortcut = Shortcut{keys::N, Modifiers::Meta},
+        });
+    useWindowAction(
+        "hint",
+        [state = state] { showHint(state); },
+        ActionDescriptor{
+            .label = "Hint",
+            .shortcut = Shortcut{keys::H, Modifiers::Meta | Modifiers::Shift},
+            .isEnabled = [state = state] {
+              SolitaireState const s = state.evaluate();
+              return !playControlsDisabled(s);
+            },
+        });
+    useWindowAction(
+        "undo",
+        [state = state] { undo(state); },
+        ActionDescriptor{
+            .label = "Undo",
+            .shortcut = shortcuts::Undo,
+            .isEnabled = [state = state] {
+              SolitaireState const s = state.evaluate();
+              return !s.completed && !s.autoFinishing && !dealAnimationRunning(s) &&
+                     !s.history.empty();
+            },
+        });
+    useWindowAction(
+        "auto-finish",
+        [state = state, drawMode = drawMode] { autoFinish(state, drawMode); },
+        ActionDescriptor{
+            .label = "Auto-Finish",
+            .shortcut = Shortcut{keys::Return, Modifiers::Meta},
+            .isEnabled = [state = state] {
+              SolitaireState const s = state.evaluate();
+              return !playControlsDisabled(s) && s.animations.empty();
+            },
+        });
+    useWindowAction(
+        "settings",
+        openSettings,
+        ActionDescriptor{
+            .label = "Settings",
+            .shortcut = Shortcut{keys::Comma, Modifiers::Meta},
+        });
+#endif
+
     return ZStack{
         .horizontalAlignment = Alignment::Stretch,
         .verticalAlignment = Alignment::Start,
@@ -3137,10 +3417,54 @@ struct RootView : ViewModifiers<RootView> {
 int main(int argc, char* argv[]) {
   Application app(argc, argv);
 
+#ifdef FLUX_SOLITAIRE_APP
+  app.setMenuBar(MenuBar{
+      .menus = {
+          MenuItem::submenu("Solitaire", {
+              MenuItem::standard(MenuRole::AppAbout),
+              MenuItem::separator(),
+              MenuItem::action("Settings...", "settings", Shortcut{keys::Comma, Modifiers::Meta}),
+              MenuItem::separator(),
+              MenuItem::standard(MenuRole::AppHide),
+              MenuItem::standard(MenuRole::AppHideOthers),
+              MenuItem::standard(MenuRole::AppShowAll),
+              MenuItem::separator(),
+              MenuItem::standard(MenuRole::AppQuit),
+          }),
+          MenuItem::submenu("Game", {
+              MenuItem::action("New Game", "new-game", Shortcut{keys::N, Modifiers::Meta}),
+              MenuItem::separator(),
+              MenuItem::action("Hint", "hint", Shortcut{keys::H, Modifiers::Meta | Modifiers::Shift}),
+              MenuItem::action("Auto-Finish", "auto-finish", Shortcut{keys::Return, Modifiers::Meta}),
+          }),
+          MenuItem::submenu("Edit", {
+              MenuItem::standard(MenuRole::EditUndo),
+          }),
+          MenuItem::submenu("View", {
+              MenuItem::standard(MenuRole::WindowFullscreen),
+          }),
+          MenuItem::submenu("Window", {
+              MenuItem::standard(MenuRole::WindowMinimize),
+              MenuItem::standard(MenuRole::WindowZoom),
+              MenuItem::separator(),
+              MenuItem::standard(MenuRole::WindowBringAllToFront),
+          }),
+          MenuItem::submenu("Help", {
+              MenuItem::standard(MenuRole::HelpSearch),
+          }),
+      },
+      .appName = "Solitaire",
+  });
+#endif
+
   auto& window = app.createWindow<Window>({
       .size = {1200, 960},
       .title = "Solitaire",
       .resizable = true,
+#ifdef FLUX_SOLITAIRE_APP
+      .minSize = {800, 600},
+      .restoreId = "main",
+#endif
   });
   window.setTheme(Theme::light());
   window.setView<RootView>();

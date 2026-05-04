@@ -6,6 +6,7 @@
 #include <Flux/UI/Views/Card.hpp>
 #include <Flux/UI/Views/HStack.hpp>
 #include <Flux/UI/Views/Rectangle.hpp>
+#include <Flux/UI/Views/Render.hpp>
 #include <Flux/UI/Views/ScrollView.hpp>
 #include <Flux/UI/Views/Slider.hpp>
 #include <Flux/UI/Views/Text.hpp>
@@ -205,78 +206,76 @@ struct MorphLab : ViewModifiers<MorphLab> {
         auto height = useAnimation<float>(52.f);
         auto radius = useAnimation<float>(16.f);
         auto lift = useAnimation<float>(0.f);
+        auto rotation = useAnimation<float>(0.f);
         auto fill = useAnimation<Color>(Color::accent());
 
-        auto calmPreset = [travel, width, height, radius, lift, fill, theme] {
+        auto calmPreset = [travel, width, height, radius, lift, rotation, fill, theme] {
             WithTransition transition {Transition::ease(std::max(0.01f, theme().durationSlow))};
             travel = 0.f;
             width = 132.f;
             height = 52.f;
             radius = theme().radiusLarge;
             lift = 0.f;
+            rotation = 0.f;
             fill = Color::accent();
         };
-        auto springPreset = [travel, width, height, radius, lift, fill, theme] {
+        auto springPreset = [travel, width, height, radius, lift, rotation, fill, theme] {
             WithTransition transition {Transition::spring(420.f, 24.f, 0.70f)};
             travel = 1.f;
             width = 194.f;
             height = 74.f;
             radius = 30.f;
             lift = -10.f;
+            rotation = 0.42f;
             fill = Color::warning();
         };
-        auto snapPreset = [travel, width, height, radius, lift, fill, theme] {
-            travel.set(0.35f, Transition::instant());
-            width.set(116.f, Transition::instant());
-            height.set(40.f, Transition::instant());
-            radius.set(theme().radiusFull, Transition::instant());
-            lift.set(10.f, Transition::instant());
-            fill.set(Color::success(), Transition::instant());
-        };
-
-        float const previewWidth = 260.f;
 
         return makeSectionCard(
             theme(), "WithTransition Scope",
             "A single WithTransition scope lets several useAnimation handles share one easing or spring without repeating the transition at each call site.",
             VStack {
                 .spacing = theme().space3,
+                .alignment = Alignment::Stretch,
                 .children = children(
-                    ZStack {
-                        .horizontalAlignment = Alignment::Start,
-                        .verticalAlignment = Alignment::Start,
-                        .children = children(
-                            Rectangle {}
-                                .size(previewWidth, 118.f)
-                                .cornerRadius(theme().radiusLarge)
-                                .fill(Color::windowBackground())
-                                .stroke(Color::separator(), 1.f),
-                            Rectangle {}
-                                .size(previewWidth - 32.f, 2.f)
-                                .cornerRadius(1.f)
-                                .fill(Color::separator())
-                                .position(16.f, 58.f),
-                            Rectangle {}
-                                .size([width] {
-                                    return width();
-                                }, [height] {
-                                    return height();
-                                })
-                                .cornerRadius([radius] {
-                                    return radius();
-                                })
-                                .fill([fill] {
-                                    return fill();
-                                })
-                                .position([travel, width, previewWidth] {
-                                    return 18.f + (previewWidth - width() - 36.f) *
-                                                   std::clamp(travel(), 0.f, 1.f);
-                                }, [lift] {
-                                    return 32.f + lift();
-                                })
-                        )
-                    }
-                        .size(previewWidth, 118.f),
+                    Render {
+                        .measureFn = [](LayoutConstraints const& constraints, LayoutHints const&) {
+                            float const width = std::isfinite(constraints.maxWidth) && constraints.maxWidth > 0.f
+                                                  ? constraints.maxWidth
+                                                  : 520.f;
+                            return Size {std::max(260.f, width), 118.f};
+                        },
+                        .draw = [theme, travel, width, height, radius, lift, rotation, fill](
+                                    Canvas& canvas, Rect frame) {
+                            Theme const currentTheme = theme.evaluate();
+                            Rect const track = Rect::sharp(frame.x, frame.y, frame.width, frame.height);
+                            canvas.drawRect(track, CornerRadius {currentTheme.radiusLarge},
+                                            FillStyle::solid(Color::windowBackground()),
+                                            StrokeStyle::solid(Color::separator(), 1.f));
+                            canvas.drawRect(Rect::sharp(frame.x + 16.f, frame.y + 58.f,
+                                                        std::max(0.f, frame.width - 32.f), 2.f),
+                                            CornerRadius {1.f}, FillStyle::solid(Color::separator()),
+                                            StrokeStyle::none());
+
+                            float const boxW = width.evaluate();
+                            float const boxH = height.evaluate();
+                            float const boxX = frame.x + 18.f + std::max(0.f, frame.width - boxW - 36.f) *
+                                                          std::clamp(travel.evaluate(), 0.f, 1.f);
+                            float const boxY = frame.y + 32.f + lift.evaluate();
+                            Rect const box = Rect::sharp(boxX, boxY, boxW, boxH);
+                            Point const center = box.center();
+                            canvas.save();
+                            canvas.translate(center);
+                            canvas.rotate(rotation.evaluate());
+                            canvas.drawRect(Rect::sharp(-boxW * 0.5f, -boxH * 0.5f, boxW, boxH),
+                                            CornerRadius {radius.evaluate()},
+                                            FillStyle::solid(fill.evaluate()),
+                                            StrokeStyle::none(),
+                                            ShadowStyle {.radius = 16.f,
+                                                         .offset = {0.f, 10.f},
+                                                         .color = Color {0.f, 0.f, 0.f, 0.16f}});
+                            canvas.restore();
+                        },
+                    },
                     HStack {
                         .spacing = theme().space3,
                         .alignment = Alignment::Stretch,
@@ -287,9 +286,9 @@ struct MorphLab : ViewModifiers<MorphLab> {
                             metricTile(theme(), [width] {
                                 return formatFloat(width());
                             }, "Width", Color::warning()),
-                            metricTile(theme(), [radius] {
-                                return formatFloat(radius());
-                            }, "Corner radius", Color::success())
+                            metricTile(theme(), [rotation] {
+                                return formatFloat(rotation());
+                            }, "Rotation", Color::success())
                         )
                     },
                     buttonRow(
@@ -297,7 +296,6 @@ struct MorphLab : ViewModifiers<MorphLab> {
                         std::vector<Element> {
                             Button {.label = "Calm Ease", .variant = ButtonVariant::Primary, .onTap = calmPreset},
                             Button {.label = "Spring Burst", .variant = ButtonVariant::Secondary, .onTap = springPreset},
-                            Button {.label = "Snap Chip", .variant = ButtonVariant::Ghost, .onTap = snapPreset},
                         }
                     )
                 )

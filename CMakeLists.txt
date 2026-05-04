@@ -351,6 +351,14 @@ option(FLUX_BUILD_EXAMPLES
   "Build standalone examples under examples/."
   OFF)
 
+option(FLUX_BUILD_SOLITAIRE_APP
+  "Build the macOS Solitaire .app bundle."
+  ON)
+
+if(APPLE AND FLUX_BUILD_SOLITAIRE_APP)
+  add_subdirectory(examples/solitaire-app)
+endif()
+
 if(FLUX_BUILD_EXAMPLES)
   add_subdirectory(examples)
 endif()

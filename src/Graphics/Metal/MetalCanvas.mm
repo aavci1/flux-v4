@@ -216,27 +216,40 @@ void clampRoundRectCornerRadii(float w, float h, CornerRadius& r) {
   fixEdge(r.topRight, r.bottomRight, h);
 }
 
-bool tryDecomposeRotationTranslation(Mat3 const& m, float* outAngle, float* outTx, float* outTy) {
+float averageLinearScale(Mat3 const& m) {
+  float const sx = std::hypot(m.m[0], m.m[1]);
+  float const sy = std::hypot(m.m[3], m.m[4]);
+  constexpr float eps = 1e-6f;
+  if (sx <= eps && sy <= eps) {
+    return 1.f;
+  }
+  if (sx <= eps) {
+    return sy;
+  }
+  if (sy <= eps) {
+    return sx;
+  }
+  return 0.5f * (sx + sy);
+}
+
+bool tryDecomposeSimilarity(Mat3 const& m, float* outAngle, float* outScale) {
   const float a = m.m[0], b = m.m[1], c = m.m[3], d = m.m[4];
   const float det = a * d - b * c;
   const float sx = std::hypot(a, b);
   const float sy = std::hypot(c, d);
-  constexpr float eps = 0.06f;
-  if (std::abs(std::abs(det) - 1.f) > 0.08f) {
+  constexpr float eps = 1e-5f;
+  if (det <= eps || sx <= eps || sy <= eps) {
     return false;
   }
-  if (std::abs(sx - sy) > eps) {
+  float const scale = 0.5f * (sx + sy);
+  if (std::abs(sx - sy) > std::max(0.01f, scale * 0.02f)) {
     return false;
   }
-  if (std::abs(sx - 1.f) > 0.1f) {
-    return false;
-  }
-  if (std::abs(a * c + b * d) > 0.06f) {
+  if (std::abs(a * c + b * d) > std::max(0.01f, scale * scale * 0.02f)) {
     return false;
   }
   *outAngle = std::atan2(b, a);
-  *outTx = m.m[6];
-  *outTy = m.m[7];
+  *outScale = scale;
   return true;
 }
 
@@ -1027,24 +1040,26 @@ public:
     clampRoundRectCornerRadii(rect.width, rect.height, crEffective);
 
     float rotationRad = 0.f;
+    float transformScale = 1.f;
     Rect mapped{};
     if (M.isTranslationOnly()) {
       mapped = Rect::sharp(rect.x + M.m[6], rect.y + M.m[7], rect.width, rect.height);
       rotationRad = 0.f;
     } else {
-      float tx = 0.f;
-      float ty = 0.f;
-      bool const decomposed = tryDecomposeRotationTranslation(M, &rotationRad, &tx, &ty);
+      bool const decomposed = tryDecomposeSimilarity(M, &rotationRad, &transformScale);
       if (decomposed) {
         Point const center = M.apply(rect.center());
-        mapped = Rect::sharp(center.x - rect.width * 0.5f, center.y - rect.height * 0.5f,
-                             rect.width, rect.height);
+        float const mappedWidth = rect.width * transformScale;
+        float const mappedHeight = rect.height * transformScale;
+        mapped = Rect::sharp(center.x - mappedWidth * 0.5f, center.y - mappedHeight * 0.5f,
+                             mappedWidth, mappedHeight);
       } else {
         mapped = boundsOfTransformedRect(rect, M);
+        transformScale = averageLinearScale(M);
         rotationRad = 0.f;
       }
     }
-    const float s = dpiScale_;
+    const float s = dpiScale_ * transformScale;
     CornerRadius cr{};
     cr.topLeft = crEffective.topLeft * s;
     cr.topRight = crEffective.topRight * s;
@@ -1059,8 +1074,8 @@ public:
     if (!shadow.isNone()) {
       shadowC = shadow.color;
       shadowC.a *= op;
-      shadowOx = shadow.offset.x * dpiScaleX_;
-      shadowOy = shadow.offset.y * dpiScaleY_;
+      shadowOx = shadow.offset.x * dpiScaleX_ * transformScale;
+      shadowOy = shadow.offset.y * dpiScaleY_ * transformScale;
       shadowR = shadow.radius * s;
     }
     emitRect(device, cr, fill, hasStroke ? strokeC : Color{0, 0, 0, 0},
@@ -1244,15 +1259,23 @@ public:
       }
     }
 
-    Rect mapped{};
     float rotationRad = 0.f;
+    float transformScale = 1.f;
+    Rect mapped{};
     if (M.isTranslationOnly()) {
       mapped = Rect::sharp(dst.x + M.m[6], dst.y + M.m[7], dst.width, dst.height);
+    } else if (tryDecomposeSimilarity(M, &rotationRad, &transformScale)) {
+      Point const center = M.apply(dst.center());
+      float const mappedWidth = dst.width * transformScale;
+      float const mappedHeight = dst.height * transformScale;
+      mapped = Rect::sharp(center.x - mappedWidth * 0.5f, center.y - mappedHeight * 0.5f,
+                           mappedWidth, mappedHeight);
     } else {
       mapped = boundsOfTransformedRect(dst, M);
+      transformScale = averageLinearScale(M);
     }
 
-    const float s = dpiScale_;
+    const float s = dpiScale_ * transformScale;
     CornerRadius cr{};
     cr.topLeft = corners.topLeft * s;
     cr.topRight = corners.topRight * s;
@@ -1299,15 +1322,23 @@ public:
       }
     }
 
-    Rect mapped{};
     float rotationRad = 0.f;
+    float transformScale = 1.f;
+    Rect mapped{};
     if (M.isTranslationOnly()) {
       mapped = Rect::sharp(dst.x + M.m[6], dst.y + M.m[7], dst.width, dst.height);
+    } else if (tryDecomposeSimilarity(M, &rotationRad, &transformScale)) {
+      Point const center = M.apply(dst.center());
+      float const mappedWidth = dst.width * transformScale;
+      float const mappedHeight = dst.height * transformScale;
+      mapped = Rect::sharp(center.x - mappedWidth * 0.5f, center.y - mappedHeight * 0.5f,
+                           mappedWidth, mappedHeight);
     } else {
       mapped = boundsOfTransformedRect(dst, M);
+      transformScale = averageLinearScale(M);
     }
 
-    const float s = dpiScale_;
+    const float s = dpiScale_ * transformScale;
     CornerRadius cr{};
     cr.topLeft = corners.topLeft * s;
     cr.topRight = corners.topRight * s;
