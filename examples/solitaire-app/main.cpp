@@ -53,6 +53,7 @@ constexpr float kHintBounceAmplitude = 16.f;
 constexpr float kSelectedCardScale = 1.035f;
 constexpr float kMovingCardScale = 1.07f;
 constexpr std::int64_t kSelectionScaleDurationNanos = 140'000'000;
+constexpr float kWinCelebrationFloorSpeedScale = 0.4f;
 
 enum class Suit : std::uint8_t { Spades, Hearts, Diamonds, Clubs };
 enum class PileKind : std::uint8_t { None, Stock, Waste, Tableau, Foundation };
@@ -2657,21 +2658,22 @@ void drawWinCelebration(Canvas& canvas, SolitaireState const& state, BoardGeomet
       Rect rect = base;
       float angle = 0.f;
       float const t = static_cast<float>(localNanos) / 1'000'000'000.f;
+      float const floorT = t * kWinCelebrationFloorSpeedScale;
       int const motionIndex = launchIndex * 4 + foundation;
       float const direction = (motionIndex % 2 == 0) ? 1.f : -1.f;
       float const speed = direction * (128.f + static_cast<float>((motionIndex * 19) % 96));
-      float const x = windowLeft + reflectedPosition(base.x - windowLeft + speed * t +
+      float const x = windowLeft + reflectedPosition(base.x - windowLeft + speed * floorT +
                                                          static_cast<float>(motionIndex % 5) * 37.f,
                                                      laneWidth);
-      float const jump = std::abs(std::sin(t * (4.1f + static_cast<float>(motionIndex % 4) * 0.35f) +
+      float const jump = std::abs(std::sin(floorT * (4.1f + static_cast<float>(motionIndex % 4) * 0.35f) +
                                            static_cast<float>(motionIndex) * 0.41f));
       float const y = floorY - jump * (120.f + static_cast<float>(motionIndex % 8) * 15.f);
-      float const intro = std::clamp(t / 0.34f, 0.f, 1.f);
+      float const intro = std::clamp(floorT / 0.34f, 0.f, 1.f);
       float const eased = intro * intro * (3.f - 2.f * intro);
       rect = Rect::sharp(base.x + (x - base.x) * eased,
                          base.y + (y - base.y) * eased,
                          kCardW, kCardH);
-      angle = std::sin(t * 4.8f + static_cast<float>(motionIndex) * 0.27f) * 0.16f;
+      angle = std::sin(floorT * 4.8f + static_cast<float>(motionIndex) * 0.27f) * 0.16f;
       drawRotatedCard(canvas, card, rect, angle);
     }
   }
