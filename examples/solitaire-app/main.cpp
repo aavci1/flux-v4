@@ -54,6 +54,7 @@ constexpr float kSelectedCardScale = 1.035f;
 constexpr float kMovingCardScale = 1.07f;
 constexpr std::int64_t kSelectionScaleDurationNanos = 140'000'000;
 constexpr float kWinCelebrationFloorSpeedScale = 0.25f;
+constexpr int kDrawCount = 1;
 
 enum class Suit : std::uint8_t { Spades, Hearts, Diamonds, Clubs };
 enum class PileKind : std::uint8_t { None, Stock, Waste, Tableau, Foundation };
@@ -278,13 +279,11 @@ std::uint32_t randomSeed() {
 
 struct SavedGame {
   SolitaireState state;
-  int drawMode = 0;
 };
 
 struct SaveMarker {
   std::uint64_t revision = 0;
   std::uint32_t seed = 0;
-  int drawMode = 0;
   int elapsedBucket = 0;
   bool completed = false;
 
@@ -392,7 +391,7 @@ SolitaireState stableForSave(SolitaireState state) {
   return state;
 }
 
-bool saveGame(SolitaireState const& state, int drawMode) {
+bool saveGame(SolitaireState const& state) {
   std::filesystem::path const path = saveFilePath();
   if (path.empty()) {
     return false;
@@ -410,7 +409,6 @@ bool saveGame(SolitaireState const& state, int drawMode) {
       return false;
     }
     out << "FLUX_SOLITAIRE_SAVE_V1\n";
-    out << "DRAW " << drawMode << '\n';
     out << "STATE " << stable.seed << ' ' << stable.moves << ' ' << stable.score << ' '
         << stable.elapsedSeconds << ' ' << (stable.completed ? 1 : 0) << '\n';
     writeBoard(out, stable.board);
@@ -449,8 +447,14 @@ std::optional<SavedGame> loadGame() {
   if (!(in >> token) || token != "FLUX_SOLITAIRE_SAVE_V1") {
     return std::nullopt;
   }
-  if (!(in >> token >> saved.drawMode) || token != "DRAW") {
+  if (!(in >> token)) {
     return std::nullopt;
+  }
+  if (token == "DRAW") {
+    int ignoredDrawMode = 0;
+    if (!(in >> ignoredDrawMode >> token)) {
+      return std::nullopt;
+    }
   }
   if (!(in >> token >> saved.state.seed >> saved.state.moves >> saved.state.score >>
         saved.state.elapsedSeconds >> completed) ||
@@ -479,7 +483,6 @@ std::optional<SavedGame> loadGame() {
     }
     saved.state.history.push_back(std::move(entry));
   }
-  saved.drawMode = saved.drawMode == 0 ? 0 : 1;
   saved.state = stableForSave(saved.state);
   saved.state.startedNanos =
       nowNanos() -
@@ -506,26 +509,25 @@ int elapsedSaveBucket(SolitaireState const& state) {
   return std::max(0, state.elapsedSeconds) / kElapsedSaveIntervalSeconds;
 }
 
-SaveMarker saveMarker(SolitaireState const& state, int drawMode) {
+SaveMarker saveMarker(SolitaireState const& state) {
   return SaveMarker{
       .revision = state.saveRevision,
       .seed = state.seed,
-      .drawMode = drawMode,
       .elapsedBucket = elapsedSaveBucket(state),
       .completed = state.completed,
   };
 }
 
-void saveGameIfNeeded(SolitaireState const& state, int drawMode) {
+void saveGameIfNeeded(SolitaireState const& state) {
   static std::optional<SaveMarker> lastSaved;
   if (saveBlockedByTransientState(state)) {
     return;
   }
-  SaveMarker const marker = saveMarker(state, drawMode);
+  SaveMarker const marker = saveMarker(state);
   if (lastSaved && *lastSaved == marker) {
     return;
   }
-  if (saveGame(state, drawMode)) {
+  if (saveGame(state)) {
     lastSaved = marker;
   }
 }
@@ -1908,12 +1910,11 @@ bool autoFinishToFoundations(SolitaireState& state, int drawCount, BoardGeometry
   return scheduleNextAutoFinishMove(state, drawCount, geometry, startNanos, true);
 }
 
-void autoFinish(Signal<SolitaireState> const& state, Signal<int> const& drawMode) {
-  int const drawCount = drawMode.peek() == 0 ? 1 : 3;
+void autoFinish(Signal<SolitaireState> const& state) {
   BoardGeometry const geometry{};
   std::int64_t const startNanos = nowNanos();
-  mutate(state, [drawCount, geometry, startNanos](SolitaireState& s) {
-    autoFinishToFoundations(s, drawCount, geometry, startNanos);
+  mutate(state, [geometry, startNanos](SolitaireState& s) {
+    autoFinishToFoundations(s, kDrawCount, geometry, startNanos);
   });
 }
 
@@ -1992,13 +1993,12 @@ void setSelectionWithAnimation(SolitaireState& state, Selection next, std::int64
 
 bool cardIsAnimating(SolitaireState const& state, int cardId, std::int64_t now);
 
-void handleBoardClick(Signal<SolitaireState> const& state, Signal<int> const& drawMode,
-                      Point localPoint, Size viewport) {
+void handleBoardClick(Signal<SolitaireState> const& state, Point localPoint, Size viewport) {
   SolitaireState const stateSnapshot = state.peek();
   if (playControlsDisabled(stateSnapshot)) {
     return;
   }
-  int const drawCount = drawMode.peek() == 0 ? 1 : 3;
+  int const drawCount = kDrawCount;
   BoardGeometry const geometry = boardGeometry(viewport);
   Point const p = toBoardPoint(localPoint, geometry);
   if (p.x < -20.f || p.y < -20.f || p.x > geometry.layoutWidth + 20.f || p.y > geometry.layoutHeight + 80.f) {
@@ -2051,9 +2051,8 @@ void handleBoardClick(Signal<SolitaireState> const& state, Signal<int> const& dr
   });
 }
 
-void startBoardDrag(Signal<SolitaireState> const& state, Signal<int> const& drawMode,
-                    Point localPoint, Size viewport) {
-  int const drawCount = drawMode.peek() == 0 ? 1 : 3;
+void startBoardDrag(Signal<SolitaireState> const& state, Point localPoint, Size viewport) {
+  int const drawCount = kDrawCount;
   BoardGeometry const geometry = boardGeometry(viewport);
   Point const p = toBoardPoint(localPoint, geometry);
   SolitaireState const& current = state.peek();
@@ -2109,16 +2108,15 @@ void updateBoardDrag(Signal<SolitaireState> const& state, Point localPoint, Size
   });
 }
 
-void finishBoardDrag(Signal<SolitaireState> const& state, Signal<int> const& drawMode,
-                     Point localPoint, Size viewport) {
-  int const drawCount = drawMode.peek() == 0 ? 1 : 3;
+void finishBoardDrag(Signal<SolitaireState> const& state, Point localPoint, Size viewport) {
+  int const drawCount = kDrawCount;
   BoardGeometry const geometry = boardGeometry(viewport);
   Point const p = toBoardPoint(localPoint, geometry);
   float const threshold = 4.f / std::max(0.01f, geometry.scale);
 
   SolitaireState const& current = state.peek();
   if (!current.drag.active()) {
-    handleBoardClick(state, drawMode, localPoint, viewport);
+    handleBoardClick(state, localPoint, viewport);
     return;
   }
 
@@ -2127,7 +2125,7 @@ void finishBoardDrag(Signal<SolitaireState> const& state, Signal<int> const& dra
   drag.moved = drag.moved || dragMoved(drag, p, threshold);
   if (!drag.moved) {
     mutate(state, [](SolitaireState& s) { s.drag = {}; });
-    handleBoardClick(state, drawMode, localPoint, viewport);
+    handleBoardClick(state, localPoint, viewport);
     return;
   }
 
@@ -2182,9 +2180,8 @@ void finishBoardDrag(Signal<SolitaireState> const& state, Signal<int> const& dra
   });
 }
 
-void startBoardPeek(Signal<SolitaireState> const& state, Signal<int> const& drawMode,
-                    Point localPoint, Size viewport) {
-  int const drawCount = drawMode.peek() == 0 ? 1 : 3;
+void startBoardPeek(Signal<SolitaireState> const& state, Point localPoint, Size viewport) {
+  int const drawCount = kDrawCount;
   BoardGeometry const geometry = boardGeometry(viewport);
   Point const p = toBoardPoint(localPoint, geometry);
   SolitaireState const& current = state.peek();
@@ -2313,16 +2310,12 @@ void undo(Signal<SolitaireState> const& state) {
   });
 }
 
-void newGameWithDrawCount(Signal<SolitaireState> const& state, int drawCount) {
+void newGame(Signal<SolitaireState> const& state) {
   std::uint32_t nextSeed = randomSeed();
   if (nextSeed == state.peek().seed) {
     ++nextSeed;
   }
-  state = makeState(nextSeed, drawCount);
-}
-
-void newGame(Signal<SolitaireState> const& state, Signal<int> const& drawMode) {
-  newGameWithDrawCount(state, drawMode.peek() == 0 ? 1 : 3);
+  state = makeState(nextSeed, kDrawCount);
 }
 
 void drawText(Canvas& canvas, std::string_view text, Font font, Color color, Point origin,
@@ -3019,7 +3012,6 @@ struct HudStatsPill : ViewModifiers<HudStatsPill> {
 
 struct SolitaireHud : ViewModifiers<SolitaireHud> {
   Signal<SolitaireState> state;
-  Signal<int> drawMode;
   std::function<void()> onSettings;
 
   auto body() const {
@@ -3035,7 +3027,7 @@ struct SolitaireHud : ViewModifiers<SolitaireHud> {
                     HudIconButton {
                         .icon = IconName::RestartAlt,
                         .primary = true,
-                        .onTap = [state = state, drawMode = drawMode] { newGame(state, drawMode); },
+                        .onTap = [state = state] { newGame(state); },
                     },
                     HudIconButton {
                         .icon = IconName::Lightbulb,
@@ -3076,7 +3068,7 @@ struct SolitaireHud : ViewModifiers<SolitaireHud> {
                         .disabled = [state = state] {
                                 auto const& s = state.evaluate();
                                 return playControlsDisabled(s) || !s.animations.empty(); },
-                        .onTap = [state = state, drawMode = drawMode] { autoFinish(state, drawMode); },
+                        .onTap = [state = state] { autoFinish(state); },
                     },
                     HudIconButton {
                         .icon = IconName::Tune,
@@ -3091,8 +3083,7 @@ struct SolitaireHud : ViewModifiers<SolitaireHud> {
   }
 
   bool operator==(SolitaireHud const& other) const {
-    return state == other.state && drawMode == other.drawMode &&
-           static_cast<bool>(onSettings) == static_cast<bool>(other.onSettings);
+    return state == other.state && static_cast<bool>(onSettings) == static_cast<bool>(other.onSettings);
   }
 };
 
@@ -3225,7 +3216,9 @@ struct ThemeSwatch : ViewModifiers<ThemeSwatch> {
   std::string label;
 
   auto body() const {
-    bool const selected = feltIndex() == index;
+    auto selected = [feltIndex = feltIndex, index = index] {
+      return feltIndex.evaluate() == index;
+    };
     return VStack{
         .spacing = 6.f,
         .alignment = Alignment::Stretch,
@@ -3233,13 +3226,17 @@ struct ThemeSwatch : ViewModifiers<ThemeSwatch> {
             Rectangle{}
                 .height(64.f)
                 .fill(feltPreviewFill(index))
-                .stroke(selected ? StrokeStyle::solid(Color::hex(0x0A84FF), 2.f)
-                                 : StrokeStyle::solid(Color{0.f, 0.f, 0.f, 0.10f}, 1.f))
+                .stroke([selected] {
+                  return selected() ? StrokeStyle::solid(Color::hex(0x0A84FF), 2.f)
+                                    : StrokeStyle::solid(Color{0.f, 0.f, 0.f, 0.10f}, 1.f);
+                })
                 .cornerRadius(6.f),
             Text{
                 .text = label,
-                .font = Font{.size = 12.f, .weight = selected ? 500.f : 400.f},
-                .color = selected ? Color::hex(0x1A1A1A) : Color{0.f, 0.f, 0.f, 0.60f},
+                .font = Font{.size = 12.f, .weight = 500.f},
+                .color = [selected] {
+                  return selected() ? Color::hex(0x1A1A1A) : Color{0.f, 0.f, 0.f, 0.60f};
+                },
                 .horizontalAlignment = HorizontalAlignment::Center,
                 .verticalAlignment = VerticalAlignment::Center,
             }
@@ -3255,14 +3252,10 @@ struct ThemeSwatch : ViewModifiers<ThemeSwatch> {
 };
 
 struct SettingsDialog : ViewModifiers<SettingsDialog> {
-  Signal<SolitaireState> state;
-  Signal<int> drawMode;
   Signal<int> feltIndex;
   std::function<void()> onClose;
 
   auto body() const {
-    auto stateSignal = state;
-    auto drawSignal = drawMode;
     auto feltSignal = feltIndex;
     auto closeAction = onClose;
 
@@ -3305,18 +3298,6 @@ struct SettingsDialog : ViewModifiers<SettingsDialog> {
                                         ),
                                     }
                                 ),
-                            },
-                            SettingsSection{
-                                .title = "Draw mode",
-                                .content = children(
-                                    DialogSegmentedControl{
-                                        .selectedIndex = drawSignal,
-                                        .options = {"Draw 1", "Draw 3"},
-                                        .onChange = [stateSignal](int index) {
-                                          newGameWithDrawCount(stateSignal, index == 0 ? 1 : 3);
-                                        },
-                                    }
-                                ),
                             }
                         ),
                     }.padding(18.f, 20.f, 20.f, 20.f),
@@ -3353,8 +3334,7 @@ struct SettingsDialog : ViewModifiers<SettingsDialog> {
   }
 
   bool operator==(SettingsDialog const& other) const {
-    return state == other.state && drawMode == other.drawMode && feltIndex == other.feltIndex &&
-           static_cast<bool>(onClose) == static_cast<bool>(other.onClose);
+    return feltIndex == other.feltIndex && static_cast<bool>(onClose) == static_cast<bool>(other.onClose);
   }
 };
 
@@ -3382,7 +3362,6 @@ struct BoardTableSurface : ViewModifiers<BoardTableSurface> {
 
 struct BoardCardSurface : ViewModifiers<BoardCardSurface> {
   Signal<SolitaireState> state;
-  Signal<int> drawMode;
   Signal<std::int64_t> frameNanos;
 
   auto body() const {
@@ -3393,7 +3372,6 @@ struct BoardCardSurface : ViewModifiers<BoardCardSurface> {
     });
 
     auto stateSignal = state;
-    auto drawModeSignal = drawMode;
     auto frameSignal = frameNanos;
 
     return Render{
@@ -3402,60 +3380,57 @@ struct BoardCardSurface : ViewModifiers<BoardCardSurface> {
           float const height = std::isfinite(constraints.maxHeight) ? constraints.maxHeight : 760.f;
           return Size{std::max(1.f, width), std::max(1.f, height)};
         },
-        .draw = [stateSignal, drawModeSignal, frameSignal, viewport](Canvas& canvas, Rect frame) {
+        .draw = [stateSignal, frameSignal, viewport](Canvas& canvas, Rect frame) {
           *viewport = Size{frame.width, frame.height};
-          int const drawCount = drawModeSignal.evaluate() == 0 ? 1 : 3;
-          drawBoard(canvas, frame, stateSignal.evaluate(), drawCount, frameSignal.evaluate());
+          drawBoard(canvas, frame, stateSignal.evaluate(), kDrawCount, frameSignal.evaluate());
         },
     }
         .cursor(Cursor::Hand)
-        .onPointerDown(std::function<void(Point, MouseButton)>{[stateSignal, drawModeSignal, viewport](Point p, MouseButton button) {
+        .onPointerDown(std::function<void(Point, MouseButton)>{[stateSignal, viewport](Point p, MouseButton button) {
           if (button == MouseButton::Right) {
-            startBoardPeek(stateSignal, drawModeSignal, p, *viewport);
+            startBoardPeek(stateSignal, p, *viewport);
             return;
           }
           if (button == MouseButton::Left) {
-            startBoardDrag(stateSignal, drawModeSignal, p, *viewport);
+            startBoardDrag(stateSignal, p, *viewport);
           }
         }})
         .onPointerMove(std::function<void(Point)>{[stateSignal, viewport](Point p) {
           updateBoardDrag(stateSignal, p, *viewport);
         }})
-        .onPointerUp(std::function<void(Point, MouseButton)>{[stateSignal, drawModeSignal, viewport](Point p, MouseButton button) {
+        .onPointerUp(std::function<void(Point, MouseButton)>{[stateSignal, viewport](Point p, MouseButton button) {
           if (button == MouseButton::Right) {
             stopBoardPeek(stateSignal);
             return;
           }
           if (button == MouseButton::Left) {
-            finishBoardDrag(stateSignal, drawModeSignal, p, *viewport);
+            finishBoardDrag(stateSignal, p, *viewport);
           }
         }});
   }
 
   bool operator==(BoardCardSurface const& other) const {
-    return state == other.state && drawMode == other.drawMode && frameNanos == other.frameNanos;
+    return state == other.state && frameNanos == other.frameNanos;
   }
 };
 
 struct RootView : ViewModifiers<RootView> {
   auto body() const {
     auto savedGame = loadGame();
-    int const initialDrawMode = savedGame ? savedGame->drawMode : 0;
     bool const useSavedBoard =
         savedGame && !savedGame->state.completed && !gameComplete(savedGame->state.board);
-    auto drawMode = useState<int>(initialDrawMode);
     auto state = useState<SolitaireState>(
-        useSavedBoard ? savedGame->state : makeState(randomSeed(), initialDrawMode == 0 ? 1 : 3));
+        useSavedBoard ? savedGame->state : makeState(randomSeed(), kDrawCount));
     auto frameNanos = useState<std::int64_t>(0);
     auto feltIndex = useState<int>(0);
     auto [showSettings, hideSettings, settingsPresented] = useOverlay();
     (void)settingsPresented;
 
-    useEffect([state, drawMode] {
-      saveGameIfNeeded(state.evaluate(), drawMode.evaluate());
+    useEffect([state] {
+      saveGameIfNeeded(state.evaluate());
     });
 
-    useFrame([state, drawMode, frameNanos](AnimationTick const& tick) {
+    useFrame([state, frameNanos](AnimationTick const& tick) {
       SolitaireState const& snapshot = state.peek();
       if (snapshot.completed && snapshot.animations.empty() && !snapshot.autoFinishing &&
           !snapshot.dealing && !snapshot.hint.active() &&
@@ -3485,8 +3460,7 @@ struct RootView : ViewModifiers<RootView> {
         changed = true;
       }
       if (current.autoFinishing && current.animations.empty()) {
-        int const drawCount = drawMode.peek() == 0 ? 1 : 3;
-        if (scheduleNextAutoFinishMove(current, drawCount, BoardGeometry{}, tick.deadlineNanos, false)) {
+        if (scheduleNextAutoFinishMove(current, kDrawCount, BoardGeometry{}, tick.deadlineNanos, false)) {
           changed = true;
         } else {
           current.autoFinishing = false;
@@ -3550,11 +3524,9 @@ struct RootView : ViewModifiers<RootView> {
       }
     });
 
-    auto openSettings = [showSettings, hideSettings, state, drawMode, feltIndex] {
+    auto openSettings = [showSettings, hideSettings, feltIndex] {
       showSettings(
           SettingsDialog{
-              .state = state,
-              .drawMode = drawMode,
               .feltIndex = feltIndex,
               .onClose = hideSettings,
           },
@@ -3570,7 +3542,7 @@ struct RootView : ViewModifiers<RootView> {
 
     useWindowAction(
         "new-game",
-        [state = state, drawMode = drawMode] { newGame(state, drawMode); },
+        [state = state] { newGame(state); },
         ActionDescriptor{
             .label = "New Game",
             .shortcut = Shortcut{keys::N, Modifiers::Meta},
@@ -3600,7 +3572,7 @@ struct RootView : ViewModifiers<RootView> {
         });
     useWindowAction(
         "auto-finish",
-        [state = state, drawMode = drawMode] { autoFinish(state, drawMode); },
+        [state = state] { autoFinish(state); },
         ActionDescriptor{
             .label = "Auto-Finish",
             .shortcut = Shortcut{keys::Return, Modifiers::Meta},
@@ -3623,11 +3595,10 @@ struct RootView : ViewModifiers<RootView> {
         .children = children(
             BoardTableSurface{.feltIndex = feltIndex}
                 .flex(1.f, 1.f),
-            BoardCardSurface{.state = state, .drawMode = drawMode, .frameNanos = frameNanos}
+            BoardCardSurface{.state = state, .frameNanos = frameNanos}
                 .flex(1.f, 1.f),
             SolitaireHud{
                 .state = state,
-                .drawMode = drawMode,
                 .onSettings = openSettings,
             }
         ),

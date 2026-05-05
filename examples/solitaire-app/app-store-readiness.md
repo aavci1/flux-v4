@@ -9,7 +9,7 @@ A real Klondike Solitaire — not a tech demo. ~3150 lines in one file, but the 
 - **Auto-finish** (`autoFinish` line 1640): plays out the win sequence with animations.
 - **Hint system** (`showHint` line 1887): finds and bounces a useful card.
 - **Fly animations** for deals, drops, wins; **win celebration** with cards bouncing across the field.
-- **Settings dialog**: 4 felt themes (Emerald, Sapphire, Obsidian, Crimson) and Draw 1 vs Draw 3.
+- **Settings dialog**: 4 felt themes (Emerald, Sapphire, Obsidian, Crimson).
 - **HUD**: New game / hint / undo / auto-finish / settings buttons in a glass pill, plus elapsed time and stats.
 - **Drag with peek**: hold to peek face-down cards, drag to move stacks.
 - Proper **HiDPI / retina** via `backingScaleFactor` (already in the platform layer).
@@ -46,7 +46,7 @@ For a self-contained Solitaire game with no network, files, or hardware access, 
 
 That's it. No file access, no network, no camera. Pure sandbox.
 
-**4. No persistence.** Close the app mid-game → next launch starts a new game, losing state. Users hate this. Solitaire game state is small (few KB serialized). Save to `~/Library/Containers/<bundle-id>/Data/Library/Application Support/...` (sandbox-safe). Load on launch. ~50 lines if you serialize `SolitaireState` to JSON or a simple binary format. Also save the felt theme + draw mode preferences (`NSUserDefaults`).
+**4. No persistence.** Close the app mid-game → next launch starts a new game, losing state. Users hate this. Solitaire game state is small (few KB serialized). Save to `~/Library/Containers/<bundle-id>/Data/Library/Application Support/...` (sandbox-safe). Load on launch. ~50 lines if you serialize `SolitaireState` to JSON or a simple binary format. Also save the felt theme preference (`NSUserDefaults`).
 
 **5. No app icon.** Apps without an icon get rejected. Need a 1024×1024 PNG icon, converted via `iconutil` to `.icns`. Design needs ~6 sizes (16, 32, 64, 128, 256, 512, 1024 with @2x where applicable). Hire someone or do it yourself, ~3 hours.
 
