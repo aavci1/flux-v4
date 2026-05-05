@@ -53,7 +53,7 @@ constexpr float kHintBounceAmplitude = 16.f;
 constexpr float kSelectedCardScale = 1.035f;
 constexpr float kMovingCardScale = 1.07f;
 constexpr std::int64_t kSelectionScaleDurationNanos = 140'000'000;
-constexpr float kWinCelebrationFloorSpeedScale = 0.4f;
+constexpr float kWinCelebrationFloorSpeedScale = 0.25f;
 
 enum class Suit : std::uint8_t { Spades, Hearts, Diamonds, Clubs };
 enum class PileKind : std::uint8_t { None, Stock, Waste, Tableau, Foundation };
@@ -2644,15 +2644,6 @@ void drawWinCelebration(Canvas& canvas, SolitaireState const& state, BoardGeomet
                                       static_cast<std::int64_t>(launchIndex) * kWinCardIntervalNanos;
       if (localNanos <= 0) {
         drawCard(canvas, card, base);
-      }
-    }
-
-    for (int cardIndex = static_cast<int>(pile.size()) - 1; cardIndex >= 0; --cardIndex) {
-      Card const& card = pile[static_cast<std::size_t>(cardIndex)];
-      int const launchIndex = winCelebrationLaunchIndex(card);
-      std::int64_t const localNanos = now - state.celebrationStartNanos -
-                                      static_cast<std::int64_t>(launchIndex) * kWinCardIntervalNanos;
-      if (localNanos <= 0) {
         continue;
       }
       Rect rect = base;
@@ -3035,43 +3026,65 @@ struct SolitaireHud : ViewModifiers<SolitaireHud> {
       auto theme = useEnvironment<ThemeKey>();
 
       return HStack {
-          .spacing = theme().space4,
-          .alignment = Alignment::Center,
           .children = children(
-              HudIconButton {
-                  .icon = IconName::RestartAlt,
-                  .primary = true,
-                  .onTap = [state = state, drawMode = drawMode] { newGame(state, drawMode); },
-              },
-              HudIconButton {
-                  .icon = IconName::Lightbulb,
-                  .disabled = [state = state] {
-                          auto const& s = state.evaluate();
-                          return playControlsDisabled(s); },
-                  .onTap = [state = state] { showHint(state); },
-              },
-              HudIconButton {
-                  .icon = IconName::Undo,
-                  .disabled = [state = state] {
-                          auto const& s = state.evaluate();
-                          return s.completed || s.autoFinishing || dealAnimationRunning(s) ||
-                                 s.history.empty(); },
-                  .onTap = [state = state] { undo(state); },
-              },
-              Spacer {},
-              HudStatsPill {.state = state},
-              Spacer {},
-              HudIconButton {
-                  .icon = IconName::AutoAwesome,
-                  .disabled = [state = state] {
-                          auto const& s = state.evaluate();
-                          return playControlsDisabled(s) || !s.animations.empty(); },
-                  .onTap = [state = state, drawMode = drawMode] { autoFinish(state, drawMode); },
-              },
-              HudIconButton {
-                  .icon = IconName::Tune,
-                  .onTap = onSettings,
+              HStack {
+                  .spacing = theme().space4,
+                  .alignment = Alignment::Center,
+                  .justifyContent = JustifyContent::Start,
+                  .children = children(
+                    HudIconButton {
+                        .icon = IconName::RestartAlt,
+                        .primary = true,
+                        .onTap = [state = state, drawMode = drawMode] { newGame(state, drawMode); },
+                    },
+                    HudIconButton {
+                        .icon = IconName::Lightbulb,
+                        .disabled = [state = state] {
+                                auto const& s = state.evaluate();
+                                return playControlsDisabled(s); },
+                        .onTap = [state = state] { showHint(state); },
+                    },
+                    HudIconButton {
+                        .icon = IconName::Undo,
+                        .disabled = [state = state] {
+                                auto const& s = state.evaluate();
+                                return s.completed || s.autoFinishing || dealAnimationRunning(s) ||
+                                      s.history.empty(); },
+                        .onTap = [state = state] { undo(state); },
+                    }
+                  ),
               }
+                  .flex(1.f, 1.f, 0.f),
+              HStack {
+                  .spacing = theme().space4,
+                  .alignment = Alignment::Center,
+                  .justifyContent = JustifyContent::Center,
+                  .children = children(
+                    HudStatsPill {
+                      .state = state
+                    }
+                  ),
+              }
+                  .flex(1.f, 1.f, 0.f),
+              HStack {
+                  .spacing = theme().space4,
+                  .alignment = Alignment::Center,
+                  .justifyContent = JustifyContent::End,
+                  .children = children(
+                    HudIconButton {
+                        .icon = IconName::AutoAwesome,
+                        .disabled = [state = state] {
+                                auto const& s = state.evaluate();
+                                return playControlsDisabled(s) || !s.animations.empty(); },
+                        .onTap = [state = state, drawMode = drawMode] { autoFinish(state, drawMode); },
+                    },
+                    HudIconButton {
+                        .icon = IconName::Tune,
+                        .onTap = onSettings,
+                    }
+                  ),
+              }
+                  .flex(1.f, 1.f, 0.f)
           ),
       }
           .padding(theme().space4, theme().space5, theme().space4, theme().space5);
