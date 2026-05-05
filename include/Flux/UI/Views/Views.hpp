@@ -16,6 +16,7 @@
 #include <Flux/UI/Views/Button.hpp>
 #include <Flux/UI/Views/Card.hpp>
 #include <Flux/UI/Views/Checkbox.hpp>
+#include <Flux/UI/Views/Dialog.hpp>
 #include <Flux/UI/Views/Divider.hpp>
 #include <Flux/UI/Views/For.hpp>
 #include <Flux/UI/Views/Grid.hpp>

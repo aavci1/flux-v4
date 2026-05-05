@@ -448,6 +448,15 @@ Theme Theme::dark() {
   t.checkboxUncheckedColor = t.opaqueSeparatorColor;
   t.checkboxBorderColor = t.opaqueSeparatorColor;
 
+  t.dialogTitleColor = t.labelColor;
+  t.dialogSurfaceColor = t.elevatedBackgroundColor;
+  t.dialogSurfaceStrokeColor = Color{1.f, 1.f, 1.f, 0.10f};
+  t.dialogDividerColor = t.separatorColor;
+  t.dialogFooterColor = t.controlBackgroundColor;
+  t.dialogShadowColor = Color{0.f, 0.f, 0.f, 0.45f};
+  t.dialogCloseIconColor = t.secondaryLabelColor;
+  t.dialogCloseHoverColor = Color{1.f, 1.f, 1.f, 0.08f};
+
   t.shadowColor = Color{0.f, 0.f, 0.f, 0.35f};
 
   return t;
@@ -468,6 +477,15 @@ inline constexpr float kSpace5 = 20.f;
 inline constexpr float kSpace6 = 24.f;
 inline constexpr float kSpace7 = 32.f;
 inline constexpr float kSpace8 = 48.f;
+
+EdgeInsets scaleInsets(EdgeInsets insets, float scale) {
+  return EdgeInsets{
+      insets.top * scale,
+      insets.right * scale,
+      insets.bottom * scale,
+      insets.left * scale,
+  };
+}
 
 } // namespace
 
@@ -490,6 +508,12 @@ Theme Theme::withDensity(float d) const {
   t.controlHeightSmall = std::max(24.f, 28.f * d);
   t.controlHeightMedium = std::max(28.f, 36.f * d);
   t.controlHeightLarge = std::max(36.f, 44.f * d);
+  t.dialogHeaderSpacing = dialogHeaderSpacing * d;
+  t.dialogContentSpacing = dialogContentSpacing * d;
+  t.dialogFooterSpacing = dialogFooterSpacing * d;
+  t.dialogHeaderPadding = scaleInsets(dialogHeaderPadding, d);
+  t.dialogContentPadding = scaleInsets(dialogContentPadding, d);
+  t.dialogFooterPadding = scaleInsets(dialogFooterPadding, d);
   return t;
 }
 

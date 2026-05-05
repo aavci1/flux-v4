@@ -3087,50 +3087,6 @@ struct SolitaireHud : ViewModifiers<SolitaireHud> {
   }
 };
 
-struct DialogCloseButton : ViewModifiers<DialogCloseButton> {
-  std::function<void()> onTap;
-
-  auto body() const {
-    Reactive::Signal<bool> hovered = useHover();
-    Reactive::Signal<bool> pressed = usePress();
-    auto handleTap = [onTap = onTap] {
-      if (onTap) {
-        onTap();
-      }
-    };
-
-    return ScaleAroundCenter{
-        .scale = [pressed] { return pressed() ? 0.94f : 1.f; },
-        .child = ZStack{
-            .horizontalAlignment = Alignment::Center,
-            .verticalAlignment = Alignment::Center,
-            .children = children(
-                Rectangle{}
-                    .size(26.f, 26.f)
-                    .fill([hovered] {
-                      return hovered() ? FillStyle::solid(Color{0.f, 0.f, 0.f, 0.05f}) : FillStyle::none();
-                    })
-                    .cornerRadius(6.f),
-                Icon{
-                    .name = IconName::Close,
-                    .size = 18.f,
-                    .weight = 450.f,
-                    .color = Color{0.f, 0.f, 0.f, 0.55f},
-                }
-            ),
-        }
-                     .size(26.f, 26.f)
-                     .cursor(Cursor::Hand)
-                     .focusable(true)
-                     .onTap(std::function<void()>{handleTap}),
-    };
-  }
-
-  bool operator==(DialogCloseButton const& other) const {
-    return static_cast<bool>(onTap) == static_cast<bool>(other.onTap);
-  }
-};
-
 struct SettingsSection : ViewModifiers<SettingsSection> {
   std::string title;
   std::vector<Element> content;
@@ -3155,59 +3111,6 @@ struct SettingsSection : ViewModifiers<SettingsSection> {
   }
 
   bool operator==(SettingsSection const& other) const { return title == other.title; }
-};
-
-struct DialogSegmentedControl : ViewModifiers<DialogSegmentedControl> {
-  Signal<int> selectedIndex;
-  std::vector<std::string> options;
-  std::function<void(int)> onChange;
-
-  auto body() const {
-    std::vector<Element> segments;
-    segments.reserve(options.size());
-    int const selected = selectedIndex();
-    for (std::size_t i = 0; i < options.size(); ++i) {
-      bool const isSelected = selected == static_cast<int>(i);
-      segments.push_back(
-          Text{
-              .text = options[i],
-              .font = Font{.size = 13.f, .weight = isSelected ? 500.f : 400.f},
-              .color = isSelected ? Color::hex(0x1A1A1A) : Color{0.f, 0.f, 0.f, 0.60f},
-              .horizontalAlignment = HorizontalAlignment::Center,
-              .verticalAlignment = VerticalAlignment::Center,
-          }
-              .padding(6.f, 12.f, 6.f, 12.f)
-              .fill(isSelected ? FillStyle::solid(Colors::white) : FillStyle::none())
-              .cornerRadius(5.f)
-              .shadow(isSelected ? ShadowStyle{.radius = 2.f, .offset = {0.f, 1.f}, .color = Color{0.f, 0.f, 0.f, 0.08f}}
-                                  : ShadowStyle::none())
-              .cursor(Cursor::Hand)
-              .onTap(std::function<void()>{[selectedIndex = selectedIndex, onChange = onChange, index = static_cast<int>(i)] {
-                if (index == selectedIndex.peek()) {
-                  return;
-                }
-                selectedIndex = index;
-                if (onChange) {
-                  onChange(index);
-                }
-              }})
-              .flex(1.f, 1.f));
-    }
-
-    return HStack{
-        .spacing = 2.f,
-        .alignment = Alignment::Stretch,
-        .children = std::move(segments),
-    }
-        .padding(2.f)
-        .fill(Color{0.f, 0.f, 0.f, 0.05f})
-        .cornerRadius(6.f);
-  }
-
-  bool operator==(DialogSegmentedControl const& other) const {
-    return selectedIndex == other.selectedIndex && options == other.options &&
-           static_cast<bool>(onChange) == static_cast<bool>(other.onChange);
-  }
 };
 
 struct ThemeSwatch : ViewModifiers<ThemeSwatch> {
@@ -3259,77 +3162,41 @@ struct SettingsDialog : ViewModifiers<SettingsDialog> {
     auto feltSignal = feltIndex;
     auto closeAction = onClose;
 
-    return ZStack{
-        .horizontalAlignment = Alignment::Center,
-        .verticalAlignment = Alignment::Center,
-        .children = children(
-            VStack{
-                .spacing = 0.f,
-                .alignment = Alignment::Stretch,
-                .children = children(
+    return Dialog{
+        .title = "Settings",
+        .content = children(
+            SettingsSection{
+                .title = "Felt theme",
+                .content = children(
                     HStack{
                         .spacing = 8.f,
-                        .alignment = Alignment::Center,
-                        .children = children(
-                            Text{
-                                .text = "Settings",
-                                .font = Font{.size = 15.f, .weight = 600.f},
-                                .color = Color::hex(0x1A1A1A),
-                            }.flex(1.f, 1.f),
-                            DialogCloseButton{.onTap = closeAction}
-                        ),
-                    }.padding(16.f, 20.f, 16.f, 20.f),
-                    Rectangle{}.height(1.f).fill(Color{0.f, 0.f, 0.f, 0.06f}),
-                    VStack{
-                        .spacing = 22.f,
                         .alignment = Alignment::Stretch,
                         .children = children(
-                            SettingsSection{
-                                .title = "Felt theme",
-                                .content = children(
-                                    HStack{
-                                        .spacing = 8.f,
-                                        .alignment = Alignment::Stretch,
-                                        .children = children(
-                                            ThemeSwatch{.feltIndex = feltSignal, .index = 0, .label = "Emerald"}.flex(1.f, 1.f),
-                                            ThemeSwatch{.feltIndex = feltSignal, .index = 1, .label = "Sapphire"}.flex(1.f, 1.f),
-                                            ThemeSwatch{.feltIndex = feltSignal, .index = 2, .label = "Obsidian"}.flex(1.f, 1.f),
-                                            ThemeSwatch{.feltIndex = feltSignal, .index = 3, .label = "Crimson"}.flex(1.f, 1.f)
-                                        ),
-                                    }
-                                ),
-                            }
+                            ThemeSwatch{.feltIndex = feltSignal, .index = 0, .label = "Emerald"}.flex(1.f, 1.f),
+                            ThemeSwatch{.feltIndex = feltSignal, .index = 1, .label = "Sapphire"}.flex(1.f, 1.f),
+                            ThemeSwatch{.feltIndex = feltSignal, .index = 2, .label = "Obsidian"}.flex(1.f, 1.f),
+                            ThemeSwatch{.feltIndex = feltSignal, .index = 3, .label = "Crimson"}.flex(1.f, 1.f)
                         ),
-                    }.padding(18.f, 20.f, 20.f, 20.f),
-                    Rectangle{}.height(1.f).fill(Color{0.f, 0.f, 0.f, 0.06f}),
-                    HStack{
-                        .spacing = 8.f,
-                        .alignment = Alignment::Center,
-                        .children = children(
-                            Spacer{},
-                            Button{
-                                .label = "Done",
-                                .variant = ButtonVariant::Primary,
-                                .style = Button::Style{
-                                    .font = Font{.size = 13.f, .weight = 500.f},
-                                    .paddingH = 16.f,
-                                    .paddingV = 7.f,
-                                    .cornerRadius = 6.f,
-                                    .accentColor = Color::hex(0x0A84FF),
-                                },
-                                .onTap = closeAction,
-                            }.height(32.f)
-                        ),
-                    }.padding(12.f, 20.f, 12.f, 20.f).fill(Color::hex(0xFAFAFA))
+                    }
                 ),
             }
-                .width(440.f)
-                .fill(Colors::white)
-                .stroke(Color{0.f, 0.f, 0.f, 0.08f}, 1.f)
-                .cornerRadius(12.f)
-                .shadow(ShadowStyle{.radius = 40.f, .offset = {0.f, 12.f}, .color = Color{0.f, 0.f, 0.f, 0.18f}})
-                .clipContent(true)
         ),
+        .footer = children(
+            Spacer{},
+            Button{
+                .label = "Done",
+                .variant = ButtonVariant::Primary,
+                .style = Button::Style{
+                    .font = Font{.size = 13.f, .weight = 500.f},
+                    .paddingH = 16.f,
+                    .paddingV = 7.f,
+                    .cornerRadius = 6.f,
+                    .accentColor = Color::hex(0x0A84FF),
+                },
+                .onTap = closeAction,
+            }.height(32.f)
+        ),
+        .onClose = closeAction,
     };
   }
 

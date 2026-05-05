@@ -197,6 +197,34 @@ struct Theme {
     float sliderTrackHeight = 4.f;
     float sliderThumbSize = 20.f;
 
+    // Dialog
+    float dialogWidth = 440.f;
+    float dialogHeaderSpacing = 8.f;
+    float dialogContentSpacing = 22.f;
+    float dialogFooterSpacing = 8.f;
+    EdgeInsets dialogHeaderPadding {16.f, 20.f, 16.f, 20.f};
+    EdgeInsets dialogContentPadding {18.f, 20.f, 20.f, 20.f};
+    EdgeInsets dialogFooterPadding {12.f, 20.f, 12.f, 20.f};
+    Font dialogTitleFont {.size = 15.f, .weight = 600.f};
+    Color dialogTitleColor = Color::hex(0x1A1A1A);
+    Color dialogSurfaceColor = Color::hex(0xFFFFFF);
+    Color dialogSurfaceStrokeColor = Color {0.f, 0.f, 0.f, 0.08f};
+    Color dialogDividerColor = Color {0.f, 0.f, 0.f, 0.06f};
+    Color dialogFooterColor = Color::hex(0xFAFAFA);
+    float dialogSurfaceStrokeWidth = 1.f;
+    float dialogDividerThickness = 1.f;
+    float dialogCornerRadius = 12.f;
+    float dialogShadowRadius = 40.f;
+    float dialogShadowOffsetX = 0.f;
+    float dialogShadowOffsetY = 12.f;
+    Color dialogShadowColor = Color {0.f, 0.f, 0.f, 0.18f};
+    float dialogCloseButtonSize = 26.f;
+    float dialogCloseButtonCornerRadius = 6.f;
+    float dialogCloseIconSize = 18.f;
+    float dialogCloseIconWeight = 450.f;
+    Color dialogCloseIconColor = Color {0.f, 0.f, 0.f, 0.55f};
+    Color dialogCloseHoverColor = Color {0.f, 0.f, 0.f, 0.05f};
+
     /// Bundled Material Symbols Rounded (override to swap icon sets globally).
     std::string iconFontFamily = "Material Symbols Rounded";
 
