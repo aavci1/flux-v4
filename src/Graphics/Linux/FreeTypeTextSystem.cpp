@@ -6,12 +6,16 @@
 #include FT_FREETYPE_H
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
+#include <initializer_list>
+#include <limits.h>
 #include <stdexcept>
 #include <string>
+#include <unistd.h>
 #include <unordered_map>
 #include <utility>
 
@@ -60,27 +64,56 @@ Font resolvedFont(Font f) {
   return f;
 }
 
-std::string findFontPath(std::string_view family) {
-  if (family == "Material Symbols Rounded") {
-    for (std::filesystem::path const& p : {
-             std::filesystem::current_path() / "fonts/MaterialSymbolsRounded.ttf",
-             std::filesystem::current_path() / "../fonts/MaterialSymbolsRounded.ttf",
-         }) {
-      if (std::filesystem::exists(p)) {
-        return p.string();
-      }
-    }
+std::filesystem::path executableDir() {
+  std::array<char, PATH_MAX> buffer{};
+  ssize_t const n = readlink("/proc/self/exe", buffer.data(), buffer.size() - 1);
+  if (n <= 0) {
+    return {};
   }
-  for (char const* p : {
-           "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-           "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
-           "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
-       }) {
+  buffer[static_cast<std::size_t>(n)] = '\0';
+  return std::filesystem::path(buffer.data()).parent_path();
+}
+
+std::string firstExisting(std::initializer_list<std::filesystem::path> paths) {
+  for (std::filesystem::path const& p : paths) {
     if (std::filesystem::exists(p)) {
-      return p;
+      return p.string();
     }
   }
   return {};
+}
+
+std::string findFontPath(std::string_view family, float weight, bool italic) {
+  std::filesystem::path const exeDir = executableDir();
+  if (family == "Material Symbols Rounded") {
+    std::string path = firstExisting({
+        exeDir / "fonts/MaterialSymbolsRounded.ttf",
+        exeDir / "../share/solitaire-app/fonts/MaterialSymbolsRounded.ttf",
+        exeDir / "../share/flux/fonts/MaterialSymbolsRounded.ttf",
+        std::filesystem::current_path() / "fonts/MaterialSymbolsRounded.ttf",
+        std::filesystem::current_path() / "../fonts/MaterialSymbolsRounded.ttf",
+    });
+    if (!path.empty()) return path;
+  }
+
+  if (italic && weight >= 600.f) {
+    std::string path = firstExisting({"/usr/share/fonts/truetype/dejavu/DejaVuSans-BoldOblique.ttf",
+                                      "/usr/share/fonts/truetype/liberation2/LiberationSans-BoldItalic.ttf"});
+    if (!path.empty()) return path;
+  }
+  if (italic) {
+    std::string path = firstExisting({"/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf",
+                                      "/usr/share/fonts/truetype/liberation2/LiberationSans-Italic.ttf"});
+    if (!path.empty()) return path;
+  }
+  if (weight >= 600.f) {
+    std::string path = firstExisting({"/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                                      "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf"});
+    if (!path.empty()) return path;
+  }
+  return firstExisting({"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                        "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
+                        "/usr/share/fonts/truetype/freefont/FreeSans.ttf"});
 }
 
 } // namespace
@@ -123,7 +156,7 @@ std::uint32_t FreeTypeTextSystem::resolveFontId(std::string_view fontFamily, flo
   if (auto it = d->ids.find(key); it != d->ids.end()) {
     return it->second;
   }
-  std::string path = findFontPath(family);
+  std::string path = findFontPath(family, weight, italic);
   if (path.empty()) {
     throw std::runtime_error("No usable Linux font found");
   }
@@ -152,63 +185,113 @@ std::shared_ptr<TextLayout const> FreeTypeTextSystem::layout(AttributedString co
     return result;
   }
 
-  AttributedRun run = text.runs.empty()
-                          ? AttributedRun{0, static_cast<std::uint32_t>(text.utf8.size()),
-                                          Font::body(), Colors::black}
-                          : text.runs.front();
-  Font font = resolvedFont(run.font);
-  std::uint32_t fontId = resolveFontId(font.family, font.weight, font.italic);
-  FT_Face face = d->face(fontId);
-  FT_Set_Pixel_Sizes(face, 0, static_cast<FT_UInt>(std::max(1.f, font.size)));
+  std::vector<AttributedRun> runs = text.runs;
+  if (runs.empty()) {
+    runs.push_back(AttributedRun{0, static_cast<std::uint32_t>(text.utf8.size()), Font::body(), Colors::black});
+  }
+  std::sort(runs.begin(), runs.end(), [](AttributedRun const& a, AttributedRun const& b) {
+    return a.start < b.start;
+  });
 
-  float const ascent = static_cast<float>(face->size->metrics.ascender >> 6);
-  float const descent = static_cast<float>(-(face->size->metrics.descender >> 6));
-  float lineHeight = static_cast<float>((face->size->metrics.height >> 6) > 0 ? (face->size->metrics.height >> 6)
-                                                                              : std::lround(font.size * 1.25f));
-  if (options.lineHeight > 0.f) {
-    lineHeight = std::max(lineHeight, options.lineHeight);
-  } else if (options.lineHeightMultiple > 0.f) {
-    lineHeight = std::max(lineHeight, static_cast<float>(std::lround(font.size * options.lineHeightMultiple)));
+  struct ResolvedRun {
+    AttributedRun source;
+    Font font;
+    std::uint32_t fontId = 0;
+    FT_Face face = nullptr;
+    float ascent = 0.f;
+    float descent = 0.f;
+    float lineHeight = 0.f;
+  };
+  std::vector<ResolvedRun> resolved;
+  resolved.reserve(runs.size());
+  for (AttributedRun const& source : runs) {
+    Font font = resolvedFont(source.font);
+    std::uint32_t fontId = resolveFontId(font.family, font.weight, font.italic);
+    FT_Face face = d->face(fontId);
+    FT_Set_Pixel_Sizes(face, 0, static_cast<FT_UInt>(std::max(1.f, font.size)));
+    float const ascent = static_cast<float>(face->size->metrics.ascender >> 6);
+    float const descent = static_cast<float>(-(face->size->metrics.descender >> 6));
+    float lineHeight = static_cast<float>((face->size->metrics.height >> 6) > 0
+                                              ? (face->size->metrics.height >> 6)
+                                              : std::lround(font.size * 1.25f));
+    if (options.lineHeight > 0.f) {
+      lineHeight = std::max(lineHeight, options.lineHeight);
+    } else if (options.lineHeightMultiple > 0.f) {
+      lineHeight = std::max(lineHeight, static_cast<float>(std::lround(font.size * options.lineHeightMultiple)));
+    }
+    resolved.push_back(ResolvedRun{source, font, fontId, face, ascent, descent, lineHeight});
   }
 
+  auto runIndexForByte = [&](std::uint32_t byte) {
+    std::size_t selected = 0;
+    for (std::size_t i = 0; i < resolved.size(); ++i) {
+      if (byte >= resolved[i].source.start && byte < resolved[i].source.end) {
+        return i;
+      }
+      if (byte >= resolved[i].source.start) {
+        selected = i;
+      }
+    }
+    return selected;
+  };
+
   float x = 0.f;
-  float y = ascent;
+  float lineAscent = resolved.front().ascent;
+  float lineDescent = resolved.front().descent;
+  float lineHeight = resolved.front().lineHeight;
+  float y = lineAscent;
   float maxLineWidth = 0.f;
   std::uint32_t lineStartByte = 0;
   std::uint32_t lineIndex = 0;
-  std::size_t lineGlyphStart = 0;
-  std::size_t linePositionStart = 0;
+  std::size_t segmentGlyphStart = 0;
+  std::size_t segmentPositionStart = 0;
+  std::uint32_t segmentStartByte = 0;
+  std::size_t currentRunIndex = runIndexForByte(0);
   bool const allowWrap = options.wrapping != TextWrapping::NoWrap && maxWidth > 0.f;
 
-  auto flushLine = [&](std::uint32_t byteEnd) {
-    std::size_t const glyphCount = result->ownedStorage->glyphArena.size() - lineGlyphStart;
-    if (glyphCount > 0) {
-      TextLayout::PlacedRun placed{};
-      placed.run.fontId = fontId;
-      placed.run.fontSize = font.size;
-      placed.run.color = run.color;
-      placed.run.glyphIds = std::span<std::uint16_t const>(result->ownedStorage->glyphArena.data() + lineGlyphStart,
-                                                           glyphCount);
-      placed.run.positions = std::span<Point const>(result->ownedStorage->positionArena.data() + linePositionStart,
-                                                    glyphCount);
-      placed.run.ascent = ascent;
-      placed.run.descent = descent;
-      placed.run.width = x;
-      placed.origin = {0.f, y};
-      placed.utf8Begin = lineStartByte;
-      placed.utf8End = byteEnd;
-      placed.ctLineIndex = lineIndex;
-      result->runs.push_back(placed);
+  auto flushSegment = [&](std::uint32_t byteEnd) {
+    std::size_t const glyphCount = result->ownedStorage->glyphArena.size() - segmentGlyphStart;
+    if (glyphCount == 0) {
+      segmentStartByte = byteEnd;
+      segmentGlyphStart = result->ownedStorage->glyphArena.size();
+      segmentPositionStart = result->ownedStorage->positionArena.size();
+      return;
     }
+    ResolvedRun const& rr = resolved[currentRunIndex];
+    TextLayout::PlacedRun placed{};
+    placed.run.fontId = rr.fontId;
+    placed.run.fontSize = rr.font.size;
+    placed.run.color = rr.source.color;
+    placed.run.glyphIds = std::span<std::uint16_t const>(result->ownedStorage->glyphArena.data() + segmentGlyphStart,
+                                                         glyphCount);
+    placed.run.positions = std::span<Point const>(result->ownedStorage->positionArena.data() + segmentPositionStart,
+                                                  glyphCount);
+    placed.run.ascent = rr.ascent;
+    placed.run.descent = rr.descent;
+    placed.run.width = x;
+    placed.origin = {0.f, y};
+    placed.utf8Begin = segmentStartByte;
+    placed.utf8End = byteEnd;
+    placed.ctLineIndex = lineIndex;
+    result->runs.push_back(placed);
+    segmentStartByte = byteEnd;
+    segmentGlyphStart = result->ownedStorage->glyphArena.size();
+    segmentPositionStart = result->ownedStorage->positionArena.size();
+  };
+
+  auto flushLine = [&](std::uint32_t byteEnd) {
+    flushSegment(byteEnd);
     result->lines.push_back(TextLayout::LineRange{lineIndex, static_cast<int>(lineStartByte),
-                                                  static_cast<int>(byteEnd), 0.f, y - ascent, y + descent, y});
+                                                  static_cast<int>(byteEnd), 0.f, y - lineAscent,
+                                                  y + lineDescent, y});
     maxLineWidth = std::max(maxLineWidth, x);
     ++lineIndex;
     x = 0.f;
     y += lineHeight;
     lineStartByte = byteEnd;
-    lineGlyphStart = result->ownedStorage->glyphArena.size();
-    linePositionStart = result->ownedStorage->positionArena.size();
+    lineAscent = resolved[currentRunIndex].ascent;
+    lineDescent = resolved[currentRunIndex].descent;
+    lineHeight = resolved[currentRunIndex].lineHeight;
   };
 
   std::vector<Codepoint> const codepoints = decodeUtf8(text.utf8);
@@ -216,20 +299,32 @@ std::shared_ptr<TextLayout const> FreeTypeTextSystem::layout(AttributedString co
   result->ownedStorage->positionArena.reserve(codepoints.size());
 
   for (Codepoint cp : codepoints) {
+    std::size_t const nextRunIndex = runIndexForByte(cp.byteBegin);
+    if (nextRunIndex != currentRunIndex) {
+      flushSegment(cp.byteBegin);
+      currentRunIndex = nextRunIndex;
+    }
+    ResolvedRun& rr = resolved[currentRunIndex];
+    FT_Set_Pixel_Sizes(rr.face, 0, static_cast<FT_UInt>(std::max(1.f, rr.font.size)));
+    lineAscent = std::max(lineAscent, rr.ascent);
+    lineDescent = std::max(lineDescent, rr.descent);
+    lineHeight = std::max(lineHeight, rr.lineHeight);
     if (cp.value == U'\n') {
       flushLine(cp.byteBegin);
       lineStartByte = cp.byteEnd;
+      segmentStartByte = cp.byteEnd;
       continue;
     }
-    FT_UInt glyph = FT_Get_Char_Index(face, static_cast<FT_ULong>(cp.value));
-    if (FT_Load_Glyph(face, glyph, FT_LOAD_DEFAULT) != 0) {
+    FT_UInt glyph = FT_Get_Char_Index(rr.face, static_cast<FT_ULong>(cp.value));
+    if (FT_Load_Glyph(rr.face, glyph, FT_LOAD_DEFAULT) != 0) {
       continue;
     }
-    float advance = static_cast<float>(face->glyph->advance.x >> 6);
+    float advance = static_cast<float>(rr.face->glyph->advance.x >> 6);
     if (allowWrap && x > 0.f && x + advance > maxWidth) {
       std::uint32_t const nextLineStart = cp.value == U' ' ? cp.byteEnd : cp.byteBegin;
       flushLine(nextLineStart);
       lineStartByte = nextLineStart;
+      segmentStartByte = nextLineStart;
       if (cp.value == U' ') {
         continue;
       }

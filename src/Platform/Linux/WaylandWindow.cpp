@@ -36,8 +36,6 @@ namespace flux {
 namespace {
 
 std::atomic<unsigned int> gNextHandle{1};
-constexpr std::int64_t kFrameIntervalNanos = 16'666'667;
-
 std::int64_t nowNanos() {
   using namespace std::chrono;
   return duration_cast<nanoseconds>(steady_clock::now().time_since_epoch()).count();
@@ -141,6 +139,7 @@ public:
   }
 
   ~WaylandWindow() override {
+    if (frameCallback_) wl_callback_destroy(frameCallback_);
     if (decoration_) zxdg_toplevel_decoration_v1_destroy(decoration_);
     if (toplevel_) xdg_toplevel_destroy(toplevel_);
     if (xdgSurface_) xdg_surface_destroy(xdgSurface_);
@@ -220,51 +219,34 @@ public:
   void* nativeGraphicsSurface() const override { return surface_; }
 
   void processEvents() override {
-    wl_display_dispatch_pending(display_);
-    wl_display_flush(display_);
+    drainWakePipe();
+    dispatchReadyEvents(0);
     flushDeferredRedraw();
-    pumpFrameIfDue();
   }
 
   void waitForEvents(int timeoutMs) override {
-    timeoutMs = timeoutWithPendingFrame(timeoutMs);
-    wl_display_flush(display_);
-    pollfd fds[2]{{wl_display_get_fd(display_), POLLIN, 0}, {wakePipe_[0], POLLIN, 0}};
-    int const pollTimeout = timeoutMs < 0 ? -1 : timeoutMs;
-    int const rc = poll(fds, 2, pollTimeout);
-    if (rc > 0) {
-      if (fds[1].revents & POLLIN) {
-        char buffer[64];
-        while (read(wakePipe_[0], buffer, sizeof(buffer)) > 0) {}
-      }
-      if (fds[0].revents & POLLIN) {
-        wl_display_dispatch(display_);
-      } else {
-        wl_display_dispatch_pending(display_);
-      }
-    } else {
-      wl_display_dispatch_pending(display_);
-    }
+    dispatchReadyEvents(timeoutMs);
     flushDeferredRedraw();
-    pumpFrameIfDue();
   }
 
   void wakeEventLoop() override {
     char const c = 1;
     (void)write(wakePipe_[1], &c, 1);
   }
+  int eventFd() const override { return display_ ? wl_display_get_fd(display_) : -1; }
+  int wakeFd() const override { return wakePipe_[0]; }
 
   void requestAnimationFrame() override {
-    if (framePending_) return;
+    if (framePending_ || !surface_) return;
     framePending_ = true;
-    frameEventPosted_ = false;
-    frameDeadlineNanos_ = nowNanos() + kFrameIntervalNanos;
-    wakeEventLoop();
+    frameCallback_ = wl_surface_frame(surface_);
+    wl_callback_add_listener(frameCallback_, &frameCallbackListener_, this);
+    wl_surface_commit(surface_);
+    wl_display_flush(display_);
   }
 
   void acknowledgeAnimationFrameTick() override {
     framePending_ = false;
-    frameEventPosted_ = false;
   }
 
   void completeAnimationFrame(bool needsAnotherFrame) override {
@@ -317,6 +299,19 @@ private:
 
   static void wmPing(void*, xdg_wm_base* base, std::uint32_t serial) {
     xdg_wm_base_pong(base, serial);
+  }
+
+  static void frameDone(void* data, wl_callback* callback, std::uint32_t) {
+    auto* self = static_cast<WaylandWindow*>(data);
+    if (callback == self->frameCallback_) {
+      wl_callback_destroy(self->frameCallback_);
+      self->frameCallback_ = nullptr;
+    } else {
+      wl_callback_destroy(callback);
+    }
+    if (!self->framePending_) return;
+    Application::instance().eventQueue().post(FrameEvent{nowNanos(), self->handle_});
+    self->wakeEventLoop();
   }
 
   static void xdgConfigure(void* data, xdg_surface* surface, std::uint32_t serial) {
@@ -497,7 +492,8 @@ private:
     Application::instance().eventQueue().post(InputEvent{.kind = pressed ? InputEvent::Kind::KeyDown
                                                                           : InputEvent::Kind::KeyUp,
                                                          .handle = self->handle_,
-                                                         .key = keyFromXkb(sym)});
+                                                         .key = keyFromXkb(sym),
+                                                         .modifiers = self->currentModifiers_});
     if (pressed) {
       std::string text = utf8FromKeysym(sym);
       if (!text.empty()) {
@@ -510,7 +506,23 @@ private:
   static void keyboardModifiers(void* data, wl_keyboard*, std::uint32_t, std::uint32_t depressed,
                                 std::uint32_t latched, std::uint32_t locked, std::uint32_t group) {
     auto* self = static_cast<WaylandWindow*>(data);
-    if (self->xkbState_) xkb_state_update_mask(self->xkbState_, depressed, latched, locked, 0, 0, group);
+    if (self->xkbState_) {
+      xkb_state_update_mask(self->xkbState_, depressed, latched, locked, 0, 0, group);
+      Modifiers mods = Modifiers::None;
+      if (xkb_state_mod_name_is_active(self->xkbState_, XKB_MOD_NAME_SHIFT, XKB_STATE_MODS_EFFECTIVE) > 0) {
+        mods = mods | Modifiers::Shift;
+      }
+      if (xkb_state_mod_name_is_active(self->xkbState_, XKB_MOD_NAME_CTRL, XKB_STATE_MODS_EFFECTIVE) > 0) {
+        mods = mods | Modifiers::Ctrl;
+      }
+      if (xkb_state_mod_name_is_active(self->xkbState_, XKB_MOD_NAME_ALT, XKB_STATE_MODS_EFFECTIVE) > 0) {
+        mods = mods | Modifiers::Alt;
+      }
+      if (xkb_state_mod_name_is_active(self->xkbState_, XKB_MOD_NAME_LOGO, XKB_STATE_MODS_EFFECTIVE) > 0) {
+        mods = mods | Modifiers::Meta;
+      }
+      self->currentModifiers_ = mods;
+    }
   }
   static void keyboardRepeatInfo(void*, wl_keyboard*, std::int32_t, std::int32_t) {}
 
@@ -576,6 +588,30 @@ private:
     wakeEventLoop();
   }
 
+  void drainWakePipe() {
+    char buffer[64];
+    while (read(wakePipe_[0], buffer, sizeof(buffer)) > 0) {}
+  }
+
+  void dispatchReadyEvents(int timeoutMs) {
+    while (wl_display_prepare_read(display_) != 0) {
+      wl_display_dispatch_pending(display_);
+    }
+    wl_display_flush(display_);
+
+    pollfd fds[2]{{wl_display_get_fd(display_), POLLIN, 0}, {wakePipe_[0], POLLIN, 0}};
+    int const rc = poll(fds, 2, timeoutMs < 0 ? -1 : timeoutMs);
+    if (rc > 0 && (fds[1].revents & POLLIN)) {
+      drainWakePipe();
+    }
+    if (rc > 0 && (fds[0].revents & POLLIN)) {
+      wl_display_read_events(display_);
+    } else {
+      wl_display_cancel_read(display_);
+    }
+    wl_display_dispatch_pending(display_);
+  }
+
   void flushDeferredRedraw() {
     if (!resizeRedrawPending_) return;
     resizeRedrawPending_ = false;
@@ -583,25 +619,9 @@ private:
     Application::instance().flushRedraw();
   }
 
-  void pumpFrameIfDue() {
-    if (!framePending_ || frameEventPosted_) return;
-    std::int64_t const now = nowNanos();
-    if (now < frameDeadlineNanos_) return;
-    frameEventPosted_ = true;
-    Application::instance().eventQueue().post(FrameEvent{now, handle_});
-    wakeEventLoop();
-  }
-
-  int timeoutWithPendingFrame(int timeoutMs) const {
-    if (!framePending_ || frameEventPosted_) return timeoutMs;
-    std::int64_t const remaining = frameDeadlineNanos_ - nowNanos();
-    int const frameTimeoutMs = remaining <= 0 ? 0 : static_cast<int>((remaining + 999'999) / 1'000'000);
-    if (timeoutMs < 0) return frameTimeoutMs;
-    return std::min(timeoutMs, frameTimeoutMs);
-  }
-
   static inline wl_registry_listener registryListener_{registryGlobal, registryRemove};
   static inline xdg_wm_base_listener wmBaseListener_{wmPing};
+  static inline wl_callback_listener frameCallbackListener_{frameDone};
   static inline wl_surface_listener surfaceListener_{surfaceEnter, surfaceLeave, surfacePreferredBufferScale,
                                                     surfacePreferredBufferTransform};
   static inline wl_output_listener outputListener_{outputGeometry, outputMode, outputDone, outputScale,
@@ -628,6 +648,7 @@ private:
   wl_pointer* pointer_ = nullptr;
   wl_keyboard* keyboard_ = nullptr;
   wl_surface* surface_ = nullptr;
+  wl_callback* frameCallback_ = nullptr;
   xdg_surface* xdgSurface_ = nullptr;
   xdg_toplevel* toplevel_ = nullptr;
   zxdg_toplevel_decoration_v1* decoration_ = nullptr;
@@ -651,10 +672,9 @@ private:
   int pendingHeight_ = 0;
   Point pointerPos_{};
   std::uint8_t pressedButtons_ = 0;
+  Modifiers currentModifiers_ = Modifiers::None;
   bool resizeRedrawPending_ = false;
   bool framePending_ = false;
-  bool frameEventPosted_ = false;
-  std::int64_t frameDeadlineNanos_ = 0;
   int wakePipe_[2]{-1, -1};
 };
 

@@ -37,6 +37,8 @@
 namespace flux {
 namespace {
 
+constexpr std::size_t kMaxFramesInFlight = 2;
+
 struct Rgba {
   std::uint8_t r = 0, g = 0, b = 0, a = 255;
 };
@@ -342,9 +344,15 @@ public:
     if (textureDescriptorLayout_) vkDestroyDescriptorSetLayout(device_, textureDescriptorLayout_, nullptr);
     if (descriptorPool_) vkDestroyDescriptorPool(device_, descriptorPool_, nullptr);
     if (renderPass_) vkDestroyRenderPass(device_, renderPass_, nullptr);
-    if (imageAvailable_) vkDestroySemaphore(device_, imageAvailable_, nullptr);
-    if (renderFinished_) vkDestroySemaphore(device_, renderFinished_, nullptr);
-    if (frameFence_) vkDestroyFence(device_, frameFence_, nullptr);
+    for (VkSemaphore semaphore : imageAvailable_) {
+      if (semaphore) vkDestroySemaphore(device_, semaphore, nullptr);
+    }
+    for (VkSemaphore semaphore : renderFinished_) {
+      if (semaphore) vkDestroySemaphore(device_, semaphore, nullptr);
+    }
+    for (VkFence fence : frameFences_) {
+      if (fence) vkDestroyFence(device_, fence, nullptr);
+    }
     if (commandPool_) vkDestroyCommandPool(device_, commandPool_, nullptr);
     if (device_) vkDestroyDevice(device_, nullptr);
     if (surface_) vkDestroySurfaceKHR(instance_, surface_, nullptr);
@@ -391,9 +399,14 @@ public:
   void present() override {
     if (!swapchain_ || width_ <= 0 || height_ <= 0 || framebufferWidth_ <= 0 || framebufferHeight_ <= 0) return;
     debug::perf::ScopedTimer timer(debug::perf::TimedMetric::CanvasPresent);
-    vkWaitForFences(device_, 1, &frameFence_, VK_TRUE, UINT64_MAX);
+    VkFence const frameFence = frameFences_[currentFrame_];
+    VkSemaphore const imageAvailable = imageAvailable_[currentFrame_];
+    VkSemaphore const renderFinished = renderFinished_[currentFrame_];
+    VkCommandBuffer const commandBuffer = commandBuffers_[currentFrame_];
+
+    vkWaitForFences(device_, 1, &frameFence, VK_TRUE, UINT64_MAX);
     std::uint32_t imageIndex = 0;
-    VkResult acquired = vkAcquireNextImageKHR(device_, swapchain_, UINT64_MAX, imageAvailable_, VK_NULL_HANDLE,
+    VkResult acquired = vkAcquireNextImageKHR(device_, swapchain_, UINT64_MAX, imageAvailable, VK_NULL_HANDLE,
                                               &imageIndex);
     if (acquired == VK_ERROR_OUT_OF_DATE_KHR) {
       recreateSwapchain();
@@ -402,14 +415,18 @@ public:
     if (acquired != VK_SUCCESS && acquired != VK_SUBOPTIMAL_KHR) {
       vkCheck(acquired, "vkAcquireNextImageKHR");
     }
-    vkResetFences(device_, 1, &frameFence_);
+    if (imageInFlightFences_[imageIndex]) {
+      vkWaitForFences(device_, 1, &imageInFlightFences_[imageIndex], VK_TRUE, UINT64_MAX);
+    }
+    imageInFlightFences_[imageIndex] = frameFence;
+    vkResetFences(device_, 1, &frameFence);
 
     uploadFrameBuffers();
     uploadAtlasIfNeeded();
 
-    vkResetCommandBuffer(commandBuffer_, 0);
+    vkResetCommandBuffer(commandBuffer, 0);
     VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
-    vkCheck(vkBeginCommandBuffer(commandBuffer_, &begin), "vkBeginCommandBuffer");
+    vkCheck(vkBeginCommandBuffer(commandBuffer, &begin), "vkBeginCommandBuffer");
     VkClearValue clear{};
     clear.color.float32[0] = clearColor_.r;
     clear.color.float32[1] = clearColor_.g;
@@ -421,31 +438,31 @@ public:
     rp.renderArea.extent = swapExtent_;
     rp.clearValueCount = 1;
     rp.pClearValues = &clear;
-    vkCmdBeginRenderPass(commandBuffer_, &rp, VK_SUBPASS_CONTENTS_INLINE);
-    drawOps();
-    vkCmdEndRenderPass(commandBuffer_);
-    transition(commandBuffer_, swapchainImages_[imageIndex], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+    vkCmdBeginRenderPass(commandBuffer, &rp, VK_SUBPASS_CONTENTS_INLINE);
+    drawOps(commandBuffer);
+    vkCmdEndRenderPass(commandBuffer);
+    transition(commandBuffer, swapchainImages_[imageIndex], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-    writeDebugScreenshotIfRequested(swapchainImages_[imageIndex]);
-    transition(commandBuffer_, swapchainImages_[imageIndex], VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+    writeDebugScreenshotIfRequested(commandBuffer, swapchainImages_[imageIndex]);
+    transition(commandBuffer, swapchainImages_[imageIndex], VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
-    vkCheck(vkEndCommandBuffer(commandBuffer_), "vkEndCommandBuffer");
+    vkCheck(vkEndCommandBuffer(commandBuffer), "vkEndCommandBuffer");
 
     VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};
     submit.waitSemaphoreCount = 1;
-    submit.pWaitSemaphores = &imageAvailable_;
+    submit.pWaitSemaphores = &imageAvailable;
     submit.pWaitDstStageMask = &waitStage;
     submit.commandBufferCount = 1;
-    submit.pCommandBuffers = &commandBuffer_;
+    submit.pCommandBuffers = &commandBuffer;
     submit.signalSemaphoreCount = 1;
-    submit.pSignalSemaphores = &renderFinished_;
-    vkCheck(vkQueueSubmit(queue_, 1, &submit, frameFence_), "vkQueueSubmit");
+    submit.pSignalSemaphores = &renderFinished;
+    vkCheck(vkQueueSubmit(queue_, 1, &submit, frameFence), "vkQueueSubmit");
     flushScreenshot();
 
     VkPresentInfoKHR presentInfo{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
     presentInfo.waitSemaphoreCount = 1;
-    presentInfo.pWaitSemaphores = &renderFinished_;
+    presentInfo.pWaitSemaphores = &renderFinished;
     presentInfo.swapchainCount = 1;
     presentInfo.pSwapchains = &swapchain_;
     presentInfo.pImageIndices = &imageIndex;
@@ -455,6 +472,7 @@ public:
     } else {
       vkCheck(presented, "vkQueuePresentKHR");
     }
+    currentFrame_ = (currentFrame_ + 1u) % kMaxFramesInFlight;
     debug::perf::recordPresentedFrame();
   }
 
@@ -650,7 +668,19 @@ public:
 
   void drawImageTiled(Image const& image, Rect const& dst, CornerRadius const& corners, float opacity) override {
     Size sz = image.size();
-    drawImage(image, Rect::sharp(0.f, 0.f, sz.width, sz.height), dst, corners, opacity);
+    if (sz.width <= 0.f || sz.height <= 0.f || dst.width <= 0.f || dst.height <= 0.f) return;
+    int const cols = static_cast<int>(std::ceil(dst.width / sz.width));
+    int const rows = static_cast<int>(std::ceil(dst.height / sz.height));
+    for (int row = 0; row < rows; ++row) {
+      for (int col = 0; col < cols; ++col) {
+        Rect tile = Rect::sharp(dst.x + static_cast<float>(col) * sz.width,
+                                dst.y + static_cast<float>(row) * sz.height,
+                                std::min(sz.width, dst.x + dst.width - (dst.x + static_cast<float>(col) * sz.width)),
+                                std::min(sz.height, dst.y + dst.height - (dst.y + static_cast<float>(row) * sz.height)));
+        Rect src = Rect::sharp(0.f, 0.f, tile.width, tile.height);
+        drawImage(image, src, tile, corners, opacity);
+      }
+    }
   }
 
   void* gpuDevice() const override { return device_; }
@@ -811,14 +841,16 @@ private:
     VkCommandBufferAllocateInfo alloc{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
     alloc.commandPool = commandPool_;
     alloc.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    alloc.commandBufferCount = 1;
-    vkCheck(vkAllocateCommandBuffers(device_, &alloc, &commandBuffer_), "vkAllocateCommandBuffers");
+    alloc.commandBufferCount = static_cast<std::uint32_t>(commandBuffers_.size());
+    vkCheck(vkAllocateCommandBuffers(device_, &alloc, commandBuffers_.data()), "vkAllocateCommandBuffers");
     VkSemaphoreCreateInfo sem{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
-    vkCheck(vkCreateSemaphore(device_, &sem, nullptr, &imageAvailable_), "vkCreateSemaphore");
-    vkCheck(vkCreateSemaphore(device_, &sem, nullptr, &renderFinished_), "vkCreateSemaphore");
     VkFenceCreateInfo fence{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
     fence.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-    vkCheck(vkCreateFence(device_, &fence, nullptr, &frameFence_), "vkCreateFence");
+    for (std::size_t i = 0; i < kMaxFramesInFlight; ++i) {
+      vkCheck(vkCreateSemaphore(device_, &sem, nullptr, &imageAvailable_[i]), "vkCreateSemaphore");
+      vkCheck(vkCreateSemaphore(device_, &sem, nullptr, &renderFinished_[i]), "vkCreateSemaphore");
+      vkCheck(vkCreateFence(device_, &fence, nullptr, &frameFences_[i]), "vkCreateFence");
+    }
   }
 
   void createDescriptors() {
@@ -931,10 +963,10 @@ private:
     rectPipelineLayout_ = createPipelineLayout({rectDescriptorLayout_}, true);
     imagePipelineLayout_ = createPipelineLayout({quadDescriptorLayout_, textureDescriptorLayout_}, true);
     pathPipelineLayout_ = createPipelineLayout({}, false);
-    rectPipeline_ = createPipeline(rectPipelineLayout_, _tmp_rect_vert_spv, _tmp_rect_vert_spv_len,
-                                   _tmp_rect_frag_spv, _tmp_rect_frag_spv_len, {});
-    imagePipeline_ = createPipeline(imagePipelineLayout_, _tmp_image_vert_spv, _tmp_image_vert_spv_len,
-                                    _tmp_image_frag_spv, _tmp_image_frag_spv_len, {});
+    rectPipeline_ = createPipeline(rectPipelineLayout_, flux_rect_vert_spv, flux_rect_vert_spv_len,
+                                   flux_rect_frag_spv, flux_rect_frag_spv_len, {});
+    imagePipeline_ = createPipeline(imagePipelineLayout_, flux_image_vert_spv, flux_image_vert_spv_len,
+                                    flux_image_frag_spv, flux_image_frag_spv_len, {});
     std::array<VkVertexInputBindingDescription, 1> binding{};
     binding[0].binding = 0;
     binding[0].stride = sizeof(PathVertex);
@@ -943,8 +975,8 @@ private:
     attrs[0] = {0, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(PathVertex, x)};
     attrs[1] = {1, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(PathVertex, color)};
     attrs[2] = {2, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(PathVertex, viewport)};
-    pathPipeline_ = createPipeline(pathPipelineLayout_, _tmp_path_vert_spv, _tmp_path_vert_spv_len,
-                                   _tmp_path_frag_spv, _tmp_path_frag_spv_len,
+    pathPipeline_ = createPipeline(pathPipelineLayout_, flux_path_vert_spv, flux_path_vert_spv_len,
+                                   flux_path_frag_spv, flux_path_frag_spv_len,
                                    {binding.data(), 1, attrs.data(), static_cast<std::uint32_t>(attrs.size())});
   }
 
@@ -1035,8 +1067,8 @@ private:
 
   void recreateSwapchain() {
     if (!device_) return;
-    if (frameFence_) {
-      vkWaitForFences(device_, 1, &frameFence_, VK_TRUE, UINT64_MAX);
+    for (VkFence fence : frameFences_) {
+      if (fence) vkWaitForFences(device_, 1, &fence, VK_TRUE, UINT64_MAX);
     }
     VkSwapchainKHR oldSwapchain = swapchain_;
     std::vector<VkImageView> oldViews = std::move(swapchainViews_);
@@ -1085,6 +1117,7 @@ private:
     vkGetSwapchainImagesKHR(device_, swapchain_, &count, nullptr);
     swapchainImages_.resize(count);
     vkGetSwapchainImagesKHR(device_, swapchain_, &count, swapchainImages_.data());
+    imageInFlightFences_.assign(count, VK_NULL_HANDLE);
     swapchainViews_.resize(count);
     framebuffers_.resize(count);
     for (std::size_t i = 0; i < swapchainImages_.size(); ++i) {
@@ -1246,60 +1279,60 @@ private:
     vkUpdateDescriptorSets(device_, 1, &write, 0, nullptr);
   }
 
-  void drawRectRange(std::uint32_t first, std::uint32_t count) {
+  void drawRectRange(VkCommandBuffer commandBuffer, std::uint32_t first, std::uint32_t count) {
     if (count == 0) return;
-    setViewportScissor();
+    setViewportScissor(commandBuffer);
     float viewport[2] = {static_cast<float>(width_), static_cast<float>(height_)};
-    vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, rectPipeline_);
-    vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, rectPipelineLayout_, 0, 1,
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, rectPipeline_);
+    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, rectPipelineLayout_, 0, 1,
                             &rectDescriptorSet_, 0, nullptr);
-    vkCmdPushConstants(commandBuffer_, rectPipelineLayout_, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(viewport), viewport);
-    vkCmdDraw(commandBuffer_, 6, count, 0, first);
+    vkCmdPushConstants(commandBuffer, rectPipelineLayout_, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(viewport), viewport);
+    vkCmdDraw(commandBuffer, 6, count, 0, first);
   }
 
-  void drawPathRange(std::uint32_t first, std::uint32_t count) {
+  void drawPathRange(VkCommandBuffer commandBuffer, std::uint32_t first, std::uint32_t count) {
     if (count == 0) return;
-    setViewportScissor();
+    setViewportScissor(commandBuffer);
     VkDeviceSize offset = 0;
-    vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pathPipeline_);
-    vkCmdBindVertexBuffers(commandBuffer_, 0, 1, &pathBuffer_.buffer, &offset);
-    vkCmdDraw(commandBuffer_, count, 1, first, 0);
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pathPipeline_);
+    vkCmdBindVertexBuffers(commandBuffer, 0, 1, &pathBuffer_.buffer, &offset);
+    vkCmdDraw(commandBuffer, count, 1, first, 0);
   }
 
-  void drawImageRange(Texture* texture, std::uint32_t first, std::uint32_t count) {
+  void drawImageRange(VkCommandBuffer commandBuffer, Texture* texture, std::uint32_t first, std::uint32_t count) {
     if (!texture || !texture->descriptor || count == 0) return;
-    setViewportScissor();
+    setViewportScissor(commandBuffer);
     float viewport[2] = {static_cast<float>(width_), static_cast<float>(height_)};
-    vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, imagePipeline_);
-    vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, imagePipelineLayout_, 0, 1,
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, imagePipeline_);
+    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, imagePipelineLayout_, 0, 1,
                             &quadDescriptorSet_, 0, nullptr);
-    vkCmdPushConstants(commandBuffer_, imagePipelineLayout_, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(viewport), viewport);
-    vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, imagePipelineLayout_, 1, 1,
+    vkCmdPushConstants(commandBuffer, imagePipelineLayout_, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(viewport), viewport);
+    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, imagePipelineLayout_, 1, 1,
                             &texture->descriptor, 0, nullptr);
-    vkCmdDraw(commandBuffer_, 6, count, 0, first);
+    vkCmdDraw(commandBuffer, 6, count, 0, first);
   }
 
-  void drawOps() {
+  void drawOps(VkCommandBuffer commandBuffer) {
     for (DrawOp const& op : ops_) {
       switch (op.kind) {
       case DrawOp::Kind::Rect:
-        drawRectRange(op.first, op.count);
+        drawRectRange(commandBuffer, op.first, op.count);
         break;
       case DrawOp::Kind::Path:
-        drawPathRange(op.first, op.count);
+        drawPathRange(commandBuffer, op.first, op.count);
         break;
       case DrawOp::Kind::Image:
-        drawImageRange(op.texture, op.first, op.count);
+        drawImageRange(commandBuffer, op.texture, op.first, op.count);
         break;
       }
     }
   }
 
-  void setViewportScissor() {
+  void setViewportScissor(VkCommandBuffer commandBuffer) {
     VkViewport vp{0.f, 0.f, static_cast<float>(swapExtent_.width), static_cast<float>(swapExtent_.height), 0.f, 1.f};
     VkRect2D sc{{0, 0}, swapExtent_};
-    vkCmdSetViewport(commandBuffer_, 0, 1, &vp);
-    vkCmdSetScissor(commandBuffer_, 0, 1, &sc);
+    vkCmdSetViewport(commandBuffer, 0, 1, &vp);
+    vkCmdSetScissor(commandBuffer, 0, 1, &sc);
   }
 
   GlyphSlot const* glyphSlot(std::uint32_t fontId, std::uint16_t glyphId, float fontSize) {
@@ -1488,7 +1521,7 @@ private:
                          0, nullptr, 0, nullptr, 1, &b);
   }
 
-  void writeDebugScreenshotIfRequested(VkImage source) {
+  void writeDebugScreenshotIfRequested(VkCommandBuffer commandBuffer, VkImage source) {
     if (debugScreenshotWritten_) return;
     char const* path = std::getenv("FLUX_DEBUG_SCREENSHOT_PATH");
     if (!path || !*path) return;
@@ -1500,7 +1533,7 @@ private:
     copy.imageSubresource.layerCount = 1;
     copy.imageExtent = {static_cast<std::uint32_t>(framebufferWidth_),
                         static_cast<std::uint32_t>(framebufferHeight_), 1};
-    vkCmdCopyImageToBuffer(commandBuffer_, source, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, staging.buffer, 1, &copy);
+    vkCmdCopyImageToBuffer(commandBuffer, source, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, staging.buffer, 1, &copy);
     pendingScreenshotPath_ = path;
     pendingScreenshotBuffer_ = staging;
     pendingScreenshotSize_ = size;
@@ -1553,14 +1586,16 @@ private:
   VkQueue queue_ = VK_NULL_HANDLE;
   std::uint32_t queueFamily_ = 0;
   VkCommandPool commandPool_ = VK_NULL_HANDLE;
-  VkCommandBuffer commandBuffer_ = VK_NULL_HANDLE;
-  VkSemaphore imageAvailable_ = VK_NULL_HANDLE;
-  VkSemaphore renderFinished_ = VK_NULL_HANDLE;
-  VkFence frameFence_ = VK_NULL_HANDLE;
+  std::array<VkCommandBuffer, kMaxFramesInFlight> commandBuffers_{};
+  std::array<VkSemaphore, kMaxFramesInFlight> imageAvailable_{};
+  std::array<VkSemaphore, kMaxFramesInFlight> renderFinished_{};
+  std::array<VkFence, kMaxFramesInFlight> frameFences_{};
+  std::size_t currentFrame_ = 0;
   VkSwapchainKHR swapchain_ = VK_NULL_HANDLE;
   VkSurfaceFormatKHR surfaceFormat_{};
   VkExtent2D swapExtent_{};
   std::vector<VkImage> swapchainImages_;
+  std::vector<VkFence> imageInFlightFences_;
   std::vector<VkImageView> swapchainViews_;
   std::vector<VkFramebuffer> framebuffers_;
   VkRenderPass renderPass_ = VK_NULL_HANDLE;

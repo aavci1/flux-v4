@@ -17,7 +17,7 @@ std::string envOr(std::string const& name, std::string fallback) {
 }
 
 std::string appDir(std::string const& base) {
-  std::filesystem::path path = std::filesystem::path(base) / "flux" / "Solitaire";
+  std::filesystem::path path = std::filesystem::path(base) / "flux";
   std::error_code ec;
   std::filesystem::create_directories(path, ec);
   return path.string();

@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <chrono>
 #include <climits>
+#include <cstdio>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -498,11 +499,19 @@ void Application::presentRequestedWindows(bool requireFrameReady, bool keepFrame
       if (hasFrameReady) {
         state.frameReady = false;
       }
-      Canvas& canvas = w->canvas();
-      canvas.beginFrame();
-      w->render(canvas);
-      canvas.present();
-      rendered = true;
+      try {
+        Canvas& canvas = w->canvas();
+        canvas.beginFrame();
+        w->render(canvas);
+        canvas.present();
+        rendered = true;
+      } catch (std::exception const& e) {
+        std::fprintf(stderr, "Flux Linux render error on window %u: %s\n", w->handle(), e.what());
+        d->pendingCloseHandles_.push_back(w->handle());
+        state.frameReady = false;
+        state.frameBudgetPending = false;
+        continue;
+      }
     }
     if (hasFrameReady) {
       state.frameReady = false;
@@ -573,7 +582,17 @@ int Application::exec() {
 
     int timeoutMs = d->nextTimerTimeoutMs();
     if (!d->windows_.empty()) {
-      d->windows_[0]->platformWindow()->waitForEvents(timeoutMs);
+      bool waited = false;
+      for (auto const& window : d->windows_) {
+        if (!window) {
+          continue;
+        }
+        window->platformWindow()->waitForEvents(waited ? 0 : timeoutMs);
+        waited = true;
+      }
+      if (!waited && timeoutMs > 0) {
+        std::this_thread::sleep_for(milliseconds(timeoutMs));
+      }
     } else if (timeoutMs > 0) {
       std::this_thread::sleep_for(milliseconds(timeoutMs));
     }
