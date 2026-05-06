@@ -19,6 +19,7 @@
 #include <initializer_list>
 #include <limits.h>
 #include <map>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <unistd.h>
@@ -90,50 +91,10 @@ std::string firstExisting(std::initializer_list<std::filesystem::path> paths) {
   return {};
 }
 
-std::string findFontPath(std::string_view family, float weight, bool italic) {
-  std::filesystem::path const exeDir = executableDir();
-  if (family == "Material Symbols Rounded") {
-    std::string const appName = Application::hasInstance() ? Application::instance().name() : "flux";
-    std::string path = firstExisting({
-        exeDir / "fonts/MaterialSymbolsRounded.ttf",
-        exeDir / "../share" / appName / "fonts/MaterialSymbolsRounded.ttf",
-        exeDir / "../share/flux/fonts/MaterialSymbolsRounded.ttf",
-        std::filesystem::current_path() / "fonts/MaterialSymbolsRounded.ttf",
-        std::filesystem::current_path() / "../fonts/MaterialSymbolsRounded.ttf",
-    });
-    if (!path.empty()) return path;
-  }
-  FcPattern* pattern = FcPatternCreate();
-  if (pattern) {
-    std::string const familyName = family.empty() || family == "System" || family == ".System"
-                                       ? "sans-serif"
-                                       : std::string(family);
-    FcPatternAddString(pattern, FC_FAMILY, reinterpret_cast<FcChar8 const*>(familyName.c_str()));
-    FcPatternAddInteger(pattern, FC_WEIGHT, weight >= 700.f ? FC_WEIGHT_BOLD
-                                                            : weight >= 600.f ? FC_WEIGHT_SEMIBOLD
-                                                                              : FC_WEIGHT_REGULAR);
-    FcPatternAddInteger(pattern, FC_SLANT, italic ? FC_SLANT_ITALIC : FC_SLANT_ROMAN);
-    FcConfigSubstitute(nullptr, pattern, FcMatchPattern);
-    FcDefaultSubstitute(pattern);
-    FcResult result = FcResultNoMatch;
-    FcPattern* match = FcFontMatch(nullptr, pattern, &result);
-    FcPatternDestroy(pattern);
-    if (match) {
-      FcChar8* file = nullptr;
-      if (FcPatternGetString(match, FC_FILE, 0, &file) == FcResultMatch && file) {
-        std::string path = reinterpret_cast<char const*>(file);
-        FcPatternDestroy(match);
-        return path;
-      }
-      FcPatternDestroy(match);
-    }
-  }
-  return {};
-}
-
-std::string findFontPathForChar(std::string_view family, float weight, bool italic, char32_t ch) {
+std::string findFontPathFc(std::string_view family, float weight, bool italic, std::optional<char32_t> codepoint) {
   FcPattern* pattern = FcPatternCreate();
   if (!pattern) return {};
+
   std::string const familyName = family.empty() || family == "System" || family == ".System"
                                      ? "sans-serif"
                                      : std::string(family);
@@ -142,12 +103,15 @@ std::string findFontPathForChar(std::string_view family, float weight, bool ital
                                                           : weight >= 600.f ? FC_WEIGHT_SEMIBOLD
                                                                             : FC_WEIGHT_REGULAR);
   FcPatternAddInteger(pattern, FC_SLANT, italic ? FC_SLANT_ITALIC : FC_SLANT_ROMAN);
-  FcCharSet* charset = FcCharSetCreate();
-  if (charset) {
-    FcCharSetAddChar(charset, static_cast<FcChar32>(ch));
-    FcPatternAddCharSet(pattern, FC_CHARSET, charset);
-    FcCharSetDestroy(charset);
+  if (codepoint) {
+    FcCharSet* charset = FcCharSetCreate();
+    if (charset) {
+      FcCharSetAddChar(charset, static_cast<FcChar32>(*codepoint));
+      FcPatternAddCharSet(pattern, FC_CHARSET, charset);
+      FcCharSetDestroy(charset);
+    }
   }
+
   FcConfigSubstitute(nullptr, pattern, FcMatchPattern);
   FcDefaultSubstitute(pattern);
   FcResult result = FcResultNoMatch;
@@ -161,6 +125,26 @@ std::string findFontPathForChar(std::string_view family, float weight, bool ital
   }
   FcPatternDestroy(match);
   return path;
+}
+
+std::string findFontPath(std::string_view family, float weight, bool italic) {
+  std::filesystem::path const exeDir = executableDir();
+  if (family == "Material Symbols Rounded") {
+    std::string const appName = Application::hasInstance() ? Application::instance().name() : "flux";
+    std::string path = firstExisting({
+        exeDir / "fonts/MaterialSymbolsRounded.ttf",
+        exeDir / "../share" / appName / "fonts/MaterialSymbolsRounded.ttf",
+        exeDir / "../share/flux/fonts/MaterialSymbolsRounded.ttf",
+        std::filesystem::current_path() / "fonts/MaterialSymbolsRounded.ttf",
+        std::filesystem::current_path() / "../fonts/MaterialSymbolsRounded.ttf",
+    });
+    if (!path.empty()) return path;
+  }
+  return findFontPathFc(family, weight, italic, std::nullopt);
+}
+
+std::string findFontPathForChar(std::string_view family, float weight, bool italic, char32_t ch) {
+  return findFontPathFc(family, weight, italic, ch);
 }
 
 } // namespace
