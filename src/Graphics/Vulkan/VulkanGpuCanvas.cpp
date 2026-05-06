@@ -680,13 +680,13 @@ public:
         .swapExtent = swapExtent_,
         .clearColor = clearColor_,
         .state = state_,
-        .stateStack = std::move(stateStack_),
-        .rects = std::move(rects_),
-        .quads = std::move(quads_),
-        .batches = std::move(batches_),
-        .ops = std::move(ops_),
-        .pathVerts = std::move(pathVerts_),
     };
+    std::swap(saved.stateStack, stateStack_);
+    std::swap(saved.rects, rects_);
+    std::swap(saved.quads, quads_);
+    std::swap(saved.batches, batches_);
+    std::swap(saved.ops, ops_);
+    std::swap(saved.pathVerts, pathVerts_);
 
     auto restore = [&] {
       width_ = saved.width;
@@ -696,12 +696,12 @@ public:
       swapExtent_ = saved.swapExtent;
       clearColor_ = saved.clearColor;
       state_ = saved.state;
-      stateStack_ = std::move(saved.stateStack);
-      rects_ = std::move(saved.rects);
-      quads_ = std::move(saved.quads);
-      batches_ = std::move(saved.batches);
-      ops_ = std::move(saved.ops);
-      pathVerts_ = std::move(saved.pathVerts);
+      std::swap(stateStack_, saved.stateStack);
+      std::swap(rects_, saved.rects);
+      std::swap(quads_, saved.quads);
+      std::swap(batches_, saved.batches);
+      std::swap(ops_, saved.ops);
+      std::swap(pathVerts_, saved.pathVerts);
     };
 
     width_ = logicalW;
