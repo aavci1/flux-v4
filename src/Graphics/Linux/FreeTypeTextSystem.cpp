@@ -231,6 +231,7 @@ struct FreeTypeTextSystem::Impl {
     constexpr std::size_t kMaxLayoutCacheEntries = 1024;
     if (auto it = layoutCache.find(key); it != layoutCache.end()) {
       it->second = std::move(layout);
+      promoteLayout(key);
       return;
     }
     layoutCache.emplace(key, std::move(layout));
@@ -239,6 +240,14 @@ struct FreeTypeTextSystem::Impl {
       layoutCache.erase(layoutCacheOrder.front());
       layoutCacheOrder.erase(layoutCacheOrder.begin());
     }
+  }
+
+  void promoteLayout(std::string const& key) {
+    auto orderIt = std::find(layoutCacheOrder.begin(), layoutCacheOrder.end(), key);
+    if (orderIt == layoutCacheOrder.end()) return;
+    std::string promoted = std::move(*orderIt);
+    layoutCacheOrder.erase(orderIt);
+    layoutCacheOrder.push_back(std::move(promoted));
   }
 };
 
@@ -329,6 +338,7 @@ std::shared_ptr<TextLayout const> FreeTypeTextSystem::layout(AttributedString co
     if (!options.suppressCacheStats) {
       debug::perf::recordTextLayoutCacheHit();
     }
+    d->promoteLayout(cacheKey);
     return it->second;
   }
   if (!options.suppressCacheStats) {
