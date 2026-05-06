@@ -78,7 +78,19 @@ std::map<std::string, Color> parseClassFills(std::string const& svg) {
 LoadedSvg loadSvgForDemo(std::string const& path) {
   std::string const source = readFile(path);
   if (source.empty()) {
-    return LoadedSvg{.status = "Unable to read " + path};
+    LoadedSvg fallback{
+        .viewBox = Rect{0.f, 0.f, 240.f, 180.f},
+        .status = "Using built-in SVG sample; unable to read " + path,
+    };
+    fallback.nodes.emplace_back(svg::rect(12.f, 12.f, 216.f, 156.f, CornerRadius{18.f},
+                                          FillStyle::linearGradient(Color::hex(0x2F80ED), Color::hex(0x27AE60)),
+                                          StrokeStyle::solid(Color::hex(0x1B4D89), 3.f)));
+    fallback.nodes.emplace_back(svg::circle(78.f, 90.f, 34.f, FillStyle::solid(Color::hex(0xF2C94C)),
+                                            StrokeStyle::solid(Color::hex(0x8A6D1F), 2.f)));
+    fallback.nodes.emplace_back(svg::rect(120.f, 58.f, 72.f, 64.f, CornerRadius{12.f},
+                                          FillStyle::solid(Color::hex(0xEB5757)),
+                                          StrokeStyle::solid(Color::hex(0x8B2C2C), 2.f)));
+    return fallback;
   }
 
   std::map<std::string, Color> classFills = parseClassFills(source);

@@ -5,6 +5,7 @@
 #include <Flux/UI/Theme.hpp>
 #include <Flux/UI/Views/Views.hpp>
 
+#include <string_view>
 #include <string>
 #include <vector>
 
@@ -14,7 +15,7 @@ namespace {
 
 struct NamedIcon {
     IconName name;
-    std::string label;
+    std::string_view label;
 };
 
 // Same order as IconName.hpp (grouped for the demo UI).
@@ -108,7 +109,7 @@ struct IconDemoRoot {
             gridCells.push_back(
                 IconCell {
                     .name = item.name,
-                    .label = item.label,
+                    .label = std::string(item.label),
                 }
             );
         }
