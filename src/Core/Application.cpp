@@ -630,8 +630,13 @@ int Application::exec() {
     int timeoutMs = d->nextTimerTimeoutMs();
     if (!d->windows_.empty()) {
       bool waited = false;
+      std::unordered_set<int> waitedEventFds;
       for (auto const& window : d->windows_) {
         if (!window) {
+          continue;
+        }
+        int const eventFd = window->platformWindow()->eventFd();
+        if (eventFd >= 0 && !waitedEventFds.insert(eventFd).second) {
           continue;
         }
         window->platformWindow()->waitForEvents(waited ? 0 : timeoutMs);
