@@ -45,6 +45,8 @@ public:
 
   /// Block until the next event or `timeoutMs` elapses; `timeoutMs < 0` waits indefinitely.
   virtual void waitForEvents(int /*timeoutMs*/) {}
+  virtual int eventFd() const { return -1; }
+  virtual int wakeFd() const { return -1; }
 
   /// Wake `waitForEvents` (e.g. after `requestRedraw`).
   virtual void wakeEventLoop() {}

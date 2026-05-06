@@ -1,22 +1,33 @@
-// Micro-benchmarks for paragraph shape cache (macOS + Core Text).
+// Micro-benchmarks for paragraph shape cache.
 // Build: cmake -B build -DFLUX_BUILD_BENCHMARKS=ON && cmake --build build --target paragraph_cache_bench
 
+#if defined(__APPLE__)
 #include "Graphics/CoreTextSystem.hpp"
+#else
+#include "Graphics/Linux/FreeTypeTextSystem.hpp"
+#endif
 
 #include <Flux/Graphics/AttributedString.hpp>
 #include <Flux/Graphics/TextLayoutOptions.hpp>
 
 #include <chrono>
+#include <cstdlib>
 #include <iostream>
-#include <vector>
 #include <string>
+#include <vector>
 
 namespace {
 
 constexpr int kParas = 5000;
 constexpr int kCharsPerPara = 80;
 
-static std::string makeDocument() {
+#if defined(__APPLE__)
+using BenchTextSystem = flux::CoreTextSystem;
+#else
+using BenchTextSystem = flux::FreeTypeTextSystem;
+#endif
+
+std::string makeDocument() {
   std::string s;
   s.reserve(static_cast<std::size_t>(kParas) * (kCharsPerPara + 1));
   for (int i = 0; i < kParas; ++i) {
@@ -26,51 +37,82 @@ static std::string makeDocument() {
   return s;
 }
 
-static std::string makeSmallLabel(int i) {
+std::string makeSmallLabel(int i) {
   return "Hello World " + std::to_string(i);
 }
 
-static double secondsSince(std::chrono::steady_clock::time_point t0) {
+double secondsSince(std::chrono::steady_clock::time_point t0) {
   auto const t1 = std::chrono::steady_clock::now();
   return std::chrono::duration<double>(t1 - t0).count();
+}
+
+flux::Font makeBenchFont() {
+  flux::Font f{};
+#if defined(__APPLE__)
+  f.family = ".AppleSystemUIFont";
+#else
+  f.family = "sans-serif";
+#endif
+  f.size = 13.f;
+  f.weight = 400.f;
+  return f;
+}
+
+void disableParagraphCache() {
+#if defined(__APPLE__)
+  setenv("FLUX_DISABLE_PARAGRAPH_CACHE", "1", 1);
+#endif
+}
+
+void enableParagraphCache() {
+#if defined(__APPLE__)
+  unsetenv("FLUX_DISABLE_PARAGRAPH_CACHE");
+#endif
 }
 
 } // namespace
 
 int main() {
-#if !defined(__APPLE__)
-  std::cerr << "paragraph_cache_bench is only supported on Apple platforms.\n";
-  return 0;
-#else
   using namespace flux;
   std::string const doc = makeDocument();
-  Font f{};
-  f.family = ".AppleSystemUIFont";
-  f.size = 13.f;
-  f.weight = 400.f;
+  Font f = makeBenchFont();
   AttributedString const as = AttributedString::plain(doc, f, Colors::black);
   TextLayoutOptions opt{};
 
+  std::cout << "paragraph_cache_bench backend: "
+#if defined(__APPLE__)
+            << "CoreText paragraph cache"
+#else
+            << "FreeType/HarfBuzz text layout"
+#endif
+            << "\n";
+
   // B1 baseline: full-document framesetter path (disable paragraph cache).
-  double tFull = 0;
   {
-    flux::CoreTextSystem sys;
-    setenv("FLUX_DISABLE_PARAGRAPH_CACHE", "1", 1);
+    BenchTextSystem sys;
+    disableParagraphCache();
     auto const t0 = std::chrono::steady_clock::now();
     (void)sys.layout(as, 800.f, opt);
-    tFull = secondsSince(t0);
-    unsetenv("FLUX_DISABLE_PARAGRAPH_CACHE");
-    std::cout << "B1 T_full (slow path): " << tFull << " s\n";
+    double const tFull = secondsSince(t0);
+    enableParagraphCache();
+    std::cout << "B1 T_full"
+#if defined(__APPLE__)
+              << " (slow path)"
+#else
+              << " (full document)"
+#endif
+              << ": " << tFull << " s\n";
   }
 
-  // B2: one framesetter for whole document vs sum of per-paragraph typesetter builds (approximate isolation).
+  // B2: one framesetter for whole document vs sum of per-paragraph typesetter builds.
   {
-    flux::CoreTextSystem sys;
-    setenv("FLUX_DISABLE_PARAGRAPH_CACHE", "1", 1);
+    BenchTextSystem sys;
+    disableParagraphCache();
     auto const t0 = std::chrono::steady_clock::now();
     (void)sys.layout(as, 800.f, opt);
     double const tDoc = secondsSince(t0);
-    unsetenv("FLUX_DISABLE_PARAGRAPH_CACHE");
+    enableParagraphCache();
+
     double sum = 0;
     std::size_t off = 0;
     while (off < doc.size()) {
@@ -86,64 +128,59 @@ int main() {
       }
       off = nl + 1;
     }
-    std::cout << "B2 T_doc (one framesetter pass): " << tDoc << " s\n";
-    std::cout << "B2 T_sum (5000 layout() calls per paragraph, slow path): " << sum << " s\n";
+    std::cout << "B2 T_doc (one full-document layout pass): " << tDoc << " s\n";
+    std::cout << "B2 T_sum (5000 layout() calls per paragraph): " << sum << " s\n";
   }
 
   // B3: paragraph-cache layout: cold vs warm assembly.
   {
-    flux::CoreTextSystem sys;
+    BenchTextSystem sys;
     auto const t0 = std::chrono::steady_clock::now();
     (void)sys.layout(as, 800.f, opt);
     double const tCold = secondsSince(t0);
     auto const t0b = std::chrono::steady_clock::now();
     (void)sys.layout(as, 800.f, opt);
     double const tWarm = secondsSince(t0b);
-    std::cout << "B3 T_assembly cold: " << tCold << " s, warm: " << tWarm << " s\n";
+    std::cout << "B3 T_repeat cold: " << tCold << " s, warm: " << tWarm << " s\n";
   }
 
   // B4: per-keystroke latency on a warm cache.
   {
-    flux::CoreTextSystem sys;
-    (void)sys.layout(as, 800.f, opt);  // warm the cache
+    BenchTextSystem sys;
+    (void)sys.layout(as, 800.f, opt);
 
-    // Mutate: append 'x' to the middle paragraph.
     std::string edited = doc;
     std::size_t const mid = kParas / 2;
-    std::size_t const insertAt = mid * (kCharsPerPara + 1) + 40;  // middle of paragraph 2500
+    std::size_t const insertAt = mid * (kCharsPerPara + 1) + 40;
     edited.insert(insertAt, 1, 'x');
     AttributedString const asEdited = AttributedString::plain(edited, f, Colors::black);
 
     auto const t0 = std::chrono::steady_clock::now();
     (void)sys.layout(asEdited, 800.f, opt);
     double const tEdit = secondsSince(t0);
-    std::cout << "B4 T_keystroke (1 paragraph changed, 4999 cached): " << tEdit << " s\n";
+    std::cout << "B4 T_keystroke (single-character edit): " << tEdit << " s\n";
   }
 
-  // B5: resize — all variants rebuild on first resize, then hit cache on second.
+  // B5: resize: first new width rebuilds variants, repeated widths hit cache.
   {
-    flux::CoreTextSystem sys;
-    (void)sys.layout(as, 800.f, opt);  // prime paragraph cache at 800px
+    BenchTextSystem sys;
+    (void)sys.layout(as, 800.f, opt);
 
-    // First resize to 600px: all paragraph variants must rebuild (cache miss)
     auto const t0 = std::chrono::steady_clock::now();
     (void)sys.layout(as, 600.f, opt);
     double const tResize = secondsSince(t0);
     std::cout << "B5 T_resize_cold (all variants rebuild, 600px): " << tResize << " s\n";
 
-    // Second layout at 600px: all paragraph variants hit the cache
     auto const t1 = std::chrono::steady_clock::now();
     (void)sys.layout(as, 600.f, opt);
     double const tResizeWarm = secondsSince(t1);
     std::cout << "B5 T_resize_warm (variant cache hit, 600px): " << tResizeWarm << " s\n";
 
-    // Back to 800px: variant cache should still have 800px variants (kMaxVariantsPerParagraph=2)
     auto const t2 = std::chrono::steady_clock::now();
     (void)sys.layout(as, 800.f, opt);
     double const tBack = secondsSince(t2);
     std::cout << "B5 T_resize_back (variant cache hit, 800px): " << tBack << " s\n";
 
-    // Repeat exact call: memo hit
     auto const t3 = std::chrono::steady_clock::now();
     (void)sys.layout(as, 800.f, opt);
     double const tMemo = secondsSince(t3);
@@ -152,8 +189,8 @@ int main() {
 
   // B6: Tier 0 pointer-identity hit on a stable buffer.
   {
-    flux::CoreTextSystem sys;
-    (void)sys.layout(as, 800.f, opt);  // warm
+    BenchTextSystem sys;
+    (void)sys.layout(as, 800.f, opt);
 
     constexpr int N = 1000;
     auto const t0 = std::chrono::steady_clock::now();
@@ -166,7 +203,7 @@ int main() {
 
   // B7: small-text cold plain-overload path with unique labels.
   {
-    flux::CoreTextSystem sys;
+    BenchTextSystem sys;
     constexpr int N = 1000;
     std::vector<std::string> labels;
     labels.reserve(N);
@@ -182,14 +219,13 @@ int main() {
     std::cout << "B7 T_small_cold (plain overload, unique labels): " << (tPer * 1e6) << " us\n";
   }
 
-  // B8: same small text content with a fresh owning std::string each call. This bypasses Tier 0 while
-  // exercising the current small-label content-hash + framesetter/layout-cache path.
+  // B8: same content with fresh owning strings; bypasses Tier 0 but hits content/layout caches.
   {
-    flux::CoreTextSystem sys;
+    BenchTextSystem sys;
     constexpr int N = 1000;
     std::string const label = "Hello World";
     std::vector<std::string> owners(N, label);
-    (void)sys.layout(std::string_view(label), f, Colors::black, 300.f, opt);  // warm framesetter/layout slot
+    (void)sys.layout(std::string_view(label), f, Colors::black, 300.f, opt);
 
     auto const t0 = std::chrono::steady_clock::now();
     for (auto const& owner : owners) {
@@ -200,5 +236,4 @@ int main() {
   }
 
   return 0;
-#endif
 }

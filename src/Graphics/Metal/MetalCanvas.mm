@@ -1961,7 +1961,7 @@ private:
   }
 
 public:
-  float dpiScale() const noexcept { return dpiScale_; }
+  float dpiScale() const noexcept override { return dpiScale_; }
 
   void beginRecordedOpsCapture(MetalFrameRecorder* target) {
     if (!target) {

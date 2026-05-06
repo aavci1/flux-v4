@@ -92,14 +92,14 @@ public:
   bool dispatchAction(std::string const& name);
   bool isActionEnabled(std::string const& name) const;
   bool isMenuShortcutClaimed(KeyCode key, Modifiers modifiers) const;
+  bool dispatchActionForShortcut(KeyCode key, Modifiers modifiers);
 
+  void setName(std::string name);
+  std::string name() const;
   std::string userDataDir() const;
   std::string cacheDir() const;
   std::optional<WindowState> loadWindowState(std::string const& restoreId) const;
   void saveWindowState(std::string const& restoreId, WindowState const& state);
-
-  /// Opaque platform font handle for the bundled icon font (on macOS: `CTFontRef`), or null if load failed.
-  void* iconFontHandle() const;
 
   /// Batched callback: runs at most once per `exec()` iteration after any reactive update.
   ObserverHandle onNextFrameNeeded(std::function<void()> callback);

@@ -30,7 +30,10 @@ struct WindowEvent {
   Kind kind = Kind::Resize;
   unsigned int handle = 0;
   Size size{};
+  /// Uniform DPI scale retained for source compatibility. Prefer dpiX/dpiY for new platform code.
   float dpi = 1.0f;
+  float dpiX = 1.0f;
+  float dpiY = 1.0f;
 };
 
 struct InputEvent {

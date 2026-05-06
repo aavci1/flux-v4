@@ -6,16 +6,16 @@
 #include <Flux/Graphics/Canvas.hpp>
 #include <Flux/Reactive/AnimationClock.hpp>
 
-#include "Core/MenuRoleDefaults.hpp"
-#include "Core/PlatformWindow.hpp"
 #include "Core/PlatformApplication.hpp"
+#include "Core/PlatformWindow.hpp"
+#include "Core/MenuRoleDefaults.hpp"
 #include "Debug/PerfCounters.hpp"
-#include "Graphics/CoreTextSystem.hpp"
-#include "Platform/Mac/MacClipboard.hpp"
+#include "Graphics/Linux/FreeTypeTextSystem.hpp"
 
 #include <algorithm>
 #include <chrono>
 #include <climits>
+#include <cstdio>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -25,28 +25,37 @@
 #include <regex>
 #include <sstream>
 #include <stdexcept>
+#include <thread>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
 
-#import <Cocoa/Cocoa.h>
-#import <CoreText/CoreText.h>
-#import <dispatch/dispatch.h>
-
 namespace flux {
 
 namespace detail {
-
 bool signalBridgeApplicationHasInstance() {
   return Application::hasInstance();
 }
-
 } // namespace detail
 
 namespace {
 
 Application* gCurrent = nullptr;
+
+class MemoryClipboard final : public Clipboard {
+public:
+  std::optional<std::string> readText() const override {
+    if (text_.empty()) {
+      return std::nullopt;
+    }
+    return text_;
+  }
+  void writeText(std::string text) override { text_ = std::move(text); }
+  bool hasText() const override { return !text_.empty(); }
+private:
+  std::string text_;
+};
 
 std::string jsonEscape(std::string const& input) {
   std::string out;
@@ -65,6 +74,15 @@ std::filesystem::path windowStatePath(std::string const& userDataDir) {
     return {};
   }
   return std::filesystem::path(userDataDir) / "window-state.json";
+}
+
+std::string appNameFromArgv(int argc, char** argv) {
+  if (argc <= 0 || !argv || !argv[0] || !*argv[0]) {
+    return "flux";
+  }
+  std::filesystem::path path(argv[0]);
+  std::string name = path.stem().string();
+  return name.empty() ? "flux" : name;
 }
 
 void loadWindowStatesFromDisk(std::filesystem::path const& path,
@@ -171,8 +189,9 @@ struct Application::Impl {
   std::unordered_map<unsigned int, Window*> byHandle_;
   std::unordered_map<unsigned int, WindowRenderState> renderStates_;
   std::unordered_set<unsigned int> pendingAdoptRedraws_;
+  std::vector<unsigned int> pendingCloseHandles_;
 
-  std::unique_ptr<CoreTextSystem> textSystem_;
+  std::unique_ptr<TextSystem> textSystem_;
   std::unique_ptr<Clipboard> clipboard_;
   std::unique_ptr<PlatformApplication> platformApp_;
   std::thread::id mainThreadId_;
@@ -209,9 +228,7 @@ struct Application::Impl {
     auto const now = steady_clock::now();
     auto minNext = timers_.front().next;
     for (auto const& t : timers_) {
-      if (t.next < minNext) {
-        minNext = t.next;
-      }
+      minNext = std::min(minNext, t.next);
     }
     if (minNext <= now) {
       return 0;
@@ -221,34 +238,22 @@ struct Application::Impl {
   }
 };
 
-Application::Application(int /*argc*/, char** /*argv*/) {
+Application::Application(int argc, char** argv) {
   if (gCurrent) {
     throw std::runtime_error("Application already exists");
   }
   gCurrent = this;
   d = std::make_unique<Impl>();
   d->mainThreadId_ = std::this_thread::get_id();
-  d->textSystem_ = std::make_unique<CoreTextSystem>();
-  d->clipboard_ = std::make_unique<MacClipboard>();
+  d->textSystem_ = std::make_unique<FreeTypeTextSystem>();
+  d->clipboard_ = std::make_unique<MemoryClipboard>();
   d->platformApp_ = detail::createPlatformApplication();
   d->platformApp_->initialize();
+  d->platformApp_->setApplicationName(appNameFromArgv(argc, argv));
   d->platformApp_->setTerminateHandler([this] {
     saveOpenWindowStates();
     d->quit_ = true;
   });
-
-  {
-    NSBundle* const bundle = [NSBundle mainBundle];
-    NSString* fontPath = [bundle pathForResource:@"MaterialSymbolsRounded" ofType:@"ttf" inDirectory:@"fonts"];
-    if (!fontPath) {
-      NSString* const bp = [bundle bundlePath];
-      fontPath = [bp stringByAppendingPathComponent:@"fonts/MaterialSymbolsRounded.ttf"];
-    }
-    if (fontPath && [[NSFileManager defaultManager] fileExistsAtPath:fontPath]) {
-      NSURL* const url = [NSURL fileURLWithPath:fontPath];
-      CTFontManagerRegisterFontsForURL((__bridge CFURLRef)url, kCTFontManagerScopeProcess, nullptr);
-    }
-  }
 
   d->eventQueue_.on<WindowLifecycleEvent>([this](WindowLifecycleEvent const& e) {
     if (e.kind == WindowLifecycleEvent::Kind::Registered && e.window != nullptr) {
@@ -264,33 +269,10 @@ Application::Application(int /*argc*/, char** /*argv*/) {
         float const sy = ev.dpiY > 0.f ? ev.dpiY : ev.dpi;
         it->second->updateCanvasDpiScale(sx, sy);
       }
-      return;
     }
-    if (ev.kind != WindowEvent::Kind::CloseRequest) {
-      return;
+    if (ev.kind == WindowEvent::Kind::CloseRequest) {
+      d->pendingCloseHandles_.push_back(ev.handle);
     }
-    // Defer destruction until after all WindowEvent handlers for this event return. Otherwise handlers
-    // registered after Application (e.g. per-window subscriptions) may run with a dangling `this`.
-    unsigned int const closeHandle = ev.handle;
-    Application* app = this;
-    dispatch_async(dispatch_get_main_queue(), ^{
-      auto it = std::find_if(app->d->windows_.begin(), app->d->windows_.end(),
-                             [&](std::unique_ptr<Window> const& w) {
-                               return w && w->handle() == closeHandle;
-                             });
-      if (it == app->d->windows_.end()) {
-        return;
-      }
-      if (!(*it)->restoreId().empty()) {
-        app->saveWindowState((*it)->restoreId(), (*it)->currentWindowState());
-      }
-      app->d->byHandle_.erase(closeHandle);
-      app->d->renderStates_.erase(closeHandle);
-      app->d->windows_.erase(it);
-      if (app->d->windows_.empty()) {
-        app->quit();
-      }
-    });
   });
 
   d->eventQueue_.on<FrameEvent>([this](FrameEvent const& ev) {
@@ -312,7 +294,6 @@ Application::Application(int /*argc*/, char** /*argv*/) {
   });
 
   AnimationClock::instance().install(d->eventQueue_);
-
 }
 
 Application::~Application() {
@@ -338,10 +319,9 @@ void Application::adoptOwnedWindow(std::unique_ptr<Window> window) {
 }
 
 void Application::onWindowRegistered(Window* window) {
-  if (!window) {
-    return;
+  if (window) {
+    window->platformWindow()->show();
   }
-  window->platformWindow()->show();
 }
 
 void Application::unregisterWindowHandle(unsigned int handle) {
@@ -351,9 +331,7 @@ void Application::unregisterWindowHandle(unsigned int handle) {
 }
 
 EventQueue& Application::eventQueue() { return d->eventQueue_; }
-
 TextSystem& Application::textSystem() { return *d->textSystem_; }
-
 Clipboard& Application::clipboard() { return *d->clipboard_; }
 
 void Application::setMenuBar(MenuBar menu) {
@@ -390,7 +368,6 @@ bool Application::dispatchAction(std::string const& name) {
     }
     return false;
   }
-
   for (auto it = d->windows_.rbegin(); it != d->windows_.rend(); ++it) {
     if (*it && (*it)->dispatchAction(name)) {
       return true;
@@ -417,11 +394,7 @@ bool Application::isActionEnabled(std::string const& name) const {
 
 bool Application::isMenuShortcutClaimed(KeyCode key, Modifiers modifiers) const {
   ShortcutKey const shortcut{.key = key, .modifiers = modifiers};
-  if (d->menuShortcuts_.contains(shortcut)) {
-    return true;
-  }
-  auto const shortcuts = d->platformApp_->menuClaimedShortcuts();
-  return shortcuts.contains(shortcut);
+  return d->menuShortcuts_.contains(shortcut) || d->platformApp_->menuClaimedShortcuts().contains(shortcut);
 }
 
 bool Application::dispatchActionForShortcut(KeyCode key, Modifiers modifiers) {
@@ -442,13 +415,8 @@ std::string Application::name() const {
   return d->platformApp_->applicationName();
 }
 
-std::string Application::userDataDir() const {
-  return d->platformApp_->userDataDir();
-}
-
-std::string Application::cacheDir() const {
-  return d->platformApp_->cacheDir();
-}
+std::string Application::userDataDir() const { return d->platformApp_->userDataDir(); }
+std::string Application::cacheDir() const { return d->platformApp_->cacheDir(); }
 
 std::optional<WindowState> Application::loadWindowState(std::string const& restoreId) const {
   if (restoreId.empty()) {
@@ -459,10 +427,7 @@ std::optional<WindowState> Application::loadWindowState(std::string const& resto
     d->windowStatesLoaded_ = true;
   }
   auto it = d->windowStates_.find(restoreId);
-  if (it == d->windowStates_.end()) {
-    return std::nullopt;
-  }
-  return it->second;
+  return it == d->windowStates_.end() ? std::nullopt : std::optional<WindowState>(it->second);
 }
 
 void Application::saveWindowState(std::string const& restoreId, WindowState const& state) {
@@ -477,9 +442,7 @@ void Application::saveWindowState(std::string const& restoreId, WindowState cons
   saveWindowStatesToDisk(windowStatePath(userDataDir()), d->windowStates_);
 }
 
-WindowConfig Application::resolveWindowConfig(WindowConfig config) {
-  return config;
-}
+WindowConfig Application::resolveWindowConfig(WindowConfig config) { return config; }
 
 ObserverHandle Application::onNextFrameNeeded(std::function<void()> callback) {
   std::uint64_t const id = d->nextFrameId_++;
@@ -488,10 +451,9 @@ ObserverHandle Application::onNextFrameNeeded(std::function<void()> callback) {
 }
 
 void Application::unobserveNextFrame(ObserverHandle handle) {
-  if (!handle.isValid()) {
-    return;
+  if (handle.isValid()) {
+    std::erase_if(d->nextFrame_, [&](Impl::NextFrameEntry const& e) { return e.id == handle.id; });
   }
-  std::erase_if(d->nextFrame_, [&](Impl::NextFrameEntry const& e) { return e.id == handle.id; });
 }
 
 bool Application::isMainThread() const noexcept {
@@ -578,25 +540,26 @@ void Application::presentRequestedWindows(bool requireFrameReady, bool keepFrame
     if (requireFrameReady && state.redrawRequested && !hasFrameReady) {
       continue;
     }
-
     bool rendered = false;
     if (state.redrawRequested && (!requireFrameReady || hasFrameReady)) {
       state.redrawRequested = false;
       if (hasFrameReady) {
         state.frameReady = false;
       }
-      Canvas& canvas = w->canvas();
-      canvas.beginFrame();
-      w->render(canvas);
-      canvas.present();
-      if (hasFrameReady && state.frameBudgetPending) {
-        debug::perf::recordDuration(debug::perf::TimedMetric::DisplayLinkToPresent,
-                                    std::chrono::steady_clock::now() - state.frameBudgetStartedAt);
+      try {
+        Canvas& canvas = w->canvas();
+        canvas.beginFrame();
+        w->render(canvas);
+        canvas.present();
+        rendered = true;
+      } catch (std::exception const& e) {
+        std::fprintf(stderr, "Flux Linux render error on window %u: %s\n", w->handle(), e.what());
+        d->pendingCloseHandles_.push_back(w->handle());
+        state.frameReady = false;
         state.frameBudgetPending = false;
+        continue;
       }
-      rendered = true;
     }
-
     if (hasFrameReady) {
       state.frameReady = false;
       state.frameBudgetPending = false;
@@ -614,12 +577,7 @@ void Application::flushRedraw() {
 
 std::uint64_t Application::scheduleRepeatingTimer(std::chrono::nanoseconds interval, unsigned int windowHandle) {
   std::uint64_t const id = d->nextTimerId_++;
-  Impl::TimerEntry t;
-  t.id = id;
-  t.interval = interval;
-  t.windowHandle = windowHandle;
-  t.next = std::chrono::steady_clock::now() + interval;
-  d->timers_.push_back(std::move(t));
+  d->timers_.push_back(Impl::TimerEntry{id, interval, std::chrono::steady_clock::now() + interval, windowHandle});
   return id;
 }
 
@@ -628,24 +586,37 @@ void Application::cancelTimer(std::uint64_t timerId) {
 }
 
 int Application::exec() {
-  [NSApp activate];
   while (!d->quit_) {
-    {
-      using namespace std::chrono;
-      auto const now = steady_clock::now();
-      for (auto& t : d->timers_) {
-        if (now >= t.next) {
-          TimerEvent te{};
-          te.deadlineNanos = duration_cast<nanoseconds>(now.time_since_epoch()).count();
-          te.timerId = t.id;
-          te.windowHandle = t.windowHandle;
-          d->eventQueue_.post(std::move(te));
-          t.next = now + t.interval;
-        }
+    using namespace std::chrono;
+    auto const now = steady_clock::now();
+    for (auto& t : d->timers_) {
+      if (now >= t.next) {
+        d->eventQueue_.post(TimerEvent{duration_cast<nanoseconds>(now.time_since_epoch()).count(),
+                                       t.id, t.windowHandle});
+        t.next = now + t.interval;
       }
     }
 
     d->eventQueue_.dispatch();
+
+    for (unsigned int closeHandle : std::exchange(d->pendingCloseHandles_, {})) {
+      auto it = std::find_if(d->windows_.begin(), d->windows_.end(),
+                             [&](std::unique_ptr<Window> const& w) {
+                               return w && w->handle() == closeHandle;
+                             });
+      if (it == d->windows_.end()) {
+        continue;
+      }
+      if (!(*it)->restoreId().empty()) {
+        saveWindowState((*it)->restoreId(), (*it)->currentWindowState());
+      }
+      d->byHandle_.erase(closeHandle);
+      d->renderStates_.erase(closeHandle);
+      d->windows_.erase(it);
+      if (d->windows_.empty()) {
+        quit();
+      }
+    }
 
     for (auto& w : d->windows_) {
       if (w) {
@@ -654,18 +625,28 @@ int Application::exec() {
     }
 
     processFrameCallbacks();
-
     presentRequestedWindows(true, AnimationClock::instance().needsFramePump());
 
     int timeoutMs = d->nextTimerTimeoutMs();
     if (!d->windows_.empty()) {
-      d->windows_[0]->platformWindow()->waitForEvents(timeoutMs);
-    } else {
-      if (timeoutMs < 0) {
-        timeoutMs = 16;
+      bool waited = false;
+      std::unordered_set<int> waitedEventFds;
+      for (auto const& window : d->windows_) {
+        if (!window) {
+          continue;
+        }
+        int const eventFd = window->platformWindow()->eventFd();
+        if (eventFd >= 0 && !waitedEventFds.insert(eventFd).second) {
+          continue;
+        }
+        window->platformWindow()->waitForEvents(waited ? 0 : timeoutMs);
+        waited = true;
       }
-      NSDate* until = [NSDate dateWithTimeIntervalSinceNow:timeoutMs / 1000.0];
-      [NSRunLoop.currentRunLoop runUntilDate:until];
+      if (!waited && timeoutMs > 0) {
+        std::this_thread::sleep_for(milliseconds(timeoutMs));
+      }
+    } else if (timeoutMs > 0) {
+      std::this_thread::sleep_for(milliseconds(timeoutMs));
     }
   }
   return 0;
