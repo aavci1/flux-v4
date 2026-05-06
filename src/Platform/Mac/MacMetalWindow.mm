@@ -44,7 +44,7 @@ CVReturn fluxHandleDisplayLinkTick(MacMetalPlatformWindow* platform);
 - (CAMetalLayer*)fluxMetalLayer;
 - (void)updateDrawableSize;
 - (BOOL)fluxWantsTextInput;
-- (void)fluxHandleDisplayLink:(CADisplayLink*)displayLink API_AVAILABLE(macos(14.0));
+- (void)fluxHandleDisplayLink:(id)displayLink;
 @end
 
 namespace flux {
@@ -251,7 +251,7 @@ void postTextInput(FluxMetalView* view, std::string text);
   return [super inputContext];
 }
 
-- (void)fluxHandleDisplayLink:(CADisplayLink*)displayLink {
+- (void)fluxHandleDisplayLink:(id)displayLink {
   (void)displayLink;
   flux::MacMetalPlatformWindow* platform = self.fluxPlatform;
   if (!platform) {
@@ -345,7 +345,7 @@ struct MacMetalPlatformWindow::Impl {
   FluxWindowDelegate* delegate_{nil};
   Window* fluxWindow_{nullptr};
   unsigned int handle_{0};
-  CADisplayLink* displayLink_ = nil;
+  id displayLink_ = nil;
   CVDisplayLinkRef legacyDisplayLink_{nullptr};
   std::atomic<bool> frameRequested_{false};
   std::atomic<bool> frameEventQueued_{false};
@@ -688,7 +688,7 @@ MacMetalPlatformWindow::MacMetalPlatformWindow(const WindowConfig& config) : d(s
                                                   selector:@selector(fluxHandleDisplayLink:)];
     if (d->displayLink_) {
       [d->displayLink_ addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
-      d->displayLink_.paused = YES;
+      [d->displayLink_ setPaused:YES];
     }
   }
   if (!d->displayLink_) {
@@ -1005,12 +1005,12 @@ CVReturn MacMetalPlatformWindow::onDisplayLinkTick() {
 }
 
 void MacMetalPlatformWindow::setModernDisplayLinkPaused(bool paused) {
-  CADisplayLink* link = d ? d->displayLink_ : nil;
+  id link = d ? d->displayLink_ : nil;
   if (!link) {
     return;
   }
   void (^updatePausedState)(void) = ^{
-    link.paused = paused ? YES : NO;
+    [link setPaused:paused ? YES : NO];
   };
   if ([NSThread isMainThread]) {
     updatePausedState();

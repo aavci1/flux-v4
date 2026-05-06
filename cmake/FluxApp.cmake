@@ -127,11 +127,6 @@ function(flux_add_app target)
     set_source_files_properties("${_res}" PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
   endforeach()
 
-  if(EXISTS "${FA_ENTITLEMENTS}")
-    target_sources(${target} PRIVATE "${FA_ENTITLEMENTS}")
-    set_source_files_properties("${FA_ENTITLEMENTS}" PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
-  endif()
-
   if(FLUX_ENABLE_ASAN)
     target_compile_options(${target} PRIVATE -fsanitize=address -fno-omit-frame-pointer)
     target_link_options(${target} PRIVATE -fsanitize=address)
@@ -139,7 +134,7 @@ function(flux_add_app target)
 
   add_custom_target(${target}-package
     COMMAND /bin/bash -c
-            "\"${PROJECT_SOURCE_DIR}/cmake/sign-and-package.sh\" \"$<TARGET_BUNDLE_DIR:${target}>\" \"$FLUX_SIGN_APP_ID\" \"$FLUX_SIGN_INSTALLER_ID\" \"${CMAKE_CURRENT_BINARY_DIR}/${FA_APP_NAME}.pkg\""
+            "\"${PROJECT_SOURCE_DIR}/cmake/sign-and-package.sh\" \"$<TARGET_BUNDLE_DIR:${target}>\" \"$FLUX_SIGN_APP_ID\" \"$FLUX_SIGN_INSTALLER_ID\" \"${CMAKE_CURRENT_BINARY_DIR}/${FA_APP_NAME}.pkg\" \"${FA_ENTITLEMENTS}\""
     DEPENDS ${target}
     VERBATIM
     COMMENT "Sign and package ${FA_APP_NAME}")

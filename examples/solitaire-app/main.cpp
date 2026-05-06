@@ -43,7 +43,7 @@ constexpr std::int64_t kDropFlyDurationNanos = 200'000'000;
 constexpr std::int64_t kDealFlyDurationNanos = 120'000'000;
 constexpr std::int64_t kDealFlyIntervalNanos = 120'000'000;
 constexpr std::int64_t kAutoFlyDurationNanos = 85'000'000;
-constexpr std::int64_t kWinCelebrationDurationNanos = 35'000'000'000;
+constexpr std::int64_t kWinCelebrationDurationNanos = 8'000'000'000;
 constexpr std::int64_t kWinCardIntervalNanos = 160'000'000;
 constexpr std::int64_t kHintBounceCycleNanos = 380'000'000;
 constexpr int kHintBounceCount = 2;
@@ -2504,9 +2504,6 @@ bool celebrationActive(SolitaireState const& state, std::int64_t now) {
   if (state.celebrationStartNanos <= 0) {
     return false;
   }
-  if (state.completed) {
-    return true;
-  }
   return now < state.celebrationStartNanos + kWinCelebrationDurationNanos;
 }
 
@@ -2744,7 +2741,7 @@ void drawFloatingCompletionText(Canvas& canvas, Rect frame) {
   };
   shadowed("Congratulations!", Font{.size = 30.f, .weight = 750.f},
            Color{1.f, 1.f, 1.f, 0.96f}, Point{center.x, center.y - 16.f});
-  shadowed("Click New Game to start a new game.", Font{.size = 14.f, .weight = 600.f},
+  shadowed("Click anywhere to start a new game.", Font{.size = 14.f, .weight = 600.f},
            Color{1.f, 1.f, 1.f, 0.82f}, Point{center.x, center.y + 24.f});
 }
 
@@ -3254,6 +3251,11 @@ struct BoardCardSurface : ViewModifiers<BoardCardSurface> {
     }
         .cursor(Cursor::Hand)
         .onPointerDown(std::function<void(Point, MouseButton)>{[stateSignal, viewport](Point p, MouseButton button) {
+          SolitaireState const& snapshot = stateSignal.peek();
+          if (snapshot.completed && snapshot.celebrationStartNanos > 0) {
+            newGame(stateSignal);
+            return;
+          }
           if (button == MouseButton::Right) {
             startBoardPeek(stateSignal, p, *viewport);
             return;
@@ -3454,6 +3456,17 @@ struct RootView : ViewModifiers<RootView> {
         ActionDescriptor{
             .label = "Settings",
             .shortcut = Shortcut{keys::Comma, Modifiers::Meta},
+        });
+    useWindowAction(
+        "new-game-after-win",
+        [state = state] { newGame(state); },
+        ActionDescriptor{
+            .label = "New Game",
+            .shortcut = Shortcut{keys::Escape, Modifiers::None},
+            .isEnabled = [state = state] {
+              auto const& s = state.evaluate();
+              return s.completed && s.celebrationStartNanos > 0;
+            },
         });
 
     return ZStack{

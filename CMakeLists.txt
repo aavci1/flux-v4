@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.25)
 
+if(NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET OR CMAKE_OSX_DEPLOYMENT_TARGET VERSION_LESS "12.0")
+  set(CMAKE_OSX_DEPLOYMENT_TARGET "12.0" CACHE STRING "Minimum macOS version" FORCE)
+endif()
+
 project(flux VERSION 5.0.0 LANGUAGES CXX C)
 
 set(CMAKE_CXX_STANDARD 23)
@@ -35,8 +39,6 @@ if(FLUX_PLATFORM_MACOS)
   enable_language(OBJC)
   enable_language(OBJCXX)
 endif()
-
-set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "Minimum macOS version")
 
 include(FetchContent)
 # libtess2 — path fill/stroke tessellation (same stack as upstream flux)
