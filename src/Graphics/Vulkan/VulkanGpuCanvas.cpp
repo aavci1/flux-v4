@@ -27,6 +27,8 @@
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <list>
+#include <memory>
 #include <mutex>
 #include <stdexcept>
 #include <string>
@@ -150,6 +152,11 @@ struct PathCacheKeyHash {
     h ^= static_cast<std::size_t>(key.viewportH) + 0x9e3779b9u + (h << 6u) + (h >> 2u);
     return h;
   }
+};
+
+struct CachedPath {
+  std::vector<VulkanPathVertex> vertices;
+  std::list<PathCacheKey>::iterator lruIt;
 };
 
 struct GlyphKey {
@@ -593,8 +600,11 @@ public:
     unregisterCanvas();
     destroySwapchain();
     for (auto& kv : imageTextures_) {
-      destroyTexture(kv.second);
+      if (kv.second) {
+        destroyTexture(*kv.second);
+      }
     }
+    destroyDeferredTextures(true);
     destroyBuffer(pathBuffer_);
     destroyBuffer(rectBuffer_);
     destroyBuffer(quadBuffer_);
@@ -752,6 +762,7 @@ public:
     VkCommandBuffer const commandBuffer = commandBuffers_[currentFrame_];
 
     vkWaitForFences(device_, 1, &frameFence, VK_TRUE, UINT64_MAX);
+    destroyDeferredTextures(false);
     std::uint32_t imageIndex = 0;
     VkResult acquired = vkAcquireNextImageKHR(device_, swapchain_, UINT64_MAX, imageAvailable, VK_NULL_HANDLE,
                                               &imageIndex);
@@ -1075,12 +1086,16 @@ public:
   void evictImageTexture(VulkanImage const* image) {
     auto it = imageTextures_.find(image);
     if (it == imageTextures_.end()) return;
-    vkDeviceWaitIdle(device_);
-    destroyTexture(it->second);
+    pendingTextureDestroys_.push_back(PendingTextureDestroy{std::move(it->second), kMaxFramesInFlight + 1u});
     imageTextures_.erase(it);
   }
 
 private:
+  struct PendingTextureDestroy {
+    std::unique_ptr<Texture> texture;
+    std::uint32_t framesRemaining = 0;
+  };
+
   struct DrawState {
     Mat3 transform = Mat3::identity();
     Rect clip{};
@@ -1606,11 +1621,12 @@ private:
         .viewportH = height_,
     };
     if (auto it = pathCache_.find(cacheKey); it != pathCache_.end()) {
+      pathCacheLru_.splice(pathCacheLru_.end(), pathCacheLru_, it->second.lruIt);
       std::uint32_t const firstVertex = static_cast<std::uint32_t>(pathVerts_.size());
-      pathVerts_.insert(pathVerts_.end(), it->second.begin(), it->second.end());
-      if (!it->second.empty()) {
+      pathVerts_.insert(pathVerts_.end(), it->second.vertices.begin(), it->second.vertices.end());
+      if (!it->second.vertices.empty()) {
         ops_.push_back(DrawOp{DrawOp::Kind::Path, nullptr, firstVertex,
-                              static_cast<std::uint32_t>(it->second.size())});
+                              static_cast<std::uint32_t>(it->second.vertices.size())});
       }
       return;
     }
@@ -1666,9 +1682,13 @@ private:
     std::uint32_t const vertexCount = static_cast<std::uint32_t>(pathVerts_.size()) - firstVertex;
     if (vertexCount > 0) {
       std::vector<VulkanPathVertex> cached(pathVerts_.begin() + firstVertex, pathVerts_.end());
-      auto [it, inserted] = pathCache_.emplace(cacheKey, std::move(cached));
+      pathCacheLru_.push_back(cacheKey);
+      auto lruIt = std::prev(pathCacheLru_.end());
+      auto [it, inserted] = pathCache_.emplace(cacheKey, CachedPath{std::move(cached), lruIt});
       if (inserted) {
-        cachedPathVertexCount_ += it->second.size();
+        cachedPathVertexCount_ += it->second.vertices.size();
+      } else {
+        pathCacheLru_.erase(lruIt);
       }
       trimPathCache();
       ops_.push_back(DrawOp{DrawOp::Kind::Path, nullptr, firstVertex, vertexCount});
@@ -1678,9 +1698,18 @@ private:
   void trimPathCache() {
     constexpr std::size_t kMaxCachedPathVertices = 500'000;
     while (cachedPathVertexCount_ > kMaxCachedPathVertices && !pathCache_.empty()) {
-      auto it = pathCache_.begin();
-      cachedPathVertexCount_ -= it->second.size();
-      pathCache_.erase(it);
+      if (pathCacheLru_.empty()) {
+        pathCache_.clear();
+        cachedPathVertexCount_ = 0;
+        return;
+      }
+      PathCacheKey const key = pathCacheLru_.front();
+      auto it = pathCache_.find(key);
+      if (it != pathCache_.end()) {
+        cachedPathVertexCount_ -= it->second.vertices.size();
+        pathCache_.erase(it);
+      }
+      pathCacheLru_.pop_front();
     }
   }
 
@@ -2015,18 +2044,34 @@ private:
 
   Texture* ensureImageTexture(VulkanImage const& image) {
     auto it = imageTextures_.find(&image);
-    if (it != imageTextures_.end()) return &it->second;
-    Texture tex{};
+    if (it != imageTextures_.end()) return it->second.get();
+    auto tex = std::make_unique<Texture>();
     try {
-      createTexture(tex, image.width, image.height, image.pixels.data(), true);
-      ensureTextureDescriptor(tex);
+      createTexture(*tex, image.width, image.height, image.pixels.data(), true);
+      ensureTextureDescriptor(*tex);
     } catch (...) {
-      destroyTexture(tex);
+      destroyTexture(*tex);
       throw;
     }
     auto [inserted, ok] = imageTextures_.emplace(&image, std::move(tex));
     (void)ok;
-    return &inserted->second;
+    return inserted->second.get();
+  }
+
+  void destroyDeferredTextures(bool force) {
+    for (auto it = pendingTextureDestroys_.begin(); it != pendingTextureDestroys_.end();) {
+      if (!force && it->framesRemaining > 0) {
+        --it->framesRemaining;
+      }
+      if (force || it->framesRemaining == 0) {
+        if (it->texture) {
+          destroyTexture(*it->texture);
+        }
+        it = pendingTextureDestroys_.erase(it);
+      } else {
+        ++it;
+      }
+    }
   }
 
   void createTexture(Texture& tex, int width, int height, Rgba const* pixels, bool uploadNow) {
@@ -2241,7 +2286,8 @@ private:
   std::vector<ImageBatch> batches_;
   std::vector<DrawOp> ops_;
   std::vector<VulkanPathVertex> pathVerts_;
-  std::unordered_map<PathCacheKey, std::vector<VulkanPathVertex>, PathCacheKeyHash> pathCache_;
+  std::unordered_map<PathCacheKey, CachedPath, PathCacheKeyHash> pathCache_;
+  std::list<PathCacheKey> pathCacheLru_;
   std::size_t cachedPathVertexCount_ = 0;
 
   VkInstance instance_ = VK_NULL_HANDLE;
@@ -2276,7 +2322,8 @@ private:
   std::string pendingScreenshotPath_;
   bool debugScreenshotWritten_ = false;
   bool swapchainDirty_ = true;
-  std::unordered_map<VulkanImage const*, Texture> imageTextures_;
+  std::unordered_map<VulkanImage const*, std::unique_ptr<Texture>> imageTextures_;
+  std::vector<PendingTextureDestroy> pendingTextureDestroys_;
   bool ownsSharedVulkanCore_ = false;
 };
 
