@@ -34,6 +34,9 @@
 #include <vector>
 
 namespace flux {
+
+class WaylandWindow;
+
 namespace {
 
 std::atomic<unsigned int> gNextHandle{1};
@@ -96,14 +99,80 @@ bool debugDecorations() {
 
 struct SharedWaylandConnection {
   wl_display* display = nullptr;
+  wl_registry* registry = nullptr;
+  wl_compositor* compositor = nullptr;
+  xdg_wm_base* wmBase = nullptr;
+  zxdg_decoration_manager_v1* decorationManager = nullptr;
+  wl_seat* seat = nullptr;
+  wl_pointer* pointer = nullptr;
+  wl_keyboard* keyboard = nullptr;
   xkb_context* xkbContext = nullptr;
+  xkb_keymap* xkbKeymap = nullptr;
+  xkb_state* xkbState = nullptr;
+  struct Output {
+    wl_output* output = nullptr;
+    std::uint32_t name = 0;
+    float scale = 1.f;
+  };
+  std::vector<std::unique_ptr<Output>> outputs;
+  std::vector<WaylandWindow*> windows;
+  WaylandWindow* pointerFocus = nullptr;
+  WaylandWindow* keyboardFocus = nullptr;
   unsigned int refs = 0;
 };
 
 std::mutex gWaylandConnectionMutex;
 SharedWaylandConnection gWaylandConnection;
 
-SharedWaylandConnection acquireWaylandConnection() {
+void sharedRegistryGlobal(void* data, wl_registry* registry, std::uint32_t name,
+                          char const* interface, std::uint32_t version);
+void sharedRegistryRemove(void* data, wl_registry*, std::uint32_t name);
+void sharedWmPing(void*, xdg_wm_base* base, std::uint32_t serial);
+void sharedSeatCapabilities(void* data, wl_seat* seat, std::uint32_t caps);
+void sharedSeatName(void*, wl_seat*, char const*);
+void sharedOutputGeometry(void*, wl_output*, std::int32_t, std::int32_t, std::int32_t, std::int32_t,
+                          std::int32_t, char const*, char const*, std::int32_t);
+void sharedOutputMode(void*, wl_output*, std::uint32_t, std::int32_t, std::int32_t, std::int32_t);
+void sharedOutputDone(void*, wl_output*);
+void sharedOutputScale(void* data, wl_output*, std::int32_t scale);
+void sharedOutputName(void*, wl_output*, char const*);
+void sharedOutputDescription(void*, wl_output*, char const*);
+void sharedPointerEnter(void* data, wl_pointer*, std::uint32_t, wl_surface* surface, wl_fixed_t x, wl_fixed_t y);
+void sharedPointerLeave(void* data, wl_pointer*, std::uint32_t, wl_surface* surface);
+void sharedPointerMotion(void* data, wl_pointer*, std::uint32_t, wl_fixed_t x, wl_fixed_t y);
+void sharedPointerButton(void* data, wl_pointer*, std::uint32_t, std::uint32_t, std::uint32_t button,
+                         std::uint32_t state);
+void sharedPointerAxis(void* data, wl_pointer*, std::uint32_t, std::uint32_t axis, wl_fixed_t value);
+void sharedPointerFrame(void*, wl_pointer*);
+void sharedPointerAxisSource(void*, wl_pointer*, std::uint32_t);
+void sharedPointerAxisStop(void*, wl_pointer*, std::uint32_t, std::uint32_t);
+void sharedPointerAxisDiscrete(void*, wl_pointer*, std::uint32_t, std::int32_t);
+void sharedPointerAxisValue120(void*, wl_pointer*, std::uint32_t, std::int32_t);
+void sharedPointerAxisRelativeDirection(void*, wl_pointer*, std::uint32_t, std::uint32_t);
+void sharedKeymap(void* data, wl_keyboard*, std::uint32_t format, int fd, std::uint32_t size);
+void sharedKeyboardEnter(void* data, wl_keyboard*, std::uint32_t, wl_surface* surface, wl_array*);
+void sharedKeyboardLeave(void* data, wl_keyboard*, std::uint32_t, wl_surface* surface);
+void sharedKeyboardKey(void* data, wl_keyboard*, std::uint32_t, std::uint32_t, std::uint32_t key,
+                       std::uint32_t state);
+void sharedKeyboardModifiers(void* data, wl_keyboard*, std::uint32_t, std::uint32_t depressed,
+                             std::uint32_t latched, std::uint32_t locked, std::uint32_t group);
+void sharedKeyboardRepeatInfo(void*, wl_keyboard*, std::int32_t, std::int32_t);
+
+wl_registry_listener const sharedRegistryListener{sharedRegistryGlobal, sharedRegistryRemove};
+xdg_wm_base_listener const sharedWmBaseListener{sharedWmPing};
+wl_seat_listener const sharedSeatListener{sharedSeatCapabilities, sharedSeatName};
+wl_output_listener const sharedOutputListener{sharedOutputGeometry, sharedOutputMode, sharedOutputDone,
+                                             sharedOutputScale, sharedOutputName, sharedOutputDescription};
+wl_pointer_listener const sharedPointerListener{sharedPointerEnter, sharedPointerLeave, sharedPointerMotion,
+                                               sharedPointerButton, sharedPointerAxis, sharedPointerFrame,
+                                               sharedPointerAxisSource, sharedPointerAxisStop,
+                                               sharedPointerAxisDiscrete, sharedPointerAxisValue120,
+                                               sharedPointerAxisRelativeDirection};
+wl_keyboard_listener const sharedKeyboardListener{sharedKeymap, sharedKeyboardEnter, sharedKeyboardLeave,
+                                                 sharedKeyboardKey, sharedKeyboardModifiers,
+                                                 sharedKeyboardRepeatInfo};
+
+SharedWaylandConnection* acquireWaylandConnection() {
   std::lock_guard lock(gWaylandConnectionMutex);
   if (!gWaylandConnection.display) {
     gWaylandConnection.display = wl_display_connect(nullptr);
@@ -116,9 +185,15 @@ SharedWaylandConnection acquireWaylandConnection() {
       gWaylandConnection.display = nullptr;
       throw std::runtime_error("Failed to create XKB context");
     }
+    gWaylandConnection.registry = wl_display_get_registry(gWaylandConnection.display);
+    wl_registry_add_listener(gWaylandConnection.registry, &sharedRegistryListener, &gWaylandConnection);
+    wl_display_roundtrip(gWaylandConnection.display);
+    if (!gWaylandConnection.compositor || !gWaylandConnection.wmBase) {
+      throw std::runtime_error("Wayland compositor does not expose required xdg-shell globals");
+    }
   }
   ++gWaylandConnection.refs;
-  return gWaylandConnection;
+  return &gWaylandConnection;
 }
 
 void releaseWaylandConnection() {
@@ -126,6 +201,46 @@ void releaseWaylandConnection() {
   if (gWaylandConnection.refs == 0) return;
   --gWaylandConnection.refs;
   if (gWaylandConnection.refs != 0) return;
+  if (gWaylandConnection.keyboard) {
+    wl_keyboard_destroy(gWaylandConnection.keyboard);
+    gWaylandConnection.keyboard = nullptr;
+  }
+  if (gWaylandConnection.pointer) {
+    wl_pointer_destroy(gWaylandConnection.pointer);
+    gWaylandConnection.pointer = nullptr;
+  }
+  if (gWaylandConnection.seat) {
+    wl_seat_destroy(gWaylandConnection.seat);
+    gWaylandConnection.seat = nullptr;
+  }
+  for (auto& output : gWaylandConnection.outputs) {
+    if (output->output) wl_output_destroy(output->output);
+  }
+  gWaylandConnection.outputs.clear();
+  if (gWaylandConnection.decorationManager) {
+    zxdg_decoration_manager_v1_destroy(gWaylandConnection.decorationManager);
+    gWaylandConnection.decorationManager = nullptr;
+  }
+  if (gWaylandConnection.wmBase) {
+    xdg_wm_base_destroy(gWaylandConnection.wmBase);
+    gWaylandConnection.wmBase = nullptr;
+  }
+  if (gWaylandConnection.compositor) {
+    wl_compositor_destroy(gWaylandConnection.compositor);
+    gWaylandConnection.compositor = nullptr;
+  }
+  if (gWaylandConnection.registry) {
+    wl_registry_destroy(gWaylandConnection.registry);
+    gWaylandConnection.registry = nullptr;
+  }
+  if (gWaylandConnection.xkbState) {
+    xkb_state_unref(gWaylandConnection.xkbState);
+    gWaylandConnection.xkbState = nullptr;
+  }
+  if (gWaylandConnection.xkbKeymap) {
+    xkb_keymap_unref(gWaylandConnection.xkbKeymap);
+    gWaylandConnection.xkbKeymap = nullptr;
+  }
   if (gWaylandConnection.xkbContext) {
     xkb_context_unref(gWaylandConnection.xkbContext);
     gWaylandConnection.xkbContext = nullptr;
@@ -148,21 +263,14 @@ public:
     }
     fcntl(wakePipe_[0], F_SETFL, fcntl(wakePipe_[0], F_GETFL, 0) | O_NONBLOCK);
     fcntl(wakePipe_[1], F_SETFL, fcntl(wakePipe_[1], F_GETFL, 0) | O_NONBLOCK);
-    SharedWaylandConnection shared = acquireWaylandConnection();
-    ownsSharedConnection_ = true;
-    display_ = shared.display;
-    xkbContext_ = shared.xkbContext;
-    registry_ = wl_display_get_registry(display_);
-    wl_registry_add_listener(registry_, &registryListener_, this);
-    wl_display_roundtrip(display_);
-    if (!compositor_ || !wmBase_) {
-      throw std::runtime_error("Wayland compositor does not expose required xdg-shell globals");
-    }
-
-    surface_ = wl_compositor_create_surface(compositor_);
+    SharedWaylandConnection* shared = acquireWaylandConnection();
+    shared_ = shared;
+    display_ = shared->display;
+    surface_ = wl_compositor_create_surface(shared->compositor);
+    shared_->windows.push_back(this);
     wl_surface_add_listener(surface_, &surfaceListener_, this);
     wl_surface_set_buffer_scale(surface_, static_cast<std::int32_t>(std::lround(dpiScaleX_)));
-    xdgSurface_ = xdg_wm_base_get_xdg_surface(wmBase_, surface_);
+    xdgSurface_ = xdg_wm_base_get_xdg_surface(shared->wmBase, surface_);
     xdg_surface_add_listener(xdgSurface_, &xdgSurfaceListener_, this);
     toplevel_ = xdg_surface_get_toplevel(xdgSurface_);
     xdg_toplevel_add_listener(toplevel_, &toplevelListener_, this);
@@ -181,24 +289,18 @@ public:
   }
 
   ~WaylandWindow() override {
+    if (shared_) {
+      shared_->windows.erase(std::remove(shared_->windows.begin(), shared_->windows.end(), this),
+                             shared_->windows.end());
+      if (shared_->pointerFocus == this) shared_->pointerFocus = nullptr;
+      if (shared_->keyboardFocus == this) shared_->keyboardFocus = nullptr;
+    }
     if (frameCallback_) wl_callback_destroy(frameCallback_);
     if (decoration_) zxdg_toplevel_decoration_v1_destroy(decoration_);
     if (toplevel_) xdg_toplevel_destroy(toplevel_);
     if (xdgSurface_) xdg_surface_destroy(xdgSurface_);
     if (surface_) wl_surface_destroy(surface_);
-    if (pointer_) wl_pointer_destroy(pointer_);
-    if (keyboard_) wl_keyboard_destroy(keyboard_);
-    if (seat_) wl_seat_destroy(seat_);
-    for (auto& output : outputs_) {
-      if (output->output) wl_output_destroy(output->output);
-    }
-    if (decorationManager_) zxdg_decoration_manager_v1_destroy(decorationManager_);
-    if (wmBase_) xdg_wm_base_destroy(wmBase_);
-    if (compositor_) wl_compositor_destroy(compositor_);
-    if (registry_) wl_registry_destroy(registry_);
-    if (xkbState_) xkb_state_unref(xkbState_);
-    if (xkbKeymap_) xkb_keymap_unref(xkbKeymap_);
-    if (ownsSharedConnection_) releaseWaylandConnection();
+    if (shared_) releaseWaylandConnection();
     if (wakePipe_[0] >= 0) close(wakePipe_[0]);
     if (wakePipe_[1] >= 0) close(wakePipe_[1]);
   }
@@ -295,53 +397,101 @@ public:
     if (needsAnotherFrame) requestAnimationFrame();
   }
 
-private:
-  static void registryGlobal(void* data, wl_registry* registry, std::uint32_t name,
-                             char const* interface, std::uint32_t version) {
-    auto* self = static_cast<WaylandWindow*>(data);
-    if (std::strcmp(interface, wl_compositor_interface.name) == 0) {
-      self->compositor_ = static_cast<wl_compositor*>(
-          wl_registry_bind(registry, name, &wl_compositor_interface, std::min(version, 4u)));
-    } else if (std::strcmp(interface, xdg_wm_base_interface.name) == 0) {
-      self->wmBase_ = static_cast<xdg_wm_base*>(
-          wl_registry_bind(registry, name, &xdg_wm_base_interface, 1));
-      xdg_wm_base_add_listener(self->wmBase_, &wmBaseListener_, self);
-    } else if (std::strcmp(interface, wl_seat_interface.name) == 0) {
-      self->seat_ = static_cast<wl_seat*>(
-          wl_registry_bind(registry, name, &wl_seat_interface, std::min(version, 7u)));
-      wl_seat_add_listener(self->seat_, &seatListener_, self);
-    } else if (std::strcmp(interface, zxdg_decoration_manager_v1_interface.name) == 0) {
-      self->decorationManager_ = static_cast<zxdg_decoration_manager_v1*>(
-          wl_registry_bind(registry, name, &zxdg_decoration_manager_v1_interface, 1));
-    } else if (std::strcmp(interface, wl_output_interface.name) == 0) {
-      auto output = std::make_unique<Output>();
-      output->owner = self;
-      output->name = name;
-      output->output = static_cast<wl_output*>(
-          wl_registry_bind(registry, name, &wl_output_interface, std::min(version, 2u)));
-      wl_output_add_listener(output->output, &outputListener_, output.get());
-      self->outputs_.push_back(std::move(output));
-    }
+  wl_surface* waylandSurface() const noexcept { return surface_; }
+
+  void handlePointerEnter(wl_fixed_t x, wl_fixed_t y) {
+    pointerPos_ = logicalPointFromFixed(x, y, dpiScaleX_, dpiScaleY_);
   }
 
-  static void registryRemove(void* data, wl_registry*, std::uint32_t name) {
-    auto* self = static_cast<WaylandWindow*>(data);
-    auto it = std::find_if(self->outputs_.begin(), self->outputs_.end(),
-                           [&](auto const& output) { return output->name == name; });
-    if (it != self->outputs_.end()) {
-      if ((*it)->entered && (*it)->scale >= self->dpiScaleX_) {
-        (*it)->entered = false;
-        self->updateEnteredScale();
+  void handlePointerLeave() {
+    pressedButtons_ = 0;
+  }
+
+  void handlePointerMotion(wl_fixed_t x, wl_fixed_t y) {
+    pointerPos_ = logicalPointFromFixed(x, y, dpiScaleX_, dpiScaleY_);
+    Application::instance().eventQueue().post(InputEvent{.kind = InputEvent::Kind::PointerMove,
+                                                         .handle = handle_,
+                                                         .position = pointerPos_,
+                                                         .pressedButtons = pressedButtons_});
+  }
+
+  void handlePointerButton(std::uint32_t button, std::uint32_t state) {
+    std::uint8_t const bit = button == BTN_LEFT ? 1u : button == BTN_RIGHT ? 2u : button == BTN_MIDDLE ? 4u : 0u;
+    if (state == WL_POINTER_BUTTON_STATE_PRESSED) pressedButtons_ |= bit;
+    else pressedButtons_ &= static_cast<std::uint8_t>(~bit);
+    Application::instance().eventQueue().post(InputEvent{.kind = state == WL_POINTER_BUTTON_STATE_PRESSED
+                                                                     ? InputEvent::Kind::PointerDown
+                                                                     : InputEvent::Kind::PointerUp,
+                                                         .handle = handle_,
+                                                         .position = pointerPos_,
+                                                         .button = mouseButtonFromLinux(button),
+                                                         .pressedButtons = pressedButtons_});
+  }
+
+  void handlePointerAxis(std::uint32_t axis, wl_fixed_t value) {
+    float dx = 0.f, dy = 0.f;
+    float const v = static_cast<float>(wl_fixed_to_double(value));
+    if (axis == WL_POINTER_AXIS_HORIZONTAL_SCROLL) dx = v;
+    else dy = v;
+    Application::instance().eventQueue().post(InputEvent{.kind = InputEvent::Kind::Scroll,
+                                                         .handle = handle_,
+                                                         .position = pointerPos_,
+                                                         .scrollDelta = {dx, dy},
+                                                         .preciseScrollDelta = true,
+                                                         .pressedButtons = pressedButtons_});
+  }
+
+  void handleKeyboardKey(xkb_state* stateForKeyboard, std::uint32_t key, std::uint32_t state) {
+    xkb_keysym_t sym = stateForKeyboard ? xkb_state_key_get_one_sym(stateForKeyboard, key + 8) : XKB_KEY_NoSymbol;
+    bool const pressed = state == WL_KEYBOARD_KEY_STATE_PRESSED;
+    Application::instance().eventQueue().post(InputEvent{.kind = pressed ? InputEvent::Kind::KeyDown
+                                                                          : InputEvent::Kind::KeyUp,
+                                                         .handle = handle_,
+                                                         .key = keyFromXkb(sym),
+                                                         .modifiers = currentModifiers_});
+    if (pressed) {
+      std::string text = utf8FromKeysym(sym);
+      if (!text.empty()) {
+        Application::instance().eventQueue().post(InputEvent{.kind = InputEvent::Kind::TextInput,
+                                                             .handle = handle_,
+                                                             .text = std::move(text)});
       }
-      if ((*it)->output) wl_output_destroy((*it)->output);
-      self->outputs_.erase(it);
     }
   }
 
-  static void wmPing(void*, xdg_wm_base* base, std::uint32_t serial) {
-    xdg_wm_base_pong(base, serial);
+  void handleKeyboardModifiers(xkb_state* stateForKeyboard, std::uint32_t depressed,
+                               std::uint32_t latched, std::uint32_t locked, std::uint32_t group) {
+    if (!stateForKeyboard) return;
+    xkb_state_update_mask(stateForKeyboard, depressed, latched, locked, 0, 0, group);
+    Modifiers mods = Modifiers::None;
+    if (xkb_state_mod_name_is_active(stateForKeyboard, XKB_MOD_NAME_SHIFT, XKB_STATE_MODS_EFFECTIVE) > 0) {
+      mods = mods | Modifiers::Shift;
+    }
+    if (xkb_state_mod_name_is_active(stateForKeyboard, XKB_MOD_NAME_CTRL, XKB_STATE_MODS_EFFECTIVE) > 0) {
+      mods = mods | Modifiers::Ctrl;
+    }
+    if (xkb_state_mod_name_is_active(stateForKeyboard, XKB_MOD_NAME_ALT, XKB_STATE_MODS_EFFECTIVE) > 0) {
+      mods = mods | Modifiers::Alt;
+    }
+    if (xkb_state_mod_name_is_active(stateForKeyboard, XKB_MOD_NAME_LOGO, XKB_STATE_MODS_EFFECTIVE) > 0) {
+      mods = mods | Modifiers::Meta;
+    }
+    currentModifiers_ = mods;
   }
 
+  void handleOutputRemoved(wl_output* output) {
+    enteredOutputs_.erase(std::remove(enteredOutputs_.begin(), enteredOutputs_.end(), output),
+                          enteredOutputs_.end());
+    updateEnteredScale();
+  }
+
+  void handleOutputScaleChanged(wl_output* output) {
+    if (std::find(enteredOutputs_.begin(), enteredOutputs_.end(), output) != enteredOutputs_.end()) {
+      updateEnteredScale();
+    }
+  }
+
+private:
   static void frameDone(void* data, wl_callback* callback, std::uint32_t) {
     auto* self = static_cast<WaylandWindow*>(data);
     if (callback == self->frameCallback_) {
@@ -398,33 +548,18 @@ private:
     }
   }
 
-  static void seatCapabilities(void* data, wl_seat* seat, std::uint32_t caps) {
-    auto* self = static_cast<WaylandWindow*>(data);
-    if ((caps & WL_SEAT_CAPABILITY_POINTER) && !self->pointer_) {
-      self->pointer_ = wl_seat_get_pointer(seat);
-      wl_pointer_add_listener(self->pointer_, &pointerListener_, self);
-    }
-    if ((caps & WL_SEAT_CAPABILITY_KEYBOARD) && !self->keyboard_) {
-      self->keyboard_ = wl_seat_get_keyboard(seat);
-      wl_keyboard_add_listener(self->keyboard_, &keyboardListener_, self);
-    }
-  }
-
-  static void seatName(void*, wl_seat*, char const*) {}
-
   static void surfaceEnter(void* data, wl_surface*, wl_output* output) {
     auto* self = static_cast<WaylandWindow*>(data);
-    if (Output* out = self->findOutput(output)) {
-      out->entered = true;
-      self->updateEnteredScale();
+    if (std::find(self->enteredOutputs_.begin(), self->enteredOutputs_.end(), output) == self->enteredOutputs_.end()) {
+      self->enteredOutputs_.push_back(output);
     }
+    self->updateEnteredScale();
   }
   static void surfaceLeave(void* data, wl_surface*, wl_output* output) {
     auto* self = static_cast<WaylandWindow*>(data);
-    if (Output* out = self->findOutput(output)) {
-      out->entered = false;
-      self->updateEnteredScale();
-    }
+    self->enteredOutputs_.erase(std::remove(self->enteredOutputs_.begin(), self->enteredOutputs_.end(), output),
+                                self->enteredOutputs_.end());
+    self->updateEnteredScale();
   }
   static void surfacePreferredBufferScale(void* data, wl_surface*, std::int32_t factor) {
     auto* self = static_cast<WaylandWindow*>(data);
@@ -443,136 +578,6 @@ private:
   }
   static void surfacePreferredBufferTransform(void*, wl_surface*, std::uint32_t) {}
 
-  static void outputGeometry(void*, wl_output*, std::int32_t, std::int32_t, std::int32_t, std::int32_t,
-                             std::int32_t, char const*, char const*, std::int32_t) {}
-  static void outputMode(void*, wl_output*, std::uint32_t, std::int32_t, std::int32_t, std::int32_t) {}
-  static void outputDone(void*, wl_output*) {}
-  static void outputScale(void* data, wl_output*, std::int32_t scale) {
-    auto* output = static_cast<Output*>(data);
-    output->scale = safeScale(static_cast<float>(std::max(1, scale)));
-    if (output->entered) output->owner->updateEnteredScale();
-  }
-  static void outputName(void*, wl_output*, char const*) {}
-  static void outputDescription(void*, wl_output*, char const*) {}
-
-  static void pointerEnter(void* data, wl_pointer*, std::uint32_t, wl_surface*, wl_fixed_t x, wl_fixed_t y) {
-    auto* self = static_cast<WaylandWindow*>(data);
-    self->pointerPos_ = logicalPointFromFixed(x, y, self->dpiScaleX_, self->dpiScaleY_);
-  }
-  static void pointerLeave(void*, wl_pointer*, std::uint32_t, wl_surface*) {}
-  static void pointerMotion(void* data, wl_pointer*, std::uint32_t, wl_fixed_t x, wl_fixed_t y) {
-    auto* self = static_cast<WaylandWindow*>(data);
-    self->pointerPos_ = logicalPointFromFixed(x, y, self->dpiScaleX_, self->dpiScaleY_);
-    Application::instance().eventQueue().post(InputEvent{.kind = InputEvent::Kind::PointerMove,
-                                                         .handle = self->handle_,
-                                                         .position = self->pointerPos_,
-                                                         .pressedButtons = self->pressedButtons_});
-  }
-  static void pointerButton(void* data, wl_pointer*, std::uint32_t, std::uint32_t, std::uint32_t button,
-                            std::uint32_t state) {
-    auto* self = static_cast<WaylandWindow*>(data);
-    std::uint8_t const bit = button == BTN_LEFT ? 1u : button == BTN_RIGHT ? 2u : button == BTN_MIDDLE ? 4u : 0u;
-    if (state == WL_POINTER_BUTTON_STATE_PRESSED) self->pressedButtons_ |= bit;
-    else self->pressedButtons_ &= static_cast<std::uint8_t>(~bit);
-    Application::instance().eventQueue().post(InputEvent{.kind = state == WL_POINTER_BUTTON_STATE_PRESSED
-                                                                     ? InputEvent::Kind::PointerDown
-                                                                     : InputEvent::Kind::PointerUp,
-                                                         .handle = self->handle_,
-                                                         .position = self->pointerPos_,
-                                                         .button = mouseButtonFromLinux(button),
-                                                         .pressedButtons = self->pressedButtons_});
-  }
-  static void pointerAxis(void* data, wl_pointer*, std::uint32_t, std::uint32_t axis, wl_fixed_t value) {
-    auto* self = static_cast<WaylandWindow*>(data);
-    float dx = 0.f, dy = 0.f;
-    float const v = static_cast<float>(wl_fixed_to_double(value));
-    if (axis == WL_POINTER_AXIS_HORIZONTAL_SCROLL) dx = v;
-    else dy = v;
-    Application::instance().eventQueue().post(InputEvent{.kind = InputEvent::Kind::Scroll,
-                                                         .handle = self->handle_,
-                                                         .position = self->pointerPos_,
-                                                         .scrollDelta = {dx, dy},
-                                                         .preciseScrollDelta = true,
-                                                         .pressedButtons = self->pressedButtons_});
-  }
-  static void pointerFrame(void*, wl_pointer*) {}
-  static void pointerAxisSource(void*, wl_pointer*, std::uint32_t) {}
-  static void pointerAxisStop(void*, wl_pointer*, std::uint32_t, std::uint32_t) {}
-  static void pointerAxisDiscrete(void*, wl_pointer*, std::uint32_t, std::int32_t) {}
-  static void pointerAxisValue120(void*, wl_pointer*, std::uint32_t, std::int32_t) {}
-  static void pointerAxisRelativeDirection(void*, wl_pointer*, std::uint32_t, std::uint32_t) {}
-
-  static void keymap(void* data, wl_keyboard*, std::uint32_t format, int fd, std::uint32_t size) {
-    auto* self = static_cast<WaylandWindow*>(data);
-    if (format != WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1) {
-      close(fd);
-      return;
-    }
-    char* map = static_cast<char*>(mmap(nullptr, size, PROT_READ, MAP_PRIVATE, fd, 0));
-    if (map == MAP_FAILED) {
-      close(fd);
-      return;
-    }
-    xkb_keymap* keymap = xkb_keymap_new_from_string(self->xkbContext_, map, XKB_KEYMAP_FORMAT_TEXT_V1,
-                                                    XKB_KEYMAP_COMPILE_NO_FLAGS);
-    munmap(map, size);
-    close(fd);
-    if (!keymap) return;
-    xkb_state* state = xkb_state_new(keymap);
-    if (!state) {
-      xkb_keymap_unref(keymap);
-      return;
-    }
-    if (self->xkbState_) xkb_state_unref(self->xkbState_);
-    if (self->xkbKeymap_) xkb_keymap_unref(self->xkbKeymap_);
-    self->xkbKeymap_ = keymap;
-    self->xkbState_ = state;
-  }
-
-  static void keyboardEnter(void*, wl_keyboard*, std::uint32_t, wl_surface*, wl_array*) {}
-  static void keyboardLeave(void*, wl_keyboard*, std::uint32_t, wl_surface*) {}
-  static void keyboardKey(void* data, wl_keyboard*, std::uint32_t, std::uint32_t, std::uint32_t key,
-                          std::uint32_t state) {
-    auto* self = static_cast<WaylandWindow*>(data);
-    xkb_keysym_t sym = self->xkbState_ ? xkb_state_key_get_one_sym(self->xkbState_, key + 8) : XKB_KEY_NoSymbol;
-    bool const pressed = state == WL_KEYBOARD_KEY_STATE_PRESSED;
-    Application::instance().eventQueue().post(InputEvent{.kind = pressed ? InputEvent::Kind::KeyDown
-                                                                          : InputEvent::Kind::KeyUp,
-                                                         .handle = self->handle_,
-                                                         .key = keyFromXkb(sym),
-                                                         .modifiers = self->currentModifiers_});
-    if (pressed) {
-      std::string text = utf8FromKeysym(sym);
-      if (!text.empty()) {
-        Application::instance().eventQueue().post(InputEvent{.kind = InputEvent::Kind::TextInput,
-                                                             .handle = self->handle_,
-                                                             .text = std::move(text)});
-      }
-    }
-  }
-  static void keyboardModifiers(void* data, wl_keyboard*, std::uint32_t, std::uint32_t depressed,
-                                std::uint32_t latched, std::uint32_t locked, std::uint32_t group) {
-    auto* self = static_cast<WaylandWindow*>(data);
-    if (self->xkbState_) {
-      xkb_state_update_mask(self->xkbState_, depressed, latched, locked, 0, 0, group);
-      Modifiers mods = Modifiers::None;
-      if (xkb_state_mod_name_is_active(self->xkbState_, XKB_MOD_NAME_SHIFT, XKB_STATE_MODS_EFFECTIVE) > 0) {
-        mods = mods | Modifiers::Shift;
-      }
-      if (xkb_state_mod_name_is_active(self->xkbState_, XKB_MOD_NAME_CTRL, XKB_STATE_MODS_EFFECTIVE) > 0) {
-        mods = mods | Modifiers::Ctrl;
-      }
-      if (xkb_state_mod_name_is_active(self->xkbState_, XKB_MOD_NAME_ALT, XKB_STATE_MODS_EFFECTIVE) > 0) {
-        mods = mods | Modifiers::Alt;
-      }
-      if (xkb_state_mod_name_is_active(self->xkbState_, XKB_MOD_NAME_LOGO, XKB_STATE_MODS_EFFECTIVE) > 0) {
-        mods = mods | Modifiers::Meta;
-      }
-      self->currentModifiers_ = mods;
-    }
-  }
-  static void keyboardRepeatInfo(void*, wl_keyboard*, std::int32_t, std::int32_t) {}
-
   void applyConfiguredSize(int width, int height) {
     size_ = {static_cast<float>(std::max(1, width)), static_cast<float>(std::max(1, height))};
     if (canvas_) canvas_->resize(static_cast<int>(std::lround(size_.width)),
@@ -587,37 +592,30 @@ private:
   }
 
   void requestServerSideDecorations() {
-    if (!decorationManager_) {
+    if (!shared_ || !shared_->decorationManager) {
       if (!warnedDecorationFallback_) {
         warnedDecorationFallback_ = true;
         std::fprintf(stderr, "Flux Wayland: compositor does not expose xdg-decoration; server-side decorations are unavailable.\n");
       }
       return;
     }
-    decoration_ = zxdg_decoration_manager_v1_get_toplevel_decoration(decorationManager_, toplevel_);
+    decoration_ = zxdg_decoration_manager_v1_get_toplevel_decoration(shared_->decorationManager, toplevel_);
     zxdg_toplevel_decoration_v1_add_listener(decoration_, &decorationListener_, this);
     zxdg_toplevel_decoration_v1_set_mode(decoration_, ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
   }
 
-  struct Output {
-    WaylandWindow* owner = nullptr;
-    wl_output* output = nullptr;
-    std::uint32_t name = 0;
-    float scale = 1.f;
-    bool entered = false;
-  };
-
-  Output* findOutput(wl_output* output) {
-    for (auto& candidate : outputs_) {
-      if (candidate->output == output) return candidate.get();
+  float outputScale(wl_output* output) const {
+    if (!shared_) return 1.f;
+    for (auto const& candidate : shared_->outputs) {
+      if (candidate->output == output) return candidate->scale;
     }
-    return nullptr;
+    return 1.f;
   }
 
   void updateEnteredScale() {
     float scale = 1.f;
-    for (auto const& output : outputs_) {
-      if (output->entered) scale = std::max(scale, output->scale);
+    for (wl_output* output : enteredOutputs_) {
+      scale = std::max(scale, outputScale(output));
     }
     if (std::abs(scale - dpiScaleX_) < 0.001f && std::abs(scale - dpiScaleY_) < 0.001f) return;
     dpiScaleX_ = scale;
@@ -670,43 +668,23 @@ private:
     Application::instance().flushRedraw();
   }
 
-  static inline wl_registry_listener registryListener_{registryGlobal, registryRemove};
-  static inline xdg_wm_base_listener wmBaseListener_{wmPing};
   static inline wl_callback_listener frameCallbackListener_{frameDone};
   static inline wl_surface_listener surfaceListener_{surfaceEnter, surfaceLeave, surfacePreferredBufferScale,
                                                     surfacePreferredBufferTransform};
-  static inline wl_output_listener outputListener_{outputGeometry, outputMode, outputDone, outputScale,
-                                                  outputName, outputDescription};
   static inline xdg_surface_listener xdgSurfaceListener_{xdgConfigure};
   static inline xdg_toplevel_listener toplevelListener_{topConfigure, topClose, topConfigureBounds,
                                                        topCapabilities};
   static inline zxdg_toplevel_decoration_v1_listener decorationListener_{decorationConfigure};
-  static inline wl_seat_listener seatListener_{seatCapabilities, seatName};
-  static inline wl_pointer_listener pointerListener_{pointerEnter, pointerLeave, pointerMotion, pointerButton,
-                                                     pointerAxis, pointerFrame, pointerAxisSource,
-                                                     pointerAxisStop, pointerAxisDiscrete, pointerAxisValue120,
-                                                     pointerAxisRelativeDirection};
-  static inline wl_keyboard_listener keyboardListener_{keymap, keyboardEnter, keyboardLeave, keyboardKey,
-                                                       keyboardModifiers, keyboardRepeatInfo};
 
   wl_display* display_ = nullptr;
-  wl_registry* registry_ = nullptr;
-  wl_compositor* compositor_ = nullptr;
-  xdg_wm_base* wmBase_ = nullptr;
-  zxdg_decoration_manager_v1* decorationManager_ = nullptr;
-  wl_seat* seat_ = nullptr;
-  std::vector<std::unique_ptr<Output>> outputs_;
-  wl_pointer* pointer_ = nullptr;
-  wl_keyboard* keyboard_ = nullptr;
+  std::vector<wl_output*> enteredOutputs_;
   wl_surface* surface_ = nullptr;
   wl_callback* frameCallback_ = nullptr;
   xdg_surface* xdgSurface_ = nullptr;
   xdg_toplevel* toplevel_ = nullptr;
   zxdg_toplevel_decoration_v1* decoration_ = nullptr;
   Canvas* canvas_ = nullptr;
-  xkb_context* xkbContext_ = nullptr;
-  xkb_keymap* xkbKeymap_ = nullptr;
-  xkb_state* xkbState_ = nullptr;
+  SharedWaylandConnection* shared_ = nullptr;
 
   Window* fluxWindow_ = nullptr;
   unsigned int handle_ = 0;
@@ -726,9 +704,177 @@ private:
   Modifiers currentModifiers_ = Modifiers::None;
   bool resizeRedrawPending_ = false;
   bool framePending_ = false;
-  bool ownsSharedConnection_ = false;
   int wakePipe_[2]{-1, -1};
 };
+
+namespace {
+
+WaylandWindow* windowForSurface(SharedWaylandConnection* shared, wl_surface* surface) {
+  if (!shared || !surface) return nullptr;
+  for (WaylandWindow* window : shared->windows) {
+    if (window && window->waylandSurface() == surface) return window;
+  }
+  return nullptr;
+}
+
+void refreshWindowsForOutput(SharedWaylandConnection* shared, wl_output* output) {
+  if (!shared) return;
+  for (WaylandWindow* window : shared->windows) {
+    if (window) window->handleOutputScaleChanged(output);
+  }
+}
+
+void sharedRegistryGlobal(void* data, wl_registry* registry, std::uint32_t name,
+                          char const* interface, std::uint32_t version) {
+  auto* shared = static_cast<SharedWaylandConnection*>(data);
+  if (std::strcmp(interface, wl_compositor_interface.name) == 0) {
+    shared->compositor = static_cast<wl_compositor*>(
+        wl_registry_bind(registry, name, &wl_compositor_interface, std::min(version, 4u)));
+  } else if (std::strcmp(interface, xdg_wm_base_interface.name) == 0) {
+    shared->wmBase = static_cast<xdg_wm_base*>(
+        wl_registry_bind(registry, name, &xdg_wm_base_interface, 1));
+    xdg_wm_base_add_listener(shared->wmBase, &sharedWmBaseListener, shared);
+  } else if (std::strcmp(interface, wl_seat_interface.name) == 0) {
+    shared->seat = static_cast<wl_seat*>(
+        wl_registry_bind(registry, name, &wl_seat_interface, std::min(version, 7u)));
+    wl_seat_add_listener(shared->seat, &sharedSeatListener, shared);
+  } else if (std::strcmp(interface, zxdg_decoration_manager_v1_interface.name) == 0) {
+    shared->decorationManager = static_cast<zxdg_decoration_manager_v1*>(
+        wl_registry_bind(registry, name, &zxdg_decoration_manager_v1_interface, 1));
+  } else if (std::strcmp(interface, wl_output_interface.name) == 0) {
+    auto output = std::make_unique<SharedWaylandConnection::Output>();
+    output->name = name;
+    output->output = static_cast<wl_output*>(
+        wl_registry_bind(registry, name, &wl_output_interface, std::min(version, 2u)));
+    wl_output_add_listener(output->output, &sharedOutputListener, output.get());
+    shared->outputs.push_back(std::move(output));
+  }
+}
+
+void sharedRegistryRemove(void* data, wl_registry*, std::uint32_t name) {
+  auto* shared = static_cast<SharedWaylandConnection*>(data);
+  auto it = std::find_if(shared->outputs.begin(), shared->outputs.end(),
+                         [&](auto const& output) { return output->name == name; });
+  if (it == shared->outputs.end()) return;
+  wl_output* removed = (*it)->output;
+  for (WaylandWindow* window : shared->windows) {
+    if (window) window->handleOutputRemoved(removed);
+  }
+  if ((*it)->output) wl_output_destroy((*it)->output);
+  shared->outputs.erase(it);
+}
+
+void sharedWmPing(void*, xdg_wm_base* base, std::uint32_t serial) {
+  xdg_wm_base_pong(base, serial);
+}
+
+void sharedSeatCapabilities(void* data, wl_seat* seat, std::uint32_t caps) {
+  auto* shared = static_cast<SharedWaylandConnection*>(data);
+  if ((caps & WL_SEAT_CAPABILITY_POINTER) && !shared->pointer) {
+    shared->pointer = wl_seat_get_pointer(seat);
+    wl_pointer_add_listener(shared->pointer, &sharedPointerListener, shared);
+  }
+  if ((caps & WL_SEAT_CAPABILITY_KEYBOARD) && !shared->keyboard) {
+    shared->keyboard = wl_seat_get_keyboard(seat);
+    wl_keyboard_add_listener(shared->keyboard, &sharedKeyboardListener, shared);
+  }
+}
+
+void sharedSeatName(void*, wl_seat*, char const*) {}
+void sharedOutputGeometry(void*, wl_output*, std::int32_t, std::int32_t, std::int32_t, std::int32_t,
+                          std::int32_t, char const*, char const*, std::int32_t) {}
+void sharedOutputMode(void*, wl_output*, std::uint32_t, std::int32_t, std::int32_t, std::int32_t) {}
+void sharedOutputDone(void*, wl_output*) {}
+void sharedOutputScale(void* data, wl_output* output, std::int32_t scale) {
+  auto* sharedOutput = static_cast<SharedWaylandConnection::Output*>(data);
+  sharedOutput->scale = safeScale(static_cast<float>(std::max(1, scale)));
+  refreshWindowsForOutput(&gWaylandConnection, output);
+}
+void sharedOutputName(void*, wl_output*, char const*) {}
+void sharedOutputDescription(void*, wl_output*, char const*) {}
+
+void sharedPointerEnter(void* data, wl_pointer*, std::uint32_t, wl_surface* surface, wl_fixed_t x, wl_fixed_t y) {
+  auto* shared = static_cast<SharedWaylandConnection*>(data);
+  shared->pointerFocus = windowForSurface(shared, surface);
+  if (shared->pointerFocus) shared->pointerFocus->handlePointerEnter(x, y);
+}
+void sharedPointerLeave(void* data, wl_pointer*, std::uint32_t, wl_surface* surface) {
+  auto* shared = static_cast<SharedWaylandConnection*>(data);
+  WaylandWindow* window = windowForSurface(shared, surface);
+  if (window) window->handlePointerLeave();
+  if (!surface || shared->pointerFocus == window) shared->pointerFocus = nullptr;
+}
+void sharedPointerMotion(void* data, wl_pointer*, std::uint32_t, wl_fixed_t x, wl_fixed_t y) {
+  auto* shared = static_cast<SharedWaylandConnection*>(data);
+  if (shared->pointerFocus) shared->pointerFocus->handlePointerMotion(x, y);
+}
+void sharedPointerButton(void* data, wl_pointer*, std::uint32_t, std::uint32_t, std::uint32_t button,
+                         std::uint32_t state) {
+  auto* shared = static_cast<SharedWaylandConnection*>(data);
+  if (shared->pointerFocus) shared->pointerFocus->handlePointerButton(button, state);
+}
+void sharedPointerAxis(void* data, wl_pointer*, std::uint32_t, std::uint32_t axis, wl_fixed_t value) {
+  auto* shared = static_cast<SharedWaylandConnection*>(data);
+  if (shared->pointerFocus) shared->pointerFocus->handlePointerAxis(axis, value);
+}
+void sharedPointerFrame(void*, wl_pointer*) {}
+void sharedPointerAxisSource(void*, wl_pointer*, std::uint32_t) {}
+void sharedPointerAxisStop(void*, wl_pointer*, std::uint32_t, std::uint32_t) {}
+void sharedPointerAxisDiscrete(void*, wl_pointer*, std::uint32_t, std::int32_t) {}
+void sharedPointerAxisValue120(void*, wl_pointer*, std::uint32_t, std::int32_t) {}
+void sharedPointerAxisRelativeDirection(void*, wl_pointer*, std::uint32_t, std::uint32_t) {}
+
+void sharedKeymap(void* data, wl_keyboard*, std::uint32_t format, int fd, std::uint32_t size) {
+  auto* shared = static_cast<SharedWaylandConnection*>(data);
+  if (format != WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1) {
+    close(fd);
+    return;
+  }
+  char* map = static_cast<char*>(mmap(nullptr, size, PROT_READ, MAP_PRIVATE, fd, 0));
+  if (map == MAP_FAILED) {
+    close(fd);
+    return;
+  }
+  xkb_keymap* keymap = xkb_keymap_new_from_string(shared->xkbContext, map, XKB_KEYMAP_FORMAT_TEXT_V1,
+                                                  XKB_KEYMAP_COMPILE_NO_FLAGS);
+  munmap(map, size);
+  close(fd);
+  if (!keymap) return;
+  xkb_state* state = xkb_state_new(keymap);
+  if (!state) {
+    xkb_keymap_unref(keymap);
+    return;
+  }
+  if (shared->xkbState) xkb_state_unref(shared->xkbState);
+  if (shared->xkbKeymap) xkb_keymap_unref(shared->xkbKeymap);
+  shared->xkbKeymap = keymap;
+  shared->xkbState = state;
+}
+
+void sharedKeyboardEnter(void* data, wl_keyboard*, std::uint32_t, wl_surface* surface, wl_array*) {
+  auto* shared = static_cast<SharedWaylandConnection*>(data);
+  shared->keyboardFocus = windowForSurface(shared, surface);
+}
+void sharedKeyboardLeave(void* data, wl_keyboard*, std::uint32_t, wl_surface* surface) {
+  auto* shared = static_cast<SharedWaylandConnection*>(data);
+  WaylandWindow* window = windowForSurface(shared, surface);
+  if (!surface || shared->keyboardFocus == window) shared->keyboardFocus = nullptr;
+}
+void sharedKeyboardKey(void* data, wl_keyboard*, std::uint32_t, std::uint32_t, std::uint32_t key,
+                       std::uint32_t state) {
+  auto* shared = static_cast<SharedWaylandConnection*>(data);
+  if (shared->keyboardFocus) shared->keyboardFocus->handleKeyboardKey(shared->xkbState, key, state);
+}
+void sharedKeyboardModifiers(void* data, wl_keyboard*, std::uint32_t, std::uint32_t depressed,
+                             std::uint32_t latched, std::uint32_t locked, std::uint32_t group) {
+  auto* shared = static_cast<SharedWaylandConnection*>(data);
+  if (shared->keyboardFocus) {
+    shared->keyboardFocus->handleKeyboardModifiers(shared->xkbState, depressed, latched, locked, group);
+  }
+}
+void sharedKeyboardRepeatInfo(void*, wl_keyboard*, std::int32_t, std::int32_t) {}
+
+} // namespace
 
 namespace detail {
 
