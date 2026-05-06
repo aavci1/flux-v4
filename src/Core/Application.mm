@@ -424,7 +424,7 @@ bool Application::isMenuShortcutClaimed(KeyCode key, Modifiers modifiers) const 
   return shortcuts.contains(shortcut);
 }
 
-bool Application::dispatchMenuShortcut(KeyCode key, Modifiers modifiers) {
+bool Application::dispatchActionForShortcut(KeyCode key, Modifiers modifiers) {
   auto it = d->menuShortcuts_.find(ShortcutKey{.key = key, .modifiers = modifiers});
   if (it == d->menuShortcuts_.end()) {
     return false;

@@ -521,7 +521,7 @@ void Runtime::handleInput(InputEvent const& event) {
   bool const menuOwnsShortcut = event.kind == InputEvent::Kind::KeyDown &&
                                 Application::hasInstance() &&
                                 Application::instance().isMenuShortcutClaimed(event.key, event.modifiers);
-  if (menuOwnsShortcut && Application::instance().dispatchMenuShortcut(event.key, event.modifiers)) {
+  if (menuOwnsShortcut && Application::instance().dispatchActionForShortcut(event.key, event.modifiers)) {
     return;
   }
   if (event.kind == InputEvent::Kind::KeyDown && !menuOwnsShortcut &&
