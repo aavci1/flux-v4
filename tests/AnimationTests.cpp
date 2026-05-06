@@ -1,8 +1,5 @@
 #include <doctest/doctest.h>
-
-#define private public
 #include <Flux/Reactive/Animation.hpp>
-#undef private
 
 #include <Flux/Detail/RootHolder.hpp>
 #include <Flux/Graphics/TextSystem.hpp>
@@ -89,18 +86,18 @@ TEST_CASE("Animation repeats across finite iterations") {
       .autoreverse = false,
   });
 
-  value.state_->startTime = 100.0;
+  value.testSetStartTime(100.0);
 
-  CHECK(value.state_->tick(100.50));
+  CHECK(value.testTick(100.50));
   CHECK(value.get() == doctest::Approx(5.f));
 
-  CHECK(value.state_->tick(101.00));
+  CHECK(value.testTick(101.00));
   CHECK(value.get() == doctest::Approx(0.f));
 
-  CHECK(value.state_->tick(101.50));
+  CHECK(value.testTick(101.50));
   CHECK(value.get() == doctest::Approx(5.f));
 
-  CHECK_FALSE(value.state_->tick(103.00));
+  CHECK_FALSE(value.testTick(103.00));
   CHECK(value.get() == doctest::Approx(10.f));
   CHECK_FALSE(value.isRunning());
 }
@@ -113,15 +110,15 @@ TEST_CASE("Animation autoreverse returns to its start on even iteration counts")
       .autoreverse = true,
   });
 
-  value.state_->startTime = 10.0;
+  value.testSetStartTime(10.0);
 
-  CHECK(value.state_->tick(10.50));
+  CHECK(value.testTick(10.50));
   CHECK(value.get() == doctest::Approx(5.f));
 
-  CHECK(value.state_->tick(11.50));
+  CHECK(value.testTick(11.50));
   CHECK(value.get() == doctest::Approx(5.f));
 
-  CHECK_FALSE(value.state_->tick(12.00));
+  CHECK_FALSE(value.testTick(12.00));
   CHECK(value.get() == doctest::Approx(0.f));
   CHECK_FALSE(value.isRunning());
 }
@@ -148,8 +145,8 @@ TEST_CASE("Animation copies share playback state") {
   CHECK(original.isRunning());
   CHECK(copy.isRunning());
 
-  original.state_->startTime = 20.0;
-  REQUIRE(copy.state_->tick(20.5));
+  original.testSetStartTime(20.0);
+  REQUIRE(copy.testTick(20.5));
   CHECK(original.get() == doctest::Approx(5.f));
 
   original.stop();

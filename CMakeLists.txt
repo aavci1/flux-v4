@@ -412,6 +412,7 @@ if(FLUX_BUILD_TESTS)
     flux
     doctest::doctest
   )
+  target_compile_definitions(flux_tests PRIVATE FLUX_TESTING=1)
 
   set_target_properties(flux_tests PROPERTIES CXX_STANDARD 23)
 
@@ -472,7 +473,7 @@ option(FLUX_BUILD_BENCHMARKS "Build micro-benchmarks in bench/." OFF)
 
 if(FLUX_BUILD_BENCHMARKS)
   add_executable(paragraph_cache_bench
-    bench/paragraph_cache/bench.mm
+    bench/paragraph_cache/bench.cpp
   )
   target_include_directories(paragraph_cache_bench PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -480,8 +481,5 @@ if(FLUX_BUILD_BENCHMARKS)
   )
   target_link_libraries(paragraph_cache_bench PRIVATE flux)
   set_target_properties(paragraph_cache_bench PROPERTIES CXX_STANDARD 23)
-  if(APPLE)
-    target_compile_options(paragraph_cache_bench PRIVATE $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>)
-  endif()
 
 endif()

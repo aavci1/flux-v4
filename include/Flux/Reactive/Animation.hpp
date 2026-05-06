@@ -129,6 +129,11 @@ public:
   bool isRunning() const { return state().running; }
   bool isPaused() const { return state().paused; }
 
+#if defined(FLUX_TESTING)
+  void testSetStartTime(double startTime) const { state().startTime = startTime; }
+  bool testTick(double nowSeconds) const { return state().tick(nowSeconds); }
+#endif
+
 private:
   struct State final : AnimationBase {
     explicit State(T initial)
