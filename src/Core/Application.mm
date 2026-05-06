@@ -184,9 +184,6 @@ struct Application::Impl {
   mutable bool windowStatesLoaded_ = false;
   mutable std::unordered_map<std::string, WindowState> windowStates_;
 
-  /// `CTFontRef` retained; released in `Application` destructor.
-  void* iconFont_ = nullptr;
-
   bool quit_ = false;
   struct NextFrameEntry {
     std::uint64_t id = 0;
@@ -250,8 +247,6 @@ Application::Application(int /*argc*/, char** /*argv*/) {
     if (fontPath && [[NSFileManager defaultManager] fileExistsAtPath:fontPath]) {
       NSURL* const url = [NSURL fileURLWithPath:fontPath];
       CTFontManagerRegisterFontsForURL((__bridge CFURLRef)url, kCTFontManagerScopeProcess, nullptr);
-      CTFontRef const ct = CTFontCreateWithName(CFSTR("Material Symbols Rounded"), 24., nullptr);
-      d->iconFont_ = reinterpret_cast<void*>(reinterpret_cast<std::uintptr_t>(ct));
     }
   }
 
@@ -323,10 +318,6 @@ Application::Application(int /*argc*/, char** /*argv*/) {
 Application::~Application() {
   saveOpenWindowStates();
   AnimationClock::instance().shutdown();
-  if (d->iconFont_) {
-    CFRelease(reinterpret_cast<CTFontRef>(reinterpret_cast<std::uintptr_t>(d->iconFont_)));
-    d->iconFont_ = nullptr;
-  }
   d->windows_.clear();
   if (gCurrent == this) {
     gCurrent = nullptr;
@@ -489,8 +480,6 @@ void Application::saveWindowState(std::string const& restoreId, WindowState cons
 WindowConfig Application::resolveWindowConfig(WindowConfig config) {
   return config;
 }
-
-void* Application::iconFontHandle() const { return d->iconFont_; }
 
 ObserverHandle Application::onNextFrameNeeded(std::function<void()> callback) {
   std::uint64_t const id = d->nextFrameId_++;

@@ -202,7 +202,6 @@ struct Application::Impl {
   std::uint64_t nextMenuHandlerId_ = 1;
   mutable bool windowStatesLoaded_ = false;
   mutable std::unordered_map<std::string, WindowState> windowStates_;
-  void* iconFont_ = nullptr;
 
   bool quit_ = false;
   struct NextFrameEntry {
@@ -444,7 +443,6 @@ void Application::saveWindowState(std::string const& restoreId, WindowState cons
 }
 
 WindowConfig Application::resolveWindowConfig(WindowConfig config) { return config; }
-void* Application::iconFontHandle() const { return d->iconFont_; }
 
 ObserverHandle Application::onNextFrameNeeded(std::function<void()> callback) {
   std::uint64_t const id = d->nextFrameId_++;

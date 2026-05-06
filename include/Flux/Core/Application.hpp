@@ -101,9 +101,6 @@ public:
   std::optional<WindowState> loadWindowState(std::string const& restoreId) const;
   void saveWindowState(std::string const& restoreId, WindowState const& state);
 
-  /// Opaque platform font handle for the bundled icon font (on macOS: `CTFontRef`), or null if load failed.
-  void* iconFontHandle() const;
-
   /// Batched callback: runs at most once per `exec()` iteration after any reactive update.
   ObserverHandle onNextFrameNeeded(std::function<void()> callback);
   void unobserveNextFrame(ObserverHandle handle);
