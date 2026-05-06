@@ -351,7 +351,10 @@ private:
       wl_callback_destroy(callback);
     }
     if (!self->framePending_) return;
-    Application::instance().eventQueue().post(FrameEvent{nowNanos(), self->handle_});
+    self->framePending_ = false;
+    auto& queue = Application::instance().eventQueue();
+    queue.post(FrameEvent{nowNanos(), self->handle_});
+    queue.dispatch();
     self->wakeEventLoop();
   }
 
