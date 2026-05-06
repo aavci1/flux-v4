@@ -963,11 +963,22 @@ public:
   }
 
   void drawTextLayout(TextLayout const& layout, Point origin) override {
-    ensureAtlasDescriptor();
+    try {
+      ensureAtlasDescriptor();
+    } catch (std::exception const& e) {
+      std::fprintf(stderr, "Flux Vulkan: glyph atlas descriptor setup failed: %s\n", e.what());
+      return;
+    }
     std::uint32_t first = static_cast<std::uint32_t>(quads_.size());
     for (TextLayout::PlacedRun const& placed : layout.runs) {
       for (std::size_t i = 0; i < placed.run.glyphIds.size(); ++i) {
-        GlyphSlot const* slot = glyphSlot(placed.run.fontId, placed.run.glyphIds[i], placed.run.fontSize);
+        GlyphSlot const* slot = nullptr;
+        try {
+          slot = glyphSlot(placed.run.fontId, placed.run.glyphIds[i], placed.run.fontSize);
+        } catch (std::exception const& e) {
+          std::fprintf(stderr, "Flux Vulkan: glyph atlas update failed: %s\n", e.what());
+          continue;
+        }
         if (!slot || slot->w == 0 || slot->h == 0) continue;
         Point pos = origin + placed.origin + placed.run.positions[i];
         Rect glyphRect = Rect::sharp(pos.x + slot->bearing.x / dpiScaleX_,
@@ -1003,7 +1014,13 @@ public:
   void drawImage(Image const& image, Rect const& src, Rect const& dst, CornerRadius const& corners, float opacity) override {
     auto const* vi = dynamic_cast<VulkanImage const*>(&image);
     if (!vi || src.width <= 0.f || src.height <= 0.f || dst.width <= 0.f || dst.height <= 0.f) return;
-    Texture* texture = ensureImageTexture(*vi);
+    Texture* texture = nullptr;
+    try {
+      texture = ensureImageTexture(*vi);
+    } catch (std::exception const& e) {
+      std::fprintf(stderr, "Flux Vulkan: image texture upload failed: %s\n", e.what());
+      return;
+    }
     if (!texture) return;
     Point p00 = state_.transform.apply({dst.x, dst.y});
     Point p10 = state_.transform.apply({dst.x + dst.width, dst.y});
@@ -1999,8 +2016,13 @@ private:
     auto it = imageTextures_.find(&image);
     if (it != imageTextures_.end()) return &it->second;
     Texture tex{};
-    createTexture(tex, image.width, image.height, image.pixels.data(), true);
-    ensureTextureDescriptor(tex);
+    try {
+      createTexture(tex, image.width, image.height, image.pixels.data(), true);
+      ensureTextureDescriptor(tex);
+    } catch (...) {
+      destroyTexture(tex);
+      throw;
+    }
     auto [inserted, ok] = imageTextures_.emplace(&image, std::move(tex));
     (void)ok;
     return &inserted->second;
