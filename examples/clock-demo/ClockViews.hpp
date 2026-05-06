@@ -208,7 +208,10 @@ struct ClockHands : flux::ViewModifiers<ClockHands> {
             canvas.drawRect(flux::Rect{-width * 0.5f, -length, width, length + tail},
                             flux::CornerRadius{width * 0.5f},
                             flux::FillStyle::solid(color),
-                            flux::StrokeStyle::none());
+                            flux::StrokeStyle::none(),
+                            flux::ShadowStyle{.radius = 5.f,
+                                              .offset = {1.5f, 2.5f},
+                                              .color = flux::Color{0.f, 0.f, 0.f, 0.18f}});
             canvas.restore();
           };
 
@@ -219,10 +222,10 @@ struct ClockHands : flux::ViewModifiers<ClockHands> {
           drawHand(second.evaluate(), currentTheme.dangerColor, secondWidth,
                    geometry.radius * 0.72f, geometry.radius * 0.16f);
 
-          float const dotRadius = geometry.radius * 0.055f;
+          float const dotRadius = geometry.radius * 0.043f;
           canvas.drawCircle(geometry.center, dotRadius,
                             flux::FillStyle::solid(currentTheme.dangerColor),
-                            flux::StrokeStyle::solid(currentTheme.elevatedBackgroundColor, 3.f));
+                            flux::StrokeStyle::none());
         },
     }
         .flex(1.f);
