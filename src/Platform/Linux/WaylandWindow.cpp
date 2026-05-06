@@ -61,13 +61,69 @@ MouseButton mouseButtonFromLinux(std::uint32_t button) {
 }
 
 KeyCode keyFromXkb(xkb_keysym_t sym) {
-  if (sym >= XKB_KEY_a && sym <= XKB_KEY_z) {
-    return static_cast<KeyCode>(keys::A + (sym - XKB_KEY_a));
-  }
-  if (sym >= XKB_KEY_A && sym <= XKB_KEY_Z) {
-    return static_cast<KeyCode>(keys::A + (sym - XKB_KEY_A));
-  }
   switch (sym) {
+  case XKB_KEY_a:
+  case XKB_KEY_A: return keys::A;
+  case XKB_KEY_b:
+  case XKB_KEY_B: return keys::B;
+  case XKB_KEY_c:
+  case XKB_KEY_C: return keys::C;
+  case XKB_KEY_d:
+  case XKB_KEY_D: return keys::D;
+  case XKB_KEY_e:
+  case XKB_KEY_E: return keys::E;
+  case XKB_KEY_f:
+  case XKB_KEY_F: return keys::F;
+  case XKB_KEY_g:
+  case XKB_KEY_G: return keys::G;
+  case XKB_KEY_h:
+  case XKB_KEY_H: return keys::H;
+  case XKB_KEY_i:
+  case XKB_KEY_I: return keys::I;
+  case XKB_KEY_j:
+  case XKB_KEY_J: return keys::J;
+  case XKB_KEY_k:
+  case XKB_KEY_K: return keys::K;
+  case XKB_KEY_l:
+  case XKB_KEY_L: return keys::L;
+  case XKB_KEY_m:
+  case XKB_KEY_M: return keys::M;
+  case XKB_KEY_n:
+  case XKB_KEY_N: return keys::N;
+  case XKB_KEY_o:
+  case XKB_KEY_O: return keys::O;
+  case XKB_KEY_p:
+  case XKB_KEY_P: return keys::P;
+  case XKB_KEY_q:
+  case XKB_KEY_Q: return keys::Q;
+  case XKB_KEY_r:
+  case XKB_KEY_R: return keys::R;
+  case XKB_KEY_s:
+  case XKB_KEY_S: return keys::S;
+  case XKB_KEY_t:
+  case XKB_KEY_T: return keys::T;
+  case XKB_KEY_u:
+  case XKB_KEY_U: return keys::U;
+  case XKB_KEY_v:
+  case XKB_KEY_V: return keys::V;
+  case XKB_KEY_w:
+  case XKB_KEY_W: return keys::W;
+  case XKB_KEY_x:
+  case XKB_KEY_X: return keys::X;
+  case XKB_KEY_y:
+  case XKB_KEY_Y: return keys::Y;
+  case XKB_KEY_z:
+  case XKB_KEY_Z: return keys::Z;
+  case XKB_KEY_0: return keys::Digit0;
+  case XKB_KEY_1: return keys::Digit1;
+  case XKB_KEY_2: return keys::Digit2;
+  case XKB_KEY_3: return keys::Digit3;
+  case XKB_KEY_4: return keys::Digit4;
+  case XKB_KEY_5: return keys::Digit5;
+  case XKB_KEY_6: return keys::Digit6;
+  case XKB_KEY_7: return keys::Digit7;
+  case XKB_KEY_8: return keys::Digit8;
+  case XKB_KEY_9: return keys::Digit9;
   case XKB_KEY_Return: return keys::Return;
   case XKB_KEY_Tab: return keys::Tab;
   case XKB_KEY_space: return keys::Space;
@@ -82,6 +138,29 @@ KeyCode keyFromXkb(xkb_keysym_t sym) {
   case XKB_KEY_End: return keys::End;
   case XKB_KEY_Page_Up: return keys::PageUp;
   case XKB_KEY_Page_Down: return keys::PageDown;
+  case XKB_KEY_F1: return keys::F1;
+  case XKB_KEY_F2: return keys::F2;
+  case XKB_KEY_F3: return keys::F3;
+  case XKB_KEY_F4: return keys::F4;
+  case XKB_KEY_F5: return keys::F5;
+  case XKB_KEY_F6: return keys::F6;
+  case XKB_KEY_F7: return keys::F7;
+  case XKB_KEY_F8: return keys::F8;
+  case XKB_KEY_F9: return keys::F9;
+  case XKB_KEY_F10: return keys::F10;
+  case XKB_KEY_F11: return keys::F11;
+  case XKB_KEY_F12: return keys::F12;
+  case XKB_KEY_minus: return keys::Minus;
+  case XKB_KEY_equal: return keys::Equal;
+  case XKB_KEY_bracketleft: return keys::LeftBracket;
+  case XKB_KEY_bracketright: return keys::RightBracket;
+  case XKB_KEY_semicolon: return keys::Semicolon;
+  case XKB_KEY_apostrophe: return keys::Quote;
+  case XKB_KEY_grave: return keys::Grave;
+  case XKB_KEY_backslash: return keys::Backslash;
+  case XKB_KEY_comma: return keys::Comma;
+  case XKB_KEY_period: return keys::Period;
+  case XKB_KEY_slash: return keys::Slash;
   default: return 0;
   }
 }
